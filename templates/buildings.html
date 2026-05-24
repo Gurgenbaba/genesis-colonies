@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{# ===================================================================
+   Macro für Building-Tabelle (MUSS vor der Nutzung stehen!)
+   =================================================================== #}
+{% macro render_building_table(rows, tab_name) %}
+
+  {% set rows = rows if rows else [] %}
+
+  {% if rows|length == 0 %}
+    <div class="gc-empty-state">
+      <div class="gc-empty-title">{{ T("msg_generic_error", "Keine Daten") }}</div>
+      <div class="gc-empty-hint">{{ T("buildings_hint") }}</div>
+    </div>
+  {% else %}
+    <div class="gc-table-scroll">
+    <table class="buildings-table table-std table-fixed">
+      <colgroup>
+        <col class="col-bname">
+        <col class="col-blevel">
+        <col class="col-bcost">
+        <col class="col-btime">
+        <col class="col-bact">
+      </colgroup>
+
+      <thead>
+        <tr>
+          <th>{{ T("buildings_col_name") }}</th>
+          <th>{{ T("buildings_col_level") }}</th>
+          <th>{{ T("buildings_col_costs") }}</th>
+          <th>{{ T("buildings_col_time") }}</th>
+          <th>{{ T("buildings_col_actions") }}</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for b in rows %}
+          {% set building_type = b.key %}
+          {% set is_max = b.level >= b.max_level %}
+
+          {# Dauer hübsch formatieren (ohne JS) #}
+          {% set s = (b.time_seconds or 0)|int %}
+          {% set h = (s // 3600) %}
+          {% set m = ((s % 3600) // 60) %}
+          {% set ss = (s % 60) %}
+
+          <tr>
+            <td class="bcell-name">
+              <div class="bname-wrap">
+                <div class="bicon-wrap">
+                  <img src="{{ url_for('static', filename=b.icon) }}"
+                       alt="{{ T('building_' ~ building_type) }}"
+                       class="bicon-img">
+                </div>
+                <div class="btext-wrap">
+                  <div class="bname-main">{{ T("building_" ~ building_type) }}</div>
+                  <div class="b-desc">{{ T('desc_' ~ building_type) }}</div>
+                </div>
+              </div>
+            </td>
+
+            <td id="level-{{ building_type }}" class="bcell-level">
+              {{ b.level|fmt_int }}
+            </td>
+
+            <td class="bcell-cost">
+              <span class="cost-metal">
+                {{ b.cost_metal|fmt_int }} {{ T("resource_metal") }}
+              </span>
+              <span class="cost-sep">/</span>
+              <span class="cost-crystal">
+                {{ b.cost_crystal|fmt_int }} {{ T("resource_crystal") }}
+              </span>
+              <div class="cost-note">
+                {{ T("buildings_col_level") }} {{ b.target_level|fmt_int }}
+              </div>
+            </td>
+
+            <td class="bcell-duration">
+              {% if h > 0 %}
+                {{ "%d:%02d:%02d"|format(h, m, ss) }}
+              {% else %}
+                {{ "%d:%02d"|format(m, ss) }}
+              {% endif %}
+            </td>
+
+            <td class="bcell-action">
+              {% if is_max %}
+                <button class="gc-btn gc-btn-ghost gc-btn-sm btn-upgrade"
+                        type="button"
+                        disabled
+                        title="{{ T('buildings_btn_max_level') }}">
+                  {{ T("buildings_btn_max_level") }}
+                </button>
+
+              {% elif not b.requirements_met %}
+                <button class="gc-btn gc-btn-danger gc-btn-sm btn-upgrade"
+                        type="button"
+                        disabled
+                        title="{{ T('msg_build_requirements') }}">
+                  {{ T("buildings_btn_upgrade") }}
+                </button>
+
+              {% elif not b.can_afford %}
+                <button class="gc-btn gc-btn-danger gc-btn-sm btn-upgrade"
+                        type="button"
+                        disabled
+                        title="{{ T('msg_build_not_enough_resources') }}">
+                  {{ T("buildings_btn_upgrade") }}
+                </button>
+
+              {% else %}
+                <a id="btn-{{ building_type }}"
+                   data-building="{{ building_type }}"
+                   href="{{ url_for('upgrade', building_type=building_type, src='buildings', tab=tab_name) }}"
+                   class="gc-btn gc-btn-primary gc-btn-sm btn-upgrade">
+                  {{ T("buildings_btn_upgrade") }}
+                </a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  {% endif %}
+
+{% endmacro %}
+
+{% block content %}
+
+{# ------------------------------------------------------------- #}
+{# Defensive Defaults                                             #}
+{# ------------------------------------------------------------- #}
+{% set active_tab = (active_tab if active_tab is defined and active_tab else 'resources') %}
+{% set rows_by_tab = (rows_by_tab if rows_by_tab is defined and rows_by_tab else {}) %}
+{% set bq = (build_queue if build_queue is defined and build_queue else {}) %}
+{% set bq_items = (bq.queue if bq and bq.queue is defined and bq.queue else []) %}
+{% set bq_summary = (bq.summary if bq and bq.summary is defined and bq.summary else {}) %}
+{% set active_job = (bq_items[0] if bq_items|length > 0 else None) %}
+
+<div class="gc-page buildings-wrapper">
+
+  <header class="buildings-headline section-header">
+    <h2 class="section-title">{{ T("buildings_title") }}</h2>
+
+    <p class="section-hint hint">
+      {{ T("buildings_hint") }}
+      {% set tt = T("buildings_techtree_link") %}
+      <a href="{{ url_for('techtree_view') }}" class="buildings-techtree-link">
+        → {{ tt if tt != "buildings_techtree_link" else "Tech-Tree anzeigen" }}
+      </a>
+    </p>
+  </header>
+
+  <div class="buildings-shell gc-panel">
+
+    {# ==========================================================
+       PREMIUM BAUSCHLEIFE (wie Research Active Block)
+       ========================================================== #}
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("build_queue_title", "Bauschleife") }}</span>
+      <span class="gc-panel-subtitle">
+        {% if bq_summary and bq_summary.count is defined %}
+          {{ T("build_queue_hint", "Aufträge") }}: {{ (bq_summary.count or 0)|int }}
+          · {{ T("build_queue_next", "Nächste Fertigstellung") }}:
+          {{ (bq_summary.first_finish_in or 0)|int }}s
+        {% else %}
+          {{ T("build_queue_hint_fallback", "Verwalte laufende Bauaufträge und starte Upgrades.") }}
+        {% endif %}
+      </span>
+    </div>
+
+    {% if active_job %}
+      {% set bt = (active_job.building_type or "") %}
+      {% set label = T("building_" ~ bt) %}
+      {% set desc = T("desc_" ~ bt) %}
+
+      {# Zeiten #}
+      {% set total_s = (active_job.total or 0) | float %}
+      {% set rem_s = (active_job.remaining or 0) | float %}
+
+      {% if total_s > 0 %}
+        {% set raw_pct = (100 * (1 - (rem_s / total_s))) %}
+      {% else %}
+        {% set raw_pct = 0 %}
+      {% endif %}
+      {% if raw_pct < 0 %}{% set progress_pct = 0 %}
+      {% elif raw_pct > 100 %}{% set progress_pct = 100 %}
+      {% else %}{% set progress_pct = raw_pct | round(0) %}
+      {% endif %}
+
+      {% set s = (active_job.total or 0)|int %}
+      {% set sh = (s // 3600) %}
+      {% set sm = ((s % 3600) // 60) %}
+      {% set ss = (s % 60) %}
+
+      {% set rem = (active_job.remaining or 0)|int %}
+      {% set rh = (rem // 3600) %}
+      {% set rm = ((rem % 3600) // 60) %}
+      {% set rsec = (rem % 60) %}
+
+      <div class="active-build-wrapper">
+
+        <div class="build-icon-large">
+          <img
+            src="{{ url_for('static', filename='img/buildings/' ~ bt ~ '.png') }}"
+            alt="{{ label }}">
+        </div>
+
+        <div class="active-build-content">
+          <div class="active-build-title-row">
+            <div>
+              <div class="active-build-name">
+                {{ label if label != ("building_" ~ bt) else bt }}
+              </div>
+              <div class="active-build-level">
+                {{ T("buildings_col_level") }} {{ (active_job.target_level or 0)|fmt_int }}
+              </div>
+            </div>
+
+            <div class="status-pill status-pill-active">
+              {{ T("buildings_btn_active", "Aktiv") }}
+            </div>
+          </div>
+
+          <div class="active-build-desc">
+            {{ desc if desc != ("desc_" ~ bt) else "" }}
+          </div>
+
+          <div class="build-progress-outer" data-total-seconds="{{ (active_job.total or 0)|int }}">
+            <div class="build-progress-label">
+              {{ T("build_queue_remaining", "Verbleibend") }}:
+              <span id="build-countdown">
+                {% if rh > 0 %}
+                  {{ "%d:%02d:%02d"|format(rh, rm, rsec) }}
+                {% else %}
+                  {{ "%d:%02d"|format(rm, rsec) }}
+                {% endif %}
+              </span>
+            </div>
+
+            <div class="build-progress-bar">
+              <div id="build-progress-fill"
+                   class="build-progress-fill"
+                   data-progress="{{ progress_pct }}"
+                   style="width: {{ progress_pct }}%;"></div>
+            </div>
+
+            <div class="build-progress-meta">
+              <span>
+                {{ T("buildings_col_time") }}:
+                {% if sh > 0 %}
+                  {{ "%d:%02d:%02d"|format(sh, sm, ss) }}
+                {% else %}
+                  {{ "%d:%02d"|format(sm, ss) }}
+                {% endif %}
+              </span>
+              <span>
+                {{ T("build_queue_target", "Ziel") }}:
+                L{{ (active_job.target_level or 0)|fmt_int }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="build-divider">
+
+    {% else %}
+      <p class="build-no-active">
+        {{ T("build_queue_none", "Keine Bauaufträge aktiv.") }}
+      </p>
+      <hr class="build-divider">
+    {% endif %}
+
+    {# ==========================================================
+       Tabs wie gehabt
+       ========================================================== #}
+    <div class="building-tabs" role="tablist" aria-label="{{ T('buildings_tabs', 'Gebäude-Kategorien') }}">
+      <button class="gc-btn gc-btn-ghost gc-btn-sm tab-btn {{ 'active' if active_tab == 'resources' else '' }}"
+              type="button"
+              role="tab"
+              id="tab-resources"
+              aria-controls="panel-resources"
+              aria-selected="{{ 'true' if active_tab == 'resources' else 'false' }}"
+              tabindex="{{ '0' if active_tab == 'resources' else '-1' }}"
+              data-tab="resources">
+        ⚡ {{ T("buildings_tab_resources") }}
+      </button>
+
+      <button class="gc-btn gc-btn-ghost gc-btn-sm tab-btn {{ 'active' if active_tab == 'research' else '' }}"
+              type="button"
+              role="tab"
+              id="tab-research"
+              aria-controls="panel-research"
+              aria-selected="{{ 'true' if active_tab == 'research' else 'false' }}"
+              tabindex="{{ '0' if active_tab == 'research' else '-1' }}"
+              data-tab="research">
+        🔬 {{ T("buildings_tab_research") }}
+      </button>
+
+      <button class="gc-btn gc-btn-ghost gc-btn-sm tab-btn {{ 'active' if active_tab == 'military' else '' }}"
+              type="button"
+              role="tab"
+              id="tab-military"
+              aria-controls="panel-military"
+              aria-selected="{{ 'true' if active_tab == 'military' else 'false' }}"
+              tabindex="{{ '0' if active_tab == 'military' else '-1' }}"
+              data-tab="military">
+        🚀 {{ T("buildings_tab_military") }}
+      </button>
+
+      <button class="gc-btn gc-btn-ghost gc-btn-sm tab-btn {{ 'active' if active_tab == 'infrastructure' else '' }}"
+              type="button"
+              role="tab"
+              id="tab-infrastructure"
+              aria-controls="panel-infrastructure"
+              aria-selected="{{ 'true' if active_tab == 'infrastructure' else 'false' }}"
+              tabindex="{{ '0' if active_tab == 'infrastructure' else '-1' }}"
+              data-tab="infrastructure">
+        🏛️ {{ T("buildings_tab_infrastructure") }}
+      </button>
+    </div>
+
+    <div class="tab-content {{ 'active' if active_tab == 'resources' else '' }}"
+         data-tab="resources"
+         role="tabpanel"
+         id="panel-resources"
+         aria-labelledby="tab-resources">
+      {{ render_building_table(rows_by_tab.get('resources', []), 'resources') }}
+    </div>
+
+    <div class="tab-content {{ 'active' if active_tab == 'research' else '' }}"
+         data-tab="research"
+         role="tabpanel"
+         id="panel-research"
+         aria-labelledby="tab-research">
+      {{ render_building_table(rows_by_tab.get('research', []), 'research') }}
+    </div>
+
+    <div class="tab-content {{ 'active' if active_tab == 'military' else '' }}"
+         data-tab="military"
+         role="tabpanel"
+         id="panel-military"
+         aria-labelledby="tab-military">
+      {{ render_building_table(rows_by_tab.get('military', []), 'military') }}
+    </div>
+
+    <div class="tab-content {{ 'active' if active_tab == 'infrastructure' else '' }}"
+         data-tab="infrastructure"
+         role="tabpanel"
+         id="panel-infrastructure"
+         aria-labelledby="tab-infrastructure">
+      {{ render_building_table(rows_by_tab.get('infrastructure', []), 'infrastructure') }}
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}

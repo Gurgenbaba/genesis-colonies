@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{# ------------------------------------------------------------- #}
+{# Defensive Defaults (Alliance darf niemals crasht)              #}
+{# ------------------------------------------------------------- #}
+{% set alliance_hint = T("alliance_hint") %}
+{% if alliance_hint == "alliance_hint" %}
+  {% set alliance_hint = "Allianz-Hub deiner Kolonie – später Dreh- und Angelpunkt für Diplomatie, Kriege und gemeinsames Progressen im Genesis-Universum." %}
+{% endif %}
+
+{% set st_title = T("alliance_status_title") %}
+{% if st_title == "alliance_status_title" %}{% set st_title = "Allianz-Status" %}{% endif %}
+
+{% set st_hint = T("alliance_status_hint") %}
+{% if st_hint == "alliance_status_hint" %}
+  {% set st_hint = "Hier wird später alles gebündelt, was deine eigene Allianz betrifft." %}
+{% endif %}
+
+{% set ph_label = T("alliance_placeholder_label") %}
+{% if ph_label == "alliance_placeholder_label" %}{% set ph_label = "Platzhalter-Modul:" %}{% endif %}
+
+{% set ph_intro = T("alliance_placeholder_intro") %}
+{% if ph_intro == "alliance_placeholder_intro" %}
+  {% set ph_intro = "Geplante Kernfunktionen für deine Allianz:" %}
+{% endif %}
+
+{% set li1_t = T("alliance_feature_identity_title") %}
+{% if li1_t == "alliance_feature_identity_title" %}{% set li1_t = "Allianz-Identität" %}{% endif %}
+{% set li1_s = T("alliance_feature_identity_sub") %}
+{% if li1_s == "alliance_feature_identity_sub" %}{% set li1_s = "Name, Tag, Emblem, Lore & Beschreibung" %}{% endif %}
+
+{% set li2_t = T("alliance_feature_members_title") %}
+{% if li2_t == "alliance_feature_members_title" %}{% set li2_t = "Mitgliederverwaltung" %}{% endif %}
+{% set li2_s = T("alliance_feature_members_sub") %}
+{% if li2_s == "alliance_feature_members_sub" %}{% set li2_s = "Ränge, Rechte, Join-Requests & Kicks" %}{% endif %}
+
+{% set li3_t = T("alliance_feature_economy_title") %}
+{% if li3_t == "alliance_feature_economy_title" %}{% set li3_t = "Allianz-Ökonomie" %}{% endif %}
+{% set li3_s = T("alliance_feature_economy_sub") %}
+{% if li3_s == "alliance_feature_economy_sub" %}{% set li3_s = "Gemeinsame Rohstofftöpfe & Boni" %}{% endif %}
+
+{% set li4_t = T("alliance_feature_goals_title") %}
+{% if li4_t == "alliance_feature_goals_title" %}{% set li4_t = "Cluster-Ziele" %}{% endif %}
+{% set li4_s = T("alliance_feature_goals_sub") %}
+{% if li4_s == "alliance_feature_goals_sub" %}{% set li4_s = "Gemeinsame Meilensteine & Season-Challenges" %}{% endif %}
+
+{% set note_own = T("alliance_note_own") %}
+{% if note_own == "alliance_note_own" %}
+  {% set note_own = "In einem späteren Update kannst du hier Allianzen gründen, verwalten und als Allianz-Commander agieren. Bis dahin dient die Seite als UI-Prototyp." %}
+{% endif %}
+
+{% set dip_title = T("alliance_diplomacy_title") %}
+{% if dip_title == "alliance_diplomacy_title" %}{% set dip_title = "Diplomatie & Social" %}{% endif %}
+
+{% set dip_hint = T("alliance_diplomacy_hint") %}
+{% if dip_hint == "alliance_diplomacy_hint" %}
+  {% set dip_hint = "Schnittstelle für Bündnisse, Kriege und interne Kommunikation zwischen Commandern." %}
+{% endif %}
+
+{% set d1_t = T("alliance_dip_apply_title") %}
+{% if d1_t == "alliance_dip_apply_title" %}{% set d1_t = "Bewerbungssystem" %}{% endif %}
+{% set d1_s = T("alliance_dip_apply_sub") %}
+{% if d1_s == "alliance_dip_apply_sub" %}{% set d1_s = "Bei bestehenden Allianzen anfragen & joinen" %}{% endif %}
+
+{% set d2_t = T("alliance_dip_matrix_title") %}
+{% if d2_t == "alliance_dip_matrix_title" %}{% set d2_t = "Diplomatie-Panel" %}{% endif %}
+{% set d2_s = T("alliance_dip_matrix_sub") %}
+{% if d2_s == "alliance_dip_matrix_sub" %}{% set d2_s = "Bündnisse, NAPs und Kriegserklärungen verwalten" %}{% endif %}
+
+{% set d3_t = T("alliance_dip_board_title") %}
+{% if d3_t == "alliance_dip_board_title" %}{% set d3_t = "Allianz-Board" %}{% endif %}
+{% set d3_s = T("alliance_dip_board_sub") %}
+{% if d3_s == "alliance_dip_board_sub" %}{% set d3_s = "Internes Forum / Message-Board für Strategien & Ansagen" %}{% endif %}
+
+{% set d4_t = T("alliance_dip_broadcast_title") %}
+{% if d4_t == "alliance_dip_broadcast_title" %}{% set d4_t = "Broadcasts" %}{% endif %}
+{% set d4_s = T("alliance_dip_broadcast_sub") %}
+{% if d4_s == "alliance_dip_broadcast_sub" %}{% set d4_s = "Allianz-weit sichtbare Befehle & Ankündigungen" %}{% endif %}
+
+{% set planned = T("alliance_planned_features") %}
+{% if planned == "alliance_planned_features" %}{% set planned = "Geplante Features" %}{% endif %}
+
+{% set pill_1 = T("alliance_pill_create") %}
+{% if pill_1 == "alliance_pill_create" %}{% set pill_1 = "Allianz-Gründung" %}{% endif %}
+{% set pill_2 = T("alliance_pill_diplomacy") %}
+{% if pill_2 == "alliance_pill_diplomacy" %}{% set pill_2 = "Diplomatie-Matrix" %}{% endif %}
+{% set pill_3 = T("alliance_pill_events") %}
+{% if pill_3 == "alliance_pill_events" %}{% set pill_3 = "Allianz-Events" %}{% endif %}
+{% set pill_4 = T("alliance_pill_intel") %}
+{% if pill_4 == "alliance_pill_intel" %}{% set pill_4 = "Shared Intel / Scanner" %}{% endif %}
+
+{% set note_dip = T("alliance_note_diplomacy") %}
+{% if note_dip == "alliance_note_diplomacy" %}
+  {% set note_dip = "Aktuell noch deaktiviert – die Allianz- & Diplomatiefunktionen werden in einem späteren Development-Step freigeschaltet, wenn Flotten und Kampf-Logik stehen." %}
+{% endif %}
+
+<div class="gc-page alliance-page">
+
+  <!-- HEADER -->
+  <header class="gc-page-header section-header">
+    <h2 class="section-title">{{ T("nav_alliance") }}</h2>
+    <p class="section-hint hint">{{ alliance_hint }}</p>
+  </header>
+
+  <div class="gc-grid-2">
+
+    <!-- LEFT: Allianz-Status / eigene Allianz -->
+    <section class="gc-panel alliance-panel">
+      <div class="gc-panel-header">
+        <span class="gc-panel-title">{{ st_title }}</span>
+        <span class="gc-panel-subtitle">{{ st_hint }}</span>
+      </div>
+
+      <p class="gc-body-text">
+        <strong>{{ ph_label }}</strong> {{ ph_intro }}
+      </p>
+
+      <ul class="gc-list">
+        <li><strong>{{ li1_t }}</strong> – {{ li1_s }}</li>
+        <li><strong>{{ li2_t }}</strong> – {{ li2_s }}</li>
+        <li><strong>{{ li3_t }}</strong> – {{ li3_s }}</li>
+        <li><strong>{{ li4_t }}</strong> – {{ li4_s }}</li>
+      </ul>
+
+      <p class="gc-body-text alliance-note">{{ note_own }}</p>
+    </section>
+
+    <!-- RIGHT: Diplomatie & Social -->
+    <section class="gc-panel alliance-panel">
+      <div class="gc-panel-header">
+        <span class="gc-panel-title">{{ dip_title }}</span>
+        <span class="gc-panel-subtitle">{{ dip_hint }}</span>
+      </div>
+
+      <ul class="gc-list">
+        <li><strong>{{ d1_t }}</strong> – {{ d1_s }}</li>
+        <li><strong>{{ d2_t }}</strong> – {{ d2_s }}</li>
+        <li><strong>{{ d3_t }}</strong> – {{ d3_s }}</li>
+        <li><strong>{{ d4_t }}</strong> – {{ d4_s }}</li>
+      </ul>
+
+      <div class="alliance-roadmap">
+        <div class="alliance-roadmap-title">{{ planned }}</div>
+        <div class="alliance-pill-row">
+          <span class="roadmap-pill">{{ pill_1 }}</span>
+          <span class="roadmap-pill">{{ pill_2 }}</span>
+          <span class="roadmap-pill">{{ pill_3 }}</span>
+          <span class="roadmap-pill">{{ pill_4 }}</span>
+        </div>
+      </div>
+
+      <p class="gc-body-text alliance-note">{{ note_dip }}</p>
+    </section>
+
+  </div>
+</div>
+
+{% endblock %}

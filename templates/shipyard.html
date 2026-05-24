@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{# ------------------------------------------------------------- #}
+{# Defensive Defaults (Werft darf niemals crasht)                 #}
+{# ------------------------------------------------------------- #}
+{% set shipyard_hint = T("shipyard_hint") %}
+{% if shipyard_hint == "shipyard_hint" %}
+  {% set shipyard_hint = "Frühphase der Werft – UI steht, die eigentliche Schiffslogik folgt in einem späteren Development-Step." %}
+{% endif %}
+
+{% set s1 = T("shipyard_panel_status_title") %}
+{% if s1 == "shipyard_panel_status_title" %}{% set s1 = "Aktuelle Werft-Situation" %}{% endif %}
+
+{% set s2 = T("shipyard_panel_status_subtitle") %}
+{% if s2 == "shipyard_panel_status_subtitle" %}
+  {% set s2 = "Deine Kolonie ist bereit für den Flottenausbau – hier entsteht später die komplette Schiffsproduktion inklusive Queue, Kostenübersicht und Bauzeiten." %}
+{% endif %}
+
+{% set p1 = T("shipyard_planned_title") %}
+{% if p1 == "shipyard_planned_title" %}{% set p1 = "Geplante Inhalte dieses Panels:" %}{% endif %}
+
+{% set i1 = T("shipyard_planned_item_list") %}
+{% if i1 == "shipyard_planned_item_list" %}
+  {% set i1 = "Liste verfügbarer Schiffsmodelle (z. B. Späher, Jäger, Kreuzer, Transporter)" %}
+{% endif %}
+
+{% set i2 = T("shipyard_planned_item_costs") %}
+{% if i2 == "shipyard_planned_item_costs" %}
+  {% set i2 = "Rohstoffkosten & Bauzeiten pro Schiffstyp auf Basis deiner Forschung" %}
+{% endif %}
+
+{% set i3 = T("shipyard_planned_item_queue") %}
+{% if i3 == "shipyard_planned_item_queue" %}
+  {% set i3 = "Aktive Werft-Queue mit Fortschritt und verbleibender Bauzeit" %}
+{% endif %}
+
+{% set t1 = T("shipyard_tag_queue") %}
+{% if t1 == "shipyard_tag_queue" %}{% set t1 = "Queue-System" %}{% endif %}
+
+{% set t2 = T("shipyard_tag_production") %}
+{% if t2 == "shipyard_tag_production" %}{% set t2 = "Schiffsproduktion" %}{% endif %}
+
+{% set t3 = T("shipyard_tag_fleet") %}
+{% if t3 == "shipyard_tag_fleet" %}{% set t3 = "Flottenaufbau" %}{% endif %}
+
+{% set r1 = T("shipyard_panel_roadmap_title") %}
+{% if r1 == "shipyard_panel_roadmap_title" %}{% set r1 = "Kommende Werft-Features" %}{% endif %}
+
+{% set r2 = T("shipyard_panel_roadmap_subtitle") %}
+{% if r2 == "shipyard_panel_roadmap_subtitle" %}
+  {% set r2 = "Dieses Modul ist als vollwertiges System geplant und wird später eng mit Forschung und Flottenansicht verzahnt." %}
+{% endif %}
+
+{% set rli1 = T("shipyard_roadmap_item_slots") %}
+{% if rli1 == "shipyard_roadmap_item_slots" %}
+  {% set rli1 = "Schiffsproduktion in mehreren Slots mit Warteschlange pro Planet" %}
+{% endif %}
+
+{% set rli2 = T("shipyard_roadmap_item_presets") %}
+{% if rli2 == "shipyard_roadmap_item_presets" %}
+  {% set rli2 = "Flotten-Presets (z. B. Raid-, Transport- und Deff-Flotten)" %}
+{% endif %}
+
+{% set rli3 = T("shipyard_roadmap_item_synergy") %}
+{% if rli3 == "shipyard_roadmap_item_synergy" %}
+  {% set rli3 = "Direkte Synergien mit Techs (Antrieb, Waffen, Panzerung)" %}
+{% endif %}
+
+{% set rli4 = T("shipyard_roadmap_item_galaxy") %}
+{% if rli4 == "shipyard_roadmap_item_galaxy" %}
+  {% set rli4 = "Anbindung an Flotten-UI & spätere Galaxie-Karte" %}
+{% endif %}
+
+{% set note = T("shipyard_placeholder_note") %}
+{% if note == "shipyard_placeholder_note" %}
+  {% set note = "Aktuell dient diese Ansicht als UI-Platzhalter, damit das Interface vollständig wirkt und Navigation & Look & Feel bereits konsistent sind." %}
+{% endif %}
+
+<div class="gc-page shipyard-wrapper">
+
+  <header class="shipyard-headline section-header">
+    <h2 class="section-title">{{ T("nav_shipyard") }}</h2>
+    <p class="section-hint hint">{{ shipyard_hint }}</p>
+  </header>
+
+  <div class="shipyard-grid">
+
+    <!-- LEFT -->
+    <section class="gc-panel shipyard-panel">
+      <div class="gc-panel-header">
+        <span class="gc-panel-title">{{ s1 }}</span>
+        <span class="gc-panel-subtitle">{{ s2 }}</span>
+      </div>
+
+      <div class="shipyard-placeholder-box">
+        <div class="shipyard-placeholder-title">
+          <strong>{{ p1 }}</strong>
+        </div>
+
+        <ul class="shipyard-placeholder-list">
+          <li>{{ i1 }}</li>
+          <li>{{ i2 }}</li>
+          <li>{{ i3 }}</li>
+        </ul>
+
+        <div class="shipyard-tag-row">
+          <span class="shipyard-tag">{{ t1 }}</span>
+          <span class="shipyard-tag">{{ t2 }}</span>
+          <span class="shipyard-tag">{{ t3 }}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT -->
+    <section class="gc-panel shipyard-panel">
+      <div class="gc-panel-header">
+        <span class="gc-panel-title">{{ r1 }}</span>
+        <span class="gc-panel-subtitle">{{ r2 }}</span>
+      </div>
+
+      <ul class="shipyard-roadmap-list">
+        <li>{{ rli1 }}</li>
+        <li>{{ rli2 }}</li>
+        <li>{{ rli3 }}</li>
+        <li>{{ rli4 }}</li>
+      </ul>
+
+      <div class="shipyard-note">{{ note }}</div>
+    </section>
+
+  </div>
+</div>
+
+{% endblock %}

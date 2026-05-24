@@ -1,0 +1,619 @@
+"""
+Gebäude-Logik für Genesis Colonies.
+"""
+
+from __future__ import annotations
+
+import time
+from typing import Dict, List, Tuple, Any, Optional
+
+from .models import (
+    db,
+    get_planet_buildings,
+    save_planet_buildings,
+    get_build_queue_rows,
+    add_build_job,
+    delete_build_job,
+    get_game_settings,
+    get_research_levels,
+    try_spend_resources,
+    get_planet_owner_id,
+    finish_due_build_jobs,  # ✅ atomare Finish-Logik (inkl. Score Trigger)
+)
+from .research import get_research_modifiers, RESEARCH_TECHS
+from .ranking import invalidate_player_score_cache  # ✅ Cache invalidieren nach Finish
+
+# =============================================================================
+#   KONFIG: Gebäude-Keys / Reihenfolge / Tabs / Icons
+# =============================================================================
+
+BUILDING_ORDER: List[str] = [
+    "metal_mine",
+    "crystal_mine",
+    "solar_plant",
+    "research_lab",
+    "academy",
+    "metal_storage",
+    "crystal_storage",
+    "command_center",
+    "shipyard",
+    "defense_factory",
+    "barracks",
+    "radar_array",
+    "shield_generator",
+    "terraformer",
+    "nanofactory",
+    "geothermal_nexus",
+    "planet_core_nexus",
+]
+
+ALL_BUILDINGS = set(BUILDING_ORDER)
+
+BUILDING_TAB: Dict[str, str] = {
+    "metal_mine": "resources",
+    "crystal_mine": "resources",
+    "solar_plant": "resources",
+    "research_lab": "research",
+    "academy": "research",
+    "metal_storage": "resources",
+    "crystal_storage": "resources",
+    "command_center": "infrastructure",
+    "shipyard": "military",
+    "defense_factory": "military",
+    "barracks": "military",
+    "radar_array": "military",
+    "shield_generator": "infrastructure",
+    "terraformer": "infrastructure",
+    "nanofactory": "infrastructure",
+    "geothermal_nexus": "infrastructure",
+    "planet_core_nexus": "infrastructure",
+}
+
+BUILDING_ICON: Dict[str, str] = {key: f"img/buildings/{key}.png" for key in BUILDING_ORDER}
+
+# =============================================================================
+#   KONFIG: Kosten, Zeit, Requirements
+# =============================================================================
+
+BASE_COST: Dict[str, Tuple[int, int]] = {
+    "metal_mine": (75, 25),
+    "crystal_mine": (40, 28),
+    "solar_plant": (45, 11),
+    "research_lab": (200, 400),
+    "academy": (400, 600),
+    "metal_storage": (1000, 0),
+    "crystal_storage": (0, 1000),
+    "command_center": (500, 200),
+    "shipyard": (400, 300),
+    "defense_factory": (600, 400),
+    "barracks": (300, 200),
+    "radar_array": (200, 600),
+    "shield_generator": (1000, 800),
+    "terraformer": (2500, 2500),
+    "nanofactory": (4000, 2500),
+    "geothermal_nexus": (6000, 6000),
+    "planet_core_nexus": (8000, 12000),
+}
+
+COST_FACTOR: Dict[str, float] = {
+    "metal_mine": 1.5,
+    "crystal_mine": 1.6,
+    "solar_plant": 1.5,
+    "research_lab": 1.8,
+    "academy": 1.8,
+    "metal_storage": 1.7,
+    "crystal_storage": 1.7,
+    "command_center": 2.0,
+    "shipyard": 1.9,
+    "defense_factory": 1.9,
+    "barracks": 1.7,
+    "radar_array": 1.7,
+    "shield_generator": 2.1,
+    "terraformer": 1.9,
+    "nanofactory": 2.1,
+    "geothermal_nexus": 2.0,
+    "planet_core_nexus": 2.2,
+}
+
+BUILD_TIME_BASE: Dict[str, int] = {
+    "metal_mine": 60,
+    "crystal_mine": 60,
+    "solar_plant": 80,
+    "research_lab": 120,
+    "academy": 180,
+    "metal_storage": 120,
+    "crystal_storage": 120,
+    "command_center": 240,
+    "shipyard": 200,
+    "defense_factory": 220,
+    "barracks": 160,
+    "radar_array": 160,
+    "shield_generator": 300,
+    "terraformer": 260,
+    "nanofactory": 480,
+    "geothermal_nexus": 540,
+    "planet_core_nexus": 600,
+}
+
+BUILD_TIME_FACTOR: Dict[str, float] = {
+    "metal_mine": 1.4,
+    "crystal_mine": 1.4,
+    "solar_plant": 1.5,
+    "research_lab": 1.6,
+    "academy": 1.6,
+    "metal_storage": 1.6,
+    "crystal_storage": 1.6,
+    "command_center": 1.7,
+    "shipyard": 1.7,
+    "defense_factory": 1.7,
+    "barracks": 1.6,
+    "radar_array": 1.6,
+    "shield_generator": 1.8,
+    "terraformer": 1.7,
+    "nanofactory": 1.8,
+    "geothermal_nexus": 1.8,
+    "planet_core_nexus": 1.9,
+}
+
+DEFAULT_BUILD_TIME_LEVEL_1 = 60
+MAX_BUILDING_LEVEL = 50
+
+BUILDING_REQUIREMENTS: Dict[str, Dict[str, Dict[str, int]]] = {
+    "metal_mine": {},
+    "crystal_mine": {},
+    "solar_plant": {},
+
+    "research_lab": {"buildings": {"metal_mine": 3, "crystal_mine": 2}},
+    "academy": {"buildings": {"research_lab": 2}},
+
+    "metal_storage": {"buildings": {"metal_mine": 4}},
+    "crystal_storage": {"buildings": {"crystal_mine": 4}},
+
+    "command_center": {},
+    "shipyard": {"buildings": {"command_center": 2}},
+    "defense_factory": {"buildings": {"shipyard": 2}},
+    "barracks": {"buildings": {"command_center": 1}},
+    "radar_array": {"buildings": {"command_center": 3}},
+    "shield_generator": {"buildings": {"command_center": 4, "defense_factory": 2}},
+
+    "terraformer": {
+        "buildings": {"command_center": 4, "metal_storage": 3, "crystal_storage": 3},
+        "research": {"storage_tech": 1},
+    },
+    "nanofactory": {
+        "buildings": {"command_center": 4},
+        "research": {"drone_tech": 3, "engine_tech": 2},
+    },
+    "geothermal_nexus": {
+        "buildings": {"command_center": 5, "crystal_storage": 4},
+        "research": {"storage_tech": 2, "energy_tech": 3},
+    },
+    "planet_core_nexus": {
+        "buildings": {"command_center": 6, "nanofactory": 2, "geothermal_nexus": 1},
+        "research": {"storage_tech": 3, "energy_tech": 4},
+    },
+}
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+def get_building_icon(building_type: str) -> str:
+    return BUILDING_ICON.get(building_type, "img/buildings/default.png")
+
+
+def get_building_tab(building_type: str) -> str:
+    return BUILDING_TAB.get(building_type, "infrastructure")
+
+
+def get_building_label_key(building_type: str) -> str:
+    return f"building_{building_type}"
+
+
+# =============================================================================
+# Costs & Time
+# =============================================================================
+
+def get_upgrade_cost(building_type: str, current_level: int) -> Tuple[int, int]:
+    base = BASE_COST.get(building_type, (100, 50))
+    factor = COST_FACTOR.get(building_type, 1.5)
+    target_level = max(int(current_level) + 1, 1)
+    multiplier = factor ** (target_level - 1)
+    metal = int(base[0] * multiplier)
+    crystal = int(base[1] * multiplier)
+    return metal, crystal
+
+
+def get_build_time(building_type: str, target_level: int, user_id: Optional[int] = None) -> int:
+    base_time = BUILD_TIME_BASE.get(building_type, DEFAULT_BUILD_TIME_LEVEL_1)
+    factor = BUILD_TIME_FACTOR.get(building_type, 1.5)
+    lvl_factor = factor ** max(int(target_level) - 1, 0)
+    seconds = float(base_time * lvl_factor)
+
+    build_time_speed = 1.0
+    if user_id is not None:
+        mods = get_research_modifiers(int(user_id))
+        build_time_speed = float(mods.get("build_time_speed", 1.0) or 1.0)
+
+    try:
+        settings = get_game_settings()
+        build_speed_val = float(settings.get("build_speed", "1.0") or 1.0)
+    except Exception:
+        build_speed_val = 1.0
+
+    effective_speed = max(0.1, build_time_speed * build_speed_val)
+    seconds /= effective_speed
+    return max(int(seconds), 1)
+
+
+# =============================================================================
+# Dynamic Max Level
+# =============================================================================
+
+def get_max_level_for_building(building_type: str, buildings: Dict[str, int]) -> int:
+    base_max = MAX_BUILDING_LEVEL
+    if building_type in ("metal_mine", "crystal_mine", "solar_plant"):
+        core_level = int(buildings.get("planet_core_nexus", 0) or 0)
+        return base_max + max(0, core_level)
+    return base_max
+
+
+# =============================================================================
+# Requirements
+# =============================================================================
+
+def _check_requirements_for_building(
+    building_type: str,
+    buildings: Dict[str, int],
+    research_levels: Dict[str, int],
+) -> bool:
+    req_cfg = BUILDING_REQUIREMENTS.get(building_type) or {}
+    req_buildings = req_cfg.get("buildings", {})
+    req_research = req_cfg.get("research", {})
+
+    for b_key, need_lvl in req_buildings.items():
+        if int(buildings.get(b_key, 0) or 0) < int(need_lvl):
+            return False
+
+    for r_key, need_lvl in req_research.items():
+        if int(research_levels.get(r_key, 0) or 0) < int(need_lvl):
+            return False
+
+    return True
+
+
+def has_building_requirements(buildings: Dict[str, int], research_levels: Dict[str, int], building_type: str) -> bool:
+    return _check_requirements_for_building(building_type, buildings, research_levels)
+
+
+# =============================================================================
+# Panel Rows
+# =============================================================================
+
+def _make_panel_row(
+    planet: dict,
+    buildings: Dict[str, int],
+    research_levels: Dict[str, int],
+    building_type: str,
+) -> Dict[str, Any]:
+    level = int(buildings.get(building_type, 0) or 0)
+    max_level = get_max_level_for_building(building_type, buildings)
+    target_level = min(level + 1, max_level)
+
+    cost_metal, cost_crystal = get_upgrade_cost(building_type, level)
+    time_seconds = get_build_time(building_type, target_level, user_id=planet.get("player_id"))
+
+    req_met = has_building_requirements(buildings, research_levels, building_type)
+    can_afford = (float(planet.get("metal", 0) or 0) >= cost_metal and float(planet.get("crystal", 0) or 0) >= cost_crystal)
+
+    return {
+        "key": building_type,
+        "tab": get_building_tab(building_type),
+        "icon": get_building_icon(building_type),
+        "level": level,
+        "target_level": target_level,
+        "max_level": max_level,
+        "cost_metal": cost_metal,
+        "cost_crystal": cost_crystal,
+        "time_seconds": int(time_seconds),
+        "requirements_met": bool(req_met),
+        "can_afford": bool(can_afford),
+    }
+
+
+def get_buildings_panel_rows(planet: dict, buildings: Dict[str, int]) -> Dict[str, List[Dict[str, Any]]]:
+    user_id = planet.get("player_id")
+    if user_id is None:
+        raise RuntimeError("get_buildings_panel_rows: planet hat kein 'player_id'-Feld")
+
+    research_levels = get_research_levels(user_id=int(user_id))
+    rows_by_tab: Dict[str, List[Dict[str, Any]]] = {
+        "resources": [],
+        "research": [],
+        "military": [],
+        "infrastructure": [],
+    }
+
+    for key in BUILDING_ORDER:
+        row = _make_panel_row(planet, buildings, research_levels, key)
+        rows_by_tab.setdefault(row["tab"], []).append(row)
+
+    return rows_by_tab
+
+
+# =============================================================================
+# Build Queue
+# =============================================================================
+
+def get_build_queue_status_for_planet(planet_id: int, conn=None) -> Dict[str, Any]:
+    """
+    Liefert Queue + Summary für ein Planet.
+    - KEIN conn-mix: alles über dieselbe conn
+    - OPTIONAL: fällige Jobs finishen (wenn du willst, dass API/Poll "mitzieht")
+    """
+    own = False
+    if conn is None:
+        conn = db()
+        own = True
+
+    try:
+        cur = conn.cursor()
+        now = time.time()
+
+        # OPTIONAL: fällige Builds abschließen (damit Levels + Score korrekt sind)
+        # Falls du das NUR in /api/status machst, kannst du es hier weglassen.
+        # owner id holen (damit finish_due_build_jobs korrekt arbeiten kann)
+        cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+        prow = cur.fetchone()
+        if prow:
+            player_id = int(prow["player_id"])
+            try:
+                finish_due_build_jobs(planet_id=int(planet_id), player_id=player_id, now=now, conn=conn)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+        # Buildings-Levels (nach finish) aus derselben conn lesen
+        buildings = get_planet_buildings(int(planet_id), conn=conn)
+
+        # Queue rows aus derselben conn lesen
+        cur.execute(
+            """
+            SELECT id, building_type, start_time, finish_time
+            FROM build_queue
+            WHERE planet_id = ?
+            ORDER BY finish_time ASC;
+            """,
+            (int(planet_id),),
+        )
+        rows_db = cur.fetchall()
+
+        counts: Dict[str, int] = {}
+        queue: List[Dict[str, Any]] = []
+        first_remaining: Optional[int] = None
+
+        for r in rows_db:
+            b_type = str(r["building_type"])
+            counts[b_type] = counts.get(b_type, 0) + 1
+
+            finish_time = float(r["finish_time"])
+            start_time = float(r["start_time"] or finish_time)
+
+            remaining = max(0, int(finish_time - now))
+            total = max(1, int(finish_time - start_time))
+
+            if first_remaining is None or remaining < first_remaining:
+                first_remaining = remaining
+
+            current_level = int(buildings.get(b_type, 0) or 0)
+            target_level = current_level + counts[b_type]
+
+            queue.append({
+                "id": int(r["id"]),
+                "building_type": b_type,
+                "label_key": get_building_label_key(b_type),
+                "target_level": int(target_level),
+                "remaining": int(remaining),
+                "total": int(total),
+                "finish_time": finish_time,
+            })
+
+        summary = {
+            "count": len(queue),
+            "has_queue": bool(queue),
+            "first_finish_in": int(first_remaining or 0),
+        }
+
+        return {"queue": queue, "summary": summary}
+
+    finally:
+        if own:
+            conn.close()
+
+
+def complete_finished_builds_for_planet(planet_id: int, conn=None) -> Dict[str, int]:
+    """
+    ✅ Conn-safe:
+    - Wenn conn übergeben: KEIN eigenes BEGIN/COMMIT, nur finish_due_build_jobs() in derselben Tx.
+    - Wenn conn None: eigene Connection + Transaction.
+    - Danach Score-Cache invalidieren (nur wenn wirklich finished).
+    - Rückgabe: aktuelle Buildings (über dieselbe conn, wenn vorhanden).
+    """
+    planet_id = int(planet_id)
+
+    # owner_id muss conn-safe sein (falls dein get_planet_owner_id noch kein conn kann,
+    # dann bitte auch dort conn optional ergänzen – ansonsten bleibt hier ein mini conn-mix).
+    owner_id = get_planet_owner_id(planet_id)
+    if not owner_id:
+        return get_planet_buildings(planet_id, conn=conn)
+
+    now = time.time()
+
+    from .models import db as _db
+    own_conn = False
+    if conn is None:
+        conn = _db()
+        own_conn = True
+
+    finished_any = False
+    try:
+        if own_conn:
+            conn.execute("BEGIN IMMEDIATE")
+
+        finished_any = finish_due_build_jobs(
+            planet_id=planet_id,
+            player_id=int(owner_id),
+            now=now,
+            conn=conn,
+        )
+
+        if own_conn:
+            conn.commit()
+
+    except Exception:
+        if own_conn:
+            conn.rollback()
+        raise
+    finally:
+        if own_conn:
+            conn.close()
+
+    if finished_any:
+        invalidate_player_score_cache(int(owner_id))
+
+    return get_planet_buildings(planet_id)
+
+
+def queue_build_for_planet(
+    planet: dict,
+    buildings: Dict[str, int],
+    building_type: str,
+    user_id: Optional[int] = None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    if building_type not in BASE_COST:
+        return False, "invalid", {"msg": "Unknown building type"}
+
+    planet_id = int(planet["id"])
+    if user_id is None:
+        pid = planet.get("player_id")
+        if pid is None:
+            raise RuntimeError("queue_build_for_planet: planet hat kein 'player_id'")
+        user_id = int(pid)
+    else:
+        user_id = int(user_id)
+
+    now = time.time()
+
+    research_levels = get_research_levels(user_id=user_id)
+
+    # ✅ zuerst Finishes sauber anwenden (atomar + score trigger, falls nötig)
+    buildings = complete_finished_builds_for_planet(planet_id)
+
+    current_level = int(buildings.get(building_type, 0) or 0)
+    max_level = get_max_level_for_building(building_type, buildings)
+
+    if current_level >= max_level:
+        return False, "invalid", {"msg": "Max level reached", "max_level": max_level}
+
+    rows_db = get_build_queue_rows(planet_id)
+    queued_same = sum(1 for r in rows_db if str(r["building_type"]) == building_type)
+    target_level = current_level + queued_same + 1
+
+    if target_level > max_level:
+        return False, "invalid", {"msg": "Max level reached", "max_level": max_level, "target_level": target_level}
+
+    if not has_building_requirements(buildings, research_levels, building_type):
+        return False, "requirements", {
+            "building_type": building_type,
+            "current_level": current_level,
+            "target_level": target_level
+        }
+
+    # Kosten für den nächsten "Slot" dieses Gebäudes (inkl. queued_same)
+    cost_metal, cost_crystal = get_upgrade_cost(building_type, current_level + queued_same)
+
+    planet_metal = float(planet.get("metal", 0) or 0)
+    planet_crystal = float(planet.get("crystal", 0) or 0)
+    if planet_metal < cost_metal or planet_crystal < cost_crystal:
+        return False, "resources", {
+            "building_type": building_type,
+            "current_level": current_level,
+            "target_level": target_level,
+            "cost_metal": cost_metal,
+            "cost_crystal": cost_crystal,
+            "planet_metal": planet_metal,
+            "planet_crystal": planet_crystal,
+        }
+
+    settings = get_game_settings()
+    raw_limit = settings.get("queue_limit", 3)
+    try:
+        queue_limit = int(raw_limit)
+    except (ValueError, TypeError):
+        try:
+            queue_limit = int(float(raw_limit))
+        except (ValueError, TypeError):
+            queue_limit = 3
+    queue_limit = max(queue_limit, 1)
+
+    if len(rows_db) >= queue_limit:
+        return False, "queue_full", {"queue_count": len(rows_db), "queue_limit": queue_limit}
+
+    duration = get_build_time(building_type, target_level, user_id=user_id)
+
+    last_finish_time = max(float(r["finish_time"]) for r in rows_db) if rows_db else now
+    start_time = max(now, last_finish_time)
+    finish_time = start_time + duration
+
+    # Ressourcen atomar abziehen (DB ist Source of Truth)
+    if not try_spend_resources(planet_id, int(cost_metal), int(cost_crystal)):
+        return False, "resources", {
+            "building_type": building_type,
+            "current_level": current_level,
+            "target_level": target_level
+        }
+
+    job_id = add_build_job(planet_id, building_type, start_time, finish_time)
+
+    payload = {
+        "job_id": int(job_id),
+        "building_type": building_type,
+        "target_level": int(target_level),
+        "duration": int(duration),
+        "finish_time": float(finish_time),
+        "queue_limit": int(queue_limit),
+        "max_level": int(max_level),
+    }
+
+    return True, "ok", payload
+
+
+# =============================================================================
+# Config Validation
+# =============================================================================
+
+def _validate_building_config() -> None:
+    for key in BUILDING_ORDER:
+        if key not in BASE_COST:
+            raise RuntimeError(f"BUILDING_CONFIG: '{key}' fehlt in BASE_COST")
+        if key not in COST_FACTOR:
+            raise RuntimeError(f"BUILDING_CONFIG: '{key}' fehlt in COST_FACTOR")
+        if key not in BUILD_TIME_BASE:
+            raise RuntimeError(f"BUILDING_CONFIG: '{key}' fehlt in BUILD_TIME_BASE")
+        if key not in BUILD_TIME_FACTOR:
+            raise RuntimeError(f"BUILDING_CONFIG: '{key}' fehlt in BUILD_TIME_FACTOR")
+        if key not in BUILDING_TAB:
+            raise RuntimeError(f"BUILDING_CONFIG: '{key}' fehlt in BUILDING_TAB")
+        if key not in BUILDING_REQUIREMENTS:
+            raise RuntimeError(f"BUILDING_CONFIG: '{key}' fehlt in BUILDING_REQUIREMENTS")
+
+    for b_type, req in BUILDING_REQUIREMENTS.items():
+        for req_b_key in req.get("buildings", {}).keys():
+            if req_b_key not in ALL_BUILDINGS:
+                raise RuntimeError(f"BUILDING_CONFIG: '{b_type}' verweist auf unbekanntes Gebäude '{req_b_key}'")
+        for req_r_key in req.get("research", {}).keys():
+            if req_r_key not in RESEARCH_TECHS:
+                raise RuntimeError(f"BUILDING_CONFIG: '{b_type}' verweist auf unbekannte Forschung '{req_r_key}'")
+
+
+_validate_building_config()

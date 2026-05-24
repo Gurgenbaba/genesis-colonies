@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>{{ T("title") }}</title>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+  {% block extra_head %}{% endblock %}
+</head>
+
+{% set SIMPLE_LAYOUT = request.endpoint in ['landing', 'login', 'register'] %}
+{% set WIP_ENDPOINTS = ['galaxy_view', 'shipyard_view', 'defense_view', 'fleet_view', 'alliance_view'] %}
+{% set _motd_enabled = (motd_enabled if motd_enabled is defined else False) %}
+{% set _motd_text = (motd_text if motd_text is defined else "") %}
+{% set _player_stats = (PLAYER_STATS if PLAYER_STATS is defined and PLAYER_STATS else {}) %}
+
+<body class="gc-body gc-theme-dark {{ body_bg|default('') }} {% if SIMPLE_LAYOUT %}gc-body-simple{% else %}gc-body-ingame{% endif %}"
+      data-theme="dark"
+      data-endpoint="{{ request.endpoint or '' }}">
+
+  <!-- Skip Link (Keyboard/Screenreader) -->
+  <a class="gc-skip-link" href="#main-content">
+    {{ T("skip_to_content", "Zum Inhalt springen") }}
+  </a>
+
+  <div class="gc-bg" aria-hidden="true"></div>
+
+  <!-- ====================== HEADER ====================== -->
+  <header class="gc-header" role="banner">
+    <div class="gc-header-inner gc-header-grid">
+
+      <!-- SLOT A: Brand -->
+      <div class="gc-hslot gc-hslot-brand">
+        <a href="{{ url_for('landing') }}" class="gc-logo" aria-label="Genesis Colonies Startseite">
+          <span class="gc-logo-icon" aria-hidden="true">🛰️</span>
+          <span class="gc-title">Genesis Colonies</span>
+        </a>
+      </div>
+
+      <!-- SLOT B: Resources (nur Ingame) -->
+      <div class="gc-hslot gc-hslot-res">
+        {% if not SIMPLE_LAYOUT %}
+          <div class="gc-resource-sticky">
+          <div class="resource-bar" id="resource-bar" role="status" aria-live="polite" aria-label="{{ T('resources', 'Ressourcen') }}">
+
+            <!-- Ferronit -->
+            <span class="res-block res-block-metal" title="{{ T('resource_metal') }}">
+              <img src="{{ url_for('static', filename='icons/ferronit.png') }}"
+                   class="res-icon"
+                   alt="{{ T('resource_metal') }}">
+              <span class="res-value metal">{{ (player.metal if player is defined else 0)|fmt_int }}</span>
+              <span class="res-sep" aria-hidden="true">/</span>
+              <span class="res-cap metal">{{ (storage_caps.metal if storage_caps is defined else 0)|fmt_int }}</span>
+            </span>
+
+            <!-- Crytite -->
+            <span class="res-block res-block-crystal" title="{{ T('resource_crystal') }}">
+              <img src="{{ url_for('static', filename='icons/crytite.png') }}"
+                   class="res-icon"
+                   alt="{{ T('resource_crystal') }}">
+              <span class="res-value crystal">{{ (player.crystal if player is defined else 0)|fmt_int }}</span>
+              <span class="res-sep" aria-hidden="true">/</span>
+              <span class="res-cap crystal">{{ (storage_caps.crystal if storage_caps is defined else 0)|fmt_int }}</span>
+            </span>
+
+            <!-- Aetherion / Energie -->
+            {% set eu = (energy_used if energy_used is defined else 0) | int %}
+            {% set et = (energy_total if energy_total is defined else 0) | int %}
+            <span id="energy-container"
+                  class="res-block res-block-energy {% if et > 0 and eu > et %}energy-warning{% endif %}"
+                  aria-label="{{ T('energy', 'Energie') }}"
+                  title="{{ T('energy', 'Energie') }}">
+              <img src="{{ url_for('static', filename='icons/energy.png') }}"
+                   class="res-icon"
+                   alt="{{ T('energy', 'Energie') }}">
+              <span id="res-energy">{{ eu|fmt_int }}/{{ et|fmt_int }}</span>
+            </span>
+
+          </div>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- SLOT C: HUD (Score/Online/User/Buttons) -->
+      <div class="gc-hslot gc-hslot-hud" aria-label="{{ T('account', 'Account') }}">
+
+        {% if not SIMPLE_LAYOUT %}
+          <!-- HUD Cluster: Score + Online (immer einzeilig) -->
+          <div class="gc-hud-cluster">
+
+            <!-- SCORE (klickbar -> Ranking) -->
+            <a class="gc-header-pill gc-score-pill"
+               href="{{ url_for('ranking_view') }}"
+               aria-label="{{ T('nav_ranking','Ranking') }}"
+               title="{{ T('nav_ranking','Ranking') }}">
+              <span aria-hidden="true">🏆</span>
+              <span class="gc-header-pill-label">
+                {{ T("overview_label_score", "Score") }}:
+              </span>
+
+              <span class="gc-header-pill-value gc-mono" id="hud-score-total">
+                {{ (score or 0)|fmt_int }}
+              </span>
+
+              <span class="res-sep" aria-hidden="true">·</span>
+
+              {% if rank_text is defined and rank_text %}
+                <span class="gc-header-pill-value gc-mono" id="hud-score-rank">{{ rank_text }}</span>
+              {% else %}
+                <span class="gc-header-pill-value gc-mono" id="hud-score-rank">#–</span>
+              {% endif %}
+            </a>
+
+            {% if _player_stats and _player_stats.online_now is defined %}
+              <span class="gc-header-pill gc-online-pill" role="status" aria-live="polite">
+                <span class="gc-header-pill-dot" aria-hidden="true"></span>
+                <span class="gc-header-pill-label">
+                  {{ T("header_online", "Online") }}:
+                </span>
+                <span class="gc-header-pill-value gc-mono">
+                  {{ (_player_stats.online_now or 0)|fmt_int }}
+                  <span aria-hidden="true">/</span>
+                  {{ (_player_stats.total_players or 0)|fmt_int }}
+                </span>
+              </span>
+            {% endif %}
+
+          </div>
+        {% endif %}
+
+        <!-- User block + buttons -->
+        <div class="gc-hud-user">
+
+          {% if request.endpoint != 'landing' %}
+            {% if AUTH_USER and AUTH_USER.id %}
+              <div class="gc-user-info" aria-label="{{ T('logged_in_as', 'Eingeloggt als') }}">
+                <span class="gc-user-name">{{ T("commander") }} {{ AUTH_USER.username }}</span>
+                {% if AUTH_ADMIN %}
+                  <span class="gc-admin-badge" aria-label="Administrator">ADMIN</span>
+                {% endif %}
+              </div>
+
+              <a href="{{ url_for('logout') }}"
+                 class="gc-btn gc-btn-outline logout-btn"
+                 aria-label="{{ T('nav_logout', 'Abmelden') }}">
+                {{ T('nav_logout', 'Abmelden') }}
+              </a>
+            {% else %}
+              <a href="{{ url_for('login') }}"
+                 class="gc-btn gc-btn-primary logout-btn"
+                 aria-label="{{ T('login_btn', 'Einloggen') }}">
+                {{ T('login_btn', 'Einloggen') }}
+              </a>
+            {% endif %}
+          {% endif %}
+
+        </div>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- ====================== LAYOUT ====================== -->
+  <div class="gc-layout">
+
+    {% if not SIMPLE_LAYOUT %}
+      <nav class="gc-sidebar gc-sidebar-desktop" aria-label="Hauptnavigation">
+
+        <a href="{{ url_for('overview') }}"
+           class="gc-nav-link {% if request.endpoint == 'overview' %}active{% endif %}">
+          {{ T("nav_overview") }}
+        </a>
+
+        <a href="{{ url_for('buildings_view') }}"
+           class="gc-nav-link {% if request.endpoint == 'buildings_view' %}active{% endif %}">
+          {{ T("nav_buildings") }}
+        </a>
+
+        <a href="{{ url_for('research_view') }}"
+           class="gc-nav-link {% if request.endpoint == 'research_view' %}active{% endif %}">
+          {{ T("nav_research") }}
+        </a>
+
+        <a href="{{ url_for('shipyard_view') }}"
+           class="gc-nav-link gc-nav-wip {% if request.endpoint == 'shipyard_view' %}active{% endif %}">
+          {{ T("nav_shipyard") }}
+          <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        </a>
+
+        <a href="{{ url_for('defense_view') }}"
+           class="gc-nav-link gc-nav-wip {% if request.endpoint == 'defense_view' %}active{% endif %}">
+          {{ T("nav_defense") }}
+          <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        </a>
+
+        <a href="{{ url_for('fleet_view') }}"
+           class="gc-nav-link gc-nav-wip {% if request.endpoint == 'fleet_view' %}active{% endif %}">
+          {{ T("nav_fleet") }}
+          <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        </a>
+
+        <a href="{{ url_for('galaxy_view') }}"
+           class="gc-nav-link gc-nav-wip {% if request.endpoint == 'galaxy_view' %}active{% endif %}">
+          {{ T("nav_galaxy") }}
+          <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        </a>
+
+        <a href="{{ url_for('alliance_view') }}"
+           class="gc-nav-link gc-nav-wip {% if request.endpoint == 'alliance_view' %}active{% endif %}">
+          {{ T("nav_alliance") }}
+          <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        </a>
+
+        <a href="{{ url_for('ranking_view') }}"
+           class="gc-nav-link {% if request.endpoint == 'ranking_view' %}active{% endif %}">
+          {{ T("nav_ranking", "Ranking") }}
+        </a>
+
+        {% if AUTH_ADMIN %}
+          <a href="{{ url_for('admin_panel') }}"
+             class="gc-nav-link gc-nav-admin {% if request.endpoint == 'admin_panel' %}active{% endif %}">
+            🛠️ {{ T("nav_admin") }}
+          </a>
+        {% endif %}
+      </nav>
+    {% endif %}
+
+    <main class="gc-main" id="main-content" role="main" tabindex="-1">
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="gc-flash-container" id="messages" role="status" aria-live="polite">
+            {% for category, message in messages %}
+              <div class="gc-flash gc-flash-{{ category }}">
+                <span class="gc-flash-dot" aria-hidden="true"></span>
+                <span class="gc-flash-text">{{ message }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      {% if not SIMPLE_LAYOUT and request.endpoint in WIP_ENDPOINTS %}
+        <div class="gc-wip-banner" role="status" aria-live="polite">
+          <span class="gc-wip-banner-icon" aria-hidden="true">🚧</span>
+          <div class="gc-wip-banner-text">
+            <strong>{{ T("wip_banner_title", "Modul in Entwicklung") }}</strong>
+            <span>{{ T("wip_banner_text", "Diese Seite ist eine Vorschau — Spielmechanik folgt in einem späteren Update.") }}</span>
+          </div>
+        </div>
+      {% endif %}
+
+      {% if not SIMPLE_LAYOUT and request.endpoint != 'admin_panel' and _motd_enabled and _motd_text %}
+        <div class="motd-banner" id="gc-motd" role="region" aria-label="{{ T('motd', 'Meldung') }}">
+          <div class="motd-banner-left">
+            <div class="motd-banner-pill" aria-hidden="true">NEWS</div>
+            <div class="motd-banner-text">{{ _motd_text | e }}</div>
+          </div>
+
+          <button class="gc-btn gc-btn-ghost motd-banner-close"
+                  type="button"
+                  aria-label="Meldung ausblenden"
+                  onclick="document.getElementById('gc-motd').style.display='none'">
+            ✕
+          </button>
+        </div>
+      {% endif %}
+
+      {% block content %}{% endblock %}
+    </main>
+
+  </div>
+
+  {% if not SIMPLE_LAYOUT %}
+  <nav class="gc-bottom-nav" aria-label="{{ T('nav_mobile', 'Mobile Navigation') }}">
+    <a href="{{ url_for('overview') }}"
+       class="gc-bottom-nav-item {% if request.endpoint == 'overview' %}active{% endif %}">
+      <span class="gc-bottom-nav-icon" aria-hidden="true">📊</span>
+      <span class="gc-bottom-nav-label">{{ T("nav_overview") }}</span>
+    </a>
+    <a href="{{ url_for('buildings_view') }}"
+       class="gc-bottom-nav-item {% if request.endpoint == 'buildings_view' %}active{% endif %}">
+      <span class="gc-bottom-nav-icon" aria-hidden="true">🏗️</span>
+      <span class="gc-bottom-nav-label">{{ T("nav_buildings") }}</span>
+    </a>
+    <a href="{{ url_for('research_view') }}"
+       class="gc-bottom-nav-item {% if request.endpoint == 'research_view' %}active{% endif %}">
+      <span class="gc-bottom-nav-icon" aria-hidden="true">🔬</span>
+      <span class="gc-bottom-nav-label">{{ T("nav_research") }}</span>
+    </a>
+    <a href="{{ url_for('ranking_view') }}"
+       class="gc-bottom-nav-item {% if request.endpoint == 'ranking_view' %}active{% endif %}">
+      <span class="gc-bottom-nav-icon" aria-hidden="true">🏆</span>
+      <span class="gc-bottom-nav-label">{{ T("nav_ranking", "Ranking") }}</span>
+    </a>
+    <button type="button"
+            class="gc-bottom-nav-item gc-bottom-nav-more"
+            id="gc-nav-more-btn"
+            aria-expanded="false"
+            aria-controls="gc-nav-drawer"
+            aria-label="{{ T('nav_more', 'Mehr') }}">
+      <span class="gc-bottom-nav-icon" aria-hidden="true">☰</span>
+      <span class="gc-bottom-nav-label">{{ T("nav_more", "Mehr") }}</span>
+    </button>
+  </nav>
+
+  <div class="gc-nav-drawer" id="gc-nav-drawer" hidden>
+    <div class="gc-nav-drawer-backdrop" id="gc-nav-drawer-backdrop" aria-hidden="true"></div>
+    <div class="gc-nav-drawer-panel" role="dialog" aria-modal="true" aria-label="{{ T('nav_more', 'Mehr') }}">
+      <div class="gc-nav-drawer-head">
+        <span class="gc-nav-drawer-title">{{ T("nav_more", "Mehr") }}</span>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" id="gc-nav-drawer-close" aria-label="{{ T('close', 'Schließen') }}">✕</button>
+      </div>
+      <div class="gc-nav-drawer-links">
+        <a href="{{ url_for('galaxy_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'galaxy_view' %}active{% endif %}">
+          {{ T("nav_galaxy") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        </a>
+        <a href="{{ url_for('shipyard_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'shipyard_view' %}active{% endif %}">
+          {{ T("nav_shipyard") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        </a>
+        <a href="{{ url_for('defense_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'defense_view' %}active{% endif %}">
+          {{ T("nav_defense") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        </a>
+        <a href="{{ url_for('fleet_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'fleet_view' %}active{% endif %}">
+          {{ T("nav_fleet") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        </a>
+        <a href="{{ url_for('alliance_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'alliance_view' %}active{% endif %}">
+          {{ T("nav_alliance") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        </a>
+        <a href="{{ url_for('techtree_view') }}" class="gc-nav-drawer-link {% if request.endpoint == 'techtree_view' %}active{% endif %}">
+          {{ T("nav_techtree", "Tech-Tree") }}
+        </a>
+        {% if AUTH_ADMIN %}
+        <a href="{{ url_for('admin_panel') }}" class="gc-nav-drawer-link gc-nav-admin {% if request.endpoint == 'admin_panel' %}active{% endif %}">
+          🛠️ {{ T("nav_admin") }}
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Locale JSON für Frontend-JS -->
+  <script id="gc-locale" type="application/json">
+    {{ T_DATA | tojson | safe }}
+  </script>
+
+  <script>
+    (function () {
+      try {
+        const el = document.getElementById('gc-locale');
+        window.GC_LOCALE = el ? JSON.parse(el.textContent) : {};
+      } catch (e) {
+        console.error('GC_LOCALE parse error', e);
+        window.GC_LOCALE = {};
+      }
+    })();
+  </script>
+
+  <script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,522 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{# ------------------------------------------------------------- #}
+{# Defensive Defaults (damit Admin niemals crasht)                #}
+{# ------------------------------------------------------------- #}
+{% set ps = (player_stats if player_stats is defined and player_stats else {}) %}
+{% set settings = (settings if settings is defined and settings else {}) %}
+{% set banned_players = (banned_players if banned_players is defined and banned_players else []) %}
+
+<div class="gc-page admin-page">
+  <div class="admin-wrapper">
+
+    <!-- ============================================================= -->
+    <!-- HEADER                                                        -->
+    <!-- ============================================================= -->
+    <header class="admin-header section-header">
+      <div>
+        <div class="admin-title section-title">
+          {{ T("admin_title") if T("admin_title") != "admin_title" else "Admin Control Center" }}
+        </div>
+        <p class="admin-hint section-hint">
+          {{ T("admin_hint") if T("admin_hint") != "admin_hint"
+             else "Universumsweite Einstellungen – Änderungen wirken sofort auf Produktion, Bauzeiten, Forschung und neue Accounts." }}
+        </p>
+      </div>
+
+      <div class="admin-badge">
+        {{ T("admin_badge_label") if T("admin_badge_label") != "admin_badge_label" else "System Admin" }}
+      </div>
+    </header>
+
+    <!-- ============================================================= -->
+    <!-- QUICK STATS                                                   -->
+    <!-- ============================================================= -->
+    <section class="admin-section admin-section-metrics">
+      <div class="admin-metrics-grid">
+
+        <div class="admin-metric-card">
+          <div class="admin-metric-label">
+            {{ T("admin_metric_online_now") if T("admin_metric_online_now") != "admin_metric_online_now" else "Online jetzt" }}
+          </div>
+          <div class="admin-metric-value">{{ ((ps.online_now if ps and ps.online_now is defined else 0) or 0)|fmt_int }}</div>
+          <div class="admin-metric-sub">
+            {{ T("admin_metric_active_24h") if T("admin_metric_active_24h") != "admin_metric_active_24h" else "Letzte 24h" }}:
+            {{ ((ps.active_24h if ps and ps.active_24h is defined else 0) or 0)|fmt_int }}
+          </div>
+        </div>
+
+        <div class="admin-metric-card">
+          <div class="admin-metric-label">
+            {{ T("admin_metric_universe_label") if T("admin_metric_universe_label") != "admin_metric_universe_label" else "Universum" }}
+          </div>
+          <div class="admin-metric-value">
+            {{ (settings.universe_name if settings and settings.universe_name is defined else "Genesis-Cluster") }}
+          </div>
+          <div class="admin-metric-sub">
+            {{ T("admin_metric_universe_hint") if T("admin_metric_universe_hint") != "admin_metric_universe_hint"
+               else "Anzeige-Name im gesamten Spiel." }}
+          </div>
+        </div>
+
+        <div class="admin-metric-card">
+          <div class="admin-metric-label">
+            {{ T("admin_metric_speed_label") if T("admin_metric_speed_label") != "admin_metric_speed_label" else "Speed-Faktoren" }}
+          </div>
+          <div class="admin-metric-value">
+            ×{{ (settings.production_speed if settings and settings.production_speed is defined else 1) }}
+            /
+            ×{{ (settings.build_speed if settings and settings.build_speed is defined else 1) }}
+            /
+            ×{{ (settings.research_speed if settings and settings.research_speed is defined else 1) }}
+          </div>
+          <div class="admin-metric-sub">
+            {{ T("admin_metric_speed_hint") if T("admin_metric_speed_hint") != "admin_metric_speed_hint" else "Produktion / Bau / Forschung" }}
+          </div>
+        </div>
+
+        <div class="admin-metric-card">
+          <div class="admin-metric-label">
+            {{ T("admin_label_galaxy_count") if T("admin_label_galaxy_count") != "admin_label_galaxy_count" else "Galaxien" }}
+          </div>
+          <div class="admin-metric-value">
+            {{ ((settings.galaxy_count if settings and settings.galaxy_count is defined else 1) or 1)|int }}
+          </div>
+          <div class="admin-metric-sub">
+            {{ T("admin_metric_galaxy_hint") if T("admin_metric_galaxy_hint") != "admin_metric_galaxy_hint" else "Spielbare Galaxien im Cluster." }}
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- SETTINGS                                                      -->
+    <!-- ============================================================= -->
+    <form method="POST" action="{{ url_for('admin_update') }}">
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">
+          {{ T("admin_section_game_settings") if T("admin_section_game_settings") != "admin_section_game_settings" else "Allgemeine Einstellungen" }}
+        </span>
+      </div>
+
+      <section class="admin-section">
+        <div class="admin-form-grid-2">
+
+          <div class="admin-field">
+            <label class="admin-label" for="universe_name">
+              {{ T("universe_name") if T("universe_name") != "universe_name" else "Universums-Name" }}
+            </label>
+            <input class="admin-input" id="universe_name" type="text" name="universe_name"
+                   value="{{ (settings.universe_name if settings and settings.universe_name is defined else '') }}">
+          </div>
+
+          <div class="admin-field">
+            <label class="admin-label" for="galaxy_count">
+              {{ T("admin_label_galaxy_count") if T("admin_label_galaxy_count") != "admin_label_galaxy_count" else "Anzahl Galaxien" }}
+            </label>
+            <input class="admin-input" id="galaxy_count" type="number" name="galaxy_count"
+                   value="{{ (settings.galaxy_count if settings and settings.galaxy_count is defined else 1) }}"
+                   min="1" max="15">
+          </div>
+
+          <div class="admin-field">
+            <label class="admin-label" for="queue_limit">
+              {{ T("admin_label_queue_limit") if T("admin_label_queue_limit") != "admin_label_queue_limit" else "Maximale Bau-Queue pro Planet" }}
+            </label>
+            <input class="admin-input" id="queue_limit" type="number" name="queue_limit"
+                   value="{{ (settings.queue_limit if settings and settings.queue_limit is defined else 1) }}"
+                   min="1" max="20">
+          </div>
+
+        </div>
+      </section>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">
+          {{ T("admin_label_speed") if T("admin_label_speed") != "admin_label_speed" else "Geschwindigkeiten" }}
+        </span>
+      </div>
+
+      <section class="admin-section">
+        <div class="admin-form-grid-3">
+
+          <div class="admin-field">
+            <label class="admin-label" for="production_speed">
+              {{ T("admin_label_production_speed") if T("admin_label_production_speed") != "admin_label_production_speed" else "Produktionsgeschwindigkeit" }}
+            </label>
+            <input class="admin-input" id="production_speed" type="number" step="0.1" name="production_speed"
+                   value="{{ (settings.production_speed if settings and settings.production_speed is defined else 1) }}">
+          </div>
+
+          <div class="admin-field">
+            <label class="admin-label" for="build_speed">
+              {{ T("admin_label_build_speed") if T("admin_label_build_speed") != "admin_label_build_speed" else "Baugeschwindigkeit" }}
+            </label>
+            <input class="admin-input" id="build_speed" type="number" step="0.1" name="build_speed"
+                   value="{{ (settings.build_speed if settings and settings.build_speed is defined else 1) }}">
+          </div>
+
+          <div class="admin-field">
+            <label class="admin-label" for="research_speed">
+              {{ T("admin_label_research_speed") if T("admin_label_research_speed") != "admin_label_research_speed" else "Forschungsgeschwindigkeit" }}
+            </label>
+            <input class="admin-input" id="research_speed" type="number" step="0.1" name="research_speed"
+                   value="{{ (settings.research_speed if settings and settings.research_speed is defined else 1) }}">
+          </div>
+
+          <div class="admin-field">
+            <label class="admin-label" for="fleet_speed_war">
+              {{ T("admin_label_fleet_speed_war") if T("admin_label_fleet_speed_war") != "admin_label_fleet_speed_war" else "Flotten-Speed (Krieg)" }}
+            </label>
+            <input class="admin-input" id="fleet_speed_war" type="number" step="0.1" name="fleet_speed_war"
+                   value="{{ (settings.fleet_speed_war if settings and settings.fleet_speed_war is defined else 1) }}">
+          </div>
+
+          <div class="admin-field">
+            <label class="admin-label" for="fleet_speed_holding">
+              {{ T("admin_label_fleet_speed_holding") if T("admin_label_fleet_speed_holding") != "admin_label_fleet_speed_holding" else "Flotten-Speed (Halten)" }}
+            </label>
+            <input class="admin-input" id="fleet_speed_holding" type="number" step="0.1" name="fleet_speed_holding"
+                   value="{{ (settings.fleet_speed_holding if settings and settings.fleet_speed_holding is defined else 1) }}">
+          </div>
+
+          <div class="admin-field">
+            <label class="admin-label" for="fleet_speed_peaceful">
+              {{ T("admin_label_fleet_speed_peaceful") if T("admin_label_fleet_speed_peaceful") != "admin_label_fleet_speed_peaceful" else "Flotten-Speed (Friedlich)" }}
+            </label>
+            <input class="admin-input" id="fleet_speed_peaceful" type="number" step="0.1" name="fleet_speed_peaceful"
+                   value="{{ (settings.fleet_speed_peaceful if settings and settings.fleet_speed_peaceful is defined else 1) }}">
+          </div>
+
+        </div>
+      </section>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">
+          {{ T("admin_section_start_values") if T("admin_section_start_values") != "admin_section_start_values" else "Startwerte für neue Spieler" }}
+        </span>
+      </div>
+
+      <section class="admin-section">
+        <div class="admin-form-grid-2">
+
+          <div class="admin-field">
+            <label class="admin-label" for="start_metal">
+              {{ T("admin_label_start_metal") if T("admin_label_start_metal") != "admin_label_start_metal" else "Start-Ferronit" }}
+            </label>
+            <input class="admin-input" id="start_metal" type="number" name="start_metal"
+                   value="{{ (settings.start_metal if settings and settings.start_metal is defined else 0) }}">
+          </div>
+
+          <div class="admin-field">
+            <label class="admin-label" for="start_crystal">
+              {{ T("admin_label_start_crystal") if T("admin_label_start_crystal") != "admin_label_start_crystal" else "Start-Crytite" }}
+            </label>
+            <input class="admin-input" id="start_crystal" type="number" name="start_crystal"
+                   value="{{ (settings.start_crystal if settings and settings.start_crystal is defined else 0) }}">
+          </div>
+
+        </div>
+
+        <div class="admin-row-full">
+          <label class="admin-checkbox-row" for="apply_start">
+            <input type="checkbox" name="apply_start_to_existing" value="1" id="apply_start">
+            <span>
+              {{ T("admin_apply_start_to_existing") if T("admin_apply_start_to_existing") != "admin_apply_start_to_existing"
+                 else "Neue Startressourcen auch auf bestehende Homeworlds anwenden (als Mindestwert)" }}
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">
+          {{ T("admin_section_motd") if T("admin_section_motd") != "admin_section_motd" else "Universums-Meldung (MOTD)" }}
+        </span>
+      </div>
+
+      <section class="admin-section">
+        <div class="admin-row">
+          <div class="admin-field admin-field-wide">
+            <label class="admin-label" for="motd_text">
+              {{ T("admin_motd_label") if T("admin_motd_label") != "admin_motd_label" else "Anzeige-Text im Spiel" }}
+            </label>
+            <span class="admin-small-hint">
+              {{ T("admin_motd_hint") if T("admin_motd_hint") != "admin_motd_hint" else "Kurze Info, z. B. Server-News, Wartungsankündigungen, Events..." }}
+            </span>
+            <textarea class="admin-textarea" name="motd_text" id="motd_text"
+                      placeholder="Kurze Info, z. B. Server-News, Wartung, Events...">{{ (settings.motd_text if settings and settings.motd_text is defined else "") }}</textarea>
+          </div>
+        </div>
+
+        <div class="admin-row-full">
+          <label class="admin-checkbox-row" for="motd_enabled">
+            <input type="checkbox" id="motd_enabled" name="motd_enabled" value="1"
+                   {% if settings and settings.motd_enabled is defined and settings.motd_enabled %}checked{% endif %}>
+            <span>
+              {{ T("admin_motd_enabled_label") if T("admin_motd_enabled_label") != "admin_motd_enabled_label" else "MOTD aktuell aktiv anzeigen" }}
+            </span>
+          </label>
+        </div>
+
+        <div class="admin-btn-row">
+          <button class="gc-btn gc-btn-primary gc-btn-sm" type="submit">
+            {{ T("admin_btn_save_settings") if T("admin_btn_save_settings") != "admin_btn_save_settings" else "Einstellungen speichern" }}
+          </button>
+        </div>
+      </section>
+
+    </form>
+
+    <!-- ============================================================= -->
+    <!-- RESOURCE TOOLS                                                -->
+    <!-- ============================================================= -->
+    <div class="admin-section-title">
+      <span class="admin-section-title-text">
+        {{ T("admin_section_resources_tools") if T("admin_section_resources_tools") != "admin_section_resources_tools" else "Ressourcen-Tools (Overflow)" }}
+      </span>
+    </div>
+
+    <section class="admin-section">
+      <p class="admin-small-hint">
+        {{ T("admin_resources_hint") if T("admin_resources_hint") != "admin_resources_hint"
+           else "Hier kannst du Ressourcen direkt auf Homeworlds verteilen. Die Änderungen ignorieren die Lagerkapazität – Overflows sind erlaubt. Spieler-ID leer ⇒ deine Homeworld · Spieler-ID gesetzt ⇒ genau dieser Spieler · Checkbox ⇒ alle bestehenden Homeworlds (Spieler-ID wird ignoriert)." }}
+      </p>
+
+      <form method="post" action="{{ url_for('admin_resources') }}">
+        <div class="admin-form-grid-2">
+          <div class="admin-field">
+            <label class="admin-label" for="metal_delta">
+              {{ T("admin_label_metal_delta") if T("admin_label_metal_delta") != "admin_label_metal_delta" else "Ferronit-Delta" }}
+            </label>
+            <input class="admin-input" type="text" id="metal_delta" name="metal_delta" placeholder="z.B. 100000 oder -50000">
+          </div>
+
+          <div class="admin-field">
+            <label class="admin-label" for="crystal_delta">
+              {{ T("admin_label_crystal_delta") if T("admin_label_crystal_delta") != "admin_label_crystal_delta" else "Crytite-Delta" }}
+            </label>
+            <input class="admin-input" type="text" id="crystal_delta" name="crystal_delta" placeholder="z.B. 50000 oder -25000">
+          </div>
+        </div>
+
+        <div class="admin-row">
+          <div class="admin-field admin-field-wide">
+            <label class="admin-label" for="resource_player_id">
+              {{ T("admin_label_resource_player_id") if T("admin_label_resource_player_id") != "admin_label_resource_player_id" else "Spieler-ID (optional)" }}
+            </label>
+            <input class="admin-input" type="text" id="resource_player_id" name="resource_player_id" placeholder="leer = du selbst">
+          </div>
+        </div>
+
+        <div class="admin-row-full">
+          <label class="admin-checkbox-row" for="resource_all">
+            <input type="checkbox" name="resource_apply_all" value="1" id="resource_all">
+            <span>
+              {{ T("admin_label_resource_apply_all") if T("admin_label_resource_apply_all") != "admin_label_resource_apply_all"
+                 else "Auf alle Homeworlds anwenden (Spieler-ID wird ignoriert)" }}
+            </span>
+          </label>
+        </div>
+
+        <div class="admin-btn-row">
+          <button type="submit" class="gc-btn gc-btn-danger gc-btn-sm">
+            {{ T("admin_btn_apply_resources") if T("admin_btn_apply_resources") != "admin_btn_apply_resources" else "Ressourcen anwenden (kein Cap)" }}
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- UNIVERSE WIPE                                                 -->
+    <!-- ============================================================= -->
+    <div class="admin-section-title">
+      <span class="admin-section-title-text">
+        {{ T("admin_section_wipe") if T("admin_section_wipe") != "admin_section_wipe" else "Universum zurücksetzen (Wipe)" }}
+      </span>
+    </div>
+
+    <section class="admin-section admin-section-danger">
+      <p class="admin-small-hint">
+        {{ T("admin_wipe_hint") if T("admin_wipe_hint") != "admin_wipe_hint"
+           else "Achtung: Dieser Vorgang setzt das gesamte Universum zurück. Alle Planeten, Gebäude, Queues und Flotten werden gelöscht. Spieler-Accounts bleiben bestehen. Homeworlds werden neu erzeugt." }}
+      </p>
+
+      <form method="post" action="{{ url_for('admin_wipe_universe') }}">
+        <div class="admin-row-full">
+          <label class="admin-checkbox-row" for="wipe_research">
+            <input type="checkbox" id="wipe_research" name="wipe_reset_research" value="1" checked>
+            <span>
+              {{ T("admin_wipe_research") if T("admin_wipe_research") != "admin_wipe_research" else "Forschungsstände zurücksetzen" }}
+            </span>
+          </label>
+        </div>
+
+        <div class="admin-row-full">
+          <label class="admin-checkbox-row" for="wipe_resources">
+            <input type="checkbox" id="wipe_resources" name="wipe_reset_resources" value="1" checked>
+            <span>
+              {{ T("admin_wipe_resources") if T("admin_wipe_resources") != "admin_wipe_resources" else "Ressourcen auf Startwerte setzen" }}
+            </span>
+          </label>
+        </div>
+
+        <div class="admin-row-full">
+          <label class="admin-checkbox-row" for="wipe_messages">
+            <input type="checkbox" id="wipe_messages" name="wipe_delete_messages" value="1" checked>
+            <span>
+              {{ T("admin_wipe_messages") if T("admin_wipe_messages") != "admin_wipe_messages" else "Nachrichten/Logs leeren" }}
+            </span>
+          </label>
+        </div>
+
+        <div class="admin-row-full">
+          <label class="admin-checkbox-row" for="wipe_confirm">
+            <input type="checkbox" id="wipe_confirm" name="wipe_confirm" value="1">
+            <span>
+              {{ T("admin_wipe_confirm") if T("admin_wipe_confirm") != "admin_wipe_confirm" else "Ich verstehe: Dieser Wipe ist endgültig." }}
+            </span>
+          </label>
+        </div>
+
+        <div class="admin-btn-row">
+          <button class="gc-btn gc-btn-danger gc-btn-sm" type="submit">
+            {{ T("admin_wipe_execute") if T("admin_wipe_execute") != "admin_wipe_execute" else "Wipe ausführen" }}
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- PLAYER BANS                                                   -->
+    <!-- ============================================================= -->
+    <div class="admin-section-title">
+      <span class="admin-section-title-text">
+        {{ T("admin_section_players") if T("admin_section_players") != "admin_section_players" else "Spieler-Verwaltung (Banns)" }}
+      </span>
+    </div>
+
+    <section class="admin-section">
+      <p class="admin-small-hint">
+        {{ T("admin_ban_hint") if T("admin_ban_hint") != "admin_ban_hint"
+           else "Schnelles Bann-Management. Feineres Player-Handling (Stats, Planeten, etc.) folgt später." }}
+      </p>
+
+      <form method="post" action="{{ url_for('admin_ban_user') }}">
+        <div class="admin-form-grid-3">
+          <div class="admin-field">
+            <label class="admin-label" for="ban_player_id">
+              {{ T("admin_label_ban_player_id") if T("admin_label_ban_player_id") != "admin_label_ban_player_id" else "Spieler-ID" }}
+            </label>
+            <input class="admin-input" id="ban_player_id" type="number" name="ban_player_id" placeholder="z.B. 1">
+          </div>
+
+          <div class="admin-field">
+            <label class="admin-label" for="ban_reason">
+              {{ T("admin_label_ban_reason") if T("admin_label_ban_reason") != "admin_label_ban_reason" else "Grund" }}
+            </label>
+            <input class="admin-input" id="ban_reason" type="text" name="ban_reason" placeholder="z.B. Multicount, Beleidigung, Botting">
+          </div>
+
+          <div class="admin-field">
+            <label class="admin-label" for="ban_hours">
+              {{ T("admin_label_ban_hours") if T("admin_label_ban_hours") != "admin_label_ban_hours" else "Dauer (Stunden)" }}
+            </label>
+            <input class="admin-input" id="ban_hours" type="number" name="ban_hours" placeholder="0 = permanent">
+          </div>
+        </div>
+
+        <div class="admin-btn-row">
+          <button class="gc-btn gc-btn-danger gc-btn-sm" type="submit">
+            {{ T("admin_btn_ban_player") if T("admin_btn_ban_player") != "admin_btn_ban_player" else "Spieler bannen" }}
+          </button>
+        </div>
+      </form>
+
+      <hr class="admin-divider">
+
+      <form method="post" action="{{ url_for('admin_unban_user') }}">
+        <div class="admin-form-grid-2">
+          <div class="admin-field">
+            <label class="admin-label" for="unban_player_id">
+              {{ T("admin_label_unban_player_id") if T("admin_label_unban_player_id") != "admin_label_unban_player_id" else "Spieler-ID (Bann aufheben)" }}
+            </label>
+            <input class="admin-input" id="unban_player_id" type="number" name="unban_player_id" placeholder="z.B. 1">
+          </div>
+        </div>
+
+        <div class="admin-btn-row">
+          <button class="gc-btn gc-btn-outline gc-btn-sm" type="submit">
+            {{ T("admin_btn_unban_player") if T("admin_btn_unban_player") != "admin_btn_unban_player" else "Bann aufheben" }}
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- ACTIVE BANS LIST                                              -->
+    <!-- ============================================================= -->
+    <div class="admin-section-title">
+      <span class="admin-section-title-text">
+        {{ T("admin_section_bans") if T("admin_section_bans") != "admin_section_bans" else "Aktive Banns" }}
+      </span>
+    </div>
+
+    <section class="admin-section">
+      {% if banned_players and banned_players|length > 0 %}
+        <div class="ban-table-wrapper">
+          <table class="ban-table table-std">
+            <thead>
+              <tr>
+                <th>Spieler-ID</th>
+                <th>Username</th>
+                <th>Player-Name</th>
+                <th>Grund</th>
+                <th>Erstellt am</th>
+                <th>Gültig bis</th>
+                <th class="text-right">Aktion</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ban in banned_players %}
+                <tr>
+                  <td>{{ ban.player_id }}</td>
+                  <td>{{ ban.username or "–" }}</td>
+                  <td>{{ ban.player_name or "–" }}</td>
+                  <td>{{ ban.reason or "–" }}</td>
+                  <td>{{ ban.created_text }}</td>
+                  <td>
+                    {% if ban.is_permanent %}
+                      <span class="ban-permanent">permanent</span>
+                    {% else %}
+                      {{ ban.expires_text }}
+                    {% endif %}
+                  </td>
+                  <td class="text-right">
+                    <form method="post" action="{{ url_for('admin_unban_user') }}" class="ban-actions-form">
+                      <input type="hidden" name="unban_player_id" value="{{ ban.player_id }}">
+                      <button type="submit" class="gc-btn gc-btn-outline gc-btn-xs">
+                        {{ T("admin_btn_unban_player") if T("admin_btn_unban_player") != "admin_btn_unban_player" else "Aufheben" }}
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <span class="admin-small-hint">
+          {{ T("admin_no_bans") if T("admin_no_bans") != "admin_no_bans" else "Aktuell sind keine Spieler gebannt." }}
+        </span>
+      {% endif %}
+    </section>
+
+  </div>
+</div>
+
+{% endblock %}

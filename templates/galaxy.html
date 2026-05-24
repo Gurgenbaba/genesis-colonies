@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{# ------------------------------------------------------------- #}
+{# Defensive Defaults (Galaxy darf niemals crasht)                #}
+{# ------------------------------------------------------------- #}
+{% set galaxy_hint = T("galaxy_hint") %}
+{% if galaxy_hint == "galaxy_hint" %}
+  {% set galaxy_hint = "Scanner-Ansicht des aktuellen Sektors. Später siehst du hier Flotten, Kolonien und Asteroidenfelder." %}
+{% endif %}
+
+{% set sector_label = T("galaxy_sector_overview") %}
+{% if sector_label == "galaxy_sector_overview" %}
+  {% set sector_label = "Sektor-Übersicht" %}
+{% endif %}
+
+{% set probes_label = T("galaxy_probes_ready") %}
+{% if probes_label == "galaxy_probes_ready" %}
+  {% set probes_label = "Sonden bereit" %}
+{% endif %}
+
+{% set slot_free = T("galaxy_colony_slot_free") %}
+{% if slot_free == "galaxy_colony_slot_free" %}
+  {% set slot_free = "Kolonieslot frei" %}
+{% endif %}
+
+<div class="gc-page galaxy-wrapper">
+
+  <!-- HEADLINE -->
+  <header class="galaxy-headline section-header">
+    <h2 class="section-title">{{ T("nav_galaxy") }}</h2>
+    <p class="section-hint hint">{{ galaxy_hint }}</p>
+  </header>
+
+  <section class="gc-panel galaxy-shell">
+
+    <!-- PANEL HEADER / CONTROLS -->
+    <div class="gc-panel-header galaxy-shell-header">
+
+      <!-- LEFT: Title + Subtitle -->
+      <div class="gc-panel-head-left">
+        <span class="gc-panel-title galaxy-shell-title">{{ sector_label }}</span>
+        <span class="gc-panel-subtitle">{{ probes_label }}</span>
+      </div>
+
+      <!-- RIGHT: Controls (placeholder UI, später dynamisch) -->
+      <div class="gc-panel-head-right galaxy-controls">
+        <div class="galaxy-coord-block" aria-label="Galaxy">
+          <span class="galaxy-coord-label">Galaxy</span>
+          <span class="galaxy-coord-value">1</span>
+        </div>
+
+        <div class="galaxy-coord-block" aria-label="System">
+          <span class="galaxy-coord-label">System</span>
+          <span class="galaxy-coord-value">001</span>
+        </div>
+
+        <div class="galaxy-nav-buttons" aria-label="Navigation (in Planung)">
+          <button class="gc-btn gc-btn-ghost gc-btn-xs" type="button" disabled>‹ Gal -</button>
+          <button class="gc-btn gc-btn-ghost gc-btn-xs" type="button" disabled>Sys -</button>
+          <button class="gc-btn gc-btn-ghost gc-btn-xs" type="button" disabled>Sys +</button>
+          <button class="gc-btn gc-btn-ghost gc-btn-xs" type="button" disabled>Gal +</button>
+        </div>
+
+        <span class="gc-panel-tag galaxy-shell-tag">{{ probes_label }}</span>
+      </div>
+
+    </div>
+
+    <!-- GRID: SYSTEM CARDS -->
+    <div class="galaxy-grid">
+
+      <div class="galaxy-system-card">
+        <div class="gs-icon">Aur</div>
+        <div class="gs-text">
+          <div class="gs-name">Aurora Prime</div>
+          <div class="gs-coord">[1:1:3]</div>
+          <div class="gs-info">
+            <span class="gs-pill gs-pill-free">{{ slot_free }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="galaxy-system-card">
+        <div class="gs-icon">Neb</div>
+        <div class="gs-text">
+          <div class="gs-name">Nebula IX</div>
+          <div class="gs-coord">[1:2:5]</div>
+          <div class="gs-info">
+            <span class="gs-pill gs-pill-free">{{ slot_free }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="galaxy-system-card">
+        <div class="gs-icon">Ver</div>
+        <div class="gs-text">
+          <div class="gs-name">Vertex</div>
+          <div class="gs-coord">[1:3:7]</div>
+          <div class="gs-info">
+            <span class="gs-pill gs-pill-free">{{ slot_free }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="galaxy-system-card">
+        <div class="gs-icon">Ecl</div>
+        <div class="gs-text">
+          <div class="gs-name">Eclipse</div>
+          <div class="gs-coord">[1:4:4]</div>
+          <div class="gs-info">
+            <span class="gs-pill gs-pill-free">{{ slot_free }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="galaxy-system-card">
+        <div class="gs-icon">Obs</div>
+        <div class="gs-text">
+          <div class="gs-name">Obsidian</div>
+          <div class="gs-coord">[1:5:2]</div>
+          <div class="gs-info">
+            <span class="gs-pill gs-pill-free">{{ slot_free }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="galaxy-system-card">
+        <div class="gs-icon">Hor</div>
+        <div class="gs-text">
+          <div class="gs-name">Horizon</div>
+          <div class="gs-coord">[1:6:3]</div>
+          <div class="gs-info">
+            <span class="gs-pill gs-pill-free">{{ slot_free }}</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- LEGEND / PLACEHOLDER -->
+    <div class="galaxy-legend">
+      <div class="galaxy-legend-title">
+        {{ T("galaxy_legend_title") if T("galaxy_legend_title") != "galaxy_legend_title" else "Scanner-Legende" }}
+      </div>
+      <div class="galaxy-legend-items">
+        <span class="gl-item">
+          <span class="gs-pill gs-pill-free"></span>
+          {{ T("galaxy_legend_free_slot") if T("galaxy_legend_free_slot") != "galaxy_legend_free_slot" else "Freier Kolonieslot" }}
+        </span>
+        <span class="gl-item gl-item-disabled">
+          {{ T("galaxy_legend_enemy_planned") if T("galaxy_legend_enemy_planned") != "galaxy_legend_enemy_planned" else "● Feindliche Kolonie (in Planung)" }}
+        </span>
+        <span class="gl-item gl-item-disabled">
+          {{ T("galaxy_legend_asteroids_planned") if T("galaxy_legend_asteroids_planned") != "galaxy_legend_asteroids_planned" else "◆ Asteroidenfeld / Expedition (in Planung)" }}
+        </span>
+      </div>
+    </div>
+
+  </section>
+</div>
+
+{% endblock %}

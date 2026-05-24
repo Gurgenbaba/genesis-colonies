@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+
+{% block extra_head %}{% endblock %}
+
+{% block content %}
+
+{# ------------------------------------------------------------- #}
+{# Defensive Defaults (Landing darf niemals crasht)               #}
+{# ------------------------------------------------------------- #}
+{% set gs = (GAME_SETTINGS if GAME_SETTINGS is defined and GAME_SETTINGS else {}) %}
+
+{% set universe_name = (gs.get('universe_name', 'Genesis Colonies') if gs else 'Genesis Colonies') %}
+
+{# Title/Sub/Pitch #}
+{% set landing_title = T("landing_title") %}
+{% if landing_title == "landing_title" %}{% set landing_title = "Genesis Colonies" %}{% endif %}
+
+{% set landing_subtitle = T("landing_subtitle") %}
+{% if landing_subtitle == "landing_subtitle" %}{% set landing_subtitle = "Baue. Erforsche. Erobere." %}{% endif %}
+
+{% set pitch1 = T("landing_pitch_line1") %}
+{% if pitch1 == "landing_pitch_line1" %}{% set pitch1 = "Errichte eine Kolonie im Genesis-Cluster und optimiere deine Produktion." %}{% endif %}
+
+{% set pitch2 = T("landing_pitch_line2") %}
+{% if pitch2 == "landing_pitch_line2" %}{% set pitch2 = "Erforsche Technologien, die deine Wirtschaft beschleunigen und neue Systeme freischalten." %}{% endif %}
+
+{% set pitch3 = T("landing_pitch_line3") %}
+{% if pitch3 == "landing_pitch_line3" %}{% set pitch3 = "Messe dich mit anderen Commandern – fair, persistent und ohne Pay2Win." %}{% endif %}
+
+{# Badges #}
+{% set b1 = T("landing_badge_scifi") %}
+{% if b1 == "landing_badge_scifi" %}{% set b1 = "⚙️ Sci-Fi Aufbaustrategie" %}{% endif %}
+{% set b2 = T("landing_badge_universe") %}
+{% if b2 == "landing_badge_universe" %}{% set b2 = "🌌 Persistentes Universum" %}{% endif %}
+{% set b3 = T("landing_badge_live") %}
+{% if b3 == "landing_badge_live" %}{% set b3 = "🛰 Live-Produktion & Forschung" %}{% endif %}
+{% set b4 = T("landing_badge_nop2w") %}
+{% if b4 == "landing_badge_nop2w" %}{% set b4 = "🚫 Kein Pay2Win" %}{% endif %}
+
+{# CTAs #}
+{% set cta_play = T("landing_cta_play") %}
+{% if cta_play == "landing_cta_play" %}{% set cta_play = "Jetzt spielen" %}{% endif %}
+
+{% set cta_login = T("landing_cta_login") %}
+{% if cta_login == "landing_cta_login" %}{% set cta_login = "Login" %}{% endif %}
+
+{% set cta_cc = T("landing_cta_command_center") %}
+{% if cta_cc == "landing_cta_command_center" %}{% set cta_cc = "🛰 Zum Command Center" %}{% endif %}
+
+{% set cta_logout = T("landing_cta_logout") %}
+{% if cta_logout == "landing_cta_logout" %}{% set cta_logout = "Abmelden" %}{% endif %}
+
+{% set foot = T("landing_footnote") %}
+{% if foot == "landing_footnote" %}
+  {% set foot = "Kostenlos spielbar · Browser-Game · Kolonie arbeitet weiter, während du offline bist" %}
+{% endif %}
+
+{# Scanner Card #}
+{% set scan_title = T("landing_scanner_title") %}
+{% if scan_title == "landing_scanner_title" %}{% set scan_title = "Kolonie-Scanner" %}{% endif %}
+
+{% set scan_sub = T("landing_scanner_subtitle") %}
+{% if scan_sub == "landing_scanner_subtitle" %}{% set scan_sub = "Live-Status des Genesis-Clusters" %}{% endif %}
+
+{% set lbl_status = T("landing_label_status") %}
+{% if lbl_status == "landing_label_status" %}{% set lbl_status = "Status" %}{% endif %}
+
+{% set lbl_universe = T("landing_label_universe") %}
+{% if lbl_universe == "landing_label_universe" %}{% set lbl_universe = "Universum" %}{% endif %}
+
+{% set lbl_galaxies = T("landing_label_galaxies") %}
+{% if lbl_galaxies == "landing_label_galaxies" %}{% set lbl_galaxies = "Galaxien" %}{% endif %}
+
+{% set lbl_start = T("landing_label_start_resources") %}
+{% if lbl_start == "landing_label_start_resources" %}{% set lbl_start = "Startressourcen" %}{% endif %}
+
+{% set lbl_prod = T("landing_label_production") %}
+{% if lbl_prod == "landing_label_production" %}{% set lbl_prod = "Produktion" %}{% endif %}
+
+{% set status_online = T("landing_status_online") %}
+{% if status_online == "landing_status_online" %}{% set status_online = "Eingeloggt" %}{% endif %}
+
+{% set status_offline = T("landing_status_offline") %}
+{% if status_offline == "landing_status_offline" %}{% set status_offline = "Offline" %}{% endif %}
+
+{% set commander_label = T("commander") %}
+{% if commander_label == "commander" %}{% set commander_label = "Commander" %}{% endif %}
+
+{% set galaxy_val = (gs.get('galaxy_count', 1) if gs else 1) %}
+{% set start_metal = (gs.get('start_metal', 0) if gs else 0) %}
+{% set start_crystal = (gs.get('start_crystal', 0) if gs else 0) %}
+
+{# IMPORTANT: force numeric for format() below #}
+{% set prod_speed_raw = (gs.get('production_speed', 1.0) if gs else 1.0) %}
+{% set prod_speed = prod_speed_raw|float %}
+
+{# Lower sections #}
+{% set s1_title = T("landing_section_what_title") %}
+{% if s1_title == "landing_section_what_title" %}{% set s1_title = "Was erwartet dich?" %}{% endif %}
+{% set s1_sub = T("landing_section_what_subtitle") %}
+{% if s1_sub == "landing_section_what_subtitle" %}{% set s1_sub = "Schlankes Core-Gameplay mit Wachstumspotential" %}{% endif %}
+
+{% set f1_t = T("landing_feature_live_title") %}
+{% if f1_t == "landing_feature_live_title" %}{% set f1_t = "Live-Produktion" %}{% endif %}
+{% set f1_s = T("landing_feature_live_text") %}
+{% if f1_s == "landing_feature_live_text" %}{% set f1_s = "Rohstoffe laufen weiter – auch wenn du offline bist." %}{% endif %}
+
+{% set f2_t = T("landing_feature_tech_title") %}
+{% if f2_t == "landing_feature_tech_title" %}{% set f2_t = "Tech-Progress" %}{% endif %}
+{% set f2_s = T("landing_feature_tech_text") %}
+{% if f2_s == "landing_feature_tech_text" %}{% set f2_s = "Forschung schaltet neue Gebäude, Schiffe und Boni frei." %}{% endif %}
+
+{% set f3_t = T("landing_feature_multi_title") %}
+{% if f3_t == "landing_feature_multi_title" %}{% set f3_t = "Multi-User ready" %}{% endif %}
+{% set f3_s = T("landing_feature_multi_text") %}
+{% if f3_s == "landing_feature_multi_text" %}{% set f3_s = "Ein Universum, viele Commander – echte Konkurrenz." %}{% endif %}
+
+{% set f4_t = T("landing_feature_nop2w_title") %}
+{% if f4_t == "landing_feature_nop2w_title" %}{% set f4_t = "Kein Pay2Win" %}{% endif %}
+{% set f4_s = T("landing_feature_nop2w_text") %}
+{% if f4_s == "landing_feature_nop2w_text" %}{% set f4_s = "Skill & Strategie > Geld. Punkt." %}{% endif %}
+
+{% set s2_title = T("landing_section_start_title") %}
+{% if s2_title == "landing_section_start_title" %}{% set s2_title = "Dein Start als Commander" %}{% endif %}
+{% set s2_sub = T("landing_section_start_subtitle") %}
+{% if s2_sub == "landing_section_start_subtitle" %}{% set s2_sub = "Drei Schritte bis zur laufenden Kolonie" %}{% endif %}
+
+{% set step1 = T("landing_step_1") %}
+{% if step1 == "landing_step_1" %}{% set step1 = "Baue Ferronit-Mine & Solarkollektoren" %}{% endif %}
+{% set step2 = T("landing_step_2") %}
+{% if step2 == "landing_step_2" %}{% set step2 = "Starte Forschung (Bauoptimierung / Scanner)" %}{% endif %}
+{% set step3 = T("landing_step_3") %}
+{% if step3 == "landing_step_3" %}{% set step3 = "Level deine Lager & plane den nächsten Ausbau" %}{% endif %}
+
+{% set rm1 = T("landing_roadmap_fleet") %}
+{% if rm1 == "landing_roadmap_fleet" %}{% set rm1 = "Flotten" %}{% endif %}
+{% set rm2 = T("landing_roadmap_defense") %}
+{% if rm2 == "landing_roadmap_defense" %}{% set rm2 = "Verteidigung" %}{% endif %}
+{% set rm3 = T("landing_roadmap_alliance") %}
+{% if rm3 == "landing_roadmap_alliance" %}{% set rm3 = "Allianzen" %}{% endif %}
+{% set rm4 = T("landing_roadmap_galaxy") %}
+{% if rm4 == "landing_roadmap_galaxy" %}{% set rm4 = "Galaxie-Karte" %}{% endif %}
+
+<div class="gc-page landing-wrapper">
+
+  <div class="landing-hero">
+
+    <!-- =========================================
+         LEFT: HERO TEXT
+         ========================================= -->
+    <div class="landing-hero-left">
+
+      <div class="landing-title">{{ landing_title }}</div>
+
+      <div class="landing-subtitle">{{ landing_subtitle }}</div>
+
+      <div class="landing-pitch">
+        <p>{{ pitch1 }}</p>
+        <p>{{ pitch2 }}</p>
+        <p>{{ pitch3 }}</p>
+      </div>
+
+      <div class="landing-badges">
+        <span class="landing-badge">{{ b1 }}</span>
+        <span class="landing-badge">{{ b2 }}</span>
+        <span class="landing-badge">{{ b3 }}</span>
+        <span class="landing-badge">{{ b4 }}</span>
+      </div>
+
+      <div class="landing-actions">
+        {% if AUTH_USER and AUTH_USER.id %}
+          <a href="{{ url_for('overview') }}"
+             class="gc-btn gc-btn-primary gc-btn-lg landing-btn-primary">
+            {{ cta_cc }}
+          </a>
+          <a href="{{ url_for('logout') }}"
+             class="gc-btn gc-btn-ghost gc-btn-lg landing-btn-ghost">
+            {{ cta_logout }}
+          </a>
+        {% else %}
+          <a href="{{ url_for('register') }}"
+             class="gc-btn gc-btn-primary gc-btn-lg landing-btn-primary">
+            {{ cta_play }}
+          </a>
+          <a href="{{ url_for('login') }}"
+             class="gc-btn gc-btn-ghost gc-btn-lg landing-btn-ghost">
+            {{ cta_login }}
+          </a>
+        {% endif %}
+      </div>
+
+      <div class="landing-footnote">{{ foot }}</div>
+    </div>
+
+    <!-- =========================================
+         RIGHT: SCANNER CARD
+         ========================================= -->
+    <section class="gc-panel landing-card-right">
+
+      <div class="gc-panel-header">
+        <span class="gc-panel-title">{{ scan_title }}</span>
+        <span class="gc-panel-subtitle">{{ scan_sub }}</span>
+      </div>
+
+      <div class="landing-card-row">
+        <span class="landing-label">{{ lbl_status }}</span>
+        <span class="landing-value">
+          {% if AUTH_USER and AUTH_USER.id %}
+            {{ status_online }}
+            <span class="landing-status-pill">
+              {{ commander_label }} {{ AUTH_USER.username }}
+            </span>
+          {% else %}
+            {{ status_offline }}
+          {% endif %}
+        </span>
+      </div>
+
+      <div class="landing-card-row">
+        <span class="landing-label">{{ lbl_universe }}</span>
+        <span class="landing-value">{{ universe_name }}</span>
+      </div>
+
+      <div class="landing-card-row">
+        <span class="landing-label">{{ lbl_galaxies }}</span>
+        <span class="landing-value">{{ galaxy_val | fmt_int }}</span>
+      </div>
+
+      <div class="landing-card-row">
+        <span class="landing-label">{{ lbl_start }}</span>
+        <span class="landing-value">
+          {{ start_metal | fmt_int }} {{ T("resource_metal") }} /
+          {{ start_crystal | fmt_int }} {{ T("resource_crystal") }}
+        </span>
+      </div>
+
+      <div class="landing-card-row">
+        <span class="landing-label">{{ lbl_prod }}</span>
+        <span class="landing-value">×{{ "%.1f"|format(prod_speed) }}</span>
+      </div>
+
+    </section>
+  </div>
+
+  <!-- =========================================
+       LOWER SECTIONS
+       ========================================= -->
+  <div class="landing-sections">
+
+    <section class="gc-panel">
+      <div class="gc-panel-header">
+        <span class="gc-panel-title">{{ s1_title }}</span>
+        <span class="gc-panel-subtitle">{{ s1_sub }}</span>
+      </div>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-title">{{ f1_t }}</div>
+          <div class="feature-text">{{ f1_s }}</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-title">{{ f2_t }}</div>
+          <div class="feature-text">{{ f2_s }}</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-title">{{ f3_t }}</div>
+          <div class="feature-text">{{ f3_s }}</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-title">{{ f4_t }}</div>
+          <div class="feature-text">{{ f4_s }}</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="gc-panel">
+      <div class="gc-panel-header">
+        <span class="gc-panel-title">{{ s2_title }}</span>
+        <span class="gc-panel-subtitle">{{ s2_sub }}</span>
+      </div>
+
+      <ul class="steps-list">
+        <li><strong>1)</strong> {{ step1 }}</li>
+        <li><strong>2)</strong> {{ step2 }}</li>
+        <li><strong>3)</strong> {{ step3 }}</li>
+      </ul>
+
+      <div class="landing-roadmap">
+        <span class="roadmap-pill">{{ rm1 }}</span>
+        <span class="roadmap-pill">{{ rm2 }}</span>
+        <span class="roadmap-pill">{{ rm3 }}</span>
+        <span class="roadmap-pill">{{ rm4 }}</span>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+{% endblock %}

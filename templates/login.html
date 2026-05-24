@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{# ------------------------------------------------------------- #}
+{# Defensive Defaults (Login darf niemals crasht)                 #}
+{# ------------------------------------------------------------- #}
+{% set err = (error if error is defined and error else "") %}
+
+{# i18n fallbacks #}
+{% set ttl = T("login_title") %}
+{% if ttl == "login_title" %}{% set ttl = "Login" %}{% endif %}
+
+{% set badge = T("login_badge") %}
+{% if badge == "login_badge" %}{% set badge = "✅ Verbindung zum Genesis-Cluster aktiv" %}{% endif %}
+
+{% set subtitle = T("login_subtitle") %}
+{% if subtitle == "login_subtitle" %}
+  {% set subtitle = "Melde dich mit deinem <strong>Commander-Account</strong> an und übernimm wieder das Ruder deiner Kolonie." %}
+{% endif %}
+
+{% set lbl_user = T("login_label_username") %}
+{% if lbl_user == "login_label_username" %}{% set lbl_user = "Benutzername" %}{% endif %}
+
+{% set ph_user = T("login_placeholder_username") %}
+{% if ph_user == "login_placeholder_username" %}{% set ph_user = "Commander-Name" %}{% endif %}
+
+{% set help_user = T("login_help_username") %}
+{% if help_user == "login_help_username" %}{% set help_user = "3–24 Zeichen (Buchstaben/Zahlen/Unterstrich empfohlen)." %}{% endif %}
+
+{% set lbl_pass = T("login_label_password") %}
+{% if lbl_pass == "login_label_password" %}{% set lbl_pass = "Passwort" %}{% endif %}
+
+{% set ph_pass = T("login_placeholder_password") %}
+{% if ph_pass == "login_placeholder_password" %}{% set ph_pass = "Zugangsprotokoll" %}{% endif %}
+
+{% set help_pass = T("login_help_password") %}
+{% if help_pass == "login_help_password" %}{% set help_pass = "Mindestens 6 Zeichen." %}{% endif %}
+
+{% set hint = T("login_hint_no_reset") %}
+{% if hint == "login_hint_no_reset" %}
+  {% set hint = "🛡 <strong>Hinweis:</strong> Bewahre deine Zugangsdaten gut auf – es gibt aktuell <u>kein Passwort-Reset-System</u>." %}
+{% endif %}
+
+{% set btn = T("login_btn_submit") %}
+{% if btn == "login_btn_submit" %}{% set btn = "🚀 Einloggen &amp; Kolonie betreten" %}{% endif %}
+
+{% set btn_loading = T("login_btn_loading") %}
+{% if btn_loading == "login_btn_loading" %}{% set btn_loading = "🔄 Prüfe Zugang…" %}{% endif %}
+
+{% set div_or = T("login_divider_or") %}
+{% if div_or == "login_divider_or" %}{% set div_or = "oder" %}{% endif %}
+
+{% set footer_noacc = T("login_footer_no_account") %}
+{% if footer_noacc == "login_footer_no_account" %}{% set footer_noacc = "Noch kein Account?" %}{% endif %}
+
+{% set footer_create = T("login_footer_create") %}
+{% if footer_create == "login_footer_create" %}{% set footer_create = "Commander erstellen" %}{% endif %}
+
+{% set footer_back = T("login_footer_back") %}
+{% if footer_back == "login_footer_back" %}{% set footer_back = "Zurück zur Startseite" %}{% endif %}
+
+<div class="gc-page auth-page">
+
+  <div class="auth-grid" aria-hidden="true"></div>
+
+  <section class="gc-panel auth-card" aria-label="{{ ttl }}">
+
+    <div class="auth-badge">{{ badge }}</div>
+
+    <div class="auth-title">
+      🛰 <span>{{ T("title") if T("title") != "title" else "Genesis Colonies" }}</span>
+    </div>
+
+    <div class="auth-subtitle">
+      {{ subtitle | safe }}
+    </div>
+
+    {% if err %}
+      <div class="auth-error" id="form-error" role="alert" aria-live="assertive" tabindex="-1">
+        {{ err }}
+      </div>
+    {% endif %}
+
+    {% set user_desc = "username-help" ~ (" form-error" if err else "") %}
+    {% set pass_desc = "password-help" ~ (" form-error" if err else "") %}
+
+    <form method="POST"
+          action="{{ url_for('login') }}"
+          class="auth-form"
+          novalidate
+          data-validate="login">
+
+      <label class="auth-label" for="username">{{ lbl_user }}</label>
+      <input
+        id="username"
+        type="text"
+        name="username"
+        class="auth-input"
+        placeholder="{{ ph_user }}"
+        autocomplete="username"
+        required
+        minlength="3"
+        maxlength="24"
+        aria-describedby="{{ user_desc }}"
+        {% if err %}aria-invalid="true"{% endif %}
+        value="{{ (request.form.get('username') or '') if request.method == 'POST' else '' }}"
+      >
+      <div class="auth-field-help" id="username-help">
+        {{ help_user }}
+      </div>
+
+      <label class="auth-label" for="password">{{ lbl_pass }}</label>
+      <input
+        id="password"
+        type="password"
+        name="password"
+        class="auth-input"
+        placeholder="{{ ph_pass }}"
+        autocomplete="current-password"
+        required
+        minlength="6"
+        aria-describedby="{{ pass_desc }}"
+        {% if err %}aria-invalid="true"{% endif %}
+      >
+      <div class="auth-field-help" id="password-help">
+        {{ help_pass }}
+      </div>
+
+      <div class="auth-hint">
+        {{ hint | safe }}
+      </div>
+
+      <button type="submit"
+              class="gc-btn gc-btn-primary gc-btn-lg auth-btn-primary"
+              data-loading-text="{{ btn_loading }}">
+        {{ btn | safe }}
+      </button>
+
+      <div class="auth-error hidden" id="client-error" role="alert" aria-live="assertive" tabindex="-1"></div>
+    </form>
+
+    <div class="auth-divider" role="separator" aria-label="{{ div_or }}">
+      <span></span><span>{{ div_or }}</span><span></span>
+    </div>
+
+    <div class="auth-footer">
+      <span>{{ footer_noacc }} <a href="{{ url_for('register') }}">{{ footer_create }}</a></span>
+      <span><a href="{{ url_for('landing') }}">{{ footer_back }}</a></span>
+    </div>
+
+  </section>
+</div>
+
+{% if err %}
+<script>
+  // A11y: Fokus direkt auf Fehlermeldung
+  window.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('form-error');
+    if (el) el.focus();
+  });
+</script>
+{% endif %}
+
+{% endblock %}

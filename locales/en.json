@@ -1,0 +1,248 @@
+{
+  "title": "Genesis Colonies – Command Center",
+
+  "commander": "Commander",
+  "universe_name": "Genesis Cluster",
+
+  "metal": "Ferronit",
+  "crystal": "Crytite",
+  "energy": "Aetherion",
+
+  "resource_metal": "Ferronit",
+  "resource_crystal": "Crytite",
+  "resource_energy": "Aetherion",
+
+  "nav_overview": "Overview",
+  "nav_buildings": "Buildings",
+  "nav_research": "Research",
+  "nav_shipyard": "Shipyard",
+  "nav_defense": "Defense",
+  "nav_fleet": "Fleet",
+  "nav_galaxy": "Galaxy",
+  "nav_alliance": "Alliance",
+  "nav_admin": "Admin",
+  "nav_logout": "Logout",
+
+  "label_speed": "Speed",
+  "msg_speed_updated": "Game speed updated.",
+  "msg_speed_invalid": "Invalid speed value.",
+
+  "overview_colony_title": "Colony Status",
+  "overview_hint": "The core status of your colony: resources, energy and infrastructure at a glance.",
+  "overview_label_commander": "Commander",
+  "overview_label_planet": "Colony",
+  "overview_label_coordinates": "Coordinates",
+  "overview_label_temperature": "Temperature",
+  "overview_label_fields": "Developed Fields",
+  "overview_label_energy": "Energy Balance",
+  "overview_label_capacity": "Storage Capacity",
+
+  "overview_metal": "Ferronit",
+  "overview_crystal": "Crytite",
+  "overview_energy_total": "Energy Generated",
+  "overview_energy_used": "Energy Used",
+
+  "overview_hint_energy_good": "Your grid is stable – you still have room to scale.",
+  "overview_hint_energy_low": "Warning: Energy is tight. Some mines are not running at full capacity.",
+  "overview_hint_energy_zero": "No energy, no production – build more solar plants or improve your efficiency.",
+
+  "overview_label_production_per_hour": "Production per Hour",
+  "overview_building_metal_mine": "Ferronit Mine",
+  "overview_building_crystal_mine": "Crytite Extractor",
+  "overview_building_solar_plant": "Solar Collector Field",
+
+  "overview_label_storage": "Storage Levels",
+  "overview_label_storage_metal": "Ferronit Storage",
+  "overview_label_storage_crystal": "Crytite Storage",
+
+  "btn_back_to_overview": "Back to Overview",
+
+  "buildings_title": "Buildings",
+  "buildings_hint": "Expand your colony’s infrastructure – from basic mines to the planetary core nexus.",
+  "buildings_tab_resources": "Resources",
+  "buildings_tab_research": "Research",
+  "buildings_tab_infrastructure": "Infrastructure",
+  "buildings_tab_military": "Military",
+
+  "buildings_col_name": "Building",
+  "buildings_col_level": "Level",
+  "buildings_col_costs": "Costs",
+  "buildings_col_time": "Build Time",
+  "buildings_col_status": "Status",
+  "buildings_col_actions": "Action",
+  "header_building": "Building",
+  "header_technology": "Technology",
+  "header_level_short": "L",
+  "buildings_cost_metal": "Ferronit",
+  "buildings_cost_crystal": "Crytite",
+
+  "buildings_btn_upgrade": "Start Upgrade",
+  "buildings_btn_max_level": "Max Level Reached",
+  "buildings_btn_queue_full": "Build Queue Full",
+  "buildings_not_enough_resources": "Not enough resources.",
+  "buildings_requirements_not_met": "Requirements not met.",
+  "buildings_queue_title": "Active Build Orders",
+  "buildings_queue_empty": "There are currently no active build orders.",
+  "buildings_queue_item": "Upgrading {name} to level {level}",
+  "buildings_queue_finish_in": "Finishes in",
+  "buildings_queue_total_time": "Total Time",
+
+  "tooltip_requirements_title": "Requirements",
+  "tooltip_requirements_building": "Buildings",
+  "tooltip_requirements_research": "Research",
+
+  "msg_build_started": "Upgrade of {name} to level {level} started.",
+  "msg_build_queue_full": "Your build queue is full. Wait until an order is finished.",
+  "msg_build_requirements": "You don’t meet the requirements for this building yet.",
+  "msg_build_invalid": "This building cannot be upgraded at the moment.",
+  "msg_build_not_enough_resources": "You lack Ferronit or Crytite for this upgrade.",
+
+  "research_title": "Research",
+  "research_hint": "Use your research lab to systematically improve your colony, fleets and defenses.",
+  "research_lab_level": "Research Lab Level",
+  "research_col_tech": "Technology",
+  "research_col_level": "Level",
+  "research_col_costs": "Costs",
+  "research_col_time": "Research Time",
+  "research_col_actions": "Action",
+
+  "research_btn_start": "Start Research",
+  "research_btn_active": "Research Running",
+  "research_active_title": "Active Research",
+  "research_active_none": "There is currently no active research.",
+  "research_active_item": "{name} – Level {level}",
+  "research_active_remaining": "Remaining Time",
+  "research_requirements_not_met": "You do not meet the requirements for this technology.",
+  "research_no_lab": "You need a research lab first.",
+  "research_not_enough_resources": "Not enough resources for this research.",
+  "research_already_active": "Only one research job can run at a time.",
+
+  "techtree_title": "Tech Tree",
+  "techtree_hint": "Building and research tree of your colony. See at a glance what you’ve unlocked – and what’s still ahead.",
+  "techtree_tab_buildings": "Buildings",
+  "techtree_tab_research": "Research",
+  "techtree_buildings_hint": "Every building unlocks new options – from efficient production to powerful defenses.",
+  "techtree_research_hint": "Research shapes your colony: faster fleets, stronger shields, optimized production.",
+  "header_requirements": "Requirements",
+
+  "status_time_seconds": "seconds",
+  "status_time_minutes": "minutes",
+  "status_time_hours": "hours",
+
+  "msg_generic_error": "An unexpected error occurred.",
+  "msg_action_success": "Action completed successfully.",
+  "msg_action_failed": "Action failed.",
+
+  "login_title": "Login",
+  "login_hint": "Log in to control your colony in the Genesis Cluster.",
+  "login_username": "Username",
+  "login_password": "Password",
+  "login_btn": "Log in",
+  "login_error": "Invalid username or password.",
+
+  "register_title": "New Command",
+  "register_hint": "Launch a new colony in the Genesis Cluster.",
+  "register_btn": "Register",
+
+  "landing_title": "Genesis Colonies",
+  "landing_subtitle": "Build. Research. Conquer.",
+  "landing_pitch_line1": "Begin with a lone colony at the edge of the Genesis Cluster.",
+  "landing_pitch_line2": "Research high technology, optimize your production and forge legendary fleets.",
+  "landing_pitch_line3": "Your decisions decide whether your colony vanishes in the star noise – or becomes the nexus of a new era.",
+  "landing_cta_play": "Found a Colony",
+  "landing_cta_login": "Already a Commander? Log in",
+
+  "admin_title": "Admin Panel",
+  "admin_hint": "Universe-wide settings and debug tools. Use with care – every click shapes the entire cluster.",
+  "admin_section_game_settings": "Game Settings",
+  "admin_section_players": "Player Management",
+  "admin_section_bans": "Ban Management",
+  "admin_label_production_speed": "Production Speed",
+  "admin_label_build_speed": "Build Speed",
+  "admin_label_research_speed": "Research Speed",
+  "admin_label_queue_limit": "Max Build Orders per Colony",
+
+  "admin_msg_settings_saved": "Settings have been saved.",
+  "admin_msg_invalid_value": "Invalid value in settings.",
+
+  "msg_not_logged_in": "You are not logged in.",
+  "msg_no_permission": "You do not have permission for this action.",
+
+  "metal_mine": "Ferronit Mine",
+  "desc_metal_mine": "Extracts Ferronit from your planet’s crust. Higher levels significantly increase production output.",
+
+  "crystal_mine": "Crytite Extractor",
+  "desc_crystal_mine": "Harvests valuable Crytite from deep veins. Essential for high-tech modules and research.",
+
+  "solar_plant": "Solar Collector Field",
+  "desc_solar_plant": "Large collector arrays that convert starlight into Aetherion energy to power your colony.",
+
+  "research_lab": "Research Lab",
+  "desc_research_lab": "The core of your scientific progress. Higher levels speed up research and unlock new technologies.",
+
+  "academy": "Genesis Academy",
+  "desc_academy": "Training center for officers and specialists. Improves efficiency of complex operations and opens paths to advanced research.",
+
+  "metal_storage": "Ferronit Depot",
+  "desc_metal_storage": "Expands storage capacity for Ferronit and prevents production stops caused by full depots.",
+
+  "crystal_storage": "Crytite Silo",
+  "desc_crystal_storage": "Specialized silos for Crytite. Crucial for financing large high-tech projects.",
+
+  "command_center": "Command Center",
+  "desc_command_center": "Strategic heart of your colony. Coordinates all facilities and unlocks central infrastructure and military buildings.",
+
+  "shipyard": "Shipyard",
+  "desc_shipyard": "Builds and expands your fleets. The higher the level, the faster and more complex the ships you can construct.",
+
+  "defense_factory": "Defense Factory",
+  "desc_defense_factory": "Produces stationary defense systems to protect your colony from enemy attacks.",
+
+  "barracks": "Orbital Barracks",
+  "desc_barracks": "Training grounds for crews and marines. Foundation for a strong military presence and fleet crews.",
+
+  "radar_array": "Deep Space Radar Array",
+  "desc_radar_array": "High-resolution scan network that detects foreign fleets early and gives you tactical advantages in space.",
+
+  "shield_generator": "Aegis Shield Projector",
+  "desc_shield_generator": "Creates multilayered energy shields that protect your colony from bombardments and first strike waves.",
+
+  "nanofactory": "Nano-Assembly Complex",
+  "desc_nanofactory": "Swarm-controlled micro-factories that produce complex components with extreme efficiency and reduce production times.",
+  "building_geothermal_nexus": "Geothermal Nexus",
+  "geothermal_nexus": "Geothermal Nexus",
+  "desc_geothermal_nexus": "A deep geothermal control complex that taps mantle energy and unlocks higher maximum levels for mines, solar collectors and storage structures. A key endgame facility for planetary stability and economic scaling.",
+
+  "energy_tech": "Energy Efficiency",
+  "desc_energy_tech": "Optimizes conduits, converters and reactors. Reduces the energy consumption of your mines by 5% per level.",
+
+  "mining_tech": "Metal Refinement",
+  "desc_mining_tech": "New drill heads, conveyor systems and refinement processes increase Ferronit output by 10% per level.",
+
+  "buildtime_tech": "Construction Optimization",
+  "desc_buildtime_tech": "Standardized modules and automated site logistics significantly reduce build and research times.",
+
+  "storage_tech": "Storage Technology",
+  "desc_storage_tech": "Densified storage structures, smart stacking and stabilization greatly increase your storage capacities.",
+
+  "research_drones_tech": "Drone Optimization",
+  "desc_research_drones_tech": "Improved mining and service drones maximize uptime and precision. Adds an extra production bonus per level.",
+
+  "research_navigation_tech": "Hyperspace Navigation",
+  "desc_research_navigation_tech": "Refined jump vectors and pathing through hyperspace shorten flight times and make operations more predictable.",
+
+  "research_engine_tech": "Cryo Drive Engineering",
+  "desc_research_engine_tech": "High-performance drives with cryogenic cooling increase thrust for large fleets and reduce energy losses.",
+
+  "research_weapon_tech": "Weapons Development",
+  "desc_research_weapon_tech": "Advanced laser, projectile and energy weapons considerably increase your fleets’ firepower.",
+
+  "research_armor_tech": "Armor Technology",
+  "desc_research_armor_tech": "Layered composite armor and adaptive material design enhance the survivability of your ships.",
+
+  "research_shield_tech": "Shield Technology",
+  "desc_research_shield_tech": "Advanced shield generators, modulators and field amplifiers harden your defenses against concentrated fire.",
+
+  "msg_building_unlocked_by_research": "New buildings have been unlocked through research.",
+  "msg_research_unlocked_by_building": "New research options have been unlocked by constructing buildings."
+}

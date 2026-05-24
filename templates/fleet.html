@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{# ------------------------------------------------------------- #}
+{# Defensive Defaults (Fleet darf niemals crasht)                 #}
+{# ------------------------------------------------------------- #}
+{% set fleet_hint = T("fleet_hint") %}
+{% if fleet_hint == "fleet_hint" %}
+  {% set fleet_hint = "Hier verwaltest du später deine Flotten – Stationierung, Missionen und Bewegungen durchs Genesis-Universum." %}
+{% endif %}
+
+{% set ov_t = T("fleet_overview_title") %}
+{% if ov_t == "fleet_overview_title" %}{% set ov_t = "Flottenübersicht" %}{% endif %}
+
+{% set ov_s = T("fleet_overview_subtitle") %}
+{% if ov_s == "fleet_overview_subtitle" %}
+  {% set ov_s = "Dieser Bereich wird später alle aktiven Flotten deiner Kolonie abbilden – inklusive Status, Position und Mission." %}
+{% endif %}
+
+{% set pc_t = T("fleet_planned_contents_title") %}
+{% if pc_t == "fleet_planned_contents_title" %}{% set pc_t = "Vorgesehene Inhalte:" %}{% endif %}
+
+{% set pc_i1 = T("fleet_planned_item_list") %}
+{% if pc_i1 == "fleet_planned_item_list" %}
+  {% set pc_i1 = "Liste aller Flotten (Heimat, unterwegs, haltend)" %}
+{% endif %}
+
+{% set pc_i2 = T("fleet_planned_item_stats") %}
+{% if pc_i2 == "fleet_planned_item_stats" %}
+  {% set pc_i2 = "Kurze Stats pro Flotte (Angriff, Deff, Transportkapazität)" %}
+{% endif %}
+
+{% set pc_i3 = T("fleet_planned_item_filter") %}
+{% if pc_i3 == "fleet_planned_item_filter" %}
+  {% set pc_i3 = "Filter nach Missionstyp (Angriff, Transport, Spionage, Halten)" %}
+{% endif %}
+
+{% set tag_raid = T("fleet_tag_raid") %}
+{% if tag_raid == "fleet_tag_raid" %}{% set tag_raid = "Raid" %}{% endif %}
+
+{% set tag_transport = T("fleet_tag_transport") %}
+{% if tag_transport == "fleet_tag_transport" %}{% set tag_transport = "Transport" %}{% endif %}
+
+{% set tag_spy = T("fleet_tag_spy") %}
+{% if tag_spy == "fleet_tag_spy" %}{% set tag_spy = "Spionage" %}{% endif %}
+
+{% set tag_def = T("fleet_tag_defense_fleet") %}
+{% if tag_def == "fleet_tag_defense_fleet" %}{% set tag_def = "Deff-Flotte" %}{% endif %}
+
+{% set cmd_t = T("fleet_commands_title") %}
+{% if cmd_t == "fleet_commands_title" %}{% set cmd_t = "Flottenbefehle" %}{% endif %}
+
+{% set cmd_s = T("fleet_commands_subtitle") %}
+{% if cmd_s == "fleet_commands_subtitle" %}
+  {% set cmd_s = "Hier entsteht später das Interface, mit dem du Missionen definierst und Flotten losschickst." %}
+{% endif %}
+
+{% set rm_1 = T("fleet_roadmap_coordinates") %}
+{% if rm_1 == "fleet_roadmap_coordinates" %}
+  {% set rm_1 = "Eingabe der Zielkoordinaten (Galaxie / System / Slot)" %}
+{% endif %}
+
+{% set rm_2 = T("fleet_roadmap_mission_type") %}
+{% if rm_2 == "fleet_roadmap_mission_type" %}
+  {% set rm_2 = "Auswahl des Missionstyps (Angriff, Transport, Spionage, Halten)" %}
+{% endif %}
+
+{% set rm_3 = T("fleet_roadmap_travel_calc") %}
+{% if rm_3 == "fleet_roadmap_travel_calc" %}
+  {% set rm_3 = "Flugdauer- und Treibstoffberechnung basierend auf Forschung & Antrieb" %}
+{% endif %}
+
+{% set rm_4 = T("fleet_roadmap_presets") %}
+{% if rm_4 == "fleet_roadmap_presets" %}
+  {% set rm_4 = "Vorauswahl von Flotten-Presets (z. B. schnelles Raid-Setup)" %}
+{% endif %}
+
+{% set note = T("fleet_placeholder_note") %}
+{% if note == "fleet_placeholder_note" %}
+  {% set note = "Aktuell ist dies eine visuelle Vorschau auf das kommende Flotten-System – das endgültige UI dockt hier direkt an, sobald die Kampf- & Flug-Logik steht." %}
+{% endif %}
+
+<div class="gc-page fleet-wrapper">
+
+  <header class="fleet-headline section-header">
+    <h2 class="section-title">{{ T("nav_fleet") }}</h2>
+    <p class="section-hint hint">{{ fleet_hint }}</p>
+  </header>
+
+  <div class="fleet-grid">
+
+    <!-- LEFT: Overview -->
+    <section class="gc-panel fleet-panel">
+      <div class="gc-panel-header">
+        <div class="gc-panel-head-left">
+          <span class="gc-panel-title">{{ ov_t }}</span>
+          <span class="gc-panel-subtitle">{{ ov_s }}</span>
+        </div>
+      </div>
+
+      <div class="fleet-placeholder-box">
+        <div class="fleet-placeholder-title"><strong>{{ pc_t }}</strong></div>
+
+        <ul class="fleet-placeholder-list">
+          <li>{{ pc_i1 }}</li>
+          <li>{{ pc_i2 }}</li>
+          <li>{{ pc_i3 }}</li>
+        </ul>
+
+        <div class="fleet-tag-row">
+          <span class="fleet-tag">{{ tag_raid }}</span>
+          <span class="fleet-tag">{{ tag_transport }}</span>
+          <span class="fleet-tag">{{ tag_spy }}</span>
+          <span class="fleet-tag">{{ tag_def }}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Commands -->
+    <section class="gc-panel fleet-panel">
+      <div class="gc-panel-header">
+        <div class="gc-panel-head-left">
+          <span class="gc-panel-title">{{ cmd_t }}</span>
+          <span class="gc-panel-subtitle">{{ cmd_s }}</span>
+        </div>
+      </div>
+
+      <ul class="fleet-roadmap-list">
+        <li>{{ rm_1 }}</li>
+        <li>{{ rm_2 }}</li>
+        <li>{{ rm_3 }}</li>
+        <li>{{ rm_4 }}</li>
+      </ul>
+
+      <div class="fleet-note">{{ note }}</div>
+    </section>
+
+  </div>
+</div>
+
+{% endblock %}

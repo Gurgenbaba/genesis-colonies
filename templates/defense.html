@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{# ------------------------------------------------------------- #}
+{# Defensive Defaults (Defense darf niemals crasht)               #}
+{# ------------------------------------------------------------- #}
+{% set defense_hint = T("defense_hint") %}
+{% if defense_hint == "defense_hint" %}
+  {% set defense_hint = "Verteidigungs-Zentrale deiner Kolonie – hier planst du später Schilde, Geschütze und planetare Abwehrsysteme." %}
+{% endif %}
+
+{% set pt = T("defense_panel_planetary_title") %}
+{% if pt == "defense_panel_planetary_title" %}{% set pt = "Planetare Verteidigung" %}{% endif %}
+
+{% set ps = T("defense_panel_planetary_subtitle") %}
+{% if ps == "defense_panel_planetary_subtitle" %}
+  {% set ps = "Dieser Bereich wird später zur Schaltzentrale für deine Def-Strukturen: von leichten Lasern bis hin zu schweren Orbit-Batterien." %}
+{% endif %}
+
+{% set ct = T("defense_planned_contents_title") %}
+{% if ct == "defense_planned_contents_title" %}{% set ct = "Geplante Inhalte dieses Panels:" %}{% endif %}
+
+{% set pi1 = T("defense_planned_item_overview") %}
+{% if pi1 == "defense_planned_item_overview" %}
+  {% set pi1 = "Übersicht über alle Defense-Strukturen pro Kolonie" %}
+{% endif %}
+
+{% set pi2 = T("defense_planned_item_build_buttons") %}
+{% if pi2 == "defense_planned_item_build_buttons" %}
+  {% set pi2 = "Bau- und Upgrade-Buttons für Laser, Raketen, Schilde & Turrets" %}
+{% endif %}
+
+{% set pi3 = T("defense_planned_item_power_score") %}
+{% if pi3 == "defense_planned_item_power_score" %}
+  {% set pi3 = "Kompakte Einschätzung der Gesamt-Defensivkraft (Score / Balken)" %}
+{% endif %}
+
+{% set tag1 = T("defense_tag_shield_setup") %}
+{% if tag1 == "defense_tag_shield_setup" %}{% set tag1 = "Shield-Setup" %}{% endif %}
+
+{% set tag2 = T("defense_tag_turrets") %}
+{% if tag2 == "defense_tag_turrets" %}{% set tag2 = "Geschütze" %}{% endif %}
+
+{% set tag3 = T("defense_tag_defense_matrix") %}
+{% if tag3 == "defense_tag_defense_matrix" %}{% set tag3 = "Abwehrmatrix" %}{% endif %}
+
+{% set mt = T("defense_panel_mechanics_title") %}
+{% if mt == "defense_panel_mechanics_title" %}{% set mt = "Zukünftige Mechaniken" %}{% endif %}
+
+{% set ms = T("defense_panel_mechanics_subtitle") %}
+{% if ms == "defense_panel_mechanics_subtitle" %}
+  {% set ms = "Die Verteidigung greift später direkt mit Radar, Flotten und Kampfberichten ineinander." %}
+{% endif %}
+
+{% set r1 = T("defense_roadmap_synergy") %}
+{% if r1 == "defense_roadmap_synergy" %}
+  {% set r1 = "Synergien mit Schildgenerator & Radar-Array (Frühwarnung & Bonuswerte)" %}
+{% endif %}
+
+{% set r2 = T("defense_roadmap_calc") %}
+{% if r2 == "defense_roadmap_calc" %}
+  {% set r2 = "Kalkulation von Deff-Werten gegen typische Angreiferflotten" %}
+{% endif %}
+
+{% set r3 = T("defense_roadmap_reports") %}
+{% if r3 == "defense_roadmap_reports" %}
+  {% set r3 = "Verknüpfung mit Kampfberichten und Log-Ansicht im Flotten-Modul" %}
+{% endif %}
+
+{% set r4 = T("defense_roadmap_repair") %}
+{% if r4 == "defense_roadmap_repair" %}
+  {% set r4 = "Mögliche Auto-Reparatur nach Kämpfen (abhängig von Forschung)" %}
+{% endif %}
+
+{% set note = T("defense_placeholder_note") %}
+{% if note == "defense_placeholder_note" %}
+  {% set note = "Solange die Kampf-Engine noch in Entwicklung ist, dient diese Seite als stylischer Platzhalter und sorgt dafür, dass das Interface bereits vollständig wirkt." %}
+{% endif %}
+
+<div class="gc-page defense-wrapper">
+
+  <header class="defense-headline section-header">
+    <h2 class="section-title">{{ T("nav_defense") }}</h2>
+    <p class="section-hint hint">{{ defense_hint }}</p>
+  </header>
+
+  <div class="defense-grid">
+
+    <!-- LEFT -->
+    <section class="gc-panel defense-panel">
+      <div class="gc-panel-header">
+        <span class="gc-panel-title">{{ pt }}</span>
+        <span class="gc-panel-subtitle">{{ ps }}</span>
+      </div>
+
+      <div class="defense-placeholder-box">
+        <div class="defense-placeholder-title">
+          <strong>{{ ct }}</strong>
+        </div>
+
+        <ul class="defense-placeholder-list">
+          <li>{{ pi1 }}</li>
+          <li>{{ pi2 }}</li>
+          <li>{{ pi3 }}</li>
+        </ul>
+
+        <div class="defense-tag-row">
+          <span class="defense-tag">{{ tag1 }}</span>
+          <span class="defense-tag">{{ tag2 }}</span>
+          <span class="defense-tag">{{ tag3 }}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT -->
+    <section class="gc-panel defense-panel">
+      <div class="gc-panel-header">
+        <span class="gc-panel-title">{{ mt }}</span>
+        <span class="gc-panel-subtitle">{{ ms }}</span>
+      </div>
+
+      <ul class="defense-roadmap-list">
+        <li>{{ r1 }}</li>
+        <li>{{ r2 }}</li>
+        <li>{{ r3 }}</li>
+        <li>{{ r4 }}</li>
+      </ul>
+
+      <div class="defense-note">{{ note }}</div>
+    </section>
+
+  </div>
+</div>
+
+{% endblock %}

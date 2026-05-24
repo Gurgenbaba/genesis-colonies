@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="gc-page research-page">
+
+  <header class="gc-page-header section-header">
+    <h2 class="section-title">{{ T("research_title") }}</h2>
+
+    <p class="section-hint hint">
+      {{ T("research_hint_intro") }}
+      {% set tt = T("research_techtree_link") %}
+      <a href="{{ url_for('techtree_view') }}" class="research-techtree-link">
+        → {{ tt if tt != "research_techtree_link" else "Tech-Tree anzeigen" }}
+      </a>
+    </p>
+  </header>
+
+  {# Defensive Defaults (damit nix crasht) #}
+  {% set rs = (research_status if research_status is defined and research_status else {}) %}
+  {% set active = (rs.active if rs and rs.active is defined else None) %}
+  {% set techs = (rs.techs if rs and rs.techs is defined and rs.techs else []) %}
+  {% set lab_level = (rs.lab_level if rs and rs.lab_level is defined else 0) %}
+
+  <div class="research-grid">
+
+    {# ==========================================================
+       LEFT: Aktive Forschung + Tech-Liste
+       ========================================================== #}
+    <section class="gc-panel">
+
+      {# ---------------- ACTIVE RESEARCH ---------------- #}
+      <div class="gc-panel-header">
+        <span class="gc-panel-title">{{ T("research_active_title") }}</span>
+        <span class="gc-panel-subtitle">
+          {{ T("research_panel_active_hint") }}
+        </span>
+      </div>
+
+      {% if active %}
+
+        {# Safe numbers #}
+        {% set total_s = (active.total_seconds or 0) | float %}
+        {% set rem_s = (active.remaining or 0) | float %}
+
+        {# Progress sicher berechnen + clamp 0..100 #}
+        {% if total_s > 0 %}
+          {% set raw_pct = (100 * (1 - (rem_s / total_s))) %}
+        {% else %}
+          {% set raw_pct = 0 %}
+        {% endif %}
+        {% if raw_pct < 0 %}{% set progress_pct = 0 %}
+        {% elif raw_pct > 100 %}{% set progress_pct = 100 %}
+        {% else %}{% set progress_pct = raw_pct | round(0) %}
+        {% endif %}
+
+        {# i18n: Name + Beschreibung rein über Key-Schema #}
+        {% set active_label = T(active.key) %}
+        {% if active_label == active.key %}
+          {% set active_label = active.label %}
+        {% endif %}
+
+        {% set active_desc = T("desc_" ~ active.key) %}
+        {% if active_desc == "desc_" ~ active.key %}
+          {% set active_desc = active.description %}
+        {% endif %}
+
+        {# Zeitformat (premium) #}
+        {% set s = (active.total_seconds or 0)|int %}
+        {% set sh = (s // 3600) %}
+        {% set sm = ((s % 3600) // 60) %}
+        {% set ss = (s % 60) %}
+
+        {% set rem = (active.remaining or 0)|int %}
+        {% set rh = (rem // 3600) %}
+        {% set rm = ((rem % 3600) // 60) %}
+        {% set rsec = (rem % 60) %}
+
+        <div class="active-research-wrapper">
+
+          {% if active.icon %}
+            <div class="research-icon-large">
+              <img
+                src="{{ url_for('static', filename='img/research/' ~ active.icon) }}"
+                alt="{{ active_label }}">
+            </div>
+          {% endif %}
+
+          <div class="active-research-content">
+            <div class="active-research-title-row">
+              <div>
+                <div class="active-research-name">
+                  {{ active_label }}
+                </div>
+                <div class="active-research-level">
+                  L{{ (active.current_level or 0)|fmt_int }} → L{{ (active.target_level or 0)|fmt_int }}
+                </div>
+              </div>
+              <div class="status-pill status-pill-active">
+                {{ T("research_btn_active") }}
+              </div>
+            </div>
+
+            <div class="active-research-desc">
+              {{ active_desc }}
+            </div>
+
+            <div class="research-progress-outer"
+                 data-total-seconds="{{ (active.total_seconds or 0)|int }}">
+              <div class="research-progress-label">
+                {{ T("research_active_remaining") }}:
+                <span id="research-countdown">
+                  {% if rh > 0 %}
+                    {{ "%d:%02d:%02d"|format(rh, rm, rsec) }}
+                  {% else %}
+                    {{ "%d:%02d"|format(rm, rsec) }}
+                  {% endif %}
+                </span>
+              </div>
+
+              <div class="research-progress-bar">
+                <div id="research-progress-fill"
+                     class="research-progress-fill"
+                     data-progress="{{ progress_pct }}"
+                     style="width: {{ progress_pct }}%;"></div>
+              </div>
+
+              <div class="research-progress-meta">
+                <span>
+                  {{ T("research_col_time") }}:
+                  {% if sh > 0 %}
+                    {{ "%d:%02d:%02d"|format(sh, sm, ss) }}
+                  {% else %}
+                    {{ "%d:%02d"|format(sm, ss) }}
+                  {% endif %}
+                </span>
+                <span>
+                  {{ T("research_col_level") }}
+                  {{ (active.current_level or 0)|fmt_int }} → {{ (active.target_level or 0)|fmt_int }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      {% else %}
+        <p class="research-no-active">
+          {{ T("research_active_none") }}
+        </p>
+      {% endif %}
+
+      <hr class="research-divider">
+
+      {# ---------------- TECH-LISTE ---------------- #}
+      <div class="gc-panel-header research-tech-header">
+        <span class="gc-panel-title">{{ T("research_col_tech") }}</span>
+        <span class="gc-panel-subtitle">
+          {{ T("research_panel_tech_hint") }}
+        </span>
+      </div>
+
+      {# Scroll-Wrap verhindert "Buchstaben-Umbruch" bei zu schmalen Layouts #}
+      <div class="gc-table-scroll">
+        <table class="tech-table table-std research-tech-table">
+          <colgroup>
+            <col class="col-tech">
+            <col class="col-costs">
+            <col class="col-time">
+            <col class="col-actions">
+          </colgroup>
+
+          <thead>
+            <tr>
+              <th>{{ T("research_col_tech") }}</th>
+              <th>{{ T("research_col_costs") }}</th>
+              <th>{{ T("research_col_time") }}</th>
+              <th class="tech-status-cell">{{ T("research_col_actions") }}</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% if techs and techs|length > 0 %}
+              {% for tech in techs %}
+                {% set is_active = active and active.key == tech.key %}
+                {% set locked = not tech.requirements_met %}
+
+                {# i18n: Schema: key / desc_key #}
+                {% set tech_label = T(tech.key) %}
+                {% if tech_label == tech.key %}
+                  {% set tech_label = tech.label %}
+                {% endif %}
+
+                {% set tech_desc = T("desc_" ~ tech.key) %}
+                {% if tech_desc == "desc_" ~ tech.key %}
+                  {% set tech_desc = tech.description %}
+                {% endif %}
+
+                {# Zeitformat #}
+                {% set ts = (tech.time_seconds or 0)|int %}
+                {% set th = (ts // 3600) %}
+                {% set tm = ((ts % 3600) // 60) %}
+                {% set tss = (ts % 60) %}
+
+                <tr class="{% if locked %}tech-row-locked{% endif %}">
+                  <td>
+                    <div class="tech-row-main">
+                      {% if tech.icon %}
+                        <img
+                          src="{{ url_for('static', filename='img/research/' ~ tech.icon) }}"
+                          alt="{{ tech_label }}"
+                          class="tech-icon">
+                      {% endif %}
+                      <div class="tech-text">
+                        <div class="tech-name">
+                          {{ tech_label }} – L{{ (tech.level or 0)|fmt_int }}
+                        </div>
+                        <div class="tech-desc">
+                          {{ tech_desc }}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <td>
+                    <div class="tech-meta">
+                      <span>{{ (tech.cost_metal or 0)|fmt_int }} {{ T("resource_metal") }}</span><br>
+                      <span>{{ (tech.cost_crystal or 0)|fmt_int }} {{ T("resource_crystal") }}</span>
+                    </div>
+                  </td>
+
+                  <td>
+                    <div class="tech-meta tech-time">
+                      {% if th > 0 %}
+                        {{ "%d:%02d:%02d"|format(th, tm, tss) }}
+                      {% else %}
+                        {{ "%d:%02d"|format(tm, tss) }}
+                      {% endif %}
+                    </div>
+                  </td>
+
+                  <td class="tech-status-cell">
+                    {% if is_active %}
+                      <span class="status-pill status-pill-active">
+                        {{ T("research_btn_active") }}
+                      </span>
+                    {% elif locked %}
+                      <span class="status-pill status-pill-locked">
+                        {{ T("research_requirements_not_met") }}
+                      </span>
+                    {% else %}
+                      <a href="{{ url_for('research_start', tech_key=tech.key) }}"
+                         class="gc-btn gc-btn-primary gc-btn-sm btn-research">
+                        {{ T("research_btn_start") }}
+                      </a>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="4" class="tech-empty">
+                  {{ T("research_empty_list") if T("research_empty_list") != "research_empty_list" else "Keine Forschungen verfügbar (Konfiguration/DB prüfen)." }}
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {# ==========================================================
+       RIGHT: Labor-Level + Erklärungen
+       ========================================================== #}
+    <section class="gc-panel">
+      <div class="gc-panel-header">
+        {# de.json hat kein research_lab -> fallback auf building_research_lab #}
+        <span class="gc-panel-title">
+          {% set lab_title = T("research_lab") %}
+          {% if lab_title == "research_lab" %}
+            {% set lab_title = T("building_research_lab") %}
+          {% endif %}
+          {{ lab_title if lab_title != "building_research_lab" else "Forschungslabor" }}
+        </span>
+        <span class="gc-panel-subtitle">
+          {{ T("research_lab_panel_hint") }}
+        </span>
+      </div>
+
+      <div class="lab-meta-row">
+        <span>
+          {{ T("research_lab_level") }}:
+          <span class="lab-level-highlight">
+            {{ lab_level|fmt_int }}
+          </span>
+        </span>
+      </div>
+
+      <div class="lab-hint">
+        {{ T("desc_research_lab") }}
+      </div>
+
+      <div class="lab-hint lab-hint-req">
+        {{ T("research_req_hint") }}
+      </div>
+    </section>
+
+  </div>
+</div>
+
+{% endblock %}

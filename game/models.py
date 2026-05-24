@@ -1,0 +1,1395 @@
+import sqlite3
+import time
+import hashlib
+import math
+from pathlib import Path
+from typing import Dict, Any, Optional, Tuple, List
+
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = BASE_DIR / "game.db"
+
+
+# ======================================================================
+# DB Helper
+# ======================================================================
+
+def db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
+
+
+def _now_ts() -> int:
+    return int(time.time())
+
+
+# ======================================================================
+# DEFAULT GAME SETTINGS
+# ======================================================================
+
+DEFAULT_GAME_SETTINGS: Dict[str, str] = {
+    "universe_name": "Genesis Colonies",
+    "production_speed": "1.0",
+    "build_speed": "1.0",
+    "research_speed": "1.0",
+    "fleet_speed_war": "1.0",
+    "fleet_speed_holding": "1.0",
+    "fleet_speed_peaceful": "1.0",
+    "galaxy_count": "5",
+    "queue_limit": "5",
+    "start_metal": "5000",
+    "start_crystal": "2500",
+
+    # historischer Alias
+    "speed": "1.0",
+
+    # --- Score Defaults (Ranking) ---
+    "score_weight_buildings": "0.60",
+    "score_weight_research": "0.40",
+    "score_cost_exponent": "1.0",  # 1.0 = linear, >1 = stärker
+    "score_softcap": "0.0",        # 0 = aus, z.B. 250000
+}
+
+
+# ======================================================================
+# INIT DATABASE
+# ======================================================================
+
+def init_db() -> None:
+    conn = db()
+    cur = conn.cursor()
+
+    # ------------------------------------------------------------
+    # USERS (Login-System)
+    # ------------------------------------------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            is_admin INTEGER NOT NULL DEFAULT 0
+        );
+    """)
+
+    # ------------------------------------------------------------
+    # PLAYERS (Game-Objekt, id == users.id)
+    # ------------------------------------------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS players (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            is_admin INTEGER NOT NULL DEFAULT 0,
+            banned_until INTEGER DEFAULT NULL,
+            last_seen INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY(id) REFERENCES users(id) ON DELETE CASCADE
+        );
+    """)
+
+    # ------------------------------------------------------------
+    # PLANETS
+    # ------------------------------------------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS planets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            is_homeworld INTEGER NOT NULL DEFAULT 0,
+            metal REAL NOT NULL DEFAULT 0 CHECK(metal >= 0),
+            crystal REAL NOT NULL DEFAULT 0 CHECK(crystal >= 0),
+            last_update REAL NOT NULL,
+            energy_total INTEGER NOT NULL DEFAULT 0,
+            energy_used INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+        );
+    """)
+
+    # ------------------------------------------------------------
+    # PLANET BUILDINGS (spaltenbasiert)
+    # ------------------------------------------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS planet_buildings (
+            planet_id INTEGER PRIMARY KEY,
+            metal_mine INTEGER DEFAULT 0 CHECK(metal_mine >= 0),
+            crystal_mine INTEGER DEFAULT 0 CHECK(crystal_mine >= 0),
+            solar_plant INTEGER DEFAULT 0 CHECK(solar_plant >= 0),
+            research_lab INTEGER DEFAULT 0 CHECK(research_lab >= 0),
+            academy INTEGER DEFAULT 0 CHECK(academy >= 0),
+            metal_storage INTEGER DEFAULT 0 CHECK(metal_storage >= 0),
+            crystal_storage INTEGER DEFAULT 0 CHECK(crystal_storage >= 0),
+            command_center INTEGER DEFAULT 0 CHECK(command_center >= 0),
+            shipyard INTEGER DEFAULT 0 CHECK(shipyard >= 0),
+            defense_factory INTEGER DEFAULT 0 CHECK(defense_factory >= 0),
+            barracks INTEGER DEFAULT 0 CHECK(barracks >= 0),
+            radar_array INTEGER DEFAULT 0 CHECK(radar_array >= 0),
+            shield_generator INTEGER DEFAULT 0 CHECK(shield_generator >= 0),
+            terraformer INTEGER DEFAULT 0 CHECK(terraformer >= 0),
+            nanofactory INTEGER DEFAULT 0 CHECK(nanofactory >= 0),
+            geothermal_nexus INTEGER DEFAULT 0 CHECK(geothermal_nexus >= 0),
+            planet_core_nexus INTEGER DEFAULT 0 CHECK(planet_core_nexus >= 0),
+            FOREIGN KEY(planet_id) REFERENCES planets(id) ON DELETE CASCADE
+        );
+    """)
+
+    # Migration: fehlende Spalten hinzufügen (robust)
+    new_building_cols = [
+        ("terraformer",       "INTEGER DEFAULT 0 CHECK(terraformer >= 0)"),
+        ("nanofactory",       "INTEGER DEFAULT 0 CHECK(nanofactory >= 0)"),
+        ("geothermal_nexus",  "INTEGER DEFAULT 0 CHECK(geothermal_nexus >= 0)"),
+        ("planet_core_nexus", "INTEGER DEFAULT 0 CHECK(planet_core_nexus >= 0)"),
+    ]
+    for col, ddl in new_building_cols:
+        try:
+            cur.execute(f"ALTER TABLE planet_buildings ADD COLUMN {col} {ddl};")
+        except sqlite3.OperationalError:
+            pass
+
+    # ------------------------------------------------------------
+    # BUILD QUEUE
+    # ------------------------------------------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS build_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            planet_id INTEGER NOT NULL,
+            building_type TEXT NOT NULL,
+            start_time REAL NOT NULL,
+            finish_time REAL NOT NULL,
+            FOREIGN KEY(planet_id) REFERENCES planets(id) ON DELETE CASCADE
+        );
+    """)
+
+    # ------------------------------------------------------------
+    # RESEARCH SYSTEM
+    # ------------------------------------------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS research_levels (
+            user_id INTEGER NOT NULL,
+            tech_key TEXT NOT NULL,
+            level INTEGER NOT NULL CHECK(level >= 0),
+            PRIMARY KEY (user_id, tech_key),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS research_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            tech_key TEXT NOT NULL,
+            finish_at REAL NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+    """)
+
+    # ------------------------------------------------------------
+    # SETTINGS
+    # ------------------------------------------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS game_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+    """)
+
+    # ------------------------------------------------------------
+    # BANS (Admin)
+    # ------------------------------------------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS bans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id INTEGER NOT NULL,
+            reason TEXT,
+            banned_until INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+        );
+    """)
+
+    # ------------------------------------------------------------
+    # SCORES / RANKING
+    # ------------------------------------------------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS player_scores (
+            player_id INTEGER PRIMARY KEY,
+            score_total INTEGER NOT NULL DEFAULT 0,
+            score_buildings INTEGER NOT NULL DEFAULT 0,
+            score_research INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+        );
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_player_scores_total_desc
+        ON player_scores(score_total DESC, updated_at DESC, player_id ASC);
+    """)
+
+    # ------------------------------------------------------------
+    # INDIZES
+    # ------------------------------------------------------------
+    indices = [
+        "CREATE INDEX IF NOT EXISTS idx_build_queue_planet ON build_queue(planet_id, finish_time)",
+        "CREATE INDEX IF NOT EXISTS idx_research_queue_user ON research_queue(user_id, finish_at)",
+        "CREATE INDEX IF NOT EXISTS idx_planets_player ON planets(player_id, is_homeworld)",
+        "CREATE INDEX IF NOT EXISTS idx_research_levels_user ON research_levels(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_bans_player ON bans(player_id, banned_until)",
+        "CREATE INDEX IF NOT EXISTS idx_players_last_seen ON players(last_seen)",
+    ]
+    for idx in indices:
+        try:
+            cur.execute(idx)
+        except sqlite3.OperationalError:
+            pass
+
+    # ------------------------------------------------------------
+    # DEFAULT ADMIN + DEFAULT PLAYER + DEFAULT SETTINGS
+    # ------------------------------------------------------------
+    create_default_admin(conn)
+    create_default_player_and_homeworld(conn)
+
+    for key, val in DEFAULT_GAME_SETTINGS.items():
+        cur.execute(
+            """
+            INSERT INTO game_settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO NOTHING;
+            """,
+            (key, str(val)),
+        )
+
+    conn.commit()
+    conn.close()
+
+
+# ======================================================================
+# USERS / AUTH
+# ======================================================================
+
+def hash_password(pwd: str) -> str:
+    return hashlib.sha256(pwd.encode("utf-8")).hexdigest()
+
+
+def create_default_admin(conn: sqlite3.Connection | None = None) -> None:
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) AS c FROM users;")
+    c = cur.fetchone()["c"]
+
+    if c == 0:
+        cur.execute(
+            """
+            INSERT INTO users (username, password_hash, is_admin)
+            VALUES ('admin', ?, 1);
+            """,
+            (hash_password("admin"),),
+        )
+        admin_id = cur.lastrowid
+        cur.execute(
+            "INSERT OR IGNORE INTO players (id, name, is_admin) VALUES (?, ?, 1);",
+            (admin_id, "Commander Gurkenvater"),
+        )
+
+    conn.commit()
+    if own_conn:
+        conn.close()
+
+
+def get_user_by_username(username: str):
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE username = ? LIMIT 1;", (username,))
+    user = cur.fetchone()
+    conn.close()
+    return user
+
+
+def verify_user(username: str, password: str):
+    user = get_user_by_username(username)
+    if not user:
+        return None
+    if hash_password(password) == user["password_hash"]:
+        return dict(user)
+    return None
+
+
+def create_user(username: str, password: str, is_admin: int = 0):
+    conn = db()
+    cur = conn.cursor()
+
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+
+        cur.execute(
+            """
+            INSERT INTO users (username, password_hash, is_admin)
+            VALUES (?, ?, ?);
+            """,
+            (username, hash_password(password), int(is_admin)),
+        )
+        user_id = cur.lastrowid
+
+        ensure_player_and_homeworld(
+            player_id=user_id,
+            player_name=f"Commander {username}",
+            is_admin=is_admin,
+            conn=conn,
+        )
+
+        conn.commit()
+        return True, None, {"id": user_id, "username": username, "is_admin": bool(is_admin)}
+
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        return False, "Benutzername ist bereits vergeben.", None
+    except Exception as e:
+        conn.rollback()
+        return False, str(e), None
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ======================================================================
+# PLAYER (Game Objects)
+# ======================================================================
+
+def touch_player_online(player_id: int) -> None:
+    if not player_id:
+        return
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE players SET last_seen = ? WHERE id = ?",
+        (_now_ts(), int(player_id))
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_player_stats() -> dict:
+    now = _now_ts()
+    day_ago = now - 24 * 3600
+    week_ago = now - 7 * 24 * 3600
+    five_min_ago = now - 5 * 60
+
+    conn = db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT COUNT(*) AS c FROM players")
+    total_players = int(cur.fetchone()["c"])
+
+    cur.execute("SELECT COUNT(*) AS c FROM players WHERE last_seen >= ?", (day_ago,))
+    active_24h = int(cur.fetchone()["c"])
+
+    cur.execute("SELECT COUNT(*) AS c FROM players WHERE last_seen >= ?", (week_ago,))
+    active_7d = int(cur.fetchone()["c"])
+
+    cur.execute("SELECT COUNT(*) AS c FROM players WHERE last_seen >= ?", (five_min_ago,))
+    online_now = int(cur.fetchone()["c"])
+
+    conn.close()
+
+    return {
+        "total_players": total_players,
+        "active_24h": active_24h,
+        "active_7d": active_7d,
+        "online_now": online_now,
+    }
+
+
+def ensure_player_and_homeworld(
+    player_id: int,
+    player_name: Optional[str] = None,
+    is_admin: int = 0,
+    conn: sqlite3.Connection | None = None,
+) -> None:
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    cur = conn.cursor()
+
+    try:
+        if own_conn:
+            conn.execute("BEGIN IMMEDIATE")
+
+        cur.execute("SELECT 1 FROM players WHERE id = ? LIMIT 1;", (int(player_id),))
+        row = cur.fetchone()
+        if not row:
+            cur.execute(
+                "INSERT INTO players (id, name, is_admin) VALUES (?, ?, ?);",
+                (int(player_id), player_name or f"Commander {player_id}", int(is_admin)),
+            )
+
+        cur.execute(
+            "SELECT COUNT(*) AS c FROM planets WHERE player_id = ? AND is_homeworld = 1;",
+            (int(player_id),),
+        )
+        c = int(cur.fetchone()["c"])
+
+        if c == 0:
+            now = time.time()
+
+            start_metal = float(DEFAULT_GAME_SETTINGS["start_metal"])
+            start_crystal = float(DEFAULT_GAME_SETTINGS["start_crystal"])
+            try:
+                settings = get_game_settings()
+                start_metal = float(settings.get("start_metal", start_metal))
+                start_crystal = float(settings.get("start_crystal", start_crystal))
+            except Exception:
+                pass
+
+            cur.execute(
+                """
+                INSERT INTO planets (player_id, name, is_homeworld, metal, crystal, last_update)
+                VALUES (?, ?, 1, ?, ?, ?);
+                """,
+                (int(player_id), "Aurora Prime", start_metal, start_crystal, now),
+            )
+            pid = cur.lastrowid
+
+            cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (int(pid),))
+
+        if own_conn:
+            conn.commit()
+
+    except Exception:
+        if own_conn:
+            conn.rollback()
+        raise
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def create_default_player_and_homeworld(conn: sqlite3.Connection | None = None) -> None:
+    ensure_player_and_homeworld(
+        player_id=1,
+        player_name="Commander Gurkenvater",
+        is_admin=1,
+        conn=conn,
+    )
+
+
+def load_player(player_id: int, conn: sqlite3.Connection | None = None) -> Optional[Dict[str, Any]]:
+    own = False
+    if conn is None:
+        conn = db()
+        own = True
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM players WHERE id = ? LIMIT 1;", (int(player_id),))
+        row = cur.fetchone()
+        return dict(row) if row else None
+    finally:
+        if own:
+            conn.close()
+
+
+
+def get_player_by_user_id(user_id: int) -> Optional[Dict[str, Any]]:
+    return load_player(int(user_id))
+
+
+# ======================================================================
+# PLANETS
+# ======================================================================
+
+def get_planets_by_player(player_id: int, conn: sqlite3.Connection | None = None) -> List[Dict[str, Any]]:
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT * FROM planets WHERE player_id = ? ORDER BY id ASC;",
+        (int(player_id),),
+    )
+    rows = cur.fetchall()
+
+    if own_conn:
+        conn.close()
+
+    return [dict(r) for r in rows]
+
+
+def get_planet_owner_id(planet_id: int) -> Optional[int]:
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+    row = cur.fetchone()
+    conn.close()
+    return int(row["player_id"]) if row else None
+
+
+def get_homeworld(player_id: int, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    own = False
+    if conn is None:
+        conn = db()
+        own = True
+
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM planets WHERE player_id = ? AND is_homeworld = 1 LIMIT 1;",
+            (int(player_id),),
+        )
+        row = cur.fetchone()
+
+        if not row:
+            # ⚠️ ensure_player_and_homeworld kann conn verwenden – bei dir ja
+            ensure_player_and_homeworld(player_id=int(player_id), conn=conn)
+            cur.execute(
+                "SELECT * FROM planets WHERE player_id = ? AND is_homeworld = 1 LIMIT 1;",
+                (int(player_id),),
+            )
+            row = cur.fetchone()
+
+        return dict(row) if row else {}
+    finally:
+        if own:
+            conn.close()
+
+
+
+def save_planet(planet: Dict[str, Any], conn: sqlite3.Connection | None = None) -> None:
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    cur = conn.cursor()
+    try:
+        if own_conn:
+            conn.execute("BEGIN IMMEDIATE")
+
+        cur.execute(
+            """
+            UPDATE planets
+            SET metal        = MAX(0, ?),
+                crystal      = MAX(0, ?),
+                last_update  = ?,
+                energy_total = ?,
+                energy_used  = ?
+            WHERE id = ?;
+            """,
+            (
+                planet["metal"],
+                planet["crystal"],
+                planet.get("last_update", time.time()),
+                int(planet.get("energy_total", 0)),
+                int(planet.get("energy_used", 0)),
+                int(planet["id"]),
+            ),
+        )
+
+        if own_conn:
+            conn.commit()
+    except Exception:
+        if own_conn:
+            conn.rollback()
+        raise
+    finally:
+        if own_conn:
+            conn.close()
+
+
+
+# ======================================================================
+# ATOMIC RESOURCE SPEND
+# ======================================================================
+
+def try_spend_resources(planet_id: int, metal_cost: int, crystal_cost: int) -> bool:
+    if metal_cost < 0 or crystal_cost < 0:
+        raise ValueError("Costs must be >= 0")
+
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE planets
+        SET metal   = metal   - ?,
+            crystal = crystal - ?
+        WHERE id = ?
+          AND metal   >= ?
+          AND crystal >= ?;
+        """,
+        (int(metal_cost), int(crystal_cost), int(planet_id), int(metal_cost), int(crystal_cost)),
+    )
+    ok = (cur.rowcount == 1)
+    conn.commit()
+    conn.close()
+    return ok
+
+
+def adjust_homeworld_resources(
+    player_id: Optional[int],
+    metal_delta: int = 0,
+    crystal_delta: int = 0,
+) -> None:
+    if not metal_delta and not crystal_delta:
+        return
+
+    conn = db()
+    cur = conn.cursor()
+
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+
+        if player_id is None:
+            cur.execute(
+                """
+                UPDATE planets
+                SET metal   = MAX(0, metal   + ?),
+                    crystal = MAX(0, crystal + ?)
+                WHERE is_homeworld = 1;
+                """,
+                (int(metal_delta), int(crystal_delta)),
+            )
+        else:
+            cur.execute(
+                """
+                UPDATE planets
+                SET metal   = MAX(0, metal   + ?),
+                    crystal = MAX(0, crystal + ?)
+                WHERE player_id = ?
+                  AND is_homeworld = 1;
+                """,
+                (int(metal_delta), int(crystal_delta), int(player_id)),
+            )
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+# ======================================================================
+# BUILDINGS
+# ======================================================================
+
+def get_planet_buildings(planet_id: int, conn: sqlite3.Connection | None = None) -> Dict[str, int]:
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM planet_buildings WHERE planet_id = ?;", (int(planet_id),))
+    row = cur.fetchone()
+
+    if not row:
+        cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (int(planet_id),))
+        if own_conn:
+            conn.commit()
+        cur.execute("SELECT * FROM planet_buildings WHERE planet_id = ?;", (int(planet_id),))
+        row = cur.fetchone()
+
+    data = dict(row)
+    data.pop("planet_id", None)
+
+    if own_conn:
+        conn.close()
+
+    return {k: int(v) for k, v in data.items()}
+
+
+def save_planet_buildings(planet_id: int, buildings: Dict[str, int]) -> None:
+    conn = db()
+    cur = conn.cursor()
+
+    keys = [
+        "metal_mine", "crystal_mine", "solar_plant",
+        "research_lab", "academy",
+        "metal_storage", "crystal_storage",
+        "command_center", "shipyard", "defense_factory",
+        "barracks", "radar_array", "shield_generator",
+        "terraformer", "nanofactory", "geothermal_nexus",
+        "planet_core_nexus",
+    ]
+
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        cur.execute(
+            f"""
+            UPDATE planet_buildings SET
+            {", ".join(f"{k}=?" for k in keys)}
+            WHERE planet_id = ?;
+            """,
+            [int(buildings.get(k, 0)) for k in keys] + [int(planet_id)],
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+# ======================================================================
+# BUILD QUEUE
+# ======================================================================
+
+def get_build_queue_rows(planet_id: int, conn: sqlite3.Connection | None = None):
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT * FROM build_queue
+        WHERE planet_id = ?
+        ORDER BY finish_time ASC;
+        """,
+        (int(planet_id),),
+    )
+    rows = cur.fetchall()
+
+    if own_conn:
+        conn.close()
+
+    return rows
+
+
+def add_build_job(
+    planet_id: int,
+    btype: str,
+    start: float,
+    finish: float,
+    conn: sqlite3.Connection | None = None,
+) -> int:
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    cur = conn.cursor()
+    try:
+        if own_conn:
+            conn.execute("BEGIN IMMEDIATE")
+
+        cur.execute(
+            """
+            INSERT INTO build_queue (planet_id, building_type, start_time, finish_time)
+            VALUES (?, ?, ?, ?);
+            """,
+            (int(planet_id), str(btype), float(start), float(finish)),
+        )
+        job_id = cur.lastrowid
+
+        if own_conn:
+            conn.commit()
+
+        return int(job_id)
+    except Exception:
+        if own_conn:
+            conn.rollback()
+        raise
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def delete_build_job(job_id: int, conn: sqlite3.Connection | None = None) -> None:
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    cur = conn.cursor()
+    try:
+        if own_conn:
+            conn.execute("BEGIN IMMEDIATE")
+        cur.execute("DELETE FROM build_queue WHERE id = ?;", (int(job_id),))
+        if own_conn:
+            conn.commit()
+    except Exception:
+        if own_conn:
+            conn.rollback()
+        raise
+    finally:
+        if own_conn:
+            conn.close()
+
+
+# ======================================================================
+# SETTINGS
+# ======================================================================
+
+def _ensure_game_settings(cur: sqlite3.Cursor) -> Dict[str, str]:
+    cur.execute("SELECT key, value FROM game_settings;")
+    rows = cur.fetchall()
+
+    if rows:
+        settings = {r["key"]: r["value"] for r in rows}
+    else:
+        settings = dict(DEFAULT_GAME_SETTINGS)
+        for key, value in settings.items():
+            cur.execute(
+                """
+                INSERT INTO game_settings (key, value)
+                VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+                """,
+                (key, str(value)),
+            )
+        cur.connection.commit()
+
+        cur.execute("SELECT key, value FROM game_settings;")
+        rows = cur.fetchall()
+        settings = {r["key"]: r["value"] for r in rows}
+
+    if "build_speed" not in settings and "speed" in settings:
+        settings["build_speed"] = settings["speed"]
+    if "speed" not in settings and "build_speed" in settings:
+        settings["speed"] = settings["build_speed"]
+
+    return settings
+
+
+def get_game_settings(conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    try:
+        cur = conn.cursor()
+        settings = _ensure_game_settings(cur)
+        return settings
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def save_game_settings(
+    settings: Optional[Dict[str, Any]] = None,
+    **kwargs: Any,
+) -> None:
+    updates: Dict[str, Any] = {}
+    if settings:
+        updates.update(settings)
+    for key, val in kwargs.items():
+        if val is None:
+            continue
+        updates[key] = val
+
+    if not updates:
+        return
+
+    if "speed" in updates and "build_speed" not in updates:
+        updates["build_speed"] = updates["speed"]
+    if "build_speed" in updates and "speed" not in updates:
+        updates["speed"] = updates["build_speed"]
+
+    safe_updates: Dict[str, str] = {}
+    for key, value in updates.items():
+        if isinstance(value, (dict, list, tuple, set)):
+            continue
+
+        if isinstance(value, bool):
+            v_str = "1" if value else "0"
+        elif isinstance(value, int):
+            v_str = str(value)
+        elif isinstance(value, float):
+            if value.is_integer():
+                v_str = str(int(value))
+            else:
+                v_str = f"{value:.6f}".rstrip("0").rstrip(".")
+        else:
+            v_str = str(value)
+
+        safe_updates[str(key)] = v_str
+
+    if not safe_updates:
+        return
+
+    conn = db()
+    cur = conn.cursor()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        for key, value_str in safe_updates.items():
+            cur.execute(
+                """
+                INSERT INTO game_settings (key, value)
+                VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+                """,
+                (key, value_str),
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+# ======================================================================
+# RESEARCH
+# ======================================================================
+
+def get_research_levels(user_id: int, conn: sqlite3.Connection | None = None) -> Dict[str, int]:
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT tech_key, level FROM research_levels WHERE user_id = ?;",
+        (int(user_id),),
+    )
+    rows = cur.fetchall()
+
+    if own_conn:
+        conn.close()
+
+    return {r["tech_key"]: int(r["level"]) for r in rows}
+
+
+def save_research_level(tech_key: str, level: int, user_id: int) -> None:
+    conn = db()
+    cur = conn.cursor()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        cur.execute(
+            """
+            INSERT INTO research_levels (user_id, tech_key, level)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+            """,
+            (int(user_id), str(tech_key), int(level)),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def get_research_queue_rows(user_id: int):
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT * FROM research_queue WHERE user_id = ? ORDER BY finish_at ASC;",
+        (int(user_id),),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
+def add_research_job(user_id: int, tech_key: str, finish_at: float) -> None:
+    conn = db()
+    cur = conn.cursor()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        cur.execute(
+            """
+            INSERT INTO research_queue (user_id, tech_key, finish_at)
+            VALUES (?, ?, ?);
+            """,
+            (int(user_id), str(tech_key), float(finish_at)),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def delete_research_job(job_id: int) -> None:
+    conn = db()
+    cur = conn.cursor()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        cur.execute("DELETE FROM research_queue WHERE id = ?;", (int(job_id),))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+# ======================================================================
+# SCORE / RANKING
+# ======================================================================
+
+def _score_settings(conn: sqlite3.Connection | None = None) -> Dict[str, float]:
+    if conn is None:
+        s = get_game_settings() or {}
+    else:
+        cur = conn.cursor()
+        cur.execute("SELECT key, value FROM game_settings;")
+        rows = cur.fetchall()
+        s = {r["key"]: r["value"] for r in rows}
+
+    def f(key: str, default: float) -> float:
+        try:
+            return float(s.get(key, default))
+        except Exception:
+            return float(default)
+
+    return {
+        "wB": f("score_weight_buildings", 0.60),
+        "wR": f("score_weight_research", 0.40),
+        "exp": f("score_cost_exponent", 1.0),
+        "softcap": f("score_softcap", 0.0),
+    }
+
+
+def _sum_costs_up_to_level(base_m: int, base_c: int, factor: float, level: int) -> int:
+    if level <= 0:
+        return 0
+    total = 0
+    for lv in range(1, level + 1):
+        mult = factor ** (lv - 1)
+        total += int(base_m * mult) + int(base_c * mult)
+    return total
+
+
+def compute_player_score(
+    player_id: int,
+    conn: sqlite3.Connection | None = None,
+) -> Tuple[int, int, int]:
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+
+    try:
+        settings = _score_settings(conn=conn)
+        wB, wR = settings["wB"], settings["wR"]
+        exp = settings["exp"]
+        softcap = settings["softcap"]
+
+        from .buildings import BUILDING_ORDER, BASE_COST, COST_FACTOR
+        from .research import RESEARCH_TECHS
+
+        planets = get_planets_by_player(int(player_id), conn=conn)
+
+        building_sum_costs = 0
+        for p in planets:
+            b = get_planet_buildings(int(p["id"]), conn=conn)
+            for key in BUILDING_ORDER:
+                lvl = int(b.get(key, 0) or 0)
+                if lvl <= 0:
+                    continue
+                base = BASE_COST.get(key, (0, 0))
+                fac = float(COST_FACTOR.get(key, 1.5))
+                building_sum_costs += _sum_costs_up_to_level(int(base[0]), int(base[1]), fac, lvl)
+
+        building_score = int((building_sum_costs ** exp) if building_sum_costs > 0 else 0)
+
+        levels = get_research_levels(int(player_id), conn=conn)
+        research_sum_costs = 0
+        for tech_key, cfg in RESEARCH_TECHS.items():
+            lvl = int(levels.get(tech_key, 0) or 0)
+            if lvl <= 0:
+                continue
+            base_m = int(cfg.get("base_cost_m", 0) or 0)
+            base_c = int(cfg.get("base_cost_c", 0) or 0)
+            fac = float(cfg.get("cost_factor", 1.6) or 1.6)
+            research_sum_costs += _sum_costs_up_to_level(base_m, base_c, fac, lvl)
+
+        research_score = int((research_sum_costs ** exp) if research_sum_costs > 0 else 0)
+
+        total = int((wB * building_score) + (wR * research_score))
+
+        if softcap and softcap > 0 and total > softcap:
+            over = total - softcap
+            total = int(softcap + (math.sqrt(over) * math.sqrt(softcap)))
+
+        return total, building_score, research_score
+
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def upsert_player_score(
+    player_id: int,
+    total: int,
+    buildings: int,
+    research: int,
+    conn: sqlite3.Connection | None = None,
+) -> None:
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO player_scores (player_id, score_total, score_buildings, score_research, updated_at)
+        VALUES (?, ?, ?, ?, strftime('%s','now'))
+        ON CONFLICT(player_id) DO UPDATE SET
+            score_total = excluded.score_total,
+            score_buildings = excluded.score_buildings,
+            score_research = excluded.score_research,
+            updated_at = excluded.updated_at
+        """,
+        (int(player_id), int(total), int(buildings), int(research)),
+    )
+
+    if owns_conn:
+        conn.commit()
+        conn.close()
+
+
+def recompute_and_upsert_score(
+    player_id: int,
+    conn: sqlite3.Connection | None = None,
+) -> Dict[str, int]:
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+
+    try:
+        total, b, r = compute_player_score(int(player_id), conn=conn)
+        upsert_player_score(int(player_id), total, b, r, conn=conn)
+        if owns_conn:
+            conn.commit()
+        return {"score_total": total, "score_buildings": b, "score_research": r}
+    except Exception:
+        if owns_conn:
+            conn.rollback()
+        raise
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def get_player_score_row(player_id: int) -> Optional[Dict[str, Any]]:
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM player_scores WHERE player_id = ?", (int(player_id),))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_ranking_rows(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            p.id AS player_id,
+            p.name AS nickname,
+            ps.score_total AS score_total,
+            ps.score_buildings AS score_buildings,
+            ps.score_research AS score_research,
+            ps.updated_at AS updated_at
+        FROM players p
+        JOIN player_scores ps ON ps.player_id = p.id
+        ORDER BY ps.score_total DESC, ps.updated_at DESC, p.id ASC
+        LIMIT ? OFFSET ?
+        """,
+        (int(limit), int(offset)),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_player_rank(player_id: int) -> Tuple[Optional[int], int]:
+    conn = db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT COUNT(*) AS cnt FROM player_scores")
+    total_players = int(cur.fetchone()["cnt"])
+
+    cur.execute("SELECT score_total, updated_at FROM player_scores WHERE player_id = ?", (int(player_id),))
+    me = cur.fetchone()
+    if not me:
+        conn.close()
+        return None, total_players
+
+    my_score = int(me["score_total"])
+    my_updated = int(me["updated_at"])
+
+    cur.execute(
+        """
+        SELECT COUNT(*) AS better
+        FROM player_scores
+        WHERE (score_total > ?)
+           OR (score_total = ? AND updated_at > ?)
+           OR (score_total = ? AND updated_at = ? AND player_id < ?)
+        """,
+        (my_score, my_score, my_updated, my_score, my_updated, int(player_id)),
+    )
+    better = int(cur.fetchone()["better"])
+    conn.close()
+
+    return better + 1, total_players
+
+
+# ----------------------------------------------------------------------
+# QUEUE FINISH TRIGGERS (Score nur bei Finish) - ATOMAR
+# ----------------------------------------------------------------------
+
+def finish_due_build_jobs(
+    planet_id: int,
+    player_id: int,
+    now: float | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> bool:
+    """
+    Schließt ALLE fälligen Build-Jobs für diesen Planeten ab.
+    Rechnet Score NUR neu, wenn mindestens ein Job abgeschlossen wurde.
+    Läuft atomar in EINER Connection/Transaction.
+    """
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+
+    if now is None:
+        now = time.time()
+
+    finished_any = False
+    cur = conn.cursor()
+
+    try:
+        if owns_conn:
+            conn.execute("BEGIN IMMEDIATE")
+
+        rows = get_build_queue_rows(int(planet_id), conn=conn)
+        due = [r for r in rows if float(r["finish_time"]) <= float(now)]
+        if not due:
+            if owns_conn:
+                conn.commit()
+            return False
+
+        buildings = get_planet_buildings(int(planet_id), conn=conn)
+
+        for job in due:
+            btype = str(job["building_type"])
+            if btype in buildings:
+                buildings[btype] = int(buildings.get(btype, 0)) + 1
+                finished_any = True
+            delete_build_job(int(job["id"]), conn=conn)
+
+        keys = [
+            "metal_mine", "crystal_mine", "solar_plant",
+            "research_lab", "academy",
+            "metal_storage", "crystal_storage",
+            "command_center", "shipyard", "defense_factory",
+            "barracks", "radar_array", "shield_generator",
+            "terraformer", "nanofactory", "geothermal_nexus",
+            "planet_core_nexus",
+        ]
+        cur.execute(
+            f"""
+            UPDATE planet_buildings SET
+            {", ".join(f"{k}=?" for k in keys)}
+            WHERE planet_id = ?;
+            """,
+            [int(buildings.get(k, 0)) for k in keys] + [int(planet_id)],
+        )
+
+        if finished_any:
+            recompute_and_upsert_score(int(player_id), conn=conn)
+
+        if owns_conn:
+            conn.commit()
+
+        return finished_any
+
+    except Exception:
+        if owns_conn:
+            conn.rollback()
+        raise
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def finish_due_research_jobs(
+    user_id: int,
+    now: float | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> bool:
+    """
+    Schließt ALLE fälligen Research-Jobs ab.
+    Rechnet Score NUR neu, wenn mindestens ein Job abgeschlossen wurde.
+    Läuft atomar in EINER Connection/Transaction.
+    """
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+
+    if now is None:
+        now = time.time()
+
+    finished_any = False
+    cur = conn.cursor()
+
+    try:
+        if owns_conn:
+            conn.execute("BEGIN IMMEDIATE")
+
+        # ✅ Wichtig: NUR über die gleiche conn lesen (kein conn-mix!)
+        cur.execute(
+            "SELECT * FROM research_queue WHERE user_id = ? ORDER BY finish_at ASC;",
+            (int(user_id),),
+        )
+        rows = cur.fetchall()
+
+        due = [r for r in rows if float(r["finish_at"]) <= float(now)]
+        if not due:
+            if owns_conn:
+                conn.commit()
+            return False
+
+        levels = get_research_levels(int(user_id), conn=conn)
+
+        for job in due:
+            tech_key = str(job["tech_key"])
+            levels[tech_key] = int(levels.get(tech_key, 0)) + 1
+            finished_any = True
+            cur.execute("DELETE FROM research_queue WHERE id = ?;", (int(job["id"]),))
+
+        for tech_key, lvl in levels.items():
+            cur.execute(
+                """
+                INSERT INTO research_levels (user_id, tech_key, level)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+                """,
+                (int(user_id), str(tech_key), int(lvl)),
+            )
+
+        if finished_any:
+            recompute_and_upsert_score(int(user_id), conn=conn)
+
+        if owns_conn:
+            conn.commit()
+
+        return finished_any
+
+    except Exception:
+        if owns_conn:
+            conn.rollback()
+        raise
+    finally:
+        if owns_conn:
+            conn.close()

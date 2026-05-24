@@ -1,0 +1,14 @@
+base.html       x
+overview.html   x
+buildings.html  x
+research.html   x
+techtree.html   x
+ranking.html    x
+galaxy.html     x
+shipyard.html   x
+defense.html    x
+fleet.html      x
+alliance.html   x
+landing.html    x
+login.html      x
+register.html   x

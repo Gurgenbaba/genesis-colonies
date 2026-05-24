@@ -1,0 +1,8 @@
+# Genesis Colonies — Python dependencies
+# Install: pip install -r requirements.txt
+#
+# Geprüft gegen app.py + game/* (Stand v1.4):
+# Einziges externes Paket ist Flask. Alles andere ist Python-Stdlib
+# (sqlite3, hashlib, json, pathlib, …).
+
+Flask>=3.0.0,<4.0.0

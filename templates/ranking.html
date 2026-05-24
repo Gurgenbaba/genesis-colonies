@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{# ------------------------------------------------------------- #}
+{# Defensive Defaults (Ranking darf niemals crasht)               #}
+{# ------------------------------------------------------------- #}
+{% set ranking = (ranking if ranking is defined and ranking else []) %}
+{% set my_score = (my_score if my_score is defined and my_score else {'total': 0, 'buildings': 0, 'research': 0}) %}
+{% set my_rank = (my_rank if my_rank is defined and my_rank else None) %}
+{% set total_players = (total_players if total_players is defined and total_players else 0) %}
+{% set player_obj = (player if player is defined and player else None) %}
+
+<div class="gc-page ranking-page">
+
+  <!-- HEADER -->
+  <header class="section-header ranking-header">
+    <h1 class="section-title">
+      {{ T("ranking_title") if T("ranking_title") != "ranking_title" else "Galaktische Rangliste" }}
+    </h1>
+    <p class="section-hint hint">
+      {{ T("ranking_subtitle") if T("ranking_subtitle") != "ranking_subtitle"
+         else "Vergleiche die Macht deiner Kolonie mit anderen Commandern im Genesis-Cluster." }}
+    </p>
+  </header>
+
+  <div class="ranking-layout">
+
+    <!-- =====================================
+         LEFT – DEIN STATUS
+         ===================================== -->
+    <section class="gc-panel ranking-panel ranking-panel-status" aria-labelledby="ranking-your-status">
+      <div class="gc-panel-header">
+        <span class="gc-panel-title" id="ranking-your-status">
+          {{ T("ranking_your_status") if T("ranking_your_status") != "ranking_your_status" else "Dein Status" }}
+        </span>
+
+        {# Name sauber auflösen #}
+        {% set subtitle_name = None %}
+        {% if player_obj and player_obj.name is defined and player_obj.name %}
+          {% set subtitle_name = player_obj.name %}
+        {% elif AUTH_USER and AUTH_USER.username %}
+          {% set subtitle_name = AUTH_USER.username %}
+        {% else %}
+          {% set subtitle_name = "Commander" %}
+        {% endif %}
+
+        <span class="gc-panel-subtitle">
+          {{ subtitle_name }}
+        </span>
+      </div>
+
+      <div class="ranking-panel-body">
+        <div class="ranking-stats-grid">
+
+          <!-- Rank -->
+          <div class="ranking-stat">
+            <div class="ranking-stat-label">
+              {{ T("ranking_label_rank") if T("ranking_label_rank") != "ranking_label_rank" else "Rang" }}
+            </div>
+            <div class="ranking-stat-value">
+              {% if my_rank %}
+                #{{ my_rank|fmt_int }}
+                <span class="ranking-stat-sub">
+                  / {{ (total_players or 0)|fmt_int }}
+                </span>
+              {% else %}
+                &mdash;
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Gesamt -->
+          <div class="ranking-stat">
+            <div class="ranking-stat-label">
+              {{ T("ranking_label_score_total") if T("ranking_label_score_total") != "ranking_label_score_total"
+                 else "Gesamt-Score" }}
+            </div>
+            <div class="ranking-stat-value">
+              {{ (my_score.total if my_score and my_score.total is defined else 0)|fmt_int }}
+            </div>
+          </div>
+
+          <!-- Gebäude -->
+          <div class="ranking-stat">
+            <div class="ranking-stat-label">
+              {{ T("ranking_label_score_buildings") if T("ranking_label_score_buildings") != "ranking_label_score_buildings"
+                 else "Gebäude" }}
+            </div>
+            <div class="ranking-stat-value">
+              {{ (my_score.buildings if my_score and my_score.buildings is defined else 0)|fmt_int }}
+            </div>
+          </div>
+
+          <!-- Forschung -->
+          <div class="ranking-stat">
+            <div class="ranking-stat-label">
+              {{ T("ranking_label_score_research") if T("ranking_label_score_research") != "ranking_label_score_research"
+                 else "Forschung" }}
+            </div>
+            <div class="ranking-stat-value">
+              {{ (my_score.research if my_score and my_score.research is defined else 0)|fmt_int }}
+            </div>
+          </div>
+
+        </div>
+
+        <div class="ranking-hint">
+          {{ T("ranking_hint") if T("ranking_hint") != "ranking_hint"
+             else "Baue deine Infrastruktur aus und treibe Forschung voran, um deinen Rang zu steigern." }}
+        </div>
+      </div>
+    </section>
+
+    <!-- =====================================
+         RIGHT – RANKING TABLE
+         ===================================== -->
+    <section class="gc-panel ranking-panel ranking-panel-table" aria-labelledby="ranking-top-commander">
+      <div class="gc-panel-header">
+        <span class="gc-panel-title" id="ranking-top-commander">
+          {{ T("ranking_top_commander") if T("ranking_top_commander") != "ranking_top_commander"
+             else "Top-Commander" }}
+        </span>
+        <span class="gc-panel-subtitle">
+          {{ T("ranking_top_commander_sub") if T("ranking_top_commander_sub") != "ranking_top_commander_sub"
+             else "Gesamt-, Gebäude- und Forschungs-Punkte der stärksten Kolonien." }}
+        </span>
+      </div>
+
+      <div class="ranking-panel-body">
+        {% if ranking and ranking|length > 0 %}
+          <div class="ranking-table-wrapper">
+            <table class="table-std ranking-table">
+              <thead>
+                <tr>
+                  <th class="col-rank">#</th>
+                  <th class="col-name">
+                    {{ T("ranking_col_commander") if T("ranking_col_commander") != "ranking_col_commander"
+                       else "Commander" }}
+                  </th>
+                  <th class="col-score">
+                    {{ T("ranking_col_total") if T("ranking_col_total") != "ranking_col_total"
+                       else "Gesamt" }}
+                  </th>
+                  <th class="col-score">
+                    {{ T("ranking_col_buildings") if T("ranking_col_buildings") != "ranking_col_buildings"
+                       else "Gebäude" }}
+                  </th>
+                  <th class="col-score">
+                    {{ T("ranking_col_research") if T("ranking_col_research") != "ranking_col_research"
+                       else "Forschung" }}
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {% for row in ranking %}
+                  {# row defensiv: unterstützt dict oder object #}
+                  {% set row_player_id = (row.player_id if row and row.player_id is defined else (row.get('player_id') if row is mapping and row.get('player_id') is not none else None)) %}
+                  {% set my_player_id = (player_obj.id if player_obj and player_obj.id is defined else None) %}
+                  {% set is_me = (my_player_id and row_player_id and (row_player_id == my_player_id)) %}
+
+                  {% set row_rank = (row.rank if row and row.rank is defined else (row.get('rank') if row is mapping else None)) %}
+                  {% set row_nick = (row.nickname if row and row.nickname is defined else (row.get('nickname') if row is mapping else None)) %}
+                  {% set row_total = (row.score_total if row and row.score_total is defined else (row.get('score_total') if row is mapping else 0)) %}
+                  {% set row_build = (row.score_buildings if row and row.score_buildings is defined else (row.get('score_buildings') if row is mapping else 0)) %}
+                  {% set row_res = (row.score_research if row and row.score_research is defined else (row.get('score_research') if row is mapping else 0)) %}
+
+                  <tr class="ranking-row {% if is_me %}is-me{% endif %}">
+                    <td class="col-rank">
+                      {% if row_rank %}
+                        #{{ row_rank|fmt_int }}
+                      {% else %}
+                        #–
+                      {% endif %}
+                    </td>
+
+                    <td class="col-name">
+                      {% if is_me %}
+                        <span class="you-pill" aria-label="Du">
+                          {{ T("ranking_you") if T("ranking_you") != "ranking_you" else "Du" }}
+                        </span>
+                      {% endif %}
+                      {{ row_nick or "–" }}
+                    </td>
+
+                    <td class="col-score">{{ (row_total or 0)|fmt_int }}</td>
+                    <td class="col-score">{{ (row_build or 0)|fmt_int }}</td>
+                    <td class="col-score">{{ (row_res or 0)|fmt_int }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+        {% else %}
+          <p class="ranking-empty">
+            {{ T("ranking_empty") if T("ranking_empty") != "ranking_empty"
+               else "Noch keine Daten vorhanden." }}
+          </p>
+        {% endif %}
+      </div>
+    </section>
+
+  </div>
+</div>
+
+{% endblock %}
