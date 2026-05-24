@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-hidden="true">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7fffd9"/>
+      <stop offset="100%" stop-color="#23f2a6"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#070e20" stroke="#7fffd9" stroke-opacity="0.45"/>
+  <circle cx="32" cy="32" r="18" fill="url(#g)" filter="url(#glow)" opacity="0.92"/>
+  <text x="32" y="38" text-anchor="middle" font-size="22" fill="#060b16" font-family="Segoe UI Emoji, Apple Color Emoji, sans-serif">⛏</text>
+  <title>ferronit</title>
+</svg>
