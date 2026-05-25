@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+{% endblock %}
+
 {% block content %}
 
 {# ------------------------------------------------------------- #}
@@ -9,7 +13,7 @@
 {% set settings = (settings if settings is defined and settings else {}) %}
 {% set banned_players = (banned_players if banned_players is defined and banned_players else []) %}
 
-<div class="gc-page admin-page">
+<div class="gc-page admin-page admin-cc" id="admin-control-center" data-admin-panel>
   <div class="admin-wrapper">
 
     <!-- ============================================================= -->
@@ -92,8 +96,108 @@
       </div>
     </section>
 
+    <nav class="admin-cc-tabs" role="tablist" aria-label="{{ T('admin_tabs_label') }}">
+      <button type="button" class="admin-cc-tab is-active" data-admin-tab="health" role="tab">{{ T("admin_health_title") }}</button>
+      <button type="button" class="admin-cc-tab" data-admin-tab="migrations" role="tab">{{ T("admin_migrations_title") }}</button>
+      <button type="button" class="admin-cc-tab" data-admin-tab="players" role="tab">{{ T("admin_players_title") }}</button>
+      <button type="button" class="admin-cc-tab" data-admin-tab="planets" role="tab">{{ T("admin_planets_title") }}</button>
+      <button type="button" class="admin-cc-tab" data-admin-tab="queues" role="tab">{{ T("admin_queues_title") }}</button>
+      <button type="button" class="admin-cc-tab" data-admin-tab="audit" role="tab">{{ T("admin_audit_title") }}</button>
+      <button type="button" class="admin-cc-tab" data-admin-tab="runtime" role="tab">{{ T("admin_runtime_title") }}</button>
+      <button type="button" class="admin-cc-tab" data-admin-tab="settings" role="tab">{{ T("admin_settings_title") }}</button>
+    </nav>
+
+    <section id="admin-tab-health" class="admin-cc-panel is-active" data-panel="health" role="tabpanel">
+      <div class="admin-cc-toolbar">
+        <h2 class="admin-cc-panel-title">{{ T("admin_health_title") }}</h2>
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="refresh-health">{{ T("admin_btn_refresh_health") }}</button>
+      </div>
+      <div id="admin-health-output" class="admin-cc-output" aria-live="polite"></div>
+    </section>
+
+    <section id="admin-tab-migrations" class="admin-cc-panel" data-panel="migrations" role="tabpanel" hidden>
+      
+      <div class="admin-cc-toolbar">
+        <h2 class="admin-cc-panel-title">{{ T("admin_migrations_title") }}</h2>
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="refresh-migrations">{{ T("admin_btn_migration_check") }}</button>
+      </div>
+      <div id="admin-migrations-output" class="admin-cc-output"></div>
+      <div class="admin-cc-danger-zone" id="admin-migrations-run-zone" hidden>
+        <p class="admin-small-hint">{{ T("admin_migrations_run_hint") }}</p>
+        <input type="text" class="admin-input" id="admin-migrations-confirm" placeholder="RUN MIGRATIONS" autocomplete="off">
+        <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="run-migrations">{{ T("admin_btn_run_migrations") }}</button>
+      </div>
+    </section>
+
+    <section id="admin-tab-players" class="admin-cc-panel" data-panel="players" role="tabpanel" hidden>
+      <div class="admin-cc-toolbar">
+        <h2 class="admin-cc-panel-title">{{ T("admin_players_title") }}</h2>
+        <div class="admin-cc-search-row">
+          <input type="search" class="admin-input" id="admin-players-search" placeholder="{{ T('admin_search_players_placeholder') }}">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="search-players">{{ T("admin_btn_search") }}</button>
+        </div>
+      </div>
+      
+      <div id="admin-players-list" class="admin-cc-table-wrap"></div>
+      <div id="admin-player-detail" class="admin-cc-detail"></div>
+    </section>
+
+    <section id="admin-tab-planets" class="admin-cc-panel" data-panel="planets" role="tabpanel" hidden>
+      <div class="admin-cc-toolbar">
+        <h2 class="admin-cc-panel-title">{{ T("admin_planets_title") }}</h2>
+        <div class="admin-cc-search-row">
+          <input type="search" class="admin-input" id="admin-planets-search" placeholder="{{ T('admin_search_planets_placeholder') }}">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="search-planets">{{ T("admin_btn_search") }}</button>
+        </div>
+      </div>
+      <div id="admin-planets-list" class="admin-cc-table-wrap"></div>
+      <div id="admin-planet-detail" class="admin-cc-detail"></div>
+    </section>
+
+    <section id="admin-tab-queues" class="admin-cc-panel" data-panel="queues" role="tabpanel" hidden>
+      <div class="admin-cc-toolbar admin-cc-toolbar-wrap">
+        <h2 class="admin-cc-panel-title">{{ T("admin_queues_title") }}</h2>
+        <div class="admin-cc-filters">
+          <input type="number" class="admin-input admin-input-sm" id="admin-queue-player-id" placeholder="{{ T('admin_filter_player_id') }}">
+          <input type="number" class="admin-input admin-input-sm" id="admin-queue-planet-id" placeholder="{{ T('admin_filter_planet_id') }}">
+          <select class="admin-input admin-input-sm" id="admin-queue-status">
+            <option value="all">{{ T("admin_filter_status_all") }}</option>
+            <option value="active">{{ T("admin_filter_status_active") }}</option>
+            <option value="finished">{{ T("admin_filter_status_finished") }}</option>
+          </select>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="load-queues">{{ T("admin_btn_load_queues") }}</button>
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="finish-due">{{ T("admin_btn_finish_due") }}</button>
+        </div>
+      </div>
+      <div id="admin-queues-output" class="admin-cc-output"></div>
+    </section>
+
+    <section id="admin-tab-audit" class="admin-cc-panel" data-panel="audit" role="tabpanel" hidden>
+      <div class="admin-cc-toolbar admin-cc-toolbar-wrap">
+        <h2 class="admin-cc-panel-title">{{ T("admin_audit_title") }}</h2>
+        <div class="admin-cc-filters">
+          <input type="number" class="admin-input admin-input-sm" id="admin-audit-admin-id" placeholder="{{ T('admin_filter_admin_id') }}">
+          <input type="text" class="admin-input admin-input-sm" id="admin-audit-action" placeholder="{{ T('admin_filter_action') }}">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="load-audit">{{ T("admin_btn_load_audit") }}</button>
+        </div>
+      </div>
+      <div id="admin-audit-output" class="admin-cc-table-wrap"></div>
+    </section>
+
+    <section id="admin-tab-runtime" class="admin-cc-panel" data-panel="runtime" role="tabpanel" hidden>
+      <div class="admin-cc-toolbar">
+        <h2 class="admin-cc-panel-title">{{ T("admin_runtime_title") }}</h2>
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="refresh-runtime">{{ T("admin_btn_refresh_runtime") }}</button>
+      </div>
+      
+      
+      <div id="admin-runtime-output" class="admin-cc-output"></div>
+    </section>
+
+    <section id="admin-tab-settings" class="admin-cc-panel" data-panel="settings" role="tabpanel" hidden>
+
     <!-- ============================================================= -->
-    <!-- SETTINGS                                                      -->
+    <!-- LEGACY SETTINGS / TOOLS (form POST)                           -->
     <!-- ============================================================= -->
     <form method="POST" action="{{ url_for('admin_update') }}">
 
@@ -525,7 +629,13 @@
       {% endif %}
     </section>
 
+    </section><!-- /admin-tab-settings -->
+
   </div>
 </div>
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='admin.js') }}"></script>
 {% endblock %}

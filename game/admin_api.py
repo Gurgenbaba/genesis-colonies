@@ -1,0 +1,869 @@
+"""
+Admin Control Center JSON API – business logic for /api/admin/* routes.
+"""
+
+from __future__ import annotations
+
+import os
+import sqlite3
+import sys
+import time
+from typing import Any, Dict, List, Optional, Tuple
+
+from game.admin_audit import list_admin_audit, write_admin_audit
+from game.config import get_app_version, is_debug_enabled, is_production
+from game.db import db, resolve_db_path, table_exists
+from game.health import build_health_report
+from game.migrations_util import get_applied_migration_names, list_migration_files, migrations_are_current
+from game.models import (
+    DEFAULT_GAME_SETTINGS,
+    BUILDING_KEYS,
+    begin_write_transaction,
+    commit,
+    delete_build_job,
+    delete_research_job,
+    ensure_player_and_homeworld,
+    finish_due_build_jobs,
+    finish_due_research_jobs,
+    get_game_settings,
+    get_homeworld,
+    get_planet_buildings,
+    get_player_rank,
+    get_player_score_row,
+    get_planets_by_player,
+    harden_planets_schema,
+    recompute_and_upsert_score,
+    rollback,
+    save_planet_buildings,
+)
+
+MAX_RESOURCE = 1_000_000_000
+MAX_BUILDING_LEVEL = 100
+SEARCH_LIMIT = 50
+
+CONFIRM_PHRASES: Dict[str, str] = {
+    "queue_clear": "CLEAR QUEUE",
+    "planet_reset": "RESET PLANET",
+    "remove_admin": "REMOVE ADMIN",
+    "ban_player": "BAN PLAYER",
+    "run_migrations": "RUN MIGRATIONS",
+}
+
+
+def _err(code: str, message: str = "") -> Dict[str, Any]:
+    return {"ok": False, "error": code, "message": message or code}
+
+
+def _ok(**payload: Any) -> Dict[str, Any]:
+    out: Dict[str, Any] = {"ok": True}
+    out.update(payload)
+    return out
+
+
+def clamp_resource(value: Any, default: float = 0.0) -> float:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        n = float(default)
+    return max(0.0, min(n, float(MAX_RESOURCE)))
+
+
+def clamp_building_level(value: Any, default: int = 0) -> int:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        n = int(default)
+    return max(0, min(n, MAX_BUILDING_LEVEL))
+
+
+def validate_confirm(action_key: str, confirm_text: Any) -> bool:
+    expected = CONFIRM_PHRASES.get(action_key)
+    if not expected:
+        return True
+    return str(confirm_text or "").strip() == expected
+
+
+def _request_meta() -> Tuple[Optional[str], Optional[str]]:
+    from flask import request
+
+    ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "")[:64]
+    ua = (request.headers.get("User-Agent") or "")[:256]
+    return ip or None, ua or None
+
+
+def audit(
+    admin_id: int,
+    action: str,
+    *,
+    target_type: Optional[str] = None,
+    target_id: Optional[str | int] = None,
+    payload: Optional[Dict[str, Any]] = None,
+) -> None:
+    ip, ua = _request_meta()
+    write_admin_audit(
+        int(admin_id),
+        action,
+        target_type=target_type,
+        target_id=target_id,
+        payload=payload,
+        ip=ip,
+        user_agent=ua,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Health / migrations / runtime
+# ---------------------------------------------------------------------------
+
+def api_health() -> Dict[str, Any]:
+    report = build_health_report()
+    report["checked_at"] = int(time.time())
+    return _ok(health=report)
+
+
+def api_migrations() -> Dict[str, Any]:
+    conn = db()
+    try:
+        applied = sorted(get_applied_migration_names(conn))
+    finally:
+        conn.close()
+    all_files = [p.name for p in list_migration_files()]
+    pending = [n for n in all_files if n not in applied]
+    current, _, err = migrations_are_current()
+    return _ok(
+        migrations={
+            "backend": os.environ.get("GC_DB_BACKEND", "sqlite"),
+            "db_path": str(resolve_db_path()),
+            "applied": applied,
+            "pending": pending,
+            "current": current,
+            "error": err,
+            "all": all_files,
+        },
+    )
+
+
+def api_runtime() -> Dict[str, Any]:
+    settings = get_game_settings() or {}
+    return _ok(
+        runtime={
+            "version": get_app_version(),
+            "python": sys.version.split()[0],
+            "app_env": os.environ.get("APP_ENV", "development"),
+            "production": is_production(),
+            "debug": is_debug_enabled(),
+            "db_backend": os.environ.get("GC_DB_BACKEND", "sqlite"),
+            "db_path": str(resolve_db_path()),
+            "polling": {
+                "interval_active_ms": 4000,
+                "interval_idle_ms": 12000,
+                "interval_hidden_ms": 60000,
+            },
+            "settings_snapshot": {
+                "production_speed": settings.get("production_speed"),
+                "build_speed": settings.get("build_speed"),
+                "research_speed": settings.get("research_speed"),
+                "queue_limit": settings.get("queue_limit"),
+                "research_queue_limit": settings.get("research_queue_limit"),
+            },
+        },
+    )
+
+
+def api_run_migrations(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    if is_production():
+        return _err("forbidden", "Migrations cannot be run from UI in production.")
+    if not validate_confirm("run_migrations", body.get("confirm_text")):
+        return _err("confirm_required", "Type RUN MIGRATIONS to confirm.")
+    try:
+        import migrate
+
+        migrate.main()
+    except SystemExit as exc:
+        if int(getattr(exc, "code", 0) or 0) != 0:
+            return _err("migration_failed", str(exc))
+    except Exception as exc:
+        return _err("migration_failed", str(exc))
+    audit(admin_id, "run_migrations", target_type="system", payload={"confirm": True})
+    return api_migrations()
+
+
+# ---------------------------------------------------------------------------
+# Players
+# ---------------------------------------------------------------------------
+
+def search_players(q: str = "", limit: int = SEARCH_LIMIT) -> Dict[str, Any]:
+    q = str(q or "").strip()[:64]
+    limit = max(1, min(int(limit), SEARCH_LIMIT))
+    conn = db()
+    try:
+        cur = conn.cursor()
+        if q.isdigit():
+            cur.execute(
+                """
+                SELECT u.id, u.username, u.is_admin AS user_is_admin,
+                       p.name AS player_name, p.is_admin AS player_is_admin,
+                       p.last_seen, p.banned_until
+                FROM users u
+                LEFT JOIN players p ON p.id = u.id
+                WHERE u.id = ?
+                LIMIT ?;
+                """,
+                (int(q), limit),
+            )
+        elif q:
+            like = f"%{q}%"
+            cur.execute(
+                """
+                SELECT u.id, u.username, u.is_admin AS user_is_admin,
+                       p.name AS player_name, p.is_admin AS player_is_admin,
+                       p.last_seen, p.banned_until
+                FROM users u
+                LEFT JOIN players p ON p.id = u.id
+                WHERE u.username LIKE ? OR p.name LIKE ?
+                ORDER BY u.id ASC
+                LIMIT ?;
+                """,
+                (like, like, limit),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT u.id, u.username, u.is_admin AS user_is_admin,
+                       p.name AS player_name, p.is_admin AS player_is_admin,
+                       p.last_seen, p.banned_until
+                FROM users u
+                LEFT JOIN players p ON p.id = u.id
+                ORDER BY u.id ASC
+                LIMIT ?;
+                """,
+                (limit,),
+            )
+        rows = [dict(r) for r in cur.fetchall()]
+        for r in rows:
+            r["is_admin"] = 1 if int(r.get("user_is_admin") or 0) or int(r.get("player_is_admin") or 0) else 0
+        return _ok(players=rows)
+    finally:
+        conn.close()
+
+
+def get_player_detail(player_id: int) -> Dict[str, Any]:
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT u.id, u.username, u.is_admin AS user_is_admin,
+                   p.name AS player_name, p.is_admin AS player_is_admin,
+                   p.last_seen, p.banned_until
+            FROM users u
+            LEFT JOIN players p ON p.id = u.id
+            WHERE u.id = ? LIMIT 1;
+            """,
+            (int(player_id),),
+        )
+        row = cur.fetchone()
+        if not row:
+            return _err("not_found", "Player not found.")
+        player = dict(row)
+        player["is_admin"] = 1 if int(player.get("user_is_admin") or 0) or int(player.get("player_is_admin") or 0) else 0
+
+        planets = get_planets_by_player(int(player_id), conn=conn)
+        homeworld = None
+        try:
+            homeworld = get_homeworld(int(player_id), conn=conn)
+        except Exception:
+            homeworld = None
+
+        score = get_player_score_row(int(player_id)) or {}
+        rank, total = get_player_rank(int(player_id))
+
+        return _ok(
+            player=player,
+            planets=planets,
+            homeworld=homeworld,
+            score={
+                "total": int(score.get("score_total") or 0),
+                "buildings": int(score.get("score_buildings") or 0),
+                "research": int(score.get("score_research") or 0),
+                "rank": rank,
+                "total_players": total,
+            },
+        )
+    finally:
+        conn.close()
+
+
+def set_player_admin(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    is_admin = 1 if body.get("is_admin") in (True, 1, "1", "true") else 0
+    if is_admin == 0 and not validate_confirm("remove_admin", body.get("confirm_text")):
+        return _err("confirm_required", "Type REMOVE ADMIN to revoke admin rights.")
+
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM users WHERE id = ? LIMIT 1;", (int(player_id),))
+        if not cur.fetchone():
+            return _err("not_found", "Player not found.")
+        cur.execute("UPDATE users SET is_admin = ? WHERE id = ?;", (is_admin, int(player_id)))
+        cur.execute(
+            "UPDATE players SET is_admin = ? WHERE id = ?;",
+            (is_admin, int(player_id)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    audit(
+        admin_id,
+        "set_admin" if is_admin else "remove_admin",
+        target_type="player",
+        target_id=player_id,
+        payload={"is_admin": is_admin},
+    )
+    return get_player_detail(player_id)
+
+
+def ban_player_api(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    if not validate_confirm("ban_player", body.get("confirm_text")):
+        return _err("confirm_required", "Type BAN PLAYER to confirm ban.")
+
+    reason = str(body.get("reason") or "").strip()[:500]
+    hours = body.get("hours")
+    try:
+        hours_val = int(hours) if hours is not None else 24 * 365 * 10
+    except (TypeError, ValueError):
+        hours_val = 24 * 365 * 10
+    hours_val = max(1, min(hours_val, 24 * 365 * 50))
+    banned_until = int(time.time()) + hours_val * 3600
+    now = int(time.time())
+
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM users WHERE id = ? LIMIT 1;", (int(player_id),))
+        if not cur.fetchone():
+            return _err("not_found", "Player not found.")
+        cur.execute(
+            "UPDATE players SET banned_until = ? WHERE id = ?;",
+            (banned_until, int(player_id)),
+        )
+        if table_exists(conn, "bans"):
+            cur.execute(
+                """
+                INSERT INTO bans (player_id, reason, banned_until, created_at)
+                VALUES (?, ?, ?, ?);
+                """,
+                (int(player_id), reason, banned_until, now),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    audit(
+        admin_id,
+        "ban_player",
+        target_type="player",
+        target_id=player_id,
+        payload={"reason": reason, "hours": hours_val},
+    )
+    return get_player_detail(player_id)
+
+
+def unban_player_api(admin_id: int, player_id: int) -> Dict[str, Any]:
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE players SET banned_until = NULL WHERE id = ?;",
+            (int(player_id),),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    audit(admin_id, "unban_player", target_type="player", target_id=player_id)
+    return get_player_detail(player_id)
+
+
+def set_player_resources(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    mode = str(body.get("mode") or "add").lower()
+    metal = clamp_resource(body.get("metal", 0))
+    crystal = clamp_resource(body.get("crystal", 0))
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id FROM planets
+            WHERE player_id = ? AND is_homeworld = 1 LIMIT 1;
+            """,
+            (int(player_id),),
+        )
+        row = cur.fetchone()
+        if not row:
+            rollback(conn)
+            return _err("not_found", "Homeworld not found.")
+        planet_id = int(row["id"])
+
+        if mode == "set":
+            cur.execute(
+                "UPDATE planets SET metal = ?, crystal = ? WHERE id = ?;",
+                (metal, crystal, planet_id),
+            )
+        else:
+            cur.execute(
+                """
+                UPDATE planets
+                SET metal = MIN(?, MAX(0, metal + ?)),
+                    crystal = MIN(?, MAX(0, crystal + ?))
+                WHERE id = ?;
+                """,
+                (MAX_RESOURCE, metal, MAX_RESOURCE, crystal, planet_id),
+            )
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    audit(
+        admin_id,
+        "player_resources",
+        target_type="player",
+        target_id=player_id,
+        payload={"mode": mode, "metal": metal, "crystal": crystal},
+    )
+    return get_player_detail(player_id)
+
+
+# ---------------------------------------------------------------------------
+# Planets
+# ---------------------------------------------------------------------------
+
+def search_planets(q: str = "", limit: int = SEARCH_LIMIT) -> Dict[str, Any]:
+    q = str(q or "").strip()[:64]
+    limit = max(1, min(int(limit), SEARCH_LIMIT))
+    conn = db()
+    try:
+        cur = conn.cursor()
+        if q.isdigit():
+            cur.execute(
+                """
+                SELECT p.*, u.username AS owner_username
+                FROM planets p
+                LEFT JOIN users u ON u.id = p.player_id
+                WHERE p.id = ? OR p.player_id = ?
+                ORDER BY p.id ASC LIMIT ?;
+                """,
+                (int(q), int(q), limit),
+            )
+        elif q:
+            like = f"%{q}%"
+            cur.execute(
+                """
+                SELECT p.*, u.username AS owner_username
+                FROM planets p
+                LEFT JOIN users u ON u.id = p.player_id
+                WHERE p.name LIKE ? OR u.username LIKE ?
+                ORDER BY p.id ASC LIMIT ?;
+                """,
+                (like, like, limit),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT p.*, u.username AS owner_username
+                FROM planets p
+                LEFT JOIN users u ON u.id = p.player_id
+                ORDER BY p.id ASC LIMIT ?;
+                """,
+                (limit,),
+            )
+        return _ok(planets=[dict(r) for r in cur.fetchall()])
+    finally:
+        conn.close()
+
+
+def get_planet_detail(planet_id: int) -> Dict[str, Any]:
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT p.*, u.username AS owner_username
+            FROM planets p
+            LEFT JOIN users u ON u.id = p.player_id
+            WHERE p.id = ? LIMIT 1;
+            """,
+            (int(planet_id),),
+        )
+        row = cur.fetchone()
+        if not row:
+            return _err("not_found", "Planet not found.")
+        planet = dict(row)
+        buildings = get_planet_buildings(int(planet_id), conn=conn)
+        cur.execute(
+            "SELECT * FROM build_queue WHERE planet_id = ? ORDER BY finish_time ASC;",
+            (int(planet_id),),
+        )
+        queue = [dict(r) for r in cur.fetchall()]
+        return _ok(planet=planet, buildings=buildings, build_queue=queue)
+    finally:
+        conn.close()
+
+
+def set_planet_resources(admin_id: int, planet_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    mode = str(body.get("mode") or "add").lower()
+    metal = clamp_resource(body.get("metal", 0))
+    crystal = clamp_resource(body.get("crystal", 0))
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+        if not cur.fetchone():
+            rollback(conn)
+            return _err("not_found", "Planet not found.")
+        if mode == "set":
+            cur.execute(
+                "UPDATE planets SET metal = ?, crystal = ? WHERE id = ?;",
+                (metal, crystal, int(planet_id)),
+            )
+        else:
+            cur.execute(
+                """
+                UPDATE planets
+                SET metal = MIN(?, MAX(0, metal + ?)),
+                    crystal = MIN(?, MAX(0, crystal + ?))
+                WHERE id = ?;
+                """,
+                (MAX_RESOURCE, metal, MAX_RESOURCE, crystal, int(planet_id)),
+            )
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    audit(
+        admin_id,
+        "planet_resources",
+        target_type="planet",
+        target_id=planet_id,
+        payload={"mode": mode, "metal": metal, "crystal": crystal},
+    )
+    return get_planet_detail(planet_id)
+
+
+def set_planet_building(admin_id: int, planet_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    building_type = str(body.get("building_type") or "").strip()
+    if building_type not in BUILDING_KEYS:
+        return _err("invalid_building", "Unknown building type.")
+    level = clamp_building_level(body.get("level", 0))
+
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+        row = cur.fetchone()
+        if not row:
+            return _err("not_found", "Planet not found.")
+        player_id = int(row["player_id"])
+        buildings = get_planet_buildings(int(planet_id), conn=conn)
+        buildings[building_type] = level
+        save_planet_buildings(int(planet_id), buildings)
+        recompute_and_upsert_score(player_id, conn=conn)
+    finally:
+        conn.close()
+
+    audit(
+        admin_id,
+        "planet_building",
+        target_type="planet",
+        target_id=planet_id,
+        payload={"building_type": building_type, "level": level},
+    )
+    return get_planet_detail(planet_id)
+
+
+def repair_homeworld(admin_id: int, player_id: int) -> Dict[str, Any]:
+    conn = db()
+    try:
+        harden_planets_schema(conn)
+        ensure_player_and_homeworld(int(player_id), conn=conn)
+        conn.commit()
+    finally:
+        conn.close()
+    audit(admin_id, "repair_homeworld", target_type="player", target_id=player_id)
+    return get_player_detail(player_id)
+
+
+def reset_planet(admin_id: int, planet_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    if not validate_confirm("planet_reset", body.get("confirm_text")):
+        return _err("confirm_required", "Type RESET PLANET to confirm.")
+
+    settings = get_game_settings() or {}
+    start_metal = clamp_resource(settings.get("start_metal", DEFAULT_GAME_SETTINGS["start_metal"]))
+    start_crystal = clamp_resource(settings.get("start_crystal", DEFAULT_GAME_SETTINGS["start_crystal"]))
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        cur = conn.cursor()
+        cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+        row = cur.fetchone()
+        if not row:
+            rollback(conn)
+            return _err("not_found", "Planet not found.")
+        player_id = int(row["player_id"])
+
+        cur.execute(
+            "UPDATE planets SET metal = ?, crystal = ?, last_update = ? WHERE id = ?;",
+            (start_metal, start_crystal, time.time(), int(planet_id)),
+        )
+        cur.execute("DELETE FROM build_queue WHERE planet_id = ?;", (int(planet_id),))
+        cur.execute(
+            f"UPDATE planet_buildings SET {', '.join(f'{k}=0' for k in BUILDING_KEYS)} WHERE planet_id = ?;",
+            (int(planet_id),),
+        )
+        recompute_and_upsert_score(player_id, conn=conn)
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    audit(admin_id, "planet_reset", target_type="planet", target_id=planet_id)
+    return get_planet_detail(planet_id)
+
+
+# ---------------------------------------------------------------------------
+# Queues
+# ---------------------------------------------------------------------------
+
+def get_queues(filters: Dict[str, Any]) -> Dict[str, Any]:
+    player_id = filters.get("player_id")
+    planet_id = filters.get("planet_id")
+    status = str(filters.get("status") or "all").lower()
+    now = time.time()
+
+    conn = db()
+    try:
+        cur = conn.cursor()
+        b_params: List[Any] = []
+        r_params: List[Any] = []
+        b_where = ["1=1"]
+        r_where = ["1=1"]
+
+        if planet_id is not None:
+            try:
+                pid = int(planet_id)
+                b_where.append("bq.planet_id = ?")
+                b_params.append(pid)
+            except (TypeError, ValueError):
+                pass
+        if player_id is not None:
+            try:
+                uid = int(player_id)
+                b_where.append("pl.player_id = ?")
+                b_params.append(uid)
+                r_where.append("rq.user_id = ?")
+                r_params.append(uid)
+            except (TypeError, ValueError):
+                pass
+
+        cur.execute(
+            f"""
+            SELECT bq.*, pl.name AS planet_name, pl.player_id, u.username
+            FROM build_queue bq
+            JOIN planets pl ON pl.id = bq.planet_id
+            LEFT JOIN users u ON u.id = pl.player_id
+            WHERE {' AND '.join(b_where)}
+            ORDER BY bq.finish_time ASC
+            LIMIT 200;
+            """,
+            b_params,
+        )
+        build_rows = [dict(r) for r in cur.fetchall()]
+
+        cur.execute(
+            f"""
+            SELECT rq.*, u.username
+            FROM research_queue rq
+            LEFT JOIN users u ON u.id = rq.user_id
+            WHERE {' AND '.join(r_where)}
+            ORDER BY rq.finish_at ASC
+            LIMIT 200;
+            """,
+            r_params,
+        )
+        research_rows = [dict(r) for r in cur.fetchall()]
+
+        def _tag(row: Dict[str, Any], finish_key: str) -> str:
+            ft = float(row.get(finish_key) or 0)
+            if ft <= now:
+                return "finished"
+            return "active"
+
+        for row in build_rows:
+            row["status"] = _tag(row, "finish_time")
+        for row in research_rows:
+            row["status"] = _tag(row, "finish_at")
+
+        if status == "active":
+            build_rows = [r for r in build_rows if r["status"] == "active"]
+            research_rows = [r for r in research_rows if r["status"] == "active"]
+        elif status == "finished":
+            build_rows = [r for r in build_rows if r["status"] == "finished"]
+            research_rows = [r for r in research_rows if r["status"] == "finished"]
+
+        return _ok(build_queue=build_rows, research_queue=research_rows)
+    finally:
+        conn.close()
+
+
+def cancel_queue_job(admin_id: int, queue_type: str, job_id: int) -> Dict[str, Any]:
+    qtype = str(queue_type or "").lower()
+    if qtype == "build":
+        conn = db()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT planet_id FROM build_queue WHERE id = ? LIMIT 1;", (int(job_id),))
+            row = cur.fetchone()
+            if not row:
+                return _err("not_found", "Build job not found.")
+            delete_build_job(int(job_id), conn=conn)
+            conn.commit()
+        finally:
+            conn.close()
+    elif qtype == "research":
+        conn = db()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT user_id FROM research_queue WHERE id = ? LIMIT 1;", (int(job_id),))
+            row = cur.fetchone()
+            if not row:
+                return _err("not_found", "Research job not found.")
+            delete_research_job(int(job_id))
+        finally:
+            conn.close()
+    else:
+        return _err("invalid_type", "Queue type must be build or research.")
+
+    audit(
+        admin_id,
+        "queue_cancel",
+        target_type=qtype,
+        target_id=job_id,
+        payload={"queue_type": qtype},
+    )
+    return _ok(cancelled=True, queue_type=qtype, job_id=int(job_id))
+
+
+def finish_due_queues(admin_id: int) -> Dict[str, Any]:
+    now = time.time()
+    build_finished = 0
+    research_finished = 0
+
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT DISTINCT planet_id, player_id FROM planets WHERE player_id IS NOT NULL;")
+        planets = cur.fetchall()
+        for prow in planets:
+            if finish_due_build_jobs(int(prow["planet_id"]), int(prow["player_id"]), now=now, conn=conn):
+                build_finished += 1
+        cur.execute("SELECT DISTINCT user_id FROM research_queue;")
+        users = cur.fetchall()
+        for urow in users:
+            if finish_due_research_jobs(int(urow["user_id"]), now=now, conn=conn):
+                research_finished += 1
+        conn.commit()
+    finally:
+        conn.close()
+
+    audit(
+        admin_id,
+        "queues_finish_due",
+        target_type="system",
+        payload={"build_planets": build_finished, "research_users": research_finished},
+    )
+    return _ok(build_planets_finished=build_finished, research_users_finished=research_finished)
+
+
+def clear_queues(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    if not validate_confirm("queue_clear", body.get("confirm_text")):
+        return _err("confirm_required", "Type CLEAR QUEUE to confirm.")
+
+    scope = str(body.get("scope") or "planet").lower()
+    planet_id = body.get("planet_id")
+    player_id = body.get("player_id")
+    queue_type = str(body.get("queue_type") or "both").lower()
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        cur = conn.cursor()
+        deleted_build = 0
+        deleted_research = 0
+
+        if queue_type in ("build", "both"):
+            if scope == "planet" and planet_id is not None:
+                cur.execute("DELETE FROM build_queue WHERE planet_id = ?;", (int(planet_id),))
+            elif scope == "player" and player_id is not None:
+                cur.execute(
+                    """
+                    DELETE FROM build_queue
+                    WHERE planet_id IN (SELECT id FROM planets WHERE player_id = ?);
+                    """,
+                    (int(player_id),),
+                )
+            deleted_build = cur.rowcount
+
+        if queue_type in ("research", "both"):
+            if scope == "player" and player_id is not None:
+                cur.execute("DELETE FROM research_queue WHERE user_id = ?;", (int(player_id),))
+                deleted_research = cur.rowcount
+            elif scope == "planet":
+                cur.execute(
+                    """
+                    DELETE FROM research_queue
+                    WHERE user_id IN (SELECT player_id FROM planets WHERE id = ? LIMIT 1);
+                    """,
+                    (int(planet_id),),
+                )
+                deleted_research = cur.rowcount
+
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    audit(
+        admin_id,
+        "queue_clear",
+        target_type=scope,
+        target_id=planet_id or player_id,
+        payload={"queue_type": queue_type, "deleted_build": deleted_build, "deleted_research": deleted_research},
+    )
+    return _ok(deleted_build=deleted_build, deleted_research=deleted_research)
+
+
+def get_audit_log(filters: Dict[str, Any]) -> Dict[str, Any]:
+    rows = list_admin_audit(
+        admin_id=filters.get("admin_id"),
+        action=str(filters.get("action") or "").strip() or None,
+        target_type=str(filters.get("target_type") or "").strip() or None,
+        limit=int(filters.get("limit") or 100),
+        offset=int(filters.get("offset") or 0),
+    )
+    return _ok(entries=rows)

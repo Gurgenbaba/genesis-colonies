@@ -324,6 +324,9 @@ def init_db() -> None:
 
     harden_planets_schema(conn)
 
+    from game.admin_audit import ensure_admin_audit_table
+    ensure_admin_audit_table(conn)
+
     # ------------------------------------------------------------
     # DEFAULT ADMIN + DEFAULT PLAYER + DEFAULT SETTINGS
     # ------------------------------------------------------------
@@ -906,6 +909,17 @@ def adjust_homeworld_resources(
 # BUILDINGS
 # ======================================================================
 
+BUILDING_KEYS = [
+    "metal_mine", "crystal_mine", "solar_plant",
+    "research_lab", "academy",
+    "metal_storage", "crystal_storage",
+    "command_center", "shipyard", "defense_factory",
+    "barracks", "radar_array", "shield_generator",
+    "terraformer", "nanofactory", "geothermal_nexus",
+    "planet_core_nexus",
+]
+
+
 def get_planet_buildings(planet_id: int, conn: sqlite3.Connection | None = None) -> Dict[str, int]:
     own_conn = False
     if conn is None:
@@ -936,15 +950,7 @@ def save_planet_buildings(planet_id: int, buildings: Dict[str, int]) -> None:
     conn = db()
     cur = conn.cursor()
 
-    keys = [
-        "metal_mine", "crystal_mine", "solar_plant",
-        "research_lab", "academy",
-        "metal_storage", "crystal_storage",
-        "command_center", "shipyard", "defense_factory",
-        "barracks", "radar_array", "shield_generator",
-        "terraformer", "nanofactory", "geothermal_nexus",
-        "planet_core_nexus",
-    ]
+    keys = list(BUILDING_KEYS)
 
     try:
         conn.execute("BEGIN IMMEDIATE")

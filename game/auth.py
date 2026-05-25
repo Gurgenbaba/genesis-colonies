@@ -21,7 +21,7 @@ import time
 from functools import wraps
 from typing import Any, Callable, Dict, Optional
 
-from flask import flash, g, redirect, session, url_for
+from flask import flash, g, jsonify, redirect, request, session, url_for
 
 from .models import (
     db,
@@ -394,6 +394,45 @@ def require_admin(func: ViewFunc) -> ViewFunc:
         except Exception:
             pass
 
+        return func(*args, **kwargs)
+
+    return decorated  # type: ignore[return-value]
+
+
+def require_admin_api(func: ViewFunc) -> ViewFunc:
+    """
+    JSON API guard for /api/admin/* – returns 401/403 instead of redirects.
+    Sets g.admin_user on success.
+    """
+    @wraps(func)
+    def decorated(*args, **kwargs):
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+        try:
+            pid = int(user_id)
+        except (TypeError, ValueError):
+            session.clear()
+            return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+        ban_response = _handle_if_banned(pid)
+        if ban_response is not None:
+            return jsonify({"ok": False, "error": "banned"}), 403
+
+        user = get_current_user()
+        if not user:
+            session.clear()
+            return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+        if not bool(user.get("is_admin")):
+            return jsonify({"ok": False, "error": "forbidden"}), 403
+
+        g.admin_user = user
+        try:
+            touch_player_online(int(user["id"]))
+        except Exception:
+            pass
         return func(*args, **kwargs)
 
     return decorated  # type: ignore[return-value]

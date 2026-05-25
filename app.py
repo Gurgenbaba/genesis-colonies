@@ -15,6 +15,7 @@ from flask import (
     jsonify,
     flash,
     session,
+    g,
 )
 
 # --------------------------------------------------------------------------
@@ -55,9 +56,11 @@ from game.auth import (
     get_current_user,
     require_login,
     require_admin,
+    require_admin_api,
 )
 
 from game import admin as admin_logic
+from game import admin_api as admin_api_logic
 
 from game.ranking import (
     get_player_score_cached,
@@ -983,6 +986,180 @@ def admin_unban_user():
     admin_logic.unban_player(request.form)
     flash(T("msg_admin_unban") or "Bann wurde aufgehoben.", "success")
     return redirect(url_for("admin_panel"))
+
+
+def _admin_json(result: Dict[str, Any], default_status: int = 200):
+    if not isinstance(result, dict):
+        return jsonify({"ok": False, "error": "internal"}), 500
+    if result.get("ok"):
+        return jsonify(result), default_status
+    err = str(result.get("error") or "error")
+    status = {
+        "not_found": 404,
+        "forbidden": 403,
+        "confirm_required": 400,
+        "invalid_building": 400,
+        "invalid_type": 400,
+        "migration_failed": 500,
+    }.get(err, 400)
+    return jsonify(result), status
+
+
+def _admin_body() -> Dict[str, Any]:
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
+def _admin_actor_id() -> int:
+    user = getattr(g, "admin_user", None) or get_current_user() or {}
+    return int(user.get("id") or session.get("user_id") or 0)
+
+
+# --------------------------------------------------------------------------
+# ADMIN JSON API (Production Control Center)
+# --------------------------------------------------------------------------
+
+@app.route("/api/admin/health", methods=["GET"])
+@require_admin_api
+def api_admin_health():
+    return _admin_json(admin_api_logic.api_health())
+
+
+@app.route("/api/admin/migrations", methods=["GET"])
+@require_admin_api
+def api_admin_migrations():
+    return _admin_json(admin_api_logic.api_migrations())
+
+
+@app.route("/api/admin/migrations/run", methods=["POST"])
+@require_admin_api
+def api_admin_migrations_run():
+    return _admin_json(admin_api_logic.api_run_migrations(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/runtime", methods=["GET"])
+@require_admin_api
+def api_admin_runtime():
+    return _admin_json(admin_api_logic.api_runtime())
+
+
+@app.route("/api/admin/players", methods=["GET"])
+@require_admin_api
+def api_admin_players_search():
+    return _admin_json(admin_api_logic.search_players(request.args.get("q", "")))
+
+
+@app.route("/api/admin/player/<int:player_id>", methods=["GET"])
+@require_admin_api
+def api_admin_player_detail(player_id: int):
+    return _admin_json(admin_api_logic.get_player_detail(player_id))
+
+
+@app.route("/api/admin/player/<int:player_id>/set-admin", methods=["POST"])
+@require_admin_api
+def api_admin_player_set_admin(player_id: int):
+    return _admin_json(admin_api_logic.set_player_admin(_admin_actor_id(), player_id, _admin_body()))
+
+
+@app.route("/api/admin/player/<int:player_id>/ban", methods=["POST"])
+@require_admin_api
+def api_admin_player_ban(player_id: int):
+    return _admin_json(admin_api_logic.ban_player_api(_admin_actor_id(), player_id, _admin_body()))
+
+
+@app.route("/api/admin/player/<int:player_id>/unban", methods=["POST"])
+@require_admin_api
+def api_admin_player_unban(player_id: int):
+    return _admin_json(admin_api_logic.unban_player_api(_admin_actor_id(), player_id))
+
+
+@app.route("/api/admin/player/<int:player_id>/resources", methods=["POST"])
+@require_admin_api
+def api_admin_player_resources(player_id: int):
+    return _admin_json(admin_api_logic.set_player_resources(_admin_actor_id(), player_id, _admin_body()))
+
+
+@app.route("/api/admin/player/<int:player_id>/repair-homeworld", methods=["POST"])
+@require_admin_api
+def api_admin_player_repair_homeworld(player_id: int):
+    return _admin_json(admin_api_logic.repair_homeworld(_admin_actor_id(), player_id))
+
+
+@app.route("/api/admin/planets", methods=["GET"])
+@require_admin_api
+def api_admin_planets_search():
+    return _admin_json(admin_api_logic.search_planets(request.args.get("q", "")))
+
+
+@app.route("/api/admin/planet/<int:planet_id>", methods=["GET"])
+@require_admin_api
+def api_admin_planet_detail(planet_id: int):
+    return _admin_json(admin_api_logic.get_planet_detail(planet_id))
+
+
+@app.route("/api/admin/planet/<int:planet_id>/resources", methods=["POST"])
+@require_admin_api
+def api_admin_planet_resources(planet_id: int):
+    return _admin_json(admin_api_logic.set_planet_resources(_admin_actor_id(), planet_id, _admin_body()))
+
+
+@app.route("/api/admin/planet/<int:planet_id>/building", methods=["POST"])
+@require_admin_api
+def api_admin_planet_building(planet_id: int):
+    return _admin_json(admin_api_logic.set_planet_building(_admin_actor_id(), planet_id, _admin_body()))
+
+
+@app.route("/api/admin/planet/<int:planet_id>/reset", methods=["POST"])
+@require_admin_api
+def api_admin_planet_reset(planet_id: int):
+    return _admin_json(admin_api_logic.reset_planet(_admin_actor_id(), planet_id, _admin_body()))
+
+
+@app.route("/api/admin/queues", methods=["GET"])
+@require_admin_api
+def api_admin_queues():
+    filters = {
+        "player_id": request.args.get("player_id"),
+        "planet_id": request.args.get("planet_id"),
+        "status": request.args.get("status", "all"),
+    }
+    return _admin_json(admin_api_logic.get_queues(filters))
+
+
+@app.route("/api/admin/queue/<queue_type>/<int:job_id>/cancel", methods=["POST"])
+@require_admin_api
+def api_admin_queue_cancel(queue_type: str, job_id: int):
+    return _admin_json(admin_api_logic.cancel_queue_job(_admin_actor_id(), queue_type, job_id))
+
+
+@app.route("/api/admin/queues/finish-due", methods=["POST"])
+@require_admin_api
+def api_admin_queues_finish_due():
+    return _admin_json(admin_api_logic.finish_due_queues(_admin_actor_id()))
+
+
+@app.route("/api/admin/queues/clear", methods=["POST"])
+@require_admin_api
+def api_admin_queues_clear():
+    return _admin_json(admin_api_logic.clear_queues(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/audit-log", methods=["GET"])
+@require_admin_api
+def api_admin_audit_log():
+    filters = {
+        "admin_id": request.args.get("admin_id"),
+        "action": request.args.get("action"),
+        "target_type": request.args.get("target_type"),
+        "limit": request.args.get("limit", 100),
+        "offset": request.args.get("offset", 0),
+    }
+    aid = filters.get("admin_id")
+    if aid is not None and str(aid).strip().isdigit():
+        filters["admin_id"] = int(aid)
+    else:
+        filters["admin_id"] = None
+    return _admin_json(admin_api_logic.get_audit_log(filters))
 
 
 # --------------------------------------------------------------------------

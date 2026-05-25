@@ -432,6 +432,7 @@
     if (path.endsWith("/research")) return "research";
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
+    if (path.endsWith("/admin")) return "admin";
     return "other";
   };
 

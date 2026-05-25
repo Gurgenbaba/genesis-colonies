@@ -344,5 +344,9 @@
   </script>
 
   <script src="{{ url_for('static', filename='main.js') }}"></script>
+  {% if AUTH_ADMIN %}
+  <script src="{{ url_for('static', filename='admin.js') }}"></script>
+  {% endif %}
+  {% block extra_scripts %}{% endblock %}
 </body>
 </html>
