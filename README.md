@@ -487,12 +487,9 @@ Keine explizite Open-Source-Lizenz im Repository hinterlegt. Nutzung und Weiterv
 
 | Dokument | Inhalt |
 |----------|--------|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Systemdesign, PJAX/Polling-Flows, Queue-Engine, APIs |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | Threat Model, Auth, Hardening, Operator-Checkliste |
+| [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) | Dev-Setup, Migrationen, Tests, PR-Checkliste |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phasen, Meilensteine, technische Schulden |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | VPS, Docker, Gunicorn, systemd, Troubleshooting |
 | [`docs/ALPHA_TESTPLAN.md`](docs/ALPHA_TESTPLAN.md) | Manueller Alpha-Testplan |
-
-**Empfohlene Erweiterungen** (noch nicht im Repo):
-
-- `docs/ARCHITECTURE.md` — Detaillierte Sequenzdiagramme (Polling, Queues, PJAX)
-- `docs/SECURITY.md` — Threat Model, Auth-Roadmap, Operator-Checkliste
-- `docs/CONTRIBUTING.md` — Erweiterte Dev-Guidelines, PR-Template
-- `docs/ROADMAP.md` — Milestones mit Prioritäten und Abhängigkeiten
