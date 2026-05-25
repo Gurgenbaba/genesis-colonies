@@ -276,8 +276,10 @@
     modules: {},
   };
 
-  GC.registerCleanup = function registerCleanup(fn) {
-    if (typeof fn === "function") GC.pageLifecycle.cleanupFns.push(fn);
+  GC.registerCleanup = function registerCleanup(fn, opts) {
+    if (typeof fn !== "function") return;
+    if (opts && opts.persistent) fn._gcPersistent = true;
+    GC.pageLifecycle.cleanupFns.push(fn);
   };
 
   GC.cleanupPage = function cleanupPage() {
@@ -290,11 +292,11 @@
     lc.cleanupFns.forEach((fn) => {
       try { fn(); } catch (e) { console.error("[GC] cleanup fn error", e); }
     });
+    lc.cleanupFns = lc.cleanupFns.filter((fn) => fn._gcPersistent);
     lc.rafIds = [];
     lc.intervals = [];
     lc.timeouts = [];
     lc.abortControllers = [];
-    lc.cleanupFns = [];
     GC.stopProgressTicker();
     GC.stopPolling();
     _statusPollErrorLogged = false;
@@ -302,6 +304,7 @@
     _lastResearchQueueSignature = "";
     _numAnim.forEach((st) => { if (st?.raf) cancelAnimationFrame(st.raf); });
     _numAnim.clear();
+    GC.currentPage = null;
     lc.initialized = false;
   };
 
@@ -1901,7 +1904,7 @@
         _syncNavActive(url);
         if (push) history.pushState({ gcPjax: true }, "", url);
 
-        GC.initPage();
+        GC.initPage({ force: true });
       } catch (err) {
         if (err?.name === "AbortError") return;
         console.error("[GC] PJAX navigation failed:", err);

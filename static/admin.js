@@ -661,8 +661,22 @@
     return null;
   }
 
-  function bindAdminPanel(root) {
-    root.addEventListener("click", async (e) => {
+  function adminRoot() {
+    return qs("#admin-control-center");
+  }
+
+  function isAdminEvent(e) {
+    const root = adminRoot();
+    return root && root.contains(e.target);
+  }
+
+  function bindAdminPanelOnce() {
+    if (window._GC_ADMIN_EVENTS_BOUND) return;
+    window._GC_ADMIN_EVENTS_BOUND = true;
+
+    document.addEventListener("click", async (e) => {
+      if (!isAdminEvent(e)) return;
+
       const tab = e.target.closest(".admin-tab-btn, .admin-cc-tab");
       if (tab && tab.dataset.adminTab) {
         switchTab(tab.dataset.adminTab);
@@ -695,8 +709,8 @@
       if (plBtn) await loadAdminPlanet(plBtn.dataset.adminPlanetId);
     });
 
-    root.addEventListener("keydown", async (e) => {
-      if (e.key !== "Enter") return;
+    document.addEventListener("keydown", async (e) => {
+      if (!isAdminEvent(e) || e.key !== "Enter") return;
       if (e.target.id === "admin-players-search") {
         e.preventDefault();
         await searchAdminPlayers();
@@ -709,14 +723,12 @@
   }
 
   function initAdminPanel() {
-    const root = qs("#admin-control-center");
+    const root = adminRoot();
     if (!root) return;
 
-    if (!root._gcAdminReady) {
-      bindAdminPanel(root);
-      root._gcAdminReady = true;
-    }
+    bindAdminPanelOnce();
 
+    showAlert("");
     const healthOut = qs("#admin-health-output");
     if (healthOut) healthOut.innerHTML = loadingHtml();
 
@@ -743,15 +755,9 @@
 
   if (typeof GC.registerCleanup === "function") {
     GC.registerCleanup(function adminPanelCleanup() {
-      const root = qs("#admin-control-center");
-      if (root) root._gcAdminReady = false;
       _activeTab = "health";
-    });
+    }, { persistent: true });
   }
 
-  document.addEventListener("DOMContentLoaded", function adminBootFallback() {
-    if (!qs("#admin-control-center")) return;
-    if (GC.currentPage === "admin") return;
-    if (typeof GC.initAdminPanel === "function") GC.initAdminPanel();
-  });
+  bindAdminPanelOnce();
 })();

@@ -19,28 +19,38 @@
 /* ── Hero / Command Header ── */
 .admin-hero {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  gap: 0;
   margin-bottom: 12px;
-  padding: 12px 14px;
+  padding: 0;
   border: 1px solid var(--admin-border);
   background: var(--admin-panel);
   box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0,0,0,0.45);
   position: relative;
+  overflow: hidden;
 }
-.admin-hero::before {
-  content: "OPS // UNIVERSE COMMAND";
-  position: absolute;
-  top: 0; right: 0;
-  padding: 2px 8px;
+
+.admin-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--admin-border);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.admin-hero-ops {
   font-family: var(--gc-mono);
   font-size: 0.62rem;
   letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--admin-accent);
-  border-left: 1px solid var(--admin-border);
-  border-bottom: 1px solid var(--admin-border);
-  background: rgba(0,0,0,0.35);
+  white-space: nowrap;
+}
+
+.admin-hero-main {
+  padding: 12px 14px;
 }
 
 .admin-hero .admin-title {
@@ -59,6 +69,7 @@
 }
 
 .admin-badge {
+  flex-shrink: 0;
   padding: 3px 8px;
   border: 1px solid var(--gc-neon-gold);
   background: rgba(255, 176, 32, 0.1);
