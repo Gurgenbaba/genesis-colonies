@@ -527,22 +527,32 @@
     p.timeoutId = GC.setSafeTimeout(tick, next);
   };
 
-  GC.initPage = function initPage() {
-    if (GC.pageLifecycle.initialized) {
-      console.debug("[GC] initPage skipped (already initialized)");
+  GC.initPage = function initPage(opts) {
+    const page = GC.detectPage();
+    const force = opts && opts.force;
+
+    if (GC.pageLifecycle.initialized && GC.currentPage === page && !force) {
+      console.debug("[GC] initPage skipped (same page)", page);
       return;
     }
-    GC.currentPage = GC.detectPage();
-    console.debug("[GC] initPage", GC.currentPage);
-    GC.pageLifecycle.initialized = true;
 
-    const mod = GC.modules[GC.currentPage];
-    if (typeof mod === "function") mod();
+    GC.currentPage = page;
+    GC.pageLifecycle.initialized = true;
+    console.debug("[GC] initPage", page);
+
+    const mod = GC.modules[page];
+    if (typeof mod === "function") {
+      try {
+        mod();
+      } catch (err) {
+        console.error("[GC] page module error", page, err);
+      }
+    }
 
     initFlashAutohide();
 
     if (!shouldRunGameLoop()) {
-      console.debug("[GC] polling skipped (auth page)");
+      console.debug("[GC] game loop skipped (auth/simple page)");
       GC.abortGameLoop("initPage");
       return;
     }
@@ -2362,11 +2372,6 @@
   // =========================
   document.addEventListener("DOMContentLoaded", () => {
     initShellOnce();
-    if (!shouldRunGameLoop()) {
-      console.debug("[GC] polling skipped (auth page)");
-      GC.abortGameLoop("boot");
-      return;
-    }
     GC.initPage();
   });
 })();

@@ -1,11 +1,13 @@
 /**
- * Genesis Colonies – Admin Control Center (AJAX, PJAX-safe)
+ * Genesis Colonies – Admin Control Center (Premium Operations UI)
  */
 (function () {
   "use strict";
 
   const GC = window.GC || (window.GC = {});
   const LOCALE = window.GC_LOCALE || {};
+  let _activeTab = "health";
+  let _isProduction = false;
 
   function t(key, fallback) {
     return LOCALE[key] || fallback || key;
@@ -20,8 +22,7 @@
   }
 
   function fmtInt(n) {
-    const x = Number(n) || 0;
-    return x.toLocaleString("de-DE");
+    return (Number(n) || 0).toLocaleString("de-DE");
   }
 
   function fmtTs(ts) {
@@ -33,6 +34,14 @@
     }
   }
 
+  function esc(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   function notify(msg, kind) {
     if (typeof GC.showNotify === "function") {
       GC.showNotify(msg, kind || "info");
@@ -41,49 +50,72 @@
     console.log("[admin]", kind, msg);
   }
 
-  async function adminFetch(url, options) {
+  function showAlert(msg, kind) {
+    const host = qs("#admin-alert-host");
+    if (!host) {
+      notify(msg, kind === "error" ? "error" : "info");
+      return;
+    }
+    if (!msg) {
+      host.hidden = true;
+      host.textContent = "";
+      host.className = "admin-alert-host";
+      return;
+    }
+    host.hidden = false;
+    host.className = `admin-alert-host admin-alert-${kind || "error"}`;
+    host.textContent = msg;
+  }
+
+  /** Dedicated admin fetch – never uses GC.fetchJSON (game auth redirect logic). */
+  async function adminApi(url, options) {
     const opts = {
+      method: "GET",
       credentials: "same-origin",
       cache: "no-store",
       headers: { Accept: "application/json" },
       ...options,
     };
-    if (opts.body && typeof opts.body === "object" && !(opts.body instanceof FormData)) {
-      opts.headers = { "Content-Type": "application/json", ...opts.headers };
+    if (opts.body && typeof opts.body === "object") {
+      opts.headers = { ...opts.headers, "Content-Type": "application/json" };
       opts.body = JSON.stringify(opts.body);
     }
-    if (typeof GC.fetchJSON === "function" && (!opts.method || opts.method === "GET")) {
-      try {
-        return await GC.fetchJSON(url, opts);
-      } catch (err) {
-        return { ok: false, error: err.message || "fetch_failed" };
-      }
+    let res;
+    try {
+      res = await fetch(url, opts);
+    } catch (err) {
+      return { ok: false, error: "network_error", message: err.message, httpStatus: 0 };
     }
-    const res = await fetch(url, opts);
     let data = {};
     try {
       data = await res.json();
-    } catch (_) {}
-    if (!res.ok && data.ok !== true) {
-      data.ok = false;
-      data.error = data.error || `HTTP ${res.status}`;
+    } catch (_) {
+      return {
+        ok: false,
+        error: "invalid_json",
+        message: `HTTP ${res.status}: invalid JSON response`,
+        httpStatus: res.status,
+      };
     }
+    if (!res.ok || data.ok === false) {
+      return {
+        ok: false,
+        error: data.error || `http_${res.status}`,
+        message: data.message || data.error || `HTTP ${res.status}`,
+        httpStatus: res.status,
+        ...data,
+      };
+    }
+    if (data.ok === undefined) data.ok = true;
     return data;
   }
 
-  async function adminPost(url, body) {
-    if (typeof GC.fetchJSON === "function") {
-      try {
-        return await GC.fetchJSON(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify(body || {}),
-        });
-      } catch (err) {
-        return { ok: false, error: err.message || "post_failed" };
-      }
-    }
-    return adminFetch(url, { method: "POST", body: body || {} });
+  function adminGet(url) {
+    return adminApi(url);
+  }
+
+  function adminPost(url, body) {
+    return adminApi(url, { method: "POST", body: body || {} });
   }
 
   function setBusy(btn, busy) {
@@ -92,131 +124,210 @@
     btn.dataset.busy = busy ? "1" : "0";
   }
 
-  function statusBadge(ok) {
-  const cls = ok ? "admin-cc-badge-ok" : "admin-cc-badge-fail";
-    return `<span class="admin-cc-badge ${cls}">${ok ? "OK" : "FAIL"}</span>`;
+  function loadingHtml() {
+    return `<div class="admin-skeleton"><div class="admin-skeleton-line"></div><div class="admin-skeleton-line"></div><div class="admin-skeleton-line short"></div></div>`;
   }
 
-  function renderKeyValues(obj) {
-    if (!obj || typeof obj !== "object") return `<pre>${String(obj)}</pre>`;
-    return `<dl class="admin-cc-kv">${Object.entries(obj)
-      .map(([k, v]) => {
-        let val = v;
-        if (v && typeof v === "object") val = JSON.stringify(v);
-        return `<dt>${k}</dt><dd>${val}</dd>`;
-      })
-      .join("")}</dl>`;
+  function statusBadge(level, label) {
+    const cls =
+      level === "ok"
+        ? "admin-status-ok"
+        : level === "warn"
+          ? "admin-status-warn"
+          : "admin-status-error";
+    return `<span class="admin-status-badge ${cls}">${esc(label || level.toUpperCase())}</span>`;
+  }
+
+  function healthLevel(status) {
+    if (status === "ok") return "ok";
+    if (status === "degraded") return "warn";
+    return "error";
+  }
+
+  function emptyState(msg) {
+    return `<div class="admin-empty">${esc(msg || t("admin_empty", "Keine Daten"))}</div>`;
+  }
+
+  function errorCard(data) {
+    return `<div class="admin-card admin-error-card">
+      <h3>${t("admin_error_title", "Fehler")}</h3>
+      <p>${esc(data.message || data.error || "unknown")}</p>
+      ${data.httpStatus ? `<p class="admin-small-hint">HTTP ${data.httpStatus}</p>` : ""}
+    </div>`;
   }
 
   function switchTab(name) {
-    qsa(".admin-cc-tab").forEach((btn) => {
-      btn.classList.toggle("is-active", btn.dataset.adminTab === name);
+    _activeTab = name;
+    qsa(".admin-tab-btn, .admin-cc-tab").forEach((btn) => {
+      const on = btn.dataset.adminTab === name;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
     });
-    qsa(".admin-cc-panel").forEach((panel) => {
-      const active = panel.dataset.panel === name;
-      panel.classList.toggle("is-active", active);
-      panel.hidden = !active;
+    qsa(".admin-panel, .admin-tab-panel, .admin-cc-panel").forEach((panel) => {
+      const pid = panel.dataset.adminPanel || panel.dataset.panel;
+      const on = pid === name;
+      panel.classList.toggle("is-active", on);
+      panel.hidden = !on;
     });
+  }
+
+  async function loadTab(name) {
+    showAlert("");
+    switch (name) {
+      case "health":
+        return loadAdminHealth();
+      case "migrations":
+        return loadAdminMigrations();
+      case "players":
+        return searchAdminPlayers();
+      case "planets":
+        return searchAdminPlanets();
+      case "queues":
+        return loadAdminQueues();
+      case "audit":
+        return loadAuditLog();
+      case "runtime":
+        return loadAdminRuntime();
+      default:
+        return null;
+    }
   }
 
   async function loadAdminHealth() {
     const out = qs("#admin-health-output");
-    if (out) out.innerHTML = `<p class="admin-cc-loading">${t("admin_loading", "Lade…")}</p>`;
-    const data = await adminFetch("/api/admin/health");
+    if (out) out.innerHTML = loadingHtml();
+    const data = await adminGet("/api/admin/health");
     if (!data.ok) {
-      notify(t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
-      if (out) out.textContent = data.error || "error";
+      showAlert(data.message || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      if (out) out.innerHTML = errorCard(data);
       return data;
     }
     const h = data.health || {};
-    const checks = h.checks || {};
+    const c = h.checks || {};
+    const db = c.database || {};
+    const mig = c.migrations || {};
+    const wr = c.writable || {};
+    const cfg = c.config || {};
+
     if (out) {
       out.innerHTML = `
-        
-        <div class="admin-cc-health-grid">
-          <div class="admin-metric-card">
+        <div class="admin-kpi-grid">
+          <div class="admin-kpi-card admin-card">
             <div class="admin-metric-label">${t("admin_health_status", "Status")}</div>
-            <div class="admin-metric-value">${statusBadge(h.status === "ok")} ${h.status || "?"}</div>
+            <div class="admin-metric-value">${statusBadge(healthLevel(h.status), h.status || "?")}</div>
           </div>
-          <div class="admin-metric-card">
+          <div class="admin-kpi-card admin-card">
             <div class="admin-metric-label">${t("admin_health_version", "Version")}</div>
-            <div class="admin-metric-value">${h.version || "–"}</div>
+            <div class="admin-metric-value">${esc(h.version || "–")}</div>
           </div>
-          <div class="admin-metric-card">
-            
+          <div class="admin-kpi-card admin-card">
             <div class="admin-metric-label">${t("admin_health_checked", "Geprüft")}</div>
-            <div class="admin-metric-value">${fmtTs(h.checked_at)}</div>
+            <div class="admin-metric-value">${esc(fmtTs(h.checked_at))}</div>
           </div>
         </div>
-        ${renderKeyValues(checks)}
-      `;
+        <div class="admin-kpi-grid">
+          <div class="admin-card">
+            <h3>${t("admin_health_db", "Datenbank")}</h3>
+            ${statusBadge(db.ok ? "ok" : "error", db.ok ? "OK" : "FAIL")}
+            <p class="admin-small-hint">${esc(db.path || "")}</p>
+          </div>
+          <div class="admin-card">
+            <h3>${t("admin_migrations_title", "Migrationen")}</h3>
+            ${statusBadge(mig.ok ? "ok" : "warn", mig.current ? "OK" : "PENDING")}
+            <p class="admin-small-hint">${(mig.pending || []).length} pending</p>
+          </div>
+          <div class="admin-card">
+            <h3>${t("admin_health_writable", "Writable")}</h3>
+            ${statusBadge(wr.ok ? "ok" : "error", wr.ok ? "OK" : "FAIL")}
+          </div>
+          <div class="admin-card">
+            <h3>${t("admin_health_config", "Config")}</h3>
+            ${statusBadge(cfg.ok ? "ok" : "warn", cfg.production ? "PROD" : "DEV")}
+            ${cfg.debug ? `<p class="admin-small-hint">Debug ON</p>` : ""}
+          </div>
+        </div>`;
     }
     return data;
   }
 
   async function loadAdminMigrations() {
     const out = qs("#admin-migrations-output");
-    if (out) out.innerHTML = `<p class="admin-cc-loading">${t("admin_loading", "Lade…")}</p>`;
-    const data = await adminFetch("/api/admin/migrations");
+    if (out) out.innerHTML = loadingHtml();
+    const data = await adminGet("/api/admin/migrations");
     if (!data.ok) {
-      notify(t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      showAlert(data.message, "error");
+      if (out) out.innerHTML = errorCard(data);
       return data;
     }
     const m = data.migrations || {};
     const runZone = qs("#admin-migrations-run-zone");
-    if (runZone) runZone.hidden = !!(m.pending && m.pending.length === 0);
+    const prodNote = qs("#admin-migrations-prod-note");
+    const hasPending = (m.pending || []).length > 0;
+
+    if (runZone) runZone.hidden = _isProduction || !hasPending;
+    if (prodNote) prodNote.hidden = !_isProduction;
+
     if (out) {
       out.innerHTML = `
-        <p><strong>${t("admin_migrations_db_path", "DB-Pfad")}:</strong> <code>${m.db_path || ""}</code></p>
-        <p><strong>${t("admin_migrations_backend", "Backend")}:</strong> ${m.backend || "sqlite"} ·
-        ${statusBadge(!!m.current)} ${m.current ? t("admin_migrations_current", "aktuell") : t("admin_migrations_pending_label", "ausstehend")}</p>
-        <h3>${t("admin_migrations_applied", "Angewendet")}</h3>
-        <ul class="admin-cc-list">${(m.applied || []).map((x) => `<li>${x}</li>`).join("") || `<li>–</li>`}</ul>
-        <h3>${t("admin_migrations_pending", "Ausstehend")}</h3>
-        <ul class="admin-cc-list admin-cc-list-warn">${(m.pending || []).map((x) => `<li>${x}</li>`).join("") || `<li>${t("admin_none", "Keine")}</li>`}</ul>
-      `;
+        <div class="admin-card">
+          <p><strong>${t("admin_migrations_db_path", "DB-Pfad")}:</strong> <code>${esc(m.db_path || "")}</code></p>
+          <p><strong>${t("admin_migrations_backend", "Backend")}:</strong> ${esc(m.backend || "sqlite")}
+            · ${statusBadge(m.current ? "ok" : "warn", m.current ? t("admin_migrations_current", "aktuell") : t("admin_migrations_pending_label", "ausstehend"))}</p>
+        </div>
+        <div class="admin-kpi-grid">
+          <div class="admin-card">
+            <h3>${t("admin_migrations_applied", "Angewendet")} (${(m.applied || []).length})</h3>
+            <ul class="admin-list">${(m.applied || []).map((x) => `<li>${esc(x)}</li>`).join("") || `<li>${t("admin_none", "Keine")}</li>`}</ul>
+          </div>
+          <div class="admin-card">
+            <h3>${t("admin_migrations_pending", "Ausstehend")} (${(m.pending || []).length})</h3>
+            <ul class="admin-list admin-list-warn">${(m.pending || []).map((x) => `<li>${esc(x)}</li>`).join("") || `<li>${t("admin_none", "Keine")}</li>`}</ul>
+          </div>
+        </div>`;
     }
     return data;
   }
 
   async function runAdminMigrations() {
     const confirmEl = qs("#admin-migrations-confirm");
-    const body = { confirm_text: confirmEl ? confirmEl.value : "" };
-    const data = await adminPost("/api/admin/migrations/run", body);
+    const data = await adminPost("/api/admin/migrations/run", {
+      confirm_text: confirmEl ? confirmEl.value : "",
+    });
     if (data.ok) notify(t("admin_action_success", "Erfolgreich"), "success");
-    else notify(data.message || t("admin_confirm_required", "Bestätigung erforderlich"), "error");
+    else showAlert(data.message || t("admin_confirm_required", "Bestätigung erforderlich"), "error");
     await loadAdminMigrations();
     return data;
+  }
+
+  function renderTable(headers, rows) {
+    if (!rows.length) return emptyState(t("admin_empty", "Keine Einträge"));
+    return `<div class="admin-table-wrap"><table class="admin-table ban-table table-std">
+      <thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>
+      <tbody>${rows.join("")}</tbody></table></div>`;
   }
 
   async function searchAdminPlayers() {
     const q = (qs("#admin-players-search")?.value || "").trim();
     const list = qs("#admin-players-list");
-    if (list) list.innerHTML = `<p class="admin-cc-loading">${t("admin_loading", "Lade…")}</p>`;
-    const data = await adminFetch(`/api/admin/players?q=${encodeURIComponent(q)}`);
+    if (list) list.innerHTML = loadingHtml();
+    const data = await adminGet(`/api/admin/players?q=${encodeURIComponent(q)}`);
     if (!data.ok) {
-      notify(t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      showAlert(data.message, "error");
+      if (list) list.innerHTML = errorCard(data);
       return data;
     }
-    const rows = data.players || [];
+    const rows = (data.players || []).map(
+      (p) => `<tr>
+        <td>${p.id}</td><td>${esc(p.username)}</td><td>${p.is_admin ? "✓" : "–"}</td>
+        <td>${esc(fmtTs(p.last_seen))}</td>
+        <td><button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-player-id="${p.id}">${t("admin_btn_details", "Details")}</button></td>
+      </tr>`
+    );
     if (list) {
-      list.innerHTML = `
-        <table class="ban-table table-std admin-cc-table">
-          <thead><tr>
-            <th>ID</th><th>${t("admin_col_username", "Username")}</th><th>${t("admin_col_admin", "Admin")}</th>
-            <th>${t("admin_col_last_seen", "Zuletzt")}</th><th></th>
-          </tr></thead>
-          <tbody>
-            ${rows.map((p) => `
-              <tr>
-                <td>${p.id}</td>
-                <td>${p.username || ""}</td>
-                <td>${p.is_admin ? "✓" : "–"}</td>
-                <td>${fmtTs(p.last_seen)}</td>
-                <td><button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-player-id="${p.id}">${t("admin_btn_details", "Details")}</button></td>
-              </tr>`).join("")}
-          </tbody>
-        </table>`;
+      list.innerHTML = renderTable(
+        ["ID", t("admin_col_username", "Username"), t("admin_col_admin", "Admin"), t("admin_col_last_seen", "Zuletzt"), ""],
+        rows
+      );
     }
     return data;
   }
@@ -228,28 +339,26 @@
     const hw = data.homeworld || {};
     const score = data.score || {};
     el.innerHTML = `
-      <div class="admin-cc-detail-card">
-        <h3>#${p.id} ${p.username || ""} ${p.is_admin ? `<span class="admin-cc-badge admin-cc-badge-ok">Admin</span>` : ""}</h3>
-        <p>${t("admin_col_last_seen", "Zuletzt")}: ${fmtTs(p.last_seen)} · Score: ${fmtInt(score.total)} (#${score.rank || "?"})</p>
-        <p>Homeworld: ${hw.name || "–"} · ${t("metal", "Ferronit")}: ${fmtInt(hw.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(hw.crystal)}</p>
-        <div class="admin-cc-actions">
-          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-set-admin" data-player-id="${p.id}" data-is-admin="${p.is_admin ? 0 : 1}">${p.is_admin ? t("admin_btn_remove_admin", "Admin entfernen") : t("admin_btn_grant_admin", "Admin setzen")}</button>
-          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-repair-hw" data-player-id="${p.id}">${t("admin_btn_repair_homeworld", "Homeworld reparieren")}</button>
-          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="player-ban" data-player-id="${p.id}">${t("admin_btn_ban", "Bannen")}</button>
-          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-unban" data-player-id="${p.id}">${t("admin_btn_unban", "Entbannen")}</button>
-        </div>
-        <div class="admin-cc-inline-form">
-          <label>${t("admin_resources_add", "Ressourcen addieren")}</label>
-          <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-metal" placeholder="${t("metal", "Ferronit")}">
-          <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-crystal" placeholder="${t("crystal", "Crytite")}">
-          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="player-resources" data-player-id="${p.id}">${t("admin_btn_apply", "Anwenden")}</button>
-        </div>
+      <h3>#${p.id} ${esc(p.username)} ${p.is_admin ? statusBadge("ok", "Admin") : ""}</h3>
+      <p>${t("admin_col_last_seen", "Zuletzt")}: ${esc(fmtTs(p.last_seen))} · Score: ${fmtInt(score.total)} (#${score.rank || "?"})</p>
+      <p>Homeworld: ${esc(hw.name || "–")} · ${t("metal", "Ferronit")}: ${fmtInt(hw.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(hw.crystal)}</p>
+      <div class="admin-action-row">
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-set-admin" data-player-id="${p.id}" data-is-admin="${p.is_admin ? 0 : 1}">${p.is_admin ? t("admin_btn_remove_admin", "Admin entfernen") : t("admin_btn_grant_admin", "Admin setzen")}</button>
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-repair-hw" data-player-id="${p.id}">${t("admin_btn_repair_homeworld", "Homeworld reparieren")}</button>
+        <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="player-ban" data-player-id="${p.id}">${t("admin_btn_ban", "Bannen")}</button>
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-unban" data-player-id="${p.id}">${t("admin_btn_unban", "Entbannen")}</button>
+      </div>
+      <div class="admin-action-row">
+        <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-metal" placeholder="${t("metal", "Ferronit")}">
+        <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-crystal" placeholder="${t("crystal", "Crytite")}">
+        <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="player-resources-add" data-player-id="${p.id}">${t("admin_btn_apply", "Addieren")}</button>
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-resources-set" data-player-id="${p.id}">${t("admin_btn_set_resources", "Setzen")}</button>
       </div>`;
   }
 
   async function loadAdminPlayer(id) {
-    const data = await adminFetch(`/api/admin/player/${id}`);
-    if (!data.ok) notify(t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+    const data = await adminGet(`/api/admin/player/${id}`);
+    if (!data.ok) showAlert(data.message, "error");
     else renderPlayerDetail(data);
     return data;
   }
@@ -257,25 +366,25 @@
   async function searchAdminPlanets() {
     const q = (qs("#admin-planets-search")?.value || "").trim();
     const list = qs("#admin-planets-list");
-    if (list) list.innerHTML = `<p class="admin-cc-loading">${t("admin_loading", "Lade…")}</p>`;
-    const data = await adminFetch(`/api/admin/planets?q=${encodeURIComponent(q)}`);
+    if (list) list.innerHTML = loadingHtml();
+    const data = await adminGet(`/api/admin/planets?q=${encodeURIComponent(q)}`);
     if (!data.ok) {
-      notify(t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      showAlert(data.message, "error");
+      if (list) list.innerHTML = errorCard(data);
       return data;
     }
-    const rows = data.planets || [];
+    const rows = (data.planets || []).map(
+      (pl) => `<tr>
+        <td>${pl.id}</td><td>${esc(pl.name)}</td><td>${esc(pl.owner_username || pl.player_id || "")}</td>
+        <td>${pl.is_homeworld ? "✓" : "–"}</td>
+        <td><button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-planet-id="${pl.id}">${t("admin_btn_details", "Details")}</button></td>
+      </tr>`
+    );
     if (list) {
-      list.innerHTML = `
-        <table class="ban-table table-std admin-cc-table">
-          <thead><tr><th>ID</th><th>${t("admin_col_name", "Name")}</th><th>${t("admin_col_owner", "Owner")}</th><th>HW</th><th></th></tr></thead>
-          <tbody>${rows.map((pl) => `
-            <tr>
-              <td>${pl.id}</td><td>${pl.name || ""}</td><td>${pl.owner_username || pl.player_id || ""}</td>
-              <td>${pl.is_homeworld ? "✓" : "–"}</td>
-              <td><button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-planet-id="${pl.id}">${t("admin_btn_details", "Details")}</button></td>
-            </tr>`).join("")}
-          </tbody>
-        </table>`;
+      list.innerHTML = renderTable(
+        ["ID", t("admin_col_name", "Name"), t("admin_col_owner", "Owner"), "HW", ""],
+        rows
+      );
     }
     return data;
   }
@@ -285,25 +394,34 @@
     if (!el || !data.ok) return;
     const pl = data.planet || {};
     const b = data.buildings || {};
+    const buildingOpts = Object.keys(b)
+      .map((k) => `<option value="${esc(k)}">${esc(k)} (${b[k]})</option>`)
+      .join("");
     el.innerHTML = `
-      <div class="admin-cc-detail-card">
-        <h3>#${pl.id} ${pl.name || ""}</h3>
-        <p>${t("metal", "Ferronit")}: ${fmtInt(pl.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(pl.crystal)}</p>
-        <details><summary>${t("admin_buildings", "Gebäude")}</summary><pre>${JSON.stringify(b, null, 2)}</pre></details>
-        
-        <div class="admin-cc-inline-form">
-          <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-metal" placeholder="${t("metal", "Ferronit")}">
-          <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-crystal" placeholder="${t("crystal", "Crytite")}">
-          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="planet-resources-set" data-planet-id="${pl.id}">${t("admin_btn_set_resources", "Setzen")}</button>
-          <input type="text" class="admin-input admin-input-sm" id="admin-planet-reset-confirm" placeholder="RESET PLANET">
-          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="planet-reset" data-planet-id="${pl.id}">${t("admin_btn_reset_planet", "Planet reset")}</button>
-        </div>
+      <h3>#${pl.id} ${esc(pl.name || "")}</h3>
+      <p>${t("metal", "Ferronit")}: ${fmtInt(pl.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(pl.crystal)}</p>
+      <details class="admin-buildings-detail"><summary>${t("admin_buildings", "Gebäude")}</summary><pre>${esc(JSON.stringify(b, null, 2))}</pre></details>
+      <div class="admin-action-row">
+        <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-metal" placeholder="${t("metal", "Ferronit")}">
+        <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-crystal" placeholder="${t("crystal", "Crytite")}">
+        <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="planet-resources-set" data-planet-id="${pl.id}">${t("admin_btn_set_resources", "Setzen")}</button>
+      </div>
+      <div class="admin-action-row">
+        <select class="admin-input admin-input-sm" id="admin-planet-building-type">${buildingOpts}</select>
+        <input type="number" min="0" max="100" class="admin-input admin-input-sm" id="admin-planet-building-level" placeholder="Level">
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="planet-building-set" data-planet-id="${pl.id}">${t("admin_btn_set_building", "Gebäude setzen")}</button>
+      </div>
+      
+      <div class="admin-danger-zone">
+        <p class="admin-small-hint">${t("admin_planet_reset_hint", "Tippe RESET PLANET zur Bestätigung")}</p>
+        <input type="text" class="admin-input" id="admin-planet-reset-confirm" placeholder="RESET PLANET" autocomplete="off">
+        <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="planet-reset" data-planet-id="${pl.id}">${t("admin_btn_reset_planet", "Planet reset")}</button>
       </div>`;
   }
 
   async function loadAdminPlanet(id) {
-    const data = await adminFetch(`/api/admin/planet/${id}`);
-    if (!data.ok) notify(t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+    const data = await adminGet(`/api/admin/planet/${id}`);
+    if (!data.ok) showAlert(data.message, "error");
     else renderPlanetDetail(data);
     return data;
   }
@@ -316,24 +434,48 @@
     const params = new URLSearchParams({ status });
     if (pid) params.set("player_id", pid);
     if (plid) params.set("planet_id", plid);
-    if (out) out.innerHTML = `<p class="admin-cc-loading">${t("admin_loading", "Lade…")}</p>`;
-    const data = await adminFetch(`/api/admin/queues?${params}`);
+    if (out) out.innerHTML = loadingHtml();
+    const data = await adminGet(`/api/admin/queues?${params}`);
     if (!data.ok) {
-      notify(t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      showAlert(data.message, "error");
+      if (out) out.innerHTML = errorCard(data);
       return data;
     }
+    const cancelBtn = (type, id) =>
+      `<button type="button" class="gc-btn gc-btn-danger gc-btn-xs" data-admin-action="queue-cancel" data-queue-type="${type}" data-job-id="${id}">${t("admin_btn_cancel", "Abbrechen")}</button>`;
     const bq = data.build_queue || [];
     const rq = data.research_queue || [];
-    const rowBtn = (type, id) =>
-      `<button type="button" class="gc-btn gc-btn-danger gc-btn-xs" data-admin-action="queue-cancel" data-queue-type="${type}" data-job-id="${id}">${t("admin_btn_cancel", "Abbrechen")}</button>`;
     if (out) {
       out.innerHTML = `
-        <h3>${t("admin_build_queue", "Bau-Queue")}</h3>
-        <table class="ban-table table-std admin-cc-table"><thead><tr><th>ID</th><th>Planet</th><th>Typ</th><th>Status</th><th></th></tr></thead>
-        <tbody>${bq.map((j) => `<tr><td>${j.id}</td><td>${j.planet_id}</td><td>${j.building_type}</td><td>${j.status}</td><td>${rowBtn("build", j.id)}</td></tr>`).join("") || `<tr><td colspan="5">–</td></tr>`}</tbody></table>
-        <h3>${t("admin_research_queue", "Forschungs-Queue")}</h3>
-        <table class="ban-table table-std admin-cc-table"><thead><tr><th>ID</th><th>User</th><th>Tech</th><th>Status</th><th></th></tr></thead>
-        <tbody>${rq.map((j) => `<tr><td>${j.id}</td><td>${j.user_id}</td><td>${j.tech_key}</td><td>${j.status}</td><td>${rowBtn("research", j.id)}</td></tr>`).join("") || `<tr><td colspan="5">–</td></tr>`}</tbody></table>`;
+        <div class="admin-card">
+          <h3>${t("admin_build_queue", "Bau-Queue")} (${bq.length})</h3>
+          ${renderTable(
+            ["ID", "Planet", "Typ", "Status", ""],
+            bq.map(
+              (j) =>
+                `<tr><td>${j.id}</td><td>${j.planet_id}</td><td>${esc(j.building_type)}</td><td>${esc(j.status)}</td><td>${cancelBtn("build", j.id)}</td></tr>`
+            )
+          )}
+        </div>
+        <div class="admin-card">
+          <h3>${t("admin_research_queue", "Forschungs-Queue")} (${rq.length})</h3>
+          ${renderTable(
+            ["ID", "User", "Tech", "Status", ""],
+            rq.map(
+              (j) =>
+                `<tr><td>${j.id}</td><td>${j.user_id}</td><td>${esc(j.tech_key)}</td><td>${esc(j.status)}</td><td>${cancelBtn("research", j.id)}</td></tr>`
+            )
+          )}
+        </div>
+        <div class="admin-danger-zone">
+          <p class="admin-small-hint">${t("admin_queue_clear_hint", "Tippe CLEAR QUEUE")}</p>
+          <input type="text" class="admin-input" id="admin-queue-clear-confirm" placeholder="CLEAR QUEUE" autocomplete="off">
+          <select class="admin-input admin-input-sm" id="admin-queue-clear-scope">
+            <option value="planet">${t("admin_filter_planet_id", "Planet")}</option>
+            <option value="player">${t("admin_filter_player_id", "Player")}</option>
+          </select>
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="queue-clear">${t("admin_btn_clear_queue", "Queue leeren")}</button>
+        </div>`;
     }
     return data;
   }
@@ -341,7 +483,7 @@
   async function cancelQueueJob(type, id) {
     const data = await adminPost(`/api/admin/queue/${type}/${id}/cancel`, {});
     if (data.ok) notify(t("admin_action_success", "Erfolgreich"), "success");
-    else notify(t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+    else showAlert(data.message, "error");
     await loadAdminQueues();
     return data;
   }
@@ -349,7 +491,20 @@
   async function finishDueQueues() {
     const data = await adminPost("/api/admin/queues/finish-due", {});
     if (data.ok) notify(t("admin_action_success", "Erfolgreich"), "success");
-    else notify(t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+    else showAlert(data.message, "error");
+    await loadAdminQueues();
+    return data;
+  }
+
+  async function clearQueues() {
+    const confirmText = qs("#admin-queue-clear-confirm")?.value || "";
+    const scope = qs("#admin-queue-clear-scope")?.value || "planet";
+    const body = { confirm_text: confirmText, scope, queue_type: "both" };
+    if (scope === "planet") body.planet_id = qs("#admin-queue-planet-id")?.value;
+    else body.player_id = qs("#admin-queue-player-id")?.value;
+    const data = await adminPost("/api/admin/queues/clear", body);
+    if (data.ok) notify(t("admin_action_success", "Erfolgreich"), "success");
+    else showAlert(data.message, "error");
     await loadAdminQueues();
     return data;
   }
@@ -361,48 +516,157 @@
     const action = qs("#admin-audit-action")?.value;
     if (aid) params.set("admin_id", aid);
     if (action) params.set("action", action);
-    if (out) out.innerHTML = `<p class="admin-cc-loading">${t("admin_loading", "Lade…")}</p>`;
-    const data = await adminFetch(`/api/admin/audit-log?${params}`);
+    if (out) out.innerHTML = loadingHtml();
+    const data = await adminGet(`/api/admin/audit-log?${params}`);
     if (!data.ok) {
-      notify(t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      showAlert(data.message, "error");
+      if (out) out.innerHTML = errorCard(data);
       return data;
     }
-    const rows = data.entries || [];
+    const rows = (data.entries || []).map(
+      (e) => `<tr>
+        <td>${e.id}</td><td>${esc(fmtTs(e.created_at))}</td><td>${esc(e.admin_username || e.admin_id)}</td>
+        <td>${esc(e.action)}</td><td>${esc(e.target_type || "")} ${esc(e.target_id || "")}</td>
+        <td><code class="admin-payload">${esc(JSON.stringify(e.payload || {}))}</code></td>
+      </tr>`
+    );
     if (out) {
-      out.innerHTML = `
-        <table class="ban-table table-std admin-cc-table">
-          <thead><tr><th>ID</th><th>${t("admin_col_time", "Zeit")}</th><th>Admin</th><th>Action</th><th>Target</th></tr></thead>
-          <tbody>${rows.map((e) => `
-            <tr>
-              <td>${e.id}</td><td>${fmtTs(e.created_at)}</td><td>${e.admin_username || e.admin_id}</td>
-              <td>${e.action}</td><td>${e.target_type || ""} ${e.target_id || ""}</td>
-            </tr>`).join("") || `<tr><td colspan="5">–</td></tr>`}
-          </tbody>
-        </table>`;
+      out.innerHTML = renderTable(
+        ["ID", t("admin_col_time", "Zeit"), "Admin", "Action", "Target", "Payload"],
+        rows
+      );
     }
     return data;
   }
 
   async function loadAdminRuntime() {
     const out = qs("#admin-runtime-output");
-    if (out) out.innerHTML = `<p class="admin-cc-loading">${t("admin_loading", "Lade…")}</p>`;
-    const data = await adminFetch("/api/admin/runtime");
+    if (out) out.innerHTML = loadingHtml();
+    const data = await adminGet("/api/admin/runtime");
     if (!data.ok) {
-      notify(t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      showAlert(data.message, "error");
+      if (out) out.innerHTML = errorCard(data);
       return data;
     }
-    if (out) out.innerHTML = renderKeyValues(data.runtime || {});
+    const r = data.runtime || {};
+    _isProduction = !!r.production;
+    if (out) {
+      out.innerHTML = `
+        
+        <div class="admin-kpi-grid">
+          ${[
+            ["Python", r.python],
+            ["Version", r.version],
+            ["APP_ENV", r.app_env],
+            ["Production", r.production ? "yes" : "no"],
+            ["Debug", r.debug ? "ON" : "OFF"],
+            ["DB Backend", r.db_backend],
+            ["DB Path", r.db_path],
+          ]
+            .map(
+              ([k, v]) => `<div class="admin-kpi-card admin-card"><div class="admin-metric-label">${esc(k)}</div><div class="admin-metric-value">${esc(v)}</div></div>`
+            )
+            .join("")}
+        </div>`;
+    }
     return data;
   }
 
-  function bindAdminPanel(root) {
-    if (!root || root.dataset.adminBound === "1") return;
-    root.dataset.adminBound = "1";
+  async function handleAction(act, btn) {
+    if (act === "refresh-health") return loadAdminHealth();
+    if (act === "refresh-migrations") return loadAdminMigrations();
+    if (act === "run-migrations") return runAdminMigrations();
+    if (act === "search-players") return searchAdminPlayers();
+    if (act === "search-planets") return searchAdminPlanets();
+    if (act === "load-queues") return loadAdminQueues();
+    if (act === "finish-due") return finishDueQueues();
+    if (act === "load-audit") return loadAuditLog();
+    if (act === "refresh-runtime") return loadAdminRuntime();
+    if (act === "queue-cancel") return cancelQueueJob(btn.dataset.queueType, btn.dataset.jobId);
+    if (act === "queue-clear") return clearQueues();
 
+    if (act === "player-set-admin") {
+      const body = { is_admin: btn.dataset.isAdmin === "1" ? 1 : 0 };
+      if (body.is_admin === 0) {
+        const c = prompt(t("admin_confirm_remove_admin", "Tippe REMOVE ADMIN"));
+        if (c !== "REMOVE ADMIN") return null;
+        body.confirm_text = c;
+      }
+      const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/set-admin`, body);
+      if (res.ok) notify(t("admin_action_success", "OK"), "success");
+      else showAlert(res.message, "error");
+      await loadAdminPlayer(btn.dataset.playerId);
+      await searchAdminPlayers();
+      return res;
+    }
+    if (act === "player-ban") {
+      const c = prompt(t("admin_confirm_ban", "Tippe BAN PLAYER"));
+      if (c !== "BAN PLAYER") return null;
+      const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/ban`, {
+        confirm_text: c,
+        reason: "admin panel",
+        hours: 24,
+      });
+      if (res.ok) notify(t("admin_action_success", "OK"), "success");
+      else showAlert(res.message, "error");
+      await loadAdminPlayer(btn.dataset.playerId);
+      return res;
+    }
+    if (act === "player-unban") {
+      const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/unban`, {});
+      notify(t("admin_action_success", "OK"), "success");
+      await loadAdminPlayer(btn.dataset.playerId);
+      return res;
+    }
+    if (act === "player-repair-hw") {
+      await adminPost(`/api/admin/player/${btn.dataset.playerId}/repair-homeworld`, {});
+      notify(t("admin_action_success", "OK"), "success");
+      return loadAdminPlayer(btn.dataset.playerId);
+    }
+    if (act === "player-resources-add" || act === "player-resources-set") {
+      const mode = act.endsWith("set") ? "set" : "add";
+      await adminPost(`/api/admin/player/${btn.dataset.playerId}/resources`, {
+        mode,
+        metal: qs("#admin-player-metal")?.value || 0,
+        crystal: qs("#admin-player-crystal")?.value || 0,
+      });
+      notify(t("admin_action_success", "OK"), "success");
+      return loadAdminPlayer(btn.dataset.playerId);
+    }
+    if (act === "planet-resources-set") {
+      await adminPost(`/api/admin/planet/${btn.dataset.planetId}/resources`, {
+        mode: "set",
+        metal: qs("#admin-planet-metal")?.value || 0,
+        crystal: qs("#admin-planet-crystal")?.value || 0,
+      });
+      notify(t("admin_action_success", "OK"), "success");
+      return loadAdminPlanet(btn.dataset.planetId);
+    }
+    if (act === "planet-building-set") {
+      await adminPost(`/api/admin/planet/${btn.dataset.planetId}/building`, {
+        building_type: qs("#admin-planet-building-type")?.value,
+        level: qs("#admin-planet-building-level")?.value || 0,
+      });
+      notify(t("admin_action_success", "OK"), "success");
+      return loadAdminPlanet(btn.dataset.planetId);
+    }
+    if (act === "planet-reset") {
+      const res = await adminPost(`/api/admin/planet/${btn.dataset.planetId}/reset`, {
+        confirm_text: qs("#admin-planet-reset-confirm")?.value || "",
+      });
+      if (res.ok) notify(t("admin_action_success", "OK"), "success");
+      else showAlert(res.message, "error");
+      return loadAdminPlanet(btn.dataset.planetId);
+    }
+    return null;
+  }
+
+  function bindAdminPanel(root) {
     root.addEventListener("click", async (e) => {
-      const tab = e.target.closest(".admin-cc-tab");
-      if (tab) {
+      const tab = e.target.closest(".admin-tab-btn, .admin-cc-tab");
+      if (tab && tab.dataset.adminTab) {
         switchTab(tab.dataset.adminTab);
+        await loadTab(tab.dataset.adminTab);
         return;
       }
 
@@ -412,66 +676,10 @@
         if (btn.dataset.busy === "1") return;
         setBusy(btn, true);
         try {
-          const act = btn.dataset.adminAction;
-          if (act === "refresh-health") await loadAdminHealth();
-          else if (act === "refresh-migrations") await loadAdminMigrations();
-          else if (act === "run-migrations") await runAdminMigrations();
-          else if (act === "search-players") await searchAdminPlayers();
-          else if (act === "search-planets") await searchAdminPlanets();
-          else if (act === "load-queues") await loadAdminQueues();
-          else if (act === "finish-due") await finishDueQueues();
-          else if (act === "load-audit") await loadAuditLog();
-          else if (act === "refresh-runtime") await loadAdminRuntime();
-          else if (act === "queue-cancel") await cancelQueueJob(btn.dataset.queueType, btn.dataset.jobId);
-          else if (act === "player-set-admin") {
-            const body = { is_admin: btn.dataset.isAdmin === "1" ? 1 : 0 };
-            if (body.is_admin === 0) {
-              const c = prompt(t("admin_confirm_remove_admin", "Tippe REMOVE ADMIN"));
-              if (c !== "REMOVE ADMIN") return;
-              body.confirm_text = c;
-            }
-            const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/set-admin`, body);
-            if (res.ok) notify(t("admin_action_success", "Erfolgreich"), "success");
-            else notify(res.message || t("admin_action_failed", "Fehler"), "error");
-            await loadAdminPlayer(btn.dataset.playerId);
-            await searchAdminPlayers();
-          } else if (act === "player-ban") {
-            const c = prompt(t("admin_confirm_ban", "Tippe BAN PLAYER"));
-            if (c !== "BAN PLAYER") return;
-            const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/ban`, { confirm_text: c, reason: "admin panel", hours: 24 });
-            if (res.ok) notify(t("admin_action_success", "Erfolgreich"), "success");
-            await loadAdminPlayer(btn.dataset.playerId);
-          } else if (act === "player-unban") {
-            await adminPost(`/api/admin/player/${btn.dataset.playerId}/unban`, {});
-            notify(t("admin_action_success", "Erfolgreich"), "success");
-            await loadAdminPlayer(btn.dataset.playerId);
-          } else if (act === "player-repair-hw") {
-            await adminPost(`/api/admin/player/${btn.dataset.playerId}/repair-homeworld`, {});
-            notify(t("admin_action_success", "Erfolgreich"), "success");
-            await loadAdminPlayer(btn.dataset.playerId);
-          } else if (act === "player-resources") {
-            await adminPost(`/api/admin/player/${btn.dataset.playerId}/resources`, {
-              mode: "add",
-              metal: qs("#admin-player-metal")?.value || 0,
-              crystal: qs("#admin-player-crystal")?.value || 0,
-            });
-            notify(t("admin_action_success", "Erfolgreich"), "success");
-            await loadAdminPlayer(btn.dataset.playerId);
-          } else if (act === "planet-resources-set") {
-            await adminPost(`/api/admin/planet/${btn.dataset.planetId}/resources`, {
-              mode: "set",
-              metal: qs("#admin-planet-metal")?.value || 0,
-              crystal: qs("#admin-planet-crystal")?.value || 0,
-            });
-            notify(t("admin_action_success", "Erfolgreich"), "success");
-            await loadAdminPlanet(btn.dataset.planetId);
-          } else if (act === "planet-reset") {
-            const c = qs("#admin-planet-reset-confirm")?.value || "";
-            const res = await adminPost(`/api/admin/planet/${btn.dataset.planetId}/reset`, { confirm_text: c });
-            if (res.ok) notify(t("admin_action_success", "Erfolgreich"), "success");
-            else notify(res.message || t("admin_confirm_required", "Bestätigung nötig"), "error");
-            await loadAdminPlanet(btn.dataset.planetId);
-          }
+          await handleAction(btn.dataset.adminAction, btn);
+        } catch (err) {
+          console.error("[admin]", err);
+          showAlert(err.message || String(err), "error");
         } finally {
           setBusy(btn, false);
         }
@@ -484,8 +692,18 @@
         return;
       }
       const plBtn = e.target.closest("[data-admin-planet-id]");
-      if (plBtn) {
-        await loadAdminPlanet(plBtn.dataset.adminPlanetId);
+      if (plBtn) await loadAdminPlanet(plBtn.dataset.adminPlanetId);
+    });
+
+    root.addEventListener("keydown", async (e) => {
+      if (e.key !== "Enter") return;
+      if (e.target.id === "admin-players-search") {
+        e.preventDefault();
+        await searchAdminPlayers();
+      }
+      if (e.target.id === "admin-planets-search") {
+        e.preventDefault();
+        await searchAdminPlanets();
       }
     });
   }
@@ -493,13 +711,27 @@
   function initAdminPanel() {
     const root = qs("#admin-control-center");
     if (!root) return;
-    bindAdminPanel(root);
-    loadAdminHealth();
-    loadAdminMigrations();
+
+    if (!root._gcAdminReady) {
+      bindAdminPanel(root);
+      root._gcAdminReady = true;
+    }
+
+    const healthOut = qs("#admin-health-output");
+    if (healthOut) healthOut.innerHTML = loadingHtml();
+
+    switchTab("health");
+    loadAdminRuntime().then(() => loadTab("health"));
+    console.debug("[GC] admin panel initialized");
   }
+
+  GC.teardownAdminPanel = function teardownAdminPanel() {
+    _activeTab = "health";
+  };
 
   GC.modules = GC.modules || {};
   GC.modules.admin = initAdminPanel;
+  GC.initAdminPanel = initAdminPanel;
   GC.loadAdminHealth = loadAdminHealth;
   GC.loadAdminMigrations = loadAdminMigrations;
   GC.searchAdminPlayers = searchAdminPlayers;
@@ -509,11 +741,17 @@
   GC.cancelQueueJob = cancelQueueJob;
   GC.loadAuditLog = loadAuditLog;
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      if (qs("#admin-control-center")) initAdminPanel();
+  if (typeof GC.registerCleanup === "function") {
+    GC.registerCleanup(function adminPanelCleanup() {
+      const root = qs("#admin-control-center");
+      if (root) root._gcAdminReady = false;
+      _activeTab = "health";
     });
-  } else if (qs("#admin-control-center")) {
-    initAdminPanel();
   }
+
+  document.addEventListener("DOMContentLoaded", function adminBootFallback() {
+    if (!qs("#admin-control-center")) return;
+    if (GC.currentPage === "admin") return;
+    if (typeof GC.initAdminPanel === "function") GC.initAdminPanel();
+  });
 })();
