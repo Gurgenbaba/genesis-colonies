@@ -28,6 +28,7 @@ from game.db import (
     with_transaction,
 )
 from game.models import (
+    harden_planets_schema,
     init_db,
     purge_stale_idempotency,
     purge_stale_idempotency_global,
@@ -77,6 +78,7 @@ def test_fresh_init_then_migrate(temp_db):
         applied = conn.execute("SELECT name FROM migration_history;").fetchall()
         names = {r["name"] for r in applied}
         assert "008_persistence_hardening.sql" in names
+        assert "009_legacy_planets_hardening.sql" in names
     finally:
         conn.close()
 
@@ -214,5 +216,128 @@ def test_sql_uses_parameter_placeholders_not_fstrings(temp_db):
             "DELETE FROM action_idempotency WHERE created_at < ?;",
             (time.time(),),
         )
+    finally:
+        conn.close()
+
+
+def _seed_legacy_planets_db(db_path: Path) -> None:
+    """Simulates pre-006 DB: planets without player_id / is_homeworld."""
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            is_admin INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE players (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            is_admin INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE planets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            metal REAL NOT NULL DEFAULT 1000,
+            crystal REAL NOT NULL DEFAULT 500,
+            last_update REAL NOT NULL DEFAULT 0
+        );
+        CREATE TABLE planet_buildings (
+            planet_id INTEGER PRIMARY KEY
+        );
+        CREATE TABLE game_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        INSERT INTO planets (name, metal, crystal, last_update)
+        VALUES ('Legacy World', 1000, 500, 0);
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_legacy_planets_without_player_id_bootstraps(temp_db):
+    _seed_legacy_planets_db(temp_db)
+    init_db()
+
+    conn = db()
+    try:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(planets);").fetchall()}
+        assert "player_id" in cols
+        assert "is_homeworld" in cols
+
+        player = conn.execute("SELECT id, name FROM players WHERE id = 1;").fetchone()
+        assert player is not None
+
+        homeworld = conn.execute(
+            "SELECT id, player_id, is_homeworld, name FROM planets WHERE player_id = 1 AND is_homeworld = 1;"
+        ).fetchone()
+        assert homeworld is not None
+        assert int(homeworld["player_id"]) == 1
+        assert int(homeworld["is_homeworld"]) == 1
+    finally:
+        conn.close()
+
+
+def test_legacy_planets_hardening_idempotent(temp_db):
+    _seed_legacy_planets_db(temp_db)
+    conn = db()
+    try:
+        harden_planets_schema(conn)
+        conn.commit()
+        harden_planets_schema(conn)
+        conn.commit()
+
+        rows = conn.execute(
+            "SELECT id, player_id, is_homeworld FROM planets ORDER BY id ASC;"
+        ).fetchall()
+        assert len(rows) == 1
+        assert int(rows[0]["player_id"]) == 1
+        assert int(rows[0]["is_homeworld"]) == 1
+    finally:
+        conn.close()
+
+
+def test_legacy_planets_migration_idempotent(temp_db):
+    _seed_legacy_planets_db(temp_db)
+    conn = db()
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS migration_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            applied_at INTEGER NOT NULL
+        );
+        """
+    )
+    for name in (
+        "006_add_player_scores.sql",
+        "007_seed_player_scores.sql",
+        "008_persistence_hardening.sql",
+    ):
+        conn.execute(
+            "INSERT INTO migration_history (name, applied_at) VALUES (?, ?);",
+            (name, int(time.time())),
+        )
+    conn.commit()
+    conn.close()
+
+    first = _run_migrate(temp_db)
+    assert first.returncode == 0, first.stderr or first.stdout
+
+    second = _run_migrate(temp_db)
+    assert second.returncode == 0, second.stderr or second.stdout
+    assert "Alle Migrationen sind bereits angewendet" in second.stdout
+
+    conn = db()
+    try:
+        assert index_exists(conn, "idx_planets_player_id")
+        assert index_exists(conn, "idx_planets_player_homeworld")
+        homeworld = conn.execute(
+            "SELECT 1 FROM planets WHERE player_id = 1 AND is_homeworld = 1 LIMIT 1;"
+        ).fetchone()
+        assert homeworld is not None
     finally:
         conn.close()

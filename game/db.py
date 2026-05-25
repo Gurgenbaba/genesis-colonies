@@ -145,3 +145,13 @@ def index_exists(conn: sqlite3.Connection, index_name: str) -> bool:
         (str(index_name),),
     )
     return cur.fetchone() is not None
+
+
+def table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    cur = conn.cursor()
+    cur.execute(f"PRAGMA table_info({table_name});")
+    return {str(row["name"]) for row in cur.fetchall()}
+
+
+def column_exists(conn: sqlite3.Connection, table_name: str, column_name: str) -> bool:
+    return column_name in table_columns(conn, table_name)

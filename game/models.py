@@ -15,6 +15,8 @@ from .db import (
     TxAbort,
     lock_planet_for_update,
     lock_player_for_update,
+    table_exists,
+    column_exists,
 )
 
 
@@ -54,6 +56,65 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
 # ======================================================================
 # INIT DATABASE
 # ======================================================================
+
+def harden_planets_schema(conn: sqlite3.Connection) -> None:
+    """
+    Upgrade legacy planets tables that predate player_id / is_homeworld columns.
+    Safe to call repeatedly (idempotent).
+    """
+    if not table_exists(conn, "planets"):
+        return
+
+    cur = conn.cursor()
+
+    if not column_exists(conn, "planets", "player_id"):
+        try:
+            cur.execute("ALTER TABLE planets ADD COLUMN player_id INTEGER;")
+        except sqlite3.OperationalError:
+            pass
+
+    if not column_exists(conn, "planets", "is_homeworld"):
+        try:
+            cur.execute("ALTER TABLE planets ADD COLUMN is_homeworld INTEGER NOT NULL DEFAULT 0;")
+        except sqlite3.OperationalError:
+            pass
+
+    if column_exists(conn, "planets", "player_id"):
+        cur.execute("UPDATE planets SET player_id = 1 WHERE player_id IS NULL;")
+
+    if column_exists(conn, "planets", "player_id") and column_exists(conn, "planets", "is_homeworld"):
+        cur.execute(
+            """
+            UPDATE planets
+            SET is_homeworld = 1
+            WHERE id IN (
+                SELECT p1.id
+                FROM planets p1
+                INNER JOIN (
+                    SELECT player_id, MIN(id) AS min_id
+                    FROM planets
+                    GROUP BY player_id
+                ) t ON t.min_id = p1.id
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM planets p2
+                    WHERE p2.player_id = p1.player_id
+                      AND p2.is_homeworld = 1
+                )
+            );
+            """
+        )
+
+    for idx_sql in (
+        "CREATE INDEX IF NOT EXISTS idx_planets_player_id ON planets(player_id);",
+        "CREATE INDEX IF NOT EXISTS idx_planets_player_homeworld ON planets(player_id, is_homeworld);",
+        "CREATE INDEX IF NOT EXISTS idx_planets_player ON planets(player_id, is_homeworld);",
+    ):
+        try:
+            cur.execute(idx_sql)
+        except sqlite3.OperationalError:
+            pass
+
 
 def init_db() -> None:
     conn = db()
@@ -261,6 +322,8 @@ def init_db() -> None:
     except sqlite3.OperationalError:
         pass
 
+    harden_planets_schema(conn)
+
     # ------------------------------------------------------------
     # DEFAULT ADMIN + DEFAULT PLAYER + DEFAULT SETTINGS
     # ------------------------------------------------------------
@@ -438,6 +501,8 @@ def ensure_player_and_homeworld(
         if own_conn:
             conn.execute("BEGIN IMMEDIATE")
 
+        harden_planets_schema(conn)
+
         cur.execute("SELECT 1 FROM players WHERE id = ? LIMIT 1;", (int(player_id),))
         row = cur.fetchone()
         if not row:
@@ -445,6 +510,9 @@ def ensure_player_and_homeworld(
                 "INSERT INTO players (id, name, is_admin) VALUES (?, ?, ?);",
                 (int(player_id), player_name or f"Commander {player_id}", int(is_admin)),
             )
+
+        if not column_exists(conn, "planets", "player_id") or not column_exists(conn, "planets", "is_homeworld"):
+            raise RuntimeError("planets schema is missing player_id or is_homeworld after hardening")
 
         cur.execute(
             "SELECT COUNT(*) AS c FROM planets WHERE player_id = ? AND is_homeworld = 1;",
@@ -488,12 +556,21 @@ def ensure_player_and_homeworld(
 
 
 def create_default_player_and_homeworld(conn: sqlite3.Connection | None = None) -> None:
-    ensure_player_and_homeworld(
-        player_id=1,
-        player_name="Commander Gurkenvater",
-        is_admin=1,
-        conn=conn,
-    )
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+    try:
+        harden_planets_schema(conn)
+        ensure_player_and_homeworld(
+            player_id=1,
+            player_name="Commander Gurkenvater",
+            is_admin=1,
+            conn=conn,
+        )
+    finally:
+        if own_conn:
+            conn.close()
 
 
 def load_player(player_id: int, conn: sqlite3.Connection | None = None) -> Optional[Dict[str, Any]]:
