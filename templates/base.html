@@ -18,7 +18,8 @@
 
 <body class="gc-body gc-theme-dark {{ body_bg|default('') }} {% if SIMPLE_LAYOUT %}gc-body-simple{% else %}gc-body-ingame{% endif %}"
       data-theme="dark"
-      data-endpoint="{{ request.endpoint or '' }}">
+      data-endpoint="{{ request.endpoint or '' }}"
+      data-auth-page="{{ '1' if SIMPLE_LAYOUT else '0' }}">
 
   <!-- Skip Link (Keyboard/Screenreader) -->
   <a class="gc-skip-link" href="#main-content">

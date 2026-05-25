@@ -135,24 +135,84 @@
   }
 
   let _statusPollErrorLogged = false;
+  let _authLoopAborted = false;
+
+  const AUTH_ROUTE_RE = /^\/(login|register|logout)(\/|$)/i;
+
+  function isAuthRoutePath() {
+    const path = (window.location.pathname || "").replace(/\/$/, "") || "/";
+    if (AUTH_ROUTE_RE.test(path)) return true;
+    if (path === "/" && document.body?.dataset?.authPage === "1") return true;
+    return false;
+  }
 
   function hasLiveStatusRoot() {
     return !!document.querySelector(
-      "[data-live-status], #live-status-root, #game-status-root, .js-status-poller, #resource-bar"
+      "#resource-bar, [data-live-status], #live-status-root, #game-status-root, .js-status-poller"
     );
   }
 
-  function shouldRunStatusPolling() {
-    if (document.body.classList.contains("gc-body-simple")) return false;
+  function shouldRunGameLoop() {
+    const body = document.body;
+    if (!body) return false;
+    if (body.classList.contains("gc-body-simple")) return false;
+    if (body.dataset.authPage === "1") return false;
+    if (isAuthRoutePath()) return false;
+    if (!body.classList.contains("gc-body-ingame")) return false;
+    if (!document.querySelector("#main-content")) return false;
     return hasLiveStatusRoot();
   }
 
+  /** @deprecated use shouldRunGameLoop */
+  function shouldRunStatusPolling() {
+    return shouldRunGameLoop();
+  }
+
+  function handleAuthFailure(reason) {
+    if (_authLoopAborted) return;
+    _authLoopAborted = true;
+    console.debug("[GC] auth redirect detected", reason || "");
+    console.debug("[GC] polling aborted");
+    GC.stopPolling();
+    GC.stopProgressTicker();
+    _statusPollErrorLogged = true;
+  }
+
+  function throwAuthError() {
+    const err = new Error("not_logged_in");
+    err.authRedirect = true;
+    err.status = 401;
+    throw err;
+  }
+
+  function isAuthRedirectResponse(res) {
+    if (!res) return false;
+    if (res.type === "opaqueredirect") return true;
+    const status = Number(res.status || 0);
+    if (status >= 300 && status < 400) return true;
+    if (res.redirected && /\/login|\/register/i.test(String(res.url || ""))) return true;
+    return false;
+  }
+
+  function inspectFetchResponseForAuth(res, contentType) {
+    if (isAuthRedirectResponse(res)) {
+      handleAuthFailure("redirect");
+      throwAuthError();
+    }
+    const ct = (contentType || res.headers.get("content-type") || "").toLowerCase();
+    if (ct.includes("text/html") && /\/api\//i.test(String(res.url || ""))) {
+      handleAuthFailure("html-on-api");
+      throwAuthError();
+    }
+  }
+
   function isAuthStatusFailure(err, data) {
+    if (err?.authRedirect) return true;
     if (data?.error === "not_logged_in" || data?.ok === false) return true;
     const status = Number(err?.status || 0);
-    if (status === 401 || status === 403 || status === 404) return true;
+    if (status === 401 || status === 403) return true;
     const msg = String(err?.message || "");
-    return /HTTP 401|HTTP 403|HTTP 404|not_logged_in|non_json_response|invalid_json_response/i.test(msg);
+    return /HTTP 401|HTTP 403|not_logged_in|non_json_response|invalid_json_response/i.test(msg);
   }
 
   function logStatusPollErrorOnce(reason, err) {
@@ -277,15 +337,23 @@
     const fetchOpts = { ...options };
     delete fetchOpts.signal;
     try {
-      const res = await fetch(url, { ...fetchOpts, signal: ctrl.signal });
+      const res = await fetch(url, {
+        ...fetchOpts,
+        signal: ctrl.signal,
+        credentials: fetchOpts.credentials || "same-origin",
+        redirect: fetchOpts.redirect || "manual",
+      });
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      inspectFetchResponseForAuth(res, ct);
       let data = {};
-      try {
-        data = await res.json();
-      } catch (_) {}
-      if (res.status === 401 || data.error === "not_logged_in") {
-        const err = new Error("not_logged_in");
-        err.status = 401;
-        throw err;
+      if (ct.includes("application/json")) {
+        try {
+          data = await res.json();
+        } catch (_) {}
+      }
+      if (res.status === 401 || res.status === 403 || data.error === "not_logged_in") {
+        handleAuthFailure(`action-http-${res.status}`);
+        throwAuthError();
       }
       return data;
     } finally {
@@ -314,15 +382,31 @@
     const fetchOpts = { ...options };
     delete fetchOpts.signal;
     try {
-      const res = await fetch(url, { ...fetchOpts, signal: ctrl.signal });
+      const res = await fetch(url, {
+        ...fetchOpts,
+        signal: ctrl.signal,
+        credentials: fetchOpts.credentials || "same-origin",
+        redirect: fetchOpts.redirect || "manual",
+      });
       const status = res.status;
       const ct = (res.headers.get("content-type") || "").toLowerCase();
+
+      inspectFetchResponseForAuth(res, ct);
+
       if (!res.ok) {
+        if (status === 401 || status === 403) {
+          handleAuthFailure(`http-${status}`);
+          throwAuthError();
+        }
         const err = new Error(`HTTP ${status}`);
         err.status = status;
         throw err;
       }
       if (!ct.includes("application/json")) {
+        if (/login|register/i.test(String(res.url || ""))) {
+          handleAuthFailure("non-json-login-url");
+          throwAuthError();
+        }
         const err = new Error("non_json_response");
         err.status = status;
         err.nonJson = true;
@@ -358,10 +442,14 @@
   };
 
   GC.startProgressTicker = function startProgressTicker() {
+    if (!shouldRunGameLoop()) return;
     if (_progressTickerActive) return;
     _progressTickerActive = true;
     const tick = () => {
-      if (!_progressTickerActive) return;
+      if (!_progressTickerActive || !shouldRunGameLoop() || _authLoopAborted) {
+        _progressTickerActive = false;
+        return;
+      }
       updateAllProgressBars();
       if (_hasActiveProgressJobs()) {
         GC.requestFrame(tick);
@@ -387,10 +475,20 @@
   };
 
   GC.stopStatusPoller = GC.stopPolling;
+  GC.shouldRunGameLoop = shouldRunGameLoop;
   GC.shouldRunStatusPolling = shouldRunStatusPolling;
+  GC.abortGameLoop = handleAuthFailure;
 
   GC.startPolling = function startPolling(anyActive, isError = false) {
-    if (!shouldRunStatusPolling()) return;
+    if (!shouldRunGameLoop()) {
+      console.debug("[GC] polling skipped (auth page)");
+      GC.stopPolling();
+      return;
+    }
+    if (_authLoopAborted) {
+      console.debug("[GC] polling skipped (auth aborted)");
+      return;
+    }
     GC.stopPolling();
     const p = GC.polling;
     if (document.hidden) {
@@ -406,11 +504,17 @@
     console.debug("[GC] polling started", next, "ms");
 
     const tick = async () => {
-      if (!p.running) return;
+      if (!p.running || !shouldRunGameLoop() || _authLoopAborted) {
+        GC.stopPolling();
+        return;
+      }
       try {
         await GC.refreshGameState("poll");
       } catch (_) {}
-      if (!p.running) return;
+      if (!p.running || !shouldRunGameLoop() || _authLoopAborted) {
+        GC.stopPolling();
+        return;
+      }
       GC.startProgressTicker();
       const active = lastHadActiveJob || lastHadActiveResearch;
       let interval = p.intervalIdle;
@@ -436,10 +540,14 @@
 
     initFlashAutohide();
 
-    if (!shouldRunStatusPolling()) {
-      console.debug("[GC] initPage: status polling skipped (no live-status root)");
+    if (!shouldRunGameLoop()) {
+      console.debug("[GC] polling skipped (auth page)");
+      GC.abortGameLoop("initPage");
       return;
     }
+
+    _authLoopAborted = false;
+    _statusPollErrorLogged = false;
 
     GC.refreshGameState("page_init");
     GC.startProgressTicker();
@@ -636,6 +744,7 @@
   }
 
   function requestFinishRefresh(type) {
+    if (!shouldRunGameLoop() || _authLoopAborted) return;
     if (GC.finishLocks[type]) return;
     GC.finishLocks[type] = true;
     Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${type}_finished`) : null).finally(() => {
@@ -1572,7 +1681,7 @@
   }
 
   async function refreshGameState(reason) {
-    if (!shouldRunStatusPolling()) return null;
+    if (!shouldRunGameLoop() || _authLoopAborted) return null;
     if (GC.refreshInFlight) return GC.refreshInFlight;
 
     const p = GC.polling;
@@ -1588,7 +1697,7 @@
       try {
         const data = await GC.fetchJSON("/api/game-state", { cache: "no-store", signal: ctrl.signal });
         if (isAuthStatusFailure(null, data)) {
-          GC.stopPolling();
+          handleAuthFailure("game-state-payload");
           return null;
         }
 
@@ -1606,6 +1715,11 @@
         if (err?.name === "AbortError") return null;
 
         if (isAuthStatusFailure(err)) {
+          handleAuthFailure(reason);
+          return null;
+        }
+
+        if (!shouldRunGameLoop()) {
           GC.stopPolling();
           return null;
         }
@@ -1613,7 +1727,7 @@
         logStatusPollErrorOnce(reason, err);
         markStatusWidgetOffline();
         p.backoff = Math.min(60000, (p.backoff || 2000) * 1.6);
-        if (reason !== "poll" && shouldRunStatusPolling()) {
+        if (reason !== "poll" && shouldRunGameLoop() && !_authLoopAborted) {
           GC.startPolling(lastHadActiveJob || lastHadActiveResearch, true);
         }
         throw err;
@@ -2112,7 +2226,8 @@
         GC.stopPolling();
         return;
       }
-      if (!shouldRunStatusPolling()) return;
+      if (!shouldRunGameLoop() || _authLoopAborted) return;
+      _authLoopAborted = false;
       GC.refreshGameState("tab_visible");
       GC.startProgressTicker();
     });
@@ -2231,6 +2346,11 @@
     initStickyResourceBar();
     initPjax();
 
+    document.addEventListener("click", (e) => {
+      const link = e.target.closest('a.logout-btn, a[href*="/logout"]');
+      if (link) GC.abortGameLoop("logout-click");
+    }, true);
+
     try {
       history.replaceState({ gcPjax: true }, "", window.location.href);
     } catch (_) {}
@@ -2241,6 +2361,11 @@
   // =========================
   document.addEventListener("DOMContentLoaded", () => {
     initShellOnce();
+    if (!shouldRunGameLoop()) {
+      console.debug("[GC] polling skipped (auth page)");
+      GC.abortGameLoop("boot");
+      return;
+    }
     GC.initPage();
   });
 })();
