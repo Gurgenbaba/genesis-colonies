@@ -26,9 +26,10 @@ from .models import (
     add_research_job,
     get_homeworld,
     get_planet_buildings,
-    try_spend_resources,
-    finish_due_research_jobs,  # ✅ atomare Finish-Logik (inkl. Score Trigger)
+    try_spend_resources_conn,
+    finish_due_research_jobs,
 )
+from .db import begin_write_transaction, commit, rollback, lock_planet_for_update, lock_player_for_update
 from .ranking import invalidate_player_score_cache  # ✅ Cache invalidieren nach Finish
 
 
@@ -287,7 +288,7 @@ def complete_finished_research(user_id: int, conn=None) -> bool:
     finished_any = False
     try:
         if own_conn:
-            conn.execute("BEGIN IMMEDIATE")
+            begin_write_transaction(conn)
 
         finished_any = finish_due_research_jobs(
             user_id=uid,
@@ -296,11 +297,11 @@ def complete_finished_research(user_id: int, conn=None) -> bool:
         )
 
         if own_conn:
-            conn.commit()
+            commit(conn)
 
     except Exception:
         if own_conn:
-            conn.rollback()
+            rollback(conn)
         raise
     finally:
         if own_conn:
@@ -313,6 +314,20 @@ def complete_finished_research(user_id: int, conn=None) -> bool:
 
 
 RESEARCH_QUEUE_LIMIT = 3
+
+
+def _resolve_research_queue_limit(settings: Optional[Dict[str, Any]] = None) -> int:
+    if settings is None:
+        settings = get_game_settings()
+    raw_limit = settings.get("research_queue_limit", RESEARCH_QUEUE_LIMIT)
+    try:
+        queue_limit = int(raw_limit)
+    except (ValueError, TypeError):
+        try:
+            queue_limit = int(float(raw_limit))
+        except (ValueError, TypeError):
+            queue_limit = RESEARCH_QUEUE_LIMIT
+    return max(queue_limit, 1)
 
 
 # ======================================================================
@@ -331,49 +346,93 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
     else:
         uid = int(user_id)
 
-    complete_finished_research(uid)
+    conn = db()
+    finished_any = False
+    try:
+        begin_write_transaction(conn)
+        lock_player_for_update(conn, uid)
+        now = time.time()
 
-    planet = get_homeworld(player_id=uid)
-    buildings = get_planet_buildings(int(planet["id"]))
-    levels = get_research_levels(uid)
+        finished_any = finish_due_research_jobs(user_id=uid, now=now, conn=conn)
 
-    if int(buildings.get("research_lab", 0) or 0) <= 0:
-        return False, "no_research_lab", None
+        planet = get_homeworld(player_id=uid, conn=conn)
+        if not planet:
+            rollback(conn)
+            return False, "no_homeworld", None
 
-    if not has_research_requirements(buildings, levels, tech_key):
-        return False, "requirements", None
+        planet_id = int(planet["id"])
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
+            (planet_id,),
+        )
+        prow = cur.fetchone()
+        if not prow:
+            rollback(conn)
+            return False, "no_homeworld", None
 
-    rows = get_research_queue_rows(uid)
-    if len(rows) >= RESEARCH_QUEUE_LIMIT:
-        return False, "research_queue_full", {
-            "queue_count": len(rows),
-            "queue_limit": RESEARCH_QUEUE_LIMIT,
+        planet_metal = float(prow["metal"] or 0)
+        planet_crystal = float(prow["crystal"] or 0)
+
+        buildings = get_planet_buildings(planet_id, conn=conn)
+        levels = get_research_levels(uid, conn=conn)
+
+        if int(buildings.get("research_lab", 0) or 0) <= 0:
+            rollback(conn)
+            return False, "no_research_lab", None
+
+        if not has_research_requirements(buildings, levels, tech_key):
+            rollback(conn)
+            return False, "requirements", None
+
+        rows = get_research_queue_rows(uid, conn=conn)
+        research_queue_limit = _resolve_research_queue_limit()
+        if len(rows) >= research_queue_limit:
+            rollback(conn)
+            return False, "research_queue_full", {
+                "queue_count": len(rows),
+                "queue_limit": research_queue_limit,
+            }
+
+        queued_same = sum(1 for r in rows if str(r["tech_key"]) == tech_key)
+        current = int(levels.get(tech_key, 0) or 0)
+        target = current + queued_same + 1
+
+        cost_m, cost_c = get_research_cost(tech_key, target)
+
+        if planet_metal < float(cost_m) or planet_crystal < float(cost_c):
+            rollback(conn)
+            return False, "not_enough_resources", (int(cost_m), int(cost_c))
+
+        duration = get_research_time(tech_key, target, user_id=uid, buildings=buildings)
+        last_finish = max(float(r["finish_at"]) for r in rows) if rows else now
+        start_at = max(now, last_finish)
+        finish_at = start_at + float(duration)
+
+        if not try_spend_resources_conn(conn, planet_id, int(cost_m), int(cost_c)):
+            rollback(conn)
+            return False, "not_enough_resources", (int(cost_m), int(cost_c))
+
+        job_id = add_research_job(uid, tech_key, float(start_at), float(finish_at), conn=conn)
+
+        commit(conn)
+
+        if finished_any:
+            invalidate_player_score_cache(uid)
+
+        return True, "ok", {
+            "job_id": int(job_id),
+            "seconds": int(duration),
+            "level": int(target),
+            "target_level": int(target),
+            "queued": len(rows) > 0,
         }
 
-    queued_same = sum(1 for r in rows if str(r["tech_key"]) == tech_key)
-    current = int(levels.get(tech_key, 0) or 0)
-    target = current + queued_same + 1
-
-    cost_m, cost_c = get_research_cost(tech_key, target)
-
-    if float(planet["metal"]) < float(cost_m) or float(planet["crystal"]) < float(cost_c):
-        return False, "not_enough_resources", (int(cost_m), int(cost_c))
-
-    duration = get_research_time(tech_key, target, user_id=uid, buildings=buildings)
-    now = time.time()
-    last_finish = max(float(r["finish_at"]) for r in rows) if rows else now
-    start_at = max(now, last_finish)
-    finish_at = start_at + float(duration)
-
-    if not try_spend_resources(int(planet["id"]), int(cost_m), int(cost_c)):
-        return False, "not_enough_resources", (int(cost_m), int(cost_c))
-
-    add_research_job(uid, tech_key, float(start_at), float(finish_at))
-    return True, "ok", {
-        "seconds": int(duration),
-        "level": int(target),
-        "queued": len(rows) > 0,
-    }
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
 
 
 # ======================================================================
@@ -458,7 +517,8 @@ def get_research_status(
     techs: List[Dict[str, Any]] = []
     for tech, cfg in RESEARCH_TECHS.items():
         curr = int(levels.get(tech, 0) or 0)
-        targ = curr + 1
+        q_count = int(queue_keys.get(tech, 0) or 0)
+        targ = curr + q_count + 1
 
         cost_m, cost_c = get_research_cost(tech, targ)
         t_sec = get_research_time(tech, targ, user_id=int(user_id), buildings=buildings)
@@ -466,8 +526,7 @@ def get_research_status(
         req = cfg.get("requirements") or {}
         req_met = _check_requirements(req, buildings, levels)
 
-        q_count = int(queue_keys.get(tech, 0) or 0)
-        is_active = bool(active and str(active.get("tech_key")) == tech and q_count > 0)
+        is_active = bool(active and str(active.get("tech_key")) == tech)
         in_queue = q_count > 0
 
         techs.append({
@@ -477,6 +536,7 @@ def get_research_status(
             "description": cfg.get("description", ""),
             "description_key": cfg.get("description_key"),
             "level": curr,
+            "target_level": targ,
             "cost_metal": int(cost_m),
             "cost_crystal": int(cost_c),
             "time_seconds": int(t_sec),
@@ -487,9 +547,10 @@ def get_research_status(
             "in_queue": in_queue,
         })
 
+    research_queue_limit = _resolve_research_queue_limit()
     summary = {
         "count": len(queue_list),
-        "limit": RESEARCH_QUEUE_LIMIT,
+        "limit": research_queue_limit,
         "has_queue": bool(queue_list),
         "first_finish_in": int(queue_list[0]["remaining"]) if queue_list else 0,
     }

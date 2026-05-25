@@ -27,138 +27,121 @@
 
   <div class="gc-bg" aria-hidden="true"></div>
 
-  <!-- ====================== HEADER ====================== -->
-  <header class="gc-header" role="banner">
-    <div class="gc-header-inner gc-header-grid">
+  <!-- ====================== HEADER (Command Console v1.7) ====================== -->
+  <header class="gc-header gc-header-cmd" role="banner">
+    <div class="gc-header-inner">
 
-      <!-- SLOT A: Brand -->
-      <div class="gc-hslot gc-hslot-brand">
-        <a href="{{ url_for('landing') }}" class="gc-logo" aria-label="Genesis Colonies Startseite">
-          <span class="gc-logo-icon" aria-hidden="true">🛰️</span>
-          <span class="gc-title">Genesis Colonies</span>
-        </a>
-      </div>
+      <!-- Zeile 1: Brand · Meta · Commander -->
+      <div class="gc-header-row gc-header-row-top">
 
-      <!-- SLOT B: Resources (nur Ingame) -->
-      <div class="gc-hslot gc-hslot-res">
-        {% if not SIMPLE_LAYOUT %}
-          <div class="gc-resource-sticky">
-          <div class="resource-bar" id="resource-bar" role="status" aria-live="polite" aria-label="{{ T('resources', 'Ressourcen') }}">
-
-            <!-- Ferronit -->
-            <span class="res-block res-block-metal" title="{{ T('resource_metal') }}">
-              <img src="{{ url_for('static', filename='icons/ferronit.png') }}"
-                   class="res-icon"
-                   alt="{{ T('resource_metal') }}">
-              <span class="res-value metal">{{ (player.metal if player is defined else 0)|fmt_int }}</span>
-              <span class="res-sep" aria-hidden="true">/</span>
-              <span class="res-cap metal">{{ (storage_caps.metal if storage_caps is defined else 0)|fmt_int }}</span>
-            </span>
-
-            <!-- Crytite -->
-            <span class="res-block res-block-crystal" title="{{ T('resource_crystal') }}">
-              <img src="{{ url_for('static', filename='icons/crytite.png') }}"
-                   class="res-icon"
-                   alt="{{ T('resource_crystal') }}">
-              <span class="res-value crystal">{{ (player.crystal if player is defined else 0)|fmt_int }}</span>
-              <span class="res-sep" aria-hidden="true">/</span>
-              <span class="res-cap crystal">{{ (storage_caps.crystal if storage_caps is defined else 0)|fmt_int }}</span>
-            </span>
-
-            <!-- Aetherion / Energie -->
-            {% set eu = (energy_used if energy_used is defined else 0) | int %}
-            {% set et = (energy_total if energy_total is defined else 0) | int %}
-            <span id="energy-container"
-                  class="res-block res-block-energy {% if et > 0 and eu > et %}energy-warning{% endif %}"
-                  aria-label="{{ T('energy', 'Energie') }}"
-                  title="{{ T('energy', 'Energie') }}">
-              <img src="{{ url_for('static', filename='icons/energy.png') }}"
-                   class="res-icon"
-                   alt="{{ T('energy', 'Energie') }}">
-              <span id="res-energy">{{ eu|fmt_int }}/{{ et|fmt_int }}</span>
-            </span>
-
-          </div>
-          </div>
-        {% endif %}
-      </div>
-
-      <!-- SLOT C: HUD (Score/Online/User/Buttons) -->
-      <div class="gc-hslot gc-hslot-hud" aria-label="{{ T('account', 'Account') }}">
+        <div class="gc-hslot gc-hslot-brand">
+          <a href="{{ url_for('landing') }}" class="gc-logo" aria-label="Genesis Colonies Startseite">
+            <span class="gc-logo-icon" aria-hidden="true">🛰️</span>
+            <span class="gc-title">Genesis Colonies</span>
+          </a>
+        </div>
 
         {% if not SIMPLE_LAYOUT %}
-          <!-- HUD Cluster: Score + Online (immer einzeilig) -->
-          <div class="gc-hud-cluster">
+          <div class="gc-header-meta" aria-label="{{ T('header_meta', 'Kommando-Status') }}">
 
-            <!-- SCORE (klickbar -> Ranking) -->
-            <a class="gc-header-pill gc-score-pill"
+            <a class="gc-hud-panel gc-hud-panel-score gc-score-pill"
                href="{{ url_for('ranking_view') }}"
                aria-label="{{ T('nav_ranking','Ranking') }}"
                title="{{ T('nav_ranking','Ranking') }}">
-              <span aria-hidden="true">🏆</span>
-              <span class="gc-header-pill-label">
-                {{ T("overview_label_score", "Score") }}:
-              </span>
-
-              <span class="gc-header-pill-value gc-mono" id="hud-score-total">
-                {{ (score or 0)|fmt_int }}
-              </span>
-
-              <span class="res-sep" aria-hidden="true">·</span>
-
+              <span class="gc-hud-panel-tag">{{ T("overview_label_score", "Score") }}</span>
+              <span class="gc-hud-panel-value gc-mono" id="hud-score-total">{{ (score or 0)|fmt_int }}</span>
+              <span class="gc-hud-panel-sep" aria-hidden="true">|</span>
               {% if rank_text is defined and rank_text %}
-                <span class="gc-header-pill-value gc-mono" id="hud-score-rank">{{ rank_text }}</span>
+                <span class="gc-hud-panel-value gc-mono" id="hud-score-rank">{{ rank_text }}</span>
               {% else %}
-                <span class="gc-header-pill-value gc-mono" id="hud-score-rank">#–</span>
+                <span class="gc-hud-panel-value gc-mono" id="hud-score-rank">#–</span>
               {% endif %}
             </a>
 
             {% if _player_stats and _player_stats.online_now is defined %}
-              <span class="gc-header-pill gc-online-pill" role="status" aria-live="polite">
-                <span class="gc-header-pill-dot" aria-hidden="true"></span>
-                <span class="gc-header-pill-label">
-                  {{ T("header_online", "Online") }}:
+              <div class="gc-hud-panel gc-hud-panel-online" role="status" aria-live="polite">
+                <span class="gc-hud-panel-tag">{{ T("header_online", "Online") }}</span>
+                <span class="gc-hud-panel-dot" aria-hidden="true"></span>
+                <span class="gc-hud-panel-value gc-mono">
+                  {{ (_player_stats.online_now or 0)|fmt_int }}/{{ (_player_stats.total_players or 0)|fmt_int }}
                 </span>
-                <span class="gc-header-pill-value gc-mono">
-                  {{ (_player_stats.online_now or 0)|fmt_int }}
-                  <span aria-hidden="true">/</span>
-                  {{ (_player_stats.total_players or 0)|fmt_int }}
-                </span>
-              </span>
+              </div>
             {% endif %}
 
           </div>
         {% endif %}
 
-        <!-- User block + buttons -->
-        <div class="gc-hud-user">
-
-          {% if request.endpoint != 'landing' %}
-            {% if AUTH_USER and AUTH_USER.id %}
-              <div class="gc-user-info" aria-label="{{ T('logged_in_as', 'Eingeloggt als') }}">
-                <span class="gc-user-name">{{ T("commander") }} {{ AUTH_USER.username }}</span>
-                {% if AUTH_ADMIN %}
-                  <span class="gc-admin-badge" aria-label="Administrator">ADMIN</span>
-                {% endif %}
-              </div>
-
-              <a href="{{ url_for('logout') }}"
-                 class="gc-btn gc-btn-outline logout-btn"
-                 aria-label="{{ T('nav_logout', 'Abmelden') }}">
-                {{ T('nav_logout', 'Abmelden') }}
-              </a>
-            {% else %}
-              <a href="{{ url_for('login') }}"
-                 class="gc-btn gc-btn-primary logout-btn"
-                 aria-label="{{ T('login_btn', 'Einloggen') }}">
-                {{ T('login_btn', 'Einloggen') }}
-              </a>
-            {% endif %}
+        {% if not SIMPLE_LAYOUT %}
+        <div class="gc-hud-user" aria-label="{{ T('account', 'Account') }}">
+          {% if AUTH_USER and AUTH_USER.id %}
+            <div class="gc-hud-panel gc-hud-panel-user" aria-label="{{ T('logged_in_as', 'Eingeloggt als') }}">
+              <span class="gc-hud-panel-tag">{{ T("commander") }}</span>
+              <span class="gc-user-name">{{ AUTH_USER.username }}</span>
+              {% if AUTH_ADMIN %}
+                <span class="gc-admin-badge" aria-label="Administrator">ADMIN</span>
+              {% endif %}
+            </div>
+            <a href="{{ url_for('logout') }}"
+               class="gc-btn gc-btn-outline gc-btn-sm logout-btn"
+               aria-label="{{ T('nav_logout', 'Abmelden') }}">
+              {{ T('nav_logout', 'Abmelden') }}
+            </a>
+          {% else %}
+            <a href="{{ url_for('login') }}"
+               class="gc-btn gc-btn-primary gc-btn-sm logout-btn"
+               aria-label="{{ T('login_btn', 'Einloggen') }}">
+              {{ T('login_btn', 'Einloggen') }}
+            </a>
           {% endif %}
-
         </div>
+        {% endif %}
 
       </div>
+
+      {% if not SIMPLE_LAYOUT %}
+      <!-- Zeile 2: Ressourcen-HUD -->
+      <div class="gc-header-row gc-header-row-resources">
+        <div class="gc-resource-sticky">
+          <div class="resource-bar resource-bar-cmd" id="resource-bar" data-live-status role="status" aria-live="polite" aria-label="{{ T('resources', 'Ressourcen') }}">
+
+            <div class="hud-res-panel hud-res-metal" title="{{ T('resource_metal') }}">
+              <span class="hud-res-label">{{ T('resource_metal') }}</span>
+              <div class="hud-res-body res-block res-block-metal">
+                <img src="{{ url_for('static', filename='icons/ferronit.png') }}" class="res-icon" alt="{{ T('resource_metal') }}">
+                <span class="res-value metal">{{ (player.metal if player is defined else 0)|fmt_int }}</span>
+                <span class="res-sep" aria-hidden="true">/</span>
+                <span class="res-cap metal">{{ (storage_caps.metal if storage_caps is defined else 0)|fmt_int }}</span>
+              </div>
+            </div>
+
+            {% set eu = (energy_used if energy_used is defined else 0) | int %}
+            {% set et = (energy_total if energy_total is defined else 0) | int %}
+            <div id="energy-container"
+                 class="hud-res-panel hud-res-energy {% if et > 0 and eu > et %}energy-warning{% endif %}"
+                 aria-label="{{ T('energy', 'Energie') }}"
+                 title="{{ T('energy', 'Energie') }}">
+              <span class="hud-res-label">{{ T('energy', 'Energie') }}</span>
+              <div class="hud-res-body res-block res-block-energy">
+                <img src="{{ url_for('static', filename='icons/energy.png') }}" class="res-icon" alt="{{ T('energy', 'Energie') }}">
+                <span id="res-energy">{{ eu|fmt_int }}/{{ et|fmt_int }}</span>
+              </div>
+            </div>
+
+            <div class="hud-res-panel hud-res-crystal" title="{{ T('resource_crystal') }}">
+              <span class="hud-res-label">{{ T('resource_crystal') }}</span>
+              <div class="hud-res-body res-block res-block-crystal">
+                <img src="{{ url_for('static', filename='icons/crytite.png') }}" class="res-icon" alt="{{ T('resource_crystal') }}">
+                <span class="res-value crystal">{{ (player.crystal if player is defined else 0)|fmt_int }}</span>
+                <span class="res-sep" aria-hidden="true">/</span>
+                <span class="res-cap crystal">{{ (storage_caps.crystal if storage_caps is defined else 0)|fmt_int }}</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
     </div>
   </header>
 

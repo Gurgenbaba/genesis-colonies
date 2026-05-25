@@ -134,6 +134,540 @@
     return TIME.serverNow + dt;
   }
 
+  let _statusPollErrorLogged = false;
+
+  function hasLiveStatusRoot() {
+    return !!document.querySelector(
+      "[data-live-status], #live-status-root, #game-status-root, .js-status-poller, #resource-bar"
+    );
+  }
+
+  function shouldRunStatusPolling() {
+    if (document.body.classList.contains("gc-body-simple")) return false;
+    return hasLiveStatusRoot();
+  }
+
+  function isAuthStatusFailure(err, data) {
+    if (data?.error === "not_logged_in" || data?.ok === false) return true;
+    const status = Number(err?.status || 0);
+    if (status === 401 || status === 403 || status === 404) return true;
+    const msg = String(err?.message || "");
+    return /HTTP 401|HTTP 403|HTTP 404|not_logged_in|non_json_response|invalid_json_response/i.test(msg);
+  }
+
+  function logStatusPollErrorOnce(reason, err) {
+    if (_statusPollErrorLogged) return;
+    _statusPollErrorLogged = true;
+    console.warn("[GC] Status polling unavailable:", reason, err);
+  }
+
+  function markStatusWidgetOffline() {
+    const root = document.querySelector(
+      "[data-live-status], #live-status-root, #game-status-root, .js-status-poller, #resource-bar"
+    );
+    if (!root) return;
+    root.setAttribute("data-connection", "offline");
+    root.classList.add("is-status-offline");
+  }
+
+  function clearStatusWidgetOffline() {
+    const root = document.querySelector(
+      "[data-live-status], #live-status-root, #game-status-root, .js-status-poller, #resource-bar"
+    );
+    if (!root) return;
+    root.removeAttribute("data-connection");
+    root.classList.remove("is-status-offline");
+  }
+
+  // =========================
+  // GC – zentraler Spielzustand + Page Lifecycle (SPA/PJAX)
+  // =========================
+  const GC = {
+    finishLocks: { buildings: false, research: false },
+    refreshInFlight: null,
+    lastState: null,
+    refreshGameState: null,
+    currentPage: null,
+    pjaxInFlight: null,
+    _shellReady: false,
+    _visibilityBound: false,
+    _gameActionsBound: false,
+    _tabsBound: false,
+    _pjaxBound: false,
+    pageLifecycle: {
+      initialized: false,
+      rafIds: [],
+      intervals: [],
+      timeouts: [],
+      abortControllers: [],
+      cleanupFns: [],
+    },
+    polling: {
+      running: false,
+      timeoutId: null,
+      inFlight: false,
+      abort: null,
+      lastInterval: 0,
+      backoff: 0,
+      intervalActive: 1000,
+      intervalIdle: 4000,
+      intervalHidden: 12000,
+    },
+    modules: {},
+  };
+
+  GC.registerCleanup = function registerCleanup(fn) {
+    if (typeof fn === "function") GC.pageLifecycle.cleanupFns.push(fn);
+  };
+
+  GC.cleanupPage = function cleanupPage() {
+    console.debug("[GC] cleanupPage");
+    const lc = GC.pageLifecycle;
+    lc.rafIds.forEach((id) => { try { cancelAnimationFrame(id); } catch (_) {} });
+    lc.intervals.forEach((id) => clearInterval(id));
+    lc.timeouts.forEach((id) => clearTimeout(id));
+    lc.abortControllers.forEach((c) => { try { c.abort(); } catch (_) {} });
+    lc.cleanupFns.forEach((fn) => {
+      try { fn(); } catch (e) { console.error("[GC] cleanup fn error", e); }
+    });
+    lc.rafIds = [];
+    lc.intervals = [];
+    lc.timeouts = [];
+    lc.abortControllers = [];
+    lc.cleanupFns = [];
+    GC.stopProgressTicker();
+    GC.stopPolling();
+    _statusPollErrorLogged = false;
+    _lastQueueSignature = "";
+    _lastResearchQueueSignature = "";
+    _numAnim.forEach((st) => { if (st?.raf) cancelAnimationFrame(st.raf); });
+    _numAnim.clear();
+    lc.initialized = false;
+  };
+
+  GC.requestFrame = function requestFrame(fn) {
+    const id = requestAnimationFrame((ts) => {
+      const idx = GC.pageLifecycle.rafIds.indexOf(id);
+      if (idx >= 0) GC.pageLifecycle.rafIds.splice(idx, 1);
+      fn(ts);
+    });
+    GC.pageLifecycle.rafIds.push(id);
+    return id;
+  };
+
+  GC.setSafeTimeout = function setSafeTimeout(fn, ms) {
+    const id = setTimeout(() => {
+      const idx = GC.pageLifecycle.timeouts.indexOf(id);
+      if (idx >= 0) GC.pageLifecycle.timeouts.splice(idx, 1);
+      fn();
+    }, ms);
+    GC.pageLifecycle.timeouts.push(id);
+    return id;
+  };
+
+  GC.setSafeInterval = function setSafeInterval(fn, ms) {
+    const id = setInterval(fn, ms);
+    GC.pageLifecycle.intervals.push(id);
+    return id;
+  };
+
+  GC.fetchGameAction = async function fetchGameAction(url, options = {}) {
+    const ctrl = new AbortController();
+    GC.pageLifecycle.abortControllers.push(ctrl);
+    const fetchOpts = { ...options };
+    delete fetchOpts.signal;
+    try {
+      const res = await fetch(url, { ...fetchOpts, signal: ctrl.signal });
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (_) {}
+      if (res.status === 401 || data.error === "not_logged_in") {
+        const err = new Error("not_logged_in");
+        err.status = 401;
+        throw err;
+      }
+      return data;
+    } finally {
+      const idx = GC.pageLifecycle.abortControllers.indexOf(ctrl);
+      if (idx >= 0) GC.pageLifecycle.abortControllers.splice(idx, 1);
+    }
+  };
+
+  function newRequestId() {
+    try {
+      if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    } catch (_) {}
+    return `r${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  GC.actionLocks = { build: false, research: false };
+
+  GC.fetchJSON = async function fetchJSON(url, options = {}) {
+    const ctrl = new AbortController();
+    GC.pageLifecycle.abortControllers.push(ctrl);
+    const extSignal = options.signal;
+    if (extSignal) {
+      if (extSignal.aborted) ctrl.abort();
+      else extSignal.addEventListener("abort", () => ctrl.abort(), { once: true });
+    }
+    const fetchOpts = { ...options };
+    delete fetchOpts.signal;
+    try {
+      const res = await fetch(url, { ...fetchOpts, signal: ctrl.signal });
+      const status = res.status;
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (!res.ok) {
+        const err = new Error(`HTTP ${status}`);
+        err.status = status;
+        throw err;
+      }
+      if (!ct.includes("application/json")) {
+        const err = new Error("non_json_response");
+        err.status = status;
+        err.nonJson = true;
+        throw err;
+      }
+      try {
+        return await res.json();
+      } catch (parseErr) {
+        const err = new Error("invalid_json_response");
+        err.status = status;
+        err.parseError = parseErr;
+        throw err;
+      }
+    } finally {
+      const idx = GC.pageLifecycle.abortControllers.indexOf(ctrl);
+      if (idx >= 0) GC.pageLifecycle.abortControllers.splice(idx, 1);
+    }
+  };
+
+  GC.detectPage = function detectPage() {
+    const path = (window.location.pathname || "").replace(/\/$/, "") || "/";
+    if (path.endsWith("/buildings")) return "buildings";
+    if (path.endsWith("/research")) return "research";
+    if (path.endsWith("/overview") || path === "/") return "overview";
+    if (path.endsWith("/ranking")) return "ranking";
+    return "other";
+  };
+
+  let _progressTickerActive = false;
+
+  GC.stopProgressTicker = function stopProgressTicker() {
+    _progressTickerActive = false;
+  };
+
+  GC.startProgressTicker = function startProgressTicker() {
+    if (_progressTickerActive) return;
+    _progressTickerActive = true;
+    const tick = () => {
+      if (!_progressTickerActive) return;
+      updateAllProgressBars();
+      if (_hasActiveProgressJobs()) {
+        GC.requestFrame(tick);
+      } else {
+        _progressTickerActive = false;
+      }
+    };
+    GC.requestFrame(tick);
+  };
+
+  GC.stopPolling = function stopPolling() {
+    console.debug("[GC] polling stopped");
+    const p = GC.polling;
+    p.running = false;
+    if (p.timeoutId) {
+      clearTimeout(p.timeoutId);
+      p.timeoutId = null;
+    }
+    p.lastInterval = 0;
+    try { if (p.abort) p.abort.abort(); } catch (_) {}
+    p.inFlight = false;
+    p.abort = null;
+  };
+
+  GC.stopStatusPoller = GC.stopPolling;
+  GC.shouldRunStatusPolling = shouldRunStatusPolling;
+
+  GC.startPolling = function startPolling(anyActive, isError = false) {
+    if (!shouldRunStatusPolling()) return;
+    GC.stopPolling();
+    const p = GC.polling;
+    if (document.hidden) {
+      console.debug("[GC] polling paused (hidden tab)");
+      return;
+    }
+    let next = p.intervalIdle;
+    if (anyActive) next = p.intervalActive;
+    if (p.backoff && isError) next = Math.max(next, p.backoff);
+
+    p.running = true;
+    p.lastInterval = next;
+    console.debug("[GC] polling started", next, "ms");
+
+    const tick = async () => {
+      if (!p.running) return;
+      try {
+        await GC.refreshGameState("poll");
+      } catch (_) {}
+      if (!p.running) return;
+      GC.startProgressTicker();
+      const active = lastHadActiveJob || lastHadActiveResearch;
+      let interval = p.intervalIdle;
+      if (active) interval = p.intervalActive;
+      if (document.hidden) interval = p.intervalHidden;
+      p.lastInterval = interval;
+      p.timeoutId = GC.setSafeTimeout(tick, interval);
+    };
+    p.timeoutId = GC.setSafeTimeout(tick, next);
+  };
+
+  GC.initPage = function initPage() {
+    if (GC.pageLifecycle.initialized) {
+      console.debug("[GC] initPage skipped (already initialized)");
+      return;
+    }
+    GC.currentPage = GC.detectPage();
+    console.debug("[GC] initPage", GC.currentPage);
+    GC.pageLifecycle.initialized = true;
+
+    const mod = GC.modules[GC.currentPage];
+    if (typeof mod === "function") mod();
+
+    initFlashAutohide();
+
+    if (!shouldRunStatusPolling()) {
+      console.debug("[GC] initPage: status polling skipped (no live-status root)");
+      return;
+    }
+
+    GC.refreshGameState("page_init");
+    GC.startProgressTicker();
+  };
+
+  function formatDuration(seconds) {
+    const s = Math.max(0, Math.floor(Number(seconds) || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  }
+
+  function showNotify(message, category = "info") {
+    const text = String(message || "").trim();
+    if (!text) return;
+
+    let box = document.getElementById("messages");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "messages";
+      box.className = "gc-flash-container";
+      box.setAttribute("role", "status");
+      box.setAttribute("aria-live", "polite");
+      const main = document.getElementById("main-content") || document.body;
+      main.prepend(box);
+    }
+
+    const item = document.createElement("div");
+    item.className = `gc-flash gc-flash-${category}`;
+    item.innerHTML =
+      `<span class="gc-flash-dot" aria-hidden="true"></span>` +
+      `<span class="gc-flash-text">${text.replace(/</g, "&lt;")}</span>`;
+    box.appendChild(item);
+
+    GC.setSafeTimeout(() => {
+      item.style.transition = "opacity 0.35s ease";
+      item.style.opacity = "0";
+      GC.setSafeTimeout(() => item.remove(), 400);
+    }, 4200);
+  }
+
+  function mapActionError(reason, payload) {
+    if (reason === "not_enough_resources" && payload) {
+      const [m, c] = Array.isArray(payload) ? payload : [payload?.metal, payload?.crystal];
+      return tf("msg_upgrade_fail_resources", { metal: m, crystal: c }, "Nicht genug Ressourcen.");
+    }
+    const map = {
+      queue_full: t("msg_build_queue_full", "Bau-Warteschlange voll."),
+      research_queue_full: t("research_msg_queue_full", "Forschungs-Warteschlange voll."),
+      requirements: t("msg_build_requirements", "Voraussetzungen nicht erfüllt."),
+      no_research_lab: t("research_msg_no_lab", "Forschungslabor erforderlich."),
+      unknown_tech: t("research_msg_unknown", "Unbekannte Forschung."),
+    };
+    return map[reason] || t("msg_generic_error", "Aktion fehlgeschlagen.");
+  }
+
+  function renderBuildingActionCell(b, bqSummary, bqQueueFull) {
+    const key = b.key;
+    const btnUpgrade = t("buildings_btn_upgrade", "Ausbau starten");
+    const btnMax = t("buildings_btn_max_level", "Max. Level");
+    const fullLabel = t("research_status_queue_full", "Warteschlange voll");
+    const btnQueue = t("research_btn_queue", "Anreihen");
+    const queueActive = (bqSummary?.count || 0) > 0;
+    const isMax = (b.level >= b.max_level) || b.at_queue_max;
+
+    if (isMax) {
+      return `<button class="gc-btn gc-btn-ghost gc-btn-sm btn-upgrade" type="button" disabled title="${btnMax}">${btnMax}</button>`;
+    }
+    if (!b.requirements_met) {
+      return `<button class="gc-btn gc-btn-danger gc-btn-sm btn-upgrade" type="button" disabled>${btnUpgrade}</button>`;
+    }
+    if (!b.can_afford) {
+      return `<button class="gc-btn gc-btn-danger gc-btn-sm btn-upgrade" type="button" disabled>${btnUpgrade}</button>`;
+    }
+    if (bqQueueFull) {
+      return `<span class="status-pill status-pill-locked status-pill-queue-full">${fullLabel}</span>`;
+    }
+    const label = queueActive ? btnQueue : btnUpgrade;
+    const tab = b.tab || _getActiveBuildingTab();
+    const href = `/upgrade/${encodeURIComponent(key)}?src=buildings&tab=${encodeURIComponent(tab)}`;
+    return `<a id="btn-${key}" data-building="${key}" href="${href}" class="gc-btn gc-btn-primary gc-btn-sm btn-upgrade">${label}</a>`;
+  }
+
+  function patchBuildingPanel(rowsByTab, buildQueueRaw) {
+    if (!rowsByTab || !document.querySelector(".buildings-table")) return;
+
+    const summary = buildQueueRaw?.summary || null;
+    const limit = summary?.limit ?? 3;
+    const count = summary?.count ?? 0;
+    const bqQueueFull = count >= limit;
+    const metalLabel = t("resource_metal", "Ferronit");
+    const crystalLabel = t("resource_crystal", "Crytite");
+    const levelLabel = t("buildings_col_level", "Level");
+
+    Object.values(rowsByTab).forEach((rows) => {
+      (rows || []).forEach((b) => {
+        const key = b.key;
+        const levelEl = document.getElementById(`level-${key}`);
+        if (levelEl) _setIfChanged(levelEl, fmtNumber(b.level));
+
+        const row = document.querySelector(`tr[data-building-row="${key}"]`);
+        if (!row) return;
+
+        const costCell = row.querySelector(".bcell-cost");
+        if (costCell) {
+          let note = `${levelLabel} ${fmtNumber(b.target_level)}`;
+          if (b.queue_count) {
+            note += ` · ${tf("research_tech_queue_count", { count: b.queue_count }, `In Warteschlange ×${b.queue_count}`)}`;
+          }
+          const html =
+            `<span class="cost-metal">${fmtNumber(b.cost_metal)} ${metalLabel}</span>` +
+            `<span class="cost-sep">/</span>` +
+            `<span class="cost-crystal">${fmtNumber(b.cost_crystal)} ${crystalLabel}</span>` +
+            `<div class="cost-note">${note}</div>`;
+          if (costCell.innerHTML !== html) costCell.innerHTML = html;
+        }
+
+        const durCell = row.querySelector(".bcell-duration");
+        if (durCell) _setIfChanged(durCell, formatDuration(b.time_seconds));
+
+        const actionCell = row.querySelector(".bcell-action");
+        if (actionCell) {
+          const html = renderBuildingActionCell(b, summary, bqQueueFull);
+          if (actionCell.innerHTML.trim() !== html.trim()) actionCell.innerHTML = html;
+        }
+      });
+    });
+  }
+
+  function patchResearchPanel(techs, researchRaw) {
+    const table = document.querySelector(".research-tech-table");
+    if (!table || !Array.isArray(techs)) return;
+
+    const summary = researchRaw?.summary || {};
+    const activeKey = researchRaw?.active?.tech_key || researchRaw?.active?.key || null;
+    const metalLabel = t("resource_metal", "Ferronit");
+    const crystalLabel = t("resource_crystal", "Crytite");
+
+    techs.forEach((tech) => {
+      const row = document.querySelector(`tr[data-tech-key="${tech.key}"]`);
+      if (!row) return;
+
+      const qCount = tech.queue_count || 0;
+      const isActive = !!tech.is_active || (activeKey && activeKey === tech.key);
+      const locked = !tech.requirements_met;
+
+      row.classList.toggle("tech-row-locked", locked);
+      row.classList.toggle("tech-row-queued", qCount > 0);
+
+      const levelEl = row.querySelector(".tech-level-current");
+      if (levelEl) {
+        levelEl.textContent = tf("research_tech_level_current", { level: tech.level }, `Aktuell L${tech.level}`);
+      }
+
+      const stack = row.querySelector(".tech-level-stack");
+      if (stack) {
+        let badges = stack.querySelector(".tech-queue-badges");
+        if (qCount > 0) {
+          const badgesHtml =
+            `<div class="tech-queue-badges">` +
+            (isActive ? `<span class="tech-queue-badge tech-queue-badge-active">${t("research_btn_active", "Aktiv")}</span>` : "") +
+            `<span class="tech-queue-badge">${tf("research_tech_queue_count", { count: qCount }, `In Warteschlange ×${qCount}`)}</span>` +
+            `<span class="tech-target-level">${tf("research_tech_target_level", { level: tech.level + qCount }, `Ziel L${tech.level + qCount}`)}</span>` +
+            `</div>`;
+          if (badges) badges.outerHTML = badgesHtml;
+          else stack.insertAdjacentHTML("beforeend", badgesHtml);
+        } else if (badges) {
+          badges.remove();
+        }
+      }
+
+      const costCell = row.querySelector(".tech-cost-cell");
+      if (costCell) {
+        costCell.innerHTML =
+          `<div class="tech-meta"><span>${fmtNumber(tech.cost_metal)} ${metalLabel}</span><br>` +
+          `<span>${fmtNumber(tech.cost_crystal)} ${crystalLabel}</span></div>`;
+      }
+
+      const timeCell = row.querySelector(".tech-time-cell");
+      if (timeCell) {
+        const inner = timeCell.querySelector(".tech-time") || timeCell;
+        _setIfChanged(inner, formatDuration(tech.time_seconds));
+      }
+    });
+
+    const labEl = document.querySelector(".lab-level-highlight");
+    if (labEl && typeof researchRaw?.lab_level !== "undefined") {
+      _setIfChanged(labEl, fmtNumber(researchRaw.lab_level));
+    }
+
+    updateResearchQueueActions(researchRaw);
+  }
+
+  function requestFinishRefresh(type) {
+    if (GC.finishLocks[type]) return;
+    GC.finishLocks[type] = true;
+    Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${type}_finished`) : null).finally(() => {
+      GC.finishLocks[type] = false;
+    });
+  }
+
+  function patchOverviewResearch(research) {
+    const box = document.getElementById("overview-research-active");
+    const emptyHint = document.querySelector(".research-empty-hint");
+    const active = research?.active || null;
+
+    if (!box && !emptyHint) return;
+
+    if (!active) {
+      if (box) box.style.display = "none";
+      if (emptyHint) emptyHint.style.display = "";
+      return;
+    }
+
+    if (box) box.style.display = "";
+    if (emptyHint) emptyHint.style.display = "none";
+
+    const nameEl = document.getElementById("overview-research-active-name");
+    if (nameEl) {
+      const label = active.label || active.tech_key || active.key || "Forschung";
+      const cur = active.current_level ?? active.level ?? 0;
+      const targ = active.target_level ?? (cur + 1);
+      nameEl.textContent = `${label} (L${cur} → L${targ})`;
+    }
+  }
+
   // =========================
   // Number animation (anti-spam)
   // =========================
@@ -186,7 +720,7 @@
       el.textContent = fmt(v);
 
       if (p < 1) {
-        state.raf = requestAnimationFrame(tick);
+        state.raf = GC.requestFrame(tick);
         _numAnim.set(el, state);
       } else {
         el.textContent = fmt(state.target);
@@ -194,7 +728,7 @@
       }
     }
 
-    state.raf = requestAnimationFrame(tick);
+    state.raf = GC.requestFrame(tick);
     _numAnim.set(el, state);
   }
 
@@ -252,10 +786,10 @@
 
     if (which === "overview") {
       if (_deltaTimerOv) clearTimeout(_deltaTimerOv);
-      _deltaTimerOv = setTimeout(() => deltaEl.classList.remove("show"), 1200);
+      _deltaTimerOv = GC.setSafeTimeout(() => deltaEl.classList.remove("show"), 1200);
     } else {
       if (_deltaTimerHud) clearTimeout(_deltaTimerHud);
-      _deltaTimerHud = setTimeout(() => deltaEl.classList.remove("show"), 1200);
+      _deltaTimerHud = GC.setSafeTimeout(() => deltaEl.classList.remove("show"), 1200);
     }
   }
 
@@ -319,8 +853,6 @@
     },
   };
 
-  let _progressRafId = 0;
-
   function _hasActiveProgressJobs() {
     return (
       BUILDQ.active.finishTime > 0 ||
@@ -331,25 +863,7 @@
     );
   }
 
-  function _ensureProgressLoop() {
-    if (_progressRafId) return;
-    const loop = () => {
-      updateAllProgressBars();
-      if (_hasActiveProgressJobs()) {
-        _progressRafId = requestAnimationFrame(loop);
-      } else {
-        _progressRafId = 0;
-      }
-    };
-    _progressRafId = requestAnimationFrame(loop);
-  }
-
-  function _stopProgressLoop() {
-    if (_progressRafId) {
-      cancelAnimationFrame(_progressRafId);
-      _progressRafId = 0;
-    }
-  }
+  // progress ticker: GC.startProgressTicker / GC.stopProgressTicker
 
   // =========================
   // Build-Queue panel render
@@ -370,7 +884,7 @@
     }
   }
 
-  function _updateBuildQueueSubtitle(count, firstEta) {
+  function _updateBuildQueueSubtitle(count, limit, firstEta) {
     const subEl = document.getElementById("build-queue-subtitle");
     if (!subEl) return;
 
@@ -381,8 +895,102 @@
 
     const jobsLabel = t("build_queue_jobs", "Aufträge");
     const nextLabel = t("build_queue_next", "Nächste Fertigstellung in");
-    const html = `${count} ${jobsLabel} · ${nextLabel}: <span id="build-queue-subtitle-eta">${firstEta}</span>`;
+    const lim = limit || 3;
+    const html = `${count}/${lim} ${jobsLabel} · ${nextLabel}: <span id="build-queue-subtitle-eta">${firstEta}</span>`;
     if (subEl.innerHTML !== html) subEl.innerHTML = html;
+  }
+
+  function _getActiveBuildingTab() {
+    const active = document.querySelector(".building-tabs .tab-btn.active");
+    return active?.dataset?.tab || "resources";
+  }
+
+  function updateResearchQueueActions(researchRaw) {
+    const table = document.querySelector(".research-tech-table");
+    if (!table) return;
+
+    const summary = researchRaw?.summary || null;
+    const count = summary?.count ?? (Array.isArray(researchRaw?.queue) ? researchRaw.queue.length : 0);
+    const limit = summary?.limit ?? 3;
+    const queueFull = count >= limit;
+    const fullLabel = t("research_status_queue_full", "Warteschlange voll");
+    const queueActive = count > 0;
+    const btnStart = t("research_btn_start", "Forschung starten");
+    const btnQueue = t("research_btn_queue", "Anreihen");
+
+    table.querySelectorAll(".tech-status-cell[data-tech-key]").forEach((cell) => {
+      const pillLocked = cell.querySelector(".status-pill-locked:not(.status-pill-queue-full)");
+      if (pillLocked) return;
+
+      const link = cell.querySelector("a.btn-research");
+      const pillFull = cell.querySelector(".status-pill-queue-full");
+
+      if (queueFull) {
+        if (!pillFull) {
+          cell.innerHTML = `<span class="status-pill status-pill-locked status-pill-queue-full">${fullLabel}</span>`;
+        }
+        return;
+      }
+
+      if (pillFull) {
+        const techKey = cell.dataset.techKey;
+        const href = `/research_start/${encodeURIComponent(techKey)}`;
+        const label = queueActive ? btnQueue : btnStart;
+        cell.innerHTML =
+          `<a href="${href}" class="gc-btn gc-btn-primary gc-btn-sm btn-research">${label}</a>`;
+        return;
+      }
+
+      if (link) {
+        const label = queueActive ? btnQueue : btnStart;
+        if (link.textContent !== label) link.textContent = label;
+      }
+    });
+  }
+
+  function updateBuildQueueActions(buildQueueRaw) {
+    if (!document.querySelector(".buildings-table")) return;
+
+    const summary = buildQueueRaw?.summary || null;
+    const count = summary?.count ?? (Array.isArray(buildQueueRaw?.queue) ? buildQueueRaw.queue.length : 0);
+    const limit = summary?.limit ?? 3;
+    const queueFull = count >= limit;
+    const fullLabel = t("research_status_queue_full", "Warteschlange voll");
+    const queueActive = count > 0;
+    const btnLabel = queueActive
+      ? t("research_btn_queue", "Anreihen")
+      : t("buildings_btn_upgrade", "Ausbau starten");
+    const tab = _getActiveBuildingTab();
+
+    document.querySelectorAll(".buildings-table .bcell-action[data-building]").forEach((cell) => {
+      if (cell.querySelector("button.btn-upgrade[disabled]")) return;
+
+      const bType = cell.dataset.building;
+      if (!bType) return;
+
+      const link = cell.querySelector("a.btn-upgrade");
+      const pill = cell.querySelector(".status-pill-queue-full");
+
+      if (queueFull) {
+        if (cell.querySelector("button.btn-upgrade[disabled]")) return;
+        if (!cell.querySelector(".status-pill-queue-full")) {
+          cell.innerHTML = `<span class="status-pill status-pill-locked status-pill-queue-full">${fullLabel}</span>`;
+        }
+        return;
+      }
+
+      if (pill) {
+        const href = `/upgrade/${encodeURIComponent(bType)}?src=buildings&tab=${encodeURIComponent(tab)}`;
+        cell.innerHTML =
+          `<a id="btn-${bType}" data-building="${bType}" href="${href}"` +
+          ` class="gc-btn gc-btn-primary gc-btn-sm btn-upgrade">${btnLabel}</a>`;
+        return;
+      }
+
+      if (link && link.textContent !== btnLabel) {
+        link.textContent = btnLabel;
+      }
+    });
   }
 
   function renderBuildQueue(buildQueueRaw) {
@@ -418,19 +1026,20 @@
 
     const sig = _queueSignature(queueList, summary);
     const count = summary?.count ?? queueList.length;
+    const limit = summary?.limit ?? 3;
     const firstEta =
       typeof summary?.first_finish_in !== "undefined"
         ? formatEta(summary.first_finish_in)
         : formatEta(first?.remaining ?? 0);
 
     if (sig === _lastQueueSignature) {
-      _updateBuildQueueSubtitle(count, firstEta);
+      _updateBuildQueueSubtitle(count, limit, firstEta);
       return;
     }
     _lastQueueSignature = sig;
 
     if (!queueList || queueList.length === 0) {
-      _updateBuildQueueSubtitle(0, firstEta);
+      _updateBuildQueueSubtitle(0, limit, firstEta);
       const none =
         t("build_queue_none", null) ||
         t("build_queue_empty", null) ||
@@ -440,7 +1049,7 @@
       return;
     }
 
-    _updateBuildQueueSubtitle(count, firstEta);
+    _updateBuildQueueSubtitle(count, limit, firstEta);
 
     let html = `<div class="build-queue-list">`;
 
@@ -486,7 +1095,7 @@
 
     html += `</div>`;
     root.innerHTML = html;
-    _ensureProgressLoop();
+    GC.startProgressTicker();
   }
 
   // =========================
@@ -567,7 +1176,7 @@
 
     if (sig === _lastResearchQueueSignature) {
       _updateResearchQueueSubtitle(count, limit, firstEta);
-      _ensureProgressLoop();
+      GC.startProgressTicker();
       return;
     }
     _lastResearchQueueSignature = sig;
@@ -579,7 +1188,7 @@
         t("research_active_none", null) ||
         "Keine Forschungsaufträge in der Warteschlange.";
       root.innerHTML = `<div class="research-queue-empty">${none}</div>`;
-      if (!_hasActiveProgressJobs()) _stopProgressLoop();
+      if (!_hasActiveProgressJobs()) GC.stopProgressTicker();
       return;
     }
 
@@ -629,7 +1238,7 @@
 
     html += `</div>`;
     root.innerHTML = html;
-    _ensureProgressLoop();
+    GC.startProgressTicker();
   }
 
   function _applyProgressFill(fillEl, pct) {
@@ -660,6 +1269,10 @@
         _applyProgressFill(fillEl, pct);
         const subEta = document.getElementById("build-queue-subtitle-eta");
         if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(remaining)));
+        if (remaining <= 0) {
+          _applyProgressFill(fillEl, 100);
+          requestFinishRefresh("buildings");
+        }
       }
     }
 
@@ -676,7 +1289,10 @@
         _applyProgressFill(fillEl, pct);
         const subEta = document.getElementById("research-queue-subtitle-eta");
         if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(remaining)));
-        if (remaining <= 0 && isResearchPage) triggerResearchReload();
+        if (remaining <= 0) {
+          _applyProgressFill(fillEl, 100);
+          requestFinishRefresh("research");
+        }
       }
     }
 
@@ -691,7 +1307,10 @@
         const barEl = document.getElementById("research-bar-fill");
         if (cdEl) _setIfChanged(cdEl, formatEta(Math.ceil(remaining)));
         _applyProgressFill(barEl, pct);
-        if (remaining <= 0 && isOverviewPage) triggerResearchReload();
+        if (remaining <= 0) {
+          _applyProgressFill(barEl, 100);
+          requestFinishRefresh("research");
+        }
       }
     }
   }
@@ -701,23 +1320,15 @@
   }
 
   // =========================
-  // Polling control
+  // Polling state (singleton via GC.polling)
   // =========================
-  const POLL = {
-    timer: 0,
-    intervalActive: 1000,
-    intervalIdle: 4000,
-    intervalHidden: 12000,
-    lastInterval: 0,
-    backoff: 0,
-    inFlight: false,
-    abort: null,
-  };
 
   let lastHadActiveJob = false;
   let lastHadActiveResearch = false;
-  let reloadTriggered = false;
-  let researchReloadTriggered = false;
+  let lastBuildQueueCount = null;
+  let lastBuildQueueFull = null;
+  let lastResearchQueueCount = null;
+  let lastResearchQueueFull = null;
 
   // Keep last values to avoid DOM churn
   const _last = {
@@ -730,45 +1341,9 @@
   };
 
   // =========================
-  // Research progressbar updater (drift-safe)
+  // Status polling / GC.refreshGameState
   // =========================
-  function triggerResearchReload() {
-    if (researchReloadTriggered) return;
-    researchReloadTriggered = true;
-    setTimeout(() => window.location.reload(), 400);
-  }
-
-  function updateResearchProgressBar() {
-    updateAllProgressBars();
-  }
-
-  // =========================
-  // Status polling
-  // =========================
-  async function fetchStatusAndUpdate() {
-    if (POLL.inFlight) return;
-
-    const path = window.location.pathname || "";
-    const isBuildingsPage = path.endsWith("/buildings");
-    const isResearchPage = path.endsWith("/research");
-    const isOverviewPage = path.endsWith("/overview") || path === "/" || path === "";
-
-    POLL.inFlight = true;
-
-    try {
-      if (POLL.abort) POLL.abort.abort();
-    } catch (_) {}
-
-    const ctrl = new AbortController();
-    POLL.abort = ctrl;
-
-    try {
-      const res = await fetch("/api/status", { cache: "no-store", signal: ctrl.signal });
-      if (!res.ok) throw new Error(`status ${res.status}`);
-
-      const data = await res.json();
-      POLL.backoff = 0;
-
+  function applyGameStateData(data, _reason) {
       if (data.server_time) setServerTime(data.server_time);
 
       const p = data.player || {};
@@ -919,6 +1494,9 @@
         }
 
         const queueActive = queueList.length > 0;
+        const bqLimit = buildQueueRaw?.summary?.limit ?? 3;
+        const bqCount = buildQueueRaw?.summary?.count ?? queueList.length;
+        const bqFull = bqCount >= bqLimit;
         let statusText = t("status_ready", "Bereit");
         let btnLabel = queueActive ? t("action_queue_upgrade", "Upgrade (anreihen)") : t("action_upgrade", "Upgrade");
 
@@ -929,21 +1507,14 @@
         if (cfg.statusId) setText(cfg.statusId, statusText);
 
         const btn = document.getElementById(cfg.btnId);
-        if (btn && btn.textContent !== btnLabel) btn.textContent = btnLabel;
+        if (btn && btn.tagName === "A" && !bqFull && btn.textContent !== btnLabel) btn.textContent = btnLabel;
       });
 
       renderBuildQueue(buildQueueRaw);
+      updateBuildQueueActions(buildQueueRaw);
       renderResearchQueue(research);
+      updateResearchQueueActions(research);
 
-      // Soft-Reload Buildings
-      const hasActiveBuild = !!activeJob;
-      if (!reloadTriggered && isBuildingsPage && lastHadActiveJob && !hasActiveBuild) {
-        reloadTriggered = true;
-        setTimeout(() => window.location.reload(), 250);
-      }
-      lastHadActiveJob = hasActiveBuild;
-
-      // --- Overview Forschung: nur Metadaten, Breite via rAF-Ticker ---
       if (activeResearch) {
         const totalSec = Math.max(
           1,
@@ -964,131 +1535,290 @@
 
         RESEARCHQ.active.finishTime = finishAt;
         RESEARCHQ.active.totalSeconds = totalSec;
-        _ensureProgressLoop();
       } else {
         RESEARCHQ.active.finishTime = 0;
         RESEARCHQ.active.totalSeconds = 0;
       }
 
-      // Soft-Reload Research/Overview
+      patchOverviewResearch(research);
+
+      if (data.buildings_panel) {
+        patchBuildingPanel(data.buildings_panel, buildQueueRaw);
+      }
+
+      if (research.techs) {
+        patchResearchPanel(research.techs, research);
+      }
+
+      const hasActiveBuild = !!activeJob;
+      const bqLimitFinal = buildQueueRaw?.summary?.limit ?? 3;
+      const bqCountFinal = buildQueueRaw?.summary?.count ?? queueList.length;
+      lastBuildQueueCount = bqCountFinal;
+      lastBuildQueueFull = bqCountFinal >= bqLimitFinal;
+      lastHadActiveJob = hasActiveBuild;
+
       const researchQueue = Array.isArray(research.queue) ? research.queue : (activeResearch ? [activeResearch] : []);
       const hasActiveResearchNow = researchQueue.length > 0;
-      if (!researchReloadTriggered && (isResearchPage || isOverviewPage) && lastHadActiveResearch && !hasActiveResearchNow) {
-        researchReloadTriggered = true;
-        setTimeout(() => window.location.reload(), 250);
-      }
+      const rqLimitFinal = research?.summary?.limit ?? 3;
+      const rqCountFinal = research?.summary?.count ?? researchQueue.length;
+      lastResearchQueueCount = rqCountFinal;
+      lastResearchQueueFull = rqCountFinal >= rqLimitFinal;
       lastHadActiveResearch = hasActiveResearchNow;
 
-      schedulePolling(hasActiveBuild || hasActiveResearchNow);
+      GC.lastState = data;
+      GC.startProgressTicker();
 
-    } catch (err) {
-      if (err?.name !== "AbortError") console.error("Status-Update fehlgeschlagen:", err);
-      POLL.backoff = Math.min(60000, (POLL.backoff || 2000) * 1.6);
-      schedulePolling(lastHadActiveJob || lastHadActiveResearch, true);
-    } finally {
-      POLL.inFlight = false;
-    }
+      return hasActiveBuild || hasActiveResearchNow;
   }
 
-  // =========================
-  // Poll loop (setTimeout) – no overlap, adaptive interval
-  // =========================
-  function schedulePolling(anyActive, isError = false) {
-    const hidden = document.hidden === true;
+  async function refreshGameState(reason) {
+    if (!shouldRunStatusPolling()) return null;
+    if (GC.refreshInFlight) return GC.refreshInFlight;
 
-    let next = POLL.intervalIdle;
-    if (anyActive) next = POLL.intervalActive;
-    if (hidden) next = POLL.intervalHidden;
-    if (isError && POLL.backoff) next = Math.max(next, POLL.backoff);
+    const p = GC.polling;
+    p.inFlight = true;
+    try {
+      if (p.abort) p.abort.abort();
+    } catch (_) {}
 
-    if (next === POLL.lastInterval && POLL.timer) return;
+    const ctrl = new AbortController();
+    p.abort = ctrl;
 
-    POLL.lastInterval = next;
-    if (POLL.timer) clearTimeout(POLL.timer);
+    GC.refreshInFlight = (async () => {
+      try {
+        const data = await GC.fetchJSON("/api/game-state", { cache: "no-store", signal: ctrl.signal });
+        if (isAuthStatusFailure(null, data)) {
+          GC.stopPolling();
+          return null;
+        }
 
-    const tick = () => {
-      fetchStatusAndUpdate();
-      _ensureProgressLoop();
-      POLL.timer = setTimeout(tick, POLL.lastInterval);
-    };
+        p.backoff = 0;
+        _statusPollErrorLogged = false;
+        clearStatusWidgetOffline();
+        if (data.server_time) setServerTime(data.server_time);
 
-    POLL.timer = setTimeout(tick, next);
+        const anyActive = applyGameStateData(data, reason);
+        if (reason !== "poll") {
+          GC.startPolling(anyActive);
+        }
+        return data;
+      } catch (err) {
+        if (err?.name === "AbortError") return null;
+
+        if (isAuthStatusFailure(err)) {
+          GC.stopPolling();
+          return null;
+        }
+
+        logStatusPollErrorOnce(reason, err);
+        markStatusWidgetOffline();
+        p.backoff = Math.min(60000, (p.backoff || 2000) * 1.6);
+        if (reason !== "poll" && shouldRunStatusPolling()) {
+          GC.startPolling(lastHadActiveJob || lastHadActiveResearch, true);
+        }
+        throw err;
+      } finally {
+        p.inFlight = false;
+        p.abort = null;
+        GC.refreshInFlight = null;
+      }
+    })();
+
+    return GC.refreshInFlight;
   }
 
+  GC.refreshGameState = refreshGameState;
+
   // =========================
-  // Tabs (Buildings) + keyboard nav
+  // Building tabs (delegated – survives PJAX)
   // =========================
-  function initTabs() {
-    const tablist = document.querySelector(".building-tabs");
+  function activateBuildingTab(btn, focus = true) {
+    const tablist = btn.closest(".building-tabs");
     if (!tablist) return;
 
+    const targetTab = btn.dataset.tab;
     const tabBtns = Array.from(tablist.querySelectorAll(".tab-btn"));
     const tabContents = Array.from(document.querySelectorAll(".tab-content[data-tab]"));
-    if (!tabBtns.length || !tabContents.length) return;
 
-    function activateTab(btn, focus = true) {
-      const targetTab = btn.dataset.tab;
-
-      tabBtns.forEach((b) => {
-        const isActive = b === btn;
-        b.classList.toggle("active", isActive);
-
-        if (b.getAttribute("role") === "tab") {
-          b.setAttribute("aria-selected", isActive ? "true" : "false");
-          b.setAttribute("tabindex", isActive ? "0" : "-1");
-        }
-      });
-
-      tabContents.forEach((c) => {
-        const isActive = c.dataset.tab === targetTab;
-        c.classList.toggle("active", isActive);
-        if (c.getAttribute("role") === "tabpanel") c.hidden = !isActive;
-      });
-
-      if (focus) btn.focus();
-    }
-
-    tabBtns.forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        if (btn.tagName === "A") e.preventDefault();
-        activateTab(btn, true);
-      });
+    tabBtns.forEach((b) => {
+      const isActive = b === btn;
+      b.classList.toggle("active", isActive);
+      if (b.getAttribute("role") === "tab") {
+        b.setAttribute("aria-selected", isActive ? "true" : "false");
+        b.setAttribute("tabindex", isActive ? "0" : "-1");
+      }
     });
 
-    if (tablist.getAttribute("role") === "tablist") {
-      tablist.addEventListener("keydown", (e) => {
-        const current = document.activeElement;
-        if (!current || !current.classList.contains("tab-btn")) return;
+    tabContents.forEach((c) => {
+      const isActive = c.dataset.tab === targetTab;
+      c.classList.toggle("active", isActive);
+      if (c.getAttribute("role") === "tabpanel") c.hidden = !isActive;
+    });
 
-        const idx = tabBtns.indexOf(current);
-        if (idx < 0) return;
+    if (focus) btn.focus();
+  }
 
-        let nextIdx = idx;
+  function bindBuildingTabsOnce() {
+    if (GC._tabsBound) return;
+    GC._tabsBound = true;
 
-        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-          nextIdx = (idx + 1) % tabBtns.length;
-          e.preventDefault();
-        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-          nextIdx = (idx - 1 + tabBtns.length) % tabBtns.length;
-          e.preventDefault();
-        } else if (e.key === "Home") {
-          nextIdx = 0;
-          e.preventDefault();
-        } else if (e.key === "End") {
-          nextIdx = tabBtns.length - 1;
-          e.preventDefault();
-        } else if (e.key === "Enter" || e.key === " ") {
-          activateTab(current, true);
-          e.preventDefault();
-          return;
-        } else return;
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest(".building-tabs .tab-btn");
+      if (!btn) return;
+      if (btn.tagName === "A") e.preventDefault();
+      activateBuildingTab(btn, true);
+    });
 
-        tabBtns[nextIdx].focus();
-      });
+    document.addEventListener("keydown", (e) => {
+      const tablist = e.target.closest(".building-tabs[role='tablist']");
+      if (!tablist) return;
+      const current = document.activeElement;
+      if (!current || !current.classList.contains("tab-btn")) return;
+
+      const tabBtns = Array.from(tablist.querySelectorAll(".tab-btn"));
+      const idx = tabBtns.indexOf(current);
+      if (idx < 0) return;
+
+      let nextIdx = idx;
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        nextIdx = (idx + 1) % tabBtns.length;
+        e.preventDefault();
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        nextIdx = (idx - 1 + tabBtns.length) % tabBtns.length;
+        e.preventDefault();
+      } else if (e.key === "Home") {
+        nextIdx = 0;
+        e.preventDefault();
+      } else if (e.key === "End") {
+        nextIdx = tabBtns.length - 1;
+        e.preventDefault();
+      } else if (e.key === "Enter" || e.key === " ") {
+        activateBuildingTab(current, true);
+        e.preventDefault();
+        return;
+      } else return;
+
+      tabBtns[nextIdx].focus();
+    });
+  }
+
+  function initBuildings() {
+    const tablist = document.querySelector(".building-tabs");
+    if (!tablist) return;
+    const tabBtns = Array.from(tablist.querySelectorAll(".tab-btn"));
+    if (!tabBtns.length) return;
+    const activeBtn = tabBtns.find((b) => b.classList.contains("active")) || tabBtns[0];
+    activateBuildingTab(activeBtn, false);
+  }
+
+  function initOverview() {}
+
+  function initResearch() {}
+
+  GC.modules.overview = initOverview;
+  GC.modules.buildings = initBuildings;
+  GC.modules.research = initResearch;
+
+  // =========================
+  // PJAX navigation
+  // =========================
+  function _syncNavActive(url) {
+    let path;
+    try {
+      path = new URL(url, window.location.origin).pathname.replace(/\/$/, "") || "/";
+    } catch (_) {
+      return;
+    }
+    document.querySelectorAll(".gc-nav-link, .gc-bottom-nav-item, .gc-nav-drawer-link").forEach((link) => {
+      const href = link.getAttribute("href");
+      if (!href) return;
+      let linkPath;
+      try {
+        linkPath = new URL(href, window.location.origin).pathname.replace(/\/$/, "") || "/";
+      } catch (_) {
+        return;
+      }
+      link.classList.toggle("active", linkPath === path);
+    });
+  }
+
+  GC.navigateTo = async function navigateTo(url, opts = {}) {
+    const push = opts.push !== false;
+    if (GC._pjaxAbort) {
+      try { GC._pjaxAbort.abort(); } catch (_) {}
     }
 
-    const activeBtn = tabBtns.find((b) => b.classList.contains("active")) || tabBtns[0];
-    activateTab(activeBtn, false);
+    GC.pjaxInFlight = (async () => {
+      const ctrl = new AbortController();
+      GC._pjaxAbort = ctrl;
+      try {
+        GC.cleanupPage();
+        const res = await fetch(url, {
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: ctrl.signal,
+          headers: {
+            "X-PJAX": "true",
+            "X-Requested-With": "XMLHttpRequest",
+            Accept: "text/html",
+          },
+        });
+        if (!res.ok) throw new Error(`PJAX ${res.status}`);
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const newMain = doc.getElementById("main-content");
+        if (!newMain) throw new Error("main-content missing");
+
+        const main = document.getElementById("main-content");
+        main.innerHTML = newMain.innerHTML;
+        if (doc.title) document.title = doc.title;
+
+        _syncNavActive(url);
+        if (push) history.pushState({ gcPjax: true }, "", url);
+
+        GC.initPage();
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        console.error("[GC] PJAX navigation failed:", err);
+        showNotify(
+          t("msg_status_refresh_failed", "Seite konnte nicht geladen werden. Bitte erneut versuchen."),
+          "error"
+        );
+      } finally {
+        GC.pjaxInFlight = null;
+        if (GC._pjaxAbort === ctrl) GC._pjaxAbort = null;
+      }
+    })();
+
+    return GC.pjaxInFlight;
+  };
+
+  function initPjax() {
+    if (GC._pjaxBound) return;
+    GC._pjaxBound = true;
+
+    const PJAX_LINK = "a.gc-nav-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link";
+
+    document.addEventListener("click", (e) => {
+      const link = e.target.closest(PJAX_LINK);
+      if (!link || link.tagName !== "A") return;
+      if (link.hasAttribute("data-no-pjax") || link.target === "_blank") return;
+      const href = link.getAttribute("href");
+      if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+      try {
+        const dest = new URL(href, window.location.origin);
+        if (dest.origin !== window.location.origin) return;
+      } catch (_) {
+        return;
+      }
+      e.preventDefault();
+      GC.navigateTo(href);
+    });
+
+    window.addEventListener("popstate", (e) => {
+      if (!e.state?.gcPjax) return;
+      GC.navigateTo(window.location.pathname + window.location.search, { push: false });
+    });
   }
 
   // =========================
@@ -1277,20 +2007,83 @@
   }
 
   // =========================
-  // Upgrade debounce
+  // Game actions (AJAX, kein Form-Reload)
   // =========================
-  function initUpgradeDebounce() {
-    document.addEventListener("click", (e) => {
-      const el = e.target.closest("a.btn-upgrade, button.btn-upgrade");
-      if (!el) return;
+  function initGameActions() {
+    if (GC._gameActionsBound) return;
+    GC._gameActionsBound = true;
 
-      if (el.dataset.debouncing === "1") {
+    document.addEventListener("click", async (e) => {
+      const upgradeLink = e.target.closest("a.btn-upgrade");
+      if (upgradeLink && upgradeLink.tagName === "A" && !upgradeLink.hasAttribute("disabled")) {
         e.preventDefault();
+        if (upgradeLink.dataset.busy === "1" || GC.actionLocks.build) return;
+        upgradeLink.dataset.busy = "1";
+        GC.actionLocks.build = true;
+
+        const buildingType = upgradeLink.dataset.building || "";
+        const tab = _getActiveBuildingTab();
+
+        try {
+          const json = await GC.fetchGameAction("/api/buildings/upgrade", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ building_type: buildingType, tab, request_id: newRequestId() }),
+          });
+          if (json.state) applyGameStateData(json.state, json.ok ? "upgrade_success" : "upgrade_error");
+          if (json.ok) {
+            GC.startPolling(true);
+            showNotify(t("msg_build_queued", "Bauauftrag angereiht."), "success");
+          } else {
+            showNotify(mapActionError(json.reason, json.payload), "error");
+          }
+        } catch (err) {
+          console.error("Upgrade AJAX fehlgeschlagen:", err);
+          showNotify(
+            t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."),
+            "error"
+          );
+        } finally {
+          upgradeLink.dataset.busy = "0";
+          GC.actionLocks.build = false;
+        }
         return;
       }
 
-      el.dataset.debouncing = "1";
-      setTimeout(() => { el.dataset.debouncing = "0"; }, 450);
+      const researchLink = e.target.closest("a.btn-research");
+      if (researchLink) {
+        e.preventDefault();
+        if (researchLink.dataset.busy === "1" || GC.actionLocks.research) return;
+        researchLink.dataset.busy = "1";
+        GC.actionLocks.research = true;
+
+        const match = (researchLink.getAttribute("href") || "").match(/\/research_start\/([^/?#]+)/);
+        const techKey = match ? decodeURIComponent(match[1]) : "";
+
+        try {
+          const json = await GC.fetchGameAction("/api/research/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ tech_key: techKey, request_id: newRequestId() }),
+          });
+          if (json.state) applyGameStateData(json.state, json.ok ? "research_start_success" : "research_start_error");
+          if (json.ok) {
+            GC.startPolling(true);
+            showNotify(t("research_msg_started_short", "Forschung angereiht."), "success");
+          } else {
+            showNotify(mapActionError(json.reason, json.payload), "error");
+          }
+        } catch (err) {
+          console.error("Research AJAX fehlgeschlagen:", err);
+          showNotify(
+            t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."),
+            "error"
+          );
+        } finally {
+          researchLink.dataset.busy = "0";
+          GC.actionLocks.research = false;
+        }
+      }
     });
   }
 
@@ -1298,12 +2091,12 @@
   // Flash autohide
   // =========================
   function initFlashAutohide() {
-    setTimeout(() => {
+    GC.setSafeTimeout(() => {
       const box = document.getElementById("messages");
       if (!box) return;
       box.style.transition = "opacity 0.4s ease";
       box.style.opacity = "0";
-      setTimeout(() => box.remove(), 450);
+      GC.setSafeTimeout(() => box.remove(), 450);
     }, 4000);
   }
 
@@ -1311,12 +2104,17 @@
   // Visibility listener
   // =========================
   function initVisibilityPolling() {
+    if (GC._visibilityBound) return;
+    GC._visibilityBound = true;
+
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) {
-        fetchStatusAndUpdate();
-        _ensureProgressLoop();
+      if (document.hidden) {
+        GC.stopPolling();
+        return;
       }
-      schedulePolling(lastHadActiveJob || lastHadActiveResearch);
+      if (!shouldRunStatusPolling()) return;
+      GC.refreshGameState("tab_visible");
+      GC.startProgressTicker();
     });
   }
 
@@ -1419,21 +2217,30 @@
     update();
   }
 
+  function initShellOnce() {
+    if (GC._shellReady) return;
+    GC._shellReady = true;
+
+    window.GC = GC;
+    bindBuildingTabsOnce();
+    initForms();
+    initSkipLink();
+    initGameActions();
+    initVisibilityPolling();
+    initMobileNav();
+    initStickyResourceBar();
+    initPjax();
+
+    try {
+      history.replaceState({ gcPjax: true }, "", window.location.href);
+    } catch (_) {}
+  }
+
   // =========================
   // Boot
   // =========================
   document.addEventListener("DOMContentLoaded", () => {
-    initTabs();
-    initForms();
-    initSkipLink();
-    initUpgradeDebounce();
-    initFlashAutohide();
-    initVisibilityPolling();
-    initMobileNav();
-    initStickyResourceBar();
-
-    fetchStatusAndUpdate();
-    _ensureProgressLoop();
-    schedulePolling(false);
+    initShellOnce();
+    GC.initPage();
   });
 })();

@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import sys
 import time
 from pathlib import Path
 from typing import Any, Tuple, Dict
@@ -20,7 +21,6 @@ from flask import (
 # GAME INTERNALS (DB / MODELS)
 # --------------------------------------------------------------------------
 from game.models import (
-    init_db,
     db,
     load_player,
     get_game_settings,
@@ -31,7 +31,10 @@ from game.models import (
     get_homeworld,
     get_player_rank,
     get_ranking_rows,
+    get_idempotent_action,
+    save_idempotent_action,
 )
+from game.db import commit, rollback
 
 from game.logic import (
     update_resources,
@@ -61,12 +64,14 @@ from game.ranking import (
     invalidate_player_score_cache,
 )
 
+from game.bootstrap import bootstrap_application
+from game.config import get_secret_key, is_debug_enabled, is_production
+
 # --------------------------------------------------------------------------
 # APP SETUP
 # --------------------------------------------------------------------------
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", os.urandom(32).hex())
 
 BASE_DIR = Path(__file__).resolve().parent
 LOCALES_DIR = BASE_DIR / "locales"
@@ -207,11 +212,25 @@ def inject_globals():
 
 
 # --------------------------------------------------------------------------
-# DB INIT
+# BOOTSTRAP (config, DB, migration guard)
 # --------------------------------------------------------------------------
 
-init_db()
-# init_db() macht create_default_admin() bereits intern -> hier NICHT doppelt.
+_skip_mig = os.environ.get("GC_SKIP_MIGRATION_CHECK", "0").strip().lower() in ("1", "true", "yes")
+bootstrap_application(skip_migration_check=_skip_mig)
+app.secret_key = get_secret_key() or os.urandom(32).hex()
+
+
+# --------------------------------------------------------------------------
+# HEALTH
+# --------------------------------------------------------------------------
+
+@app.route("/health")
+def health():
+    from game.health import build_health_report
+
+    report = build_health_report()
+    code = 200 if report.get("status") == "ok" else 503
+    return jsonify(report), code
 
 
 # --------------------------------------------------------------------------
@@ -244,7 +263,7 @@ def _load_player_view_with_resources() -> Tuple[Any, Dict[str, int], float, int,
         return player_view, buildings, ratio, energy_total, energy_used, storage_caps
 
     except Exception:
-        conn.rollback()
+        rollback(conn)
         raise
     finally:
         conn.close()
@@ -390,15 +409,16 @@ def buildings_view():
 
     planet = get_homeworld(player_id=int(player_view["id"]))
 
-    rows_by_tab = get_buildings_panel_rows(
-        planet,
-        buildings,
-    )
-
     user = get_current_user()
     user_id = int(user["id"])
 
     build_queue = get_build_queue_status(user_id=user_id)
+
+    rows_by_tab = get_buildings_panel_rows(
+        planet,
+        buildings,
+        build_queue=build_queue,
+    )
 
     prod_per_hour = get_building_production_per_hour(
         buildings,
@@ -693,19 +713,25 @@ def ranking_view():
 # API (AJAX / main.js)
 # --------------------------------------------------------------------------
 
-@app.route("/api/status")
-@require_login
-def api_status():
+def _build_game_state_payload(include_panel: bool = True) -> Tuple[dict, int]:
+    """
+    Zentraler Spielzustand für Polling + AJAX-Refresh (kein Page-Reload).
+    Returns (payload, player_id) or raises via caller checking player_view.
+    """
     player_view, buildings, ratio, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
     if player_view is None:
-        return jsonify({"error": "not_logged_in"}), 401
+        return {"ok": False, "error": "not_logged_in"}, 0
 
     user = get_current_user()
     user_id = int(user["id"])
     player_id = int(player_view["id"])
 
-    payload = {
-        "server_time": int(time.time()),  # ✅ für Live-Counter / Drift-Korrektur
+    build_queue = get_build_queue_status(user_id=user_id)
+    research = get_research_status(user_id=user_id, buildings=buildings)
+
+    payload: Dict[str, Any] = {
+        "ok": True,
+        "server_time": int(time.time()),
         "player": {
             "name": player_view["name"],
             "metal": round(float(player_view["metal"]), 2),
@@ -713,19 +739,33 @@ def api_status():
             "energy_used": int(energy_used),
             "energy_total": int(energy_total),
         },
+        "resources": {
+            "metal": round(float(player_view["metal"]), 2),
+            "crystal": round(float(player_view["crystal"]), 2),
+            "energy_used": int(energy_used),
+            "energy_total": int(energy_total),
+            "storage": storage_caps,
+        },
         "buildings": buildings,
-        "build_queue": get_build_queue_status(user_id=user_id),
+        "build_queue": build_queue,
+        "building_queue": build_queue,
         "production_per_hour": get_building_production_per_hour(
             buildings=buildings,
             ratio=ratio,
             user_id=user_id,
         ),
-        "research": get_research_status(
-            user_id=user_id,
-            buildings=buildings,
-        ),
+        "research": research,
+        "research_queue": research.get("queue", []),
         "storage": storage_caps,
     }
+
+    if include_panel:
+        planet = get_homeworld(player_id=player_id)
+        payload["buildings_panel"] = get_buildings_panel_rows(
+            planet,
+            buildings,
+            build_queue=build_queue,
+        )
 
     score = get_player_score_cached(player_id) or {"total": 0, "buildings": 0, "research": 0}
     rank, total_players = get_player_rank(player_id)
@@ -738,7 +778,120 @@ def api_status():
         "total_players": int(total_players) if total_players else None,
     }
 
+    return payload, player_id
+
+
+def _extract_request_id(data: Dict[str, Any]) -> str:
+    rid = (data.get("request_id") or request.headers.get("X-Request-Id") or "").strip()
+    return rid
+
+
+def _action_json_response(
+    ok: bool,
+    reason: str,
+    payload: Any = None,
+    job: Any = None,
+) -> Any:
+    """Immer frischen Spielzustand liefern – auch bei Fehlern."""
+    state, _ = _build_game_state_payload(include_panel=True)
+    resp: Dict[str, Any] = {
+        "ok": bool(ok),
+        "reason": reason,
+        "state": state,
+    }
+    if not ok and payload is not None:
+        resp["payload"] = payload
+    if ok and job is not None:
+        resp["job"] = job
+    return jsonify(resp)
+
+
+@app.route("/api/status")
+@require_login
+def api_status():
+    payload, player_id = _build_game_state_payload(include_panel=True)
+    if not payload.get("ok"):
+        return jsonify({"error": "not_logged_in"}), 401
     return jsonify(payload)
+
+
+@app.route("/api/game-state")
+@require_login
+def api_game_state():
+    payload, player_id = _build_game_state_payload(include_panel=True)
+    if not payload.get("ok"):
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    return jsonify(payload)
+
+
+@app.route("/api/buildings/upgrade", methods=["POST"])
+@require_login
+def api_buildings_upgrade():
+    data = request.get_json(silent=True) or {}
+    building_type = (data.get("building_type") or request.form.get("building_type") or "").strip()
+    if not building_type:
+        state, _ = _build_game_state_payload(include_panel=True)
+        return jsonify({"ok": False, "reason": "missing_building_type", "state": state}), 400
+
+    player_view, buildings, _, _, _, _ = _load_player_view_with_resources()
+    if player_view is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    user_id = int(player_view["id"])
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    ok, reason, extra = queue_build(player_view, buildings, building_type)
+    resp = _action_json_response(
+        ok,
+        reason,
+        payload=extra if not ok else None,
+        job=extra if ok else None,
+    )
+    response_obj = resp.get_json()
+
+    if request_id and isinstance(response_obj, dict):
+        save_idempotent_action(user_id, request_id, response_obj)
+
+    return resp
+
+
+@app.route("/api/research/start", methods=["POST"])
+@require_login
+def api_research_start():
+    data = request.get_json(silent=True) or {}
+    tech_key = (data.get("tech_key") or request.form.get("tech_key") or "").strip()
+    if not tech_key:
+        state, _ = _build_game_state_payload(include_panel=True)
+        return jsonify({"ok": False, "reason": "missing_tech_key", "state": state}), 400
+
+    player_view, _, _, _, _, _ = _load_player_view_with_resources()
+    if player_view is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    user_id = int(player_view["id"])
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    ok, reason, extra = queue_research(player_view, tech_key)
+    resp = _action_json_response(
+        ok,
+        reason,
+        payload=extra if not ok else None,
+        job=extra if ok else None,
+    )
+    response_obj = resp.get_json()
+
+    if request_id and isinstance(response_obj, dict):
+        save_idempotent_action(user_id, request_id, response_obj)
+
+    return resp
 
 
 # --------------------------------------------------------------------------
@@ -837,4 +990,9 @@ def admin_unban_user():
 # --------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "5000"))
+    if is_production() and is_debug_enabled():
+        print("[GC] ERROR: Refusing to run production with FLASK_DEBUG=1", file=sys.stderr)
+        raise SystemExit(1)
+    app.run(host=host, port=port, debug=is_debug_enabled())

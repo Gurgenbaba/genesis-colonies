@@ -3,9 +3,11 @@
 {# ===================================================================
    Macro für Building-Tabelle (MUSS vor der Nutzung stehen!)
    =================================================================== #}
-{% macro render_building_table(rows, tab_name) %}
+{% macro render_building_table(rows, tab_name, bq_summary, bq_queue_full) %}
 
   {% set rows = rows if rows else [] %}
+  {% set _bq_summary = bq_summary if bq_summary is defined and bq_summary else {} %}
+  {% set _bq_queue_full = bq_queue_full if bq_queue_full is defined else false %}
 
   {% if rows|length == 0 %}
     <div class="gc-empty-state">
@@ -36,7 +38,7 @@
       <tbody>
         {% for b in rows %}
           {% set building_type = b.key %}
-          {% set is_max = b.level >= b.max_level %}
+          {% set is_max = (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) %}
 
           {# Dauer hübsch formatieren (ohne JS) #}
           {% set s = (b.time_seconds or 0)|int %}
@@ -44,7 +46,7 @@
           {% set m = ((s % 3600) // 60) %}
           {% set ss = (s % 60) %}
 
-          <tr>
+          <tr data-building-row="{{ building_type }}">
             <td class="bcell-name">
               <div class="bname-wrap">
                 <div class="bicon-wrap">
@@ -73,6 +75,9 @@
               </span>
               <div class="cost-note">
                 {{ T("buildings_col_level") }} {{ b.target_level|fmt_int }}
+                {% if b.queue_count %}
+                  · {{ T("research_tech_queue_count", count=b.queue_count) }}
+                {% endif %}
               </div>
             </td>
 
@@ -84,7 +89,7 @@
               {% endif %}
             </td>
 
-            <td class="bcell-action">
+            <td class="bcell-action" data-building="{{ building_type }}">
               {% if is_max %}
                 <button class="gc-btn gc-btn-ghost gc-btn-sm btn-upgrade"
                         type="button"
@@ -109,12 +114,21 @@
                   {{ T("buildings_btn_upgrade") }}
                 </button>
 
+              {% elif _bq_queue_full %}
+                <span class="status-pill status-pill-locked status-pill-queue-full">
+                  {{ T("research_status_queue_full", "Warteschlange voll") }}
+                </span>
+
               {% else %}
                 <a id="btn-{{ building_type }}"
                    data-building="{{ building_type }}"
                    href="{{ url_for('upgrade', building_type=building_type, src='buildings', tab=tab_name) }}"
                    class="gc-btn gc-btn-primary gc-btn-sm btn-upgrade">
-                  {{ T("buildings_btn_upgrade") }}
+                  {% if _bq_summary.count %}
+                    {{ T("research_btn_queue", "Anreihen") }}
+                  {% else %}
+                    {{ T("buildings_btn_upgrade") }}
+                  {% endif %}
                 </a>
               {% endif %}
             </td>
@@ -137,6 +151,8 @@
 {% set bq = (build_queue if build_queue is defined and build_queue else {}) %}
 {% set bq_items = (bq.queue if bq and bq.queue is defined and bq.queue else []) %}
 {% set bq_summary = (bq.summary if bq and bq.summary is defined and bq.summary else {}) %}
+{% set bq_limit = (bq_summary.limit if bq_summary.limit is defined else 3) %}
+{% set bq_queue_full = (bq_summary.count or 0)|int >= bq_limit|int %}
 {% set active_job = (bq_items[0] if bq_items|length > 0 else None) %}
 
 <div class="gc-page buildings-wrapper">
@@ -158,121 +174,22 @@
     {# ==========================================================
        PREMIUM BAUSCHLEIFE (wie Research Active Block)
        ========================================================== #}
-    <div class="gc-panel-header">
+    <div class="gc-panel-header build-queue-head">
       <span class="gc-panel-title">{{ T("build_queue_title", "Bauschleife") }}</span>
-      <span class="gc-panel-subtitle">
-        {% if bq_summary and bq_summary.count is defined %}
-          {{ T("build_queue_hint", "Aufträge") }}: {{ (bq_summary.count or 0)|int }}
-          · {{ T("build_queue_next", "Nächste Fertigstellung") }}:
-          {{ (bq_summary.first_finish_in or 0)|int }}s
+      <span class="gc-panel-subtitle" id="build-queue-subtitle">
+        {% if bq_summary and bq_summary.count %}
+          {{ (bq_summary.count or 0)|int }}/{{ bq_limit|int }} {{ T("build_queue_jobs") }}
+          · {{ T("build_queue_next") }}:
+          <span id="build-queue-subtitle-eta">{{ (bq_summary.first_finish_in or 0)|int }}s</span>
         {% else %}
-          {{ T("build_queue_hint_fallback", "Verwalte laufende Bauaufträge und starte Upgrades.") }}
+          {{ T("build_queue_hint_fallback") }}
         {% endif %}
       </span>
     </div>
 
-    {% if active_job %}
-      {% set bt = (active_job.building_type or "") %}
-      {% set label = T("building_" ~ bt) %}
-      {% set desc = T("desc_" ~ bt) %}
+    <div id="build-queue-root" class="build-queue-root" aria-live="polite"></div>
 
-      {# Zeiten #}
-      {% set total_s = (active_job.total or 0) | float %}
-      {% set rem_s = (active_job.remaining or 0) | float %}
-
-      {% if total_s > 0 %}
-        {% set raw_pct = (100 * (1 - (rem_s / total_s))) %}
-      {% else %}
-        {% set raw_pct = 0 %}
-      {% endif %}
-      {% if raw_pct < 0 %}{% set progress_pct = 0 %}
-      {% elif raw_pct > 100 %}{% set progress_pct = 100 %}
-      {% else %}{% set progress_pct = raw_pct | round(0) %}
-      {% endif %}
-
-      {% set s = (active_job.total or 0)|int %}
-      {% set sh = (s // 3600) %}
-      {% set sm = ((s % 3600) // 60) %}
-      {% set ss = (s % 60) %}
-
-      {% set rem = (active_job.remaining or 0)|int %}
-      {% set rh = (rem // 3600) %}
-      {% set rm = ((rem % 3600) // 60) %}
-      {% set rsec = (rem % 60) %}
-
-      <div class="active-build-wrapper">
-
-        <div class="build-icon-large">
-          <img
-            src="{{ url_for('static', filename='img/buildings/' ~ bt ~ '.png') }}"
-            alt="{{ label }}">
-        </div>
-
-        <div class="active-build-content">
-          <div class="active-build-title-row">
-            <div>
-              <div class="active-build-name">
-                {{ label if label != ("building_" ~ bt) else bt }}
-              </div>
-              <div class="active-build-level">
-                {{ T("buildings_col_level") }} {{ (active_job.target_level or 0)|fmt_int }}
-              </div>
-            </div>
-
-            <div class="status-pill status-pill-active">
-              {{ T("buildings_btn_active", "Aktiv") }}
-            </div>
-          </div>
-
-          <div class="active-build-desc">
-            {{ desc if desc != ("desc_" ~ bt) else "" }}
-          </div>
-
-          <div class="build-progress-outer" data-total-seconds="{{ (active_job.total or 0)|int }}">
-            <div class="build-progress-label">
-              {{ T("build_queue_remaining", "Verbleibend") }}:
-              <span id="build-countdown">
-                {% if rh > 0 %}
-                  {{ "%d:%02d:%02d"|format(rh, rm, rsec) }}
-                {% else %}
-                  {{ "%d:%02d"|format(rm, rsec) }}
-                {% endif %}
-              </span>
-            </div>
-
-            <div class="build-progress-bar">
-              <div id="build-progress-fill"
-                   class="build-progress-fill"
-                   data-progress="{{ progress_pct }}"
-                   style="width: {{ progress_pct }}%;"></div>
-            </div>
-
-            <div class="build-progress-meta">
-              <span>
-                {{ T("buildings_col_time") }}:
-                {% if sh > 0 %}
-                  {{ "%d:%02d:%02d"|format(sh, sm, ss) }}
-                {% else %}
-                  {{ "%d:%02d"|format(sm, ss) }}
-                {% endif %}
-              </span>
-              <span>
-                {{ T("build_queue_target", "Ziel") }}:
-                L{{ (active_job.target_level or 0)|fmt_int }}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <hr class="build-divider">
-
-    {% else %}
-      <p class="build-no-active">
-        {{ T("build_queue_none", "Keine Bauaufträge aktiv.") }}
-      </p>
-      <hr class="build-divider">
-    {% endif %}
+    <hr class="build-divider">
 
     {# ==========================================================
        Tabs wie gehabt
@@ -328,7 +245,7 @@
          role="tabpanel"
          id="panel-resources"
          aria-labelledby="tab-resources">
-      {{ render_building_table(rows_by_tab.get('resources', []), 'resources') }}
+      {{ render_building_table(rows_by_tab.get('resources', []), 'resources', bq_summary, bq_queue_full) }}
     </div>
 
     <div class="tab-content {{ 'active' if active_tab == 'research' else '' }}"
@@ -336,7 +253,7 @@
          role="tabpanel"
          id="panel-research"
          aria-labelledby="tab-research">
-      {{ render_building_table(rows_by_tab.get('research', []), 'research') }}
+      {{ render_building_table(rows_by_tab.get('research', []), 'research', bq_summary, bq_queue_full) }}
     </div>
 
     <div class="tab-content {{ 'active' if active_tab == 'military' else '' }}"
@@ -344,7 +261,7 @@
          role="tabpanel"
          id="panel-military"
          aria-labelledby="tab-military">
-      {{ render_building_table(rows_by_tab.get('military', []), 'military') }}
+      {{ render_building_table(rows_by_tab.get('military', []), 'military', bq_summary, bq_queue_full) }}
     </div>
 
     <div class="tab-content {{ 'active' if active_tab == 'infrastructure' else '' }}"
@@ -352,7 +269,7 @@
          role="tabpanel"
          id="panel-infrastructure"
          aria-labelledby="tab-infrastructure">
-      {{ render_building_table(rows_by_tab.get('infrastructure', []), 'infrastructure') }}
+      {{ render_building_table(rows_by_tab.get('infrastructure', []), 'infrastructure', bq_summary, bq_queue_full) }}
     </div>
 
   </div>

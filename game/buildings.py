@@ -16,10 +16,11 @@ from .models import (
     delete_build_job,
     get_game_settings,
     get_research_levels,
-    try_spend_resources,
+    try_spend_resources_conn,
     get_planet_owner_id,
-    finish_due_build_jobs,  # ✅ atomare Finish-Logik (inkl. Score Trigger)
+    finish_due_build_jobs,
 )
+from .db import begin_write_transaction, commit, rollback, lock_planet_for_update
 from .research import get_research_modifiers, RESEARCH_TECHS
 from .ranking import invalidate_player_score_cache  # ✅ Cache invalidieren nach Finish
 
@@ -295,12 +296,15 @@ def _make_panel_row(
     buildings: Dict[str, int],
     research_levels: Dict[str, int],
     building_type: str,
+    queue_count: int = 0,
 ) -> Dict[str, Any]:
     level = int(buildings.get(building_type, 0) or 0)
     max_level = get_max_level_for_building(building_type, buildings)
-    target_level = min(level + 1, max_level)
+    queued_same = int(queue_count or 0)
+    at_queue_max = (level + queued_same) >= max_level
+    target_level = min(level + queued_same + 1, max_level)
 
-    cost_metal, cost_crystal = get_upgrade_cost(building_type, level)
+    cost_metal, cost_crystal = get_upgrade_cost(building_type, level + queued_same)
     time_seconds = get_build_time(building_type, target_level, user_id=planet.get("player_id"))
 
     req_met = has_building_requirements(buildings, research_levels, building_type)
@@ -313,6 +317,8 @@ def _make_panel_row(
         "level": level,
         "target_level": target_level,
         "max_level": max_level,
+        "queue_count": queued_same,
+        "at_queue_max": bool(at_queue_max),
         "cost_metal": cost_metal,
         "cost_crystal": cost_crystal,
         "time_seconds": int(time_seconds),
@@ -321,12 +327,24 @@ def _make_panel_row(
     }
 
 
-def get_buildings_panel_rows(planet: dict, buildings: Dict[str, int]) -> Dict[str, List[Dict[str, Any]]]:
+def get_buildings_panel_rows(
+    planet: dict,
+    buildings: Dict[str, int],
+    build_queue: Optional[Dict[str, Any]] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
     user_id = planet.get("player_id")
     if user_id is None:
         raise RuntimeError("get_buildings_panel_rows: planet hat kein 'player_id'-Feld")
 
     research_levels = get_research_levels(user_id=int(user_id))
+
+    queue_counts: Dict[str, int] = {}
+    if build_queue and isinstance(build_queue.get("queue"), list):
+        for job in build_queue["queue"]:
+            bt = str(job.get("building_type") or "")
+            if bt:
+                queue_counts[bt] = queue_counts.get(bt, 0) + 1
+
     rows_by_tab: Dict[str, List[Dict[str, Any]]] = {
         "resources": [],
         "research": [],
@@ -335,7 +353,13 @@ def get_buildings_panel_rows(planet: dict, buildings: Dict[str, int]) -> Dict[st
     }
 
     for key in BUILDING_ORDER:
-        row = _make_panel_row(planet, buildings, research_levels, key)
+        row = _make_panel_row(
+            planet,
+            buildings,
+            research_levels,
+            key,
+            queue_count=queue_counts.get(key, 0),
+        )
         rows_by_tab.setdefault(row["tab"], []).append(row)
 
     return rows_by_tab
@@ -344,6 +368,20 @@ def get_buildings_panel_rows(planet: dict, buildings: Dict[str, int]) -> Dict[st
 # =============================================================================
 # Build Queue
 # =============================================================================
+
+def _resolve_build_queue_limit(settings: Optional[Dict[str, Any]] = None) -> int:
+    if settings is None:
+        settings = get_game_settings()
+    raw_limit = settings.get("queue_limit", 3)
+    try:
+        queue_limit = int(raw_limit)
+    except (ValueError, TypeError):
+        try:
+            queue_limit = int(float(raw_limit))
+        except (ValueError, TypeError):
+            queue_limit = 3
+    return max(queue_limit, 1)
+
 
 def get_build_queue_status_for_planet(planet_id: int, conn=None) -> Dict[str, Any]:
     """
@@ -369,9 +407,9 @@ def get_build_queue_status_for_planet(planet_id: int, conn=None) -> Dict[str, An
             player_id = int(prow["player_id"])
             try:
                 finish_due_build_jobs(planet_id=int(planet_id), player_id=player_id, now=now, conn=conn)
-                conn.commit()
+                commit(conn)
             except Exception:
-                conn.rollback()
+                rollback(conn)
 
         # Buildings-Levels (nach finish) aus derselben conn lesen
         buildings = get_planet_buildings(int(planet_id), conn=conn)
@@ -418,8 +456,11 @@ def get_build_queue_status_for_planet(planet_id: int, conn=None) -> Dict[str, An
                 "finish_time": finish_time,
             })
 
+        queue_limit = _resolve_build_queue_limit()
+
         summary = {
             "count": len(queue),
+            "limit": queue_limit,
             "has_queue": bool(queue),
             "first_finish_in": int(first_remaining or 0),
         }
@@ -458,7 +499,7 @@ def complete_finished_builds_for_planet(planet_id: int, conn=None) -> Dict[str, 
     finished_any = False
     try:
         if own_conn:
-            conn.execute("BEGIN IMMEDIATE")
+            begin_write_transaction(conn)
 
         finished_any = finish_due_build_jobs(
             planet_id=planet_id,
@@ -468,11 +509,11 @@ def complete_finished_builds_for_planet(planet_id: int, conn=None) -> Dict[str, 
         )
 
         if own_conn:
-            conn.commit()
+            commit(conn)
 
     except Exception:
         if own_conn:
-            conn.rollback()
+            rollback(conn)
         raise
     finally:
         if own_conn:
@@ -502,90 +543,123 @@ def queue_build_for_planet(
     else:
         user_id = int(user_id)
 
-    now = time.time()
-
-    research_levels = get_research_levels(user_id=user_id)
-
-    # ✅ zuerst Finishes sauber anwenden (atomar + score trigger, falls nötig)
-    buildings = complete_finished_builds_for_planet(planet_id)
-
-    current_level = int(buildings.get(building_type, 0) or 0)
-    max_level = get_max_level_for_building(building_type, buildings)
-
-    if current_level >= max_level:
-        return False, "invalid", {"msg": "Max level reached", "max_level": max_level}
-
-    rows_db = get_build_queue_rows(planet_id)
-    queued_same = sum(1 for r in rows_db if str(r["building_type"]) == building_type)
-    target_level = current_level + queued_same + 1
-
-    if target_level > max_level:
-        return False, "invalid", {"msg": "Max level reached", "max_level": max_level, "target_level": target_level}
-
-    if not has_building_requirements(buildings, research_levels, building_type):
-        return False, "requirements", {
-            "building_type": building_type,
-            "current_level": current_level,
-            "target_level": target_level
-        }
-
-    # Kosten für den nächsten "Slot" dieses Gebäudes (inkl. queued_same)
-    cost_metal, cost_crystal = get_upgrade_cost(building_type, current_level + queued_same)
-
-    planet_metal = float(planet.get("metal", 0) or 0)
-    planet_crystal = float(planet.get("crystal", 0) or 0)
-    if planet_metal < cost_metal or planet_crystal < cost_crystal:
-        return False, "resources", {
-            "building_type": building_type,
-            "current_level": current_level,
-            "target_level": target_level,
-            "cost_metal": cost_metal,
-            "cost_crystal": cost_crystal,
-            "planet_metal": planet_metal,
-            "planet_crystal": planet_crystal,
-        }
-
-    settings = get_game_settings()
-    raw_limit = settings.get("queue_limit", 3)
+    conn = db()
+    finished_any = False
     try:
-        queue_limit = int(raw_limit)
-    except (ValueError, TypeError):
-        try:
-            queue_limit = int(float(raw_limit))
-        except (ValueError, TypeError):
-            queue_limit = 3
-    queue_limit = max(queue_limit, 1)
+        begin_write_transaction(conn)
+        lock_planet_for_update(conn, planet_id)
+        now = time.time()
 
-    if len(rows_db) >= queue_limit:
-        return False, "queue_full", {"queue_count": len(rows_db), "queue_limit": queue_limit}
+        finished_any = finish_due_build_jobs(
+            planet_id=planet_id,
+            player_id=user_id,
+            now=now,
+            conn=conn,
+        )
 
-    duration = get_build_time(building_type, target_level, user_id=user_id)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
+            (planet_id,),
+        )
+        prow = cur.fetchone()
+        if not prow:
+            rollback(conn)
+            return False, "invalid", {"msg": "Planet not found"}
 
-    last_finish_time = max(float(r["finish_time"]) for r in rows_db) if rows_db else now
-    start_time = max(now, last_finish_time)
-    finish_time = start_time + duration
+        planet_metal = float(prow["metal"] or 0)
+        planet_crystal = float(prow["crystal"] or 0)
 
-    # Ressourcen atomar abziehen (DB ist Source of Truth)
-    if not try_spend_resources(planet_id, int(cost_metal), int(cost_crystal)):
-        return False, "resources", {
+        buildings = get_planet_buildings(planet_id, conn=conn)
+        research_levels = get_research_levels(user_id=user_id, conn=conn)
+
+        current_level = int(buildings.get(building_type, 0) or 0)
+        max_level = get_max_level_for_building(building_type, buildings)
+
+        if current_level >= max_level:
+            rollback(conn)
+            return False, "invalid", {"msg": "Max level reached", "max_level": max_level}
+
+        rows_db = get_build_queue_rows(planet_id, conn=conn)
+        queued_same = sum(1 for r in rows_db if str(r["building_type"]) == building_type)
+        target_level = current_level + queued_same + 1
+
+        if target_level > max_level:
+            rollback(conn)
+            return False, "invalid", {
+                "msg": "Max level reached",
+                "max_level": max_level,
+                "target_level": target_level,
+            }
+
+        if not has_building_requirements(buildings, research_levels, building_type):
+            rollback(conn)
+            return False, "requirements", {
+                "building_type": building_type,
+                "current_level": current_level,
+                "target_level": target_level,
+            }
+
+        cost_metal, cost_crystal = get_upgrade_cost(building_type, current_level + queued_same)
+
+        if planet_metal < cost_metal or planet_crystal < cost_crystal:
+            rollback(conn)
+            return False, "resources", {
+                "building_type": building_type,
+                "current_level": current_level,
+                "target_level": target_level,
+                "cost_metal": cost_metal,
+                "cost_crystal": cost_crystal,
+                "planet_metal": planet_metal,
+                "planet_crystal": planet_crystal,
+            }
+
+        settings = get_game_settings()
+        queue_limit = _resolve_build_queue_limit(settings)
+
+        if len(rows_db) >= queue_limit:
+            rollback(conn)
+            return False, "queue_full", {"queue_count": len(rows_db), "queue_limit": queue_limit}
+
+        duration = get_build_time(building_type, target_level, user_id=user_id)
+
+        last_finish_time = max(float(r["finish_time"]) for r in rows_db) if rows_db else now
+        start_time = max(now, last_finish_time)
+        finish_time = start_time + duration
+
+        if not try_spend_resources_conn(conn, planet_id, int(cost_metal), int(cost_crystal)):
+            rollback(conn)
+            return False, "resources", {
+                "building_type": building_type,
+                "current_level": current_level,
+                "target_level": target_level,
+                "cost_metal": cost_metal,
+                "cost_crystal": cost_crystal,
+            }
+
+        job_id = add_build_job(planet_id, building_type, start_time, finish_time, conn=conn)
+
+        commit(conn)
+
+        if finished_any:
+            invalidate_player_score_cache(user_id)
+
+        payload = {
+            "job_id": int(job_id),
             "building_type": building_type,
-            "current_level": current_level,
-            "target_level": target_level
+            "target_level": int(target_level),
+            "duration": int(duration),
+            "finish_time": float(finish_time),
+            "queue_limit": int(queue_limit),
+            "max_level": int(max_level),
         }
+        return True, "ok", payload
 
-    job_id = add_build_job(planet_id, building_type, start_time, finish_time)
-
-    payload = {
-        "job_id": int(job_id),
-        "building_type": building_type,
-        "target_level": int(target_level),
-        "duration": int(duration),
-        "finish_time": float(finish_time),
-        "queue_limit": int(queue_limit),
-        "max_level": int(max_level),
-    }
-
-    return True, "ok", payload
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
 
 
 # =============================================================================

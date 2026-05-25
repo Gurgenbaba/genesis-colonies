@@ -41,6 +41,7 @@ def _ensure_admin_defaults(settings: Dict[str, Any]) -> Dict[str, Any]:
         "universe_name": "Genesis Colonies",
         "galaxy_count": 1,
         "queue_limit": 3,
+        "research_queue_limit": 3,
 
         "production_speed": 1.0,
         "build_speed": 1.0,
@@ -157,6 +158,10 @@ def update_admin_settings(form: Dict[str, Any]) -> None:
     queue_limit = _parse_int(form.get("queue_limit"))
     if queue_limit is not None and queue_limit > 0:
         new_settings["queue_limit"] = queue_limit
+
+    research_queue_limit = _parse_int(form.get("research_queue_limit"))
+    if research_queue_limit is not None and research_queue_limit > 0:
+        new_settings["research_queue_limit"] = research_queue_limit
 
     start_metal = _parse_int(form.get("start_metal"))
     if start_metal is not None and start_metal >= 0:

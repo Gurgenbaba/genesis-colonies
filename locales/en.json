@@ -161,6 +161,7 @@
   "admin_label_build_speed": "Build Speed",
   "admin_label_research_speed": "Research Speed",
   "admin_label_queue_limit": "Max Build Orders per Colony",
+  "admin_label_research_queue_limit": "Max Research Orders per Player",
 
   "admin_msg_settings_saved": "Settings have been saved.",
   "admin_msg_invalid_value": "Invalid value in settings.",
@@ -244,5 +245,25 @@
   "desc_research_shield_tech": "Advanced shield generators, modulators and field amplifiers harden your defenses against concentrated fire.",
 
   "msg_building_unlocked_by_research": "New buildings have been unlocked through research.",
-  "msg_research_unlocked_by_building": "New research options have been unlocked by constructing buildings."
+  "msg_research_unlocked_by_building": "New research options have been unlocked by constructing buildings.",
+
+  "build_queue_jobs": "jobs",
+  "build_queue_hint_fallback": "Manage active build orders and start upgrades.",
+  "build_queue_none": "No active build orders.",
+  "status_in_queue": "Queued",
+  "label_level_short": "L",
+  "header_meta": "Command status",
+  "build_queue_next": "Next completion in",
+
+  "research_msg_queue_full": "Research queue full (max. 3 slots).",
+  "research_queue_title": "Research queue",
+  "research_queue_jobs": "jobs",
+  "research_queue_none": "No research orders in the queue.",
+  "research_queue_hint_fallback": "Start research — up to 3 can be queued.",
+  "research_btn_queue": "Queue",
+  "research_status_queued": "Queued",
+  "research_status_queue_full": "Queue full",
+  "research_tech_level_current": "Current L%(level)s",
+  "research_tech_queue_count": "Queued: ×%(count)s",
+  "research_tech_target_level": "Target level: L%(level)s",
 }

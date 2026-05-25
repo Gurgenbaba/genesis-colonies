@@ -455,6 +455,7 @@
   "admin_section_game_settings": "Allgemeine Einstellungen",
   "admin_label_galaxy_count": "Anzahl Galaxien",
   "admin_label_queue_limit": "Maximale Bau-Queue pro Planet",
+  "admin_label_research_queue_limit": "Maximale Forschungs-Queue pro Spieler",
 
   "admin_label_speed": "Geschwindigkeiten",
   "admin_label_production_speed": "Produktionsspeed",
@@ -529,6 +530,17 @@
 
   "research_msg_no_lab": "Du benötigst zuerst ein Forschungslabor.",
   "research_msg_active": "Es läuft bereits eine Forschung.",
+  "research_msg_queue_full": "Forschungs-Warteschlange voll (max. 3 Slots).",
+  "research_queue_title": "Forschungs-Warteschlange",
+  "research_queue_jobs": "Aufträge",
+  "research_queue_none": "Keine Forschungsaufträge in der Warteschlange.",
+  "research_queue_hint_fallback": "Starte Forschungen — bis zu 3 können angereiht werden.",
+  "research_btn_queue": "Anreihen",
+  "research_status_queued": "In Warteschlange",
+  "research_status_queue_full": "Warteschlange voll",
+  "research_tech_level_current": "Aktuell L%(level)s",
+  "research_tech_queue_count": "In Warteschlange: ×%(count)s",
+  "research_tech_target_level": "Ziel-Level: L%(level)s",
   "research_msg_not_enough": "Nicht genug Ressourcen: Es fehlen %(metal)s Ferronit und %(crystal)s Crytite.",
   "research_msg_not_enough_fmt": "Nicht genug Ressourcen: Es fehlen {metal} Ferronit und {crystal} Crytite.",
   "research_msg_unknown": "Diese Forschung ist unbekannt oder nicht verfügbar.",
@@ -696,8 +708,13 @@
   "build_queue_target": "Ziel",
   "build_queue_level_short": "L",
   "buildings_btn_active": "Aktiv",
-  "build_queue_hint": "Nächste Fertigstellung in Echtzeit überwachen.",
+  "build_queue_hint": "{count} Aufträge · Nächste Fertigstellung: {eta}",
+  "build_queue_jobs": "Aufträge",
+  "build_queue_hint_fallback": "Verwalte laufende Bauaufträge und starte Upgrades.",
   "build_queue_none": "Keine Bauaufträge aktiv.",
+  "status_in_queue": "In Warteschlange",
+  "label_level_short": "L",
+  "header_meta": "Kommando-Status",
 
   "alliance_note_diplomacy": "Aktuell noch deaktiviert – die Allianz- & Diplomatiefunktionen werden in einem späteren Development-Step freigeschaltet, wenn Flotten und Kampf-Logik stehen."
 }

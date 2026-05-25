@@ -18,6 +18,7 @@ Robustheit:
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import time
 from pathlib import Path
@@ -29,8 +30,12 @@ from typing import List
 # ----------------------------------------
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "game" / "game.db"
 MIGRATIONS_DIR = BASE_DIR / "migrations"
+
+
+def _db_path() -> Path:
+    from game.db import resolve_db_path
+    return resolve_db_path()
 
 
 # ----------------------------------------
@@ -38,8 +43,11 @@ MIGRATIONS_DIR = BASE_DIR / "migrations"
 # ----------------------------------------
 
 def ensure_db_exists() -> None:
-    if not DB_PATH.exists():
-        raise SystemExit(f"[ERROR] DB nicht gefunden: {DB_PATH}")
+    db_path = _db_path()
+    if not db_path.exists():
+        print(f"[INFO] DB nicht gefunden – bootstrap via init_db(): {db_path}")
+        from game.models import init_db
+        init_db()
 
 
 def ensure_migrations_dir() -> None:
@@ -49,7 +57,7 @@ def ensure_migrations_dir() -> None:
 
 def get_connection() -> sqlite3.Connection:
     # WICHTIG: autocommit mode => keine implicit transaction von sqlite3
-    conn = sqlite3.connect(DB_PATH, isolation_level=None)
+    conn = sqlite3.connect(_db_path(), isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA foreign_keys=ON;")
@@ -277,7 +285,7 @@ def apply_migration(conn: sqlite3.Connection, filename: str, sql_text: str) -> N
                 conn.execute(s_clean)
             except sqlite3.Error as e:
                 if _is_idempotent_sqlite_error(e):
-                    print(f"     ⚠️  überspringe idempotent: {e} | stmt: {s_clean}")
+                    print(f"     [skip idempotent] {e} | stmt: {s_clean[:80]}")
                     continue
                 # Nicht-idempotent => hart stoppen
                 raise
@@ -287,7 +295,7 @@ def apply_migration(conn: sqlite3.Connection, filename: str, sql_text: str) -> N
 
         # Migration als erfolgreich markieren (eigener Mini-Commit bei autocommit nötig? nein, autocommit schreibt sofort)
         mark_migration_applied(conn, filename)
-        print(f"  ✅ Migration erfolgreich: {filename}")
+        print(f"  OK Migration erfolgreich: {filename}")
 
     except sqlite3.Error as e:
         # Wenn wir selbst BEGIN gemacht haben => rollback
@@ -296,7 +304,7 @@ def apply_migration(conn: sqlite3.Connection, filename: str, sql_text: str) -> N
                 conn.execute("ROLLBACK;")
         except Exception:
             pass
-        print(f"  ❌ FEHLER in Migration {filename}: {e}")
+        print(f"  FEHLER in Migration {filename}: {e}")
         raise
 
 
@@ -305,8 +313,9 @@ def apply_migration(conn: sqlite3.Connection, filename: str, sql_text: str) -> N
 # ----------------------------------------
 
 def main() -> None:
+    db_path = _db_path()
     print("=== Genesis Colonies – Migration Runner ===")
-    print(f"DB:         {DB_PATH}")
+    print(f"DB:         {db_path}")
     print(f"Migrations: {MIGRATIONS_DIR}")
     print("-------------------------------------------")
 
@@ -328,7 +337,7 @@ def main() -> None:
 
         new_migrations = [p for p in sql_files if p.name not in applied]
         if not new_migrations:
-            print("Alle Migrationen sind bereits angewendet. ✅")
+            print("Alle Migrationen sind bereits angewendet.")
             return
 
         print(f"Neue Migrationen: {len(new_migrations)}")
@@ -339,7 +348,7 @@ def main() -> None:
             sql_text = path.read_text(encoding="utf-8")
             apply_migration(conn, filename, sql_text)
 
-        print("\n🎉 Alle neuen Migrationen erfolgreich angewendet.")
+        print("\nAlle neuen Migrationen erfolgreich angewendet.")
     finally:
         conn.close()
 

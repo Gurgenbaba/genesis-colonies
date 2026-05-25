@@ -83,6 +83,9 @@
                 {% set is_active = tech.is_active if tech.is_active is defined else (active and active.key == tech.key) %}
                 {% set locked = not tech.requirements_met %}
                 {% set queue_full = (rq_summary.count or 0)|int >= rq_limit|int %}
+                {% set curr_lvl = (tech.level or 0)|int %}
+                {% set q_count = (tech.queue_count if tech.queue_count is defined else 0)|int %}
+                {% set target_lvl = (tech.target_level if tech.target_level is defined else (curr_lvl + q_count + 1)) %}
 
                 {# i18n: Schema: key / desc_key #}
                 {% set tech_label = T(tech.key) %}
@@ -101,7 +104,7 @@
                 {% set tm = ((ts % 3600) // 60) %}
                 {% set tss = (ts % 60) %}
 
-                <tr class="{% if locked %}tech-row-locked{% endif %}">
+                <tr class="{% if locked %}tech-row-locked{% endif %}{% if q_count > 0 %} tech-row-queued{% endif %}" data-tech-key="{{ tech.key }}">
                   <td>
                     <div class="tech-row-main">
                       {% if tech.icon %}
@@ -111,8 +114,26 @@
                           class="tech-icon">
                       {% endif %}
                       <div class="tech-text">
-                        <div class="tech-name">
-                          {{ tech_label }} – L{{ (tech.level or 0)|fmt_int }}
+                        <div class="tech-name">{{ tech_label }}</div>
+                        <div class="tech-level-stack">
+                          <span class="tech-level-current">
+                            {{ T("research_tech_level_current", level=curr_lvl) }}
+                          </span>
+                          {% if q_count > 0 %}
+                            <div class="tech-queue-badges">
+                              {% if is_active %}
+                                <span class="tech-queue-badge tech-queue-badge-active">
+                                  {{ T("research_btn_active") }}
+                                </span>
+                              {% endif %}
+                              <span class="tech-queue-badge">
+                                {{ T("research_tech_queue_count", count=q_count) }}
+                              </span>
+                              <span class="tech-target-level">
+                                {{ T("research_tech_target_level", level=curr_lvl + q_count) }}
+                              </span>
+                            </div>
+                          {% endif %}
                         </div>
                         <div class="tech-desc">
                           {{ tech_desc }}
@@ -121,14 +142,14 @@
                     </div>
                   </td>
 
-                  <td>
+                  <td class="tech-cost-cell">
                     <div class="tech-meta">
                       <span>{{ (tech.cost_metal or 0)|fmt_int }} {{ T("resource_metal") }}</span><br>
                       <span>{{ (tech.cost_crystal or 0)|fmt_int }} {{ T("resource_crystal") }}</span>
                     </div>
                   </td>
 
-                  <td>
+                  <td class="tech-time-cell">
                     <div class="tech-meta tech-time">
                       {% if th > 0 %}
                         {{ "%d:%02d:%02d"|format(th, tm, tss) }}
@@ -138,17 +159,13 @@
                     </div>
                   </td>
 
-                  <td class="tech-status-cell">
-                    {% if is_active %}
-                      <span class="status-pill status-pill-active">
-                        {{ T("research_btn_active") }}
-                      </span>
-                    {% elif locked %}
+                  <td class="tech-status-cell" data-tech-key="{{ tech.key }}">
+                    {% if locked %}
                       <span class="status-pill status-pill-locked">
                         {{ T("research_requirements_not_met") }}
                       </span>
                     {% elif queue_full %}
-                      <span class="status-pill status-pill-locked">
+                      <span class="status-pill status-pill-locked status-pill-queue-full">
                         {{ T("research_status_queue_full", "Warteschlange voll") }}
                       </span>
                     {% else %}

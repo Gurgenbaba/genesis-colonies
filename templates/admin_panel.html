@@ -132,6 +132,15 @@
                    min="1" max="20">
           </div>
 
+          <div class="admin-field">
+            <label class="admin-label" for="research_queue_limit">
+              {{ T("admin_label_research_queue_limit", "Maximale Forschungs-Queue pro Spieler") }}
+            </label>
+            <input class="admin-input" id="research_queue_limit" type="number" name="research_queue_limit"
+                   value="{{ (settings.research_queue_limit if settings and settings.research_queue_limit is defined else 3) }}"
+                   min="1" max="20">
+          </div>
+
         </div>
       </section>
 

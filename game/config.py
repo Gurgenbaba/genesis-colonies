@@ -1,0 +1,150 @@
+"""
+Genesis Colonies – central configuration from environment variables.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+ENV_FILE = ROOT_DIR / ".env"
+ENV_EXAMPLE = ROOT_DIR / ".env.example"
+VERSION_FILE = ROOT_DIR / "VERSION"
+
+INSECURE_SECRET_KEYS = frozenset({
+    "",
+    "change-me-dev-secret",
+    "change-me",
+    "dev",
+    "development",
+    "secret",
+    "admin",
+    "test",
+    "changeme",
+})
+
+
+def _load_dotenv() -> None:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(ENV_FILE, override=False)
+    except ImportError:
+        if ENV_FILE.exists():
+            for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                os.environ.setdefault(key, val)
+
+
+def _normalize_database_url() -> None:
+    """Map DATABASE_URL -> GC_DB_PATH for SQLite deployments."""
+    if os.environ.get("GC_DB_PATH", "").strip():
+        return
+    url = os.environ.get("DATABASE_URL", "").strip()
+    if not url:
+        legacy = os.environ.get("DATABASE_PATH", "").strip()
+        if legacy:
+            p = Path(legacy)
+            if not p.is_absolute():
+                p = ROOT_DIR / p
+            os.environ["GC_DB_PATH"] = str(p.resolve())
+        return
+    if url.startswith("sqlite:///"):
+        raw = url[len("sqlite:///"):]
+        p = Path(raw)
+        if not p.is_absolute() and len(raw) > 1 and raw[1] != ":":
+            p = ROOT_DIR / raw
+        os.environ["GC_DB_PATH"] = str(p.resolve())
+    elif url.startswith("sqlite://"):
+        raw = url[len("sqlite://"):]
+        p = Path(raw)
+        if not p.is_absolute():
+            p = ROOT_DIR / raw
+        os.environ["GC_DB_PATH"] = str(p.resolve())
+
+
+def get_app_version() -> str:
+    try:
+        if VERSION_FILE.exists():
+            v = VERSION_FILE.read_text(encoding="utf-8").strip()
+            if v:
+                return v
+    except OSError:
+        pass
+    return "0.0.0-dev"
+
+
+def is_production() -> bool:
+    env = (
+        os.environ.get("APP_ENV")
+        or os.environ.get("FLASK_ENV")
+        or "development"
+    ).strip().lower()
+    return env in ("production", "prod")
+
+
+def is_debug_enabled() -> bool:
+    val = os.environ.get("FLASK_DEBUG", os.environ.get("DEBUG", "0"))
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+
+def get_secret_key() -> str:
+    return os.environ.get("SECRET_KEY", "").strip()
+
+
+def validate_config(*, strict: bool | None = None) -> list[str]:
+    """
+    Validate environment. Returns list of error strings (empty = OK).
+    strict=True in production; strict=False logs warnings only in dev.
+    """
+    if strict is None:
+        strict = is_production()
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    secret = get_secret_key()
+    if not secret:
+        msg = "SECRET_KEY is not set. Set a long random value in .env"
+        if strict:
+            errors.append(msg)
+        else:
+            warnings.append(msg + " (using ephemeral key for this process)")
+
+    elif secret.lower() in INSECURE_SECRET_KEYS:
+        msg = "SECRET_KEY is an insecure default. Change it before production."
+        if strict:
+            errors.append(msg)
+        else:
+            warnings.append(msg)
+
+    if is_production() and is_debug_enabled():
+        msg = "FLASK_DEBUG/DEBUG must be off in production (APP_ENV=production)."
+        if strict:
+            errors.append(msg)
+        else:
+            warnings.append(msg)
+
+    backend = os.environ.get("GC_DB_BACKEND", "sqlite").strip().lower()
+    if backend not in ("sqlite", "postgres"):
+        errors.append(f"Unsupported GC_DB_BACKEND: {backend}")
+
+    if backend == "postgres":
+        errors.append("GC_DB_BACKEND=postgres is not implemented yet. Use sqlite.")
+
+    for w in warnings:
+        print(f"[GC config] WARNING: {w}", file=sys.stderr)
+
+    return errors
+
+
+def init_config() -> None:
+    """Load .env and normalize paths. Call once at process start."""
+    _load_dotenv()
+    _normalize_database_url()

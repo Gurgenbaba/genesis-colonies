@@ -19,18 +19,11 @@ Kein Node.js, kein Docker nötig.
 
 ```powershell
 cd "C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies"
-
-# Virtuelle Umgebung (empfohlen)
-python -m venv .venv
+python scripts/install.py --venv --admin
 .\.venv\Scripts\Activate.ps1
-
-# Abhängigkeiten
-pip install -r requirements.txt
-
-# Optionale Umgebungsvariablen
-copy .env.example .env
-# SECRET_KEY in .env anpassen, wenn Sessions über Neustarts hinweg stabil bleiben sollen
 ```
+
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for Linux VPS, Docker, updates, and production checklist.
 
 ---
 
@@ -116,4 +109,4 @@ Siehe [docs/ALPHA_TESTPLAN.md](docs/ALPHA_TESTPLAN.md).
 
 ## Lizenz / Status
 
-Early Alpha — lokale Entwicklung. Kein Production-Setup enthalten (`debug=True` in `app.py`).
+Early Alpha — use `docs/DEPLOYMENT.md` for production setup. Health: `GET /health`.

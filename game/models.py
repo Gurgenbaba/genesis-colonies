@@ -5,20 +5,17 @@ import math
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "game.db"
-
-
-# ======================================================================
-# DB Helper
-# ======================================================================
-
-def db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+from .db import (
+    DB_PATH,
+    db,
+    begin_write_transaction,
+    commit,
+    rollback,
+    with_transaction,
+    TxAbort,
+    lock_planet_for_update,
+    lock_player_for_update,
+)
 
 
 def _now_ts() -> int:
@@ -39,6 +36,7 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     "fleet_speed_peaceful": "1.0",
     "galaxy_count": "5",
     "queue_limit": "5",
+    "research_queue_limit": "3",
     "start_metal": "5000",
     "start_crystal": "2500",
 
@@ -182,6 +180,17 @@ def init_db() -> None:
         );
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS action_idempotency (
+            user_id INTEGER NOT NULL,
+            request_id TEXT NOT NULL,
+            response_json TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            PRIMARY KEY (user_id, request_id),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+    """)
+
     # ------------------------------------------------------------
     # SETTINGS
     # ------------------------------------------------------------
@@ -229,7 +238,13 @@ def init_db() -> None:
     # ------------------------------------------------------------
     indices = [
         "CREATE INDEX IF NOT EXISTS idx_build_queue_planet ON build_queue(planet_id, finish_time)",
+        "CREATE INDEX IF NOT EXISTS idx_build_queue_planet_id ON build_queue(planet_id)",
+        "CREATE INDEX IF NOT EXISTS idx_build_queue_planet_finish ON build_queue(planet_id, finish_time)",
         "CREATE INDEX IF NOT EXISTS idx_research_queue_user ON research_queue(user_id, finish_at)",
+        "CREATE INDEX IF NOT EXISTS idx_research_queue_user_id ON research_queue(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_research_queue_user_finish ON research_queue(user_id, finish_at)",
+        "CREATE INDEX IF NOT EXISTS idx_action_idempotency_created ON action_idempotency(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_action_idempotency_user_created ON action_idempotency(user_id, created_at)",
         "CREATE INDEX IF NOT EXISTS idx_planets_player ON planets(player_id, is_homeworld)",
         "CREATE INDEX IF NOT EXISTS idx_research_levels_user ON research_levels(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_bans_player ON bans(player_id, banned_until)",
@@ -240,6 +255,11 @@ def init_db() -> None:
             cur.execute(idx)
         except sqlite3.OperationalError:
             pass
+
+    try:
+        cur.execute("ALTER TABLE research_queue ADD COLUMN start_at REAL;")
+    except sqlite3.OperationalError:
+        pass
 
     # ------------------------------------------------------------
     # DEFAULT ADMIN + DEFAULT PLAYER + DEFAULT SETTINGS
@@ -610,6 +630,34 @@ def try_spend_resources(planet_id: int, metal_cost: int, crystal_cost: int) -> b
         raise ValueError("Costs must be >= 0")
 
     conn = db()
+    try:
+        begin_write_transaction(conn)
+        lock_planet_for_update(conn, int(planet_id))
+        ok = try_spend_resources_conn(conn, int(planet_id), int(metal_cost), int(crystal_cost))
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+        return ok
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
+def try_spend_resources_conn(
+    conn: sqlite3.Connection,
+    planet_id: int,
+    metal_cost: int,
+    crystal_cost: int,
+) -> bool:
+    """Atomarer Ressourcenabzug innerhalb einer laufenden Transaktion (kein commit)."""
+    if metal_cost < 0 or crystal_cost < 0:
+        raise ValueError("Costs must be >= 0")
+    if metal_cost == 0 and crystal_cost == 0:
+        return True
+
     cur = conn.cursor()
     cur.execute(
         """
@@ -622,10 +670,115 @@ def try_spend_resources(planet_id: int, metal_cost: int, crystal_cost: int) -> b
         """,
         (int(metal_cost), int(crystal_cost), int(planet_id), int(metal_cost), int(crystal_cost)),
     )
-    ok = (cur.rowcount == 1)
-    conn.commit()
-    conn.close()
-    return ok
+    return cur.rowcount == 1
+
+
+# ======================================================================
+# ACTION IDEMPOTENCY (optional client request_id)
+# ======================================================================
+
+_IDEMPOTENCY_TTL_SEC = 120.0
+
+
+def purge_stale_idempotency(
+    conn: sqlite3.Connection,
+    *,
+    user_id: Optional[int] = None,
+    max_age_sec: float = _IDEMPOTENCY_TTL_SEC,
+) -> int:
+    cutoff = time.time() - float(max_age_sec)
+    if user_id is not None:
+        cur = conn.execute(
+            "DELETE FROM action_idempotency WHERE user_id = ? AND created_at < ?;",
+            (int(user_id), float(cutoff)),
+        )
+    else:
+        cur = conn.execute(
+            "DELETE FROM action_idempotency WHERE created_at < ?;",
+            (float(cutoff),),
+        )
+    return int(cur.rowcount)
+
+
+def purge_stale_idempotency_global(max_age_sec: float = _IDEMPOTENCY_TTL_SEC) -> int:
+    """TTL cleanup for idempotency rows (call on app startup or periodic maintenance)."""
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        deleted = purge_stale_idempotency(conn, max_age_sec=max_age_sec)
+        commit(conn)
+        return deleted
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
+def _purge_stale_idempotency(conn: sqlite3.Connection, user_id: int) -> None:
+    purge_stale_idempotency(conn, user_id=user_id)
+
+
+def get_idempotent_action(user_id: int, request_id: str) -> Optional[Dict[str, Any]]:
+    import json
+
+    rid = str(request_id or "").strip()
+    if not rid:
+        return None
+
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT response_json, created_at FROM action_idempotency
+            WHERE user_id = ? AND request_id = ? LIMIT 1;
+            """,
+            (int(user_id), rid),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        if float(row["created_at"]) < time.time() - _IDEMPOTENCY_TTL_SEC:
+            begin_write_transaction(conn)
+            conn.execute(
+                "DELETE FROM action_idempotency WHERE user_id = ? AND request_id = ?;",
+                (int(user_id), rid),
+            )
+            commit(conn)
+            return None
+        return json.loads(str(row["response_json"]))
+    finally:
+        conn.close()
+
+
+def save_idempotent_action(user_id: int, request_id: str, response: Dict[str, Any]) -> None:
+    import json
+
+    rid = str(request_id or "").strip()
+    if not rid:
+        return
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        _purge_stale_idempotency(conn, int(user_id))
+        conn.execute(
+            """
+            INSERT INTO action_idempotency (user_id, request_id, response_json, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, request_id) DO UPDATE SET
+                response_json = excluded.response_json,
+                created_at = excluded.created_at;
+            """,
+            (int(user_id), rid, json.dumps(response), float(time.time())),
+        )
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
 
 
 def adjust_homeworld_resources(
@@ -979,36 +1132,62 @@ def save_research_level(tech_key: str, level: int, user_id: int) -> None:
         conn.close()
 
 
-def get_research_queue_rows(user_id: int):
-    conn = db()
+def get_research_queue_rows(user_id: int, conn: sqlite3.Connection | None = None):
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
     cur = conn.cursor()
     cur.execute(
         "SELECT * FROM research_queue WHERE user_id = ? ORDER BY finish_at ASC;",
         (int(user_id),),
     )
     rows = cur.fetchall()
-    conn.close()
+
+    if own_conn:
+        conn.close()
+
     return rows
 
 
-def add_research_job(user_id: int, tech_key: str, finish_at: float) -> None:
-    conn = db()
+def add_research_job(
+    user_id: int,
+    tech_key: str,
+    start_at: float,
+    finish_at: float,
+    conn: sqlite3.Connection | None = None,
+) -> int:
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
     cur = conn.cursor()
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        if own_conn:
+            conn.execute("BEGIN IMMEDIATE")
+
         cur.execute(
             """
-            INSERT INTO research_queue (user_id, tech_key, finish_at)
-            VALUES (?, ?, ?);
+            INSERT INTO research_queue (user_id, tech_key, start_at, finish_at)
+            VALUES (?, ?, ?, ?);
             """,
-            (int(user_id), str(tech_key), float(finish_at)),
+            (int(user_id), str(tech_key), float(start_at), float(finish_at)),
         )
-        conn.commit()
+        job_id = int(cur.lastrowid)
+
+        if own_conn:
+            conn.commit()
+
+        return job_id
     except Exception:
-        conn.rollback()
+        if own_conn:
+            conn.rollback()
         raise
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
 
 def delete_research_job(job_id: int) -> None:
