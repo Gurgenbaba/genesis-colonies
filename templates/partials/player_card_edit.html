@@ -1,0 +1,123 @@
+{# PlayerCard edit partial (AJAX – no loading UI here) #}
+{% set card = card if card is defined and card else {} %}
+{% set form = card.get('form') if card is mapping else {} %}
+{% if not form %}{% set form = {} %}{% endif %}
+
+<div class="gc-player-card-shell gc-player-card-edit"
+     data-player-id="{{ card.get('player_id', '') }}"
+     data-theme="{{ form.get('theme', card.get('theme', 'cyan')) }}"
+     data-mode="edit">
+
+  <form class="gc-player-card-form" id="gc-player-card-form" novalidate>
+    <input type="hidden" name="player_id" value="{{ card.get('player_id', '') }}">
+
+    <div class="gc-player-card-edit-layout">
+      <section class="gc-player-card-preview" id="gc-player-card-preview" data-theme="{{ form.get('theme', 'cyan') }}" aria-label="{{ T('playercard_preview') }}">
+        <div class="gc-player-card-preview-label">{{ T("playercard_preview") }}</div>
+        <div class="gc-player-card-hero gc-player-card-hero-compact">
+          <div class="gc-player-card-avatar-wrap">
+            <img class="gc-player-card-avatar"
+                 id="pc-preview-avatar"
+                 src="{{ form.get('avatar_url') or '' }}"
+                 alt=""
+                 {% if not form.get('avatar_url') %}hidden{% endif %}
+                 referrerpolicy="no-referrer">
+            <div class="gc-player-card-avatar gc-player-card-avatar-placeholder"
+                 id="pc-preview-avatar-ph"
+                 {% if form.get('avatar_url') %}hidden{% endif %}
+                 aria-hidden="true">{{ (card.get('commander_name_raw') or '?')[:1] }}</div>
+          </div>
+          <div class="gc-player-card-identity">
+            <h3 class="gc-player-card-commander" id="pc-preview-name">{{ card.get('commander_name', '—') }}</h3>
+            <p class="gc-player-card-title-text" id="pc-preview-title">{{ form.get('title') or '' }}</p>
+            <p class="gc-player-card-bio-preview" id="pc-preview-bio">{{ form.get('bio') or '' }}</p>
+          </div>
+        </div>
+        <div class="gc-player-card-badges gc-player-card-badges-preview" id="pc-preview-badges" aria-live="polite"></div>
+      </section>
+
+      <section class="gc-player-card-fields">
+        <label class="gc-player-card-field">
+          <span class="gc-player-card-field-label">{{ T("playercard_avatar_url") }}</span>
+          <input type="url"
+                 name="avatar_url"
+                 class="gc-input"
+                 maxlength="512"
+                 placeholder="https://…"
+                 value="{{ form.get('avatar_url', '') }}"
+                 data-pc-field="avatar_url"
+                 autocomplete="off">
+        </label>
+
+        <label class="gc-player-card-field">
+          <span class="gc-player-card-field-label">{{ T("playercard_commander_title") }}</span>
+          <input type="text"
+                 name="title"
+                 class="gc-input"
+                 maxlength="64"
+                 value="{{ form.get('title', '') }}"
+                 data-pc-field="title">
+        </label>
+
+        <label class="gc-player-card-field">
+          <span class="gc-player-card-field-label">{{ T("playercard_bio") }}</span>
+          <textarea name="bio"
+                    class="gc-input gc-textarea"
+                    maxlength="400"
+                    rows="4"
+                    data-pc-field="bio">{{ form.get('bio', '') }}</textarea>
+        </label>
+
+        <label class="gc-player-card-field">
+          <span class="gc-player-card-field-label">{{ T("playercard_theme") }}</span>
+          <select name="theme" class="gc-input" data-pc-field="theme">
+            {% for th in card.get('themes', ['cyan', 'violet', 'amber', 'emerald', 'rose']) %}
+              <option value="{{ th }}" {% if form.get('theme', 'cyan') == th %}selected{% endif %}>{{ T("playercard_theme_" ~ th) }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label class="gc-player-card-field gc-player-card-field-check">
+          <input type="checkbox"
+                 name="is_public"
+                 value="1"
+                 data-pc-field="is_public"
+                 {% if form.get('is_public', True) %}checked{% endif %}>
+          <span class="gc-player-card-field-check-text">
+            <span class="gc-player-card-field-label">{{ T("playercard_public") }}</span>
+            <span class="gc-player-card-field-hint">{{ T("playercard_public_hint") }}</span>
+          </span>
+        </label>
+
+        {% if card.get('unlocked_badges') and card.get('unlocked_badges')|length > 0 %}
+        <fieldset class="gc-player-card-badges-picker">
+          <legend>{{ T("playercard_badges_select") }}</legend>
+          <p class="gc-player-card-field-hint">{{ T("playercard_badges_select_hint") }}</p>
+          <div class="gc-player-card-badge-options">
+            {% for badge in card.get('unlocked_badges') %}
+              {% set bid = badge.get('id') %}
+              <label class="gc-player-card-badge-option">
+                <input type="checkbox"
+                       name="badge_slot"
+                       value="{{ bid }}"
+                       data-pc-badge-id="{{ bid }}"
+                       data-pc-badge-icon="{{ badge.get('icon', '★') }}"
+                       data-pc-badge-name="{{ T(badge.get('name_i18n_key', ''), badge.get('name_i18n_key', '')) }}"
+                       {% if bid == form.get('selected_badge_1') or bid == form.get('selected_badge_2') or bid == form.get('selected_badge_3') %}checked{% endif %}>
+                <span class="gc-player-card-badge-icon" aria-hidden="true">{{ badge.get('icon', '★') }}</span>
+                <span>{{ T(badge.get('name_i18n_key', ''), badge.get('name_i18n_key', '')) }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+        {% endif %}
+
+        <div class="gc-player-card-form-actions">
+          <button type="button" class="gc-btn gc-btn-ghost" data-pc-cancel>{{ T("playercard_cancel") }}</button>
+          <button type="submit" class="gc-btn gc-btn-primary" data-pc-save>{{ T("playercard_save") }}</button>
+        </div>
+        <p class="gc-player-card-form-msg" data-pc-form-msg hidden role="status"></p>
+      </section>
+    </div>
+  </form>
+</div>

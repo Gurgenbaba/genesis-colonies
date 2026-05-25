@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>{{ T("title") }}</title>
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ GC_ASSET_VERSION }}">
+
+  {% if AUTH_ADMIN %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}?v={{ GC_ASSET_VERSION }}">
+  {% endif %}
 
   {% block extra_head %}{% endblock %}
 </head>
@@ -77,7 +81,7 @@
           {% if AUTH_USER and AUTH_USER.id %}
             <div class="gc-hud-panel gc-hud-panel-user" aria-label="{{ T('logged_in_as', 'Eingeloggt als') }}">
               <span class="gc-hud-panel-tag">{{ T("commander") }}</span>
-              <span class="gc-user-name">{{ AUTH_USER.username }}</span>
+              <span class="gc-user-name">{{ player_name_link(CURRENT_PLAYER_ID, AUTH_USER.username) }}</span>
               {% if AUTH_ADMIN %}
                 <span class="gc-admin-badge" aria-label="Administrator">ADMIN</span>
               {% endif %}
@@ -204,7 +208,8 @@
 
         {% if AUTH_ADMIN %}
           <a href="{{ url_for('admin_panel') }}"
-             class="gc-nav-link gc-nav-admin {% if request.endpoint == 'admin_panel' %}active{% endif %}">
+             class="gc-nav-link gc-nav-admin {% if request.endpoint == 'admin_panel' %}active{% endif %}"
+             data-no-pjax="1">
             🛠️ {{ T("nav_admin") }}
           </a>
         {% endif %}
@@ -256,6 +261,10 @@
     </main>
 
   </div>
+
+  {% if not SIMPLE_LAYOUT and AUTH_USER and AUTH_USER.id %}
+  {% include "partials/player_card_modal.html" %}
+  {% endif %}
 
   {% if not SIMPLE_LAYOUT %}
   <nav class="gc-bottom-nav" aria-label="{{ T('nav_mobile', 'Mobile Navigation') }}">
@@ -317,7 +326,7 @@
           {{ T("nav_techtree", "Tech-Tree") }}
         </a>
         {% if AUTH_ADMIN %}
-        <a href="{{ url_for('admin_panel') }}" class="gc-nav-drawer-link gc-nav-admin {% if request.endpoint == 'admin_panel' %}active{% endif %}">
+        <a href="{{ url_for('admin_panel') }}" class="gc-nav-drawer-link gc-nav-admin {% if request.endpoint == 'admin_panel' %}active{% endif %}" data-no-pjax="1">
           🛠️ {{ T("nav_admin") }}
         </a>
         {% endif %}
@@ -343,9 +352,9 @@
     })();
   </script>
 
-  <script src="{{ url_for('static', filename='main.js') }}"></script>
+  <script src="{{ url_for('static', filename='main.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   {% if AUTH_ADMIN %}
-  <script src="{{ url_for('static', filename='admin.js') }}"></script>
+  <script src="{{ url_for('static', filename='admin.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   {% endif %}
   {% block extra_scripts %}{% endblock %}
 </body>

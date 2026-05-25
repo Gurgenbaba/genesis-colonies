@@ -25,6 +25,8 @@
   {% set slot_free = "Kolonieslot frei" %}
 {% endif %}
 
+{% set sector_commanders = (sector_commanders if sector_commanders is defined and sector_commanders else []) %}
+
 <div class="gc-page galaxy-wrapper">
 
   <!-- HEADLINE -->
@@ -138,6 +140,22 @@
       </div>
 
     </div>
+
+    {% if sector_commanders and sector_commanders|length > 0 %}
+    <div class="galaxy-sector-commanders">
+      <div class="galaxy-legend-title">
+        {{ T("galaxy_sector_commanders") if T("galaxy_sector_commanders") != "galaxy_sector_commanders" else "Commander im Sektor" }}
+      </div>
+      <ul class="galaxy-commander-list">
+        {% for cmd in sector_commanders %}
+          <li class="galaxy-commander-item">
+            {{ player_name_link(cmd.player_id, cmd.nickname) }}
+            <span class="galaxy-commander-score gc-mono">{{ (cmd.score_total or 0)|fmt_int }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
 
     <!-- LEGEND / PLACEHOLDER -->
     <div class="galaxy-legend">

@@ -3390,3 +3390,564 @@ body.gc-body-ingame {
   .admin-panel.is-active,
   .admin-tab-panel.is-active { animation: none; }
 }
+
+/* ==========================================================================
+   PLAYER CARD (global profile modal)
+   ========================================================================== */
+
+.gc-player-name {
+  color: var(--gc-neon-cyan, #46e5ff);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(70, 229, 255, 0.35);
+  text-underline-offset: 0.15em;
+  transition: color 0.15s ease, text-shadow 0.15s ease;
+}
+.gc-player-name:hover,
+.gc-player-name:focus-visible {
+  color: #9ef6ff;
+  text-shadow: 0 0 12px rgba(70, 229, 255, 0.45);
+  outline: none;
+}
+
+body.gc-player-card-open { overflow: hidden; }
+
+/* --- Modal shell --- */
+.gc-player-card-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+           max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+.gc-player-card-modal[hidden] { display: none !important; }
+
+.gc-player-card-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 8, 18, 0.72);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.gc-player-card-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(580px, 100%);
+  max-height: min(92vh, 760px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--gc-border-bright, rgba(70, 229, 255, 0.35));
+  border-radius: var(--gc-radius-md, 10px);
+  background: linear-gradient(160deg, rgba(12, 20, 36, 0.98), rgba(6, 10, 20, 0.98));
+  box-shadow: 0 0 40px rgba(70, 229, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  animation: gc-pc-in 0.22s ease-out;
+  overflow: hidden;
+}
+.gc-player-card-dialog[data-theme="cyan"] {
+  border-color: rgba(70, 229, 255, 0.4);
+  box-shadow: 0 0 36px rgba(70, 229, 255, 0.14);
+}
+.gc-player-card-dialog[data-theme="violet"] {
+  border-color: rgba(168, 120, 255, 0.45);
+  box-shadow: 0 0 40px rgba(168, 120, 255, 0.15);
+}
+.gc-player-card-dialog[data-theme="amber"] {
+  border-color: rgba(255, 190, 80, 0.45);
+  box-shadow: 0 0 40px rgba(255, 190, 80, 0.12);
+}
+.gc-player-card-dialog[data-theme="emerald"] {
+  border-color: rgba(80, 220, 140, 0.4);
+  box-shadow: 0 0 40px rgba(80, 220, 140, 0.12);
+}
+.gc-player-card-dialog[data-theme="rose"] {
+  border-color: rgba(255, 120, 160, 0.4);
+  box-shadow: 0 0 40px rgba(255, 120, 160, 0.12);
+}
+
+@keyframes gc-pc-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* --- Header --- */
+.gc-player-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--gc-border, rgba(255, 255, 255, 0.08));
+}
+.gc-player-card-head-title {
+  margin: 0;
+  font-family: var(--gc-font-display, Orbitron, sans-serif);
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* --- Body: content + overlay states --- */
+.gc-player-card-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 140px;
+  overflow: auto;
+  padding: 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.gc-player-card-content {
+  min-height: 0;
+}
+.gc-player-card-content:empty {
+  display: none;
+}
+
+/* CRITICAL: [hidden] must win over display:flex (fixes stuck "Lade Profil…") */
+.gc-player-card-loading[hidden],
+.gc-player-card-error[hidden] {
+  display: none !important;
+}
+
+.gc-player-card-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: rgba(6, 10, 20, 0.88);
+  color: var(--gc-text-muted, #9aa8c4);
+  font-size: 0.9rem;
+  text-align: center;
+  pointer-events: none;
+}
+.gc-player-card-loading-text {
+  letter-spacing: 0.04em;
+}
+
+.gc-player-card-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(70, 229, 255, 0.2);
+  border-top-color: var(--gc-neon-cyan, #46e5ff);
+  border-radius: 50%;
+  animation: gc-pc-spin 0.8s linear infinite;
+}
+@keyframes gc-pc-spin { to { transform: rotate(360deg); } }
+
+.gc-player-card-error {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
+  color: #ff9a9a;
+  font-size: 0.9rem;
+  background: rgba(6, 10, 20, 0.92);
+}
+
+.gc-player-card-modal.is-loading .gc-player-card-content {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* --- View shell / profile --- */
+.gc-player-card-shell {
+  animation: gc-pc-in 0.18s ease-out;
+}
+
+.gc-player-card-profile {
+  margin-bottom: 16px;
+}
+
+.gc-player-card-hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.gc-player-card-hero-compact {
+  grid-template-columns: auto 1fr;
+}
+
+.gc-player-card-hero-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.gc-player-card-avatar-wrap {
+  flex-shrink: 0;
+}
+
+.gc-player-card-avatar {
+  width: 72px;
+  height: 72px;
+  max-width: 100%;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  background: rgba(0, 0, 0, 0.35);
+}
+.gc-player-card-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  font-family: var(--gc-font-display, Orbitron, sans-serif);
+  font-size: 1.6rem;
+  color: var(--gc-neon-cyan, #46e5ff);
+  border-radius: 12px;
+  border: 1px solid rgba(70, 229, 255, 0.25);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.gc-player-card-commander {
+  margin: 0 0 4px;
+  font-size: 1.15rem;
+  line-height: 1.25;
+  font-family: var(--gc-font-display, Orbitron, sans-serif);
+  letter-spacing: 0.04em;
+  word-break: break-word;
+}
+.gc-player-card-title-text {
+  margin: 0 0 6px;
+  color: var(--gc-text-muted, #9aa8c4);
+  font-size: 0.88rem;
+  word-break: break-word;
+}
+.gc-player-card-activity {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--gc-neon-cyan, #46e5ff);
+  opacity: 0.85;
+}
+
+/* --- Stats --- */
+.gc-player-card-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.gc-player-card-stat {
+  padding: 10px 12px;
+  border: 1px solid var(--gc-border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--gc-radius-sm, 6px);
+  background: rgba(0, 0, 0, 0.22);
+  min-width: 0;
+}
+.gc-player-card-stat-label {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gc-text-muted, #9aa8c4);
+  margin-bottom: 4px;
+}
+.gc-player-card-stat-value {
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+.gc-player-card-stat-sub {
+  font-size: 0.78rem;
+  opacity: 0.7;
+}
+
+/* --- Bio & badges --- */
+.gc-player-card-bio {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-left: 2px solid rgba(70, 229, 255, 0.35);
+  background: rgba(0, 0, 0, 0.18);
+}
+.gc-player-card-bio p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.gc-player-card-badges-section {
+  margin-top: 8px;
+}
+.gc-player-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.gc-player-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(70, 229, 255, 0.25);
+  background: rgba(70, 229, 255, 0.06);
+  font-size: 0.78rem;
+  max-width: 100%;
+}
+.gc-player-card-badge-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+.gc-player-card-badge-rare { border-color: rgba(168, 120, 255, 0.45); }
+.gc-player-card-badge-epic { border-color: rgba(255, 190, 80, 0.5); }
+.gc-player-card-badge-legendary {
+  border-color: rgba(255, 220, 120, 0.55);
+  background: rgba(255, 200, 80, 0.08);
+}
+
+.gc-player-card-no-badges {
+  margin: 8px 0 0;
+  color: var(--gc-text-muted, #9aa8c4);
+  font-size: 0.85rem;
+}
+
+/* --- Private profile --- */
+.gc-player-card-private {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: var(--gc-radius-sm, 6px);
+  background: rgba(0, 0, 0, 0.2);
+}
+.gc-player-card-private-msg {
+  margin: 6px 0 0;
+  color: var(--gc-text-muted, #9aa8c4);
+  font-size: 0.88rem;
+}
+
+.gc-player-card-error-state {
+  text-align: center;
+  padding: 24px 12px;
+}
+.gc-player-card-error-text {
+  color: #ff8a8a;
+  margin: 0 0 14px;
+}
+
+/* --- Edit mode --- */
+.gc-player-card-edit .gc-player-card-form {
+  margin: 0;
+}
+
+.gc-player-card-edit-layout {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+.gc-player-card-preview {
+  padding: 14px;
+  border: 1px dashed rgba(70, 229, 255, 0.28);
+  border-radius: var(--gc-radius-sm, 6px);
+  background: rgba(0, 0, 0, 0.22);
+  min-width: 0;
+}
+.gc-player-card-preview[data-theme="violet"] { border-color: rgba(168, 120, 255, 0.35); }
+.gc-player-card-preview[data-theme="amber"] { border-color: rgba(255, 190, 80, 0.35); }
+.gc-player-card-preview[data-theme="emerald"] { border-color: rgba(80, 220, 140, 0.35); }
+.gc-player-card-preview[data-theme="rose"] { border-color: rgba(255, 120, 160, 0.35); }
+
+.gc-player-card-preview-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gc-text-muted, #9aa8c4);
+  margin-bottom: 10px;
+}
+.gc-player-card-bio-preview {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--gc-text-muted, #9aa8c4);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-height: 6em;
+  overflow: hidden;
+}
+
+.gc-player-card-fields {
+  min-width: 0;
+}
+
+.gc-player-card-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+}
+.gc-player-card-field-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gc-text-muted, #9aa8c4);
+}
+.gc-player-card-field-check {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.gc-player-card-field-check-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gc-player-card-field-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--gc-text-muted, #9aa8c4);
+  line-height: 1.35;
+}
+
+.gc-player-card-fields .gc-input,
+.gc-player-card-fields .gc-textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.gc-textarea {
+  min-height: 88px;
+  max-height: 200px;
+  resize: vertical;
+}
+
+.gc-player-card-badges-picker {
+  border: 1px solid var(--gc-border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--gc-radius-sm, 6px);
+  padding: 10px 12px;
+  margin: 0 0 12px;
+}
+.gc-player-card-badges-picker legend {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 4px;
+}
+.gc-player-card-badge-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.gc-player-card-badge-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.gc-player-card-badge-option:hover {
+  background: rgba(70, 229, 255, 0.06);
+}
+
+.gc-player-card-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 4px;
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, transparent, rgba(6, 10, 20, 0.95) 24%);
+  margin: 0 -4px;
+  padding-bottom: 4px;
+}
+.gc-player-card-form-msg {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: var(--gc-neon-cyan, #46e5ff);
+}
+.gc-player-card-form-msg[hidden] {
+  display: none !important;
+}
+
+/* --- Galaxy / alliance name lists --- */
+.galaxy-sector-commanders,
+.alliance-member-preview {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--gc-border, rgba(255, 255, 255, 0.08));
+}
+.galaxy-commander-list,
+.alliance-member-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.galaxy-commander-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+.galaxy-commander-score {
+  font-size: 0.82rem;
+  color: var(--gc-text-muted, #9aa8c4);
+}
+
+/* --- Responsive --- */
+@media (min-width: 640px) {
+  .gc-player-card-edit-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  }
+  .gc-player-card-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .gc-player-card-dialog {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: var(--gc-radius-sm, 6px);
+  }
+  .gc-player-card-body {
+    padding: 12px;
+  }
+  .gc-player-card-hero-actions {
+    justify-content: stretch;
+  }
+  .gc-player-card-hero-actions .gc-btn {
+    width: 100%;
+  }
+  .gc-player-card-stats {
+    grid-template-columns: 1fr;
+  }
+  .gc-player-card-form-actions {
+    flex-direction: column-reverse;
+  }
+  .gc-player-card-form-actions .gc-btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gc-player-card-dialog,
+  .gc-player-card-shell { animation: none; }
+  .gc-player-card-spinner { animation: none; }
+}

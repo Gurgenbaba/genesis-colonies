@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="gc-page player-card-page">
+  <header class="section-header">
+    <h1 class="section-title">{{ T("playercard_title") }}</h1>
+    <p class="section-hint hint">
+      <a href="{{ url_for('ranking_view') }}" class="gc-nav-link">{{ T("nav_ranking") }}</a>
+    </p>
+  </header>
+  <section class="gc-panel">
+    {% include "partials/player_card_view.html" %}
+  </section>
+</div>
+{% endblock %}

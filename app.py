@@ -17,6 +17,7 @@ from flask import (
     session,
     g,
 )
+from markupsafe import Markup, escape
 
 # --------------------------------------------------------------------------
 # GAME INTERNALS (DB / MODELS)
@@ -67,6 +68,8 @@ from game.ranking import (
     invalidate_player_score_cache,
 )
 
+from game import playercard as playercard_logic
+
 from game.bootstrap import bootstrap_application
 from game.config import get_secret_key, is_debug_enabled, is_production
 
@@ -78,6 +81,17 @@ app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
 LOCALES_DIR = BASE_DIR / "locales"
+VERSION_FILE = BASE_DIR / "VERSION"
+
+
+def get_asset_version() -> str:
+    try:
+        return VERSION_FILE.read_text(encoding="utf-8").strip() or "dev"
+    except Exception:
+        return "dev"
+
+
+GC_ASSET_VERSION = get_asset_version()
 
 BACKGROUND_CLASSES = ["bg-1", "bg-2", "bg-3", "bg-4"]
 GC_LOCALE = "de"
@@ -111,6 +125,50 @@ def fmt_int_filter(value):
     except (TypeError, ValueError):
         return value
     return f"{n:,}".replace(",", ".")
+
+
+@app.template_global()
+def player_name_link(
+    player_id,
+    name=None,
+    extra_class: str = "",
+    enable_card: bool = True,
+) -> Markup:
+    """
+    Standard clickable player name for PlayerCard (PJAX-safe markup).
+
+    Usage: {{ player_name_link(row.player_id, row.nickname) }}
+    """
+    try:
+        pid = int(player_id)
+    except (TypeError, ValueError):
+        return Markup(escape(name or "—"))
+    if pid <= 0:
+        return Markup(escape(name or "—"))
+
+    label = escape(str(name or "Commander"))
+    classes = ["gc-player-name"]
+    if extra_class:
+        classes.append(str(extra_class).strip())
+    attrs = [
+        f'class="{" ".join(classes)}"',
+        f'data-player-id="{pid}"',
+        f'data-player-name="{label}"',
+    ]
+    if enable_card:
+        attrs.append('data-player-card="1"')
+        attrs.append(f'title="{escape(T("playercard_open"))}"')
+        attrs.append('role="button"')
+        attrs.append('tabindex="0"')
+    return Markup(f"<span {' '.join(attrs)}>{label}</span>")
+
+
+def _current_player_id() -> int | None:
+    try:
+        uid = session.get("user_id")
+        return int(uid) if uid is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 # --------------------------------------------------------------------------
@@ -195,6 +253,9 @@ def inject_globals():
         T=T,
         T_DATA=T_DATA,
         GC_LOCALE=GC_LOCALE,
+        GC_ASSET_VERSION=GC_ASSET_VERSION,
+        player_name_link=player_name_link,
+        CURRENT_PLAYER_ID=_current_player_id(),
 
         AUTH_USER=auth_user,
         AUTH_ADMIN=auth_admin,
@@ -595,12 +656,26 @@ def galaxy_view():
     if player_view is None:
         return redirect(url_for("login"))
 
+    sector_commanders = []
+    try:
+        for row in get_ranking_rows(limit=6, offset=0):
+            sector_commanders.append(
+                {
+                    "player_id": row["player_id"],
+                    "nickname": row["nickname"],
+                    "score_total": row["score_total"],
+                }
+            )
+    except Exception:
+        sector_commanders = []
+
     return render_template(
         "galaxy.html",
         player=player_view,
         energy_total=energy_total,
         energy_used=energy_used,
         storage_caps=storage_caps,
+        sector_commanders=sector_commanders,
     )
 
 
@@ -659,12 +734,25 @@ def alliance_view():
     if player_view is None:
         return redirect(url_for("login"))
 
+    alliance_members = []
+    try:
+        for row in get_ranking_rows(limit=8, offset=0):
+            alliance_members.append(
+                {
+                    "player_id": row["player_id"],
+                    "nickname": row["nickname"],
+                }
+            )
+    except Exception:
+        alliance_members = []
+
     return render_template(
         "alliance.html",
         player=player_view,
         energy_total=energy_total,
         energy_used=energy_used,
         storage_caps=storage_caps,
+        alliance_members=alliance_members,
     )
 
 
@@ -709,6 +797,105 @@ def ranking_view():
         my_score=my_score,
         my_rank=my_rank,
         total_players=total_players,
+    )
+
+
+# --------------------------------------------------------------------------
+# PLAYER CARD (global profile popup)
+# --------------------------------------------------------------------------
+
+def _playercard_viewer_id() -> int | None:
+    return _current_player_id()
+
+
+@app.route("/api/player-card/<int:player_id>")
+@require_login
+def api_player_card_view(player_id: int):
+    viewer_id = _playercard_viewer_id()
+    card, err = playercard_logic.build_public_card(player_id, viewer_id=viewer_id)
+    if err:
+        return (
+            render_template(
+                "partials/player_card_error.html",
+                error_key=err,
+            ),
+            404,
+        )
+    if card is None:
+        return (
+            render_template(
+                "partials/player_card_error.html",
+                error_key="playercard_not_found",
+            ),
+            404,
+        )
+    return render_template("partials/player_card_view.html", card=card)
+
+
+@app.route("/api/player-card/<int:player_id>/edit")
+@require_login
+def api_player_card_edit(player_id: int):
+    viewer_id = _playercard_viewer_id()
+    if viewer_id is None or int(viewer_id) != int(player_id):
+        return (
+            render_template(
+                "partials/player_card_error.html",
+                error_key="playercard_forbidden",
+            ),
+            403,
+        )
+    card, err = playercard_logic.build_edit_card(player_id)
+    if err:
+        status = 403 if err == "playercard_forbidden" else 404
+        return render_template("partials/player_card_error.html", error_key=err), status
+    if card is None:
+        return (
+            render_template(
+                "partials/player_card_error.html",
+                error_key="playercard_not_found",
+            ),
+            404,
+        )
+    return render_template("partials/player_card_edit.html", card=card)
+
+
+@app.route("/api/player-card/me", methods=["POST"])
+@require_login
+def api_player_card_save():
+    viewer_id = _playercard_viewer_id()
+    if viewer_id is None:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    ok, reason, card = playercard_logic.save_own_card(int(viewer_id), data)
+    if not ok:
+        status = 429 if reason == "playercard_rate_limited" else 400
+        return jsonify({"ok": False, "reason": reason}), status
+
+    html = render_template("partials/player_card_view.html", card=card)
+    return jsonify({"ok": True, "reason": reason, "html": html})
+
+
+@app.route("/player/<int:player_id>")
+@require_login
+def player_card_fallback_page(player_id: int):
+    """Optional full-page fallback when JS is unavailable."""
+    viewer_id = _playercard_viewer_id()
+    card, err = playercard_logic.build_public_card(player_id, viewer_id=viewer_id)
+    if err or card is None:
+        flash(T(err or "playercard_not_found"), "error")
+        return redirect(url_for("ranking_view"))
+
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    return render_template(
+        "player_card_page.html",
+        player=player_view,
+        buildings=buildings,
+        energy_total=energy_total,
+        energy_used=energy_used,
+        storage_caps=storage_caps,
+        card=card,
+        card_player_id=player_id,
     )
 
 

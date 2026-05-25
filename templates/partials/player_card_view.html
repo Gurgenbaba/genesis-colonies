@@ -1,0 +1,116 @@
+{# PlayerCard view partial (AJAX – no loading UI here) #}
+{% set card = card if card is defined and card else {} %}
+{% set is_private = card.get('is_private') if card is mapping else false %}
+
+<div class="gc-player-card-shell gc-player-card-view"
+     data-player-id="{{ card.get('player_id', '') }}"
+     data-theme="{{ card.get('theme', 'cyan') }}"
+     data-can-edit="{{ '1' if card.get('can_edit') else '0' }}">
+
+  {% if is_private %}
+    <div class="gc-player-card-profile gc-player-card-private">
+      <div class="gc-player-card-avatar gc-player-card-avatar-placeholder" aria-hidden="true">?</div>
+      <div class="gc-player-card-private-text">
+        <h3 class="gc-player-card-commander">{{ card.get('commander_name', '—') }}</h3>
+        <p class="gc-player-card-private-msg">{{ T("playercard_private_profile") }}</p>
+      </div>
+    </div>
+  {% else %}
+
+  <div class="gc-player-card-profile">
+    <div class="gc-player-card-hero">
+      <div class="gc-player-card-avatar-wrap">
+        {% if card.get('avatar_url') %}
+          <img class="gc-player-card-avatar"
+               src="{{ card.get('avatar_url') }}"
+               alt=""
+               loading="lazy"
+               referrerpolicy="no-referrer">
+        {% else %}
+          <div class="gc-player-card-avatar gc-player-card-avatar-placeholder" aria-hidden="true">
+            {{ (card.get('commander_name_raw') or '?')[:1] }}
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="gc-player-card-identity">
+        <h3 class="gc-player-card-commander">{{ card.get('commander_name', '—') }}</h3>
+        {% if card.get('title') %}
+          <p class="gc-player-card-title-text">{{ card.get('title') }}</p>
+        {% endif %}
+        <p class="gc-player-card-activity">
+          {{ T(card.get('activity_key', 'playercard_recently_active')) }}
+        </p>
+      </div>
+    </div>
+
+    {% if card.get('can_edit') %}
+      <div class="gc-player-card-hero-actions">
+        <button type="button"
+                class="gc-btn gc-btn-outline gc-btn-sm gc-player-card-edit-btn"
+                data-pc-edit
+                data-player-id="{{ card.get('player_id') }}">
+          {{ T("playercard_edit") }}
+        </button>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="gc-player-card-stats">
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("playercard_rank") }}</span>
+      <span class="gc-player-card-stat-value gc-mono">
+        {% if card.get('rank') %}#{{ card.get('rank')|fmt_int }}{% else %}—{% endif %}
+        {% if card.get('total_players') %}
+          <span class="gc-player-card-stat-sub">/ {{ card.get('total_players')|fmt_int }}</span>
+        {% endif %}
+      </span>
+    </div>
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("playercard_total_score") }}</span>
+      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_total') or 0)|fmt_int }}</span>
+    </div>
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("playercard_building_score") }}</span>
+      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_buildings') or 0)|fmt_int }}</span>
+    </div>
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("playercard_research_score") }}</span>
+      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_research') or 0)|fmt_int }}</span>
+    </div>
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("playercard_home_planet") }}</span>
+      <span class="gc-player-card-stat-value">{{ card.get('home_planet', '—') }}</span>
+    </div>
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("playercard_colonies") }}</span>
+      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('colonies') or 0)|fmt_int }}</span>
+    </div>
+  </div>
+
+  {% if card.get('bio') %}
+    <div class="gc-player-card-bio">
+      <span class="gc-player-card-stat-label">{{ T("playercard_bio") }}</span>
+      <p>{{ card.get('bio') }}</p>
+    </div>
+  {% endif %}
+
+  <div class="gc-player-card-badges-section">
+    <span class="gc-player-card-stat-label">{{ T("playercard_badges") }}</span>
+    {% if card.get('badges') and card.get('badges')|length > 0 %}
+      <div class="gc-player-card-badges">
+        {% for badge in card.get('badges') %}
+          <span class="gc-player-card-badge gc-player-card-badge-{{ badge.get('rarity', 'common') }}"
+                title="{{ T(badge.get('description_i18n_key', ''), badge.get('description_i18n_key', '')) }}">
+            <span class="gc-player-card-badge-icon" aria-hidden="true">{{ badge.get('icon', '★') }}</span>
+            <span class="gc-player-card-badge-name">{{ T(badge.get('name_i18n_key', ''), badge.get('name_i18n_key', '')) }}</span>
+          </span>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="gc-player-card-no-badges">{{ T("playercard_no_badges") }}</p>
+    {% endif %}
+  </div>
+
+  {% endif %}
+</div>

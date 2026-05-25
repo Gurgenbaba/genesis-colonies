@@ -42,6 +42,17 @@
       .replace(/"/g, "&quot;");
   }
 
+  function playerNameLink(playerId, name) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id) || id <= 0) return esc(name || "—");
+    const label = esc(name || "Commander");
+    const title = esc(t("playercard_open", "Profil öffnen"));
+    return (
+      `<span class="gc-player-name" data-player-id="${id}" data-player-name="${label}" ` +
+      `data-player-card="1" role="button" tabindex="0" title="${title}">${label}</span>`
+    );
+  }
+
   function notify(msg, kind) {
     if (typeof GC.showNotify === "function") {
       GC.showNotify(msg, kind || "info");
@@ -318,7 +329,7 @@
     }
     const rows = (data.players || []).map(
       (p) => `<tr>
-        <td>${p.id}</td><td>${esc(p.username)}</td><td>${p.is_admin ? "✓" : "–"}</td>
+        <td>${p.id}</td><td>${playerNameLink(p.id, p.username)}</td><td>${p.is_admin ? "✓" : "–"}</td>
         <td>${esc(fmtTs(p.last_seen))}</td>
         <td><button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-player-id="${p.id}">${t("admin_btn_details", "Details")}</button></td>
       </tr>`
@@ -339,7 +350,7 @@
     const hw = data.homeworld || {};
     const score = data.score || {};
     el.innerHTML = `
-      <h3>#${p.id} ${esc(p.username)} ${p.is_admin ? statusBadge("ok", "Admin") : ""}</h3>
+      <h3>#${p.id} ${playerNameLink(p.id, p.username)} ${p.is_admin ? statusBadge("ok", "Admin") : ""}</h3>
       <p>${t("admin_col_last_seen", "Zuletzt")}: ${esc(fmtTs(p.last_seen))} · Score: ${fmtInt(score.total)} (#${score.rank || "?"})</p>
       <p>Homeworld: ${esc(hw.name || "–")} · ${t("metal", "Ferronit")}: ${fmtInt(hw.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(hw.crystal)}</p>
       <div class="admin-action-row">
@@ -375,7 +386,7 @@
     }
     const rows = (data.planets || []).map(
       (pl) => `<tr>
-        <td>${pl.id}</td><td>${esc(pl.name)}</td><td>${esc(pl.owner_username || pl.player_id || "")}</td>
+        <td>${pl.id}</td><td>${esc(pl.name)}</td><td>${pl.player_id ? playerNameLink(pl.player_id, pl.owner_username || pl.player_id) : esc(pl.owner_username || "–")}</td>
         <td>${pl.is_homeworld ? "✓" : "–"}</td>
         <td><button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-planet-id="${pl.id}">${t("admin_btn_details", "Details")}</button></td>
       </tr>`

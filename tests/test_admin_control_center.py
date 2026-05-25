@@ -183,3 +183,21 @@ def test_migrations_endpoint(app_client):
     m = r.get_json()["migrations"]
     assert "applied" in m
     assert "pending" in m
+
+
+def test_admin_page_smoke_html(app_client):
+    """Smoke: /admin shell markup for JS/CSS bindings."""
+    client, _, _ = app_client
+    _login(client, "admin_cc", "adminpass123")
+    r = client.get("/admin")
+    assert r.status_code == 200
+    html = r.get_data(as_text=True)
+    assert 'id="admin-control-center"' in html
+    assert 'data-page="admin"' in html
+    assert 'class="admin-tab-btn' in html
+    assert 'data-admin-tab="health"' in html
+    assert 'data-admin-panel="health"' in html
+    assert "admin.js" in html
+    assert "admin.css" in html
+    assert "GC_ASSET_VERSION" not in html
+    assert "?v=" in html

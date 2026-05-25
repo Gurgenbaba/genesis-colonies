@@ -327,6 +327,9 @@ def init_db() -> None:
     from game.admin_audit import ensure_admin_audit_table
     ensure_admin_audit_table(conn)
 
+    from game.playercard import ensure_player_card_tables
+    ensure_player_card_tables(conn)
+
     # ------------------------------------------------------------
     # DEFAULT ADMIN + DEFAULT PLAYER + DEFAULT SETTINGS
     # ------------------------------------------------------------

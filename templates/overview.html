@@ -62,7 +62,7 @@
         <div class="gc-panel-head-left">
           <span class="gc-panel-title">
             {{ (T("overview_label_colony") if T("overview_label_colony") != "overview_label_colony" else "Kolonie") }}
-            – {{ p_name }}
+            – {% if player_obj and player_obj.id is defined %}{{ player_name_link(player_obj.id, p_name) }}{% else %}{{ p_name }}{% endif %}
           </span>
 
           <span class="gc-panel-subtitle">

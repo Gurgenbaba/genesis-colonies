@@ -96,6 +96,8 @@
   {% set note_dip = "Aktuell noch deaktiviert – die Allianz- & Diplomatiefunktionen werden in einem späteren Development-Step freigeschaltet, wenn Flotten und Kampf-Logik stehen." %}
 {% endif %}
 
+{% set alliance_members = (alliance_members if alliance_members is defined and alliance_members else []) %}
+
 <div class="gc-page alliance-page">
 
   <!-- HEADER -->
@@ -125,6 +127,17 @@
       </ul>
 
       <p class="gc-body-text alliance-note">{{ note_own }}</p>
+
+      {% if alliance_members and alliance_members|length > 0 %}
+      <div class="alliance-member-preview">
+        <p class="gc-body-text"><strong>{{ T("alliance_members_preview") }}</strong></p>
+        <ul class="gc-list alliance-member-list">
+          {% for m in alliance_members %}
+            <li>{{ player_name_link(m.player_id, m.nickname) }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
     </section>
 
     <!-- RIGHT: Diplomatie & Social -->

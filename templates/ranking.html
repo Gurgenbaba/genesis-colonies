@@ -46,7 +46,11 @@
         {% endif %}
 
         <span class="gc-panel-subtitle">
-          {{ subtitle_name }}
+          {% if player_obj and player_obj.id is defined %}
+            {{ player_name_link(player_obj.id, subtitle_name) }}
+          {% else %}
+            {{ subtitle_name }}
+          {% endif %}
         </span>
       </div>
 
@@ -181,7 +185,11 @@
                           {{ T("ranking_you") if T("ranking_you") != "ranking_you" else "Du" }}
                         </span>
                       {% endif %}
-                      {{ row_nick or "–" }}
+                      {% if row_player_id and row_nick %}
+                        {{ player_name_link(row_player_id, row_nick) }}
+                      {% else %}
+                        {{ row_nick or "–" }}
+                      {% endif %}
                     </td>
 
                     <td class="col-score">{{ (row_total or 0)|fmt_int }}</td>

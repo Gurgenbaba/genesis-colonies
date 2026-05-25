@@ -1,0 +1,30 @@
+{# Global PlayerCard modal shell (persists across PJAX) #}
+<div id="gc-player-card-root"
+     class="gc-player-card-modal"
+     hidden
+     aria-hidden="true">
+  <div class="gc-player-card-overlay" data-pc-close tabindex="-1"></div>
+  <div class="gc-player-card-dialog"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="gc-player-card-title"
+       data-theme="cyan">
+    <header class="gc-player-card-head">
+      <h2 id="gc-player-card-title" class="gc-player-card-head-title">
+        {{ T("playercard_title") }}
+      </h2>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              data-pc-close
+              aria-label="{{ T('playercard_close') }}">✕</button>
+    </header>
+    <div id="gc-player-card-body" class="gc-player-card-body" aria-live="polite">
+      <div class="gc-player-card-content" data-pc-content></div>
+      <div class="gc-player-card-loading" data-pc-loading hidden aria-hidden="true">
+        <span class="gc-player-card-spinner" aria-hidden="true"></span>
+        <span class="gc-player-card-loading-text">{{ T("playercard_loading") }}</span>
+      </div>
+      <div class="gc-player-card-error" data-pc-error hidden aria-hidden="true" role="alert"></div>
+    </div>
+  </div>
+</div>

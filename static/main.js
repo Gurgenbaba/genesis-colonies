@@ -2346,6 +2346,427 @@
     update();
   }
 
+  // =========================
+  // Player Card (global modal, PJAX-safe)
+  // =========================
+  const PLAYER_CARD = {
+    root: null,
+    dialog: null,
+    content: null,
+    loadingEl: null,
+    errorEl: null,
+    abort: null,
+    open: false,
+    currentId: null,
+    mode: "view",
+    reqId: 0,
+  };
+
+  function cachePlayerCardElements() {
+    if (PLAYER_CARD.root && PLAYER_CARD.content) return PLAYER_CARD.root;
+    PLAYER_CARD.root = document.getElementById("gc-player-card-root");
+    if (!PLAYER_CARD.root) return null;
+    PLAYER_CARD.dialog = PLAYER_CARD.root.querySelector(".gc-player-card-dialog");
+    PLAYER_CARD.content = PLAYER_CARD.root.querySelector("[data-pc-content]");
+    PLAYER_CARD.loadingEl = PLAYER_CARD.root.querySelector("[data-pc-loading]");
+    PLAYER_CARD.errorEl = PLAYER_CARD.root.querySelector("[data-pc-error]");
+    return PLAYER_CARD.root;
+  }
+
+  function pcSetLoading(on) {
+    cachePlayerCardElements();
+    const show = !!on;
+    if (PLAYER_CARD.loadingEl) {
+      PLAYER_CARD.loadingEl.hidden = !show;
+      PLAYER_CARD.loadingEl.setAttribute("aria-hidden", show ? "false" : "true");
+    }
+    if (show && PLAYER_CARD.errorEl) {
+      PLAYER_CARD.errorEl.hidden = true;
+      PLAYER_CARD.errorEl.textContent = "";
+    }
+    if (PLAYER_CARD.root) {
+      PLAYER_CARD.root.classList.toggle("is-loading", show);
+      PLAYER_CARD.root.setAttribute("aria-busy", show ? "true" : "false");
+    }
+  }
+
+  function pcSetError(msg) {
+    cachePlayerCardElements();
+    pcSetLoading(false);
+    if (PLAYER_CARD.content) PLAYER_CARD.content.innerHTML = "";
+    if (PLAYER_CARD.errorEl) {
+      PLAYER_CARD.errorEl.textContent = msg || t("playercard_load_error", "Profil konnte nicht geladen werden.");
+      PLAYER_CARD.errorEl.hidden = false;
+      PLAYER_CARD.errorEl.setAttribute("aria-hidden", "false");
+    }
+  }
+
+  function pcClearError() {
+    cachePlayerCardElements();
+    if (PLAYER_CARD.errorEl) {
+      PLAYER_CARD.errorEl.hidden = true;
+      PLAYER_CARD.errorEl.textContent = "";
+      PLAYER_CARD.errorEl.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function pcAbortFetch() {
+    if (PLAYER_CARD.abort) {
+      try { PLAYER_CARD.abort.abort(); } catch (_) {}
+      PLAYER_CARD.abort = null;
+    }
+  }
+
+  function pcResetModalState() {
+    cachePlayerCardElements();
+    pcAbortFetch();
+    pcSetLoading(false);
+    pcClearError();
+    if (PLAYER_CARD.content) PLAYER_CARD.content.innerHTML = "";
+    if (PLAYER_CARD.dialog) {
+      PLAYER_CARD.dialog.setAttribute("data-theme", "cyan");
+    }
+    PLAYER_CARD.mode = "view";
+  }
+
+  function openPlayerCardModal(focusClose) {
+    const root = cachePlayerCardElements();
+    if (!root) return;
+    root.hidden = false;
+    root.setAttribute("aria-hidden", "false");
+    document.body.classList.add("gc-player-card-open");
+    PLAYER_CARD.open = true;
+    if (focusClose) {
+      const closeBtn = root.querySelector(".gc-player-card-close");
+      if (closeBtn) closeBtn.focus({ preventScroll: true });
+    }
+  }
+
+  function closePlayerCardModal() {
+    const root = cachePlayerCardElements();
+    if (!root) return;
+    pcResetModalState();
+    root.hidden = true;
+    root.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("gc-player-card-open");
+    PLAYER_CARD.open = false;
+    PLAYER_CARD.currentId = null;
+  }
+
+  function applyPlayerCardTheme(theme) {
+    cachePlayerCardElements();
+    if (!PLAYER_CARD.dialog) return;
+    const th = String(theme || "cyan");
+    PLAYER_CARD.dialog.setAttribute("data-theme", th);
+  }
+
+  async function fetchPlayerCardHtml(url, reqToken) {
+    pcAbortFetch();
+    const ctrl = new AbortController();
+    PLAYER_CARD.abort = ctrl;
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "text/html",
+        },
+        signal: ctrl.signal,
+      });
+      if (reqToken !== PLAYER_CARD.reqId) {
+        return { ok: false, aborted: true };
+      }
+      const html = await res.text();
+      if (reqToken !== PLAYER_CARD.reqId) {
+        return { ok: false, aborted: true };
+      }
+      if (!res.ok) {
+        return { ok: false, html, status: res.status };
+      }
+      return { ok: true, html, status: res.status };
+    } catch (e) {
+      if (e && e.name === "AbortError") {
+        return { ok: false, aborted: true };
+      }
+      throw e;
+    } finally {
+      if (PLAYER_CARD.abort === ctrl) PLAYER_CARD.abort = null;
+    }
+  }
+
+  function mountPlayerCardHtml(html, mode) {
+    cachePlayerCardElements();
+    if (!PLAYER_CARD.content) return;
+    pcClearError();
+    pcSetLoading(false);
+    PLAYER_CARD.mode = mode || "view";
+
+    const wrap = document.createElement("div");
+    wrap.innerHTML = html;
+    const shell = wrap.querySelector(".gc-player-card-shell");
+    PLAYER_CARD.content.innerHTML = "";
+    if (shell) {
+      PLAYER_CARD.content.appendChild(shell);
+      applyPlayerCardTheme(shell.getAttribute("data-theme"));
+    } else {
+      PLAYER_CARD.content.appendChild(wrap);
+    }
+    bindPlayerCardInnerActions();
+  }
+
+  function pcPrepareOpen(playerId, mode) {
+    const pid = Number(playerId);
+    if (!Number.isFinite(pid) || pid <= 0) return false;
+    const wasOpen = PLAYER_CARD.open;
+    PLAYER_CARD.reqId += 1;
+    PLAYER_CARD.currentId = pid;
+    PLAYER_CARD.mode = mode || "view";
+    pcResetModalState();
+    openPlayerCardModal(!wasOpen);
+    pcSetLoading(true);
+    return true;
+  }
+
+  async function loadPlayerCardView(playerId) {
+    if (!pcPrepareOpen(playerId, "view")) return;
+    const reqToken = PLAYER_CARD.reqId;
+    try {
+      const result = await fetchPlayerCardHtml(`/api/player-card/${playerId}`, reqToken);
+      if (result.aborted || reqToken !== PLAYER_CARD.reqId) return;
+      if (!result.ok) {
+        if (result.html && result.html.includes("gc-player-card-shell")) {
+          mountPlayerCardHtml(result.html, "view");
+        } else {
+          pcSetError(t("playercard_load_error", "Profil konnte nicht geladen werden."));
+        }
+        return;
+      }
+      mountPlayerCardHtml(result.html, "view");
+    } catch (_) {
+      if (reqToken !== PLAYER_CARD.reqId) return;
+      pcSetError(t("playercard_load_error", "Profil konnte nicht geladen werden."));
+    }
+  }
+
+  async function loadPlayerCardEdit(playerId) {
+    if (!pcPrepareOpen(playerId, "edit")) return;
+    const reqToken = PLAYER_CARD.reqId;
+    try {
+      const result = await fetchPlayerCardHtml(`/api/player-card/${playerId}/edit`, reqToken);
+      if (result.aborted || reqToken !== PLAYER_CARD.reqId) return;
+      if (!result.ok) {
+        const msg = result.status === 403
+          ? t("playercard_forbidden", "Keine Berechtigung.")
+          : t("playercard_load_error", "Profil konnte nicht geladen werden.");
+        if (result.html && result.html.includes("gc-player-card-shell")) {
+          mountPlayerCardHtml(result.html, "edit");
+        } else {
+          pcSetError(msg);
+        }
+        return;
+      }
+      mountPlayerCardHtml(result.html, "edit");
+      initPlayerCardEditPreview();
+    } catch (_) {
+      if (reqToken !== PLAYER_CARD.reqId) return;
+      pcSetError(t("playercard_load_error", "Profil konnte nicht geladen werden."));
+    }
+  }
+
+  function initPlayerCardEditPreview() {
+    const form = PLAYER_CARD.content?.querySelector("#gc-player-card-form");
+    if (!form || form.dataset.pcPreviewBound === "1") return;
+    form.dataset.pcPreviewBound = "1";
+
+    const preview = form.querySelector("#gc-player-card-preview");
+    const avatarImg = form.querySelector("#pc-preview-avatar");
+    const avatarPh = form.querySelector("#pc-preview-avatar-ph");
+    const titleEl = form.querySelector("#pc-preview-title");
+    const bioEl = form.querySelector("#pc-preview-bio");
+    const themeSel = form.querySelector('[data-pc-field="theme"]');
+
+    function syncBadgePreview() {
+      const host = form.querySelector("#pc-preview-badges");
+      if (!host) return;
+      host.innerHTML = "";
+      const checked = form.querySelectorAll('input[name="badge_slot"]:checked');
+      let n = 0;
+      checked.forEach((inp) => {
+        if (n >= 3) return;
+        const icon = inp.getAttribute("data-pc-badge-icon") || "★";
+        const name = inp.getAttribute("data-pc-badge-name") || "";
+        const span = document.createElement("span");
+        span.className = "gc-player-card-badge";
+        span.innerHTML =
+          `<span class="gc-player-card-badge-icon" aria-hidden="true">${icon}</span>` +
+          `<span class="gc-player-card-badge-name">${name}</span>`;
+        host.appendChild(span);
+        n += 1;
+      });
+    }
+
+    function syncPreview() {
+      const avatarUrl = (form.querySelector('[data-pc-field="avatar_url"]')?.value || "").trim();
+      if (avatarImg && avatarPh) {
+        if (avatarUrl) {
+          avatarImg.src = avatarUrl;
+          avatarImg.hidden = false;
+          avatarPh.hidden = true;
+        } else {
+          avatarImg.removeAttribute("src");
+          avatarImg.hidden = true;
+          avatarPh.hidden = false;
+        }
+      }
+      if (titleEl) titleEl.textContent = form.querySelector('[data-pc-field="title"]')?.value || "";
+      if (bioEl) bioEl.textContent = form.querySelector('[data-pc-field="bio"]')?.value || "";
+      const th = themeSel?.value || "cyan";
+      if (preview) preview.setAttribute("data-theme", th);
+      applyPlayerCardTheme(th);
+      syncBadgePreview();
+    }
+
+    form.querySelectorAll("[data-pc-field]").forEach((el) => {
+      el.addEventListener("input", syncPreview);
+      el.addEventListener("change", syncPreview);
+    });
+    form.querySelectorAll('input[name="badge_slot"]').forEach((el) => {
+      el.addEventListener("change", () => {
+        const checked = form.querySelectorAll('input[name="badge_slot"]:checked');
+        if (checked.length > 3) el.checked = false;
+        syncBadgePreview();
+      });
+    });
+    syncPreview();
+  }
+
+  async function savePlayerCardForm(form) {
+    const msgEl = form.querySelector("[data-pc-form-msg]");
+    const saveBtn = form.querySelector("[data-pc-save]");
+    const badges = Array.from(form.querySelectorAll('input[name="badge_slot"]:checked'))
+      .slice(0, 3)
+      .map((inp) => inp.value);
+
+    const payload = {
+      avatar_url: form.querySelector('[name="avatar_url"]')?.value || "",
+      title: form.querySelector('[name="title"]')?.value || "",
+      bio: form.querySelector('[name="bio"]')?.value || "",
+      theme: form.querySelector('[name="theme"]')?.value || "cyan",
+      is_public: form.querySelector('[name="is_public"]')?.checked ? "1" : "0",
+      selected_badge_1: badges[0] || null,
+      selected_badge_2: badges[1] || null,
+      selected_badge_3: badges[2] || null,
+    };
+
+    if (msgEl) { msgEl.hidden = true; msgEl.textContent = ""; }
+    if (saveBtn) saveBtn.disabled = true;
+    pcSetLoading(true);
+
+    try {
+      const res = await fetch("/api/player-card/me", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      pcSetLoading(false);
+      if (!data.ok) {
+        const key = data.reason || "playercard_save_error";
+        const txt = t(key, t("playercard_save_error", "Speichern fehlgeschlagen."));
+        if (msgEl) { msgEl.textContent = txt; msgEl.hidden = false; }
+        showNotify(txt, "error");
+        return;
+      }
+      showNotify(t("playercard_save_success", "Profil gespeichert."), "success");
+      if (data.html) mountPlayerCardHtml(data.html, "view");
+    } catch (_) {
+      pcSetLoading(false);
+      const txt = t("playercard_save_error", "Speichern fehlgeschlagen.");
+      if (msgEl) { msgEl.textContent = txt; msgEl.hidden = false; }
+      showNotify(txt, "error");
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  }
+
+  function bindPlayerCardInnerActions() {
+    cachePlayerCardElements();
+    if (!PLAYER_CARD.content) return;
+
+    const editBtn = PLAYER_CARD.content.querySelector("[data-pc-edit]");
+    if (editBtn && editBtn.dataset.pcBound !== "1") {
+      editBtn.dataset.pcBound = "1";
+      editBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const pid = editBtn.getAttribute("data-player-id") || PLAYER_CARD.currentId;
+        loadPlayerCardEdit(pid);
+      });
+    }
+
+    const form = PLAYER_CARD.content.querySelector("#gc-player-card-form");
+    if (form && form.dataset.pcBound !== "1") {
+      form.dataset.pcBound = "1";
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        savePlayerCardForm(form);
+      });
+      const cancel = form.querySelector("[data-pc-cancel]");
+      if (cancel) {
+        cancel.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (PLAYER_CARD.currentId) loadPlayerCardView(PLAYER_CARD.currentId);
+        });
+      }
+      initPlayerCardEditPreview();
+    }
+  }
+
+  function initPlayerCardOnce() {
+    if (GC._playerCardBound) return;
+    GC._playerCardBound = true;
+
+    document.addEventListener("click", (e) => {
+      const closeEl = e.target.closest("[data-pc-close]");
+      if (closeEl) {
+        const root = cachePlayerCardElements();
+        if (root && PLAYER_CARD.open) {
+          e.preventDefault();
+          closePlayerCardModal();
+        }
+        return;
+      }
+
+      const nameEl = e.target.closest(".gc-player-name[data-player-card]");
+      if (!nameEl) return;
+      const pid = nameEl.getAttribute("data-player-id");
+      if (!pid) return;
+      e.preventDefault();
+      e.stopPropagation();
+      loadPlayerCardView(pid);
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      const nameEl = e.target.closest(".gc-player-name[data-player-card]");
+      if (!nameEl || document.activeElement !== nameEl) return;
+      e.preventDefault();
+      loadPlayerCardView(nameEl.getAttribute("data-player-id"));
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (PLAYER_CARD.open) closePlayerCardModal();
+    });
+  }
+
+  GC.openPlayerCard = loadPlayerCardView;
+  GC.closePlayerCard = closePlayerCardModal;
+
   function initShellOnce() {
     if (GC._shellReady) return;
     GC._shellReady = true;
@@ -2359,6 +2780,7 @@
     initMobileNav();
     initStickyResourceBar();
     initPjax();
+    initPlayerCardOnce();
 
     document.addEventListener("click", (e) => {
       const link = e.target.closest('a.logout-btn, a[href*="/logout"]');
