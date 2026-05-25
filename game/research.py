@@ -312,6 +312,9 @@ def complete_finished_research(user_id: int, conn=None) -> bool:
     return bool(finished_any)
 
 
+RESEARCH_QUEUE_LIMIT = 3
+
+
 # ======================================================================
 # QUEUE START
 # ======================================================================
@@ -328,7 +331,6 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
     else:
         uid = int(user_id)
 
-    # ✅ zuerst ggf. fertige Forschung abschließen
     complete_finished_research(uid)
 
     planet = get_homeworld(player_id=uid)
@@ -341,12 +343,16 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
     if not has_research_requirements(buildings, levels, tech_key):
         return False, "requirements", None
 
-    # nur 1 Forschung gleichzeitig
-    if get_research_queue_rows(uid):
-        return False, "research_active", None
+    rows = get_research_queue_rows(uid)
+    if len(rows) >= RESEARCH_QUEUE_LIMIT:
+        return False, "research_queue_full", {
+            "queue_count": len(rows),
+            "queue_limit": RESEARCH_QUEUE_LIMIT,
+        }
 
+    queued_same = sum(1 for r in rows if str(r["tech_key"]) == tech_key)
     current = int(levels.get(tech_key, 0) or 0)
-    target = current + 1
+    target = current + queued_same + 1
 
     cost_m, cost_c = get_research_cost(tech_key, target)
 
@@ -354,13 +360,20 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
         return False, "not_enough_resources", (int(cost_m), int(cost_c))
 
     duration = get_research_time(tech_key, target, user_id=uid, buildings=buildings)
-    finish_at = time.time() + float(duration)
+    now = time.time()
+    last_finish = max(float(r["finish_at"]) for r in rows) if rows else now
+    start_at = max(now, last_finish)
+    finish_at = start_at + float(duration)
 
     if not try_spend_resources(int(planet["id"]), int(cost_m), int(cost_c)):
         return False, "not_enough_resources", (int(cost_m), int(cost_c))
 
-    add_research_job(uid, tech_key, float(finish_at))
-    return True, "ok", {"seconds": int(duration), "level": int(target)}
+    add_research_job(uid, tech_key, float(start_at), float(finish_at))
+    return True, "ok", {
+        "seconds": int(duration),
+        "level": int(target),
+        "queued": len(rows) > 0,
+    }
 
 
 # ======================================================================
@@ -371,7 +384,7 @@ def get_research_status(
     user_id: int,
     buildings: Optional[Dict[str, int]] = None,
 ) -> dict:
-    # ✅ UI soll immer frisch sein
+    # ✅ UI soll immer frisch sein — ggf. mehrfach abschließen wenn fällig
     complete_finished_research(int(user_id))
 
     if buildings is None:
@@ -382,30 +395,65 @@ def get_research_status(
     queue = get_research_queue_rows(int(user_id))
     now = time.time()
 
-    active = None
-    if queue:
-        job = queue[0]
+    # Nachziehen: Job kann „0s“ anzeigen, finish_at aber knapp in der Zukunft liegen
+    for _ in range(3):
+        if not queue:
+            break
+        if float(queue[0]["finish_at"]) > now:
+            break
+        if not complete_finished_research(int(user_id)):
+            break
+        queue = get_research_queue_rows(int(user_id))
+        levels = get_research_levels(int(user_id))
+
+    queue_list: List[Dict[str, Any]] = []
+    pending: Dict[str, int] = {}
+
+    for i, job in enumerate(queue):
         tech = str(job["tech_key"])
         cfg = RESEARCH_TECHS.get(tech, {})
+        pending[tech] = pending.get(tech, 0) + 1
 
         curr = int(levels.get(tech, 0) or 0)
-        targ = curr + 1
+        targ = curr + pending[tech]
 
-        total = get_research_time(tech, targ, user_id=int(user_id), buildings=buildings)
-        remain = max(0, int(float(job["finish_at"]) - now))
+        finish_at = float(job["finish_at"])
+        start_raw = job["start_at"] if "start_at" in job.keys() else None
+        if start_raw is not None and float(start_raw or 0) > 0:
+            start_at = float(start_raw)
+        elif i > 0:
+            start_at = float(queue[i - 1]["finish_at"])
+        else:
+            start_at = finish_at - float(get_research_time(tech, targ, user_id=int(user_id), buildings=buildings))
 
-        active = {
+        total = max(1, int(finish_at - start_at))
+        remain = max(0, int(finish_at - now))
+
+        queue_list.append({
+            "id": int(job["id"]),
+            "tech_key": tech,
             "key": tech,
             "label": cfg.get("label", tech),
             "label_key": cfg.get("label_key"),
             "description": cfg.get("description", ""),
             "description_key": cfg.get("description_key"),
             "current_level": curr,
-            "target_level": targ,
-            "remaining": remain,
+            "target_level": int(targ),
+            "remaining": int(remain),
             "total_seconds": int(total),
+            "total": int(total),
+            "finish_at": finish_at,
+            "start_at": start_at,
             "icon": cfg.get("icon"),
-        }
+            "position": i + 1,
+        })
+
+    active = queue_list[0] if queue_list else None
+
+    queue_keys: Dict[str, int] = {}
+    for item in queue_list:
+        k = str(item["tech_key"])
+        queue_keys[k] = queue_keys.get(k, 0) + 1
 
     techs: List[Dict[str, Any]] = []
     for tech, cfg in RESEARCH_TECHS.items():
@@ -417,6 +465,10 @@ def get_research_status(
 
         req = cfg.get("requirements") or {}
         req_met = _check_requirements(req, buildings, levels)
+
+        q_count = int(queue_keys.get(tech, 0) or 0)
+        is_active = bool(active and str(active.get("tech_key")) == tech and q_count > 0)
+        in_queue = q_count > 0
 
         techs.append({
             "key": tech,
@@ -430,10 +482,22 @@ def get_research_status(
             "time_seconds": int(t_sec),
             "requirements_met": bool(req_met),
             "icon": cfg.get("icon"),
+            "queue_count": q_count,
+            "is_active": is_active,
+            "in_queue": in_queue,
         })
+
+    summary = {
+        "count": len(queue_list),
+        "limit": RESEARCH_QUEUE_LIMIT,
+        "has_queue": bool(queue_list),
+        "first_finish_in": int(queue_list[0]["remaining"]) if queue_list else 0,
+    }
 
     return {
         "active": active,
+        "queue": queue_list,
+        "summary": summary,
         "techs": techs,
         "lab_level": int(buildings.get("research_lab", 0) or 0),
     }

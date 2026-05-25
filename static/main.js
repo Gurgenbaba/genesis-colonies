@@ -306,12 +306,50 @@
   // Build Queue live state
   // =========================
   const BUILDQ = {
-    // set by renderBuildQueue() when there is an active job
     active: {
-      finishTime: 0,   // epoch seconds
-      totalSeconds: 0, // seconds
+      finishTime: 0,
+      totalSeconds: 0,
     },
   };
+
+  const RESEARCHQ = {
+    active: {
+      finishTime: 0,
+      totalSeconds: 0,
+    },
+  };
+
+  let _progressRafId = 0;
+
+  function _hasActiveProgressJobs() {
+    return (
+      BUILDQ.active.finishTime > 0 ||
+      RESEARCHQ.active.finishTime > 0 ||
+      !!document.querySelector(".build-job.build-job-active") ||
+      !!document.querySelector(".research-job.research-job-active") ||
+      !!document.getElementById("overview-research-active")
+    );
+  }
+
+  function _ensureProgressLoop() {
+    if (_progressRafId) return;
+    const loop = () => {
+      updateAllProgressBars();
+      if (_hasActiveProgressJobs()) {
+        _progressRafId = requestAnimationFrame(loop);
+      } else {
+        _progressRafId = 0;
+      }
+    };
+    _progressRafId = requestAnimationFrame(loop);
+  }
+
+  function _stopProgressLoop() {
+    if (_progressRafId) {
+      cancelAnimationFrame(_progressRafId);
+      _progressRafId = 0;
+    }
+  }
 
   // =========================
   // Build-Queue panel render
@@ -322,14 +360,29 @@
 
   function _queueSignature(queueList, summary) {
     try {
-      const first = queueList && queueList[0] ? queueList[0] : null;
-      const a = summary?.count ?? (queueList?.length ?? 0);
-      // IMPORTANT: do NOT include "remaining" here, otherwise we re-render every poll second
-      const b = first ? `${first.building_type}:${first.target_level}:${first.finish_time || 0}` : "none";
-      return `${a}|${b}`;
+      const count = summary?.count ?? (queueList?.length ?? 0);
+      const items = (queueList || [])
+        .map((j) => `${j.id || j.building_type}:${j.target_level}:${j.finish_time || 0}`)
+        .join("|");
+      return `${count}|${items}`;
     } catch (_) {
       return "";
     }
+  }
+
+  function _updateBuildQueueSubtitle(count, firstEta) {
+    const subEl = document.getElementById("build-queue-subtitle");
+    if (!subEl) return;
+
+    if (!count) {
+      _setIfChanged(subEl, t("build_queue_hint_fallback", "Verwalte laufende Bauaufträge und starte Upgrades."));
+      return;
+    }
+
+    const jobsLabel = t("build_queue_jobs", "Aufträge");
+    const nextLabel = t("build_queue_next", "Nächste Fertigstellung in");
+    const html = `${count} ${jobsLabel} · ${nextLabel}: <span id="build-queue-subtitle-eta">${firstEta}</span>`;
+    if (subEl.innerHTML !== html) subEl.innerHTML = html;
   }
 
   function renderBuildQueue(buildQueueRaw) {
@@ -364,50 +417,32 @@
     }
 
     const sig = _queueSignature(queueList, summary);
-    if (sig === _lastQueueSignature) return;
-    _lastQueueSignature = sig;
-
-    const title = t("build_queue_title", "Bauschleife");
-
-    // empty state
-    if (!queueList || queueList.length === 0) {
-      const none =
-        t("build_queue_none", null) ||
-        t("build_queue_empty", null) ||
-        t("build_queue_no_active", null) ||
-        "Keine Bauaufträge aktiv.";
-
-      root.innerHTML = `
-        <div class="build-queue-panel">
-          <div class="build-queue-header">
-            <h3 class="section-subtitle">${title}</h3>
-          </div>
-          <div class="build-queue-empty">${none}</div>
-        </div>
-      `;
-      return;
-    }
-
     const count = summary?.count ?? queueList.length;
-
     const firstEta =
       typeof summary?.first_finish_in !== "undefined"
         ? formatEta(summary.first_finish_in)
         : formatEta(first?.remaining ?? 0);
 
-    const hint = tf(
-      "build_queue_hint",
-      { count, eta: firstEta },
-      `${count} · Nächste Fertigstellung in: ${firstEta}`
-    );
+    if (sig === _lastQueueSignature) {
+      _updateBuildQueueSubtitle(count, firstEta);
+      return;
+    }
+    _lastQueueSignature = sig;
 
-    let html = `
-      <div class="build-queue-panel">
-        <div class="build-queue-header">
-          <h3 class="section-subtitle">${title}</h3>
-          <div class="build-queue-meta" id="build-queue-hint-live">${hint}</div>
-        </div>
-    `;
+    if (!queueList || queueList.length === 0) {
+      _updateBuildQueueSubtitle(0, firstEta);
+      const none =
+        t("build_queue_none", null) ||
+        t("build_queue_empty", null) ||
+        t("build_queue_no_active", null) ||
+        "Keine Bauaufträge aktiv.";
+      root.innerHTML = `<div class="build-queue-empty">${none}</div>`;
+      return;
+    }
+
+    _updateBuildQueueSubtitle(count, firstEta);
+
+    let html = `<div class="build-queue-list">`;
 
     queueList.forEach((job, index) => {
       const bType = job.building_type;
@@ -419,78 +454,250 @@
         (job.label_key ? t(job.label_key, fallbackName) : t(i18nKey, fallbackName));
 
       const remaining = parseInt(job.remaining, 10) || 0;
-
-      // total: prefer API's total; otherwise use remaining+1 as safe fallback
       const totalRaw = job.total || job.total_seconds || 0;
       const total = Math.max(1, parseInt(totalRaw, 10) || (remaining + 1));
       const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
+      const iconSrc = `/static/img/buildings/${bType}.png`;
+      const isActive = index === 0;
+      const finishTime = Number(job.finish_time || 0);
 
-      if (index === 0) {
-        const finishTime = Number(job.finish_time || 0);
-
-        html += `
-          <div class="build-job build-job-active"
-               data-finish-time="${finishTime}"
-               data-total="${total}">
+      html += `
+        <div class="build-job${isActive ? " build-job-active" : " build-job-queued"}"
+             ${isActive ? `data-finish-time="${finishTime}" data-total="${total}"` : ""}>
+          <div class="build-job-icon">
+            <img src="${iconSrc}" alt="" loading="lazy" onerror="this.src='/static/img/buildings/default.png'">
+          </div>
+          <div class="build-job-body">
             <div class="job-header">
               <span class="job-name">${name} → ${t("label_level_short", "L")} ${job.target_level}</span>
-              <span class="job-time" id="build-eta-live">${formatEta(remaining)}</span>
+              <span class="job-time${isActive ? "" : " job-time-muted"}"${isActive ? ' id="build-eta-live"' : ""}>
+                ${isActive ? formatEta(remaining) : t("status_in_queue", "In Warteschlange")}
+              </span>
             </div>
             <div class="build-bar build-bar-large">
-              <div class="build-bar-fill" id="build-bar-fill-live" style="width:${pct}%"
-                   role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"></div>
+              <div class="build-bar-fill gc-progress-smooth"${isActive ? ' id="build-bar-fill-live"' : ""}
+                   style="width:${isActive ? pct : 0}%"
+                   role="progressbar" aria-valuenow="${isActive ? pct : 0}" aria-valuemin="0" aria-valuemax="100"></div>
             </div>
-          </div>`;
-      } else {
-        html += `
-          <div class="build-job">
-            <div class="job-header">
-              <span class="job-name">${name} → ${t("label_level_short", "L")} ${job.target_level}</span>
-              <span class="job-time">${t("status_in_queue", "In Warteschlange")}</span>
-            </div>
-            <div class="build-bar build-bar-large">
-              <div class="build-bar-fill" style="width:0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-            </div>
-          </div>`;
-      }
+            ${isActive ? `<span class="job-badge-active">${t("buildings_btn_active", "Aktiv")}</span>` : `<span class="job-badge-queued">#${index + 1}</span>`}
+          </div>
+        </div>`;
     });
 
     html += `</div>`;
     root.innerHTML = html;
+    _ensureProgressLoop();
   }
 
-  // LIVE ticker for build queue (runs every second via schedulePolling tick)
-  function updateBuildQueueLive() {
-    const active = document.querySelector(".build-job.build-job-active");
-    if (!active) return;
+  // =========================
+  // Research Queue panel render
+  // =========================
+  let _lastResearchQueueSignature = "";
 
-    const finishTime = Number(active.getAttribute("data-finish-time") || 0);
-    const total = Math.max(1, Number(active.getAttribute("data-total") || 1));
+  function _researchQueueSignature(queueList, summary) {
+    try {
+      const count = summary?.count ?? (queueList?.length ?? 0);
+      const items = (queueList || [])
+        .map((j) => `${j.id || j.tech_key}:${j.target_level}:${j.finish_at || j.finish_time || 0}`)
+        .join("|");
+      return `${count}|${items}`;
+    } catch (_) {
+      return "";
+    }
+  }
 
-    if (!finishTime) return;
+  function _updateResearchQueueSubtitle(count, limit, firstEta) {
+    const subEl = document.getElementById("research-queue-subtitle");
+    if (!subEl) return;
 
+    if (!count) {
+      _setIfChanged(
+        subEl,
+        t("research_queue_hint_fallback", "Starte Forschungen — bis zu 3 können angereiht werden.")
+      );
+      return;
+    }
+
+    const jobsLabel = t("research_queue_jobs", "Aufträge");
+    const nextLabel = t("build_queue_next", "Nächste Fertigstellung in");
+    const lim = limit || 3;
+    const html = `${count}/${lim} ${jobsLabel} · ${nextLabel}: <span id="research-queue-subtitle-eta">${firstEta}</span>`;
+    if (subEl.innerHTML !== html) subEl.innerHTML = html;
+  }
+
+  function renderResearchQueue(researchRaw) {
+    const root = document.getElementById("research-queue-root");
+    if (!root) return;
+
+    let queueList = [];
+    let summary = null;
+
+    if (!researchRaw) {
+      queueList = [];
+    } else if (Array.isArray(researchRaw.queue)) {
+      queueList = researchRaw.queue;
+      summary = researchRaw.summary || null;
+    } else if (researchRaw.active) {
+      queueList = [researchRaw.active];
+      summary = { count: 1, limit: 3, first_finish_in: researchRaw.active.remaining || 0 };
+    }
+
+    const first = queueList.length ? queueList[0] : null;
+    if (first && (first.finish_at || first.finish_time)) {
+      const finishTime = Number(first.finish_at || first.finish_time || 0);
+      const totalRaw = Number(first.total || first.total_seconds || 0);
+      const now = getApproxServerNow();
+      const remaining = Math.max(0, Math.floor(finishTime - (now || 0)));
+      const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
+
+      RESEARCHQ.active.finishTime = finishTime;
+      RESEARCHQ.active.totalSeconds = total;
+    } else {
+      RESEARCHQ.active.finishTime = 0;
+      RESEARCHQ.active.totalSeconds = 0;
+    }
+
+    const sig = _researchQueueSignature(queueList, summary);
+    const count = summary?.count ?? queueList.length;
+    const limit = summary?.limit ?? 3;
+    const firstEta =
+      typeof summary?.first_finish_in !== "undefined"
+        ? formatEta(summary.first_finish_in)
+        : formatEta(first?.remaining ?? 0);
+
+    if (sig === _lastResearchQueueSignature) {
+      _updateResearchQueueSubtitle(count, limit, firstEta);
+      _ensureProgressLoop();
+      return;
+    }
+    _lastResearchQueueSignature = sig;
+
+    if (!queueList.length) {
+      _updateResearchQueueSubtitle(0, limit, firstEta);
+      const none =
+        t("research_queue_none", null) ||
+        t("research_active_none", null) ||
+        "Keine Forschungsaufträge in der Warteschlange.";
+      root.innerHTML = `<div class="research-queue-empty">${none}</div>`;
+      if (!_hasActiveProgressJobs()) _stopProgressLoop();
+      return;
+    }
+
+    _updateResearchQueueSubtitle(count, limit, firstEta);
+
+    let html = `<div class="research-queue-list">`;
+
+    queueList.forEach((job, index) => {
+      const techKey = job.tech_key || job.key;
+      const i18nKey = job.label_key || techKey;
+      const fallbackName = job.label || techKey || i18nKey;
+      const name = t(i18nKey, fallbackName);
+
+      const remaining = parseInt(job.remaining, 10) || 0;
+      const totalRaw = job.total || job.total_seconds || 0;
+      const total = Math.max(1, parseInt(totalRaw, 10) || remaining + 1);
+      const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
+      const iconFile = job.icon || `${techKey}.png`;
+      const iconSrc = `/static/img/research/${iconFile}`;
+      const isActive = index === 0;
+      const finishTime = Number(job.finish_at || job.finish_time || 0);
+      const currLvl = job.current_level ?? 0;
+      const targLvl = job.target_level ?? currLvl + 1;
+
+      html += `
+        <div class="research-job${isActive ? " research-job-active" : " research-job-queued"}"
+             ${isActive ? `data-finish-time="${finishTime}" data-total="${total}"` : ""}>
+          <div class="research-job-icon">
+            <img src="${iconSrc}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+          </div>
+          <div class="research-job-body">
+            <div class="job-header">
+              <span class="job-name">${name} → ${t("label_level_short", "L")}${currLvl} → ${t("label_level_short", "L")}${targLvl}</span>
+              <span class="job-time${isActive ? "" : " job-time-muted"}"${isActive ? ' id="research-eta-live"' : ""}>
+                ${isActive ? formatEta(remaining) : t("status_in_queue", "In Warteschlange")}
+              </span>
+            </div>
+            <div class="research-bar research-bar-large">
+              <div class="research-bar-fill gc-progress-smooth"${isActive ? ' id="research-bar-fill-live"' : ""}
+                   style="width:${isActive ? pct : 0}%"
+                   role="progressbar" aria-valuenow="${isActive ? pct : 0}" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            ${isActive ? `<span class="job-badge-active">${t("research_btn_active", "Aktiv")}</span>` : `<span class="job-badge-queued">#${index + 1}</span>`}
+          </div>
+        </div>`;
+    });
+
+    html += `</div>`;
+    root.innerHTML = html;
+    _ensureProgressLoop();
+  }
+
+  function _applyProgressFill(fillEl, pct) {
+    if (!fillEl) return;
+    const clamped = Math.max(0, Math.min(100, pct));
+    fillEl.style.width = `${clamped}%`;
+    fillEl.setAttribute("aria-valuenow", String(Math.round(clamped)));
+  }
+
+  function updateAllProgressBars() {
     const serverNow = getApproxServerNow();
     if (!serverNow) return;
 
-    const remaining = Math.max(0, Math.ceil(finishTime - serverNow));
-    const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
+    const path = window.location.pathname || "";
+    const isResearchPage = path.endsWith("/research");
+    const isOverviewPage = path.endsWith("/overview") || path === "/" || path === "";
 
-    const etaEl = document.getElementById("build-eta-live");
-    const fillEl = document.getElementById("build-bar-fill-live");
-
-    if (etaEl) _setIfChanged(etaEl, formatEta(remaining));
-    if (fillEl) {
-      fillEl.style.width = `${pct}%`;
-      fillEl.setAttribute("aria-valuenow", String(Math.round(pct)));
+    const buildActive = document.querySelector(".build-job.build-job-active");
+    if (buildActive) {
+      const finishTime = Number(buildActive.getAttribute("data-finish-time") || 0);
+      const total = Math.max(1, Number(buildActive.getAttribute("data-total") || 1));
+      if (finishTime) {
+        const remaining = Math.max(0, finishTime - serverNow);
+        const pct = 100 * (1 - remaining / total);
+        const etaEl = document.getElementById("build-eta-live");
+        const fillEl = document.getElementById("build-bar-fill-live");
+        if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
+        _applyProgressFill(fillEl, pct);
+        const subEta = document.getElementById("build-queue-subtitle-eta");
+        if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(remaining)));
+      }
     }
 
-    // optional: keep header hint in sync when serverNow ticks
-    const hintEl = document.getElementById("build-queue-hint-live");
-    if (hintEl) {
-      // We only rewrite ETA part safely using tf on the fly, but we don't know count here.
-      // If you want fully correct, rely on polling data; for now keep it stable.
-      // (No-op.)
+    const researchActive = document.querySelector(".research-job.research-job-active");
+    if (researchActive) {
+      const finishTime = Number(researchActive.getAttribute("data-finish-time") || 0);
+      const total = Math.max(1, Number(researchActive.getAttribute("data-total") || 1));
+      if (finishTime) {
+        const remaining = Math.max(0, finishTime - serverNow);
+        const pct = 100 * (1 - remaining / total);
+        const etaEl = document.getElementById("research-eta-live");
+        const fillEl = document.getElementById("research-bar-fill-live");
+        if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
+        _applyProgressFill(fillEl, pct);
+        const subEta = document.getElementById("research-queue-subtitle-eta");
+        if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(remaining)));
+        if (remaining <= 0 && isResearchPage) triggerResearchReload();
+      }
     }
+
+    const ovBox = document.getElementById("overview-research-active");
+    if (ovBox) {
+      const finishAt = Number(ovBox.dataset.finishAt || 0);
+      const total = Math.max(1, Number(ovBox.dataset.total || 1));
+      if (finishAt) {
+        const remaining = Math.max(0, finishAt - serverNow);
+        const pct = 100 * (1 - remaining / total);
+        const cdEl = document.getElementById("research-remaining");
+        const barEl = document.getElementById("research-bar-fill");
+        if (cdEl) _setIfChanged(cdEl, formatEta(Math.ceil(remaining)));
+        _applyProgressFill(barEl, pct);
+        if (remaining <= 0 && isOverviewPage) triggerResearchReload();
+      }
+    }
+  }
+
+  function updateBuildQueueLive() {
+    updateAllProgressBars();
   }
 
   // =========================
@@ -525,33 +732,14 @@
   // =========================
   // Research progressbar updater (drift-safe)
   // =========================
+  function triggerResearchReload() {
+    if (researchReloadTriggered) return;
+    researchReloadTriggered = true;
+    setTimeout(() => window.location.reload(), 400);
+  }
+
   function updateResearchProgressBar() {
-    const outer = document.querySelector(".research-progress-outer");
-    const fill = document.getElementById("research-progress-fill");
-    const countdown = document.getElementById("research-countdown");
-    if (!outer || !fill || !countdown) return;
-
-    const total = parseInt(outer.dataset.totalSeconds || "0", 10);
-    if (!total || total <= 0) return;
-
-    const finishAt = parseInt(outer.dataset.finishAt || "0", 10);
-    if (finishAt > 0) {
-      const serverNow = getApproxServerNow();
-      if (serverNow > 0) {
-        const remaining = Math.max(0, Math.floor(finishAt - serverNow));
-        _setIfChanged(countdown, formatEta(remaining));
-        const done = Math.max(0, Math.min(1, 1 - remaining / total));
-        fill.style.width = `${Math.round(done * 100)}%`;
-        return;
-      }
-    }
-
-    // fallback: parse existing text
-    const remaining = parseDurationToSeconds(countdown.textContent);
-    if (!Number.isFinite(remaining)) return;
-
-    const done = Math.max(0, Math.min(1, 1 - remaining / total));
-    fill.style.width = `${Math.round(done * 100)}%`;
+    updateAllProgressBars();
   }
 
   // =========================
@@ -745,6 +933,7 @@
       });
 
       renderBuildQueue(buildQueueRaw);
+      renderResearchQueue(research);
 
       // Soft-Reload Buildings
       const hasActiveBuild = !!activeJob;
@@ -754,34 +943,36 @@
       }
       lastHadActiveJob = hasActiveBuild;
 
-      // --- Live-Update Forschung (from API) ---
+      // --- Overview Forschung: nur Metadaten, Breite via rAF-Ticker ---
       if (activeResearch) {
-        const remaining = Math.max(0, parseInt(activeResearch.remaining, 10) || 0);
         const totalSec = Math.max(
           1,
           parseInt(activeResearch.total_seconds, 10) ||
             parseInt(activeResearch.total, 10) ||
-            remaining + 1
+            (parseInt(activeResearch.remaining, 10) || 0) + 1
         );
+        const finishAt = parseInt(activeResearch.finish_at, 10) || 0;
 
-        const cdEl = document.getElementById("research-countdown");
-        const barEl = document.getElementById("research-progress-fill");
+        const ovBox = document.getElementById("overview-research-active");
+        if (ovBox) {
+          ovBox.dataset.total = String(totalSec);
+          if (finishAt > 0) ovBox.dataset.finishAt = String(finishAt);
+        }
 
-        const ovCdEl = document.getElementById("research-remaining");
-        const ovBarEl = document.getElementById("research-bar-fill");
         const totalLabel = document.getElementById("research-total");
-
-        if (cdEl) _setIfChanged(cdEl, formatEta(remaining));
-        if (ovCdEl) _setIfChanged(ovCdEl, `${remaining}s`);
         if (totalLabel) _setIfChanged(totalLabel, `${totalSec}s`);
 
-        const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / totalSec)));
-        if (barEl) barEl.style.width = `${pct}%`;
-        if (ovBarEl) ovBarEl.style.width = `${pct}%`;
+        RESEARCHQ.active.finishTime = finishAt;
+        RESEARCHQ.active.totalSeconds = totalSec;
+        _ensureProgressLoop();
+      } else {
+        RESEARCHQ.active.finishTime = 0;
+        RESEARCHQ.active.totalSeconds = 0;
       }
 
       // Soft-Reload Research/Overview
-      const hasActiveResearchNow = !!activeResearch;
+      const researchQueue = Array.isArray(research.queue) ? research.queue : (activeResearch ? [activeResearch] : []);
+      const hasActiveResearchNow = researchQueue.length > 0;
       if (!researchReloadTriggered && (isResearchPage || isOverviewPage) && lastHadActiveResearch && !hasActiveResearchNow) {
         researchReloadTriggered = true;
         setTimeout(() => window.location.reload(), 250);
@@ -816,13 +1007,8 @@
     if (POLL.timer) clearTimeout(POLL.timer);
 
     const tick = () => {
-      // fetch (may be intervalActive = 1s, but fine)
       fetchStatusAndUpdate();
-
-      // live UI tick (every second)
-      updateResearchProgressBar();
-      updateBuildQueueLive();
-
+      _ensureProgressLoop();
       POLL.timer = setTimeout(tick, POLL.lastInterval);
     };
 
@@ -1128,8 +1314,7 @@
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) {
         fetchStatusAndUpdate();
-        updateResearchProgressBar();
-        updateBuildQueueLive();
+        _ensureProgressLoop();
       }
       schedulePolling(lastHadActiveJob || lastHadActiveResearch);
     });
@@ -1248,8 +1433,7 @@
     initStickyResourceBar();
 
     fetchStatusAndUpdate();
-    updateResearchProgressBar();
-    updateBuildQueueLive();
+    _ensureProgressLoop();
     schedulePolling(false);
   });
 })();

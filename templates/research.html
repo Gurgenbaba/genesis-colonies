@@ -19,8 +19,11 @@
   {# Defensive Defaults (damit nix crasht) #}
   {% set rs = (research_status if research_status is defined and research_status else {}) %}
   {% set active = (rs.active if rs and rs.active is defined else None) %}
+  {% set rq = (rs.queue if rs and rs.queue is defined and rs.queue else []) %}
+  {% set rq_summary = (rs.summary if rs and rs.summary is defined and rs.summary else {}) %}
   {% set techs = (rs.techs if rs and rs.techs is defined and rs.techs else []) %}
   {% set lab_level = (rs.lab_level if rs and rs.lab_level is defined else 0) %}
+  {% set rq_limit = (rq_summary.limit if rq_summary.limit is defined else 3) %}
 
   <div class="research-grid">
 
@@ -29,125 +32,21 @@
        ========================================================== #}
     <section class="gc-panel">
 
-      {# ---------------- ACTIVE RESEARCH ---------------- #}
-      <div class="gc-panel-header">
-        <span class="gc-panel-title">{{ T("research_active_title") }}</span>
-        <span class="gc-panel-subtitle">
-          {{ T("research_panel_active_hint") }}
+      {# ---------------- FORSCHUNGS-WARTESCHLANGE (3 Slots) ---------------- #}
+      <div class="gc-panel-header research-queue-head">
+        <span class="gc-panel-title">{{ T("research_queue_title", "Forschungs-Warteschlange") }}</span>
+        <span class="gc-panel-subtitle" id="research-queue-subtitle">
+          {% if rq_summary and rq_summary.count %}
+            {{ (rq_summary.count or 0)|int }}/{{ rq_limit|int }} {{ T("research_queue_jobs", "Aufträge") }}
+            · {{ T("build_queue_next", "Nächste Fertigstellung in") }}:
+            <span id="research-queue-subtitle-eta">{{ (rq_summary.first_finish_in or 0)|int }}s</span>
+          {% else %}
+            {{ T("research_queue_hint_fallback", "Starte Forschungen — bis zu 3 können angereiht werden.") }}
+          {% endif %}
         </span>
       </div>
 
-      {% if active %}
-
-        {# Safe numbers #}
-        {% set total_s = (active.total_seconds or 0) | float %}
-        {% set rem_s = (active.remaining or 0) | float %}
-
-        {# Progress sicher berechnen + clamp 0..100 #}
-        {% if total_s > 0 %}
-          {% set raw_pct = (100 * (1 - (rem_s / total_s))) %}
-        {% else %}
-          {% set raw_pct = 0 %}
-        {% endif %}
-        {% if raw_pct < 0 %}{% set progress_pct = 0 %}
-        {% elif raw_pct > 100 %}{% set progress_pct = 100 %}
-        {% else %}{% set progress_pct = raw_pct | round(0) %}
-        {% endif %}
-
-        {# i18n: Name + Beschreibung rein über Key-Schema #}
-        {% set active_label = T(active.key) %}
-        {% if active_label == active.key %}
-          {% set active_label = active.label %}
-        {% endif %}
-
-        {% set active_desc = T("desc_" ~ active.key) %}
-        {% if active_desc == "desc_" ~ active.key %}
-          {% set active_desc = active.description %}
-        {% endif %}
-
-        {# Zeitformat (premium) #}
-        {% set s = (active.total_seconds or 0)|int %}
-        {% set sh = (s // 3600) %}
-        {% set sm = ((s % 3600) // 60) %}
-        {% set ss = (s % 60) %}
-
-        {% set rem = (active.remaining or 0)|int %}
-        {% set rh = (rem // 3600) %}
-        {% set rm = ((rem % 3600) // 60) %}
-        {% set rsec = (rem % 60) %}
-
-        <div class="active-research-wrapper">
-
-          {% if active.icon %}
-            <div class="research-icon-large">
-              <img
-                src="{{ url_for('static', filename='img/research/' ~ active.icon) }}"
-                alt="{{ active_label }}">
-            </div>
-          {% endif %}
-
-          <div class="active-research-content">
-            <div class="active-research-title-row">
-              <div>
-                <div class="active-research-name">
-                  {{ active_label }}
-                </div>
-                <div class="active-research-level">
-                  L{{ (active.current_level or 0)|fmt_int }} → L{{ (active.target_level or 0)|fmt_int }}
-                </div>
-              </div>
-              <div class="status-pill status-pill-active">
-                {{ T("research_btn_active") }}
-              </div>
-            </div>
-
-            <div class="active-research-desc">
-              {{ active_desc }}
-            </div>
-
-            <div class="research-progress-outer"
-                 data-total-seconds="{{ (active.total_seconds or 0)|int }}">
-              <div class="research-progress-label">
-                {{ T("research_active_remaining") }}:
-                <span id="research-countdown">
-                  {% if rh > 0 %}
-                    {{ "%d:%02d:%02d"|format(rh, rm, rsec) }}
-                  {% else %}
-                    {{ "%d:%02d"|format(rm, rsec) }}
-                  {% endif %}
-                </span>
-              </div>
-
-              <div class="research-progress-bar">
-                <div id="research-progress-fill"
-                     class="research-progress-fill"
-                     data-progress="{{ progress_pct }}"
-                     style="width: {{ progress_pct }}%;"></div>
-              </div>
-
-              <div class="research-progress-meta">
-                <span>
-                  {{ T("research_col_time") }}:
-                  {% if sh > 0 %}
-                    {{ "%d:%02d:%02d"|format(sh, sm, ss) }}
-                  {% else %}
-                    {{ "%d:%02d"|format(sm, ss) }}
-                  {% endif %}
-                </span>
-                <span>
-                  {{ T("research_col_level") }}
-                  {{ (active.current_level or 0)|fmt_int }} → {{ (active.target_level or 0)|fmt_int }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      {% else %}
-        <p class="research-no-active">
-          {{ T("research_active_none") }}
-        </p>
-      {% endif %}
+      <div id="research-queue-root" class="research-queue-root" aria-live="polite"></div>
 
       <hr class="research-divider">
 
@@ -181,8 +80,9 @@
           <tbody>
             {% if techs and techs|length > 0 %}
               {% for tech in techs %}
-                {% set is_active = active and active.key == tech.key %}
+                {% set is_active = tech.is_active if tech.is_active is defined else (active and active.key == tech.key) %}
                 {% set locked = not tech.requirements_met %}
+                {% set queue_full = (rq_summary.count or 0)|int >= rq_limit|int %}
 
                 {# i18n: Schema: key / desc_key #}
                 {% set tech_label = T(tech.key) %}
@@ -247,10 +147,18 @@
                       <span class="status-pill status-pill-locked">
                         {{ T("research_requirements_not_met") }}
                       </span>
+                    {% elif queue_full %}
+                      <span class="status-pill status-pill-locked">
+                        {{ T("research_status_queue_full", "Warteschlange voll") }}
+                      </span>
                     {% else %}
                       <a href="{{ url_for('research_start', tech_key=tech.key) }}"
                          class="gc-btn gc-btn-primary gc-btn-sm btn-research">
-                        {{ T("research_btn_start") }}
+                        {% if rq_summary.count %}
+                          {{ T("research_btn_queue", "Anreihen") }}
+                        {% else %}
+                          {{ T("research_btn_start") }}
+                        {% endif %}
                       </a>
                     {% endif %}
                   </td>

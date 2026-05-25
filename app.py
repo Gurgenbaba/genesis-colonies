@@ -493,16 +493,14 @@ def research_start(tech_key):
     player_view, buildings, _, _, _, _ = _load_player_view_with_resources()
     if player_view is None:
         return redirect(url_for("login"))
-    try:
-        ok, reason, payload = queue_research(player_view, buildings, tech_key)
-    except TypeError:
-        ok, reason, payload = queue_research(player_view, tech_key)
-    
+    ok, reason, payload = queue_research(player_view, tech_key)
     if not ok:
         if reason == "no_research_lab":
             flash(T("research_msg_no_lab"), "error")
         elif reason == "research_active":
             flash(T("research_msg_active"), "error")
+        elif reason == "research_queue_full":
+            flash(T("research_msg_queue_full"), "error")
         elif reason == "not_enough_resources":
             need_m, need_c = payload
             flash(T("research_msg_not_enough", metal=need_m, crystal=need_c), "error")

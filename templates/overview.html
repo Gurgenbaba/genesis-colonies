@@ -302,7 +302,8 @@
         <div class="research-active-box"
              id="overview-research-active"
              data-remaining="{{ remaining }}"
-             data-total="{{ total }}">
+             data-total="{{ total }}"
+             data-finish-at="{{ (active.finish_at or 0)|int }}">
           <div class="research-active-name" id="overview-research-active-name">
             {{ active_label }}
             (L{{ (active.current_level if active.current_level is defined else 0)|fmt_int }}
@@ -310,7 +311,7 @@
           </div>
 
           <div class="research-bar" aria-label="{{ T('progress','Fortschritt') }}">
-            <div class="research-bar-fill"
+            <div class="research-bar-fill gc-progress-smooth"
                  id="research-bar-fill"
                  style="width: {{ progress }}%;"></div>
           </div>
