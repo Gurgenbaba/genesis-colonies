@@ -208,11 +208,19 @@
 
   function isAuthStatusFailure(err, data) {
     if (err?.authRedirect) return true;
-    if (data?.error === "not_logged_in" || data?.ok === false) return true;
+    if (data?.error === "not_logged_in") return true;
     const status = Number(err?.status || 0);
     if (status === 401 || status === 403) return true;
     const msg = String(err?.message || "");
     return /HTTP 401|HTTP 403|not_logged_in|non_json_response|invalid_json_response/i.test(msg);
+  }
+
+  function applyActionState(json, reason) {
+    if (!json || !json.state) return false;
+    const anyActive = applyGameStateData(json.state, reason);
+    GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch);
+    GC.startProgressTicker();
+    return anyActive;
   }
 
   function logStatusPollErrorOnce(reason, err) {
@@ -565,6 +573,7 @@
 
     GC.refreshGameState("page_init");
     GC.startProgressTicker();
+    if (typeof GC.resumeChatPolling === "function") GC.resumeChatPolling();
   };
 
   function formatDuration(seconds) {
@@ -1541,9 +1550,13 @@
   // Status polling / GC.refreshGameState
   // =========================
   function applyGameStateData(data, _reason) {
+      if (!data || data.ok === false) return false;
+
       if (data.server_time) setServerTime(data.server_time);
 
       const p = data.player || {};
+      const energy = data.energy || {};
+      const resources = data.resources || {};
       const buildings = data.buildings || {};
       const buildQueueRaw = data.build_queue || null;
       const prod = data.production_per_hour || {};
@@ -1554,10 +1567,10 @@
       const storageMetal = Math.floor(Number(storage.metal || 0));
       const storageCrystal = Math.floor(Number(storage.crystal || 0));
 
-      const metal = Math.floor(Number(p.metal || 0));
-      const crystal = Math.floor(Number(p.crystal || 0));
-      const used = Math.floor(Number(p.energy_used || 0));
-      const total = Math.floor(Number(p.energy_total || 0));
+      const metal = Math.floor(Number(p.metal ?? resources.metal ?? 0));
+      const crystal = Math.floor(Number(p.crystal ?? resources.crystal ?? 0));
+      const used = Math.floor(Number(p.energy_used ?? energy.used ?? resources.energy_used ?? 0));
+      const total = Math.floor(Number(p.energy_total ?? energy.total ?? resources.energy_total ?? 0));
 
       // --- Top-Bar Ressourcen (alle sichtbaren Instanzen aktualisieren) ---
       const metalValEls = document.querySelectorAll(".res-value.metal");
@@ -1791,8 +1804,8 @@
     GC.refreshInFlight = (async () => {
       try {
         const data = await GC.fetchJSON("/api/game-state", { cache: "no-store", signal: ctrl.signal });
-        if (isAuthStatusFailure(null, data)) {
-          handleAuthFailure("game-state-payload");
+        if (!data || data.ok === false) {
+          if (isAuthStatusFailure(null, data)) handleAuthFailure("game-state-payload");
           return null;
         }
 
@@ -2414,9 +2427,8 @@
             headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({ building_type: buildingType, tab, request_id: newRequestId() }),
           });
-          if (json.state) applyGameStateData(json.state, json.ok ? "upgrade_success" : "upgrade_error");
+          applyActionState(json, json.ok ? "upgrade_success" : "upgrade_error");
           if (json.ok) {
-            GC.startPolling(true);
             showNotify(t("msg_build_queued", "Bauauftrag angereiht."), "success");
           } else {
             showNotify(mapActionError(json.reason, json.payload), "error");
@@ -2450,9 +2462,8 @@
             headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({ tech_key: techKey, request_id: newRequestId() }),
           });
-          if (json.state) applyGameStateData(json.state, json.ok ? "research_start_success" : "research_start_error");
+          applyActionState(json, json.ok ? "research_start_success" : "research_start_error");
           if (json.ok) {
-            GC.startPolling(true);
             showNotify(t("research_msg_started_short", "Forschung angereiht."), "success");
           } else {
             showNotify(mapActionError(json.reason, json.payload), "error");
@@ -2482,7 +2493,7 @@
             headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({ job_id: Number(buildCancelBtn.dataset.buildCancelId || 0) }),
           });
-          if (json.state) applyGameStateData(json.state, json.ok ? "build_cancel_success" : "build_cancel_error");
+          applyActionState(json, json.ok ? "build_cancel_success" : "build_cancel_error");
           if (json.ok) {
             showNotify(t("msg_build_cancelled", "Bauauftrag abgebrochen."), "success");
           } else {
@@ -2510,7 +2521,7 @@
             headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify({ job_id: Number(researchCancelBtn.dataset.researchCancelId || 0) }),
           });
-          if (json.state) applyGameStateData(json.state, json.ok ? "research_cancel_success" : "research_cancel_error");
+          applyActionState(json, json.ok ? "research_cancel_success" : "research_cancel_error");
           if (json.ok) {
             showNotify(t("msg_research_cancelled", "Forschungsauftrag abgebrochen."), "success");
           } else {
@@ -2554,7 +2565,9 @@
       }
       if (!shouldRunGameLoop() || _authLoopAborted) return;
       _authLoopAborted = false;
-      GC.refreshGameState("tab_visible");
+      GC.refreshGameState("tab_visible").then(() => {
+        GC.startPolling(lastHadActiveJob || lastHadActiveResearch);
+      });
       GC.startProgressTicker();
     });
   }

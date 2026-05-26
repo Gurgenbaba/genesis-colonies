@@ -143,6 +143,20 @@ def test_api_game_state_overview_production_after_mining_tech(game_client):
     assert int(data["production_per_hour"]["metal_mine"]) == prod_after
 
 
+def test_api_status_alias_matches_game_state(game_client):
+    client, _pid = game_client
+    r_state = client.get("/api/game-state")
+    r_status = client.get("/api/status")
+    assert r_state.status_code == 200
+    assert r_status.status_code == 200
+    state = r_state.get_json()
+    status = r_status.get_json()
+    assert state["ok"] is True
+    assert status["ok"] is True
+    assert status["energy"]["used"] == state["energy"]["used"]
+    assert status["overview"]["rows"] == state["overview"]["rows"]
+
+
 def test_api_game_state_single_finish_via_coerce(game_client):
     client, pid = game_client
     _set_buildings(pid, {"metal_mine": 1, "solar_plant": 1})

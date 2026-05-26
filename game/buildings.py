@@ -18,10 +18,10 @@ from .models import (
     get_research_levels,
     try_spend_resources_conn,
     get_planet_owner_id,
-    finish_due_build_jobs,
 )
 from .db import begin_write_transaction, commit, rollback, lock_planet_for_update
-from .research import get_research_modifiers, RESEARCH_TECHS
+from .research import RESEARCH_TECHS
+from .effects import EffectResolver, get_effect_resolver
 from .ranking import invalidate_player_score_cache  # ✅ Cache invalidieren nach Finish
 
 # =============================================================================
@@ -226,25 +226,14 @@ def get_upgrade_cost(building_type: str, current_level: int) -> Tuple[int, int]:
 
 
 def get_build_time(building_type: str, target_level: int, user_id: Optional[int] = None) -> int:
-    base_time = BUILD_TIME_BASE.get(building_type, DEFAULT_BUILD_TIME_LEVEL_1)
-    factor = BUILD_TIME_FACTOR.get(building_type, 1.5)
-    lvl_factor = factor ** max(int(target_level) - 1, 0)
-    seconds = float(base_time * lvl_factor)
+    if user_id is None:
+        base_time = BUILD_TIME_BASE.get(building_type, DEFAULT_BUILD_TIME_LEVEL_1)
+        factor = BUILD_TIME_FACTOR.get(building_type, 1.5)
+        lvl_factor = factor ** max(int(target_level) - 1, 0)
+        return max(int(base_time * lvl_factor), 1)
 
-    build_time_speed = 1.0
-    if user_id is not None:
-        mods = get_research_modifiers(int(user_id))
-        build_time_speed = float(mods.get("build_time_speed", 1.0) or 1.0)
-
-    try:
-        settings = get_game_settings()
-        build_speed_val = float(settings.get("build_speed", "1.0") or 1.0)
-    except Exception:
-        build_speed_val = 1.0
-
-    effective_speed = max(0.1, build_time_speed * build_speed_val)
-    seconds /= effective_speed
-    return max(int(seconds), 1)
+    resolver = get_effect_resolver(int(user_id), force_refresh=True)
+    return resolver.get_build_time_seconds(building_type, int(target_level))
 
 
 # =============================================================================
@@ -252,11 +241,7 @@ def get_build_time(building_type: str, target_level: int, user_id: Optional[int]
 # =============================================================================
 
 def get_max_level_for_building(building_type: str, buildings: Dict[str, int]) -> int:
-    base_max = MAX_BUILDING_LEVEL
-    if building_type in ("metal_mine", "crystal_mine", "solar_plant"):
-        core_level = int(buildings.get("planet_core_nexus", 0) or 0)
-        return base_max + max(0, core_level)
-    return base_max
+    return EffectResolver(buildings, {}).get_max_building_level(building_type)
 
 
 # =============================================================================
@@ -383,11 +368,15 @@ def _resolve_build_queue_limit(settings: Optional[Dict[str, Any]] = None) -> int
     return max(queue_limit, 1)
 
 
-def get_build_queue_status_for_planet(planet_id: int, conn=None) -> Dict[str, Any]:
+def get_build_queue_status_for_planet(
+    planet_id: int,
+    conn=None,
+    *,
+    skip_finish: bool = False,
+) -> Dict[str, Any]:
     """
     Liefert Queue + Summary für ein Planet.
-    - KEIN conn-mix: alles über dieselbe conn
-    - OPTIONAL: fällige Jobs finishen (wenn du willst, dass API/Poll "mitzieht")
+    Finish läuft über queue_engine (Caller oder skip_finish=True).
     """
     own = False
     if conn is None:
@@ -398,20 +387,22 @@ def get_build_queue_status_for_planet(planet_id: int, conn=None) -> Dict[str, An
         cur = conn.cursor()
         now = time.time()
 
-        # OPTIONAL: fällige Builds abschließen (damit Levels + Score korrekt sind)
-        # Falls du das NUR in /api/status machst, kannst du es hier weglassen.
-        # owner id holen (damit finish_due_build_jobs korrekt arbeiten kann)
-        cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
-        prow = cur.fetchone()
-        if prow:
-            player_id = int(prow["player_id"])
-            try:
-                finish_due_build_jobs(planet_id=int(planet_id), player_id=player_id, now=now, conn=conn)
-                commit(conn)
-            except Exception:
-                rollback(conn)
+        from .live_state import coerce_skip_finish
 
-        # Buildings-Levels (nach finish) aus derselben conn lesen
+        if not coerce_skip_finish(bool(skip_finish)):
+            cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+            prow = cur.fetchone()
+            if prow:
+                from .queue_engine import finish_due_work_once
+
+                finish_due_work_once(
+                    player_id=int(prow["player_id"]),
+                    planet_id=int(planet_id),
+                    now=now,
+                    conn=conn,
+                    source="build_queue_status",
+                )
+
         buildings = get_planet_buildings(int(planet_id), conn=conn)
 
         # Queue rows aus derselben conn lesen
@@ -474,43 +465,37 @@ def get_build_queue_status_for_planet(planet_id: int, conn=None) -> Dict[str, An
 
 def complete_finished_builds_for_planet(planet_id: int, conn=None) -> Dict[str, int]:
     """
-    ✅ Conn-safe:
-    - Wenn conn übergeben: KEIN eigenes BEGIN/COMMIT, nur finish_due_build_jobs() in derselben Tx.
-    - Wenn conn None: eigene Connection + Transaction.
-    - Danach Score-Cache invalidieren (nur wenn wirklich finished).
-    - Rückgabe: aktuelle Buildings (über dieselbe conn, wenn vorhanden).
+    Conn-safe: delegiert an queue_engine.finish_due_work (Build + Research des Owners).
     """
     planet_id = int(planet_id)
-
-    # owner_id muss conn-safe sein (falls dein get_planet_owner_id noch kein conn kann,
-    # dann bitte auch dort conn optional ergänzen – ansonsten bleibt hier ein mini conn-mix).
     owner_id = get_planet_owner_id(planet_id)
     if not owner_id:
         return get_planet_buildings(planet_id, conn=conn)
 
-    now = time.time()
-
     from .models import db as _db
+    from .queue_engine import finish_due_work_once
+
     own_conn = False
     if conn is None:
         conn = _db()
         own_conn = True
 
-    finished_any = False
     try:
         if own_conn:
             begin_write_transaction(conn)
 
-        finished_any = finish_due_build_jobs(
-            planet_id=planet_id,
+        finish_due_work_once(
             player_id=int(owner_id),
-            now=now,
+            planet_id=planet_id,
             conn=conn,
+            source="buildings",
         )
+
+        buildings = get_planet_buildings(planet_id, conn=conn)
 
         if own_conn:
             commit(conn)
-
+        return buildings
     except Exception:
         if own_conn:
             rollback(conn)
@@ -518,11 +503,6 @@ def complete_finished_builds_for_planet(planet_id: int, conn=None) -> Dict[str, 
     finally:
         if own_conn:
             conn.close()
-
-    if finished_any:
-        invalidate_player_score_cache(int(owner_id))
-
-    return get_planet_buildings(planet_id)
 
 
 def queue_build_for_planet(
@@ -550,12 +530,19 @@ def queue_build_for_planet(
         lock_planet_for_update(conn, planet_id)
         now = time.time()
 
-        finished_any = finish_due_build_jobs(
-            planet_id=planet_id,
+        from .queue_engine import finish_due_work
+
+        engine_result = finish_due_work(
             player_id=user_id,
+            planet_id=planet_id,
             now=now,
             conn=conn,
+            source="action",
         )
+        finished_any = (
+            int(engine_result["finished"]["buildings"])
+            + int(engine_result["finished"]["research"])
+        ) > 0
 
         cur = conn.cursor()
         cur.execute(
@@ -654,6 +641,79 @@ def queue_build_for_planet(
             "max_level": int(max_level),
         }
         return True, "ok", payload
+
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
+def cancel_build_job_for_planet(
+    planet_id: int,
+    job_id: int,
+    user_id: Optional[int] = None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    planet_id = int(planet_id)
+    job_id = int(job_id)
+    user_id_int = int(user_id) if user_id is not None else None
+
+    conn = db()
+    finished_any = False
+    try:
+        begin_write_transaction(conn)
+        lock_planet_for_update(conn, planet_id)
+        now = time.time()
+
+        owner_id = get_planet_owner_id(planet_id)
+        if not owner_id:
+            rollback(conn)
+            return False, "not_found", {"msg": "Planet owner not found"}
+
+        if user_id_int is not None and int(owner_id) != user_id_int:
+            rollback(conn)
+            return False, "forbidden", {"msg": "Not your planet"}
+
+        from .queue_engine import finish_due_work
+
+        engine_result = finish_due_work(
+            player_id=int(owner_id),
+            planet_id=planet_id,
+            now=now,
+            conn=conn,
+            source="action",
+        )
+        finished_any = (
+            int(engine_result["finished"]["buildings"])
+            + int(engine_result["finished"]["research"])
+        ) > 0
+
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, building_type
+            FROM build_queue
+            WHERE id = ? AND planet_id = ?
+            LIMIT 1;
+            """,
+            (job_id, planet_id),
+        )
+        row = cur.fetchone()
+        if not row:
+            rollback(conn)
+            return False, "not_found", {"msg": "Build job not found", "job_id": job_id}
+
+        delete_build_job(int(row["id"]), conn=conn)
+        commit(conn)
+
+        if finished_any:
+            invalidate_player_score_cache(int(owner_id))
+
+        return True, "ok", {
+            "job_id": int(row["id"]),
+            "building_type": str(row["building_type"]),
+            "cancelled": True,
+        }
 
     except Exception:
         rollback(conn)

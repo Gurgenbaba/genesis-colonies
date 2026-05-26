@@ -494,6 +494,10 @@ def get_research_status(
 ) -> dict:
     uid = int(user_id)
 
+    from .live_state import coerce_skip_finish
+
+    skip_finish = coerce_skip_finish(bool(skip_finish))
+
     if not skip_finish:
         if conn is not None:
             from .queue_engine import finish_due_work_once

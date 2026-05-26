@@ -31,6 +31,7 @@ from game.models import (
     get_user_by_username,
     create_user,
     get_homeworld,
+    get_planet_buildings,
     get_player_rank,
     get_ranking_rows,
     get_idempotent_action,
@@ -1277,23 +1278,14 @@ def api_chat_admin_unmute():
 # API (AJAX / main.js)
 # --------------------------------------------------------------------------
 
-def _build_game_state_payload(include_panel: bool = True) -> Tuple[dict, int]:
-    """
-    Zentraler Spielzustand für Polling + AJAX-Refresh (kein Page-Reload).
-    Returns (payload, player_id) or raises via caller checking player_view.
-    """
+def _payload_from_live_context(
+    ctx: Dict[str, Any],
+    *,
+    user_id: int,
+    include_panel: bool = True,
+) -> Dict[str, Any]:
+    """Build JSON payload from an already-refreshed live context."""
     from game.logic import get_research_modifiers
-
-    user = get_current_user()
-    if not user:
-        return {"ok": False, "error": "not_logged_in"}, 0
-
-    user_id = int(user["id"])
-    player_id = user_id
-
-    ctx = _load_page_live_context(finish_source="game_state", include_panel=include_panel)
-    if ctx is None:
-        return {"ok": False, "error": "not_logged_in"}, 0
 
     player_view = ctx["player_view"]
     buildings = ctx["buildings"]
@@ -1363,15 +1355,15 @@ def _build_game_state_payload(include_panel: bool = True) -> Tuple[dict, int]:
     }
 
     if include_panel:
-        planet = get_homeworld(player_id=player_id)
+        planet = get_homeworld(player_id=user_id)
         payload["buildings_panel"] = get_buildings_panel_rows(
             planet,
             buildings,
             build_queue=build_queue,
         )
 
-    score = get_player_score_cached(player_id) or {"total": 0, "buildings": 0, "research": 0}
-    rank, total_players = get_player_rank(player_id)
+    score = get_player_score_cached(user_id) or {"total": 0, "buildings": 0, "research": 0}
+    rank, total_players = get_player_rank(user_id)
 
     payload["score"] = {
         "total": int(score.get("total", 0) or 0),
@@ -1381,7 +1373,45 @@ def _build_game_state_payload(include_panel: bool = True) -> Tuple[dict, int]:
         "total_players": int(total_players) if total_players else None,
     }
 
-    return payload, player_id
+    return payload
+
+
+def _build_game_state_payload(
+    include_panel: bool = True,
+    *,
+    finish_source: str = "game_state",
+) -> Tuple[dict, int]:
+    """
+    Zentraler Spielzustand für Polling + AJAX-Refresh (kein Page-Reload).
+    Returns (payload, player_id).
+    """
+    user = get_current_user()
+    if not user:
+        return {"ok": False, "error": "not_logged_in"}, 0
+
+    user_id = int(user["id"])
+    ctx = _load_page_live_context(
+        finish_source=str(finish_source or "game_state"),
+        include_panel=include_panel,
+    )
+    if ctx is None:
+        return {"ok": False, "error": "not_logged_in"}, 0
+
+    return _payload_from_live_context(ctx, user_id=user_id, include_panel=include_panel), user_id
+
+
+def _player_context_for_action() -> Optional[Tuple[Any, Dict[str, int]]]:
+    """Lightweight player + buildings for mutations (no full live refresh)."""
+    user_id = session.get("user_id")
+    if user_id is None:
+        return None
+    user_id = int(user_id)
+    player_view = load_player(user_id)
+    if not player_view:
+        return None
+    planet = get_homeworld(player_id=user_id)
+    buildings = get_planet_buildings(int(planet["id"]))
+    return player_view, buildings
 
 
 def _extract_request_id(data: Dict[str, Any]) -> str:
@@ -1394,9 +1424,11 @@ def _action_json_response(
     reason: str,
     payload: Any = None,
     job: Any = None,
+    *,
+    finish_source: str = "action",
 ) -> Any:
-    """Immer frischen Spielzustand liefern – auch bei Fehlern."""
-    state, _ = _build_game_state_payload(include_panel=True)
+    """Immer frischen Spielzustand liefern – auch bei Fehlern (ein Refresh nach Mutation)."""
+    state, _ = _build_game_state_payload(include_panel=True, finish_source=finish_source)
     resp: Dict[str, Any] = {
         "ok": bool(ok),
         "reason": reason,
@@ -1412,16 +1444,14 @@ def _action_json_response(
 @app.route("/api/status")
 @require_login
 def api_status():
-    payload, player_id = _build_game_state_payload(include_panel=True)
-    if not payload.get("ok"):
-        return jsonify({"error": "not_logged_in"}), 401
-    return jsonify(payload)
+    """Alias von /api/game-state (gleiches Schema)."""
+    return api_game_state()
 
 
 @app.route("/api/game-state")
 @require_login
 def api_game_state():
-    payload, player_id = _build_game_state_payload(include_panel=True)
+    payload, _player_id = _build_game_state_payload(include_panel=True, finish_source="game_state")
     if not payload.get("ok"):
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
     return jsonify(payload)
@@ -1436,9 +1466,10 @@ def api_buildings_upgrade():
         state, _ = _build_game_state_payload(include_panel=True)
         return jsonify({"ok": False, "reason": "missing_building_type", "state": state}), 400
 
-    player_view, buildings, _, _, _, _ = _load_player_view_with_resources()
-    if player_view is None:
+    ctx = _player_context_for_action()
+    if ctx is None:
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    player_view, buildings = ctx
 
     user_id = int(player_view["id"])
     request_id = _extract_request_id(data)
@@ -1453,6 +1484,7 @@ def api_buildings_upgrade():
         reason,
         payload=extra if not ok else None,
         job=extra if ok else None,
+        finish_source="api_buildings_upgrade",
     )
     response_obj = resp.get_json()
 
@@ -1475,9 +1507,10 @@ def api_buildings_cancel():
         state, _ = _build_game_state_payload(include_panel=True)
         return jsonify({"ok": False, "reason": "missing_job_id", "state": state}), 400
 
-    player_view, _, _, _, _, _ = _load_player_view_with_resources()
-    if player_view is None:
+    ctx = _player_context_for_action()
+    if ctx is None:
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    player_view, _buildings = ctx
 
     ok, reason, extra = cancel_build(player_view, job_id)
     return _action_json_response(
@@ -1485,6 +1518,7 @@ def api_buildings_cancel():
         reason,
         payload=extra if not ok else None,
         job=extra if ok else None,
+        finish_source="api_buildings_cancel",
     )
 
 
@@ -1497,9 +1531,10 @@ def api_research_start():
         state, _ = _build_game_state_payload(include_panel=True)
         return jsonify({"ok": False, "reason": "missing_tech_key", "state": state}), 400
 
-    player_view, _, _, _, _, _ = _load_player_view_with_resources()
-    if player_view is None:
+    ctx = _player_context_for_action()
+    if ctx is None:
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    player_view, _buildings = ctx
 
     user_id = int(player_view["id"])
     request_id = _extract_request_id(data)
@@ -1514,6 +1549,7 @@ def api_research_start():
         reason,
         payload=extra if not ok else None,
         job=extra if ok else None,
+        finish_source="api_research_start",
     )
     response_obj = resp.get_json()
 
@@ -1536,9 +1572,10 @@ def api_research_cancel():
         state, _ = _build_game_state_payload(include_panel=True)
         return jsonify({"ok": False, "reason": "missing_job_id", "state": state}), 400
 
-    player_view, _, _, _, _, _ = _load_player_view_with_resources()
-    if player_view is None:
+    ctx = _player_context_for_action()
+    if ctx is None:
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    player_view, _buildings = ctx
 
     ok, reason, extra = cancel_research(player_view, job_id)
     return _action_json_response(
@@ -1546,6 +1583,7 @@ def api_research_cancel():
         reason,
         payload=extra if not ok else None,
         job=extra if ok else None,
+        finish_source="api_research_cancel",
     )
 
 
