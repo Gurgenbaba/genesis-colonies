@@ -403,5 +403,7 @@
   "playercard_badge_commander_50k": "Legend",
   "playercard_badge_commander_50k_desc": "Reached 50,000 total points.",
   "galaxy_sector_commanders": "Commanders in sector",
-  "alliance_members_preview": "Commanders in cluster (preview)"
+  "alliance_members_preview": "Commanders in cluster (preview)",
+  "playercard_back_to_game": "Back to overview",
+  "playercard_fallback_edit_hint": "Tip: Click your name in-game to edit your profile (AJAX)."
 }

@@ -81,7 +81,7 @@
           {% if AUTH_USER and AUTH_USER.id %}
             <div class="gc-hud-panel gc-hud-panel-user" aria-label="{{ T('logged_in_as', 'Eingeloggt als') }}">
               <span class="gc-hud-panel-tag">{{ T("commander") }}</span>
-              <span class="gc-user-name">{{ player_name_link(CURRENT_PLAYER_ID, AUTH_USER.username) }}</span>
+              <span class="gc-user-name">{{ player_name_link(AUTH_USER.id, AUTH_USER.name or AUTH_USER.username) }}</span>
               {% if AUTH_ADMIN %}
                 <span class="gc-admin-badge" aria-label="Administrator">ADMIN</span>
               {% endif %}

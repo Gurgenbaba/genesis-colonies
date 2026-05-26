@@ -36,7 +36,11 @@
 {% endif %}
 
 {% if not p_name %}
-  {% if auth_user and auth_user.username %}{% set p_name = auth_user.username %}{% else %}{% set p_name = "Commander" %}{% endif %}
+  {% if player_obj and player_obj.name is defined and player_obj.name %}
+    {% set p_name = player_obj.name %}
+  {% elif auth_user and auth_user.name is defined and auth_user.name %}
+    {% set p_name = auth_user.name %}
+  {% elif auth_user and auth_user.username %}{% set p_name = auth_user.username %}{% else %}{% set p_name = "Commander" %}{% endif %}
 {% endif %}
 
 <div class="gc-page overview-wrapper">

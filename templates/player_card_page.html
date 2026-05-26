@@ -1,12 +1,21 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% set card = card if card is defined and card else {} %}
+{% set viewer_id = (CURRENT_PLAYER_ID if CURRENT_PLAYER_ID is defined else None) %}
+{% set is_own = (viewer_id and card.get('player_id') and (viewer_id|int == card.get('player_id')|int)) %}
+
 <div class="gc-page player-card-page">
   <header class="section-header">
     <h1 class="section-title">{{ T("playercard_title") }}</h1>
     <p class="section-hint hint">
+      <a href="{{ url_for('overview') }}" class="gc-nav-link">{{ T("playercard_back_to_game") }}</a>
+      ·
       <a href="{{ url_for('ranking_view') }}" class="gc-nav-link">{{ T("nav_ranking") }}</a>
     </p>
+    {% if is_own and not card.get('is_private') %}
+      <p class="section-hint hint">{{ T("playercard_fallback_edit_hint") }}</p>
+    {% endif %}
   </header>
   <section class="gc-panel">
     {% include "partials/player_card_view.html" %}

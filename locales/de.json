@@ -854,5 +854,7 @@
   "playercard_badge_commander_50k": "Legende",
   "playercard_badge_commander_50k_desc": "50.000 Gesamtpunkte erreicht.",
   "galaxy_sector_commanders": "Commander im Sektor",
-  "alliance_members_preview": "Commander im Cluster (Vorschau)"
+  "alliance_members_preview": "Commander im Cluster (Vorschau)",
+  "playercard_back_to_game": "Zurück zur Übersicht",
+  "playercard_fallback_edit_hint": "Tipp: Im Spiel auf deinen Namen klicken, um das Profil zu bearbeiten (AJAX)."
 }

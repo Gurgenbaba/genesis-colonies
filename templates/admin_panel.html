@@ -601,7 +601,13 @@
               {% for ban in banned_players %}
                 <tr>
                   <td>{{ ban.player_id }}</td>
-                  <td>{{ ban.username or "–" }}</td>
+                  <td>
+                    {% if ban.player_id and ban.username %}
+                      {{ player_name_link(ban.player_id, ban.username) }}
+                    {% else %}
+                      {{ ban.username or "–" }}
+                    {% endif %}
+                  </td>
                   <td>{{ ban.player_name or "–" }}</td>
                   <td>{{ ban.reason or "–" }}</td>
                   <td>{{ ban.created_text }}</td>

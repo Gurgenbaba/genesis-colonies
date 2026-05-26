@@ -274,6 +274,103 @@ def test_modal_shell_has_separate_content_and_loading(app_client):
     assert 'data-pc-error' in page
 
 
+def test_player_name_link_escapes_and_valid_id(app_client):
+    import importlib
+    import app as app_mod
+
+    importlib.reload(app_mod)
+    link = app_mod.player_name_link(5, '<img onerror="x">')
+    html = str(link)
+    assert 'data-player-id="5"' in html
+    assert "<img" not in html
+    assert "&lt;img" in html or "onerror" not in html
+
+    bad = app_mod.player_name_link(0, "Ghost")
+    assert "data-player-card" not in str(bad)
+    assert "Ghost" in str(bad) or "—" in str(bad)
+
+
+def test_session_user_id_matches_player_id(temp_db):
+    init_db()
+    _close_db_conn()
+    pid, uname = _create_player("id_match")
+    conn = db()
+    try:
+        row = conn.execute(
+            "SELECT u.id AS user_id, p.id AS player_id FROM users u JOIN players p ON p.id = u.id WHERE u.username LIKE ?",
+            (f"{uname}%",),
+        ).fetchone()
+        assert row is not None
+        assert int(row["user_id"]) == int(row["player_id"]) == pid
+    finally:
+        conn.close()
+
+
+def test_private_card_minimal_fields(temp_db):
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("priv_a")
+    other, _ = _create_player("priv_b")
+    ensure_player_card(other)
+    c = db()
+    try:
+        c.execute("UPDATE player_cards SET is_public = 0 WHERE player_id = ?", (other,))
+        commit(c)
+    finally:
+        c.close()
+
+    view, err = build_public_card(other, viewer_id=pid)
+    assert err is None
+    assert view.get("is_private") is True
+    assert "avatar_url" not in view or not view.get("avatar_url")
+    assert view.get("score_total") is None or "score_total" not in view
+
+
+def test_header_commander_link_uses_player_id(app_client):
+    pid, login_name = _create_player("header_link")
+    client = app_client
+    client.post("/login", data={"username": login_name, "password": "test-pass-123"}, follow_redirects=True)
+
+    page = client.get("/overview").get_data(as_text=True)
+    assert f'data-player-id="{pid}"' in page
+    assert 'data-player-card="1"' in page
+    assert "gc-user-name" in page
+
+
+def test_fallback_player_page(app_client):
+    pid, login_name = _create_player("fallback_user")
+    client = app_client
+    client.post("/login", data={"username": login_name, "password": "test-pass-123"}, follow_redirects=True)
+
+    res = client.get(f"/player/{pid}")
+    assert res.status_code == 200
+    body = res.get_data(as_text=True)
+    assert "player-card-page" in body
+    assert "gc-player-card-view" in body
+    assert "playercard_back_to_game" in body or "Zurück zur Übersicht" in body
+    assert "playercard_fallback_edit_hint" in body or "AJAX" in body
+    # Modal shell may include loading copy; SSR card must not be stuck on loading only.
+    assert "gc-player-card-stat" in body or "gc-player-card-private" in body
+
+
+def test_fallback_private_player(app_client):
+    owner, owner_name = _create_player("fallback_priv")
+    viewer, viewer_login = _create_player("fallback_view")
+    ensure_player_card(owner)
+    c = db()
+    try:
+        c.execute("UPDATE player_cards SET is_public = 0 WHERE player_id = ?", (owner,))
+        commit(c)
+    finally:
+        c.close()
+
+    client = app_client
+    client.post("/login", data={"username": viewer_login, "password": "test-pass-123"}, follow_redirects=True)
+    res = client.get(f"/player/{owner}")
+    assert res.status_code == 200
+    assert "playercard_private_profile" in res.get_data(as_text=True) or "privat" in res.get_data(as_text=True).lower()
+
+
 def test_badge_seed_idempotent_via_service(temp_db):
     init_db()
     _close_db_conn()
