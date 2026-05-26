@@ -30,15 +30,18 @@ from .resources import (
 from .buildings import (
     get_build_queue_status_for_planet,
     queue_build_for_planet as _queue_build_for_planet,
+    cancel_build_job_for_planet as _cancel_build_job_for_planet,
     complete_finished_builds_for_planet,  # finish + score trigger in buildings/models
 )
 
 from .research import (
     queue_research as _queue_research,  # signature: (player, tech_key, user_id=None)
+    cancel_research_job as _cancel_research_job,
     get_research_status as _get_research_status,
     get_research_modifiers as _get_research_modifiers,
     complete_finished_research as _complete_finished_research,
 )
+from .effects import get_effect_resolver
 
 from .techtree import (
     get_techtree_data as _tt_get_techtree_data,
@@ -49,6 +52,69 @@ from .techtree import (
 # ============================================================================ #
 # RESSOURCEN
 # ============================================================================ #
+
+def refresh_player_live_state(
+    player_id: int,
+    conn=None,
+    *,
+    finish_source: str = "live_state",
+) -> Tuple[Any, Dict[str, int], float, int, int, Dict[str, int]]:
+    """
+    Single authoritative refresh for API/polling:
+    1) finish due queue work + sync derived planet state
+    2) recompute resources/energy via EffectResolver (skip second finish pass)
+    """
+    from .models import db as _db, get_homeworld, load_player
+    from .queue_engine import finish_due_work_once
+
+    uid = int(player_id)
+    own_conn = conn is None
+    if own_conn:
+        conn = _db()
+
+    try:
+        if own_conn:
+            conn.execute("BEGIN IMMEDIATE")
+
+        finish_due_work_once(player_id=uid, conn=conn, source=str(finish_source or "live_state"))
+
+        player = load_player(uid, conn=conn)
+        if not player:
+            raise RuntimeError(f"player {uid} not found")
+
+        planet = get_homeworld(player_id=uid, conn=conn)
+        planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
+            planet,
+            conn=conn,
+            skip_queue_finish=True,
+        )
+        storage_caps = get_storage_capacity(buildings, user_id=uid, conn=conn)
+
+        player_view = dict(player)
+        player_view["metal"] = planet["metal"]
+        player_view["crystal"] = planet["crystal"]
+        player_view["energy_total"] = int(energy_total)
+        player_view["energy_used"] = int(energy_used)
+
+        if own_conn:
+            conn.commit()
+
+        from .live_state import mark_request_live_refreshed
+
+        mark_request_live_refreshed()
+
+        return player_view, buildings, ratio, int(energy_total), int(energy_used), storage_caps
+
+    except Exception:
+        if own_conn:
+            from .models import rollback
+
+            rollback(conn)
+        raise
+    finally:
+        if own_conn and conn is not None:
+            conn.close()
+
 
 def update_planet_resources(planet: dict, conn=None):
     """
@@ -158,23 +224,30 @@ def apply_resource_delta_unbounded(
 # BUILD QUEUE
 # ============================================================================ #
 
-def get_build_queue_status(user_id: int) -> Dict[str, Any]:
+def get_build_queue_status(
+    user_id: int,
+    *,
+    skip_finish: bool = False,
+    conn=None,
+) -> Dict[str, Any]:
     """
     Liefert die Build-Queue für den aktuellen User (Homeworld).
 
-    Wichtig:
-    - Finish-Handling + Score Trigger ist in buildings/models enthalten.
-    - Hier nur "anwenden + lesen".
+    skip_finish=True: Caller hat bereits refresh_player_live_state / finish_due_work ausgeführt.
     """
     user_id_int = int(user_id)
 
-    planet = get_homeworld(player_id=user_id_int)
+    planet = get_homeworld(player_id=user_id_int, conn=conn)
     planet_id = int(planet["id"])
 
-    # ✅ fertige Builds anwenden (inkl. Score Trigger in buildings/models)
-    complete_finished_builds_for_planet(planet_id)
+    from .live_state import coerce_skip_finish
 
-    return get_build_queue_status_for_planet(planet_id)
+    skip_finish = coerce_skip_finish(skip_finish)
+    if not skip_finish:
+        from .queue_engine import finish_due_work_once
+
+        finish_due_work_once(player_id=user_id_int, conn=conn, source="game_state")
+    return get_build_queue_status_for_planet(planet_id, conn=conn, skip_finish=True)
 
 
 def queue_build(
@@ -220,6 +293,18 @@ def queue_build(
     return True, "ok", payload
 
 
+def cancel_build(player: dict, job_id: int) -> Tuple[bool, str, Any]:
+    user_id = int(player.get("id"))
+    planet = get_homeworld(player_id=user_id)
+
+    ok, reason, payload = _cancel_build_job_for_planet(
+        planet_id=int(planet["id"]),
+        job_id=int(job_id),
+        user_id=user_id,
+    )
+    return ok, reason, payload
+
+
 # ============================================================================ #
 # RESEARCH
 # ============================================================================ #
@@ -234,24 +319,44 @@ def queue_research(player: dict, tech_key: str):
     return _queue_research(player, tech_key)
 
 
+def cancel_research(player: dict, job_id: int):
+    user_id = int(player.get("id"))
+    return _cancel_research_job(user_id=user_id, job_id=int(job_id))
+
+
 def get_research_status(
     user_id: int,
     buildings: Optional[Dict[str, int]] = None,
+    *,
+    skip_finish: bool = False,
+    conn=None,
 ) -> dict:
     """
     Wrapper um game.research.get_research_status.
 
-    - Finish-Handling + Score Trigger passiert in research/models.
-    - UI bekommt stets frische Daten.
+    skip_finish=True: Caller hat bereits refresh_player_live_state ausgeführt.
     """
-    return _get_research_status(user_id=int(user_id), buildings=buildings)
+    from .live_state import coerce_skip_finish
+
+    return _get_research_status(
+        user_id=int(user_id),
+        buildings=buildings,
+        skip_finish=coerce_skip_finish(bool(skip_finish)),
+        conn=conn,
+    )
 
 
 def get_research_modifiers(user_id: int, conn=None) -> Dict[str, float]:
     """
-    ✅ Einziger offizieller Mods-Endpunkt.
+    Einziger offizieller Mods-Endpunkt (delegiert an EffectResolver).
     """
     return _get_research_modifiers(int(user_id), conn=conn)
+
+
+def get_effect_debug_snapshot(user_id: int, conn=None) -> Dict[str, Any]:
+    """Admin/debug: vollständige Effekt-Aufschlüsselung für einen Spieler."""
+    resolver = get_effect_resolver(int(user_id), conn=conn, force_refresh=True)
+    return resolver.debug_snapshot()
 
 
 def complete_finished_research(user_id: int, conn=None) -> bool:

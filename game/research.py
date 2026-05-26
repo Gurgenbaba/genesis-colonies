@@ -5,7 +5,7 @@ Forschungs-Logik für Genesis Colonies.
 - Kosten- und Zeit-Berechnung
 - Requirement-Checks
 - Research-Queue (Starten)
-- Finish-Handling läuft ATOMAR über models.finish_due_research_jobs (inkl. Score Trigger)
+- Finish-Handling läuft über queue_engine.finish_due_work (zentral)
 - Cache invalidieren nach Finish (ranking.invalidate_player_score_cache)
 
 WICHTIG:
@@ -24,10 +24,10 @@ from .models import (
     get_research_levels,
     get_research_queue_rows,
     add_research_job,
+    delete_research_job,
     get_homeworld,
     get_planet_buildings,
     try_spend_resources_conn,
-    finish_due_research_jobs,
 )
 from .db import begin_write_transaction, commit, rollback, lock_planet_for_update, lock_player_for_update
 from .ranking import invalidate_player_score_cache  # ✅ Cache invalidieren nach Finish
@@ -196,37 +196,18 @@ def get_research_time(
     user_id: int,
     buildings: Optional[Dict[str, int]] = None,
 ) -> int:
-    cfg = RESEARCH_TECHS.get(tech_key)
-    if not cfg:
+    if tech_key not in RESEARCH_TECHS:
         return 0
 
-    base_time = float(cfg.get("base_time", 600))
-    cost_factor = float(cfg.get("cost_factor", 1.6))
-
-    lvl = max(1, int(level))
-    factor = cost_factor ** (lvl - 1)
-    raw = float(base_time * factor)
-
-    # Gebäude (Lab-Level) laden falls nicht übergeben
     if buildings is None:
         planet = get_homeworld(player_id=int(user_id))
         buildings = get_planet_buildings(int(planet["id"]))
 
-    lab_level = int(buildings.get("research_lab", 0) or 0)
-    lab_bonus = 1.0 + max(0, lab_level - 1) * 0.10
+    from .effects import EffectResolver
 
-    # NOTE: build_time_speed kommt aus research modifiers (siehe game/logic.py)
-    # Hier bleiben wir kompatibel: wir rechnen build_time_speed als 1.0, wenn du später zentral ziehst.
-    build_time_speed = 1.0
-
-    settings = get_game_settings()
-    build_speed = float(settings.get("build_speed", 1.0) or 1.0)
-    research_speed = float(settings.get("research_speed", 1.0) or 1.0)
-
-    effective_speed = max(0.1, build_speed * research_speed * lab_bonus * build_time_speed)
-    raw /= effective_speed
-
-    return max(5, int(raw))
+    research_levels = get_research_levels(int(user_id))
+    resolver = EffectResolver(buildings, research_levels, player_id=int(user_id))
+    return resolver.get_research_time_seconds(tech_key, max(1, int(level)))
 
 
 # ======================================================================
@@ -270,34 +251,35 @@ def has_research_requirements(
 
 def complete_finished_research(user_id: int, conn=None) -> bool:
     """
-    ✅ Conn-safe:
-    - Wenn conn übergeben: KEIN eigenes BEGIN/COMMIT, nur finish_due_research_jobs() in derselben Tx.
-    - Wenn conn None: eigene Connection + Transaction.
-    - Danach Score-Cache invalidieren (nur wenn wirklich finished).
-    - Rückgabe: True wenn mindestens ein Job gefinished wurde.
+    Conn-safe: delegiert an queue_engine.finish_due_work (nur dieser Spieler).
     """
     uid = int(user_id)
-    now = time.time()
 
     from .models import db as _db
+    from .queue_engine import finish_due_work_once
+
     own_conn = False
     if conn is None:
         conn = _db()
         own_conn = True
 
-    finished_any = False
     try:
         if own_conn:
             begin_write_transaction(conn)
 
-        finished_any = finish_due_research_jobs(
-            user_id=uid,
-            now=now,
+        engine_result = finish_due_work_once(
+            player_id=uid,
             conn=conn,
+            source="research",
         )
+        finished_any = (
+            int(engine_result["finished"]["buildings"])
+            + int(engine_result["finished"]["research"])
+        ) > 0
 
         if own_conn:
             commit(conn)
+        return bool(finished_any)
 
     except Exception:
         if own_conn:
@@ -306,11 +288,6 @@ def complete_finished_research(user_id: int, conn=None) -> bool:
     finally:
         if own_conn:
             conn.close()
-
-    if finished_any:
-        invalidate_player_score_cache(uid)
-
-    return bool(finished_any)
 
 
 RESEARCH_QUEUE_LIMIT = 3
@@ -353,14 +330,26 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
         lock_player_for_update(conn, uid)
         now = time.time()
 
-        finished_any = finish_due_research_jobs(user_id=uid, now=now, conn=conn)
-
         planet = get_homeworld(player_id=uid, conn=conn)
         if not planet:
             rollback(conn)
             return False, "no_homeworld", None
 
         planet_id = int(planet["id"])
+
+        from .queue_engine import finish_due_work
+
+        engine_result = finish_due_work(
+            player_id=uid,
+            planet_id=planet_id,
+            now=now,
+            conn=conn,
+            source="action",
+        )
+        finished_any = (
+            int(engine_result["finished"]["buildings"])
+            + int(engine_result["finished"]["research"])
+        ) > 0
         cur = conn.cursor()
         cur.execute(
             "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
@@ -435,6 +424,63 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
         conn.close()
 
 
+def cancel_research_job(user_id: int, job_id: int):
+    uid = int(user_id)
+    jid = int(job_id)
+
+    conn = db()
+    finished_any = False
+    try:
+        begin_write_transaction(conn)
+        lock_player_for_update(conn, uid)
+        now = time.time()
+
+        from .queue_engine import finish_due_work
+
+        engine_result = finish_due_work(
+            player_id=uid,
+            now=now,
+            conn=conn,
+            source="action",
+        )
+        finished_any = (
+            int(engine_result["finished"]["buildings"])
+            + int(engine_result["finished"]["research"])
+        ) > 0
+
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, tech_key
+            FROM research_queue
+            WHERE id = ? AND user_id = ?
+            LIMIT 1;
+            """,
+            (jid, uid),
+        )
+        row = cur.fetchone()
+        if not row:
+            rollback(conn)
+            return False, "not_found", {"msg": "Research job not found", "job_id": jid}
+
+        delete_research_job(int(row["id"]), conn=conn)
+        commit(conn)
+
+        if finished_any:
+            invalidate_player_score_cache(uid)
+
+        return True, "ok", {
+            "job_id": int(row["id"]),
+            "tech_key": str(row["tech_key"]),
+            "cancelled": True,
+        }
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
 # ======================================================================
 # STATUS FOR UI
 # ======================================================================
@@ -442,28 +488,44 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
 def get_research_status(
     user_id: int,
     buildings: Optional[Dict[str, int]] = None,
+    *,
+    skip_finish: bool = False,
+    conn=None,
 ) -> dict:
-    # ✅ UI soll immer frisch sein — ggf. mehrfach abschließen wenn fällig
-    complete_finished_research(int(user_id))
+    uid = int(user_id)
+
+    if not skip_finish:
+        if conn is not None:
+            from .queue_engine import finish_due_work_once
+
+            finish_due_work_once(player_id=uid, conn=conn, source="research_status")
+        else:
+            complete_finished_research(uid)
 
     if buildings is None:
-        planet = get_homeworld(player_id=int(user_id))
-        buildings = get_planet_buildings(int(planet["id"]))
+        planet = get_homeworld(player_id=uid, conn=conn)
+        buildings = get_planet_buildings(int(planet["id"]), conn=conn)
 
-    levels = get_research_levels(int(user_id))
-    queue = get_research_queue_rows(int(user_id))
+    levels = get_research_levels(uid, conn=conn)
+    queue = get_research_queue_rows(uid, conn=conn)
     now = time.time()
 
-    # Nachziehen: Job kann „0s“ anzeigen, finish_at aber knapp in der Zukunft liegen
-    for _ in range(3):
-        if not queue:
-            break
-        if float(queue[0]["finish_at"]) > now:
-            break
-        if not complete_finished_research(int(user_id)):
-            break
-        queue = get_research_queue_rows(int(user_id))
-        levels = get_research_levels(int(user_id))
+    if not skip_finish:
+        for _ in range(3):
+            if not queue:
+                break
+            if float(queue[0]["finish_at"]) > now:
+                break
+            if conn is not None:
+                from .queue_engine import finish_due_work_once
+
+                engine = finish_due_work_once(player_id=uid, conn=conn, source="research_status_retry")
+                if int(engine.get("finished", {}).get("research", 0)) <= 0:
+                    break
+            elif not complete_finished_research(uid):
+                break
+            queue = get_research_queue_rows(uid, conn=conn)
+            levels = get_research_levels(uid, conn=conn)
 
     queue_list: List[Dict[str, Any]] = []
     pending: Dict[str, int] = {}
@@ -580,118 +642,15 @@ def _validate_research_config() -> None:
 _validate_research_config()
 
 # ============================================================================
-# Modifiers (used by buildings/resources)
+# Modifiers (delegates to EffectResolver – single source of truth)
 # ============================================================================
-from typing import Optional, Dict, Any
-
-def _get_level(levels: Dict[str, Any], key: str) -> int:
-    try:
-        return int(levels.get(key, 0) or 0)
-    except Exception:
-        return 0
 
 def get_research_modifiers(player_id: int, conn=None) -> dict:
     """
-    Gibt ein Modifier-Dict zurück, das in resources.update_planet_resources genutzt wird.
-
-    Wichtig:
-    - Muss conn optional akzeptieren, weil resources.py mit conn=... aufruft.
-    - Fallback: falls get_research_levels() in deiner models.py noch kein conn akzeptiert.
+    Canonical modifier bundle for resources, buildings, and API consumers.
+    All formulas live in game.effects.effect_resolver.EffectResolver.
     """
+    from .effects import get_effect_resolver
 
-    # --- Research-Levels laden (conn optional) ---
-    try:
-        levels = get_research_levels(player_id, conn=conn)  # type: ignore[arg-type]
-    except TypeError:
-        # ältere Signatur ohne conn
-        levels = get_research_levels(player_id)
-
-    if not isinstance(levels, dict):
-        levels = {}
-
-    # --- Default Modifier (sehr defensive) ---
-    mods = {
-        # Produktion/Ökonomie
-        "prod_multiplier": 1.0,          # allgemeiner Produktions-Multiplikator
-        "storage_multiplier": 1.0,       # Lagerkapazität
-        "energy_efficiency": 1.0,        # optional, falls du es separat nutzt
-
-        # Zeiten
-        "build_time_multiplier": 1.0,    # Bauzeit-Multiplikator
-        "research_time_multiplier": 1.0, # Forschungszeit-Multiplikator
-
-        # Combat/Meta (für später / UI)
-        "weapon_bonus": 0.0,
-        "armor_bonus": 0.0,
-        "shield_bonus": 0.0,
-
-        # Galaxy/Fleet (für später)
-        "scan_range": 0,
-        "fleet_speed_multiplier": 1.0,
-        "cargo_multiplier": 1.0,
-    }
-
-    # --- Modifiers ableiten (sanft, keine Hardcore-Balance hier) ---
-    def lvl(key: str) -> int:
-        try:
-            return int(levels.get(key, 0) or 0)
-        except Exception:
-            return 0
-
-    # Beispiel-Keys (passen wir später 1:1 an deine RESEARCH_TECHS an)
-    # -> Diese Implementierung crasht NICHT, auch wenn Keys fehlen.
-
-    # Energie-/Produktionseffizienz
-    le = lvl("energy_efficiency")
-    if le > 0:
-        mods["energy_efficiency"] *= (1.0 + 0.02 * le)
-        mods["prod_multiplier"] *= (1.0 + 0.01 * le)
-
-    # Drohnenoptimierung (kleiner Produktionsboost)
-    ld = lvl("drones_optimization")
-    if ld > 0:
-        mods["prod_multiplier"] *= (1.0 + 0.01 * ld)
-
-    # Bauoptimierung (Bauzeit runter)
-    lb = lvl("build_optimization")
-    if lb > 0:
-        mods["build_time_multiplier"] *= max(0.40, 1.0 - 0.03 * lb)
-
-    # Forschung (Forschungszeit runter)
-    lr = lvl("research_optimization")
-    if lr > 0:
-        mods["research_time_multiplier"] *= max(0.45, 1.0 - 0.03 * lr)
-
-    # Lagertechnik (Cap hoch)
-    ls = lvl("storage_tech")
-    if ls > 0:
-        mods["storage_multiplier"] *= (1.0 + 0.05 * ls)
-
-    # Scanner / Radar (Range hoch)
-    lscan = lvl("scanner_tech")
-    if lscan > 0:
-        mods["scan_range"] += lscan
-
-    # Combat Tech (für später)
-    lw = lvl("weapons_development")
-    if lw > 0:
-        mods["weapon_bonus"] += 0.05 * lw
-
-    la = lvl("armor_tech")
-    if la > 0:
-        mods["armor_bonus"] += 0.05 * la
-
-    lsh = lvl("shield_tech")
-    if lsh > 0:
-        mods["shield_bonus"] += 0.05 * lsh
-
-    # Fleet Speed (für später)
-    lhn = lvl("hyper_navigation")
-    if lhn > 0:
-        mods["fleet_speed_multiplier"] *= (1.0 + 0.03 * lhn)
-
-    lcryo = lvl("cryo_engine")
-    if lcryo > 0:
-        mods["fleet_speed_multiplier"] *= (1.0 + 0.02 * lcryo)
-
-    return mods
+    resolver = get_effect_resolver(int(player_id), conn=conn, force_refresh=True)
+    return resolver.get_modifiers()

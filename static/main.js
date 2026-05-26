@@ -616,6 +616,9 @@
       requirements: t("msg_build_requirements", "Voraussetzungen nicht erfüllt."),
       no_research_lab: t("research_msg_no_lab", "Forschungslabor erforderlich."),
       unknown_tech: t("research_msg_unknown", "Unbekannte Forschung."),
+      not_found: t("msg_job_not_found", "Auftrag nicht gefunden."),
+      forbidden: t("msg_action_forbidden", "Aktion nicht erlaubt."),
+      missing_job_id: t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."),
     };
     return map[reason] || t("msg_generic_error", "Aktion fehlgeschlagen.");
   }
@@ -764,6 +767,64 @@
     Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${type}_finished`) : null).finally(() => {
       GC.finishLocks[type] = false;
     });
+  }
+
+  function patchOverviewTable(overview, buildings, prod) {
+    const table = document.querySelector(".overview-table tbody");
+    if (!table) return;
+
+    const rows = overview?.rows;
+    if (Array.isArray(rows) && rows.length > 0) {
+      const trs = table.querySelectorAll("tr");
+      rows.forEach((row, idx) => {
+        const tr = trs[idx];
+        if (!tr) return;
+        const cells = tr.querySelectorAll("td");
+        if (cells[1]) _setIfChanged(cells[1], fmtNumber(row.level || 0));
+        if (cells[2]) {
+          const ph = Math.floor(Number(row.production_per_hour || 0));
+          _setIfChanged(cells[2], ph > 0 ? `+${fmtNumber(ph)} / h` : "–");
+        }
+      });
+      return;
+    }
+
+    const keys = ["metal_mine", "crystal_mine", "solar_plant"];
+    const trs = table.querySelectorAll("tr");
+    keys.forEach((key, idx) => {
+      const tr = trs[idx];
+      if (!tr) return;
+      const cells = tr.querySelectorAll("td");
+      const lvl = buildings?.[key];
+      if (cells[1] && typeof lvl !== "undefined") _setIfChanged(cells[1], fmtNumber(lvl));
+      if (cells[2]) {
+        const ph = Math.floor(Number(prod?.[key] || 0));
+        _setIfChanged(cells[2], ph > 0 ? `+${fmtNumber(ph)} / h` : "–");
+      }
+    });
+  }
+
+  function patchOverviewEnergyHint(overview, data) {
+    const hint = document.querySelector(".overview-hint");
+    if (!hint) return;
+
+    const hintKey = overview?.energy_hint;
+    const total = Math.floor(
+      Number(data?.energy?.total ?? data?.player?.energy_total ?? data?.resources?.energy_total ?? 0)
+    );
+    const ratio = Number(data?.energy?.ratio ?? data?.energy_ratio ?? 1);
+
+    let state = hintKey;
+    if (!state) {
+      if (total <= 0) state = "zero";
+      else if (ratio >= 1) state = "ok";
+      else state = "low";
+    }
+
+    hint.classList.remove("overview-energy-zero", "overview-energy-ok", "overview-energy-low");
+    if (state === "zero") hint.classList.add("overview-energy-zero");
+    else if (state === "ok") hint.classList.add("overview-energy-ok");
+    else hint.classList.add("overview-energy-low");
   }
 
   function patchOverviewResearch(research) {
@@ -1157,6 +1218,7 @@
 
     if (sig === _lastQueueSignature) {
       _updateBuildQueueSubtitle(count, limit, firstEta);
+      GC.startProgressTicker();
       return;
     }
     _lastQueueSignature = sig;
@@ -1210,6 +1272,11 @@
               <div class="build-bar-fill gc-progress-smooth"${isActive ? ' id="build-bar-fill-live"' : ""}
                    style="width:${isActive ? pct : 0}%"
                    role="progressbar" aria-valuenow="${isActive ? pct : 0}" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="job-actions">
+              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-build-cancel-id="${job.id}">
+                ${t("action_cancel", "Abbrechen")}
+              </button>
             </div>
             ${isActive ? `<span class="job-badge-active">${t("buildings_btn_active", "Aktiv")}</span>` : `<span class="job-badge-queued">#${index + 1}</span>`}
           </div>
@@ -1354,6 +1421,11 @@
                    style="width:${isActive ? pct : 0}%"
                    role="progressbar" aria-valuenow="${isActive ? pct : 0}" aria-valuemin="0" aria-valuemax="100"></div>
             </div>
+            <div class="job-actions">
+              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-research-cancel-id="${job.id}">
+                ${t("action_cancel", "Abbrechen")}
+              </button>
+            </div>
             ${isActive ? `<span class="job-badge-active">${t("research_btn_active", "Aktiv")}</span>` : `<span class="job-badge-queued">#${index + 1}</span>`}
           </div>
         </div>`;
@@ -1380,22 +1452,24 @@
     const isOverviewPage = path.endsWith("/overview") || path === "/" || path === "";
 
     const buildActive = document.querySelector(".build-job.build-job-active");
-    if (buildActive) {
-      const finishTime = Number(buildActive.getAttribute("data-finish-time") || 0);
-      const total = Math.max(1, Number(buildActive.getAttribute("data-total") || 1));
-      if (finishTime) {
-        const remaining = Math.max(0, finishTime - serverNow);
-        const pct = 100 * (1 - remaining / total);
-        const etaEl = document.getElementById("build-eta-live");
-        const fillEl = document.getElementById("build-bar-fill-live");
-        if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
-        _applyProgressFill(fillEl, pct);
-        const subEta = document.getElementById("build-queue-subtitle-eta");
-        if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(remaining)));
-        if (remaining <= 0) {
-          _applyProgressFill(fillEl, 100);
-          requestFinishRefresh("buildings");
-        }
+    const buildFinishFromDom = buildActive ? Number(buildActive.getAttribute("data-finish-time") || 0) : 0;
+    const buildTotalFromDom = buildActive ? Math.max(1, Number(buildActive.getAttribute("data-total") || 1)) : 1;
+    const buildFinishFromState = Number(BUILDQ.active.finishTime || 0);
+    const buildTotalFromState = Math.max(1, Number(BUILDQ.active.totalSeconds || 1));
+    const buildFinish = buildFinishFromDom || buildFinishFromState;
+    const buildTotal = buildFinishFromDom ? buildTotalFromDom : buildTotalFromState;
+    if (buildFinish) {
+      const remaining = Math.max(0, buildFinish - serverNow);
+      const pct = 100 * (1 - remaining / buildTotal);
+      const etaEl = document.getElementById("build-eta-live");
+      const fillEl = document.getElementById("build-bar-fill-live");
+      if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
+      _applyProgressFill(fillEl, pct);
+      const subEta = document.getElementById("build-queue-subtitle-eta");
+      if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(remaining)));
+      if (remaining <= 0) {
+        _applyProgressFill(fillEl, 100);
+        requestFinishRefresh("buildings");
       }
     }
 
@@ -1512,6 +1586,12 @@
       const energyText = `${fmtNumber(used)}/${fmtNumber(total)}`;
       if (_last.energyUsed !== used || _last.energyTotal !== total) {
         setText("res-energy", energyText);
+        document.querySelectorAll("[data-energy-used]").forEach((el) => {
+          _setIfChanged(el, fmtNumber(used));
+        });
+        document.querySelectorAll("[data-energy-total]").forEach((el) => {
+          _setIfChanged(el, fmtNumber(total));
+        });
         _last.energyUsed = used;
         _last.energyTotal = total;
       }
@@ -1581,13 +1661,12 @@
       if (ovEnergyUsed) _setIfChanged(ovEnergyUsed, fmtNumber(used));
       if (ovEnergyTotal) _setIfChanged(ovEnergyTotal, fmtNumber(total));
 
-      // Effizienz
+      // Effizienz (nur Serverwerte — keine lokale Gameplay-Formel)
       const ovEff = document.getElementById("overview-efficiency");
       if (ovEff) {
-        let ratio = 1.0;
-        if (total <= 0) ratio = 0.0;
-        else if (used > total) ratio = total / Math.max(1, used);
-        const pct = Math.round(ratio * 100);
+        const pct = Number.isFinite(Number(data.energy_efficiency_pct))
+          ? Math.round(Number(data.energy_efficiency_pct))
+          : 100;
         _setIfChanged(ovEff, pct);
       }
 
@@ -1664,6 +1743,8 @@
       }
 
       patchOverviewResearch(research);
+      patchOverviewTable(data.overview, buildings, prod);
+      patchOverviewEnergyHint(data.overview, data);
 
       if (data.buildings_panel) {
         patchBuildingPanel(data.buildings_panel, buildQueueRaw);
@@ -1843,9 +1924,184 @@
 
   function initResearch() {}
 
+  // =========================
+  // Ranking page (PJAX-safe singleton)
+  // =========================
+  const _rankingLifecycle = { abort: null, loadId: 0 };
+
+  function rankingT(key, fallback) {
+    const loc = window.GC_LOCALE || {};
+    const v = loc[key];
+    if (v && v !== key) return v;
+    return fallback || key;
+  }
+
+  function rankingEscapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function rankingPlayerNameSpan(playerId, name) {
+    const pid = Number(playerId) || 0;
+    const label = rankingEscapeHtml(name || "Commander");
+    if (pid <= 0) return label;
+    return (
+      `<span class="gc-player-name" data-player-id="${pid}" data-player-name="${label}" ` +
+      `data-player-card="1" role="button" tabindex="0">${label}</span>`
+    );
+  }
+
+  function rankingStatBlock(labelKey, labelFallback, value) {
+    return (
+      `<div class="ranking-stat">` +
+      `<div class="ranking-stat-label">${rankingEscapeHtml(rankingT(labelKey, labelFallback))}</div>` +
+      `<div class="ranking-stat-value">${fmtNumber(value)}</div>` +
+      `</div>`
+    );
+  }
+
+  function renderRankingPayload(payload) {
+    const statusEl = document.getElementById("ranking-status-content");
+    const tableEl = document.getElementById("ranking-table-content");
+    if (!statusEl || !tableEl) return;
+
+    if (!payload || !payload.ok) {
+      const errMsg = rankingT("ranking_error", "Could not load ranking.");
+      const errHtml = `<div class="ranking-state ranking-state-error">${errMsg}</div>`;
+      statusEl.innerHTML = errHtml;
+      tableEl.innerHTML = errHtml;
+      return;
+    }
+
+    const cur = payload.current_player || {};
+    const top = Array.isArray(payload.top_players) ? payload.top_players : [];
+    const showFleet = (Number(cur.fleet_score) || 0) > 0 || top.some((r) => (Number(r.fleet_score) || 0) > 0);
+    const showDefense = (Number(cur.defense_score) || 0) > 0 || top.some((r) => (Number(r.defense_score) || 0) > 0);
+
+    const rankVal = cur.rank
+      ? `#${fmtNumber(cur.rank)}<span class="ranking-stat-sub">/ ${fmtNumber(cur.total_players || 0)}</span>`
+      : "—";
+
+    let statusGrid =
+      `<div class="ranking-stat">` +
+      `<div class="ranking-stat-label">${rankingEscapeHtml(rankingT("ranking_label_rank", "Rank"))}</div>` +
+      `<div class="ranking-stat-value">${rankVal}</div>` +
+      `</div>` +
+      rankingStatBlock("ranking_label_score_total", "Total Score", cur.total_score) +
+      rankingStatBlock("ranking_label_score_buildings", "Buildings", cur.building_score) +
+      rankingStatBlock("ranking_label_score_research", "Research", cur.research_score);
+
+    if (showFleet) {
+      statusGrid += rankingStatBlock("ranking_label_score_fleet", "Fleet", cur.fleet_score);
+    }
+    if (showDefense) {
+      statusGrid += rankingStatBlock("ranking_label_score_defense", "Defense", cur.defense_score);
+    }
+
+    statusEl.innerHTML = `<div class="ranking-stats-grid">${statusGrid}</div>`;
+
+    if (!top.length) {
+      tableEl.innerHTML = `<p class="ranking-empty">${rankingEscapeHtml(rankingT("ranking_empty", "No data yet."))}</p>`;
+      return;
+    }
+
+    let head =
+      `<th class="col-rank">#</th>` +
+      `<th class="col-name">${rankingEscapeHtml(rankingT("ranking_col_commander", "Commander"))}</th>` +
+      `<th class="col-score">${rankingEscapeHtml(rankingT("ranking_col_total", "Total"))}</th>` +
+      `<th class="col-score">${rankingEscapeHtml(rankingT("ranking_col_buildings", "Buildings"))}</th>` +
+      `<th class="col-score">${rankingEscapeHtml(rankingT("ranking_col_research", "Research"))}</th>`;
+    if (showFleet) {
+      head += `<th class="col-score">${rankingEscapeHtml(rankingT("ranking_col_fleet", "Fleet"))}</th>`;
+    }
+    if (showDefense) {
+      head += `<th class="col-score">${rankingEscapeHtml(rankingT("ranking_col_defense", "Defense"))}</th>`;
+    }
+
+    const rows = top
+      .map((row) => {
+        const isMe = !!row.is_current_player;
+        const youPill = isMe
+          ? `<span class="you-pill" aria-label="${rankingEscapeHtml(rankingT("ranking_you", "You"))}">${rankingEscapeHtml(rankingT("ranking_you", "You"))}</span>`
+          : "";
+        let cells =
+          `<td class="col-rank">#${fmtNumber(row.rank)}</td>` +
+          `<td class="col-name">${youPill}${rankingPlayerNameSpan(row.player_id, row.commander_name)}</td>` +
+          `<td class="col-score">${fmtNumber(row.total_score)}</td>` +
+          `<td class="col-score">${fmtNumber(row.building_score)}</td>` +
+          `<td class="col-score">${fmtNumber(row.research_score)}</td>`;
+        if (showFleet) cells += `<td class="col-score">${fmtNumber(row.fleet_score)}</td>`;
+        if (showDefense) cells += `<td class="col-score">${fmtNumber(row.defense_score)}</td>`;
+        return `<tr class="ranking-row${isMe ? " is-me" : ""}">${cells}</tr>`;
+      })
+      .join("");
+
+    tableEl.innerHTML =
+      `<div class="ranking-table-wrapper">` +
+      `<table class="table-std ranking-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>` +
+      `</div>`;
+  }
+
+  function loadRankingData() {
+    const statusEl = document.getElementById("ranking-status-content");
+    const tableEl = document.getElementById("ranking-table-content");
+    if (!statusEl || !tableEl) return;
+
+    if (_rankingLifecycle.abort) {
+      try {
+        _rankingLifecycle.abort.abort();
+      } catch (_) {}
+    }
+    _rankingLifecycle.abort = new AbortController();
+    const loadId = ++_rankingLifecycle.loadId;
+    const signal = _rankingLifecycle.abort.signal;
+
+    const loadingMsg = rankingEscapeHtml(rankingT("ranking_loading", "Loading…"));
+    const loadingHtml = `<div class="ranking-state ranking-state-loading">${loadingMsg}</div>`;
+    statusEl.innerHTML = loadingHtml;
+    tableEl.innerHTML = loadingHtml;
+
+    const initialEl = document.getElementById("ranking-initial-data");
+    if (initialEl) {
+      try {
+        const data = JSON.parse(initialEl.textContent || "{}");
+        initialEl.remove();
+        if (loadId === _rankingLifecycle.loadId) renderRankingPayload(data);
+        return;
+      } catch (_) {
+        initialEl.remove();
+      }
+    }
+
+    GC.fetchJSON("/api/ranking", {
+      cache: "no-store",
+      signal,
+    })
+      .then((data) => {
+        if (loadId !== _rankingLifecycle.loadId) return;
+        renderRankingPayload(data);
+      })
+      .catch((err) => {
+        if (err && err.name === "AbortError") return;
+        if (loadId !== _rankingLifecycle.loadId) return;
+        renderRankingPayload(null);
+      });
+  }
+
+  GC.initRanking = function initRanking() {
+    if (!document.getElementById("ranking-page")) return;
+    loadRankingData();
+  };
+
   GC.modules.overview = initOverview;
   GC.modules.buildings = initBuildings;
   GC.modules.research = initResearch;
+  GC.modules.ranking = function initRankingPage() {
+    GC.initRanking();
+  };
 
   // =========================
   // PJAX navigation
@@ -2209,6 +2465,62 @@
           );
         } finally {
           researchLink.dataset.busy = "0";
+          GC.actionLocks.research = false;
+        }
+        return;
+      }
+
+      const buildCancelBtn = e.target.closest("[data-build-cancel-id]");
+      if (buildCancelBtn) {
+        e.preventDefault();
+        if (buildCancelBtn.dataset.busy === "1" || GC.actionLocks.build) return;
+        buildCancelBtn.dataset.busy = "1";
+        GC.actionLocks.build = true;
+        try {
+          const json = await GC.fetchGameAction("/api/buildings/cancel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ job_id: Number(buildCancelBtn.dataset.buildCancelId || 0) }),
+          });
+          if (json.state) applyGameStateData(json.state, json.ok ? "build_cancel_success" : "build_cancel_error");
+          if (json.ok) {
+            showNotify(t("msg_build_cancelled", "Bauauftrag abgebrochen."), "success");
+          } else {
+            showNotify(mapActionError(json.reason, json.payload), "error");
+          }
+        } catch (err) {
+          console.error("Build cancel AJAX fehlgeschlagen:", err);
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+        } finally {
+          buildCancelBtn.dataset.busy = "0";
+          GC.actionLocks.build = false;
+        }
+        return;
+      }
+
+      const researchCancelBtn = e.target.closest("[data-research-cancel-id]");
+      if (researchCancelBtn) {
+        e.preventDefault();
+        if (researchCancelBtn.dataset.busy === "1" || GC.actionLocks.research) return;
+        researchCancelBtn.dataset.busy = "1";
+        GC.actionLocks.research = true;
+        try {
+          const json = await GC.fetchGameAction("/api/research/cancel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ job_id: Number(researchCancelBtn.dataset.researchCancelId || 0) }),
+          });
+          if (json.state) applyGameStateData(json.state, json.ok ? "research_cancel_success" : "research_cancel_error");
+          if (json.ok) {
+            showNotify(t("msg_research_cancelled", "Forschungsauftrag abgebrochen."), "success");
+          } else {
+            showNotify(mapActionError(json.reason, json.payload), "error");
+          }
+        } catch (err) {
+          console.error("Research cancel AJAX fehlgeschlagen:", err);
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+        } finally {
+          researchCancelBtn.dataset.busy = "0";
           GC.actionLocks.research = false;
         }
       }
@@ -2781,6 +3093,7 @@
     initStickyResourceBar();
     initPjax();
     initPlayerCardOnce();
+    if (typeof GC.initChat === "function") GC.initChat();
 
     document.addEventListener("click", (e) => {
       const link = e.target.closest('a.logout-btn, a[href*="/logout"]');

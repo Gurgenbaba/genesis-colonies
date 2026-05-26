@@ -4,7 +4,7 @@ import random
 import sys
 import time
 from pathlib import Path
-from typing import Any, Tuple, Dict
+from typing import Any, Dict, Optional, Tuple
 
 from flask import (
     Flask,
@@ -42,8 +42,10 @@ from game.logic import (
     update_resources,
     get_build_queue_status,
     queue_build,
+    cancel_build,
     get_building_production_per_hour,
     queue_research,
+    cancel_research,
     get_storage_capacity,
     get_research_status,
     get_techtree_data,
@@ -64,11 +66,14 @@ from game import admin as admin_logic
 from game import admin_api as admin_api_logic
 
 from game.ranking import (
+    build_ranking_api_payload,
     get_player_score_cached,
     invalidate_player_score_cache,
+    recalculate_all_rankings,
 )
 
 from game import playercard as playercard_logic
+from game import chat as chat_logic
 
 from game.bootstrap import bootstrap_application
 from game.config import get_secret_key, is_debug_enabled, is_production
@@ -284,6 +289,13 @@ bootstrap_application(skip_migration_check=_skip_mig)
 app.secret_key = get_secret_key() or os.urandom(32).hex()
 
 
+@app.teardown_request
+def _teardown_queue_finish_dedup(_exc=None):
+    from game.queue_engine import clear_request_finish_dedup
+
+    clear_request_finish_dedup()
+
+
 # --------------------------------------------------------------------------
 # HEALTH
 # --------------------------------------------------------------------------
@@ -306,31 +318,75 @@ def _load_player_view_with_resources() -> Tuple[Any, Dict[str, int], float, int,
     Return:
       (player_view | None, buildings, ratio, energy_total, energy_used, storage_caps)
     """
+    ctx = _load_page_live_context(finish_source="page_load")
+    if ctx is None:
+        return None, {}, 1.0, 0, 0, {"metal": 0, "crystal": 0}
+    return (
+        ctx["player_view"],
+        ctx["buildings"],
+        ctx["ratio"],
+        ctx["energy_total"],
+        ctx["energy_used"],
+        ctx["storage_caps"],
+    )
+
+
+def _load_page_live_context(
+    *,
+    finish_source: str = "page_load",
+    include_panel: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """
+    One finish + derived sync + read-only queue/research per page/API request.
+    """
+    from game.logic import refresh_player_live_state
+
     user_id = session.get("user_id")
     if user_id is None:
-        return None, {}, 1.0, 0, 0, {"metal": 0, "crystal": 0}
+        return None
 
     user_id = int(user_id)
-    player = load_player(user_id)
-    if not player:
-        return None, {}, 1.0, 0, 0, {"metal": 0, "crystal": 0}
+    if not load_player(user_id):
+        return None
 
     conn = db()
     try:
-        # ✅ Ressourcen-Tick & Finisher laufen conn-safe (aber brauchen commit)
-        player_view, buildings, ratio, energy_total, energy_used = update_resources(player, conn=conn)
-
-        # ✅ Storage conn-safe
-        storage_caps = get_storage_capacity(buildings, user_id=user_id, conn=conn)
-
-        conn.commit()  # ✅ WICHTIG: sonst werden save_planet/finisher zurückgerollt
-        return player_view, buildings, ratio, energy_total, energy_used, storage_caps
-
+        player_view, buildings, ratio, energy_total, energy_used, storage_caps = refresh_player_live_state(
+            user_id,
+            conn=conn,
+            finish_source=str(finish_source or "page_load"),
+        )
+        build_queue = get_build_queue_status(user_id=user_id, skip_finish=True, conn=conn)
+        research = get_research_status(
+            user_id=user_id,
+            buildings=buildings,
+            skip_finish=True,
+            conn=conn,
+        )
+        prod_per_hour = get_building_production_per_hour(
+            buildings=buildings,
+            ratio=ratio,
+            user_id=user_id,
+        )
+        conn.commit()
     except Exception:
         rollback(conn)
         raise
     finally:
         conn.close()
+
+    return {
+        "player_view": player_view,
+        "buildings": buildings,
+        "ratio": ratio,
+        "energy_total": energy_total,
+        "energy_used": energy_used,
+        "storage_caps": storage_caps,
+        "build_queue": build_queue,
+        "research": research,
+        "prod_per_hour": prod_per_hour,
+        "include_panel": include_panel,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -415,46 +471,22 @@ def landing():
 @app.route("/overview")
 @require_login
 def overview():
-    (
-        player_view,
-        buildings,
-        ratio,
-        energy_total,
-        energy_used,
-        storage_caps,
-    ) = _load_player_view_with_resources()
-
-    if player_view is None:
+    ctx = _load_page_live_context(finish_source="overview")
+    if ctx is None:
         return redirect(url_for("login"))
-
-    user = get_current_user()
-    user_id = int(user["id"])
-
-    prod_per_hour = get_building_production_per_hour(
-        buildings=buildings,
-        ratio=ratio,
-        user_id=user_id,
-    )
-
-    build_queue = get_build_queue_status(user_id=user_id)
-
-    research_status = get_research_status(
-        user_id=user_id,
-        buildings=buildings,
-    )
 
     return render_template(
         "overview.html",
-        player=player_view,
-        buildings=buildings,
-        ratio=ratio,
-        energy_total=energy_total,
-        energy_used=energy_used,
-        storage_caps=storage_caps,
-        prod_per_hour=prod_per_hour,
-        build_queue=build_queue,
-        research_status=research_status,
-        build_status=build_queue,
+        player=ctx["player_view"],
+        buildings=ctx["buildings"],
+        ratio=ctx["ratio"],
+        energy_total=ctx["energy_total"],
+        energy_used=ctx["energy_used"],
+        storage_caps=ctx["storage_caps"],
+        prod_per_hour=ctx["prod_per_hour"],
+        build_queue=ctx["build_queue"],
+        research_status=ctx["research"],
+        build_status=ctx["build_queue"],
     )
 
 
@@ -467,41 +499,29 @@ def overview():
 def buildings_view():
     active_tab = request.args.get("tab") or "resources"
 
-    player_view, buildings, ratio, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
-    if player_view is None:
+    ctx = _load_page_live_context(finish_source="buildings")
+    if ctx is None:
         return redirect(url_for("login"))
 
-    planet = get_homeworld(player_id=int(player_view["id"]))
-
-    user = get_current_user()
-    user_id = int(user["id"])
-
-    build_queue = get_build_queue_status(user_id=user_id)
-
+    planet = get_homeworld(player_id=int(ctx["player_view"]["id"]))
     rows_by_tab = get_buildings_panel_rows(
         planet,
-        buildings,
-        build_queue=build_queue,
-    )
-
-    prod_per_hour = get_building_production_per_hour(
-        buildings,
-        ratio,
-        user_id=user_id,
+        ctx["buildings"],
+        build_queue=ctx["build_queue"],
     )
 
     return render_template(
         "buildings.html",
-        player=player_view,
+        player=ctx["player_view"],
         rows_by_tab=rows_by_tab,
         active_tab=active_tab,
-        build_queue=build_queue,
-        prod_per_hour=prod_per_hour,
-        energy_total=energy_total,
-        energy_used=energy_used,
-        ratio=ratio,
-        storage_caps=storage_caps,
-        build_status=build_queue,
+        build_queue=ctx["build_queue"],
+        prod_per_hour=ctx["prod_per_hour"],
+        energy_total=ctx["energy_total"],
+        energy_used=ctx["energy_used"],
+        ratio=ctx["ratio"],
+        storage_caps=ctx["storage_caps"],
+        build_status=ctx["build_queue"],
     )
 
 
@@ -548,26 +568,18 @@ def upgrade(building_type):
 @app.route("/research")
 @require_login
 def research_view():
-    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
-    if player_view is None:
+    ctx = _load_page_live_context(finish_source="research")
+    if ctx is None:
         return redirect(url_for("login"))
-
-    user = get_current_user()
-    user_id = int(user["id"])
-
-    research_status = get_research_status(
-        user_id=user_id,
-        buildings=buildings,
-    )
 
     return render_template(
         "research.html",
-        player=player_view,
-        buildings=buildings,
-        research_status=research_status,
-        energy_total=energy_total,
-        energy_used=energy_used,
-        storage_caps=storage_caps,
+        player=ctx["player_view"],
+        buildings=ctx["buildings"],
+        research_status=ctx["research"],
+        energy_total=ctx["energy_total"],
+        energy_used=ctx["energy_used"],
+        storage_caps=ctx["storage_caps"],
     )
 
 
@@ -613,17 +625,13 @@ def research_start(tech_key):
 @app.route("/techtree")
 @require_login
 def techtree_view():
-    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
-    if player_view is None:
+    ctx = _load_page_live_context(finish_source="techtree")
+    if ctx is None:
         return redirect(url_for("login"))
 
-    user = get_current_user()
-    user_id = int(user["id"])
-
-    research_status = get_research_status(
-        user_id=user_id,
-        buildings=buildings,
-    )
+    user_id = int(ctx["player_view"]["id"])
+    research_status = ctx["research"]
+    buildings = ctx["buildings"]
     techs = research_status.get("techs", []) or []
     research_levels = {t.get("key"): int(t.get("level", 0) or 0) for t in techs}
 
@@ -635,11 +643,11 @@ def techtree_view():
 
     return render_template(
         "techtree.html",
-        player=player_view,
+        player=ctx["player_view"],
         buildings=buildings,
-        energy_total=energy_total,
-        energy_used=energy_used,
-        storage_caps=storage_caps,
+        energy_total=ctx["energy_total"],
+        energy_used=ctx["energy_used"],
+        storage_caps=ctx["storage_caps"],
         building_nodes=building_nodes,
         research_nodes=research_nodes,
     )
@@ -768,23 +776,7 @@ def ranking_view():
         return redirect(url_for("login"))
 
     player_id = int(player_view["id"])
-
-    rows = get_ranking_rows(limit=100, offset=0)
-    my_score = get_player_score_cached(player_id)
-    my_rank, total_players = get_player_rank(player_id)
-
-    ranking = []
-    for idx, row in enumerate(rows, start=1):
-        ranking.append(
-            {
-                "rank": idx,
-                "player_id": row["player_id"],
-                "nickname": row["nickname"],
-                "score_total": row["score_total"],
-                "score_buildings": row["score_buildings"],
-                "score_research": row["score_research"],
-            }
-        )
+    ranking_payload = build_ranking_api_payload(player_id, limit=100, refresh=False)
 
     return render_template(
         "ranking.html",
@@ -793,11 +785,49 @@ def ranking_view():
         energy_total=energy_total,
         energy_used=energy_used,
         storage_caps=storage_caps,
-        ranking=ranking,
-        my_score=my_score,
-        my_rank=my_rank,
-        total_players=total_players,
+        ranking_payload=ranking_payload,
     )
+
+
+@app.route("/api/ranking")
+@require_login
+def api_ranking():
+    player_id = _current_player_id()
+    if player_id is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    try:
+        payload = build_ranking_api_payload(int(player_id), limit=100, refresh=False)
+        return jsonify(payload)
+    except Exception:
+        return jsonify({"ok": False, "error": "ranking_unavailable"}), 500
+
+
+@app.route("/api/admin/rankings/recalculate", methods=["POST"])
+@require_admin_api
+def api_admin_recalculate_rankings():
+    admin = get_current_user()
+    admin_id = int(admin["id"]) if admin else 0
+    try:
+        result = recalculate_all_rankings(refresh_scores=True)
+        if admin_id:
+            try:
+                from game.admin_audit import write_admin_audit
+
+                write_admin_audit(
+                    admin_id,
+                    "recalculate_rankings",
+                    target_type="system",
+                    payload={
+                        "players_updated": result.get("players_updated"),
+                        "duration_ms": result.get("duration_ms"),
+                    },
+                )
+            except Exception:
+                pass
+        status = 200 if result.get("ok") else 500
+        return jsonify(result), status
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 # --------------------------------------------------------------------------
@@ -900,6 +930,350 @@ def player_card_fallback_page(player_id: int):
 
 
 # --------------------------------------------------------------------------
+# CHAT API (Genesis TChat)
+# --------------------------------------------------------------------------
+
+def _chat_player_id() -> int | None:
+    return _current_player_id()
+
+
+def _chat_json(result: dict, default_status: int = 200):
+    if not isinstance(result, dict):
+        return jsonify({"ok": False, "error": "internal", "data": None}), 500
+    if result.get("ok"):
+        return jsonify(result), default_status
+    err = str(result.get("error") or "error")
+    status = {
+        "no_permission": 403,
+        "chat_banned": 403,
+        "owner_cannot_leave_room": 403,
+        "room_not_found": 404,
+        "player_not_found": 404,
+        "not_found": 404,
+        "rate_limited": 429,
+        "muted": 403,
+        "chat_not_ready": 503,
+    }.get(err, 400)
+    return jsonify(result), status
+
+
+@app.route("/api/chat/bootstrap")
+@require_login
+def api_chat_bootstrap():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    return _chat_json(chat_logic.chat_bootstrap(int(pid)))
+
+
+@app.route("/api/chat/rooms")
+@require_login
+def api_chat_rooms():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    rooms = chat_logic.list_rooms_for_player(int(pid))
+    return jsonify({"ok": True, "error": None, "data": {"rooms": rooms}})
+
+
+@app.route("/api/chat/messages")
+@require_login
+def api_chat_messages():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    try:
+        room_id = int(request.args.get("room_id", 0))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_room", "data": None}), 400
+    try:
+        after_id = int(request.args.get("after_id", 0) or 0)
+    except (TypeError, ValueError):
+        after_id = 0
+    messages, err = chat_logic.fetch_messages(int(pid), room_id, after_id=after_id)
+    if err:
+        return _chat_json({"ok": False, "error": err, "data": None})
+    return jsonify({"ok": True, "error": None, "data": {"messages": messages}})
+
+
+@app.route("/api/chat/send", methods=["POST"])
+@require_login
+def api_chat_send():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    body = data.get("body") or request.form.get("body") or ""
+    room_id = data.get("room_id")
+    if room_id is not None:
+        try:
+            room_id = int(room_id)
+        except (TypeError, ValueError):
+            room_id = None
+    return _chat_json(
+        chat_logic.send_chat_message(
+            int(pid),
+            str(body),
+            room_id=room_id,
+            command=data.get("command"),
+        )
+    )
+
+
+@app.route("/api/chat/read", methods=["POST"])
+@require_login
+def api_chat_read():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        room_id = int(data.get("room_id"))
+        last_id = int(data.get("last_read_message_id", 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_payload", "data": None}), 400
+    err = chat_logic.mark_room_read(int(pid), room_id, last_id)
+    if err:
+        return _chat_json({"ok": False, "error": err, "data": None})
+    return jsonify({"ok": True, "error": None, "data": {}})
+
+
+@app.route("/api/chat/state", methods=["POST"])
+@require_login
+def api_chat_state():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    allowed = ("is_open", "is_minimized", "active_room_id", "width", "height", "pos_x", "pos_y")
+    payload = {}
+    for k in allowed:
+        if k in data:
+            payload[k] = data[k]
+    state = chat_logic.save_user_state(int(pid), payload)
+    return jsonify({"ok": True, "error": None, "data": {"ui_state": state}})
+
+
+@app.route("/api/chat/players")
+@require_login
+def api_chat_players():
+    q = request.args.get("q", "")
+    players = chat_logic.search_players_for_autocomplete(q)
+    return jsonify({"ok": True, "error": None, "data": {"players": players}})
+
+
+@app.route("/api/chat/open-dm", methods=["POST"])
+@require_login
+def api_chat_open_dm():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        target_id = int(data.get("target_player_id") or data.get("player_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_payload", "data": None}), 400
+    return _chat_json(chat_logic.open_dm_room(int(pid), target_id))
+
+
+@app.route("/api/chat/rooms/create", methods=["POST"])
+@require_login
+def api_chat_create_room():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    title = str(data.get("title") or "")
+    return _chat_json(chat_logic.create_player_custom_room(int(pid), title))
+
+
+@app.route("/api/chat/rooms/invite", methods=["POST"])
+@require_login
+def api_chat_invite_room_member():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        room_id = int(data.get("room_id"))
+        target_id = int(data.get("player_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_payload", "data": None}), 400
+    return _chat_json(chat_logic.invite_player_to_custom_room(int(pid), room_id, target_id))
+
+
+@app.route("/api/chat/rooms/remove", methods=["POST"])
+@require_login
+def api_chat_remove_room_member():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        room_id = int(data.get("room_id"))
+        target_id = int(data.get("player_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_payload", "data": None}), 400
+    return _chat_json(chat_logic.remove_player_from_custom_room(int(pid), room_id, target_id))
+
+
+@app.route("/api/chat/rooms/delete", methods=["POST"])
+@require_login
+def api_chat_delete_room():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        room_id = int(data.get("room_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_payload", "data": None}), 400
+    return _chat_json(chat_logic.delete_custom_room(int(pid), room_id))
+
+
+@app.route("/api/chat/rooms/leave", methods=["POST"])
+@require_login
+def api_chat_leave_room():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        room_id = int(data.get("room_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_payload", "data": None}), 400
+    return _chat_json(chat_logic.leave_custom_room(int(pid), room_id))
+
+
+@app.route("/api/chat/rooms/members")
+@require_login
+def api_chat_room_members():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    try:
+        room_id = int(request.args.get("room_id", 0))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_room", "data": None}), 400
+    return _chat_json(chat_logic.list_custom_room_members(int(pid), room_id))
+
+
+@app.route("/api/chat/admin/search")
+@require_login
+def api_chat_admin_search():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    q = request.args.get("q", "")
+    limit = request.args.get("limit", 50)
+    try:
+        limit_i = int(limit)
+    except (TypeError, ValueError):
+        limit_i = 50
+    return _chat_json(chat_logic.admin_search_messages(int(pid), q, limit=limit_i))
+
+
+@app.route("/api/chat/admin/delete-message", methods=["POST"])
+@require_login
+def api_chat_admin_delete_message():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        message_id = int(data.get("message_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_payload", "data": None}), 400
+    return _chat_json(chat_logic.admin_delete_message(int(pid), message_id))
+
+
+@app.route("/api/chat/admin/mute", methods=["POST"])
+@require_login
+def api_chat_admin_mute():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        target_id = int(data.get("player_id"))
+        muted_until = int(data.get("muted_until"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_payload", "data": None}), 400
+    scope = str(data.get("scope") or "global")
+    room_id = data.get("room_id")
+    if room_id is not None:
+        try:
+            room_id = int(room_id)
+        except (TypeError, ValueError):
+            room_id = None
+    return _chat_json(
+        chat_logic.admin_mute_player(
+            int(pid),
+            target_id,
+            scope,
+            muted_until,
+            room_id=room_id,
+            reason=data.get("reason"),
+        )
+    )
+
+
+@app.route("/api/chat/admin/system-notice", methods=["POST"])
+@require_login
+def api_chat_admin_system_notice():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    body = str(data.get("body") or "")
+    return _chat_json(chat_logic.admin_system_notice(int(pid), body))
+
+
+@app.route("/api/chat/admin/ban", methods=["POST"])
+@require_login
+def api_chat_admin_ban():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        target_id = int(data.get("player_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_payload", "data": None}), 400
+    return _chat_json(chat_logic.admin_chat_ban_player(int(pid), target_id, reason=data.get("reason")))
+
+
+@app.route("/api/chat/admin/unban", methods=["POST"])
+@require_login
+def api_chat_admin_unban():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        target_id = int(data.get("player_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_payload", "data": None}), 400
+    return _chat_json(chat_logic.admin_chat_unban_player(int(pid), target_id))
+
+
+@app.route("/api/chat/admin/unmute", methods=["POST"])
+@require_login
+def api_chat_admin_unmute():
+    pid = _chat_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        target_id = int(data.get("player_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid_payload", "data": None}), 400
+    scope = data.get("scope")
+    scope_val = str(scope) if scope else None
+    return _chat_json(chat_logic.admin_unmute_player(int(pid), target_id, scope=scope_val))
+
+
+# --------------------------------------------------------------------------
 # API (AJAX / main.js)
 # --------------------------------------------------------------------------
 
@@ -908,45 +1282,84 @@ def _build_game_state_payload(include_panel: bool = True) -> Tuple[dict, int]:
     Zentraler Spielzustand für Polling + AJAX-Refresh (kein Page-Reload).
     Returns (payload, player_id) or raises via caller checking player_view.
     """
-    player_view, buildings, ratio, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
-    if player_view is None:
-        return {"ok": False, "error": "not_logged_in"}, 0
+    from game.logic import get_research_modifiers
 
     user = get_current_user()
-    user_id = int(user["id"])
-    player_id = int(player_view["id"])
+    if not user:
+        return {"ok": False, "error": "not_logged_in"}, 0
 
-    build_queue = get_build_queue_status(user_id=user_id)
-    research = get_research_status(user_id=user_id, buildings=buildings)
+    user_id = int(user["id"])
+    player_id = user_id
+
+    ctx = _load_page_live_context(finish_source="game_state", include_panel=include_panel)
+    if ctx is None:
+        return {"ok": False, "error": "not_logged_in"}, 0
+
+    player_view = ctx["player_view"]
+    buildings = ctx["buildings"]
+    ratio = ctx["ratio"]
+    energy_total = ctx["energy_total"]
+    energy_used = ctx["energy_used"]
+    storage_caps = ctx["storage_caps"]
+    build_queue = ctx["build_queue"]
+    research = ctx["research"]
+    prod_per_hour = ctx["prod_per_hour"]
+
+    energy_efficiency_pct = int(round(float(ratio) * 100))
+    mods = get_research_modifiers(user_id)
 
     payload: Dict[str, Any] = {
         "ok": True,
         "server_time": int(time.time()),
+        "energy_ratio": float(ratio),
+        "energy_efficiency_pct": energy_efficiency_pct,
         "player": {
             "name": player_view["name"],
             "metal": round(float(player_view["metal"]), 2),
             "crystal": round(float(player_view["crystal"]), 2),
             "energy_used": int(energy_used),
             "energy_total": int(energy_total),
+            "energy_ratio": float(ratio),
+            "energy_efficiency_pct": energy_efficiency_pct,
         },
         "resources": {
             "metal": round(float(player_view["metal"]), 2),
             "crystal": round(float(player_view["crystal"]), 2),
             "energy_used": int(energy_used),
             "energy_total": int(energy_total),
+            "energy_ratio": float(ratio),
+            "energy_efficiency_pct": energy_efficiency_pct,
             "storage": storage_caps,
         },
         "buildings": buildings,
         "build_queue": build_queue,
         "building_queue": build_queue,
-        "production_per_hour": get_building_production_per_hour(
-            buildings=buildings,
-            ratio=ratio,
-            user_id=user_id,
-        ),
+        "production_per_hour": prod_per_hour,
         "research": research,
         "research_queue": research.get("queue", []),
         "storage": storage_caps,
+        "energy": {
+            "total": int(energy_total),
+            "used": int(energy_used),
+            "ratio": float(ratio),
+            "efficiency_pct": energy_efficiency_pct,
+            "mine_energy_factor": float(mods.get("mine_energy_factor", 1.0) or 1.0),
+        },
+        "overview": {
+            "rows": [
+                {
+                    "key": key,
+                    "level": int(buildings.get(key, 0) or 0),
+                    "production_per_hour": int(prod_per_hour.get(key, 0) or 0),
+                }
+                for key in ("metal_mine", "crystal_mine", "solar_plant")
+            ],
+            "energy_hint": (
+                "zero"
+                if int(energy_total) <= 0
+                else ("ok" if float(ratio) >= 1.0 else "low")
+            ),
+        },
     }
 
     if include_panel:
@@ -1049,6 +1462,32 @@ def api_buildings_upgrade():
     return resp
 
 
+@app.route("/api/buildings/cancel", methods=["POST"])
+@require_login
+def api_buildings_cancel():
+    data = request.get_json(silent=True) or {}
+    try:
+        job_id = int(data.get("job_id") or request.form.get("job_id") or 0)
+    except (TypeError, ValueError):
+        state, _ = _build_game_state_payload(include_panel=True)
+        return jsonify({"ok": False, "reason": "missing_job_id", "state": state}), 400
+    if job_id <= 0:
+        state, _ = _build_game_state_payload(include_panel=True)
+        return jsonify({"ok": False, "reason": "missing_job_id", "state": state}), 400
+
+    player_view, _, _, _, _, _ = _load_player_view_with_resources()
+    if player_view is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    ok, reason, extra = cancel_build(player_view, job_id)
+    return _action_json_response(
+        ok,
+        reason,
+        payload=extra if not ok else None,
+        job=extra if ok else None,
+    )
+
+
 @app.route("/api/research/start", methods=["POST"])
 @require_login
 def api_research_start():
@@ -1082,6 +1521,32 @@ def api_research_start():
         save_idempotent_action(user_id, request_id, response_obj)
 
     return resp
+
+
+@app.route("/api/research/cancel", methods=["POST"])
+@require_login
+def api_research_cancel():
+    data = request.get_json(silent=True) or {}
+    try:
+        job_id = int(data.get("job_id") or request.form.get("job_id") or 0)
+    except (TypeError, ValueError):
+        state, _ = _build_game_state_payload(include_panel=True)
+        return jsonify({"ok": False, "reason": "missing_job_id", "state": state}), 400
+    if job_id <= 0:
+        state, _ = _build_game_state_payload(include_panel=True)
+        return jsonify({"ok": False, "reason": "missing_job_id", "state": state}), 400
+
+    player_view, _, _, _, _, _ = _load_player_view_with_resources()
+    if player_view is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    ok, reason, extra = cancel_research(player_view, job_id)
+    return _action_json_response(
+        ok,
+        reason,
+        payload=extra if not ok else None,
+        job=extra if ok else None,
+    )
 
 
 # --------------------------------------------------------------------------
@@ -1242,6 +1707,12 @@ def api_admin_player_detail(player_id: int):
     return _admin_json(admin_api_logic.get_player_detail(player_id))
 
 
+@app.route("/api/admin/player/<int:player_id>/effects", methods=["GET"])
+@require_admin_api
+def api_admin_player_effects(player_id: int):
+    return _admin_json(admin_api_logic.get_player_effects_debug(player_id))
+
+
 @app.route("/api/admin/player/<int:player_id>/set-admin", methods=["POST"])
 @require_admin_api
 def api_admin_player_set_admin(player_id: int):
@@ -1323,6 +1794,12 @@ def api_admin_queue_cancel(queue_type: str, job_id: int):
 @require_admin_api
 def api_admin_queues_finish_due():
     return _admin_json(admin_api_logic.finish_due_queues(_admin_actor_id()))
+
+
+@app.route("/api/admin/queue-tick", methods=["POST"])
+@require_admin_api
+def api_admin_queue_tick():
+    return _admin_json(admin_api_logic.run_queue_tick_admin(_admin_actor_id()))
 
 
 @app.route("/api/admin/queues/clear", methods=["POST"])
