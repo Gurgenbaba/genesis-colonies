@@ -105,6 +105,7 @@
       <button type="button" class="admin-tab-btn" data-admin-tab="queues" role="tab">{{ T("admin_queues_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="audit" role="tab">{{ T("admin_audit_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="chat" role="tab">{{ T("admin_chat_title") }}</button>
+      <button type="button" class="admin-tab-btn" data-admin-tab="support" role="tab">{{ T("admin_support_title", "Support") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="runtime" role="tab">{{ T("admin_runtime_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="settings" role="tab">{{ T("admin_settings_title") }}</button>
     </nav>
@@ -244,6 +245,26 @@
           <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="chat-search">{{ T("admin_btn_search") }}</button>
         </div>
         <div id="admin-chat-search-output" class="admin-table-wrap"></div>
+      </div>
+    </section>
+
+    <section id="admin-tab-support" class="admin-panel admin-tab-panel" data-admin-panel="support" role="tabpanel" hidden>
+      <div class="admin-action-row admin-action-row-wrap">
+        <h2 class="admin-panel-title">{{ T("admin_support_title", "Support-Tickets") }}</h2>
+        <select class="admin-input admin-input-sm" id="admin-support-status-filter">
+          <option value="">{{ T("admin_filter_status_all", "Alle Status") }}</option>
+          <option value="open">{{ T("admin_support_status_open", "Offen") }}</option>
+          <option value="in_progress">{{ T("admin_support_status_progress", "In Bearbeitung") }}</option>
+          <option value="closed">{{ T("admin_support_status_closed", "Geschlossen") }}</option>
+        </select>
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="support-refresh">{{ T("admin_btn_refresh", "Aktualisieren") }}</button>
+      </div>
+      <p class="admin-small-hint">{{ T("admin_support_hint", "Alle Spieler-Tickets – antworten und Status setzen.") }}</p>
+      <div class="admin-support-layout">
+        <div id="admin-support-list" class="admin-table-wrap admin-support-list" aria-live="polite"></div>
+        <div id="admin-support-detail" class="admin-card admin-support-detail">
+          <p class="admin-small-hint">{{ T("admin_support_select_hint", "Ticket aus der Liste waehlen.") }}</p>
+        </div>
       </div>
     </section>
 

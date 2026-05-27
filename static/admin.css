@@ -458,7 +458,41 @@
   min-width: 90px;
 }
 
+.admin-support-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.4fr);
+  gap: 12px;
+  align-items: start;
+}
+.admin-support-list .admin-support-ticket-row {
+  cursor: pointer;
+}
+.admin-support-list .admin-support-ticket-row.is-active {
+  background: rgba(111, 255, 216, 0.08);
+}
+.admin-support-detail .admin-support-timeline {
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.admin-support-msg {
+  border: 1px solid var(--admin-border);
+  padding: 8px;
+  font-size: 0.85rem;
+}
+.admin-support-msg-meta {
+  font-size: 0.72rem;
+  opacity: 0.75;
+  margin-bottom: 4px;
+}
+
 @media (max-width: 640px) {
+  .admin-support-layout {
+    grid-template-columns: 1fr;
+  }
   .admin-tabs { flex-direction: column; }
   .admin-tab-btn,
   .admin-cc-tab {

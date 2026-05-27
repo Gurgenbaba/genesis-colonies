@@ -122,6 +122,65 @@ def create_ticket(player_id: int, payload: dict[str, Any]) -> dict[str, Any]:
     return _ok({"ticket_id": ticket_id})
 
 
+def _message_sender_name(m: Any, viewer_player_id: int | None) -> str:
+    role = str(m["sender_role"] or "player")
+    if role == "admin":
+        return "Support"
+    sender_id = int(m["sender_id"]) if m["sender_id"] is not None else None
+    if viewer_player_id is not None and sender_id == int(viewer_player_id):
+        return "Du"
+    return str(m["sender_name"] or "Spieler")
+
+
+def _fetch_ticket_messages(cur: Any, ticket_id: int, viewer_player_id: int | None) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT m.id, m.sender_id, m.sender_role, m.message, m.created_at, p.name AS sender_name
+        FROM support_messages m
+        LEFT JOIN players p ON p.id = m.sender_id
+        WHERE m.ticket_id = ?
+        ORDER BY m.id ASC
+        LIMIT 60;
+        """,
+        (int(ticket_id),),
+    )
+    messages: list[dict[str, Any]] = []
+    for m in cur.fetchall():
+        role = str(m["sender_role"] or "player")
+        messages.append(
+            {
+                "id": int(m["id"]),
+                "sender_id": int(m["sender_id"]) if m["sender_id"] is not None else None,
+                "sender_role": role,
+                "sender_name": _message_sender_name(m, viewer_player_id),
+                "message": str(m["message"] or ""),
+                "created_at": int(m["created_at"] or 0),
+            }
+        )
+    return messages
+
+
+def _ticket_row_to_dict(row: Any, messages: list[dict[str, Any]], *, player_name: str | None = None) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "id": int(row["id"]),
+        "player_id": int(row["player_id"]),
+        "subject": str(row["subject"] or ""),
+        "category": str(row["category"] or "general"),
+        "category_label": _category_label(str(row["category"] or "general")),
+        "priority": str(row["priority"] or "normal"),
+        "priority_label": _priority_label(str(row["priority"] or "normal")),
+        "status": str(row["status"] or "open"),
+        "status_label": _ticket_status_label(str(row["status"] or "open")),
+        "created_at": int(row["created_at"] or 0),
+        "updated_at": int(row["updated_at"] or 0),
+        "last_message_at": int(row["last_message_at"] or 0),
+        "messages": messages,
+    }
+    if player_name is not None:
+        out["player_name"] = player_name
+    return out
+
+
 def list_tickets(player_id: int) -> dict[str, Any]:
     conn = db()
     try:
@@ -130,7 +189,8 @@ def list_tickets(player_id: int) -> dict[str, Any]:
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT t.id, t.player_id, t.subject, t.category, t.priority, t.status, t.created_at, t.updated_at, t.last_message_at
+            SELECT t.id, t.player_id, t.subject, t.category, t.priority, t.status,
+                   t.created_at, t.updated_at, t.last_message_at
             FROM support_tickets t
             WHERE t.player_id = ?
             ORDER BY t.last_message_at DESC, t.id DESC
@@ -141,46 +201,58 @@ def list_tickets(player_id: int) -> dict[str, Any]:
         tickets = []
         for row in cur.fetchall():
             ticket_id = int(row["id"])
+            messages = _fetch_ticket_messages(cur, ticket_id, int(player_id))
+            tickets.append(_ticket_row_to_dict(row, messages))
+        return _ok({"tickets": tickets})
+    finally:
+        conn.close()
+
+
+def list_all_tickets(admin_id: int, *, status: str | None = None) -> dict[str, Any]:
+    conn = db()
+    try:
+        if not _table_ready(conn):
+            return _err("support_not_ready")
+        if not _is_admin(int(admin_id), conn):
+            return _err("forbidden")
+        cur = conn.cursor()
+        status_filter = str(status or "").strip().lower()
+        if status_filter and status_filter not in {"open", "in_progress", "closed"}:
+            status_filter = ""
+        if status_filter:
             cur.execute(
                 """
-                SELECT m.id, m.sender_id, m.sender_role, m.message, m.created_at, p.name AS sender_name
-                FROM support_messages m
-                LEFT JOIN players p ON p.id = m.sender_id
-                WHERE m.ticket_id = ?
-                ORDER BY m.id ASC
-                LIMIT 60;
+                SELECT t.id, t.player_id, t.subject, t.category, t.priority, t.status,
+                       t.created_at, t.updated_at, t.last_message_at, p.name AS player_name
+                FROM support_tickets t
+                LEFT JOIN players p ON p.id = t.player_id
+                WHERE t.status = ?
+                ORDER BY t.last_message_at DESC, t.id DESC
+                LIMIT 200;
                 """,
-                (ticket_id,),
+                (status_filter,),
             )
-            messages = []
-            for m in cur.fetchall():
-                role = str(m["sender_role"] or "player")
-                messages.append(
-                    {
-                        "id": int(m["id"]),
-                        "sender_id": int(m["sender_id"]) if m["sender_id"] is not None else None,
-                        "sender_role": role,
-                        "sender_name": str(m["sender_name"] or ("Support" if role == "admin" else "Du")),
-                        "message": str(m["message"] or ""),
-                        "created_at": int(m["created_at"] or 0),
-                    }
-                )
-
+        else:
+            cur.execute(
+                """
+                SELECT t.id, t.player_id, t.subject, t.category, t.priority, t.status,
+                       t.created_at, t.updated_at, t.last_message_at, p.name AS player_name
+                FROM support_tickets t
+                LEFT JOIN players p ON p.id = t.player_id
+                ORDER BY t.last_message_at DESC, t.id DESC
+                LIMIT 200;
+                """
+            )
+        tickets = []
+        for row in cur.fetchall():
+            ticket_id = int(row["id"])
+            messages = _fetch_ticket_messages(cur, ticket_id, None)
             tickets.append(
-                {
-                    "id": ticket_id,
-                    "subject": str(row["subject"] or ""),
-                    "category": str(row["category"] or "general"),
-                    "category_label": _category_label(str(row["category"] or "general")),
-                    "priority": str(row["priority"] or "normal"),
-                    "priority_label": _priority_label(str(row["priority"] or "normal")),
-                    "status": str(row["status"] or "open"),
-                    "status_label": _ticket_status_label(str(row["status"] or "open")),
-                    "created_at": int(row["created_at"] or 0),
-                    "updated_at": int(row["updated_at"] or 0),
-                    "last_message_at": int(row["last_message_at"] or 0),
-                    "messages": messages,
-                }
+                _ticket_row_to_dict(
+                    row,
+                    messages,
+                    player_name=str(row["player_name"] or f"Spieler #{row['player_id']}"),
+                )
             )
         return _ok({"tickets": tickets})
     finally:
@@ -219,6 +291,51 @@ def reply_ticket(player_id: int, ticket_id: int, message: str) -> dict[str, Any]
             """
             UPDATE support_tickets
             SET status = CASE WHEN status = 'closed' THEN 'open' ELSE status END,
+                updated_at = ?, last_message_at = ?
+            WHERE id = ?;
+            """,
+            (now, now, int(ticket_id)),
+        )
+        commit(conn)
+        return _ok({"ticket_id": int(ticket_id)})
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
+def admin_reply_ticket(admin_id: int, ticket_id: int, message: str) -> dict[str, Any]:
+    msg = _norm_text(message, 1200)
+    if not msg:
+        return _err("missing_message")
+    conn = db()
+    try:
+        if not _table_ready(conn):
+            return _err("support_not_ready")
+        if not _is_admin(int(admin_id), conn):
+            return _err("forbidden")
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, status FROM support_tickets WHERE id = ? LIMIT 1;",
+            (int(ticket_id),),
+        )
+        row = cur.fetchone()
+        if not row:
+            return _err("not_found")
+        now = _now()
+        begin_write_transaction(conn)
+        conn.execute(
+            """
+            INSERT INTO support_messages (ticket_id, sender_id, sender_role, message, created_at)
+            VALUES (?, ?, 'admin', ?, ?);
+            """,
+            (int(ticket_id), int(admin_id), msg, now),
+        )
+        conn.execute(
+            """
+            UPDATE support_tickets
+            SET status = CASE WHEN status = 'closed' THEN 'open' WHEN status = 'open' THEN 'in_progress' ELSE status END,
                 updated_at = ?, last_message_at = ?
             WHERE id = ?;
             """,

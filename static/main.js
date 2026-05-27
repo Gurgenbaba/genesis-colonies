@@ -3162,27 +3162,38 @@
     });
   }
 
-  function initSupportModule() {
-    const root = document.querySelector("[data-special-window='support']");
-    if (!root || root.dataset.supportBound === "1") return;
-    root.dataset.supportBound = "1";
+  function openSpecialWindow(target) {
+    const root = document.querySelector("[data-special-root]");
+    if (!root) return;
+    const btn = root.querySelector(`[data-special-open-window="${target}"]`);
+    if (btn) btn.click();
+  }
 
-    const form = root.querySelector("[data-support-form]");
-    const subjectEl = root.querySelector("[data-support-subject]");
-    const categoryEl = root.querySelector("[data-support-category]");
-    const priorityEl = root.querySelector("[data-support-priority]");
-    const messageEl = root.querySelector("[data-support-message]");
-    const feedbackEl = root.querySelector("[data-support-feedback]");
-    const refreshBtn = root.querySelector("[data-support-refresh]");
-    const listEl = root.querySelector("[data-support-list]");
-    if (!form || !subjectEl || !categoryEl || !priorityEl || !messageEl || !feedbackEl || !listEl) return;
+  function initSupportModule() {
+    const createRoot = document.querySelector("[data-special-window='support']");
+    const ticketsRoot = document.querySelector("[data-special-window='my-tickets']");
+    if ((!createRoot && !ticketsRoot) || window._GC_SUPPORT_BOUND === "1") return;
+    window._GC_SUPPORT_BOUND = "1";
+
+    const form = createRoot && createRoot.querySelector("[data-support-form]");
+    const subjectEl = createRoot && createRoot.querySelector("[data-support-subject]");
+    const categoryEl = createRoot && createRoot.querySelector("[data-support-category]");
+    const priorityEl = createRoot && createRoot.querySelector("[data-support-priority]");
+    const messageEl = createRoot && createRoot.querySelector("[data-support-message]");
+    const createFeedbackEl = createRoot && createRoot.querySelector("[data-support-feedback]");
+    const openTicketsBtn = createRoot && createRoot.querySelector("[data-support-open-tickets]");
+    const refreshBtn = ticketsRoot && ticketsRoot.querySelector("[data-support-refresh]");
+    const listEl = ticketsRoot && ticketsRoot.querySelector("[data-support-list]");
+    const ticketsFeedbackEl = ticketsRoot && ticketsRoot.querySelector("[data-support-tickets-feedback]");
+    if (!listEl) return;
 
     const dtf = new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" });
 
-    const setFeedback = (text, kind = "") => {
-      feedbackEl.textContent = text || "";
-      feedbackEl.classList.remove("is-ok", "is-error");
-      if (kind) feedbackEl.classList.add(kind === "ok" ? "is-ok" : "is-error");
+    const setFeedback = (el, text, kind = "") => {
+      if (!el) return;
+      el.textContent = text || "";
+      el.classList.remove("is-ok", "is-error");
+      if (kind) el.classList.add(kind === "ok" ? "is-ok" : "is-error");
     };
 
     const formatTs = (ts) => {
@@ -3246,7 +3257,7 @@
       sendBtn.addEventListener("click", async () => {
         const msg = (reply.value || "").trim();
         if (!msg) {
-          setFeedback("Bitte zuerst eine Antwort schreiben.", "error");
+          setFeedback(ticketsFeedbackEl, "Bitte zuerst eine Antwort schreiben.", "error");
           return;
         }
         sendBtn.disabled = true;
@@ -3259,13 +3270,13 @@
           });
           const data = await res.json();
           if (!res.ok || !data.ok) {
-            setFeedback("Antwort konnte nicht gesendet werden.", "error");
+            setFeedback(ticketsFeedbackEl, "Antwort konnte nicht gesendet werden.", "error");
             return;
           }
-          setFeedback("Antwort gesendet.", "ok");
+          setFeedback(ticketsFeedbackEl, "Antwort gesendet.", "ok");
           await loadTickets();
         } catch (_) {
-          setFeedback("Verbindungsfehler beim Antworten.", "error");
+          setFeedback(ticketsFeedbackEl, "Verbindungsfehler beim Antworten.", "error");
         } finally {
           sendBtn.disabled = false;
         }
@@ -3288,13 +3299,13 @@
             });
             const data = await res.json();
             if (!res.ok || !data.ok) {
-              setFeedback("Ticket konnte nicht geschlossen werden.", "error");
+              setFeedback(ticketsFeedbackEl, "Ticket konnte nicht geschlossen werden.", "error");
               return;
             }
-            setFeedback("Ticket geschlossen.", "ok");
+            setFeedback(ticketsFeedbackEl, "Ticket geschlossen.", "ok");
             await loadTickets();
           } catch (_) {
-            setFeedback("Verbindungsfehler beim Schliessen.", "error");
+            setFeedback(ticketsFeedbackEl, "Verbindungsfehler beim Schliessen.", "error");
           } finally {
             closeBtn.disabled = false;
           }
@@ -3332,45 +3343,58 @@
       }
     }
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const payload = {
-        subject: subjectEl.value || "",
-        category: categoryEl.value || "general",
-        priority: priorityEl.value || "normal",
-        message: messageEl.value || "",
-      };
-      if (!String(payload.subject).trim() || !String(payload.message).trim()) {
-        setFeedback("Bitte Betreff und Nachricht ausfuellen.", "error");
-        return;
-      }
-      const submitBtn = form.querySelector('button[type="submit"]');
-      if (submitBtn) submitBtn.disabled = true;
-      try {
-        const res = await fetch("/api/support/tickets", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.ok) {
-          setFeedback("Ticket konnte nicht erstellt werden.", "error");
+    if (form && subjectEl && categoryEl && priorityEl && messageEl) {
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const payload = {
+          subject: subjectEl.value || "",
+          category: categoryEl.value || "general",
+          priority: priorityEl.value || "normal",
+          message: messageEl.value || "",
+        };
+        if (!String(payload.subject).trim() || !String(payload.message).trim()) {
+          setFeedback(createFeedbackEl, "Bitte Betreff und Nachricht ausfuellen.", "error");
           return;
         }
-        setFeedback("Ticket erfolgreich erstellt.", "ok");
-        form.reset();
-        if (priorityEl) priorityEl.value = "normal";
-        await loadTickets();
-      } catch (_) {
-        setFeedback("Verbindungsfehler beim Senden.", "error");
-      } finally {
-        if (submitBtn) submitBtn.disabled = false;
-      }
-    });
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = true;
+        try {
+          const res = await fetch("/api/support/tickets", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) {
+            setFeedback(createFeedbackEl, "Ticket konnte nicht erstellt werden.", "error");
+            return;
+          }
+          setFeedback(createFeedbackEl, "Ticket erfolgreich erstellt.", "ok");
+          form.reset();
+          if (priorityEl) priorityEl.value = "normal";
+        } catch (_) {
+          setFeedback(createFeedbackEl, "Verbindungsfehler beim Senden.", "error");
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      });
+    }
+
+    if (openTicketsBtn) {
+      openTicketsBtn.addEventListener("click", () => {
+        openSpecialWindow("my-tickets");
+        loadTickets();
+      });
+    }
 
     if (refreshBtn) refreshBtn.addEventListener("click", () => loadTickets());
-    loadTickets();
+
+    document.querySelectorAll("[data-special-open-window='my-tickets']").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        setTimeout(() => loadTickets(), 0);
+      });
+    });
   }
 
   function initStickyResourceBar() {

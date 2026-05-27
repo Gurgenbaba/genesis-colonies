@@ -1236,6 +1236,41 @@ def api_support_ticket_status(ticket_id: int):
     )
 
 
+@app.route("/api/admin/support/tickets", methods=["GET"])
+@require_admin_api
+def api_admin_support_tickets():
+    status = request.args.get("status")
+    return _support_json(
+        support_logic.list_all_tickets(_admin_actor_id(), status=status)
+    )
+
+
+@app.route("/api/admin/support/tickets/<int:ticket_id>/reply", methods=["POST"])
+@require_admin_api
+def api_admin_support_ticket_reply(ticket_id: int):
+    payload = request.get_json(silent=True) or {}
+    return _support_json(
+        support_logic.admin_reply_ticket(
+            _admin_actor_id(),
+            int(ticket_id),
+            payload.get("message") or "",
+        )
+    )
+
+
+@app.route("/api/admin/support/tickets/<int:ticket_id>/status", methods=["POST"])
+@require_admin_api
+def api_admin_support_ticket_status(ticket_id: int):
+    payload = request.get_json(silent=True) or {}
+    return _support_json(
+        support_logic.change_ticket_status(
+            _admin_actor_id(),
+            int(ticket_id),
+            payload.get("status") or "",
+        )
+    )
+
+
 @app.route("/api/chat/admin/search")
 @require_login
 def api_chat_admin_search():

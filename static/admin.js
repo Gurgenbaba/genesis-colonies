@@ -8,6 +8,7 @@
   const LOCALE = window.GC_LOCALE || {};
   let _activeTab = "health";
   let _isProduction = false;
+  let _selectedSupportTicketId = null;
 
   function t(key, fallback) {
     return LOCALE[key] || fallback || key;
@@ -199,6 +200,8 @@
         return loadAuditLog();
       case "chat":
         return loadAdminChat();
+      case "support":
+        return loadAdminSupport();
       case "runtime":
         return loadAdminRuntime();
       default:
@@ -681,6 +684,126 @@
     return data;
   }
 
+  function renderAdminSupportDetail(ticket) {
+    const out = qs("#admin-support-detail");
+    if (!out) return;
+    if (!ticket) {
+      out.innerHTML = `<p class="admin-small-hint">${esc(t("admin_support_select_hint", "Ticket aus der Liste waehlen."))}</p>`;
+      return;
+    }
+    const msgs = (ticket.messages || [])
+      .map(
+        (m) => `
+        <div class="admin-support-msg">
+          <div class="admin-support-msg-meta">${esc(m.sender_name || m.sender_role)} · ${esc(fmtTs(m.created_at))}</div>
+          <div>${esc(m.message)}</div>
+        </div>`
+      )
+      .join("");
+    out.innerHTML = `
+      <h3 class="admin-subtitle">#${ticket.id} · ${esc(ticket.subject)}</h3>
+      <p class="admin-small-hint">
+        ${playerNameLink(ticket.player_id, ticket.player_name)} ·
+        ${esc(ticket.status_label || ticket.status)} ·
+        ${esc(ticket.priority_label || ticket.priority)} ·
+        ${esc(ticket.category_label || ticket.category)}
+      </p>
+      <div class="admin-support-timeline">${msgs || `<p class="admin-small-hint">${esc(t("admin_support_no_messages", "Keine Nachrichten."))}</p>`}</div>
+      <label class="admin-label">${esc(t("admin_support_reply_label", "Antwort an Spieler"))}</label>
+      <textarea class="admin-input" id="admin-support-reply-body" rows="3" maxlength="1200"></textarea>
+      <div class="admin-action-row admin-action-row-wrap">
+        <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="support-reply" data-ticket-id="${ticket.id}">
+          ${esc(t("admin_support_reply_btn", "Antwort senden"))}
+        </button>
+        <select class="admin-input admin-input-sm" id="admin-support-status-set">
+          <option value="open" ${ticket.status === "open" ? "selected" : ""}>${esc(t("admin_support_status_open", "Offen"))}</option>
+          <option value="in_progress" ${ticket.status === "in_progress" ? "selected" : ""}>${esc(t("admin_support_status_progress", "In Bearbeitung"))}</option>
+          <option value="closed" ${ticket.status === "closed" ? "selected" : ""}>${esc(t("admin_support_status_closed", "Geschlossen"))}</option>
+        </select>
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="support-set-status" data-ticket-id="${ticket.id}">
+          ${esc(t("admin_support_status_btn", "Status setzen"))}
+        </button>
+      </div>`;
+  }
+
+  async function loadAdminSupport() {
+    const listOut = qs("#admin-support-list");
+    if (!listOut) return null;
+    listOut.innerHTML = loadingHtml();
+    const status = (qs("#admin-support-status-filter")?.value || "").trim();
+    const q = status ? `?status=${encodeURIComponent(status)}` : "";
+    const data = await adminGet(`/api/admin/support/tickets${q}`);
+    if (!data.ok) {
+      showAlert(data.message || t("admin_action_failed", "Fehler"), "error");
+      listOut.innerHTML = errorCard(data);
+      return data;
+    }
+    const tickets = data.data?.tickets || [];
+    if (!tickets.length) {
+      listOut.innerHTML = `<p class="admin-small-hint">${esc(t("admin_support_empty", "Keine Tickets."))}</p>`;
+      renderAdminSupportDetail(null);
+      return data;
+    }
+    listOut.innerHTML = `
+      <table class="admin-table">
+        <thead><tr>
+          <th>ID</th>
+          <th>${esc(t("admin_support_col_player", "Spieler"))}</th>
+          <th>${esc(t("admin_support_col_subject", "Betreff"))}</th>
+          <th>${esc(t("admin_support_col_status", "Status"))}</th>
+          <th>${esc(t("admin_support_col_updated", "Aktualisiert"))}</th>
+        </tr></thead>
+        <tbody>
+          ${tickets
+            .map(
+              (tk) => `
+            <tr class="admin-support-ticket-row${_selectedSupportTicketId === tk.id ? " is-active" : ""}"
+                data-admin-support-ticket-id="${tk.id}">
+              <td>${tk.id}</td>
+              <td>${playerNameLink(tk.player_id, tk.player_name)}</td>
+              <td>${esc(tk.subject)}</td>
+              <td>${esc(tk.status_label || tk.status)}</td>
+              <td>${esc(fmtTs(tk.last_message_at || tk.updated_at))}</td>
+            </tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>`;
+    const selected =
+      tickets.find((tk) => tk.id === _selectedSupportTicketId) || tickets[0];
+    _selectedSupportTicketId = selected?.id || null;
+    renderAdminSupportDetail(selected || null);
+    return data;
+  }
+
+  async function adminSupportReply(ticketId) {
+    const body = (qs("#admin-support-reply-body")?.value || "").trim();
+    if (!body) {
+      showAlert(t("admin_support_reply_empty", "Antwort eingeben."), "error");
+      return null;
+    }
+    const res = await adminPost(`/api/admin/support/tickets/${ticketId}/reply`, { message: body });
+    if (res.ok) {
+      notify(t("admin_support_reply_ok", "Antwort gesendet."), "success");
+      _selectedSupportTicketId = ticketId;
+      return loadAdminSupport();
+    }
+    showAlert(res.message, "error");
+    return res;
+  }
+
+  async function adminSupportSetStatus(ticketId) {
+    const status = qs("#admin-support-status-set")?.value || "open";
+    const res = await adminPost(`/api/admin/support/tickets/${ticketId}/status`, { status });
+    if (res.ok) {
+      notify(t("admin_support_status_ok", "Status aktualisiert."), "success");
+      _selectedSupportTicketId = ticketId;
+      return loadAdminSupport();
+    }
+    showAlert(res.message, "error");
+    return res;
+  }
+
   async function loadAdminChat() {
     const out = qs("#admin-chat-search-output");
     if (out && !out.innerHTML.trim()) {
@@ -741,6 +864,17 @@
     if (act === "finish-due") return finishDueQueues();
     if (act === "load-audit") return loadAuditLog();
     if (act === "chat-search") return searchAdminChatMessages();
+    if (act === "support-refresh") return loadAdminSupport();
+    if (act === "support-reply") {
+      const tid = parseInt(btn.dataset.ticketId, 10);
+      if (!Number.isFinite(tid)) return null;
+      return adminSupportReply(tid);
+    }
+    if (act === "support-set-status") {
+      const tid = parseInt(btn.dataset.ticketId, 10);
+      if (!Number.isFinite(tid)) return null;
+      return adminSupportSetStatus(tid);
+    }
     if (act === "chat-system-notice") {
       const body = (qs("#admin-chat-notice-body")?.value || "").trim();
       if (!body) {
@@ -945,6 +1079,12 @@
       }
       const plBtn = e.target.closest("[data-admin-planet-id]");
       if (plBtn) await loadAdminPlanet(plBtn.dataset.adminPlanetId);
+
+      const supportRow = e.target.closest("[data-admin-support-ticket-id]");
+      if (supportRow) {
+        _selectedSupportTicketId = parseInt(supportRow.dataset.adminSupportTicketId, 10);
+        await loadAdminSupport();
+      }
     });
 
     document.addEventListener("keydown", async (e) => {

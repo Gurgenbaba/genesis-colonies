@@ -12,6 +12,10 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9h3a6 6 0 1 1 6 6v3a9 9 0 0 0 0-18zm-1 6h2v6h-2V9zm0 8h2v2h-2v-2z"/></svg>
       <span>SUPPORT</span>
     </button>
+    <button type="button" class="gc-special-bar-btn" data-special-open-window="my-tickets" aria-label="Meine Tickets" title="Meine Tickets">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6zm0 5h10v2H4v-2zm0 5h16v2H4v-2z"/></svg>
+      <span>TICKETS</span>
+    </button>
     <button type="button" class="gc-special-bar-btn" data-special-open-window="imprint" aria-label="{{ T('imprint', 'Impressum') }}" title="{{ T('imprint', 'Impressum') }}">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5V4zm2 2v12h10V6H7zm1 2h8v2H8V8zm0 4h8v2H8v-2z"/></svg>
       <span>IMPR.</span>
@@ -178,7 +182,7 @@
       <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="support" aria-label="{{ T('close', 'Schließen') }}">✕</button>
     </header>
     <div class="gc-special-window-content">
-      <p class="gc-special-intro">Schneller Support direkt im Spiel: Ticket erstellen, Antwortverlauf sehen, Status verfolgen.</p>
+      <p class="gc-special-intro">Neues Support-Ticket erstellen. Deine bestehenden Tickets findest du unter <strong>TICKETS</strong> in der Leiste.</p>
 
       <form class="gc-support-form" data-support-form>
         <div class="gc-support-grid">
@@ -211,17 +215,28 @@
         </label>
         <div class="gc-support-actions">
           <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm">Ticket senden</button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-support-open-tickets>Meine Tickets</button>
           <span class="gc-support-feedback" data-support-feedback aria-live="polite"></span>
         </div>
       </form>
+    </div>
+  </aside>
 
+  <aside class="gc-special-window" data-special-window="my-tickets" hidden>
+    <header class="gc-special-head">
+      <span class="gc-special-title">Meine Tickets</span>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="my-tickets" aria-label="{{ T('close', 'Schließen') }}">✕</button>
+    </header>
+    <div class="gc-special-window-content">
+      <p class="gc-special-intro">Nur deine eigenen Tickets – Antworten vom Support und deine Nachrichten.</p>
       <div class="gc-support-list-head">
-        <strong>Meine Tickets</strong>
+        <strong>Ticketliste</strong>
         <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-support-refresh>Aktualisieren</button>
       </div>
       <div class="gc-support-list" data-support-list>
         <div class="gc-support-empty">Noch keine Tickets vorhanden.</div>
       </div>
+      <p class="gc-support-feedback" data-support-tickets-feedback aria-live="polite"></p>
     </div>
   </aside>
 
