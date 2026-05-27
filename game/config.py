@@ -136,7 +136,20 @@ def validate_config(*, strict: bool | None = None) -> list[str]:
         errors.append(f"Unsupported GC_DB_BACKEND: {backend}")
 
     if backend == "postgres":
-        errors.append("GC_DB_BACKEND=postgres is not implemented yet. Use sqlite.")
+        msg = (
+            "GC_DB_BACKEND=postgres is not implemented yet. "
+            "For Railway/production use GC_DB_BACKEND=sqlite, GC_DB_PATH=/data/game.db, "
+            "and a persistent volume at /data. Do not add or link PostgreSQL on Railway yet."
+        )
+        errors.append(msg)
+
+    if strict and is_production():
+        db_url = os.environ.get("DATABASE_URL", "").strip().lower()
+        if db_url.startswith("postgres://") or db_url.startswith("postgresql://"):
+            warnings.append(
+                "DATABASE_URL points to PostgreSQL but is ignored — the app uses SQLite only. "
+                "Unset DATABASE_URL or remove the Postgres service link; set GC_DB_PATH=/data/game.db."
+            )
 
     for w in warnings:
         print(f"[GC config] WARNING: {w}", file=sys.stderr)

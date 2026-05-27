@@ -30,7 +30,7 @@ Genesis Colonies ist ein persistentes Browser-Strategiespiel, in dem Spieler ein
 | Bereich | Stand |
 |---------|-------|
 | Installer & Bootstrap | `scripts/install.py`, `.env`-Setup, Migration Guard |
-| Deployment | Gunicorn, Docker, systemd-Vorlage ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)) |
+| Deployment | Gunicorn, Docker, Railway ([`docs/DEPLOY_RAILWAY.md`](docs/DEPLOY_RAILWAY.md)), VPS ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)) |
 | Health Monitoring | `GET /health` mit DB-, Migrations-, Config- und Write-Checks |
 | DB-Migrationen | Versioniertes SQL-System (`migrations/`, `migrate.py`) |
 | Admin Control Center | JSON-API + operatives UI (`/admin`, `/api/admin/*`) |
@@ -325,6 +325,18 @@ curl http://127.0.0.1:5000/health
 
 Daten persistieren im Volume `gc_data` (`GC_DB_PATH=/data/game.db`).
 
+### Railway (PaaS)
+
+SQLite auf einem **Railway Volume** (`/data` → `GC_DB_PATH=/data/game.db`). **PostgreSQL noch nicht** — keinen Postgres-Service verlinken.
+
+Vollständige Anleitung: [`docs/DEPLOY_RAILWAY.md`](docs/DEPLOY_RAILWAY.md).
+
+```bash
+# Nach erstem Deploy (Railway Shell):
+python scripts/install.py --admin
+curl https://<service>.up.railway.app/health
+```
+
 ### Updates
 
 ```bash
@@ -491,5 +503,6 @@ Keine explizite Open-Source-Lizenz im Repository hinterlegt. Nutzung und Weiterv
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Threat Model, Auth, Hardening, Operator-Checkliste |
 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) | Dev-Setup, Migrationen, Tests, PR-Checkliste |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phasen, Meilensteine, technische Schulden |
+| [`docs/DEPLOY_RAILWAY.md`](docs/DEPLOY_RAILWAY.md) | Railway, Volume, Variables, `/health`, Admin |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | VPS, Docker, Gunicorn, systemd, Troubleshooting |
 | [`docs/ALPHA_TESTPLAN.md`](docs/ALPHA_TESTPLAN.md) | Manueller Alpha-Testplan |

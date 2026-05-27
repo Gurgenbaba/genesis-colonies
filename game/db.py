@@ -20,7 +20,19 @@ from typing import Any, Generator, Optional
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "game.db"
 
-GC_DB_BACKEND = os.environ.get("GC_DB_BACKEND", "sqlite").strip().lower()
+def get_db_backend() -> str:
+    return os.environ.get("GC_DB_BACKEND", "sqlite").strip().lower()
+
+
+_POSTGRES_NOT_IMPLEMENTED = (
+    "PostgreSQL (GC_DB_BACKEND=postgres) is not implemented yet. "
+    "Use GC_DB_BACKEND=sqlite with GC_DB_PATH=/data/game.db and a Railway Volume "
+    "mounted at /data. Do not link a PostgreSQL service on Railway until this backend ships."
+)
+
+
+def _postgres_not_implemented_message() -> str:
+    return _POSTGRES_NOT_IMPLEMENTED
 
 
 def resolve_db_path() -> Path:
@@ -28,6 +40,13 @@ def resolve_db_path() -> Path:
     if override:
         return Path(override)
     return DB_PATH
+
+
+def ensure_db_parent_dir() -> Path:
+    """Create parent directory for GC_DB_PATH (e.g. Railway volume mount /data)."""
+    db_path = resolve_db_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    return db_path
 
 
 class TxAbort(Exception):
@@ -39,11 +58,10 @@ class TxAbort(Exception):
 
 
 def db() -> sqlite3.Connection:
-    if GC_DB_BACKEND != "sqlite":
-        raise NotImplementedError(
-            f"DB backend '{GC_DB_BACKEND}' is not implemented yet. Use GC_DB_BACKEND=sqlite."
-        )
-    conn = sqlite3.connect(resolve_db_path(), timeout=30.0)
+    if get_db_backend() != "sqlite":
+        raise NotImplementedError(_postgres_not_implemented_message())
+    db_path = ensure_db_parent_dir()
+    conn = sqlite3.connect(db_path, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -66,7 +84,7 @@ def begin_write_transaction(conn: sqlite3.Connection) -> None:
     """
     if in_transaction(conn):
         return
-    if GC_DB_BACKEND == "postgres":
+    if get_db_backend() == "postgres":
         conn.execute("BEGIN")
     else:
         conn.execute("BEGIN IMMEDIATE")
@@ -82,14 +100,14 @@ def rollback(conn: sqlite3.Connection) -> None:
 
 def lock_planet_for_update(conn: sqlite3.Connection, planet_id: int) -> None:
     """Postgres: row-level lock before queue/spend. SQLite: no-op (IMMEDIATE covers writers)."""
-    if GC_DB_BACKEND != "postgres":
+    if get_db_backend() != "postgres":
         return
     conn.execute("SELECT id FROM planets WHERE id = ? FOR UPDATE;", (int(planet_id),))
 
 
 def lock_player_for_update(conn: sqlite3.Connection, user_id: int) -> None:
     """Postgres: serialize research queue mutations per player."""
-    if GC_DB_BACKEND != "postgres":
+    if get_db_backend() != "postgres":
         return
     conn.execute("SELECT id FROM players WHERE id = ? FOR UPDATE;", (int(user_id),))
 

@@ -56,8 +56,11 @@ def ensure_migrations_dir() -> None:
 
 
 def get_connection() -> sqlite3.Connection:
+    from game.db import ensure_db_parent_dir
+
     # WICHTIG: autocommit mode => keine implicit transaction von sqlite3
-    conn = sqlite3.connect(_db_path(), isolation_level=None)
+    db_path = ensure_db_parent_dir()
+    conn = sqlite3.connect(db_path, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA foreign_keys=ON;")
@@ -313,6 +316,9 @@ def apply_migration(conn: sqlite3.Connection, filename: str, sql_text: str) -> N
 # ----------------------------------------
 
 def main() -> None:
+    from game.config import init_config
+
+    init_config()
     db_path = _db_path()
     print("=== Genesis Colonies – Migration Runner ===")
     print(f"DB:         {db_path}")

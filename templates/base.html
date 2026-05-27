@@ -171,6 +171,11 @@
           {{ T("nav_research") }}
         </a>
 
+        <a href="{{ url_for('planet_evolution_view') }}"
+           class="gc-nav-link {% if request.endpoint == 'planet_evolution_view' %}active{% endif %}">
+          {{ T("nav_planet_evolution", "Planet Evolution") }}
+        </a>
+
         <a href="{{ url_for('shipyard_view') }}"
            class="gc-nav-link gc-nav-wip {% if request.endpoint == 'shipyard_view' %}active{% endif %}">
           {{ T("nav_shipyard") }}
@@ -262,8 +267,14 @@
 
   </div>
 
+  {% if not SIMPLE_LAYOUT %}
+  {% include "partials/special_panel.html" %}
+  {% endif %}
+
   {% if not SIMPLE_LAYOUT and AUTH_USER and AUTH_USER.id %}
+  {% include "partials/chat.html" %}
   {% include "partials/player_card_modal.html" %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/chat.css') }}?v={{ GC_ASSET_VERSION }}">
   {% endif %}
 
   {% if not SIMPLE_LAYOUT %}
@@ -353,6 +364,9 @@
   </script>
 
   <script src="{{ url_for('static', filename='main.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+  {% if not SIMPLE_LAYOUT and AUTH_USER and AUTH_USER.id %}
+  <script src="{{ url_for('static', filename='js/chat.js') }}?v={{ GC_ASSET_VERSION }}"></script>
+  {% endif %}
   {% if AUTH_ADMIN %}
   <script src="{{ url_for('static', filename='admin.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   {% endif %}

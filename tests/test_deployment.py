@@ -40,6 +40,44 @@ def test_config_rejects_insecure_secret_in_production(monkeypatch):
     assert any("SECRET_KEY" in e for e in errors)
 
 
+def test_config_rejects_postgres_backend_in_production(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.setenv("SECRET_KEY", "a" * 64)
+    monkeypatch.setenv("FLASK_DEBUG", "0")
+    monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+
+    from game.config import init_config, validate_config
+
+    init_config()
+    errors = validate_config(strict=True)
+    assert any("postgres" in e.lower() for e in errors)
+    assert any("Railway" in e or "sqlite" in e.lower() for e in errors)
+
+
+def test_ensure_db_parent_dir_creates_volume_path(monkeypatch, tmp_path):
+    db_file = tmp_path / "data" / "game.db"
+    monkeypatch.setenv("GC_DB_PATH", str(db_file))
+    monkeypatch.setenv("GC_DB_BACKEND", "sqlite")
+
+    from game.db import ensure_db_parent_dir, resolve_db_path
+
+    assert not db_file.parent.exists()
+    ensure_db_parent_dir()
+    assert db_file.parent.exists()
+    assert resolve_db_path() == db_file
+
+
+def test_db_rejects_postgres_backend_at_connect(monkeypatch):
+    monkeypatch.setenv("GC_DB_BACKEND", "postgres")
+
+    from game.db import db
+
+    with pytest.raises(NotImplementedError) as exc:
+        db()
+    assert "PostgreSQL" in str(exc.value) or "postgres" in str(exc.value).lower()
+
+
 def test_config_rejects_debug_in_production(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("SECRET_KEY", "a" * 64)
@@ -105,3 +143,12 @@ def test_env_example_exists():
     assert "SECRET_KEY" in text
     assert "GC_DB_PATH" in text
     assert "GC_DB_BACKEND" in text
+
+
+def test_railway_deploy_doc_exists():
+    doc = ROOT / "docs" / "DEPLOY_RAILWAY.md"
+    assert doc.exists()
+    text = doc.read_text(encoding="utf-8")
+    assert "GC_DB_PATH=/data/game.db" in text
+    assert "PostgreSQL" in text or "postgres" in text.lower()
+    assert "/health" in text

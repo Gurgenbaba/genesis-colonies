@@ -289,9 +289,22 @@ def init_db() -> None:
             FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
         );
     """)
+    for col, ddl in (
+        ("score_fleet", "INTEGER NOT NULL DEFAULT 0"),
+        ("score_defense", "INTEGER NOT NULL DEFAULT 0"),
+        ("rank_total", "INTEGER"),
+        ("rank_building", "INTEGER"),
+        ("rank_research", "INTEGER"),
+    ):
+        if not column_exists(conn, "player_scores", col):
+            cur.execute(f"ALTER TABLE player_scores ADD COLUMN {col} {ddl};")
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_player_scores_total_desc
-        ON player_scores(score_total DESC, updated_at DESC, player_id ASC);
+        ON player_scores(score_total DESC, score_buildings DESC, score_research DESC, player_id ASC);
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_player_scores_rank_total
+        ON player_scores(rank_total ASC);
     """)
 
     # ------------------------------------------------------------
@@ -548,6 +561,15 @@ def ensure_player_and_homeworld(
             pid = cur.lastrowid
 
             cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (int(pid),))
+
+            try:
+                from game.planet_evolution.bootstrap import ensure_planet_evolution
+                from game.planet_evolution.repository import evolution_schema_ready
+
+                if evolution_schema_ready(conn):
+                    ensure_planet_evolution(int(pid), conn)
+            except Exception:
+                pass
 
         if own_conn:
             conn.commit()
@@ -1276,111 +1298,46 @@ def add_research_job(
             conn.close()
 
 
-def delete_research_job(job_id: int) -> None:
-    conn = db()
+def delete_research_job(job_id: int, conn: sqlite3.Connection | None = None) -> None:
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
     cur = conn.cursor()
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        if own_conn:
+            conn.execute("BEGIN IMMEDIATE")
         cur.execute("DELETE FROM research_queue WHERE id = ?;", (int(job_id),))
-        conn.commit()
+        if own_conn:
+            conn.commit()
     except Exception:
-        conn.rollback()
+        if own_conn:
+            conn.rollback()
         raise
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
 
 # ======================================================================
-# SCORE / RANKING
+# SCORE / RANKING (delegates to game.ranking – single source of truth)
 # ======================================================================
-
-def _score_settings(conn: sqlite3.Connection | None = None) -> Dict[str, float]:
-    if conn is None:
-        s = get_game_settings() or {}
-    else:
-        cur = conn.cursor()
-        cur.execute("SELECT key, value FROM game_settings;")
-        rows = cur.fetchall()
-        s = {r["key"]: r["value"] for r in rows}
-
-    def f(key: str, default: float) -> float:
-        try:
-            return float(s.get(key, default))
-        except Exception:
-            return float(default)
-
-    return {
-        "wB": f("score_weight_buildings", 0.60),
-        "wR": f("score_weight_research", 0.40),
-        "exp": f("score_cost_exponent", 1.0),
-        "softcap": f("score_softcap", 0.0),
-    }
-
-
-def _sum_costs_up_to_level(base_m: int, base_c: int, factor: float, level: int) -> int:
-    if level <= 0:
-        return 0
-    total = 0
-    for lv in range(1, level + 1):
-        mult = factor ** (lv - 1)
-        total += int(base_m * mult) + int(base_c * mult)
-    return total
 
 
 def compute_player_score(
     player_id: int,
     conn: sqlite3.Connection | None = None,
 ) -> Tuple[int, int, int]:
+    from .ranking import compute_player_scores
+
     owns_conn = False
     if conn is None:
         conn = db()
         owns_conn = True
-
     try:
-        settings = _score_settings(conn=conn)
-        wB, wR = settings["wB"], settings["wR"]
-        exp = settings["exp"]
-        softcap = settings["softcap"]
-
-        from .buildings import BUILDING_ORDER, BASE_COST, COST_FACTOR
-        from .research import RESEARCH_TECHS
-
-        planets = get_planets_by_player(int(player_id), conn=conn)
-
-        building_sum_costs = 0
-        for p in planets:
-            b = get_planet_buildings(int(p["id"]), conn=conn)
-            for key in BUILDING_ORDER:
-                lvl = int(b.get(key, 0) or 0)
-                if lvl <= 0:
-                    continue
-                base = BASE_COST.get(key, (0, 0))
-                fac = float(COST_FACTOR.get(key, 1.5))
-                building_sum_costs += _sum_costs_up_to_level(int(base[0]), int(base[1]), fac, lvl)
-
-        building_score = int((building_sum_costs ** exp) if building_sum_costs > 0 else 0)
-
-        levels = get_research_levels(int(player_id), conn=conn)
-        research_sum_costs = 0
-        for tech_key, cfg in RESEARCH_TECHS.items():
-            lvl = int(levels.get(tech_key, 0) or 0)
-            if lvl <= 0:
-                continue
-            base_m = int(cfg.get("base_cost_m", 0) or 0)
-            base_c = int(cfg.get("base_cost_c", 0) or 0)
-            fac = float(cfg.get("cost_factor", 1.6) or 1.6)
-            research_sum_costs += _sum_costs_up_to_level(base_m, base_c, fac, lvl)
-
-        research_score = int((research_sum_costs ** exp) if research_sum_costs > 0 else 0)
-
-        total = int((wB * building_score) + (wR * research_score))
-
-        if softcap and softcap > 0 and total > softcap:
-            over = total - softcap
-            total = int(softcap + (math.sqrt(over) * math.sqrt(softcap)))
-
-        return total, building_score, research_score
-
+        s = compute_player_scores(int(player_id), conn=conn)
+        return s["total_score"], s["building_score"], s["research_score"]
     finally:
         if owns_conn:
             conn.close()
@@ -1393,117 +1350,46 @@ def upsert_player_score(
     research: int,
     conn: sqlite3.Connection | None = None,
 ) -> None:
-    owns_conn = False
-    if conn is None:
-        conn = db()
-        owns_conn = True
+    from .ranking import upsert_player_scores
 
-    cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO player_scores (player_id, score_total, score_buildings, score_research, updated_at)
-        VALUES (?, ?, ?, ?, strftime('%s','now'))
-        ON CONFLICT(player_id) DO UPDATE SET
-            score_total = excluded.score_total,
-            score_buildings = excluded.score_buildings,
-            score_research = excluded.score_research,
-            updated_at = excluded.updated_at
-        """,
-        (int(player_id), int(total), int(buildings), int(research)),
+    upsert_player_scores(
+        int(player_id),
+        {
+            "total_score": int(total),
+            "building_score": int(buildings),
+            "research_score": int(research),
+            "fleet_score": 0,
+            "defense_score": 0,
+        },
+        conn=conn,
     )
-
-    if owns_conn:
-        conn.commit()
-        conn.close()
 
 
 def recompute_and_upsert_score(
     player_id: int,
     conn: sqlite3.Connection | None = None,
 ) -> Dict[str, int]:
-    owns_conn = False
-    if conn is None:
-        conn = db()
-        owns_conn = True
+    from .ranking import recompute_and_upsert_score as _ranking_recompute
 
-    try:
-        total, b, r = compute_player_score(int(player_id), conn=conn)
-        upsert_player_score(int(player_id), total, b, r, conn=conn)
-        if owns_conn:
-            conn.commit()
-        return {"score_total": total, "score_buildings": b, "score_research": r}
-    except Exception:
-        if owns_conn:
-            conn.rollback()
-        raise
-    finally:
-        if owns_conn:
-            conn.close()
+    return _ranking_recompute(int(player_id), conn=conn)
 
 
 def get_player_score_row(player_id: int) -> Optional[Dict[str, Any]]:
-    conn = db()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM player_scores WHERE player_id = ?", (int(player_id),))
-    row = cur.fetchone()
-    conn.close()
-    return dict(row) if row else None
+    from .ranking import get_player_score_row as _ranking_row
+
+    return _ranking_row(int(player_id))
 
 
 def get_ranking_rows(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
-    conn = db()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT
-            p.id AS player_id,
-            p.name AS nickname,
-            ps.score_total AS score_total,
-            ps.score_buildings AS score_buildings,
-            ps.score_research AS score_research,
-            ps.updated_at AS updated_at
-        FROM players p
-        JOIN player_scores ps ON ps.player_id = p.id
-        ORDER BY ps.score_total DESC, ps.updated_at DESC, p.id ASC
-        LIMIT ? OFFSET ?
-        """,
-        (int(limit), int(offset)),
-    )
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    from .ranking import get_ranking_rows as _ranking_rows
+
+    return _ranking_rows(limit=limit, offset=offset)
 
 
 def get_player_rank(player_id: int) -> Tuple[Optional[int], int]:
-    conn = db()
-    cur = conn.cursor()
+    from .ranking import get_player_rank as _ranking_rank
 
-    cur.execute("SELECT COUNT(*) AS cnt FROM player_scores")
-    total_players = int(cur.fetchone()["cnt"])
-
-    cur.execute("SELECT score_total, updated_at FROM player_scores WHERE player_id = ?", (int(player_id),))
-    me = cur.fetchone()
-    if not me:
-        conn.close()
-        return None, total_players
-
-    my_score = int(me["score_total"])
-    my_updated = int(me["updated_at"])
-
-    cur.execute(
-        """
-        SELECT COUNT(*) AS better
-        FROM player_scores
-        WHERE (score_total > ?)
-           OR (score_total = ? AND updated_at > ?)
-           OR (score_total = ? AND updated_at = ? AND player_id < ?)
-        """,
-        (my_score, my_score, my_updated, my_score, my_updated, int(player_id)),
-    )
-    better = int(cur.fetchone()["better"])
-    conn.close()
-
-    return better + 1, total_players
+    return _ranking_rank(int(player_id))
 
 
 # ----------------------------------------------------------------------
@@ -1515,12 +1401,15 @@ def finish_due_build_jobs(
     player_id: int,
     now: float | None = None,
     conn: sqlite3.Connection | None = None,
+    *,
+    update_score: bool = True,
 ) -> bool:
     """
-    Schließt ALLE fälligen Build-Jobs für diesen Planeten ab.
-    Rechnet Score NUR neu, wenn mindestens ein Job abgeschlossen wurde.
-    Läuft atomar in EINER Connection/Transaction.
+    Schließt fällige Build-Jobs für einen Planeten ab.
+    Delegiert an queue_engine; optional Score (legacy single-planet path).
     """
+    from .queue_engine import finish_planet_build_jobs
+
     owns_conn = False
     if conn is None:
         conn = db()
@@ -1529,54 +1418,21 @@ def finish_due_build_jobs(
     if now is None:
         now = time.time()
 
-    finished_any = False
-    cur = conn.cursor()
-
     try:
         if owns_conn:
             conn.execute("BEGIN IMMEDIATE")
 
-        rows = get_build_queue_rows(int(planet_id), conn=conn)
-        due = [r for r in rows if float(r["finish_time"]) <= float(now)]
-        if not due:
-            if owns_conn:
-                conn.commit()
-            return False
+        count = finish_planet_build_jobs(conn, int(planet_id), int(player_id), float(now))
 
-        buildings = get_planet_buildings(int(planet_id), conn=conn)
+        if count > 0 and update_score:
+            from .ranking import recompute_and_upsert_score
 
-        for job in due:
-            btype = str(job["building_type"])
-            if btype in buildings:
-                buildings[btype] = int(buildings.get(btype, 0)) + 1
-                finished_any = True
-            delete_build_job(int(job["id"]), conn=conn)
-
-        keys = [
-            "metal_mine", "crystal_mine", "solar_plant",
-            "research_lab", "academy",
-            "metal_storage", "crystal_storage",
-            "command_center", "shipyard", "defense_factory",
-            "barracks", "radar_array", "shield_generator",
-            "terraformer", "nanofactory", "geothermal_nexus",
-            "planet_core_nexus",
-        ]
-        cur.execute(
-            f"""
-            UPDATE planet_buildings SET
-            {", ".join(f"{k}=?" for k in keys)}
-            WHERE planet_id = ?;
-            """,
-            [int(buildings.get(k, 0)) for k in keys] + [int(planet_id)],
-        )
-
-        if finished_any:
             recompute_and_upsert_score(int(player_id), conn=conn)
 
         if owns_conn:
             conn.commit()
 
-        return finished_any
+        return count > 0
 
     except Exception:
         if owns_conn:
@@ -1591,12 +1447,15 @@ def finish_due_research_jobs(
     user_id: int,
     now: float | None = None,
     conn: sqlite3.Connection | None = None,
+    *,
+    update_score: bool = True,
 ) -> bool:
     """
-    Schließt ALLE fälligen Research-Jobs ab.
-    Rechnet Score NUR neu, wenn mindestens ein Job abgeschlossen wurde.
-    Läuft atomar in EINER Connection/Transaction.
+    Schließt fällige Research-Jobs ab.
+    Delegiert an queue_engine; optional Score (legacy single-player path).
     """
+    from .queue_engine import finish_player_research_jobs
+
     owns_conn = False
     if conn is None:
         conn = db()
@@ -1605,51 +1464,21 @@ def finish_due_research_jobs(
     if now is None:
         now = time.time()
 
-    finished_any = False
-    cur = conn.cursor()
-
     try:
         if owns_conn:
             conn.execute("BEGIN IMMEDIATE")
 
-        # ✅ Wichtig: NUR über die gleiche conn lesen (kein conn-mix!)
-        cur.execute(
-            "SELECT * FROM research_queue WHERE user_id = ? ORDER BY finish_at ASC;",
-            (int(user_id),),
-        )
-        rows = cur.fetchall()
+        count = finish_player_research_jobs(conn, int(user_id), float(now))
 
-        due = [r for r in rows if float(r["finish_at"]) <= float(now)]
-        if not due:
-            if owns_conn:
-                conn.commit()
-            return False
+        if count > 0 and update_score:
+            from .ranking import recompute_and_upsert_score
 
-        levels = get_research_levels(int(user_id), conn=conn)
-
-        for job in due:
-            tech_key = str(job["tech_key"])
-            levels[tech_key] = int(levels.get(tech_key, 0)) + 1
-            finished_any = True
-            cur.execute("DELETE FROM research_queue WHERE id = ?;", (int(job["id"]),))
-
-        for tech_key, lvl in levels.items():
-            cur.execute(
-                """
-                INSERT INTO research_levels (user_id, tech_key, level)
-                VALUES (?, ?, ?)
-                ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
-                """,
-                (int(user_id), str(tech_key), int(lvl)),
-            )
-
-        if finished_any:
             recompute_and_upsert_score(int(user_id), conn=conn)
 
         if owns_conn:
             conn.commit()
 
-        return finished_any
+        return count > 0
 
     except Exception:
         if owns_conn:

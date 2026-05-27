@@ -1,0 +1,594 @@
+{% extends "base.html" %}
+
+{% macro pe_research_job(job, is_first=false) %}
+<article class="research-job pe-planet-research-job{% if is_first %} research-job-active pe-planet-research-active{% else %} research-job-queued{% endif %}"
+         {% if is_first and job.finish_at %}data-finish-time="{{ job.finish_at|int }}" data-total="{{ job.total_seconds or 1 }}"{% endif %}>
+  <div class="research-job-icon">
+    <img src="{{ url_for('static', filename='img/research/' ~ job.tech_key ~ '.png') }}"
+         alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+  </div>
+  <div class="research-job-body">
+    <div class="job-header">
+      <span class="job-name">{{ T(job.label_key, job.tech_key) }}</span>
+      <span class="job-time{% if not is_first %} job-time-muted{% endif %}"{% if is_first %} data-pe-research-eta{% endif %}>
+        {% if is_first %}~{{ (job.seconds_remaining // 3600) }}h {{ ((job.seconds_remaining % 3600) // 60) }}m{% else %}{{ T("status_in_queue", "In Warteschlange") }}{% endif %}
+      </span>
+    </div>
+    {% if job.unlock_key %}<p class="hint pe-research-unlock-hint">{{ T(job.unlock_key, "") }}</p>{% endif %}
+    <div class="research-bar research-bar-large" aria-label="{{ T('progress', 'Fortschritt') }}">
+      <div class="research-bar-fill gc-progress-smooth pe-planet-research-fill"
+           style="width: {{ job.progress_pct if is_first else 0 }}%;"
+           role="progressbar"
+           aria-valuenow="{{ job.progress_pct if is_first else 0 }}"
+           aria-valuemin="0"
+           aria-valuemax="100"></div>
+    </div>
+    {% if is_first %}
+    <div class="research-active-meta">
+      <span data-pe-research-pct>{{ job.progress_pct }}%</span>
+      <span>{{ T("pe_research_remaining", "Verbleibend") }}</span>
+    </div>
+    {% endif %}
+  </div>
+</article>
+{% endmacro %}
+
+{% block content %}
+<div class="gc-page planet-evolution-page">
+
+  {% set ps = planet_state if planet_state is defined and planet_state else {} %}
+  {% set research = ps.research if ps.research is defined else {} %}
+  {% set dash = ps.dashboard if ps.dashboard is defined else {} %}
+  {% set hdr = dash.header if dash.header is defined else {} %}
+  {% set prog = dash.progression if dash.progression is defined else {} %}
+  {% set econ = dash.economy if dash.economy is defined else {} %}
+  {% set rdx = dash.research_ux if dash.research_ux is defined else {} %}
+  {% set action = dash.next_action if dash.next_action is defined else {} %}
+  {% set status = hdr.status if hdr.status is defined else {} %}
+  {% set history_items = dash.history['items'] if dash.history is defined and dash.history['items'] is defined else [] %}
+  {% set spec_detail = ps.specialization_detail if ps.specialization_detail is defined else {} %}
+  {% set spec_options = ps.specialization_options if ps.specialization_options is defined else [] %}
+  {% set policy_ux = dash.policy_ux if dash.policy_ux is defined else {} %}
+
+  <header class="gc-page-header pe-page-header">
+    <h2 class="section-title">{{ T("pe_title", "Planet-Entwicklung") }}</h2>
+    <p class="section-hint hint">{{ T("pe_hint", "Forme die Identität, Wirtschaft und Zukunft deiner Kolonie.") }}</p>
+  </header>
+
+  <section class="pe-colony-bar">
+    <span class="pe-colony-label">{{ T("pe_planet_switcher", "Deine Kolonien") }}</span>
+    <div class="pe-switcher-body">
+      {% for p in planets or [] %}
+        <button type="button"
+                class="gc-btn gc-btn-secondary pe-planet-btn {% if p.is_active %}is-active{% endif %}"
+                data-planet-id="{{ p.planet_id }}">
+          <span class="pe-planet-name">{{ p.name }}</span>
+          <span class="pe-planet-meta">{{ T("pe_level_short", "Stufe") }} {{ p.planet_level }}{% if p.is_homeworld %} · {{ T("pe_homeworld", "Heimatwelt") }}{% endif %}</span>
+        </button>
+      {% endfor %}
+      <button type="button" class="gc-btn gc-btn-primary" id="pe-colonize-btn">{{ T("pe_colonize", "Neue Kolonie gründen") }}</button>
+    </div>
+  </section>
+
+  {% if ps.ok %}
+
+  {# ── Planet Header ── #}
+  <section class="pe-planet-header gc-panel">
+    <div class="pe-planet-header-main">
+      <div class="pe-planet-header-left">
+        <div class="pe-planet-title-row">
+          <h3 class="pe-planet-name">{{ ps.name }}</h3>
+          {% if hdr.is_homeworld %}
+            <span class="pe-chip pe-chip-home">{{ T("pe_homeworld", "Heimatwelt") }}</span>
+          {% endif %}
+          <span class="pe-chip pe-chip-status pe-chip-status-{{ status.key or 'stable' }}">
+            {{ T(status.label_key, "Stabil") }}
+          </span>
+        </div>
+        <p class="pe-planet-subline">
+          {{ T("pe_level", "Stufe") }} {{ ps.level }} {{ T("pe_of", "von") }} {{ prog.max_level or 30 }}
+          · {{ T(hdr.planet_class_label_key, "Felsplanet") }}
+          · {{ T(hdr.rarity_label_key, "Planet-DNA") }}
+          {% if ps.specialization.key %}
+            · {{ T('spec_' ~ ps.specialization.key, ps.specialization.key) }}
+          {% else %}
+            · {{ T("pe_no_spec_yet", "Noch keine Spezialisierung") }}
+          {% endif %}
+        </p>
+        <p class="pe-planet-location hint">{{ dash.location.display if dash.location is defined else "" }}</p>
+      </div>
+      <div class="pe-planet-header-right">
+        <div class="pe-planet-score-block">
+          <span class="pe-score-label">{{ T("pe_planet_score", "Planetenwert") }}</span>
+          <span class="pe-score-value">{{ dash.planet_score or 0 }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="pe-planet-xp">
+      <div class="build-progress-label pe-xp-labels">
+        <span>{{ T("pe_xp_to_level", "Entwicklung bis Stufe") }} {{ prog.next_level or (ps.level + 1) }}</span>
+        <span>{{ prog.xp_remaining or 0 }} {{ T("pe_xp_remaining", "Punkte fehlen") }}</span>
+      </div>
+      <div class="build-bar build-bar-large pe-xp-bar" title="{{ T('pe_xp_tooltip', 'Entwicklungspunkte durch Forschung, Events und Planet-Aktivität.') }}">
+        <div class="build-bar-fill gc-progress-smooth pe-xp-bar-fill" style="width: {{ prog.xp_pct or 0 }}%;"></div>
+      </div>
+    </div>
+  </section>
+
+  {# ── Action + Problems row ── #}
+  <div class="pe-guidance-row">
+    <section class="pe-action-card gc-panel" id="pe-section-action">
+      <h4 class="pe-section-label">{{ T("pe_next_step", "Dein nächster Schritt") }}</h4>
+      <h3 class="pe-action-title">{{ T(action.title_key, "Weiterentwickeln") }}</h3>
+      <p class="pe-action-body">
+        {% if action.event_label_key and action.priority == 'event' %}
+          {{ T(action.body_key, "Eine wichtige Entscheidung wartet auf dich.") }}
+          <strong>{{ T(action.event_label_key, "") }}</strong>
+        {% elif action.tech_label_key and action.priority == 'research' %}
+          {{ T(action.body_key, "Neue Forschung ist bereit.") }}
+          <strong>{{ T(action.tech_label_key, "") }}</strong>
+        {% else %}
+          {{ T(action.body_key, "Nutze die Zeit, um deinen Planeten weiterzuentwickeln.") }}
+        {% endif %}
+      </p>
+      <button type="button" class="gc-btn gc-btn-primary pe-scroll-btn" data-scroll="{{ action.cta_target or 'traits' }}">
+        {{ T(action.cta_label_key, "Weiter") }}
+      </button>
+    </section>
+
+    <section class="pe-problems-card gc-panel" id="pe-section-problems">
+      <h4 class="pe-section-label">{{ T("pe_warnings", "Aktive Probleme") }}</h4>
+      {% if dash.warnings %}
+        <ul class="pe-problem-list">
+          {% for w in dash.warnings[:3] %}
+          <li class="pe-problem pe-problem-{{ w.severity }}">
+            <div class="pe-problem-title">{{ T(w.label_key, w.key) }}</div>
+            <div class="pe-problem-body hint">{{ T(w.body_key, "") }}</div>
+            <button type="button" class="pe-link-btn pe-scroll-btn" data-scroll="{{ w.action_target }}">{{ T("pe_view_details", "Details anzeigen") }}</button>
+          </li>
+          {% endfor %}
+        </ul>
+        {% if (dash.warnings|length) > 3 %}
+          <p class="hint">{{ T("pe_more_problems", "+%s weitere Probleme") % (dash.warnings|length - 3) }}</p>
+        {% endif %}
+      {% else %}
+        <p class="pe-empty-inline">{{ T("pe_no_problems", "Keine akuten Probleme — dein Planet ist stabil.") }}</p>
+      {% endif %}
+    </section>
+  </div>
+
+  {# ── Planet DNA (always visible) ── #}
+  <section class="pe-section-block" id="pe-section-traits">
+    <h3 class="pe-block-title">{{ T("pe_dna_section", "Was diesen Planeten einzigartig macht") }}</h3>
+    {% if dash.traits %}
+    <div class="pe-trait-grid">
+      {% for trait in dash.traits %}
+      <article class="pe-trait-card pe-trait-{{ trait.polarity }}" title="{{ T('pe_trait_tooltip', 'Planet-Eigenschaften prägen Forschung, Events und Spezialisierungen.') }}">
+        <header class="pe-trait-header">
+          <span class="pe-trait-badge">{{ T(trait.polarity_label_key, "Eigenschaft") }}</span>
+          <span class="pe-trait-cat hint">{{ T(trait.category_label_key, trait.category) }}</span>
+        </header>
+        <h4 class="pe-trait-name">{{ T(trait.label_key, trait.key) }}</h4>
+        <p class="pe-trait-effect">{{ T(trait.effect_key, "") }}</p>
+        {% if trait.risk_key %}
+        <p class="pe-trait-risk">{{ T(trait.risk_key, "") }}</p>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="pe-empty-state">
+      <p>{{ T("pe_no_traits", "Eigenschaften werden mit steigender Entwicklung sichtbar.") }}</p>
+    </div>
+    {% endif %}
+  </section>
+
+  {# ── Progression + Economy row ── #}
+  <div class="pe-mid-row">
+    <section class="pe-section-block gc-panel" id="pe-section-progression">
+      <h3 class="pe-block-title">{{ T("pe_progression_section", "Entwicklung & Freischaltungen") }}</h3>
+      <p class="pe-progression-summary hint">
+        {{ T("pe_level", "Stufe") }} {{ prog.level }}
+        {% if prog.next_level %}→ {{ prog.next_level }}{% endif %}
+        · {{ prog.xp_pct or 0 }}%
+      </p>
+      {% if prog.milestones %}
+      <ul class="pe-milestone-list">
+        {% for ms in prog.milestones %}
+        <li class="pe-milestone">
+          <span class="pe-milestone-level">{{ T("pe_at_level", "Ab Stufe") }} {{ ms.level }}</span>
+          <span class="pe-milestone-label">{{ T(ms.label_key, "Neue Möglichkeit") }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+    <section class="pe-section-block gc-panel" id="pe-section-economy">
+      <h3 class="pe-block-title">{{ T("pe_economy_section", "Produktion & Versorgung") }}</h3>
+      {% if econ.exports or econ.chains %}
+      <div class="pe-economy-group">
+        <h5>{{ T("pe_exports", "Exporte") }}</h5>
+        <ul class="pe-flow-list">
+          {% for ex in econ.exports %}
+          <li class="pe-flow-item pe-flow-ok">{{ T(ex.label_key, ex.resource_key) }}</li>
+          {% else %}
+          <li class="hint">{{ T("pe_no_exports", "Noch keine Export-Slots aktiv.") }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="pe-economy-group">
+        <h5>{{ T("pe_chains", "Produktionsketten") }}</h5>
+        <ul class="pe-flow-list">
+          {% for ch in econ.chains %}
+          <li class="pe-flow-item pe-flow-ok">{{ T(ch.label_key, ch.chain_key) }}</li>
+          {% else %}
+          <li class="hint">{{ T("pe_no_chains", "Noch keine Ketten aktiv — Forschung schaltet Ketten frei.") }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      {% if econ.deficits %}
+      <div class="pe-economy-group">
+        <h5>{{ T("pe_import_deficit", "Import-Defizit") }}</h5>
+        {% for d in econ.deficits %}
+        <div class="pe-deficit pe-deficit-{{ d.status }}">
+          <span>{{ T(d.label_key, d.resource_key) }}</span>
+          <span>{{ "%.1f"|format(d.received) }} / {{ "%.1f"|format(d.required) }} /h</span>
+          <div class="build-bar build-bar-large">
+            <div class="build-bar-fill gc-progress-smooth" style="width: {{ d.pct }}%;"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% elif not econ.exports and not econ.chains %}
+      <p class="pe-empty-inline">{{ T("pe_economy_empty", "Baue Forschung und Infrastruktur aus, um Produktion zu starten.") }}</p>
+      {% endif %}
+    </section>
+  </div>
+
+  {# ── Specialization ── #}
+  <section class="pe-section-block gc-panel pe-spec-hero" id="pe-section-specialization">
+    <h3 class="pe-block-title">{{ T("pe_spec_section", "Planet-Identität") }}</h3>
+
+    {% if spec_detail.spec_key %}
+      <div class="pe-spec-active-block">
+        <div class="pe-spec-active-head">
+          <div>
+            <h4 class="pe-spec-active-name">{{ T(spec_detail.label_key, spec_detail.spec_key) }}</h4>
+            <p class="pe-spec-tagline">{{ T(spec_detail.tagline_key, "") }}</p>
+          </div>
+          <div class="pe-spec-tier-badge">
+            {{ T("pe_spec_tier", "Spezialisierung Stufe") }} {{ spec_detail.tier }} / {{ spec_detail.max_tier }}
+          </div>
+        </div>
+        <p class="pe-spec-identity">{{ T(spec_detail.identity_key, T("pe_spec_active_desc", "Diese permanente Richtung prägt Produktion, Events und Politik auf diesem Planeten.")) }}</p>
+
+        <div class="pe-spec-roadmap">
+          <h5>{{ T("pe_spec_roadmap", "Entwicklungspfad") }}</h5>
+          {% for step in spec_detail.roadmap or [] %}
+          <div class="pe-spec-roadmap-step {% if step.tier <= spec_detail.tier %}is-unlocked{% elif step.tier == spec_detail.tier + 1 %}is-next{% endif %}">
+            <div class="pe-spec-roadmap-head">
+              <span>{{ T(step.title_key, "Stufe") }} {{ step.tier }}</span>
+              {% if step.tier <= spec_detail.tier %}
+                <span class="pe-spec-roadmap-state">{{ T("pe_spec_tier_active", "Aktiv") }}</span>
+              {% elif step.level_required %}
+                <span class="hint">{{ T("pe_at_level", "Ab Stufe") }} {{ step.level_required }}</span>
+              {% endif %}
+            </div>
+            <p class="hint">{{ T(step.summary_key, "") }}</p>
+            {% if step.unlocks %}
+            <ul class="pe-spec-unlock-list">
+              {% for unlock in step.unlocks %}
+              <li>{{ T(unlock.text_key, unlock.label_key if unlock.label_key is defined else "Neue Mechanik") }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if spec_detail.upgrade %}
+        <div class="pe-spec-upgrade">
+          <p>
+            <strong>{{ T("pe_spec_next_tier", "Nächste Stufe") }}:</strong>
+            {{ T(spec_detail.upgrade.summary_key, "") }}
+          </p>
+          {% if spec_detail.upgrade.can_upgrade %}
+            <button type="button" class="gc-btn gc-btn-primary pe-spec-upgrade-btn" data-planet-id="{{ ps.planet_id }}">
+              {{ T("pe_spec_upgrade_btn", "Spezialisierung auf Stufe %s ausbauen") % spec_detail.upgrade.next_tier }}
+            </button>
+          {% else %}
+            <p class="hint">{{ T("pe_spec_upgrade_need_level", "Benötigt Planet-Stufe %s (aktuell: %s)") % (spec_detail.upgrade.required_level, spec_detail.upgrade.current_level) }}</p>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if spec_detail.event_pool %}
+        <div class="pe-spec-events">
+          <h5>{{ T("pe_spec_events", "Typische Planet-Ereignisse") }}</h5>
+          {% for ev in spec_detail.event_labels or [] %}
+            <span class="pe-tag">{{ T(ev, ev) }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+
+    {% elif ps.level >= 8 %}
+      <p class="pe-spec-intro">{{ T("pe_spec_pick_intro", "Wähle die permanente Zukunft deines Planeten. Diese Entscheidung kann nicht rückgängig gemacht werden.") }}</p>
+      <div class="pe-spec-grid" id="pe-spec-picker" data-planet-id="{{ ps.planet_id }}">
+        {% for spec in spec_options if spec.eligible %}
+        <article class="pe-spec-card">
+          <header class="pe-spec-card-head">
+            <h4>{{ T(spec.label_key, spec.spec_key) }}</h4>
+            {% if spec.synergy_score >= 10 %}
+              <span class="pe-spec-match">{{ T("pe_spec_best_match", "Beste DNA-Passung") }}</span>
+            {% endif %}
+          </header>
+          <p class="pe-spec-tagline">{{ T(spec.tagline_key, "") }}</p>
+          {% if spec.synergy_traits %}
+          <p class="pe-spec-synergy">
+            {{ T("pe_spec_synergy", "Passt zu deiner DNA:") }}
+            {% for tk in spec.synergy_trait_labels %}
+              <span class="pe-tag">{{ T(tk, tk) }}</span>
+            {% endfor %}
+          </p>
+          {% endif %}
+
+          <div class="pe-spec-preview-tiers">
+            {% for step in spec.tier_preview or [] %}
+            <div class="pe-spec-preview-tier">
+              <span class="pe-spec-preview-tier-label">{{ T(step.title_key, "Stufe") }} {{ step.tier }}</span>
+              <span class="hint">{{ T(step.summary_key, "") }}</span>
+            </div>
+            {% endfor %}
+          </div>
+
+          {% if spec.import_preview %}
+          <p class="hint pe-spec-imports">
+            {{ T("pe_spec_needs_import", "Benötigt Import:") }}
+            {% for imp in spec.import_preview %}
+              {{ T(imp.label_key, imp.resource_key) }} ({{ "%.0f"|format(imp.required_per_hour) }}/h)
+            {% endfor %}
+          </p>
+          {% endif %}
+
+          <button type="button" class="gc-btn gc-btn-primary pe-spec-btn" data-spec-key="{{ spec.spec_key }}">
+            {{ T("pe_spec_pick_btn", "Diesen Planeten so formen") }}
+          </button>
+        </article>
+        {% else %}
+        <p class="pe-empty-inline">{{ T("pe_spec_none_eligible", "Keine Spezialisierung passt zur aktuellen DNA. Entwickle den Planeten weiter oder kolonisiere eine passende Welt.") }}</p>
+        {% endfor %}
+      </div>
+
+      {% set locked_specs = spec_options|selectattr('eligible', 'equalto', false)|list %}
+      {% if locked_specs %}
+      <details class="pe-spec-locked-details">
+        <summary>{{ T("pe_spec_locked_list", "Weitere Spezialisierungen (gesperrt)") }} ({{ locked_specs|length }})</summary>
+        <ul class="pe-spec-locked-list">
+          {% for spec in locked_specs %}
+          <li>
+            <strong>{{ T(spec.label_key, spec.spec_key) }}</strong>
+            <span class="hint">{{ T(spec.locked_reason_key, "Voraussetzungen fehlen") }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+
+    {% else %}
+      <div class="pe-empty-state">
+        <p>{{ T("pe_spec_locked", "Ab Stufe 8 kannst du die Identität deines Planeten festlegen.") }}</p>
+        {% if ps.level < 8 %}
+        <p class="hint">{{ T("pe_spec_levels_remaining", "Noch %(remaining)s Stufen bis zur Freischaltung.") % {"remaining": (8 - ps.level)} }}</p>
+        {% endif %}
+      </div>
+    {% endif %}
+  </section>
+
+  {# ── Secondary navigation ── #}
+  <nav class="pe-secondary-nav" role="tablist">
+    <button type="button" class="pe-sec-tab is-active" data-panel="research">{{ T("pe_tab_research", "Forschung") }}</button>
+    <button type="button" class="pe-sec-tab" data-panel="events">
+      {{ T("pe_tab_events", "Ereignisse") }}
+      {% if dash.open_events_count %}<span class="pe-tab-badge">{{ dash.open_events_count }}</span>{% endif %}
+    </button>
+    <button type="button" class="pe-sec-tab" data-panel="policies">{{ T("pe_tab_policies", "Politik") }}</button>
+    <button type="button" class="pe-sec-tab" data-panel="history">{{ T("pe_tab_history", "Chronik") }}</button>
+  </nav>
+
+  <div class="pe-secondary-panels">
+    {# Research #}
+    <div class="pe-sec-panel is-active" data-panel="research" id="pe-section-research">
+      {% if rdx.active %}
+      <section class="pe-research-zone">
+        <h4>{{ T("pe_research_running", "Läuft gerade") }}</h4>
+        <div class="research-queue-list">
+          {% for job in rdx.active %}
+            {{ pe_research_job(job, loop.first) }}
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+      {% if rdx.recommended %}
+      <section class="pe-research-zone">
+        <h4>{{ T("pe_research_recommended", "Empfohlen für diesen Planeten") }}</h4>
+        {% for tech in rdx.recommended %}
+        <article class="pe-research-card">
+          <h5>{{ T(tech.label_key, tech.tech_key) }}</h5>
+          {% if tech.unlock_key %}
+          <p class="pe-research-unlock"><strong>{{ T("pe_research_unlocks", "Schaltet frei:") }}</strong> {{ T(tech.unlock_key, "") }}</p>
+          {% endif %}
+          {% if tech.choice_group and not tech.choice_made and tech.choice_options %}
+            <p class="hint">{{ T("pe_research_choice_hint", "Permanente Richtung wählen:") }}</p>
+            <div class="pe-research-actions">
+              {% for opt in tech.choice_options %}
+                <button type="button" class="gc-btn gc-btn-sm pe-choice-btn"
+                        data-planet-id="{{ ps.planet_id }}"
+                        data-choice-group="{{ tech.choice_group }}"
+                        data-choice-key="{{ opt }}">{{ T('pe_choice_' ~ opt, opt) }}</button>
+              {% endfor %}
+            </div>
+          {% elif rdx.queue_has_room %}
+            <button type="button" class="gc-btn gc-btn-primary pe-research-btn"
+                    data-planet-id="{{ ps.planet_id }}"
+                    data-tech-key="{{ tech.tech_key }}">{{ T("research_start", "Forschung starten") }}</button>
+          {% else %}
+            <p class="hint">{{ T("pe_research_queue_full", "Forschungs-Warteschlange ist voll.") }}</p>
+          {% endif %}
+        </article>
+        {% endfor %}
+      </section>
+      {% endif %}
+
+      {% if rdx.locked %}
+      <details class="pe-research-later">
+        <summary>{{ T("pe_research_later", "Später verfügbar") }} ({{ rdx.locked|length }})</summary>
+        {% for tech in rdx.locked %}
+        <article class="pe-research-card pe-research-locked">
+          <h5>{{ T(tech.label_key, tech.tech_key) }}</h5>
+          {% if tech.unlock_key %}<p class="hint">{{ T(tech.unlock_key, "") }}</p>{% endif %}
+          <ul class="pe-req-list">
+            {% for req in tech.missing_human %}
+            <li>{{ T(req.label_key, req.fallback) }}</li>
+            {% endfor %}
+          </ul>
+        </article>
+        {% endfor %}
+      </details>
+      {% endif %}
+    </div>
+
+    {# Events #}
+    <div class="pe-sec-panel" data-panel="events" hidden id="pe-section-events">
+      {% if ps.active_event %}
+      <article class="pe-event-decision gc-panel">
+        <span class="pe-event-urgent">{{ T("pe_event_urgent", "Dringend") }}</span>
+        <h4>{{ T(ps.active_event.label_key, ps.active_event.event_key) }}</h4>
+        <p>{{ T("pe_event_decision_hint", "Deine Entscheidung verändert Produktion, Stabilität oder zukünftige Events.") }}</p>
+        <div class="pe-event-actions" id="pe-event-choices"
+             data-event-id="{{ ps.active_event.id }}"
+             data-planet-id="{{ ps.planet_id }}">
+          {% for c in ps.active_event.choices or [] %}
+            <button type="button" class="gc-btn gc-btn-secondary pe-event-choice-btn"
+                    data-choice-key="{{ c.key }}">{{ T('pe_event_choice_' ~ c.key, c.key) }}</button>
+          {% endfor %}
+        </div>
+      </article>
+      {% endif %}
+      <ul class="pe-events-feed">
+        {% for ev in dash.events_feed or [] %}
+        <li class="pe-event-item">
+          <span class="pe-event-name">{{ T(ev.label_key, ev.event_key) }}</span>
+          <span class="pe-event-state">{{ T(ev.state_label_key, ev.state) }}</span>
+        </li>
+        {% else %}
+        <li class="pe-empty-inline">{{ T("pe_no_events", "Derzeit ruhige Phase — nutze die Zeit für Aufbau.") }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    {# Policies #}
+    <div class="pe-sec-panel" data-panel="policies" hidden id="pe-section-policies">
+      <p class="hint">
+        {{ T("pe_policies_hint", "Politik-Slots sind mechanische Regeln — keine Kosmetik.") }}
+        · {{ (dash.policies_active or [])|length }}/{{ dash.policy_slots_max or 1 }} {{ T("pe_policy_slots_used", "belegt") }}
+      </p>
+      {% if policy_ux.archetype_key %}
+      <p class="pe-policy-archetype hint">
+        {{ T("pe_policy_archetype", "Kultur-Archetyp:") }}
+        <strong>{{ T(policy_ux.archetype_label_key, policy_ux.archetype_key) }}</strong>
+      </p>
+      {% endif %}
+
+      {% if policy_ux.slots %}
+        {% for slot in policy_ux.slots %}
+        <article class="pe-policy-slot-card gc-panel">
+          <header class="pe-policy-slot-head">
+            <h4>{{ T("pe_policy_slot", "Slot") }} {{ slot.slot }}</h4>
+            {% if slot.active %}
+              <span class="pe-tag">{{ T(slot.active.label_key, slot.active.policy_key) }}</span>
+            {% else %}
+              <span class="hint">{{ T("pe_policy_empty", "Frei") }}</span>
+            {% endif %}
+          </header>
+
+          {% if slot.on_cooldown %}
+            <p class="hint">{{ T("pe_policy_cooldown", "Slot im Abkling — Wechsel bald wieder möglich.") }}</p>
+          {% else %}
+            <div class="pe-policy-options">
+              {% for opt in slot.options if opt.eligible %}
+              <button type="button"
+                      class="gc-btn gc-btn-sm pe-policy-btn {% if slot.active and slot.active.policy_key == opt.policy_key %}gc-btn-primary{% else %}gc-btn-secondary{% endif %}"
+                      data-planet-id="{{ ps.planet_id }}"
+                      data-slot="{{ slot.slot }}"
+                      data-policy-key="{{ opt.policy_key }}"
+                      {% if slot.active and slot.active.policy_key == opt.policy_key %}disabled{% endif %}>
+                {{ T(opt.label_key, opt.policy_key) }}
+              </button>
+              {% else %}
+              <p class="hint">{{ T("pe_policy_none_eligible", "Keine Politik passt zur aktuellen Kultur in diesem Slot.") }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </article>
+        {% endfor %}
+      {% elif (dash.policy_slots_max or 0) < 1 %}
+        <p class="pe-empty-inline">{{ T("pe_policy_locked_level", "Ab Stufe 5 schaltet der erste Politik-Slot frei.") }}</p>
+      {% else %}
+        <ul class="pe-policy-list">
+          {% for pol in dash.policies_active or [] %}
+          <li class="pe-policy-item">
+            <span class="pe-policy-slot">{{ T("pe_policy_slot", "Slot") }} {{ pol.slot }}</span>
+            <span>{{ T(pol.label_key, pol.policy_key) }}</span>
+          </li>
+          {% else %}
+          <li class="pe-empty-inline">{{ T("pe_no_policies", "Noch keine Politik aktiv.") }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+
+    {# History #}
+    <div class="pe-sec-panel" data-panel="history" hidden id="pe-section-history">
+      <ul class="pe-history-list">
+        {% for item in history_items %}
+        <li class="pe-history-item">
+          <div class="pe-history-title">{{ T(item.title_key, item.event_type) }}</div>
+          {% if item.body_key %}
+          <div class="pe-history-body hint">{{ T(item.body_key, "") }}</div>
+          {% endif %}
+        </li>
+        {% else %}
+        <li class="pe-empty-inline">{{ T("pe_no_history", "Die Geschichte deines Planeten beginnt mit deinen Entscheidungen.") }}</li>
+        {% endfor %}
+      </ul>
+      {% if ps.legacy_tags %}
+      <div class="pe-legacy-block">
+        <h4>{{ T("pe_legacy", "Legacy deines Planeten") }}</h4>
+        {% for tag in ps.legacy_tags %}
+          <span class="pe-tag pe-tag-legacy">{{ T('pe_legacy_' ~ tag, tag) }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% else %}
+  <section class="pe-empty-state gc-panel">
+    <h3>{{ T("pe_load_error_title", "Planet-Daten nicht verfügbar") }}</h3>
+    <p class="hint">{{ T("pe_load_error_body", "Die Evolution-Daten konnten nicht geladen werden. Bitte Seite neu laden oder Support kontaktieren.") }}</p>
+    {% if ps.error %}
+      <p class="hint"><code>{{ ps.error }}</code></p>
+    {% endif %}
+    <button type="button" class="gc-btn gc-btn-primary" onclick="window.location.reload()">
+      {{ T("pe_reload", "Seite neu laden") }}
+    </button>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}{% endblock %}

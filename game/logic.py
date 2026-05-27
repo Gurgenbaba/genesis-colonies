@@ -83,6 +83,17 @@ def refresh_player_live_state(
             raise RuntimeError(f"player {uid} not found")
 
         planet = get_homeworld(player_id=uid, conn=conn)
+        try:
+            from .planet_evolution.repository import evolution_schema_ready, get_active_planet_id, get_planet_row
+
+            if evolution_schema_ready(conn):
+                active_id = get_active_planet_id(uid, conn=conn)
+                active = get_planet_row(active_id, conn=conn)
+                if active:
+                    planet = active
+        except Exception:
+            pass
+
         planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
             planet,
             conn=conn,

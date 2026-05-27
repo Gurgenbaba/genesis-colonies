@@ -312,6 +312,7 @@
     _lastResearchQueueSignature = "";
     _numAnim.forEach((st) => { if (st?.raf) cancelAnimationFrame(st.raf); });
     _numAnim.clear();
+    if (typeof rankingAbortInFlight === "function") rankingAbortInFlight();
     GC.currentPage = null;
     lc.initialized = false;
   };
@@ -441,11 +442,36 @@
     const path = (window.location.pathname || "").replace(/\/$/, "") || "/";
     if (path.endsWith("/buildings")) return "buildings";
     if (path.endsWith("/research")) return "research";
+    if (path.endsWith("/planet-evolution")) return "planet_evolution";
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
+    if (path.endsWith("/techtree")) return "techtree";
     if (path.endsWith("/admin")) return "admin";
     return "other";
   };
+
+  GC.getServerNow = getApproxServerNow;
+
+  GC.reloadCurrentPage = function reloadCurrentPage() {
+    const target = `${window.location.pathname || "/"}${window.location.search || ""}`;
+    if (typeof GC.navigateTo === "function") {
+      return GC.navigateTo(target, { push: false });
+    }
+    window.location.reload();
+    return Promise.resolve();
+  };
+
+  function hydratePageFromLastState() {
+    if (!GC.lastState || GC.lastState.ok !== true) return false;
+    try {
+      applyGameStateData(GC.lastState, "page_hydrate");
+      GC.startProgressTicker();
+      return true;
+    } catch (err) {
+      console.error("[GC] page hydrate failed", err);
+      return false;
+    }
+  }
 
   let _progressTickerActive = false;
 
@@ -561,6 +587,10 @@
     }
 
     initFlashAutohide();
+
+    if (shouldRunGameLoop()) {
+      hydratePageFromLastState();
+    }
 
     if (!shouldRunGameLoop()) {
       console.debug("[GC] game loop skipped (auth/simple page)");
@@ -1937,10 +1967,263 @@
 
   function initResearch() {}
 
+  function syncPlanetEvolutionResearchTicker() {
+    const active = document.querySelector(".planet-evolution-page .pe-planet-research-active");
+    if (!active) return;
+
+    const finish = Number(active.dataset.finishTime || 0);
+    const total = Math.max(1, Number(active.dataset.total || 1));
+    const fill = active.querySelector(".pe-planet-research-fill");
+    const etaEl = active.querySelector("[data-pe-research-eta]");
+    const pctEl = active.querySelector("[data-pe-research-pct]");
+
+    const formatEta = (sec) => {
+      const s = Math.max(0, Math.ceil(sec));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      return h > 0 ? `~${h}h ${m}m` : `~${m}m`;
+    };
+
+    const tick = () => {
+      const now = getApproxServerNow() || Math.floor(Date.now() / 1000);
+      const remaining = Math.max(0, finish - now);
+      const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
+      if (fill) {
+        fill.style.width = `${pct}%`;
+        fill.setAttribute("aria-valuenow", String(Math.round(pct)));
+      }
+      if (etaEl) etaEl.textContent = formatEta(remaining);
+      if (pctEl) pctEl.textContent = `${Math.round(pct)}%`;
+    };
+
+    tick();
+    GC.setSafeInterval(tick, 1000);
+  }
+
+  function bindPlanetEvolutionOnce() {
+    if (GC._peActionsBound) return;
+    GC._peActionsBound = true;
+
+    const tt = (key, fallback) => t(key, fallback);
+    const reasonText = (reason) => {
+      if (!reason) return tt("pe_error_generic", "Aktion fehlgeschlagen.");
+      return tt(`pe_reason_${reason}`, reason);
+    };
+
+    const postAction = async (url, body) => {
+      if (typeof GC.fetchGameAction === "function") {
+        return GC.fetchGameAction(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+          body: JSON.stringify(body || {}),
+        });
+      }
+      return GC.fetchJSON(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+        body: JSON.stringify(body || {}),
+      });
+    };
+
+    const scrollTargets = {
+      events: "pe-section-events",
+      research: "pe-section-research",
+      specialization: "pe-section-specialization",
+      economy: "pe-section-economy",
+      progression: "pe-section-progression",
+      traits: "pe-section-traits",
+      policies: "pe-section-policies",
+      action: "pe-section-action",
+    };
+
+    document.addEventListener("click", async (e) => {
+      const root = document.querySelector(".planet-evolution-page");
+      if (!root) return;
+
+      const scrollBtn = e.target.closest(".pe-scroll-btn");
+      if (scrollBtn && root.contains(scrollBtn)) {
+        const target = scrollBtn.dataset.scroll;
+        const panelMap = { events: "events", research: "research", policies: "policies", history: "history" };
+        if (panelMap[target]) {
+          const tab = root.querySelector(`.pe-sec-tab[data-panel="${panelMap[target]}"]`);
+          if (tab) tab.click();
+        }
+        const id = scrollTargets[target] || `pe-section-${target}`;
+        const el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+
+      const tab = e.target.closest(".pe-sec-tab");
+      if (tab && root.contains(tab)) {
+        const name = tab.dataset.panel;
+        root.querySelectorAll(".pe-sec-tab").forEach((tEl) => tEl.classList.toggle("is-active", tEl === tab));
+        root.querySelectorAll(".pe-sec-panel").forEach((panel) => {
+          const active = panel.dataset.panel === name;
+          panel.classList.toggle("is-active", active);
+          panel.hidden = !active;
+        });
+        return;
+      }
+
+      const planetBtn = e.target.closest(".pe-planet-btn");
+      if (planetBtn && root.contains(planetBtn)) {
+        planetBtn.disabled = true;
+        const planetId = parseInt(planetBtn.dataset.planetId || "0", 10);
+        const res = await postAction("/api/planets/active", { planet_id: planetId });
+        if (res?.ok) await GC.reloadCurrentPage();
+        else {
+          planetBtn.disabled = false;
+          alert(reasonText(res?.reason));
+        }
+        return;
+      }
+
+      const researchBtn = e.target.closest(".pe-research-btn");
+      if (researchBtn && root.contains(researchBtn)) {
+        researchBtn.disabled = true;
+        const planetId = parseInt(researchBtn.dataset.planetId || "0", 10);
+        const techKey = researchBtn.dataset.techKey || "";
+        const requestId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+        const res = await postAction(`/api/planets/${planetId}/research/start`, { tech_key: techKey, request_id: requestId });
+        if (res?.ok) await GC.reloadCurrentPage();
+        else {
+          researchBtn.disabled = false;
+          alert(reasonText(res?.reason));
+        }
+        return;
+      }
+
+      const choiceBtn = e.target.closest(".pe-choice-btn");
+      if (choiceBtn && root.contains(choiceBtn)) {
+        if (!confirm(tt("pe_confirm_choice", "Diese Wahl ist permanent."))) return;
+        choiceBtn.disabled = true;
+        const planetId = parseInt(choiceBtn.dataset.planetId || "0", 10);
+        const res = await postAction(`/api/planets/${planetId}/research/choose`, {
+          choice_group: choiceBtn.dataset.choiceGroup,
+          choice_key: choiceBtn.dataset.choiceKey,
+        });
+        if (res?.ok) await GC.reloadCurrentPage();
+        else {
+          choiceBtn.disabled = false;
+          alert(reasonText(res?.reason));
+        }
+        return;
+      }
+
+      const specBtn = e.target.closest(".pe-spec-btn");
+      if (specBtn && root.contains(specBtn)) {
+        if (!confirm(tt("pe_confirm_spec", "Die Spezialisierung ist permanent."))) return;
+        const picker = root.querySelector("#pe-spec-picker");
+        if (!picker) return;
+        specBtn.disabled = true;
+        const planetId = parseInt(picker.dataset.planetId || "0", 10);
+        const res = await postAction(`/api/planets/${planetId}/specialization/pick`, { spec_key: specBtn.dataset.specKey });
+        if (res?.ok) await GC.reloadCurrentPage();
+        else {
+          specBtn.disabled = false;
+          alert(reasonText(res?.reason));
+        }
+        return;
+      }
+
+      const specUpgradeBtn = e.target.closest(".pe-spec-upgrade-btn");
+      if (specUpgradeBtn && root.contains(specUpgradeBtn)) {
+        specUpgradeBtn.disabled = true;
+        const planetId = parseInt(specUpgradeBtn.dataset.planetId || "0", 10);
+        const res = await postAction(`/api/planets/${planetId}/specialization/upgrade`, {});
+        if (res?.ok) await GC.reloadCurrentPage();
+        else {
+          specUpgradeBtn.disabled = false;
+          alert(reasonText(res?.reason));
+        }
+        return;
+      }
+
+      const policyBtn = e.target.closest(".pe-policy-btn");
+      if (policyBtn && root.contains(policyBtn)) {
+        if (!confirm(tt("pe_confirm_policy", "Politik in diesem Slot aktivieren?"))) return;
+        policyBtn.disabled = true;
+        const planetId = parseInt(policyBtn.dataset.planetId || "0", 10);
+        const slot = parseInt(policyBtn.dataset.slot || "0", 10);
+        const res = await postAction(`/api/planets/${planetId}/policies/activate`, {
+          slot,
+          policy_key: policyBtn.dataset.policyKey,
+        });
+        if (res?.ok) await GC.reloadCurrentPage();
+        else {
+          policyBtn.disabled = false;
+          alert(reasonText(res?.reason));
+        }
+        return;
+      }
+
+      const eventChoiceBtn = e.target.closest(".pe-event-choice-btn");
+      const eventRoot = root.querySelector("#pe-event-choices");
+      if (eventChoiceBtn && eventRoot && root.contains(eventChoiceBtn)) {
+        eventChoiceBtn.disabled = true;
+        const planetId = parseInt(eventRoot.dataset.planetId || "0", 10);
+        const eventId = parseInt(eventRoot.dataset.eventId || "0", 10);
+        const res = await postAction(`/api/planets/${planetId}/events/resolve`, {
+          event_id: eventId,
+          choice_key: eventChoiceBtn.dataset.choiceKey,
+        });
+        if (res?.ok) await GC.reloadCurrentPage();
+        else {
+          eventChoiceBtn.disabled = false;
+          alert(reasonText(res?.reason));
+        }
+        return;
+      }
+
+      const colonizeBtn = e.target.closest("#pe-colonize-btn");
+      if (colonizeBtn && root.contains(colonizeBtn)) {
+        const name = prompt(tt("pe_colonize_prompt", "Name der neuen Kolonie:"));
+        if (!name) return;
+        colonizeBtn.disabled = true;
+        const res = await postAction("/api/planets/colonize", {
+          name,
+          galaxy: 1,
+          system: Math.floor(Math.random() * 900) + 100,
+          position: Math.floor(Math.random() * 15) + 1,
+        });
+        if (res?.ok) await GC.reloadCurrentPage();
+        else {
+          colonizeBtn.disabled = false;
+          alert(reasonText(res?.reason));
+        }
+      }
+    });
+  }
+
+  function initPlanetEvolution() {
+    if (!document.querySelector(".planet-evolution-page")) return;
+    bindPlanetEvolutionOnce();
+    syncPlanetEvolutionResearchTicker();
+  }
+
   // =========================
   // Ranking page (PJAX-safe singleton)
   // =========================
-  const _rankingLifecycle = { abort: null, loadId: 0 };
+  const _rankingLifecycle = { abort: null, loadId: 0, payload: null, tab: "total" };
+
+  function rankingAbortInFlight() {
+    if (_rankingLifecycle.abort) {
+      try {
+        _rankingLifecycle.abort.abort();
+      } catch (_) {}
+      _rankingLifecycle.abort = null;
+    }
+    _rankingLifecycle.loadId += 1;
+  }
+
+  const RANKING_TABS = [
+    { id: "total", scoreKey: "total_score", rankKey: "rank_total", labelKey: "ranking_tab_total", fallback: "Total" },
+    { id: "building", scoreKey: "building_score", rankKey: "rank_building", labelKey: "ranking_tab_buildings", fallback: "Buildings" },
+    { id: "research", scoreKey: "research_score", rankKey: "rank_research", labelKey: "ranking_tab_research", fallback: "Research" },
+    { id: "fleet", scoreKey: "fleet_score", rankKey: null, labelKey: "ranking_tab_fleet", fallback: "Fleet" },
+    { id: "defense", scoreKey: "defense_score", rankKey: null, labelKey: "ranking_tab_defense", fallback: "Defense" },
+  ];
 
   function rankingT(key, fallback) {
     const loc = window.GC_LOCALE || {};
@@ -1957,111 +2240,271 @@
       .replace(/"/g, "&quot;");
   }
 
-  function rankingPlayerNameSpan(playerId, name) {
-    const pid = Number(playerId) || 0;
-    const label = rankingEscapeHtml(name || "Commander");
-    if (pid <= 0) return label;
+  function rankingScoreValue(row, tabId) {
+    const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
+    return Number(row[tab.scoreKey]) || 0;
+  }
+
+  function rankingVisibleTabs(payload) {
+    const cur = payload?.current_player || {};
+    const top = Array.isArray(payload?.top_players) ? payload.top_players : [];
+    return RANKING_TABS.filter((tab) => {
+      if (tab.id === "total" || tab.id === "building" || tab.id === "research") return true;
+      const curScore = Number(cur[tab.scoreKey]) || 0;
+      const anyScore = top.some((row) => (Number(row[tab.scoreKey]) || 0) > 0);
+      return curScore > 0 || anyScore;
+    });
+  }
+
+  function rankingSortedRows(payload, tabId) {
+    const top = Array.isArray(payload?.top_players) ? [...payload.top_players] : [];
+    const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
+    top.sort((a, b) => {
+      const diff = rankingScoreValue(b, tabId) - rankingScoreValue(a, tabId);
+      if (diff !== 0) return diff;
+      return (Number(a.player_id) || 0) - (Number(b.player_id) || 0);
+    });
+    return top.map((row, idx) => {
+      const displayRank = tab.rankKey && row[tab.rankKey] != null ? Number(row[tab.rankKey]) : idx + 1;
+      return { ...row, display_rank: displayRank, display_score: rankingScoreValue(row, tabId) };
+    });
+  }
+
+  function rankingCurrentRank(payload, tabId) {
+    const cur = payload?.current_player || {};
+    const ranks = cur.ranks || {};
+    if (ranks[tabId] != null) return Number(ranks[tabId]);
+    if (tabId === "total" && cur.rank != null) return Number(cur.rank);
+    return null;
+  }
+
+  function rankingCurrentScore(payload, tabId) {
+    const cur = payload?.current_player || {};
+    const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
+    return Number(cur[tab.scoreKey]) || 0;
+  }
+
+  function rankingAvatarInner(row) {
+    const initial = rankingEscapeHtml(row.avatar_initial || "?");
+    const theme = rankingEscapeHtml(row.theme || "cyan");
+    if (row.show_avatar && row.avatar_url) {
+      const src = rankingEscapeHtml(row.avatar_url);
+      return `<img class="gc-ranking-avatar-img" src="${src}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`;
+    }
+    return `<span class="gc-ranking-avatar-fallback gc-ranking-avatar-fallback--${theme}" aria-hidden="true">${initial}</span>`;
+  }
+
+  function rankingBadgesHtml(row) {
+    const badges = Array.isArray(row.badges) ? row.badges : [];
+    if (!badges.length) return "";
+    const chips = badges
+      .map((badge) => {
+        const label = rankingEscapeHtml(rankingT(badge.name_key, badge.icon || "★"));
+        const icon = rankingEscapeHtml(badge.icon || "★");
+        const rarity = rankingEscapeHtml(badge.rarity || "common");
+        return (
+          `<span class="gc-ranking-badge gc-ranking-badge--${rarity}" title="${label}" aria-label="${label}">` +
+          `<span class="gc-ranking-badge-icon" aria-hidden="true">${icon}</span>` +
+          `</span>`
+        );
+      })
+      .join("");
+    return `<div class="gc-ranking-badges" aria-label="${rankingEscapeHtml(rankingT("ranking_badges", "Badges"))}">${chips}</div>`;
+  }
+
+  function rankingAllianceHtml(row) {
+    const noAlliance = rankingEscapeHtml(rankingT("ranking_no_alliance", "No alliance"));
+    if (row.alliance_id && (row.alliance_tag || row.alliance_name)) {
+      const tag = row.alliance_tag ? `[${rankingEscapeHtml(row.alliance_tag)}]` : "";
+      const name = row.alliance_name ? ` ${rankingEscapeHtml(row.alliance_name)}` : "";
+      const label = `${tag}${name}`.trim();
+      return `<span class="gc-ranking-alliance" title="${label}">${label}</span>`;
+    }
+    return `<span class="gc-ranking-alliance gc-ranking-alliance--none">${noAlliance}</span>`;
+  }
+
+  function rankingTopClass(rank) {
+    const r = Number(rank) || 0;
+    if (r >= 1 && r <= 3) return ` gc-ranking-row--top gc-ranking-row--top-${r}`;
+    return "";
+  }
+
+  function rankingYouPill(isMe) {
+    if (!isMe) return "";
+    const you = rankingEscapeHtml(rankingT("ranking_you", "You"));
+    return `<span class="you-pill" aria-label="${you}">${you}</span>`;
+  }
+
+  function rankingPlayerCell(row, isMe) {
+    const pid = Number(row.player_id) || 0;
+    const openLabel = rankingEscapeHtml(rankingT("ranking_open_playercard", "Open player card"));
+    const name = rankingEscapeHtml(row.commander_name || "Commander");
+    const title = row.title
+      ? `<span class="gc-ranking-player-title">${rankingEscapeHtml(row.title)}</span>`
+      : "";
+
+    if (pid <= 0) {
+      return (
+        `<div class="gc-ranking-player">` +
+        `<span class="gc-ranking-avatar">${rankingAvatarInner(row)}</span>` +
+        `<div class="gc-ranking-player-meta"><div class="gc-ranking-player-name-row">${name}</div>${title}${rankingBadgesHtml(row)}</div>` +
+        `</div>`
+      );
+    }
+
     return (
-      `<span class="gc-player-name" data-player-id="${pid}" data-player-name="${label}" ` +
-      `data-player-card="1" role="button" tabindex="0">${label}</span>`
+      `<button type="button" class="gc-ranking-player gc-ranking-player-trigger" ` +
+      `data-player-id="${pid}" data-player-card="1" aria-label="${openLabel}: ${name}">` +
+      `<span class="gc-ranking-avatar">${rankingAvatarInner(row)}</span>` +
+      `<div class="gc-ranking-player-meta">` +
+      `<div class="gc-ranking-player-name-row">${rankingYouPill(isMe)}<span class="gc-ranking-player-name">${name}</span></div>` +
+      title +
+      rankingBadgesHtml(row) +
+      `</div>` +
+      `</button>`
     );
   }
 
-  function rankingStatBlock(labelKey, labelFallback, value) {
-    return (
-      `<div class="ranking-stat">` +
-      `<div class="ranking-stat-label">${rankingEscapeHtml(rankingT(labelKey, labelFallback))}</div>` +
-      `<div class="ranking-stat-value">${fmtNumber(value)}</div>` +
-      `</div>`
-    );
+  function rankingRenderMyStrip(payload, tabId) {
+    const stripEl = document.getElementById("ranking-my-strip");
+    if (!stripEl || !payload?.ok) {
+      if (stripEl) stripEl.innerHTML = "";
+      return;
+    }
+    const rank = rankingCurrentRank(payload, tabId);
+    const totalPlayers = Number(payload.current_player?.total_players) || 0;
+    const score = rankingCurrentScore(payload, tabId);
+    const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
+    const rankText = rank ? `#${fmtNumber(rank)} / ${fmtNumber(totalPlayers)}` : "—";
+    stripEl.innerHTML =
+      `<div class="gc-ranking-my-rank">` +
+      `<span class="gc-ranking-my-label">${rankingEscapeHtml(rankingT("ranking_my_rank", "Your rank"))}</span>` +
+      `<span class="gc-ranking-my-value">${rankText}</span>` +
+      `</div>` +
+      `<div class="gc-ranking-my-score">` +
+      `<span class="gc-ranking-my-label">${rankingEscapeHtml(rankingT(tab.labelKey, tab.fallback))}</span>` +
+      `<span class="gc-ranking-my-value gc-mono">${fmtNumber(score)}</span>` +
+      `</div>`;
   }
 
-  function renderRankingPayload(payload) {
-    const statusEl = document.getElementById("ranking-status-content");
+  function rankingRenderTabs(payload, tabId) {
+    const tabsEl = document.getElementById("ranking-tabs");
+    if (!tabsEl) return;
+    const tabs = rankingVisibleTabs(payload);
+    if (!tabs.some((t) => t.id === tabId)) {
+      _rankingLifecycle.tab = tabs[0]?.id || "total";
+    }
+    const activeTab = _rankingLifecycle.tab;
+    tabsEl.innerHTML = tabs
+      .map((tab) => {
+        const label = rankingEscapeHtml(rankingT(tab.labelKey, tab.fallback));
+        const active = tab.id === activeTab ? " active" : "";
+        return (
+          `<button type="button" class="gc-btn gc-btn-outline tab-btn${active}" ` +
+          `data-ranking-tab="${tab.id}" role="tab" aria-selected="${tab.id === activeTab ? "true" : "false"}">` +
+          label +
+          `</button>`
+        );
+      })
+      .join("");
+  }
+
+  function rankingRenderList(payload, tabId) {
     const tableEl = document.getElementById("ranking-table-content");
-    if (!statusEl || !tableEl) return;
+    if (!tableEl) return;
 
     if (!payload || !payload.ok) {
       const errMsg = rankingT("ranking_error", "Could not load ranking.");
-      const errHtml = `<div class="ranking-state ranking-state-error">${errMsg}</div>`;
-      statusEl.innerHTML = errHtml;
-      tableEl.innerHTML = errHtml;
+      tableEl.innerHTML = `<div class="ranking-state ranking-state-error">${rankingEscapeHtml(errMsg)}</div>`;
       return;
     }
 
-    const cur = payload.current_player || {};
-    const top = Array.isArray(payload.top_players) ? payload.top_players : [];
-    const showFleet = (Number(cur.fleet_score) || 0) > 0 || top.some((r) => (Number(r.fleet_score) || 0) > 0);
-    const showDefense = (Number(cur.defense_score) || 0) > 0 || top.some((r) => (Number(r.defense_score) || 0) > 0);
+    const rows = rankingSortedRows(payload, tabId);
+    const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
+    const scoreLabel = rankingEscapeHtml(rankingT(tab.labelKey, tab.fallback));
 
-    const rankVal = cur.rank
-      ? `#${fmtNumber(cur.rank)}<span class="ranking-stat-sub">/ ${fmtNumber(cur.total_players || 0)}</span>`
-      : "—";
-
-    let statusGrid =
-      `<div class="ranking-stat">` +
-      `<div class="ranking-stat-label">${rankingEscapeHtml(rankingT("ranking_label_rank", "Rank"))}</div>` +
-      `<div class="ranking-stat-value">${rankVal}</div>` +
-      `</div>` +
-      rankingStatBlock("ranking_label_score_total", "Total Score", cur.total_score) +
-      rankingStatBlock("ranking_label_score_buildings", "Buildings", cur.building_score) +
-      rankingStatBlock("ranking_label_score_research", "Research", cur.research_score);
-
-    if (showFleet) {
-      statusGrid += rankingStatBlock("ranking_label_score_fleet", "Fleet", cur.fleet_score);
-    }
-    if (showDefense) {
-      statusGrid += rankingStatBlock("ranking_label_score_defense", "Defense", cur.defense_score);
-    }
-
-    statusEl.innerHTML = `<div class="ranking-stats-grid">${statusGrid}</div>`;
-
-    if (!top.length) {
+    if (!rows.length) {
       tableEl.innerHTML = `<p class="ranking-empty">${rankingEscapeHtml(rankingT("ranking_empty", "No data yet."))}</p>`;
       return;
     }
 
-    let head =
-      `<th class="col-rank">#</th>` +
-      `<th class="col-name">${rankingEscapeHtml(rankingT("ranking_col_commander", "Commander"))}</th>` +
-      `<th class="col-score">${rankingEscapeHtml(rankingT("ranking_col_total", "Total"))}</th>` +
-      `<th class="col-score">${rankingEscapeHtml(rankingT("ranking_col_buildings", "Buildings"))}</th>` +
-      `<th class="col-score">${rankingEscapeHtml(rankingT("ranking_col_research", "Research"))}</th>`;
-    if (showFleet) {
-      head += `<th class="col-score">${rankingEscapeHtml(rankingT("ranking_col_fleet", "Fleet"))}</th>`;
-    }
-    if (showDefense) {
-      head += `<th class="col-score">${rankingEscapeHtml(rankingT("ranking_col_defense", "Defense"))}</th>`;
-    }
-
-    const rows = top
+    const desktopRows = rows
       .map((row) => {
         const isMe = !!row.is_current_player;
-        const youPill = isMe
-          ? `<span class="you-pill" aria-label="${rankingEscapeHtml(rankingT("ranking_you", "You"))}">${rankingEscapeHtml(rankingT("ranking_you", "You"))}</span>`
-          : "";
-        let cells =
-          `<td class="col-rank">#${fmtNumber(row.rank)}</td>` +
-          `<td class="col-name">${youPill}${rankingPlayerNameSpan(row.player_id, row.commander_name)}</td>` +
-          `<td class="col-score">${fmtNumber(row.total_score)}</td>` +
-          `<td class="col-score">${fmtNumber(row.building_score)}</td>` +
-          `<td class="col-score">${fmtNumber(row.research_score)}</td>`;
-        if (showFleet) cells += `<td class="col-score">${fmtNumber(row.fleet_score)}</td>`;
-        if (showDefense) cells += `<td class="col-score">${fmtNumber(row.defense_score)}</td>`;
-        return `<tr class="ranking-row${isMe ? " is-me" : ""}">${cells}</tr>`;
+        return (
+          `<tr class="gc-ranking-row${isMe ? " is-me" : ""}${rankingTopClass(row.display_rank)}">` +
+          `<td class="gc-ranking-place"><span class="gc-ranking-place-num">#${fmtNumber(row.display_rank)}</span></td>` +
+          `<td class="gc-ranking-col-player">${rankingPlayerCell(row, isMe)}</td>` +
+          `<td class="gc-ranking-col-alliance">${rankingAllianceHtml(row)}</td>` +
+          `<td class="gc-ranking-score gc-ranking-score--active">${fmtNumber(row.display_score)}</td>` +
+          `</tr>`
+        );
+      })
+      .join("");
+
+    const mobileCards = rows
+      .map((row) => {
+        const isMe = !!row.is_current_player;
+        return (
+          `<article class="gc-ranking-mobile-card${isMe ? " is-me" : ""}${rankingTopClass(row.display_rank)}">` +
+          `<div class="gc-ranking-mobile-head">` +
+          `<span class="gc-ranking-place gc-ranking-place-num">#${fmtNumber(row.display_rank)}</span>` +
+          rankingAllianceHtml(row) +
+          `<span class="gc-ranking-mobile-score-inline gc-mono">${fmtNumber(row.display_score)}</span>` +
+          `</div>` +
+          `<div class="gc-ranking-mobile-player">${rankingPlayerCell(row, isMe)}</div>` +
+          `</article>`
+        );
       })
       .join("");
 
     tableEl.innerHTML =
-      `<div class="ranking-table-wrapper">` +
-      `<table class="table-std ranking-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>` +
+      `<div class="gc-ranking">` +
+      `<div class="gc-ranking-desktop ranking-table-wrapper">` +
+      `<table class="gc-ranking-table">` +
+      `<thead><tr>` +
+      `<th class="gc-ranking-place">${rankingEscapeHtml(rankingT("ranking_rank", "Rank"))}</th>` +
+      `<th class="gc-ranking-col-player">${rankingEscapeHtml(rankingT("ranking_commander", "Commander"))}</th>` +
+      `<th class="gc-ranking-col-alliance">${rankingEscapeHtml(rankingT("ranking_alliance", "Alliance"))}</th>` +
+      `<th class="gc-ranking-score gc-ranking-score--active">${scoreLabel}</th>` +
+      `</tr></thead>` +
+      `<tbody>${desktopRows}</tbody>` +
+      `</table>` +
+      `</div>` +
+      `<div class="gc-ranking-mobile">${mobileCards}</div>` +
       `</div>`;
   }
 
+  function renderRankingPayload(payload) {
+    _rankingLifecycle.payload = payload && payload.ok ? payload : null;
+    if (_rankingLifecycle.payload) {
+      const visible = rankingVisibleTabs(_rankingLifecycle.payload);
+      if (!visible.some((t) => t.id === _rankingLifecycle.tab)) {
+        _rankingLifecycle.tab = visible[0]?.id || "total";
+      }
+    }
+    rankingRenderMyStrip(_rankingLifecycle.payload, _rankingLifecycle.tab);
+    rankingRenderTabs(_rankingLifecycle.payload, _rankingLifecycle.tab);
+    rankingRenderList(_rankingLifecycle.payload, _rankingLifecycle.tab);
+  }
+
+  function bindRankingTabsOnce() {
+    if (GC._rankingTabsBound) return;
+    GC._rankingTabsBound = true;
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-ranking-tab]");
+      if (!btn || !document.getElementById("ranking-page")) return;
+      const tabId = btn.getAttribute("data-ranking-tab");
+      if (!tabId || tabId === _rankingLifecycle.tab) return;
+      e.preventDefault();
+      _rankingLifecycle.tab = tabId;
+      renderRankingPayload(_rankingLifecycle.payload);
+    });
+  }
+
   function loadRankingData() {
-    const statusEl = document.getElementById("ranking-status-content");
     const tableEl = document.getElementById("ranking-table-content");
-    if (!statusEl || !tableEl) return;
+    if (!tableEl) return;
 
     if (_rankingLifecycle.abort) {
       try {
@@ -2073,9 +2516,7 @@
     const signal = _rankingLifecycle.abort.signal;
 
     const loadingMsg = rankingEscapeHtml(rankingT("ranking_loading", "Loading…"));
-    const loadingHtml = `<div class="ranking-state ranking-state-loading">${loadingMsg}</div>`;
-    statusEl.innerHTML = loadingHtml;
-    tableEl.innerHTML = loadingHtml;
+    tableEl.innerHTML = `<div class="ranking-state ranking-state-loading">${loadingMsg}</div>`;
 
     const initialEl = document.getElementById("ranking-initial-data");
     if (initialEl) {
@@ -2106,15 +2547,18 @@
 
   GC.initRanking = function initRanking() {
     if (!document.getElementById("ranking-page")) return;
+    bindRankingTabsOnce();
     loadRankingData();
   };
 
   GC.modules.overview = initOverview;
   GC.modules.buildings = initBuildings;
   GC.modules.research = initResearch;
+  GC.modules.planet_evolution = initPlanetEvolution;
   GC.modules.ranking = function initRankingPage() {
     GC.initRanking();
   };
+  GC.modules.techtree = function initTechtree() {};
 
   // =========================
   // PJAX navigation
@@ -2169,6 +2613,11 @@
         const main = document.getElementById("main-content");
         main.innerHTML = newMain.innerHTML;
         if (doc.title) document.title = doc.title;
+
+        const fetchedBody = doc.body;
+        if (fetchedBody?.dataset && fetchedBody.dataset.endpoint !== undefined) {
+          document.body.dataset.endpoint = fetchedBody.dataset.endpoint || "";
+        }
 
         _syncNavActive(url);
         if (push) history.pushState({ gcPjax: true }, "", url);
@@ -2411,14 +2860,14 @@
     GC._gameActionsBound = true;
 
     document.addEventListener("click", async (e) => {
-      const upgradeLink = e.target.closest("a.btn-upgrade");
-      if (upgradeLink && upgradeLink.tagName === "A" && !upgradeLink.hasAttribute("disabled")) {
-        e.preventDefault();
-        if (upgradeLink.dataset.busy === "1" || GC.actionLocks.build) return;
-        upgradeLink.dataset.busy = "1";
+      const upgradeEl = e.target.closest("a.btn-upgrade, button.btn-upgrade:not([disabled])");
+      if (upgradeEl && !upgradeEl.hasAttribute("disabled")) {
+        if (upgradeEl.tagName === "A") e.preventDefault();
+        if (upgradeEl.dataset.busy === "1" || GC.actionLocks.build) return;
+        upgradeEl.dataset.busy = "1";
         GC.actionLocks.build = true;
 
-        const buildingType = upgradeLink.dataset.building || "";
+        const buildingType = upgradeEl.dataset.building || "";
         const tab = _getActiveBuildingTab();
 
         try {
@@ -2440,15 +2889,15 @@
             "error"
           );
         } finally {
-          upgradeLink.dataset.busy = "0";
+          upgradeEl.dataset.busy = "0";
           GC.actionLocks.build = false;
         }
         return;
       }
 
-      const researchLink = e.target.closest("a.btn-research");
-      if (researchLink) {
-        e.preventDefault();
+      const researchLink = e.target.closest("a.btn-research, button.btn-research:not([disabled])");
+      if (researchLink && !researchLink.hasAttribute("disabled")) {
+        if (researchLink.tagName === "A") e.preventDefault();
         if (researchLink.dataset.busy === "1" || GC.actionLocks.research) return;
         researchLink.dataset.busy = "1";
         GC.actionLocks.research = true;
@@ -2642,6 +3091,286 @@
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && drawer.classList.contains("is-open")) closeDrawer();
     });
+  }
+
+  // =========================
+  // Special panel (Wiki/Support)
+  // =========================
+  function initSpecialPanel() {
+    const root = document.querySelector("[data-special-root]");
+    if (!root || root.dataset.bound === "1") return;
+    root.dataset.bound = "1";
+
+    const openButtons = root.querySelectorAll("[data-special-open-window]");
+    const closeButtons = root.querySelectorAll("[data-special-window-close]");
+    const windows = root.querySelectorAll("[data-special-window]");
+    const barButtons = root.querySelectorAll(".gc-special-bar [data-special-open-window]");
+
+    const setActiveBarButton = (target) => {
+      barButtons.forEach((btn) => {
+        const isActive = (btn.dataset.specialOpenWindow || "") === target;
+        btn.classList.toggle("is-active", isActive);
+      });
+    };
+
+    const closeAllWindows = () => {
+      windows.forEach((win) => {
+        win.hidden = true;
+      });
+      root.classList.remove("is-open");
+      setActiveBarButton("");
+    };
+
+    const openWindow = (target) => {
+      if (!target) return;
+
+      if (target === "chat") {
+        windows.forEach((win) => {
+          win.hidden = true;
+        });
+        root.classList.remove("is-open");
+        const chatFab = document.querySelector("[data-chat-fab]");
+        if (chatFab) chatFab.click();
+        setActiveBarButton("chat");
+        return;
+      }
+
+      let found = false;
+      windows.forEach((win) => {
+        const active = (win.dataset.specialWindow || "") === target;
+        win.hidden = !active;
+        if (active) found = true;
+      });
+      if (!found) return;
+      root.classList.add("is-open");
+      setActiveBarButton(target);
+    };
+
+    openButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const target = btn.dataset.specialOpenWindow || "";
+        openWindow(target);
+      });
+    });
+
+    closeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => closeAllWindows());
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeAllWindows();
+    });
+  }
+
+  function initSupportModule() {
+    const root = document.querySelector("[data-special-window='support']");
+    if (!root || root.dataset.supportBound === "1") return;
+    root.dataset.supportBound = "1";
+
+    const form = root.querySelector("[data-support-form]");
+    const subjectEl = root.querySelector("[data-support-subject]");
+    const categoryEl = root.querySelector("[data-support-category]");
+    const priorityEl = root.querySelector("[data-support-priority]");
+    const messageEl = root.querySelector("[data-support-message]");
+    const feedbackEl = root.querySelector("[data-support-feedback]");
+    const refreshBtn = root.querySelector("[data-support-refresh]");
+    const listEl = root.querySelector("[data-support-list]");
+    if (!form || !subjectEl || !categoryEl || !priorityEl || !messageEl || !feedbackEl || !listEl) return;
+
+    const dtf = new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" });
+
+    const setFeedback = (text, kind = "") => {
+      feedbackEl.textContent = text || "";
+      feedbackEl.classList.remove("is-ok", "is-error");
+      if (kind) feedbackEl.classList.add(kind === "ok" ? "is-ok" : "is-error");
+    };
+
+    const formatTs = (ts) => {
+      const n = Number(ts || 0);
+      if (!n) return "-";
+      try {
+        return dtf.format(new Date(n * 1000));
+      } catch (_) {
+        return "-";
+      }
+    };
+
+    const createMessageNode = (m) => {
+      const row = document.createElement("div");
+      row.className = "gc-support-msg";
+      const meta = document.createElement("div");
+      meta.className = "gc-support-msg-meta";
+      meta.textContent = `${m.sender_name || "Unbekannt"} · ${formatTs(m.created_at)}`;
+      const body = document.createElement("div");
+      body.className = "gc-support-msg-body";
+      body.textContent = m.message || "";
+      row.appendChild(meta);
+      row.appendChild(body);
+      return row;
+    };
+
+    const createTicketNode = (ticket) => {
+      const wrap = document.createElement("details");
+      wrap.className = "gc-support-ticket";
+      wrap.open = ticket.status !== "closed";
+      const head = document.createElement("summary");
+      head.innerHTML =
+        `<span class="gc-support-ticket-subject">${ticket.subject || "-"}</span>` +
+        `<span class="gc-support-ticket-meta">${ticket.status_label || ticket.status} · ${ticket.priority_label || ticket.priority} · ${ticket.category_label || ticket.category}</span>`;
+      wrap.appendChild(head);
+
+      const body = document.createElement("div");
+      body.className = "gc-support-ticket-body";
+
+      const timeline = document.createElement("div");
+      timeline.className = "gc-support-timeline";
+      (ticket.messages || []).forEach((m) => timeline.appendChild(createMessageNode(m)));
+      body.appendChild(timeline);
+
+      const controls = document.createElement("div");
+      controls.className = "gc-support-ticket-controls";
+
+      const reply = document.createElement("textarea");
+      reply.className = "gc-support-reply";
+      reply.rows = 2;
+      reply.maxLength = 1200;
+      reply.placeholder = "Antwort schreiben...";
+      controls.appendChild(reply);
+
+      const actions = document.createElement("div");
+      actions.className = "gc-support-actions";
+      const sendBtn = document.createElement("button");
+      sendBtn.type = "button";
+      sendBtn.className = "gc-btn gc-btn-primary gc-btn-xs";
+      sendBtn.textContent = "Antwort senden";
+      sendBtn.addEventListener("click", async () => {
+        const msg = (reply.value || "").trim();
+        if (!msg) {
+          setFeedback("Bitte zuerst eine Antwort schreiben.", "error");
+          return;
+        }
+        sendBtn.disabled = true;
+        try {
+          const res = await fetch(`/api/support/tickets/${ticket.id}/reply`, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ message: msg }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) {
+            setFeedback("Antwort konnte nicht gesendet werden.", "error");
+            return;
+          }
+          setFeedback("Antwort gesendet.", "ok");
+          await loadTickets();
+        } catch (_) {
+          setFeedback("Verbindungsfehler beim Antworten.", "error");
+        } finally {
+          sendBtn.disabled = false;
+        }
+      });
+      actions.appendChild(sendBtn);
+
+      if (ticket.status !== "closed") {
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "gc-btn gc-btn-ghost gc-btn-xs";
+        closeBtn.textContent = "Ticket schliessen";
+        closeBtn.addEventListener("click", async () => {
+          closeBtn.disabled = true;
+          try {
+            const res = await fetch(`/api/support/tickets/${ticket.id}/status`, {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              body: JSON.stringify({ status: "closed" }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.ok) {
+              setFeedback("Ticket konnte nicht geschlossen werden.", "error");
+              return;
+            }
+            setFeedback("Ticket geschlossen.", "ok");
+            await loadTickets();
+          } catch (_) {
+            setFeedback("Verbindungsfehler beim Schliessen.", "error");
+          } finally {
+            closeBtn.disabled = false;
+          }
+        });
+        actions.appendChild(closeBtn);
+      }
+
+      controls.appendChild(actions);
+      body.appendChild(controls);
+      wrap.appendChild(body);
+      return wrap;
+    };
+
+    async function loadTickets() {
+      listEl.innerHTML = '<div class="gc-support-empty">Tickets werden geladen...</div>';
+      try {
+        const res = await fetch("/api/support/tickets", {
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          listEl.innerHTML = '<div class="gc-support-empty">Support ist aktuell nicht verfuegbar.</div>';
+          return;
+        }
+        const tickets = (data.data && data.data.tickets) || [];
+        if (!tickets.length) {
+          listEl.innerHTML = '<div class="gc-support-empty">Noch keine Tickets vorhanden.</div>';
+          return;
+        }
+        listEl.innerHTML = "";
+        tickets.forEach((ticket) => listEl.appendChild(createTicketNode(ticket)));
+      } catch (_) {
+        listEl.innerHTML = '<div class="gc-support-empty">Tickets konnten nicht geladen werden.</div>';
+      }
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        subject: subjectEl.value || "",
+        category: categoryEl.value || "general",
+        priority: priorityEl.value || "normal",
+        message: messageEl.value || "",
+      };
+      if (!String(payload.subject).trim() || !String(payload.message).trim()) {
+        setFeedback("Bitte Betreff und Nachricht ausfuellen.", "error");
+        return;
+      }
+      const submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      try {
+        const res = await fetch("/api/support/tickets", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          setFeedback("Ticket konnte nicht erstellt werden.", "error");
+          return;
+        }
+        setFeedback("Ticket erfolgreich erstellt.", "ok");
+        form.reset();
+        if (priorityEl) priorityEl.value = "normal";
+        await loadTickets();
+      } catch (_) {
+        setFeedback("Verbindungsfehler beim Senden.", "error");
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    });
+
+    if (refreshBtn) refreshBtn.addEventListener("click", () => loadTickets());
+    loadTickets();
   }
 
   function initStickyResourceBar() {
@@ -3066,9 +3795,9 @@
         return;
       }
 
-      const nameEl = e.target.closest(".gc-player-name[data-player-card]");
-      if (!nameEl) return;
-      const pid = nameEl.getAttribute("data-player-id");
+      const trigger = e.target.closest("[data-player-card]");
+      if (!trigger) return;
+      const pid = trigger.getAttribute("data-player-id");
       if (!pid) return;
       e.preventDefault();
       e.stopPropagation();
@@ -3076,11 +3805,11 @@
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter") return;
-      const nameEl = e.target.closest(".gc-player-name[data-player-card]");
-      if (!nameEl || document.activeElement !== nameEl) return;
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const trigger = e.target.closest("[data-player-card]");
+      if (!trigger || document.activeElement !== trigger) return;
       e.preventDefault();
-      loadPlayerCardView(nameEl.getAttribute("data-player-id"));
+      loadPlayerCardView(trigger.getAttribute("data-player-id"));
     });
 
     document.addEventListener("keydown", (e) => {
@@ -3101,8 +3830,11 @@
     initForms();
     initSkipLink();
     initGameActions();
+    bindPlanetEvolutionOnce();
     initVisibilityPolling();
     initMobileNav();
+    initSpecialPanel();
+    initSupportModule();
     initStickyResourceBar();
     initPjax();
     initPlayerCardOnce();

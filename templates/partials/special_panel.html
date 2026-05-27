@@ -1,0 +1,297 @@
+<div id="gc-special-root" class="gc-special-root" data-special-root aria-hidden="false">
+  <nav class="gc-special-bar" aria-label="{{ T('special_nav', 'Special Navigation') }}">
+    <button type="button" class="gc-special-bar-btn" data-special-open-window="chat" aria-label="{{ T('chat_title', 'Tchat') }}" title="{{ T('chat_title', 'Tchat') }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v11H8l-4 4V4zm3 4h10v2H7V8zm0 4h7v2H7v-2z"/></svg>
+      <span>TCHAT</span>
+    </button>
+    <button type="button" class="gc-special-bar-btn" data-special-open-window="wiki" aria-label="{{ T('wiki_title', 'Wiki') }}" title="{{ T('wiki_title', 'Wiki') }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h8v14H4V5zm10 0h6v14h-6V5zm-8 2v10h4V7H6zm10 0v10h2V7h-2z"/></svg>
+      <span>WIKI</span>
+    </button>
+    <button type="button" class="gc-special-bar-btn" data-special-open-window="support" aria-label="{{ T('support', 'Support') }}" title="{{ T('support', 'Support') }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9h3a6 6 0 1 1 6 6v3a9 9 0 0 0 0-18zm-1 6h2v6h-2V9zm0 8h2v2h-2v-2z"/></svg>
+      <span>SUPPORT</span>
+    </button>
+    <button type="button" class="gc-special-bar-btn" data-special-open-window="imprint" aria-label="{{ T('imprint', 'Impressum') }}" title="{{ T('imprint', 'Impressum') }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5V4zm2 2v12h10V6H7zm1 2h8v2H8V8zm0 4h8v2H8v-2z"/></svg>
+      <span>IMPR.</span>
+    </button>
+    <button type="button" class="gc-special-bar-btn" data-special-open-window="rules" aria-label="{{ T('rules', 'Regeln') }}" title="{{ T('rules', 'Regeln') }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12l3 4v14H3V7l3-4zm1.2 2L6 6.6V19h12V6.6L16.8 5H7.2zM8 9h8v2H8V9zm0 4h8v2H8v-2z"/></svg>
+      <span>REGELN</span>
+    </button>
+  </nav>
+
+  <aside class="gc-special-window gc-special-window-wiki" data-special-window="wiki" hidden>
+    <header class="gc-special-head">
+      <span class="gc-special-title">{{ T('wiki_title', 'Ingame Wiki') }}</span>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="wiki" aria-label="{{ T('close', 'Schließen') }}">✕</button>
+    </header>
+    <div class="gc-special-window-content">
+      <p class="gc-special-intro">Willkommen im Ingame-Wiki. Hier findest du alle Kernsysteme von Genesis Colonies in einer kompakten, praxisnahen Uebersicht.</p>
+
+      <details class="gc-special-card" open>
+        <summary>Schnellstart in 10 Minuten</summary>
+        <p>1) Upgrade zuerst Metall- und Krytit-Minen. 2) Energie immer im Plus halten. 3) Speicher frueh ausbauen, damit Produktion nicht capped. 4) Bau- und Forschungsqueue dauerhaft aktiv halten. 5) Taeglich Ranking und Planet Evolution checken.</p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Ressourcen und Energie</summary>
+        <p>Metall und Krytit sind deine Hauptwaehrungen fuer Gebaeude, Forschung und spaeter militaerische Expansion. Energie ist ein Multiplikator fuer alles: Bei Energiemangel sinkt die effektive Leistung deiner Produktionsgebaeude. Faustregel: erst Energie stabilisieren, dann Produktion hochziehen.</p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Gebaeude: Prioritaeten</summary>
+        <p>Fruehspiel: Minen + Energie + Speicher im Dreiklang. Midgame: Forschung und spezialisierte Produktionspfade staerken. Lategame: gezielte Optimierung je nach Strategie (Wirtschaft, Forschung, Score-Push). Vermeide einseitigen Ausbau, der in Energie- oder Speicherengpaessen endet.</p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Forschung: Effizient planen</summary>
+        <p>Forschung sollte nie stillstehen. Priorisiere Technologien, die direkte Engpaesse loesen (Produktionsbooster, Energieeffizienz, Bau-/Forschungszeit). Plane Ketten: Eine teure Forschung lohnt sich besonders, wenn du die Folgeforschungen bereits vorbereitest.</p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Bau- und Forschungsqueue</summary>
+        <p>Optimales Spiel bedeutet hohe Queue-Uptime. Nutze kurze Bauzeiten als Lueckenfueller, bevor du offline gehst. Starte laengere Jobs, wenn du laenger abwesend bist. Ziel: moeglichst keine Leerlaufzeit in Bau und Forschung.</p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Planet Evolution</summary>
+        <p>Planet Evolution bewertet nicht nur Rohleistung, sondern auch Identitaet und Entwicklungspfad deines Planeten. Achte auf Trigger, Spezialisierungen und situative Entscheidungen. Ein stabiler Planet mit klarer Ausrichtung erzielt konstant bessere Punktwerte.</p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Ranking und Score verstehen</summary>
+        <p>Score entsteht durch strukturellen Fortschritt: Gebaeudelevel, Forschungstiefe und Systementwicklung. Kurzfristige Peaks sind gut, aber nachhaltiges Wachstum gewinnt ueber die Saison. Vergleiche dich regelmaessig mit aehnlichen Spielern statt nur mit der Spitze.</p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Allianz und Kommunikation</summary>
+        <p>Nutze den Tchat aktiv: Informationsvorsprung ist ein echter Vorteil. In Allianzen helfen abgestimmte Ausbauphasen, Wissenstransfer und koordinierte Entscheidungen. Klare Kommunikation spart Ressourcen und vermeidet Fehlentwicklungen.</p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Typische Fehler vermeiden</summary>
+        <p>Hauefige Fehler: Energie ignorieren, Speicher zu spaet upgraden, Forschung pausieren lassen, nur einen Rohstoff pushen, Queue nicht planen. Wenn dein Fortschritt stockt, liegt es fast immer an einem Engpass in genau diesen Punkten.</p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>FAQ</summary>
+        <p><strong>Warum sinkt meine Produktion?</strong> Meist Energiemangel oder volles Lager.<br><strong>Was zuerst upgraden?</strong> Erst Engpass-Systeme, dann Output-Systeme.<br><strong>Wann Forschung priorisieren?</strong> Sobald Produktionsbasis stabil steht.<br><strong>Warum stagniert mein Score?</strong> Zu viel Leerlauf in Queue oder unausgewogene Infrastruktur.</p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Glossar</summary>
+        <p><strong>Queue-Uptime:</strong> Anteil der Zeit mit aktivem Bau/Forschungsauftrag.<br><strong>Engpass:</strong> System, das dein Wachstum limitiert (oft Energie/Lager).<br><strong>Spezialisierung:</strong> Langfristige Ausrichtung deines Planeten.<br><strong>Efficiency Window:</strong> Zeitraum, in dem Upgrades den groessten Nutzen bringen.</p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Nerd-Wiki: Formelblatt (live relevant)</summary>
+        <p>
+          <strong>Energie:</strong><br>
+          <code>E_total = int(20 * solar^1.4 * solar_output_factor)</code><br>
+          <code>E_used = int((10 * metal^1.25 + 6 * crystal^1.25) * mine_energy_factor)</code><br>
+          <code>ratio = 1.0 wenn E_total >= E_used, sonst E_total / E_used</code>
+        </p>
+        <p>
+          <strong>Produktion pro Sekunde:</strong><br>
+          <code>metal_rate = 0.04 * metal_mine^1.4 * metal_prod_factor</code><br>
+          <code>crystal_rate = 0.03 * crystal_mine^1.35 * crystal_prod_factor</code>
+        </p>
+        <p>
+          <strong>Produktion pro Stunde:</strong><br>
+          <code>metal_h = int(metal_rate * ratio * 3600 * production_speed)</code><br>
+          <code>crystal_h = int(crystal_rate * ratio * 3600 * production_speed)</code>
+        </p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Nerd-Wiki: Lager, Caps, Overflow</summary>
+        <p>
+          <code>BASE_STORAGE = 100000</code>, <code>STORAGE_GROW = 1.8</code><br>
+          <code>cap_metal = BASE_STORAGE * 1.8^(metal_storage-1)</code><br>
+          <code>cap_crystal = BASE_STORAGE * 1.8^(crystal_storage-1)</code><br>
+          Danach Multiplikation mit <code>storage_factor</code> (Storage-Tech) und <code>terraformer_factor = 1 + 0.05 * terraformer</code>.
+        </p>
+        <p>
+          Produktionszuwachs capped am Lagerlimit. Bereits vorhandener Overflow (z. B. Rewards) wird nicht abgeschnitten.
+        </p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Nerd-Wiki: Build-/Research-Kosten und Zeiten</summary>
+        <p>
+          <strong>Gebaeude-Kosten:</strong> <code>cost = base_cost * cost_factor^(target_level-1)</code><br>
+          <strong>Build-Zeit roh:</strong> <code>t_build_raw = base_time * build_time_factor^(target_level-1)</code><br>
+          <strong>Build-Zeit effektiv:</strong> <code>t_build = t_build_raw / (build_time_speed * build_speed)</code>
+        </p>
+        <p>
+          <strong>Research-Kosten:</strong> <code>cost = base_cost * cost_factor^(target_level-1)</code><br>
+          <strong>Research-Zeit roh:</strong> <code>t_res_raw = base_time * cost_factor^(target_level-1)</code><br>
+          <strong>Research-Zeit effektiv:</strong><br>
+          <code>t_res = t_res_raw / (build_speed * research_speed * lab_bonus * research_time_speed)</code><br>
+          <code>lab_bonus = 1 + max(0, research_lab-1) * 0.10</code>
+        </p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Nerd-Wiki: Multiplikatoren (pro Level)</summary>
+        <p>
+          <strong>energy_tech:</strong> <code>mine_energy_factor = max(0.4, 1 - 0.05 * lvl)</code><br>
+          <strong>mining_tech:</strong> <code>metal +10%</code>, <code>crystal +4%</code><br>
+          <strong>drone_tech:</strong> <code>metal +3%</code> und <code>crystal +3%</code><br>
+          <strong>storage_tech:</strong> <code>storage +25%</code><br>
+          <strong>buildtime_tech:</strong> Dauerfaktor <code>max(0.4, 1 - 0.03*lvl)</code>, Speed = <code>1 / Dauerfaktor</code><br>
+          <strong>academy:</strong> <code>research_time_speed +5%</code> pro Level<br>
+          <strong>nanofactory:</strong> <code>build_time_speed +3%</code> pro Level<br>
+          <strong>geothermal_nexus:</strong> <code>solar_output +3%</code> pro Level
+        </p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Nerd-Wiki: Queue-Mechanik und Limits</summary>
+        <p>
+          Standardmaessig: <code>build_queue_limit = 3</code>, <code>research_queue_limit = 3</code> (adminseitig ueber Settings aenderbar).
+        </p>
+        <p>
+          Jobs starten sequentiell: <code>start = max(now, last_finish)</code>, <code>finish = start + duration</code>.<br>
+          Gleiches Tech/Gebaeude mehrfach in Queue: Target-Level berechnet sich inklusive bereits geplanter gleichen Eintraege.
+        </p>
+      </details>
+
+      <details class="gc-special-card">
+        <summary>Nerd-Wiki: Harte Grenzen</summary>
+        <p>
+          <strong>Default Max Building Level:</strong> <code>50</code><br>
+          Fuer <code>metal_mine</code>, <code>crystal_mine</code>, <code>solar_plant</code> gilt zusaetzlich:<br>
+          <code>max = 50 + planet_core_nexus + 2 * geothermal_nexus</code><br>
+          Fuer <code>metal_storage</code> und <code>crystal_storage</code>:<br>
+          <code>max = 50 + 2 * geothermal_nexus</code>
+        </p>
+      </details>
+    </div>
+  </aside>
+
+  <aside class="gc-special-window" data-special-window="support" hidden>
+    <header class="gc-special-head">
+      <span class="gc-special-title">{{ T('support', 'Support') }}</span>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="support" aria-label="{{ T('close', 'Schließen') }}">✕</button>
+    </header>
+    <div class="gc-special-window-content">
+      <p class="gc-special-intro">Schneller Support direkt im Spiel: Ticket erstellen, Antwortverlauf sehen, Status verfolgen.</p>
+
+      <form class="gc-support-form" data-support-form>
+        <div class="gc-support-grid">
+          <label class="gc-support-field">
+            <span>Betreff</span>
+            <input type="text" maxlength="120" required data-support-subject placeholder="Kurzbeschreibung deines Anliegens">
+          </label>
+          <label class="gc-support-field">
+            <span>Kategorie</span>
+            <select data-support-category>
+              <option value="general">Allgemein</option>
+              <option value="bug">Bug</option>
+              <option value="account">Account</option>
+              <option value="balance">Balance</option>
+              <option value="report">Meldung</option>
+            </select>
+          </label>
+          <label class="gc-support-field">
+            <span>Prioritaet</span>
+            <select data-support-priority>
+              <option value="low">Niedrig</option>
+              <option value="normal" selected>Normal</option>
+              <option value="high">Hoch</option>
+            </select>
+          </label>
+        </div>
+        <label class="gc-support-field">
+          <span>Nachricht</span>
+          <textarea rows="4" maxlength="1200" required data-support-message placeholder="Beschreibe dein Problem moeglichst konkret..."></textarea>
+        </label>
+        <div class="gc-support-actions">
+          <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm">Ticket senden</button>
+          <span class="gc-support-feedback" data-support-feedback aria-live="polite"></span>
+        </div>
+      </form>
+
+      <div class="gc-support-list-head">
+        <strong>Meine Tickets</strong>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-support-refresh>Aktualisieren</button>
+      </div>
+      <div class="gc-support-list" data-support-list>
+        <div class="gc-support-empty">Noch keine Tickets vorhanden.</div>
+      </div>
+    </div>
+  </aside>
+
+  <aside class="gc-special-window" data-special-window="imprint" hidden>
+    <header class="gc-special-head">
+      <span class="gc-special-title">{{ T('imprint', 'Impressum') }}</span>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="imprint" aria-label="{{ T('close', 'Schließen') }}">✕</button>
+    </header>
+    <div class="gc-special-window-content">
+      <details class="gc-special-card" open>
+        <summary>Projektstatus</summary>
+        <p>Genesis Colonies ist ein privates Hobbyprojekt in aktiver Entwicklung. Das Projekt wird nicht kommerziell betrieben und ist derzeit nicht offiziell in einem oeffentlichen Register gelistet.</p>
+      </details>
+      <details class="gc-special-card">
+        <summary>Anbieterhinweis</summary>
+        <p>Dieses Angebot wird im Rahmen eines Freizeitprojekts bereitgestellt. Es besteht kein Anspruch auf dauerhafte Verfuegbarkeit, bestimmte Funktionen oder Support-Level wie bei professionellen/kommerziellen Diensten.</p>
+      </details>
+      <details class="gc-special-card">
+        <summary>Inhalte und Haftung</summary>
+        <p>Alle Inhalte und Spielmechaniken werden nach bestem Wissen gepflegt, koennen sich aber jederzeit aendern oder fehlerhaft sein. Fuer Datenverlust, Spielfortschritt, Ausfaelle oder Folgeschaeden wird im Rahmen dieses Hobbyprojekts keine Gewaehr uebernommen.</p>
+      </details>
+      <details class="gc-special-card">
+        <summary>Urheberrecht und Assets</summary>
+        <p>Spielcode, Texte, UI-Elemente und eigene Assets unterliegen dem Urheberrecht der Projektbetreiber, sofern nicht anders gekennzeichnet. Verwendete Drittinhalte bleiben Eigentum der jeweiligen Rechteinhaber.</p>
+      </details>
+      <details class="gc-special-card">
+        <summary>Kontakt</summary>
+        <p>Da es sich um ein nicht offiziell gelistetes Hobbyprojekt handelt, erfolgt Kontakt und Rueckmeldung aktuell ausschliesslich ueber die Ingame-Kanaele (z. B. Support-Bereich/Chat) oder direkt ueber die bekannten Projektkontakte.</p>
+      </details>
+      <details class="gc-special-card">
+        <summary>Stand</summary>
+        <p>Stand dieses Hinweises: Mai 2026.</p>
+      </details>
+    </div>
+  </aside>
+
+  <aside class="gc-special-window" data-special-window="rules" hidden>
+    <header class="gc-special-head">
+      <span class="gc-special-title">{{ T('rules', 'Regeln') }}</span>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-special-window-close="rules" aria-label="{{ T('close', 'Schließen') }}">✕</button>
+    </header>
+    <div class="gc-special-window-content">
+      <details class="gc-special-card" open>
+        <summary>1) Fairness steht ueber allem</summary>
+        <p>Genesis Colonies ist absichtlich frei gestaltet: fast alles ist erlaubt, solange es fair bleibt. Kein absichtliches Ausnutzen von Fehlern gegen andere Spieler, kein zielgerichtetes Sabotieren des Spielflusses und kein Verhalten, das den fairen Wettbewerb zerstoert.</p>
+      </details>
+      <details class="gc-special-card">
+        <summary>2) Spielstil: frei und kreativ</summary>
+        <p>Diplomatie, Bluff, aggressive Expansion, wirtschaftlicher Fokus, Meta-Strategien und unkonventionelle Taktiken sind ausdruecklich gewollt. Du darfst hart spielen, aber nicht unfair.</p>
+      </details>
+      <details class="gc-special-card">
+        <summary>3) Grenzen bei Exploits und Automatisierung</summary>
+        <p>Tools, Scripts oder Mechaniken, die dir einen unnatuerlichen, nicht vorgesehenen Vorteil verschaffen, sind nicht im Sinne des Spiels. Wenn du eine Luecke findest, melde sie bitte ueber Support statt sie systematisch auszunutzen.</p>
+      </details>
+      <details class="gc-special-card">
+        <summary>4) Kommunikation und Umgangston</summary>
+        <p>Trash Talk ist okay, Respektlosigkeit nicht. Keine diskriminierenden Inhalte, kein massiver Spam, keine persoenlichen Angriffe. Konkurrenz ja, Entgleisung nein.</p>
+      </details>
+      <details class="gc-special-card">
+        <summary>5) Multiaccounting und Umgehung</summary>
+        <p>Mehrere Accounts zur Umgehung von Limits, Push-Mechaniken oder Ranking-Manipulation widersprechen dem Fairness-Grundsatz und sind nicht erlaubt.</p>
+      </details>
+      <details class="gc-special-card">
+        <summary>6) Moderationsprinzip</summary>
+        <p>Im Zweifel entscheidet das Team nach dem Grundsatz: Was schuetzt fairen Wettbewerb und eine gesunde Spielumgebung? Eingriffe erfolgen so leicht wie moeglich, aber so klar wie noetig.</p>
+      </details>
+      <details class="gc-special-card">
+        <summary>Kurzfassung</summary>
+        <p>Fast alles erlaubt. Fairness zuerst. Spiel hart, spiel clever, spiel sauber.</p>
+      </details>
+    </div>
+  </aside>
+</div>

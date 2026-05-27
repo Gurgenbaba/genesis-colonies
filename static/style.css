@@ -221,7 +221,7 @@ button, input, textarea { font: inherit; }
   padding: 10px 12px;
   background: rgba(5, 10, 22, 0.95);
   border: 1px solid rgba(70, 229, 255, 0.6);
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   color: var(--gc-text);
   z-index: 9999;
 }
@@ -323,7 +323,7 @@ button, input, textarea { font: inherit; }
   gap: 10px;
 
   padding: 8px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
 
   background: linear-gradient(180deg, rgba(10,18,34,0.72), rgba(8,14,26,0.52));
   border: 1px solid var(--gc-hdr-border);
@@ -340,7 +340,7 @@ button, input, textarea { font: inherit; }
   content:"";
   width: 3px;
   height: 20px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: linear-gradient(180deg,
     rgba(120,255,220,0.14),
     rgba(120,255,220,0.92),
@@ -385,7 +385,7 @@ button, input, textarea { font: inherit; }
   justify-content: center;
   gap: 0;
   padding: 0;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: var(--gc-panel-bg);
   border: 1px solid var(--gc-border-bright);
   box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0,0,0,0.45);
@@ -408,7 +408,7 @@ button, input, textarea { font: inherit; }
   align-items:center;
   gap: 7px;
   padding: 7px 12px;
-  border-radius: 0;
+  border-radius: var(--gc-radius-sm);
   background: transparent;
   border: none;
   border-right: 1px solid var(--gc-border);
@@ -447,7 +447,7 @@ button, input, textarea { font: inherit; }
   align-items:center;
   gap: 8px;
   padding: 5px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: var(--gc-panel-bg-2);
   border: 1px solid var(--gc-border);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35);
@@ -476,7 +476,7 @@ button, input, textarea { font: inherit; }
   align-items:center;
   gap: 10px;
   padding: 5px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: var(--gc-panel-bg-2);
   border: 1px solid var(--gc-border);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35);
@@ -488,7 +488,7 @@ button, input, textarea { font: inherit; }
 
 .gc-admin-badge{
   padding: 2px 7px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -534,7 +534,7 @@ button, input, textarea { font: inherit; }
   flex-direction: column;
   gap: 2px;
   padding: 0;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: var(--gc-panel-bg);
   border: 1px solid var(--gc-border-bright);
   box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0,0,0,0.4);
@@ -544,7 +544,7 @@ button, input, textarea { font: inherit; }
 .gc-nav-link{
   display: block;
   padding: 11px 14px;
-  border-radius: 0;
+  border-radius: var(--gc-radius-sm);
   border: none;
   border-left: 2px solid transparent;
   border-bottom: 1px solid var(--gc-border);
@@ -599,7 +599,7 @@ button, input, textarea { font: inherit; }
 .section-header{
   padding: 12px 14px 10px 14px;
   margin-bottom: 16px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(7, 14, 32, 0.55);
   border: 1px solid rgba(120, 190, 255, 0.16);
   box-shadow: 0 0 26px rgba(70, 229, 255, 0.06);
@@ -626,7 +626,7 @@ button, input, textarea { font: inherit; }
    ========================= */
 .gc-panel{
   position: relative;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: var(--gc-panel-bg);
   border: 1px solid var(--gc-border-bright);
   box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0,0,0,0.45);
@@ -675,7 +675,7 @@ button, input, textarea { font: inherit; }
 
 .gc-panel-tag{
   padding: 2px 8px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid var(--gc-border-bright);
   background: rgba(0,0,0,0.35);
   color: var(--gc-text-soft);
@@ -705,7 +705,7 @@ button, input, textarea { font: inherit; }
   justify-content: center;
   gap: 8px;
   padding: 8px 14px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid var(--gc-border-bright);
   background: var(--gc-panel-bg-2);
   color: var(--gc-text);
@@ -817,7 +817,7 @@ button, input, textarea { font: inherit; }
 /* Logout button — segmented, not pill */
 .logout-btn{
   white-space: nowrap;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   padding: 7px 11px !important;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -838,7 +838,7 @@ button, input, textarea { font: inherit; }
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(7, 14, 32, 0.78);
   border: 1px solid rgba(120, 190, 255, 0.18);
   box-shadow: 0 14px 28px rgba(0,0,0,0.36);
@@ -866,7 +866,7 @@ button, input, textarea { font: inherit; }
 .motd-banner{
   margin-bottom: 12px;
   padding: 10px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(7, 14, 32, 0.82);
   border: 1px solid rgba(255, 196, 0, 0.40);
   box-shadow: 0 0 0 1px rgba(255,196,0,0.15), 0 0 30px rgba(255,196,0,0.12), 0 18px 40px rgba(0,0,0,0.50);
@@ -878,7 +878,7 @@ button, input, textarea { font: inherit; }
 .motd-banner-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .motd-banner-pill{
   padding: 4px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(40, 28, 0, 0.74);
   border: 1px solid rgba(255, 196, 0, 0.80);
   color: #ffe58a;
@@ -913,7 +913,7 @@ button, input, textarea { font: inherit; }
   border-collapse: collapse;
   background: rgba(5, 10, 22, 0.38);
   border: 1px solid rgba(120, 190, 255, 0.16);
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   overflow: hidden;
   box-shadow: 0 18px 46px rgba(0,0,0,0.46);
 }
@@ -1007,7 +1007,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .admin-badge{
   padding: 5px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(255, 196, 0, 0.85);
   color: #ffe58a;
   font-size: 0.78rem;
@@ -1035,7 +1035,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .admin-metric-card{
   padding: 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: var(--gc-panel-strong);
   border: 1px solid var(--gc-panel-border-strong);
   box-shadow: 0 0 26px rgba(70,229,255,0.06), 0 18px 44px rgba(0,0,0,0.50);
@@ -1054,7 +1054,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .admin-section{
   padding: 12px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: var(--gc-panel-strong);
   border: 1px solid var(--gc-panel-border);
   margin-bottom: 10px;
@@ -1090,7 +1090,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .admin-input,
 .admin-textarea{
   padding: 9px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.28);
   background: rgba(5, 10, 22, 0.82);
   font-size: 0.88rem;
@@ -1147,7 +1147,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .landing-hero-left{
   padding: 16px 14px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(7, 14, 32, 0.55);
   border: 1px solid rgba(120, 190, 255, 0.16);
   box-shadow: 0 0 26px rgba(70,229,255,0.06), 0 22px 60px rgba(0,0,0,0.55);
@@ -1175,7 +1175,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .landing-badge{
   padding: 6px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.20);
   background: rgba(5, 10, 22, 0.60);
   color: var(--gc-text-soft);
@@ -1201,7 +1201,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .landing-status-pill{
   margin-left: 8px;
   padding: 3px 9px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(35,242,166,0.45);
   background: rgba(0, 22, 16, 0.55);
   color: rgba(215,246,255,0.90);
@@ -1215,7 +1215,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .landing-roadmap{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .roadmap-pill{
   padding: 6px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.28);
   background: rgba(5, 10, 22, 0.60);
   color: var(--gc-text-soft);
@@ -1239,7 +1239,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.35);
   background: rgba(5, 10, 22, 0.55);
   color: var(--gc-text-soft);
@@ -1270,7 +1270,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   align-items: center;
   gap: 10px;
   padding: 9px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.16);
   background: rgba(5, 10, 22, 0.55);
   color: var(--gc-text-soft);
@@ -1278,7 +1278,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .auth-error{
   padding: 10px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(255,75,106,0.62);
   background: rgba(28, 5, 15, 0.88);
   color: rgba(255, 238, 242, 0.92);
@@ -1292,7 +1292,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .auth-input{
   padding: 10px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.28);
   background: rgba(5, 10, 22, 0.82);
   color: var(--gc-text);
@@ -1309,7 +1309,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .auth-hint{
   margin: 10px 0;
   padding: 10px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(255, 196, 0, 0.35);
   background: rgba(40, 28, 0, 0.35);
   color: var(--gc-text-soft);
@@ -1359,7 +1359,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(5, 10, 22, 0.60);
   border: 1px solid rgba(120, 190, 255, 0.16);
   box-shadow: 0 18px 44px rgba(0,0,0,0.46);
@@ -1398,7 +1398,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 .overview-score-rank-pill{
   padding: 4px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(40, 28, 0, 0.55);
   border: 1px solid rgba(255, 196, 0, 0.55);
   color: rgba(255, 229, 138, 0.92);
@@ -1409,7 +1409,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .overview-hint{
   margin-top: 10px;
   padding: 10px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.18);
   background: rgba(7, 14, 32, 0.52);
   color: var(--gc-text-soft);
@@ -1422,7 +1422,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 /* Overview Research side */
 .research-active-box{
   padding: 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.28);
   background: rgba(5, 10, 22, 0.60);
   box-shadow: 0 18px 44px rgba(0,0,0,0.46);
@@ -1431,7 +1431,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .research-bar{
   height: 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(120, 190, 255, 0.10);
   border: 1px solid rgba(120, 190, 255, 0.14);
   overflow: hidden;
@@ -1467,7 +1467,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .research-list{ list-style: none; padding: 0; margin: 10px 0 0 0; display: grid; gap: 8px; }
 .research-item{
   padding: 10px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(5, 10, 22, 0.58);
   border: 1px solid rgba(120, 190, 255, 0.16);
   box-shadow: 0 18px 44px rgba(0,0,0,0.40);
@@ -1520,7 +1520,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .bicon-wrap{
   width: 54px;
   height: 54px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.18);
   background:
     radial-gradient(circle at 50% 40%, rgba(70, 229, 255, 0.10), rgba(5, 10, 22, 0.62));
@@ -1570,7 +1570,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   column-gap: 10px;
 
   padding: 6px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
 
   background: rgba(255,255,255,0.03);
   box-shadow:
@@ -1598,7 +1598,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .gc-res-icon{
   width: 12px;
   height: 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   display: inline-block;
   box-shadow: 0 0 18px rgba(255,255,255,0.30);
 }
@@ -1643,7 +1643,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .research-icon-large{
   width: 110px;
   height: 110px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.18);
   background:
     radial-gradient(circle at 50% 42%, rgba(70, 229, 255, 0.12), rgba(5, 10, 22, 0.62));
@@ -1711,7 +1711,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .research-progress-label{ color: var(--gc-text-dim); font-size: 0.84rem; margin-bottom: 6px; }
 .research-progress-bar{
   height: 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(120, 190, 255, 0.10);
   border: 1px solid rgba(120, 190, 255, 0.14);
   overflow: hidden;
@@ -1776,7 +1776,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   display: inline-flex;
   align-items: center;
   padding: 2px 7px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   font-size: 0.72rem;
   letter-spacing: 0.03em;
   border: 1px solid rgba(127, 255, 217, 0.28);
@@ -1841,7 +1841,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   display: inline-flex;
   align-items: center;
   padding: 3px 8px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   font-size: 0.72rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1867,7 +1867,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .tech-panel .tech-tag{
   margin-left: 8px;
   padding: 3px 8px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.18);
   background: rgba(5, 10, 22, 0.58);
   color: var(--gc-text-dim);
@@ -1876,7 +1876,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .tech-level-pill{
   padding: 4px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.35);
   background: rgba(5, 10, 22, 0.58);
   color: var(--gc-text-soft);
@@ -1897,7 +1897,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .galaxy-coord-block{
   padding: 6px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.18);
   background: rgba(5, 10, 22, 0.58);
   display: flex;
@@ -1921,7 +1921,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 12px;
   align-items: center;
   padding: 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.16);
   background: rgba(5, 10, 22, 0.58);
   transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
@@ -1936,7 +1936,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .gs-icon{
   width: 46px;
   height: 46px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70,229,255,0.28);
   background: rgba(7, 14, 32, 0.74);
   display: flex;
@@ -1954,7 +1954,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .gs-pill{
   padding: 4px 9px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.18);
   background: rgba(7, 14, 32, 0.62);
   font-size: 0.78rem;
@@ -1965,7 +1965,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .galaxy-legend{
   margin-top: 12px;
   padding: 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.14);
   background: rgba(7, 14, 32, 0.46);
   box-shadow: 0 18px 44px rgba(0,0,0,0.40);
@@ -2004,7 +2004,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .defense-placeholder-box,
 .shipyard-placeholder-box{
   padding: 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.16);
   background: rgba(5, 10, 22, 0.58);
   box-shadow: 0 18px 44px rgba(0,0,0,0.42);
@@ -2033,7 +2033,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .defense-tag,
 .shipyard-tag{
   padding: 6px 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.25);
   background: rgba(7, 14, 32, 0.58);
   color: var(--gc-text-soft);
@@ -2053,7 +2053,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .shipyard-note{
   margin-top: 12px;
   padding: 10px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.14);
   background: rgba(7, 14, 32, 0.46);
   color: var(--gc-text-soft);
@@ -2075,47 +2075,423 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 /* =========================
    21) Ranking
    ========================= */
-.ranking-layout{
-  display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
-  gap: 12px;
-}
-@media (max-width: 980px){ .ranking-layout{ grid-template-columns: 1fr; } }
+.ranking-panel-full{ width: 100%; }
 
-.ranking-stats-grid{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-  margin-top: 6px;
+.gc-ranking-panel-head{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
-.ranking-stat{
-  padding: 12px;
-  border-radius: var(--gc-radius-sm)
-  border: 1px solid rgba(120, 190, 255, 0.16);
-  background: rgba(5, 10, 22, 0.58);
-  box-shadow: 0 18px 44px rgba(0,0,0,0.42);
+.gc-ranking-panel-head-text{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
-.ranking-stat-label{ color: var(--gc-text-dim); font-size: 0.80rem; text-transform: uppercase; letter-spacing: 0.06em; }
-.ranking-stat-value{
-  margin-top: 6px;
+.gc-ranking-my-strip{
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.gc-ranking-my-rank,
+.gc-ranking-my-score{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.18);
+  background: rgba(5, 10, 22, 0.62);
+  min-width: 120px;
+}
+
+.gc-ranking-my-label{
+  color: var(--gc-text-dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.gc-ranking-my-value{
   font-family: Orbitron, Inter, system-ui, sans-serif;
-  font-weight: 900;
-  letter-spacing: 0.05em;
+  font-weight: 800;
   color: var(--gc-primary-2);
 }
-.ranking-stat-sub{ color: var(--gc-text-dim); font-size: 0.86rem; margin-left: 6px; }
+
+.gc-ranking-body{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gc-ranking-tabs{
+  padding: 4px 0 8px;
+}
 
 .ranking-hint{ margin-top: 10px; color: var(--gc-text-soft); }
 
-.ranking-table-wrapper{ overflow-x: auto; }
-.ranking-table .is-me{ background: rgba(40, 28, 0, 0.25); }
+.ranking-table-wrapper{
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Social ranking list */
+.gc-ranking{ width: 100%; }
+
+.gc-ranking-desktop{ display: block; }
+.gc-ranking-mobile{ display: none; }
+
+.gc-ranking-table{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+  table-layout: fixed;
+}
+
+.gc-ranking-table thead th{
+  padding: 8px 12px;
+  text-align: left;
+  color: var(--gc-text-dim);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(120, 190, 255, 0.14);
+}
+
+.gc-ranking-table thead th.gc-ranking-score,
+.gc-ranking-table tbody td.gc-ranking-score{
+  text-align: right;
+  width: 140px;
+}
+
+.gc-ranking-table thead th.gc-ranking-place,
+.gc-ranking-table tbody td.gc-ranking-place{
+  width: 72px;
+}
+
+.gc-ranking-table thead th.gc-ranking-col-alliance,
+.gc-ranking-table tbody td.gc-ranking-col-alliance{
+  width: 180px;
+}
+
+.gc-ranking-row td{
+  padding: 12px;
+  vertical-align: middle;
+  background: rgba(5, 10, 22, 0.58);
+  border-top: 1px solid rgba(120, 190, 255, 0.10);
+  border-bottom: 1px solid rgba(120, 190, 255, 0.10);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.gc-ranking-row td:first-child{
+  border-left: 1px solid rgba(120, 190, 255, 0.10);
+  border-radius: var(--gc-radius-sm) 0 0 var(--gc-radius-sm);
+}
+
+.gc-ranking-row td:last-child{
+  border-right: 1px solid rgba(120, 190, 255, 0.10);
+  border-radius: 0 var(--gc-radius-sm) var(--gc-radius-sm) 0;
+}
+
+.gc-ranking-row:hover td{
+  background: rgba(8, 16, 34, 0.78);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  transform: translateY(-1px);
+}
+
+.gc-ranking-row.is-me td{
+  background: rgba(0, 220, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(0, 220, 255, 0.22);
+}
+
+.gc-ranking-row--top td{
+  background: rgba(12, 20, 38, 0.72);
+}
+
+.gc-ranking-row--top-1 .gc-ranking-place-num{
+  color: #ffd86a;
+  text-shadow: 0 0 12px rgba(255, 216, 106, 0.35);
+}
+
+.gc-ranking-row--top-2 .gc-ranking-place-num{
+  color: #d8e4ff;
+}
+
+.gc-ranking-row--top-3 .gc-ranking-place-num{
+  color: #d4a574;
+}
+
+.gc-ranking-place{
+  width: 64px;
+  white-space: nowrap;
+}
+
+.gc-ranking-place-num{
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--gc-primary-2);
+}
+
+.gc-ranking-col-player{ min-width: 0; width: auto; }
+
+.gc-ranking-player,
+.gc-ranking-player-trigger{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+  text-align: left;
+}
+
+.gc-ranking-player-trigger{
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  cursor: pointer;
+  border-radius: var(--gc-radius-sm);
+  transition: background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.gc-ranking-player-trigger:hover,
+.gc-ranking-player-trigger:focus-visible{
+  background: rgba(0, 220, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(0, 220, 255, 0.18);
+  outline: none;
+}
+
+.gc-ranking-player-meta{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.gc-ranking-player-name-row{
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.gc-ranking-player-name{
+  font-weight: 700;
+  color: var(--gc-primary-2);
+}
+
+.gc-ranking-player-title{
+  color: var(--gc-text-soft);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gc-ranking-badges{
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gc-ranking-badge{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--gc-radius-pill);
+  border: 1px solid rgba(120, 190, 255, 0.24);
+  background: rgba(8, 16, 34, 0.82);
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.gc-ranking-badge--rare{ border-color: rgba(168, 120, 255, 0.45); }
+.gc-ranking-badge--epic{ border-color: rgba(255, 190, 80, 0.5); }
+.gc-ranking-badge--legendary{
+  border-color: rgba(255, 216, 106, 0.55);
+  box-shadow: 0 0 10px rgba(255, 216, 106, 0.18);
+}
+
+.gc-ranking-avatar{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(120, 190, 255, 0.28);
+  background: rgba(4, 10, 24, 0.85);
+  overflow: hidden;
+}
+
+.gc-ranking-avatar-img{
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.gc-ranking-avatar-fallback{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--gc-primary-2);
+  background: linear-gradient(145deg, rgba(0, 220, 255, 0.12), rgba(80, 120, 255, 0.08));
+}
+
+.gc-ranking-avatar-fallback--violet{ color: #c4b5fd; }
+.gc-ranking-avatar-fallback--amber{ color: #fcd34d; }
+.gc-ranking-avatar-fallback--emerald{ color: #6ee7b7; }
+.gc-ranking-avatar-fallback--rose{ color: #fda4af; }
+
+.gc-ranking-alliance{
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: var(--gc-radius-pill);
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  background: rgba(8, 16, 34, 0.72);
+  color: var(--gc-text-soft);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gc-ranking-alliance--none{
+  color: var(--gc-text-dim);
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.gc-ranking-score{
+  text-align: right;
+  font-family: var(--gc-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--gc-text);
+}
+
+.gc-ranking-score--active{
+  font-weight: 700;
+  color: var(--gc-primary-2);
+}
+
+.gc-ranking-mobile-score-inline{
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--gc-primary-2);
+  white-space: nowrap;
+}
+
+.gc-ranking-mobile-card{
+  padding: 14px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.16);
+  background: rgba(5, 10, 22, 0.58);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+}
+
+.gc-ranking-mobile-card + .gc-ranking-mobile-card{
+  margin-top: 10px;
+}
+
+.gc-ranking-mobile-card.is-me{
+  border-color: rgba(0, 220, 255, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(0, 220, 255, 0.18);
+}
+
+.gc-ranking-mobile-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.gc-ranking-mobile-player .gc-ranking-player{
+  align-items: flex-start;
+}
+
+.gc-ranking-mobile-scores{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(120, 190, 255, 0.12);
+}
+
+.gc-ranking-mobile-score{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gc-ranking-mobile-score-label{
+  color: var(--gc-text-dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gc-ranking-mobile-score-value{
+  font-family: var(--gc-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--gc-primary-2);
+  font-weight: 700;
+}
+
+@media (max-width: 820px){
+  .gc-ranking-desktop{ display: none; }
+  .gc-ranking-mobile{ display: block; }
+  .gc-ranking-mobile-scores{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.ranking-state{
+  padding: 18px 12px;
+  text-align: center;
+  color: var(--gc-text-soft);
+}
+.ranking-state-loading{ color: var(--gc-primary-2); }
+.ranking-state-error{ color: #ff8a8a; }
+.ranking-empty{ color: var(--gc-text-dim); padding: 12px 4px; }
 .you-pill{
   display: inline-flex;
   align-items: center;
   padding: 3px 8px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(255, 196, 0, 0.55);
   background: rgba(40, 28, 0, 0.55);
   color: #ffe58a;
@@ -2161,7 +2537,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   justify-content: center;
 
   padding: 4px 8px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
 
   font-weight: 900;
   font-size: 12px;
@@ -2223,7 +2599,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 16px;
   align-items: start;
   padding: 14px 14px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(10, 18, 34, 0.55);
   border: 1px solid rgba(120, 255, 217, 0.14);
   box-shadow: 0 0 0 1px rgba(0,0,0,0.15) inset;
@@ -2232,7 +2608,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .build-icon-large{
   width: 92px;
   height: 92px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background:
     radial-gradient(circle at 50% 38%, rgba(127, 255, 217, 0.12), rgba(0, 0, 0, 0.22));
   border: 1px solid rgba(120, 255, 217, 0.14);
@@ -2287,7 +2663,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .build-progress-bar{
   height: 10px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(120, 255, 217, 0.12);
   overflow: hidden;
@@ -2295,7 +2671,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .build-progress-fill{
   height: 100%;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(127, 255, 217, 0.55);
   box-shadow: 0 0 18px rgba(127, 255, 217, 0.35);
   width: 0%;
@@ -2337,7 +2713,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .gc-nav-wip-badge{
   flex: 0 0 auto;
   padding: 2px 7px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -2353,7 +2729,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 10px;
   margin-bottom: 12px;
   padding: 10px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(255, 196, 0, 0.38);
   background: rgba(40, 28, 0, 0.42);
   box-shadow: 0 12px 32px rgba(0,0,0,0.40);
@@ -2385,6 +2761,263 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 /* Bottom nav — hidden on desktop */
 .gc-bottom-nav,
 .gc-nav-drawer{ display: none; }
+
+.gc-special-root{
+  position: fixed;
+  right: calc(14px + var(--gc-safe-right));
+  bottom: 14px;
+  z-index: 74;
+  display: block;
+}
+
+.gc-special-bar{
+  display: grid;
+  grid-auto-rows: minmax(44px, auto);
+  gap: 6px;
+}
+
+.gc-special-bar-btn{
+  min-width: 72px;
+  min-height: 44px;
+  padding: 6px 8px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  border-radius: 0;
+  border: 1px solid rgba(120, 190, 255, 0.34);
+  background: rgba(9, 18, 36, 0.92);
+  color: var(--gc-text-soft);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.gc-special-bar-btn svg{
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.gc-special-bar-btn.is-active,
+.gc-special-bar-btn:hover{
+  border-color: rgba(70, 229, 255, 0.6);
+  color: var(--gc-primary);
+  box-shadow: 0 0 0 1px rgba(70, 229, 255, 0.3) inset;
+}
+
+.gc-special-window{
+  position: fixed;
+  right: calc(94px + var(--gc-safe-right));
+  bottom: 14px;
+  width: min(520px, calc(100vw - 120px));
+  max-height: min(72vh, 680px);
+  overflow: auto;
+  border-radius: 0;
+  border: 1px solid var(--gc-border-bright);
+  background: linear-gradient(180deg, rgba(8, 16, 34, 0.98), rgba(5, 11, 24, 0.98));
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.52);
+  padding: 12px;
+}
+
+.gc-special-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.gc-special-head .gc-btn{
+  border-radius: 0;
+}
+
+.gc-special-title{
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  color: var(--gc-primary);
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.gc-special-window-layout{
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 10px;
+}
+
+.gc-special-window-nav{
+  display: grid;
+  gap: 6px;
+}
+
+.gc-special-window-nav-btn{
+  min-height: 32px;
+  border-radius: 0;
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  background: rgba(9, 18, 36, 0.92);
+  color: var(--gc-text-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.gc-special-window-content h3{
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.gc-special-intro{
+  margin: 0 0 10px;
+  color: var(--gc-text-soft);
+  font-size: 0.9rem;
+}
+
+.gc-special-card{
+  margin: 0 0 8px;
+  border-radius: 0;
+  border: 1px solid rgba(120, 190, 255, 0.17);
+  background: rgba(7, 15, 31, 0.82);
+  padding: 8px 10px;
+}
+
+.gc-special-card summary{
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--gc-primary-2);
+}
+
+.gc-special-card p{
+  margin: 8px 0 0;
+  color: var(--gc-text-soft);
+  font-size: 0.88rem;
+  line-height: 1.42;
+}
+
+.gc-support-form{
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.gc-support-grid{
+  display: grid;
+  grid-template-columns: 1fr 140px 120px;
+  gap: 8px;
+}
+
+.gc-support-field{
+  display: grid;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--gc-text-soft);
+}
+
+.gc-support-field input,
+.gc-support-field select,
+.gc-support-field textarea,
+.gc-support-reply{
+  width: 100%;
+  border-radius: 0;
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  background: rgba(6, 12, 24, 0.9);
+  color: var(--gc-text);
+  padding: 8px;
+  font: inherit;
+}
+
+.gc-support-feedback{
+  font-size: 0.78rem;
+  color: var(--gc-text-soft);
+}
+
+.gc-support-feedback.is-ok{ color: #6fffd8; }
+.gc-support-feedback.is-error{ color: #ff8e8e; }
+
+.gc-support-list-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.gc-support-list{
+  display: grid;
+  gap: 8px;
+}
+
+.gc-support-empty{
+  padding: 10px;
+  border: 1px solid rgba(120, 190, 255, 0.16);
+  background: rgba(7, 14, 29, 0.76);
+  color: var(--gc-text-soft);
+  font-size: 0.86rem;
+}
+
+.gc-support-ticket{
+  border: 1px solid rgba(120, 190, 255, 0.2);
+  background: rgba(7, 14, 29, 0.8);
+  padding: 8px;
+}
+
+.gc-support-ticket > summary{
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  list-style: none;
+}
+
+.gc-support-ticket-subject{
+  color: var(--gc-primary);
+  font-weight: 800;
+}
+
+.gc-support-ticket-meta{
+  color: var(--gc-text-soft);
+  font-size: 0.76rem;
+}
+
+.gc-support-ticket-body{
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.gc-support-timeline{
+  display: grid;
+  gap: 6px;
+}
+
+.gc-support-msg{
+  border: 1px solid rgba(120, 190, 255, 0.14);
+  background: rgba(5, 11, 22, 0.9);
+  padding: 6px 8px;
+}
+
+.gc-support-msg-meta{
+  font-size: 0.72rem;
+  color: var(--gc-text-dim);
+  margin-bottom: 4px;
+}
+
+.gc-support-msg-body{
+  color: var(--gc-text-soft);
+  white-space: pre-wrap;
+}
+
+.gc-support-ticket-controls{
+  display: grid;
+  gap: 6px;
+}
+
+.gc-chat-fab{
+  display: none !important;
+}
 
 @media (max-width: 768px){
   :root{
@@ -2527,7 +3160,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
   .gc-grid-2,
   .research-grid,
-  .ranking-layout{
+  .gc-ranking-body{
     gap: clamp(16px, 4vw, 22px);
   }
 
@@ -2630,7 +3263,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
     min-height: var(--gc-touch-min);
     padding: 5px 3px;
     border: none;
-    border-radius: var(--gc-radius-sm)
+    border-radius: var(--gc-radius-sm);
     background: transparent;
     color: var(--gc-text-dim);
     font: inherit;
@@ -2656,7 +3289,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
     top: 2px;
     width: 22px;
     height: 3px;
-    border-radius: var(--gc-radius-sm)
+    border-radius: var(--gc-radius-sm);
     background: var(--gc-primary);
     box-shadow: 0 0 12px rgba(70, 229, 255, 0.45);
   }
@@ -2714,7 +3347,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
     padding:
       14px 14px
       calc(14px + var(--gc-safe-bottom));
-    border-radius: var(--gc-radius-sm)
+    border-radius: var(--gc-radius-sm);
     background: rgba(7, 14, 32, 0.98);
     border: 1px solid var(--gc-panel-border);
     box-shadow: var(--gc-shadow-hard);
@@ -2757,7 +3390,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
     gap: 10px;
     min-height: var(--gc-touch-min);
     padding: 12px 14px;
-    border-radius: var(--gc-radius-sm)
+    border-radius: var(--gc-radius-sm);
     border: 1px solid rgba(120, 190, 255, 0.16);
     background: rgba(5, 10, 22, 0.58);
     color: var(--gc-text-soft);
@@ -2772,6 +3405,38 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   }
 
   body.gc-nav-drawer-open{ overflow: hidden; }
+
+  .gc-special-root{
+    right: calc(10px + var(--gc-safe-right));
+    bottom: calc(var(--gc-bottom-nav-h) + var(--gc-safe-bottom) + 10px);
+  }
+
+  .gc-special-bar{
+    grid-template-columns: repeat(5, minmax(56px, 1fr));
+    grid-auto-rows: minmax(42px, auto);
+    width: min(340px, calc(100vw - 20px));
+  }
+
+  .gc-special-bar-btn{
+    min-width: 56px;
+    font-size: 0.55rem;
+    letter-spacing: 0.02em;
+  }
+
+  .gc-special-window{
+    right: calc(10px + var(--gc-safe-right));
+    width: min(420px, calc(100vw - 20px));
+    max-height: min(62vh, 560px);
+    bottom: calc(var(--gc-bottom-nav-h) + var(--gc-safe-bottom) + 64px);
+  }
+
+  .gc-special-window-layout{
+    grid-template-columns: 1fr;
+  }
+
+  .gc-support-grid{
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Narrow phones: 360–390px */
@@ -2857,7 +3522,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   align-items: center;
   gap: 7px;
   padding: 5px 9px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: linear-gradient(180deg, rgba(8, 14, 28, 0.88), rgba(6, 10, 22, 0.72));
   border: 1px solid rgba(120, 190, 255, 0.14);
   box-shadow:
@@ -2889,7 +3554,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .gc-hud-panel-dot{
   width: 7px;
   height: 7px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(120, 255, 220, 0.92);
   box-shadow: 0 0 10px rgba(120, 255, 220, 0.45);
 }
@@ -2906,7 +3571,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 
 .gc-header-cmd .gc-logo{
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   padding: 7px 11px;
   box-shadow:
     0 10px 24px rgba(0, 0, 0, 0.42),
@@ -2914,7 +3579,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 
 .gc-header-cmd .gc-admin-badge{
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   padding: 2px 6px;
   font-size: 0.68rem;
 }
@@ -2931,7 +3596,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   border: none;
   background: transparent;
   box-shadow: none;
-  border-radius: 0;
+  border-radius: var(--gc-radius-sm);
 }
 
 .gc-header-cmd .hud-res-panel{
@@ -2943,7 +3608,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   min-width: 0;
   min-height: 52px;
   padding: 7px 9px 8px 11px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: linear-gradient(180deg, rgba(8, 14, 28, 0.88), rgba(6, 10, 20, 0.72));
   border: 1px solid rgba(120, 190, 255, 0.14);
   box-shadow:
@@ -2997,7 +3662,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 6px;
   padding: 0;
   border: none;
-  border-radius: 0;
+  border-radius: var(--gc-radius-sm);
   background: transparent;
   box-shadow: none;
   min-width: 0;
@@ -3015,11 +3680,11 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 /* Legacy pill aliases map to panels */
 .gc-header-pill{
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
 }
 
 .gc-user-info{
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
 }
 
 /* Build queue (JS-rendered) */
@@ -3033,7 +3698,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .build-queue-empty{
   padding: 12px 14px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(8, 14, 28, 0.55);
   border: 1px dashed rgba(120, 190, 255, 0.16);
   color: var(--gc-text-dim);
@@ -3046,7 +3711,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 10px;
   align-items: start;
   padding: 10px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(8, 14, 28, 0.62);
   border: 1px solid rgba(120, 190, 255, 0.12);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18) inset;
@@ -3064,7 +3729,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .build-job-icon{
   width: 52px;
   height: 52px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(0, 0, 0, 0.22);
   border: 1px solid rgba(120, 255, 217, 0.12);
   display: grid;
@@ -3108,7 +3773,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .build-bar{
   height: 8px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(120, 255, 217, 0.10);
   overflow: hidden;
@@ -3116,7 +3781,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .build-bar-fill{
   height: 100%;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: linear-gradient(90deg, rgba(70, 229, 255, 0.55), rgba(127, 255, 217, 0.75));
   box-shadow: 0 0 10px rgba(127, 255, 217, 0.25);
 }
@@ -3132,7 +3797,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .research-queue-empty{
   padding: 12px 14px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(8, 14, 28, 0.55);
   border: 1px dashed rgba(120, 190, 255, 0.16);
   color: var(--gc-text-dim);
@@ -3145,7 +3810,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 10px;
   align-items: start;
   padding: 10px 12px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(8, 14, 28, 0.62);
   border: 1px solid rgba(120, 190, 255, 0.12);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18) inset;
@@ -3163,7 +3828,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .research-job-icon{
   width: 52px;
   height: 52px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(0, 0, 0, 0.22);
   border: 1px solid rgba(120, 255, 217, 0.12);
   display: grid;
@@ -3181,7 +3846,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .research-bar-large{
   height: 8px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(120, 255, 217, 0.10);
   overflow: hidden;
@@ -3201,7 +3866,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 2px 6px;
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 255, 217, 0.18);
 }
 
@@ -3217,22 +3882,22 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 /* Segmented tabs on buildings page (less pill) */
 .buildings-shell .building-tabs .gc-btn{
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
 }
 
 /* Header logout + HUD buttons */
 .gc-header-cmd .logout-btn,
 .gc-header-cmd .gc-btn{
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
 }
 
 .active-research-wrapper,
 .research-progress-bar{
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
 }
 
 .research-progress-fill{
-  border-radius: var(--gc-radius-sm)
+  border-radius: var(--gc-radius-sm);
 }
 
 @media (max-width: 768px){
@@ -3596,7 +4261,7 @@ body.gc-player-card-open { overflow: hidden; }
   width: 72px;
   height: 72px;
   max-width: 100%;
-  border-radius: 12px;
+  border-radius: var(--gc-radius-xl);
   object-fit: cover;
   border: 1px solid rgba(70, 229, 255, 0.35);
   background: rgba(0, 0, 0, 0.35);
@@ -3610,7 +4275,7 @@ body.gc-player-card-open { overflow: hidden; }
   font-family: var(--gc-font-display, Orbitron, sans-serif);
   font-size: 1.6rem;
   color: var(--gc-neon-cyan, #46e5ff);
-  border-radius: 12px;
+  border-radius: var(--gc-radius-xl);
   border: 1px solid rgba(70, 229, 255, 0.25);
   background: rgba(0, 0, 0, 0.35);
 }
@@ -3695,7 +4360,7 @@ body.gc-player-card-open { overflow: hidden; }
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-radius: 999px;
+  border-radius: var(--gc-radius-pill);
   border: 1px solid rgba(70, 229, 255, 0.25);
   background: rgba(70, 229, 255, 0.06);
   font-size: 0.78rem;
@@ -3858,7 +4523,7 @@ body.gc-player-card-open { overflow: hidden; }
   gap: 8px;
   padding: 6px 4px;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--gc-radius-xs);
 }
 .gc-player-card-badge-option:hover {
   background: rgba(70, 229, 255, 0.06);
@@ -3950,4 +4615,887 @@ body.gc-player-card-open { overflow: hidden; }
   .gc-player-card-dialog,
   .gc-player-card-shell { animation: none; }
   .gc-player-card-spinner { animation: none; }
+}
+
+/* --- Planet Evolution --- */
+.planet-evolution-page .pe-switcher-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+.planet-evolution-page .pe-planet-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 10rem;
+  text-align: left;
+}
+.planet-evolution-page .pe-planet-btn.is-active {
+  border-color: var(--gc-accent, #46e5ff);
+  box-shadow: 0 0 0 1px rgba(70, 229, 255, 0.35);
+}
+.planet-evolution-page .pe-planet-meta,
+.planet-evolution-page .pe-planet-spec {
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+.planet-evolution-page .pe-main-grid {
+  gap: 1rem;
+}
+.planet-evolution-page .pe-stat-list {
+  margin: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+.planet-evolution-page .pe-stat-row {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr;
+  gap: 0.75rem;
+  align-items: start;
+}
+.planet-evolution-page .pe-stat-row dt {
+  margin: 0;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.planet-evolution-page .pe-stat-row dd {
+  margin: 0;
+}
+.planet-evolution-page .pe-tag {
+  display: inline-block;
+  margin: 0.15rem 0.35rem 0.15rem 0;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--gc-radius-xs);
+  border: 1px solid var(--gc-panel-border);
+  background: rgba(70, 229, 255, 0.06);
+  font-size: 0.82rem;
+}
+.planet-evolution-page .pe-tag-export {
+  border-color: rgba(255, 196, 86, 0.35);
+}
+.planet-evolution-page .pe-tag-legacy {
+  border-color: rgba(180, 140, 255, 0.35);
+}
+.planet-evolution-page .pe-event-box {
+  margin-top: 0.85rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 120, 80, 0.35);
+  border-radius: var(--gc-radius-sm, 6px);
+  background: rgba(255, 80, 40, 0.06);
+}
+.planet-evolution-page .pe-event-title {
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.planet-evolution-page .pe-event-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.planet-evolution-page .pe-alert-warn {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--gc-radius-xs);
+  border: 1px solid rgba(255, 196, 86, 0.4);
+  background: rgba(255, 196, 86, 0.08);
+  font-size: 0.88rem;
+}
+.planet-evolution-page .pe-tech-locked {
+  opacity: 0.55;
+}
+.planet-evolution-page .pe-tech-name {
+  font-weight: 600;
+}
+.planet-evolution-page .pe-tech-desc,
+.planet-evolution-page .pe-tech-missing {
+  font-size: 0.78rem;
+  margin-top: 0.2rem;
+}
+.planet-evolution-page .pe-tech-actions {
+  white-space: nowrap;
+}
+.planet-evolution-page .pe-spec-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.planet-evolution-page .pe-page-header {
+  margin-bottom: 0.75rem;
+}
+.planet-evolution-page .pe-hero {
+  margin-bottom: 1rem;
+  padding: 1rem 1.15rem;
+}
+.planet-evolution-page .pe-hero-top {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr auto;
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .planet-evolution-page .pe-hero-top {
+    grid-template-columns: 1fr;
+  }
+}
+.planet-evolution-page .pe-hero-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+.planet-evolution-page .pe-hero-name {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.planet-evolution-page .pe-badge {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: var(--gc-radius-pill);
+  border: 1px solid var(--gc-panel-border);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.planet-evolution-page .pe-badge-home {
+  border-color: rgba(70, 229, 255, 0.45);
+  color: #8eefff;
+}
+.planet-evolution-page .pe-badge-spec {
+  border-color: rgba(255, 196, 86, 0.45);
+  color: #ffd98a;
+}
+.planet-evolution-page .pe-hero-level {
+  font-size: 0.88rem;
+  opacity: 0.85;
+  margin-bottom: 0.65rem;
+}
+.planet-evolution-page .pe-xp-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  opacity: 0.8;
+  margin-bottom: 0.35rem;
+}
+.planet-evolution-page .pe-xp-bar-fill {
+  background: linear-gradient(90deg, rgba(255, 196, 86, 0.75), rgba(255, 140, 66, 0.85));
+  box-shadow: 0 0 10px rgba(255, 196, 86, 0.25);
+}
+.planet-evolution-page .pe-progression-summary {
+  margin: 0 0 0.75rem;
+}
+.planet-evolution-page .pe-research-zone .research-queue-list {
+  margin-top: 0.35rem;
+}
+.planet-evolution-page .pe-research-unlock-hint {
+  margin: 0.15rem 0 0.45rem;
+}
+.planet-evolution-page .pe-progress {
+  height: 0.45rem;
+  border-radius: var(--gc-radius-pill);
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.planet-evolution-page .pe-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #46e5ff, #6b9dff);
+  transition: width 0.25s ease;
+}
+.planet-evolution-page .pe-progress-good .pe-progress-fill {
+  background: linear-gradient(90deg, #5fd67a, #46e5aa);
+}
+.planet-evolution-page .pe-progress-xp .pe-progress-fill {
+  background: linear-gradient(90deg, #ffc456, #ff8c42);
+}
+.planet-evolution-page .pe-progress-research .pe-progress-fill {
+  background: linear-gradient(90deg, #b48cff, #46e5ff);
+}
+.planet-evolution-page .pe-hero-metrics {
+  display: grid;
+  gap: 0.65rem;
+}
+.planet-evolution-page .pe-metric-label {
+  display: block;
+  font-size: 0.78rem;
+  opacity: 0.75;
+  margin-bottom: 0.2rem;
+}
+.planet-evolution-page .pe-metric-value {
+  font-weight: 600;
+}
+.planet-evolution-page .pe-metric-pct {
+  font-size: 0.78rem;
+  opacity: 0.8;
+}
+.planet-evolution-page .pe-hero-score {
+  text-align: right;
+  min-width: 7rem;
+}
+.planet-evolution-page .pe-score-label {
+  display: block;
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+.planet-evolution-page .pe-score-value {
+  display: block;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #46e5ff;
+}
+.planet-evolution-page .pe-score-dna {
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+.planet-evolution-page .pe-hero-location {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--gc-panel-border);
+  font-size: 0.82rem;
+  opacity: 0.8;
+}
+
+.planet-evolution-page .pe-dashboard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 17rem;
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .planet-evolution-page .pe-dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.planet-evolution-page .pe-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+.planet-evolution-page .pe-tab {
+  border: 1px solid var(--gc-panel-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--gc-radius-sm);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.planet-evolution-page .pe-tab.is-active {
+  border-color: rgba(70, 229, 255, 0.5);
+  background: rgba(70, 229, 255, 0.1);
+}
+.planet-evolution-page .pe-tab-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0 0.35rem;
+  border-radius: var(--gc-radius-pill);
+  background: rgba(255, 120, 80, 0.85);
+  color: #111;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.planet-evolution-page .pe-tab-panel {
+  padding: 0.15rem 0;
+}
+.planet-evolution-page .pe-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+.planet-evolution-page .pe-stat-card {
+  padding: 0.75rem;
+  border: 1px solid var(--gc-panel-border);
+  border-radius: var(--gc-radius-sm, 6px);
+  background: rgba(255, 255, 255, 0.02);
+}
+.planet-evolution-page .pe-stat-card header {
+  font-size: 0.78rem;
+  opacity: 0.8;
+  margin-bottom: 0.35rem;
+}
+.planet-evolution-page .pe-stat-numbers {
+  font-weight: 600;
+  margin-bottom: 0.45rem;
+  font-size: 0.92rem;
+}
+.planet-evolution-page .pe-section {
+  margin-bottom: 1rem;
+}
+.planet-evolution-page .pe-section-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.92rem;
+}
+.planet-evolution-page .pe-research-job {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--gc-panel-border);
+  border-radius: var(--gc-radius-sm);
+  margin-bottom: 0.5rem;
+}
+.planet-evolution-page .pe-research-job-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.88rem;
+}
+.planet-evolution-page .pe-locked-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+}
+.planet-evolution-page .pe-locked-name {
+  font-weight: 600;
+}
+
+.planet-evolution-page .pe-trait-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.65rem;
+}
+.planet-evolution-page .pe-trait-card {
+  padding: 0.75rem;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid var(--gc-panel-border);
+}
+.planet-evolution-page .pe-trait-positive {
+  border-color: rgba(95, 214, 122, 0.4);
+  background: rgba(95, 214, 122, 0.06);
+}
+.planet-evolution-page .pe-trait-negative {
+  border-color: rgba(255, 120, 80, 0.4);
+  background: rgba(255, 80, 40, 0.06);
+}
+.planet-evolution-page .pe-trait-rare {
+  border-color: rgba(180, 140, 255, 0.45);
+  background: rgba(180, 140, 255, 0.08);
+}
+.planet-evolution-page .pe-trait-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.planet-evolution-page .pe-trait-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.planet-evolution-page .pe-trait-rarity {
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+.planet-evolution-page .pe-trait-effect {
+  margin: 0;
+  font-size: 0.82rem;
+  opacity: 0.9;
+}
+
+.planet-evolution-page .pe-events-feed,
+.planet-evolution-page .pe-history-list,
+.planet-evolution-page .pe-policy-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.planet-evolution-page .pe-event-item,
+.planet-evolution-page .pe-history-item,
+.planet-evolution-page .pe-policy-item {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--gc-panel-border);
+  border-radius: var(--gc-radius-sm);
+}
+.planet-evolution-page .pe-policy-slot-card {
+  margin-bottom: 0.75rem;
+}
+.planet-evolution-page .pe-policy-slot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.planet-evolution-page .pe-policy-slot-head h4 {
+  margin: 0;
+}
+.planet-evolution-page .pe-policy-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.planet-evolution-page .pe-policy-archetype {
+  margin-bottom: 0.75rem;
+}
+.planet-evolution-page .pe-inline-header {
+  margin-bottom: 0.5rem;
+}
+
+.planet-evolution-page .pe-sidebar {
+  display: grid;
+  gap: 0.75rem;
+}
+.planet-evolution-page .pe-sidebar-panel .gc-panel-body {
+  display: grid;
+  gap: 0.45rem;
+}
+.planet-evolution-page .pe-sidebar-policy {
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--gc-radius-xs);
+  border: 1px solid var(--gc-panel-border);
+  font-size: 0.85rem;
+}
+.planet-evolution-page .pe-spec-active {
+  font-weight: 700;
+}
+.planet-evolution-page .pe-warning {
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--gc-radius-xs);
+  font-size: 0.82rem;
+  margin-bottom: 0.35rem;
+}
+.planet-evolution-page .pe-warning-warn {
+  border: 1px solid rgba(255, 196, 86, 0.4);
+  background: rgba(255, 196, 86, 0.08);
+}
+.planet-evolution-page .pe-warning-critical {
+  border: 1px solid rgba(255, 80, 80, 0.45);
+  background: rgba(255, 80, 80, 0.08);
+}
+
+/* Planet Evolution — gameplay UX layout */
+.planet-evolution-page .pe-colony-bar {
+  margin-bottom: 1rem;
+}
+.planet-evolution-page .pe-colony-label {
+  display: block;
+  font-size: 0.78rem;
+  opacity: 0.75;
+  margin-bottom: 0.4rem;
+}
+.planet-evolution-page .pe-planet-header {
+  margin-bottom: 1rem;
+  padding: 1rem 1.15rem;
+}
+.planet-evolution-page .pe-planet-header-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.planet-evolution-page .pe-planet-name {
+  margin: 0;
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+.planet-evolution-page .pe-planet-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+.planet-evolution-page .pe-planet-subline {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+.planet-evolution-page .pe-planet-location {
+  margin: 0;
+  font-size: 0.8rem;
+}
+.planet-evolution-page .pe-chip {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--gc-radius-pill);
+  border: 1px solid var(--gc-panel-border);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.planet-evolution-page .pe-chip-home {
+  border-color: rgba(70, 229, 255, 0.45);
+  color: #8eefff;
+}
+.planet-evolution-page .pe-chip-status-stable {
+  border-color: rgba(95, 214, 122, 0.45);
+  color: #9ae8a8;
+}
+.planet-evolution-page .pe-chip-status-pressure {
+  border-color: rgba(255, 196, 86, 0.45);
+  color: #ffd98a;
+}
+.planet-evolution-page .pe-chip-status-crisis {
+  border-color: rgba(255, 80, 80, 0.5);
+  color: #ff9a9a;
+}
+.planet-evolution-page .pe-planet-score-block {
+  text-align: right;
+}
+.planet-evolution-page .pe-score-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--gc-accent, #46e5ff);
+}
+.planet-evolution-page .pe-planet-xp {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--gc-panel-border);
+}
+.planet-evolution-page .pe-guidance-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+@media (max-width: 900px) {
+  .planet-evolution-page .pe-guidance-row,
+  .planet-evolution-page .pe-mid-row {
+    grid-template-columns: 1fr;
+  }
+}
+.planet-evolution-page .pe-action-card {
+  padding: 1rem 1.15rem;
+  border-left: 3px solid var(--gc-accent, #46e5ff);
+}
+.planet-evolution-page .pe-section-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+.planet-evolution-page .pe-action-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+}
+.planet-evolution-page .pe-action-body {
+  margin: 0 0 0.85rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.planet-evolution-page .pe-problems-card {
+  padding: 1rem;
+}
+.planet-evolution-page .pe-problem-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+.planet-evolution-page .pe-problem {
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid var(--gc-panel-border);
+}
+.planet-evolution-page .pe-problem-warn {
+  border-color: rgba(255, 196, 86, 0.35);
+  background: rgba(255, 196, 86, 0.06);
+}
+.planet-evolution-page .pe-problem-critical {
+  border-color: rgba(255, 80, 80, 0.4);
+  background: rgba(255, 80, 80, 0.06);
+}
+.planet-evolution-page .pe-problem-title {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+.planet-evolution-page .pe-problem-body {
+  font-size: 0.8rem;
+  margin: 0.2rem 0 0.35rem;
+}
+.planet-evolution-page .pe-link-btn {
+  background: none;
+  border: none;
+  color: var(--gc-accent, #46e5ff);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0;
+  text-decoration: underline;
+}
+.planet-evolution-page .pe-section-block {
+  margin-bottom: 1.25rem;
+}
+.planet-evolution-page .pe-block-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+.planet-evolution-page .pe-trait-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+.planet-evolution-page .pe-trait-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.planet-evolution-page .pe-trait-risk {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: rgba(255, 160, 120, 0.95);
+}
+.planet-evolution-page .pe-mid-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.planet-evolution-page .pe-milestone-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.planet-evolution-page .pe-milestone {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+.planet-evolution-page .pe-milestone-level {
+  opacity: 0.75;
+  min-width: 5.5rem;
+}
+.planet-evolution-page .pe-flow-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.planet-evolution-page .pe-flow-item {
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--gc-radius-xs);
+  font-size: 0.85rem;
+}
+.planet-evolution-page .pe-flow-ok {
+  border-left: 3px solid rgba(95, 214, 122, 0.6);
+}
+.planet-evolution-page .pe-deficit {
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+.planet-evolution-page .pe-deficit-warn {
+  color: #ffd98a;
+}
+.planet-evolution-page .pe-deficit-critical {
+  color: #ff9a9a;
+}
+.planet-evolution-page .pe-spec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.75rem;
+}
+.planet-evolution-page .pe-spec-card {
+  padding: 1rem;
+  border: 1px solid var(--gc-panel-border);
+  border-radius: var(--gc-radius-sm, 6px);
+}
+.planet-evolution-page .pe-spec-card h4 {
+  margin: 0 0 0.5rem;
+}
+.planet-evolution-page .pe-spec-hero {
+  border: 1px solid rgba(70, 229, 255, 0.2);
+}
+.planet-evolution-page .pe-spec-active-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+.planet-evolution-page .pe-spec-active-name {
+  margin: 0;
+  font-size: 1.35rem;
+}
+.planet-evolution-page .pe-spec-tagline {
+  margin: 0.25rem 0 0;
+  opacity: 0.85;
+  font-size: 0.92rem;
+}
+.planet-evolution-page .pe-spec-tier-badge {
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid var(--gc-panel-border);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.planet-evolution-page .pe-spec-identity {
+  margin: 0 0 1rem;
+  line-height: 1.45;
+}
+.planet-evolution-page .pe-spec-roadmap {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+}
+.planet-evolution-page .pe-spec-roadmap-step {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--gc-panel-border);
+  border-radius: var(--gc-radius-sm);
+  opacity: 0.55;
+}
+.planet-evolution-page .pe-spec-roadmap-step.is-unlocked {
+  opacity: 1;
+  border-color: rgba(95, 214, 122, 0.35);
+  background: rgba(95, 214, 122, 0.05);
+}
+.planet-evolution-page .pe-spec-roadmap-step.is-next {
+  opacity: 1;
+  border-color: rgba(255, 196, 86, 0.4);
+}
+.planet-evolution-page .pe-spec-roadmap-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+.planet-evolution-page .pe-spec-unlock-list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+.planet-evolution-page .pe-spec-upgrade {
+  padding: 0.75rem;
+  border-radius: var(--gc-radius-sm);
+  border: 1px dashed rgba(70, 229, 255, 0.35);
+  margin-bottom: 0.75rem;
+}
+.planet-evolution-page .pe-spec-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: start;
+}
+.planet-evolution-page .pe-spec-match {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: #9ae8a8;
+  white-space: nowrap;
+}
+.planet-evolution-page .pe-spec-preview-tiers {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.65rem 0;
+}
+.planet-evolution-page .pe-spec-preview-tier {
+  font-size: 0.82rem;
+}
+.planet-evolution-page .pe-spec-preview-tier-label {
+  font-weight: 600;
+  margin-right: 0.35rem;
+}
+.planet-evolution-page .pe-spec-locked-details {
+  margin-top: 0.75rem;
+}
+.planet-evolution-page .pe-spec-locked-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+}
+.planet-evolution-page .pe-secondary-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 1.25rem 0 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--gc-panel-border);
+}
+.planet-evolution-page .pe-sec-tab {
+  border: 1px solid var(--gc-panel-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  padding: 0.45rem 0.8rem;
+  border-radius: var(--gc-radius-sm);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.planet-evolution-page .pe-sec-tab.is-active {
+  border-color: rgba(70, 229, 255, 0.5);
+  background: rgba(70, 229, 255, 0.1);
+}
+.planet-evolution-page .pe-research-zone {
+  margin-bottom: 1rem;
+}
+.planet-evolution-page .pe-research-zone h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.88rem;
+  opacity: 0.85;
+}
+.planet-evolution-page .pe-research-card {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--gc-panel-border);
+  border-radius: var(--gc-radius-sm);
+  margin-bottom: 0.5rem;
+}
+.planet-evolution-page .pe-research-card h5 {
+  margin: 0 0 0.35rem;
+}
+.planet-evolution-page .pe-research-unlock {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+}
+.planet-evolution-page .pe-research-locked {
+  opacity: 0.7;
+}
+.planet-evolution-page .pe-research-later summary {
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+  opacity: 0.85;
+}
+.planet-evolution-page .pe-req-list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+}
+.planet-evolution-page .pe-event-decision {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(255, 120, 80, 0.4);
+}
+.planet-evolution-page .pe-event-urgent {
+  display: inline-block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: #ff9a7a;
+  margin-bottom: 0.35rem;
+}
+.planet-evolution-page .pe-event-state {
+  font-size: 0.78rem;
+  opacity: 0.7;
+}
+.planet-evolution-page .pe-empty-state,
+.planet-evolution-page .pe-empty-inline {
+  font-size: 0.88rem;
+  opacity: 0.85;
+}
+.planet-evolution-page .pe-legacy-block {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--gc-panel-border);
+}
+@media (max-width: 768px) {
+  .planet-evolution-page .pe-trait-grid {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 0.65rem;
+    padding-bottom: 0.35rem;
+  }
+  .planet-evolution-page .pe-trait-card {
+    flex: 0 0 85%;
+    scroll-snap-align: start;
+  }
 }

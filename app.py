@@ -75,6 +75,7 @@ from game.ranking import (
 
 from game import playercard as playercard_logic
 from game import chat as chat_logic
+from game import support as support_logic
 
 from game.bootstrap import bootstrap_application
 from game.config import get_secret_key, is_debug_enabled, is_production
@@ -111,7 +112,13 @@ except Exception:
 
 
 def T(key: str, *fmt_args, **fmt_kwargs) -> str:
-    txt = T_DATA.get(key, key)
+    if key in T_DATA:
+        txt = T_DATA[key]
+    elif len(fmt_args) == 1 and isinstance(fmt_args[0], str):
+        txt = fmt_args[0]
+        fmt_args = ()
+    else:
+        txt = key
     if not fmt_args and not fmt_kwargs:
         return txt
     try:
@@ -1159,6 +1166,76 @@ def api_chat_room_members():
     return _chat_json(chat_logic.list_custom_room_members(int(pid), room_id))
 
 
+# --------------------------------------------------------------------------
+# SUPPORT API (simple ticket module)
+# --------------------------------------------------------------------------
+
+def _support_json(result: dict, default_status: int = 200):
+    if not isinstance(result, dict):
+        return jsonify({"ok": False, "error": "internal", "data": None}), 500
+    if result.get("ok"):
+        return jsonify(result), default_status
+    err = str(result.get("error") or "error")
+    status = {
+        "not_logged_in": 401,
+        "forbidden": 403,
+        "not_found": 404,
+        "support_not_ready": 503,
+    }.get(err, 400)
+    return jsonify(result), status
+
+
+@app.route("/api/support/tickets")
+@require_login
+def api_support_tickets():
+    pid = _current_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    return _support_json(support_logic.list_tickets(int(pid)))
+
+
+@app.route("/api/support/tickets", methods=["POST"])
+@require_login
+def api_support_ticket_create():
+    pid = _current_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    payload = request.get_json(silent=True) or {}
+    return _support_json(support_logic.create_ticket(int(pid), payload))
+
+
+@app.route("/api/support/tickets/<int:ticket_id>/reply", methods=["POST"])
+@require_login
+def api_support_ticket_reply(ticket_id: int):
+    pid = _current_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    payload = request.get_json(silent=True) or {}
+    return _support_json(
+        support_logic.reply_ticket(
+            int(pid),
+            int(ticket_id),
+            payload.get("message") or "",
+        )
+    )
+
+
+@app.route("/api/support/tickets/<int:ticket_id>/status", methods=["POST"])
+@require_login
+def api_support_ticket_status(ticket_id: int):
+    pid = _current_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    payload = request.get_json(silent=True) or {}
+    return _support_json(
+        support_logic.change_ticket_status(
+            int(pid),
+            int(ticket_id),
+            payload.get("status") or "",
+        )
+    )
+
+
 @app.route("/api/chat/admin/search")
 @require_login
 def api_chat_admin_search():
@@ -1409,7 +1486,19 @@ def _player_context_for_action() -> Optional[Tuple[Any, Dict[str, int]]]:
     player_view = load_player(user_id)
     if not player_view:
         return None
-    planet = get_homeworld(player_id=user_id)
+    try:
+        from game.planet_evolution.repository import evolution_schema_ready, get_active_planet_id, get_planet_row
+
+        conn = db()
+        try:
+            if evolution_schema_ready(conn):
+                planet = get_planet_row(get_active_planet_id(user_id, conn=conn), conn=conn)
+            else:
+                planet = get_homeworld(player_id=user_id)
+        finally:
+            conn.close()
+    except Exception:
+        planet = get_homeworld(player_id=user_id)
     buildings = get_planet_buildings(int(planet["id"]))
     return player_view, buildings
 
@@ -1585,6 +1674,224 @@ def api_research_cancel():
         job=extra if ok else None,
         finish_source="api_research_cancel",
     )
+
+
+# --------------------------------------------------------------------------
+# PLANET EVOLUTION
+# --------------------------------------------------------------------------
+
+@app.route("/planet-evolution")
+@require_login
+def planet_evolution_view():
+    ctx = _load_page_live_context(finish_source="planet_evolution")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    user_id = int(ctx["player_view"]["id"])
+    from game.planet_evolution.service import get_planet_state_payload, list_player_planets
+    from game.planet_evolution.repository import get_active_planet_id
+
+    conn = db()
+    try:
+        active_id = get_active_planet_id(user_id, conn=conn)
+        planet_state = get_planet_state_payload(active_id, player_id=user_id, conn=conn)
+        planets = list_player_planets(user_id, conn=conn)
+        conn.commit()
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    return render_template(
+        "planet_evolution.html",
+        player=ctx["player_view"],
+        planet_state=planet_state,
+        planets=planets,
+        build_queue=ctx["build_queue"],
+        research_status=ctx["research"],
+    )
+
+
+@app.route("/api/planets")
+@require_login
+def api_planets_list():
+    user_id = int(session["user_id"])
+    from game.planet_evolution.service import list_player_planets
+
+    return jsonify({"ok": True, "planets": list_player_planets(user_id)})
+
+
+@app.route("/api/planets/active", methods=["POST"])
+@require_login
+def api_planets_set_active():
+    data = request.get_json(silent=True) or {}
+    try:
+        planet_id = int(data.get("planet_id") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "reason": "missing_planet_id"}), 400
+    from game.planet_evolution.service import set_active_planet
+
+    ok, reason = set_active_planet(int(session["user_id"]), planet_id)
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_planets_active")
+    return jsonify({"ok": ok, "reason": reason, "state": state})
+
+
+@app.route("/api/planets/<int:planet_id>/state")
+@require_login
+def api_planet_state(planet_id: int):
+    from game.planet_evolution.service import get_planet_state_payload
+
+    payload = get_planet_state_payload(planet_id, player_id=int(session["user_id"]))
+    if payload.get("error"):
+        return jsonify({"ok": False, "reason": payload["error"]}), 403
+    return jsonify({"ok": True, "planet": payload})
+
+
+@app.route("/api/planets/<int:planet_id>/research")
+@require_login
+def api_planet_research_status(planet_id: int):
+    from game.planet_evolution.planet_research import get_planet_research_status
+    from game.models import get_planet_owner_id
+
+    if get_planet_owner_id(planet_id) != int(session["user_id"]):
+        return jsonify({"ok": False, "reason": "forbidden"}), 403
+    return jsonify({"ok": True, "research": get_planet_research_status(planet_id)})
+
+
+@app.route("/api/planets/<int:planet_id>/research/start", methods=["POST"])
+@require_login
+def api_planet_research_start(planet_id: int):
+    data = request.get_json(silent=True) or {}
+    tech_key = (data.get("tech_key") or "").strip()
+    if not tech_key:
+        return jsonify({"ok": False, "reason": "missing_tech_key"}), 400
+    from game.planet_evolution.planet_research import queue_planet_research
+    from game.models import get_planet_owner_id
+
+    if get_planet_owner_id(planet_id) != int(session["user_id"]):
+        return jsonify({"ok": False, "reason": "forbidden"}), 403
+    request_id = _extract_request_id(data)
+    user_id = int(session["user_id"])
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+    ok, reason, extra = queue_planet_research(planet_id, tech_key, request_id=request_id or None)
+    resp = _action_json_response(ok, reason, payload=extra if not ok else None, job=extra if ok else None, finish_source="api_planet_research_start")
+    if request_id:
+        save_idempotent_action(user_id, request_id, resp.get_json())
+    return resp
+
+
+@app.route("/api/planets/<int:planet_id>/research/choose", methods=["POST"])
+@require_login
+def api_planet_research_choose(planet_id: int):
+    data = request.get_json(silent=True) or {}
+    choice_group = (data.get("choice_group") or "").strip()
+    choice_key = (data.get("choice_key") or "").strip()
+    if not choice_group or not choice_key:
+        return jsonify({"ok": False, "reason": "missing_choice"}), 400
+    from game.planet_evolution.service import make_locked_choice
+    from game.models import get_planet_owner_id
+
+    if get_planet_owner_id(planet_id) != int(session["user_id"]):
+        return jsonify({"ok": False, "reason": "forbidden"}), 403
+    ok, reason = make_locked_choice(planet_id, choice_group, choice_key, int(session["user_id"]))
+    return _action_json_response(ok, reason, finish_source="api_planet_research_choose")
+
+
+@app.route("/api/planets/<int:planet_id>/specialization/pick", methods=["POST"])
+@require_login
+def api_planet_spec_pick(planet_id: int):
+    data = request.get_json(silent=True) or {}
+    spec_key = (data.get("spec_key") or "").strip()
+    if not spec_key:
+        return jsonify({"ok": False, "reason": "missing_spec_key"}), 400
+    from game.planet_evolution.service import pick_specialization
+    from game.models import get_planet_owner_id
+
+    if get_planet_owner_id(planet_id) != int(session["user_id"]):
+        return jsonify({"ok": False, "reason": "forbidden"}), 403
+    ok, reason, extra = pick_specialization(planet_id, spec_key, int(session["user_id"]))
+    return _action_json_response(
+        ok,
+        reason,
+        payload=extra if not ok else None,
+        job=extra if ok else None,
+        finish_source="api_planet_spec_pick",
+    )
+
+
+@app.route("/api/planets/<int:planet_id>/specialization/upgrade", methods=["POST"])
+@require_login
+def api_planet_spec_upgrade(planet_id: int):
+    from game.planet_evolution.service import upgrade_specialization_tier
+    from game.models import get_planet_owner_id
+
+    if get_planet_owner_id(planet_id) != int(session["user_id"]):
+        return jsonify({"ok": False, "reason": "forbidden"}), 403
+    ok, reason, extra = upgrade_specialization_tier(planet_id, int(session["user_id"]))
+    return _action_json_response(ok, reason, payload=extra if not ok else None, job=extra if ok else None, finish_source="api_planet_spec_upgrade")
+
+
+@app.route("/api/planets/<int:planet_id>/policies/activate", methods=["POST"])
+@require_login
+def api_planet_policy_activate(planet_id: int):
+    data = request.get_json(silent=True) or {}
+    try:
+        slot = int(data.get("slot") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "reason": "missing_slot"}), 400
+    policy_key = (data.get("policy_key") or "").strip()
+    if slot <= 0 or not policy_key:
+        return jsonify({"ok": False, "reason": "invalid_payload"}), 400
+    from game.planet_evolution.service import activate_policy
+    from game.models import get_planet_owner_id
+
+    if get_planet_owner_id(planet_id) != int(session["user_id"]):
+        return jsonify({"ok": False, "reason": "forbidden"}), 403
+    ok, reason = activate_policy(planet_id, slot, policy_key, int(session["user_id"]))
+    return _action_json_response(ok, reason, finish_source="api_planet_policy_activate")
+
+
+@app.route("/api/planets/<int:planet_id>/events/resolve", methods=["POST"])
+@require_login
+def api_planet_event_resolve(planet_id: int):
+    data = request.get_json(silent=True) or {}
+    try:
+        event_id = int(data.get("event_id") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "reason": "missing_event_id"}), 400
+    choice_key = (data.get("choice_key") or "").strip()
+    if event_id <= 0 or not choice_key:
+        return jsonify({"ok": False, "reason": "invalid_payload"}), 400
+    from game.planet_evolution.service import resolve_event_choice
+    from game.models import get_planet_owner_id
+
+    if get_planet_owner_id(planet_id) != int(session["user_id"]):
+        return jsonify({"ok": False, "reason": "forbidden"}), 403
+    ok, reason, extra = resolve_event_choice(planet_id, event_id, choice_key, int(session["user_id"]))
+    return _action_json_response(ok, reason, payload=extra if not ok else None, job=extra if ok else None, finish_source="api_planet_event_resolve")
+
+
+@app.route("/api/planets/colonize", methods=["POST"])
+@require_login
+def api_planets_colonize():
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "reason": "missing_name"}), 400
+    from game.planet_evolution.service import colonize_planet
+
+    ok, reason, extra = colonize_planet(
+        int(session["user_id"]),
+        name=name,
+        galaxy=int(data.get("galaxy") or 1),
+        system=data.get("system"),
+        position=data.get("position"),
+    )
+    return _action_json_response(ok, reason, payload=extra if not ok else None, job=extra if ok else None, finish_source="api_planets_colonize")
 
 
 # --------------------------------------------------------------------------

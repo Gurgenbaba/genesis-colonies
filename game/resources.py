@@ -24,55 +24,33 @@ from .models import (
     get_game_settings,
     save_planet,
 )
-from .buildings import complete_finished_builds_for_planet
-from .research import complete_finished_research, get_research_modifiers
+from .queue_engine import finish_due_work_once
+from .effects import EffectResolver, get_effect_resolver
 
 
 # ==========================================================================
 #   ENERGY & PRODUCTION
 # ==========================================================================
 
+def _resolver(
+    buildings: Dict[str, int],
+    research: Optional[Dict[str, int]] = None,
+    mods: Optional[Dict[str, float]] = None,
+) -> EffectResolver:
+    research = research or {}
+    resolver = EffectResolver(buildings, research)
+    if mods is not None:
+        resolver._mods = dict(mods)
+    return resolver
+
+
 def compute_energy(
     buildings: Dict[str, int],
     research: Optional[Dict[str, int]] = None,
     mods: Optional[Dict[str, float]] = None,
 ) -> Tuple[int, int]:
-    """
-    Berechnet:
-    - energy_total: erzeugte Energie (Solar)
-    - energy_used: verbrauchte Energie (Minen)
-
-    Research-Effekte:
-    - Wenn 'mods' übergeben wird, wird mine_energy_factor aus get_research_modifiers()
-      verwendet.
-    - Wenn kein 'mods' gesetzt ist, wird als Fallback direkt aus 'research["energy_tech"]'
-      gerechnet (Formel identisch zu get_research_modifiers).
-    """
-    if research is None:
-        research = {}
-
-    solar_lvl = int(buildings.get("solar_plant", 0) or 0)
-    metal_lvl = int(buildings.get("metal_mine", 0) or 0)
-    crystal_lvl = int(buildings.get("crystal_mine", 0) or 0)
-
-    # Beispiel-Formeln
-    energy_total = int(20 * (solar_lvl ** 1.4)) if solar_lvl > 0 else 0
-
-    energy_metal = int(10 * (metal_lvl ** 1.25)) if metal_lvl > 0 else 0
-    energy_crystal = int(6 * (crystal_lvl ** 1.25)) if crystal_lvl > 0 else 0
-    energy_used = energy_metal + energy_crystal
-
-    # Energieeffizienz
-    if mods is not None:
-        mine_energy_factor = float(mods.get("mine_energy_factor", 1.0) or 1.0)
-        energy_used = int(energy_used * mine_energy_factor)
-    else:
-        eff_lvl = int(research.get("energy_tech", 0) or 0)
-        if eff_lvl > 0:
-            energy_factor = max(0.4, 1.0 - 0.05 * eff_lvl)
-            energy_used = int(energy_used * energy_factor)
-
-    return energy_total, energy_used
+    """Delegates to EffectResolver (authoritative)."""
+    return _resolver(buildings, research, mods).compute_energy()
 
 
 def production_rates_per_sec(
@@ -80,51 +58,8 @@ def production_rates_per_sec(
     research: Optional[Dict[str, int]] = None,
     mods: Optional[Dict[str, float]] = None,
 ) -> Tuple[float, float]:
-    """
-    Basis-Produktionsraten pro Sekunde (vor Energie- und Speed-Faktoren).
-
-    Berücksichtigt:
-    - Minenlevel
-    - Research-Effekte:
-
-      Variante A (empfohlen):
-        - über 'mods' (get_research_modifiers):
-          metal_prod_factor, crystal_prod_factor
-
-      Variante B (Fallback):
-        - mining_tech (+10 % Metall, +4 % Crytite pro Stufe)
-        - drone_tech  (+3 % auf beide Ressourcen pro Stufe)
-    """
-    if research is None:
-        research = {}
-
-    metal_lvl = int(buildings.get("metal_mine", 0) or 0)
-    crystal_lvl = int(buildings.get("crystal_mine", 0) or 0)
-
-    # Basis-Formeln
-    metal_rate = 0.04 * (metal_lvl ** 1.4) if metal_lvl > 0 else 0.0
-    crystal_rate = 0.03 * (crystal_lvl ** 1.35) if crystal_lvl > 0 else 0.0
-
-    # Fallback-Levels
-    mining_lvl = int(research.get("mining_tech", 0) or 0)
-    drones_lvl = int(research.get("drone_tech", 0) or 0)
-
-    if mods is not None:
-        metal_factor = float(mods.get("metal_prod_factor", 1.0) or 1.0)
-        crystal_factor = float(mods.get("crystal_prod_factor", 1.0) or 1.0)
-        metal_rate *= metal_factor
-        crystal_rate *= crystal_factor
-    else:
-        if mining_lvl > 0:
-            metal_rate *= (1.0 + 0.10 * mining_lvl)
-            crystal_rate *= (1.0 + 0.04 * mining_lvl)
-
-        if drones_lvl > 0:
-            bonus = 1.0 + 0.03 * drones_lvl
-            metal_rate *= bonus
-            crystal_rate *= bonus
-
-    return metal_rate, crystal_rate
+    """Delegates to EffectResolver (authoritative)."""
+    return _resolver(buildings, research, mods).production_rates_per_sec()
 
 
 def get_building_production_per_hour(
@@ -141,41 +76,7 @@ def get_building_production_per_hour(
         get_research_modifiers() verwendet.
       - Andernfalls Fallback auf 'research'-Dict (Formeln identisch).
     """
-    settings = get_game_settings()
-    prod_speed = float(settings.get("production_speed", 1.0) or 1.0)
-
-    metal_rate, crystal_rate = production_rates_per_sec(
-        buildings,
-        research=research,
-        mods=mods,
-    )
-
-    metal_ph = int(metal_rate * float(ratio) * 3600 * prod_speed)
-    crystal_ph = int(crystal_rate * float(ratio) * 3600 * prod_speed)
-
-    return {
-        "metal_mine": metal_ph,
-        "crystal_mine": crystal_ph,
-        "solar_plant": 0,
-
-        "research_lab": 0,
-        "academy": 0,
-
-        "metal_storage": 0,
-        "crystal_storage": 0,
-
-        "command_center": 0,
-        "shipyard": 0,
-        "defense_factory": 0,
-        "barracks": 0,
-        "radar_array": 0,
-        "shield_generator": 0,
-
-        "terraformer": 0,
-        "nanofactory": 0,
-        "geothermal_nexus": 0,
-        "planet_core_nexus": 0,
-    }
+    return _resolver(buildings, research, mods).get_building_production_per_hour(ratio)
 
 
 # ==========================================================================
@@ -208,30 +109,7 @@ def get_storage_capacity(
             except Exception:
                 research = {}
 
-    terra_lvl = int(buildings.get("terraformer", 0) or 0)
-    terra_factor = 1.0 + 0.05 * terra_lvl
-
-    if mods is not None:
-        storage_factor = float(mods.get("storage_factor", 1.0) or 1.0)
-    else:
-        storage_lvl = int(research.get("storage_tech", 0) or 0)
-        storage_factor = 1.0 + 0.25 * storage_lvl
-
-    storage_bonus = storage_factor * terra_factor
-
-    base = 100_000
-    grow = 1.8
-
-    m_lvl = int(buildings.get("metal_storage", 0) or 0)
-    c_lvl = int(buildings.get("crystal_storage", 0) or 0)
-
-    m_cap = base * (grow ** max(0, m_lvl - 1)) if m_lvl > 0 else base
-    c_cap = base * (grow ** max(0, c_lvl - 1)) if c_lvl > 0 else base
-
-    return {
-        "metal": int(m_cap * storage_bonus),
-        "crystal": int(c_cap * storage_bonus),
-    }
+    return _resolver(buildings, research, mods).get_storage_capacity()
 
 def apply_production_delta(
     planet: dict,
@@ -286,11 +164,15 @@ def apply_resource_delta_unbounded(
 #   RESOURCE UPDATE
 # ==========================================================================
 
-def update_planet_resources(planet: dict, conn=None):
+def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool = False):
     """
     Conn-safe Update:
     - gleiche DB-Connection wird durchgereicht (wenn vorhanden)
     - verhindert "conn-mix" in /api/status und in Queue-Finishern
+
+    skip_queue_finish: True when called from sync_derived_state_after_queue_finish only.
+      Must stay True there — otherwise finish_due_work → sync → update_planet_resources would
+      call finish_due_work_once again (double queue processing). sync never sets skip_queue_finish=False.
     """
     planet = dict(planet)  # ✅ wichtig (sqlite row -> dict)
 
@@ -311,9 +193,15 @@ def update_planet_resources(planet: dict, conn=None):
         if own_conn:
             conn.execute("BEGIN IMMEDIATE")
 
-        # ✅ Fertige Jobs anwenden (muss conn-safe sein)
-        complete_finished_builds_for_planet(planet_id, conn=conn)
-        complete_finished_research(user_id=player_id, conn=conn)
+        if not skip_queue_finish:
+            finish_due_work_once(
+                player_id=player_id,
+                conn=conn,
+                source="resources",
+            )
+            from .live_state import mark_request_live_refreshed
+
+            mark_request_live_refreshed()
 
         now = time.time()
         last_raw = planet.get("last_update")
@@ -322,16 +210,23 @@ def update_planet_resources(planet: dict, conn=None):
 
         buildings = get_planet_buildings(planet_id, conn=conn)
         research = get_research_levels(user_id=player_id, conn=conn)
-        mods = get_research_modifiers(player_id, conn=conn)
+        resolver = get_effect_resolver(
+            player_id,
+            buildings=buildings,
+            research=research,
+            conn=conn,
+            force_refresh=True,
+        )
+        mods = resolver.get_modifiers()
 
-        energy_total, energy_used = compute_energy(buildings, research, mods=mods)
-        ratio = 1.0 if energy_total >= energy_used else max(0.0, float(energy_total) / max(1.0, float(energy_used)))
+        energy_total, energy_used = resolver.compute_energy()
+        ratio = EffectResolver.energy_ratio(energy_total, energy_used)
 
         settings = get_game_settings(conn=conn)
         prod_speed = float(settings.get("production_speed", 1.0) or 1.0)
 
         if delta > 0:
-            m_rate, c_rate = production_rates_per_sec(buildings, research, mods=mods)
+            m_rate, c_rate = resolver.production_rates_per_sec()
             delta_metal = int(m_rate * ratio * delta * prod_speed)
             delta_crystal = int(c_rate * ratio * delta * prod_speed)
 
@@ -349,6 +244,27 @@ def update_planet_resources(planet: dict, conn=None):
         planet["energy_used"] = int(energy_used)
 
         save_planet(planet, conn=conn)
+
+        try:
+            from .planet_evolution.repository import evolution_schema_ready
+
+            if evolution_schema_ready(conn):
+                from .planet_evolution.bootstrap import ensure_planet_evolution
+                from .planet_evolution.tick import evolution_tick_planet
+
+                ensure_planet_evolution(planet_id, conn)
+                evolution_tick_planet(
+                    conn,
+                    planet_id,
+                    now,
+                    skip_research_finish=bool(skip_queue_finish),
+                )
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "planet evolution tick failed planet_id=%s", planet_id
+            )
 
         if own_conn:
             conn.commit()
@@ -376,11 +292,30 @@ def update_resources(player: dict, conn=None):
 
     player_id = int(player["id"])
 
-    # ✅ gleiche Connection nutzen, falls übergeben
     planet = get_homeworld(player_id=player_id, conn=conn)
+    try:
+        from .planet_evolution.repository import evolution_schema_ready, get_active_planet_id, get_planet_row
 
-    # ⚠️ update_planet_resources muss idealerweise auch conn akzeptieren
-    # Wenn deine resources.py das noch nicht kann: unten ist der Mini-Patch.
+        if conn is not None and evolution_schema_ready(conn):
+            active_id = get_active_planet_id(player_id, conn=conn)
+            active = get_planet_row(active_id, conn=conn)
+            if active:
+                planet = active
+        elif conn is None:
+            from .models import db as _db
+
+            _conn = _db()
+            try:
+                if evolution_schema_ready(_conn):
+                    active_id = get_active_planet_id(player_id, conn=_conn)
+                    active = get_planet_row(active_id, conn=_conn)
+                    if active:
+                        planet = active
+            finally:
+                _conn.close()
+    except Exception:
+        pass
+
     planet, buildings, ratio, energy_total, energy_used = update_planet_resources(planet, conn=conn)
 
     player_view = dict(player)
@@ -390,3 +325,72 @@ def update_resources(player: dict, conn=None):
     player_view["energy_used"] = energy_used
 
     return player_view, buildings, ratio, energy_total, energy_used
+
+
+def sync_derived_state_after_queue_finish(
+    *,
+    planet_ids=None,
+    player_ids=None,
+    conn=None,
+) -> int:
+    """
+    Persist authoritative derived state (energy, production tick, caps) after queue finish.
+    Safe for cron/admin ticks without a player HTTP request.
+
+    Recursion-safe: only calls update_planet_resources(..., skip_queue_finish=True).
+    Never invokes finish_due_work_once (queue work already finished by the caller).
+    """
+    from .models import db as _db, get_homeworld
+
+    own_conn = False
+    if conn is None:
+        conn = _db()
+        own_conn = True
+
+    synced: set[int] = set()
+    count = 0
+
+    try:
+        if own_conn:
+            conn.execute("BEGIN IMMEDIATE")
+
+        for raw_pid in planet_ids or []:
+            planet_id = int(raw_pid)
+            if planet_id in synced:
+                continue
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM planets WHERE id = ? LIMIT 1;", (planet_id,))
+            row = cur.fetchone()
+            if not row:
+                continue
+            update_planet_resources(dict(row), conn=conn, skip_queue_finish=True)
+            synced.add(planet_id)
+            count += 1
+
+        for raw_uid in player_ids or []:
+            user_id = int(raw_uid)
+            from .models import get_planets_by_player
+
+            try:
+                planets = get_planets_by_player(user_id, conn=conn)
+            except Exception:
+                continue
+            for planet in planets:
+                planet_id = int(planet["id"])
+                if planet_id in synced:
+                    continue
+                update_planet_resources(dict(planet), conn=conn, skip_queue_finish=True)
+                synced.add(planet_id)
+                count += 1
+
+        if own_conn:
+            conn.commit()
+    except Exception:
+        if own_conn:
+            conn.rollback()
+        raise
+    finally:
+        if own_conn:
+            conn.close()
+
+    return count

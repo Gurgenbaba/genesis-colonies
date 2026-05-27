@@ -23,8 +23,6 @@ from game.models import (
     delete_build_job,
     delete_research_job,
     ensure_player_and_homeworld,
-    finish_due_build_jobs,
-    finish_due_research_jobs,
     get_game_settings,
     get_homeworld,
     get_planet_buildings,
@@ -144,7 +142,10 @@ def api_migrations() -> Dict[str, Any]:
 
 
 def api_runtime() -> Dict[str, Any]:
+    from game.runtime_state import get_queue_tick_status
+
     settings = get_game_settings() or {}
+    queue_tick = get_queue_tick_status()
     return _ok(
         runtime={
             "version": get_app_version(),
@@ -166,6 +167,7 @@ def api_runtime() -> Dict[str, Any]:
                 "queue_limit": settings.get("queue_limit"),
                 "research_queue_limit": settings.get("research_queue_limit"),
             },
+            "queue_tick": queue_tick,
         },
     )
 
@@ -292,6 +294,24 @@ def get_player_detail(player_id: int) -> Dict[str, Any]:
         )
     finally:
         conn.close()
+
+
+def get_player_effects_debug(player_id: int) -> Dict[str, Any]:
+    """Authoritative effect breakdown for admin debugging."""
+    from game.logic import get_effect_debug_snapshot
+
+    try:
+        snapshot = get_effect_debug_snapshot(int(player_id))
+    except Exception as exc:
+        return _err("effects_unavailable", str(exc))
+    return _ok(
+        effects=snapshot,
+        developer_note=(
+            "modifiers_active = live gameplay. modifiers_prepared = computed only; "
+            "not applied until combat/fleet/scan engines exist. Do not show prepared "
+            "values as active bonuses to players."
+        ),
+    )
 
 
 def set_player_admin(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
@@ -751,7 +771,8 @@ def cancel_queue_job(admin_id: int, queue_type: str, job_id: int) -> Dict[str, A
             row = cur.fetchone()
             if not row:
                 return _err("not_found", "Research job not found.")
-            delete_research_job(int(job_id))
+            delete_research_job(int(job_id), conn=conn)
+            conn.commit()
         finally:
             conn.close()
     else:
@@ -767,35 +788,80 @@ def cancel_queue_job(admin_id: int, queue_type: str, job_id: int) -> Dict[str, A
     return _ok(cancelled=True, queue_type=qtype, job_id=int(job_id))
 
 
-def finish_due_queues(admin_id: int) -> Dict[str, Any]:
-    now = time.time()
-    build_finished = 0
-    research_finished = 0
+def run_queue_tick_admin(admin_id: int) -> Dict[str, Any]:
+    """Manual queue tick via tick_runner (batched due scope)."""
+    from game.tick_runner import run_tick
 
-    conn = db()
-    try:
-        cur = conn.cursor()
-        cur.execute("SELECT DISTINCT planet_id, player_id FROM planets WHERE player_id IS NOT NULL;")
-        planets = cur.fetchall()
-        for prow in planets:
-            if finish_due_build_jobs(int(prow["planet_id"]), int(prow["player_id"]), now=now, conn=conn):
-                build_finished += 1
-        cur.execute("SELECT DISTINCT user_id FROM research_queue;")
-        users = cur.fetchall()
-        for urow in users:
-            if finish_due_research_jobs(int(urow["user_id"]), now=now, conn=conn):
-                research_finished += 1
-        conn.commit()
-    finally:
-        conn.close()
+    result = run_tick(
+        scope="due",
+        batch_size=100,
+        source="admin_manual",
+        persist=True,
+    )
+
+    finished = dict(result.get("finished") or {})
+    affected = list(result.get("affected_players") or [])
+    errors = list(result.get("errors") or [])
+    elapsed = int(result.get("tick_elapsed_ms") or result.get("duration_ms") or 0)
+
+    derived_sync_count = int(result.get("derived_sync_count") or 0)
+
+    audit(
+        admin_id,
+        "queue_tick",
+        target_type="system",
+        payload={
+            "source": "admin_manual",
+            "finished": finished,
+            "affected_players": len(affected),
+            "batches": int(result.get("batches") or 0),
+            "duration_ms": elapsed,
+            "derived_sync_count": derived_sync_count,
+            "errors": len(errors),
+        },
+    )
+
+    out = _ok(
+        finished=finished,
+        affected_players=affected,
+        batches=int(result.get("batches") or 0),
+        tick_elapsed_ms=elapsed,
+        derived_sync_count=derived_sync_count,
+        errors=errors,
+        players_processed=int(result.get("players_processed") or 0),
+        score_updates=int(result.get("score_updates") or 0),
+        rank_recalculated=bool(result.get("rank_recalculated")),
+    )
+    if not result.get("ok", True):
+        out["ok"] = False
+        out["error"] = "tick_failed"
+        out["message"] = "; ".join(errors) if errors else "queue_tick_failed"
+    return out
+
+
+def finish_due_queues(admin_id: int) -> Dict[str, Any]:
+    from game.queue_engine import finish_due_work
+
+    engine = finish_due_work(source="admin")
 
     audit(
         admin_id,
         "queues_finish_due",
         target_type="system",
-        payload={"build_planets": build_finished, "research_users": research_finished},
+        payload={
+            "source": engine.get("source"),
+            "finished": engine.get("finished"),
+            "affected_players": len(engine.get("affected_players") or []),
+            "affected_planets": len(engine.get("affected_planets") or []),
+            "score_updates": engine.get("score_updates"),
+            "rank_recalculated": engine.get("rank_recalculated"),
+            "duration_ms": engine.get("duration_ms"),
+            "errors": engine.get("errors"),
+        },
     )
-    return _ok(build_planets_finished=build_finished, research_users_finished=research_finished)
+    out = _ok()
+    out.update(engine)
+    return out
 
 
 def clear_queues(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:

@@ -197,6 +197,8 @@
         return loadAdminQueues();
       case "audit":
         return loadAuditLog();
+      case "chat":
+        return loadAdminChat();
       case "runtime":
         return loadAdminRuntime();
       default:
@@ -507,6 +509,57 @@
     return data;
   }
 
+  function formatTickSummary(finished, playersCount, durationMs) {
+    const fin = finished || {};
+    const tpl = t(
+      "admin_tick_result_summary",
+      "Gebäude: %(buildings)s · Forschung: %(research)s · Werft: %(shipyard)s · Verteidigung: %(defense)s · Spieler: %(players)s · Dauer: %(duration)s ms"
+    );
+    return tpl
+      .replace("%(buildings)s", String(fin.buildings != null ? fin.buildings : 0))
+      .replace("%(research)s", String(fin.research != null ? fin.research : 0))
+      .replace("%(shipyard)s", String(fin.shipyard != null ? fin.shipyard : 0))
+      .replace("%(defense)s", String(fin.defense != null ? fin.defense : 0))
+      .replace("%(players)s", String(playersCount != null ? playersCount : 0))
+      .replace("%(duration)s", String(durationMs != null ? durationMs : 0));
+  }
+
+  async function runQueueTick(triggerBtn) {
+    const btn = triggerBtn || qs("#admin-btn-queue-tick");
+    const resultEl = qs("#admin-queue-tick-result");
+    if (resultEl) resultEl.textContent = t("admin_tick_running", "Tick läuft …");
+    setBusy(btn, true);
+    try {
+      const data = await adminPost("/api/admin/queue-tick", {});
+      if (!data || data.ok === false) {
+        const msg = (data && (data.message || data.error)) || t("admin_tick_failed", "Queue-Tick fehlgeschlagen");
+        showAlert(msg, "error");
+        if (resultEl) resultEl.textContent = msg;
+        return data || { ok: false, error: "tick_failed" };
+      }
+      const fin = data.finished || {};
+      const players = Array.isArray(data.affected_players) ? data.affected_players.length : 0;
+      const elapsed = data.tick_elapsed_ms != null ? data.tick_elapsed_ms : data.duration_ms;
+      const derivedSync = data.derived_sync_count != null ? Number(data.derived_sync_count) : 0;
+      let summary = formatTickSummary(fin, players, elapsed);
+      summary += ` · ${t("admin_tick_derived_sync", "Derived sync")}: ${derivedSync}`;
+      notify(t("admin_tick_success", "Queue-Tick abgeschlossen"), "success");
+      if (resultEl) resultEl.textContent = summary;
+      if ((data.errors || []).length) {
+        showAlert((data.errors || []).join("\n"), "error");
+      }
+      await loadAdminRuntime();
+      return data;
+    } catch (err) {
+      const msg = err && err.message ? err.message : t("admin_tick_failed", "Queue-Tick fehlgeschlagen");
+      showAlert(msg, "error");
+      if (resultEl) resultEl.textContent = msg;
+      return { ok: false, error: "tick_failed", message: msg };
+    } finally {
+      setBusy(btn, false);
+    }
+  }
+
   async function clearQueues() {
     const confirmText = qs("#admin-queue-clear-confirm")?.value || "";
     const scope = qs("#admin-queue-clear-scope")?.value || "planet";
@@ -560,8 +613,28 @@
       return data;
     }
     const r = data.runtime || {};
+    const qt = r.queue_tick || {};
+    const fin = qt.finished || {};
+    const tickAtRaw = qt.last_tick_at != null ? qt.last_tick_at : qt.last_at;
+    const tickSource = qt.last_tick_source != null ? qt.last_tick_source : qt.source;
+    const tickDuration =
+      qt.last_tick_duration_ms != null ? qt.last_tick_duration_ms : qt.duration_ms;
+    const playersCount =
+      qt.affected_players_count != null
+        ? qt.affected_players_count
+        : (qt.affected_players || []).length;
+    const errorsCount = qt.errors_count != null ? qt.errors_count : (qt.errors || []).length;
     _isProduction = !!r.production;
     if (out) {
+      const tickAt = tickAtRaw
+        ? new Date(Number(tickAtRaw) * 1000).toLocaleString()
+        : t("admin_tick_never", "—");
+      const tickOk =
+        qt.ok === true
+          ? t("admin_tick_ok", "OK")
+          : qt.ok === false
+            ? t("admin_tick_error", "Fehler")
+            : t("admin_tick_unknown", "—");
       out.innerHTML = `
         
         <div class="admin-kpi-grid">
@@ -578,8 +651,83 @@
               ([k, v]) => `<div class="admin-kpi-card admin-card"><div class="admin-metric-label">${esc(k)}</div><div class="admin-metric-value">${esc(v)}</div></div>`
             )
             .join("")}
-        </div>`;
+        </div>
+        <h3 class="admin-subtitle">${esc(t("admin_queue_tick_title", "Queue-Tick (Cron/Worker)"))}</h3>
+        <div class="admin-kpi-grid">
+          ${[
+            [t("admin_tick_last", "Letzter Queue-Tick"), tickAt],
+            [t("admin_tick_status", "Status"), tickOk],
+            [t("admin_tick_source", "Quelle"), tickSource || "—"],
+            [t("admin_tick_duration", "Dauer"), tickDuration != null ? `${tickDuration} ms` : "—"],
+            [t("admin_tick_buildings", "Gebäude"), fin.buildings != null ? fin.buildings : 0],
+            [t("admin_tick_research", "Forschung"), fin.research != null ? fin.research : 0],
+            [t("admin_tick_shipyard", "Werft"), fin.shipyard != null ? fin.shipyard : 0],
+            [t("admin_tick_defense", "Verteidigung"), fin.defense != null ? fin.defense : 0],
+            [t("admin_tick_affected_players", "Betroffene Spieler"), playersCount],
+            [t("admin_tick_batches", "Batches"), qt.batches != null ? qt.batches : 0],
+            [t("admin_tick_errors_count", "Fehler (Anzahl)"), errorsCount],
+          ]
+            .map(
+              ([k, v]) => `<div class="admin-kpi-card admin-card"><div class="admin-metric-label">${esc(k)}</div><div class="admin-metric-value">${esc(v)}</div></div>`
+            )
+            .join("")}
+        </div>
+        ${
+          (qt.errors || []).length
+            ? `<div class="admin-alert admin-alert-error"><strong>${esc(t("admin_tick_errors", "Fehler"))}</strong><pre class="admin-pre">${esc((qt.errors || []).join("\n"))}</pre></div>`
+            : ""
+        }`;
     }
+    return data;
+  }
+
+  async function loadAdminChat() {
+    const out = qs("#admin-chat-search-output");
+    if (out && !out.innerHTML.trim()) {
+      out.innerHTML = `<p class="admin-small-hint">${esc(t("admin_chat_search_hint", "Nachrichten durchsuchen…"))}</p>`;
+    }
+    return null;
+  }
+
+  async function searchAdminChatMessages() {
+    const out = qs("#admin-chat-search-output");
+    const q = (qs("#admin-chat-search-q")?.value || "").trim();
+    if (!out) return null;
+    if (q.length < 2) {
+      showAlert(t("admin_chat_search_min", "Mindestens 2 Zeichen."), "error");
+      return null;
+    }
+    out.innerHTML = loadingHtml();
+    const data = await adminGet(`/api/chat/admin/search?q=${encodeURIComponent(q)}&limit=50`);
+    if (!data.ok) {
+      showAlert(data.message || t("admin_action_failed", "Fehler"), "error");
+      out.innerHTML = errorCard(data);
+      return data;
+    }
+    const rows = data.data?.messages || [];
+    if (!rows.length) {
+      out.innerHTML = `<p class="admin-small-hint">${esc(t("admin_chat_search_empty", "Keine Treffer."))}</p>`;
+      return data;
+    }
+    out.innerHTML = `
+      <table class="admin-table">
+        <thead><tr>
+          <th>ID</th><th>${esc(t("admin_chat_col_room", "Raum"))}</th>
+          <th>${esc(t("admin_chat_col_sender", "Sender"))}</th>
+          <th>${esc(t("admin_chat_col_message", "Nachricht"))}</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+          ${rows.map((m) => `
+            <tr>
+              <td>${m.id}</td>
+              <td>${esc(m.room_title || m.room_key)}</td>
+              <td>${m.sender_id ? playerNameLink(m.sender_id, m.sender_name) : esc("System")}</td>
+              <td>${m.is_deleted ? `<em>${esc(t("chat_message_deleted", "Entfernt"))}</em>` : esc(m.message)}</td>
+              <td>${m.is_deleted ? "" : `<button type="button" class="gc-btn gc-btn-danger gc-btn-xs" data-admin-action="chat-delete-msg" data-message-id="${m.id}">${esc(t("admin_chat_delete_btn", "Löschen"))}</button>`}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
     return data;
   }
 
@@ -592,7 +740,86 @@
     if (act === "load-queues") return loadAdminQueues();
     if (act === "finish-due") return finishDueQueues();
     if (act === "load-audit") return loadAuditLog();
+    if (act === "chat-search") return searchAdminChatMessages();
+    if (act === "chat-system-notice") {
+      const body = (qs("#admin-chat-notice-body")?.value || "").trim();
+      if (!body) {
+        showAlert(t("chat_error_empty_message", "Leere Nachricht."), "error");
+        return null;
+      }
+      const res = await adminPost("/api/chat/admin/system-notice", { body });
+      if (res.ok) {
+        notify(t("admin_chat_notice_sent", "System-Meldung gesendet."), "success");
+        if (qs("#admin-chat-notice-body")) qs("#admin-chat-notice-body").value = "";
+      } else showAlert(res.message, "error");
+      return res;
+    }
+    if (act === "chat-mute-player") {
+      const pid = parseInt(qs("#admin-chat-mute-player")?.value, 10);
+      const mins = parseInt(qs("#admin-chat-mute-minutes")?.value, 10) || 60;
+      if (!Number.isFinite(pid) || pid <= 0) {
+        showAlert(t("admin_chat_mute_invalid", "Ungültige Spieler-ID."), "error");
+        return null;
+      }
+      const res = await adminPost("/api/chat/admin/mute", {
+        player_id: pid,
+        scope: qs("#admin-chat-mute-scope")?.value || "global",
+        muted_until: Math.floor(Date.now() / 1000) + mins * 60,
+        reason: qs("#admin-chat-mute-reason")?.value || "",
+      });
+      if (res.ok) notify(t("admin_chat_mute_ok", "Spieler stummgeschaltet."), "success");
+      else showAlert(res.message, "error");
+      return res;
+    }
+    if (act === "chat-ban-player") {
+      const pid = parseInt(qs("#admin-chat-mod-player")?.value, 10);
+      if (!Number.isFinite(pid) || pid <= 0) {
+        showAlert(t("admin_chat_mute_invalid", "Ungültige Spieler-ID."), "error");
+        return null;
+      }
+      const res = await adminPost("/api/chat/admin/ban", {
+        player_id: pid,
+        reason: qs("#admin-chat-ban-reason")?.value || "",
+      });
+      if (res.ok) notify(t("admin_chat_ban_ok", "Spieler aus Chat gebannt."), "success");
+      else showAlert(res.message, "error");
+      return res;
+    }
+    if (act === "chat-unban-player") {
+      const pid = parseInt(qs("#admin-chat-mod-player")?.value, 10);
+      if (!Number.isFinite(pid) || pid <= 0) {
+        showAlert(t("admin_chat_mute_invalid", "Ungültige Spieler-ID."), "error");
+        return null;
+      }
+      const res = await adminPost("/api/chat/admin/unban", { player_id: pid });
+      if (res.ok) notify(t("admin_chat_unban_ok", "Chat-Ban aufgehoben."), "success");
+      else showAlert(res.message, "error");
+      return res;
+    }
+    if (act === "chat-unmute-player") {
+      const pid = parseInt(qs("#admin-chat-mod-player")?.value, 10);
+      if (!Number.isFinite(pid) || pid <= 0) {
+        showAlert(t("admin_chat_mute_invalid", "Ungültige Spieler-ID."), "error");
+        return null;
+      }
+      const res = await adminPost("/api/chat/admin/unmute", { player_id: pid });
+      if (res.ok) notify(t("admin_chat_unmute_ok", "Stummschaltung aufgehoben."), "success");
+      else showAlert(res.message, "error");
+      return res;
+    }
+    if (act === "chat-delete-msg") {
+      const mid = parseInt(btn.dataset.messageId, 10);
+      if (!Number.isFinite(mid)) return null;
+      const res = await adminPost("/api/chat/admin/delete-message", { message_id: mid });
+      if (res.ok) {
+        notify(t("admin_chat_deleted", "Nachricht gelöscht."), "success");
+        return searchAdminChatMessages();
+      }
+      showAlert(res.message, "error");
+      return res;
+    }
     if (act === "refresh-runtime") return loadAdminRuntime();
+    if (act === "run-queue-tick") return runQueueTick(btn);
     if (act === "queue-cancel") return cancelQueueJob(btn.dataset.queueType, btn.dataset.jobId);
     if (act === "queue-clear") return clearQueues();
 
@@ -729,6 +956,10 @@
       if (e.target.id === "admin-planets-search") {
         e.preventDefault();
         await searchAdminPlanets();
+      }
+      if (e.target.id === "admin-chat-search-q") {
+        e.preventDefault();
+        await searchAdminChatMessages();
       }
     });
   }

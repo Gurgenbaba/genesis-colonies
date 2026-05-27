@@ -8,11 +8,16 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
+import time
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+MIGRATE_SCRIPT = ROOT / "migrate.py"
 
 
 @pytest.fixture()
@@ -185,6 +190,160 @@ def test_migrations_endpoint(app_client):
     assert "pending" in m
 
 
+def test_finish_due_queues_returns_200(app_client):
+    """Admin finish-due must not reference planets.planet_id (uses planets.id)."""
+    client, _, user_id = app_client
+    _login(client, "admin_cc", "adminpass123")
+
+    from game.models import db, get_homeworld
+    import time
+
+    hw = get_homeworld(user_id)
+    planet_id = int(hw["id"])
+    conn = db()
+    conn.execute(
+        "INSERT INTO build_queue (planet_id, building_type, start_time, finish_time) "
+        "VALUES (?, ?, ?, ?);",
+        (planet_id, "metal_mine", time.time() - 60, time.time() - 1),
+    )
+    conn.commit()
+    conn.close()
+
+    r = client.post("/api/admin/queues/finish-due", json={})
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert "finished" in data
+    assert "affected_players" in data
+    assert "duration_ms" in data
+    assert data["source"] == "admin"
+
+
+def test_schema_validation_passes_after_bootstrap(admin_env, monkeypatch):
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    from game.bootstrap import bootstrap_application
+    from game.schema_validation import validate_core_schema
+
+    bootstrap_application(skip_migration_check=True)
+    issues = validate_core_schema(strict=True)
+    assert issues == []
+
+
+def _run_migrate(db_path: Path) -> None:
+    env = os.environ.copy()
+    env["GC_DB_PATH"] = str(db_path)
+    result = subprocess.run(
+        [sys.executable, str(MIGRATE_SCRIPT)],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_migration_015_runtime_state_idempotent(admin_env):
+    _run_migrate(admin_env)
+    _run_migrate(admin_env)
+
+    from game.bootstrap import bootstrap_application
+    from game.db import table_exists
+    from game.models import db
+
+    bootstrap_application(skip_migration_check=True)
+    conn = db()
+    try:
+        assert table_exists(conn, "runtime_state")
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='runtime_state';"
+        ).fetchone()
+        assert row is not None
+    finally:
+        conn.close()
+
+
+def test_api_admin_queue_tick_admin_ok(app_client):
+    client, admin_id, user_id = app_client
+    _login(client, "admin_cc", "adminpass123")
+
+    from game.models import db, get_homeworld
+
+    hw = get_homeworld(user_id)
+    planet_id = int(hw["id"])
+    conn = db()
+    conn.execute(
+        "INSERT INTO build_queue (planet_id, building_type, start_time, finish_time) "
+        "VALUES (?, ?, ?, ?);",
+        (planet_id, "metal_mine", time.time() - 60, time.time() - 1),
+    )
+    conn.commit()
+    conn.close()
+
+    r = client.post("/api/admin/queue-tick", json={})
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert "finished" in data
+    assert "affected_players" in data
+    assert "batches" in data
+    assert "tick_elapsed_ms" in data
+    assert "errors" in data
+    assert data["finished"]["buildings"] >= 1
+
+    from game.runtime_state import get_queue_tick_status
+
+    status = get_queue_tick_status()
+    assert status["last_tick_at"] is not None
+    assert status["last_tick_source"] == "admin_manual"
+    assert status["last_tick_duration_ms"] is not None
+    assert status["finished"].get("buildings", 0) >= 1
+    assert status["affected_players_count"] >= 1
+
+    audit = client.get("/api/admin/audit-log?action=queue_tick")
+    assert audit.status_code == 200
+    entries = audit.get_json()["entries"]
+    assert any(e["action"] == "queue_tick" for e in entries)
+    tick_entry = next(e for e in entries if e["action"] == "queue_tick")
+    assert tick_entry["payload"]["source"] == "admin_manual"
+    assert tick_entry["payload"]["finished"]["buildings"] >= 1
+
+
+def test_api_admin_queue_tick_forbidden_for_user(app_client):
+    client, _, _ = app_client
+    _login(client, "normal_cc", "userpass123")
+    r = client.post("/api/admin/queue-tick", json={})
+    assert r.status_code == 403
+    assert r.get_json()["error"] == "forbidden"
+
+
+def test_api_admin_queue_tick_error_response_shape(app_client):
+    """Admin JS must receive structured JSON even when tick fails."""
+    client, _, _ = app_client
+    _login(client, "admin_cc", "adminpass123")
+
+    with patch("game.tick_runner.run_tick") as mock_tick:
+        mock_tick.return_value = {
+            "ok": False,
+            "source": "admin_manual",
+            "scope": "due",
+            "finished": {"buildings": 0, "research": 0, "shipyard": 0, "defense": 0},
+            "affected_players": [],
+            "errors": ["simulated failure"],
+            "batches": 0,
+            "tick_elapsed_ms": 1,
+            "duration_ms": 1,
+        }
+        r = client.post("/api/admin/queue-tick", json={})
+
+    assert r.status_code == 400
+    data = r.get_json()
+    assert data["ok"] is False
+    assert data["error"] == "tick_failed"
+    assert data["errors"] == ["simulated failure"]
+    assert "finished" in data
+    assert "message" in data
+
+
 def test_admin_page_smoke_html(app_client):
     """Smoke: /admin shell markup for JS/CSS bindings."""
     client, _, _ = app_client
@@ -199,5 +358,7 @@ def test_admin_page_smoke_html(app_client):
     assert 'data-admin-panel="health"' in html
     assert "admin.js" in html
     assert "admin.css" in html
+    assert 'data-admin-action="run-queue-tick"' in html
+    assert "admin-btn-queue-tick" in html
     assert "GC_ASSET_VERSION" not in html
     assert "?v=" in html

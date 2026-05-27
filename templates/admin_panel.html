@@ -104,6 +104,7 @@
       <button type="button" class="admin-tab-btn" data-admin-tab="planets" role="tab">{{ T("admin_planets_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="queues" role="tab">{{ T("admin_queues_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="audit" role="tab">{{ T("admin_audit_title") }}</button>
+      <button type="button" class="admin-tab-btn" data-admin-tab="chat" role="tab">{{ T("admin_chat_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="runtime" role="tab">{{ T("admin_runtime_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="settings" role="tab">{{ T("admin_settings_title") }}</button>
     </nav>
@@ -187,13 +188,72 @@
       <div id="admin-audit-output" class="admin-table-wrap"></div>
     </section>
 
+    <section id="admin-tab-chat" class="admin-panel admin-tab-panel" data-admin-panel="chat" role="tabpanel" hidden>
+      <div class="admin-action-row admin-action-row-wrap">
+        <h2 class="admin-panel-title">{{ T("admin_chat_title") }}</h2>
+      </div>
+      <p class="admin-small-hint">{{ T("admin_chat_hint") }}</p>
+
+      <div class="admin-card">
+        <h3 class="admin-subtitle">{{ T("admin_chat_notice_title") }}</h3>
+        <textarea class="admin-input" id="admin-chat-notice-body" rows="3" maxlength="500"
+                  placeholder="{{ T('admin_chat_notice_placeholder') }}"></textarea>
+        <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="chat-system-notice">
+          {{ T("admin_chat_notice_send") }}
+        </button>
+      </div>
+
+      <div class="admin-card">
+        <h3 class="admin-subtitle">{{ T("admin_chat_mute_title") }}</h3>
+        <div class="admin-action-row admin-action-row-wrap">
+          <input type="number" class="admin-input admin-input-sm" id="admin-chat-mute-player" placeholder="{{ T('admin_chat_mute_player_id') }}">
+          <select class="admin-input admin-input-sm" id="admin-chat-mute-scope">
+            <option value="global">{{ T("admin_chat_mute_scope_global") }}</option>
+            <option value="room">{{ T("admin_chat_mute_scope_room") }}</option>
+            <option value="alliance">{{ T("admin_chat_mute_scope_alliance") }}</option>
+          </select>
+          <input type="number" class="admin-input admin-input-sm" id="admin-chat-mute-minutes" placeholder="{{ T('admin_chat_mute_minutes') }}" value="60">
+          <input type="text" class="admin-input admin-input-sm" id="admin-chat-mute-reason" placeholder="{{ T('admin_chat_mute_reason') }}">
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="chat-mute-player">
+            {{ T("admin_chat_mute_btn") }}
+          </button>
+        </div>
+      </div>
+
+      <div class="admin-card">
+        <h3 class="admin-subtitle">{{ T("admin_chat_moderation_title", "Chat-Ban / Unmute") }}</h3>
+        <div class="admin-action-row admin-action-row-wrap">
+          <input type="number" class="admin-input admin-input-sm" id="admin-chat-mod-player" placeholder="{{ T('admin_chat_mute_player_id') }}">
+          <input type="text" class="admin-input admin-input-sm" id="admin-chat-ban-reason" placeholder="{{ T('admin_chat_mute_reason') }}">
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="chat-ban-player">
+            {{ T("admin_chat_ban_btn", "Chat bannen") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="chat-unban-player">
+            {{ T("admin_chat_unban_btn", "Chat entbannen") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="chat-unmute-player">
+            {{ T("admin_chat_unmute_btn", "Stumm aufheben") }}
+          </button>
+        </div>
+      </div>
+
+      <div class="admin-card">
+        <h3 class="admin-subtitle">{{ T("admin_chat_search_title") }}</h3>
+        <div class="admin-action-row">
+          <input type="search" class="admin-input" id="admin-chat-search-q" placeholder="{{ T('admin_chat_search_placeholder') }}">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="chat-search">{{ T("admin_btn_search") }}</button>
+        </div>
+        <div id="admin-chat-search-output" class="admin-table-wrap"></div>
+      </div>
+    </section>
+
     <section id="admin-tab-runtime" class="admin-panel admin-tab-panel" data-admin-panel="runtime" role="tabpanel" hidden>
       <div class="admin-action-row">
         <h2 class="admin-panel-title">{{ T("admin_runtime_title") }}</h2>
+        <button type="button" id="admin-btn-queue-tick" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="run-queue-tick">{{ T("admin_tick_now") }}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="refresh-runtime">{{ T("admin_btn_refresh_runtime") }}</button>
       </div>
-      
-      
+      <div id="admin-queue-tick-result" class="admin-small-hint" aria-live="polite"></div>
       <div id="admin-runtime-output" class="admin-panel-body"></div>
     </section>
 

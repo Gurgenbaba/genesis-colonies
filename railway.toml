@@ -1,0 +1,11 @@
+# Railway deploy config — https://docs.railway.com/reference/config-as-code
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+# Run pending migrations against the mounted SQLite volume before traffic.
+preDeployCommand = "python migrate.py"

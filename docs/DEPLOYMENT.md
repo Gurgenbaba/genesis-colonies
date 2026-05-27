@@ -122,6 +122,14 @@ Data persists in Docker volume `gc_data` (`GC_DB_PATH=/data/game.db`).
 
 ---
 
+## Railway (SQLite + Volume)
+
+PostgreSQL is **not** implemented yet. Use SQLite on a Railway Volume mounted at `/data` with `GC_DB_PATH=/data/game.db`. Do not link a PostgreSQL service or rely on `DATABASE_URL`.
+
+Full guide: [`DEPLOY_RAILWAY.md`](DEPLOY_RAILWAY.md).
+
+---
+
 ## Update existing installation
 
 ```bash

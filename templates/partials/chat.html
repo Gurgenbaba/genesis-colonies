@@ -1,0 +1,86 @@
+{# Genesis TChat – global floating panel (outside #main-content, PJAX-safe) #}
+<div id="gc-chat-root"
+     class="gc-chat-root"
+     data-chat-root
+     aria-hidden="true">
+  <button type="button"
+          class="gc-chat-fab"
+          data-chat-fab
+          aria-label="{{ T('chat_title', 'TChat') }}"
+          title="{{ T('chat_title', 'TChat') }}">
+    <span class="gc-chat-fab-icon" aria-hidden="true">💬</span>
+    <span class="gc-chat-fab-badge" data-chat-fab-badge hidden></span>
+  </button>
+
+  <div class="gc-chat-panel"
+       data-chat-panel
+       role="dialog"
+       aria-label="{{ T('chat_title', 'TChat') }}"
+       aria-modal="false">
+    <header class="gc-chat-header">
+      <div class="gc-chat-header-left" data-chat-drag-handle title="{{ T('chat_drag', 'Verschieben') }}">
+        <span class="gc-chat-status-dot" aria-hidden="true"></span>
+        <span class="gc-chat-title">{{ T('chat_title', 'TChat') }}</span>
+        <span class="gc-chat-online-label">{{ T('chat_online', 'Online') }}</span>
+      </div>
+      <div class="gc-chat-header-actions">
+        <button type="button" class="gc-chat-btn" data-chat-minimize aria-label="{{ T('chat_minimize', 'Minimieren') }}">−</button>
+        <button type="button" class="gc-chat-btn" data-chat-maximize aria-label="{{ T('chat_maximize', 'Maximieren') }}">□</button>
+        <button type="button" class="gc-chat-btn" data-chat-close aria-label="{{ T('chat_close', 'Schließen') }}">✕</button>
+      </div>
+    </header>
+
+    <div class="gc-chat-body">
+      <aside class="gc-chat-sidebar" data-chat-sidebar aria-label="{{ T('chat_rooms', 'Räume') }}">
+        <div class="gc-chat-room-tools">
+          <button type="button" class="gc-chat-room-tool" data-chat-room-create title="{{ T('chat_room_create', 'Raum erstellen') }}">＋</button>
+          <button type="button" class="gc-chat-room-tool" data-chat-room-invite title="{{ T('chat_room_invite', 'Spieler einladen') }}">👤+</button>
+          <button type="button" class="gc-chat-room-tool" data-chat-room-remove title="{{ T('chat_room_remove', 'Spieler entfernen') }}">👤−</button>
+          <button type="button" class="gc-chat-room-tool" data-chat-room-leave title="{{ T('chat_room_leave', 'Raum verlassen') }}">↩</button>
+          <button type="button" class="gc-chat-room-tool" data-chat-room-delete title="{{ T('chat_room_delete', 'Raum löschen') }}">🗑</button>
+        </div>
+        <nav class="gc-chat-rooms" data-chat-room-list></nav>
+      </aside>
+
+      <div class="gc-chat-main">
+        <div class="gc-chat-room-head">
+          <span class="gc-chat-room-title" data-chat-active-title>—</span>
+          <span class="gc-chat-room-hint" data-chat-room-hint hidden></span>
+          <div class="gc-chat-room-members" data-chat-room-members hidden></div>
+        </div>
+
+        <div class="gc-chat-messages-wrap">
+          <div class="gc-chat-messages" data-chat-messages role="log" aria-live="polite" aria-relevant="additions"></div>
+          <button type="button" class="gc-chat-new-msgs" data-chat-new-msgs hidden>
+            {{ T('chat_new_messages', 'Neue Nachrichten') }}
+          </button>
+        </div>
+
+        <div class="gc-chat-error" data-chat-error hidden role="alert"></div>
+
+        <form class="gc-chat-composer" data-chat-composer autocomplete="off">
+          <div class="gc-chat-autocomplete" data-chat-autocomplete hidden></div>
+          <div class="gc-chat-composer-row">
+            <button type="button"
+                    class="gc-chat-emoji-btn"
+                    data-chat-emoji-toggle
+                    aria-label="{{ T('chat_emoji', 'Smileys') }}"
+                    title="{{ T('chat_emoji', 'Smileys') }}">😀</button>
+            <textarea class="gc-chat-input"
+                      data-chat-input
+                      rows="1"
+                      maxlength="500"
+                      placeholder="{{ T('chat_placeholder', 'Nachricht… (/help)') }}"
+                      aria-label="{{ T('chat_send', 'Senden') }}"></textarea>
+            <button type="submit" class="gc-btn gc-btn-primary gc-chat-send" data-chat-send>
+              {{ T('chat_send', 'Senden') }}
+            </button>
+          </div>
+          <div class="gc-chat-emoji-picker" data-chat-emoji-picker hidden role="listbox" aria-label="{{ T('chat_emoji', 'Smileys') }}"></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="gc-chat-resize" data-chat-resize aria-hidden="true"></div>
+  </div>
+</div>

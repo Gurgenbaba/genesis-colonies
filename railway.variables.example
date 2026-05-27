@@ -1,0 +1,15 @@
+# Copy these to Railway → genesis-colonies (WEB service) → Variables
+# Do NOT commit real SECRET_KEY values to git — use your own in Railway only.
+
+APP_ENV=production
+FLASK_ENV=production
+FLASK_DEBUG=0
+SECRET_KEY=<generate-with-python-secrets-token-hex-32>
+GC_DB_BACKEND=sqlite
+GC_DB_PATH=/data/game.db
+HOST=0.0.0.0
+
+# Volume: mount path /data on the web service
+
+# Do NOT add DATABASE_URL from the Postgres service to the web service.
+# Postgres backend is not implemented yet (GC_DB_BACKEND=postgres will fail).
