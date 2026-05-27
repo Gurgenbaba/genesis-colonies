@@ -160,21 +160,25 @@ def player_name_link(
     if pid <= 0:
         return Markup(escape(name or "—"))
 
-    label = escape(str(name or "Commander"))
+    from game.player_display import commander_display_name, commander_lookup_name
+
+    lookup = commander_lookup_name(name)
+    display = escape(commander_display_name(name) or "—")
+    lookup_attr = escape(lookup)
     classes = ["gc-player-name"]
     if extra_class:
         classes.append(str(extra_class).strip())
     attrs = [
         f'class="{" ".join(classes)}"',
         f'data-player-id="{pid}"',
-        f'data-player-name="{label}"',
+        f'data-player-name="{lookup_attr}"',
     ]
     if enable_card:
         attrs.append('data-player-card="1"')
         attrs.append(f'title="{escape(T("playercard_open"))}"')
         attrs.append('role="button"')
         attrs.append('tabindex="0"')
-    return Markup(f"<span {' '.join(attrs)}>{label}</span>")
+    return Markup(f"<span {' '.join(attrs)}>{display}</span>")
 
 
 def _current_player_id() -> int | None:

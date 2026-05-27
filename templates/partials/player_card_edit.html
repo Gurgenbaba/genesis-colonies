@@ -28,7 +28,8 @@
                  aria-hidden="true">{{ (card.get('commander_name_raw') or '?')[:1] }}</div>
           </div>
           <div class="gc-player-card-identity">
-            <h3 class="gc-player-card-commander" id="pc-preview-name">{{ card.get('commander_name', '—') }}</h3>
+            {% set name = card.get('commander_name', '—') %}
+            <h3 class="gc-player-card-commander" id="pc-preview-name">{% include "partials/commander_name.html" %}</h3>
             <p class="gc-player-card-title-text" id="pc-preview-title">{{ form.get('title') or '' }}</p>
             <p class="gc-player-card-bio-preview" id="pc-preview-bio">{{ form.get('bio') or '' }}</p>
           </div>

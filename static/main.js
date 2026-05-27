@@ -2362,10 +2362,21 @@
     return `<span class="you-pill" aria-label="${you}">${you}</span>`;
   }
 
+  function rankingCommanderNameHtml(row) {
+    const display = row.commander_display || row.commander_name || "—";
+    const prefix = rankingEscapeHtml(rankingT("commander", "Commander"));
+    const name = rankingEscapeHtml(display);
+    return (
+      `<span class="gc-commander-prefix">${prefix}</span>` +
+      `<span class="gc-ranking-player-name">${name}</span>`
+    );
+  }
+
   function rankingPlayerCell(row, isMe) {
     const pid = Number(row.player_id) || 0;
     const openLabel = rankingEscapeHtml(rankingT("ranking_open_playercard", "Open player card"));
-    const name = rankingEscapeHtml(row.commander_name || "Commander");
+    const displayName = rankingEscapeHtml(row.commander_display || row.commander_name || "—");
+    const nameRow = rankingCommanderNameHtml(row);
     const title = row.title
       ? `<span class="gc-ranking-player-title">${rankingEscapeHtml(row.title)}</span>`
       : "";
@@ -2374,17 +2385,17 @@
       return (
         `<div class="gc-ranking-player">` +
         `<span class="gc-ranking-avatar">${rankingAvatarInner(row)}</span>` +
-        `<div class="gc-ranking-player-meta"><div class="gc-ranking-player-name-row">${name}</div>${title}${rankingBadgesHtml(row)}</div>` +
+        `<div class="gc-ranking-player-meta"><div class="gc-ranking-player-name-row">${nameRow}</div>${title}${rankingBadgesHtml(row)}</div>` +
         `</div>`
       );
     }
 
     return (
       `<button type="button" class="gc-ranking-player gc-ranking-player-trigger" ` +
-      `data-player-id="${pid}" data-player-card="1" aria-label="${openLabel}: ${name}">` +
+      `data-player-id="${pid}" data-player-card="1" aria-label="${openLabel}: ${displayName}">` +
       `<span class="gc-ranking-avatar">${rankingAvatarInner(row)}</span>` +
       `<div class="gc-ranking-player-meta">` +
-      `<div class="gc-ranking-player-name-row">${rankingYouPill(isMe)}<span class="gc-ranking-player-name">${name}</span></div>` +
+      `<div class="gc-ranking-player-name-row">${rankingYouPill(isMe)}${nameRow}</div>` +
       title +
       rankingBadgesHtml(row) +
       `</div>` +

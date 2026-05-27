@@ -2288,9 +2288,24 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   min-width: 0;
 }
 
+.gc-commander-prefix,
+.gc-ranking-commander-prefix{
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-text-soft);
+  flex-shrink: 0;
+}
+
+.gc-commander-name,
 .gc-ranking-player-name{
   font-weight: 700;
   color: var(--gc-primary-2);
+}
+
+.gc-player-card-commander .gc-commander-prefix{
+  margin-right: 0.35em;
 }
 
 .gc-ranking-player-title{

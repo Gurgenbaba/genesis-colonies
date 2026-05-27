@@ -124,7 +124,6 @@
 
     const composeForm = document.getElementById("messages-compose-form");
     composeForm?.addEventListener("submit", async (e) => {
-      if (!document.getElementById("messages-page")) return;
       e.preventDefault();
       e.stopPropagation();
 
@@ -158,6 +157,14 @@
     });
 
     document.addEventListener("click", (e) => {
+      const composeTo = e.target.closest("[data-messages-compose]");
+      if (composeTo) {
+        e.preventDefault();
+        e.stopPropagation();
+        openCompose(composeTo.dataset.recipientName || "");
+        return;
+      }
+
       if (!document.getElementById("messages-page")) return;
 
       if (e.target.closest("#messages-compose-btn")) {
@@ -415,5 +422,6 @@
   GC.modules = GC.modules || {};
   GC.modules.messages = initMessagesPage;
   GC.initMessagesPage = initMessagesPage;
+  GC.openMessagesCompose = openCompose;
   bindMessagesUiOnce();
 })();

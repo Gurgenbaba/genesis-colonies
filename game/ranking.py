@@ -729,7 +729,9 @@ def _ranking_social_select_and_join(conn) -> Tuple[str, str]:
 
 
 def _avatar_initial_from_name(name: Any) -> str:
-    label = str(name or "").strip()
+    from .player_display import commander_display_name
+
+    label = commander_display_name(str(name or ""))
     if not label:
         return "?"
     return label[0].upper()
@@ -753,8 +755,11 @@ def enrich_ranking_social_fields(raw: Dict[str, Any]) -> Dict[str, Any]:
     """
     from .playercard import sanitize_text_field, validate_avatar_url, validate_theme, TITLE_MAX
 
-    name = str(raw.get("commander_name") or "Commander")
-    initial = _avatar_initial_from_name(name)
+    from .player_display import commander_display_name, commander_lookup_name
+
+    lookup = commander_lookup_name(raw.get("commander_name"))
+    name = commander_display_name(lookup)
+    initial = _avatar_initial_from_name(lookup)
     pub_raw = raw.get("card_is_public")
     is_public = bool(int(pub_raw)) if pub_raw is not None else True
 
@@ -851,11 +856,15 @@ def get_sorted_ranking_entries(
         scores = _normalize_db_row(d)
         rank = base_rank + idx
         social = enrich_ranking_social_fields(d)
+        from .player_display import commander_display_name, commander_lookup_name
+
+        raw_name = d.get("commander_name") or "Commander"
         out.append(
             {
                 "rank": rank,
                 "player_id": int(d["player_id"]),
-                "commander_name": d.get("commander_name") or "Commander",
+                "commander_name": commander_lookup_name(raw_name),
+                "commander_display": commander_display_name(raw_name),
                 "is_current_player": False,
                 "rank_total": int(d["rank_total"]) if d.get("rank_total") is not None else None,
                 "rank_building": int(d["rank_building"]) if d.get("rank_building") is not None else None,

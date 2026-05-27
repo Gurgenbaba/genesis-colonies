@@ -11,7 +11,8 @@
     <div class="gc-player-card-profile gc-player-card-private">
       <div class="gc-player-card-avatar gc-player-card-avatar-placeholder" aria-hidden="true">?</div>
       <div class="gc-player-card-private-text">
-        <h3 class="gc-player-card-commander">{{ card.get('commander_name', '—') }}</h3>
+        {% set name = card.get('commander_name', '—') %}
+        <h3 class="gc-player-card-commander">{% include "partials/commander_name.html" %}</h3>
         <p class="gc-player-card-private-msg">{{ T("playercard_private_profile") }}</p>
       </div>
     </div>
@@ -34,7 +35,8 @@
       </div>
 
       <div class="gc-player-card-identity">
-        <h3 class="gc-player-card-commander">{{ card.get('commander_name', '—') }}</h3>
+        {% set name = card.get('commander_name', '—') %}
+        <h3 class="gc-player-card-commander">{% include "partials/commander_name.html" %}</h3>
         {% if card.get('title') %}
           <p class="gc-player-card-title-text">{{ card.get('title') }}</p>
         {% endif %}
@@ -50,8 +52,14 @@
               class="gc-btn gc-btn-outline gc-btn-sm"
               data-chat-whisper
               data-player-id="{{ card.get('player_id') }}"
-              data-player-name="{{ card.get('commander_name') }}">
+              data-player-name="{{ card.get('commander_name_lookup', card.get('commander_name')) }}">
         {{ T("chat_whisper_btn") }}
+      </button>
+      <button type="button"
+              class="gc-btn gc-btn-outline gc-btn-sm"
+              data-messages-compose
+              data-recipient-name="{{ card.get('commander_name_lookup', card.get('commander_name')) }}">
+        {{ T("playercard_message_btn") }}
       </button>
       {% endif %}
       {% if card.get('can_edit') %}

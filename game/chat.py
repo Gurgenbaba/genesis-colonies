@@ -290,21 +290,28 @@ def remove_custom_room_member(actor_id: int, room_id: int, target_player_id: int
 
 
 def find_player_by_name(name: str, conn) -> Optional[Dict[str, Any]]:
+    from .player_display import commander_name_candidates
+
     q = str(name or "").strip()
     if len(q) < 2:
         return None
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, name FROM players
-        WHERE LOWER(name) = LOWER(?)
-        LIMIT 1;
-        """,
-        (q,),
-    )
-    row = cur.fetchone()
-    if row:
-        return dict(row)
+
+    for candidate in commander_name_candidates(q):
+        if len(candidate) < 2:
+            continue
+        cur.execute(
+            """
+            SELECT id, name FROM players
+            WHERE LOWER(name) = LOWER(?)
+            LIMIT 1;
+            """,
+            (candidate,),
+        )
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+
     cur.execute(
         """
         SELECT id, name FROM players

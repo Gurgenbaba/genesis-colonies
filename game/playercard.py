@@ -380,6 +380,20 @@ def build_public_card(
             c.close()
 
 
+def _commander_fields(player: Dict[str, Any]) -> Dict[str, str]:
+    from .player_display import commander_display_name, commander_lookup_name, strip_commander_prefix
+
+    raw = str(player.get("name") or "Commander")
+    display = commander_display_name(raw)
+    lookup = commander_lookup_name(raw)
+    initial_src = strip_commander_prefix(raw) or display or lookup
+    return {
+        "commander_name": display,
+        "commander_name_lookup": lookup,
+        "commander_name_raw": initial_src,
+    }
+
+
 def _build_public_card_payload(
     tid: int,
     player: Dict[str, Any],
@@ -391,9 +405,11 @@ def _build_public_card_payload(
 
     is_public = bool(int(card.get("is_public", 1) or 0))
     if not is_public and not is_self:
+        names = _commander_fields(player)
         return {
             "player_id": tid,
-            "commander_name": escape(str(player.get("name") or "Commander")),
+            "commander_name": escape(names["commander_name"]),
+            "commander_name_lookup": names["commander_name_lookup"],
             "is_private": True,
             "is_self": False,
             "can_edit": False,
@@ -405,10 +421,12 @@ def _build_public_card_payload(
     colonies = _count_colonies(tid, conn=conn)
     last_seen = int(player.get("last_seen") or 0)
 
+    names = _commander_fields(player)
     payload: Dict[str, Any] = {
         "player_id": tid,
-        "commander_name": escape(str(player.get("name") or "Commander")),
-        "commander_name_raw": str(player.get("name") or "Commander"),
+        "commander_name": escape(names["commander_name"]),
+        "commander_name_lookup": names["commander_name_lookup"],
+        "commander_name_raw": names["commander_name_raw"],
         "avatar_url": escape(str(card.get("avatar_url") or "")),
         "title": escape(sanitize_text_field(card.get("title"), TITLE_MAX)),
         "bio": escape(sanitize_text_field(card.get("bio"), BIO_MAX)),
