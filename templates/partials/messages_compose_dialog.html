@@ -1,0 +1,29 @@
+{# Persistent compose dialog — outside #main-content so PJAX cannot destroy it. #}
+<dialog id="messages-compose-dialog" class="gc-messages-compose-dialog">
+  <form id="messages-compose-form" class="gc-messages-compose-form">
+    <header class="gc-messages-compose-head">
+      <h2 class="gc-panel-title">{{ T("messages.compose") }}</h2>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" id="messages-compose-close"
+              aria-label="{{ T('close') }}">×</button>
+    </header>
+    <label class="gc-messages-field">
+      <span class="gc-messages-field-label">{{ T("messages.recipient") }}</span>
+      <input type="text" class="gc-messages-input" name="recipient" id="messages-compose-recipient"
+             required maxlength="64" autocomplete="off">
+    </label>
+    <label class="gc-messages-field">
+      <span class="gc-messages-field-label">{{ T("messages.subject") }}</span>
+      <input type="text" class="gc-messages-input" name="subject" id="messages-compose-subject"
+             required minlength="3" maxlength="120">
+    </label>
+    <label class="gc-messages-field">
+      <span class="gc-messages-field-label">{{ T("messages.body") }}</span>
+      <textarea class="gc-messages-input gc-messages-textarea" name="body" id="messages-compose-body"
+                required minlength="3" maxlength="5000" rows="8"></textarea>
+    </label>
+    <p class="gc-messages-compose-status" id="messages-compose-status" role="status" aria-live="polite"></p>
+    <footer class="gc-messages-compose-foot">
+      <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm">{{ T("messages.send") }}</button>
+    </footer>
+  </form>
+</dialog>

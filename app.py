@@ -76,6 +76,7 @@ from game.ranking import (
 from game import playercard as playercard_logic
 from game import chat as chat_logic
 from game import support as support_logic
+from game import messages as messages_logic
 
 from game.bootstrap import bootstrap_application
 from game.config import get_secret_key, is_debug_enabled, is_production
@@ -1271,6 +1272,191 @@ def api_admin_support_ticket_status(ticket_id: int):
     )
 
 
+# --------------------------------------------------------------------------
+# MESSAGES API (player inbox)
+# --------------------------------------------------------------------------
+
+def _messages_json(result: dict, default_status: int = 200):
+    if not isinstance(result, dict):
+        return jsonify({"ok": False, "error": "internal", "data": None}), 500
+    if result.get("ok"):
+        return jsonify(result), default_status
+    err = str(result.get("error") or "error")
+    status = {
+        "not_logged_in": 401,
+        "forbidden": 403,
+        "not_found": 404,
+        "messages_not_ready": 503,
+        "cooldown": 429,
+        "rate_limited": 429,
+        "recipient_not_found": 404,
+        "validation": 400,
+    }.get(err, 400)
+    return jsonify(result), status
+
+
+@app.route("/api/admin/messages")
+@require_admin_api
+def api_admin_messages_list():
+    player_id = request.args.get("player_id")
+    category = request.args.get("category")
+    try:
+        limit = int(request.args.get("limit", 50))
+    except (TypeError, ValueError):
+        limit = 50
+    try:
+        offset = int(request.args.get("offset", 0))
+    except (TypeError, ValueError):
+        offset = 0
+    pid = None
+    if player_id not in (None, ""):
+        try:
+            pid = int(player_id)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "validation", "data": None}), 400
+    return _messages_json(
+        messages_logic.admin_list_messages(
+            player_id=pid,
+            category=category,
+            limit=limit,
+            offset=offset,
+        )
+    )
+
+
+@app.route("/api/admin/messages/<int:message_id>")
+@require_admin_api
+def api_admin_messages_get(message_id: int):
+    return _messages_json(messages_logic.admin_get_message(int(message_id)))
+
+
+@app.route("/api/admin/messages/send", methods=["POST"])
+@require_admin_api
+def api_admin_messages_send():
+    payload = request.get_json(silent=True) or {}
+    recipient = payload.get("recipient_id") or payload.get("recipient") or payload.get("player_id")
+    return _messages_json(
+        messages_logic.admin_send_message(
+            recipient,
+            payload.get("subject") or "",
+            payload.get("body") or "",
+            category=str(payload.get("category") or "admin"),
+            sender_name=payload.get("sender_name"),
+        )
+    )
+
+
+@app.route("/messages")
+@require_login
+def messages_view():
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    if player_view is None:
+        return redirect(url_for("login"))
+    return render_template(
+        "messages.html",
+        player=player_view,
+        buildings=buildings,
+        energy_total=energy_total,
+        energy_used=energy_used,
+        storage_caps=storage_caps,
+    )
+
+
+@app.route("/api/messages")
+@require_login
+def api_messages_list():
+    pid = _current_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    category = request.args.get("category")
+    include_archived = str(request.args.get("include_archived", "")).lower() in ("1", "true", "yes")
+    try:
+        limit = int(request.args.get("limit", 50))
+    except (TypeError, ValueError):
+        limit = 50
+    try:
+        offset = int(request.args.get("offset", 0))
+    except (TypeError, ValueError):
+        offset = 0
+    return _messages_json(
+        messages_logic.list_messages(
+            int(pid),
+            category=category,
+            include_archived=include_archived,
+            limit=limit,
+            offset=offset,
+        )
+    )
+
+
+@app.route("/api/messages/<int:message_id>")
+@require_login
+def api_messages_get(message_id: int):
+    pid = _current_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    return _messages_json(messages_logic.get_message(int(pid), int(message_id)))
+
+
+@app.route("/api/messages/<int:message_id>/read", methods=["POST"])
+@require_login
+def api_messages_read(message_id: int):
+    pid = _current_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    return _messages_json(messages_logic.mark_message_read(int(pid), int(message_id)))
+
+
+@app.route("/api/messages/read-all", methods=["POST"])
+@require_login
+def api_messages_read_all():
+    pid = _current_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    payload = request.get_json(silent=True) or {}
+    return _messages_json(
+        messages_logic.mark_all_messages_read(
+            int(pid),
+            category=payload.get("category"),
+        )
+    )
+
+
+@app.route("/api/messages/<int:message_id>/archive", methods=["POST"])
+@require_login
+def api_messages_archive(message_id: int):
+    pid = _current_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    return _messages_json(messages_logic.archive_message(int(pid), int(message_id)))
+
+
+@app.route("/api/messages/<int:message_id>/delete", methods=["POST"])
+@require_login
+def api_messages_delete(message_id: int):
+    pid = _current_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    return _messages_json(messages_logic.delete_message(int(pid), int(message_id)))
+
+
+@app.route("/api/messages/send", methods=["POST"])
+@require_login
+def api_messages_send():
+    pid = _current_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    payload = request.get_json(silent=True) or {}
+    return _messages_json(
+        messages_logic.send_player_message(
+            int(pid),
+            payload.get("recipient") or payload.get("recipient_name") or "",
+            payload.get("subject") or "",
+            payload.get("body") or "",
+        )
+    )
+
+
 @app.route("/api/chat/admin/search")
 @require_login
 def api_chat_admin_search():
@@ -1484,6 +1670,11 @@ def _payload_from_live_context(
         "rank": int(rank) if rank else None,
         "total_players": int(total_players) if total_players else None,
     }
+
+    try:
+        payload["unread_messages_count"] = messages_logic.unread_count(user_id)
+    except Exception:
+        payload["unread_messages_count"] = 0
 
     return payload
 

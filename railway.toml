@@ -7,5 +7,6 @@ dockerfilePath = "Dockerfile"
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
-# Migrations run in scripts/docker-entrypoint.sh (main container + volume).
+# Migrations run automatically in scripts/docker-entrypoint.sh (main container + /data volume).
+# Includes 020_player_messages.sql and all pending *.sql — no manual shell needed.
 # Do NOT use preDeployCommand — that container cannot mount Railway volumes.

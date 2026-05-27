@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="gc-page gc-messages-page" id="messages-page" data-player-id="{{ CURRENT_PLAYER_ID or '' }}">
+
+  <header class="section-header">
+    <h1 class="section-title">{{ T("messages.title") }}</h1>
+    <p class="section-hint hint">{{ T("messages.subtitle") }}</p>
+  </header>
+
+  <section class="gc-panel gc-messages-panel" aria-labelledby="messages-panel-title">
+    <div class="gc-panel-header gc-messages-head">
+      <div class="gc-panel-head-left">
+        <span class="gc-panel-title" id="messages-panel-title">{{ T("messages.title") }}</span>
+        <span class="gc-panel-subtitle" id="messages-unread-label">
+          {{ T("messages.unread") }}:
+          <span class="gc-messages-unread-pill" id="messages-unread-count">0</span>
+        </span>
+      </div>
+      <div class="gc-panel-head-right gc-messages-head-actions">
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" id="messages-mark-all-read">
+          {{ T("messages.mark_all_read") }}
+        </button>
+        <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" id="messages-compose-btn">
+          {{ T("messages.compose") }}
+        </button>
+      </div>
+    </div>
+
+    <div class="gc-messages-body">
+      <div id="messages-tabs" class="gc-messages-tabs building-tabs" role="tablist"
+           aria-label="{{ T('messages.title') }}">
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn active" data-filter="all"
+                role="tab" aria-selected="true">
+          {{ T("messages.filter.all") }}
+        </button>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="system"
+                role="tab" aria-selected="false">
+          {{ T("messages.category.system") }}
+        </button>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="player"
+                role="tab" aria-selected="false">
+          {{ T("messages.category.player") }}
+        </button>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="reports"
+                role="tab" aria-selected="false">
+          {{ T("messages.filter.reports") }}
+        </button>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="archive"
+                role="tab" aria-selected="false">
+          {{ T("messages.filter.archive") }}
+        </button>
+      </div>
+
+      <div class="gc-messages-layout">
+        <aside class="gc-messages-list-wrap gc-messages-inset" aria-label="{{ T('messages.list') }}">
+          <div id="messages-list" class="gc-messages-list" aria-live="polite">
+          <div class="gc-messages-empty">{{ T("messages.empty") }}</div>
+        </div>
+        </aside>
+
+        <div class="gc-messages-detail-wrap gc-messages-inset">
+          <article id="messages-detail" class="gc-messages-detail" aria-live="polite" hidden>
+            <header class="gc-messages-detail-head">
+              <h2 class="gc-messages-detail-subject" id="messages-detail-subject"></h2>
+              <p class="gc-messages-detail-meta" id="messages-detail-meta"></p>
+            </header>
+            <div class="gc-messages-detail-body" id="messages-detail-body"></div>
+            <div class="gc-messages-detail-actions" id="messages-detail-actions"></div>
+          </article>
+
+          <div id="messages-detail-empty" class="gc-messages-empty gc-messages-detail-placeholder">
+            {{ T("messages.select_hint") }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+{% endblock %}

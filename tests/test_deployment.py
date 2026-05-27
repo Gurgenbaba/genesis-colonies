@@ -137,6 +137,46 @@ def test_migration_pending_detected(deploy_env):
     assert isinstance(pending, list)
 
 
+def test_docker_entrypoint_migrations_apply_player_messages(deploy_env):
+    """Simulates Railway start: migrate.py before app (see scripts/docker-entrypoint.sh)."""
+    env = os.environ.copy()
+    env["GC_DB_PATH"] = str(deploy_env)
+    env["GC_SKIP_MIGRATION_CHECK"] = "1"
+
+    from game.models import init_db
+
+    init_db()
+
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "migrate.py")],
+        cwd=str(ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+    from game.db import db, table_exists
+
+    conn = db()
+    try:
+        assert table_exists(conn, "player_messages")
+        row = conn.execute(
+            "SELECT name FROM migration_history WHERE name = ?;",
+            ("020_player_messages.sql",),
+        ).fetchone()
+        assert row is not None
+    finally:
+        conn.close()
+
+    from game.migrations_util import migrations_are_current
+
+    current, pending, err = migrations_are_current()
+    assert err is None
+    assert current is True
+    assert "020_player_messages.sql" not in pending
+
+
 def test_env_example_exists():
     assert (ROOT / ".env.example").exists()
     text = (ROOT / ".env.example").read_text(encoding="utf-8")

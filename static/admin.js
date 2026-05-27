@@ -9,6 +9,7 @@
   let _activeTab = "health";
   let _isProduction = false;
   let _selectedSupportTicketId = null;
+  let _selectedAdminMessageId = null;
 
   function t(key, fallback) {
     return LOCALE[key] || fallback || key;
@@ -202,6 +203,8 @@
         return loadAdminChat();
       case "support":
         return loadAdminSupport();
+      case "messages":
+        return loadAdminMessages();
       case "runtime":
         return loadAdminRuntime();
       default:
@@ -776,6 +779,126 @@
     return data;
   }
 
+  function renderAdminMessageDetail(msg) {
+    const out = qs("#admin-messages-detail");
+    if (!out) return;
+    if (!msg) {
+      out.innerHTML = `<p class="admin-small-hint">${esc(t("admin_messages_select_hint", "Nachricht aus der Liste waehlen."))}</p>`;
+      return;
+    }
+    out.innerHTML = `
+      <h3 class="admin-subtitle">#${msg.id} · ${esc(msg.subject)}</h3>
+      <p class="admin-small-hint">
+        ${esc(t("admin_messages_col_recipient", "Empfaenger"))}:
+        ${playerNameLink(msg.recipient_player_id, msg.recipient_name || `#${msg.recipient_player_id}`)}
+        · ${esc(t(`messages.category.${msg.category}`, msg.category))}
+        · ${esc(msg.is_read ? t("messages.read", "Gelesen") : t("messages.unread", "Ungelesen"))}
+        · ${esc(fmtTs(msg.created_at))}
+      </p>
+      <p class="admin-small-hint">
+        ${esc(t("admin_messages_col_sender", "Absender"))}: ${esc(msg.sender_name || "—")}
+      </p>
+      <div class="admin-support-msg">
+        <div class="admin-support-msg-body">${esc(msg.body)}</div>
+      </div>`;
+  }
+
+  async function loadAdminMessages() {
+    const listOut = qs("#admin-messages-list");
+    if (!listOut) return null;
+    listOut.innerHTML = loadingHtml();
+
+    const playerRaw = (qs("#admin-messages-player-filter")?.value || "").trim();
+    const category = (qs("#admin-messages-category-filter")?.value || "").trim();
+    const params = new URLSearchParams();
+    if (playerRaw) params.set("player_id", playerRaw);
+    if (category) params.set("category", category);
+    const q = params.toString() ? `?${params.toString()}` : "";
+
+    const data = await adminGet(`/api/admin/messages${q}`);
+    if (!data.ok) {
+      showAlert(data.error || data.message || t("admin_action_failed", "Fehler"), "error");
+      listOut.innerHTML = errorCard(data);
+      return data;
+    }
+
+    const messages = data.data?.messages || [];
+    if (!messages.length) {
+      listOut.innerHTML = `<p class="admin-small-hint">${esc(t("admin_messages_empty", "Keine Nachrichten."))}</p>`;
+      renderAdminMessageDetail(null);
+      return data;
+    }
+
+    listOut.innerHTML = `
+      <table class="admin-table">
+        <thead><tr>
+          <th>ID</th>
+          <th>${esc(t("admin_messages_col_recipient", "Empfaenger"))}</th>
+          <th>${esc(t("admin_messages_col_subject", "Betreff"))}</th>
+          <th>${esc(t("messages.category.system", "Kategorie"))}</th>
+          <th>${esc(t("admin_messages_col_date", "Datum"))}</th>
+        </tr></thead>
+        <tbody>
+          ${messages
+            .map(
+              (m) => `
+            <tr class="admin-support-ticket-row${_selectedAdminMessageId === m.id ? " is-active" : ""}"
+                data-admin-message-id="${m.id}">
+              <td>${m.id}</td>
+              <td>${playerNameLink(m.recipient_player_id, m.recipient_name || `#${m.recipient_player_id}`)}</td>
+              <td>${esc(m.subject)}</td>
+              <td>${esc(t(`messages.category.${m.category}`, m.category))}</td>
+              <td>${esc(fmtTs(m.created_at))}</td>
+            </tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>`;
+
+    if (_selectedAdminMessageId) {
+      const hit = messages.find((m) => m.id === _selectedAdminMessageId);
+      if (hit) {
+        renderAdminMessageDetail(hit);
+        return data;
+      }
+    }
+    _selectedAdminMessageId = messages[0]?.id || null;
+    renderAdminMessageDetail(messages[0] || null);
+    return data;
+  }
+
+  async function loadAdminMessageDetail(messageId) {
+    const data = await adminGet(`/api/admin/messages/${messageId}`);
+    if (!data.ok) {
+      showAlert(data.error || t("admin_action_failed", "Fehler"), "error");
+      return data;
+    }
+    renderAdminMessageDetail(data.data?.message || null);
+    return data;
+  }
+
+  async function adminMessagesSend() {
+    const recipient = (qs("#admin-messages-send-recipient")?.value || "").trim();
+    const subject = (qs("#admin-messages-send-subject")?.value || "").trim();
+    const body = (qs("#admin-messages-send-body")?.value || "").trim();
+    if (!recipient || !subject || !body) {
+      showAlert(t("messages.error_validation", "Eingabe ungueltig."), "error");
+      return null;
+    }
+    const payload = { recipient, subject, body, category: "admin" };
+    if (/^\d+$/.test(recipient)) payload.recipient_id = parseInt(recipient, 10);
+    const res = await adminPost("/api/admin/messages/send", payload);
+    if (res.ok) {
+      notify(t("admin_messages_send_ok", "Admin-Nachricht gesendet."), "success");
+      if (qs("#admin-messages-send-subject")) qs("#admin-messages-send-subject").value = "";
+      if (qs("#admin-messages-send-body")) qs("#admin-messages-send-body").value = "";
+      await loadAdminMessages();
+    } else {
+      showAlert(res.error || res.message || t("admin_action_failed", "Fehler"), "error");
+    }
+    return res;
+  }
+
   async function adminSupportReply(ticketId) {
     const body = (qs("#admin-support-reply-body")?.value || "").trim();
     if (!body) {
@@ -865,6 +988,8 @@
     if (act === "load-audit") return loadAuditLog();
     if (act === "chat-search") return searchAdminChatMessages();
     if (act === "support-refresh") return loadAdminSupport();
+    if (act === "messages-refresh") return loadAdminMessages();
+    if (act === "messages-send") return adminMessagesSend();
     if (act === "support-reply") {
       const tid = parseInt(btn.dataset.ticketId, 10);
       if (!Number.isFinite(tid)) return null;
@@ -1084,6 +1209,13 @@
       if (supportRow) {
         _selectedSupportTicketId = parseInt(supportRow.dataset.adminSupportTicketId, 10);
         await loadAdminSupport();
+        return;
+      }
+
+      const msgRow = e.target.closest("[data-admin-message-id]");
+      if (msgRow) {
+        _selectedAdminMessageId = parseInt(msgRow.dataset.adminMessageId, 10);
+        await loadAdminMessageDetail(_selectedAdminMessageId);
       }
     });
 

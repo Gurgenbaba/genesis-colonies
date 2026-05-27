@@ -106,6 +106,7 @@
       <button type="button" class="admin-tab-btn" data-admin-tab="audit" role="tab">{{ T("admin_audit_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="chat" role="tab">{{ T("admin_chat_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="support" role="tab">{{ T("admin_support_title", "Support") }}</button>
+      <button type="button" class="admin-tab-btn" data-admin-tab="messages" role="tab">{{ T("admin_messages_title", "Nachrichten") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="runtime" role="tab">{{ T("admin_runtime_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="settings" role="tab">{{ T("admin_settings_title") }}</button>
     </nav>
@@ -265,6 +266,45 @@
         <div id="admin-support-detail" class="admin-card admin-support-detail">
           <p class="admin-small-hint">{{ T("admin_support_select_hint", "Ticket aus der Liste waehlen.") }}</p>
         </div>
+      </div>
+    </section>
+
+    <section id="admin-tab-messages" class="admin-panel admin-tab-panel" data-admin-panel="messages" role="tabpanel" hidden>
+      <div class="admin-action-row admin-action-row-wrap">
+        <h2 class="admin-panel-title">{{ T("admin_messages_title", "Spieler-Nachrichten") }}</h2>
+        <input type="number" class="admin-input admin-input-sm" id="admin-messages-player-filter"
+               placeholder="{{ T('admin_messages_filter_player', 'Spieler-ID') }}" min="1">
+        <select class="admin-input admin-input-sm" id="admin-messages-category-filter">
+          <option value="">{{ T("admin_messages_filter_all", "Alle Kategorien") }}</option>
+          <option value="system">{{ T("messages.category.system", "System") }}</option>
+          <option value="player">{{ T("messages.category.player", "Spieler") }}</option>
+          <option value="combat">{{ T("messages.category.combat", "Kampf") }}</option>
+          <option value="espionage">{{ T("messages.category.espionage", "Spionage") }}</option>
+          <option value="expedition">{{ T("messages.category.expedition", "Expedition") }}</option>
+          <option value="admin">{{ T("messages.category.admin", "Admin") }}</option>
+        </select>
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="messages-refresh">{{ T("admin_btn_refresh", "Aktualisieren") }}</button>
+      </div>
+      <p class="admin-small-hint">{{ T("admin_messages_hint", "Posteingänge aller Spieler einsehen und Admin-Nachrichten senden.") }}</p>
+      <div class="admin-support-layout">
+        <div id="admin-messages-list" class="admin-table-wrap admin-support-list" aria-live="polite"></div>
+        <div id="admin-messages-detail" class="admin-card admin-support-detail">
+          <p class="admin-small-hint">{{ T("admin_messages_select_hint", "Nachricht aus der Liste wählen.") }}</p>
+        </div>
+      </div>
+      <div class="admin-card admin-messages-compose">
+        <h3 class="admin-subtitle">{{ T("admin_messages_send_title", "Admin-Nachricht senden") }}</h3>
+        <div class="admin-action-row admin-action-row-wrap">
+          <input type="text" class="admin-input admin-input-sm" id="admin-messages-send-recipient"
+                 placeholder="{{ T('admin_messages_send_recipient', 'Spieler-ID oder Name') }}">
+          <input type="text" class="admin-input" id="admin-messages-send-subject"
+                 placeholder="{{ T('messages.subject', 'Betreff') }}" maxlength="120">
+        </div>
+        <textarea class="admin-input" id="admin-messages-send-body" rows="4" maxlength="5000"
+                  placeholder="{{ T('messages.body', 'Nachricht') }}"></textarea>
+        <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="messages-send">
+          {{ T("admin_messages_send_btn", "Nachricht senden") }}
+        </button>
       </div>
     </section>
 

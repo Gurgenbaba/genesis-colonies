@@ -445,6 +445,7 @@
     if (path.endsWith("/planet-evolution")) return "planet_evolution";
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
+    if (path.endsWith("/messages")) return "messages";
     if (path.endsWith("/techtree")) return "techtree";
     if (path.endsWith("/admin")) return "admin";
     return "other";
@@ -1577,6 +1578,28 @@
   };
 
   // =========================
+  // Messages unread badges (game-state polling)
+  // =========================
+  function updateMessagesUnreadBadges(count) {
+    const n = Math.max(0, Number(count) || 0);
+    const label = n > 99 ? "99+" : String(n);
+    document.querySelectorAll("[data-messages-unread-badge]").forEach((el) => {
+      if (n > 0) {
+        el.textContent = label;
+        el.hidden = false;
+        el.classList.remove("hidden");
+        el.setAttribute("aria-hidden", "false");
+      } else {
+        el.textContent = "";
+        el.hidden = true;
+        el.classList.add("hidden");
+        el.setAttribute("aria-hidden", "true");
+      }
+    });
+  }
+  GC.updateMessagesUnreadBadges = updateMessagesUnreadBadges;
+
+  // =========================
   // Status polling / GC.refreshGameState
   // =========================
   function applyGameStateData(data, _reason) {
@@ -1686,6 +1709,10 @@
 
         if (ovScoreBuild) animateNumber(ovScoreBuild, scoreBuildings, { duration: 650 });
         if (ovScoreRes) animateNumber(ovScoreRes, scoreResearch, { duration: 650 });
+      }
+
+      if (typeof data.unread_messages_count === "number") {
+        updateMessagesUnreadBadges(data.unread_messages_count);
       }
 
       // --- Overview-Ressourcen-Karten ---
@@ -2570,7 +2597,9 @@
     } catch (_) {
       return;
     }
-    document.querySelectorAll(".gc-nav-link, .gc-bottom-nav-item, .gc-nav-drawer-link").forEach((link) => {
+    document.querySelectorAll(
+      ".gc-nav-link, .gc-bottom-nav-item, .gc-nav-drawer-link, a.gc-hud-panel-messages"
+    ).forEach((link) => {
       const href = link.getAttribute("href");
       if (!href) return;
       let linkPath;
@@ -2623,6 +2652,9 @@
         if (push) history.pushState({ gcPjax: true }, "", url);
 
         GC.initPage({ force: true });
+        if (GC.detectPage() === "messages" && typeof GC.initMessagesPage === "function") {
+          requestAnimationFrame(() => GC.initMessagesPage());
+        }
       } catch (err) {
         if (err?.name === "AbortError") return;
         console.error("[GC] PJAX navigation failed:", err);
@@ -2643,7 +2675,8 @@
     if (GC._pjaxBound) return;
     GC._pjaxBound = true;
 
-    const PJAX_LINK = "a.gc-nav-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link";
+    const PJAX_LINK =
+      "a.gc-nav-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages";
 
     document.addEventListener("click", (e) => {
       const link = e.target.closest(PJAX_LINK);

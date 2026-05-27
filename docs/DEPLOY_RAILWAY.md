@@ -70,8 +70,10 @@ On each deploy:
 1. **Build** — Docker image (`scripts/install.py` seeds schema in the image only; not used at runtime on Railway)
 2. **Start** — `scripts/docker-entrypoint.sh` in the **main** container (where `/data` volume is mounted):
    - create DB parent directory
-   - `python migrate.py` (idempotent; never wipes data)
+   - `python migrate.py` (idempotent; never wipes data — applies all pending files in `migrations/`, e.g. `020_player_messages.sql` for the inbox)
    - Gunicorn on `0.0.0.0:$PORT`
+
+You do **not** need a Railway shell for migrations on deploy. Push to GitHub → Railway rebuilds → entrypoint migrates → app starts.
 3. **Healthcheck** — `GET /health`
 
 **Do not use `preDeployCommand` for migrations.** Railway runs pre-deploy in a separate container **without** volume access — SQLite migrations there are lost and the app crashes.
