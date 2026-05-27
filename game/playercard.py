@@ -17,7 +17,9 @@ from .models import (
     get_homeworld,
     load_player,
 )
-from .ranking import get_player_rank, read_player_scores
+import sqlite3
+
+from .ranking import get_player_rank, read_player_scores_for_playercard
 
 # ---------------------------------------------------------------------------
 # Limits & validation
@@ -464,10 +466,12 @@ def _build_public_card_payload(
             "can_edit": False,
         }, None
 
-    score = read_player_scores(tid, conn=conn)
+    score = read_player_scores_for_playercard(tid, conn=conn)
+    rank: int | None = None
+    total_players = 0
     try:
         rank, total_players = get_player_rank(tid, conn=conn)
-    except Exception:
+    except sqlite3.OperationalError:
         rank, total_players = None, 0
     homeworld = get_homeworld(tid, conn=conn)
     colonies = _count_colonies(tid, conn=conn)
@@ -494,11 +498,14 @@ def _build_public_card_payload(
         "can_edit": is_self,
         "alliance": None,
         "alliance_label": "",
-        "rank": int(rank) if rank else None,
+        "rank": int(rank) if rank is not None and int(rank) >= 1 else None,
         "total_players": int(total_players) if total_players else None,
         "score_total": int(score.get("score_total", 0) or 0),
         "score_buildings": int(score.get("score_buildings", 0) or 0),
         "score_research": int(score.get("score_research", 0) or 0),
+        "score_fleet": int(score.get("score_fleet", 0) or 0),
+        "score_defense": int(score.get("score_defense", 0) or 0),
+        "score_planet_evolution": int(score.get("score_planet_evolution", 0) or 0),
         "home_planet": escape(str(homeworld.get("name") or "—")),
         "colonies": colonies,
         "badges": _selected_badges(card, unlocked),
@@ -508,6 +515,9 @@ def _build_public_card_payload(
             "score_total": int(score.get("score_total", 0) or 0),
             "score_buildings": int(score.get("score_buildings", 0) or 0),
             "score_research": int(score.get("score_research", 0) or 0),
+            "score_fleet": int(score.get("score_fleet", 0) or 0),
+            "score_defense": int(score.get("score_defense", 0) or 0),
+            "score_planet_evolution": int(score.get("score_planet_evolution", 0) or 0),
             "colonies": colonies,
         },
     }

@@ -49,12 +49,16 @@
     });
     const ct = (res.headers.get("content-type") || "").toLowerCase();
     if (!ct.includes("application/json")) {
-      return { ok: false, error: "error_load" };
+      return { ok: false, error: "error_load", status: res.status };
     }
     try {
-      return await res.json();
+      const data = await res.json();
+      if (!res.ok && data && typeof data === "object") {
+        return { ...data, ok: false, status: res.status };
+      }
+      return data;
     } catch (_) {
-      return { ok: false, error: "error_load" };
+      return { ok: false, error: "error_load", status: res.status };
     }
   }
 
@@ -112,8 +116,14 @@
     if (GC._messagesUiBound) return;
     GC._messagesUiBound = true;
 
-    if (typeof GC.registerPageCleanup === "function") {
-      GC.registerPageCleanup(() => {
+    const registerCleanup = GC.registerPageCleanup || GC.registerCleanup;
+    if (typeof registerCleanup === "function") {
+      registerCleanup(() => {
+        if (GC.messagesPageState?.listAbort) {
+          try {
+            GC.messagesPageState.listAbort.abort();
+          } catch (_) {}
+        }
         if (GC.messagesPageState) {
           GC.messagesPageState.loadGen += 1;
           GC.messagesPageState = null;
@@ -165,7 +175,17 @@
         return;
       }
 
-      if (!document.getElementById("messages-page")) return;
+      const onMessagesPage = document.getElementById("messages-page");
+      if (!onMessagesPage) return;
+
+      let state = GC.messagesPageState;
+      const itemEarly = e.target.closest(".gc-messages-item[data-id]");
+      if (itemEarly && !state) {
+        e.preventDefault();
+        initMessagesPage();
+        state = GC.messagesPageState;
+      }
+      if (!state) return;
 
       if (e.target.closest("#messages-compose-btn")) {
         e.preventDefault();
@@ -179,14 +199,6 @@
         return;
       }
 
-      let state = GC.messagesPageState;
-      const itemEarly = e.target.closest(".gc-messages-item[data-id]");
-      if (itemEarly && !state) {
-        e.preventDefault();
-        initMessagesPage();
-        state = GC.messagesPageState;
-      }
-      if (!state) return;
       if (e.target.closest("#messages-mark-all-read")) {
         e.preventDefault();
         state.onMarkAllRead?.();
@@ -245,11 +257,18 @@
     const detailBody = document.getElementById("messages-detail-body");
     const detailActions = document.getElementById("messages-detail-actions");
 
+    if (GC.messagesPageState?.listAbort) {
+      try {
+        GC.messagesPageState.listAbort.abort();
+      } catch (_) {}
+    }
+
     const state = {
       filter: "all",
       messages: [],
       selectedId: null,
       loadGen: 0,
+      listAbort: null,
     };
 
     function setDetailVisible(show) {
@@ -324,8 +343,24 @@
       detailActions.appendChild(mkBtn(t("messages.delete"), "delete", "danger"));
     }
 
+    function isActiveState(gen) {
+      return (
+        state === GC.messagesPageState &&
+        gen === state.loadGen &&
+        document.getElementById("messages-page")
+      );
+    }
+
     async function loadList() {
       const gen = ++state.loadGen;
+      if (state.listAbort) {
+        try {
+          state.listAbort.abort();
+        } catch (_) {}
+      }
+      const ctrl = new AbortController();
+      state.listAbort = ctrl;
+
       showListMessage(`<div class="gc-messages-empty">${esc(t("messages.loading"))}</div>`);
 
       try {
@@ -333,14 +368,25 @@
         if (state.filter && state.filter !== "all") params.set("category", state.filter);
         if (state.filter === "archive") params.set("include_archived", "1");
 
-        const data = await messagesApi(`/api/messages?${params.toString()}`);
-        if (gen !== state.loadGen || !document.getElementById("messages-page")) return;
+        const data = await messagesApi(`/api/messages?${params.toString()}`, {
+          signal: ctrl.signal,
+        });
+
+        if (ctrl.signal.aborted || !isActiveState(gen)) return;
 
         if (!data || !data.ok) {
-          const err = data?.error || "error";
+          const err = data?.error || "error_load";
+          const errLabel = esc(t(`messages.error_${err}`, t("messages.error_load")));
           showListMessage(
-            `<div class="gc-messages-empty">${esc(t(`messages.error_${err}`, t("messages.error_load")))}</div>`
+            `<div class="gc-messages-empty">` +
+              `<p>${errLabel}</p>` +
+              `<button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-messages-retry>` +
+              `${esc(t("messages.retry", "Erneut laden"))}</button>` +
+              `</div>`
           );
+          listEl?.querySelector("[data-messages-retry]")?.addEventListener("click", () => {
+            loadList();
+          });
           return;
         }
 
@@ -356,9 +402,12 @@
             setDetailVisible(false);
           }
         }
-      } catch (_) {
-        if (gen !== state.loadGen) return;
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        if (!isActiveState(gen)) return;
         showListMessage(`<div class="gc-messages-empty">${esc(t("messages.error_load"))}</div>`);
+      } finally {
+        if (state.listAbort === ctrl) state.listAbort = null;
       }
     }
 
@@ -374,6 +423,7 @@
 
     async function openMessage(id) {
       const data = await messagesApi(`/api/messages/${id}`);
+      if (state !== GC.messagesPageState || !document.getElementById("messages-page")) return;
       if (!data || !data.ok) {
         showDetailError(data?.error || "load");
         return;
@@ -395,7 +445,7 @@
       const data = await messagesApi(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: "{}",
+        body: JSON.stringify({}),
       });
       if (!syncUnreadFromResponse(data)) await refreshBadgesFromServer();
       return data;

@@ -88,6 +88,31 @@ def test_playercard_get_is_read_only(temp_db):
     assert writes == [], f"unexpected writes: {writes}"
 
 
+def test_read_player_scores_for_playercard_field_names(temp_db):
+    from game.ranking import format_scores_for_playercard, read_player_scores_for_playercard
+
+    pid = _create_player("pc_fields")
+    conn = db()
+    conn.execute(
+        "UPDATE player_scores SET score_total=5000, score_buildings=3000, score_research=2000 WHERE player_id=?",
+        (pid,),
+    )
+    conn.commit()
+    conn.close()
+
+    scores = read_player_scores_for_playercard(pid)
+    assert scores["score_total"] == 5000
+    assert scores["score_buildings"] == 3000
+    assert scores["score_research"] == 2000
+    assert scores["total_score"] == 5000
+
+    mapped = format_scores_for_playercard(
+        {"total_score": 42, "building_score": 10, "research_score": 5, "fleet_score": 1, "defense_score": 2, "evolution_score": 0}
+    )
+    assert mapped["score_total"] == 42
+    assert mapped["score_fleet"] == 1
+
+
 def test_playercard_get_never_calls_ensure_score_rows(temp_db, monkeypatch):
     from game import ranking as ranking_mod
 
@@ -104,8 +129,27 @@ def test_playercard_get_never_calls_ensure_score_rows(temp_db, monkeypatch):
     monkeypatch.setattr(ranking_mod, "_ensure_score_rows", _forbidden)
     card, err = build_public_card(pid, viewer_id=other)
     assert err is None and card is not None
-    assert card.get("rank") is None or isinstance(card.get("rank"), int)
+    assert card.get("rank") is not None
     assert int(card.get("score_total", 0) or 0) == 0
+
+
+def test_playercard_rank_survives_operational_error(temp_db, monkeypatch):
+    import sqlite3
+
+    from game import ranking as ranking_mod
+
+    pid = _create_player("pc_lock")
+    other = _create_player("pc_lock_viewer")
+
+    def _locked(_player_id, conn=None):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(ranking_mod, "get_player_rank_from_snapshot", _locked)
+    card, err = build_public_card(pid, viewer_id=other)
+    assert err is None and card is not None
+    assert int(card.get("score_total", 0) or 0) >= 0
+    assert card.get("rank") is None
+    assert int(card.get("total_players", 0) or 0) >= 1
 
 
 def test_api_player_card_without_score_row_returns_200(temp_db, monkeypatch):

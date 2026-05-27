@@ -77,7 +77,7 @@
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("playercard_rank") }}</span>
       <span class="gc-player-card-stat-value gc-mono">
-        {% if card.get('rank') %}#{{ card.get('rank')|fmt_int }}{% else %}—{% endif %}
+        {% if card.get('rank') is not none %}#{{ card.get('rank')|fmt_int }}{% else %}—{% endif %}
         {% if card.get('total_players') %}
           <span class="gc-player-card-stat-sub">/ {{ card.get('total_players')|fmt_int }}</span>
         {% endif %}
@@ -94,6 +94,14 @@
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("playercard_research_score") }}</span>
       <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_research') or 0)|fmt_int }}</span>
+    </div>
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("playercard_fleet_score") }}</span>
+      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_fleet') or 0)|fmt_int }}</span>
+    </div>
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("playercard_defense_score") }}</span>
+      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_defense') or 0)|fmt_int }}</span>
     </div>
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("playercard_home_planet") }}</span>

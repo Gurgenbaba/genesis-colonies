@@ -115,6 +115,58 @@ def test_migration_idempotent_and_tables(temp_db):
         conn.close()
 
 
+def test_public_card_shows_real_scores_and_rank(temp_db):
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("card_scores")
+    other, _ = _create_player("card_scores_viewer")
+
+    conn = db()
+    conn.execute(
+        """
+        UPDATE player_scores
+        SET score_total = ?, score_buildings = ?, score_research = ?,
+            score_fleet = 120, score_defense = 80
+        WHERE player_id = ?
+        """,
+        (10000, 6000, 2500, pid),
+    )
+    conn.commit()
+    conn.close()
+
+    from game.ranking import recalculate_ranks
+
+    recalculate_ranks()
+
+    card, err = build_public_card(pid, viewer_id=other)
+    assert err is None and card is not None
+    assert card["score_total"] == 10000
+    assert card["score_buildings"] == 6000
+    assert card["score_research"] == 2500
+    assert card["score_fleet"] == 120
+    assert card["score_defense"] == 80
+    assert card.get("rank") is not None and int(card["rank"]) >= 1
+    assert card.get("total_players") is not None and int(card["total_players"]) >= 1
+
+
+def test_public_card_without_score_row_shows_zero_with_rank(temp_db):
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("card_zero")
+    other, _ = _create_player("card_zero_viewer")
+    conn = db()
+    conn.execute("DELETE FROM player_scores WHERE player_id = ?", (pid,))
+    conn.commit()
+    conn.close()
+
+    card, err = build_public_card(pid, viewer_id=other)
+    assert err is None and card is not None
+    assert card["score_total"] == 0
+    assert card["score_buildings"] == 0
+    assert card["score_research"] == 0
+    assert card.get("rank") is not None and int(card["rank"]) >= 1
+
+
 def test_public_card_and_private_profile(temp_db):
     init_db()
     _close_db_conn()
@@ -125,7 +177,9 @@ def test_public_card_and_private_profile(temp_db):
     assert err is None
     assert card is not None
     assert "card_alpha" in card["commander_name"]
-    assert card["score_total"] >= 0
+    assert card["score_total"] >= 4000
+    assert card["score_buildings"] >= 2500
+    assert card["score_research"] >= 1500
     assert card["colonies"] >= 1
     assert card.get("unlocked_badges")  # founder badge unlocked at minimum
 

@@ -289,6 +289,8 @@
     if (opts && opts.persistent) fn._gcPersistent = true;
     GC.pageLifecycle.cleanupFns.push(fn);
   };
+  // Alias used by messages.js (older name)
+  GC.registerPageCleanup = GC.registerCleanup;
 
   GC.cleanupPage = function cleanupPage() {
     console.debug("[GC] cleanupPage");
@@ -1713,6 +1715,15 @@
 
       if (typeof data.unread_messages_count === "number") {
         updateMessagesUnreadBadges(data.unread_messages_count);
+        if (
+          GC.detectPage() === "messages" &&
+          data.unread_messages_count > 0 &&
+          GC.messagesPageState &&
+          typeof GC.messagesPageState.loadList === "function" &&
+          (!Array.isArray(GC.messagesPageState.messages) || GC.messagesPageState.messages.length === 0)
+        ) {
+          GC.messagesPageState.loadList();
+        }
       }
 
       // --- Overview-Ressourcen-Karten ---
@@ -2718,9 +2729,6 @@
         if (push) history.pushState({ gcPjax: true }, "", url);
 
         GC.initPage({ force: true });
-        if (GC.detectPage() === "messages" && typeof GC.initMessagesPage === "function") {
-          requestAnimationFrame(() => GC.initMessagesPage());
-        }
       } catch (err) {
         if (err?.name === "AbortError") return;
         console.error("[GC] PJAX navigation failed:", err);

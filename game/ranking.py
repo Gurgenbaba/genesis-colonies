@@ -174,14 +174,42 @@ def _normalize_db_row(row: Optional[dict]) -> Dict[str, int]:
     research = _safe_int(row.get("score_research", 0))
     fleet = _safe_int(row.get("score_fleet", 0)) if "score_fleet" in keys else 0
     defense = _safe_int(row.get("score_defense", 0)) if "score_defense" in keys else 0
-    return _sanitize_scores(
+    evolution = (
+        _safe_int(row.get("score_planet_evolution", 0))
+        if "score_planet_evolution" in keys
+        else 0
+    )
+    result = _sanitize_scores(
         {
             "building_score": building,
             "research_score": research,
             "fleet_score": fleet,
             "defense_score": defense,
+            "evolution_score": evolution,
         }
     )
+    if "score_total" in keys:
+        result["total_score"] = _safe_int(row.get("score_total", result["total_score"]))
+    return result
+
+
+def format_scores_for_playercard(normalized: Dict[str, int]) -> Dict[str, int]:
+    """Map internal normalized scores to PlayerCard template/API field names."""
+    return {
+        "score_total": int(normalized.get("total_score", 0) or 0),
+        "score_buildings": int(normalized.get("building_score", 0) or 0),
+        "score_research": int(normalized.get("research_score", 0) or 0),
+        "score_fleet": int(normalized.get("fleet_score", 0) or 0),
+        "score_defense": int(normalized.get("defense_score", 0) or 0),
+        "score_planet_evolution": int(normalized.get("evolution_score", 0) or 0),
+        # Backward-compatible aliases (ranking/HUD internals)
+        "total_score": int(normalized.get("total_score", 0) or 0),
+        "building_score": int(normalized.get("building_score", 0) or 0),
+        "research_score": int(normalized.get("research_score", 0) or 0),
+        "fleet_score": int(normalized.get("fleet_score", 0) or 0),
+        "defense_score": int(normalized.get("defense_score", 0) or 0),
+        "evolution_score": int(normalized.get("evolution_score", 0) or 0),
+    }
 
 
 def _normalize_payload(data: Optional[dict]) -> Dict[str, int]:
@@ -392,6 +420,12 @@ def _fleet_defense_select(conn) -> str:
     if column_exists(conn, "player_scores", "score_fleet"):
         return "COALESCE(ps.score_fleet, 0) AS score_fleet, COALESCE(ps.score_defense, 0) AS score_defense"
     return "0 AS score_fleet, 0 AS score_defense"
+
+
+def _evolution_score_select(conn) -> str:
+    if column_exists(conn, "player_scores", "score_planet_evolution"):
+        return "COALESCE(ps.score_planet_evolution, 0) AS score_planet_evolution"
+    return "0 AS score_planet_evolution"
 
 
 def _fetch_all_score_rows(conn) -> List[Dict[str, Any]]:
@@ -960,9 +994,11 @@ def get_player_rank_from_snapshot(player_id: int, conn=None) -> Tuple[Optional[i
         )
         row = cur.fetchone()
         if row and row["rank_total"] is not None:
-            if owns_conn:
-                conn.close()
-            return int(row["rank_total"]), total_players
+            snap_rank = int(row["rank_total"])
+            if snap_rank >= 1:
+                if owns_conn:
+                    conn.close()
+                return snap_rank, total_players
 
     total_expr = _total_score_sql(conn)
     cur.execute(
@@ -1208,21 +1244,21 @@ def read_player_scores(
     player_id: int,
     conn=None,
 ) -> Dict[str, int]:
-    """Read score components without creating rows or recomputing."""
+    """Read score components without creating rows or recomputing (normalized keys)."""
     owns_conn = False
     if conn is None:
         conn = db()
         owns_conn = True
     try:
         cur = conn.cursor()
-        extra = _fleet_defense_select(conn)
         cur.execute(
             f"""
             SELECT
                 COALESCE(ps.score_total, 0) AS score_total,
                 COALESCE(ps.score_buildings, 0) AS score_buildings,
                 COALESCE(ps.score_research, 0) AS score_research,
-                {extra}
+                {_fleet_defense_select(conn)},
+                {_evolution_score_select(conn)}
             FROM players p
             LEFT JOIN player_scores ps ON ps.player_id = p.id
             WHERE p.id = ?
@@ -1237,6 +1273,14 @@ def read_player_scores(
     finally:
         if owns_conn:
             conn.close()
+
+
+def read_player_scores_for_playercard(
+    player_id: int,
+    conn=None,
+) -> Dict[str, int]:
+    """Read-only scores using PlayerCard field names (score_total, score_buildings, …)."""
+    return format_scores_for_playercard(read_player_scores(int(player_id), conn=conn))
 
 
 def recompute_and_upsert_score(
