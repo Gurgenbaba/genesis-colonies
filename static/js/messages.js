@@ -38,16 +38,36 @@
   }
 
   async function messagesApi(url, options = {}) {
-    const res = await fetch(url, {
-      credentials: "same-origin",
+    const headers = {
+      Accept: "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+      ...(options.headers || {}),
+    };
+    const fetchOpts = {
       cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        ...(options.headers || {}),
-      },
+      credentials: "same-origin",
       ...options,
-    });
+      headers,
+    };
+
+    if (typeof GC.fetchJSON === "function") {
+      try {
+        const data = await GC.fetchJSON(url, fetchOpts);
+        if (!data || typeof data !== "object") {
+          return { ok: false, error: "error_load" };
+        }
+        return data;
+      } catch (err) {
+        if (err?.auth) return { ok: false, error: "not_logged_in" };
+        return { ok: false, error: "error_load", status: err?.status || 0 };
+      }
+    }
+
+    const res = await fetch(url, { ...fetchOpts, redirect: "manual" });
     const ct = (res.headers.get("content-type") || "").toLowerCase();
+    if (res.type === "opaqueredirect" || res.status === 401 || res.status === 403) {
+      return { ok: false, error: "not_logged_in", status: res.status };
+    }
     if (!ct.includes("application/json")) {
       return { ok: false, error: "error_load", status: res.status };
     }
@@ -66,6 +86,9 @@
     const n = data?.data?.unread_count;
     if (typeof n === "number") {
       updateLocalUnread(n);
+      if (GC.messagesPageState) {
+        GC.messagesPageState.unreadSyncedFromApi = true;
+      }
       return true;
     }
     return false;
@@ -77,6 +100,9 @@
     if (el) el.textContent = String(n);
     if (typeof GC.updateMessagesUnreadBadges === "function") {
       GC.updateMessagesUnreadBadges(n);
+    }
+    if (typeof GC.setMessagesUnreadPollBaseline === "function") {
+      GC.setMessagesUnreadPollBaseline(n);
     }
   }
 
@@ -112,6 +138,14 @@
     if (dlg?.open) dlg.close();
   }
 
+  function ensureMessagesState() {
+    if (!document.getElementById("messages-page")) return null;
+    if (!GC.messagesPageState) {
+      initMessagesPage({ force: true });
+    }
+    return GC.messagesPageState || null;
+  }
+
   function bindMessagesUiOnce() {
     if (GC._messagesUiBound) return;
     GC._messagesUiBound = true;
@@ -126,6 +160,7 @@
         }
         if (GC.messagesPageState) {
           GC.messagesPageState.loadGen += 1;
+          GC.messagesPageState.unreadSyncedFromApi = false;
           GC.messagesPageState = null;
         }
         closeCompose();
@@ -153,9 +188,7 @@
       if (data?.ok) {
         if (composeStatus) composeStatus.textContent = t("messages.sent_success");
         closeCompose();
-        if (state && typeof state.loadList === "function") {
-          await state.loadList();
-        }
+        // Sent mail is stored in the recipient inbox only — refresh badges, not sender list.
         await refreshBadgesFromServer();
         return;
       }
@@ -178,13 +211,7 @@
       const onMessagesPage = document.getElementById("messages-page");
       if (!onMessagesPage) return;
 
-      let state = GC.messagesPageState;
-      const itemEarly = e.target.closest(".gc-messages-item[data-id]");
-      if (itemEarly && !state) {
-        e.preventDefault();
-        initMessagesPage();
-        state = GC.messagesPageState;
-      }
+      const state = ensureMessagesState();
       if (!state) return;
 
       if (e.target.closest("#messages-compose-btn")) {
@@ -201,6 +228,7 @@
 
       if (e.target.closest("#messages-mark-all-read")) {
         e.preventDefault();
+        e.stopPropagation();
         state.onMarkAllRead?.();
         return;
       }
@@ -238,12 +266,18 @@
     });
   }
 
-  function initMessagesPage() {
+  function initMessagesPage(options) {
+    const force = Boolean(options && options.force);
     bindMessagesUiOnce();
 
     const page = document.getElementById("messages-page");
     if (!page) {
       GC.messagesPageState = null;
+      return;
+    }
+
+    if (GC.messagesPageState && !force) {
+      GC.messagesPageState.loadList?.(true);
       return;
     }
 
@@ -269,6 +303,7 @@
       selectedId: null,
       loadGen: 0,
       listAbort: null,
+      unreadSyncedFromApi: false,
     };
 
     function setDetailVisible(show) {
@@ -351,13 +386,8 @@
       );
     }
 
-    async function loadList() {
+    async function loadList(retryNotReady = true) {
       const gen = ++state.loadGen;
-      if (state.listAbort) {
-        try {
-          state.listAbort.abort();
-        } catch (_) {}
-      }
       const ctrl = new AbortController();
       state.listAbort = ctrl;
 
@@ -376,6 +406,10 @@
 
         if (!data || !data.ok) {
           const err = data?.error || "error_load";
+          if ((err === "messages_not_ready" || data?.status === 503) && retryNotReady && isActiveState(gen)) {
+            await new Promise((r) => setTimeout(r, 400));
+            if (isActiveState(gen)) return loadList(false);
+          }
           const errLabel = esc(t(`messages.error_${err}`, t("messages.error_load")));
           showListMessage(
             `<div class="gc-messages-empty">` +
@@ -393,6 +427,14 @@
         state.messages = data.data?.messages || [];
         syncUnreadFromResponse(data);
         renderList();
+        if (typeof console !== "undefined" && console.debug) {
+          console.debug("[messages] inbox loaded", {
+            player_id: data.data?.player_id,
+            count: state.messages.length,
+            unread: data.data?.unread_count,
+            filter: state.filter,
+          });
+        }
 
         if (state.selectedId) {
           const current = state.messages.find((m) => m.id === state.selectedId);
@@ -478,9 +520,15 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      syncUnreadFromResponse(data);
-      await loadList();
-      await refreshBadgesFromServer();
+      if (data?.ok) {
+        syncUnreadFromResponse(data);
+        await loadList();
+      } else {
+        const err = data?.error || "error_load";
+        showListMessage(
+          `<div class="gc-messages-empty">${esc(t(`messages.error_${err}`, t("messages.error_load")))}</div>`
+        );
+      }
     };
 
     state.loadList = loadList;
@@ -490,11 +538,32 @@
 
     GC.messagesPageState = state;
     loadList();
+    const retryLater = typeof GC.setSafeTimeout === "function" ? GC.setSafeTimeout : setTimeout;
+    retryLater(() => {
+      if (state !== GC.messagesPageState || !document.getElementById("messages-page")) return;
+      if (state.messages.length > 0 || state.unreadSyncedFromApi) return;
+      const listNode = document.getElementById("messages-list");
+      const loading = (listNode?.textContent || "").includes(t("messages.loading"));
+      if (loading) loadList(false);
+    }, 2500);
   }
 
   GC.modules = GC.modules || {};
   GC.modules.messages = initMessagesPage;
   GC.initMessagesPage = initMessagesPage;
   GC.openMessagesCompose = openCompose;
+  GC.ensureMessagesState = ensureMessagesState;
   bindMessagesUiOnce();
+
+  function bootMessagesIfPresent() {
+    if (document.getElementById("messages-page")) {
+      initMessagesPage({ force: !GC.messagesPageState });
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootMessagesIfPresent);
+  } else {
+    bootMessagesIfPresent();
+  }
 })();

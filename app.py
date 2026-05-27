@@ -63,6 +63,7 @@ from game.auth import (
     logout_user,
     get_current_user,
     require_login,
+    require_login_api,
     require_admin,
     require_admin_api,
 )
@@ -1444,11 +1445,10 @@ def messages_view():
 
 
 @app.route("/api/messages")
-@require_login
+@require_login_api
 def api_messages_list():
     pid = _current_player_id()
-    if pid is None:
-        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    assert pid is not None
     category = request.args.get("category")
     include_archived = str(request.args.get("include_archived", "")).lower() in ("1", "true", "yes")
     try:
@@ -1471,29 +1471,26 @@ def api_messages_list():
 
 
 @app.route("/api/messages/<int:message_id>")
-@require_login
+@require_login_api
 def api_messages_get(message_id: int):
     pid = _current_player_id()
-    if pid is None:
-        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    assert pid is not None
     return _messages_json(messages_logic.get_message(int(pid), int(message_id)))
 
 
 @app.route("/api/messages/<int:message_id>/read", methods=["POST"])
-@require_login
+@require_login_api
 def api_messages_read(message_id: int):
     pid = _current_player_id()
-    if pid is None:
-        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    assert pid is not None
     return _messages_json(messages_logic.mark_message_read(int(pid), int(message_id)))
 
 
 @app.route("/api/messages/read-all", methods=["POST"])
-@require_login
+@require_login_api
 def api_messages_read_all():
     pid = _current_player_id()
-    if pid is None:
-        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    assert pid is not None
     payload = request.get_json(silent=True) or {}
     return _messages_json(
         messages_logic.mark_all_messages_read(
@@ -1504,29 +1501,26 @@ def api_messages_read_all():
 
 
 @app.route("/api/messages/<int:message_id>/archive", methods=["POST"])
-@require_login
+@require_login_api
 def api_messages_archive(message_id: int):
     pid = _current_player_id()
-    if pid is None:
-        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    assert pid is not None
     return _messages_json(messages_logic.archive_message(int(pid), int(message_id)))
 
 
 @app.route("/api/messages/<int:message_id>/delete", methods=["POST"])
-@require_login
+@require_login_api
 def api_messages_delete(message_id: int):
     pid = _current_player_id()
-    if pid is None:
-        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    assert pid is not None
     return _messages_json(messages_logic.delete_message(int(pid), int(message_id)))
 
 
 @app.route("/api/messages/send", methods=["POST"])
-@require_login
+@require_login_api
 def api_messages_send():
     pid = _current_player_id()
-    if pid is None:
-        return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+    assert pid is not None
     payload = request.get_json(silent=True) or {}
     return _messages_json(
         messages_logic.send_player_message(

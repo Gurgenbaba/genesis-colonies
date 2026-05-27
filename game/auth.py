@@ -399,6 +399,43 @@ def require_admin(func: ViewFunc) -> ViewFunc:
     return decorated  # type: ignore[return-value]
 
 
+def require_login_api(func: ViewFunc) -> ViewFunc:
+    """
+    JSON API guard for /api/* player routes – returns 401/403 JSON instead of redirects.
+    Sets g.player on success (same as require_login).
+    """
+    @wraps(func)
+    def decorated(*args, **kwargs):
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+
+        try:
+            pid = int(user_id)
+        except (TypeError, ValueError):
+            session.clear()
+            return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+
+        ban_response = _handle_if_banned(pid)
+        if ban_response is not None:
+            return jsonify({"ok": False, "error": "banned", "data": None}), 403
+
+        player = get_player_by_user_id(pid)
+        if not player:
+            session.clear()
+            return jsonify({"ok": False, "error": "not_logged_in", "data": None}), 401
+
+        try:
+            touch_player_online(int(player["id"]))
+        except Exception:
+            pass
+
+        g.player = player
+        return func(*args, **kwargs)
+
+    return decorated  # type: ignore[return-value]
+
+
 def require_admin_api(func: ViewFunc) -> ViewFunc:
     """
     JSON API guard for /api/admin/* – returns 401/403 instead of redirects.

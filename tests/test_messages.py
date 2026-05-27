@@ -614,3 +614,299 @@ def test_messages_page_loads(app_client, temp_db):
     r = client.get("/messages")
     assert r.status_code == 200
     assert b"messages-page" in r.data or b"gc-messages-page" in r.data
+
+
+def _set_player_name(player_id: int, name: str) -> None:
+    conn = db()
+    try:
+        conn.execute("UPDATE players SET name = ? WHERE id = ?;", (name, int(player_id)))
+        conn.commit()
+    finally:
+        conn.close()
+    _close_db()
+
+
+def _api_inbox(client, user_id: int, *, category: str | None = None):
+    with client.session_transaction() as sess:
+        sess["user_id"] = int(user_id)
+    qs = f"?category={category}" if category else ""
+    return client.get(f"/api/messages{qs}")
+
+
+def _api_unread_via_list(client, user_id: int) -> int:
+    data = _api_inbox(client, user_id).get_json()
+    assert data["ok"]
+    return int(data["data"]["unread_count"])
+
+
+def _api_send(client, sender_id: int, recipient: str, subject: str, body: str):
+    with client.session_transaction() as sess:
+        sess["user_id"] = int(sender_id)
+    return client.post(
+        "/api/messages/send",
+        json={"recipient": recipient, "subject": subject, "body": body},
+    )
+
+
+def test_alice_to_bob_inbox_isolation_api(app_client, temp_db):
+    """A: Alice sends to Bob — only Bob's inbox and unread change."""
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    alice = _create_player("alice")
+    bob = _create_player("bob")
+    _set_player_name(bob, "Commander Bobby")
+    _close_db()
+
+    client = app_client
+    alice_unread_before = _api_unread_via_list(client, alice)
+
+    send = _api_send(client, alice, "Bobby", "Hello Bob", "Private note for Bobby")
+    assert send.status_code == 200
+    send_data = send.get_json()
+    assert send_data["ok"]
+    assert send_data["data"]["recipient_player_id"] == bob
+    assert send_data["data"]["message_id"] > 0
+
+    conn = db()
+    try:
+        row = conn.execute(
+            """
+            SELECT recipient_player_id, sender_player_id, category
+            FROM player_messages WHERE id = ?;
+            """,
+            (int(send_data["data"]["message_id"]),),
+        ).fetchone()
+        assert int(row["recipient_player_id"]) == bob
+        assert int(row["sender_player_id"]) == alice
+        assert row["category"] == "player"
+    finally:
+        conn.close()
+    _close_db()
+
+    alice_inbox = _api_inbox(client, alice).get_json()
+    assert not any(m["subject"] == "Hello Bob" for m in alice_inbox["data"]["messages"])
+    assert alice_inbox["data"]["unread_count"] == alice_unread_before
+
+    bob_inbox = _api_inbox(client, bob).get_json()
+    bob_msgs = [m for m in bob_inbox["data"]["messages"] if m["subject"] == "Hello Bob"]
+    assert len(bob_msgs) == 1
+    assert bob_msgs[0]["sender_player_id"] == alice
+    assert bob_inbox["data"]["unread_count"] == 1
+
+
+def test_bob_read_clears_unread_alice_unchanged_api(app_client, temp_db):
+    """B: Bob opens message — his unread drops; Alice unchanged."""
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    alice = _create_player("alice_read")
+    bob = _create_player("bob_read")
+    _set_player_name(bob, "Commander Bobby")
+    _close_db()
+
+    client = app_client
+    send = _api_send(client, alice, "Bobby", "Read me", "Please open this message")
+    mid = int(send.get_json()["data"]["message_id"])
+
+    alice_unread = _api_unread_via_list(client, alice)
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = bob
+    detail = client.get(f"/api/messages/{mid}")
+    assert detail.status_code == 200
+    assert detail.get_json()["data"]["message"]["is_read"] is True
+    assert detail.get_json()["data"]["message"]["reply_to_player_id"] == alice
+
+    assert _api_unread_via_list(client, bob) == 0
+    assert _api_unread_via_list(client, alice) == alice_unread
+
+
+def test_bob_archive_and_delete_api(app_client, temp_db):
+    """C: Bob archive/delete — list and badge stay consistent."""
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    alice = _create_player("alice_arch")
+    bob = _create_player("bob_arch")
+    _set_player_name(bob, "Bobby")
+    _close_db()
+
+    client = app_client
+    send = _api_send(client, alice, "Bobby", "Archive test", "Archive this player mail")
+    mid = int(send.get_json()["data"]["message_id"])
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = bob
+    arch = client.post(f"/api/messages/{mid}/archive")
+    assert arch.get_json()["ok"]
+    assert arch.get_json()["data"]["unread_count"] == 0
+
+    active = _api_inbox(client, bob).get_json()
+    assert not any(m["id"] == mid for m in active["data"]["messages"])
+
+    archived = _api_inbox(client, bob, category="archive").get_json()
+    assert any(m["id"] == mid for m in archived["data"]["messages"])
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = bob
+    deleted = client.post(f"/api/messages/{mid}/delete")
+    assert deleted.get_json()["ok"]
+
+    archived_after = _api_inbox(client, bob, category="archive").get_json()
+    assert not any(m["id"] == mid for m in archived_after["data"]["messages"])
+
+
+@pytest.mark.parametrize(
+    "lookup_name",
+    ["Bobby", "Commander Bobby"],
+)
+def test_send_lookup_commander_variants_api(app_client, temp_db, lookup_name):
+    """D: Send to display name or stored Commander name."""
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    sender = _create_player(f"sender_{lookup_name.replace(' ', '_')}")
+    target = _create_player(f"target_{lookup_name.replace(' ', '_')}")
+    _set_player_name(target, "Commander Bobby")
+    _close_db()
+
+    client = app_client
+    subject = f"To {lookup_name}"
+    send = _api_send(client, sender, lookup_name, subject, "Lookup variant body text")
+    assert send.get_json()["ok"]
+    assert send.get_json()["data"]["recipient_player_id"] == target
+
+    bob_inbox = _api_inbox(client, target).get_json()
+    assert any(m["subject"] == subject for m in bob_inbox["data"]["messages"])
+
+
+def test_send_lookup_ambiguous_api(app_client, temp_db):
+    """D: Ambiguous recipient name is rejected."""
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    sender = _create_player("sender_amb_api")
+    cmd = _create_player("cmd_amb")
+    plain = _create_player("plain_amb")
+    _set_player_name(cmd, "Commander Alpha")
+    _set_player_name(plain, "Alpha")
+    _close_db()
+
+    client = app_client
+    send = _api_send(client, sender, "Alpha", "Blocked", "Should not be delivered")
+    assert send.status_code == 400
+    assert send.get_json()["error"] == "recipient_ambiguous"
+
+
+def test_alice_cannot_read_or_mutate_bob_message_api(app_client, temp_db):
+    """E: Cross-player access and admin separation."""
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    alice = _create_player("sec_alice")
+    bob = _create_player("sec_bob")
+    admin_id = _create_player("sec_admin")
+    _set_player_name(bob, "Bobby")
+    conn = db()
+    try:
+        conn.execute("UPDATE users SET is_admin = 1 WHERE id = ?;", (admin_id,))
+        conn.execute("UPDATE players SET is_admin = 1 WHERE id = ?;", (admin_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    _close_db()
+
+    client = app_client
+    send = _api_send(client, alice, "Bobby", "Secret", "Bob only content here")
+    mid = int(send.get_json()["data"]["message_id"])
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = alice
+    assert client.get(f"/api/messages/{mid}").status_code == 404
+    assert client.post(f"/api/messages/{mid}/archive").status_code == 404
+    assert client.post(f"/api/messages/{mid}/delete").status_code == 404
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = admin_id
+    admin_list = client.get("/api/admin/messages").get_json()
+    assert admin_list["ok"]
+    assert any(m["id"] == mid for m in admin_list["data"]["messages"])
+
+    alice_inbox = _api_inbox(client, alice).get_json()
+    assert not any(m["id"] == mid for m in alice_inbox["data"]["messages"])
+
+
+def test_legacy_deleted_at_zero_repaired_on_list(temp_db):
+    """Legacy deleted_at=0 rows are repaired when the inbox is loaded."""
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("legacy_deleted")
+    conn = db()
+    try:
+        conn.execute(
+            """
+            INSERT INTO player_messages (
+                recipient_player_id, sender_player_id, sender_name,
+                category, subject, body, is_read, is_archived,
+                metadata_json, created_at, deleted_at
+            ) VALUES (?, ?, ?, 'player', 'Hidden legacy row', 'Body text', 0, 0, NULL, ?, 0);
+            """,
+            (pid, None, "System", int(__import__("time").time())),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _close_db()
+
+    listed = list_messages(pid)
+    assert len(listed["data"]["messages"]) == 1
+    assert listed["data"]["unread_count"] == 1
+    assert mark_all_messages_read(pid)["ok"]
+    assert unread_count(pid) == 0
+
+
+def test_api_messages_returns_json_not_redirect_when_logged_out(app_client, temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    r = app_client.get("/api/messages")
+    assert r.status_code == 401
+    assert r.is_json
+    assert r.get_json()["error"] == "not_logged_in"
+
+
+def test_migration_021_normalizes_zero_deleted_at(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("m021")
+    conn = db()
+    try:
+        conn.execute(
+            """
+            INSERT INTO player_messages (
+                recipient_player_id, sender_player_id, sender_name,
+                category, subject, body, is_read, is_archived,
+                metadata_json, created_at, deleted_at
+            ) VALUES (?, ?, ?, 'system', 'Was zero deleted', 'Body', 0, 0, NULL, ?, 0);
+            """,
+            (pid, None, "System", int(__import__("time").time())),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _close_db()
+
+    listed = list_messages(pid)
+    assert any(m["subject"] == "Was zero deleted" for m in listed["data"]["messages"])

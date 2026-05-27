@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from typing import Any, Optional
 
+logger = logging.getLogger(__name__)
+
 from .player_display import resolve_player_by_name
-from .db import begin_write_transaction, commit, db, rollback, table_exists
+from .db import begin_write_transaction, commit, db, in_transaction, rollback, table_exists
 
 VALID_CATEGORIES = frozenset(
     {"system", "player", "combat", "espionage", "expedition", "admin"}
@@ -49,6 +52,15 @@ def _table_ready(conn) -> bool:
     return table_exists(conn, "player_messages")
 
 
+def _safe_int(raw: Any, default: int = 0) -> int:
+    try:
+        if raw is None or raw == "":
+            return int(default)
+        return int(raw)
+    except (TypeError, ValueError):
+        return int(default)
+
+
 def _parse_metadata(raw: Any) -> dict[str, Any] | None:
     if raw is None or raw == "":
         return None
@@ -63,21 +75,22 @@ def _parse_metadata(raw: Any) -> dict[str, Any] | None:
 
 def _row_to_dict(row: Any, *, recipient_name: str | None = None) -> dict[str, Any]:
     meta = _parse_metadata(row["metadata_json"])
-    sender_player_id = (
-        int(row["sender_player_id"]) if row["sender_player_id"] is not None else None
-    )
+    sender_raw = row["sender_player_id"]
+    sender_player_id = _safe_int(sender_raw, 0) if sender_raw is not None else None
+    if sender_player_id is not None and sender_player_id <= 0:
+        sender_player_id = None
     out: dict[str, Any] = {
-        "id": int(row["id"]),
-        "recipient_player_id": int(row["recipient_player_id"]),
+        "id": _safe_int(row["id"]),
+        "recipient_player_id": _safe_int(row["recipient_player_id"]),
         "sender_player_id": sender_player_id,
         "sender_name": str(row["sender_name"]) if row["sender_name"] is not None else None,
         "category": str(row["category"] or "system"),
         "subject": str(row["subject"] or ""),
         "body": str(row["body"] or ""),
-        "is_read": bool(int(row["is_read"] or 0)),
-        "is_archived": bool(int(row["is_archived"] or 0)),
-        "created_at": int(row["created_at"] or 0),
-        "read_at": int(row["read_at"]) if row["read_at"] is not None else None,
+        "is_read": bool(_safe_int(row["is_read"], 0)),
+        "is_archived": bool(_safe_int(row["is_archived"], 0)),
+        "created_at": _safe_int(row["created_at"], 0),
+        "read_at": _safe_int(row["read_at"], 0) if row["read_at"] is not None else None,
         "metadata": meta,
     }
     if recipient_name is not None:
@@ -102,8 +115,45 @@ def _category_clause(category: str | None) -> tuple[str, list[Any]]:
     return "", []
 
 
+def _not_deleted_sql() -> str:
+    return "(deleted_at IS NULL OR deleted_at = 0)"
+
+
 def _not_deleted_clause() -> str:
-    return " AND deleted_at IS NULL"
+    return f" AND {_not_deleted_sql()}"
+
+
+def normalize_inbox_rows(conn, player_id: int) -> None:
+    """Repair legacy rows so list + unread_count stay consistent."""
+    pid = int(player_id)
+    conn.execute(
+        "UPDATE player_messages SET deleted_at = NULL WHERE recipient_player_id = ? AND deleted_at = 0;",
+        (pid,),
+    )
+    conn.execute(
+        "UPDATE player_messages SET is_archived = 0 WHERE recipient_player_id = ? AND is_archived IS NULL;",
+        (pid,),
+    )
+    conn.execute(
+        "UPDATE player_messages SET is_read = 0 WHERE recipient_player_id = ? AND is_read IS NULL;",
+        (pid,),
+    )
+
+
+def _prepare_inbox(conn, player_id: int) -> None:
+    if not _table_ready(conn):
+        return
+    pid = int(player_id)
+    if in_transaction(conn):
+        normalize_inbox_rows(conn, pid)
+        return
+    begin_write_transaction(conn)
+    try:
+        normalize_inbox_rows(conn, pid)
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
 
 
 def create_message(
@@ -290,8 +340,18 @@ def notify_expedition(
 def _inbox_visibility_clause(*, archived: bool = False) -> str:
     """Shared inbox filters for list + unread_count (non-archive tab)."""
     if archived:
-        return "recipient_player_id = ? AND deleted_at IS NULL AND is_archived = 1"
-    return "recipient_player_id = ? AND deleted_at IS NULL AND is_archived = 0"
+        return (
+            f"recipient_player_id = ? AND {_not_deleted_sql()} "
+            "AND COALESCE(is_archived, 0) = 1"
+        )
+    return (
+        f"recipient_player_id = ? AND {_not_deleted_sql()} "
+        "AND COALESCE(is_archived, 0) = 0"
+    )
+
+
+def _unread_clause() -> str:
+    return " AND COALESCE(is_read, 0) = 0"
 
 
 def list_messages(
@@ -306,6 +366,7 @@ def list_messages(
     try:
         if not _table_ready(conn):
             return _err("messages_not_ready")
+        _prepare_inbox(conn, int(player_id))
 
         cat = str(category or "").strip().lower()
         if cat == "archive":
@@ -339,7 +400,14 @@ def list_messages(
         )
         rows = [_row_to_dict(r) for r in cur.fetchall()]
         unread = unread_count(int(player_id), conn=conn)
-        return _ok({"messages": rows, "unread_count": unread})
+        logger.debug(
+            "list_messages player_id=%s category=%r item_count=%s unread=%s",
+            int(player_id),
+            category,
+            len(rows),
+            unread,
+        )
+        return _ok({"messages": rows, "unread_count": unread, "player_id": int(player_id)})
     finally:
         conn.close()
 
@@ -349,6 +417,7 @@ def get_message(player_id: int, message_id: int, *, mark_read: bool = True) -> d
     try:
         if not _table_ready(conn):
             return _err("messages_not_ready")
+        _prepare_inbox(conn, int(player_id))
         cur = conn.cursor()
         cur.execute(
             """
@@ -356,7 +425,9 @@ def get_message(player_id: int, message_id: int, *, mark_read: bool = True) -> d
                    category, subject, body, is_read, is_archived,
                    metadata_json, created_at, read_at
             FROM player_messages
-            WHERE id = ? AND recipient_player_id = ? AND deleted_at IS NULL
+            WHERE id = ? AND recipient_player_id = ? AND """
+            + _not_deleted_sql()
+            + """
             LIMIT 1;
             """,
             (int(message_id), int(player_id)),
@@ -410,7 +481,9 @@ def mark_message_read(player_id: int, message_id: int) -> dict[str, Any]:
             """
             UPDATE player_messages
             SET is_read = 1, read_at = COALESCE(read_at, ?)
-            WHERE id = ? AND recipient_player_id = ? AND deleted_at IS NULL;
+            WHERE id = ? AND recipient_player_id = ? AND """
+            + _not_deleted_sql()
+            + """;
             """,
             (now, int(message_id), int(player_id)),
         )
@@ -431,7 +504,8 @@ def mark_all_messages_read(player_id: int, *, category: str | None = None) -> di
     try:
         if not _table_ready(conn):
             return _err("messages_not_ready")
-        where = f"{_inbox_visibility_clause(archived=False)} AND is_read = 0"
+        _prepare_inbox(conn, int(player_id))
+        where = f"{_inbox_visibility_clause(archived=False)}{_unread_clause()}"
         params: list[Any] = [int(player_id)]
         cat_sql, cat_params = _category_clause(category)
         where += cat_sql
@@ -469,7 +543,9 @@ def archive_message(player_id: int, message_id: int) -> dict[str, Any]:
             """
             UPDATE player_messages
             SET is_archived = 1
-            WHERE id = ? AND recipient_player_id = ? AND deleted_at IS NULL;
+            WHERE id = ? AND recipient_player_id = ? AND """
+            + _not_deleted_sql()
+            + """;
             """,
             (int(message_id), int(player_id)),
         )
@@ -497,7 +573,9 @@ def delete_message(player_id: int, message_id: int) -> dict[str, Any]:
             """
             UPDATE player_messages
             SET deleted_at = ?
-            WHERE id = ? AND recipient_player_id = ? AND deleted_at IS NULL;
+            WHERE id = ? AND recipient_player_id = ? AND """
+            + _not_deleted_sql()
+            + """;
             """,
             (now, int(message_id), int(player_id)),
         )
@@ -520,13 +598,14 @@ def unread_count(player_id: int, *, conn=None) -> int:
     try:
         if not _table_ready(conn):
             return 0
+        _prepare_inbox(conn, int(player_id))
         cur = conn.cursor()
         cur.execute(
             f"""
             SELECT COUNT(*) AS c
             FROM player_messages
             WHERE {_inbox_visibility_clause(archived=False)}
-              AND is_read = 0;
+              {_unread_clause()};
             """,
             (int(player_id),),
         )
@@ -555,7 +634,8 @@ def send_player_message(
         if not _table_ready(conn):
             return _err("messages_not_ready")
 
-        recipient, lookup_err = resolve_player_by_name(recipient_name, conn)
+        lookup_input = str(recipient_name or "").strip()
+        recipient, lookup_err = resolve_player_by_name(lookup_input, conn)
         if lookup_err == "ambiguous":
             return _err("recipient_ambiguous")
         if lookup_err or not recipient:
@@ -563,6 +643,13 @@ def send_player_message(
         recipient_id = int(recipient["id"])
         if recipient_id == int(sender_player_id):
             return _err("validation")
+
+        logger.debug(
+            "send_player_message sender_player_id=%s recipient_player_id=%s recipient_lookup_input=%r",
+            int(sender_player_id),
+            recipient_id,
+            lookup_input,
+        )
 
         cur = conn.cursor()
         cur.execute(
@@ -603,6 +690,7 @@ def send_player_message(
             int(sender_player_id),
             {
                 "message_id": result["data"]["message_id"],
+                "recipient_player_id": recipient_id,
                 "recipient_id": recipient_id,
                 "recipient_name": str(recipient.get("name") or ""),
             },

@@ -315,6 +315,7 @@
     _numAnim.forEach((st) => { if (st?.raf) cancelAnimationFrame(st.raf); });
     _numAnim.clear();
     if (typeof rankingAbortInFlight === "function") rankingAbortInFlight();
+    _lastMessagesUnreadPoll = null;
     GC.currentPage = null;
     lc.initialized = false;
   };
@@ -464,10 +465,10 @@
     return Promise.resolve();
   };
 
-  function hydratePageFromLastState() {
+  function hydratePageFromLastState(opts) {
     if (!GC.lastState || GC.lastState.ok !== true) return false;
     try {
-      applyGameStateData(GC.lastState, "page_hydrate");
+      applyGameStateData(GC.lastState, "page_hydrate", opts);
       GC.startProgressTicker();
       return true;
     } catch (err) {
@@ -583,16 +584,26 @@
     const mod = GC.modules[page];
     if (typeof mod === "function") {
       try {
-        mod();
+        if (page === "messages") {
+          mod({ force: true });
+        } else {
+          mod();
+        }
       } catch (err) {
         console.error("[GC] page module error", page, err);
+      }
+    } else if (page === "messages" && typeof GC.initMessagesPage === "function") {
+      try {
+        GC.initMessagesPage({ force: true });
+      } catch (err) {
+        console.error("[GC] messages init fallback error", err);
       }
     }
 
     initFlashAutohide();
 
     if (shouldRunGameLoop()) {
-      hydratePageFromLastState();
+      hydratePageFromLastState({ skipMessagesUnread: page === "messages" });
     }
 
     if (!shouldRunGameLoop()) {
@@ -1582,6 +1593,8 @@
   // =========================
   // Messages unread badges (game-state polling)
   // =========================
+  let _lastMessagesUnreadPoll = null;
+
   function updateMessagesUnreadBadges(count) {
     const n = Math.max(0, Number(count) || 0);
     const label = n > 99 ? "99+" : String(n);
@@ -1600,12 +1613,16 @@
     });
   }
   GC.updateMessagesUnreadBadges = updateMessagesUnreadBadges;
+  GC.setMessagesUnreadPollBaseline = function setMessagesUnreadPollBaseline(count) {
+    _lastMessagesUnreadPoll = Math.max(0, Number(count) || 0);
+  };
 
   // =========================
   // Status polling / GC.refreshGameState
   // =========================
-  function applyGameStateData(data, _reason) {
+  function applyGameStateData(data, _reason, opts) {
       if (!data || data.ok === false) return false;
+      const skipMessagesUnread = Boolean(opts && opts.skipMessagesUnread);
 
       if (data.server_time) setServerTime(data.server_time);
 
@@ -1714,15 +1731,31 @@
       }
 
       if (typeof data.unread_messages_count === "number") {
-        updateMessagesUnreadBadges(data.unread_messages_count);
-        if (
-          GC.detectPage() === "messages" &&
-          data.unread_messages_count > 0 &&
+        const onMessagesPage = GC.detectPage() === "messages";
+        const inboxSynced =
+          onMessagesPage &&
           GC.messagesPageState &&
-          typeof GC.messagesPageState.loadList === "function" &&
-          (!Array.isArray(GC.messagesPageState.messages) || GC.messagesPageState.messages.length === 0)
-        ) {
-          GC.messagesPageState.loadList();
+          GC.messagesPageState.unreadSyncedFromApi;
+        const prevUnread = _lastMessagesUnreadPoll;
+        const unreadIncreased =
+          prevUnread !== null && data.unread_messages_count > prevUnread;
+        if (!skipMessagesUnread && (!inboxSynced || unreadIncreased)) {
+          _lastMessagesUnreadPoll = data.unread_messages_count;
+          updateMessagesUnreadBadges(data.unread_messages_count);
+          if (
+            onMessagesPage &&
+            GC.messagesPageState &&
+            typeof GC.messagesPageState.loadList === "function"
+          ) {
+            const emptyInboxNeedsFill =
+              data.unread_messages_count > 0 &&
+              (!Array.isArray(GC.messagesPageState.messages) ||
+                GC.messagesPageState.messages.length === 0);
+            if (unreadIncreased || (prevUnread === null && emptyInboxNeedsFill)) {
+              GC.messagesPageState.unreadSyncedFromApi = false;
+              GC.messagesPageState.loadList();
+            }
+          }
         }
       }
 
