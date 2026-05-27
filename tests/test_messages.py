@@ -497,6 +497,110 @@ def test_notify_invalid_player_id(temp_db):
     assert unread_count(999999) == 0
 
 
+def test_message_to_zero_score_player(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    sender = _create_player("sender_z")
+    target = _create_player("target_z")
+    conn = db()
+    conn.execute("DELETE FROM player_scores WHERE player_id = ?", (target,))
+    conn.execute("UPDATE players SET name = ? WHERE id = ?", ("Commander ZeroTarget", target))
+    conn.commit()
+    conn.close()
+    _close_db()
+
+    res = send_player_message(sender, "ZeroTarget", "Hello there", "Body text for zero score")
+    assert res["ok"], res
+
+    listed = list_messages(target)
+    assert listed["ok"]
+    assert any(m["subject"] == "Hello there" for m in listed["data"]["messages"])
+
+
+def test_send_message_ambiguous_recipient(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    sender = _create_player("sender_amb")
+    cmd_alpha = _create_player("cmd_alpha")
+    plain_alpha = _create_player("plain_alpha")
+    conn = db()
+    conn.execute("UPDATE players SET name = ? WHERE id = ?", ("Commander Alpha", cmd_alpha))
+    conn.execute("UPDATE players SET name = ? WHERE id = ?", ("Alpha", plain_alpha))
+    conn.commit()
+    conn.close()
+    _close_db()
+
+    res = send_player_message(sender, "Alpha", "Hello", "Ambiguous name test body")
+    assert not res["ok"]
+    assert res["error"] == "recipient_ambiguous"
+
+
+def test_unread_count_matches_visible_unread_in_list(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("unread_sync")
+    notify_player(pid, "Unread A", "Body A", category="system")
+    notify_player(pid, "Unread B", "Body B", category="system")
+    read_msg = notify_player(pid, "Read C", "Body C", category="system")
+    _close_db()
+
+    mid = read_msg["data"]["message_id"]
+    assert mark_message_read(pid, mid)["ok"]
+
+    listed = list_messages(pid)
+    assert listed["ok"]
+    visible_unread = [m for m in listed["data"]["messages"] if not m["is_read"]]
+    assert unread_count(pid) == len(visible_unread)
+    assert listed["data"]["unread_count"] == unread_count(pid)
+
+
+def test_archived_and_deleted_unread_not_counted(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("unread_filter")
+    notify_player(pid, "Still unread", "Counts in badge", category="system")
+    res_arch = notify_player(pid, "Archive me", "Gone from badge", category="system")
+    res_del = notify_player(pid, "Delete me", "Gone from badge", category="system")
+    listed = list_messages(pid)
+    arch_id = next(m["id"] for m in listed["data"]["messages"] if m["subject"] == "Archive me")
+    del_id = res_del["data"]["message_id"]
+    assert archive_message(pid, arch_id)["ok"]
+    assert delete_message(pid, del_id)["ok"]
+    _close_db()
+
+    assert unread_count(pid) == 1
+    listed = list_messages(pid)
+    assert listed["data"]["unread_count"] == 1
+
+
+def test_api_messages_lists_unread(temp_db, app_client):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("api_msg")
+    notify_player(pid, "API ping", "Hello from API test", category="system")
+    _close_db()
+
+    with app_client.session_transaction() as sess:
+        sess["user_id"] = pid
+
+    r = app_client.get("/api/messages")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert data["data"]["unread_count"] >= 1
+    assert any(m["subject"] == "API ping" for m in data["data"]["messages"])
+
+
 def test_messages_page_loads(app_client, temp_db):
     _run_migrate(temp_db)
     init_db()

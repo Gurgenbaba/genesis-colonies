@@ -16,9 +16,14 @@ WICHTIG:
 
 from __future__ import annotations
 
+import logging
+import sqlite3
+import time
 from typing import Dict, Any, Optional, Tuple
 
-from .models import get_homeworld, get_research_levels
+logger = logging.getLogger(__name__)
+
+from .models import get_homeworld, get_planet_buildings, get_research_levels
 from . import resources as _res
 from .resources import (
     update_resources as _update_resources,
@@ -42,6 +47,7 @@ from .research import (
     complete_finished_research as _complete_finished_research,
 )
 from .effects import get_effect_resolver
+from .effects.effect_resolver import EffectResolver
 
 from .techtree import (
     get_techtree_data as _tt_get_techtree_data,
@@ -52,6 +58,147 @@ from .techtree import (
 # ============================================================================ #
 # RESSOURCEN
 # ============================================================================ #
+
+
+def _read_player_live_state_no_writes(
+    uid: int,
+    conn,
+    player: Dict[str, Any],
+    planet: Dict[str, Any],
+) -> Tuple[Any, Dict[str, int], float, int, int, Dict[str, int]]:
+    """Pure read path for polling when writes are skipped (e.g. SQLite lock)."""
+    planet_id = int(planet["id"])
+    buildings = get_planet_buildings(planet_id, conn=conn)
+    research = get_research_levels(user_id=uid, conn=conn)
+    resolver = get_effect_resolver(
+        uid,
+        buildings=buildings,
+        research=research,
+        conn=conn,
+        force_refresh=True,
+    )
+    energy_total, energy_used = resolver.compute_energy()
+    ratio = EffectResolver.energy_ratio(energy_total, energy_used)
+    storage_caps = get_storage_capacity(buildings, user_id=uid, conn=conn)
+
+    player_view = dict(player)
+    player_view["metal"] = planet["metal"]
+    player_view["crystal"] = planet["crystal"]
+    player_view["energy_total"] = int(energy_total)
+    player_view["energy_used"] = int(energy_used)
+    return player_view, buildings, ratio, int(energy_total), int(energy_used), storage_caps
+
+
+def read_player_live_state_for_poll(
+    player_id: int,
+    conn=None,
+) -> Tuple[Any, Dict[str, int], float, int, int, Dict[str, int]]:
+    """
+    Game-state polling path: throttled queue finish, no rank/score seeding writes.
+
+    - Finishes due queue work only when jobs are due OR poll lease expired.
+    - Skips rank recalculation on poll (recalc_ranks=False).
+    - May still persist resource accrual when a finish ran or idle time warrants it.
+    """
+    from .db import begin_write_transaction, in_transaction
+    from .models import db as _db, get_homeworld, load_player, rollback
+    from .queue_engine import finish_due_work_once
+    from .queue_poll import record_poll_queue_finish, should_run_queue_finish_for_poll
+
+    uid = int(player_id)
+    own_conn = conn is None
+    if own_conn:
+        conn = _db()
+
+    try:
+        run_finish = should_run_queue_finish_for_poll(uid, conn=conn)
+        player = load_player(uid, conn=conn)
+        if not player:
+            raise RuntimeError(f"player {uid} not found")
+
+        planet = get_homeworld(player_id=uid, conn=conn)
+        try:
+            from .planet_evolution.repository import evolution_schema_ready, get_active_planet_id, get_planet_row
+
+            if evolution_schema_ready(conn):
+                active_id = get_active_planet_id(uid, conn=conn)
+                active = get_planet_row(active_id, conn=conn)
+                if active:
+                    planet = active
+        except Exception:
+            pass
+
+        now = time.time()
+        last_raw = planet.get("last_update")
+        last = float(last_raw) if last_raw is not None else now
+        persist_resources = run_finish or (now - last) >= 60.0
+
+        try:
+            if run_finish or persist_resources:
+                if own_conn and not in_transaction(conn):
+                    begin_write_transaction(conn)
+
+                if run_finish:
+                    finish_due_work_once(
+                        player_id=uid,
+                        conn=conn,
+                        source="game_state",
+                        update_scores=True,
+                        recalc_ranks=False,
+                    )
+                    record_poll_queue_finish(uid, conn=conn)
+                    from .live_state import mark_request_live_refreshed
+
+                    mark_request_live_refreshed()
+
+                planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
+                    planet,
+                    conn=conn,
+                    skip_queue_finish=True,
+                )
+                storage_caps = get_storage_capacity(buildings, user_id=uid, conn=conn)
+
+                if own_conn and in_transaction(conn):
+                    from .models import commit
+
+                    commit(conn)
+            else:
+                player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
+                    _read_player_live_state_no_writes(uid, conn, player, planet)
+                )
+                return player_view, buildings, ratio, energy_total, energy_used, storage_caps
+
+            player_view = dict(player)
+            player_view["metal"] = planet["metal"]
+            player_view["crystal"] = planet["crystal"]
+            player_view["energy_total"] = int(energy_total)
+            player_view["energy_used"] = int(energy_used)
+
+            return player_view, buildings, ratio, int(energy_total), int(energy_used), storage_caps
+
+        except sqlite3.OperationalError:
+            logger.warning(
+                "read_player_live_state_for_poll locked, read-only fallback player_id=%s",
+                uid,
+                exc_info=True,
+            )
+            if own_conn:
+                try:
+                    rollback(conn)
+                except Exception:
+                    pass
+            player = load_player(uid, conn=conn) or player
+            planet = get_homeworld(player_id=uid, conn=conn)
+            return _read_player_live_state_no_writes(uid, conn, player, planet)
+
+    except Exception:
+        if own_conn:
+            rollback(conn)
+        raise
+    finally:
+        if own_conn and conn is not None:
+            conn.close()
+
 
 def refresh_player_live_state(
     player_id: int,

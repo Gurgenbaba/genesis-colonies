@@ -202,10 +202,10 @@ def _normalize_payload(data: Optional[dict]) -> Dict[str, int]:
 def _total_score_sql(conn) -> str:
     if column_exists(conn, "player_scores", "score_fleet"):
         return (
-            "(ps.score_buildings + ps.score_research + "
+            "(COALESCE(ps.score_buildings, 0) + COALESCE(ps.score_research, 0) + "
             "COALESCE(ps.score_fleet, 0) + COALESCE(ps.score_defense, 0))"
         )
-    return "(ps.score_buildings + ps.score_research)"
+    return "(COALESCE(ps.score_buildings, 0) + COALESCE(ps.score_research, 0))"
 
 
 def upsert_player_scores(
@@ -352,7 +352,7 @@ def on_player_score_changed(player_id: int, conn=None) -> Dict[str, int]:
     return recompute_and_upsert_score(int(player_id), conn=conn)
 
 
-def _ensure_score_rows(conn) -> None:
+def _ensure_score_rows(conn) -> int:
     cur = conn.cursor()
     cur.execute(
         """
@@ -362,6 +362,30 @@ def _ensure_score_rows(conn) -> None:
         WHERE NOT EXISTS (SELECT 1 FROM player_scores s WHERE s.player_id = p.id)
         """
     )
+    return int(cur.rowcount or 0)
+
+
+def ensure_player_score_row(player_id: int, conn=None) -> None:
+    """Ensure a single player has a zeroed player_scores row (e.g. after registration)."""
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO player_scores (player_id, score_total, score_buildings, score_research, updated_at)
+            VALUES (?, 0, 0, 0, CAST(strftime('%s','now') AS INTEGER))
+            ON CONFLICT(player_id) DO NOTHING;
+            """,
+            (int(player_id),),
+        )
+        if owns_conn:
+            conn.commit()
+    finally:
+        if owns_conn:
+            conn.close()
 
 
 def _fleet_defense_select(conn) -> str:
@@ -371,19 +395,21 @@ def _fleet_defense_select(conn) -> str:
 
 
 def _fetch_all_score_rows(conn) -> List[Dict[str, Any]]:
+    _ensure_score_rows(conn)
     cur = conn.cursor()
     extra = _fleet_defense_select(conn)
     cur.execute(
         f"""
         SELECT
-            ps.player_id,
+            p.id AS player_id,
             p.name AS commander_name,
-            ps.score_total,
-            ps.score_buildings,
-            ps.score_research,
+            COALESCE(ps.score_total, 0) AS score_total,
+            COALESCE(ps.score_buildings, 0) AS score_buildings,
+            COALESCE(ps.score_research, 0) AS score_research,
             {extra}
-        FROM player_scores ps
-        JOIN players p ON p.id = ps.player_id
+        FROM players p
+        LEFT JOIN player_scores ps ON ps.player_id = p.id
+        ORDER BY p.id ASC
         """
     )
     rows = []
@@ -556,15 +582,39 @@ def recalculate_all_rankings(
             conn.close()
 
 
+def backfill_player_score_rows(conn=None) -> int:
+    """
+    Idempotent INSERT for players missing player_scores rows.
+    Call from migrations, init_db, registration — never from ranking GET / player-card GET.
+    """
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        inserted = _ensure_score_rows(conn)
+        if owns_conn:
+            conn.commit()
+        return inserted
+    finally:
+        if owns_conn:
+            conn.close()
+
+
 def ensure_ranking_snapshot(
     conn=None,
     *,
     current_player_id: Optional[int] = None,
+    write: bool = False,
 ) -> None:
     """
-    Lightweight read-path maintenance: seed rows, assign missing ranks, repair current player legacy total.
-    Does NOT recompute all player scores from game state.
+    Legacy name — ranking GET must stay read-only (write=False, default).
+
+    write=True: admin/cron maintenance (seed rows, recalc missing ranks, optional repair).
     """
+    if not write:
+        return
+
     owns_conn = False
     if conn is None:
         conn = db()
@@ -572,6 +622,8 @@ def ensure_ranking_snapshot(
 
     try:
         _ensure_score_rows(conn)
+        if owns_conn:
+            conn.commit()
         if column_exists(conn, "player_scores", "rank_total"):
             cur = conn.cursor()
             cur.execute("SELECT COUNT(*) FROM player_scores WHERE rank_total IS NULL")
@@ -580,6 +632,8 @@ def ensure_ranking_snapshot(
                 recalculate_ranks(conn=conn)
         if current_player_id is not None:
             repair_player_score_totals(int(current_player_id), conn=conn)
+        if owns_conn:
+            conn.commit()
     finally:
         if owns_conn:
             conn.close()
@@ -598,7 +652,12 @@ def get_player_score_row(player_id: int, conn=None) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
-def get_player_score_cached(player_id: int, force_recompute: bool = False) -> Dict[str, int]:
+def get_player_score_cached(
+    player_id: int,
+    force_recompute: bool = False,
+    *,
+    read_only: bool = False,
+) -> Dict[str, int]:
     """
     Cached score read for HUD/header. Keys: total, buildings, research (+ fleet/defense when present).
     """
@@ -629,9 +688,12 @@ def get_player_score_cached(player_id: int, force_recompute: bool = False) -> Di
         if (now - ts) <= CACHE_TTL_SECONDS:
             return data
 
-    row = get_player_score_row(pid)
+    row = get_player_score_row(pid, conn=None)
     if not row:
-        out = _to_legacy(refresh_player_score(pid))
+        if read_only:
+            out = _to_legacy(_zero_scores())
+        else:
+            out = _to_legacy(refresh_player_score(pid))
     else:
         out = _to_legacy(_normalize_db_row(row))
 
@@ -648,6 +710,7 @@ def _ranking_social_select_and_join(conn) -> Tuple[str, str]:
         select_parts.extend(
             [
                 "pc.avatar_url AS card_avatar_url",
+                "COALESCE(pc.updated_at, 0) AS card_updated_at",
                 "pc.title AS card_title",
                 "pc.theme AS card_theme",
                 "COALESCE(pc.is_public, 1) AS card_is_public",
@@ -753,7 +816,7 @@ def enrich_ranking_social_fields(raw: Dict[str, Any]) -> Dict[str, Any]:
     Normalize player-card and alliance fields for ranking API / templates.
     Avatar URL is only exposed when the profile is public and passes validation.
     """
-    from .playercard import sanitize_text_field, validate_avatar_url, validate_theme, TITLE_MAX
+    from .playercard import avatar_url_for_client, sanitize_text_field, validate_avatar_url, validate_theme, TITLE_MAX
 
     from .player_display import commander_display_name, commander_lookup_name
 
@@ -762,6 +825,7 @@ def enrich_ranking_social_fields(raw: Dict[str, Any]) -> Dict[str, Any]:
     initial = _avatar_initial_from_name(lookup)
     pub_raw = raw.get("card_is_public")
     is_public = bool(int(pub_raw)) if pub_raw is not None else True
+    card_updated_at = int(raw.get("card_updated_at") or 0)
 
     avatar_url = ""
     show_avatar = False
@@ -770,7 +834,7 @@ def enrich_ranking_social_fields(raw: Dict[str, Any]) -> Dict[str, Any]:
         if raw_url:
             ok, validated = validate_avatar_url(raw_url)
             if ok and validated:
-                avatar_url = validated
+                avatar_url = avatar_url_for_client(validated, card_updated_at)
                 show_avatar = True
 
     title = sanitize_text_field(raw.get("card_title"), TITLE_MAX) if is_public else ""
@@ -831,16 +895,19 @@ def get_sorted_ranking_entries(
         SELECT
             p.id AS player_id,
             p.name AS commander_name,
-            ps.score_total,
-            ps.score_buildings,
-            ps.score_research,
+            COALESCE(ps.score_total, 0) AS score_total,
+            COALESCE(ps.score_buildings, 0) AS score_buildings,
+            COALESCE(ps.score_research, 0) AS score_research,
             {extra},
-            ps.updated_at{rank_select},
+            COALESCE(ps.updated_at, 0) AS score_updated_at{rank_select},
             {social_select}
         FROM players p
-        JOIN player_scores ps ON ps.player_id = p.id
+        LEFT JOIN player_scores ps ON ps.player_id = p.id
         {social_join}
-        ORDER BY {total_expr} DESC, ps.score_buildings DESC, ps.score_research DESC, p.id ASC
+        ORDER BY {total_expr} DESC,
+                 COALESCE(ps.score_buildings, 0) DESC,
+                 COALESCE(ps.score_research, 0) DESC,
+                 p.id ASC
         LIMIT ? OFFSET ?
         """,
         (int(limit), int(offset)),
@@ -883,7 +950,7 @@ def get_player_rank_from_snapshot(player_id: int, conn=None) -> Tuple[Optional[i
         owns_conn = True
 
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) AS cnt FROM player_scores")
+    cur.execute("SELECT COUNT(*) AS cnt FROM players")
     total_players = int(cur.fetchone()["cnt"])
 
     if column_exists(conn, "player_scores", "rank_total"):
@@ -892,18 +959,20 @@ def get_player_rank_from_snapshot(player_id: int, conn=None) -> Tuple[Optional[i
             (int(player_id),),
         )
         row = cur.fetchone()
-        if owns_conn:
-            conn.close()
-        if not row or row["rank_total"] is None:
-            return None, total_players
-        return int(row["rank_total"]), total_players
+        if row and row["rank_total"] is not None:
+            if owns_conn:
+                conn.close()
+            return int(row["rank_total"]), total_players
 
     total_expr = _total_score_sql(conn)
     cur.execute(
         f"""
-        SELECT {total_expr} AS eff_total, ps.score_buildings, ps.score_research
-        FROM player_scores ps
-        WHERE ps.player_id = ?
+        SELECT {total_expr} AS eff_total,
+               COALESCE(ps.score_buildings, 0) AS score_buildings,
+               COALESCE(ps.score_research, 0) AS score_research
+        FROM players p
+        LEFT JOIN player_scores ps ON ps.player_id = p.id
+        WHERE p.id = ?
         """,
         (int(player_id),),
     )
@@ -920,13 +989,13 @@ def get_player_rank_from_snapshot(player_id: int, conn=None) -> Tuple[Optional[i
     cur.execute(
         f"""
         SELECT COUNT(*) AS better
-        FROM player_scores ps
-        JOIN players p ON p.id = ps.player_id
+        FROM players p
+        LEFT JOIN player_scores ps ON ps.player_id = p.id
         WHERE ({total_expr} > ?)
-           OR ({total_expr} = ? AND ps.score_buildings > ?)
-           OR ({total_expr} = ? AND ps.score_buildings = ? AND ps.score_research > ?)
-           OR ({total_expr} = ? AND ps.score_buildings = ? AND ps.score_research = ?
-               AND ps.player_id < ?)
+           OR ({total_expr} = ? AND COALESCE(ps.score_buildings, 0) > ?)
+           OR ({total_expr} = ? AND COALESCE(ps.score_buildings, 0) = ? AND COALESCE(ps.score_research, 0) > ?)
+           OR ({total_expr} = ? AND COALESCE(ps.score_buildings, 0) = ? AND COALESCE(ps.score_research, 0) = ?
+               AND p.id < ?)
         """,
         (
             my_total,
@@ -1070,8 +1139,7 @@ def build_ranking_api_payload(
     """
     if refresh:
         recalculate_all_rankings(refresh_scores=True)
-    else:
-        ensure_ranking_snapshot(current_player_id=int(current_player_id))
+    # Normal GET: read-only snapshot (LEFT JOIN players); no _ensure_score_rows here.
 
     top = get_sorted_ranking_entries(limit=limit, offset=0)
     for row in top:
@@ -1104,8 +1172,71 @@ def get_ranking_rows(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
     return legacy
 
 
-def get_player_rank(player_id: int) -> Tuple[Optional[int], int]:
-    return get_player_rank_from_snapshot(player_id)
+def get_player_rank(
+    player_id: int,
+    conn=None,
+) -> Tuple[Optional[int], int]:
+    """
+    Read-only rank lookup. Never seeds player_scores (no _ensure_score_rows).
+  On SQLite lock, returns (None, total_players) instead of raising.
+    """
+    try:
+        return get_player_rank_from_snapshot(int(player_id), conn=conn)
+    except sqlite3.OperationalError:
+        logger.warning(
+            "get_player_rank skipped (database locked), player_id=%s",
+            player_id,
+            exc_info=True,
+        )
+        owns_conn = False
+        if conn is None:
+            conn = db()
+            owns_conn = True
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) AS cnt FROM players")
+            total = int(cur.fetchone()["cnt"])
+            return None, total
+        except Exception:
+            return None, 0
+        finally:
+            if owns_conn and conn is not None:
+                conn.close()
+
+
+def read_player_scores(
+    player_id: int,
+    conn=None,
+) -> Dict[str, int]:
+    """Read score components without creating rows or recomputing."""
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        cur = conn.cursor()
+        extra = _fleet_defense_select(conn)
+        cur.execute(
+            f"""
+            SELECT
+                COALESCE(ps.score_total, 0) AS score_total,
+                COALESCE(ps.score_buildings, 0) AS score_buildings,
+                COALESCE(ps.score_research, 0) AS score_research,
+                {extra}
+            FROM players p
+            LEFT JOIN player_scores ps ON ps.player_id = p.id
+            WHERE p.id = ?
+            LIMIT 1;
+            """,
+            (int(player_id),),
+        )
+        row = cur.fetchone()
+        if not row:
+            return _zero_scores()
+        return _normalize_db_row(dict(row))
+    finally:
+        if owns_conn:
+            conn.close()
 
 
 def recompute_and_upsert_score(

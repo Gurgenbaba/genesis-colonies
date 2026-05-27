@@ -1516,6 +1516,7 @@
   "messages.error_rate_limited": "Bitte kurz warten, bevor du erneut sendest.",
   "messages.error_cooldown": "Bitte kurz warten, bevor du erneut sendest.",
   "messages.error_recipient_not_found": "Empfänger nicht gefunden.",
+  "messages.error_recipient_ambiguous": "Mehrere Spieler passen zu diesem Namen. Bitte genauer eingeben.",
   "messages.error_messages_not_ready": "Nachrichtensystem ist noch nicht bereit.",
 
   "admin_messages_title": "Nachrichten",

@@ -4,7 +4,7 @@ import json
 import time
 from typing import Any, Optional
 
-from .chat import find_player_by_name
+from .player_display import resolve_player_by_name
 from .db import begin_write_transaction, commit, db, rollback, table_exists
 
 VALID_CATEGORIES = frozenset(
@@ -287,6 +287,13 @@ def notify_expedition(
     )
 
 
+def _inbox_visibility_clause(*, archived: bool = False) -> str:
+    """Shared inbox filters for list + unread_count (non-archive tab)."""
+    if archived:
+        return "recipient_player_id = ? AND deleted_at IS NULL AND is_archived = 1"
+    return "recipient_player_id = ? AND deleted_at IS NULL AND is_archived = 0"
+
+
 def list_messages(
     player_id: int,
     *,
@@ -304,13 +311,11 @@ def list_messages(
         if cat == "archive":
             include_archived = True
 
-        where = "recipient_player_id = ?" + _not_deleted_clause()
-        params: list[Any] = [int(player_id)]
-
         if cat == "archive":
-            where += " AND is_archived = 1"
-        elif not include_archived:
-            where += " AND is_archived = 0"
+            where = _inbox_visibility_clause(archived=True)
+        else:
+            where = _inbox_visibility_clause(archived=False)
+        params: list[Any] = [int(player_id)]
 
         cat_sql, cat_params = _category_clause(None if cat in ("", "all", "archive") else cat)
         where += cat_sql
@@ -426,7 +431,7 @@ def mark_all_messages_read(player_id: int, *, category: str | None = None) -> di
     try:
         if not _table_ready(conn):
             return _err("messages_not_ready")
-        where = "recipient_player_id = ? AND deleted_at IS NULL AND is_read = 0 AND is_archived = 0"
+        where = f"{_inbox_visibility_clause(archived=False)} AND is_read = 0"
         params: list[Any] = [int(player_id)]
         cat_sql, cat_params = _category_clause(category)
         where += cat_sql
@@ -517,12 +522,10 @@ def unread_count(player_id: int, *, conn=None) -> int:
             return 0
         cur = conn.cursor()
         cur.execute(
-            """
+            f"""
             SELECT COUNT(*) AS c
             FROM player_messages
-            WHERE recipient_player_id = ?
-              AND deleted_at IS NULL
-              AND is_archived = 0
+            WHERE {_inbox_visibility_clause(archived=False)}
               AND is_read = 0;
             """,
             (int(player_id),),
@@ -552,8 +555,10 @@ def send_player_message(
         if not _table_ready(conn):
             return _err("messages_not_ready")
 
-        recipient = find_player_by_name(recipient_name, conn)
-        if not recipient:
+        recipient, lookup_err = resolve_player_by_name(recipient_name, conn)
+        if lookup_err == "ambiguous":
+            return _err("recipient_ambiguous")
+        if lookup_err or not recipient:
             return _err("recipient_not_found")
         recipient_id = int(recipient["id"])
         if recipient_id == int(sender_player_id):
@@ -722,8 +727,10 @@ def admin_send_message(
             if not row:
                 return _err("recipient_not_found")
         else:
-            hit = find_player_by_name(str(recipient), conn)
-            if not hit:
+            hit, lookup_err = resolve_player_by_name(str(recipient), conn)
+            if lookup_err == "ambiguous":
+                return _err("recipient_ambiguous")
+            if lookup_err or not hit:
                 return _err("recipient_not_found")
             recipient_id = int(hit["id"])
 

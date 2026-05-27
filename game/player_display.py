@@ -39,6 +39,41 @@ def split_commander_name(name: str | None) -> dict[str, str]:
     }
 
 
+def resolve_player_by_name(name: str | None, conn) -> tuple[dict | None, str | None]:
+    """
+    Look up a player by display or stored name (players table only).
+
+    Returns (player_row, error_key). error_key: validation, not_found, ambiguous.
+    """
+    q = str(name or "").strip()
+    if len(q) < 2:
+        return None, "validation"
+
+    cur = conn.cursor()
+    matches: dict[int, dict] = {}
+
+    for candidate in commander_name_candidates(q):
+        if len(candidate) < 2:
+            continue
+        cur.execute(
+            """
+            SELECT id, name FROM players
+            WHERE LOWER(name) = LOWER(?)
+            ORDER BY id ASC;
+            """,
+            (candidate,),
+        )
+        for row in cur.fetchall():
+            pid = int(row["id"])
+            matches[pid] = {"id": pid, "name": str(row["name"] or "")}
+
+    if not matches:
+        return None, "not_found"
+    if len(matches) > 1:
+        return None, "ambiguous"
+    return next(iter(matches.values())), None
+
+
 def commander_name_candidates(name: str | None) -> list[str]:
     """Distinct name variants for DB lookups (exact match)."""
     q = str(name or "").strip()

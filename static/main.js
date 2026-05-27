@@ -2321,6 +2321,60 @@
     return `<span class="gc-ranking-avatar-fallback gc-ranking-avatar-fallback--${theme}" aria-hidden="true">${initial}</span>`;
   }
 
+  function bustAvatarUrl(url, version) {
+    const raw = String(url || "").trim();
+    if (!raw) return "";
+    const v = Number(version) || 0;
+    if (v <= 0) return raw;
+    if (!/^https?:\/\//i.test(raw)) return raw;
+    const sep = raw.includes("?") ? "&" : "?";
+    return `${raw}${sep}v=${v}`;
+  }
+
+  GC.syncPlayerAvatarVisuals = function syncPlayerAvatarVisuals(sync) {
+    const pid = Number(sync?.player_id);
+    if (!Number.isFinite(pid) || pid <= 0) return;
+
+    const busted = String(sync.avatar_url || "").trim();
+    const show = !!(sync.show_avatar && busted);
+    const initial = String(sync.avatar_initial || "?").slice(0, 1).toUpperCase() || "?";
+    const theme = String(sync.theme || "cyan");
+
+    document.querySelectorAll(`[data-player-card][data-player-id="${pid}"]`).forEach((trigger) => {
+      const avatarWrap = trigger.querySelector(".gc-ranking-avatar");
+      if (!avatarWrap) return;
+      if (show) {
+        avatarWrap.innerHTML =
+          `<img class="gc-ranking-avatar-img" src="${rankingEscapeHtml(busted)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`;
+      } else {
+        avatarWrap.innerHTML =
+          `<span class="gc-ranking-avatar-fallback gc-ranking-avatar-fallback--${rankingEscapeHtml(theme)}" aria-hidden="true">${rankingEscapeHtml(initial)}</span>`;
+      }
+    });
+
+    const modalImg = PLAYER_CARD.content?.querySelector(".gc-player-card-avatar[src]");
+    if (modalImg && PLAYER_CARD.currentId === pid && show) {
+      modalImg.src = busted;
+      modalImg.hidden = false;
+      const ph = PLAYER_CARD.content.querySelector(".gc-player-card-avatar-placeholder");
+      if (ph) ph.hidden = true;
+    }
+
+    const top = GC._rankingLastPayload || _rankingLifecycle.payload;
+    if (top?.top_players) {
+      const row = top.top_players.find((r) => Number(r.player_id) === pid);
+      if (row) {
+        row.avatar_url = busted;
+        row.show_avatar = show;
+        row.avatar_initial = initial;
+        row.theme = theme;
+        if (document.getElementById("ranking-page")) {
+          rankingRenderList(top, _rankingLifecycle.tab);
+        }
+      }
+    }
+  };
+
   function rankingBadgesHtml(row) {
     const badges = Array.isArray(row.badges) ? row.badges : [];
     if (!badges.length) return "";
@@ -2514,6 +2568,7 @@
   }
 
   function renderRankingPayload(payload) {
+    if (payload?.ok) GC._rankingLastPayload = payload;
     _rankingLifecycle.payload = payload && payload.ok ? payload : null;
     if (_rankingLifecycle.payload) {
       const visible = rankingVisibleTabs(_rankingLifecycle.payload);
@@ -3806,6 +3861,9 @@
       }
       showNotify(t("playercard_save_success", "Profil gespeichert."), "success");
       if (data.html) mountPlayerCardHtml(data.html, "view");
+      if (data.card && typeof GC.syncPlayerAvatarVisuals === "function") {
+        GC.syncPlayerAvatarVisuals(data.card);
+      }
     } catch (_) {
       pcSetLoading(false);
       const txt = t("playercard_save_error", "Speichern fehlgeschlagen.");

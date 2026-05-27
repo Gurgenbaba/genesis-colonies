@@ -349,6 +349,10 @@ def init_db() -> None:
     create_default_admin(conn)
     create_default_player_and_homeworld(conn)
 
+    from .ranking import backfill_player_score_rows
+
+    backfill_player_score_rows(conn=conn)
+
     for key, val in DEFAULT_GAME_SETTINGS.items():
         cur.execute(
             """
@@ -440,6 +444,10 @@ def create_user(username: str, password: str, is_admin: int = 0):
             is_admin=is_admin,
             conn=conn,
         )
+
+        from .ranking import ensure_player_score_row
+
+        ensure_player_score_row(int(user_id), conn=conn)
 
         conn.commit()
         return True, None, {"id": user_id, "username": username, "is_admin": bool(is_admin)}

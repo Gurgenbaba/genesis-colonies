@@ -80,6 +80,26 @@ def _set_buildings(player_id: int, levels: dict) -> None:
     save_planet_buildings(int(planet["id"]), levels)
 
 
+def test_api_game_state_no_500_when_queue_finish_locked(game_client, monkeypatch):
+    import sqlite3
+
+    from game import queue_engine
+
+    client, _pid = game_client
+
+    def _locked(**_kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(queue_engine, "finish_due_work_once", _locked)
+    monkeypatch.setenv("GC_POLL_FINISH_INTERVAL_SEC", "0")
+
+    r = client.get("/api/game-state")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body.get("ok") is True
+    assert "player" in body
+
+
 def test_api_game_state_energy_after_energy_tech_finish(game_client):
     client, pid = game_client
     _set_buildings(pid, {"metal_mine": 6, "crystal_mine": 4, "solar_plant": 3})

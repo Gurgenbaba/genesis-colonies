@@ -1,6 +1,8 @@
 import json
+import logging
 import os
 import random
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -38,6 +40,8 @@ from game.models import (
     save_idempotent_action,
 )
 from game.db import commit, rollback
+
+logger = logging.getLogger(__name__)
 
 from game.logic import (
     update_resources,
@@ -363,25 +367,65 @@ def _load_page_live_context(
         return None
 
     conn = db()
+    src = str(finish_source or "page_load")
     try:
-        player_view, buildings, ratio, energy_total, energy_used, storage_caps = refresh_player_live_state(
-            user_id,
-            conn=conn,
-            finish_source=str(finish_source or "page_load"),
-        )
-        build_queue = get_build_queue_status(user_id=user_id, skip_finish=True, conn=conn)
-        research = get_research_status(
-            user_id=user_id,
-            buildings=buildings,
-            skip_finish=True,
-            conn=conn,
-        )
-        prod_per_hour = get_building_production_per_hour(
-            buildings=buildings,
-            ratio=ratio,
-            user_id=user_id,
-        )
-        conn.commit()
+        try:
+            if src == "game_state":
+                from game.logic import read_player_live_state_for_poll
+
+                player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
+                    read_player_live_state_for_poll(user_id, conn=conn)
+                )
+            else:
+                player_view, buildings, ratio, energy_total, energy_used, storage_caps = refresh_player_live_state(
+                    user_id,
+                    conn=conn,
+                    finish_source=src,
+                )
+            build_queue = get_build_queue_status(user_id=user_id, skip_finish=True, conn=conn)
+            research = get_research_status(
+                user_id=user_id,
+                buildings=buildings,
+                skip_finish=True,
+                conn=conn,
+            )
+            prod_per_hour = get_building_production_per_hour(
+                buildings=buildings,
+                ratio=ratio,
+                user_id=user_id,
+            )
+            if src != "game_state":
+                conn.commit()
+        except sqlite3.OperationalError:
+            rollback(conn)
+            if src != "game_state":
+                raise
+            logger.warning(
+                "game_state live context locked, using read-only fallback user_id=%s",
+                user_id,
+                exc_info=True,
+            )
+            from game.logic import _read_player_live_state_no_writes
+
+            player = load_player(user_id, conn=conn)
+            if not player:
+                return None
+            planet = get_homeworld(player_id=user_id, conn=conn)
+            player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
+                _read_player_live_state_no_writes(user_id, conn, player, planet)
+            )
+            build_queue = get_build_queue_status(user_id=user_id, skip_finish=True, conn=conn)
+            research = get_research_status(
+                user_id=user_id,
+                buildings=buildings,
+                skip_finish=True,
+                conn=conn,
+            )
+            prod_per_hour = get_building_production_per_hour(
+                buildings=buildings,
+                ratio=ratio,
+                user_id=user_id,
+            )
     except Exception:
         rollback(conn)
         raise
@@ -855,7 +899,31 @@ def _playercard_viewer_id() -> int | None:
 @require_login
 def api_player_card_view(player_id: int):
     viewer_id = _playercard_viewer_id()
-    card, err = playercard_logic.build_public_card(player_id, viewer_id=viewer_id)
+    wants_json = request.accept_mimetypes.best_match(["application/json", "text/html"]) == "application/json"
+    try:
+        card, err = playercard_logic.build_public_card(player_id, viewer_id=viewer_id)
+    except sqlite3.OperationalError:
+        logger.warning("player-card view locked player_id=%s", player_id, exc_info=True)
+        if wants_json:
+            return jsonify({"ok": False, "error": "database_locked"}), 503
+        return (
+            render_template(
+                "partials/player_card_error.html",
+                error_key="playercard_load_error",
+            ),
+            200,
+        )
+    except Exception:
+        logger.exception("player-card view failed player_id=%s", player_id)
+        if wants_json:
+            return jsonify({"ok": False, "error": "internal_error"}), 500
+        return (
+            render_template(
+                "partials/player_card_error.html",
+                error_key="playercard_load_error",
+            ),
+            200,
+        )
     if err:
         return (
             render_template(
@@ -916,7 +984,15 @@ def api_player_card_save():
         return jsonify({"ok": False, "reason": reason}), status
 
     html = render_template("partials/player_card_view.html", card=card)
-    return jsonify({"ok": True, "reason": reason, "html": html})
+    sync = {
+        "player_id": int(viewer_id),
+        "avatar_url": card.get("avatar_url_client") or "",
+        "avatar_version": int(card.get("avatar_version") or 0),
+        "show_avatar": bool(card.get("avatar_url_client")),
+        "theme": card.get("theme") or "cyan",
+        "avatar_initial": (card.get("commander_name_raw") or "?")[:1],
+    }
+    return jsonify({"ok": True, "reason": reason, "html": html, "card": sync})
 
 
 @app.route("/player/<int:player_id>")
@@ -1294,6 +1370,7 @@ def _messages_json(result: dict, default_status: int = 200):
         "cooldown": 429,
         "rate_limited": 429,
         "recipient_not_found": 404,
+        "recipient_ambiguous": 400,
         "validation": 400,
     }.get(err, 400)
     return jsonify(result), status
@@ -1664,7 +1741,11 @@ def _payload_from_live_context(
             build_queue=build_queue,
         )
 
-    score = get_player_score_cached(user_id) or {"total": 0, "buildings": 0, "research": 0}
+    score = get_player_score_cached(user_id, read_only=True) or {
+        "total": 0,
+        "buildings": 0,
+        "research": 0,
+    }
     rank, total_players = get_player_rank(user_id)
 
     payload["score"] = {

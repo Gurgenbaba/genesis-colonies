@@ -121,7 +121,7 @@ def test_public_card_and_private_profile(temp_db):
     pid, _ = _create_player("card_alpha")
     other, _ = _create_player("card_beta")
 
-    card, err = build_public_card(pid, viewer_id=other)
+    card, err = build_public_card(pid, viewer_id=other, sync_badges=True)
     assert err is None
     assert card is not None
     assert "card_alpha" in card["commander_name"]
@@ -259,8 +259,31 @@ def test_api_routes_and_partials(app_client):
     payload = save.get_json()
     assert payload["ok"] is True
     assert "html" in payload
+    assert "card" in payload
+    assert payload["card"]["player_id"] == pid
+    assert "avatar_version" in payload["card"]
     assert "Star Marshal" in payload["html"]
     assert "playercard_loading" not in payload["html"].lower() or "Lade Profil" not in payload["html"]
+
+    save_avatar = client.post(
+        "/api/player-card/me",
+        data=json.dumps(
+            {
+                "title": "Star Marshal",
+                "bio": "Explorer of the rim.",
+                "avatar_url": "https://example.com/pc-avatar.png",
+                "theme": "cyan",
+                "is_public": "1",
+            }
+        ),
+        content_type="application/json",
+    )
+    assert save_avatar.status_code == 200
+    av_payload = save_avatar.get_json()
+    assert av_payload["ok"] is True
+    assert av_payload["card"]["show_avatar"] is True
+    assert "example.com/pc-avatar.png" in av_payload["card"]["avatar_url"]
+    assert "?v=" in av_payload["card"]["avatar_url"] or "&v=" in av_payload["card"]["avatar_url"]
 
 
 def test_modal_shell_has_separate_content_and_loading(app_client):

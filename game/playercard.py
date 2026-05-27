@@ -15,9 +15,9 @@ from urllib.parse import urlparse
 from .db import begin_write_transaction, commit, db, rollback, table_exists
 from .models import (
     get_homeworld,
-    get_player_rank,
     load_player,
 )
+from .ranking import get_player_rank, read_player_scores
 
 # ---------------------------------------------------------------------------
 # Limits & validation
@@ -147,6 +147,27 @@ def sanitize_text_field(value: Any, max_len: int) -> str:
     return s
 
 
+def avatar_url_for_client(url: str, version: Any = None) -> str:
+    """Append cache-busting query param for http(s) avatar URLs."""
+    s = str(url or "").strip()
+    if not s:
+        return ""
+    try:
+        v = int(version or 0)
+    except (TypeError, ValueError):
+        v = 0
+    if v <= 0:
+        return s
+    try:
+        parsed = urlparse(s)
+    except Exception:
+        return s
+    if parsed.scheme not in _AVATAR_SCHEMES:
+        return s
+    sep = "&" if parsed.query else "?"
+    return f"{s}{sep}v={v}"
+
+
 def validate_avatar_url(url: Any) -> Tuple[bool, str]:
     s = _strip_control(str(url or "").strip())
     if len(s) > AVATAR_URL_MAX:
@@ -186,6 +207,30 @@ def get_player_card_row(player_id: int, conn=None) -> Optional[Dict[str, Any]]:
     finally:
         if own:
             c.close()
+
+
+def _synthetic_player_card(player_id: int) -> Dict[str, Any]:
+    """In-memory defaults for read-only display (no INSERT)."""
+    now = _now_ts()
+    return {
+        "player_id": int(player_id),
+        "avatar_url": "",
+        "title": "",
+        "bio": "",
+        "theme": "cyan",
+        "is_public": 1,
+        "selected_badge_1": None,
+        "selected_badge_2": None,
+        "selected_badge_3": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def get_player_card_for_display(player_id: int, conn=None) -> Dict[str, Any]:
+    """Read-only card row for GET /api/player-card (never INSERT)."""
+    row = get_player_card_row(player_id, conn=conn)
+    return row if row else _synthetic_player_card(player_id)
 
 
 def ensure_player_card(player_id: int, conn=None) -> Dict[str, Any]:
@@ -353,6 +398,8 @@ def build_public_card(
     target_id: int,
     viewer_id: Optional[int] = None,
     conn=None,
+    *,
+    sync_badges: bool = False,
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Returns (card_payload, error_key).
@@ -371,8 +418,10 @@ def build_public_card(
             return None, "playercard_not_found"
 
         is_self = viewer_id is not None and int(viewer_id) == tid
-        card = ensure_player_card(tid, conn=c)
-        _sync_badge_unlocks(tid, conn=c)
+        card = get_player_card_for_display(tid, conn=c)
+        if sync_badges:
+            card = ensure_player_card(tid, conn=c)
+            _sync_badge_unlocks(tid, conn=c)
         unlocked = _list_unlocked_badges(tid, conn=c)
         return _build_public_card_payload(tid, player, is_self, card, unlocked, c)
     finally:
@@ -415,19 +464,27 @@ def _build_public_card_payload(
             "can_edit": False,
         }, None
 
-    score = _read_player_score(tid, conn) or {}
-    rank, total_players = get_player_rank(tid)
+    score = read_player_scores(tid, conn=conn)
+    try:
+        rank, total_players = get_player_rank(tid, conn=conn)
+    except Exception:
+        rank, total_players = None, 0
     homeworld = get_homeworld(tid, conn=conn)
     colonies = _count_colonies(tid, conn=conn)
     last_seen = int(player.get("last_seen") or 0)
 
     names = _commander_fields(player)
+    card_updated = int(card.get("updated_at") or 0)
+    ok_av, avatar_raw = validate_avatar_url(card.get("avatar_url"))
+    avatar_display = avatar_url_for_client(avatar_raw, card_updated) if ok_av else ""
     payload: Dict[str, Any] = {
         "player_id": tid,
         "commander_name": escape(names["commander_name"]),
         "commander_name_lookup": names["commander_name_lookup"],
         "commander_name_raw": names["commander_name_raw"],
-        "avatar_url": escape(str(card.get("avatar_url") or "")),
+        "avatar_url": escape(avatar_display),
+        "avatar_url_client": avatar_display,
+        "avatar_version": card_updated,
         "title": escape(sanitize_text_field(card.get("title"), TITLE_MAX)),
         "bio": escape(sanitize_text_field(card.get("bio"), BIO_MAX)),
         "theme": validate_theme(card.get("theme")),
@@ -564,5 +621,5 @@ def save_own_card(player_id: int, data: Dict[str, Any]) -> Tuple[bool, str, Opti
 
     _LAST_SAVE_TS[pid] = now
 
-    view, _ = build_public_card(pid, viewer_id=pid)
+    view, _ = build_public_card(pid, viewer_id=pid, sync_badges=True)
     return True, "playercard_save_success", view

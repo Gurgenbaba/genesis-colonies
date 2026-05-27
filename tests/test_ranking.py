@@ -413,7 +413,8 @@ def test_ranking_includes_avatar_when_public(temp_db):
     rows = get_sorted_ranking_entries(limit=10)
     row = next(r for r in rows if r["player_id"] == pid)
     assert row["show_avatar"] is True
-    assert row["avatar_url"] == "https://cdn.example.com/a.png"
+    assert "cdn.example.com/a.png" in row["avatar_url"]
+    assert "?v=" in row["avatar_url"] or "&v=" in row["avatar_url"]
     assert row["avatar_initial"] == "A"
     assert row["title"] == "Star Marshal"
 
@@ -630,3 +631,45 @@ def test_ranking_invalid_avatar_url_rejected(temp_db):
     assert social["show_avatar"] is False
     assert social["avatar_url"] == ""
     assert social["avatar_initial"] == "T"
+
+
+def test_ranking_includes_player_without_score_row(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("zero_row")
+    conn = db()
+    conn.execute("DELETE FROM player_scores WHERE player_id = ?", (pid,))
+    conn.commit()
+    conn.close()
+    _close_db()
+
+    rows = get_sorted_ranking_entries(limit=200)
+    match = next((r for r in rows if r["player_id"] == pid), None)
+    assert match is not None
+    assert match["total_score"] == 0
+    assert match["building_score"] == 0
+    assert match["research_score"] == 0
+
+
+def test_ranking_avatar_cache_bust(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("avatar_rank")
+    _seed_scores(pid, 10, 5)
+    recalculate_ranks()
+    _set_player_card(
+        pid,
+        avatar_url="https://example.com/avatar.png",
+        is_public=1,
+    )
+    _close_db()
+
+    rows = get_sorted_ranking_entries(limit=50)
+    row = next(r for r in rows if r["player_id"] == pid)
+    assert row["show_avatar"] is True
+    assert "example.com/avatar.png" in row["avatar_url"]
+    assert "?v=" in row["avatar_url"] or "&v=" in row["avatar_url"]

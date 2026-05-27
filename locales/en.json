@@ -617,6 +617,8 @@
   "messages.error_rate_limited": "Please wait before sending again.",
   "messages.error_cooldown": "Please wait before sending again.",
   "messages.error_recipient_not_found": "Recipient not found.",
+  "messages.error_recipient_ambiguous": "Multiple players match this name. Please be more specific.",
+  "messages.error_recipient_ambiguous": "Multiple players match this name. Please be more specific.",
   "messages.error_messages_not_ready": "Messaging system is not ready yet.",
 
   "admin_messages_title": "Messages",

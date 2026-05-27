@@ -179,7 +179,13 @@
         return;
       }
 
-      const state = GC.messagesPageState;
+      let state = GC.messagesPageState;
+      const itemEarly = e.target.closest(".gc-messages-item[data-id]");
+      if (itemEarly && !state) {
+        e.preventDefault();
+        initMessagesPage();
+        state = GC.messagesPageState;
+      }
       if (!state) return;
       if (e.target.closest("#messages-mark-all-read")) {
         e.preventDefault();
@@ -356,10 +362,27 @@
       }
     }
 
+    function showDetailError(key) {
+      setDetailVisible(true);
+      if (detailSubject) detailSubject.textContent = t("messages.error_load", "Could not load message.");
+      if (detailMeta) detailMeta.textContent = "";
+      if (detailBody) {
+        detailBody.textContent = t(`messages.error_${key}`, t("messages.error_load"));
+      }
+      if (detailActions) detailActions.innerHTML = "";
+    }
+
     async function openMessage(id) {
       const data = await messagesApi(`/api/messages/${id}`);
-      if (!data || !data.ok) return;
+      if (!data || !data.ok) {
+        showDetailError(data?.error || "load");
+        return;
+      }
       const msg = data.data?.message;
+      if (!msg) {
+        showDetailError("load");
+        return;
+      }
       state.selectedId = id;
       const idx = state.messages.findIndex((m) => m.id === id);
       if (idx >= 0) state.messages[idx] = msg;

@@ -1,0 +1,171 @@
+"""
+Read-path vs write-path tests (SQLite locking architecture).
+
+Run: python -m pytest tests/test_db_read_paths.py -v
+"""
+
+from __future__ import annotations
+
+import re
+import uuid
+
+import pytest
+
+import game.db as dbmod
+import game.models as models
+from game.db import db
+from game.models import create_user, init_db, load_player
+from game.playercard import build_public_card
+from game.ranking import build_ranking_api_payload, get_sorted_ranking_entries
+
+ROOT_WRITE = re.compile(
+    r"^\s*(INSERT|UPDATE|DELETE|REPLACE)\b",
+    re.IGNORECASE,
+)
+
+
+@pytest.fixture()
+def temp_db(tmp_path, monkeypatch):
+    db_file = tmp_path / "read_paths.db"
+    monkeypatch.setenv("GC_DB_PATH", str(db_file))
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    monkeypatch.setattr(dbmod, "DB_PATH", db_file)
+    monkeypatch.setattr(models, "DB_PATH", db_file)
+    init_db()
+    try:
+        db().close()
+    except Exception:
+        pass
+    return db_file
+
+
+def _create_player(username: str) -> int:
+    uname = f"{username}_{uuid.uuid4().hex[:8]}"
+    ok, err, user = create_user(uname, "test-pass-123")
+    assert ok and user, err
+    try:
+        db().close()
+    except Exception:
+        pass
+    return int(user["id"])
+
+
+def _connection_with_write_trace():
+    conn = db()
+    writes: list[str] = []
+
+    def trace(stmt: str) -> None:
+        if ROOT_WRITE.match(stmt):
+            writes.append(stmt.strip().split()[0].upper())
+
+    conn.set_trace_callback(trace)
+    return conn, writes
+
+
+def test_ranking_list_is_read_only(temp_db):
+    pid = _create_player("rank_read")
+    conn, writes = _connection_with_write_trace()
+    try:
+        rows = get_sorted_ranking_entries(limit=50, conn=conn)
+    finally:
+        conn.set_trace_callback(None)
+        conn.close()
+    assert any(r["player_id"] == pid for r in rows)
+    assert writes == [], f"unexpected writes: {writes}"
+
+
+def test_playercard_get_is_read_only(temp_db):
+    pid = _create_player("pc_read")
+    other = _create_player("pc_viewer")
+    build_public_card(pid, viewer_id=other)
+    conn, writes = _connection_with_write_trace()
+    try:
+        card, err = build_public_card(pid, viewer_id=other, conn=conn)
+    finally:
+        conn.set_trace_callback(None)
+        conn.close()
+    assert err is None and card is not None
+    assert writes == [], f"unexpected writes: {writes}"
+
+
+def test_playercard_get_never_calls_ensure_score_rows(temp_db, monkeypatch):
+    from game import ranking as ranking_mod
+
+    pid = _create_player("pc_no_seed")
+    other = _create_player("pc_no_seed_viewer")
+    conn = db()
+    conn.execute("DELETE FROM player_scores WHERE player_id = ?", (pid,))
+    conn.commit()
+    conn.close()
+
+    def _forbidden(*_a, **_k):
+        raise AssertionError("_ensure_score_rows must not run on PlayerCard GET")
+
+    monkeypatch.setattr(ranking_mod, "_ensure_score_rows", _forbidden)
+    card, err = build_public_card(pid, viewer_id=other)
+    assert err is None and card is not None
+    assert card.get("rank") is None or isinstance(card.get("rank"), int)
+    assert int(card.get("score_total", 0) or 0) == 0
+
+
+def test_api_player_card_without_score_row_returns_200(temp_db, monkeypatch):
+    import importlib
+
+    import app as app_module
+
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-not-default-value-32chars")
+    import game.db as dbmod
+
+    monkeypatch.setattr(dbmod, "DB_PATH", temp_db)
+    monkeypatch.setattr(models, "DB_PATH", temp_db)
+    importlib.reload(app_module)
+
+    target = _create_player("pc_api_target")
+    viewer = _create_player("pc_api_viewer")
+    conn = db()
+    conn.execute("DELETE FROM player_scores WHERE player_id = ?", (target,))
+    conn.commit()
+    conn.close()
+
+    conn = db()
+    row = conn.execute("SELECT username FROM users WHERE id = ?", (viewer,)).fetchone()
+    conn.close()
+    assert row
+    uname = row["username"]
+
+    client = app_module.app.test_client()
+    login = client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    assert login.status_code in (200, 302)
+    res = client.get(f"/api/player-card/{target}")
+    assert res.status_code == 200
+    assert b"gc-player-card-shell" in res.data or b"gc-player-card-error-state" in res.data
+
+
+def test_new_player_has_score_row_and_appears_in_ranking(temp_db):
+    pid = _create_player("fresh_zero")
+    conn = db()
+    try:
+        row = conn.execute(
+            "SELECT score_total FROM player_scores WHERE player_id = ?;",
+            (pid,),
+        ).fetchone()
+        assert row is not None
+        assert int(row["score_total"]) == 0
+    finally:
+        conn.close()
+
+    entries = get_sorted_ranking_entries(limit=200)
+    assert any(e["player_id"] == pid and e["total_score"] == 0 for e in entries)
+
+
+def test_player_without_score_row_still_in_ranking_via_left_join(temp_db):
+    pid = _create_player("left_join")
+    conn = db()
+    conn.execute("DELETE FROM player_scores WHERE player_id = ?", (pid,))
+    conn.commit()
+    conn.close()
+
+    entries = get_sorted_ranking_entries(limit=200)
+    match = next((e for e in entries if e["player_id"] == pid), None)
+    assert match is not None
+    assert match["total_score"] == 0
