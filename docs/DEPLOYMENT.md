@@ -128,6 +128,8 @@ PostgreSQL is **not** implemented yet. Use SQLite on a Railway Volume mounted at
 
 Full guide: [`DEPLOY_RAILWAY.md`](DEPLOY_RAILWAY.md).
 
+Migrations run in `scripts/docker-entrypoint.sh` at container start (not `preDeployCommand` — volumes are unavailable there).
+
 ---
 
 ## Update existing installation

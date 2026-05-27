@@ -65,12 +65,16 @@ If Railway injected `DATABASE_URL` from an old Postgres link, **delete that vari
 
 ## 4. Deploy flow
 
-On each deploy, Railway runs (from `railway.toml`):
+On each deploy:
 
-1. **Build** — Docker image (`scripts/install.py` seeds schema at build time for the image only)
-2. **preDeployCommand** — `python migrate.py` against the **volume** at `GC_DB_PATH` (idempotent; never wipes data)
-3. **Start** — Gunicorn on `0.0.0.0:$PORT`
-4. **Healthcheck** — `GET /health`
+1. **Build** — Docker image (`scripts/install.py` seeds schema in the image only; not used at runtime on Railway)
+2. **Start** — `scripts/docker-entrypoint.sh` in the **main** container (where `/data` volume is mounted):
+   - create DB parent directory
+   - `python migrate.py` (idempotent; never wipes data)
+   - Gunicorn on `0.0.0.0:$PORT`
+3. **Healthcheck** — `GET /health`
+
+**Do not use `preDeployCommand` for migrations.** Railway runs pre-deploy in a separate container **without** volume access — SQLite migrations there are lost and the app crashes.
 
 ---
 
@@ -101,7 +105,7 @@ HTTP **503** / `"status": "fail"` — check deploy logs:
 
 | Symptom | Fix |
 |---------|-----|
-| Pending migrations | Ensure `preDeployCommand` ran; run `python migrate.py` in Railway shell |
+| Pending migrations | Check deploy logs for `[GC] Applying migrations...`; run `python migrate.py` in Railway shell on the web service |
 | `SECRET_KEY` errors | Set a strong unique `SECRET_KEY` |
 | `Path not writable` | Volume mounted at `/data`; `GC_DB_PATH=/data/game.db` |
 | Postgres / `GC_DB_BACKEND=postgres` | Set `GC_DB_BACKEND=sqlite` |

@@ -5,7 +5,7 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 healthcheckPath = "/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 60
 restartPolicyType = "on_failure"
-# Run pending migrations against the mounted SQLite volume before traffic.
-preDeployCommand = "python migrate.py"
+# Migrations run in scripts/docker-entrypoint.sh (main container + volume).
+# Do NOT use preDeployCommand — that container cannot mount Railway volumes.
