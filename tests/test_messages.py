@@ -910,3 +910,40 @@ def test_migration_021_normalizes_zero_deleted_at(temp_db):
 
     listed = list_messages(pid)
     assert any(m["subject"] == "Was zero deleted" for m in listed["data"]["messages"])
+
+
+def test_api_messages_repeat_get_returns_same_inbox(app_client, temp_db):
+    """PJAX re-entry must be safe to call GET /api/messages again (no stale contract)."""
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    alice = _create_player("repeat_alice")
+    bob = _create_player("repeat_bob")
+    _set_player_name(bob, "RepeatBob")
+    _close_db()
+
+    client = app_client
+    send = _api_send(client, alice, "RepeatBob", "Repeat subject", "Repeat body text")
+    assert send.get_json()["ok"]
+
+    first = _api_inbox(client, bob).get_json()
+    second = _api_inbox(client, bob).get_json()
+
+    assert first["ok"] and second["ok"]
+    assert first["data"]["unread_count"] == second["data"]["unread_count"] == 1
+    assert len(first["data"]["messages"]) == len(second["data"]["messages"]) == 1
+    assert first["data"]["messages"][0]["subject"] == second["data"]["messages"][0]["subject"]
+
+
+def test_api_messages_empty_only_after_ok_list(app_client, temp_db):
+    """Empty inbox is valid only when API ok with zero items."""
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    player = _create_player("empty_inbox")
+    payload = _api_inbox(client := app_client, player).get_json()
+    assert payload["ok"] is True
+    assert payload["data"]["messages"] == []
+    assert payload["data"]["unread_count"] == 0

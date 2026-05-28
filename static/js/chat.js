@@ -30,6 +30,18 @@
     return fallback || key;
   }
 
+  function chatDebug(...args) {
+    try {
+      const dev =
+        GC.DEBUG === true ||
+        window.localStorage?.getItem("gc_debug") === "1" ||
+        /localhost|127\.0\.0\.1/.test(window.location.hostname || "");
+      if (dev && typeof console !== "undefined" && console.debug) {
+        console.debug(...args);
+      }
+    } catch (_) {}
+  }
+
   const CHAT = {
     root: null,
     panel: null,
@@ -204,6 +216,51 @@
     if (type === "admin") return t("chat_admin", "Admin");
     if (type === "custom") return room.title || t("chat_custom_room", "Raum");
     return room.title || room.room_key;
+  }
+
+  function isChatPanelVisible() {
+    return !!CHAT.root?.classList.contains("is-open");
+  }
+
+  function isActivelyViewingRoom(roomId) {
+    return isChatPanelVisible() && Number(roomId) === Number(CHAT.activeRoomId);
+  }
+
+  function filterFreshMessages(roomId, messages) {
+    const prevLast = Number(CHAT.lastMsgIdByRoom[roomId] || 0);
+    return (messages || []).filter((m) => Number(m.id) > prevLast);
+  }
+
+  function bumpLastMsgId(roomId, messages) {
+    let maxId = Number(CHAT.lastMsgIdByRoom[roomId] || 0);
+    for (const m of messages || []) {
+      const mid = Number(m.id);
+      if (mid > maxId) maxId = mid;
+    }
+    if (maxId > 0) CHAT.lastMsgIdByRoom[roomId] = maxId;
+    return maxId;
+  }
+
+  function applyIncomingPollMessages(roomId, messages) {
+    const fresh = filterFreshMessages(roomId, messages);
+    if (!fresh.length) return;
+
+    bumpLastMsgId(roomId, fresh);
+    const rid = String(roomId);
+
+    if (isActivelyViewingRoom(roomId)) {
+      renderMessages(fresh, true);
+      return;
+    }
+
+    const beforeUnread = totalUnread();
+    CHAT.unread[rid] = (CHAT.unread[rid] || 0) + fresh.length;
+    for (const m of fresh) {
+      if (detectMention(m.message)) CHAT.mentionUnread[rid] = true;
+    }
+    updateFabBadge();
+    renderRoomList();
+    notifyChatUnreadIfIncreased(beforeUnread);
   }
 
   function getActiveRoom() {
@@ -704,7 +761,17 @@
     await markRead();
   }
 
+  function notifyChatUnreadIfIncreased(before) {
+    const after = totalUnread();
+    if (after > before && !isChatPanelVisible()) {
+      if (typeof GC.showNotify === "function") {
+        GC.showNotify(t("chat_notify_new", "Neue Chat-Nachricht."), "info");
+      }
+    }
+  }
+
   async function refreshBootstrap() {
+    const beforeUnread = totalUnread();
     const { data } = await apiFetch("/api/chat/bootstrap");
     if (!data.ok) return false;
     CHAT.bootstrap = data.data;
@@ -720,6 +787,7 @@
     }
     updateFabBadge();
     renderRoomList();
+    notifyChatUnreadIfIncreased(beforeUnread);
     return true;
   }
 
@@ -765,6 +833,18 @@
   }
 
   function stopPolling() {
+    CHAT.polling.started = false;
+    if (CHAT.polling.timer) {
+      clearTimeout(CHAT.polling.timer);
+      CHAT.polling.timer = null;
+    }
+    if (CHAT.polling.abort) {
+      try { CHAT.polling.abort.abort(); } catch (_) {}
+      CHAT.polling.abort = null;
+    }
+  }
+
+  function clearPollTimer() {
     if (CHAT.polling.timer) {
       clearTimeout(CHAT.polling.timer);
       CHAT.polling.timer = null;
@@ -776,8 +856,9 @@
   }
 
   function schedulePoll() {
-    stopPolling();
+    clearPollTimer();
     if (!CHAT.root || !CHAT.activeRoomId) return;
+    CHAT.polling.started = true;
     const delay = document.hidden ? CHAT.polling.intervalHidden : CHAT.polling.interval;
     CHAT.polling.timer = setTimeout(pollTick, delay);
   }
@@ -786,6 +867,23 @@
     if (!CHAT.activeRoomId) {
       schedulePoll();
       return;
+    }
+
+    const panelVisible = isChatPanelVisible();
+    if (!panelVisible) {
+      CHAT.polling.bootstrapEvery = (CHAT.polling.bootstrapEvery || 0) + 1;
+      if (CHAT.polling.bootstrapEvery >= 4) {
+        CHAT.polling.bootstrapEvery = 0;
+        try {
+          await refreshBootstrap();
+        } catch (e) {
+          if (e?.name !== "AbortError") chatDebug("[chat] bootstrap refresh", e);
+        }
+        schedulePoll();
+        return;
+      }
+    } else {
+      CHAT.polling.bootstrapEvery = 0;
     }
 
     const roomId = CHAT.activeRoomId;
@@ -801,6 +899,13 @@
         signal: ctrl.signal,
       });
       const data = await res.json();
+      chatDebug("[chat] poll", {
+        roomId,
+        after,
+        ok: data.ok,
+        count: data.data?.messages?.length || 0,
+        panelVisible,
+      });
       if (!data.ok) {
         if (data.error === "room_not_found" || data.error === "no_permission") {
           await refreshBootstrap();
@@ -812,22 +917,10 @@
         }
       }
       if (data.ok && data.data?.messages?.length) {
-        const isOpen = CHAT.root.classList.contains("is-open");
-        const sameRoom = isOpen;
-        if (sameRoom) {
-          renderMessages(data.data.messages, true);
-        } else {
-          const rid = String(roomId);
-          CHAT.unread[rid] = (CHAT.unread[rid] || 0) + data.data.messages.length;
-          for (const m of data.data.messages) {
-            if (detectMention(m.message)) CHAT.mentionUnread[rid] = true;
-          }
-          updateFabBadge();
-          renderRoomList();
-        }
+        applyIncomingPollMessages(roomId, data.data.messages);
       }
     } catch (e) {
-      if (e.name !== "AbortError") console.debug("[TChat] poll", e);
+      if (e.name !== "AbortError") chatDebug("[chat] poll", e);
     } finally {
       CHAT.polling.abort = null;
       schedulePoll();
@@ -844,7 +937,13 @@
     if (!CHAT.root || !cacheElements()) return;
     if (!CHAT.bootstrap) return;
     CHAT.polling.started = true;
-    schedulePoll();
+    refreshBootstrap()
+      .catch((e) => {
+        if (e?.name !== "AbortError") chatDebug("[chat] resume bootstrap", e);
+      })
+      .finally(() => {
+        if (CHAT.root && CHAT.activeRoomId) schedulePoll();
+      });
   }
 
   async function sendMessage(text) {

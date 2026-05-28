@@ -538,3 +538,32 @@ def test_owner_member_leave_rules(app_client):
         sess["user_id"] = owner
     owner_leave2 = app_client.post("/api/chat/rooms/leave", json={"room_id": room_id})
     assert owner_leave2.get_json()["ok"] is True
+
+
+def test_bootstrap_unread_increases_after_global_message(app_client):
+    """Chat badge sync: bootstrap unread rises when another player posts in global room."""
+    reset_rate_limits()
+    sender = _create_player("chat_unread_sender")
+    recipient = _create_player("chat_unread_recipient")
+
+    with app_client.session_transaction() as sess:
+        sess["user_id"] = recipient
+    boot_before = app_client.get("/api/chat/bootstrap").get_json()["data"]
+    global_room = next(x for x in boot_before["rooms"] if x["room_type"] == "global")
+    rid = str(global_room["id"])
+    unread_before = int(boot_before.get("unread", {}).get(rid, 0))
+
+    with app_client.session_transaction() as sess:
+        sess["user_id"] = sender
+    send = app_client.post("/api/chat/send", json={"body": "/g Unread badge regression ping"})
+    assert send.get_json()["ok"]
+
+    with app_client.session_transaction() as sess:
+        sess["user_id"] = recipient
+    boot_after = app_client.get("/api/chat/bootstrap").get_json()["data"]
+    unread_after = int(boot_after.get("unread", {}).get(rid, 0))
+    assert unread_after > unread_before
+
+    poll = app_client.get(f"/api/chat/messages?room_id={global_room['id']}&after_id=0")
+    assert poll.get_json()["ok"]
+    assert any("Unread badge regression ping" in m["message"] for m in poll.get_json()["data"]["messages"])

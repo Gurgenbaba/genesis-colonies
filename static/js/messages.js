@@ -4,6 +4,18 @@
 
   const GC = (window.GC = window.GC || {});
 
+  function msgDebug(...args) {
+    try {
+      const dev =
+        GC.DEBUG === true ||
+        window.localStorage?.getItem("gc_debug") === "1" ||
+        /localhost|127\.0\.0\.1/.test(window.location.hostname || "");
+      if (dev && typeof console !== "undefined" && console.debug) {
+        console.debug(...args);
+      }
+    } catch (_) {}
+  }
+
   function t(key, fallback) {
     try {
       const dict = window.GC_LOCALE || {};
@@ -141,9 +153,23 @@
   function ensureMessagesState() {
     if (!document.getElementById("messages-page")) return null;
     if (!GC.messagesPageState) {
-      initMessagesPage({ force: true });
+      initMessagesPage();
     }
     return GC.messagesPageState || null;
+  }
+
+  function resetMessagesPageState() {
+    if (GC.messagesPageState?.listAbort) {
+      try {
+        GC.messagesPageState.listAbort.abort();
+      } catch (_) {}
+    }
+    if (GC.messagesPageState) {
+      GC.messagesPageState.loadGen += 1;
+      GC.messagesPageState.unreadSyncedFromApi = false;
+      GC.messagesPageState = null;
+    }
+    closeCompose();
   }
 
   function bindMessagesUiOnce() {
@@ -153,18 +179,9 @@
     const registerCleanup = GC.registerPageCleanup || GC.registerCleanup;
     if (typeof registerCleanup === "function") {
       registerCleanup(() => {
-        if (GC.messagesPageState?.listAbort) {
-          try {
-            GC.messagesPageState.listAbort.abort();
-          } catch (_) {}
-        }
-        if (GC.messagesPageState) {
-          GC.messagesPageState.loadGen += 1;
-          GC.messagesPageState.unreadSyncedFromApi = false;
-          GC.messagesPageState = null;
-        }
-        closeCompose();
-      });
+        msgDebug("[messages] cleanup (leave page)");
+        resetMessagesPageState();
+      }, { persistent: true });
     }
 
     const composeForm = document.getElementById("messages-compose-form");
@@ -266,57 +283,60 @@
     });
   }
 
+  function readActiveFilterFromDom() {
+    const activeTab = document.querySelector("#messages-tabs .tab-btn.active[data-filter]");
+    return activeTab?.dataset.filter || "all";
+  }
+
   function initMessagesPage(options) {
-    const force = Boolean(options && options.force);
     bindMessagesUiOnce();
 
     const page = document.getElementById("messages-page");
     if (!page) {
-      GC.messagesPageState = null;
+      resetMessagesPageState();
       return;
     }
 
-    if (GC.messagesPageState && !force) {
-      GC.messagesPageState.loadList?.(true);
-      return;
-    }
+    resetMessagesPageState();
 
-    closeCompose();
+    msgDebug("[messages] init", { filter: readActiveFilterFromDom(), pjax: Boolean(options && options.pjax) });
 
-    const listEl = document.getElementById("messages-list");
-    const detailEl = document.getElementById("messages-detail");
-    const detailEmptyEl = document.getElementById("messages-detail-empty");
-    const detailSubject = document.getElementById("messages-detail-subject");
-    const detailMeta = document.getElementById("messages-detail-meta");
-    const detailBody = document.getElementById("messages-detail-body");
-    const detailActions = document.getElementById("messages-detail-actions");
-
-    if (GC.messagesPageState?.listAbort) {
-      try {
-        GC.messagesPageState.listAbort.abort();
-      } catch (_) {}
-    }
+    const getDetailEl = () => document.getElementById("messages-detail");
+    const getDetailEmptyEl = () => document.getElementById("messages-detail-empty");
+    const getDetailSubject = () => document.getElementById("messages-detail-subject");
+    const getDetailMeta = () => document.getElementById("messages-detail-meta");
+    const getDetailBody = () => document.getElementById("messages-detail-body");
+    const getDetailActions = () => document.getElementById("messages-detail-actions");
 
     const state = {
-      filter: "all",
+      filter: readActiveFilterFromDom(),
       messages: [],
       selectedId: null,
       loadGen: 0,
       listAbort: null,
       unreadSyncedFromApi: false,
+      listLoaded: false,
     };
 
     function setDetailVisible(show) {
+      const detailEl = getDetailEl();
+      const detailEmptyEl = getDetailEmptyEl();
       if (detailEl) detailEl.hidden = !show;
       if (detailEmptyEl) detailEmptyEl.hidden = show;
     }
 
     function showListMessage(html) {
+      const listEl = document.getElementById("messages-list");
       if (listEl) listEl.innerHTML = html;
     }
 
     function renderList() {
+      const listEl = document.getElementById("messages-list");
       if (!listEl) return;
+      if (!state.listLoaded) {
+        showListMessage(`<div class="gc-messages-empty">${esc(t("messages.loading"))}</div>`);
+        return;
+      }
       if (!state.messages.length) {
         showListMessage(`<div class="gc-messages-empty">${esc(t("messages.empty"))}</div>`);
         state.selectedId = null;
@@ -345,6 +365,10 @@
         return;
       }
       setDetailVisible(true);
+      const detailSubject = getDetailSubject();
+      const detailMeta = getDetailMeta();
+      const detailBody = getDetailBody();
+      const detailActions = getDetailActions();
       if (detailSubject) detailSubject.textContent = msg.subject || "";
       const sender = msg.sender_name || categoryLabel(msg.category);
       if (detailMeta) {
@@ -425,16 +449,15 @@
         }
 
         state.messages = data.data?.messages || [];
+        state.listLoaded = true;
         syncUnreadFromResponse(data);
         renderList();
-        if (typeof console !== "undefined" && console.debug) {
-          console.debug("[messages] inbox loaded", {
-            player_id: data.data?.player_id,
-            count: state.messages.length,
-            unread: data.data?.unread_count,
-            filter: state.filter,
-          });
-        }
+        msgDebug("[messages] inbox loaded", {
+          player_id: data.data?.player_id,
+          count: state.messages.length,
+          unread: data.data?.unread_count,
+          filter: state.filter,
+        });
 
         if (state.selectedId) {
           const current = state.messages.find((m) => m.id === state.selectedId);
@@ -455,6 +478,10 @@
 
     function showDetailError(key) {
       setDetailVisible(true);
+      const detailSubject = getDetailSubject();
+      const detailMeta = getDetailMeta();
+      const detailBody = getDetailBody();
+      const detailActions = getDetailActions();
       if (detailSubject) detailSubject.textContent = t("messages.error_load", "Could not load message.");
       if (detailMeta) detailMeta.textContent = "";
       if (detailBody) {
@@ -541,7 +568,7 @@
     const retryLater = typeof GC.setSafeTimeout === "function" ? GC.setSafeTimeout : setTimeout;
     retryLater(() => {
       if (state !== GC.messagesPageState || !document.getElementById("messages-page")) return;
-      if (state.messages.length > 0 || state.unreadSyncedFromApi) return;
+      if (state.listLoaded || state.messages.length > 0 || state.unreadSyncedFromApi) return;
       const listNode = document.getElementById("messages-list");
       const loading = (listNode?.textContent || "").includes(t("messages.loading"));
       if (loading) loadList(false);
@@ -557,7 +584,7 @@
 
   function bootMessagesIfPresent() {
     if (document.getElementById("messages-page")) {
-      initMessagesPage({ force: !GC.messagesPageState });
+      initMessagesPage();
     }
   }
 

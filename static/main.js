@@ -585,7 +585,7 @@
     if (typeof mod === "function") {
       try {
         if (page === "messages") {
-          mod({ force: true });
+          mod();
         } else {
           mod();
         }
@@ -594,7 +594,7 @@
       }
     } else if (page === "messages" && typeof GC.initMessagesPage === "function") {
       try {
-        GC.initMessagesPage({ force: true });
+        GC.initMessagesPage();
       } catch (err) {
         console.error("[GC] messages init fallback error", err);
       }
@@ -617,6 +617,7 @@
 
     GC.refreshGameState("page_init");
     GC.startProgressTicker();
+    if (typeof GC.initChat === "function") GC.initChat();
     if (typeof GC.resumeChatPolling === "function") GC.resumeChatPolling();
   };
 
@@ -657,6 +658,7 @@
       GC.setSafeTimeout(() => item.remove(), 400);
     }, 4200);
   }
+  GC.showNotify = showNotify;
 
   function mapActionError(reason, payload) {
     if (reason === "not_enough_resources" && payload) {
@@ -1742,6 +1744,17 @@
         if (!skipMessagesUnread && (!inboxSynced || unreadIncreased)) {
           _lastMessagesUnreadPoll = data.unread_messages_count;
           updateMessagesUnreadBadges(data.unread_messages_count);
+
+          if (unreadIncreased && !onMessagesPage) {
+            const msg =
+              data.unread_messages_count === 1
+                ? t("messages.notify_new", "Neue Nachricht im Posteingang.")
+                : t("messages.notify_new_count", "Du hast %(count)s ungelesene Nachrichten.")
+                    .replace("%(count)s", String(data.unread_messages_count))
+                    .replace("{count}", String(data.unread_messages_count));
+            showNotify(msg, "info");
+          }
+
           if (
             onMessagesPage &&
             GC.messagesPageState &&
@@ -3158,6 +3171,7 @@
         GC.startPolling(lastHadActiveJob || lastHadActiveResearch);
       });
       GC.startProgressTicker();
+      if (typeof GC.resumeChatPolling === "function") GC.resumeChatPolling();
     });
   }
 
