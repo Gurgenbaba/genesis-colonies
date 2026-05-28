@@ -684,6 +684,155 @@
     return map[reason] || t("msg_generic_error", "Aktion fehlgeschlagen.");
   }
 
+  function renderCompactCosts(metal, crystal, targetLevel, queueCount) {
+    const levelLabel = t("buildings_col_level", "Level");
+    let targetNote = `→ L${fmtNumber(targetLevel)}`;
+    if (queueCount) targetNote += ` · ×${queueCount}`;
+    return (
+      `<div class="gc-costs-compact">` +
+      `<span class="gc-cost-chip gc-cost-metal"><span class="gc-res-icon gc-res-metal" aria-hidden="true"></span>` +
+      `<span class="gc-cost-val">${fmtNumber(metal)}</span></span>` +
+      `<span class="gc-cost-chip gc-cost-crystal"><span class="gc-res-icon gc-res-crystal" aria-hidden="true"></span>` +
+      `<span class="gc-cost-val">${fmtNumber(crystal)}</span></span>` +
+      `<span class="gc-cost-target" title="${levelLabel} ${fmtNumber(targetLevel)}">${targetNote}</span>` +
+      `</div>`
+    );
+  }
+
+  function applyBuildingRowState(row, b) {
+    if (!row || !b) return;
+    const isMax = (b.level >= b.max_level) || b.at_queue_max;
+    row.classList.remove(
+      "gc-prog-affordable",
+      "gc-prog-locked",
+      "gc-prog-unaffordable",
+      "gc-prog-max",
+      "gc-prog-queued",
+      "gc-prog-has-queue"
+    );
+    if (isMax) row.classList.add("gc-prog-max");
+    else if (!b.requirements_met) row.classList.add("gc-prog-locked");
+    else if (!b.can_afford) row.classList.add("gc-prog-unaffordable");
+    else {
+      row.classList.add("gc-prog-affordable");
+      if (b.queue_count > 0) row.classList.add("gc-prog-queued");
+    }
+    if (b.queue_count > 0) row.classList.add("gc-prog-has-queue");
+  }
+
+  function applyResearchRowState(row, tech) {
+    if (!row || !tech) return;
+    const locked = !tech.requirements_met;
+    const qCount = tech.queue_count || 0;
+    row.classList.remove("gc-prog-affordable", "gc-prog-locked", "gc-prog-queued", "gc-prog-has-queue", "tech-row-locked", "tech-row-queued");
+    if (locked) {
+      row.classList.add("gc-prog-locked", "tech-row-locked");
+    } else {
+      row.classList.add("gc-prog-affordable");
+      if (qCount > 0) row.classList.add("gc-prog-queued", "tech-row-queued");
+    }
+    if (qCount > 0) row.classList.add("gc-prog-has-queue");
+  }
+
+  function patchInlineBuildQueues(queueList) {
+    document.querySelectorAll(".buildings-prog-list [data-building-row]").forEach((row) => {
+      const key = row.dataset.buildingRow;
+      if (!key) return;
+
+      const jobs = (queueList || []).filter((j) => String(j.building_type) === String(key));
+      let inline = row.querySelector(`[data-building-queue="${key}"]`);
+
+      if (!jobs.length) {
+        if (inline) inline.remove();
+        return;
+      }
+
+      const first = jobs[0];
+      const remaining = parseInt(first.remaining, 10) || 0;
+      const totalRaw = first.total || first.total_seconds || 0;
+      const total = Math.max(1, parseInt(totalRaw, 10) || remaining + 1);
+      const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
+      let meta = `→ L${fmtNumber(first.target_level)}`;
+      if (remaining > 0) meta += ` · ${formatEta(remaining)}`;
+      if (jobs.length > 1) meta += ` · ×${jobs.length}`;
+
+      if (!inline) {
+        row.insertAdjacentHTML(
+          "beforeend",
+          `<div class="gc-prog-queue-inline" data-building-queue="${key}"` +
+            `${remaining > 0 && first.finish_time ? ` data-finish-time="${Number(first.finish_time)}" data-total="${total}"` : ""}>` +
+            `<div class="gc-prog-queue-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">` +
+            `<div class="gc-prog-queue-fill gc-progress-smooth" style="width:${pct}%"></div></div>` +
+            `<span class="gc-prog-queue-meta">${meta}</span></div>`
+        );
+        return;
+      }
+
+      if (remaining > 0 && first.finish_time) {
+        inline.setAttribute("data-finish-time", String(Number(first.finish_time)));
+        inline.setAttribute("data-total", String(total));
+      } else {
+        inline.removeAttribute("data-finish-time");
+        inline.removeAttribute("data-total");
+      }
+
+      const fill = inline.querySelector(".gc-prog-queue-fill");
+      const metaEl = inline.querySelector(".gc-prog-queue-meta");
+      if (fill) fill.style.width = `${pct}%`;
+      if (metaEl) _setIfChanged(metaEl, meta);
+    });
+  }
+
+  function patchInlineResearchQueues(queueList) {
+    document.querySelectorAll(".research-prog-list [data-tech-key]").forEach((row) => {
+      const key = row.dataset.techKey;
+      if (!key) return;
+
+      const jobs = (queueList || []).filter((j) => String(j.tech_key || j.key) === String(key));
+      let inline = row.querySelector(`[data-research-queue="${key}"]`);
+
+      if (!jobs.length) {
+        if (inline) inline.remove();
+        return;
+      }
+
+      const first = jobs[0];
+      const remaining = parseInt(first.remaining, 10) || 0;
+      const totalRaw = first.total || first.total_seconds || 0;
+      const total = Math.max(1, parseInt(totalRaw, 10) || remaining + 1);
+      const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
+      let meta = `→ L${fmtNumber(first.target_level)}`;
+      if (remaining > 0) meta += ` · ${formatEta(remaining)}`;
+      if (jobs.length > 1) meta += ` · ×${jobs.length}`;
+
+      if (!inline) {
+        row.insertAdjacentHTML(
+          "beforeend",
+          `<div class="gc-prog-queue-inline" data-research-queue="${key}"` +
+            `${remaining > 0 && (first.finish_at || first.finish_time) ? ` data-finish-time="${Number(first.finish_at || first.finish_time)}" data-total="${total}"` : ""}>` +
+            `<div class="gc-prog-queue-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">` +
+            `<div class="gc-prog-queue-fill gc-progress-smooth" style="width:${pct}%"></div></div>` +
+            `<span class="gc-prog-queue-meta">${meta}</span></div>`
+        );
+        return;
+      }
+
+      const finishTs = Number(first.finish_at || first.finish_time || 0);
+      if (remaining > 0 && finishTs) {
+        inline.setAttribute("data-finish-time", String(finishTs));
+        inline.setAttribute("data-total", String(total));
+      } else {
+        inline.removeAttribute("data-finish-time");
+        inline.removeAttribute("data-total");
+      }
+
+      const fill = inline.querySelector(".gc-prog-queue-fill");
+      const metaEl = inline.querySelector(".gc-prog-queue-meta");
+      if (fill) fill.style.width = `${pct}%`;
+      if (metaEl) _setIfChanged(metaEl, meta);
+    });
+  }
+
   function renderBuildingActionCell(b, bqSummary, bqQueueFull) {
     const key = b.key;
     const btnUpgrade = t("buildings_btn_upgrade", "Ausbau starten");
@@ -694,33 +843,33 @@
     const isMax = (b.level >= b.max_level) || b.at_queue_max;
 
     if (isMax) {
-      return `<button class="gc-btn gc-btn-ghost gc-btn-sm btn-upgrade" type="button" disabled title="${btnMax}">${btnMax}</button>`;
+      return `<button class="gc-btn gc-btn-ghost gc-btn-xs btn-upgrade" type="button" disabled title="${btnMax}">${btnMax}</button>`;
     }
     if (!b.requirements_met) {
-      return `<button class="gc-btn gc-btn-danger gc-btn-sm btn-upgrade" type="button" disabled>${btnUpgrade}</button>`;
+      const lockTitle = t("msg_build_requirements", "Voraussetzungen nicht erfüllt.");
+      return `<button class="gc-btn gc-btn-danger gc-btn-xs btn-upgrade status-pill-icon-btn" type="button" disabled title="${lockTitle}" aria-label="${lockTitle}">🔒</button>`;
     }
     if (!b.can_afford) {
-      return `<button class="gc-btn gc-btn-danger gc-btn-sm btn-upgrade" type="button" disabled>${btnUpgrade}</button>`;
+      return `<button class="gc-btn gc-btn-danger gc-btn-xs btn-upgrade" type="button" disabled>${btnUpgrade}</button>`;
     }
     if (bqQueueFull) {
-      return `<span class="status-pill status-pill-locked status-pill-queue-full">${fullLabel}</span>`;
+      const fullShort = t("research_status_queue_full_short", "Voll");
+      return `<span class="status-pill status-pill-locked status-pill-queue-full status-pill-compact" title="${fullLabel}">${fullShort}</span>`;
     }
     const label = queueActive ? btnQueue : btnUpgrade;
     const tab = b.tab || _getActiveBuildingTab();
     const href = `/upgrade/${encodeURIComponent(key)}?src=buildings&tab=${encodeURIComponent(tab)}`;
-    return `<a id="btn-${key}" data-building="${key}" href="${href}" class="gc-btn gc-btn-primary gc-btn-sm btn-upgrade">${label}</a>`;
+    return `<a id="btn-${key}" data-building="${key}" href="${href}" class="gc-btn gc-btn-primary gc-btn-xs btn-upgrade">${label}</a>`;
   }
 
   function patchBuildingPanel(rowsByTab, buildQueueRaw) {
-    if (!rowsByTab || !document.querySelector(".buildings-table")) return;
+    if (!rowsByTab || !document.querySelector(".buildings-prog-list")) return;
 
     const summary = buildQueueRaw?.summary || null;
     const limit = summary?.limit ?? 3;
     const count = summary?.count ?? 0;
     const bqQueueFull = count >= limit;
-    const metalLabel = t("resource_metal", "Ferronit");
-    const crystalLabel = t("resource_crystal", "Crytite");
-    const levelLabel = t("buildings_col_level", "Level");
+    const queueList = Array.isArray(buildQueueRaw?.queue) ? buildQueueRaw.queue : [];
 
     Object.values(rowsByTab).forEach((rows) => {
       (rows || []).forEach((b) => {
@@ -728,21 +877,15 @@
         const levelEl = document.getElementById(`level-${key}`);
         if (levelEl) _setIfChanged(levelEl, fmtNumber(b.level));
 
-        const row = document.querySelector(`tr[data-building-row="${key}"]`);
+        const row = document.querySelector(`[data-building-row="${key}"]`);
         if (!row) return;
+
+        applyBuildingRowState(row, b);
 
         const costCell = row.querySelector(".bcell-cost");
         if (costCell) {
-          let note = `${levelLabel} ${fmtNumber(b.target_level)}`;
-          if (b.queue_count) {
-            note += ` · ${tf("research_tech_queue_count", { count: b.queue_count }, `In Warteschlange ×${b.queue_count}`)}`;
-          }
-          const html =
-            `<span class="cost-metal">${fmtNumber(b.cost_metal)} ${metalLabel}</span>` +
-            `<span class="cost-sep">/</span>` +
-            `<span class="cost-crystal">${fmtNumber(b.cost_crystal)} ${crystalLabel}</span>` +
-            `<div class="cost-note">${note}</div>`;
-          if (costCell.innerHTML !== html) costCell.innerHTML = html;
+          const html = renderCompactCosts(b.cost_metal, b.cost_crystal, b.target_level, b.queue_count || 0);
+          if (costCell.innerHTML.trim() !== html.trim()) costCell.innerHTML = html;
         }
 
         const durCell = row.querySelector(".bcell-duration");
@@ -755,45 +898,41 @@
         }
       });
     });
+
+    patchInlineBuildQueues(queueList);
   }
 
   function patchResearchPanel(techs, researchRaw) {
-    const table = document.querySelector(".research-tech-table");
-    if (!table || !Array.isArray(techs)) return;
+    const list = document.querySelector(".research-prog-list");
+    if (!list || !Array.isArray(techs)) return;
 
     const summary = researchRaw?.summary || {};
     const activeKey = researchRaw?.active?.tech_key || researchRaw?.active?.key || null;
-    const metalLabel = t("resource_metal", "Ferronit");
-    const crystalLabel = t("resource_crystal", "Crytite");
+    const queueList = Array.isArray(researchRaw?.queue) ? researchRaw.queue : [];
 
     techs.forEach((tech) => {
-      const row = document.querySelector(`tr[data-tech-key="${tech.key}"]`);
+      const row = document.querySelector(`[data-tech-key="${tech.key}"]`);
       if (!row) return;
 
       const qCount = tech.queue_count || 0;
       const isActive = !!tech.is_active || (activeKey && activeKey === tech.key);
-      const locked = !tech.requirements_met;
 
-      row.classList.toggle("tech-row-locked", locked);
-      row.classList.toggle("tech-row-queued", qCount > 0);
+      applyResearchRowState(row, tech);
 
       const levelEl = row.querySelector(".tech-level-current");
-      if (levelEl) {
-        levelEl.textContent = tf("research_tech_level_current", { level: tech.level }, `Aktuell L${tech.level}`);
-      }
+      if (levelEl) _setIfChanged(levelEl, fmtNumber(tech.level));
 
-      const stack = row.querySelector(".tech-level-stack");
-      if (stack) {
-        let badges = stack.querySelector(".tech-queue-badges");
+      const levelCol = row.querySelector(".gc-prog-level");
+      if (levelCol) {
+        let badges = levelCol.querySelector(".tech-queue-badges");
         if (qCount > 0) {
           const badgesHtml =
             `<div class="tech-queue-badges">` +
             (isActive ? `<span class="tech-queue-badge tech-queue-badge-active">${t("research_btn_active", "Aktiv")}</span>` : "") +
-            `<span class="tech-queue-badge">${tf("research_tech_queue_count", { count: qCount }, `In Warteschlange ×${qCount}`)}</span>` +
-            `<span class="tech-target-level">${tf("research_tech_target_level", { level: tech.level + qCount }, `Ziel L${tech.level + qCount}`)}</span>` +
+            `<span class="tech-queue-badge">×${qCount}</span>` +
             `</div>`;
           if (badges) badges.outerHTML = badgesHtml;
-          else stack.insertAdjacentHTML("beforeend", badgesHtml);
+          else levelCol.insertAdjacentHTML("beforeend", badgesHtml);
         } else if (badges) {
           badges.remove();
         }
@@ -801,9 +940,8 @@
 
       const costCell = row.querySelector(".tech-cost-cell");
       if (costCell) {
-        costCell.innerHTML =
-          `<div class="tech-meta"><span>${fmtNumber(tech.cost_metal)} ${metalLabel}</span><br>` +
-          `<span>${fmtNumber(tech.cost_crystal)} ${crystalLabel}</span></div>`;
+        const html = renderCompactCosts(tech.cost_metal, tech.cost_crystal, tech.target_level, 0);
+        if (costCell.innerHTML.trim() !== html.trim()) costCell.innerHTML = html;
       }
 
       const timeCell = row.querySelector(".tech-time-cell");
@@ -818,6 +956,7 @@
       _setIfChanged(labEl, fmtNumber(researchRaw.lab_level));
     }
 
+    patchInlineResearchQueues(queueList);
     updateResearchQueueActions(researchRaw);
   }
 
@@ -1151,8 +1290,8 @@
   }
 
   function updateResearchQueueActions(researchRaw) {
-    const table = document.querySelector(".research-tech-table");
-    if (!table) return;
+    const list = document.querySelector(".research-prog-list");
+    if (!list) return;
 
     const summary = researchRaw?.summary || null;
     const count = summary?.count ?? (Array.isArray(researchRaw?.queue) ? researchRaw.queue.length : 0);
@@ -1163,7 +1302,7 @@
     const btnStart = t("research_btn_start", "Forschung starten");
     const btnQueue = t("research_btn_queue", "Anreihen");
 
-    table.querySelectorAll(".tech-status-cell[data-tech-key]").forEach((cell) => {
+    list.querySelectorAll(".tech-status-cell[data-tech-key]").forEach((cell) => {
       const pillLocked = cell.querySelector(".status-pill-locked:not(.status-pill-queue-full)");
       if (pillLocked) return;
 
@@ -1172,7 +1311,9 @@
 
       if (queueFull) {
         if (!pillFull) {
-          cell.innerHTML = `<span class="status-pill status-pill-locked status-pill-queue-full">${fullLabel}</span>`;
+          const fullShort = t("research_status_queue_full_short", "Voll");
+          cell.innerHTML =
+            `<span class="status-pill status-pill-locked status-pill-queue-full status-pill-compact" title="${fullLabel}">${fullShort}</span>`;
         }
         return;
       }
@@ -1182,7 +1323,7 @@
         const href = `/research_start/${encodeURIComponent(techKey)}`;
         const label = queueActive ? btnQueue : btnStart;
         cell.innerHTML =
-          `<a href="${href}" class="gc-btn gc-btn-primary gc-btn-sm btn-research">${label}</a>`;
+          `<a href="${href}" class="gc-btn gc-btn-primary gc-btn-xs btn-research">${label}</a>`;
         return;
       }
 
@@ -1194,7 +1335,7 @@
   }
 
   function updateBuildQueueActions(buildQueueRaw) {
-    if (!document.querySelector(".buildings-table")) return;
+    if (!document.querySelector(".buildings-prog-list")) return;
 
     const summary = buildQueueRaw?.summary || null;
     const count = summary?.count ?? (Array.isArray(buildQueueRaw?.queue) ? buildQueueRaw.queue.length : 0);
@@ -1207,7 +1348,7 @@
       : t("buildings_btn_upgrade", "Ausbau starten");
     const tab = _getActiveBuildingTab();
 
-    document.querySelectorAll(".buildings-table .bcell-action[data-building]").forEach((cell) => {
+    document.querySelectorAll(".buildings-prog-list .bcell-action[data-building]").forEach((cell) => {
       if (cell.querySelector("button.btn-upgrade[disabled]")) return;
 
       const bType = cell.dataset.building;
@@ -1219,7 +1360,9 @@
       if (queueFull) {
         if (cell.querySelector("button.btn-upgrade[disabled]")) return;
         if (!cell.querySelector(".status-pill-queue-full")) {
-          cell.innerHTML = `<span class="status-pill status-pill-locked status-pill-queue-full">${fullLabel}</span>`;
+          const fullShort = t("research_status_queue_full_short", "Voll");
+          cell.innerHTML =
+            `<span class="status-pill status-pill-locked status-pill-queue-full status-pill-compact" title="${fullLabel}">${fullShort}</span>`;
         }
         return;
       }
@@ -1228,7 +1371,7 @@
         const href = `/upgrade/${encodeURIComponent(bType)}?src=buildings&tab=${encodeURIComponent(tab)}`;
         cell.innerHTML =
           `<a id="btn-${bType}" data-building="${bType}" href="${href}"` +
-          ` class="gc-btn gc-btn-primary gc-btn-sm btn-upgrade">${btnLabel}</a>`;
+          ` class="gc-btn gc-btn-primary gc-btn-xs btn-upgrade">${btnLabel}</a>`;
         return;
       }
 
@@ -1532,6 +1675,23 @@
         _applyProgressFill(fillEl, 100);
         requestFinishRefresh("buildings");
       }
+
+      document.querySelectorAll(".gc-prog-queue-inline[data-finish-time]").forEach((inline) => {
+        const finishTime = Number(inline.getAttribute("data-finish-time") || 0);
+        const total = Math.max(1, Number(inline.getAttribute("data-total") || 1));
+        if (!finishTime) return;
+        const rem = Math.max(0, finishTime - serverNow);
+        const inlinePct = 100 * (1 - rem / total);
+        _applyProgressFill(inline.querySelector(".gc-prog-queue-fill"), inlinePct);
+        const metaEl = inline.querySelector(".gc-prog-queue-meta");
+        if (metaEl && rem > 0) {
+          const parts = String(metaEl.textContent || "").split(" · ");
+          if (parts.length > 1) {
+            parts[parts.length - 1] = formatEta(Math.ceil(rem));
+            _setIfChanged(metaEl, parts.join(" · "));
+          }
+        }
+      });
     }
 
     const researchActive = document.querySelector(".research-job.research-job-active");

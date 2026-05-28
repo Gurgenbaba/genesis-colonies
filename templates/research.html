@@ -1,11 +1,27 @@
 {% extends "base.html" %}
+{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_research_inline_queue, render_req_tooltip, render_prog_identity with context %}
 
 {% block content %}
 
+{% set rs = (research_status if research_status is defined and research_status else {}) %}
+{% set active = (rs.active if rs and rs.active is defined else None) %}
+{% set rq = (rs.queue if rs and rs.queue is defined and rs.queue else []) %}
+{% set rq_summary = (rs.summary if rs and rs.summary is defined and rs.summary else {}) %}
+{% set techs = (rs.techs if rs and rs.techs is defined and rs.techs else []) %}
+{% set lab_level = (rs.lab_level if rs and rs.lab_level is defined else 0) %}
+{% set rq_limit = (rq_summary.limit if rq_summary.limit is defined else 3) %}
+{% set queue_full = (rq_summary.count or 0)|int >= rq_limit|int %}
+
 <div class="gc-page research-page">
 
-  <header class="gc-page-header section-header">
-    <h2 class="section-title">{{ T("research_title") }}</h2>
+  <header class="gc-page-header section-header research-page-header">
+    <div class="section-header-row">
+      <h2 class="section-title">{{ T("research_title") }}</h2>
+      <span class="research-lab-chip" title="{{ T('research_lab_panel_hint') }}">
+        🔬 {{ T("research_lab_level") }}:
+        <span class="lab-level-highlight">{{ lab_level|fmt_int }}</span>
+      </span>
+    </div>
 
     <p class="section-hint hint">
       {{ T("research_hint_intro") }}
@@ -16,220 +32,141 @@
     </p>
   </header>
 
-  {# Defensive Defaults (damit nix crasht) #}
-  {% set rs = (research_status if research_status is defined and research_status else {}) %}
-  {% set active = (rs.active if rs and rs.active is defined else None) %}
-  {% set rq = (rs.queue if rs and rs.queue is defined and rs.queue else []) %}
-  {% set rq_summary = (rs.summary if rs and rs.summary is defined and rs.summary else {}) %}
-  {% set techs = (rs.techs if rs and rs.techs is defined and rs.techs else []) %}
-  {% set lab_level = (rs.lab_level if rs and rs.lab_level is defined else 0) %}
-  {% set rq_limit = (rq_summary.limit if rq_summary.limit is defined else 3) %}
+  <section class="gc-panel research-shell">
 
-  <div class="research-grid">
+    <div class="gc-panel-header research-queue-head gc-prog-queue-head">
+      <span class="gc-panel-title">{{ T("research_queue_title", "Forschungs-Warteschlange") }}</span>
+      <span class="gc-panel-subtitle" id="research-queue-subtitle">
+        {% if rq_summary and rq_summary.count %}
+          {{ (rq_summary.count or 0)|int }}/{{ rq_limit|int }} {{ T("research_queue_jobs", "Aufträge") }}
+          · {{ T("build_queue_next", "Nächste Fertigstellung in") }}:
+          <span id="research-queue-subtitle-eta">{{ (rq_summary.first_finish_in or 0)|int }}s</span>
+        {% else %}
+          {{ T("research_queue_hint_fallback", "Starte Forschungen — bis zu 3 können angereiht werden.") }}
+        {% endif %}
+      </span>
+    </div>
 
-    {# ==========================================================
-       LEFT: Aktive Forschung + Tech-Liste
-       ========================================================== #}
-    <section class="gc-panel">
+    <div id="research-queue-root" class="research-queue-root gc-prog-queue-panel" aria-live="polite"></div>
 
-      {# ---------------- FORSCHUNGS-WARTESCHLANGE (3 Slots) ---------------- #}
-      <div class="gc-panel-header research-queue-head">
-        <span class="gc-panel-title">{{ T("research_queue_title", "Forschungs-Warteschlange") }}</span>
-        <span class="gc-panel-subtitle" id="research-queue-subtitle">
-          {% if rq_summary and rq_summary.count %}
-            {{ (rq_summary.count or 0)|int }}/{{ rq_limit|int }} {{ T("research_queue_jobs", "Aufträge") }}
-            · {{ T("build_queue_next", "Nächste Fertigstellung in") }}:
-            <span id="research-queue-subtitle-eta">{{ (rq_summary.first_finish_in or 0)|int }}s</span>
+    <hr class="research-divider gc-prog-divider">
+
+    {% if techs and techs|length > 0 %}
+      <div class="gc-prog-list research-prog-list research-tech-table" role="list">
+        <div class="gc-prog-head" aria-hidden="true">
+          <span class="gc-prog-col gc-prog-name">{{ T("research_col_tech") }}</span>
+          <span class="gc-prog-col gc-prog-level">{{ T("buildings_col_level") }}</span>
+          <span class="gc-prog-col gc-prog-costs">{{ T("research_col_costs") }}</span>
+          <span class="gc-prog-col gc-prog-time">{{ T("research_col_time") }}</span>
+          <span class="gc-prog-col gc-prog-action">{{ T("research_col_actions") }}</span>
+        </div>
+
+        {% for tech in techs %}
+          {% set is_active = tech.is_active if tech.is_active is defined else (active and active.key == tech.key) %}
+          {% set locked = not tech.requirements_met %}
+          {% set curr_lvl = (tech.level or 0)|int %}
+          {% set q_count = (tech.queue_count if tech.queue_count is defined else 0)|int %}
+          {% set target_lvl = (tech.target_level if tech.target_level is defined else (curr_lvl + q_count + 1)) %}
+          {% set req_tooltip = render_req_tooltip(tech.requirements_items) | trim %}
+
+          {% set tech_label = T(tech.key) %}
+          {% if tech_label == tech.key %}
+            {% set tech_label = tech.label %}
+          {% endif %}
+
+          {% set tech_desc = T("desc_" ~ tech.key) %}
+          {% if tech_desc == "desc_" ~ tech.key and tech.description_key is defined and tech.description_key %}
+            {% set tech_desc = T(tech.description_key) %}
+          {% endif %}
+          {% if tech_desc == "desc_" ~ tech.key or (tech.description_key is defined and tech_desc == tech.description_key) %}
+            {% set tech_desc = tech.description %}
+          {% endif %}
+
+          {% set row_class = '' %}
+          {% if locked %}
+            {% set row_class = 'gc-prog-locked' %}
+          {% elif q_count > 0 %}
+            {% set row_class = 'gc-prog-queued gc-prog-affordable' %}
           {% else %}
-            {{ T("research_queue_hint_fallback", "Starte Forschungen — bis zu 3 können angereiht werden.") }}
+            {% set row_class = 'gc-prog-affordable' %}
           {% endif %}
-        </span>
-      </div>
 
-      <div id="research-queue-root" class="research-queue-root" aria-live="polite"></div>
+          <div class="gc-prog-card {{ row_class }}{% if q_count > 0 %} gc-prog-has-queue{% endif %}{% if locked %} tech-row-locked{% endif %}{% if q_count > 0 %} tech-row-queued{% endif %}"
+               data-tech-key="{{ tech.key }}"
+               role="listitem">
 
-      <hr class="research-divider">
+            <div class="gc-prog-main">
+              {% if tech.icon %}
+                {{ render_prog_identity(tech_label, url_for('static', filename='img/research/' ~ tech.icon), desc_text=tech_desc) }}
+              {% else %}
+                {{ render_prog_identity(tech_label, fallback='🔬', desc_text=tech_desc) }}
+              {% endif %}
 
-      {# ---------------- TECH-LISTE ---------------- #}
-      <div class="gc-panel-header research-tech-header">
-        <span class="gc-panel-title">{{ T("research_col_tech") }}</span>
-        <span class="gc-panel-subtitle">
-          {{ T("research_panel_tech_hint") }}
-        </span>
-      </div>
-
-      {# Scroll-Wrap verhindert "Buchstaben-Umbruch" bei zu schmalen Layouts #}
-      <div class="gc-table-scroll">
-        <table class="tech-table table-std research-tech-table">
-          <colgroup>
-            <col class="col-tech">
-            <col class="col-costs">
-            <col class="col-time">
-            <col class="col-actions">
-          </colgroup>
-
-          <thead>
-            <tr>
-              <th>{{ T("research_col_tech") }}</th>
-              <th>{{ T("research_col_costs") }}</th>
-              <th>{{ T("research_col_time") }}</th>
-              <th class="tech-status-cell">{{ T("research_col_actions") }}</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {% if techs and techs|length > 0 %}
-              {% for tech in techs %}
-                {% set is_active = tech.is_active if tech.is_active is defined else (active and active.key == tech.key) %}
-                {% set locked = not tech.requirements_met %}
-                {% set queue_full = (rq_summary.count or 0)|int >= rq_limit|int %}
-                {% set curr_lvl = (tech.level or 0)|int %}
-                {% set q_count = (tech.queue_count if tech.queue_count is defined else 0)|int %}
-                {% set target_lvl = (tech.target_level if tech.target_level is defined else (curr_lvl + q_count + 1)) %}
-
-                {# i18n: Schema: key / desc_key #}
-                {% set tech_label = T(tech.key) %}
-                {% if tech_label == tech.key %}
-                  {% set tech_label = tech.label %}
-                {% endif %}
-
-                {% set tech_desc = T("desc_" ~ tech.key) %}
-                {% if tech_desc == "desc_" ~ tech.key %}
-                  {% set tech_desc = tech.description %}
-                {% endif %}
-
-                {# Zeitformat #}
-                {% set ts = (tech.time_seconds or 0)|int %}
-                {% set th = (ts // 3600) %}
-                {% set tm = ((ts % 3600) // 60) %}
-                {% set tss = (ts % 60) %}
-
-                <tr class="{% if locked %}tech-row-locked{% endif %}{% if q_count > 0 %} tech-row-queued{% endif %}" data-tech-key="{{ tech.key }}">
-                  <td>
-                    <div class="tech-row-main">
-                      {% if tech.icon %}
-                        <img
-                          src="{{ url_for('static', filename='img/research/' ~ tech.icon) }}"
-                          alt="{{ tech_label }}"
-                          class="tech-icon">
-                      {% endif %}
-                      <div class="tech-text">
-                        <div class="tech-name">{{ tech_label }}</div>
-                        <div class="tech-level-stack">
-                          <span class="tech-level-current">
-                            {{ T("research_tech_level_current", level=curr_lvl) }}
-                          </span>
-                          {% if q_count > 0 %}
-                            <div class="tech-queue-badges">
-                              {% if is_active %}
-                                <span class="tech-queue-badge tech-queue-badge-active">
-                                  {{ T("research_btn_active") }}
-                                </span>
-                              {% endif %}
-                              <span class="tech-queue-badge">
-                                {{ T("research_tech_queue_count", count=q_count) }}
-                              </span>
-                              <span class="tech-target-level">
-                                {{ T("research_tech_target_level", level=curr_lvl + q_count) }}
-                              </span>
-                            </div>
-                          {% endif %}
-                        </div>
-                        <div class="tech-desc">
-                          {{ tech_desc }}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td class="tech-cost-cell">
-                    <div class="tech-meta">
-                      <span>{{ (tech.cost_metal or 0)|fmt_int }} {{ T("resource_metal") }}</span><br>
-                      <span>{{ (tech.cost_crystal or 0)|fmt_int }} {{ T("resource_crystal") }}</span>
-                    </div>
-                  </td>
-
-                  <td class="tech-time-cell">
-                    <div class="tech-meta tech-time">
-                      {% if th > 0 %}
-                        {{ "%d:%02d:%02d"|format(th, tm, tss) }}
-                      {% else %}
-                        {{ "%d:%02d"|format(tm, tss) }}
-                      {% endif %}
-                    </div>
-                  </td>
-
-                  <td class="tech-status-cell" data-tech-key="{{ tech.key }}">
-                    {% if locked %}
-                      <span class="status-pill status-pill-locked">
-                        {{ T("research_requirements_not_met") }}
+              <div class="gc-prog-col gc-prog-level">
+                <span class="gc-level-badge tech-level-current">{{ curr_lvl|fmt_int }}</span>
+                {% if q_count > 0 %}
+                  <div class="tech-queue-badges">
+                    {% if is_active %}
+                      <span class="tech-queue-badge tech-queue-badge-active">
+                        {{ T("research_btn_active") }}
                       </span>
-                    {% elif queue_full %}
-                      <span class="status-pill status-pill-locked status-pill-queue-full">
-                        {{ T("research_status_queue_full", "Warteschlange voll") }}
-                      </span>
-                    {% else %}
-                      <a href="{{ url_for('research_start', tech_key=tech.key) }}"
-                         class="gc-btn gc-btn-primary gc-btn-sm btn-research">
-                        {% if rq_summary.count %}
-                          {{ T("research_btn_queue", "Anreihen") }}
-                        {% else %}
-                          {{ T("research_btn_start") }}
-                        {% endif %}
-                      </a>
                     {% endif %}
-                  </td>
-                </tr>
-              {% endfor %}
-            {% else %}
-              <tr>
-                <td colspan="4" class="tech-empty">
-                  {{ T("research_empty_list") if T("research_empty_list") != "research_empty_list" else "Keine Forschungen verfügbar (Konfiguration/DB prüfen)." }}
-                </td>
-              </tr>
+                    <span class="tech-queue-badge">
+                      ×{{ q_count|fmt_int }}
+                    </span>
+                  </div>
+                {% endif %}
+              </div>
+
+              <div class="gc-prog-col gc-prog-costs tech-cost-cell">
+                {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, target_lvl, 0) }}
+              </div>
+
+              <div class="gc-prog-col gc-prog-time tech-time-cell">
+                <span class="tech-time">{{ render_prog_duration(tech.time_seconds) }}</span>
+              </div>
+
+              <div class="gc-prog-col gc-prog-action tech-status-cell" data-tech-key="{{ tech.key }}">
+              {% if locked %}
+                {% set lock_title = T("research_requirements_not_met") %}
+                {% if req_tooltip %}
+                  {% set lock_title = lock_title ~ " · " ~ req_tooltip %}
+                {% endif %}
+                <span class="status-pill status-pill-locked status-pill-icon"
+                      title="{{ lock_title }}"
+                      aria-label="{{ lock_title }}">🔒</span>
+              {% elif queue_full %}
+                <span class="status-pill status-pill-locked status-pill-queue-full status-pill-compact"
+                      title="{{ T('research_status_queue_full', 'Warteschlange voll') }}">
+                  {{ T("research_status_queue_full_short", "Voll") }}
+                </span>
+              {% else %}
+                <a href="{{ url_for('research_start', tech_key=tech.key) }}"
+                   class="gc-btn gc-btn-primary gc-btn-xs btn-research">
+                  {% if rq_summary.count %}
+                    {{ T("research_btn_queue", "Anreihen") }}
+                  {% else %}
+                    {{ T("research_btn_start") }}
+                  {% endif %}
+                </a>
+              {% endif %}
+              </div>
+            </div>
+
+            {% if q_count > 0 %}
+              {{ render_research_inline_queue(rq, tech.key) }}
             {% endif %}
-          </tbody>
-        </table>
+          </div>
+        {% endfor %}
       </div>
-    </section>
-
-    {# ==========================================================
-       RIGHT: Labor-Level + Erklärungen
-       ========================================================== #}
-    <section class="gc-panel">
-      <div class="gc-panel-header">
-        {# de.json hat kein research_lab -> fallback auf building_research_lab #}
-        <span class="gc-panel-title">
-          {% set lab_title = T("research_lab") %}
-          {% if lab_title == "research_lab" %}
-            {% set lab_title = T("building_research_lab") %}
-          {% endif %}
-          {{ lab_title if lab_title != "building_research_lab" else "Forschungslabor" }}
-        </span>
-        <span class="gc-panel-subtitle">
-          {{ T("research_lab_panel_hint") }}
-        </span>
+    {% else %}
+      <div class="gc-empty-state">
+        <div class="gc-empty-title">
+          {{ T("research_empty_list") if T("research_empty_list") != "research_empty_list" else "Keine Forschungen verfügbar (Konfiguration/DB prüfen)." }}
+        </div>
       </div>
-
-      <div class="lab-meta-row">
-        <span>
-          {{ T("research_lab_level") }}:
-          <span class="lab-level-highlight">
-            {{ lab_level|fmt_int }}
-          </span>
-        </span>
-      </div>
-
-      <div class="lab-hint">
-        {{ T("desc_research_lab") }}
-      </div>
-
-      <div class="lab-hint lab-hint-req">
-        {{ T("research_req_hint") }}
-      </div>
-    </section>
-
-  </div>
+    {% endif %}
+  </section>
 </div>
 
 {% endblock %}

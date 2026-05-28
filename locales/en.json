@@ -376,6 +376,7 @@
   "research_btn_queue": "Queue",
   "research_status_queued": "Queued",
   "research_status_queue_full": "Queue full",
+  "research_status_queue_full_short": "Full",
   "research_tech_level_current": "Current L%(level)s",
   "research_tech_queue_count": "Queued: ×%(count)s",
   "research_tech_target_level": "Target level: L%(level)s",

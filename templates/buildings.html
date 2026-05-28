@@ -1,13 +1,15 @@
 {% extends "base.html" %}
+{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_building_inline_queue, render_req_tooltip, render_prog_identity with context %}
 
 {# ===================================================================
-   Macro für Building-Tabelle (MUSS vor der Nutzung stehen!)
+   Compact building cards (Resources / Research / Military / Infrastructure)
    =================================================================== #}
-{% macro render_building_table(rows, tab_name, bq_summary, bq_queue_full) %}
+{% macro render_building_table(rows, tab_name, bq_summary, bq_queue_full, bq_items) %}
 
   {% set rows = rows if rows else [] %}
   {% set _bq_summary = bq_summary if bq_summary is defined and bq_summary else {} %}
   {% set _bq_queue_full = bq_queue_full if bq_queue_full is defined else false %}
+  {% set _bq_items = bq_items if bq_items is defined and bq_items else [] %}
 
   {% if rows|length == 0 %}
     <div class="gc-empty-state">
@@ -15,127 +17,110 @@
       <div class="gc-empty-hint">{{ T("buildings_hint") }}</div>
     </div>
   {% else %}
-    <div class="gc-table-scroll">
-    <table class="buildings-table table-std table-fixed">
-      <colgroup>
-        <col class="col-bname">
-        <col class="col-blevel">
-        <col class="col-bcost">
-        <col class="col-btime">
-        <col class="col-bact">
-      </colgroup>
+    <div class="gc-prog-list buildings-prog-list" role="list">
+      <div class="gc-prog-head" aria-hidden="true">
+        <span class="gc-prog-col gc-prog-name">{{ T("buildings_col_name") }}</span>
+        <span class="gc-prog-col gc-prog-level">{{ T("buildings_col_level") }}</span>
+        <span class="gc-prog-col gc-prog-costs">{{ T("buildings_col_costs") }}</span>
+        <span class="gc-prog-col gc-prog-time">{{ T("buildings_col_time") }}</span>
+        <span class="gc-prog-col gc-prog-action">{{ T("buildings_col_actions") }}</span>
+      </div>
 
-      <thead>
-        <tr>
-          <th>{{ T("buildings_col_name") }}</th>
-          <th>{{ T("buildings_col_level") }}</th>
-          <th>{{ T("buildings_col_costs") }}</th>
-          <th>{{ T("buildings_col_time") }}</th>
-          <th>{{ T("buildings_col_actions") }}</th>
-        </tr>
-      </thead>
+      {% for b in rows %}
+        {% set building_type = b.key %}
+        {% set is_max = (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) %}
+        {% set q_count = (b.queue_count if b.queue_count is defined else 0)|int %}
+        {% set desc = T('desc_' ~ building_type) %}
+        {% if desc == 'desc_' ~ building_type %}
+          {% set desc = '' %}
+        {% endif %}
+        {% set req_tooltip = render_req_tooltip(b.requirements_items) | trim %}
+        {% set row_class = '' %}
+        {% if is_max %}
+          {% set row_class = 'gc-prog-max' %}
+        {% elif not b.requirements_met %}
+          {% set row_class = 'gc-prog-locked' %}
+        {% elif not b.can_afford %}
+          {% set row_class = 'gc-prog-unaffordable' %}
+        {% elif q_count > 0 %}
+          {% set row_class = 'gc-prog-queued gc-prog-affordable' %}
+        {% else %}
+          {% set row_class = 'gc-prog-affordable' %}
+        {% endif %}
 
-      <tbody>
-        {% for b in rows %}
-          {% set building_type = b.key %}
-          {% set is_max = (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) %}
+        <div class="gc-prog-card {{ row_class }}{% if q_count > 0 %} gc-prog-has-queue{% endif %}"
+             data-building-row="{{ building_type }}"
+             role="listitem">
 
-          {# Dauer hübsch formatieren (ohne JS) #}
-          {% set s = (b.time_seconds or 0)|int %}
-          {% set h = (s // 3600) %}
-          {% set m = ((s % 3600) // 60) %}
-          {% set ss = (s % 60) %}
+          <div class="gc-prog-main">
+            {{ render_prog_identity(T("building_" ~ building_type), url_for('static', filename=b.icon), desc_text=desc) }}
 
-          <tr data-building-row="{{ building_type }}">
-            <td class="bcell-name">
-              <div class="bname-wrap">
-                <div class="bicon-wrap">
-                  <img src="{{ url_for('static', filename=b.icon) }}"
-                       alt="{{ T('building_' ~ building_type) }}"
-                       class="bicon-img">
-                </div>
-                <div class="btext-wrap">
-                  <div class="bname-main">{{ T("building_" ~ building_type) }}</div>
-                  <div class="b-desc">{{ T('desc_' ~ building_type) }}</div>
-                </div>
-              </div>
-            </td>
+            <div class="gc-prog-col gc-prog-level">
+              <span id="level-{{ building_type }}" class="gc-level-badge">{{ b.level|fmt_int }}</span>
+            </div>
 
-            <td id="level-{{ building_type }}" class="bcell-level">
-              {{ b.level|fmt_int }}
-            </td>
+            <div class="gc-prog-col gc-prog-costs bcell-cost">
+              {{ render_prog_costs(b.cost_metal, b.cost_crystal, b.target_level, q_count) }}
+            </div>
 
-            <td class="bcell-cost">
-              <span class="cost-metal">
-                {{ b.cost_metal|fmt_int }} {{ T("resource_metal") }}
+            <div class="gc-prog-col gc-prog-time bcell-duration">
+              {{ render_prog_duration(b.time_seconds) }}
+            </div>
+
+            <div class="gc-prog-col gc-prog-action bcell-action" data-building="{{ building_type }}">
+            {% if is_max %}
+              <button class="gc-btn gc-btn-ghost gc-btn-xs btn-upgrade"
+                      type="button"
+                      disabled
+                      title="{{ T('buildings_btn_max_level') }}">
+                {{ T("buildings_btn_max_level") }}
+              </button>
+
+            {% elif not b.requirements_met %}
+              {% set lock_title = T('msg_build_requirements') %}
+              {% if req_tooltip %}
+                {% set lock_title = lock_title ~ " · " ~ req_tooltip %}
+              {% endif %}
+              <button class="gc-btn gc-btn-danger gc-btn-xs btn-upgrade status-pill-icon-btn"
+                      type="button"
+                      disabled
+                      title="{{ lock_title }}"
+                      aria-label="{{ lock_title }}">🔒</button>
+
+            {% elif not b.can_afford %}
+              <button class="gc-btn gc-btn-danger gc-btn-xs btn-upgrade"
+                      type="button"
+                      disabled
+                      title="{{ T('msg_build_not_enough_resources') }}">
+                {{ T("buildings_btn_upgrade") }}
+              </button>
+
+            {% elif _bq_queue_full %}
+              <span class="status-pill status-pill-locked status-pill-queue-full status-pill-compact"
+                    title="{{ T('research_status_queue_full', 'Warteschlange voll') }}">
+                {{ T("research_status_queue_full_short", "Voll") }}
               </span>
-              <span class="cost-sep">/</span>
-              <span class="cost-crystal">
-                {{ b.cost_crystal|fmt_int }} {{ T("resource_crystal") }}
-              </span>
-              <div class="cost-note">
-                {{ T("buildings_col_level") }} {{ b.target_level|fmt_int }}
-                {% if b.queue_count %}
-                  · {{ T("research_tech_queue_count", count=b.queue_count) }}
+
+            {% else %}
+              <a id="btn-{{ building_type }}"
+                 data-building="{{ building_type }}"
+                 href="{{ url_for('upgrade', building_type=building_type, src='buildings', tab=tab_name) }}"
+                 class="gc-btn gc-btn-primary gc-btn-xs btn-upgrade">
+                {% if _bq_summary.count %}
+                  {{ T("research_btn_queue", "Anreihen") }}
+                {% else %}
+                  {{ T("buildings_btn_upgrade") }}
                 {% endif %}
-              </div>
-            </td>
+              </a>
+            {% endif %}
+            </div>
+          </div>
 
-            <td class="bcell-duration">
-              {% if h > 0 %}
-                {{ "%d:%02d:%02d"|format(h, m, ss) }}
-              {% else %}
-                {{ "%d:%02d"|format(m, ss) }}
-              {% endif %}
-            </td>
-
-            <td class="bcell-action" data-building="{{ building_type }}">
-              {% if is_max %}
-                <button class="gc-btn gc-btn-ghost gc-btn-sm btn-upgrade"
-                        type="button"
-                        disabled
-                        title="{{ T('buildings_btn_max_level') }}">
-                  {{ T("buildings_btn_max_level") }}
-                </button>
-
-              {% elif not b.requirements_met %}
-                <button class="gc-btn gc-btn-danger gc-btn-sm btn-upgrade"
-                        type="button"
-                        disabled
-                        title="{{ T('msg_build_requirements') }}">
-                  {{ T("buildings_btn_upgrade") }}
-                </button>
-
-              {% elif not b.can_afford %}
-                <button class="gc-btn gc-btn-danger gc-btn-sm btn-upgrade"
-                        type="button"
-                        disabled
-                        title="{{ T('msg_build_not_enough_resources') }}">
-                  {{ T("buildings_btn_upgrade") }}
-                </button>
-
-              {% elif _bq_queue_full %}
-                <span class="status-pill status-pill-locked status-pill-queue-full">
-                  {{ T("research_status_queue_full", "Warteschlange voll") }}
-                </span>
-
-              {% else %}
-                <a id="btn-{{ building_type }}"
-                   data-building="{{ building_type }}"
-                   href="{{ url_for('upgrade', building_type=building_type, src='buildings', tab=tab_name) }}"
-                   class="gc-btn gc-btn-primary gc-btn-sm btn-upgrade">
-                  {% if _bq_summary.count %}
-                    {{ T("research_btn_queue", "Anreihen") }}
-                  {% else %}
-                    {{ T("buildings_btn_upgrade") }}
-                  {% endif %}
-                </a>
-              {% endif %}
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+          {% if q_count > 0 %}
+            {{ render_building_inline_queue(_bq_items, building_type) }}
+          {% endif %}
+        </div>
+      {% endfor %}
     </div>
   {% endif %}
 
@@ -143,9 +128,6 @@
 
 {% block content %}
 
-{# ------------------------------------------------------------- #}
-{# Defensive Defaults                                             #}
-{# ------------------------------------------------------------- #}
 {% set active_tab = (active_tab if active_tab is defined and active_tab else 'resources') %}
 {% set rows_by_tab = (rows_by_tab if rows_by_tab is defined and rows_by_tab else {}) %}
 {% set bq = (build_queue if build_queue is defined and build_queue else {}) %}
@@ -153,7 +135,6 @@
 {% set bq_summary = (bq.summary if bq and bq.summary is defined and bq.summary else {}) %}
 {% set bq_limit = (bq_summary.limit if bq_summary.limit is defined else 3) %}
 {% set bq_queue_full = (bq_summary.count or 0)|int >= bq_limit|int %}
-{% set active_job = (bq_items[0] if bq_items|length > 0 else None) %}
 
 <div class="gc-page buildings-wrapper">
 
@@ -171,10 +152,7 @@
 
   <div class="buildings-shell gc-panel">
 
-    {# ==========================================================
-       PREMIUM BAUSCHLEIFE (wie Research Active Block)
-       ========================================================== #}
-    <div class="gc-panel-header build-queue-head">
+    <div class="gc-panel-header build-queue-head gc-prog-queue-head">
       <span class="gc-panel-title">{{ T("build_queue_title", "Bauschleife") }}</span>
       <span class="gc-panel-subtitle" id="build-queue-subtitle">
         {% if bq_summary and bq_summary.count %}
@@ -187,13 +165,10 @@
       </span>
     </div>
 
-    <div id="build-queue-root" class="build-queue-root" aria-live="polite"></div>
+    <div id="build-queue-root" class="build-queue-root gc-prog-queue-panel" aria-live="polite"></div>
 
-    <hr class="build-divider">
+    <hr class="build-divider gc-prog-divider">
 
-    {# ==========================================================
-       Tabs wie gehabt
-       ========================================================== #}
     <div class="building-tabs" role="tablist" aria-label="{{ T('buildings_tabs', 'Gebäude-Kategorien') }}">
       <button class="gc-btn gc-btn-ghost gc-btn-sm tab-btn {{ 'active' if active_tab == 'resources' else '' }}"
               type="button"
@@ -245,7 +220,7 @@
          role="tabpanel"
          id="panel-resources"
          aria-labelledby="tab-resources">
-      {{ render_building_table(rows_by_tab.get('resources', []), 'resources', bq_summary, bq_queue_full) }}
+      {{ render_building_table(rows_by_tab.get('resources', []), 'resources', bq_summary, bq_queue_full, bq_items) }}
     </div>
 
     <div class="tab-content {{ 'active' if active_tab == 'research' else '' }}"
@@ -253,7 +228,7 @@
          role="tabpanel"
          id="panel-research"
          aria-labelledby="tab-research">
-      {{ render_building_table(rows_by_tab.get('research', []), 'research', bq_summary, bq_queue_full) }}
+      {{ render_building_table(rows_by_tab.get('research', []), 'research', bq_summary, bq_queue_full, bq_items) }}
     </div>
 
     <div class="tab-content {{ 'active' if active_tab == 'military' else '' }}"
@@ -261,7 +236,7 @@
          role="tabpanel"
          id="panel-military"
          aria-labelledby="tab-military">
-      {{ render_building_table(rows_by_tab.get('military', []), 'military', bq_summary, bq_queue_full) }}
+      {{ render_building_table(rows_by_tab.get('military', []), 'military', bq_summary, bq_queue_full, bq_items) }}
     </div>
 
     <div class="tab-content {{ 'active' if active_tab == 'infrastructure' else '' }}"
@@ -269,7 +244,7 @@
          role="tabpanel"
          id="panel-infrastructure"
          aria-labelledby="tab-infrastructure">
-      {{ render_building_table(rows_by_tab.get('infrastructure', []), 'infrastructure', bq_summary, bq_queue_full) }}
+      {{ render_building_table(rows_by_tab.get('infrastructure', []), 'infrastructure', bq_summary, bq_queue_full, bq_items) }}
     </div>
 
   </div>

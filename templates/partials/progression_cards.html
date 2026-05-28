@@ -1,0 +1,140 @@
+{# Shared compact progression row helpers (Buildings + Research) #}
+
+{% macro render_prog_identity(title, icon_src='', fallback='', desc_text='') %}
+  <div class="gc-prog-col gc-prog-name">
+    <div class="gc-prog-name-wrap">
+      {% if icon_src %}
+        <img src="{{ icon_src }}" alt="" class="gc-prog-icon" loading="lazy">
+      {% elif fallback %}
+        <span class="gc-prog-icon gc-prog-icon-fallback" aria-hidden="true">{{ fallback }}</span>
+      {% endif %}
+      <div class="gc-prog-title-row">
+        <span class="gc-prog-title">{{ title }}</span>
+        {% if desc_text and desc_text[:5] != 'desc_' %}
+          <button type="button"
+                  class="gc-prog-info"
+                  title="{{ desc_text }}"
+                  aria-label="{{ desc_text }}">?</button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro render_prog_duration(seconds) %}
+  {% set s = (seconds or 0)|int %}
+  {% set h = (s // 3600) %}
+  {% set m = ((s % 3600) // 60) %}
+  {% set ss = (s % 60) %}
+  {% if h > 0 %}
+    {{ "%d:%02d:%02d"|format(h, m, ss) }}
+  {% else %}
+    {{ "%d:%02d"|format(m, ss) }}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_prog_costs(metal, crystal, target_level, queue_count) %}
+  <div class="gc-costs-compact">
+    <span class="gc-cost-chip gc-cost-metal">
+      <span class="gc-res-icon gc-res-metal" aria-hidden="true"></span>
+      <span class="gc-cost-val">{{ metal|fmt_int }}</span>
+    </span>
+    <span class="gc-cost-chip gc-cost-crystal">
+      <span class="gc-res-icon gc-res-crystal" aria-hidden="true"></span>
+      <span class="gc-cost-val">{{ crystal|fmt_int }}</span>
+    </span>
+    <span class="gc-cost-target" title="{{ T('buildings_col_level') }} {{ target_level|fmt_int }}">
+      → L{{ target_level|fmt_int }}{% if queue_count %} · ×{{ queue_count|fmt_int }}{% endif %}
+    </span>
+  </div>
+{% endmacro %}
+
+{% macro render_req_tooltip(items) -%}
+  {%- for req in items if not req.met -%}
+    {%- if req.kind == 'building' -%}
+      {%- set req_label = T('building_' ~ req.key) -%}
+    {%- else -%}
+      {%- set req_label = T(req.key) -%}
+      {%- if req_label == req.key -%}{%- set req_label = req.key -%}{%- endif -%}
+    {%- endif -%}
+    {{ req_label }} L{{ req.need|fmt_int }}{% if not loop.last %} · {% endif %}
+  {%- endfor -%}
+{%- endmacro %}
+
+{% macro render_prog_requirements(items, requirements_met) %}
+  <div class="gc-req-inline">
+    {% if requirements_met %}
+      <span class="gc-req-ok" title="{{ T('research_requirements_met', 'Voraussetzungen erfüllt') }}">✓</span>
+    {% else %}
+      {% for req in items if not req.met %}
+        {% if req.kind == 'building' %}
+          {% set req_label = T('building_' ~ req.key) %}
+        {% else %}
+          {% set req_label = T(req.key) %}
+          {% if req_label == req.key %}
+            {% set req_label = req.key %}
+          {% endif %}
+        {% endif %}
+        <span class="gc-req-lock"
+              title="{{ req_label }} L{{ req.need|fmt_int }} ({{ req.have|fmt_int }}/{{ req.need|fmt_int }})">
+          <span class="gc-req-lock-icon" aria-hidden="true">🔒</span>
+          <span class="gc-req-lock-text">{{ req_label }} L{{ req.need|fmt_int }}</span>
+        </span>
+      {% endfor %}
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{% macro render_building_inline_queue(jobs, building_type) %}
+  {% set matched = jobs | selectattr('building_type', 'equalto', building_type) | list %}
+  {% if matched %}
+    {% set job = matched[0] %}
+    {% set job_count = matched | length %}
+    {% set remaining = (job.remaining or 0)|int %}
+    {% set total_raw = (job.total or job.total_seconds or 0)|int %}
+    {% set total = total_raw if total_raw > 0 else (remaining + 1) %}
+    {% set pct = [100, [0, (100 * (1 - remaining / total))|int]|max]|min %}
+    <div class="gc-prog-queue-inline" data-building-queue="{{ building_type }}"
+         {% if remaining > 0 and job.finish_time %}data-finish-time="{{ job.finish_time|int }}" data-total="{{ total }}"{% endif %}>
+      <div class="gc-prog-queue-bar" role="progressbar"
+           aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100">
+        <div class="gc-prog-queue-fill gc-progress-smooth" style="width: {{ pct }}%"></div>
+      </div>
+      <span class="gc-prog-queue-meta">
+        → L{{ job.target_level|fmt_int }}
+        {% if remaining > 0 %} · {{ remaining|fmt_int }}s{% endif %}
+        {% if job_count > 1 %} · ×{{ job_count|fmt_int }}{% endif %}
+      </span>
+    </div>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_research_inline_queue(jobs, tech_key) %}
+  {% set matched = [] %}
+  {% for job in jobs %}
+    {% if (job.tech_key or job.key) == tech_key %}
+      {% if matched.append(job) %}{% endif %}
+    {% endif %}
+  {% endfor %}
+  {% if matched %}
+    {% set job = matched[0] %}
+    {% set job_count = matched | length %}
+    {% set remaining = (job.remaining or 0)|int %}
+    {% set total_raw = (job.total or job.total_seconds or 0)|int %}
+    {% set total = total_raw if total_raw > 0 else (remaining + 1) %}
+    {% set pct = [100, [0, (100 * (1 - remaining / total))|int]|max]|min %}
+    {% set finish_ts = (job.finish_at or job.finish_time or 0)|int %}
+    <div class="gc-prog-queue-inline" data-research-queue="{{ tech_key }}"
+         {% if remaining > 0 and finish_ts %}data-finish-time="{{ finish_ts }}" data-total="{{ total }}"{% endif %}>
+      <div class="gc-prog-queue-bar" role="progressbar"
+           aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100">
+        <div class="gc-prog-queue-fill gc-progress-smooth" style="width: {{ pct }}%"></div>
+      </div>
+      <span class="gc-prog-queue-meta">
+        → L{{ job.target_level|fmt_int }}
+        {% if remaining > 0 %} · {{ remaining|fmt_int }}s{% endif %}
+        {% if job_count > 1 %} · ×{{ job_count|fmt_int }}{% endif %}
+      </span>
+    </div>
+  {% endif %}
+{% endmacro %}

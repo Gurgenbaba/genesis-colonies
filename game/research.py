@@ -233,6 +233,40 @@ def _check_requirements(
     return True
 
 
+def get_research_requirements_items(
+    tech_key: str,
+    buildings: Dict[str, int],
+    research_levels: Dict[str, int],
+) -> List[Dict[str, Any]]:
+    cfg = RESEARCH_TECHS.get(tech_key) or {}
+    req = cfg.get("requirements") or {}
+    items: List[Dict[str, Any]] = []
+
+    for b_key, need_lvl in (req.get("buildings") or {}).items():
+        have = int(buildings.get(b_key, 0) or 0)
+        need = int(need_lvl)
+        items.append({
+            "kind": "building",
+            "key": b_key,
+            "need": need,
+            "have": have,
+            "met": have >= need,
+        })
+
+    for r_key, need_lvl in (req.get("research") or {}).items():
+        have = int(research_levels.get(r_key, 0) or 0)
+        need = int(need_lvl)
+        items.append({
+            "kind": "research",
+            "key": r_key,
+            "need": need,
+            "have": have,
+            "met": have >= need,
+        })
+
+    return items
+
+
 def has_research_requirements(
     buildings: Dict[str, int],
     research_levels: Dict[str, int],
@@ -607,6 +641,7 @@ def get_research_status(
             "cost_crystal": int(cost_c),
             "time_seconds": int(t_sec),
             "requirements_met": bool(req_met),
+            "requirements_items": get_research_requirements_items(tech, buildings, levels),
             "icon": cfg.get("icon"),
             "queue_count": q_count,
             "is_active": is_active,

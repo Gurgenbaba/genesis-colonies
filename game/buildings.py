@@ -272,6 +272,39 @@ def has_building_requirements(buildings: Dict[str, int], research_levels: Dict[s
     return _check_requirements_for_building(building_type, buildings, research_levels)
 
 
+def get_building_requirements_items(
+    building_type: str,
+    buildings: Dict[str, int],
+    research_levels: Dict[str, int],
+) -> List[Dict[str, Any]]:
+    req_cfg = BUILDING_REQUIREMENTS.get(building_type) or {}
+    items: List[Dict[str, Any]] = []
+
+    for b_key, need_lvl in (req_cfg.get("buildings") or {}).items():
+        have = int(buildings.get(b_key, 0) or 0)
+        need = int(need_lvl)
+        items.append({
+            "kind": "building",
+            "key": b_key,
+            "need": need,
+            "have": have,
+            "met": have >= need,
+        })
+
+    for r_key, need_lvl in (req_cfg.get("research") or {}).items():
+        have = int(research_levels.get(r_key, 0) or 0)
+        need = int(need_lvl)
+        items.append({
+            "kind": "research",
+            "key": r_key,
+            "need": need,
+            "have": have,
+            "met": have >= need,
+        })
+
+    return items
+
+
 # =============================================================================
 # Panel Rows
 # =============================================================================
@@ -308,6 +341,7 @@ def _make_panel_row(
         "cost_crystal": cost_crystal,
         "time_seconds": int(time_seconds),
         "requirements_met": bool(req_met),
+        "requirements_items": get_building_requirements_items(building_type, buildings, research_levels),
         "can_afford": bool(can_afford),
     }
 
