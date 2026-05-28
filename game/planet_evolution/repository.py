@@ -42,6 +42,30 @@ def get_planet_row(planet_id: int, conn: Optional[sqlite3.Connection] = None) ->
             conn.close()
 
 
+def get_context_planet(
+    player_id: int,
+    conn: Optional[sqlite3.Connection] = None,
+) -> Dict[str, Any]:
+    """
+    Planet row for gameplay UI and mutations: active colony when set, else homeworld.
+  """
+    from ..models import get_homeworld
+
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if evolution_schema_ready(conn):
+            active_id = get_active_planet_id(int(player_id), conn=conn)
+            row = get_planet_row(active_id, conn=conn)
+            if row:
+                return row
+        return get_homeworld(player_id=int(player_id), conn=conn)
+    finally:
+        if own:
+            conn.close()
+
+
 def get_active_planet_id(player_id: int, conn: Optional[sqlite3.Connection] = None) -> int:
     from ..models import get_homeworld
 

@@ -82,6 +82,8 @@ from game import playercard as playercard_logic
 from game import chat as chat_logic
 from game import support as support_logic
 from game import messages as messages_logic
+from game import options as options_logic
+from game import account_email as account_email_logic
 
 from game.bootstrap import bootstrap_application
 from game.config import get_secret_key, is_debug_enabled, is_production
@@ -165,11 +167,9 @@ def player_name_link(
     if pid <= 0:
         return Markup(escape(name or "—"))
 
-    from game.player_display import commander_display_name, commander_lookup_name
-
-    lookup = commander_lookup_name(name)
-    display = escape(commander_display_name(name) or "—")
-    lookup_attr = escape(lookup)
+    raw = str(name or "").strip()
+    display = escape(raw or "—")
+    lookup_attr = escape(raw)
     classes = ["gc-player-name"]
     if extra_class:
         classes.append(str(extra_class).strip())
@@ -411,7 +411,9 @@ def _load_page_live_context(
             player = load_player(user_id, conn=conn)
             if not player:
                 return None
-            planet = get_homeworld(player_id=user_id, conn=conn)
+            from game.planet_evolution.repository import get_context_planet
+
+            planet = get_context_planet(user_id, conn=conn)
             player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
                 _read_player_live_state_no_writes(user_id, conn, player, planet)
             )
@@ -459,6 +461,7 @@ def login():
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
 
+        # Login uses username only; resolve_login_username() prepared for GC_LOGIN_ALLOW_EMAIL=1
         user = verify_user(username, password)
         if user:
             login_user(user)
@@ -483,11 +486,12 @@ def register():
 
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
+        email = (request.form.get("email") or "").strip()
         password = request.form.get("password") or ""
         password2 = request.form.get("password2") or ""
 
-        if not username or not password:
-            error = T("msg_register_need_user_pass") or "Bitte Benutzername und Passwort angeben."
+        if not username or not password or not email:
+            error = T("msg_register_need_user_pass_email") or T("msg_register_need_user_pass")
         elif password != password2:
             error = T("msg_register_pw_mismatch") or "Die Passwörter stimmen nicht überein."
         elif len(username) < 3:
@@ -495,19 +499,78 @@ def register():
         elif len(password) < 4:
             error = T("msg_register_password_short") or "Passwort muss mindestens 4 Zeichen lang sein."
         else:
-            existing = get_user_by_username(username)
-            if existing:
-                error = T("msg_register_username_taken") or "Benutzername ist bereits vergeben."
+            ok, err, user = account_email_logic.register_user_with_email(username, password, email)
+            if not ok:
+                error = T(err) if err and T(err) != err else (err or T("msg_register_failed"))
             else:
-                ok, msg, user = create_user(username, password)
-                if not ok:
-                    error = msg or (T("msg_register_failed") or "Account konnte nicht erstellt werden.")
-                else:
-                    login_user(user)
-                    flash(T("msg_register_success") or "Willkommen im Genesis-Universum, Commander!", "success")
-                    return redirect(url_for("overview"))
+                login_user(user)
+                flash(T("msg_register_success_verify") or T("msg_register_success"), "success")
+                return redirect(url_for("overview"))
 
     return render_template("register.html", error=error)
+
+
+@app.route("/verify-email/<token>")
+def verify_email(token: str):
+    ok, err = account_email_logic.verify_email_token(token)
+    state = "success" if ok else ("warning" if err == "account_already_verified" else "error")
+    if ok:
+        title = T("verify_email_success_title")
+        message = T(err) if T(err) != err else err
+    elif err == "account_already_verified":
+        title = T("verify_email_already_title")
+        message = T(err) if T(err) != err else err
+    else:
+        title = T("verify_email_failed_title")
+        message = T(err) if T(err) != err else err
+    return render_template(
+        "auth_result.html",
+        page_title=title,
+        badge=T("verify_email_badge"),
+        state=state,
+        title=title,
+        message=message,
+        primary_href=url_for("overview") if get_current_user() else url_for("login"),
+        primary_label=T("verify_email_continue") if get_current_user() else T("login_btn"),
+    )
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    error = None
+    sent = False
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip()
+        meta = _options_request_meta()
+        account_email_logic.request_password_reset(email, ip=meta["ip"])
+        sent = True
+    return render_template(
+        "forgot_password.html",
+        error=error,
+        sent=sent,
+        success_message=T("account_reset_generic"),
+    )
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token: str):
+    error = None
+    success = False
+    if request.method == "POST":
+        password = request.form.get("password") or ""
+        password2 = request.form.get("password2") or ""
+        ok, err = account_email_logic.reset_password_with_token(token, password, password2)
+        if ok:
+            success = True
+        else:
+            error = T(err) if err and T(err) != err else err
+    return render_template(
+        "reset_password.html",
+        error=error,
+        success=success,
+        token=token,
+        success_message=T("account_password_reset_ok"),
+    )
 
 
 # --------------------------------------------------------------------------
@@ -561,7 +624,9 @@ def buildings_view():
     if ctx is None:
         return redirect(url_for("login"))
 
-    planet = get_homeworld(player_id=int(ctx["player_view"]["id"]))
+    from game.planet_evolution.repository import get_context_planet
+
+    planet = get_context_planet(int(ctx["player_view"]["id"]))
     rows_by_tab = get_buildings_panel_rows(
         planet,
         ctx["buildings"],
@@ -1428,6 +1493,128 @@ def api_admin_messages_send():
     )
 
 
+def _options_request_meta() -> Dict[str, Optional[str]]:
+    return {
+        "ip": (request.headers.get("X-Forwarded-For") or request.remote_addr or "")[:64] or None,
+        "user_agent": (request.headers.get("User-Agent") or "")[:256] or None,
+    }
+
+
+def _options_api_response(ok: bool, error: Optional[str] = None, data: Any = None, status: int = 200):
+    body: Dict[str, Any] = {"ok": bool(ok), "error": error, "data": data}
+    if ok and error:
+        body["message"] = error
+    return jsonify(body), status
+
+
+@app.route("/options")
+@require_login
+def options_view():
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    if player_view is None:
+        return redirect(url_for("login"))
+
+    pid = _current_player_id()
+    options_data = options_logic.get_options_snapshot(int(pid)) if pid else {}
+
+    return render_template(
+        "options.html",
+        player=player_view,
+        buildings=buildings,
+        energy_total=energy_total,
+        energy_used=energy_used,
+        storage_caps=storage_caps,
+        options_data=options_data,
+    )
+
+
+@app.route("/api/options/player-name", methods=["POST"])
+@require_login_api
+def api_options_player_name():
+    pid = _current_player_id()
+    assert pid is not None
+    payload = request.get_json(silent=True) or {}
+    name = payload.get("player_name") or payload.get("name") or ""
+    meta = _options_request_meta()
+    ok, err, data = options_logic.update_player_name(
+        int(pid), name, ip=meta["ip"], user_agent=meta["user_agent"]
+    )
+    if not ok:
+        return _options_api_response(False, err, data, 400)
+    return _options_api_response(True, err, data)
+
+
+@app.route("/api/options/planet-name", methods=["POST"])
+@require_login_api
+def api_options_planet_name():
+    pid = _current_player_id()
+    assert pid is not None
+    payload = request.get_json(silent=True) or {}
+    name = payload.get("planet_name") or payload.get("name") or ""
+    meta = _options_request_meta()
+    ok, err, data = options_logic.update_homeworld_name(
+        int(pid), name, ip=meta["ip"], user_agent=meta["user_agent"]
+    )
+    if not ok:
+        return _options_api_response(False, err, data, 400)
+    return _options_api_response(True, err, data)
+
+
+@app.route("/api/options/email", methods=["POST"])
+@require_login_api
+def api_options_email():
+    pid = _current_player_id()
+    assert pid is not None
+    payload = request.get_json(silent=True) or {}
+    email = payload.get("email") or ""
+    meta = _options_request_meta()
+    ok, err, data = options_logic.update_email(
+        int(pid), email, ip=meta["ip"], user_agent=meta["user_agent"]
+    )
+    if not ok:
+        status = 429 if err == "options_error_rate_limited" else 400
+        return _options_api_response(False, err, data, status)
+    return _options_api_response(True, err, data)
+
+
+@app.route("/api/options/password", methods=["POST"])
+@require_login_api
+def api_options_password():
+    pid = _current_player_id()
+    assert pid is not None
+    user = get_current_user()
+    if not user:
+        return _options_api_response(False, "not_logged_in", None, 401)
+
+    payload = request.get_json(silent=True) or {}
+    meta = _options_request_meta()
+    ok, err, data = options_logic.update_password(
+        int(pid),
+        str(user.get("username") or ""),
+        str(payload.get("current_password") or ""),
+        str(payload.get("new_password") or ""),
+        str(payload.get("confirm_password") or payload.get("password_confirm") or ""),
+        ip=meta["ip"],
+        user_agent=meta["user_agent"],
+    )
+    if not ok:
+        status = 429 if err == "options_error_rate_limited" else 400
+        return _options_api_response(False, err, data, status)
+    return _options_api_response(True, err, data)
+
+
+@app.route("/api/options/resend-verification", methods=["POST"])
+@require_login_api
+def api_options_resend_verification():
+    pid = _current_player_id()
+    assert pid is not None
+    ok, err = account_email_logic.resend_verification_email(int(pid))
+    if not ok:
+        status = 429 if err == "options_error_verify_resend_rate" else 400
+        return _options_api_response(False, err, None, status)
+    return _options_api_response(True, err, {"email_verified": False})
+
+
 @app.route("/messages")
 @require_login
 def messages_view():
@@ -1727,8 +1914,13 @@ def _payload_from_live_context(
         },
     }
 
+    from game.planet_evolution.repository import get_active_planet_id, get_context_planet
+
+    active_planet_id = get_active_planet_id(user_id)
+    payload["active_planet_id"] = int(active_planet_id)
+
     if include_panel:
-        planet = get_homeworld(player_id=user_id)
+        planet = get_context_planet(user_id)
         payload["buildings_panel"] = get_buildings_panel_rows(
             planet,
             buildings,
@@ -1791,19 +1983,9 @@ def _player_context_for_action() -> Optional[Tuple[Any, Dict[str, int]]]:
     player_view = load_player(user_id)
     if not player_view:
         return None
-    try:
-        from game.planet_evolution.repository import evolution_schema_ready, get_active_planet_id, get_planet_row
+    from game.planet_evolution.repository import get_context_planet
 
-        conn = db()
-        try:
-            if evolution_schema_ready(conn):
-                planet = get_planet_row(get_active_planet_id(user_id, conn=conn), conn=conn)
-            else:
-                planet = get_homeworld(player_id=user_id)
-        finally:
-            conn.close()
-    except Exception:
-        planet = get_homeworld(player_id=user_id)
+    planet = get_context_planet(user_id)
     buildings = get_planet_buildings(int(planet["id"]))
     return player_view, buildings
 

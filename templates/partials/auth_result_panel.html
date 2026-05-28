@@ -1,0 +1,15 @@
+{# Auth result state – success | error | warning | info #}
+{% set st = (state if state is defined else 'info') %}
+{% set icon = '✓' if st == 'success' else ('✕' if st == 'error' else ('⚠' if st == 'warning' else 'ℹ')) %}
+
+<div class="gc-auth-state gc-auth-state-{{ st }}" role="status" aria-live="polite">
+  <span class="gc-auth-state-icon" aria-hidden="true">{{ icon }}</span>
+  <div class="gc-auth-state-body">
+    {% if title is defined and title %}
+      <strong class="gc-auth-state-title">{{ title }}</strong>
+    {% endif %}
+    {% if message is defined and message %}
+      <p class="gc-auth-state-message">{{ message }}</p>
+    {% endif %}
+  </div>
+</div>

@@ -329,7 +329,8 @@
     resetMessagesPageState();
 
     const filter = readActiveFilterFromDom();
-    msgDebug("[messages] init", { initSeq, filter, pjax: Boolean(options && options.pjax) });
+    console.debug("[messages] init", { initSeq, filter });
+    msgDebug("[messages] init detail", { pjax: Boolean(options && options.pjax) });
 
     const state = {
       initSeq,
@@ -490,7 +491,10 @@
             }
             return;
           }
-          if (finishLoadAttempt(requestId)) showErrorList(err);
+          if (finishLoadAttempt(requestId)) {
+            console.debug("[messages] inbox load failed", { error: err, filter: state.filter });
+            showErrorList(err);
+          }
           return;
         }
 
@@ -500,14 +504,12 @@
         state.listLoaded = true;
         syncUnreadFromResponse(data);
         renderList();
-        msgDebug("[messages] inbox loaded", {
-          initSeq,
-          requestId,
-          player_id: data.data?.player_id,
+        console.debug("[messages] inbox loaded", {
           count: state.messages.length,
           unread: data.data?.unread_count,
           filter: state.filter,
         });
+        msgDebug("[messages] inbox detail", { initSeq, requestId, player_id: data.data?.player_id });
 
         if (state.selectedId) {
           const current = state.messages.find((m) => m.id === state.selectedId);
@@ -529,7 +531,10 @@
           return;
         }
         if (!isCurrentRequest(state, initSeq, requestId)) return;
-        if (finishLoadAttempt(requestId)) showErrorList("error_load");
+        if (finishLoadAttempt(requestId)) {
+          console.debug("[messages] inbox load error", err);
+          showErrorList("error_load");
+        }
       } finally {
         if (state.listAbort === ctrl) state.listAbort = null;
       }

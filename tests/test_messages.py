@@ -760,12 +760,9 @@ def test_bob_archive_and_delete_api(app_client, temp_db):
     assert not any(m["id"] == mid for m in archived_after["data"]["messages"])
 
 
-@pytest.mark.parametrize(
-    "lookup_name",
-    ["Bobby", "Commander Bobby"],
-)
-def test_send_lookup_commander_variants_api(app_client, temp_db, lookup_name):
-    """D: Send to display name or stored Commander name."""
+def test_send_lookup_exact_stored_name_api(app_client, temp_db):
+    """Recipient lookup uses the exact stored player name only."""
+    lookup_name = "Commander Bobby"
     _run_migrate(temp_db)
     init_db()
     _close_db()

@@ -453,7 +453,7 @@ def _fetch_all_score_rows(conn) -> List[Dict[str, Any]]:
         rows.append(
             {
                 "player_id": int(d["player_id"]),
-                "commander_name": d.get("commander_name") or "Commander",
+                "commander_name": d.get("commander_name") or "—",
                 **scores,
             }
         )
@@ -959,7 +959,7 @@ def get_sorted_ranking_entries(
         social = enrich_ranking_social_fields(d)
         from .player_display import commander_display_name, commander_lookup_name
 
-        raw_name = d.get("commander_name") or "Commander"
+        raw_name = d.get("commander_name") or "—"
         out.append(
             {
                 "rank": rank,

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="gc-page auth-page">
+  <section class="gc-panel auth-card gc-auth-result-card" aria-label="{{ page_title }}">
+    <div class="auth-badge">{{ badge if badge is defined else 'Genesis Colonies' }}</div>
+    <div class="auth-title">🛰 <span>{{ page_title }}</span></div>
+
+    {% include "partials/auth_result_panel.html" %}
+
+    {% if primary_href is defined and primary_href %}
+      <div class="gc-auth-result-actions">
+        <a href="{{ primary_href }}" class="gc-btn gc-btn-primary gc-btn-lg auth-btn-primary">
+          {{ primary_label if primary_label is defined else T('login_btn') }}
+        </a>
+      </div>
+    {% endif %}
+
+    <div class="auth-footer gc-auth-result-footer">
+      <a href="{{ url_for('landing') }}">{{ T('login_footer_back') if T('login_footer_back') != 'login_footer_back' else 'Zurück zur Startseite' }}</a>
+    </div>
+  </section>
+</div>
+
+{% endblock %}

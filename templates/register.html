@@ -133,6 +133,29 @@
       >
       <div class="auth-field-help" id="username-help">{{ help_user }}</div>
 
+      {% set lbl_email = T("register_label_email") %}
+      {% if lbl_email == "register_label_email" %}{% set lbl_email = "E-Mail" %}{% endif %}
+      {% set ph_email = T("register_placeholder_email") %}
+      {% if ph_email == "register_placeholder_email" %}{% set ph_email = "kommando@genesis-cluster …" %}{% endif %}
+      {% set help_email = T("register_help_email") %}
+      {% if help_email == "register_help_email" %}{% set help_email = "Wird für Verifizierung und Passwort-Reset genutzt." %}{% endif %}
+
+      <label class="auth-label" for="email">{{ lbl_email }}</label>
+      <input
+        id="email"
+        type="email"
+        name="email"
+        class="auth-input"
+        placeholder="{{ ph_email }}"
+        autocomplete="email"
+        required
+        maxlength="254"
+        aria-describedby="email-help"
+        {% if err %}aria-invalid="true"{% endif %}
+        value="{{ (request.form.get('email') or '') if request.method == 'POST' else '' }}"
+      >
+      <div class="auth-field-help" id="email-help">{{ help_email }}</div>
+
       <label class="auth-label" for="password">{{ lbl_pass }}</label>
       <input
         id="password"

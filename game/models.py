@@ -5,6 +5,8 @@ import math
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from .db import (
     DB_PATH,
     db,
@@ -128,9 +130,36 @@ def init_db() -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
-            is_admin INTEGER NOT NULL DEFAULT 0
+            is_admin INTEGER NOT NULL DEFAULT 0,
+            email TEXT
         );
     """)
+
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN email TEXT;")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cur.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower
+                ON users (LOWER(email))
+                WHERE email IS NOT NULL AND email != '';
+            """
+        )
+    except sqlite3.OperationalError:
+        pass
+
+    for col, typedef in (
+        ("email_verified", "INTEGER NOT NULL DEFAULT 0"),
+        ("email_verification_token", "TEXT"),
+        ("password_reset_token", "TEXT"),
+        ("password_reset_expires_at", "INTEGER"),
+    ):
+        try:
+            cur.execute(f"ALTER TABLE users ADD COLUMN {col} {typedef};")
+        except sqlite3.OperationalError:
+            pass
 
     # ------------------------------------------------------------
     # PLAYERS (Game-Objekt, id == users.id)
@@ -372,7 +401,20 @@ def init_db() -> None:
 # ======================================================================
 
 def hash_password(pwd: str) -> str:
-    return hashlib.sha256(pwd.encode("utf-8")).hexdigest()
+    """PBKDF2-SHA256 (Werkzeug). New passwords always use this format."""
+    return generate_password_hash(pwd, method="pbkdf2:sha256")
+
+
+def verify_password(stored_hash: str, pwd: str) -> bool:
+    """Verify password; accepts legacy SHA-256 hex hashes for existing accounts."""
+    stored = str(stored_hash or "")
+    if not stored or not pwd:
+        return False
+    if stored.startswith(("pbkdf2:", "scrypt:", "argon2:")):
+        return check_password_hash(stored, pwd)
+    if len(stored) == 64 and all(c in "0123456789abcdef" for c in stored.lower()):
+        return hashlib.sha256(pwd.encode("utf-8")).hexdigest() == stored.lower()
+    return False
 
 
 def create_default_admin(conn: sqlite3.Connection | None = None) -> None:
@@ -396,7 +438,7 @@ def create_default_admin(conn: sqlite3.Connection | None = None) -> None:
         admin_id = cur.lastrowid
         cur.execute(
             "INSERT OR IGNORE INTO players (id, name, is_admin) VALUES (?, ?, 1);",
-            (admin_id, "Commander Gurkenvater"),
+            (admin_id, "Gurkenvater"),
         )
 
     conn.commit()
@@ -413,34 +455,66 @@ def get_user_by_username(username: str):
     return user
 
 
+def resolve_login_username(identifier: str) -> Optional[str]:
+    """
+    Resolve login field to username. Username-only by default.
+    Set GC_LOGIN_ALLOW_EMAIL=1 to enable email login later (not active in UI yet).
+    """
+    import os
+
+    ident = str(identifier or "").strip()
+    if not ident:
+        return None
+    allow_email = os.environ.get("GC_LOGIN_ALLOW_EMAIL", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if allow_email and "@" in ident:
+        from .account_email import get_user_by_email
+
+        user = get_user_by_email(ident)
+        return str(user["username"]) if user else None
+    return ident
+
+
 def verify_user(username: str, password: str):
     user = get_user_by_username(username)
     if not user:
         return None
-    if hash_password(password) == user["password_hash"]:
+    if verify_password(user["password_hash"], password):
         return dict(user)
     return None
 
 
-def create_user(username: str, password: str, is_admin: int = 0):
+def create_user(username: str, password: str, is_admin: int = 0, email: str | None = None):
     conn = db()
     cur = conn.cursor()
 
     try:
         conn.execute("BEGIN IMMEDIATE")
 
+        normalized_email = str(email or "").strip().lower() if email else None
+
         cur.execute(
             """
-            INSERT INTO users (username, password_hash, is_admin)
-            VALUES (?, ?, ?);
+            INSERT INTO users (username, password_hash, is_admin, email, email_verified)
+            VALUES (?, ?, ?, ?, ?);
             """,
-            (username, hash_password(password), int(is_admin)),
+            (
+                username,
+                hash_password(password),
+                int(is_admin),
+                normalized_email,
+                0 if normalized_email else 1,
+            ),
         )
         user_id = cur.lastrowid
 
         ensure_player_and_homeworld(
             player_id=user_id,
-            player_name=f"Commander {username}",
+            player_name=username,
             is_admin=is_admin,
             conn=conn,
         )
@@ -535,7 +609,7 @@ def ensure_player_and_homeworld(
         if not row:
             cur.execute(
                 "INSERT INTO players (id, name, is_admin) VALUES (?, ?, ?);",
-                (int(player_id), player_name or f"Commander {player_id}", int(is_admin)),
+                (int(player_id), player_name or f"Player-{player_id}", int(is_admin)),
             )
 
         if not column_exists(conn, "planets", "player_id") or not column_exists(conn, "planets", "is_homeworld"):
@@ -600,7 +674,7 @@ def create_default_player_and_homeworld(conn: sqlite3.Connection | None = None) 
         harden_planets_schema(conn)
         ensure_player_and_homeworld(
             player_id=1,
-            player_name="Commander Gurkenvater",
+            player_name="Gurkenvater",
             is_admin=1,
             conn=conn,
         )

@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{% set od = options_data if options_data is defined and options_data else {} %}
+
+<div class="gc-page gc-options-page" id="options-page"
+     data-player-id="{{ CURRENT_PLAYER_ID or '' }}"
+     data-player-name="{{ od.get('player_name', '')|e }}"
+     data-active-planet-name="{{ od.get('active_planet_name', od.get('homeworld_name', ''))|e }}"
+     data-email="{{ od.get('email', '')|e }}"
+     data-email-verified="{{ '1' if od.get('email_verified') else '0' }}">
+
+  <header class="section-header gc-options-header">
+    <h1 class="section-title">{{ T("options_title") }}</h1>
+    <p class="section-hint hint">{{ T("options_subtitle") }}</p>
+  </header>
+
+  <div class="gc-options-grid">
+
+    <section class="gc-panel gc-options-panel gc-panel-accent" aria-labelledby="options-profile-title">
+      <div class="gc-panel-header gc-options-panel-head">
+        <div class="gc-panel-head-left">
+          <span class="gc-panel-title" id="options-profile-title">{{ T("options_profile_title") }}</span>
+          <span class="gc-panel-subtitle">{{ T("options_profile_subtitle") }}</span>
+        </div>
+        <span class="gc-panel-tag">{{ T("options_tag_profile") }}</span>
+      </div>
+      <div class="gc-panel-body gc-options-panel-body">
+
+        <form class="gc-options-form" id="options-form-player-name" method="post" action="#" novalidate>
+          <div class="gc-options-form-head">
+            <span class="gc-options-form-kicker">{{ T("options_player_name") }}</span>
+          </div>
+          <div class="gc-options-field-row">
+            <label class="gc-options-field">
+              <span class="gc-options-label">{{ T("options_player_name_current") }}</span>
+              <output class="gc-options-current" id="options-current-player-name">{{ od.get('player_name') or T('options_not_set') }}</output>
+            </label>
+            <label class="gc-options-field">
+              <span class="gc-options-label">{{ T("options_player_name") }}</span>
+              <input type="text" class="gc-input gc-options-input" name="player_name" maxlength="32" required
+                     autocomplete="nickname"
+                     placeholder="{{ T('options_placeholder_player_name') }}"
+                     value="{{ od.get('player_name', '') }}">
+            </label>
+          </div>
+          <div class="gc-options-form-actions">
+            <button type="submit" class="gc-btn gc-btn-primary gc-options-save">{{ T("options_save") }}</button>
+            <p class="gc-options-form-hint" role="status" aria-live="polite" hidden></p>
+          </div>
+        </form>
+
+        <form class="gc-options-form" id="options-form-planet-name" method="post" action="#" novalidate>
+          <div class="gc-options-form-head">
+            <span class="gc-options-form-kicker">{{ T("options_planet_name") }}</span>
+          </div>
+          <div class="gc-options-field-row">
+            <label class="gc-options-field">
+              <span class="gc-options-label">{{ T("options_planet_name_current") }}</span>
+              <output class="gc-options-current" id="options-current-planet-name">{{ od.get('active_planet_name', od.get('homeworld_name')) or T('options_not_set') }}</output>
+            </label>
+            <label class="gc-options-field">
+              <span class="gc-options-label">{{ T("options_planet_name") }}</span>
+              <input type="text" class="gc-input gc-options-input" name="planet_name" maxlength="32" required
+                     autocomplete="off"
+                     placeholder="{{ T('options_placeholder_planet_name') }}"
+                     value="{{ od.get('active_planet_name', od.get('homeworld_name', '')) }}">
+            </label>
+          </div>
+          <div class="gc-options-form-actions">
+            <button type="submit" class="gc-btn gc-btn-primary gc-options-save">{{ T("options_save") }}</button>
+            <p class="gc-options-form-hint" role="status" aria-live="polite" hidden></p>
+          </div>
+        </form>
+
+      </div>
+    </section>
+
+    <section class="gc-panel gc-options-panel gc-panel-accent" aria-labelledby="options-account-title">
+      <div class="gc-panel-header gc-options-panel-head">
+        <div class="gc-panel-head-left">
+          <span class="gc-panel-title" id="options-account-title">{{ T("options_account_title") }}</span>
+          <span class="gc-panel-subtitle">{{ T("options_account_subtitle") }}</span>
+        </div>
+        <span class="gc-panel-tag">{{ T("options_tag_account") }}</span>
+      </div>
+      <div class="gc-panel-body gc-options-panel-body">
+
+        <form class="gc-options-form" id="options-form-email" method="post" action="#" novalidate>
+          <div class="gc-options-form-head">
+            <span class="gc-options-form-kicker">{{ T("options_email") }}</span>
+          </div>
+          {% if od.get('email') %}
+          <div class="gc-options-verify-row" id="options-email-verify-row"
+               data-verified="{{ '1' if od.get('email_verified') else '0' }}">
+            {% if od.get('email_verified') %}
+              <span class="gc-options-verify-badge gc-options-verify-badge-ok" id="options-email-verify-badge">
+                <span class="gc-options-verify-icon" aria-hidden="true">✓</span>
+                {{ T("options_email_verified") }}
+              </span>
+            {% else %}
+              <span class="gc-options-verify-badge gc-options-verify-badge-warn" id="options-email-verify-badge">
+                <span class="gc-options-verify-icon" aria-hidden="true">⚠</span>
+                {{ T("options_email_unverified") }}
+              </span>
+              <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" id="options-resend-verify">
+                {{ T("options_resend_verification") }}
+              </button>
+              <p class="gc-options-resend-hint" id="options-resend-hint" role="status" aria-live="polite" hidden></p>
+            {% endif %}
+          </div>
+          {% endif %}
+          <div class="gc-options-field-row">
+            <label class="gc-options-field">
+              <span class="gc-options-label">{{ T("options_email_current") }}</span>
+              <output class="gc-options-current gc-options-current-mono" id="options-current-email">{{ od.get('email') or T('options_not_set') }}</output>
+            </label>
+            <label class="gc-options-field">
+              <span class="gc-options-label">{{ T("options_email") }}</span>
+              <input type="email" class="gc-input gc-options-input" name="email" maxlength="254" required
+                     autocomplete="email"
+                     placeholder="{{ T('options_placeholder_email') }}"
+                     value="{{ od.get('email', '') }}">
+            </label>
+          </div>
+          <div class="gc-options-form-actions">
+            <button type="submit" class="gc-btn gc-btn-primary gc-options-save">{{ T("options_save") }}</button>
+            <p class="gc-options-form-hint" role="status" aria-live="polite" hidden></p>
+          </div>
+        </form>
+
+        <form class="gc-options-form gc-options-form-password" id="options-form-password" method="post" action="#" novalidate>
+          <div class="gc-options-form-head">
+            <span class="gc-options-form-kicker">{{ T("options_password") }}</span>
+          </div>
+          <div class="gc-options-field-row gc-options-field-row-password">
+            <label class="gc-options-field">
+              <span class="gc-options-label">{{ T("options_current_password") }}</span>
+              <input type="password" class="gc-input gc-options-input" name="current_password" required
+                     autocomplete="current-password"
+                     placeholder="{{ T('options_placeholder_password_current') }}">
+            </label>
+            <label class="gc-options-field">
+              <span class="gc-options-label">{{ T("options_new_password") }}</span>
+              <input type="password" class="gc-input gc-options-input" name="new_password" required
+                     autocomplete="new-password" minlength="4"
+                     placeholder="{{ T('options_placeholder_password_new') }}">
+            </label>
+            <label class="gc-options-field">
+              <span class="gc-options-label">{{ T("options_confirm_password") }}</span>
+              <input type="password" class="gc-input gc-options-input" name="confirm_password" required
+                     autocomplete="new-password" minlength="4"
+                     placeholder="{{ T('options_placeholder_password_confirm') }}">
+            </label>
+          </div>
+          <div class="gc-options-form-actions">
+            <button type="submit" class="gc-btn gc-btn-primary gc-options-save">{{ T("options_save") }}</button>
+            <p class="gc-options-form-hint" role="status" aria-live="polite" hidden></p>
+          </div>
+        </form>
+
+      </div>
+    </section>
+
+  </div>
+
+  <section class="gc-panel gc-options-panel gc-options-security" aria-labelledby="options-security-title">
+    <div class="gc-options-security-card" role="note">
+      <div class="gc-options-security-head">
+        <span class="gc-options-security-icon" aria-hidden="true">⛨</span>
+        <div class="gc-options-security-head-text">
+          <span class="gc-options-security-title" id="options-security-title">{{ T("options_security_title") }}</span>
+          <p class="gc-options-security-lead">{{ T("options_security_hint") }}</p>
+        </div>
+      </div>
+      <ul class="gc-options-security-list">
+        <li>{{ T("options_security_item_confirm") }}</li>
+        <li>{{ T("options_security_item_password") }}</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+
+{% endblock %}

@@ -116,17 +116,9 @@ def read_player_live_state_for_poll(
         if not player:
             raise RuntimeError(f"player {uid} not found")
 
-        planet = get_homeworld(player_id=uid, conn=conn)
-        try:
-            from .planet_evolution.repository import evolution_schema_ready, get_active_planet_id, get_planet_row
+        from .planet_evolution.repository import get_context_planet
 
-            if evolution_schema_ready(conn):
-                active_id = get_active_planet_id(uid, conn=conn)
-                active = get_planet_row(active_id, conn=conn)
-                if active:
-                    planet = active
-        except Exception:
-            pass
+        planet = get_context_planet(uid, conn=conn)
 
         now = time.time()
         last_raw = planet.get("last_update")
@@ -187,8 +179,10 @@ def read_player_live_state_for_poll(
                     rollback(conn)
                 except Exception:
                     pass
+            from .planet_evolution.repository import get_context_planet
+
             player = load_player(uid, conn=conn) or player
-            planet = get_homeworld(player_id=uid, conn=conn)
+            planet = get_context_planet(uid, conn=conn)
             return _read_player_live_state_no_writes(uid, conn, player, planet)
 
     except Exception:
@@ -229,17 +223,9 @@ def refresh_player_live_state(
         if not player:
             raise RuntimeError(f"player {uid} not found")
 
-        planet = get_homeworld(player_id=uid, conn=conn)
-        try:
-            from .planet_evolution.repository import evolution_schema_ready, get_active_planet_id, get_planet_row
+        from .planet_evolution.repository import get_context_planet
 
-            if evolution_schema_ready(conn):
-                active_id = get_active_planet_id(uid, conn=conn)
-                active = get_planet_row(active_id, conn=conn)
-                if active:
-                    planet = active
-        except Exception:
-            pass
+        planet = get_context_planet(uid, conn=conn)
 
         planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
             planet,
@@ -389,13 +375,15 @@ def get_build_queue_status(
     conn=None,
 ) -> Dict[str, Any]:
     """
-    Liefert die Build-Queue für den aktuellen User (Homeworld).
+    Liefert die Build-Queue für den aktiven Spielplaneten.
 
     skip_finish=True: Caller hat bereits refresh_player_live_state / finish_due_work ausgeführt.
     """
     user_id_int = int(user_id)
 
-    planet = get_homeworld(player_id=user_id_int, conn=conn)
+    from .planet_evolution.repository import get_context_planet
+
+    planet = get_context_planet(user_id_int, conn=conn)
     planet_id = int(planet["id"])
 
     from .live_state import coerce_skip_finish
@@ -426,7 +414,9 @@ def queue_build(
         - unknown_building
     """
     user_id = int(player.get("id"))
-    planet = get_homeworld(player_id=user_id)
+    from .planet_evolution.repository import get_context_planet
+
+    planet = get_context_planet(user_id)
 
     ok, reason, payload = _queue_build_for_planet(
         planet=planet,
@@ -453,7 +443,9 @@ def queue_build(
 
 def cancel_build(player: dict, job_id: int) -> Tuple[bool, str, Any]:
     user_id = int(player.get("id"))
-    planet = get_homeworld(player_id=user_id)
+    from .planet_evolution.repository import get_context_planet
+
+    planet = get_context_planet(user_id)
 
     ok, reason, payload = _cancel_build_job_for_planet(
         planet_id=int(planet["id"]),

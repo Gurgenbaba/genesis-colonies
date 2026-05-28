@@ -449,6 +449,7 @@
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
     if (path.endsWith("/messages")) return "messages";
+    if (path.endsWith("/options")) return "options";
     if (path.endsWith("/techtree")) return "techtree";
     if (path.endsWith("/admin")) return "admin";
     return "other";
@@ -2267,20 +2268,7 @@
 
       const colonizeBtn = e.target.closest("#pe-colonize-btn");
       if (colonizeBtn && root.contains(colonizeBtn)) {
-        const name = prompt(tt("pe_colonize_prompt", "Name der neuen Kolonie:"));
-        if (!name) return;
-        colonizeBtn.disabled = true;
-        const res = await postAction("/api/planets/colonize", {
-          name,
-          galaxy: 1,
-          system: Math.floor(Math.random() * 900) + 100,
-          position: Math.floor(Math.random() * 15) + 1,
-        });
-        if (res?.ok) await GC.reloadCurrentPage();
-        else {
-          colonizeBtn.disabled = false;
-          alert(reasonText(res?.reason));
-        }
+        alert(tt("pe_colonize_unavailable_hint", "Derzeit nicht verfügbar – Galaxie & System kommen in einem späteren Update."));
       }
     });
   }
@@ -2479,13 +2467,8 @@
   }
 
   function rankingCommanderNameHtml(row) {
-    const display = row.commander_display || row.commander_name || "—";
-    const prefix = rankingEscapeHtml(rankingT("commander", "Commander"));
-    const name = rankingEscapeHtml(display);
-    return (
-      `<span class="gc-commander-prefix">${prefix}</span>` +
-      `<span class="gc-ranking-player-name">${name}</span>`
-    );
+    const name = rankingEscapeHtml(row.commander_display || row.commander_name || "—");
+    return `<span class="gc-ranking-player-name">${name}</span>`;
   }
 
   function rankingPlayerCell(row, isMe) {
@@ -2714,6 +2697,192 @@
     GC.initRanking();
   };
   GC.modules.techtree = function initTechtree() {};
+  GC.modules.options = function initOptionsModule() {
+    if (typeof GC.initOptionsPage === "function") {
+      GC.initOptionsPage();
+    } else {
+      console.warn("[GC] options.js not loaded – Options forms inactive");
+    }
+  };
+
+  const OPTIONS_FORM_ROUTES = {
+    "options-form-player-name": {
+      url: "/api/options/player-name",
+      fields: ["player_name"],
+      apply(form, data) {
+        const name = data.player_name || "";
+        const cur = document.getElementById("options-current-player-name");
+        if (cur) cur.textContent = name || t("options_not_set", "—");
+        const inp = form.querySelector('[name="player_name"]');
+        if (inp) inp.value = name;
+        const page = document.getElementById("options-page");
+        if (page) page.setAttribute("data-player-name", name);
+        const pid = page && page.getAttribute("data-player-id");
+        if (pid && name) {
+          const esc = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(String(pid)) : String(pid);
+          document.querySelectorAll(`.gc-player-name[data-player-id="${esc}"]`).forEach((el) => {
+            el.textContent = name;
+            el.setAttribute("data-player-name", name);
+          });
+          document.querySelectorAll(".gc-hud-panel-user .gc-user-name").forEach((el) => {
+            el.textContent = name;
+            el.setAttribute("data-player-name", name);
+          });
+        }
+        if (typeof GC.refreshGameState === "function") GC.refreshGameState("options_name_change");
+      },
+    },
+    "options-form-planet-name": {
+      url: "/api/options/planet-name",
+      fields: ["planet_name"],
+      apply(form, data) {
+        const name = data.active_planet_name || data.planet_name || data.homeworld_name || "";
+        const cur = document.getElementById("options-current-planet-name");
+        if (cur) cur.textContent = name || t("options_not_set", "—");
+        const inp = form.querySelector('[name="planet_name"]');
+        if (inp) inp.value = name;
+        const page = document.getElementById("options-page");
+        if (page) page.setAttribute("data-active-planet-name", name);
+      },
+    },
+    "options-form-email": {
+      url: "/api/options/email",
+      fields: ["email"],
+      apply(form, data) {
+        const email = data.email || "";
+        const cur = document.getElementById("options-current-email");
+        if (cur) cur.textContent = email || t("options_not_set", "—");
+        const inp = form.querySelector('[name="email"]');
+        if (inp) inp.value = email;
+        const page = document.getElementById("options-page");
+        if (page) page.setAttribute("data-email", email);
+        if (typeof GC.initOptionsPage === "function") GC.initOptionsPage();
+      },
+    },
+    "options-form-password": {
+      url: "/api/options/password",
+      fields: ["current_password", "new_password", "confirm_password"],
+      apply(form) {
+        form.reset();
+      },
+    },
+  };
+
+  function optionsFieldValue(form, name) {
+    const el = form.querySelector(`[name="${name}"]`);
+    return el ? String(el.value || "").trim() : "";
+  }
+
+  function setOptionsFormHint(form, text, isError) {
+    const hint = form.querySelector(".gc-options-form-hint");
+    if (!hint) return;
+    hint.textContent = text || "";
+    if (text) {
+      hint.hidden = false;
+      hint.removeAttribute("hidden");
+    } else {
+      hint.hidden = true;
+    }
+    hint.classList.toggle("gc-options-hint-error", Boolean(isError));
+    hint.classList.toggle("gc-options-hint-success", Boolean(text) && !isError);
+  }
+
+  function setOptionsFormBusy(form, busy) {
+    if (!form) return;
+    form.dataset.gcSubmitting = busy ? "1" : "0";
+    form.querySelectorAll('button[type="submit"]').forEach((btn) => {
+      btn.disabled = busy;
+    });
+  }
+
+  GC.runOptionsFormSave = async function runOptionsFormSave(form, ev) {
+    if (ev && typeof ev.preventDefault === "function") ev.preventDefault();
+    if (!form || !form.id) return false;
+
+    const route = OPTIONS_FORM_ROUTES[form.id];
+    if (!route) return false;
+    if (form.dataset.gcSubmitting === "1") return false;
+
+    setOptionsFormHint(form, "", false);
+    setOptionsFormBusy(form, true);
+
+    const payload = {};
+    route.fields.forEach((name) => {
+      payload[name] = optionsFieldValue(form, name);
+    });
+
+    try {
+      if (typeof GC.fetchGameAction !== "function") {
+        throw new Error("fetchGameAction missing");
+      }
+      const data = await GC.fetchGameAction(route.url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!data || data.ok !== true) {
+        const errKey = (data && data.error) || "options_error_invalid_name";
+        const msg = t(errKey, errKey);
+        setOptionsFormHint(form, msg, true);
+        showNotify(msg, "error");
+        return false;
+      }
+
+      const savedMsg = t("options_saved", "Gespeichert.");
+      setOptionsFormHint(form, savedMsg, false);
+      if (typeof route.apply === "function") route.apply(form, data.data || {});
+      showNotify(savedMsg, "success");
+      return true;
+    } catch (err) {
+      if (err && err.name === "AuthError") return false;
+      const msg = t("options_error_invalid_name", "Eingabe ungültig.");
+      setOptionsFormHint(form, msg, true);
+      showNotify(msg, "error");
+      return false;
+    } finally {
+      setOptionsFormBusy(form, false);
+    }
+  };
+
+  GC.handleOptionsFormSubmit = GC.runOptionsFormSave;
+
+  function initOptionsFormsCapture() {
+    if (GC._optionsCaptureBound) return;
+    GC._optionsCaptureBound = true;
+
+    const dispatchSave = (form, ev) => {
+      if (!form || !form.id || !OPTIONS_FORM_ROUTES[form.id]) return;
+      if (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+      void GC.runOptionsFormSave(form, ev);
+    };
+
+    document.addEventListener(
+      "submit",
+      (ev) => {
+        const form = ev.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        if (!form.classList.contains("gc-options-form")) return;
+        dispatchSave(form, ev);
+      },
+      true
+    );
+
+    document.addEventListener(
+      "click",
+      (ev) => {
+        const btn = ev.target.closest("button.gc-options-save");
+        if (!btn) return;
+        const form = btn.closest("form.gc-options-form");
+        if (!form) return;
+        dispatchSave(form, ev);
+      },
+      true
+    );
+  }
 
   // =========================
   // PJAX navigation
@@ -4014,6 +4183,7 @@
     window.GC = GC;
     bindBuildingTabsOnce();
     initForms();
+    initOptionsFormsCapture();
     initSkipLink();
     initGameActions();
     bindPlanetEvolutionOnce();

@@ -28,6 +28,15 @@ def bootstrap_application(*, skip_migration_check: bool = False) -> None:
     purge_stale_idempotency_global()
 
     try:
+        from game.options import ensure_account_options_schema
+        from game.account_email import ensure_user_email_auth_schema
+
+        ensure_account_options_schema()
+        ensure_user_email_auth_schema()
+    except Exception as exc:
+        print(f"[GC bootstrap] WARNING: account schema: {exc}", file=sys.stderr)
+
+    try:
         from game.planet_evolution.bootstrap import backfill_all_planets_evolution
         from game.planet_evolution.definitions import reload_definitions
 

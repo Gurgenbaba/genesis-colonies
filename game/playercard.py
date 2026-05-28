@@ -432,16 +432,11 @@ def build_public_card(
 
 
 def _commander_fields(player: Dict[str, Any]) -> Dict[str, str]:
-    from .player_display import commander_display_name, commander_lookup_name, strip_commander_prefix
-
-    raw = str(player.get("name") or "Commander")
-    display = commander_display_name(raw)
-    lookup = commander_lookup_name(raw)
-    initial_src = strip_commander_prefix(raw) or display or lookup
+    raw = str(player.get("name") or "").strip() or "—"
     return {
-        "commander_name": display,
-        "commander_name_lookup": lookup,
-        "commander_name_raw": initial_src,
+        "commander_name": raw,
+        "commander_name_lookup": raw,
+        "commander_name_raw": raw,
     }
 
 

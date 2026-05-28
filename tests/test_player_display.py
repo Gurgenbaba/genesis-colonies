@@ -13,27 +13,20 @@ from game.player_display import (
     commander_lookup_name,
     commander_name_candidates,
     resolve_player_by_name,
-    strip_commander_prefix,
 )
 
 
-def test_strip_commander_prefix():
-    assert strip_commander_prefix("Commander Bobby") == "Bobby"
-    assert strip_commander_prefix("commander bobby") == "bobby"
-    assert strip_commander_prefix("Bobby") == "Bobby"
-    assert strip_commander_prefix("") == ""
-
-
-def test_commander_display_and_lookup():
-    assert commander_display_name("Commander Alpha") == "Alpha"
-    assert commander_lookup_name("Commander Alpha") == "Commander Alpha"
+def test_commander_display_and_lookup_raw_only():
+    assert commander_display_name("Alpha") == "Alpha"
+    assert commander_display_name("Commander Alpha") == "Commander Alpha"
     assert commander_lookup_name("Alpha") == "Alpha"
+    assert commander_lookup_name("") == "—"
 
 
-def test_commander_name_candidates():
+def test_commander_name_candidates_exact_only():
     cands = commander_name_candidates("Bobby")
-    assert "Bobby" in cands
-    assert "Commander Bobby" in cands
+    assert cands == ["Bobby"]
+    assert "Commander Bobby" not in cands
 
 
 @pytest.fixture()
@@ -67,20 +60,24 @@ def _make_player(name: str) -> int:
     return pid
 
 
-def test_resolve_player_without_commander_prefix(temp_db):
+def test_resolve_player_exact_stored_name_only(temp_db):
     pid = _make_player("Commander Zeta")
     conn = db()
     try:
-        hit, err = resolve_player_by_name("Zeta", conn)
+        hit, err = resolve_player_by_name("Commander Zeta", conn)
         assert err is None
         assert hit and int(hit["id"]) == pid
+
+        miss, err2 = resolve_player_by_name("Zeta", conn)
+        assert miss is None
+        assert err2 == "not_found"
     finally:
         conn.close()
 
 
 def test_resolve_player_ambiguous(temp_db):
-    _make_player("Commander Alpha")
     _make_player("Alpha")
+    _make_player("alpha")
     conn = db()
     try:
         hit, err = resolve_player_by_name("Alpha", conn)

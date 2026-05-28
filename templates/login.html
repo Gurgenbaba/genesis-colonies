@@ -127,8 +127,8 @@
         {{ help_pass }}
       </div>
 
-      <div class="auth-hint">
-        {{ hint | safe }}
+      <div class="auth-footer" style="margin-top:4px;padding:0;border:none">
+        <a href="{{ url_for('forgot_password') }}">{{ T("login_forgot_password") if T("login_forgot_password") != "login_forgot_password" else "Passwort vergessen?" }}</a>
       </div>
 
       <button type="submit"
