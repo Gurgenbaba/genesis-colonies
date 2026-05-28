@@ -295,7 +295,7 @@
   "desc_research_lab": "The core of your scientific progress. Higher levels speed up research and unlock new technologies.",
 
   "academy": "Genesis Academy",
-  "desc_academy": "Training center for officers and specialists. Improves efficiency of complex operations and opens paths to advanced research.",
+  "desc_academy": "Speeds up all research times by 5% per Academy level. Requires Research Lab level 2.",
 
   "metal_storage": "Ferronit Depot",
   "desc_metal_storage": "Expands storage capacity for Ferronit and prevents production stops caused by full depots.",
@@ -321,23 +321,31 @@
   "shield_generator": "Aegis Shield Projector",
   "desc_shield_generator": "Creates multilayered energy shields that protect your colony from bombardments and first strike waves.",
 
+  "terraformer": "Terraformer",
+  "building_terraformer": "Terraformer",
+  "desc_terraformer": "Increases Ferronit and Crytite storage capacity by 5% per level. Stacks with storage buildings and Storage Technology.",
+
   "nanofactory": "Nano-Assembly Complex",
-  "desc_nanofactory": "Swarm-controlled micro-factories that produce complex components with extreme efficiency and reduce production times.",
+  "desc_nanofactory": "Reduces build times for all buildings by 3% per level. Stacks with Construction Optimization and Research Lab.",
   "building_geothermal_nexus": "Geothermal Nexus",
   "geothermal_nexus": "Geothermal Nexus",
   "desc_geothermal_nexus": "A deep geothermal control complex that taps mantle energy and unlocks higher maximum levels for mines, solar collectors and storage structures. A key endgame facility for planetary stability and economic scaling.",
+
+  "planet_core_nexus": "Planet Core Nexus",
+  "building_planet_core_nexus": "Planet Core Nexus",
+  "desc_planet_core_nexus": "Endgame: +1 max level for Ferronit Mine, Crytite Extractor and Solar Collectors per level (base max 50).",
 
   "energy_tech": "Energy Efficiency",
   "desc_energy_tech": "Optimizes conduits, converters and reactors. Reduces the energy consumption of your mines by 5% per level.",
 
   "mining_tech": "Metal Refinement",
-  "desc_mining_tech": "New drill heads, conveyor systems and refinement processes increase Ferronit output by 10% per level.",
+  "desc_mining_tech": "+10% Ferronit production and +4% Crytite production per level. Stacks with Drone Optimization.",
 
   "buildtime_tech": "Construction Optimization",
   "desc_buildtime_tech": "Standardized modules and automated site logistics significantly reduce build and research times.",
 
   "storage_tech": "Storage Technology",
-  "desc_storage_tech": "Densified storage structures, smart stacking and stabilization greatly increase your storage capacities.",
+  "desc_storage_tech": "Increases Ferronit and Crytite storage capacity by 25% per level. Stacks with storage buildings and Terraformer.",
 
   "research_drones_tech": "Drone Optimization",
   "desc_research_drones_tech": "Improved mining and service drones maximize uptime and precision. Adds an extra production bonus per level.",
@@ -356,6 +364,24 @@
 
   "research_shield_tech": "Shield Technology",
   "desc_research_shield_tech": "Advanced shield generators, modulators and field amplifiers harden your defenses against concentrated fire.",
+
+  "drone_tech": "Drone Optimization",
+  "desc_drone_tech": "+3% Ferronit and Crytite production per level. Stacks with Metal Refinement.",
+
+  "navigation_tech": "Hyperspace Navigation",
+  "desc_navigation_tech": "Planned: +3% fleet speed per level (not yet live). Requires Research Lab 3 and Drone Optimization 2.",
+
+  "engine_tech": "Cryo Drive Engineering",
+  "desc_engine_tech": "Planned: +2% fleet speed and +2% cargo per level. Unlocks Nano-Assembly Complex among others.",
+
+  "weapon_tech": "Weapons Development",
+  "desc_weapon_tech": "Planned: +5% weapons bonus per level for combat. No resource bonus.",
+
+  "armor_tech": "Armor Technology",
+  "desc_armor_tech": "Planned: +5% armor bonus per level. Requires Weapons Development level 1.",
+
+  "shield_tech": "Shield Technology",
+  "desc_shield_tech": "Planned: +5% shield bonus per level. No planetary or fleet shield effect yet.",
 
   "msg_building_unlocked_by_research": "New buildings have been unlocked through research.",
   "msg_research_unlocked_by_building": "New research options have been unlocked by constructing buildings.",
