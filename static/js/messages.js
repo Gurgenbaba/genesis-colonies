@@ -67,6 +67,7 @@
     };
   }
 
+  /** Inbox fetch – bypass GC.fetchJSON so PJAX cleanup cannot abort list loads. */
   async function messagesApi(url, options = {}) {
     const headers = {
       Accept: "application/json",
@@ -76,39 +77,35 @@
     const fetchOpts = {
       cache: "no-store",
       credentials: "same-origin",
+      redirect: "manual",
       ...options,
       headers,
     };
 
-    if (typeof GC.fetchJSON === "function") {
-      try {
-        const data = await GC.fetchJSON(url, fetchOpts);
-        if (!data || typeof data !== "object") {
-          return { ok: false, error: "error_load" };
-        }
-        return data;
-      } catch (err) {
-        if (err?.auth) return { ok: false, error: "not_logged_in" };
-        return { ok: false, error: "error_load", status: err?.status || 0 };
-      }
-    }
-
-    const res = await fetch(url, { ...fetchOpts, redirect: "manual" });
-    const ct = (res.headers.get("content-type") || "").toLowerCase();
-    if (res.type === "opaqueredirect" || res.status === 401 || res.status === 403) {
-      return { ok: false, error: "not_logged_in", status: res.status };
-    }
-    if (!ct.includes("application/json")) {
-      return { ok: false, error: "error_load", status: res.status };
-    }
     try {
+      const res = await fetch(url, fetchOpts);
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (res.type === "opaqueredirect" || res.status === 401 || res.status === 403) {
+        return { ok: false, error: "not_logged_in", status: res.status };
+      }
+      if (!ct.includes("application/json")) {
+        return { ok: false, error: "error_load", status: res.status };
+      }
       const data = await res.json();
       if (!res.ok && data && typeof data === "object") {
         return { ...data, ok: false, status: res.status };
       }
+      if (!data || typeof data !== "object") {
+        return { ok: false, error: "error_load", status: res.status };
+      }
       return data;
-    } catch (_) {
-      return { ok: false, error: "error_load", status: res.status };
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        const abortErr = new Error("aborted");
+        abortErr.name = "AbortError";
+        throw abortErr;
+      }
+      return { ok: false, error: "error_load", status: err?.status || 0 };
     }
   }
 
@@ -214,7 +211,6 @@
     if (typeof registerCleanup === "function") {
       registerCleanup(() => {
         msgDebug("[messages] cleanup (leave page)");
-        _messagesInitSeq += 1;
         resetMessagesPageState();
       }, { persistent: true });
     }
@@ -455,6 +451,12 @@
       dom.detailActions.appendChild(mkBtn(t("messages.delete"), "delete", "danger"));
     }
 
+    function finishLoadAttempt(requestId) {
+      if (!isCurrentRequest(state, initSeq, requestId)) return false;
+      state.loading = false;
+      return true;
+    }
+
     async function loadList(retryNotReady = true) {
       if (!isCurrentInit(state, initSeq)) return;
 
@@ -473,7 +475,7 @@
           signal: ctrl.signal,
         });
 
-        if (ctrl.signal.aborted || !isCurrentRequest(state, initSeq, requestId)) return;
+        if (!isCurrentRequest(state, initSeq, requestId)) return;
 
         if (!data || !data.ok) {
           const err = data?.error || "error_load";
@@ -488,12 +490,13 @@
             }
             return;
           }
-          showErrorList(err);
+          if (finishLoadAttempt(requestId)) showErrorList(err);
           return;
         }
 
+        if (!finishLoadAttempt(requestId)) return;
+
         state.messages = data.data?.messages || [];
-        state.loading = false;
         state.listLoaded = true;
         syncUnreadFromResponse(data);
         renderList();
@@ -515,14 +518,20 @@
           }
         }
       } catch (err) {
-        if (err?.name === "AbortError") return;
+        if (err?.name === "AbortError") {
+          if (isCurrentInit(state, initSeq) && !state.listLoaded && !state._loadRetryScheduled) {
+            state._loadRetryScheduled = true;
+            queueMicrotask(() => {
+              state._loadRetryScheduled = false;
+              if (isCurrentInit(state, initSeq) && !state.listLoaded) loadList(retryNotReady);
+            });
+          }
+          return;
+        }
         if (!isCurrentRequest(state, initSeq, requestId)) return;
-        showErrorList("error_load");
+        if (finishLoadAttempt(requestId)) showErrorList("error_load");
       } finally {
         if (state.listAbort === ctrl) state.listAbort = null;
-        if (isCurrentRequest(state, initSeq, requestId) && state.loading) {
-          state.loading = false;
-        }
       }
     }
 
@@ -609,7 +618,16 @@
     state.setDetailVisible = setDetailVisible;
 
     GC.messagesPageState = state;
-    loadList();
+
+    const startLoad = () => {
+      if (!isCurrentInit(state, initSeq)) return;
+      loadList();
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(startLoad);
+    } else {
+      queueMicrotask(startLoad);
+    }
   }
 
   GC.modules = GC.modules || {};

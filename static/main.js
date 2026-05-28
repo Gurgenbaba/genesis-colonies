@@ -584,11 +584,7 @@
     const mod = GC.modules[page];
     if (typeof mod === "function") {
       try {
-        if (page === "messages") {
-          mod();
-        } else {
-          mod();
-        }
+        mod();
       } catch (err) {
         console.error("[GC] page module error", page, err);
       }
@@ -615,10 +611,19 @@
     _authLoopAborted = false;
     _statusPollErrorLogged = false;
 
-    GC.refreshGameState("page_init");
-    GC.startProgressTicker();
-    if (typeof GC.initChat === "function") GC.initChat();
-    if (typeof GC.resumeChatPolling === "function") GC.resumeChatPolling();
+    const afterInit = () => {
+      GC.refreshGameState("page_init");
+      GC.startProgressTicker();
+      if (typeof GC.initChat === "function") GC.initChat();
+      if (typeof GC.resumeChatPolling === "function") GC.resumeChatPolling();
+    };
+
+    if (page === "messages") {
+      const runAfter = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (fn) => queueMicrotask(fn);
+      runAfter(afterInit);
+    } else {
+      afterInit();
+    }
   };
 
   function formatDuration(seconds) {
@@ -2774,7 +2779,7 @@
         _syncNavActive(url);
         if (push) history.pushState({ gcPjax: true }, "", url);
 
-        GC.initPage({ force: true });
+        await GC.initPage({ force: true });
       } catch (err) {
         if (err?.name === "AbortError") return;
         console.error("[GC] PJAX navigation failed:", err);

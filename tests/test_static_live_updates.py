@@ -36,7 +36,9 @@ def test_messages_js_initial_load_and_stale_request_guards():
     assert "isCurrentRequest(state, initSeq, requestId)" in src
     assert "showLoadingList" in src
     assert "showErrorList" in src
-    assert "loadList();" in src.split("GC.messagesPageState = state")[1]
+    assert "requestAnimationFrame(startLoad)" in src
+    assert "bypass GC.fetchJSON" in src
+    assert "await GC.fetchJSON" not in src
     assert "loadGen" not in src
 
 
