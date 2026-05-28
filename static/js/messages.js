@@ -4,6 +4,9 @@
 
   const GC = (window.GC = window.GC || {});
 
+  /** Monotonic page init counter – invalidates in-flight loads after re-init. */
+  let _messagesInitSeq = 0;
+
   function msgDebug(...args) {
     try {
       const dev =
@@ -47,6 +50,21 @@
     } catch (_) {
       return String(n);
     }
+  }
+
+  function getMessagesDom() {
+    const page = document.getElementById("messages-page");
+    if (!page) return null;
+    return {
+      page,
+      list: document.getElementById("messages-list"),
+      detail: document.getElementById("messages-detail"),
+      detailEmpty: document.getElementById("messages-detail-empty"),
+      detailSubject: document.getElementById("messages-detail-subject"),
+      detailMeta: document.getElementById("messages-detail-meta"),
+      detailBody: document.getElementById("messages-detail-body"),
+      detailActions: document.getElementById("messages-detail-actions"),
+    };
   }
 
   async function messagesApi(url, options = {}) {
@@ -150,6 +168,19 @@
     if (dlg?.open) dlg.close();
   }
 
+  function isCurrentInit(state, initSeq) {
+    return (
+      state === GC.messagesPageState &&
+      state?.initSeq === initSeq &&
+      initSeq === _messagesInitSeq &&
+      !!getMessagesDom()
+    );
+  }
+
+  function isCurrentRequest(state, initSeq, requestId) {
+    return isCurrentInit(state, initSeq) && state.requestSeq === requestId;
+  }
+
   function ensureMessagesState() {
     if (!document.getElementById("messages-page")) return null;
     if (!GC.messagesPageState) {
@@ -159,16 +190,19 @@
   }
 
   function resetMessagesPageState() {
-    if (GC.messagesPageState?.listAbort) {
+    const prev = GC.messagesPageState;
+    if (prev?.listAbort) {
       try {
-        GC.messagesPageState.listAbort.abort();
+        prev.listAbort.abort();
       } catch (_) {}
+      prev.listAbort = null;
     }
-    if (GC.messagesPageState) {
-      GC.messagesPageState.loadGen += 1;
-      GC.messagesPageState.unreadSyncedFromApi = false;
-      GC.messagesPageState = null;
+    if (prev) {
+      prev.requestSeq += 1;
+      prev.loading = false;
+      prev.unreadSyncedFromApi = false;
     }
+    GC.messagesPageState = null;
     closeCompose();
   }
 
@@ -180,6 +214,7 @@
     if (typeof registerCleanup === "function") {
       registerCleanup(() => {
         msgDebug("[messages] cleanup (leave page)");
+        _messagesInitSeq += 1;
         resetMessagesPageState();
       }, { persistent: true });
     }
@@ -205,7 +240,6 @@
       if (data?.ok) {
         if (composeStatus) composeStatus.textContent = t("messages.sent_success");
         closeCompose();
-        // Sent mail is stored in the recipient inbox only — refresh badges, not sender list.
         await refreshBadgesFromServer();
         return;
       }
@@ -225,8 +259,7 @@
         return;
       }
 
-      const onMessagesPage = document.getElementById("messages-page");
-      if (!onMessagesPage) return;
+      if (!document.getElementById("messages-page")) return;
 
       const state = ensureMessagesState();
       if (!state) return;
@@ -291,52 +324,74 @@
   function initMessagesPage(options) {
     bindMessagesUiOnce();
 
-    const page = document.getElementById("messages-page");
-    if (!page) {
+    if (!document.getElementById("messages-page")) {
       resetMessagesPageState();
       return;
     }
 
+    const initSeq = ++_messagesInitSeq;
     resetMessagesPageState();
 
-    msgDebug("[messages] init", { filter: readActiveFilterFromDom(), pjax: Boolean(options && options.pjax) });
-
-    const getDetailEl = () => document.getElementById("messages-detail");
-    const getDetailEmptyEl = () => document.getElementById("messages-detail-empty");
-    const getDetailSubject = () => document.getElementById("messages-detail-subject");
-    const getDetailMeta = () => document.getElementById("messages-detail-meta");
-    const getDetailBody = () => document.getElementById("messages-detail-body");
-    const getDetailActions = () => document.getElementById("messages-detail-actions");
+    const filter = readActiveFilterFromDom();
+    msgDebug("[messages] init", { initSeq, filter, pjax: Boolean(options && options.pjax) });
 
     const state = {
-      filter: readActiveFilterFromDom(),
+      initSeq,
+      filter,
       messages: [],
       selectedId: null,
-      loadGen: 0,
+      requestSeq: 0,
       listAbort: null,
       unreadSyncedFromApi: false,
+      loading: false,
       listLoaded: false,
     };
 
     function setDetailVisible(show) {
-      const detailEl = getDetailEl();
-      const detailEmptyEl = getDetailEmptyEl();
-      if (detailEl) detailEl.hidden = !show;
-      if (detailEmptyEl) detailEmptyEl.hidden = show;
+      const dom = getMessagesDom();
+      if (!dom) return;
+      if (dom.detail) dom.detail.hidden = !show;
+      if (dom.detailEmpty) dom.detailEmpty.hidden = show;
     }
 
     function showListMessage(html) {
-      const listEl = document.getElementById("messages-list");
-      if (listEl) listEl.innerHTML = html;
+      const dom = getMessagesDom();
+      if (!dom?.list) return;
+      dom.list.innerHTML = html;
+    }
+
+    function showLoadingList() {
+      state.loading = true;
+      state.listLoaded = false;
+      showListMessage(`<div class="gc-messages-empty">${esc(t("messages.loading"))}</div>`);
+    }
+
+    function showErrorList(errKey, withRetry = true) {
+      state.loading = false;
+      state.listLoaded = true;
+      const errLabel = esc(t(`messages.error_${errKey}`, t("messages.error_load")));
+      const retryBtn = withRetry
+        ? `<button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-messages-retry>` +
+          `${esc(t("messages.retry", "Erneut laden"))}</button>`
+        : "";
+      showListMessage(
+        `<div class="gc-messages-empty"><p>${errLabel}</p>${retryBtn}</div>`
+      );
+      const dom = getMessagesDom();
+      dom?.list?.querySelector("[data-messages-retry]")?.addEventListener("click", () => {
+        loadList();
+      });
     }
 
     function renderList() {
-      const listEl = document.getElementById("messages-list");
-      if (!listEl) return;
-      if (!state.listLoaded) {
+      const dom = getMessagesDom();
+      if (!dom?.list) return;
+
+      if (state.loading || !state.listLoaded) {
         showListMessage(`<div class="gc-messages-empty">${esc(t("messages.loading"))}</div>`);
         return;
       }
+
       if (!state.messages.length) {
         showListMessage(`<div class="gc-messages-empty">${esc(t("messages.empty"))}</div>`);
         state.selectedId = null;
@@ -344,7 +399,7 @@
         return;
       }
 
-      listEl.innerHTML = state.messages
+      dom.list.innerHTML = state.messages
         .map((m) => {
           const unread = !m.is_read;
           const active = state.selectedId === m.id ? " is-active" : "";
@@ -364,20 +419,18 @@
         setDetailVisible(false);
         return;
       }
+      const dom = getMessagesDom();
+      if (!dom) return;
       setDetailVisible(true);
-      const detailSubject = getDetailSubject();
-      const detailMeta = getDetailMeta();
-      const detailBody = getDetailBody();
-      const detailActions = getDetailActions();
-      if (detailSubject) detailSubject.textContent = msg.subject || "";
+      if (dom.detailSubject) dom.detailSubject.textContent = msg.subject || "";
       const sender = msg.sender_name || categoryLabel(msg.category);
-      if (detailMeta) {
-        detailMeta.textContent = `${sender} · ${categoryLabel(msg.category)} · ${formatTime(msg.created_at)}`;
+      if (dom.detailMeta) {
+        dom.detailMeta.textContent = `${sender} · ${categoryLabel(msg.category)} · ${formatTime(msg.created_at)}`;
       }
-      if (detailBody) detailBody.textContent = msg.body || "";
+      if (dom.detailBody) dom.detailBody.textContent = msg.body || "";
 
-      if (!detailActions) return;
-      detailActions.innerHTML = "";
+      if (!dom.detailActions) return;
+      dom.detailActions.innerHTML = "";
 
       const mkBtn = (label, action, variant = "outline") => {
         const b = document.createElement("button");
@@ -394,28 +447,22 @@
         return b;
       };
 
-      if (!msg.is_read) detailActions.appendChild(mkBtn(t("messages.read"), "read", "outline"));
+      if (!msg.is_read) dom.detailActions.appendChild(mkBtn(t("messages.read"), "read", "outline"));
       if (msg.reply_to_player_id || msg.sender_player_id) {
-        detailActions.appendChild(mkBtn(t("messages.reply"), "reply", "primary"));
+        dom.detailActions.appendChild(mkBtn(t("messages.reply"), "reply", "primary"));
       }
-      if (!msg.is_archived) detailActions.appendChild(mkBtn(t("messages.archive"), "archive", "outline"));
-      detailActions.appendChild(mkBtn(t("messages.delete"), "delete", "danger"));
-    }
-
-    function isActiveState(gen) {
-      return (
-        state === GC.messagesPageState &&
-        gen === state.loadGen &&
-        document.getElementById("messages-page")
-      );
+      if (!msg.is_archived) dom.detailActions.appendChild(mkBtn(t("messages.archive"), "archive", "outline"));
+      dom.detailActions.appendChild(mkBtn(t("messages.delete"), "delete", "danger"));
     }
 
     async function loadList(retryNotReady = true) {
-      const gen = ++state.loadGen;
+      if (!isCurrentInit(state, initSeq)) return;
+
+      const requestId = ++state.requestSeq;
       const ctrl = new AbortController();
       state.listAbort = ctrl;
 
-      showListMessage(`<div class="gc-messages-empty">${esc(t("messages.loading"))}</div>`);
+      showLoadingList();
 
       try {
         const params = new URLSearchParams({ limit: "50" });
@@ -426,33 +473,33 @@
           signal: ctrl.signal,
         });
 
-        if (ctrl.signal.aborted || !isActiveState(gen)) return;
+        if (ctrl.signal.aborted || !isCurrentRequest(state, initSeq, requestId)) return;
 
         if (!data || !data.ok) {
           const err = data?.error || "error_load";
-          if ((err === "messages_not_ready" || data?.status === 503) && retryNotReady && isActiveState(gen)) {
+          if (
+            (err === "messages_not_ready" || data?.status === 503) &&
+            retryNotReady &&
+            isCurrentRequest(state, initSeq, requestId)
+          ) {
             await new Promise((r) => setTimeout(r, 400));
-            if (isActiveState(gen)) return loadList(false);
+            if (isCurrentRequest(state, initSeq, requestId)) {
+              return loadList(false);
+            }
+            return;
           }
-          const errLabel = esc(t(`messages.error_${err}`, t("messages.error_load")));
-          showListMessage(
-            `<div class="gc-messages-empty">` +
-              `<p>${errLabel}</p>` +
-              `<button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-messages-retry>` +
-              `${esc(t("messages.retry", "Erneut laden"))}</button>` +
-              `</div>`
-          );
-          listEl?.querySelector("[data-messages-retry]")?.addEventListener("click", () => {
-            loadList();
-          });
+          showErrorList(err);
           return;
         }
 
         state.messages = data.data?.messages || [];
+        state.loading = false;
         state.listLoaded = true;
         syncUnreadFromResponse(data);
         renderList();
         msgDebug("[messages] inbox loaded", {
+          initSeq,
+          requestId,
           player_id: data.data?.player_id,
           count: state.messages.length,
           unread: data.data?.unread_count,
@@ -469,30 +516,31 @@
         }
       } catch (err) {
         if (err?.name === "AbortError") return;
-        if (!isActiveState(gen)) return;
-        showListMessage(`<div class="gc-messages-empty">${esc(t("messages.error_load"))}</div>`);
+        if (!isCurrentRequest(state, initSeq, requestId)) return;
+        showErrorList("error_load");
       } finally {
         if (state.listAbort === ctrl) state.listAbort = null;
+        if (isCurrentRequest(state, initSeq, requestId) && state.loading) {
+          state.loading = false;
+        }
       }
     }
 
     function showDetailError(key) {
       setDetailVisible(true);
-      const detailSubject = getDetailSubject();
-      const detailMeta = getDetailMeta();
-      const detailBody = getDetailBody();
-      const detailActions = getDetailActions();
-      if (detailSubject) detailSubject.textContent = t("messages.error_load", "Could not load message.");
-      if (detailMeta) detailMeta.textContent = "";
-      if (detailBody) {
-        detailBody.textContent = t(`messages.error_${key}`, t("messages.error_load"));
+      const dom = getMessagesDom();
+      if (!dom) return;
+      if (dom.detailSubject) dom.detailSubject.textContent = t("messages.error_load", "Could not load message.");
+      if (dom.detailMeta) dom.detailMeta.textContent = "";
+      if (dom.detailBody) {
+        dom.detailBody.textContent = t(`messages.error_${key}`, t("messages.error_load"));
       }
-      if (detailActions) detailActions.innerHTML = "";
+      if (dom.detailActions) dom.detailActions.innerHTML = "";
     }
 
     async function openMessage(id) {
       const data = await messagesApi(`/api/messages/${id}`);
-      if (state !== GC.messagesPageState || !document.getElementById("messages-page")) return;
+      if (!isCurrentInit(state, initSeq)) return;
       if (!data || !data.ok) {
         showDetailError(data?.error || "load");
         return;
@@ -551,10 +599,7 @@
         syncUnreadFromResponse(data);
         await loadList();
       } else {
-        const err = data?.error || "error_load";
-        showListMessage(
-          `<div class="gc-messages-empty">${esc(t(`messages.error_${err}`, t("messages.error_load")))}</div>`
-        );
+        showErrorList(data?.error || "error_load");
       }
     };
 
@@ -565,14 +610,6 @@
 
     GC.messagesPageState = state;
     loadList();
-    const retryLater = typeof GC.setSafeTimeout === "function" ? GC.setSafeTimeout : setTimeout;
-    retryLater(() => {
-      if (state !== GC.messagesPageState || !document.getElementById("messages-page")) return;
-      if (state.listLoaded || state.messages.length > 0 || state.unreadSyncedFromApi) return;
-      const listNode = document.getElementById("messages-list");
-      const loading = (listNode?.textContent || "").includes(t("messages.loading"));
-      if (loading) loadList(false);
-    }, 2500);
   }
 
   GC.modules = GC.modules || {};
@@ -580,17 +617,6 @@
   GC.initMessagesPage = initMessagesPage;
   GC.openMessagesCompose = openCompose;
   GC.ensureMessagesState = ensureMessagesState;
+
   bindMessagesUiOnce();
-
-  function bootMessagesIfPresent() {
-    if (document.getElementById("messages-page")) {
-      initMessagesPage();
-    }
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", bootMessagesIfPresent);
-  } else {
-    bootMessagesIfPresent();
-  }
 })();

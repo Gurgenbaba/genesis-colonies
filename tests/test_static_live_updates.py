@@ -20,9 +20,32 @@ def test_messages_js_always_reinits_and_persistent_cleanup():
     assert "persistent: true" in src
     assert "listLoaded" in src
     assert "readActiveFilterFromDom" in src
-    assert "getElementById(\"messages-list\")" in src
+    assert "getMessagesDom" in src
     assert "GC.messagesPageState && !force" not in src
     assert "resetMessagesPageState" in src
+    assert "_messagesInitSeq" in src
+    assert "requestSeq" in src
+    assert "isCurrentRequest" in src
+    assert "bootMessagesIfPresent" not in src
+
+
+def test_messages_js_initial_load_and_stale_request_guards():
+    src = _read("static/js/messages.js")
+    assert "state.loading = true" in src
+    assert "state.listLoaded = true" in src
+    assert "isCurrentRequest(state, initSeq, requestId)" in src
+    assert "showLoadingList" in src
+    assert "showErrorList" in src
+    assert "loadList();" in src.split("GC.messagesPageState = state")[1]
+    assert "loadGen" not in src
+
+
+def test_messages_js_tab_and_initial_share_load_list():
+    src = _read("static/js/messages.js")
+    assert "state.loadList = loadList" in src
+    assert "state.loadList?.()" in src
+    tab_section = src.split("tabBtn.dataset.filter")[1][:400]
+    assert "loadList" in tab_section
 
 
 def test_messages_js_debug_gated():
