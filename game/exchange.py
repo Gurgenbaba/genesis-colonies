@@ -16,7 +16,7 @@ _EXCHANGE_SETTING_DEFAULTS = {
     "exchange_enabled": "1",
     "exchange_rate_metal_to_crystal": "0.8",
     "exchange_rate_crystal_to_metal": "0.8",
-    "exchange_daily_limit": "50000",
+    "exchange_daily_limit": "500000000",
     "exchange_min_amount": "100",
 }
 
