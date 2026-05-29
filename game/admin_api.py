@@ -933,3 +933,40 @@ def get_audit_log(filters: Dict[str, Any]) -> Dict[str, Any]:
         offset=int(filters.get("offset") or 0),
     )
     return _ok(entries=rows)
+
+
+# ---------------------------------------------------------------------------
+# Balance settings (Admin → Balance tab)
+# ---------------------------------------------------------------------------
+
+def api_get_balance_settings() -> Dict[str, Any]:
+    from game.admin_balance import get_balance_settings
+
+    return _ok(settings=get_balance_settings())
+
+
+def api_save_balance_settings(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.admin_balance import save_balance_settings
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+
+    settings, err = save_balance_settings(body)
+    if err:
+        return _err("invalid_settings", err)
+
+    audit(
+        int(admin_id),
+        "balance_settings_save",
+        target_type="system",
+        payload={"keys": sorted(body.keys())},
+    )
+    return _ok(settings=settings)
+
+
+def api_apply_balance_preset_b(admin_id: int) -> Dict[str, Any]:
+    from game.admin_balance import apply_preset_b
+
+    settings = apply_preset_b()
+    audit(int(admin_id), "balance_preset_b", target_type="system")
+    return _ok(settings=settings)

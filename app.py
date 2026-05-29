@@ -1018,6 +1018,24 @@ def api_admin_recalculate_rankings():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@app.route("/api/admin/balance", methods=["GET"])
+@require_admin_api
+def api_admin_balance_get():
+    return _admin_json(admin_api_logic.api_get_balance_settings())
+
+
+@app.route("/api/admin/balance", methods=["POST"])
+@require_admin_api
+def api_admin_balance_save():
+    return _admin_json(admin_api_logic.api_save_balance_settings(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/balance/preset-b", methods=["POST"])
+@require_admin_api
+def api_admin_balance_preset_b():
+    return _admin_json(admin_api_logic.api_apply_balance_preset_b(_admin_actor_id()))
+
+
 # --------------------------------------------------------------------------
 # PLAYER CARD (global profile popup)
 # --------------------------------------------------------------------------

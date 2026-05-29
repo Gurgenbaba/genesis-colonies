@@ -108,6 +108,7 @@
       <button type="button" class="admin-tab-btn" data-admin-tab="support" role="tab">{{ T("admin_support_title", "Support") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="messages" role="tab">{{ T("admin_messages_title", "Nachrichten") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="runtime" role="tab">{{ T("admin_runtime_title") }}</button>
+      <button type="button" class="admin-tab-btn" data-admin-tab="balance" role="tab">{{ T("admin_balance_title", "Balance") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="settings" role="tab">{{ T("admin_settings_title") }}</button>
     </nav>
 
@@ -316,6 +317,119 @@
       </div>
       <div id="admin-queue-tick-result" class="admin-small-hint" aria-live="polite"></div>
       <div id="admin-runtime-output" class="admin-panel-body"></div>
+    </section>
+
+    <section id="admin-tab-balance" class="admin-panel admin-tab-panel" data-admin-panel="balance" role="tabpanel" hidden>
+      <div class="admin-action-row admin-action-row-wrap">
+        <h2 class="admin-panel-title">{{ T("admin_balance_title", "Balance") }}</h2>
+        <div class="admin-action-row">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="balance-save">{{ T("admin_balance_btn_save", "Speichern") }}</button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="balance-preset-b">{{ T("admin_balance_btn_preset_b", "Preset B anwenden") }}</button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="balance-recalculate">{{ T("admin_balance_btn_recalc", "Ranking neu berechnen") }}</button>
+        </div>
+      </div>
+      <p class="admin-small-hint">{{ T("admin_balance_hint", "Pacing, Queues, Score-Gewichte und Tauschhub — nur whitelisted Keys.") }}</p>
+      <div id="admin-balance-status" class="admin-small-hint" aria-live="polite"></div>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_balance_section_start", "Startressourcen") }}</span>
+      </div>
+      <section class="admin-section">
+        <div class="admin-form-grid-2">
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-start-metal">{{ T("admin_label_start_metal", "Start-Ferronit") }}</label>
+            <input class="admin-input" id="admin-balance-start-metal" type="number" min="0" step="1" data-balance-key="start_metal">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-start-crystal">{{ T("admin_label_start_crystal", "Start-Crytite") }}</label>
+            <input class="admin-input" id="admin-balance-start-crystal" type="number" min="0" step="1" data-balance-key="start_crystal">
+          </div>
+        </div>
+      </section>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_balance_section_speed", "Geschwindigkeiten") }}</span>
+      </div>
+      <section class="admin-section">
+        <div class="admin-form-grid-3">
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-production-speed">{{ T("admin_label_production_speed", "Produktion") }}</label>
+            <input class="admin-input" id="admin-balance-production-speed" type="number" min="0.01" step="0.01" data-balance-key="production_speed">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-build-speed">{{ T("admin_label_build_speed", "Bau") }}</label>
+            <input class="admin-input" id="admin-balance-build-speed" type="number" min="0.01" step="0.01" data-balance-key="build_speed">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-research-speed">{{ T("admin_label_research_speed", "Forschung") }}</label>
+            <input class="admin-input" id="admin-balance-research-speed" type="number" min="0.01" step="0.01" data-balance-key="research_speed">
+          </div>
+        </div>
+      </section>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_balance_section_queues", "Warteschlangen") }}</span>
+      </div>
+      <section class="admin-section">
+        <div class="admin-form-grid-2">
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-queue-limit">{{ T("admin_label_queue_limit", "Bau-Queue") }}</label>
+            <input class="admin-input" id="admin-balance-queue-limit" type="number" min="1" step="1" data-balance-key="queue_limit">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-research-queue-limit">{{ T("admin_label_research_queue_limit", "Forschungs-Queue") }}</label>
+            <input class="admin-input" id="admin-balance-research-queue-limit" type="number" min="1" step="1" data-balance-key="research_queue_limit">
+          </div>
+        </div>
+        <p class="admin-small-hint">{{ T("admin_balance_queue_note", "3. Forschungs-Slot ab research_lab Level 4 (Code-Regel).") }}</p>
+      </section>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_balance_section_scores", "Score-Gewichte") }}</span>
+      </div>
+      <section class="admin-section">
+        <div class="admin-form-grid-2">
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-score-buildings">{{ T("admin_balance_score_buildings", "Gebäude") }}</label>
+            <input class="admin-input" id="admin-balance-score-buildings" type="number" min="0" step="0.01" data-balance-key="score_weight_buildings">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-score-research">{{ T("admin_balance_score_research", "Forschung") }}</label>
+            <input class="admin-input" id="admin-balance-score-research" type="number" min="0" step="0.01" data-balance-key="score_weight_research">
+          </div>
+        </div>
+      </section>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_balance_section_exchange", "Tauschhub") }}</span>
+      </div>
+      <section class="admin-section">
+        <div class="admin-form-grid-2">
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-exchange-enabled">{{ T("admin_balance_exchange_enabled", "Aktiv") }}</label>
+            <select class="admin-input" id="admin-balance-exchange-enabled" data-balance-key="exchange_enabled">
+              <option value="1">{{ T("admin_yes", "Ja") }}</option>
+              <option value="0">{{ T("admin_no", "Nein") }}</option>
+            </select>
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-exchange-min">{{ T("admin_balance_exchange_min", "Mindestmenge") }}</label>
+            <input class="admin-input" id="admin-balance-exchange-min" type="number" min="0" step="1" data-balance-key="exchange_min_amount">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-exchange-daily">{{ T("admin_balance_exchange_daily", "Tageslimit") }}</label>
+            <input class="admin-input" id="admin-balance-exchange-daily" type="number" min="0" step="1" data-balance-key="exchange_daily_limit">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-rate-m2c">{{ T("exchange_rate_metal_to_crystal", "Ferronit → Crytite") }}</label>
+            <input class="admin-input" id="admin-balance-rate-m2c" type="number" min="0.01" step="0.01" data-balance-key="exchange_rate_metal_to_crystal">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-rate-c2m">{{ T("exchange_rate_crystal_to_metal", "Crytite → Ferronit") }}</label>
+            <input class="admin-input" id="admin-balance-rate-c2m" type="number" min="0.01" step="0.01" data-balance-key="exchange_rate_crystal_to_metal">
+          </div>
+        </div>
+      </section>
     </section>
 
     <section id="admin-tab-settings" class="admin-panel admin-tab-panel" data-admin-panel="settings" role="tabpanel" hidden>

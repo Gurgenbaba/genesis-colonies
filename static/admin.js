@@ -207,9 +207,92 @@
         return loadAdminMessages();
       case "runtime":
         return loadAdminRuntime();
+      case "balance":
+        return loadAdminBalance();
       default:
         return null;
     }
+  }
+
+  function balanceFieldElements() {
+    return qsa("[data-balance-key]");
+  }
+
+  function populateBalanceForm(settings) {
+    balanceFieldElements().forEach((el) => {
+      const key = el.dataset.balanceKey;
+      if (!key || settings[key] === undefined || settings[key] === null) return;
+      if (el.tagName === "SELECT") {
+        el.value = settings[key] ? "1" : "0";
+      } else {
+        el.value = settings[key];
+      }
+    });
+  }
+
+  function collectBalancePayload() {
+    const payload = {};
+    balanceFieldElements().forEach((el) => {
+      const key = el.dataset.balanceKey;
+      if (!key) return;
+      payload[key] = el.value;
+    });
+    return payload;
+  }
+
+  function setBalanceStatus(msg) {
+    const host = qs("#admin-balance-status");
+    if (host) host.textContent = msg || "";
+  }
+
+  async function loadAdminBalance() {
+    setBalanceStatus("");
+    const data = await adminGet("/api/admin/balance");
+    if (!data.ok) {
+      showAlert(data.message || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      return data;
+    }
+    populateBalanceForm(data.settings || {});
+    return data;
+  }
+
+  async function saveAdminBalance() {
+    const payload = collectBalancePayload();
+    const res = await adminPost("/api/admin/balance", payload);
+    if (res.ok) {
+      populateBalanceForm(res.settings || {});
+      notify(t("admin_balance_saved", "Balance-Einstellungen gespeichert."), "success");
+      setBalanceStatus(t("admin_balance_saved", "Balance-Einstellungen gespeichert."));
+    } else {
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+    }
+    return res;
+  }
+
+  async function applyBalancePresetB() {
+    const res = await adminPost("/api/admin/balance/preset-b", {});
+    if (res.ok) {
+      populateBalanceForm(res.settings || {});
+      notify(t("admin_balance_preset_applied", "Preset B angewendet."), "success");
+      setBalanceStatus(t("admin_balance_preset_applied", "Preset B angewendet."));
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  async function recalculateAdminRankings() {
+    const res = await adminPost("/api/admin/rankings/recalculate", {});
+    if (res.ok) {
+      const n = res.players_updated ?? 0;
+      notify(t("admin_balance_recalc_ok", "Ranking neu berechnet.") + ` (${n})`, "success");
+      setBalanceStatus(
+        `${t("admin_balance_recalc_ok", "Ranking neu berechnet.")} — ${n} ${t("admin_balance_players", "Spieler")}`
+      );
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
   }
 
   async function loadAdminHealth() {
@@ -1078,6 +1161,9 @@
       return res;
     }
     if (act === "refresh-runtime") return loadAdminRuntime();
+    if (act === "balance-save") return saveAdminBalance();
+    if (act === "balance-preset-b") return applyBalancePresetB();
+    if (act === "balance-recalculate") return recalculateAdminRankings();
     if (act === "run-queue-tick") return runQueueTick(btn);
     if (act === "queue-cancel") return cancelQueueJob(btn.dataset.queueType, btn.dataset.jobId);
     if (act === "queue-clear") return clearQueues();
