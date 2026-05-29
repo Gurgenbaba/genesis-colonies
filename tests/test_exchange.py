@@ -53,7 +53,7 @@ def test_exchange_config_defaults(exchange_db):
     assert cfg["enabled"] is True
     assert cfg["rate_metal_to_crystal"] == 0.8
     assert cfg["rate_crystal_to_metal"] == 0.8
-    assert cfg["daily_limit"] == 50000
+    assert cfg["daily_limit"] == 500000000
     assert cfg["min_amount"] == 100
 
 
@@ -128,6 +128,9 @@ def test_exchange_daily_limit(exchange_db):
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     cur = conn.cursor()
+    cur.execute(
+        "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('exchange_daily_limit', '50000');"
+    )
     cur.execute("UPDATE planets SET metal = 200000, crystal = 0 WHERE id = ?;", (pid,))
     conn.commit()
 

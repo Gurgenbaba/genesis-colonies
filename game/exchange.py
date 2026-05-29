@@ -48,7 +48,7 @@ def get_exchange_config(conn=None) -> Dict[str, Any]:
             "enabled": enabled,
             "rate_metal_to_crystal": _float_setting(settings, "exchange_rate_metal_to_crystal", "0.8"),
             "rate_crystal_to_metal": _float_setting(settings, "exchange_rate_crystal_to_metal", "0.8"),
-            "daily_limit": _int_setting(settings, "exchange_daily_limit", "50000"),
+            "daily_limit": _int_setting(settings, "exchange_daily_limit", "500000000"),
             "min_amount": _int_setting(settings, "exchange_min_amount", "100"),
         }
     finally:
