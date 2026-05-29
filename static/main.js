@@ -1025,7 +1025,14 @@
     patchOverviewTable(overview, buildings, prod);
 
     if (status?.planet?.name && typeof GC.applyOverviewPlanetName === "function") {
-      GC.applyOverviewPlanetName(status.planet.name);
+      const planetModal = document.getElementById("gc-planet-manage-root");
+      const renameInput = document.getElementById("overview-planet-rename-input");
+      const editingPlanetName =
+        (planetModal && !planetModal.hidden) ||
+        (renameInput && document.activeElement === renameInput);
+      if (!editingPlanetName) {
+        GC.applyOverviewPlanetName(status.planet.name);
+      }
     }
 
     const actList = document.getElementById("overview-activities");
@@ -2294,19 +2301,27 @@
 
   function initOverview() {
     const trigger = document.getElementById("overview-planet-menu-trigger");
-    const menu = document.getElementById("overview-planet-menu");
+    const modal = document.getElementById("gc-planet-manage-root");
     const renameForm = document.getElementById("overview-planet-rename-form");
     const deleteBtn = document.getElementById("overview-planet-delete-btn");
-    if (!trigger || !menu) return;
+    const deleteHint = document.getElementById("overview-planet-delete-hint");
+    if (!trigger || !modal) return;
 
-    const hintEl = menu.querySelector(".overview-planet-form-hint");
-    const nameInput = renameForm && renameForm.querySelector('[name="planet_name"]');
+    const hintEl = modal.querySelector("[data-planet-form-msg]");
+    const nameInput = document.getElementById("overview-planet-rename-input");
+
+    function isPlanetManageModalOpen() {
+      return modal && !modal.hidden;
+    }
 
     function setPlanetNameDisplay(name) {
       const label = String(name || "").trim();
       const nameEl = document.getElementById("overview-planet-name");
       if (nameEl) nameEl.textContent = label;
-      if (nameInput) nameInput.value = label;
+      const inputActive =
+        nameInput &&
+        (isPlanetManageModalOpen() || document.activeElement === nameInput);
+      if (nameInput && !inputActive) nameInput.value = label;
       ["build-queue-planet-label", "research-planet-label"].forEach((id) => {
         const chip = document.getElementById(id);
         if (!chip) return;
@@ -2314,14 +2329,41 @@
       });
     }
 
-    function setMenuOpen(open) {
-      trigger.setAttribute("aria-expanded", open ? "true" : "false");
-      if (open) {
-        menu.hidden = false;
-        menu.removeAttribute("hidden");
-      } else {
-        menu.hidden = true;
+    function syncDeleteState() {
+      const canDelete = trigger.getAttribute("data-can-delete") === "1";
+      if (deleteBtn) {
+        deleteBtn.disabled = !canDelete;
+        deleteBtn.setAttribute("aria-disabled", canDelete ? "false" : "true");
       }
+      if (deleteHint) deleteHint.hidden = canDelete;
+    }
+
+    function openPlanetManageModal() {
+      const currentName = document.getElementById("overview-planet-name");
+      if (nameInput && currentName) nameInput.value = (currentName.textContent || "").trim();
+      syncDeleteState();
+      if (hintEl) {
+        hintEl.textContent = "";
+        hintEl.hidden = true;
+      }
+      modal.hidden = false;
+      modal.setAttribute("aria-hidden", "false");
+      trigger.setAttribute("aria-expanded", "true");
+      document.body.classList.add("gc-planet-manage-open");
+      const closeBtn = modal.querySelector("[data-planet-close].gc-player-card-close");
+      if (nameInput) {
+        setTimeout(() => nameInput.focus(), 0);
+      } else if (closeBtn) {
+        closeBtn.focus({ preventScroll: true });
+      }
+    }
+
+    function closePlanetManageModal() {
+      modal.hidden = true;
+      modal.setAttribute("aria-hidden", "true");
+      trigger.setAttribute("aria-expanded", "false");
+      document.body.classList.remove("gc-planet-manage-open");
+      trigger.focus({ preventScroll: true });
     }
 
     function setHint(text, isError) {
@@ -2329,26 +2371,30 @@
       hintEl.textContent = text || "";
       hintEl.hidden = !text;
       hintEl.classList.toggle("gc-options-hint-error", Boolean(isError));
-      hintEl.classList.toggle("gc-options-hint-success", Boolean(text) && !isError);
+      hintEl.classList.toggle("is-error", Boolean(isError));
+      hintEl.classList.toggle("is-success", Boolean(text) && !isError);
     }
 
+    if (!modal.dataset.bound) {
+      modal.dataset.bound = "1";
+      modal.querySelectorAll("[data-planet-close]").forEach((el) => {
+        el.addEventListener("click", () => closePlanetManageModal());
+      });
+      document.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape" && !modal.hidden) closePlanetManageModal();
+      });
+    }
+
+    if (trigger.dataset.overviewPlanetBound) {
+      GC.applyOverviewPlanetName = setPlanetNameDisplay;
+      return;
+    }
+    trigger.dataset.overviewPlanetBound = "1";
+
     trigger.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const open = trigger.getAttribute("aria-expanded") === "true";
-      setMenuOpen(!open);
-      if (!open && nameInput) {
-        setTimeout(() => nameInput.focus(), 0);
-      }
-    });
-
-    document.addEventListener("click", (ev) => {
-      if (trigger.getAttribute("aria-expanded") !== "true") return;
-      if (menu.contains(ev.target) || trigger.contains(ev.target)) return;
-      setMenuOpen(false);
-    });
-
-    document.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape") setMenuOpen(false);
+      ev.preventDefault();
+      if (modal.hidden) openPlanetManageModal();
+      else closePlanetManageModal();
     });
 
     if (renameForm) {
@@ -2371,18 +2417,19 @@
             data.data &&
             (data.data.active_planet_name || data.data.planet_name || data.data.homeworld_name);
           if (saved) setPlanetNameDisplay(saved);
-          setHint(t("options_saved", "Gespeichert."), false);
+          setHint(t("playercard_save_success", "Gespeichert."), false);
           if (typeof GC.refreshGameState === "function") GC.refreshGameState("planet_rename");
-          setTimeout(() => setMenuOpen(false), 450);
+          setTimeout(() => closePlanetManageModal(), 450);
         } catch (err) {
           if (err && err.message === "auth") return;
-          setHint(t("options_error_invalid_name", "Speichern fehlgeschlagen."), true);
+          setHint(t("playercard_save_error", "Speichern fehlgeschlagen."), true);
         }
       });
     }
 
-    if (deleteBtn && !deleteBtn.disabled) {
+    if (deleteBtn) {
       deleteBtn.addEventListener("click", async () => {
+        if (deleteBtn.disabled) return;
         const confirmMsg = t(
           "overview_planet_delete_confirm",
           "Diese Kolonie unwiderruflich löschen?"
@@ -2398,15 +2445,15 @@
           });
           if (!data.ok) {
             setHint(t(data.error || "planet_error_delete_failed", "Löschen fehlgeschlagen."), true);
-            deleteBtn.disabled = false;
+            syncDeleteState();
             return;
           }
-          setMenuOpen(false);
+          closePlanetManageModal();
           window.location.href = "/overview";
         } catch (err) {
           if (err && err.message === "auth") return;
           setHint(t("planet_error_delete_failed", "Löschen fehlgeschlagen."), true);
-          deleteBtn.disabled = false;
+          syncDeleteState();
         }
       });
     }

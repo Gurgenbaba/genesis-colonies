@@ -1,0 +1,68 @@
+{# Planet rename/delete modal — same shell as PlayerCard #}
+<div id="gc-planet-manage-root"
+     class="gc-player-card-modal gc-planet-manage-modal"
+     hidden
+     aria-hidden="true">
+  <div class="gc-player-card-overlay" data-planet-close tabindex="-1"></div>
+  <div class="gc-player-card-dialog"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="gc-planet-manage-title"
+       data-theme="cyan">
+    <header class="gc-player-card-head">
+      <h2 id="gc-planet-manage-title" class="gc-player-card-head-title">
+        {{ T('overview_planet_manage', 'Kolonie verwalten') }}
+      </h2>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              data-planet-close
+              aria-label="{{ T('playercard_close', 'Schließen') }}">✕</button>
+    </header>
+    <div class="gc-player-card-body">
+      <div class="gc-player-card-content">
+        <form class="gc-player-card-form overview-planet-rename-form"
+              id="overview-planet-rename-form"
+              novalidate>
+          <div class="gc-player-card-fields">
+            <label class="gc-player-card-field">
+              <span class="gc-player-card-field-label">{{ T('overview_planet_rename', 'Planet umbenennen') }}</span>
+              <input type="text"
+                     class="gc-input"
+                     id="overview-planet-rename-input"
+                     name="planet_name"
+                     maxlength="32"
+                     required
+                     autocomplete="off"
+                     placeholder="{{ T('options_placeholder_planet_name', 'Neuer Kolonie-Name …') }}">
+            </label>
+          </div>
+          <div class="gc-player-card-form-actions">
+            <button type="button" class="gc-btn gc-btn-ghost" data-planet-close>
+              {{ T('playercard_cancel', 'Abbrechen') }}
+            </button>
+            <button type="submit" class="gc-btn gc-btn-primary">
+              {{ T('playercard_save', 'Speichern') }}
+            </button>
+          </div>
+          <p class="gc-player-card-form-msg overview-planet-form-hint"
+             data-planet-form-msg
+             hidden
+             role="status"></p>
+        </form>
+
+        <div class="overview-planet-delete-block" id="overview-planet-delete-block">
+          <button type="button"
+                  class="gc-btn gc-btn-danger gc-btn-sm overview-planet-delete-btn"
+                  id="overview-planet-delete-btn">
+            {{ T('overview_planet_delete', 'Planet löschen') }}
+          </button>
+          <p class="hint overview-planet-delete-hint"
+             id="overview-planet-delete-hint"
+             hidden>
+            {{ T('overview_planet_delete_homeworld', 'Die Homeworld kann nicht gelöscht werden.') }}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

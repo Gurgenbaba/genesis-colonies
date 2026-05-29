@@ -38,7 +38,7 @@
                   class="overview-hero-name-btn"
                   id="overview-planet-menu-trigger"
                   aria-expanded="false"
-                  aria-controls="overview-planet-menu"
+                  aria-controls="gc-planet-manage-root"
                   aria-haspopup="dialog"
                   aria-label="{{ T('overview_planet_manage', 'Kolonie verwalten') }}"
                   title="{{ T('overview_planet_manage', 'Kolonie verwalten') }}"
@@ -46,43 +46,6 @@
                   data-can-delete="{{ '1' if planet.can_delete else '0' }}">
             <span class="overview-hero-name" id="overview-planet-name">{{ planet.name or T('overview_label_planet', 'Kolonie') }}</span>
           </button>
-          <div class="overview-planet-menu gc-panel"
-               id="overview-planet-menu"
-               role="dialog"
-               aria-labelledby="overview-planet-menu-title"
-               hidden>
-            <div class="overview-planet-menu-head">
-              <span class="gc-panel-title" id="overview-planet-menu-title">{{ T('overview_planet_manage', 'Kolonie verwalten') }}</span>
-            </div>
-            <form class="overview-planet-rename-form" id="overview-planet-rename-form" novalidate>
-              <label class="overview-planet-field">
-                <span class="overview-planet-field-label">{{ T('overview_planet_rename', 'Planet umbenennen') }}</span>
-                <input type="text"
-                       class="gc-input"
-                       name="planet_name"
-                       maxlength="32"
-                       required
-                       autocomplete="off"
-                       value="{{ planet.name or '' }}"
-                       placeholder="{{ T('options_placeholder_planet_name', 'Neuer Kolonie-Name …') }}">
-              </label>
-              <div class="overview-planet-menu-actions">
-                <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm">{{ T('options_save', 'Speichern') }}</button>
-              </div>
-              <p class="overview-planet-form-hint hint" role="status" aria-live="polite" hidden></p>
-            </form>
-            <div class="overview-planet-delete-block">
-              <button type="button"
-                      class="gc-btn gc-btn-danger gc-btn-sm overview-planet-delete-btn"
-                      id="overview-planet-delete-btn"
-                      {% if not planet.can_delete %}disabled aria-disabled="true"{% endif %}>
-                {{ T('overview_planet_delete', 'Planet löschen') }}
-              </button>
-              {% if planet.is_homeworld %}
-              <p class="hint overview-planet-delete-hint">{{ T('overview_planet_delete_homeworld', 'Die Homeworld kann nicht gelöscht werden.') }}</p>
-              {% endif %}
-            </div>
-          </div>
         </div>
         <p class="overview-hero-coords gc-mono" id="overview-planet-coords">{{ planet.coordinates.display if planet.coordinates is defined else 'G1 · Sektor ? · Position ?' }}</p>
       </div>
