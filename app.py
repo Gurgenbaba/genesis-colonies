@@ -2442,7 +2442,12 @@ def api_planet_research_start(planet_id: int):
         cached = get_idempotent_action(user_id, request_id)
         if cached is not None:
             return jsonify(cached)
-    ok, reason, extra = queue_planet_research(planet_id, tech_key, request_id=request_id or None)
+    ok, reason, extra = queue_planet_research(
+        planet_id,
+        tech_key,
+        player_id=user_id,
+        request_id=request_id or None,
+    )
     resp = _action_json_response(ok, reason, payload=extra if not ok else None, job=extra if ok else None, finish_source="api_planet_research_start")
     if request_id:
         save_idempotent_action(user_id, request_id, resp.get_json())

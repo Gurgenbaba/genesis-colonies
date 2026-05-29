@@ -11,11 +11,14 @@ from ..models import get_game_settings
 from .constants import AFFINITY_KEYS
 from .definitions import get_traits
 
+# SQLite INTEGER is signed 64-bit; keep seeds in [0, 2^63-1].
+MAX_SQLITE_SIGNED_INT = (1 << 63) - 1
+
 
 def _stable_seed(*parts: Any, server_salt: str = "") -> int:
     raw = "|".join(str(p) for p in parts) + "|" + str(server_salt)
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-    return int(digest[:16], 16)
+    return int(digest[:16], 16) & MAX_SQLITE_SIGNED_INT
 
 
 def _class_for_seed(rng: random.Random) -> str:

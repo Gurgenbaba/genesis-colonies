@@ -218,7 +218,12 @@ def test_planet_evolution_research_isolated_per_planet(instancing_db):
     conn.close()
 
     conn = db()
-    ok, reason, _ = queue_planet_research(hw_id, "industry_t1_automation", conn=conn)
+    ok, reason, _ = queue_planet_research(
+        hw_id,
+        "industry_t1_automation",
+        player_id=player_id,
+        conn=conn,
+    )
     assert ok, reason
 
     hw_status = get_planet_research_status(hw_id, conn=conn)
@@ -227,6 +232,36 @@ def test_planet_evolution_research_isolated_per_planet(instancing_db):
 
     assert len(hw_status.get("queue") or []) >= 1
     assert (col_status.get("queue") or []) == []
+
+
+def test_queue_planet_research_rejects_foreign_owner(instancing_db):
+    owner_a, _ = _create_player()
+    owner_b, _ = _create_player()
+    planet_b = int(get_homeworld(player_id=owner_b)["id"])
+
+    conn = db()
+    conn.execute("UPDATE planets SET metal = 999999, crystal = 999999 WHERE id = ?;", (planet_b,))
+    conn.execute("UPDATE planet_buildings SET research_lab = 5 WHERE planet_id = ?;", (planet_b,))
+    ensure_planet_evolution(planet_b, conn)
+    conn.commit()
+    conn.close()
+
+    ok, reason, extra = queue_planet_research(
+        planet_b,
+        "industry_t1_automation",
+        player_id=owner_a,
+    )
+    assert not ok
+    assert reason == "not_owner"
+    assert extra is None
+
+    conn = db()
+    count = conn.execute(
+        "SELECT COUNT(*) AS c FROM planet_research_queue WHERE planet_id = ?;",
+        (planet_b,),
+    ).fetchone()["c"]
+    conn.close()
+    assert int(count) == 0
 
 
 def test_trade_routes_reject_foreign_planets(instancing_db):

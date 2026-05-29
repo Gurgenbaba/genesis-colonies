@@ -132,6 +132,7 @@ def queue_planet_research(
     planet_id: int,
     tech_key: str,
     *,
+    player_id: Optional[int] = None,
     request_id: Optional[str] = None,
     conn: Optional[sqlite3.Connection] = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
@@ -146,6 +147,10 @@ def queue_planet_research(
         if owner_id is None:
             rollback(conn)
             return False, "planet_not_found", None
+
+        if player_id is not None and int(owner_id) != int(player_id):
+            rollback(conn)
+            return False, "not_owner", None
 
         from ..queue_engine import finish_due_work
 

@@ -6,7 +6,7 @@ import pytest
 
 from game.models import db, create_user, ensure_player_and_homeworld, get_planets_by_player
 from game.planet_evolution.bootstrap import backfill_all_planets_evolution, ensure_planet_evolution
-from game.planet_evolution.dna import generate_planet_dna
+from game.planet_evolution.dna import MAX_SQLITE_SIGNED_INT, generate_planet_dna, _stable_seed
 from game.planet_evolution.definitions import reload_definitions
 from game.planet_evolution.repository import evolution_schema_ready, get_planet_dna, get_locked_choices
 from game.planet_evolution.planet_research import queue_planet_research, finish_planet_research_jobs
@@ -70,6 +70,44 @@ def test_dna_deterministic(evo_db):
     assert a["geology_traits"] == b["geology_traits"]
 
 
+def test_dna_seed_fits_sqlite_signed_integer(evo_db):
+    reload_definitions()
+    salts = ("genesis_colonies_v1", "alt_salt_probe", "")
+    for salt in salts:
+        for galaxy in range(1, 12):
+            for system in range(0, 600, 37):
+                for position in range(1, 10):
+                    seed = _stable_seed(galaxy, system, position, server_salt=salt)
+                    assert 0 <= seed <= MAX_SQLITE_SIGNED_INT
+                    dna = generate_planet_dna(
+                        galaxy=galaxy,
+                        system=system,
+                        position=position,
+                        server_salt=salt or None,
+                    )
+                    assert 0 <= int(dna["dna_seed"]) <= MAX_SQLITE_SIGNED_INT
+
+
+def test_colonize_planet_never_overflows_dna_seed(evo_db):
+    uid = _ensure_test_player(901, name="Colonist")
+    for attempt in range(8):
+        ok, reason, extra = colonize_planet(
+            uid,
+            name=f"Outpost_{attempt}",
+            galaxy=1,
+            system=100 + attempt,
+            position=1 + (attempt % 8),
+        )
+        assert ok is True, reason
+        conn = db()
+        row = conn.execute(
+            "SELECT dna_seed FROM planets WHERE id = ?;",
+            (int(extra["planet_id"]),),
+        ).fetchone()
+        conn.close()
+        assert 0 <= int(row["dna_seed"]) <= MAX_SQLITE_SIGNED_INT
+
+
 def test_homeworld_has_dna(evo_db):
     conn = db()
     uid = _ensure_test_player(42, conn=conn)
@@ -111,7 +149,12 @@ def test_planet_research_queue(evo_db):
     cur.execute("UPDATE planet_buildings SET research_lab = 5 WHERE planet_id = ?;", (pid,))
     conn.commit()
 
-    ok, reason, extra = queue_planet_research(pid, "industry_t1_automation", conn=conn)
+    ok, reason, extra = queue_planet_research(
+        pid,
+        "industry_t1_automation",
+        player_id=uid,
+        conn=conn,
+    )
     assert ok is True, reason
     assert extra and extra.get("job_id")
 
