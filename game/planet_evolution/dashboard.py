@@ -7,12 +7,13 @@ import time
 from typing import Any, Dict, List, Optional
 
 from ..models import get_planet_buildings
-from .constants import LEVEL_UNLOCKS, MAX_PLANET_LEVEL
+from .constants import LEVEL_UNLOCKS, MAX_PLANET_LEVEL, SPECIALIZATION_UNLOCK_LEVEL, IDENTITY_TEASER_MIN_LEVEL
 from .definitions import get_event, get_policy, get_policies as get_policy_definitions, get_research_def, get_trait
 from .specialization import list_specialization_options
 from .dna import all_trait_keys
 from .history import get_history
 from .planet_level import xp_threshold_for_level
+from .planet_research import compute_planet_research_cost, compute_planet_research_time
 from .repository import (
     get_discoveries,
     get_legacy_tags,
@@ -33,6 +34,7 @@ from .ux_copy import (
     level_unlock_label_key,
     planet_class_label_key,
     polarity_label_key,
+    trait_effect_lines,
 )
 
 
@@ -88,6 +90,7 @@ def _trait_cards(dna: Dict[str, Any], reveal: int) -> List[Dict[str, Any]]:
                 "key": key,
                 "label_key": f"trait_{key}",
                 "effect_key": f"trait_effect_{key}",
+                "effect_lines": trait_effect_lines(tdef),
                 "risk_key": risk_key,
                 "rarity": rarity,
                 "category": tdef.get("category") or "geology",
@@ -157,7 +160,99 @@ def _economy_flow(planet_id: int, mechanics: Dict[str, Any], conn: sqlite3.Conne
     return {"exports": exports, "chains": chains, "deficits": deficits}
 
 
-def _research_ux(research_status: Dict[str, Any], planet_level: int) -> Dict[str, Any]:
+def _enrich_research_card(
+    *,
+    tech: Dict[str, Any],
+    cfg: Dict[str, Any],
+    planet_id: int,
+    planet: Dict[str, Any],
+    planet_level: int,
+    queue_has_room: bool,
+    conn: sqlite3.Connection,
+) -> Dict[str, Any]:
+    tech_key = str(tech.get("tech_key") or "")
+    current = int(tech.get("level") or 0)
+    q_count = int(tech.get("queue_count") or 0)
+    max_level = int(tech.get("max_level") or 1)
+    target = current + q_count + 1
+
+    cost_m, cost_c = compute_planet_research_cost(tech_key, target)
+    duration_seconds = int(compute_planet_research_time(planet_id, tech_key, target, conn))
+
+    metal = float(planet.get("metal") or 0)
+    crystal = float(planet.get("crystal") or 0)
+    missing_resources: List[Dict[str, Any]] = []
+    if metal < cost_m:
+        missing_resources.append(
+            {
+                "resource_key": "metal",
+                "label_key": "resource_metal",
+                "have": int(metal),
+                "need": int(cost_m),
+                "deficit": int(cost_m - metal),
+            }
+        )
+    if crystal < cost_c:
+        missing_resources.append(
+            {
+                "resource_key": "crystal",
+                "label_key": "resource_crystal",
+                "have": int(crystal),
+                "need": int(cost_c),
+                "deficit": int(cost_c - crystal),
+            }
+        )
+    can_afford = not missing_resources
+
+    unavailable_reason_key: Optional[str] = None
+    can_start = False
+    if tech.get("is_active"):
+        unavailable_reason_key = "already_running"
+    elif not tech.get("requirements_met"):
+        unavailable_reason_key = "research_locked"
+    elif tech.get("choice_group") and not tech.get("choice_made"):
+        unavailable_reason_key = "choice_required"
+    elif target > max_level:
+        unavailable_reason_key = "max_level"
+    elif not queue_has_room:
+        unavailable_reason_key = "queue_full"
+    elif not can_afford:
+        unavailable_reason_key = "not_enough_resources"
+    else:
+        can_start = True
+
+    return {
+        "tech_key": tech_key,
+        "label_key": tech.get("label_key") or tech_key,
+        "unlock_key": tech.get("description_key") or cfg.get("description_key"),
+        "tier": tech.get("tier"),
+        "target_level": target,
+        "cost_metal": int(cost_m),
+        "cost_crystal": int(cost_c),
+        "duration_seconds": duration_seconds,
+        "can_afford": can_afford,
+        "can_start": can_start,
+        "missing_resources": missing_resources,
+        "unavailable_reason_key": unavailable_reason_key,
+        "requirements_met": bool(tech.get("requirements_met")),
+        "missing_human": humanize_requirements(
+            tech.get("missing_requirements") or [],
+            planet_level=planet_level,
+        ),
+        "choice_group": tech.get("choice_group"),
+        "choice_options": tech.get("choice_options"),
+        "choice_made": tech.get("choice_made"),
+    }
+
+
+def _research_ux(
+    research_status: Dict[str, Any],
+    planet_level: int,
+    *,
+    planet_id: int,
+    planet: Dict[str, Any],
+    conn: sqlite3.Connection,
+) -> Dict[str, Any]:
     now = time.time()
     queue = research_status.get("queue") or []
     techs = research_status.get("techs") or []
@@ -188,6 +283,7 @@ def _research_ux(research_status: Dict[str, Any], planet_level: int) -> Dict[str
 
     recommended: List[Dict[str, Any]] = []
     locked: List[Dict[str, Any]] = []
+    queue_has_room = queue_count < queue_limit
 
     for tech in techs:
         tech_key = str(tech.get("tech_key") or "")
@@ -197,20 +293,15 @@ def _research_ux(research_status: Dict[str, Any], planet_level: int) -> Dict[str
         if level >= max_level or tech.get("is_active"):
             continue
 
-        card = {
-            "tech_key": tech_key,
-            "label_key": tech.get("label_key") or tech_key,
-            "unlock_key": tech.get("description_key") or cfg.get("description_key"),
-            "tier": tech.get("tier"),
-            "requirements_met": bool(tech.get("requirements_met")),
-            "missing_human": humanize_requirements(
-                tech.get("missing_requirements") or [],
-                planet_level=planet_level,
-            ),
-            "choice_group": tech.get("choice_group"),
-            "choice_options": tech.get("choice_options"),
-            "choice_made": tech.get("choice_made"),
-        }
+        card = _enrich_research_card(
+            tech=tech,
+            cfg=cfg,
+            planet_id=planet_id,
+            planet=planet,
+            planet_level=planet_level,
+            queue_has_room=queue_has_room,
+            conn=conn,
+        )
 
         if tech.get("requirements_met") and len(recommended) < 3:
             recommended.append(card)
@@ -223,7 +314,7 @@ def _research_ux(research_status: Dict[str, Any], planet_level: int) -> Dict[str
         "locked": locked,
         "queue_count": queue_count,
         "queue_limit": queue_limit,
-        "queue_has_room": queue_count < queue_limit,
+        "queue_has_room": queue_has_room,
     }
 
 
@@ -324,95 +415,137 @@ def _next_action(
     warnings: List[Dict[str, Any]],
     mechanics: Dict[str, Any],
 ) -> Dict[str, Any]:
-    if active_event:
+    def _cta(
+        *,
+        priority: str,
+        title_key: str,
+        body_key: str,
+        cta_label_key: str,
+        cta_target: str,
+        cta_action: str = "focus",
+        cta_highlight: Optional[str] = None,
+        **extra: Any,
+    ) -> Dict[str, Any]:
         return {
-            "priority": "event",
-            "title_key": "pe_action_event_title",
-            "body_key": "pe_action_event_body",
-            "cta_label_key": "pe_action_event_cta",
-            "cta_target": "events",
-            "event_label_key": active_event.get("label_key"),
+            "priority": priority,
+            "title_key": title_key,
+            "body_key": body_key,
+            "cta_label_key": cta_label_key,
+            "cta_target": cta_target,
+            "cta_action": cta_action,
+            "cta_highlight": cta_highlight,
+            **extra,
         }
+
+    if active_event:
+        return _cta(
+            priority="event",
+            title_key="pe_action_event_title",
+            body_key="pe_action_event_body",
+            cta_label_key="pe_action_event_cta",
+            cta_target="events",
+            cta_action="focus_tab",
+            cta_highlight="pe-event-decision",
+            event_label_key=active_event.get("label_key"),
+        )
 
     if planet.get("failure_state"):
-        return {
-            "priority": "crisis",
-            "title_key": "pe_action_crisis_title",
-            "body_key": "pe_action_crisis_body",
-            "cta_label_key": "pe_action_crisis_cta",
-            "cta_target": "events",
-        }
+        return _cta(
+            priority="crisis",
+            title_key="pe_action_crisis_title",
+            body_key="pe_action_crisis_body",
+            cta_label_key="pe_action_crisis_cta",
+            cta_target="events",
+            cta_action="focus_tab",
+            cta_highlight="pe-event-decision",
+        )
 
-    if not planet.get("specialization_key") and level >= 8 and eligible_specs:
-        return {
-            "priority": "specialization",
-            "title_key": "pe_action_spec_title",
-            "body_key": "pe_action_spec_body",
-            "cta_label_key": "pe_action_spec_cta",
-            "cta_target": "specialization",
-        }
+    if not planet.get("specialization_key") and level >= SPECIALIZATION_UNLOCK_LEVEL and eligible_specs:
+        return _cta(
+            priority="specialization",
+            title_key="pe_action_spec_title",
+            body_key="pe_action_spec_body",
+            cta_label_key="pe_action_spec_cta",
+            cta_target="specialization",
+            cta_action="focus_section",
+            cta_highlight="pe-spec-picker",
+        )
 
-    if level < 8 and not planet.get("specialization_key"):
-        return {
-            "priority": "progression",
-            "title_key": "pe_action_spec_soon_title",
-            "body_key": "pe_action_spec_soon_body",
-            "cta_label_key": "pe_action_progression_cta",
-            "cta_target": "progression",
-            "unlock_level": 8,
-        }
+    if level < SPECIALIZATION_UNLOCK_LEVEL and not planet.get("specialization_key"):
+        return _cta(
+            priority="progression",
+            title_key="pe_action_spec_soon_title",
+            body_key="pe_action_spec_soon_body",
+            cta_label_key="pe_action_progression_cta",
+            cta_target="progression",
+            cta_action="focus_section",
+            cta_highlight="pe-section-progression",
+            unlock_level=SPECIALIZATION_UNLOCK_LEVEL,
+        )
 
     rec = research_ux.get("recommended") or []
     if rec and research_ux.get("queue_has_room"):
         first = rec[0]
-        return {
-            "priority": "research",
-            "title_key": "pe_action_research_title",
-            "body_key": "pe_action_research_body",
-            "cta_label_key": "pe_action_research_cta",
-            "cta_target": "research",
-            "tech_key": first.get("tech_key"),
-            "tech_label_key": first.get("label_key"),
-        }
+        tech_key = str(first.get("tech_key") or "")
+        return _cta(
+            priority="research",
+            title_key="pe_action_research_title",
+            body_key="pe_action_research_body",
+            cta_label_key="pe_action_research_cta",
+            cta_target="research",
+            cta_action="focus_tab",
+            cta_highlight=f"pe-research-card-{tech_key}" if tech_key else "pe-section-research",
+            tech_key=tech_key,
+            tech_label_key=first.get("label_key"),
+        )
 
     if research_ux.get("active"):
         job = research_ux["active"][0]
-        return {
-            "priority": "research_running",
-            "title_key": "pe_action_research_running_title",
-            "body_key": "pe_action_research_running_body",
-            "cta_label_key": "pe_action_research_running_cta",
-            "cta_target": "research",
-            "tech_label_key": job.get("label_key"),
-            "progress_pct": job.get("progress_pct"),
-        }
+        tech_key = str(job.get("tech_key") or "")
+        return _cta(
+            priority="research_running",
+            title_key="pe_action_research_running_title",
+            body_key="pe_action_research_running_body",
+            cta_label_key="pe_action_research_running_cta",
+            cta_target="research",
+            cta_action="focus_tab",
+            cta_highlight="pe-planet-research-active",
+            tech_label_key=job.get("label_key"),
+            progress_pct=job.get("progress_pct"),
+        )
 
     deficits = mechanics.get("import_deficits") or []
     if deficits:
-        return {
-            "priority": "economy",
-            "title_key": "pe_action_economy_title",
-            "body_key": "pe_action_economy_body",
-            "cta_label_key": "pe_action_economy_cta",
-            "cta_target": "economy",
-        }
+        return _cta(
+            priority="economy",
+            title_key="pe_action_economy_title",
+            body_key="pe_action_economy_body",
+            cta_label_key="pe_action_economy_cta",
+            cta_target="economy",
+            cta_action="focus_section",
+            cta_highlight="pe-section-economy",
+        )
 
     if any(w.get("key") == "stability" for w in warnings):
-        return {
-            "priority": "stability",
-            "title_key": "pe_action_stability_title",
-            "body_key": "pe_action_stability_body",
-            "cta_label_key": "pe_action_stability_cta",
-            "cta_target": "policies",
-        }
+        return _cta(
+            priority="stability",
+            title_key="pe_action_stability_title",
+            body_key="pe_action_stability_body",
+            cta_label_key="pe_action_stability_cta",
+            cta_target="policies",
+            cta_action="focus_tab",
+            cta_highlight="pe-section-policies",
+        )
 
-    return {
-        "priority": "explore",
-        "title_key": "pe_action_explore_title",
-        "body_key": "pe_action_explore_body",
-        "cta_label_key": "pe_action_explore_cta",
-        "cta_target": "traits",
-    }
+    return _cta(
+        priority="explore",
+        title_key="pe_action_explore_title",
+        body_key="pe_action_explore_body",
+        cta_label_key="pe_action_explore_cta",
+        cta_target="traits",
+        cta_action="focus_section",
+        cta_highlight="pe-section-traits",
+    )
 
 
 def _events_feed(planet_id: int, conn: sqlite3.Connection) -> List[Dict[str, Any]]:
@@ -527,6 +660,78 @@ def _policy_ux(
     }
 
 
+def build_identity_teaser(
+    *,
+    planet: Dict[str, Any],
+    eligible_specs: List[str],
+    xp_pct: int = 0,
+    planet_score: int = 0,
+) -> Dict[str, Any]:
+    """Compact identity progress payload for Overview widget and PE banners."""
+    level = int(planet.get("planet_level") or 1)
+    spec_key = planet.get("specialization_key")
+    spec_tier = int(planet.get("specialization_tier") or 0)
+    unlock = SPECIALIZATION_UNLOCK_LEVEL
+
+    if not spec_key and level < IDENTITY_TEASER_MIN_LEVEL:
+        return {"visible": False}
+
+    if spec_key:
+        status = "active"
+        title_key = "pe_identity_teaser_active_title"
+        body_key = "pe_identity_teaser_active_body"
+        cta_label_key = "pe_identity_teaser_view_cta"
+    elif level >= unlock:
+        if eligible_specs:
+            status = "ready"
+            title_key = "pe_identity_teaser_ready_title"
+            body_key = "pe_identity_teaser_ready_body"
+            cta_label_key = "pe_identity_teaser_pick_cta"
+        else:
+            status = "waiting"
+            title_key = "pe_identity_teaser_waiting_title"
+            body_key = "pe_identity_teaser_waiting_body"
+            cta_label_key = "pe_identity_teaser_view_cta"
+    else:
+        status = "countdown"
+        title_key = "pe_identity_teaser_countdown_title"
+        body_key = "pe_identity_teaser_countdown_body"
+        cta_label_key = "pe_identity_teaser_view_cta"
+
+    levels_remaining = max(0, unlock - level)
+    progress_to_unlock_pct = min(100, int(round(100.0 * level / max(1, unlock)))) if level < unlock else 100
+
+    next_unlock_level = None
+    next_unlock_label_key = None
+    for unlock_level in sorted(LEVEL_UNLOCKS.keys()):
+        if unlock_level <= level:
+            continue
+        next_unlock_level = unlock_level
+        next_unlock_label_key = level_unlock_label_key(unlock_level, LEVEL_UNLOCKS[unlock_level])
+        break
+
+    return {
+        "visible": True,
+        "status": status,
+        "title_key": title_key,
+        "body_key": body_key,
+        "cta_label_key": cta_label_key,
+        "planet_level": level,
+        "max_level": MAX_PLANET_LEVEL,
+        "unlock_level": unlock,
+        "levels_remaining": levels_remaining,
+        "progress_to_unlock_pct": progress_to_unlock_pct,
+        "xp_pct": int(xp_pct),
+        "planet_score": int(planet_score),
+        "spec_key": spec_key,
+        "spec_label_key": f"spec_{spec_key}" if spec_key else None,
+        "spec_tier": spec_tier,
+        "eligible_count": len(eligible_specs or []),
+        "next_unlock_level": next_unlock_level,
+        "next_unlock_label_key": next_unlock_label_key,
+    }
+
+
 def build_dashboard_extras(
     planet_id: int,
     *,
@@ -549,7 +754,7 @@ def build_dashboard_extras(
     rarity = str(dna.get("rarity_tier") or "common")
 
     eligible = list(eligible_specializations or [])
-    research_ux = _research_ux(research, level)
+    research_ux = _research_ux(research, level, planet_id=planet_id, planet=planet, conn=conn)
     warnings = _warnings(planet, culture, mechanics, active_event)
     status = _planet_status(planet, culture, warnings)
     economy = _economy_flow(planet_id, mechanics, conn)
@@ -612,4 +817,10 @@ def build_dashboard_extras(
         "events_feed": _events_feed(planet_id, conn),
         "open_events_count": open_events,
         "history": get_history(planet_id, limit=20, conn=conn),
+        "identity_teaser": build_identity_teaser(
+            planet=planet,
+            eligible_specs=eligible,
+            xp_pct=_pct(xp_in_level, xp_span),
+            planet_score=compute_single_planet_score(planet_id, conn=conn),
+        ),
     }

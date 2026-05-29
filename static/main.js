@@ -446,6 +446,7 @@
     if (path.endsWith("/buildings")) return "buildings";
     if (path.endsWith("/research")) return "research";
     if (path.endsWith("/planet-evolution")) return "planet_evolution";
+    if (path.endsWith("/trader-hub")) return "trader_hub";
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
     if (path.endsWith("/messages")) return "messages";
@@ -468,6 +469,16 @@
 
   function hydratePageFromLastState(opts) {
     if (!GC.lastState || GC.lastState.ok !== true) return false;
+    const queueRoot = document.getElementById("build-queue-root");
+    if (queueRoot && queueRoot.dataset.planetId) {
+      const domPlanetId = Number(queueRoot.dataset.planetId || 0);
+      const statePlanetId = Number(
+        GC.lastState.active_planet_id || GC.lastState.build_queue?.planet_id || 0
+      );
+      if (domPlanetId > 0 && statePlanetId > 0 && domPlanetId !== statePlanetId) {
+        return false;
+      }
+    }
     try {
       applyGameStateData(GC.lastState, "page_hydrate", opts);
       GC.startProgressTicker();
@@ -668,7 +679,14 @@
 
   function mapActionError(reason, payload) {
     if (reason === "not_enough_resources" && payload) {
-      const [m, c] = Array.isArray(payload) ? payload : [payload?.metal, payload?.crystal];
+      let m = 0;
+      let c = 0;
+      if (Array.isArray(payload)) {
+        [m, c] = payload;
+      } else if (payload && typeof payload === "object") {
+        m = payload.metal ?? payload.deficit_metal ?? payload.cost_metal ?? 0;
+        c = payload.crystal ?? payload.deficit_crystal ?? payload.cost_crystal ?? 0;
+      }
       return tf("msg_upgrade_fail_resources", { metal: m, crystal: c }, "Nicht genug Ressourcen.");
     }
     const map = {
@@ -716,9 +734,17 @@
   function applyResearchRowState(row, tech) {
     if (!row || !tech) return;
     const locked = !tech.requirements_met;
-    row.classList.remove("gc-prog-affordable", "gc-prog-locked", "tech-row-locked");
+    const unaffordable = !locked && tech.can_afford === false;
+    row.classList.remove(
+      "gc-prog-affordable",
+      "gc-prog-locked",
+      "gc-prog-unaffordable",
+      "tech-row-locked"
+    );
     if (locked) {
       row.classList.add("gc-prog-locked", "tech-row-locked");
+    } else if (unaffordable) {
+      row.classList.add("gc-prog-unaffordable");
     } else {
       row.classList.add("gc-prog-affordable");
     }
@@ -763,6 +789,10 @@
         `<span class="status-pill status-pill-locked status-pill-queue-full status-pill-compact"` +
         ` title="${fullLabel}">${fullShort}</span>`
       );
+    }
+    if (tech.can_afford === false) {
+      const shortMsg = t("research_not_enough_resources", "Nicht genug Ressourcen.");
+      return `<button class="gc-btn gc-btn-danger gc-btn-xs btn-research" type="button" disabled title="${shortMsg}">${btnStart}</button>`;
     }
     const label = queueActive ? btnQueue : btnStart;
     const href = `/research_start/${encodeURIComponent(key)}`;
@@ -1173,13 +1203,14 @@
   // =========================
   let _lastQueueSignature = "";
 
-  function _queueSignature(queueList, summary) {
+  function _queueSignature(queueList, summary, planetId) {
     try {
+      const pid = Number(planetId || 0);
       const count = summary?.count ?? (queueList?.length ?? 0);
       const items = (queueList || [])
         .map((j) => `${j.id || j.building_type}:${j.target_level}:${j.finish_time || 0}`)
         .join("|");
-      return `${count}|${items}`;
+      return `${pid}|${count}|${items}`;
     } catch (_) {
       return "";
     }
@@ -1304,6 +1335,7 @@
 
     let queueList = [];
     let summary = null;
+    let queuePlanetId = Number(buildQueueRaw?.planet_id || root.dataset.planetId || 0);
 
     if (!buildQueueRaw) {
       queueList = [];
@@ -1312,6 +1344,11 @@
     } else if (Array.isArray(buildQueueRaw.queue)) {
       queueList = buildQueueRaw.queue;
       summary = buildQueueRaw.summary || null;
+      queuePlanetId = Number(buildQueueRaw.planet_id || queuePlanetId || 0);
+    }
+
+    if (queuePlanetId > 0) {
+      root.dataset.planetId = String(queuePlanetId);
     }
 
     // update live state regardless of DOM churn
@@ -1329,7 +1366,7 @@
       BUILDQ.active.totalSeconds = 0;
     }
 
-    const sig = _queueSignature(queueList, summary);
+    const sig = _queueSignature(queueList, summary, queuePlanetId);
     const count = summary?.count ?? queueList.length;
     const limit = summary?.limit ?? 3;
     const firstEta =
@@ -1656,6 +1693,7 @@
     energyTotal: null,
     storageMetal: null,
     storageCrystal: null,
+    activePlanetId: null,
   };
 
   // =========================
@@ -1693,6 +1731,21 @@
       const skipMessagesUnread = Boolean(opts && opts.skipMessagesUnread);
 
       if (data.server_time) setServerTime(data.server_time);
+
+      const activePlanetId = Number(data.active_planet_id || data.build_queue?.planet_id || 0);
+      if (
+        _last.activePlanetId !== null &&
+        activePlanetId > 0 &&
+        _last.activePlanetId !== activePlanetId
+      ) {
+        // Build queue is per active colony — never reuse the previous planet's panel state.
+        _lastQueueSignature = "";
+        BUILDQ.active.finishTime = 0;
+        BUILDQ.active.totalSeconds = 0;
+      }
+      if (activePlanetId > 0) {
+        _last.activePlanetId = activePlanetId;
+      }
 
       const p = data.player || {};
       const energy = data.energy || {};
@@ -1938,6 +1991,8 @@
       patchOverviewResearch(research);
       patchOverviewTable(data.overview, buildings, prod);
       patchOverviewEnergyHint(data.overview, data);
+      if (data.exchange) patchExchangePanel(data.exchange);
+      if (data.planet_teaser) patchPlanetTeaser(data.planet_teaser);
 
       if (data.buildings_panel) {
         patchBuildingPanel(data.buildings_panel, buildQueueRaw);
@@ -2113,7 +2168,162 @@
     activateBuildingTab(activeBtn, false);
   }
 
+  function patchPlanetTeaser(teaser) {
+    const root = document.getElementById("gc-planet-teaser");
+    if (!root || !teaser || !teaser.visible) return;
+
+    const levelEl = root.querySelector("[data-pe-teaser-level]");
+    const scoreEl = root.querySelector("[data-pe-teaser-score]");
+    const pctEl = root.querySelector("[data-pe-teaser-unlock-pct]");
+    if (levelEl && teaser.planet_level != null) levelEl.textContent = String(teaser.planet_level);
+    if (scoreEl && teaser.planet_score != null) scoreEl.textContent = String(teaser.planet_score);
+    if (pctEl && teaser.progress_to_unlock_pct != null) {
+      pctEl.style.width = `${teaser.progress_to_unlock_pct}%`;
+    }
+    root.className = `gc-planet-teaser gc-panel gc-planet-teaser-${teaser.status || "countdown"}`;
+  }
+
   function initOverview() {}
+
+  function initTraderHub() {
+    initExchangePanel();
+  }
+
+  function initExchangePanel() {
+    const panel = document.getElementById("gc-exchange-panel");
+    if (!panel || panel.dataset.disabled === "1") return;
+
+    const form = panel.querySelector("#gc-exchange-form");
+    const amountInput = panel.querySelector("#gc-exchange-amount");
+    const previewEl = panel.querySelector("[data-exchange-preview]");
+    const errorEl = panel.querySelector("[data-exchange-error]");
+    const remainingEl = panel.querySelector("[data-exchange-daily-remaining]");
+    const submitBtn = panel.querySelector(".gc-exchange-submit");
+    if (!form || !amountInput || !previewEl) return;
+
+    const tt = (key, fallback) => t(key, fallback);
+    const rateM2C = parseFloat(panel.dataset.rateM2c || "0.8");
+    const rateC2M = parseFloat(panel.dataset.rateC2m || "0.8");
+    const minAmount = parseInt(panel.dataset.min || "100", 10);
+
+    const reasonText = (reason) => tt(`exchange_error_${reason}`, tt("exchange_error_generic", "Exchange failed."));
+
+    const selectedDirection = () => {
+      const checked = form.querySelector('input[name="exchange_dir"]:checked');
+      return checked ? checked.value : "metal_to_crystal";
+    };
+
+    const updatePreview = () => {
+      const raw = parseInt(amountInput.value || "0", 10);
+      if (!raw || raw < minAmount) {
+        previewEl.textContent = "–";
+        return;
+      }
+      const dir = selectedDirection();
+      const rate = dir === "metal_to_crystal" ? rateM2C : rateC2M;
+      const receive = Math.floor(raw * rate);
+      const receiveLabel = dir === "metal_to_crystal"
+        ? tt("resource_crystal", "Crytite")
+        : tt("resource_metal", "Ferronit");
+      previewEl.textContent = `${receive.toLocaleString()} ${receiveLabel}`;
+    };
+
+    const patchExchangeFromState = (exchange) => {
+      if (!exchange || !remainingEl) return;
+      if (typeof exchange.daily_remaining === "number") {
+        remainingEl.textContent = String(exchange.daily_remaining);
+      }
+      if (typeof exchange.rate_metal_to_crystal === "number") {
+        panel.dataset.rateM2c = String(exchange.rate_metal_to_crystal);
+      }
+      if (typeof exchange.rate_crystal_to_metal === "number") {
+        panel.dataset.rateC2m = String(exchange.rate_crystal_to_metal);
+      }
+    };
+
+    if (!panel.dataset.exchangeBound) {
+      panel.dataset.exchangeBound = "1";
+
+      form.addEventListener("change", updatePreview);
+      amountInput.addEventListener("input", updatePreview);
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (errorEl) {
+          errorEl.hidden = true;
+          errorEl.textContent = "";
+        }
+
+        const amount = parseInt(amountInput.value || "0", 10);
+        if (!amount || amount < minAmount) {
+          if (errorEl) {
+            errorEl.textContent = reasonText("below_minimum");
+            errorEl.hidden = false;
+          }
+          return;
+        }
+
+        const dir = selectedDirection();
+        const fromRes = dir === "metal_to_crystal" ? "metal" : "crystal";
+        const giveLabel = fromRes === "metal"
+          ? tt("resource_metal", "Ferronit")
+          : tt("resource_crystal", "Crytite");
+        const receiveLabel = fromRes === "metal"
+          ? tt("resource_crystal", "Crytite")
+          : tt("resource_metal", "Ferronit");
+        const rate = fromRes === "metal" ? rateM2C : rateC2M;
+        const receive = Math.floor(amount * rate);
+        const confirmMsg = tt(
+          "exchange_confirm_prompt",
+          "Exchange %(amount)s %(give)s for ~%(receive)s %(get)s?"
+        )
+          .replace("%(amount)s", String(amount))
+          .replace("%(give)s", giveLabel)
+          .replace("%(receive)s", String(receive))
+          .replace("%(get)s", receiveLabel);
+
+        if (!window.confirm(confirmMsg)) return;
+
+        if (submitBtn) submitBtn.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/exchange", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+            body: JSON.stringify({ direction: dir, amount }),
+          });
+          if (res?.ok) {
+            amountInput.value = "";
+            updatePreview();
+            applyActionState(res, "exchange_success");
+            showNotify(tt("exchange_success", "Exchange completed."), "success");
+          } else {
+            applyActionState(res, "exchange_error");
+            if (errorEl) {
+              errorEl.textContent = reasonText(res?.reason);
+              errorEl.hidden = false;
+            }
+          }
+        } catch (_) {
+          if (errorEl) {
+            errorEl.textContent = reasonText("generic");
+            errorEl.hidden = false;
+          }
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      });
+    }
+
+    panel._patchExchangeFromState = patchExchangeFromState;
+    updatePreview();
+  }
+
+  function patchExchangePanel(exchange) {
+    const panel = document.getElementById("gc-exchange-panel");
+    if (panel && typeof panel._patchExchangeFromState === "function") {
+      panel._patchExchangeFromState(exchange);
+    }
+  }
 
   function initResearch() {}
 
@@ -2155,9 +2365,17 @@
     GC._peActionsBound = true;
 
     const tt = (key, fallback) => t(key, fallback);
+    const PE_REASON_ALIASES = {
+      requirements: "research_locked",
+    };
     const reasonText = (reason) => {
       if (!reason) return tt("pe_error_generic", "Aktion fehlgeschlagen.");
-      return tt(`pe_reason_${reason}`, reason);
+      const key = PE_REASON_ALIASES[reason] || reason;
+      const pe = tt(`pe_reason_${key}`, "");
+      if (pe && pe !== `pe_reason_${key}`) return pe;
+      const alt = tt(`reason_${key}`, "");
+      if (alt && alt !== `reason_${key}`) return alt;
+      return reason;
     };
 
     const postAction = async (url, body) => {
@@ -2186,21 +2404,56 @@
       action: "pe-section-action",
     };
 
+    const tabPanels = { events: "events", research: "research", policies: "policies", history: "history" };
+
+    const peHighlightEl = (el) => {
+      if (!el) return;
+      el.classList.remove("pe-highlight-pulse");
+      void el.offsetWidth;
+      el.classList.add("pe-highlight-pulse");
+      window.setTimeout(() => el.classList.remove("pe-highlight-pulse"), 2600);
+    };
+
+    const focusPeTarget = (root, { action, target, highlight, techKey }) => {
+      const actionType = action || "focus_section";
+      const needsTab = actionType === "focus_tab" || Boolean(tabPanels[target]);
+      if (needsTab && tabPanels[target]) {
+        const tab = root.querySelector(`.pe-sec-tab[data-panel="${tabPanels[target]}"]`);
+        if (tab) tab.click();
+      }
+
+      let el = null;
+      const highlightId = highlight || scrollTargets[target] || `pe-section-${target}`;
+      if (highlightId) el = document.getElementById(highlightId);
+      if (!el && techKey) {
+        el = root.querySelector(`#pe-research-card-${techKey}, [data-tech-key="${techKey}"]`);
+      }
+      if (!el) el = document.getElementById(scrollTargets[target] || `pe-section-${target}`);
+
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        peHighlightEl(el);
+      }
+    };
+
     document.addEventListener("click", async (e) => {
       const root = document.querySelector(".planet-evolution-page");
       if (!root) return;
 
+      const actionBtn = e.target.closest(".pe-action-btn");
+      if (actionBtn && root.contains(actionBtn)) {
+        focusPeTarget(root, {
+          action: actionBtn.dataset.ctaAction,
+          target: actionBtn.dataset.ctaTarget,
+          highlight: actionBtn.dataset.ctaHighlight,
+          techKey: actionBtn.dataset.techKey,
+        });
+        return;
+      }
+
       const scrollBtn = e.target.closest(".pe-scroll-btn");
       if (scrollBtn && root.contains(scrollBtn)) {
-        const target = scrollBtn.dataset.scroll;
-        const panelMap = { events: "events", research: "research", policies: "policies", history: "history" };
-        if (panelMap[target]) {
-          const tab = root.querySelector(`.pe-sec-tab[data-panel="${panelMap[target]}"]`);
-          if (tab) tab.click();
-        }
-        const id = scrollTargets[target] || `pe-section-${target}`;
-        const el = document.getElementById(id);
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        focusPeTarget(root, { target: scrollBtn.dataset.scroll });
         return;
       }
 
@@ -2221,8 +2474,16 @@
         planetBtn.disabled = true;
         const planetId = parseInt(planetBtn.dataset.planetId || "0", 10);
         const res = await postAction("/api/planets/active", { planet_id: planetId });
-        if (res?.ok) await GC.reloadCurrentPage();
-        else {
+        if (res?.ok) {
+          if (res.state && typeof applyActionState === "function") {
+            applyActionState(res, "planet_switch");
+          } else if (res.state) {
+            GC.lastState = res.state;
+            _lastQueueSignature = "";
+            _last.activePlanetId = null;
+          }
+          await GC.reloadCurrentPage();
+        } else {
           planetBtn.disabled = false;
           alert(reasonText(res?.reason));
         }
@@ -2231,15 +2492,18 @@
 
       const researchBtn = e.target.closest(".pe-research-btn");
       if (researchBtn && root.contains(researchBtn)) {
+        if (researchBtn.disabled || researchBtn.getAttribute("aria-disabled") === "true") return;
         researchBtn.disabled = true;
         const planetId = parseInt(researchBtn.dataset.planetId || "0", 10);
         const techKey = researchBtn.dataset.techKey || "";
         const requestId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
-        const res = await postAction(`/api/planets/${planetId}/research/start`, { tech_key: techKey, request_id: requestId });
-        if (res?.ok) await GC.reloadCurrentPage();
-        else {
-          researchBtn.disabled = false;
-          alert(reasonText(res?.reason));
+        let res;
+        try {
+          res = await postAction(`/api/planets/${planetId}/research/start`, { tech_key: techKey, request_id: requestId });
+          if (res?.ok) await GC.reloadCurrentPage();
+          else showNotify(reasonText(res?.reason), "error");
+        } finally {
+          if (!res?.ok) researchBtn.disabled = false;
         }
         return;
       }
@@ -2333,6 +2597,78 @@
     });
   }
 
+  function initGcPopoversOnce() {
+    if (GC._popoverBound) return;
+    GC._popoverBound = true;
+
+    let activePopover = null;
+    let activeTrigger = null;
+
+    const closePopover = () => {
+      if (activePopover) {
+        activePopover.remove();
+        activePopover = null;
+      }
+      if (activeTrigger) {
+        activeTrigger.setAttribute("aria-expanded", "false");
+        activeTrigger = null;
+      }
+    };
+
+    const positionPopover = (pop, trigger) => {
+      const rect = trigger.getBoundingClientRect();
+      const margin = 8;
+      pop.style.visibility = "hidden";
+      pop.style.display = "block";
+      const popRect = pop.getBoundingClientRect();
+      let left = rect.left + rect.width / 2 - popRect.width / 2;
+      left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
+      let top = rect.bottom + margin;
+      if (top + popRect.height > window.innerHeight - margin) {
+        top = Math.max(margin, rect.top - popRect.height - margin);
+      }
+      pop.style.left = `${left}px`;
+      pop.style.top = `${top}px`;
+      pop.style.visibility = "visible";
+    };
+
+    const openPopover = (trigger) => {
+      const text = (trigger.dataset.popover || trigger.getAttribute("title") || "").trim();
+      if (!text) return;
+      closePopover();
+
+      const pop = document.createElement("div");
+      pop.className = "gc-popover";
+      pop.setAttribute("role", "tooltip");
+      pop.textContent = text;
+      document.body.appendChild(pop);
+      positionPopover(pop, trigger);
+
+      activePopover = pop;
+      activeTrigger = trigger;
+      trigger.setAttribute("aria-expanded", "true");
+    };
+
+    document.addEventListener("click", (e) => {
+      const trigger = e.target.closest(".gc-popover-trigger");
+      if (trigger) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (activeTrigger === trigger) closePopover();
+        else openPopover(trigger);
+        return;
+      }
+      if (!e.target.closest(".gc-popover")) closePopover();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closePopover();
+    });
+
+    window.addEventListener("resize", closePopover);
+    window.addEventListener("scroll", closePopover, true);
+  }
+
   function initPlanetEvolution() {
     if (!document.querySelector(".planet-evolution-page")) return;
     bindPlanetEvolutionOnce();
@@ -2358,6 +2694,7 @@
     { id: "total", scoreKey: "total_score", rankKey: "rank_total", labelKey: "ranking_tab_total", fallback: "Total" },
     { id: "building", scoreKey: "building_score", rankKey: "rank_building", labelKey: "ranking_tab_buildings", fallback: "Buildings" },
     { id: "research", scoreKey: "research_score", rankKey: "rank_research", labelKey: "ranking_tab_research", fallback: "Research" },
+    { id: "evolution", scoreKey: "evolution_score", rankKey: null, labelKey: "ranking_tab_evolution", fallback: "Planet Evolution" },
     { id: "fleet", scoreKey: "fleet_score", rankKey: null, labelKey: "ranking_tab_fleet", fallback: "Fleet" },
     { id: "defense", scoreKey: "defense_score", rankKey: null, labelKey: "ranking_tab_defense", fallback: "Defense" },
   ];
@@ -2386,7 +2723,7 @@
     const cur = payload?.current_player || {};
     const top = Array.isArray(payload?.top_players) ? payload.top_players : [];
     return RANKING_TABS.filter((tab) => {
-      if (tab.id === "total" || tab.id === "building" || tab.id === "research") return true;
+      if (tab.id === "total" || tab.id === "building" || tab.id === "research" || tab.id === "evolution") return true;
       const curScore = Number(cur[tab.scoreKey]) || 0;
       const anyScore = top.some((row) => (Number(row[tab.scoreKey]) || 0) > 0);
       return curScore > 0 || anyScore;
@@ -2750,6 +3087,7 @@
   };
 
   GC.modules.overview = initOverview;
+  GC.modules.trader_hub = initTraderHub;
   GC.modules.buildings = initBuildings;
   GC.modules.research = initResearch;
   GC.modules.planet_evolution = initPlanetEvolution;
@@ -4247,6 +4585,7 @@
     initSkipLink();
     initGameActions();
     bindPlanetEvolutionOnce();
+    initGcPopoversOnce();
     initVisibilityPolling();
     initMobileNav();
     initSpecialPanel();

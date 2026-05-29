@@ -1450,6 +1450,74 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .overview-res-main .gc-cap{ font-family: var(--gc-mono); font-size: 0.86rem; color: var(--gc-text-dim); }
 .overview-res-cap{ color: var(--gc-text-soft); font-size: 0.84rem; }
 
+.trader-hub-page .trader-hub-balance{
+  margin-bottom: 1rem;
+}
+.trader-hub-page .trader-hub-resources{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+.trader-hub-page .gc-exchange-panel{
+  max-width: 520px;
+}
+.gc-exchange-panel{
+  margin-bottom: 12px;
+  padding: 0.85rem 1rem;
+}
+.gc-exchange-panel .gc-panel-header{
+  margin-bottom: 0.5rem;
+}
+.gc-exchange-rates{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.8rem;
+}
+.gc-exchange-limit{
+  margin-bottom: 0.65rem;
+  font-size: 0.82rem;
+}
+.gc-exchange-form{
+  display: grid;
+  gap: 0.55rem;
+}
+.gc-exchange-direction{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+.gc-exchange-dir{
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+.gc-exchange-row{
+  display: grid;
+  gap: 0.25rem;
+}
+.gc-exchange-label{
+  font-size: 0.78rem;
+  color: var(--gc-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.gc-exchange-input{
+  max-width: 12rem;
+}
+.gc-exchange-preview strong{
+  color: var(--gc-primary-2);
+}
+.gc-exchange-error{
+  color: #ff9a7a;
+}
+.gc-exchange-submit{
+  justify-self: start;
+}
+
 .overview-score-card{ border-color: rgba(255, 196, 0, 0.25); }
 .overview-score-main-row{ display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .overview-score-value{
@@ -1647,10 +1715,6 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
     0 8px 22px rgba(0, 0, 0, 0.34);
 }
 
-.gc-prog-card.gc-prog-has-queue{
-  padding-bottom: 4px;
-}
-
 .gc-prog-col{
   min-width: 0;
 }
@@ -1679,13 +1743,6 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   align-items: center;
   justify-content: center;
   font-size: 0.95rem;
-}
-
-.gc-prog-card.gc-prog-has-queue{
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-bottom: 4px;
 }
 
 .gc-prog-title-row{
@@ -1732,6 +1789,26 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   background: rgba(70, 229, 255, 0.18);
   box-shadow: 0 0 10px rgba(70, 229, 255, 0.18);
   outline: none;
+}
+
+.gc-popover{
+  position: fixed;
+  z-index: 12050;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(127, 255, 217, 0.35);
+  background: rgba(8, 18, 32, 0.97);
+  color: var(--gc-text);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 0 18px rgba(70, 229, 255, 0.12);
+  pointer-events: none;
+}
+
+.gc-popover-trigger[aria-expanded="true"]{
+  border-color: rgba(127, 255, 217, 0.65);
+  background: rgba(70, 229, 255, 0.22);
 }
 
 .gc-prog-desc,
@@ -1886,47 +1963,6 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   opacity: 0.62;
 }
 
-.gc-prog-queued,
-.tech-row-queued{
-  border-color: rgba(70, 229, 255, 0.26);
-}
-
-/* Inline queue strip inside card */
-.gc-prog-queue-inline{
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-  padding-top: 3px;
-  border-top: 1px dashed rgba(120, 190, 255, 0.10);
-}
-
-.gc-prog-queue-bar{
-  flex: 1;
-  min-width: 0;
-  height: 5px;
-  border-radius: var(--gc-radius-sm);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(120, 255, 217, 0.10);
-  overflow: hidden;
-}
-
-.gc-prog-queue-fill{
-  height: 100%;
-  border-radius: var(--gc-radius-sm);
-  background: linear-gradient(90deg, rgba(70, 229, 255, 0.55), rgba(127, 255, 217, 0.75));
-  box-shadow: 0 0 8px rgba(127, 255, 217, 0.20);
-}
-
-.gc-prog-queue-meta{
-  flex-shrink: 0;
-  font-family: var(--gc-mono);
-  font-size: 0.68rem;
-  color: rgba(127, 255, 217, 0.88);
-  white-space: nowrap;
-}
-
 /* Legacy cost helpers (still used elsewhere) */
 .cost-metal, .cost-crystal{ font-family: var(--gc-mono); font-size: 0.86rem; }
 .cost-metal{ color: rgba(127,255,217,0.85); }
@@ -2014,35 +2050,6 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 
 .research-divider{ margin: 8px 0; }
-
-.tech-queue-badges{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 3px;
-  margin-top: 2px;
-}
-
-.tech-queue-badge{
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 5px;
-  border-radius: var(--gc-radius-sm);
-  font-size: 0.62rem;
-  letter-spacing: 0.03em;
-  border: 1px solid rgba(127, 255, 217, 0.28);
-  background: rgba(127, 255, 217, 0.07);
-  color: rgba(127, 255, 217, 0.92);
-  font-family: var(--gc-mono);
-  white-space: nowrap;
-  line-height: 1.2;
-}
-
-.tech-queue-badge-active{
-  border-color: rgba(70, 229, 255, 0.45);
-  background: rgba(70, 229, 255, 0.12);
-  color: rgba(180, 245, 255, 0.98);
-}
 
 .tech-row-locked{ opacity: 0.52; }
 
@@ -2137,11 +2144,6 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   .gc-prog-time{
     order: 5;
     margin-right: 8px;
-  }
-
-  .gc-prog-queue-inline{
-    flex: 1 1 100%;
-    order: 6;
   }
 
   .gc-prog-action .gc-btn,
@@ -4940,7 +4942,151 @@ body.gc-player-card-open { overflow: hidden; }
   .gc-player-card-spinner { animation: none; }
 }
 
+.planet-evolution-page .pe-identity-teaser{
+  margin-bottom: 0.85rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(127, 255, 217, 0.28);
+  background: rgba(70, 229, 255, 0.06);
+}
+.planet-evolution-page .pe-identity-teaser-ready{
+  border-color: rgba(127, 255, 217, 0.45);
+  background: rgba(127, 255, 217, 0.08);
+}
+.planet-evolution-page .pe-identity-teaser-title{
+  margin: 0 0 0.35rem;
+  font-size: 0.92rem;
+  color: var(--gc-accent, #46e5ff);
+}
+.planet-evolution-page .pe-identity-teaser-bar{
+  margin-top: 0.45rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.gc-planet-teaser{
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  background: rgba(70, 229, 255, 0.05);
+}
+.gc-planet-teaser-ready{
+  border-color: rgba(127, 255, 217, 0.4);
+  box-shadow: 0 0 18px rgba(70, 229, 255, 0.08);
+}
+.gc-planet-teaser-head{
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.55rem;
+}
+.gc-planet-teaser-title{
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  color: var(--gc-accent, #46e5ff);
+}
+.gc-planet-teaser-body{
+  margin: 0;
+  font-size: 0.84rem;
+  max-width: 36rem;
+}
+.gc-planet-teaser-stats{
+  display: flex;
+  gap: 1rem;
+}
+.gc-planet-teaser-stat{
+  display: grid;
+  gap: 0.1rem;
+  text-align: right;
+}
+.gc-planet-teaser-stat-label{
+  font-size: 0.72rem;
+  color: var(--gc-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.gc-planet-teaser-stat-value{
+  font-family: var(--gc-mono);
+  font-weight: 700;
+  color: var(--gc-primary-2);
+}
+.gc-planet-teaser-progress{
+  margin-bottom: 0.5rem;
+}
+.gc-planet-teaser-next{
+  margin: 0 0 0.55rem;
+}
+.gc-planet-teaser-cta{
+  margin-top: 0.25rem;
+}
+
 /* --- Planet Evolution --- */
+.planet-evolution-page .pe-intro{
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  background: rgba(70, 229, 255, 0.05);
+}
+.planet-evolution-page .pe-intro-title{
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: var(--gc-accent, #46e5ff);
+}
+.planet-evolution-page .pe-intro-list{
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--gc-text-muted, rgba(200, 220, 240, 0.85));
+}
+.planet-evolution-page .pe-intro-list li + li{
+  margin-top: 0.35rem;
+}
+.planet-evolution-page .pe-trait-effects{
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.planet-evolution-page .pe-trait-chip{
+  display: inline-block;
+  padding: 0.2rem 0.45rem;
+  border-radius: var(--gc-radius-xs);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  border: 1px solid rgba(120, 190, 255, 0.28);
+  background: rgba(8, 22, 38, 0.55);
+}
+.planet-evolution-page .pe-trait-chip-affinity{
+  border-color: rgba(127, 255, 217, 0.35);
+  color: rgba(180, 255, 230, 0.95);
+}
+.planet-evolution-page .pe-trait-chip-unlock{
+  border-color: rgba(70, 229, 255, 0.35);
+  color: rgba(180, 245, 255, 0.95);
+}
+.planet-evolution-page .pe-trait-chip-risk,
+.planet-evolution-page .pe-trait-chip-block{
+  border-color: rgba(255, 140, 100, 0.35);
+  color: rgba(255, 200, 170, 0.95);
+}
+.planet-evolution-page .pe-trait-chip-bonus{
+  border-color: rgba(200, 160, 255, 0.35);
+  color: rgba(220, 200, 255, 0.95);
+}
+.planet-evolution-page .pe-highlight-pulse{
+  animation: pe-highlight-pulse 2.4s ease-out 1;
+  outline: 2px solid rgba(70, 229, 255, 0.55);
+  outline-offset: 3px;
+}
+@keyframes pe-highlight-pulse{
+  0%{ box-shadow: 0 0 0 0 rgba(70, 229, 255, 0.45); }
+  40%{ box-shadow: 0 0 0 8px rgba(70, 229, 255, 0.12); }
+  100%{ box-shadow: none; }
+}
 .planet-evolution-page .pe-switcher-body {
   display: flex;
   flex-wrap: wrap;
@@ -5779,6 +5925,15 @@ body.gc-player-card-open { overflow: hidden; }
   border: 1px solid var(--gc-panel-border);
   border-radius: var(--gc-radius-sm);
   margin-bottom: 0.5rem;
+}
+.planet-evolution-page .pe-research-meta {
+  margin: 0.35rem 0 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.planet-evolution-page .pe-research-missing {
+  color: var(--ogx-warn, #e8a317);
 }
 .planet-evolution-page .pe-research-card h5 {
   margin: 0 0 0.35rem;

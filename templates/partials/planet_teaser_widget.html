@@ -1,0 +1,65 @@
+{# Planet Identity teaser — Overview & cross-page #}
+{% set pt = planet_teaser if planet_teaser is defined and planet_teaser else {} %}
+{% if pt.visible %}
+<aside class="gc-planet-teaser gc-panel gc-planet-teaser-{{ pt.status or 'countdown' }}"
+       id="gc-planet-teaser"
+       aria-label="{{ T(pt.title_key, 'Planet-Entwicklung') }}">
+  <div class="gc-planet-teaser-head">
+    <div>
+      <h3 class="gc-planet-teaser-title">{{ T(pt.title_key, 'Planet-Entwicklung') }}</h3>
+      <p class="gc-planet-teaser-body hint">
+        {{ T(pt.body_key, '') }}
+        {% if pt.status == 'countdown' and pt.levels_remaining is defined %}
+          <strong>{{ T('pe_identity_countdown_fmt', 'Noch %(remaining)s Stufen bis Identität (Stufe %(unlock)s).') % {'remaining': pt.levels_remaining, 'unlock': pt.unlock_level} }}</strong>
+        {% elif pt.status == 'ready' and pt.eligible_count %}
+          <strong>{{ T('pe_identity_ready_fmt', '%(count)s Spezialisierungen passen zu deiner DNA.') % {'count': pt.eligible_count} }}</strong>
+        {% elif pt.status == 'active' and pt.spec_label_key %}
+          <strong>{{ T(pt.spec_label_key, pt.spec_key) }}</strong>
+          {% if pt.spec_tier %} · {{ T('pe_spec_tier', 'Stufe') }} {{ pt.spec_tier }}{% endif %}
+        {% endif %}
+      </p>
+    </div>
+    <div class="gc-planet-teaser-stats">
+      <span class="gc-planet-teaser-stat">
+        <span class="gc-planet-teaser-stat-label">{{ T('pe_level', 'Stufe') }}</span>
+        <span class="gc-planet-teaser-stat-value" data-pe-teaser-level>{{ pt.planet_level or 1 }}</span>
+      </span>
+      <span class="gc-planet-teaser-stat">
+        <span class="gc-planet-teaser-stat-label">{{ T('pe_planet_score', 'Planetenwert') }}</span>
+        <span class="gc-planet-teaser-stat-value" data-pe-teaser-score>{{ pt.planet_score or 0 }}</span>
+      </span>
+    </div>
+  </div>
+
+  {% if pt.status == 'countdown' %}
+  <div class="gc-planet-teaser-progress">
+    <div class="build-progress-label pe-xp-labels">
+      <span>{{ T('pe_identity_progress_label', 'Fortschritt bis Identität') }}</span>
+      <span>{{ pt.planet_level or 1 }} / {{ pt.unlock_level or 8 }}</span>
+    </div>
+    <div class="build-bar build-bar-large" aria-hidden="true">
+      <div class="build-bar-fill gc-progress-smooth"
+           data-pe-teaser-unlock-pct
+           style="width: {{ pt.progress_to_unlock_pct or 0 }}%;"></div>
+    </div>
+  </div>
+  {% elif pt.xp_pct is defined %}
+  <div class="gc-planet-teaser-progress hint">
+    {{ T('pe_xp_to_level', 'Entwicklung') }}: {{ pt.xp_pct or 0 }}%
+  </div>
+  {% endif %}
+
+  {% if pt.next_unlock_label_key and pt.next_unlock_level %}
+  <p class="gc-planet-teaser-next hint">
+    {{ T('pe_identity_next_unlock', 'Nächste Freischaltung') }}:
+    {{ T('pe_at_level', 'Ab Stufe') }} {{ pt.next_unlock_level }} — {{ T(pt.next_unlock_label_key, '') }}
+  </p>
+  {% endif %}
+
+  <a href="{{ url_for('planet_evolution_view') }}"
+     class="gc-btn gc-btn-primary gc-btn-sm gc-planet-teaser-cta"
+     data-pe-teaser-cta>
+    {{ T(pt.cta_label_key, 'Planet-Entwicklung öffnen') }}
+  </a>
+</aside>
+{% endif %}

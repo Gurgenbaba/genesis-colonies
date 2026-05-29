@@ -167,3 +167,141 @@ def level_unlock_label_key(level: int, unlock: Tuple[Any, ...]) -> str:
 
 def event_state_label_key(state: str) -> str:
     return _EVENT_STATE_KEYS.get(str(state or ""), "pe_event_state_unknown")
+
+
+_AFFINITY_LABEL_KEYS = {
+    "industry": "pe_affinity_industry",
+    "science": "pe_affinity_science",
+    "energy": "pe_affinity_energy",
+    "ecology": "pe_affinity_ecology",
+    "military": "pe_affinity_military",
+    "trade": "pe_affinity_trade",
+    "ancient": "pe_affinity_ancient",
+    "experimental": "pe_affinity_experimental",
+    "governance": "pe_affinity_governance",
+}
+
+_RISK_LABEL_KEYS = {
+    "event_rate_mult": "pe_trait_chip_risk_events",
+    "mantle_quake": "pe_trait_chip_risk_mantle",
+    "energy_variance": "pe_trait_chip_risk_energy",
+    "storm_outage": "pe_trait_chip_risk_storm",
+    "contamination": "pe_trait_chip_risk_contamination",
+    "discovery_bonus": "pe_trait_chip_bonus_discovery",
+    "experimental_failure": "pe_trait_chip_risk_experimental",
+}
+
+
+def _unlock_label_key(raw: str) -> str:
+    s = str(raw or "").strip()
+    if s.startswith("research:"):
+        tech = s.split(":", 1)[1]
+        rdef = get_research_def(tech) or {}
+        return str(rdef.get("label_key") or f"pe_{tech}")
+    if s.startswith("choice:"):
+        return f"pe_choice_{s.split(':', 1)[1]}"
+    if s.startswith("discovery:"):
+        key = s.split(":", 1)[1]
+        return f"pe_discovery_{key}"
+    if s.startswith("export:"):
+        key = s.split(":", 1)[1]
+        return f"resource_{key}"
+    if s.startswith("chain:"):
+        key = s.split(":", 1)[1]
+        return f"chain_{key}"
+    return "pe_trait_chip_unlock_generic"
+
+
+def _block_label_key(raw: str) -> str:
+    s = str(raw or "").strip()
+    if s.startswith("research:"):
+        tech = s.split(":", 1)[1]
+        rdef = get_research_def(tech) or {}
+        return str(rdef.get("label_key") or f"pe_{tech}")
+    return "pe_trait_chip_block_generic"
+
+
+def trait_effect_lines(tdef: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Structured effect chips for trait cards (i18n keys + format args)."""
+    lines: List[Dict[str, Any]] = []
+    effects = tdef.get("effects") or {}
+    if not isinstance(effects, dict):
+        effects = {}
+
+    affinity = effects.get("affinity") or {}
+    if isinstance(affinity, dict):
+        for key, value in sorted(affinity.items()):
+            try:
+                pct = int(round(float(value)))
+            except (TypeError, ValueError):
+                continue
+            if pct == 0:
+                continue
+            lines.append(
+                {
+                    "kind": "affinity",
+                    "label_key": "pe_trait_chip_affinity",
+                    "affinity_key": key,
+                    "affinity_label_key": _AFFINITY_LABEL_KEYS.get(str(key), f"pe_affinity_{key}"),
+                    "value": pct,
+                }
+            )
+
+    for raw in effects.get("unlocks") or []:
+        lines.append(
+            {
+                "kind": "unlock",
+                "label_key": "pe_trait_chip_unlock",
+                "target_label_key": _unlock_label_key(str(raw)),
+            }
+        )
+
+    blocks: List[str] = []
+    for raw in tdef.get("blocks") or []:
+        blocks.append(str(raw))
+    for raw in effects.get("blocks") or []:
+        blocks.append(str(raw))
+    seen_blocks: set[str] = set()
+    for raw in blocks:
+        if raw in seen_blocks:
+            continue
+        seen_blocks.add(raw)
+        lines.append(
+            {
+                "kind": "block",
+                "label_key": "pe_trait_chip_block",
+                "target_label_key": _block_label_key(raw),
+            }
+        )
+
+    risk = tdef.get("risk") or tdef.get("risk_json") or {}
+    if isinstance(risk, str):
+        risk = {}
+    if isinstance(risk, dict):
+        mult = float(risk.get("event_rate_mult") or 1.0)
+        if mult > 1.05:
+            pct = int(round((mult - 1.0) * 100))
+            lines.append(
+                {
+                    "kind": "risk",
+                    "label_key": _RISK_LABEL_KEYS["event_rate_mult"],
+                    "value": pct,
+                }
+            )
+        for rkey, rlabel in _RISK_LABEL_KEYS.items():
+            if rkey == "event_rate_mult":
+                continue
+            if rkey not in risk:
+                continue
+            try:
+                val = float(risk[rkey])
+            except (TypeError, ValueError):
+                continue
+            if val <= 0:
+                continue
+            if rkey == "discovery_bonus":
+                lines.append({"kind": "bonus", "label_key": rlabel, "value": int(round(val * 100))})
+            else:
+                lines.append({"kind": "risk", "label_key": rlabel, "value": int(round(val * 100))})
+
+    return lines

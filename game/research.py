@@ -15,8 +15,11 @@ WICHTIG:
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Dict, Tuple, List, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from .models import (
     db,
@@ -373,6 +376,33 @@ def complete_finished_research(user_id: int, conn=None) -> bool:
 RESEARCH_QUEUE_LIMIT = 3
 
 
+def _research_resource_planet(player_id: int, conn) -> Dict[str, Any]:
+    """
+    Planet whose metal/crystal pay for imperial research — matches UI + building upgrades.
+    """
+    from .planet_evolution.repository import get_context_planet
+
+    return get_context_planet(int(player_id), conn=conn)
+
+
+def _research_not_enough_payload(
+    *,
+    planet_metal: float,
+    planet_crystal: float,
+    cost_m: int,
+    cost_c: int,
+) -> Dict[str, int]:
+    """Missing amounts for error messages (never locale-formatted strings)."""
+    return {
+        "metal": int(max(0, cost_m - int(planet_metal))),
+        "crystal": int(max(0, cost_c - int(planet_crystal))),
+        "available_metal": int(planet_metal),
+        "available_crystal": int(planet_crystal),
+        "cost_metal": int(cost_m),
+        "cost_crystal": int(cost_c),
+    }
+
+
 def _resolve_research_queue_limit(settings: Optional[Dict[str, Any]] = None) -> int:
     if settings is None:
         settings = get_game_settings()
@@ -410,8 +440,8 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
         lock_player_for_update(conn, uid)
         now = time.time()
 
-        planet = get_homeworld(player_id=uid, conn=conn)
-        if not planet:
+        planet = _research_resource_planet(uid, conn)
+        if not planet or not planet.get("id"):
             rollback(conn)
             return False, "no_homeworld", None
 
@@ -473,9 +503,26 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
 
         cost_m, cost_c = get_research_cost(tech_key, target)
 
+        logger.info(
+            "Research Start: player_id=%s planet_id=%s available_feronit=%s available_crytite=%s "
+            "required_feronit=%s required_crytite=%s tech=%s",
+            uid,
+            planet_id,
+            int(planet_metal),
+            int(planet_crystal),
+            int(cost_m),
+            int(cost_c),
+            tech_key,
+        )
+
         if planet_metal < float(cost_m) or planet_crystal < float(cost_c):
             rollback(conn)
-            return False, "not_enough_resources", (int(cost_m), int(cost_c))
+            return False, "not_enough_resources", _research_not_enough_payload(
+                planet_metal=planet_metal,
+                planet_crystal=planet_crystal,
+                cost_m=int(cost_m),
+                cost_c=int(cost_c),
+            )
 
         duration = get_research_time(tech_key, target, user_id=uid, buildings=buildings)
         last_finish = max(float(r["finish_at"]) for r in rows) if rows else now
@@ -484,7 +531,19 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
 
         if not try_spend_resources_conn(conn, planet_id, int(cost_m), int(cost_c)):
             rollback(conn)
-            return False, "not_enough_resources", (int(cost_m), int(cost_c))
+            cur.execute(
+                "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
+                (planet_id,),
+            )
+            after = cur.fetchone()
+            avail_m = float(after["metal"] or 0) if after else planet_metal
+            avail_c = float(after["crystal"] or 0) if after else planet_crystal
+            return False, "not_enough_resources", _research_not_enough_payload(
+                planet_metal=avail_m,
+                planet_crystal=avail_c,
+                cost_m=int(cost_m),
+                cost_c=int(cost_c),
+            )
 
         job_id = add_research_job(uid, tech_key, float(start_at), float(finish_at), conn=conn)
 
@@ -590,9 +649,12 @@ def get_research_status(
         else:
             complete_finished_research(uid)
 
+    resource_planet = _research_resource_planet(uid, conn)
+    planet_metal = float(resource_planet.get("metal") or 0)
+    planet_crystal = float(resource_planet.get("crystal") or 0)
+
     if buildings is None:
-        planet = get_homeworld(player_id=uid, conn=conn)
-        buildings = get_planet_buildings(int(planet["id"]), conn=conn)
+        buildings = get_planet_buildings(int(resource_planet["id"]), conn=conn)
 
     buildings = resolve_buildings_for_research(buildings, uid, conn=conn)
     lab_level = int(buildings.get("research_lab", 0) or 0)
@@ -678,6 +740,7 @@ def get_research_status(
 
         req = cfg.get("requirements") or {}
         req_met = _check_requirements(req, buildings, levels)
+        can_afford = planet_metal >= float(cost_m) and planet_crystal >= float(cost_c)
 
         is_active = bool(active and str(active.get("tech_key")) == tech)
         in_queue = q_count > 0
@@ -694,6 +757,7 @@ def get_research_status(
             "cost_crystal": int(cost_c),
             "time_seconds": int(t_sec),
             "requirements_met": bool(req_met),
+            "can_afford": bool(can_afford),
             "requirements_items": get_research_requirements_items(tech, buildings, levels),
             "icon": cfg.get("icon"),
             "queue_count": q_count,

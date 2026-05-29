@@ -392,7 +392,12 @@ def get_build_queue_status(
     if not skip_finish:
         from .queue_engine import finish_due_work_once
 
-        finish_due_work_once(player_id=user_id_int, conn=conn, source="game_state")
+        finish_due_work_once(
+            player_id=user_id_int,
+            planet_id=planet_id,
+            conn=conn,
+            source="game_state",
+        )
     return get_build_queue_status_for_planet(planet_id, conn=conn, skip_finish=True)
 
 

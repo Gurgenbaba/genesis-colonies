@@ -33,6 +33,57 @@
 </article>
 {% endmacro %}
 
+{% macro pe_research_card_meta(tech) %}
+<div class="pe-research-meta">
+  <p class="pe-research-cost hint">
+    <strong>{{ T("pe_research_cost", "Kosten:") }}</strong>
+    {{ T("resource_metal", "Ferronit") }} {{ tech.cost_metal|int }}
+    · {{ T("resource_crystal", "Crytite") }} {{ tech.cost_crystal|int }}
+  </p>
+  <p class="pe-research-duration hint">
+    <strong>{{ T("pe_research_duration", "Dauer:") }}</strong>
+    ~{{ (tech.duration_seconds // 3600) }}h {{ ((tech.duration_seconds % 3600) // 60) }}m
+  </p>
+  {% if tech.missing_resources %}
+  <p class="pe-research-missing hint">
+    <strong>{{ T("pe_research_missing", "Fehlend:") }}</strong>
+    {% for mr in tech.missing_resources %}
+      {{ T(mr.label_key, mr.resource_key) }} {{ mr.deficit }}{% if not loop.last %} · {% endif %}
+    {% endfor %}
+  </p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro pe_research_card_actions(tech, planet_id, queue_has_room) %}
+{% if tech.choice_group and not tech.choice_made and tech.choice_options %}
+  <p class="hint">{{ T("pe_research_choice_hint", "Permanente Richtung wählen:") }}</p>
+  <div class="pe-research-actions">
+    {% for opt in tech.choice_options %}
+      <button type="button" class="gc-btn gc-btn-sm pe-choice-btn"
+              data-planet-id="{{ planet_id }}"
+              data-choice-group="{{ tech.choice_group }}"
+              data-choice-key="{{ opt }}">{{ T('pe_choice_' ~ opt, opt) }}</button>
+    {% endfor %}
+  </div>
+{% elif tech.can_start and queue_has_room %}
+  <button type="button" class="gc-btn gc-btn-primary pe-research-btn"
+          data-planet-id="{{ planet_id }}"
+          data-tech-key="{{ tech.tech_key }}"
+          data-can-start="1">{{ T("pe_research_start", "Starten") }}</button>
+{% else %}
+  {% if tech.unavailable_reason_key == "not_enough_resources" %}
+    <button type="button" class="gc-btn gc-btn-primary" disabled aria-disabled="true">{{ T("pe_research_cannot_afford", "Ressourcen fehlen") }}</button>
+  {% elif tech.unavailable_reason_key == "queue_full" %}
+    <p class="hint">{{ T("pe_research_queue_full", "Forschungs-Warteschlange ist voll.") }}</p>
+    <button type="button" class="gc-btn gc-btn-primary" disabled aria-disabled="true">{{ T("pe_reason_queue_full", "Warteschlange voll") }}</button>
+  {% elif tech.unavailable_reason_key %}
+    <p class="hint">{{ T("pe_reason_" ~ tech.unavailable_reason_key, tech.unavailable_reason_key) }}</p>
+    <button type="button" class="gc-btn gc-btn-primary" disabled aria-disabled="true">{{ T("pe_reason_" ~ tech.unavailable_reason_key, tech.unavailable_reason_key) }}</button>
+  {% endif %}
+{% endif %}
+{% endmacro %}
+
 {% block content %}
 <div class="gc-page planet-evolution-page">
 
@@ -54,6 +105,15 @@
     <h2 class="section-title">{{ T("pe_title", "Planet-Entwicklung") }}</h2>
     <p class="section-hint hint">{{ T("pe_hint", "Forme die Identität, Wirtschaft und Zukunft deiner Kolonie.") }}</p>
   </header>
+
+  <section class="pe-intro gc-panel" aria-label="{{ T('pe_intro_title', 'So funktioniert Planet-Entwicklung') }}">
+    <h3 class="pe-intro-title">{{ T("pe_intro_title", "So funktioniert Planet-Entwicklung") }}</h3>
+    <ul class="pe-intro-list">
+      <li>{{ T("pe_intro_dna", "Die Planet-DNA bestimmt Stärken, Schwächen und seltene Besonderheiten deiner Kolonie.") }}</li>
+      <li>{{ T("pe_intro_xp", "Entwicklungspunkte erhältst du durch Ausbau, Planet-Forschung, Events und laufende Produktion.") }}</li>
+      <li>{{ T("pe_intro_identity", "Ab Stufe 8 wählst du die permanente Planet-Identität — eine der wichtigsten Entscheidungen.") }}</li>
+    </ul>
+  </section>
 
   <section class="pe-colony-bar">
     <span class="pe-colony-label">{{ T("pe_planet_switcher", "Deine Kolonien") }}</span>
@@ -139,7 +199,12 @@
           {{ T(action.body_key, "Nutze die Zeit, um deinen Planeten weiterzuentwickeln.") }}
         {% endif %}
       </p>
-      <button type="button" class="gc-btn gc-btn-primary pe-scroll-btn" data-scroll="{{ action.cta_target or 'traits' }}">
+      <button type="button"
+              class="gc-btn gc-btn-primary pe-action-btn"
+              data-cta-action="{{ action.cta_action or 'focus_section' }}"
+              data-cta-target="{{ action.cta_target or 'traits' }}"
+              {% if action.cta_highlight %}data-cta-highlight="{{ action.cta_highlight }}"{% endif %}
+              {% if action.tech_key %}data-tech-key="{{ action.tech_key }}"{% endif %}>
         {{ T(action.cta_label_key, "Weiter") }}
       </button>
     </section>
@@ -152,7 +217,11 @@
           <li class="pe-problem pe-problem-{{ w.severity }}">
             <div class="pe-problem-title">{{ T(w.label_key, w.key) }}</div>
             <div class="pe-problem-body hint">{{ T(w.body_key, "") }}</div>
-            <button type="button" class="pe-link-btn pe-scroll-btn" data-scroll="{{ w.action_target }}">{{ T("pe_view_details", "Details anzeigen") }}</button>
+            <button type="button"
+                    class="pe-link-btn pe-action-btn"
+                    data-cta-action="focus"
+                    data-cta-target="{{ w.action_target }}"
+                    data-cta-highlight="pe-section-{{ w.action_target }}">{{ T("pe_view_details", "Details anzeigen") }}</button>
           </li>
           {% endfor %}
         </ul>
@@ -177,7 +246,28 @@
           <span class="pe-trait-cat hint">{{ T(trait.category_label_key, trait.category) }}</span>
         </header>
         <h4 class="pe-trait-name">{{ T(trait.label_key, trait.key) }}</h4>
+        {% if trait.effect_key and T(trait.effect_key, "") %}
         <p class="pe-trait-effect">{{ T(trait.effect_key, "") }}</p>
+        {% endif %}
+        {% if trait.effect_lines %}
+        <ul class="pe-trait-effects" aria-label="{{ T('pe_trait_effects_label', 'Konkrete Auswirkungen') }}">
+          {% for fx in trait.effect_lines %}
+          <li class="pe-trait-chip pe-trait-chip-{{ fx.kind }}">
+            {% if fx.kind == 'affinity' %}
+              {{ T(fx.label_key, '+%(value)s%% %(affinity)s') % {'value': fx.value, 'affinity': T(fx.affinity_label_key, fx.affinity_key)} }}
+            {% elif fx.kind == 'unlock' %}
+              {{ T(fx.label_key, 'Schaltet frei: %(target)s') % {'target': T(fx.target_label_key, '')} }}
+            {% elif fx.kind == 'block' %}
+              {{ T(fx.label_key, 'Blockiert: %(target)s') % {'target': T(fx.target_label_key, '')} }}
+            {% elif fx.value is defined %}
+              {{ T(fx.label_key, '') % {'value': fx.value} }}
+            {% else %}
+              {{ T(fx.label_key, '') }}
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
         {% if trait.risk_key %}
         <p class="pe-trait-risk">{{ T(trait.risk_key, "") }}</p>
         {% endif %}
@@ -258,6 +348,24 @@
   {# ── Specialization ── #}
   <section class="pe-section-block gc-panel pe-spec-hero" id="pe-section-specialization">
     <h3 class="pe-block-title">{{ T("pe_spec_section", "Planet-Identität") }}</h3>
+
+    {% set id_teaser = dash.identity_teaser if dash.identity_teaser is defined else {} %}
+    {% if id_teaser.visible and id_teaser.status != 'active' %}
+    <div class="pe-identity-teaser pe-identity-teaser-{{ id_teaser.status }}">
+      <h4 class="pe-identity-teaser-title">{{ T(id_teaser.title_key, '') }}</h4>
+      <p class="hint">{{ T(id_teaser.body_key, '') }}</p>
+      {% if id_teaser.status == 'countdown' %}
+      <div class="pe-identity-teaser-bar">
+        <div class="build-bar build-bar-large">
+          <div class="build-bar-fill gc-progress-smooth" style="width: {{ id_teaser.progress_to_unlock_pct or 0 }}%;"></div>
+        </div>
+        <span class="hint">{{ T('pe_identity_countdown_fmt', 'Noch %(remaining)s Stufen bis Identität (Stufe %(unlock)s).') % {'remaining': id_teaser.levels_remaining, 'unlock': id_teaser.unlock_level} }}</span>
+      </div>
+      {% elif id_teaser.status == 'ready' %}
+      <p class="pe-identity-teaser-cta-hint hint">{{ T('pe_identity_teaser_ready_hint', 'Scrolle nach unten und wähle eine permanente Spezialisierung.') }}</p>
+      {% endif %}
+    </div>
+    {% endif %}
 
     {% if spec_detail.spec_key %}
       <div class="pe-spec-active-block">
@@ -388,7 +496,9 @@
     {% else %}
       <div class="pe-empty-state">
         <p>{{ T("pe_spec_locked", "Ab Stufe 8 kannst du die Identität deines Planeten festlegen.") }}</p>
-        {% if ps.level < 8 %}
+        {% if ps.level < 8 and id_teaser.visible %}
+        <p class="hint">{{ T("pe_spec_levels_remaining", "Noch %(remaining)s Stufen bis zur Freischaltung.") % {"remaining": id_teaser.levels_remaining or (8 - ps.level)} }}</p>
+        {% elif ps.level < 8 %}
         <p class="hint">{{ T("pe_spec_levels_remaining", "Noch %(remaining)s Stufen bis zur Freischaltung.") % {"remaining": (8 - ps.level)} }}</p>
         {% endif %}
       </div>
@@ -424,28 +534,13 @@
       <section class="pe-research-zone">
         <h4>{{ T("pe_research_recommended", "Empfohlen für diesen Planeten") }}</h4>
         {% for tech in rdx.recommended %}
-        <article class="pe-research-card">
+        <article class="pe-research-card" id="pe-research-card-{{ tech.tech_key }}" data-tech-key="{{ tech.tech_key }}">
           <h5>{{ T(tech.label_key, tech.tech_key) }}</h5>
           {% if tech.unlock_key %}
           <p class="pe-research-unlock"><strong>{{ T("pe_research_unlocks", "Schaltet frei:") }}</strong> {{ T(tech.unlock_key, "") }}</p>
           {% endif %}
-          {% if tech.choice_group and not tech.choice_made and tech.choice_options %}
-            <p class="hint">{{ T("pe_research_choice_hint", "Permanente Richtung wählen:") }}</p>
-            <div class="pe-research-actions">
-              {% for opt in tech.choice_options %}
-                <button type="button" class="gc-btn gc-btn-sm pe-choice-btn"
-                        data-planet-id="{{ ps.planet_id }}"
-                        data-choice-group="{{ tech.choice_group }}"
-                        data-choice-key="{{ opt }}">{{ T('pe_choice_' ~ opt, opt) }}</button>
-              {% endfor %}
-            </div>
-          {% elif rdx.queue_has_room %}
-            <button type="button" class="gc-btn gc-btn-primary pe-research-btn"
-                    data-planet-id="{{ ps.planet_id }}"
-                    data-tech-key="{{ tech.tech_key }}">{{ T("research_start", "Forschung starten") }}</button>
-          {% else %}
-            <p class="hint">{{ T("pe_research_queue_full", "Forschungs-Warteschlange ist voll.") }}</p>
-          {% endif %}
+          {{ pe_research_card_meta(tech) }}
+          {{ pe_research_card_actions(tech, ps.planet_id, rdx.queue_has_room) }}
         </article>
         {% endfor %}
       </section>
@@ -458,6 +553,8 @@
         <article class="pe-research-card pe-research-locked">
           <h5>{{ T(tech.label_key, tech.tech_key) }}</h5>
           {% if tech.unlock_key %}<p class="hint">{{ T(tech.unlock_key, "") }}</p>{% endif %}
+          {{ pe_research_card_meta(tech) }}
+          <p class="hint"><strong>{{ T("header_requirements", "Voraussetzungen") }}:</strong></p>
           <ul class="pe-req-list">
             {% for req in tech.missing_human %}
             <li>{{ T(req.label_key, req.fallback) }}</li>
@@ -472,7 +569,7 @@
     {# Events #}
     <div class="pe-sec-panel" data-panel="events" hidden id="pe-section-events">
       {% if ps.active_event %}
-      <article class="pe-event-decision gc-panel">
+      <article class="pe-event-decision gc-panel" id="pe-event-decision">
         <span class="pe-event-urgent">{{ T("pe_event_urgent", "Dringend") }}</span>
         <h4>{{ T(ps.active_event.label_key, ps.active_event.event_key) }}</h4>
         <p>{{ T("pe_event_decision_hint", "Deine Entscheidung verändert Produktion, Stabilität oder zukünftige Events.") }}</p>

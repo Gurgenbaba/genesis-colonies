@@ -490,7 +490,11 @@ def get_build_queue_status_for_planet(
             "first_finish_in": int(first_remaining or 0),
         }
 
-        return {"queue": queue, "summary": summary}
+        return {
+            "planet_id": int(planet_id),
+            "queue": queue,
+            "summary": summary,
+        }
 
     finally:
         if own:

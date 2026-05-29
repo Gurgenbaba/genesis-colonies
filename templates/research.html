@@ -1,11 +1,9 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_research_inline_queue, render_req_tooltip, render_prog_identity with context %}
+{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_prog_identity with context %}
 
 {% block content %}
 
 {% set rs = (research_status if research_status is defined and research_status else {}) %}
-{% set active = (rs.active if rs and rs.active is defined else None) %}
-{% set rq = (rs.queue if rs and rs.queue is defined and rs.queue else []) %}
 {% set rq_summary = (rs.summary if rs and rs.summary is defined and rs.summary else {}) %}
 {% set techs = (rs.techs if rs and rs.techs is defined and rs.techs else []) %}
 {% set lab_level = (rs.lab_level if rs and rs.lab_level is defined else 0) %}
@@ -62,12 +60,11 @@
         </div>
 
         {% for tech in techs %}
-          {% set is_active = tech.is_active if tech.is_active is defined else (active and active.key == tech.key) %}
           {% set locked = not tech.requirements_met %}
           {% set curr_lvl = (tech.level or 0)|int %}
-          {% set q_count = (tech.queue_count if tech.queue_count is defined else 0)|int %}
-          {% set target_lvl = (tech.target_level if tech.target_level is defined else (curr_lvl + q_count + 1)) %}
+          {% set target_lvl = (tech.target_level if tech.target_level is defined else (curr_lvl + 1)) %}
           {% set req_tooltip = render_req_tooltip(tech.requirements_items) | trim %}
+          {% set can_afford = tech.can_afford if tech.can_afford is defined else true %}
 
           {% set tech_label = T(tech.key) %}
           {% if tech_label == tech.key %}
@@ -85,13 +82,13 @@
           {% set row_class = '' %}
           {% if locked %}
             {% set row_class = 'gc-prog-locked' %}
-          {% elif q_count > 0 %}
-            {% set row_class = 'gc-prog-queued gc-prog-affordable' %}
+          {% elif not can_afford %}
+            {% set row_class = 'gc-prog-unaffordable' %}
           {% else %}
             {% set row_class = 'gc-prog-affordable' %}
           {% endif %}
 
-          <div class="gc-prog-card {{ row_class }}{% if q_count > 0 %} gc-prog-has-queue{% endif %}{% if locked %} tech-row-locked{% endif %}{% if q_count > 0 %} tech-row-queued{% endif %}"
+          <div class="gc-prog-card {{ row_class }}{% if locked %} tech-row-locked{% endif %}"
                data-tech-key="{{ tech.key }}"
                role="listitem">
 
@@ -104,22 +101,10 @@
 
               <div class="gc-prog-col gc-prog-level">
                 <span class="gc-level-badge tech-level-current">{{ curr_lvl|fmt_int }}</span>
-                {% if q_count > 0 %}
-                  <div class="tech-queue-badges">
-                    {% if is_active %}
-                      <span class="tech-queue-badge tech-queue-badge-active">
-                        {{ T("research_btn_active") }}
-                      </span>
-                    {% endif %}
-                    <span class="tech-queue-badge">
-                      ×{{ q_count|fmt_int }}
-                    </span>
-                  </div>
-                {% endif %}
               </div>
 
               <div class="gc-prog-col gc-prog-costs tech-cost-cell">
-                {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, target_lvl, 0) }}
+                {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, target_lvl) }}
               </div>
 
               <div class="gc-prog-col gc-prog-time tech-time-cell">
@@ -140,6 +125,13 @@
                       title="{{ T('research_status_queue_full', 'Warteschlange voll') }}">
                   {{ T("research_status_queue_full_short", "Voll") }}
                 </span>
+              {% elif not can_afford %}
+                <button type="button"
+                        class="gc-btn gc-btn-danger gc-btn-xs btn-research"
+                        disabled
+                        title="{{ T('research_not_enough_resources') }}">
+                  {{ T("research_btn_start") }}
+                </button>
               {% else %}
                 <a href="{{ url_for('research_start', tech_key=tech.key) }}"
                    class="gc-btn gc-btn-primary gc-btn-xs btn-research">
@@ -152,10 +144,6 @@
               {% endif %}
               </div>
             </div>
-
-            {% if q_count > 0 %}
-              {{ render_research_inline_queue(rq, tech.key) }}
-            {% endif %}
           </div>
         {% endfor %}
       </div>

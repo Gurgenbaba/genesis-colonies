@@ -596,6 +596,20 @@ def overview():
     if ctx is None:
         return redirect(url_for("login"))
 
+    from game.planet_evolution.teaser import get_overview_planet_teaser
+
+    planet_teaser = {"visible": False}
+    conn = db()
+    try:
+        planet_teaser = get_overview_planet_teaser(
+            int(session["user_id"]),
+            metal=float(ctx["player_view"]["metal"]),
+            crystal=float(ctx["player_view"]["crystal"]),
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
     return render_template(
         "overview.html",
         player=ctx["player_view"],
@@ -608,6 +622,40 @@ def overview():
         build_queue=ctx["build_queue"],
         research_status=ctx["research"],
         build_status=ctx["build_queue"],
+        planet_teaser=planet_teaser,
+    )
+
+
+@app.route("/trader-hub")
+@require_login
+def trader_hub_view():
+    ctx = _load_page_live_context(finish_source="trader_hub")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.exchange import exchange_schema_ready, get_exchange_status
+    from game.planet_evolution.repository import get_context_planet
+
+    exchange = {}
+    conn = db()
+    try:
+        planet = get_context_planet(int(session["user_id"]), conn=conn)
+        if exchange_schema_ready(conn):
+            exchange = get_exchange_status(
+                player_id=int(session["user_id"]),
+                planet_id=int(planet["id"]),
+                metal=float(ctx["player_view"]["metal"]),
+                crystal=float(ctx["player_view"]["crystal"]),
+                conn=conn,
+            )
+    finally:
+        conn.close()
+
+    return render_template(
+        "trader_hub.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        exchange=exchange,
     )
 
 
@@ -636,6 +684,8 @@ def buildings_view():
     return render_template(
         "buildings.html",
         player=ctx["player_view"],
+        active_planet_id=int(planet["id"]),
+        active_planet_name=str(planet.get("name") or ""),
         rows_by_tab=rows_by_tab,
         active_tab=active_tab,
         build_queue=ctx["build_queue"],
@@ -721,7 +771,11 @@ def research_start(tech_key):
         elif reason == "research_queue_full":
             flash(T("research_msg_queue_full"), "error")
         elif reason == "not_enough_resources":
-            need_m, need_c = payload
+            if isinstance(payload, dict):
+                need_m = int(payload.get("metal", 0))
+                need_c = int(payload.get("crystal", 0))
+            else:
+                need_m, need_c = payload
             flash(T("research_msg_not_enough", metal=need_m, crystal=need_c), "error")
         elif reason == "unknown_tech":
             flash(T("research_msg_unknown"), "error")
@@ -1947,6 +2001,36 @@ def _payload_from_live_context(
     except Exception:
         payload["unread_messages_count"] = 0
 
+    try:
+        from game.exchange import exchange_schema_ready, get_exchange_status
+
+        conn_ex = db()
+        try:
+            if exchange_schema_ready(conn_ex):
+                planet = get_context_planet(user_id, conn=conn_ex)
+                payload["exchange"] = get_exchange_status(
+                    player_id=user_id,
+                    planet_id=int(planet["id"]),
+                    metal=float(player_view["metal"]),
+                    crystal=float(player_view["crystal"]),
+                    conn=conn_ex,
+                )
+        finally:
+            conn_ex.close()
+    except Exception:
+        pass
+
+    try:
+        from game.planet_evolution.teaser import get_overview_planet_teaser
+
+        payload["planet_teaser"] = get_overview_planet_teaser(
+            user_id,
+            metal=float(player_view["metal"]),
+            crystal=float(player_view["crystal"]),
+        )
+    except Exception:
+        payload["planet_teaser"] = {"visible": False}
+
     return payload
 
 
@@ -2031,6 +2115,89 @@ def api_game_state():
     if not payload.get("ok"):
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
     return jsonify(payload)
+
+
+@app.route("/api/exchange/rates")
+@require_login
+def api_exchange_rates():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    from game.exchange import exchange_schema_ready, get_exchange_status
+    from game.planet_evolution.repository import get_context_planet
+    from game.logic import refresh_player_live_state
+
+    conn = db()
+    try:
+        if not exchange_schema_ready(conn):
+            return jsonify({"ok": False, "reason": "exchange_unavailable"}), 503
+        player_view, _, _, _, _, _ = refresh_player_live_state(user_id, conn=conn, finish_source="exchange_rates")
+        planet = get_context_planet(user_id, conn=conn)
+        status = get_exchange_status(
+            player_id=user_id,
+            planet_id=int(planet["id"]),
+            metal=float(player_view["metal"]),
+            crystal=float(player_view["crystal"]),
+            conn=conn,
+        )
+        conn.commit()
+        return jsonify({"ok": True, "exchange": status})
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
+@app.route("/api/exchange", methods=["POST"])
+@require_login
+def api_exchange():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    from_resource = (data.get("from") or data.get("from_resource") or "").strip().lower()
+    direction = (data.get("direction") or "").strip().lower()
+    if direction == "metal_to_crystal":
+        from_resource = "metal"
+    elif direction == "crystal_to_metal":
+        from_resource = "crystal"
+
+    try:
+        amount = int(data.get("amount") or 0)
+    except (TypeError, ValueError):
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_exchange")
+        return jsonify({"ok": False, "reason": "invalid_amount", "state": state}), 400
+
+    from game.exchange import execute_exchange, exchange_schema_ready
+    from game.planet_evolution.repository import get_context_planet
+
+    if not exchange_schema_ready(db()):
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_exchange")
+        return jsonify({"ok": False, "reason": "exchange_unavailable", "state": state}), 503
+
+    conn = db()
+    try:
+        planet = get_context_planet(user_id, conn=conn)
+        ok, reason, result = execute_exchange(
+            player_id=user_id,
+            planet_id=int(planet["id"]),
+            from_resource=from_resource,
+            amount=amount,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    return _action_json_response(
+        ok,
+        reason,
+        payload=result if not ok else None,
+        job=result if ok else None,
+        finish_source="api_exchange",
+    )
 
 
 @app.route("/api/buildings/upgrade", methods=["POST"])

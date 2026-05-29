@@ -1,16 +1,14 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_building_inline_queue, render_req_tooltip, render_prog_identity with context %}
+{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_prog_identity with context %}
 
 {# ===================================================================
    Compact building cards (Resources / Research / Military / Infrastructure)
    =================================================================== #}
-{% macro render_building_table(rows, tab_name, bq_summary, bq_queue_full, bq_items) %}
+{% macro render_building_table(rows, tab_name, bq_summary, bq_queue_full) %}
 
   {% set rows = rows if rows else [] %}
   {% set _bq_summary = bq_summary if bq_summary is defined and bq_summary else {} %}
   {% set _bq_queue_full = bq_queue_full if bq_queue_full is defined else false %}
-  {% set _bq_items = bq_items if bq_items is defined and bq_items else [] %}
-
   {% if rows|length == 0 %}
     <div class="gc-empty-state">
       <div class="gc-empty-title">{{ T("msg_generic_error", "Keine Daten") }}</div>
@@ -29,7 +27,6 @@
       {% for b in rows %}
         {% set building_type = b.key %}
         {% set is_max = (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) %}
-        {% set q_count = (b.queue_count if b.queue_count is defined else 0)|int %}
         {% set desc = T('desc_' ~ building_type) %}
         {% if desc == 'desc_' ~ building_type %}
           {% set desc = '' %}
@@ -42,13 +39,11 @@
           {% set row_class = 'gc-prog-locked' %}
         {% elif not b.can_afford %}
           {% set row_class = 'gc-prog-unaffordable' %}
-        {% elif q_count > 0 %}
-          {% set row_class = 'gc-prog-queued gc-prog-affordable' %}
         {% else %}
           {% set row_class = 'gc-prog-affordable' %}
         {% endif %}
 
-        <div class="gc-prog-card {{ row_class }}{% if q_count > 0 %} gc-prog-has-queue{% endif %}"
+        <div class="gc-prog-card {{ row_class }}"
              data-building-row="{{ building_type }}"
              role="listitem">
 
@@ -60,7 +55,7 @@
             </div>
 
             <div class="gc-prog-col gc-prog-costs bcell-cost">
-              {{ render_prog_costs(b.cost_metal, b.cost_crystal, b.target_level, q_count) }}
+              {{ render_prog_costs(b.cost_metal, b.cost_crystal, b.target_level) }}
             </div>
 
             <div class="gc-prog-col gc-prog-time bcell-duration">
@@ -115,10 +110,6 @@
             {% endif %}
             </div>
           </div>
-
-          {% if q_count > 0 %}
-            {{ render_building_inline_queue(_bq_items, building_type) }}
-          {% endif %}
         </div>
       {% endfor %}
     </div>
@@ -131,7 +122,6 @@
 {% set active_tab = (active_tab if active_tab is defined and active_tab else 'resources') %}
 {% set rows_by_tab = (rows_by_tab if rows_by_tab is defined and rows_by_tab else {}) %}
 {% set bq = (build_queue if build_queue is defined and build_queue else {}) %}
-{% set bq_items = (bq.queue if bq and bq.queue is defined and bq.queue else []) %}
 {% set bq_summary = (bq.summary if bq and bq.summary is defined and bq.summary else {}) %}
 {% set bq_limit = (bq_summary.limit if bq_summary.limit is defined else 3) %}
 {% set bq_queue_full = (bq_summary.count or 0)|int >= bq_limit|int %}
@@ -153,7 +143,14 @@
   <div class="buildings-shell gc-panel">
 
     <div class="gc-panel-header build-queue-head gc-prog-queue-head">
-      <span class="gc-panel-title">{{ T("build_queue_title", "Bauschleife") }}</span>
+      <span class="gc-panel-title">
+        {{ T("build_queue_title", "Bauschleife") }}
+        {% if active_planet_name is defined and active_planet_name %}
+          <span class="build-queue-planet-chip" id="build-queue-planet-label" title="{{ T('pe_planet_switcher', 'Kolonie wählen') }}">
+            · {{ active_planet_name }}
+          </span>
+        {% endif %}
+      </span>
       <span class="gc-panel-subtitle" id="build-queue-subtitle">
         {% if bq_summary and bq_summary.count %}
           {{ (bq_summary.count or 0)|int }}/{{ bq_limit|int }} {{ T("build_queue_jobs") }}
@@ -165,7 +162,10 @@
       </span>
     </div>
 
-    <div id="build-queue-root" class="build-queue-root gc-prog-queue-panel" aria-live="polite"></div>
+    <div id="build-queue-root"
+         class="build-queue-root gc-prog-queue-panel"
+         aria-live="polite"
+         {% if active_planet_id is defined %}data-planet-id="{{ active_planet_id|int }}"{% endif %}></div>
 
     <hr class="build-divider gc-prog-divider">
 
@@ -220,7 +220,7 @@
          role="tabpanel"
          id="panel-resources"
          aria-labelledby="tab-resources">
-      {{ render_building_table(rows_by_tab.get('resources', []), 'resources', bq_summary, bq_queue_full, bq_items) }}
+      {{ render_building_table(rows_by_tab.get('resources', []), 'resources', bq_summary, bq_queue_full) }}
     </div>
 
     <div class="tab-content {{ 'active' if active_tab == 'research' else '' }}"
@@ -228,7 +228,7 @@
          role="tabpanel"
          id="panel-research"
          aria-labelledby="tab-research">
-      {{ render_building_table(rows_by_tab.get('research', []), 'research', bq_summary, bq_queue_full, bq_items) }}
+      {{ render_building_table(rows_by_tab.get('research', []), 'research', bq_summary, bq_queue_full) }}
     </div>
 
     <div class="tab-content {{ 'active' if active_tab == 'military' else '' }}"
@@ -236,7 +236,7 @@
          role="tabpanel"
          id="panel-military"
          aria-labelledby="tab-military">
-      {{ render_building_table(rows_by_tab.get('military', []), 'military', bq_summary, bq_queue_full, bq_items) }}
+      {{ render_building_table(rows_by_tab.get('military', []), 'military', bq_summary, bq_queue_full) }}
     </div>
 
     <div class="tab-content {{ 'active' if active_tab == 'infrastructure' else '' }}"
@@ -244,7 +244,7 @@
          role="tabpanel"
          id="panel-infrastructure"
          aria-labelledby="tab-infrastructure">
-      {{ render_building_table(rows_by_tab.get('infrastructure', []), 'infrastructure', bq_summary, bq_queue_full, bq_items) }}
+      {{ render_building_table(rows_by_tab.get('infrastructure', []), 'infrastructure', bq_summary, bq_queue_full) }}
     </div>
 
   </div>

@@ -69,12 +69,14 @@ def test_locale_mechanics_descriptions():
     for locale, label in ((de, "de"), (en, "en")):
         if label == "de":
             assert "5 %" in locale["desc_terraformer"] and "Lager" in locale["desc_terraformer"]
+            assert "Infrastruktur" in locale["desc_terraformer"]
             assert "5 %" in locale["desc_academy"] and "Forschung" in locale["desc_academy"]
             assert "3 %" in locale["desc_nanofactory"] and "Bauzeit" in locale["desc_nanofactory"]
             assert "10 %" in locale["desc_mining_tech"] and "4 %" in locale["desc_mining_tech"]
             assert "25 %" in locale["desc_storage_tech"] and "Lager" in locale["desc_storage_tech"]
         else:
             assert "5%" in locale["desc_terraformer"] and "storage" in locale["desc_terraformer"].lower()
+            assert "infrastructure" in locale["desc_terraformer"].lower()
             assert "5%" in locale["desc_academy"] and "research" in locale["desc_academy"].lower()
             assert "3%" in locale["desc_nanofactory"] and "build" in locale["desc_nanofactory"].lower()
             assert "10%" in locale["desc_mining_tech"] and "4%" in locale["desc_mining_tech"]
@@ -115,8 +117,9 @@ def test_buildings_page_renders(temp_db, monkeypatch):
     assert "gc-prog-effect" not in html
     assert "gc-prog-desc" not in html
 
-    info_count = html.count('class="gc-prog-info"')
+    info_count = html.count('class="gc-prog-info')
     assert info_count >= len(BUILDING_ORDER), f"expected >={len(BUILDING_ORDER)} info tooltips, got {info_count}"
+    assert "gc-popover-trigger" in html
 
     assert "status-pill-icon-btn" in html or "🔒" in html
 
@@ -133,12 +136,35 @@ def test_research_page_renders(temp_db, monkeypatch):
     assert "gc-prog-effect" not in html
     assert "gc-prog-desc" not in html
 
-    info_count = html.count('class="gc-prog-info"')
+    info_count = html.count('class="gc-prog-info')
     assert info_count >= len(RESEARCH_TECHS), f"expected >={len(RESEARCH_TECHS)} info tooltips, got {info_count}"
+    assert "gc-popover-trigger" in html
 
     assert "status-pill-locked status-pill-icon" in html
     assert "🔒" in html
     assert "Voraussetzungen nicht erfüllt" in html
+
+
+def test_trait_effect_keys_en_complete():
+    en = json.loads((ROOT / "locales" / "en.json").read_text(encoding="utf-8"))
+    trait_keys = [
+        "ferronit_rich_crust",
+        "crytite_veins",
+        "unstable_mantle",
+        "deep_core_pressure",
+        "plasma_winds",
+        "cryogenic_atmosphere",
+        "aetherion_storms",
+        "radioactive_ocean",
+        "organic_subsurface_network",
+        "high_gravity",
+        "ancient_ruins",
+        "dark_matter_residue",
+        "quantum_echo_field",
+        "subsurface_vault_hint",
+    ]
+    for key in trait_keys:
+        assert f"trait_effect_{key}" in en, f"missing en trait_effect_{key}"
 
 
 def test_queue_full_short_label_keys_exist():

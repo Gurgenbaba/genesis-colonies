@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set player_obj = (player if player is defined and player else None) %}
+{% set caps = (storage_caps if storage_caps is defined and storage_caps else {'metal': 0, 'crystal': 0}) %}
+{% set p_metal = (player_obj.metal if player_obj and player_obj.metal is defined else 0) | int %}
+{% set p_crystal = (player_obj.crystal if player_obj and player_obj.crystal is defined else 0) | int %}
+
+<div class="gc-page trader-hub-page">
+  <header class="gc-page-header section-header">
+    <h1 class="section-title">{{ T("trader_hub_title", "Trader Hub") }}</h1>
+    <p class="section-hint hint">{{ T("trader_hub_hint", "Soforttausch Ferronit und Crytite auf deiner aktiven Kolonie.") }}</p>
+  </header>
+
+  <section class="gc-panel trader-hub-balance" aria-label="{{ T('trader_hub_balance', 'Kolonie-Bestand') }}">
+    <div class="overview-resources trader-hub-resources">
+      <article class="overview-res-card" aria-label="{{ T('resource_metal') }}">
+        <img src="{{ url_for('static', filename='icons/ferronit.png') }}"
+             alt="{{ T('resource_metal') }}" class="overview-res-icon" loading="lazy">
+        <div class="overview-res-meta">
+          <span class="overview-res-label">{{ T("resource_metal") }}</span>
+          <span class="overview-res-main">
+            <span class="gc-val" data-res="metal">{{ p_metal|fmt_int }}</span>
+            <span class="gc-cap">/ {{ (caps.metal if caps and caps.metal is defined else (caps.get('metal', 0) if caps is mapping else 0))|fmt_int }}</span>
+          </span>
+        </div>
+      </article>
+      <article class="overview-res-card" aria-label="{{ T('resource_crystal') }}">
+        <img src="{{ url_for('static', filename='icons/crytite.png') }}"
+             alt="{{ T('resource_crystal') }}" class="overview-res-icon" loading="lazy">
+        <div class="overview-res-meta">
+          <span class="overview-res-label">{{ T("resource_crystal") }}</span>
+          <span class="overview-res-main">
+            <span class="gc-val" data-res="crystal">{{ p_crystal|fmt_int }}</span>
+            <span class="gc-cap">/ {{ (caps.crystal if caps and caps.crystal is defined else (caps.get('crystal', 0) if caps is mapping else 0))|fmt_int }}</span>
+          </span>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  {% include "partials/exchange_panel.html" %}
+</div>
+{% endblock %}

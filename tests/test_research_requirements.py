@@ -21,6 +21,7 @@ import game.db as dbmod
 import game.models as models
 from game.logic import refresh_player_live_state
 from game.models import create_user, get_homeworld, init_db, save_planet_buildings
+from game.planet_evolution.repository import set_active_planet_id
 from game.planet_evolution.service import colonize_planet, set_active_planet
 from game.research import (
     get_player_research_lab_level,
@@ -129,6 +130,14 @@ def test_research_page_renders_empire_lab_level_chip(research_db, monkeypatch):
     save_planet_buildings(colony_id, {"metal_mine": 1, "solar_plant": 1})
     set_active_planet(player_id, colony_id)
 
+    conn = dbmod.db()
+    conn.execute(
+        "UPDATE planets SET metal = 50000, crystal = 50000 WHERE id = ?;",
+        (colony_id,),
+    )
+    conn.commit()
+    conn.close()
+
     client = app_module.app.test_client()
     client.post("/login", data={"username": uname, "password": "test-pass-123"})
     html = client.get("/research").get_data(as_text=True)
@@ -179,3 +188,73 @@ def test_queue_research_uses_empire_lab_not_homeworld_only(research_db):
     player = models.load_player(player_id)
     ok, reason, _ = queue_research(player, "energy_tech")
     assert ok, reason
+
+
+def test_queue_research_charges_active_planet_not_homeworld(research_db):
+    """Resources shown in HUD (active colony) must be the ones spent for research."""
+    player_id, _ = _create_player()
+    hw = get_homeworld(player_id=player_id)
+    hw_id = int(hw["id"])
+    colony_id = _second_planet(player_id)
+
+    save_planet_buildings(hw_id, {"research_lab": 1, "metal_mine": 1, "solar_plant": 1})
+    save_planet_buildings(colony_id, {"metal_mine": 1, "solar_plant": 1})
+
+    conn = dbmod.db()
+    conn.execute(
+        "UPDATE planets SET metal = 50, crystal = 50 WHERE id = ?;",
+        (hw_id,),
+    )
+    conn.execute(
+        "UPDATE planets SET metal = 50000, crystal = 50000 WHERE id = ?;",
+        (colony_id,),
+    )
+    set_active_planet_id(player_id, colony_id, conn)
+    conn.commit()
+    conn.close()
+
+    player = models.load_player(player_id)
+    ok, reason, _ = queue_research(player, "energy_tech")
+    assert ok, reason
+
+    conn = dbmod.db()
+    hw_metal = float(
+        conn.execute("SELECT metal FROM planets WHERE id = ?;", (hw_id,)).fetchone()["metal"]
+    )
+    col_metal = float(
+        conn.execute("SELECT metal FROM planets WHERE id = ?;", (colony_id,)).fetchone()["metal"]
+    )
+    conn.close()
+
+    assert hw_metal == 50.0
+    assert col_metal < 50000.0
+
+
+def test_research_status_can_afford_uses_active_planet(research_db):
+    player_id, _ = _create_player()
+    hw_id = int(get_homeworld(player_id=player_id)["id"])
+    colony_id = _second_planet(player_id)
+
+    save_planet_buildings(hw_id, {"research_lab": 1, "metal_mine": 1, "solar_plant": 1})
+    save_planet_buildings(colony_id, {"metal_mine": 1, "solar_plant": 1})
+
+    conn = dbmod.db()
+    conn.execute("UPDATE planets SET metal = 50, crystal = 50 WHERE id = ?;", (hw_id,))
+    conn.execute("UPDATE planets SET metal = 50000, crystal = 50000 WHERE id = ?;", (colony_id,))
+    set_active_planet_id(player_id, colony_id, conn)
+    conn.commit()
+    conn.close()
+
+    _, buildings, _, _, _, _ = refresh_player_live_state(player_id)
+    status = get_research_status(player_id, buildings=buildings, skip_finish=True)
+    assert _tech(status, "energy_tech")["can_afford"] is True
+
+    conn = dbmod.db()
+    conn.execute("UPDATE planets SET metal = 10, crystal = 10 WHERE id = ?;", (colony_id,))
+    set_active_planet_id(player_id, colony_id, conn)
+    conn.commit()
+    conn.close()
+
+    _, buildings, _, _, _, _ = refresh_player_live_state(player_id)
+    status_poor = get_research_status(player_id, buildings=buildings, skip_finish=True)
+    assert _tech(status_poor, "energy_tech")["can_afford"] is False

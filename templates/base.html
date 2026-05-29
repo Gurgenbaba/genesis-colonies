@@ -184,6 +184,11 @@
           {{ T("nav_planet_evolution", "Planet Evolution") }}
         </a>
 
+        <a href="{{ url_for('trader_hub_view') }}"
+           class="gc-nav-link {% if request.endpoint == 'trader_hub_view' %}active{% endif %}">
+          {{ T("nav_trader_hub", "Trader Hub") }}
+        </a>
+
         <a href="{{ url_for('shipyard_view') }}"
            class="gc-nav-link gc-nav-wip {% if request.endpoint == 'shipyard_view' %}active{% endif %}">
           {{ T("nav_shipyard") }}
@@ -347,6 +352,9 @@
         </a>
         <a href="{{ url_for('alliance_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'alliance_view' %}active{% endif %}">
           {{ T("nav_alliance") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        </a>
+        <a href="{{ url_for('trader_hub_view') }}" class="gc-nav-drawer-link {% if request.endpoint == 'trader_hub_view' %}active{% endif %}">
+          {{ T("nav_trader_hub", "Trader Hub") }}
         </a>
         <a href="{{ url_for('techtree_view') }}" class="gc-nav-drawer-link {% if request.endpoint == 'techtree_view' %}active{% endif %}">
           {{ T("nav_techtree", "Tech-Tree") }}

@@ -696,7 +696,7 @@ def get_player_score_cached(
     Cached score read for HUD/header. Keys: total, buildings, research (+ fleet/defense when present).
     """
     if not player_id:
-        return {"total": 0, "buildings": 0, "research": 0, "fleet": 0, "defense": 0}
+        return {"total": 0, "buildings": 0, "research": 0, "fleet": 0, "defense": 0, "evolution": 0}
 
     pid = int(player_id)
     now = time.time()
@@ -708,6 +708,7 @@ def get_player_score_cached(
             "research": int(s.get("research_score", 0)),
             "fleet": int(s.get("fleet_score", 0)),
             "defense": int(s.get("defense_score", 0)),
+            "evolution": int(s.get("evolution_score", 0)),
         }
 
     if force_recompute:
@@ -919,6 +920,7 @@ def get_sorted_ranking_entries(
 
     cur = conn.cursor()
     extra = _fleet_defense_select(conn)
+    evo = _evolution_score_select(conn)
     total_expr = _total_score_sql(conn)
     social_select, social_join = _ranking_social_select_and_join(conn)
     rank_select = ""
@@ -933,6 +935,7 @@ def get_sorted_ranking_entries(
             COALESCE(ps.score_buildings, 0) AS score_buildings,
             COALESCE(ps.score_research, 0) AS score_research,
             {extra},
+            {evo},
             COALESCE(ps.updated_at, 0) AS score_updated_at{rank_select},
             {social_select}
         FROM players p
@@ -1065,9 +1068,20 @@ def get_player_category_ranks(player_id: int, conn=None) -> Dict[str, Any]:
     ranks: Dict[str, Any] = {"total_players": total_players}
 
     has_fleet = column_exists(conn, "player_scores", "score_fleet")
-    if has_fleet:
+    has_evo = column_exists(conn, "player_scores", "score_planet_evolution")
+    if has_fleet and has_evo:
+        cur.execute(
+            "SELECT score_buildings, score_research, score_fleet, score_defense, score_planet_evolution FROM player_scores WHERE player_id = ?",
+            (int(player_id),),
+        )
+    elif has_fleet:
         cur.execute(
             "SELECT score_buildings, score_research, score_fleet, score_defense FROM player_scores WHERE player_id = ?",
+            (int(player_id),),
+        )
+    elif has_evo:
+        cur.execute(
+            "SELECT score_buildings, score_research, score_planet_evolution FROM player_scores WHERE player_id = ?",
             (int(player_id),),
         )
     else:
@@ -1086,6 +1100,7 @@ def get_player_category_ranks(player_id: int, conn=None) -> Dict[str, Any]:
     my_res = _safe_int(score_row["score_research"])
     my_fleet = _safe_int(score_row["score_fleet"]) if "score_fleet" in keys else 0
     my_def = _safe_int(score_row["score_defense"]) if "score_defense" in keys else 0
+    my_evo = _safe_int(score_row["score_planet_evolution"]) if "score_planet_evolution" in keys else 0
 
     if column_exists(conn, "player_scores", "rank_total"):
         cur.execute(
@@ -1123,6 +1138,17 @@ def get_player_category_ranks(player_id: int, conn=None) -> Dict[str, Any]:
         )
         ranks["defense"] = int(cur.fetchone()["better"]) + 1
 
+    if column_exists(conn, "player_scores", "score_planet_evolution"):
+        cur.execute(
+            """
+            SELECT COUNT(*) AS better FROM player_scores
+            WHERE COALESCE(score_planet_evolution, 0) > ?
+               OR (COALESCE(score_planet_evolution, 0) = ? AND player_id < ?)
+            """,
+            (my_evo, my_evo, int(player_id)),
+        )
+        ranks["evolution"] = int(cur.fetchone()["better"]) + 1
+
     if owns_conn:
         conn.close()
     return ranks
@@ -1146,6 +1172,7 @@ def _current_player_payload(
         "research_score": int(my_scores.get("research", 0)),
         "fleet_score": int(my_scores.get("fleet", 0)),
         "defense_score": int(my_scores.get("defense", 0)),
+        "evolution_score": int(my_scores.get("evolution", 0)),
         "ranks": category_ranks,
     }
 
@@ -1157,6 +1184,7 @@ def _current_player_payload(
         current["research_score"] = in_top["research_score"]
         current["fleet_score"] = in_top["fleet_score"]
         current["defense_score"] = in_top["defense_score"]
+        current["evolution_score"] = in_top.get("evolution_score", 0)
 
     return current
 

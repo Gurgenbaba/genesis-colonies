@@ -226,6 +226,51 @@ def test_game_state_follows_active_planet_switch(scoped_db, monkeypatch):
     assert int(body_hw["buildings"]["metal_mine"]) == 3
 
 
+def test_game_state_build_queue_follows_active_planet(scoped_db, monkeypatch):
+    import importlib
+
+    import app as app_mod
+
+    importlib.reload(app_mod)
+    app_mod.app.config["TESTING"] = True
+    app_mod.app.config["WTF_CSRF_ENABLED"] = False
+
+    player_id, uname = _create_player()
+    hw = get_homeworld(player_id=player_id)
+    hw_id = int(hw["id"])
+    colony_id = _second_planet(player_id)
+
+    save_planet_buildings(hw_id, {"metal_mine": 1, "solar_plant": 1})
+    save_planet_buildings(colony_id, {"metal_mine": 1, "solar_plant": 1})
+
+    conn = db()
+    conn.execute("UPDATE planets SET metal = 99999, crystal = 99999 WHERE player_id = ?;", (player_id,))
+    conn.commit()
+    conn.close()
+
+    client = app_mod.app.test_client()
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+
+    set_active_planet(player_id, colony_id)
+    player = load_player(player_id)
+    buildings = get_planet_buildings(colony_id)
+    ok, reason, _ = queue_build(player, buildings, "metal_mine")
+    assert ok, reason
+
+    r_colony = client.get("/api/game-state")
+    body_colony = r_colony.get_json()
+    assert body_colony["active_planet_id"] == colony_id
+    assert int(body_colony["build_queue"]["planet_id"]) == colony_id
+    assert len(body_colony["build_queue"]["queue"]) >= 1
+
+    set_active_planet(player_id, hw_id)
+    r_hw = client.get("/api/game-state")
+    body_hw = r_hw.get_json()
+    assert body_hw["active_planet_id"] == hw_id
+    assert int(body_hw["build_queue"]["planet_id"]) == hw_id
+    assert body_hw["build_queue"]["queue"] == []
+
+
 def test_queue_build_targets_active_planet(scoped_db):
     player_id, _ = _create_player()
     hw = get_homeworld(player_id=player_id)
