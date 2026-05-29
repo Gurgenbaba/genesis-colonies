@@ -427,13 +427,12 @@ def get_build_queue_status_for_planet(
             cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
             prow = cur.fetchone()
             if prow:
-                from .queue_engine import finish_due_work_once
+                from .queue_engine import finish_active_planet_due_work
 
-                finish_due_work_once(
-                    player_id=int(prow["player_id"]),
-                    planet_id=int(planet_id),
-                    now=now,
-                    conn=conn,
+                finish_active_planet_due_work(
+                    int(prow["player_id"]),
+                    int(planet_id),
+                    conn,
                     source="build_queue_status",
                 )
 

@@ -102,14 +102,20 @@ def compute_import_deficits(
 
 def _incoming_routes(planet_id: int, conn: sqlite3.Connection) -> Dict[str, float]:
     cur = conn.cursor()
+    cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+    owner_row = cur.fetchone()
+    owner_id = int(owner_row["player_id"]) if owner_row else None
+    if owner_id is None:
+        return {}
+
     cur.execute(
         """
         SELECT resource_key, SUM(amount_per_hour) AS total
         FROM planet_trade_routes
-        WHERE target_planet_id = ? AND is_active = 1
+        WHERE target_planet_id = ? AND owner_player_id = ? AND is_active = 1
         GROUP BY resource_key;
         """,
-        (int(planet_id),),
+        (int(planet_id), owner_id),
     )
     return {str(r["resource_key"]): float(r["total"] or 0) for r in cur.fetchall()}
 

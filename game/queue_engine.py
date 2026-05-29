@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 _ENGINE_LOCK = threading.RLock()
 
+_MAX_FINISH_PASSES = 8
+
 _BUILDING_KEYS = [
     "metal_mine", "crystal_mine", "solar_plant",
     "research_lab", "academy",
@@ -140,6 +142,65 @@ def _find_cached_result(
     return None
 
 
+def _due_epsilon() -> float:
+    from .queue_poll import DUE_TIME_EPSILON_SEC
+
+    return float(DUE_TIME_EPSILON_SEC)
+
+
+def finish_active_planet_due_work(
+    player_id: int,
+    planet_id: int,
+    conn: sqlite3.Connection,
+    *,
+    source: str = "live_state",
+    update_scores: bool = True,
+    recalc_ranks: bool = True,
+) -> Dict[str, Any]:
+    """
+    Finish due queue work on one planet, retrying while jobs remain due.
+
+    Handles short build/research times and request-level dedup edge cases.
+    """
+    from .queue_poll import player_has_due_queue_work
+
+    uid = int(player_id)
+    pid = int(planet_id)
+    src = str(source or "live_state")
+    aggregate = _empty_result(src)
+    last = aggregate
+
+    for pass_idx in range(_MAX_FINISH_PASSES):
+        last = finish_due_work_once(
+            player_id=uid,
+            planet_id=pid,
+            conn=conn,
+            source=src if pass_idx == 0 else f"{src}_retry",
+            update_scores=update_scores,
+            recalc_ranks=recalc_ranks if pass_idx == 0 else False,
+            force=pass_idx > 0,
+        )
+        for key in aggregate["finished"]:
+            aggregate["finished"][key] += int(last.get("finished", {}).get(key, 0) or 0)
+        aggregate["score_updates"] += int(last.get("score_updates", 0) or 0)
+        aggregate["derived_sync_count"] += int(last.get("derived_sync_count", 0) or 0)
+        if last.get("errors"):
+            aggregate["errors"].extend(last["errors"])
+            aggregate["ok"] = False
+
+        if not player_has_due_queue_work(uid, conn=conn, planet_id=pid):
+            break
+        finished_this_pass = sum(int(v or 0) for v in last.get("finished", {}).values())
+        if finished_this_pass > 0:
+            continue
+        if last.get("skipped_due_to_dedup") and pass_idx + 1 < _MAX_FINISH_PASSES:
+            continue
+        break
+
+    aggregate["dedup_scope_key"] = last.get("dedup_scope_key")
+    return aggregate
+
+
 def finish_due_work_once(
     player_id: Optional[int] = None,
     planet_id: Optional[int] = None,
@@ -223,7 +284,8 @@ def finish_planet_build_jobs(
     """
     cur = conn.cursor()
     rows = get_build_queue_rows(int(planet_id), conn=conn)
-    due = [r for r in rows if float(r["finish_time"]) <= float(now)]
+    due_cutoff = float(now) + _due_epsilon()
+    due = [r for r in rows if float(r["finish_time"]) <= due_cutoff]
     if not due:
         return 0
 
@@ -260,7 +322,8 @@ def finish_player_research_jobs(
         (int(user_id),),
     )
     rows = cur.fetchall()
-    due = [r for r in rows if float(r["finish_at"]) <= float(now)]
+    due_cutoff = float(now) + _due_epsilon()
+    due = [r for r in rows if float(r["finish_at"]) <= due_cutoff]
     if not due:
         return 0
 

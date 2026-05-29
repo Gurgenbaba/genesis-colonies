@@ -15,6 +15,11 @@
   <header class="gc-page-header section-header research-page-header">
     <div class="section-header-row">
       <h2 class="section-title">{{ T("research_title") }}</h2>
+      {% if active_planet_name is defined and active_planet_name %}
+        <span class="build-queue-planet-chip" id="research-planet-label" title="{{ T('pe_planet_switcher', 'Kolonie wählen') }}">
+          {{ active_planet_name }}
+        </span>
+      {% endif %}
       <span class="research-lab-chip" title="{{ T('research_lab_panel_hint') }}">
         🔬 {{ T("research_lab_level") }}:
         <span class="lab-level-highlight">{{ lab_level|fmt_int }}</span>

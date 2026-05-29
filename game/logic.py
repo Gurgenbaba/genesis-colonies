@@ -102,7 +102,7 @@ def read_player_live_state_for_poll(
     """
     from .db import begin_write_transaction, in_transaction
     from .models import db as _db, get_homeworld, load_player, rollback
-    from .queue_engine import finish_due_work_once
+    from .queue_engine import finish_active_planet_due_work
     from .queue_poll import record_poll_queue_finish, should_run_queue_finish_for_poll
 
     uid = int(player_id)
@@ -111,14 +111,20 @@ def read_player_live_state_for_poll(
         conn = _db()
 
     try:
-        run_finish = should_run_queue_finish_for_poll(uid, conn=conn)
-        player = load_player(uid, conn=conn)
-        if not player:
-            raise RuntimeError(f"player {uid} not found")
-
         from .planet_evolution.repository import get_context_planet
 
         planet = get_context_planet(uid, conn=conn)
+        planet_id = int(planet["id"])
+
+        run_finish = should_run_queue_finish_for_poll(
+            uid,
+            conn=conn,
+            planet_id=planet_id,
+        )
+
+        player = load_player(uid, conn=conn)
+        if not player:
+            raise RuntimeError(f"player {uid} not found")
 
         now = time.time()
         last_raw = planet.get("last_update")
@@ -131,9 +137,10 @@ def read_player_live_state_for_poll(
                     begin_write_transaction(conn)
 
                 if run_finish:
-                    finish_due_work_once(
-                        player_id=uid,
-                        conn=conn,
+                    finish_active_planet_due_work(
+                        uid,
+                        planet_id,
+                        conn,
                         source="game_state",
                         update_scores=True,
                         recalc_ranks=False,
@@ -206,7 +213,7 @@ def refresh_player_live_state(
     2) recompute resources/energy via EffectResolver (skip second finish pass)
     """
     from .models import db as _db, get_homeworld, load_player
-    from .queue_engine import finish_due_work_once
+    from .queue_engine import finish_active_planet_due_work
 
     uid = int(player_id)
     own_conn = conn is None
@@ -217,15 +224,24 @@ def refresh_player_live_state(
         if own_conn:
             conn.execute("BEGIN IMMEDIATE")
 
-        finish_due_work_once(player_id=uid, conn=conn, source=str(finish_source or "live_state"))
+        from .planet_evolution.repository import get_context_planet
 
         player = load_player(uid, conn=conn)
         if not player:
             raise RuntimeError(f"player {uid} not found")
 
-        from .planet_evolution.repository import get_context_planet
-
         planet = get_context_planet(uid, conn=conn)
+        planet_id = int(planet["id"])
+
+        finish_active_planet_due_work(
+            uid,
+            planet_id,
+            conn,
+            source=str(finish_source or "live_state"),
+        )
+        from .live_state import mark_request_live_refreshed
+
+        mark_request_live_refreshed()
 
         planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
             planet,
@@ -390,12 +406,12 @@ def get_build_queue_status(
 
     skip_finish = coerce_skip_finish(skip_finish)
     if not skip_finish:
-        from .queue_engine import finish_due_work_once
+        from .queue_engine import finish_active_planet_due_work
 
-        finish_due_work_once(
-            player_id=user_id_int,
-            planet_id=planet_id,
-            conn=conn,
+        finish_active_planet_due_work(
+            user_id_int,
+            planet_id,
+            conn,
             source="game_state",
         )
     return get_build_queue_status_for_planet(planet_id, conn=conn, skip_finish=True)

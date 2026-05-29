@@ -71,6 +71,9 @@ def compute_planet_research_time(
 
 
 def finish_planet_research_jobs(conn: sqlite3.Connection, planet_id: int, now: float) -> int:
+    from ..queue_poll import DUE_TIME_EPSILON_SEC
+
+    due_cutoff = float(now) + float(DUE_TIME_EPSILON_SEC)
     cur = conn.cursor()
     cur.execute(
         """
@@ -78,7 +81,7 @@ def finish_planet_research_jobs(conn: sqlite3.Connection, planet_id: int, now: f
         WHERE planet_id = ? AND finish_at <= ?
         ORDER BY finish_at ASC, id ASC;
         """,
-        (int(planet_id), float(now)),
+        (int(planet_id), due_cutoff),
     )
     due = cur.fetchall()
     if not due:
@@ -138,6 +141,11 @@ def queue_planet_research(
     try:
         begin_write_transaction(conn)
         lock_planet_for_update(conn, int(planet_id))
+
+        owner_id = get_planet_owner_id(int(planet_id))
+        if owner_id is None:
+            rollback(conn)
+            return False, "planet_not_found", None
 
         from ..queue_engine import finish_due_work
 

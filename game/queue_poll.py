@@ -16,25 +16,46 @@ from .db import db
 # Minimum seconds between queue-finish passes triggered by game-state polling.
 POLL_FINISH_INTERVAL_SEC = float(os.environ.get("GC_POLL_FINISH_INTERVAL_SEC", "25"))
 
+# Sub-second tolerance so jobs with 1s duration are not stuck between float ticks.
+DUE_TIME_EPSILON_SEC = float(os.environ.get("GC_DUE_TIME_EPSILON_SEC", "0.05"))
 
-def player_has_due_queue_work(player_id: int, conn=None, *, now: Optional[float] = None) -> bool:
-    """Read-only check: any build/research job past due for this player?"""
+
+def player_has_due_queue_work(
+    player_id: int,
+    conn=None,
+    *,
+    now: Optional[float] = None,
+    planet_id: Optional[int] = None,
+) -> bool:
+    """Read-only check: any build/research job past due for this player (optional: one planet)."""
     owns_conn = conn is None
     if owns_conn:
         conn = db()
-    ts = float(now if now is not None else time.time())
+    ts = float(now if now is not None else time.time()) + DUE_TIME_EPSILON_SEC
+    pid_filter = int(planet_id) if planet_id is not None else None
     try:
         cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT 1
-            FROM build_queue bq
-            INNER JOIN planets p ON p.id = bq.planet_id
-            WHERE p.player_id = ? AND bq.finish_time <= ?
-            LIMIT 1;
-            """,
-            (int(player_id), ts),
-        )
+        if pid_filter is not None:
+            cur.execute(
+                """
+                SELECT 1
+                FROM build_queue bq
+                WHERE bq.planet_id = ? AND bq.finish_time <= ?
+                LIMIT 1;
+                """,
+                (pid_filter, ts),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT 1
+                FROM build_queue bq
+                INNER JOIN planets p ON p.id = bq.planet_id
+                WHERE p.player_id = ? AND bq.finish_time <= ?
+                LIMIT 1;
+                """,
+                (int(player_id), ts),
+            )
         if cur.fetchone():
             return True
         cur.execute(
@@ -51,16 +72,27 @@ def player_has_due_queue_work(player_id: int, conn=None, *, now: Optional[float]
             from .planet_evolution.repository import evolution_schema_ready
 
             if evolution_schema_ready(conn):
-                cur.execute(
-                    """
-                    SELECT 1
-                    FROM planet_research_queue prq
-                    INNER JOIN planets p ON p.id = prq.planet_id
-                    WHERE p.player_id = ? AND prq.finish_at <= ?
-                    LIMIT 1;
-                    """,
-                    (int(player_id), ts),
-                )
+                if pid_filter is not None:
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM planet_research_queue prq
+                        WHERE prq.planet_id = ? AND prq.finish_at <= ?
+                        LIMIT 1;
+                        """,
+                        (pid_filter, ts),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM planet_research_queue prq
+                        INNER JOIN planets p ON p.id = prq.planet_id
+                        WHERE p.player_id = ? AND prq.finish_at <= ?
+                        LIMIT 1;
+                        """,
+                        (int(player_id), ts),
+                    )
                 if cur.fetchone():
                     return True
         except Exception:
@@ -95,14 +127,19 @@ def should_run_queue_finish_for_poll(
     conn=None,
     *,
     force_due: bool = True,
+    planet_id: Optional[int] = None,
 ) -> bool:
     """
     True when game-state polling may run finish_due_work_once.
 
-    - Always when due queue work exists (force_due=True).
+    - Always when due queue work exists on the scoped planet (force_due=True).
     - Otherwise only after POLL_FINISH_INTERVAL_SEC since last recorded poll finish.
     """
-    if force_due and player_has_due_queue_work(player_id, conn=conn):
+    if force_due and player_has_due_queue_work(
+        player_id,
+        conn=conn,
+        planet_id=planet_id,
+    ):
         return True
     return seconds_until_poll_finish_allowed(player_id, conn=conn) <= 0.0
 

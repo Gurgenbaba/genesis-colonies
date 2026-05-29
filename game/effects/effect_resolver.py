@@ -17,7 +17,8 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..models import get_game_settings, get_homeworld, get_planet_buildings, get_research_levels
+from ..models import get_game_settings, get_planet_buildings, get_research_levels
+from ..planet_evolution.repository import get_context_planet
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ class EffectResolver:
 
     @classmethod
     def for_player(cls, player_id: int, conn=None) -> EffectResolver:
-        planet = get_homeworld(player_id=int(player_id), conn=conn)
+        planet = get_context_planet(player_id=int(player_id), conn=conn)
         buildings = get_planet_buildings(int(planet["id"]), conn=conn)
         research = get_research_levels(int(player_id), conn=conn)
         try:
@@ -497,7 +498,7 @@ def get_effect_resolver(
         planet_id = None
         if conn is not None:
             try:
-                planet = get_homeworld(player_id=int(player_id), conn=conn)
+                planet = get_context_planet(player_id=int(player_id), conn=conn)
                 planet_id = int(planet["id"])
             except Exception:
                 pass

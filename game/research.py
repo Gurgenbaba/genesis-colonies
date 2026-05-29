@@ -203,7 +203,9 @@ def get_research_time(
         return 0
 
     if buildings is None:
-        planet = get_homeworld(player_id=int(user_id))
+        from .planet_evolution.repository import get_context_planet
+
+        planet = get_context_planet(int(user_id))
         buildings = get_planet_buildings(int(planet["id"]))
 
     from .effects import EffectResolver
@@ -339,6 +341,7 @@ def complete_finished_research(user_id: int, conn=None) -> bool:
     uid = int(user_id)
 
     from .models import db as _db
+    from .planet_evolution.repository import get_context_planet
     from .queue_engine import finish_due_work_once
 
     own_conn = False
@@ -352,6 +355,7 @@ def complete_finished_research(user_id: int, conn=None) -> bool:
 
         engine_result = finish_due_work_once(
             player_id=uid,
+            planet_id=int(get_context_planet(uid, conn=conn)["id"]),
             conn=conn,
             source="research",
         )
@@ -580,8 +584,10 @@ def cancel_research_job(user_id: int, job_id: int):
 
         from .queue_engine import finish_due_work
 
+        resource_planet = _research_resource_planet(uid, conn)
         engine_result = finish_due_work(
             player_id=uid,
+            planet_id=int(resource_planet["id"]),
             now=now,
             conn=conn,
             source="action",
@@ -641,15 +647,22 @@ def get_research_status(
 
     skip_finish = coerce_skip_finish(bool(skip_finish))
 
+    resource_planet = _research_resource_planet(uid, conn)
+    planet_id = int(resource_planet["id"])
+
     if not skip_finish:
         if conn is not None:
-            from .queue_engine import finish_due_work_once
+            from .queue_engine import finish_active_planet_due_work
 
-            finish_due_work_once(player_id=uid, conn=conn, source="research_status")
+            finish_active_planet_due_work(
+                uid,
+                planet_id,
+                conn,
+                source="research_status",
+            )
         else:
             complete_finished_research(uid)
 
-    resource_planet = _research_resource_planet(uid, conn)
     planet_metal = float(resource_planet.get("metal") or 0)
     planet_crystal = float(resource_planet.get("crystal") or 0)
 
@@ -670,9 +683,15 @@ def get_research_status(
             if float(queue[0]["finish_at"]) > now:
                 break
             if conn is not None:
-                from .queue_engine import finish_due_work_once
+                from .queue_engine import finish_active_planet_due_work
 
-                engine = finish_due_work_once(player_id=uid, conn=conn, source="research_status_retry")
+                engine = finish_active_planet_due_work(
+                    uid,
+                    planet_id,
+                    conn,
+                    source="research_status_retry",
+                    recalc_ranks=False,
+                )
                 if int(engine.get("finished", {}).get("research", 0)) <= 0:
                     break
             elif not complete_finished_research(uid):

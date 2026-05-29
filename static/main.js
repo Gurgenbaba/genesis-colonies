@@ -909,11 +909,23 @@
 
   function requestFinishRefresh(type) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
-    if (GC.finishLocks[type]) return;
-    GC.finishLocks[type] = true;
-    Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${type}_finished`) : null).finally(() => {
-      GC.finishLocks[type] = false;
-    });
+
+    const run = () => {
+      if (GC.finishLocks[type]) {
+        GC.setSafeTimeout(run, 150);
+        return;
+      }
+      GC.finishLocks[type] = true;
+      Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${type}_finished`) : null).finally(() => {
+        GC.finishLocks[type] = false;
+      });
+    };
+
+    if (GC.refreshInFlight) {
+      Promise.resolve(GC.refreshInFlight).finally(run);
+      return;
+    }
+    run();
   }
 
   function patchOverviewTable(overview, buildings, prod) {

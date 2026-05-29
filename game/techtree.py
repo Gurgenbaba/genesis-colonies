@@ -21,10 +21,10 @@ from .buildings import (
 )
 from .research import RESEARCH_TECHS
 from .models import (
-    get_homeworld,
     get_planet_buildings,
     get_research_levels,
 )
+from .planet_evolution.repository import get_context_planet
 
 # ---------------------------------------------------------------------------
 # Öffentliche Config-Objekte (werden über logic.py re-exportiert)
@@ -158,7 +158,7 @@ def _ensure_context(
             "Multi-User-Setup benötigt explizite IDs."
         )
 
-    planet = get_homeworld(player_id=int(user_id))
+    planet = get_context_planet(player_id=int(user_id))
     buildings_db = get_planet_buildings(int(planet["id"]))
     research_db = get_research_levels(int(user_id))
 

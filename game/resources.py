@@ -196,6 +196,7 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
         if not skip_queue_finish:
             finish_due_work_once(
                 player_id=player_id,
+                planet_id=planet_id,
                 conn=conn,
                 source="resources",
             )
@@ -282,40 +283,12 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
 
 def update_resources(player: dict, conn=None):
     """
-    Haupt-Aufruf aus app.py:
-    - aktualisiert Homeworld-Ressourcen des jeweiligen Spielers
-    - mapt relevante Werte in das player-Objekt, das im Template landet
-
-    NEU: optional conn, damit /api/status nicht zig Connections öffnet.
+    Refresh resources for the player's active context planet (not homeworld-only).
     """
-    from .models import get_homeworld  # lazy import, um Zyklus zu vermeiden
+    from .planet_evolution.repository import get_context_planet
 
     player_id = int(player["id"])
-
-    planet = get_homeworld(player_id=player_id, conn=conn)
-    try:
-        from .planet_evolution.repository import evolution_schema_ready, get_active_planet_id, get_planet_row
-
-        if conn is not None and evolution_schema_ready(conn):
-            active_id = get_active_planet_id(player_id, conn=conn)
-            active = get_planet_row(active_id, conn=conn)
-            if active:
-                planet = active
-        elif conn is None:
-            from .models import db as _db
-
-            _conn = _db()
-            try:
-                if evolution_schema_ready(_conn):
-                    active_id = get_active_planet_id(player_id, conn=_conn)
-                    active = get_planet_row(active_id, conn=_conn)
-                    if active:
-                        planet = active
-            finally:
-                _conn.close()
-    except Exception:
-        pass
-
+    planet = get_context_planet(player_id, conn=conn)
     planet, buildings, ratio, energy_total, energy_used = update_planet_resources(planet, conn=conn)
 
     player_view = dict(player)

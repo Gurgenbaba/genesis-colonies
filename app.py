@@ -610,6 +610,11 @@ def overview():
     finally:
         conn.close()
 
+    from game.planet_evolution.repository import get_context_planet
+
+    planet = get_context_planet(int(session["user_id"]))
+    active_planet_name = str(planet.get("name") or "")
+
     return render_template(
         "overview.html",
         player=ctx["player_view"],
@@ -623,6 +628,7 @@ def overview():
         research_status=ctx["research"],
         build_status=ctx["build_queue"],
         planet_teaser=planet_teaser,
+        active_planet_name=active_planet_name,
     )
 
 
@@ -745,6 +751,10 @@ def research_view():
     if ctx is None:
         return redirect(url_for("login"))
 
+    from game.planet_evolution.repository import get_context_planet
+
+    planet = get_context_planet(int(session["user_id"]))
+
     return render_template(
         "research.html",
         player=ctx["player_view"],
@@ -753,6 +763,7 @@ def research_view():
         energy_total=ctx["energy_total"],
         energy_used=ctx["energy_used"],
         storage_caps=ctx["storage_caps"],
+        active_planet_name=str(planet.get("name") or ""),
     )
 
 

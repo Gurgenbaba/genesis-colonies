@@ -457,3 +457,49 @@ def test_scoped_finish_not_global(temp_db):
 
     b2 = int(get_planet_buildings(int(hw2["id"])).get("metal_mine", 0))
     assert b2 == 0
+
+
+def test_finish_active_planet_due_work_retries_after_dedup(temp_db):
+    """Short build times: second pass must finish even if dedup skipped the first noop."""
+    from game.queue_engine import finish_active_planet_due_work
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("short_build")
+    hw = get_homeworld(pid)
+    planet_id = int(hw["id"])
+    conn = db()
+    finish_at = time.time() + 2.0
+    add_build_job(planet_id, "metal_mine", finish_at - 1, finish_at, conn=conn)
+    conn.commit()
+    conn.close()
+
+    with _flask_app.test_request_context():
+        clear_request_finish_dedup()
+        finish_due_work_once(
+            player_id=pid,
+            planet_id=planet_id,
+            source="noop_probe",
+        )
+        assert int(get_planet_buildings(planet_id).get("metal_mine", 0)) == 0
+
+        conn = db()
+        conn.execute(
+            "UPDATE build_queue SET finish_time = ? WHERE planet_id = ?;",
+            (time.time() - 0.1, planet_id),
+        )
+        conn.commit()
+
+        result = finish_active_planet_due_work(
+            pid,
+            planet_id,
+            conn,
+            source="short_build_test",
+        )
+        conn.commit()
+        conn.close()
+
+    assert int(result["finished"]["buildings"]) >= 1
+    assert int(get_planet_buildings(planet_id).get("metal_mine", 0)) >= 1
