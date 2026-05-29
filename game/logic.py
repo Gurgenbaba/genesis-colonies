@@ -96,14 +96,14 @@ def read_player_live_state_for_poll(
     """
     Game-state polling path: throttled queue finish, no rank/score seeding writes.
 
-    - Finishes due queue work only when jobs are due OR poll lease expired.
+    - Finishes queue work while jobs are pending or due on the active planet.
     - Skips rank recalculation on poll (recalc_ranks=False).
-    - May still persist resource accrual when a finish ran or idle time warrants it.
+    - May still persist resource accrual when idle time warrants it.
     """
     from .db import begin_write_transaction, in_transaction
-    from .models import db as _db, get_homeworld, load_player, rollback
+    from .models import db as _db, load_player, rollback
     from .queue_engine import finish_active_planet_due_work
-    from .queue_poll import record_poll_queue_finish, should_run_queue_finish_for_poll
+    from .queue_poll import player_has_due_queue_work, player_has_pending_queue_work
 
     uid = int(player_id)
     own_conn = conn is None
@@ -116,12 +116,6 @@ def read_player_live_state_for_poll(
         planet = get_context_planet(uid, conn=conn)
         planet_id = int(planet["id"])
 
-        run_finish = should_run_queue_finish_for_poll(
-            uid,
-            conn=conn,
-            planet_id=planet_id,
-        )
-
         player = load_player(uid, conn=conn)
         if not player:
             raise RuntimeError(f"player {uid} not found")
@@ -129,14 +123,18 @@ def read_player_live_state_for_poll(
         now = time.time()
         last_raw = planet.get("last_update")
         last = float(last_raw) if last_raw is not None else now
-        persist_resources = run_finish or (now - last) >= 60.0
+        persist_resources = (now - last) >= 60.0
+
+        has_due = player_has_due_queue_work(uid, conn=conn, planet_id=planet_id)
+        has_pending = player_has_pending_queue_work(uid, conn=conn, planet_id=planet_id)
+        need_write = bool(has_due or has_pending or persist_resources)
 
         try:
-            if run_finish or persist_resources:
+            if need_write:
                 if own_conn and not in_transaction(conn):
                     begin_write_transaction(conn)
 
-                if run_finish:
+                if has_due or has_pending:
                     finish_active_planet_due_work(
                         uid,
                         planet_id,
@@ -145,7 +143,6 @@ def read_player_live_state_for_poll(
                         update_scores=True,
                         recalc_ranks=False,
                     )
-                    record_poll_queue_finish(uid, conn=conn)
                     from .live_state import mark_request_live_refreshed
 
                     mark_request_live_refreshed()

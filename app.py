@@ -1927,7 +1927,7 @@ def _payload_from_live_context(
 
     payload: Dict[str, Any] = {
         "ok": True,
-        "server_time": int(time.time()),
+        "server_time": time.time(),
         "energy_ratio": float(ratio),
         "energy_efficiency_pct": energy_efficiency_pct,
         "player": {

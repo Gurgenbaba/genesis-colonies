@@ -122,7 +122,7 @@
   };
 
   function setServerTime(serverTimeSec) {
-    const v = parseInt(serverTimeSec, 10);
+    const v = Number(serverTimeSec);
     if (!Number.isFinite(v) || v <= 0) return;
     TIME.serverNow = v;
     TIME.clientPerfAt = performance.now();
@@ -907,25 +907,34 @@
     updateResearchQueueActions(researchRaw);
   }
 
+  let _finishRefreshTimer = null;
+
   function requestFinishRefresh(type) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
+    if (_finishRefreshTimer) return;
 
-    const run = () => {
+    _finishRefreshTimer = GC.setSafeTimeout(() => {
+      _finishRefreshTimer = null;
+      _lastQueueSignature = "";
+      _lastResearchQueueSignature = "";
+
+      const run = () => {
+        Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${type}_finished`) : null).finally(() => {
+          GC.finishLocks[type] = false;
+        });
+      };
+
       if (GC.finishLocks[type]) {
         GC.setSafeTimeout(run, 150);
         return;
       }
       GC.finishLocks[type] = true;
-      Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${type}_finished`) : null).finally(() => {
-        GC.finishLocks[type] = false;
-      });
-    };
-
-    if (GC.refreshInFlight) {
-      Promise.resolve(GC.refreshInFlight).finally(run);
-      return;
-    }
-    run();
+      if (GC.refreshInFlight) {
+        Promise.resolve(GC.refreshInFlight).finally(run);
+        return;
+      }
+      run();
+    }, 300);
   }
 
   function patchOverviewTable(overview, buildings, prod) {
@@ -1387,9 +1396,16 @@
         : formatEta(first?.remaining ?? 0);
 
     if (sig === _lastQueueSignature) {
-      _updateBuildQueueSubtitle(count, limit, firstEta);
-      GC.startProgressTicker();
-      return;
+      const overdue =
+        first &&
+        first.finish_time &&
+        getApproxServerNow() &&
+        Number(first.finish_time) <= getApproxServerNow();
+      if (!overdue) {
+        _updateBuildQueueSubtitle(count, limit, firstEta);
+        GC.startProgressTicker();
+        return;
+      }
     }
     _lastQueueSignature = sig;
 
@@ -1535,9 +1551,13 @@
         : formatEta(first?.remaining ?? 0);
 
     if (sig === _lastResearchQueueSignature) {
-      _updateResearchQueueSubtitle(count, limit, firstEta);
-      GC.startProgressTicker();
-      return;
+      const finishTime = first ? Number(first.finish_at || first.finish_time || 0) : 0;
+      const overdue = finishTime > 0 && getApproxServerNow() && finishTime <= getApproxServerNow();
+      if (!overdue) {
+        _updateResearchQueueSubtitle(count, limit, firstEta);
+        GC.startProgressTicker();
+        return;
+      }
     }
     _lastResearchQueueSignature = sig;
 
@@ -2037,13 +2057,27 @@
 
   async function refreshGameState(reason) {
     if (!shouldRunGameLoop() || _authLoopAborted) return null;
-    if (GC.refreshInFlight) return GC.refreshInFlight;
+
+    const reasonStr = String(reason || "");
+    const isFinishReason = reasonStr.endsWith("_finished");
+
+    if (GC.refreshInFlight) {
+      if (isFinishReason) {
+        return GC.refreshInFlight.finally(() => {
+          GC.refreshInFlight = null;
+          return refreshGameState(reason);
+        });
+      }
+      return GC.refreshInFlight;
+    }
 
     const p = GC.polling;
     p.inFlight = true;
-    try {
-      if (p.abort) p.abort.abort();
-    } catch (_) {}
+    if (p.abort && !isFinishReason && reasonStr !== "poll") {
+      try {
+        p.abort.abort();
+      } catch (_) {}
+    }
 
     const ctrl = new AbortController();
     p.abort = ctrl;
@@ -2062,8 +2096,8 @@
         if (data.server_time) setServerTime(data.server_time);
 
         const anyActive = applyGameStateData(data, reason);
-        if (reason !== "poll") {
-          GC.startPolling(anyActive);
+        if (reason !== "poll" || anyActive) {
+          GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch);
         }
         return data;
       } catch (err) {
@@ -3604,8 +3638,20 @@
         upgradeEl.dataset.busy = "1";
         GC.actionLocks.build = true;
 
-        const buildingType = upgradeEl.dataset.building || "";
+        const buildingType =
+          upgradeEl.dataset.building ||
+          (() => {
+            const m = (upgradeEl.getAttribute("href") || "").match(/\/upgrade\/([^/?#]+)/);
+            return m ? decodeURIComponent(m[1]) : "";
+          })();
         const tab = _getActiveBuildingTab();
+
+        if (!buildingType) {
+          upgradeEl.dataset.busy = "0";
+          GC.actionLocks.build = false;
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+          return;
+        }
 
         try {
           const json = await GC.fetchGameAction("/api/buildings/upgrade", {
@@ -3614,9 +3660,7 @@
             body: JSON.stringify({ building_type: buildingType, tab, request_id: newRequestId() }),
           });
           applyActionState(json, json.ok ? "upgrade_success" : "upgrade_error");
-          if (json.ok) {
-            showNotify(t("msg_build_queued", "Bauauftrag angereiht."), "success");
-          } else {
+          if (!json.ok) {
             showNotify(mapActionError(json.reason, json.payload), "error");
           }
         } catch (err) {
@@ -3649,9 +3693,7 @@
             body: JSON.stringify({ tech_key: techKey, request_id: newRequestId() }),
           });
           applyActionState(json, json.ok ? "research_start_success" : "research_start_error");
-          if (json.ok) {
-            showNotify(t("research_msg_started_short", "Forschung angereiht."), "success");
-          } else {
+          if (!json.ok) {
             showNotify(mapActionError(json.reason, json.payload), "error");
           }
         } catch (err) {
@@ -3680,9 +3722,7 @@
             body: JSON.stringify({ job_id: Number(buildCancelBtn.dataset.buildCancelId || 0) }),
           });
           applyActionState(json, json.ok ? "build_cancel_success" : "build_cancel_error");
-          if (json.ok) {
-            showNotify(t("msg_build_cancelled", "Bauauftrag abgebrochen."), "success");
-          } else {
+          if (!json.ok) {
             showNotify(mapActionError(json.reason, json.payload), "error");
           }
         } catch (err) {
@@ -3708,9 +3748,7 @@
             body: JSON.stringify({ job_id: Number(researchCancelBtn.dataset.researchCancelId || 0) }),
           });
           applyActionState(json, json.ok ? "research_cancel_success" : "research_cancel_error");
-          if (json.ok) {
-            showNotify(t("msg_research_cancelled", "Forschungsauftrag abgebrochen."), "success");
-          } else {
+          if (!json.ok) {
             showNotify(mapActionError(json.reason, json.payload), "error");
           }
         } catch (err) {

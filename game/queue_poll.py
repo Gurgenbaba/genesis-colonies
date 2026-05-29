@@ -149,3 +149,73 @@ def record_poll_queue_finish(player_id: int, conn=None) -> None:
     from .runtime_state import set_runtime_value
 
     set_runtime_value(_lease_key(player_id), str(time.time()), conn=conn)
+
+
+def player_has_pending_queue_work(
+    player_id: int,
+    conn=None,
+    *,
+    planet_id: Optional[int] = None,
+) -> bool:
+    """Read-only: any queued build/research job still open (due or not)."""
+    owns_conn = conn is None
+    if owns_conn:
+        conn = db()
+    try:
+        cur = conn.cursor()
+        pid_filter = int(planet_id) if planet_id is not None else None
+
+        if pid_filter is not None:
+            cur.execute(
+                "SELECT 1 FROM build_queue WHERE planet_id = ? LIMIT 1;",
+                (pid_filter,),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT 1
+                FROM build_queue bq
+                INNER JOIN planets p ON p.id = bq.planet_id
+                WHERE p.player_id = ?
+                LIMIT 1;
+                """,
+                (int(player_id),),
+            )
+        if cur.fetchone():
+            return True
+
+        cur.execute(
+            "SELECT 1 FROM research_queue WHERE user_id = ? LIMIT 1;",
+            (int(player_id),),
+        )
+        if cur.fetchone():
+            return True
+
+        try:
+            from .planet_evolution.repository import evolution_schema_ready
+
+            if evolution_schema_ready(conn):
+                if pid_filter is not None:
+                    cur.execute(
+                        "SELECT 1 FROM planet_research_queue WHERE planet_id = ? LIMIT 1;",
+                        (pid_filter,),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM planet_research_queue prq
+                        INNER JOIN planets p ON p.id = prq.planet_id
+                        WHERE p.player_id = ?
+                        LIMIT 1;
+                        """,
+                        (int(player_id),),
+                    )
+                if cur.fetchone():
+                    return True
+        except Exception:
+            pass
+        return False
+    finally:
+        if owns_conn and conn is not None:
+            conn.close()
