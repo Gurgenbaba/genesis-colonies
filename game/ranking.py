@@ -1,7 +1,8 @@
 """
 Galactic ranking service – single source of truth for scores and ranks.
 
-total_score = building_score + research_score + fleet_score + defense_score
+total_score = weighted(building) + weighted(research) + fleet + defense + evolution
+Component weights from game_settings: score_weight_buildings, score_weight_research.
 """
 
 from __future__ import annotations
@@ -94,6 +95,21 @@ def _score_exponent(conn) -> float:
         return 1.0
 
 
+def _score_weights(conn) -> Tuple[float, float]:
+    from .models import get_game_settings
+
+    settings = get_game_settings(conn=conn) or {}
+    try:
+        w_build = float(settings.get("score_weight_buildings", 1.0) or 1.0)
+    except (TypeError, ValueError):
+        w_build = 1.0
+    try:
+        w_research = float(settings.get("score_weight_research", 1.0) or 1.0)
+    except (TypeError, ValueError):
+        w_research = 1.0
+    return max(0.0, w_build), max(0.0, w_research)
+
+
 def compute_player_scores(
     player_id: int,
     conn=None,
@@ -110,6 +126,7 @@ def compute_player_scores(
 
     try:
         exp = _score_exponent(conn)
+        w_build, w_research = _score_weights(conn)
         from .buildings import BASE_COST, BUILDING_ORDER, COST_FACTOR
         from .research import RESEARCH_TECHS
 
@@ -127,7 +144,9 @@ def compute_player_scores(
                     int(base[0]), int(base[1]), fac, lvl
                 )
 
-        building_score = _safe_int((building_sum_costs**exp) if building_sum_costs > 0 else 0)
+        building_score = _safe_int(
+            ((building_sum_costs**exp) * w_build) if building_sum_costs > 0 else 0
+        )
 
         levels = get_research_levels(int(player_id), conn=conn)
         research_sum_costs = 0
@@ -140,7 +159,9 @@ def compute_player_scores(
             fac = float(cfg.get("cost_factor", 1.6) or 1.6)
             research_sum_costs += _sum_costs_up_to_level(base_m, base_c, fac, lvl)
 
-        research_score = _safe_int((research_sum_costs**exp) if research_sum_costs > 0 else 0)
+        research_score = _safe_int(
+            ((research_sum_costs**exp) * w_research) if research_sum_costs > 0 else 0
+        )
 
         fleet_score = 0
         defense_score = 0
@@ -359,11 +380,30 @@ def repair_player_score_totals(player_id: int, conn=None) -> bool:
         row = cur.fetchone()
         if not row:
             return False
-        normalized = _normalize_db_row(dict(row))
+        row_dict = dict(row)
+        keys = row_dict.keys() if hasattr(row_dict, "keys") else ()
+        building = _safe_int(row_dict.get("score_buildings", 0))
+        research = _safe_int(row_dict.get("score_research", 0))
+        fleet = _safe_int(row_dict.get("score_fleet", 0)) if "score_fleet" in keys else 0
+        defense = _safe_int(row_dict.get("score_defense", 0)) if "score_defense" in keys else 0
+        evolution = (
+            _safe_int(row_dict.get("score_planet_evolution", 0))
+            if "score_planet_evolution" in keys
+            else 0
+        )
+        computed = _sanitize_scores(
+            {
+                "building_score": building,
+                "research_score": research,
+                "fleet_score": fleet,
+                "defense_score": defense,
+                "evolution_score": evolution,
+            }
+        )
         stored_total = _safe_int(row["score_total"])
-        if stored_total == normalized["total_score"]:
+        if stored_total == computed["total_score"]:
             return False
-        upsert_player_scores(int(player_id), normalized, conn=conn)
+        upsert_player_scores(int(player_id), computed, conn=conn)
         if owns_conn:
             conn.commit()
         return True

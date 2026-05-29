@@ -161,7 +161,9 @@ def test_parallel_research_queue_full(isolated_db):
         list(pool.map(attempt, techs))
 
     ok_count = sum(1 for ok, _, _ in results if ok)
-    limit = 3
+    from game.research import _resolve_research_queue_limit
+
+    limit = _resolve_research_queue_limit(player_id=user_id)
     assert ok_count <= limit
     assert len(get_research_queue_rows(user_id)) <= limit
 

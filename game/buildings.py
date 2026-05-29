@@ -117,9 +117,9 @@ COST_FACTOR: Dict[str, float] = {
 }
 
 BUILD_TIME_BASE: Dict[str, int] = {
-    "metal_mine": 60,
-    "crystal_mine": 60,
-    "solar_plant": 80,
+    "metal_mine": 51,
+    "crystal_mine": 51,
+    "solar_plant": 68,
     "research_lab": 120,
     "academy": 180,
     "metal_storage": 120,

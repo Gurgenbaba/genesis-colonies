@@ -33,16 +33,16 @@ def _now_ts() -> int:
 DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     "universe_name": "Genesis Colonies",
     "production_speed": "1.0",
-    "build_speed": "1.0",
-    "research_speed": "1.0",
+    "build_speed": "1.1",
+    "research_speed": "0.85",
     "fleet_speed_war": "1.0",
     "fleet_speed_holding": "1.0",
     "fleet_speed_peaceful": "1.0",
     "galaxy_count": "5",
     "queue_limit": "5",
-    "research_queue_limit": "3",
-    "start_metal": "5000",
-    "start_crystal": "2500",
+    "research_queue_limit": "2",
+    "start_metal": "3000",
+    "start_crystal": "1500",
 
     # Instant resource exchange (Trader Hub)
     "exchange_enabled": "1",
@@ -51,12 +51,12 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     "exchange_daily_limit": "500000000",
     "exchange_min_amount": "100",
 
-    # historischer Alias
-    "speed": "1.0",
+    # historischer Alias (build_speed)
+    "speed": "1.1",
 
-    # --- Score Defaults (Ranking) ---
-    "score_weight_buildings": "0.60",
-    "score_weight_research": "0.40",
+    # --- Score Defaults (Ranking) — Preset B: building 1.0, research 0.7 ---
+    "score_weight_buildings": "1.0",
+    "score_weight_research": "0.7",
     "score_cost_exponent": "1.0",  # 1.0 = linear, >1 = stärker
     "score_softcap": "0.0",        # 0 = aus, z.B. 250000
 }

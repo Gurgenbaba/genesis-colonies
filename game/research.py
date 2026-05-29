@@ -50,7 +50,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "icon": "energieeffizienz.png",
         "base_cost_m": 1000,
         "base_cost_c": 500,
-        "base_time": 600,
+        "base_time": 840,
         "cost_factor": 1.6,
         "requirements": {"buildings": {"research_lab": 1}},
     },
@@ -63,7 +63,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "icon": "metallveredelung.png",
         "base_cost_m": 1200,
         "base_cost_c": 600,
-        "base_time": 650,
+        "base_time": 910,
         "cost_factor": 1.6,
         "requirements": {"buildings": {"research_lab": 1}},
     },
@@ -76,7 +76,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "icon": "bauoptimierung.png",
         "base_cost_m": 1500,
         "base_cost_c": 800,
-        "base_time": 700,
+        "base_time": 980,
         "cost_factor": 1.7,
         "requirements": {"buildings": {"research_lab": 2}},
     },
@@ -89,7 +89,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "icon": "lagertechnik.png",
         "base_cost_m": 800,
         "base_cost_c": 800,
-        "base_time": 550,
+        "base_time": 770,
         "cost_factor": 1.6,
         "requirements": {"buildings": {"research_lab": 1}},
     },
@@ -102,7 +102,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "icon": "drohnenoptimierung.png",
         "base_cost_m": 1500,
         "base_cost_c": 900,
-        "base_time": 750,
+        "base_time": 1050,
         "cost_factor": 1.7,
         "requirements": {"buildings": {"research_lab": 2}},
     },
@@ -115,7 +115,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "icon": "hyperraum-navigation.png",
         "base_cost_m": 2000,
         "base_cost_c": 1500,
-        "base_time": 900,
+        "base_time": 1260,
         "cost_factor": 1.8,
         "requirements": {"buildings": {"research_lab": 3}, "research": {"drone_tech": 2}},
     },
@@ -128,7 +128,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "icon": "kryo-antriebstechnik.png",
         "base_cost_m": 2200,
         "base_cost_c": 1600,
-        "base_time": 950,
+        "base_time": 1330,
         "cost_factor": 1.8,
         "requirements": {"buildings": {"research_lab": 3}, "research": {"energy_tech": 2}},
     },
@@ -141,7 +141,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "icon": "waffenentwicklung.png",
         "base_cost_m": 1800,
         "base_cost_c": 900,
-        "base_time": 800,
+        "base_time": 1120,
         "cost_factor": 1.7,
         "requirements": {"buildings": {"research_lab": 2}},
     },
@@ -154,7 +154,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "icon": "panzerungstechnik.png",
         "base_cost_m": 1900,
         "base_cost_c": 1100,
-        "base_time": 850,
+        "base_time": 1190,
         "cost_factor": 1.7,
         "requirements": {"buildings": {"research_lab": 2}, "research": {"weapon_tech": 1}},
     },
@@ -167,7 +167,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "icon": "schildtechnologie.png",
         "base_cost_m": 2200,
         "base_cost_c": 1300,
-        "base_time": 950,
+        "base_time": 1330,
         "cost_factor": 1.8,
         "requirements": {"buildings": {"research_lab": 3}, "research": {"armor_tech": 1}},
     },
@@ -377,7 +377,9 @@ def complete_finished_research(user_id: int, conn=None) -> bool:
             conn.close()
 
 
-RESEARCH_QUEUE_LIMIT = 3
+RESEARCH_QUEUE_LIMIT = 2
+RESEARCH_QUEUE_LIMIT_AT_LAB4 = 3
+RESEARCH_QUEUE_LAB_LEVEL_FOR_BONUS = 4
 
 
 def _research_resource_planet(player_id: int, conn) -> Dict[str, Any]:
@@ -407,9 +409,17 @@ def _research_not_enough_payload(
     }
 
 
-def _resolve_research_queue_limit(settings: Optional[Dict[str, Any]] = None) -> int:
+def _resolve_research_queue_limit(
+    settings: Optional[Dict[str, Any]] = None,
+    *,
+    player_id: Optional[int] = None,
+    conn=None,
+) -> int:
     if settings is None:
-        settings = get_game_settings()
+        try:
+            settings = get_game_settings(conn=conn)
+        except TypeError:
+            settings = get_game_settings()
     raw_limit = settings.get("research_queue_limit", RESEARCH_QUEUE_LIMIT)
     try:
         queue_limit = int(raw_limit)
@@ -418,7 +428,12 @@ def _resolve_research_queue_limit(settings: Optional[Dict[str, Any]] = None) -> 
             queue_limit = int(float(raw_limit))
         except (ValueError, TypeError):
             queue_limit = RESEARCH_QUEUE_LIMIT
-    return max(queue_limit, 1)
+    base = max(queue_limit, 1)
+    if player_id is not None:
+        lab = get_player_research_lab_level(int(player_id), conn=conn)
+        if lab >= RESEARCH_QUEUE_LAB_LEVEL_FOR_BONUS:
+            return max(base, RESEARCH_QUEUE_LIMIT_AT_LAB4)
+    return base
 
 
 # ======================================================================
@@ -493,7 +508,7 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
             return False, "requirements", None
 
         rows = get_research_queue_rows(uid, conn=conn)
-        research_queue_limit = _resolve_research_queue_limit()
+        research_queue_limit = _resolve_research_queue_limit(player_id=uid, conn=conn)
         if len(rows) >= research_queue_limit:
             rollback(conn)
             return False, "research_queue_full", {
@@ -784,7 +799,7 @@ def get_research_status(
             "in_queue": in_queue,
         })
 
-    research_queue_limit = _resolve_research_queue_limit()
+    research_queue_limit = _resolve_research_queue_limit(player_id=uid, conn=conn)
     summary = {
         "count": len(queue_list),
         "limit": research_queue_limit,
