@@ -684,10 +684,9 @@
     return map[reason] || t("msg_generic_error", "Aktion fehlgeschlagen.");
   }
 
-  function renderCompactCosts(metal, crystal, targetLevel, queueCount) {
+  function renderCompactCosts(metal, crystal, targetLevel) {
     const levelLabel = t("buildings_col_level", "Level");
-    let targetNote = `→ L${fmtNumber(targetLevel)}`;
-    if (queueCount) targetNote += ` · ×${queueCount}`;
+    const targetNote = `→ L${fmtNumber(targetLevel)}`;
     return (
       `<div class="gc-costs-compact">` +
       `<span class="gc-cost-chip gc-cost-metal"><span class="gc-res-icon gc-res-metal" aria-hidden="true"></span>` +
@@ -706,131 +705,68 @@
       "gc-prog-affordable",
       "gc-prog-locked",
       "gc-prog-unaffordable",
-      "gc-prog-max",
-      "gc-prog-queued",
-      "gc-prog-has-queue"
+      "gc-prog-max"
     );
     if (isMax) row.classList.add("gc-prog-max");
     else if (!b.requirements_met) row.classList.add("gc-prog-locked");
     else if (!b.can_afford) row.classList.add("gc-prog-unaffordable");
-    else {
-      row.classList.add("gc-prog-affordable");
-      if (b.queue_count > 0) row.classList.add("gc-prog-queued");
-    }
-    if (b.queue_count > 0) row.classList.add("gc-prog-has-queue");
+    else row.classList.add("gc-prog-affordable");
   }
 
   function applyResearchRowState(row, tech) {
     if (!row || !tech) return;
     const locked = !tech.requirements_met;
-    const qCount = tech.queue_count || 0;
-    row.classList.remove("gc-prog-affordable", "gc-prog-locked", "gc-prog-queued", "gc-prog-has-queue", "tech-row-locked", "tech-row-queued");
+    row.classList.remove("gc-prog-affordable", "gc-prog-locked", "tech-row-locked");
     if (locked) {
       row.classList.add("gc-prog-locked", "tech-row-locked");
     } else {
       row.classList.add("gc-prog-affordable");
-      if (qCount > 0) row.classList.add("gc-prog-queued", "tech-row-queued");
     }
-    if (qCount > 0) row.classList.add("gc-prog-has-queue");
   }
 
-  function patchInlineBuildQueues(queueList) {
-    document.querySelectorAll(".buildings-prog-list [data-building-row]").forEach((row) => {
-      const key = row.dataset.buildingRow;
-      if (!key) return;
-
-      const jobs = (queueList || []).filter((j) => String(j.building_type) === String(key));
-      let inline = row.querySelector(`[data-building-queue="${key}"]`);
-
-      if (!jobs.length) {
-        if (inline) inline.remove();
-        return;
-      }
-
-      const first = jobs[0];
-      const remaining = parseInt(first.remaining, 10) || 0;
-      const totalRaw = first.total || first.total_seconds || 0;
-      const total = Math.max(1, parseInt(totalRaw, 10) || remaining + 1);
-      const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
-      let meta = `→ L${fmtNumber(first.target_level)}`;
-      if (remaining > 0) meta += ` · ${formatEta(remaining)}`;
-      if (jobs.length > 1) meta += ` · ×${jobs.length}`;
-
-      if (!inline) {
-        row.insertAdjacentHTML(
-          "beforeend",
-          `<div class="gc-prog-queue-inline" data-building-queue="${key}"` +
-            `${remaining > 0 && first.finish_time ? ` data-finish-time="${Number(first.finish_time)}" data-total="${total}"` : ""}>` +
-            `<div class="gc-prog-queue-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">` +
-            `<div class="gc-prog-queue-fill gc-progress-smooth" style="width:${pct}%"></div></div>` +
-            `<span class="gc-prog-queue-meta">${meta}</span></div>`
-        );
-        return;
-      }
-
-      if (remaining > 0 && first.finish_time) {
-        inline.setAttribute("data-finish-time", String(Number(first.finish_time)));
-        inline.setAttribute("data-total", String(total));
-      } else {
-        inline.removeAttribute("data-finish-time");
-        inline.removeAttribute("data-total");
-      }
-
-      const fill = inline.querySelector(".gc-prog-queue-fill");
-      const metaEl = inline.querySelector(".gc-prog-queue-meta");
-      if (fill) fill.style.width = `${pct}%`;
-      if (metaEl) _setIfChanged(metaEl, meta);
-    });
+  function formatResearchReqTooltip(items) {
+    if (!Array.isArray(items)) return "";
+    return items
+      .filter((req) => !req.met)
+      .map((req) => {
+        const label =
+          req.kind === "building"
+            ? t("building_" + req.key, req.key)
+            : t(req.key, req.key);
+        return `${label} L${fmtNumber(req.need)}`;
+      })
+      .join(" · ");
   }
 
-  function patchInlineResearchQueues(queueList) {
-    document.querySelectorAll(".research-prog-list [data-tech-key]").forEach((row) => {
-      const key = row.dataset.techKey;
-      if (!key) return;
+  function renderResearchActionCell(tech, summary) {
+    const key = tech.key;
+    const count = summary?.count ?? 0;
+    const limit = summary?.limit ?? 3;
+    const queueFull = count >= limit;
+    const queueActive = count > 0;
+    const btnStart = t("research_btn_start", "Forschung starten");
+    const btnQueue = t("research_btn_queue", "Anreihen");
+    const fullLabel = t("research_status_queue_full", "Warteschlange voll");
 
-      const jobs = (queueList || []).filter((j) => String(j.tech_key || j.key) === String(key));
-      let inline = row.querySelector(`[data-research-queue="${key}"]`);
-
-      if (!jobs.length) {
-        if (inline) inline.remove();
-        return;
-      }
-
-      const first = jobs[0];
-      const remaining = parseInt(first.remaining, 10) || 0;
-      const totalRaw = first.total || first.total_seconds || 0;
-      const total = Math.max(1, parseInt(totalRaw, 10) || remaining + 1);
-      const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
-      let meta = `→ L${fmtNumber(first.target_level)}`;
-      if (remaining > 0) meta += ` · ${formatEta(remaining)}`;
-      if (jobs.length > 1) meta += ` · ×${jobs.length}`;
-
-      if (!inline) {
-        row.insertAdjacentHTML(
-          "beforeend",
-          `<div class="gc-prog-queue-inline" data-research-queue="${key}"` +
-            `${remaining > 0 && (first.finish_at || first.finish_time) ? ` data-finish-time="${Number(first.finish_at || first.finish_time)}" data-total="${total}"` : ""}>` +
-            `<div class="gc-prog-queue-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">` +
-            `<div class="gc-prog-queue-fill gc-progress-smooth" style="width:${pct}%"></div></div>` +
-            `<span class="gc-prog-queue-meta">${meta}</span></div>`
-        );
-        return;
-      }
-
-      const finishTs = Number(first.finish_at || first.finish_time || 0);
-      if (remaining > 0 && finishTs) {
-        inline.setAttribute("data-finish-time", String(finishTs));
-        inline.setAttribute("data-total", String(total));
-      } else {
-        inline.removeAttribute("data-finish-time");
-        inline.removeAttribute("data-total");
-      }
-
-      const fill = inline.querySelector(".gc-prog-queue-fill");
-      const metaEl = inline.querySelector(".gc-prog-queue-meta");
-      if (fill) fill.style.width = `${pct}%`;
-      if (metaEl) _setIfChanged(metaEl, meta);
-    });
+    if (!tech.requirements_met) {
+      let lockTitle = t("research_requirements_not_met", "Voraussetzungen nicht erfüllt.");
+      const reqHint = formatResearchReqTooltip(tech.requirements_items);
+      if (reqHint) lockTitle += " · " + reqHint;
+      return (
+        `<span class="status-pill status-pill-locked status-pill-icon"` +
+        ` title="${lockTitle}" aria-label="${lockTitle}">🔒</span>`
+      );
+    }
+    if (queueFull) {
+      const fullShort = t("research_status_queue_full_short", "Voll");
+      return (
+        `<span class="status-pill status-pill-locked status-pill-queue-full status-pill-compact"` +
+        ` title="${fullLabel}">${fullShort}</span>`
+      );
+    }
+    const label = queueActive ? btnQueue : btnStart;
+    const href = `/research_start/${encodeURIComponent(key)}`;
+    return `<a href="${href}" class="gc-btn gc-btn-primary gc-btn-xs btn-research">${label}</a>`;
   }
 
   function renderBuildingActionCell(b, bqSummary, bqQueueFull) {
@@ -869,7 +805,6 @@
     const limit = summary?.limit ?? 3;
     const count = summary?.count ?? 0;
     const bqQueueFull = count >= limit;
-    const queueList = Array.isArray(buildQueueRaw?.queue) ? buildQueueRaw.queue : [];
 
     Object.values(rowsByTab).forEach((rows) => {
       (rows || []).forEach((b) => {
@@ -884,7 +819,7 @@
 
         const costCell = row.querySelector(".bcell-cost");
         if (costCell) {
-          const html = renderCompactCosts(b.cost_metal, b.cost_crystal, b.target_level, b.queue_count || 0);
+          const html = renderCompactCosts(b.cost_metal, b.cost_crystal, b.target_level);
           if (costCell.innerHTML.trim() !== html.trim()) costCell.innerHTML = html;
         }
 
@@ -898,8 +833,6 @@
         }
       });
     });
-
-    patchInlineBuildQueues(queueList);
   }
 
   function patchResearchPanel(techs, researchRaw) {
@@ -907,40 +840,19 @@
     if (!list || !Array.isArray(techs)) return;
 
     const summary = researchRaw?.summary || {};
-    const activeKey = researchRaw?.active?.tech_key || researchRaw?.active?.key || null;
-    const queueList = Array.isArray(researchRaw?.queue) ? researchRaw.queue : [];
 
     techs.forEach((tech) => {
       const row = document.querySelector(`[data-tech-key="${tech.key}"]`);
       if (!row) return;
-
-      const qCount = tech.queue_count || 0;
-      const isActive = !!tech.is_active || (activeKey && activeKey === tech.key);
 
       applyResearchRowState(row, tech);
 
       const levelEl = row.querySelector(".tech-level-current");
       if (levelEl) _setIfChanged(levelEl, fmtNumber(tech.level));
 
-      const levelCol = row.querySelector(".gc-prog-level");
-      if (levelCol) {
-        let badges = levelCol.querySelector(".tech-queue-badges");
-        if (qCount > 0) {
-          const badgesHtml =
-            `<div class="tech-queue-badges">` +
-            (isActive ? `<span class="tech-queue-badge tech-queue-badge-active">${t("research_btn_active", "Aktiv")}</span>` : "") +
-            `<span class="tech-queue-badge">×${qCount}</span>` +
-            `</div>`;
-          if (badges) badges.outerHTML = badgesHtml;
-          else levelCol.insertAdjacentHTML("beforeend", badgesHtml);
-        } else if (badges) {
-          badges.remove();
-        }
-      }
-
       const costCell = row.querySelector(".tech-cost-cell");
       if (costCell) {
-        const html = renderCompactCosts(tech.cost_metal, tech.cost_crystal, tech.target_level, 0);
+        const html = renderCompactCosts(tech.cost_metal, tech.cost_crystal, tech.target_level);
         if (costCell.innerHTML.trim() !== html.trim()) costCell.innerHTML = html;
       }
 
@@ -949,6 +861,12 @@
         const inner = timeCell.querySelector(".tech-time") || timeCell;
         _setIfChanged(inner, formatDuration(tech.time_seconds));
       }
+
+      const actionCell = row.querySelector(".tech-status-cell");
+      if (actionCell) {
+        const html = renderResearchActionCell(tech, summary);
+        if (actionCell.innerHTML.trim() !== html.trim()) actionCell.innerHTML = html;
+      }
     });
 
     const labEl = document.querySelector(".lab-level-highlight");
@@ -956,7 +874,6 @@
       _setIfChanged(labEl, fmtNumber(researchRaw.lab_level));
     }
 
-    patchInlineResearchQueues(queueList);
     updateResearchQueueActions(researchRaw);
   }
 
@@ -1675,23 +1592,6 @@
         _applyProgressFill(fillEl, 100);
         requestFinishRefresh("buildings");
       }
-
-      document.querySelectorAll(".gc-prog-queue-inline[data-finish-time]").forEach((inline) => {
-        const finishTime = Number(inline.getAttribute("data-finish-time") || 0);
-        const total = Math.max(1, Number(inline.getAttribute("data-total") || 1));
-        if (!finishTime) return;
-        const rem = Math.max(0, finishTime - serverNow);
-        const inlinePct = 100 * (1 - rem / total);
-        _applyProgressFill(inline.querySelector(".gc-prog-queue-fill"), inlinePct);
-        const metaEl = inline.querySelector(".gc-prog-queue-meta");
-        if (metaEl && rem > 0) {
-          const parts = String(metaEl.textContent || "").split(" · ");
-          if (parts.length > 1) {
-            parts[parts.length - 1] = formatEta(Math.ceil(rem));
-            _setIfChanged(metaEl, parts.join(" · "));
-          }
-        }
-      });
     }
 
     const researchActive = document.querySelector(".research-job.research-job-active");
