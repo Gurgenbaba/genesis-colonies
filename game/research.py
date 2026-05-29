@@ -214,6 +214,52 @@ def get_research_time(
 # REQUIREMENTS
 # ======================================================================
 
+def get_player_research_lab_level(player_id: int, conn=None) -> int:
+    """
+    Research is account-scoped; unlock checks use the highest research_lab
+    level on any planet owned by the player (finished levels only).
+    """
+    from .models import db as _db
+
+    uid = int(player_id)
+    own_conn = False
+    if conn is None:
+        conn = _db()
+        own_conn = True
+
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT COALESCE(MAX(pb.research_lab), 0) AS lab_level
+            FROM planet_buildings pb
+            INNER JOIN planets p ON p.id = pb.planet_id
+            WHERE p.player_id = ?;
+            """,
+            (uid,),
+        )
+        row = cur.fetchone()
+        return int(row["lab_level"] if row else 0)
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def resolve_buildings_for_research(
+    buildings: Optional[Dict[str, int]],
+    player_id: int,
+    *,
+    conn=None,
+) -> Dict[str, int]:
+    """
+    Overlay empire-wide research_lab level onto a planet buildings snapshot.
+    Other building keys stay planet-local; only research_lab drives tech unlocks.
+    """
+    resolved = dict(buildings or {})
+    resolved["research_lab"] = get_player_research_lab_level(player_id, conn=conn)
+    return resolved
+
+
 def _check_requirements(
     base_requirements: Dict[str, Any],
     buildings: Dict[str, int],
@@ -397,7 +443,11 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
         planet_metal = float(prow["metal"] or 0)
         planet_crystal = float(prow["crystal"] or 0)
 
-        buildings = get_planet_buildings(planet_id, conn=conn)
+        buildings = resolve_buildings_for_research(
+            get_planet_buildings(planet_id, conn=conn),
+            uid,
+            conn=conn,
+        )
         levels = get_research_levels(uid, conn=conn)
 
         if int(buildings.get("research_lab", 0) or 0) <= 0:
@@ -544,6 +594,9 @@ def get_research_status(
         planet = get_homeworld(player_id=uid, conn=conn)
         buildings = get_planet_buildings(int(planet["id"]), conn=conn)
 
+    buildings = resolve_buildings_for_research(buildings, uid, conn=conn)
+    lab_level = int(buildings.get("research_lab", 0) or 0)
+
     levels = get_research_levels(uid, conn=conn)
     queue = get_research_queue_rows(uid, conn=conn)
     now = time.time()
@@ -661,7 +714,7 @@ def get_research_status(
         "queue": queue_list,
         "summary": summary,
         "techs": techs,
-        "lab_level": int(buildings.get("research_lab", 0) or 0),
+        "lab_level": lab_level,
     }
 
 
