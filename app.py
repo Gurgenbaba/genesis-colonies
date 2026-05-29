@@ -610,25 +610,22 @@ def overview():
     finally:
         conn.close()
 
+    from game.overview_page import build_overview_page_context
     from game.planet_evolution.repository import get_context_planet
 
     planet = get_context_planet(int(session["user_id"]))
-    active_planet_name = str(planet.get("name") or "")
+    overview_status = build_overview_page_context(int(session["user_id"]), ctx, planet=planet)
 
     return render_template(
         "overview.html",
         player=ctx["player_view"],
-        buildings=ctx["buildings"],
         ratio=ctx["ratio"],
         energy_total=ctx["energy_total"],
         energy_used=ctx["energy_used"],
         storage_caps=ctx["storage_caps"],
         prod_per_hour=ctx["prod_per_hour"],
-        build_queue=ctx["build_queue"],
-        research_status=ctx["research"],
-        build_status=ctx["build_queue"],
         planet_teaser=planet_teaser,
-        active_planet_name=active_planet_name,
+        overview_status=overview_status,
     )
 
 
@@ -1643,6 +1640,23 @@ def api_options_planet_name():
     return _options_api_response(True, err, data)
 
 
+@app.route("/api/planet/delete", methods=["POST"])
+@require_login_api
+def api_planet_delete():
+    pid = _current_player_id()
+    assert pid is not None
+    meta = _options_request_meta()
+    ok, err, data = options_logic.delete_active_planet(
+        int(pid), ip=meta["ip"], user_agent=meta["user_agent"]
+    )
+    if not ok:
+        status = 400
+        if err == "planet_error_not_found":
+            status = 404
+        return _options_api_response(False, err, data, status)
+    return _options_api_response(True, err, data)
+
+
 @app.route("/api/options/email", methods=["POST"])
 @require_login_api
 def api_options_email():
@@ -1997,7 +2011,23 @@ def _payload_from_live_context(
         },
     }
 
+    from game.overview_page import build_overview_status
     from game.planet_evolution.repository import get_active_planet_id, get_context_planet
+
+    planet = get_context_planet(user_id)
+    payload["overview"]["status"] = build_overview_status(
+        user_id=user_id,
+        player_view=player_view,
+        ratio=float(ratio),
+        energy_total=int(energy_total),
+        energy_used=int(energy_used),
+        storage_caps=storage_caps,
+        prod_per_hour=prod_per_hour,
+        build_queue=build_queue,
+        research=research,
+        planet=planet,
+        include_log=False,
+    )
 
     active_planet_id = get_active_planet_id(user_id)
     payload["active_planet_id"] = int(active_planet_id)

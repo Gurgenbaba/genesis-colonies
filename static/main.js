@@ -973,14 +973,22 @@
   }
 
   function patchOverviewEnergyHint(overview, data) {
-    const hint = document.querySelector(".overview-hint");
+    const hint = document.querySelector(".overview-hint, #overview-energy-hint");
     if (!hint) return;
 
-    const hintKey = overview?.energy_hint;
+    const hintKey = overview?.energy_hint ?? overview?.status?.energy?.hint;
     const total = Math.floor(
-      Number(data?.energy?.total ?? data?.player?.energy_total ?? data?.resources?.energy_total ?? 0)
+      Number(
+        data?.energy?.total ??
+          overview?.status?.energy?.total ??
+          data?.player?.energy_total ??
+          data?.resources?.energy_total ??
+          0
+      )
     );
-    const ratio = Number(data?.energy?.ratio ?? data?.energy_ratio ?? 1);
+    const ratio = Number(
+      data?.energy?.ratio ?? overview?.status?.energy?.ratio ?? data?.energy_ratio ?? 1
+    );
 
     let state = hintKey;
     if (!state) {
@@ -993,6 +1001,62 @@
     if (state === "zero") hint.classList.add("overview-energy-zero");
     else if (state === "ok") hint.classList.add("overview-energy-ok");
     else hint.classList.add("overview-energy-low");
+  }
+
+  function patchOverviewStatus(overview, data, buildings, prod) {
+    const status = overview?.status;
+    if (status?.resources) {
+      const metalPhEl = document.querySelector('[data-ph="metal"]');
+      const crystalPhEl = document.querySelector('[data-ph="crystal"]');
+      if (metalPhEl) {
+        _setIfChanged(metalPhEl, fmtNumber(Math.floor(Number(status.resources.metal_per_hour || 0))));
+      }
+      if (crystalPhEl) {
+        _setIfChanged(crystalPhEl, fmtNumber(Math.floor(Number(status.resources.crystal_per_hour || 0))));
+      }
+    } else if (prod) {
+      const metalPhEl = document.querySelector('[data-ph="metal"]');
+      const crystalPhEl = document.querySelector('[data-ph="crystal"]');
+      if (metalPhEl) _setIfChanged(metalPhEl, fmtNumber(Math.floor(Number(prod.metal_mine || 0))));
+      if (crystalPhEl) _setIfChanged(crystalPhEl, fmtNumber(Math.floor(Number(prod.crystal_mine || 0))));
+    }
+
+    patchOverviewEnergyHint(overview, data);
+    patchOverviewTable(overview, buildings, prod);
+
+    if (status?.planet?.name && typeof GC.applyOverviewPlanetName === "function") {
+      GC.applyOverviewPlanetName(status.planet.name);
+    }
+
+    const actList = document.getElementById("overview-activities");
+    const activities = status?.activities;
+    if (!actList || !Array.isArray(activities)) return;
+
+    activities.forEach((act) => {
+      const row = actList.querySelector(`[data-activity-key="${act.key}"]`);
+      if (!row) return;
+
+      row.classList.remove("overview-activity-active", "overview-activity-idle");
+      row.classList.add(`overview-activity-${act.state || "idle"}`);
+
+      if (act.finish_at) row.dataset.finishAt = String(act.finish_at);
+      else delete row.dataset.finishAt;
+
+      if (act.remaining != null) row.dataset.remaining = String(act.remaining);
+
+      const etaEl = row.querySelector("[data-activity-eta]");
+      const detailEl = row.querySelector(".overview-activity-detail");
+
+      if (act.state === "active") {
+        if (detailEl && act.summary) _setIfChanged(detailEl, act.summary);
+        if (etaEl) {
+          etaEl.style.display = "";
+          _setIfChanged(etaEl, act.remaining_display || formatEta(act.remaining || 0));
+        }
+      } else if (etaEl) {
+        etaEl.style.display = "none";
+      }
+    });
   }
 
   function patchOverviewResearch(research) {
@@ -2021,8 +2085,7 @@
       }
 
       patchOverviewResearch(research);
-      patchOverviewTable(data.overview, buildings, prod);
-      patchOverviewEnergyHint(data.overview, data);
+      patchOverviewStatus(data.overview, data, buildings, prod);
       if (data.exchange) patchExchangePanel(data.exchange);
       if (data.planet_teaser) patchPlanetTeaser(data.planet_teaser);
 
@@ -2229,7 +2292,127 @@
     root.className = `gc-planet-teaser gc-panel gc-planet-teaser-${teaser.status || "countdown"}`;
   }
 
-  function initOverview() {}
+  function initOverview() {
+    const trigger = document.getElementById("overview-planet-menu-trigger");
+    const menu = document.getElementById("overview-planet-menu");
+    const renameForm = document.getElementById("overview-planet-rename-form");
+    const deleteBtn = document.getElementById("overview-planet-delete-btn");
+    if (!trigger || !menu) return;
+
+    const hintEl = menu.querySelector(".overview-planet-form-hint");
+    const nameInput = renameForm && renameForm.querySelector('[name="planet_name"]');
+
+    function setPlanetNameDisplay(name) {
+      const label = String(name || "").trim();
+      const nameEl = document.getElementById("overview-planet-name");
+      if (nameEl) nameEl.textContent = label;
+      if (nameInput) nameInput.value = label;
+      ["build-queue-planet-label", "research-planet-label"].forEach((id) => {
+        const chip = document.getElementById(id);
+        if (!chip) return;
+        chip.textContent = id === "build-queue-planet-label" ? `· ${label}` : label;
+      });
+    }
+
+    function setMenuOpen(open) {
+      trigger.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) {
+        menu.hidden = false;
+        menu.removeAttribute("hidden");
+      } else {
+        menu.hidden = true;
+      }
+    }
+
+    function setHint(text, isError) {
+      if (!hintEl) return;
+      hintEl.textContent = text || "";
+      hintEl.hidden = !text;
+      hintEl.classList.toggle("gc-options-hint-error", Boolean(isError));
+      hintEl.classList.toggle("gc-options-hint-success", Boolean(text) && !isError);
+    }
+
+    trigger.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const open = trigger.getAttribute("aria-expanded") === "true";
+      setMenuOpen(!open);
+      if (!open && nameInput) {
+        setTimeout(() => nameInput.focus(), 0);
+      }
+    });
+
+    document.addEventListener("click", (ev) => {
+      if (trigger.getAttribute("aria-expanded") !== "true") return;
+      if (menu.contains(ev.target) || trigger.contains(ev.target)) return;
+      setMenuOpen(false);
+    });
+
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") setMenuOpen(false);
+    });
+
+    if (renameForm) {
+      renameForm.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const planetName = String(nameInput && nameInput.value ? nameInput.value : "").trim();
+        if (!planetName) return;
+        setHint("", false);
+        try {
+          const data = await GC.fetchGameAction("/api/options/planet-name", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ planet_name: planetName }),
+          });
+          if (!data.ok) {
+            setHint(t(data.error || "options_error_invalid_name", "Speichern fehlgeschlagen."), true);
+            return;
+          }
+          const saved =
+            data.data &&
+            (data.data.active_planet_name || data.data.planet_name || data.data.homeworld_name);
+          if (saved) setPlanetNameDisplay(saved);
+          setHint(t("options_saved", "Gespeichert."), false);
+          if (typeof GC.refreshGameState === "function") GC.refreshGameState("planet_rename");
+          setTimeout(() => setMenuOpen(false), 450);
+        } catch (err) {
+          if (err && err.message === "auth") return;
+          setHint(t("options_error_invalid_name", "Speichern fehlgeschlagen."), true);
+        }
+      });
+    }
+
+    if (deleteBtn && !deleteBtn.disabled) {
+      deleteBtn.addEventListener("click", async () => {
+        const confirmMsg = t(
+          "overview_planet_delete_confirm",
+          "Diese Kolonie unwiderruflich löschen?"
+        );
+        if (!window.confirm(confirmMsg)) return;
+        setHint("", false);
+        deleteBtn.disabled = true;
+        try {
+          const data = await GC.fetchGameAction("/api/planet/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({}),
+          });
+          if (!data.ok) {
+            setHint(t(data.error || "planet_error_delete_failed", "Löschen fehlgeschlagen."), true);
+            deleteBtn.disabled = false;
+            return;
+          }
+          setMenuOpen(false);
+          window.location.href = "/overview";
+        } catch (err) {
+          if (err && err.message === "auth") return;
+          setHint(t("planet_error_delete_failed", "Löschen fehlgeschlagen."), true);
+          deleteBtn.disabled = false;
+        }
+      });
+    }
+
+    GC.applyOverviewPlanetName = setPlanetNameDisplay;
+  }
 
   function initTraderHub() {
     initExchangePanel();
@@ -3174,19 +3357,6 @@
           });
         }
         if (typeof GC.refreshGameState === "function") GC.refreshGameState("options_name_change");
-      },
-    },
-    "options-form-planet-name": {
-      url: "/api/options/planet-name",
-      fields: ["planet_name"],
-      apply(form, data) {
-        const name = data.active_planet_name || data.planet_name || data.homeworld_name || "";
-        const cur = document.getElementById("options-current-planet-name");
-        if (cur) cur.textContent = name || t("options_not_set", "—");
-        const inp = form.querySelector('[name="planet_name"]');
-        if (inp) inp.value = name;
-        const page = document.getElementById("options-page");
-        if (page) page.setAttribute("data-active-planet-name", name);
       },
     },
     "options-form-email": {

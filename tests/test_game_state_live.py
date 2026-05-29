@@ -181,6 +181,10 @@ def test_api_game_state_single_finish_via_coerce(game_client):
     client, pid = game_client
     _set_buildings(pid, {"metal_mine": 1, "solar_plant": 1})
 
+    planet = get_homeworld(player_id=pid)
+    now = time.time()
+    add_build_job(int(planet["id"]), "metal_mine", now - 120, now - 1)
+
     from unittest.mock import patch
 
     from game.queue_engine import finish_due_work_once as real_finish

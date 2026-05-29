@@ -39,7 +39,7 @@ def resolve_db_path() -> Path:
     override = os.environ.get("GC_DB_PATH", "").strip()
     if override:
         return Path(override)
-    return DB_PATH
+    return Path(DB_PATH)
 
 
 def ensure_db_parent_dir() -> Path:

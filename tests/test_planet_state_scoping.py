@@ -28,7 +28,7 @@ from game.models import (
     load_player,
     save_planet_buildings,
 )
-from game.options import get_options_snapshot, update_active_planet_name
+from game.options import get_options_snapshot, update_active_planet_name, delete_active_planet
 from game.planet_evolution.repository import set_active_planet_id
 from game.planet_evolution.service import colonize_planet, set_active_planet
 from game.player_display import commander_display_name, commander_lookup_name
@@ -299,3 +299,32 @@ def test_queue_build_targets_active_planet(scoped_db):
     planet_ids = {int(r["planet_id"]) for r in rows}
     assert colony_id in planet_ids
     assert int(hw["id"]) not in planet_ids
+
+
+def test_delete_active_colony_switches_to_homeworld(scoped_db):
+    player_id, _ = _create_player()
+    hw = get_homeworld(player_id=player_id)
+    hw_id = int(hw["id"])
+    colony_id = _second_planet(player_id)
+
+    conn = db()
+    set_active_planet_id(player_id, colony_id, conn)
+    conn.commit()
+    conn.close()
+
+    ok, err, data = delete_active_planet(player_id)
+    assert ok, err
+    assert data["active_planet_id"] == hw_id
+
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM planets WHERE id = ?;", (colony_id,))
+    assert cur.fetchone() is None
+    conn.close()
+
+
+def test_delete_homeworld_rejected(scoped_db):
+    player_id, _ = _create_player()
+    ok, err, _ = delete_active_planet(player_id)
+    assert not ok
+    assert err == "planet_error_cannot_delete_homeworld"

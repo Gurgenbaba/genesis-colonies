@@ -22,20 +22,6 @@
         updateCommanderInChrome(name);
       },
     },
-    "options-form-planet-name": {
-      url: "/api/options/planet-name",
-      payload(form) {
-        return { planet_name: fieldValue(form, "planet_name") };
-      },
-      onSuccess(form, data, page, emptyLabel) {
-        const name =
-          data.active_planet_name || data.planet_name || data.homeworld_name || "";
-        const out = document.getElementById("options-current-planet-name");
-        if (out) out.textContent = name || emptyLabel;
-        setFieldValue(form, "planet_name", name);
-        if (page) page.setAttribute("data-active-planet-name", name);
-      },
-    },
     "options-form-email": {
       url: "/api/options/email",
       payload(form) {

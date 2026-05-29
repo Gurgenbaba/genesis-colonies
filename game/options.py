@@ -355,6 +355,72 @@ def update_homeworld_name(
     )
 
 
+def delete_active_planet(
+    player_id: int,
+    *,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """Delete the player's currently active colony (never the homeworld)."""
+    conn = db()
+    try:
+        from .models import get_homeworld
+        from .planet_evolution.repository import get_context_planet, set_active_planet_id
+
+        planet = get_context_planet(int(player_id), conn=conn)
+        if not planet or not planet.get("id"):
+            return False, "planet_error_not_found", {}
+
+        planet_id = int(planet["id"])
+        if int(planet.get("is_homeworld") or 0):
+            return False, "planet_error_cannot_delete_homeworld", {}
+
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT COUNT(*) AS c FROM planets WHERE player_id = ?;",
+            (int(player_id),),
+        )
+        if int(cur.fetchone()["c"]) <= 1:
+            return False, "planet_error_last_planet", {}
+
+        homeworld = get_homeworld(int(player_id), conn=conn)
+        hw_id = int(homeworld["id"])
+
+        begin_write_transaction(conn)
+        set_active_planet_id(int(player_id), hw_id, conn)
+        cur.execute(
+            "DELETE FROM planets WHERE id = ? AND player_id = ? AND is_homeworld = 0;",
+            (planet_id, int(player_id)),
+        )
+        if int(cur.rowcount or 0) <= 0:
+            rollback(conn)
+            return False, "planet_error_delete_failed", {}
+
+        write_account_audit(
+            player_id,
+            "planet_deleted",
+            payload={
+                "planet_id": planet_id,
+                "name": planet.get("name"),
+                "switched_to": hw_id,
+            },
+            ip=ip,
+            user_agent=user_agent,
+            conn=conn,
+        )
+        commit(conn)
+        return True, "planet_deleted", {
+            "deleted_planet_id": planet_id,
+            "active_planet_id": hw_id,
+            "active_planet_name": str(homeworld.get("name") or ""),
+        }
+    except Exception:
+        rollback(conn)
+        return False, "planet_error_delete_failed", {}
+    finally:
+        conn.close()
+
+
 def update_email(
     player_id: int,
     new_email: str,

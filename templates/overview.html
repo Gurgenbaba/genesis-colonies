@@ -2,384 +2,264 @@
 
 {% block content %}
 
-{# ------------------------------------------------------------- #}
-{# Defensive Defaults (Overview darf niemals crasht)              #}
-{# ------------------------------------------------------------- #}
+{% set os = (overview_status if overview_status is defined and overview_status else {}) %}
+{% set planet = (os.planet if os.planet is defined else {}) %}
+{% set commander = (os.commander if os.commander is defined else {}) %}
+{% set res = (os.resources if os.resources is defined else {}) %}
+{% set nrg = (os.energy if os.energy is defined else {}) %}
+{% set activities = (os.activities if os.activities is defined and os.activities else []) %}
+{% set warnings = (os.warnings if os.warnings is defined and os.warnings else []) %}
+{% set recent_log = (os.recent_log if os.recent_log is defined and os.recent_log else []) %}
+
 {% set player_obj = (player if player is defined and player else None) %}
-{% set auth_user = (AUTH_USER if AUTH_USER is defined and AUTH_USER else None) %}
-
-{% set et = (energy_total if energy_total is defined and energy_total is not none else 0) | int %}
-{% set eu = (energy_used if energy_used is defined and energy_used is not none else 0) | int %}
-{% set ratio_val = (ratio if ratio is defined and ratio is not none else 1.0) %}
-
-{% set ph = (prod_per_hour if prod_per_hour is defined and prod_per_hour else {}) %}
-{% set bld = (buildings if buildings is defined and buildings else {}) %}
-{% set caps = (storage_caps if storage_caps is defined and storage_caps else {'metal': 0, 'crystal': 0}) %}
-
-{% set score_total = (score if score is defined and score is not none else 0) %}
-{% set score_b = (score_buildings if score_buildings is defined and score_buildings is not none else None) %}
-{% set score_r = (score_research if score_research is defined and score_research is not none else None) %}
-{% set rank_lbl = (rank_text if rank_text is defined and rank_text else "#–/–") %}
-
-{# Player values robust (object oder dict) #}
-{% set p_name = None %}
-{% set p_metal = 0 %}
-{% set p_crystal = 0 %}
-{% if player_obj %}
-  {% if player_obj.name is defined and player_obj.name %}{% set p_name = player_obj.name %}{% endif %}
-  {% if player_obj.metal is defined %}{% set p_metal = (player_obj.metal or 0) %}{% endif %}
-  {% if player_obj.crystal is defined %}{% set p_crystal = (player_obj.crystal or 0) %}{% endif %}
-{% elif player is mapping %}
-  {% if player.get('name') %}{% set p_name = player.get('name') %}{% endif %}
-  {% set p_metal = (player.get('metal', 0) or 0) %}
-  {% set p_crystal = (player.get('crystal', 0) or 0) %}
-{% endif %}
-
-{% if not p_name %}
-  {% if player_obj and player_obj.name is defined and player_obj.name %}
-    {% set p_name = player_obj.name %}
-  {% elif auth_user and auth_user.name is defined and auth_user.name %}
-    {% set p_name = auth_user.name %}
-  {% elif auth_user and auth_user.username %}{% set p_name = auth_user.username %}{% else %}{% set p_name = "Commander" %}{% endif %}
-{% endif %}
+{% set cmd_id = commander.id if commander.id is defined else (player_obj.id if player_obj and player_obj.id is defined else None) %}
+{% set cmd_name = commander.name if commander.name is defined and commander.name else "Commander" %}
 
 <div class="gc-page overview-wrapper">
 
-  <!-- HEADLINE -->
   <header class="overview-header section-header">
     <div class="section-header-row">
       <h1 class="section-title">
-        {{ T("overview_colony_title") if T("overview_colony_title") != "overview_colony_title" else "Übersicht" }}
+        {{ T("overview_colony_title", "Kolonie-Status") }}
       </h1>
-      {% if active_planet_name is defined and active_planet_name %}
-        <span class="build-queue-planet-chip" id="overview-planet-label" title="{{ T('pe_planet_switcher', 'Kolonie wählen') }}">
-          {{ active_planet_name }}
-        </span>
-      {% endif %}
     </div>
     <p class="section-hint hint">
-      {{ T("overview_hint") if T("overview_hint") != "overview_hint" else "Status deiner Kolonie im Überblick." }}
+      {{ T("overview_hint", "Planet, Ressourcen und laufende Aktionen auf einen Blick.") }}
     </p>
   </header>
 
   {% include "partials/planet_teaser_widget.html" %}
 
-  <!-- MAIN GRID -->
-  <div class="gc-grid-2">
+  <section class="gc-panel overview-hero" aria-label="{{ T('overview_label_planet', 'Kolonie') }}">
+    <div class="overview-hero-top">
+      <div class="overview-hero-identity">
+        <div class="overview-hero-name-wrap">
+          <button type="button"
+                  class="overview-hero-name-btn"
+                  id="overview-planet-menu-trigger"
+                  aria-expanded="false"
+                  aria-controls="overview-planet-menu"
+                  aria-haspopup="dialog"
+                  aria-label="{{ T('overview_planet_manage', 'Kolonie verwalten') }}"
+                  title="{{ T('overview_planet_manage', 'Kolonie verwalten') }}"
+                  data-planet-id="{{ planet.planet_id or 0 }}"
+                  data-can-delete="{{ '1' if planet.can_delete else '0' }}">
+            <span class="overview-hero-name" id="overview-planet-name">{{ planet.name or T('overview_label_planet', 'Kolonie') }}</span>
+          </button>
+          <div class="overview-planet-menu gc-panel"
+               id="overview-planet-menu"
+               role="dialog"
+               aria-labelledby="overview-planet-menu-title"
+               hidden>
+            <div class="overview-planet-menu-head">
+              <span class="gc-panel-title" id="overview-planet-menu-title">{{ T('overview_planet_manage', 'Kolonie verwalten') }}</span>
+            </div>
+            <form class="overview-planet-rename-form" id="overview-planet-rename-form" novalidate>
+              <label class="overview-planet-field">
+                <span class="overview-planet-field-label">{{ T('overview_planet_rename', 'Planet umbenennen') }}</span>
+                <input type="text"
+                       class="gc-input"
+                       name="planet_name"
+                       maxlength="32"
+                       required
+                       autocomplete="off"
+                       value="{{ planet.name or '' }}"
+                       placeholder="{{ T('options_placeholder_planet_name', 'Neuer Kolonie-Name …') }}">
+              </label>
+              <div class="overview-planet-menu-actions">
+                <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm">{{ T('options_save', 'Speichern') }}</button>
+              </div>
+              <p class="overview-planet-form-hint hint" role="status" aria-live="polite" hidden></p>
+            </form>
+            <div class="overview-planet-delete-block">
+              <button type="button"
+                      class="gc-btn gc-btn-danger gc-btn-sm overview-planet-delete-btn"
+                      id="overview-planet-delete-btn"
+                      {% if not planet.can_delete %}disabled aria-disabled="true"{% endif %}>
+                {{ T('overview_planet_delete', 'Planet löschen') }}
+              </button>
+              {% if planet.is_homeworld %}
+              <p class="hint overview-planet-delete-hint">{{ T('overview_planet_delete_homeworld', 'Die Homeworld kann nicht gelöscht werden.') }}</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        <p class="overview-hero-coords gc-mono" id="overview-planet-coords">{{ planet.coordinates.display if planet.coordinates is defined else 'G1 · Sektor ? · Position ?' }}</p>
+      </div>
+      <span class="overview-hero-class gc-chip-angular">
+        {{ T(planet.planet_class_label_key, planet.planet_class or 'terrestrial') }}
+      </span>
+    </div>
 
-    <!-- LEFT: Kolonie / Ressourcen / Buildings -->
-    <section class="gc-panel overview-colony-panel"
-             aria-label="{{ T('overview_label_colony') if T('overview_label_colony') != 'overview_label_colony' else 'Kolonie' }}">
+    <dl class="overview-meta-grid">
+      <div class="overview-meta-item">
+        <dt>{{ T("overview_label_commander", "Commander") }}</dt>
+        <dd>
+          {% if cmd_id %}{{ player_name_link(cmd_id, cmd_name) }}{% else %}{{ cmd_name }}{% endif %}
+        </dd>
+      </div>
+      <div class="overview-meta-item">
+        <dt>{{ T("overview_label_coordinates", "Koordinaten") }}</dt>
+        <dd class="gc-mono">{{ planet.coordinates.display if planet.coordinates is defined else '–' }}</dd>
+      </div>
+      <div class="overview-meta-item">
+        <dt>{{ T("overview_label_planet_class", "Planetentyp") }}</dt>
+        <dd>{{ T(planet.planet_class_label_key, planet.planet_class or 'terrestrial') }}</dd>
+      </div>
+      <div class="overview-meta-item">
+        <dt>{{ T("overview_label_temperature", "Temperatur") }}</dt>
+        <dd id="overview-planet-temp">{{ planet.temperature.display if planet.temperature is defined else '–' }}</dd>
+      </div>
+    </dl>
+  </section>
 
+  <div class="gc-grid-2 overview-main-grid">
+
+    <section class="gc-panel overview-economy-panel" aria-label="{{ T('overview_label_resources', 'Ressourcen') }}">
       <div class="gc-panel-header">
         <div class="gc-panel-head-left">
-          <span class="gc-panel-title">
-            {{ (T("overview_label_colony") if T("overview_label_colony") != "overview_label_colony" else "Kolonie") }}
-            – {% if player_obj and player_obj.id is defined %}{{ player_name_link(player_obj.id, p_name) }}{% else %}{{ p_name }}{% endif %}
-          </span>
-
-          <span class="gc-panel-subtitle">
-            {{ T("overview_panel_colony_status") if T("overview_panel_colony_status") != "overview_panel_colony_status"
-               else "Kernwerte deiner aktuellen Kolonie." }}
-          </span>
+          <span class="gc-panel-title">{{ T("overview_label_resources", "Ressourcen") }}</span>
+          <span class="gc-panel-subtitle">{{ T("overview_panel_resources_hint", "Bestand und stündliche Produktion.") }}</span>
         </div>
       </div>
 
-      <!-- RESOURCE CARDS -->
-      <div class="overview-resources">
-
-        {# FERRONIT #}
-        {% set metal_ph_raw = (ph.get("metal_mine", 0) if ph is mapping else (ph.metal_mine if ph and ph.metal_mine is defined else 0)) | int %}
-        <article class="overview-res-card"
-                 aria-label="{{ T('resource_metal') if T('resource_metal') != 'resource_metal' else 'Ferronit' }}">
-          <img src="{{ url_for('static', filename='icons/ferronit.png') }}"
-               alt="{{ T('resource_metal') if T('resource_metal') != 'resource_metal' else 'Ferronit' }}"
-               class="overview-res-icon">
-
+      <div class="overview-resources overview-resources-compact">
+        <article class="overview-res-card" aria-label="{{ T('resource_metal', 'Ferronit') }}">
+          <img src="{{ url_for('static', filename='icons/ferronit.png') }}" alt="" class="overview-res-icon">
           <div class="overview-res-meta">
-            <span class="overview-res-label">
-              {{ T("resource_metal") if T("resource_metal") != "resource_metal" else "Ferronit" }}
-            </span>
-
+            <span class="overview-res-label">{{ T("resource_metal", "Ferronit") }}</span>
             <span id="overview-metal-val" class="overview-res-main">
-              <span class="gc-val" data-res="metal">{{ (p_metal or 0)|fmt_int }}</span>
-              <span class="gc-cap">/ {{ (caps.metal if caps and caps.metal is defined else (caps.get('metal', 0) if caps is mapping else 0))|fmt_int }}</span>
+              <span class="gc-val" data-res="metal">{{ (res.metal or 0)|fmt_int }}</span>
+              <span class="gc-cap">/ {{ (res.metal_cap or 0)|fmt_int }}</span>
             </span>
-
             <span class="overview-res-cap">
-              +<span data-ph="metal">{{ metal_ph_raw|fmt_int }}</span> / h
+              +<span data-ph="metal">{{ (res.metal_per_hour or 0)|fmt_int }}</span> / h
             </span>
           </div>
         </article>
 
-        {# CRYTITE #}
-        {% set crystal_ph_raw = (ph.get("crystal_mine", 0) if ph is mapping else (ph.crystal_mine if ph and ph.crystal_mine is defined else 0)) | int %}
-        <article class="overview-res-card"
-                 aria-label="{{ T('resource_crystal') if T('resource_crystal') != 'resource_crystal' else 'Crytite' }}">
-          <img src="{{ url_for('static', filename='icons/crytite.png') }}"
-               alt="{{ T('resource_crystal') if T('resource_crystal') != 'resource_crystal' else 'Crytite' }}"
-               class="overview-res-icon">
-
+        <article class="overview-res-card" aria-label="{{ T('resource_crystal', 'Crytite') }}">
+          <img src="{{ url_for('static', filename='icons/crytite.png') }}" alt="" class="overview-res-icon">
           <div class="overview-res-meta">
-            <span class="overview-res-label">
-              {{ T("resource_crystal") if T("resource_crystal") != "resource_crystal" else "Crytite" }}
-            </span>
-
+            <span class="overview-res-label">{{ T("resource_crystal", "Crytite") }}</span>
             <span id="overview-crystal-val" class="overview-res-main">
-              <span class="gc-val" data-res="crystal">{{ (p_crystal or 0)|fmt_int }}</span>
-              <span class="gc-cap">/ {{ (caps.crystal if caps and caps.crystal is defined else (caps.get('crystal', 0) if caps is mapping else 0))|fmt_int }}</span>
+              <span class="gc-val" data-res="crystal">{{ (res.crystal or 0)|fmt_int }}</span>
+              <span class="gc-cap">/ {{ (res.crystal_cap or 0)|fmt_int }}</span>
             </span>
-
             <span class="overview-res-cap">
-              +<span data-ph="crystal">{{ crystal_ph_raw|fmt_int }}</span> / h
+              +<span data-ph="crystal">{{ (res.crystal_per_hour or 0)|fmt_int }}</span> / h
             </span>
           </div>
         </article>
-
-        {# AETHERION / ENERGIE #}
-        <article class="overview-res-card" aria-label="{{ T('energy') if T('energy') != 'energy' else 'Energie' }}">
-          <img src="{{ url_for('static', filename='icons/energy.png') }}"
-               alt="{{ T('energy') if T('energy') != 'energy' else 'Energie' }}"
-               class="overview-res-icon">
-
-          <div class="overview-res-meta">
-            <span class="overview-res-label">
-              {{ T("energy") if T("energy") != "energy" else "Energie" }}
-            </span>
-
-            <span class="overview-res-main" id="overview-energy-val">
-              <span class="gc-val" data-energy-used>{{ eu|fmt_int }}</span>
-              <span class="gc-cap">/ <span data-energy-total>{{ et|fmt_int }}</span></span>
-            </span>
-
-            {# Effizienz clamp 0..100 #}
-            {% set eff_label = T("overview_label_efficiency") %}
-            {% set eff = (ratio_val * 100) | int %}
-            {% if eff < 0 %}{% set eff = 0 %}{% endif %}
-            {% if eff > 100 %}{% set eff = 100 %}{% endif %}
-
-            <span class="overview-res-cap">
-              {{ eff_label if eff_label != "overview_label_efficiency" else "Effizienz" }}:
-              <span id="overview-efficiency" data-efficiency>{{ eff }}</span> %
-            </span>
-          </div>
-        </article>
-
-        {# SCORE / RANK (clickable) #}
-        <a class="overview-res-card overview-score-card gc-score-pill"
-           id="overview-score-card"
-           href="{{ url_for('ranking_view') }}"
-           aria-label="{{ T('nav_ranking','Ranking') }}"
-           title="{{ T('nav_ranking','Ranking') }}">
-          <div class="overview-res-meta">
-            {% set score_label = T("overview_label_score") %}
-            <span class="overview-res-label">
-              {{ score_label if score_label != "overview_label_score" else "Score" }}
-            </span>
-
-            <div class="overview-score-main-row">
-              <span id="overview-score-value" class="overview-score-value" data-score>
-                {{ (score_total or 0)|fmt_int }}
-              </span>
-
-              <span class="overview-score-rank-pill">
-                <span id="overview-score-rank" data-rank>{{ rank_lbl }}</span>
-              </span>
-            </div>
-
-            <span class="overview-score-sub">
-              <span id="overview-score-buildings" data-score-buildings>
-                {% if score_b is not none %}{{ score_b|fmt_int }}{% else %}–{% endif %}
-              </span>
-              {{ T("label_buildings","Gebäude") if T("label_buildings","Gebäude") else "Gebäude" }}
-              ·
-              <span id="overview-score-research" data-score-research>
-                {% if score_r is not none %}{{ score_r|fmt_int }}{% else %}–{% endif %}
-              </span>
-              {{ T("label_research","Forschung") if T("label_research","Forschung") else "Forschung" }}
-            </span>
-          </div>
-        </a>
-
       </div>
 
-      <!-- BUILDING SUMMARY -->
-      <div class="gc-table-scroll">
-      <table class="overview-table table-std">
-        <thead>
-          <tr>
-            <th>{{ T("header_building") if T("header_building") != "header_building" else "Gebäude" }}</th>
-            <th>{{ T("header_level") if T("header_level") != "header_level" else "Level" }}</th>
-            <th>
-              {{ T("overview_label_production_per_hour") if T("overview_label_production_per_hour") != "overview_label_production_per_hour"
-                 else "Produktion / h" }}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {% set building_types = ["metal_mine", "crystal_mine", "solar_plant"] %}
-          {% for b in building_types %}
-            {% set lvl = (bld.get(b, 0) if bld is mapping else (bld[b] if bld and bld[b] is defined else 0)) | int %}
-            {% set ph_raw = (ph.get(b, 0) if ph is mapping else (ph[b] if ph and ph[b] is defined else 0)) | int %}
-            {% set b_key = "building_" ~ b %}
-            {% set b_name = T(b_key) %}
-            <tr>
-              <td>{{ b_name if b_name != b_key else b }}</td>
-              <td class="gc-mono">{{ lvl|fmt_int }}</td>
-              <td class="gc-mono">
-                {% if ph_raw > 0 %}
-                  +{{ ph_raw|fmt_int }} / h
-                {% else %}
-                  –
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="overview-energy-strip">
+        <div class="overview-energy-head">
+          <span class="overview-energy-label">{{ T("overview_label_energy", "Energie-Bilanz") }}</span>
+          <span class="overview-energy-values gc-mono" id="overview-energy-val">
+            <span class="gc-val" data-energy-used>{{ (nrg.used or 0)|fmt_int }}</span>
+            <span class="gc-cap">/ <span data-energy-total>{{ (nrg.total or 0)|fmt_int }}</span></span>
+          </span>
+        </div>
+        <div class="overview-energy-meta">
+          <span>
+            {{ T("overview_label_efficiency", "Effizienz") }}:
+            <strong id="overview-efficiency" data-efficiency>{{ (nrg.efficiency_pct or 100)|fmt_int }}</strong> %
+          </span>
+        </div>
+        <div class="overview-hint overview-energy-hint
+                    {% if (nrg.total or 0) == 0 %}overview-energy-zero
+                    {% elif (nrg.ratio or 1) >= 1 %}overview-energy-ok
+                    {% else %}overview-energy-low{% endif %}"
+             id="overview-energy-hint">
+          {% if (nrg.total or 0) == 0 %}
+            {{ T("overview_hint_energy_zero", "Keine Energie – baue Solarkollektoren.") }}
+          {% elif (nrg.ratio or 1) >= 1 %}
+            {{ T("overview_hint_energy_good", "Energie stabil.") }}
+          {% else %}
+            {{ T("overview_hint_energy_low", "Energieengpass – Produktion gedrosselt.") }}
+          {% endif %}
+        </div>
       </div>
-
-      <!-- ENERGY HINT -->
-      <div class="overview-hint
-                  {% if et == 0 %}
-                    overview-energy-zero
-                  {% elif ratio_val >= 1 %}
-                    overview-energy-ok
-                  {% else %}
-                    overview-energy-low
-                  {% endif %}">
-        {% if et == 0 %}
-          {{ T("overview_hint_energy_zero") if T("overview_hint_energy_zero") != "overview_hint_energy_zero"
-             else "Keine Energieproduktion vorhanden." }}
-        {% elif ratio_val >= 1 %}
-          {{ T("overview_hint_energy_good") if T("overview_hint_energy_good") != "overview_hint_energy_good"
-             else "Energieversorgung stabil." }}
-        {% else %}
-          {{ T("overview_hint_energy_low") if T("overview_hint_energy_low") != "overview_hint_energy_low"
-             else "Energie reicht nicht aus – Produktion ist gedrosselt." }}
-        {% endif %}
-      </div>
-
     </section>
 
-    <!-- RIGHT: Forschung kompakt -->
-    <section class="gc-panel research-panel"
-             aria-label="{{ T('nav_research') if T('nav_research') != 'nav_research' else 'Forschung' }}">
-
+    <section class="gc-panel overview-activities-panel" aria-label="{{ T('overview_label_activities', 'Aktivitäten') }}">
       <div class="gc-panel-header">
         <div class="gc-panel-head-left">
-          <span class="gc-panel-title">{{ T("nav_research") if T("nav_research") != "nav_research" else "Forschung" }}</span>
-          <span class="gc-panel-subtitle">
-            {{ T("overview_panel_research_hint") if T("overview_panel_research_hint") != "overview_panel_research_hint"
-               else "Aktive Projekte & Kerntechnologien im Überblick." }}
-          </span>
-        </div>
-
-        <div class="gc-panel-head-right">
-          <a class="gc-btn gc-btn-xs gc-btn-outline" href="{{ url_for('research_view') }}">
-            {{ T("open_research", "Öffnen") }}
-          </a>
+          <span class="gc-panel-title">{{ T("overview_label_activities", "Aktivitäten") }}</span>
+          <span class="gc-panel-subtitle">{{ T("overview_panel_activities_hint", "Bau, Forschung und Flotte – kompakt.") }}</span>
         </div>
       </div>
 
-      {% set rs = (research_status if research_status is defined and research_status else {}) %}
-      {% set active = (rs.active if rs and rs.active is defined else None) %}
-
-      {% if active %}
-        {% set total = (active.total_seconds if active.total_seconds is defined and active.total_seconds is not none else 0) | int %}
-        {% set remaining = (active.remaining if active.remaining is defined and active.remaining is not none else 0) | int %}
-
-        {% set progress = 0 %}
-        {% if total > 0 %}
-          {% set progress = (100 - (remaining / total * 100)) | int %}
-        {% endif %}
-        {% if progress < 0 %}{% set progress = 0 %}{% endif %}
-        {% if progress > 100 %}{% set progress = 100 %}{% endif %}
-
-        {# i18n label (active.key) #}
-        {% set active_label = None %}
-        {% if active.key is defined and active.key %}
-          {% set active_label = T(active.key) %}
-          {% if active_label == active.key and active.label is defined and active.label %}
-            {% set active_label = active.label %}
-          {% endif %}
-        {% else %}
-          {% set active_label = (active.label if active.label is defined else "Forschung") %}
-        {% endif %}
-
-        {# Zeitformat kurz: m:ss oder h:mm:ss #}
-        {% set rh = (remaining // 3600) %}
-        {% set rm = ((remaining % 3600) // 60) %}
-        {% set rsec = (remaining % 60) %}
-
-        <div class="research-active-box"
-             id="overview-research-active"
-             data-remaining="{{ remaining }}"
-             data-total="{{ total }}"
-             data-finish-at="{{ (active.finish_at or 0)|int }}">
-          <div class="research-active-name" id="overview-research-active-name">
-            {{ active_label }}
-            (L{{ (active.current_level if active.current_level is defined else 0)|fmt_int }}
-            → L{{ (active.target_level if active.target_level is defined else 0)|fmt_int }})
-          </div>
-
-          <div class="research-bar" aria-label="{{ T('progress','Fortschritt') }}">
-            <div class="research-bar-fill gc-progress-smooth"
-                 id="research-bar-fill"
-                 style="width: {{ progress }}%;"></div>
-          </div>
-
-          <div class="research-active-meta">
-            <span id="research-remaining">
-              {% if rh > 0 %}
-                {{ "%d:%02d:%02d"|format(rh, rm, rsec) }}
+      <ul class="overview-activities" id="overview-activities">
+        {% for act in activities %}
+        <li class="overview-activity-row overview-activity-{{ act.key }} overview-activity-{{ act.state }}"
+            data-activity-key="{{ act.key }}"
+            {% if act.finish_at %}data-finish-at="{{ act.finish_at|int }}"{% endif %}
+            {% if act.remaining is defined %}data-remaining="{{ act.remaining|int }}"{% endif %}>
+          <a class="overview-activity-link" href="{{ url_for(act.href_key) }}">
+            <span class="overview-activity-type">{{ T('overview_activity_' ~ act.key, act.key) }}</span>
+            <span class="overview-activity-body">
+              {% if act.state == 'active' %}
+                <span class="overview-activity-name">{{ T(act.label_key, act.label_key) }}</span>
+                <span class="overview-activity-detail gc-mono">{{ act.summary }}</span>
+                <span class="overview-activity-eta gc-mono" data-activity-eta>{{ act.remaining_display }}</span>
               {% else %}
-                {{ "%d:%02d"|format(rm, rsec) }}
+                <span class="overview-activity-idle">{{ T(act.label_key, 'Bereit') }}</span>
               {% endif %}
             </span>
-            <span id="research-total">{{ total|fmt_int }}s</span>
-          </div>
-        </div>
-      {% else %}
-        <p class="research-empty-hint">
-          {{ T("overview_research_none") if T("overview_research_none") != "overview_research_none" else "Aktuell keine Forschung aktiv." }}
-        </p>
-      {% endif %}
-
-      {% if rs and rs.techs is defined and rs.techs %}
-        <ul class="research-list">
-          {% for tech in rs.techs[:4] %}
-            {% set locked = (not tech.requirements_met) if tech and tech.requirements_met is defined else false %}
-
-            {# Tech label i18n: tech.key -> fallback tech.label #}
-            {% set t_label = (tech.label if tech and tech.label is defined else "Technologie") %}
-            {% if tech and tech.key is defined and tech.key %}
-              {% set maybe = T(tech.key) %}
-              {% if maybe != tech.key %}
-                {% set t_label = maybe %}
-              {% endif %}
-            {% endif %}
-
-            <li class="research-item {% if locked %}research-item-locked{% endif %}">
-              <div class="research-item-header">
-                <span class="research-item-name">{{ t_label }}</span>
-                <span class="research-item-level">L{{ (tech.level if tech and tech.level is defined else 0)|fmt_int }}</span>
-              </div>
-              <div class="research-item-cost">
-                {{ (tech.cost_metal if tech and tech.cost_metal is defined else 0)|fmt_int }}
-                {{ T("resource_metal") if T("resource_metal") != "resource_metal" else "Ferronit" }}
-                ·
-                {{ (tech.cost_crystal if tech and tech.cost_crystal is defined else 0)|fmt_int }}
-                {{ T("resource_crystal") if T("resource_crystal") != "resource_crystal" else "Crytite" }}
-              </div>
-            </li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
     </section>
 
   </div>
+
+  {% if warnings %}
+  <section class="gc-panel overview-warnings-panel" aria-label="{{ T('overview_label_warnings', 'Hinweise') }}">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("overview_label_warnings", "Hinweise") }}</span>
+    </div>
+    <ul class="overview-warnings" id="overview-warnings">
+      {% for w in warnings %}
+      <li class="overview-warning overview-warning-{{ w.severity or 'info' }}" data-warning-key="{{ w.key }}">
+        {{ T(w.label_key, w.key) }}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% else %}
+  <ul class="overview-warnings overview-warnings-empty" id="overview-warnings" hidden aria-hidden="true"></ul>
+  {% endif %}
+
+  <section class="gc-panel overview-log-panel" aria-label="{{ T('overview_label_recent_log', 'Systemlog') }}">
+    <div class="gc-panel-header">
+      <div class="gc-panel-head-left">
+        <span class="gc-panel-title">{{ T("overview_label_recent_log", "Letzte Ereignisse") }}</span>
+      </div>
+      <div class="gc-panel-head-right">
+        <a class="gc-btn gc-btn-xs gc-btn-outline" href="{{ url_for('messages_view') }}">
+          {{ T("overview_log_open", "Posteingang") }}
+        </a>
+      </div>
+    </div>
+
+    {% if recent_log %}
+    <ul class="overview-log" id="overview-log">
+      {% for entry in recent_log %}
+      <li class="overview-log-item{% if not entry.is_read %} overview-log-unread{% endif %}">
+        <span class="overview-log-time gc-mono">{{ entry.time_display or '–' }}</span>
+        <span class="overview-log-subject">{{ entry.subject or T('messages_no_subject', 'Ohne Betreff') }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="hint overview-log-empty" id="overview-log-empty">
+      {{ T("overview_log_empty", "Noch keine Systemmeldungen.") }}
+    </p>
+    {% endif %}
+  </section>
 
 </div>
 

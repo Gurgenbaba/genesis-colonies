@@ -51,29 +51,6 @@
           </div>
         </form>
 
-        <form class="gc-options-form" id="options-form-planet-name" method="post" action="#" novalidate>
-          <div class="gc-options-form-head">
-            <span class="gc-options-form-kicker">{{ T("options_planet_name") }}</span>
-          </div>
-          <div class="gc-options-field-row">
-            <label class="gc-options-field">
-              <span class="gc-options-label">{{ T("options_planet_name_current") }}</span>
-              <output class="gc-options-current" id="options-current-planet-name">{{ od.get('active_planet_name', od.get('homeworld_name')) or T('options_not_set') }}</output>
-            </label>
-            <label class="gc-options-field">
-              <span class="gc-options-label">{{ T("options_planet_name") }}</span>
-              <input type="text" class="gc-input gc-options-input" name="planet_name" maxlength="32" required
-                     autocomplete="off"
-                     placeholder="{{ T('options_placeholder_planet_name') }}"
-                     value="{{ od.get('active_planet_name', od.get('homeworld_name', '')) }}">
-            </label>
-          </div>
-          <div class="gc-options-form-actions">
-            <button type="submit" class="gc-btn gc-btn-primary gc-options-save">{{ T("options_save") }}</button>
-            <p class="gc-options-form-hint" role="status" aria-live="polite" hidden></p>
-          </div>
-        </form>
-
       </div>
     </section>
 
