@@ -5752,11 +5752,13 @@
         root.classList.remove("is-open");
         setActiveBarButton("chat");
         if (typeof GC.openTChat === "function") {
-          GC.openTChat();
+          void Promise.resolve(GC.openTChat()).catch((err) => {
+            console.error("[GC] openTChat failed", err);
+          });
         } else if (typeof GC.initChat === "function") {
-          GC.initChat();
-          const chatFab = document.querySelector("[data-chat-fab]");
-          if (chatFab) chatFab.click();
+          void Promise.resolve(GC.initChat()).catch((err) => {
+            console.error("[GC] initChat failed", err);
+          });
         }
         return;
       }

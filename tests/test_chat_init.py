@@ -32,9 +32,12 @@ def test_chat_js_global_handlers_and_idempotent_init():
     assert "CHAT.uiBound" in src
     assert "GC.initChat = initChat" in src
     assert "GC._chatBootstrapDone" in src
+    assert "GC._chatWantsOpen" in src
+    assert "data-special-open-window='chat'" in src
     assert "chat:bootstrap skipped/reused" in src
     assert "chat:open" in src
     assert "chat:bound" in src
+    assert "setOpen(true)" in src.split("async function openTChat")[1].split("GC.initChat = initChat")[0]
     tail = src.split("GC.initChat = initChat")[1]
     assert "DOMContentLoaded" not in tail
     assert "initChatOnce" not in src
@@ -61,5 +64,6 @@ def test_main_js_shell_does_not_init_chat():
 
 def test_main_js_special_panel_uses_open_tchat():
     src = _read("static/main.js")
-    block = src.split('target === "chat"')[1][:400]
+    block = src.split('target === "chat"')[1][:500]
     assert "GC.openTChat" in block
+    assert "openTChat failed" in block

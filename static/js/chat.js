@@ -447,6 +447,7 @@
 
   function setMinimized() {
     if (!CHAT.root) return;
+    GC._chatWantsOpen = false;
     const geom = readPanelStateForSave();
     hideEmojiPicker();
     CHAT.root.classList.remove("is-open");
@@ -466,6 +467,7 @@
       return;
     }
 
+    GC._chatWantsOpen = true;
     CHAT.root.classList.add("is-open");
     if (CHAT.fab) CHAT.fab.style.removeProperty("display");
     applyPanelGeometry(CHAT.uiState);
@@ -822,7 +824,9 @@
     updateActiveRoomHeader();
 
     const ui = CHAT.uiState || {};
-    if (!CHAT.isMobile && ui.is_open && !ui.is_minimized) {
+    const wantsOpen =
+      GC._chatWantsOpen === true || (!CHAT.isMobile && ui.is_open && !ui.is_minimized);
+    if (wantsOpen) {
       setOpen(true);
     } else {
       CHAT.root.classList.remove("is-open");
@@ -1419,6 +1423,15 @@
     chatDebug("chat:bound");
 
     document.addEventListener("click", (e) => {
+      const specialChatBtn = e.target.closest("[data-special-open-window='chat']");
+      if (specialChatBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        chatDebug("chat:open");
+        void openTChat();
+        return;
+      }
+
       const fab = e.target.closest("[data-chat-fab]");
       if (fab) {
         const root = getChatRoot();
@@ -1662,9 +1675,19 @@
   async function openTChat() {
     if (!getChatRoot()) return;
     chatDebug("chat:open");
-    await initChat();
-    if (!CHAT.root && !cacheElements()) return;
+    installGlobalChatHandlers();
+    if (!cacheElements()) return;
+    GC._chatWantsOpen = true;
     setOpen(true);
+    try {
+      await initChat();
+    } catch (err) {
+      console.error("[chat] openTChat init failed", err);
+    }
+    if (GC._chatWantsOpen && getChatRoot()) {
+      if (!CHAT.root) cacheElements();
+      setOpen(true);
+    }
   }
 
   installGlobalChatHandlers();
