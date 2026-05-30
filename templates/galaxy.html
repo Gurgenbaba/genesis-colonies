@@ -7,7 +7,12 @@
 {% set slots = sys.slots if sys.slots is defined else [] %}
 {% set map_cells = minimap if minimap is defined else [] %}
 
-<div class="gc-page galaxy-page">
+<div class="gc-page galaxy-page"
+     id="galaxy-page-root"
+     data-galaxy="{{ nav.galaxy or 1 }}"
+     data-system="{{ nav.system or 1 }}"
+     {% if nav.has_prev %}data-prev-url="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=nav.prev_system) }}"{% endif %}
+     {% if nav.has_next %}data-next-url="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=nav.next_system) }}"{% endif %}>
 
   <header class="galaxy-page-head section-header">
     <h2 class="section-title">{{ T("nav_galaxy") }}</h2>

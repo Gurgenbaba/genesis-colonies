@@ -71,3 +71,26 @@ def test_main_js_init_page_resumes_chat_after_pjax():
     assert "GC.initChat()" in src
     assert "GC.resumeChatPolling()" in src
     assert 'mod();' in src or "mod({ force: true })" not in src.split("page === \"messages\"")[1][:120]
+
+
+def test_main_js_pjax_covers_main_content_links():
+    src = _read("static/main.js")
+    assert "isPjaxEligibleLink" in src
+    assert 'link.closest("#main-content")' in src
+    assert "data-no-pjax" in src
+    assert 'form.hasAttribute("data-validate")' in src
+
+
+def test_main_js_galaxy_prefetch_on_init():
+    src = _read("static/main.js")
+    assert "GC.modules.galaxy = initGalaxy" in src
+    assert "prefetchGalaxyAdjacent" in src
+    assert 'path.endsWith("/galaxy")' in src
+    assert "bindGalaxyKeyboardOnce" not in src
+
+
+def test_galaxy_template_pjax_nav_urls():
+    tpl = _read("templates/galaxy.html")
+    assert 'id="galaxy-page-root"' in tpl
+    assert "data-prev-url" in tpl
+    assert "data-next-url" in tpl

@@ -457,6 +457,7 @@
     if (path.endsWith("/ranking")) return "ranking";
     if (path.endsWith("/messages")) return "messages";
     if (path.endsWith("/options")) return "options";
+    if (path.endsWith("/galaxy")) return "galaxy";
     if (path.endsWith("/techtree")) return "techtree";
     if (path.endsWith("/admin")) return "admin";
     return "other";
@@ -2862,16 +2863,25 @@
       window.setTimeout(() => el.classList.remove("pe-highlight-pulse"), 2600);
     };
 
+    const openPeSection = (sectionId) => {
+      const section = document.getElementById(sectionId);
+      if (section && section.tagName === "DETAILS") section.open = true;
+    };
+
     const focusPeTarget = (root, { action, target, highlight, techKey }) => {
       const actionType = action || "focus_section";
+      const sectionId = scrollTargets[target] || `pe-section-${target}`;
       const needsTab = actionType === "focus_tab" || Boolean(tabPanels[target]);
       if (needsTab && tabPanels[target]) {
         const tab = root.querySelector(`.pe-sec-tab[data-panel="${tabPanels[target]}"]`);
         if (tab) tab.click();
+        else openPeSection(sectionId);
+      } else if (sectionId) {
+        openPeSection(sectionId);
       }
 
       let el = null;
-      const highlightId = highlight || scrollTargets[target] || `pe-section-${target}`;
+      const highlightId = highlight || sectionId;
       if (highlightId) el = document.getElementById(highlightId);
       if (!el && techKey) {
         el = root.querySelector(`#pe-research-card-${techKey}, [data-tech-key="${techKey}"]`);
@@ -3096,6 +3106,48 @@
     if (!document.querySelector(".planet-evolution-page")) return;
     bindPlanetEvolutionOnce();
     syncPlanetEvolutionResearchTicker();
+  }
+
+  // =========================
+  // Galaxy page — prefetch adjacent systems (PJAX)
+  // =========================
+  const _galaxyPrefetchUrls = new Set();
+
+  function getGalaxyPageRoot() {
+    return document.getElementById("galaxy-page-root") || document.querySelector(".galaxy-page");
+  }
+
+  function prefetchGalaxyHref(href) {
+    if (!href || _galaxyPrefetchUrls.has(href)) return;
+    if (_galaxyPrefetchUrls.size >= 48) return;
+    try {
+      const url = new URL(href, window.location.origin);
+      if (url.origin !== window.location.origin) return;
+      if (!url.pathname.endsWith("/galaxy")) return;
+    } catch (_) {
+      return;
+    }
+    _galaxyPrefetchUrls.add(href);
+    const link = document.createElement("link");
+    link.rel = "prefetch";
+    link.as = "document";
+    link.href = href;
+    document.head.appendChild(link);
+  }
+
+  function prefetchGalaxyAdjacent() {
+    const page = getGalaxyPageRoot();
+    if (!page) return;
+    if (page.dataset.prevUrl) prefetchGalaxyHref(page.dataset.prevUrl);
+    if (page.dataset.nextUrl) prefetchGalaxyHref(page.dataset.nextUrl);
+    page.querySelectorAll(".galaxy-nav-step[href], .galaxy-range-item[href]").forEach((a) => {
+      prefetchGalaxyHref(a.href);
+    });
+  }
+
+  function initGalaxy() {
+    if (!document.querySelector(".galaxy-page")) return;
+    prefetchGalaxyAdjacent();
   }
 
   // =========================
@@ -3514,6 +3566,7 @@
   GC.modules.buildings = initBuildings;
   GC.modules.research = initResearch;
   GC.modules.planet_evolution = initPlanetEvolution;
+  GC.modules.galaxy = initGalaxy;
   GC.modules.ranking = function initRankingPage() {
     GC.initRanking();
   };
@@ -3695,6 +3748,37 @@
   // =========================
   // PJAX navigation
   // =========================
+  const PJAX_NAV_LINK =
+    "a.gc-nav-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages";
+
+  function isPjaxEligibleLink(link) {
+    if (!link || link.tagName !== "A") return false;
+    if (link.hasAttribute("data-no-pjax") || link.target === "_blank" || link.hasAttribute("download")) {
+      return false;
+    }
+    if (link.hasAttribute("data-player-card") || link.closest("[data-player-card]")) return false;
+    if (link.matches(".btn-upgrade, .btn-research, a.logout-btn, a[href*='/logout']")) return false;
+    const href = link.getAttribute("href");
+    if (!href || href.startsWith("#") || href.startsWith("javascript:") || href.startsWith("mailto:")) {
+      return false;
+    }
+    let dest;
+    try {
+      dest = new URL(href, window.location.origin);
+      if (dest.origin !== window.location.origin) return false;
+      if (dest.pathname.includes("/logout")) return false;
+    } catch (_) {
+      return false;
+    }
+    return !!(link.matches(PJAX_NAV_LINK) || link.closest("#main-content"));
+  }
+
+  function pjaxNavigateFromLink(link) {
+    const href = link.getAttribute("href");
+    if (!href) return;
+    GC.navigateTo(href);
+  }
+
   function _syncNavActive(url) {
     let path;
     try {
@@ -3761,6 +3845,7 @@
         if (push) history.pushState({ gcPjax: true }, "", url);
 
         await GC.initPage({ force: true });
+        if (document.querySelector(".galaxy-page")) prefetchGalaxyAdjacent();
       } catch (err) {
         if (err?.name === "AbortError") return;
         console.error("[GC] PJAX navigation failed:", err);
@@ -3781,23 +3866,33 @@
     if (GC._pjaxBound) return;
     GC._pjaxBound = true;
 
-    const PJAX_LINK =
-      "a.gc-nav-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages";
-
     document.addEventListener("click", (e) => {
-      const link = e.target.closest(PJAX_LINK);
-      if (!link || link.tagName !== "A") return;
-      if (link.hasAttribute("data-no-pjax") || link.target === "_blank") return;
-      const href = link.getAttribute("href");
-      if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+      if (e.defaultPrevented) return;
+      const link = e.target.closest("a[href]");
+      if (!isPjaxEligibleLink(link)) return;
+      e.preventDefault();
+      pjaxNavigateFromLink(link);
+    });
+
+    document.addEventListener("submit", (e) => {
+      const form = e.target;
+      if (!form || form.tagName !== "FORM" || form.hasAttribute("data-no-pjax")) return;
+      if ((form.getAttribute("method") || "get").toLowerCase() !== "get") return;
+      if (form.hasAttribute("data-validate")) return;
+      if (!form.closest("#main-content")) return;
+      e.preventDefault();
+      let url;
       try {
-        const dest = new URL(href, window.location.origin);
-        if (dest.origin !== window.location.origin) return;
+        url = new URL(form.getAttribute("action") || window.location.pathname, window.location.origin);
       } catch (_) {
         return;
       }
-      e.preventDefault();
-      GC.navigateTo(href);
+      const fd = new FormData(form);
+      url.search = "";
+      fd.forEach((value, key) => {
+        if (value != null && String(value).trim() !== "") url.searchParams.set(key, value);
+      });
+      GC.navigateTo(`${url.pathname}${url.search}`);
     });
 
     window.addEventListener("popstate", (e) => {
