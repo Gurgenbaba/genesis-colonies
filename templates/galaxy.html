@@ -16,54 +16,95 @@
 
   <section class="gc-panel galaxy-panel">
 
-    <!-- Topbar: Galaxy / System pills + system range -->
-    <div class="galaxy-topbar">
-      <div class="galaxy-topbar-main">
-        <div class="galaxy-topbar-pills" aria-label="{{ T('galaxy_current_position') }}">
-          <span class="galaxy-pill galaxy-pill-galaxy">
-            <span class="galaxy-pill-label">{{ T("galaxy_label_galaxy") }}</span>
-            <span class="galaxy-pill-value gc-mono">{{ nav.galaxy or 1 }}</span>
-          </span>
-          <span class="galaxy-pill galaxy-pill-system">
-            <span class="galaxy-pill-label">{{ T("galaxy_label_system") }}</span>
-            <span class="galaxy-pill-value gc-mono">{{ nav.system or 1 }}</span>
-          </span>
-          <span class="galaxy-pill galaxy-pill-scan gc-mono">[{{ nav.galaxy or 1 }}:{{ nav.system or 1 }}:1–15]</span>
-        </div>
-
-        {% if nav.multi_galaxy %}
-        <div class="galaxy-topbar-galaxy-nav" aria-label="{{ T('galaxy_nav_galaxy') }}">
-          {% if nav.has_prev_galaxy %}
-          <a href="{{ url_for('galaxy_view', galaxy=nav.prev_galaxy, system=nav.system) }}" class="galaxy-topbar-arrow" title="{{ T('galaxy_prev_galaxy') }}">&lsaquo;</a>
-          {% else %}
-          <span class="galaxy-topbar-arrow is-disabled" aria-disabled="true">&lsaquo;</span>
-          {% endif %}
-          {% if nav.has_next_galaxy %}
-          <a href="{{ url_for('galaxy_view', galaxy=nav.next_galaxy, system=nav.system) }}" class="galaxy-topbar-arrow" title="{{ T('galaxy_next_galaxy') }}">&rsaquo;</a>
-          {% else %}
-          <span class="galaxy-topbar-arrow is-disabled" aria-disabled="true">&rsaquo;</span>
-          {% endif %}
-        </div>
-        {% endif %}
-      </div>
-
-      {% if map_cells and map_cells|length > 0 %}
-      <nav class="galaxy-system-range" aria-label="{{ T('galaxy_minimap_label') }}">
-        <span class="galaxy-system-range-label">{{ T("galaxy_minimap_title") }}</span>
-        <div class="galaxy-system-range-track">
-          {% for cell in map_cells %}
-            {% if cell.is_current %}
-              <span class="galaxy-range-item galaxy-range-current gc-mono" aria-current="true">[{{ cell.system }}]</span>
-            {% else %}
-              <a href="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=cell.system) }}"
-                 class="galaxy-range-item gc-mono {% if cell.has_own_planet %}has-own{% endif %} {% if cell.has_occupancy %}has-data{% endif %}"
-                 title="{{ T('galaxy_minimap_system') }} {{ cell.system }}">{{ cell.system }}</a>
-            {% endif %}
-          {% endfor %}
-        </div>
-      </nav>
+    <nav class="galaxy-nav-bar" aria-label="{{ T('galaxy_nav_label') }}">
+      {% if nav.has_prev %}
+      <a href="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=nav.prev_system) }}"
+         class="galaxy-nav-step galaxy-nav-step--prev"
+         title="{{ T('galaxy_prev_system') }}">&lsaquo; {{ T('galaxy_prev_system') }}</a>
+      {% else %}
+      <span class="galaxy-nav-step is-disabled" aria-disabled="true">&lsaquo;</span>
       {% endif %}
-    </div>
+
+      <form class="galaxy-jump-form galaxy-nav-jump" method="get" action="{{ url_for('galaxy_view') }}">
+        <div class="galaxy-nav-field">
+          <label class="galaxy-nav-field-label" for="galaxy-jump-galaxy">{{ T("galaxy_label_galaxy") }}</label>
+          <div class="galaxy-nav-field-controls">
+            {% if nav.multi_galaxy %}
+              {% if nav.has_prev_galaxy %}
+              <a href="{{ url_for('galaxy_view', galaxy=nav.prev_galaxy, system=nav.system) }}"
+                 class="galaxy-nav-arrow"
+                 title="{{ T('galaxy_prev_galaxy') }}"
+                 aria-label="{{ T('galaxy_prev_galaxy') }}">&lsaquo;</a>
+              {% else %}
+              <span class="galaxy-nav-arrow is-disabled" aria-hidden="true">&lsaquo;</span>
+              {% endif %}
+              <input id="galaxy-jump-galaxy"
+                     class="galaxy-jump-input galaxy-jump-input--galaxy gc-mono"
+                     type="number"
+                     name="galaxy"
+                     min="{{ nav.galaxy_min or 1 }}"
+                     max="{{ nav.galaxy_max or 1 }}"
+                     value="{{ nav.galaxy or 1 }}"
+                     required
+                     aria-label="{{ T('galaxy_label_galaxy') }}">
+              {% if nav.has_next_galaxy %}
+              <a href="{{ url_for('galaxy_view', galaxy=nav.next_galaxy, system=nav.system) }}"
+                 class="galaxy-nav-arrow"
+                 title="{{ T('galaxy_next_galaxy') }}"
+                 aria-label="{{ T('galaxy_next_galaxy') }}">&rsaquo;</a>
+              {% else %}
+              <span class="galaxy-nav-arrow is-disabled" aria-hidden="true">&rsaquo;</span>
+              {% endif %}
+            {% else %}
+              <input type="hidden" name="galaxy" value="{{ nav.galaxy or 1 }}">
+              <span class="galaxy-nav-fixed gc-mono">{{ nav.galaxy or 1 }}</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <span class="galaxy-nav-sep gc-mono" aria-hidden="true">:</span>
+
+        <div class="galaxy-nav-field">
+          <label class="galaxy-nav-field-label" for="galaxy-jump-system">{{ T("galaxy_label_system") }}</label>
+          <input id="galaxy-jump-system"
+                 class="galaxy-jump-input gc-mono"
+                 type="number"
+                 name="system"
+                 min="{{ nav.system_min or 1 }}"
+                 max="{{ nav.system_max or 499 }}"
+                 value="{{ nav.system or 1 }}"
+                 required
+                 aria-label="{{ T('galaxy_label_system') }}">
+        </div>
+
+        <button type="submit" class="gc-btn gc-btn-primary gc-btn-xs">{{ T("galaxy_jump") }}</button>
+      </form>
+
+      {% if nav.has_next %}
+      <a href="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=nav.next_system) }}"
+         class="galaxy-nav-step galaxy-nav-step--next"
+         title="{{ T('galaxy_next_system') }}">{{ T('galaxy_next_system') }} &rsaquo;</a>
+      {% else %}
+      <span class="galaxy-nav-step is-disabled" aria-disabled="true">&rsaquo;</span>
+      {% endif %}
+    </nav>
+
+    {% if map_cells and map_cells|length > 0 %}
+    <nav class="galaxy-system-range" aria-label="{{ T('galaxy_minimap_label') }}">
+      <span class="galaxy-system-range-label">{{ T("galaxy_minimap_title") }}</span>
+      <div class="galaxy-system-range-track">
+        {% for cell in map_cells %}
+          {% if cell.is_current %}
+            <span class="galaxy-range-item galaxy-range-current gc-mono" aria-current="true">[{{ cell.system }}]</span>
+          {% else %}
+            <a href="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=cell.system) }}"
+               class="galaxy-range-item gc-mono {% if cell.has_own_planet %}has-own{% endif %} {% if cell.has_occupancy %}has-data{% endif %}"
+               title="{{ T('galaxy_minimap_system') }} {{ cell.system }}">{{ cell.system }}</a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </nav>
+    {% endif %}
 
     <form class="galaxy-search-bar" method="get" action="{{ url_for('galaxy_view') }}" role="search">
       <label class="galaxy-search-label" for="galaxy-coord-q">{{ T("galaxy_search_label") }}</label>
@@ -80,32 +121,6 @@
       <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm">{{ T("galaxy_search_go") }}</button>
       <span id="galaxy-search-hint" class="galaxy-search-hint">{{ T("galaxy_search_hint") }}</span>
     </form>
-
-    <nav class="galaxy-controls-row" aria-label="{{ T('galaxy_nav_label') }}">
-      {% if nav.has_prev %}
-      <a href="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=nav.prev_system) }}" class="gc-btn gc-btn-ghost gc-btn-xs" title="{{ T('galaxy_prev_system') }}">&lt; {{ T('galaxy_prev_system') }}</a>
-      {% else %}
-      <span class="gc-btn gc-btn-ghost gc-btn-xs is-disabled" aria-disabled="true">&lt;</span>
-      {% endif %}
-
-      <form class="galaxy-jump-form" method="get" action="{{ url_for('galaxy_view') }}">
-        {% if nav.multi_galaxy %}
-        <input id="galaxy-jump-galaxy" class="galaxy-jump-input galaxy-jump-input--galaxy gc-mono" type="number" name="galaxy"
-               min="{{ nav.galaxy_min or 1 }}" max="{{ nav.galaxy_max or 1 }}" value="{{ nav.galaxy or 1 }}" required aria-label="{{ T('galaxy_label_galaxy') }}">
-        {% else %}
-        <input type="hidden" name="galaxy" value="{{ nav.galaxy or 1 }}">
-        {% endif %}
-        <input id="galaxy-jump-system" class="galaxy-jump-input gc-mono" type="number" name="system"
-               min="{{ nav.system_min or 1 }}" max="{{ nav.system_max or 499 }}" value="{{ nav.system or 1 }}" required aria-label="{{ T('galaxy_label_system') }}">
-        <button type="submit" class="gc-btn gc-btn-primary gc-btn-xs">{{ T("galaxy_jump") }}</button>
-      </form>
-
-      {% if nav.has_next %}
-      <a href="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=nav.next_system) }}" class="gc-btn gc-btn-ghost gc-btn-xs" title="{{ T('galaxy_next_system') }}">{{ T('galaxy_next_system') }} &gt;</a>
-      {% else %}
-      <span class="gc-btn gc-btn-ghost gc-btn-xs is-disabled" aria-disabled="true">&gt;</span>
-      {% endif %}
-    </nav>
 
     <!-- Slot cards -->
     <div class="galaxy-slots" role="list">

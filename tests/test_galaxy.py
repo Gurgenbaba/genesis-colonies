@@ -264,7 +264,8 @@ def test_galaxy_page_loads(galaxy_db, monkeypatch):
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "galaxy-slot-card" in body
-    assert "galaxy-topbar" in body
+    assert "galaxy-nav-bar" in body
+    assert "galaxy-nav-jump" in body
     assert "galaxy-system-range" in body
     assert "galaxy-range-current" in body or "[" in body
     assert "data-player-card" in body
