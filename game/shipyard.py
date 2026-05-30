@@ -13,6 +13,7 @@ from .fleet_defs import (
     canonical_ship_key,
     get_ship,
     is_known_ship_key,
+    ship_icon_static_path,
 )
 from .models import db, get_planet_buildings, lock_planet_for_update
 
@@ -123,7 +124,7 @@ def _ship_catalog_entry(
         "max_build": max_qty,
         "can_build": False,
         "block_reason": "",
-        "icon": f"/static/img/ships/{ship_key}.svg",
+        "icon": ship_icon_static_path(ship_key),
     }
     if player_id is not None and planet_id is not None:
         from .models import get_planet_buildings, get_research_levels

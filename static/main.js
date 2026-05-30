@@ -3293,6 +3293,34 @@
   }
 
   let _shipyardBound = false;
+  let _shipyardPollIntervalId = null;
+  let _shipyardQueueTickIntervalId = null;
+
+  function stopShipyardTimers() {
+    if (_shipyardPollIntervalId != null) {
+      clearInterval(_shipyardPollIntervalId);
+      _shipyardPollIntervalId = null;
+    }
+    if (_shipyardQueueTickIntervalId != null) {
+      clearInterval(_shipyardQueueTickIntervalId);
+      _shipyardQueueTickIntervalId = null;
+    }
+  }
+
+  function startShipyardTimers() {
+    stopShipyardTimers();
+    const page = document.getElementById("shipyard-page");
+    if (!page || page.dataset.ready !== "1") return;
+    _shipyardQueueTickIntervalId = GC.setSafeInterval(tickShipyardQueueCountdowns, 1000);
+    _shipyardPollIntervalId = GC.setSafeInterval(() => {
+      const p = document.getElementById("shipyard-page");
+      if (!p || p.dataset.ready !== "1" || !document.body.contains(p)) {
+        stopShipyardTimers();
+        return;
+      }
+      if (!p.dataset.queueRefreshBusy) refreshShipyardState(p).catch(() => {});
+    }, 12000);
+  }
 
   function parseShipyardPageData(page) {
     const el = document.getElementById("shipyard-page-state");
@@ -3493,7 +3521,11 @@
       if (!card || card.dataset.unlocked !== "1") return;
       const btn = card.querySelector("[data-shipyard-build]");
       const maxBtn = card.querySelector("[data-shipyard-max]");
-      if (btn) btn.disabled = !ship.can_build;
+      if (btn) {
+        btn.disabled = !ship.can_build;
+        btn.dataset.canBuild = ship.can_build ? "1" : "0";
+        if (btn.dataset.building !== "1") btn.classList.remove("is-loading");
+      }
       if (maxBtn) maxBtn.dataset.maxQty = String(ship.max_build || 0);
       const warn = card.querySelector(".shipyard-hint-warn");
       if (warn) {
@@ -3612,12 +3644,15 @@
 
       const buildBtn = e.target.closest("[data-shipyard-build]");
       if (!buildBtn || !page.contains(buildBtn) || buildBtn.disabled) return;
+      if (buildBtn.dataset.building === "1" || buildBtn.dataset.canBuild === "0") return;
       e.preventDefault();
       const shipKey = buildBtn.getAttribute("data-shipyard-build");
       const qtyInp = page.querySelector(`[data-shipyard-qty="${shipKey}"]`);
       const amount = parseInt(qtyInp?.value || "1", 10) || 1;
       const planetId = parseInt(page.dataset.planetId || "0", 10);
+      buildBtn.dataset.building = "1";
       buildBtn.disabled = true;
+      buildBtn.classList.add("is-loading");
       try {
         const res = await GC.fetchGameAction("/api/shipyard/build", {
           method: "POST",
@@ -3630,12 +3665,15 @@
           else await refreshShipyardState(page);
           if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_build");
         } else {
-          showNotify(reasonText(res?.error || apiError(res)), "error");
+          const errKey = res?.error || apiError(res);
+          showNotify(reasonText(errKey), "error");
         }
       } catch (_) {
         showNotify(reasonText("generic"), "error");
       } finally {
-        buildBtn.disabled = false;
+        delete buildBtn.dataset.building;
+        buildBtn.classList.remove("is-loading");
+        buildBtn.disabled = buildBtn.dataset.canBuild !== "1";
       }
     });
   }
@@ -3647,19 +3685,8 @@
     const data = parseShipyardPageData(page);
     if (!data) return;
     applyShipyardState(page, data);
-    if (!page.dataset.queueTickBound) {
-      page.dataset.queueTickBound = "1";
-      GC.setSafeInterval(tickShipyardQueueCountdowns, 1000);
-    }
-    if (!page.dataset.queuePollBound) {
-      page.dataset.queuePollBound = "1";
-      GC.setSafeInterval(() => {
-        const p = document.getElementById("shipyard-page");
-        if (p && p.dataset.ready === "1" && !p.dataset.queueRefreshBusy) {
-          refreshShipyardState(p).catch(() => {});
-        }
-      }, 12000);
-    }
+    startShipyardTimers();
+    GC.registerCleanup(stopShipyardTimers);
     tickShipyardQueueCountdowns();
     const activePid = Number(GC.lastState?.active_planet_id || 0);
     const domPid = Number(page.dataset.planetId || 0);

@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Mapping, Tuple
 
 from .db import begin_write_transaction, commit, db, rollback
 from .fleet import deduct_planet_ships, get_planet_ships
-from .fleet_defs import canonical_ship_key, get_ship, is_known_ship_key
+from .fleet_defs import canonical_ship_key, get_ship, is_known_ship_key, ship_icon_static_path
 from .models import lock_planet_for_update
 from .shipyard import _unit_build_cost
 
@@ -54,6 +54,7 @@ def list_scrapyard_ships(player_id: int, planet_id: int, *, conn=None) -> List[D
             out.append(
                 {
                     "ship_key": key,
+                    "icon": ship_icon_static_path(key),
                     "amount": int(qty),
                     "role": spec.get("role"),
                     "build_cost": cost,

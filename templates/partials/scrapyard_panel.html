@@ -17,7 +17,7 @@
       {% for row in ships %}
       <article class="gc-scrapyard-row" data-scrap-ship="{{ row.ship_key }}" data-scrap-max="{{ row.amount }}">
         <div class="gc-scrapyard-row-main">
-          <img src="{{ url_for('static', filename='img/ships/' ~ row.ship_key ~ '.svg') }}"
+          <img src="{{ row.icon }}"
                alt="" class="gc-scrapyard-ship-icon" width="40" height="40" loading="lazy">
           <div>
             <span class="gc-scrapyard-ship-name">{{ T('fleet_ship_' ~ row.ship_key) }}</span>

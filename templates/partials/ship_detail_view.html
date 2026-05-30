@@ -77,11 +77,11 @@
     {% endif %}
   </div>
 
-  {% if card.get('requirements') and card.requirements.get('items') %}
+  {% if card.get('requirements_items') %}
   <div class="gc-ship-detail-reqs">
     <span class="gc-player-card-stat-label">{{ T("ship_detail_requirements") }}</span>
     <ul class="gc-ship-detail-req-list">
-      {% for item in card.requirements.items %}
+      {% for item in card.requirements_items %}
       <li class="gc-ship-detail-req-item{% if item.met %} is-met{% endif %}">
         {% if item.type == 'building' %}
         <span>{{ T('building_' ~ item.key, item.key) }} {{ item.current|fmt_int }}/{{ item.required|fmt_int }}</span>

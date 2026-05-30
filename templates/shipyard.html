@@ -117,8 +117,7 @@
       {% set buildable_ships = sy.buildable_ships if sy.buildable_ships is defined else [] %}
       {% for ship in buildable_ships %}
       <article class="shipyard-ship-card" data-ship-card="{{ ship.ship_key }}" data-unlocked="1">
-        <img src="{{ url_for('static', filename='img/ships/' ~ ship.ship_key ~ '.svg') }}"
-             alt="" class="shipyard-ship-thumb" width="48" height="48" loading="lazy">
+        <img src="{{ ship.icon }}" alt="" class="shipyard-ship-thumb" width="48" height="48" loading="lazy">
         <div class="shipyard-ship-card-head">
           <h3 class="shipyard-ship-card-title">
             <button type="button" class="gc-ship-detail-trigger"
@@ -145,7 +144,8 @@
           </button>
           <button type="button" class="gc-btn gc-btn-primary"
                   data-shipyard-build="{{ ship.ship_key }}"
-                  {% if not ship.can_build %}disabled{% endif %}>
+                  data-can-build="{{ '1' if ship.can_build else '0' }}"
+                  {% if not ship.can_build %}disabled aria-disabled="true"{% endif %}>
             {{ T("shipyard_build_btn") }}
           </button>
         </div>
@@ -170,8 +170,7 @@
     <div class="shipyard-ship-list shipyard-ship-list-locked" data-shipyard-locked-list>
       {% for ship in sy.locked_ships %}
       <article class="shipyard-ship-card is-locked" data-ship-card="{{ ship.ship_key }}" data-unlocked="0">
-        <img src="{{ url_for('static', filename='img/ships/' ~ ship.ship_key ~ '.svg') }}"
-             alt="" class="shipyard-ship-thumb" width="48" height="48" loading="lazy">
+        <img src="{{ ship.icon }}" alt="" class="shipyard-ship-thumb" width="48" height="48" loading="lazy">
         <div class="shipyard-ship-card-head">
           <h3 class="shipyard-ship-card-title">
             <button type="button" class="gc-ship-detail-trigger"

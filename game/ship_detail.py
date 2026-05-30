@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping, Tuple
 
-from game.fleet_defs import canonical_ship_key, get_ship, ship_icon_filename
+from game.fleet_defs import canonical_ship_key, get_ship, ship_icon_static_path
 
 ShipDetailCard = Dict[str, Any]
 ShipDetailError = str | None
@@ -35,7 +35,7 @@ def build_ship_detail_card(
         "shield": int(spec.get("shield", 0) or 0),
         "hull": int(spec.get("hull", 0) or 0),
         "crew": spec.get("crew"),
-        "icon": f"/static/img/ships/{ship_icon_filename(key)}",
+        "icon": ship_icon_static_path(key),
         "build_cost_metal": int(build_cost.get("metal", 0) or 0),
         "build_cost_crystal": int(build_cost.get("crystal", 0) or 0),
         "build_cost_fuel_cells": int(build_cost.get("fuel_cells", 0) or 0),
@@ -46,7 +46,9 @@ def build_ship_detail_card(
     if buildings is not None and research is not None:
         from game.ship_requirements import requirements_summary_for_client
 
-        card["requirements"] = requirements_summary_for_client(
+        req_summary = requirements_summary_for_client(
             key, buildings=buildings, research=research
         )
+        card["requirements"] = req_summary
+        card["requirements_items"] = list(req_summary.get("items") or [])
     return card, None
