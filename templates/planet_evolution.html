@@ -115,29 +115,6 @@
     </ul>
   </section>
 
-  <section class="pe-colony-bar">
-    <span class="pe-colony-label">{{ T("pe_planet_switcher", "Deine Kolonien") }}</span>
-    <div class="pe-switcher-body">
-      {% for p in planets or [] %}
-        <button type="button"
-                class="gc-btn gc-btn-secondary pe-planet-btn {% if p.is_active %}is-active{% endif %}"
-                data-planet-id="{{ p.planet_id }}">
-          <span class="pe-planet-name">{{ p.name }}</span>
-          <span class="pe-planet-meta">{{ T("pe_level_short", "Stufe") }} {{ p.planet_level }}{% if p.is_homeworld %} · {{ T("pe_homeworld", "Heimatwelt") }}{% endif %}</span>
-        </button>
-      {% endfor %}
-      <button type="button"
-              class="gc-btn gc-btn-secondary pe-colonize-soon"
-              id="pe-colonize-btn"
-              disabled
-              aria-disabled="true"
-              title="{{ T('pe_colonize_unavailable_hint', 'Derzeit nicht verfügbar') }}">
-        {{ T("pe_colonize", "Kolonisieren") }}
-        <span class="pe-coming-soon-badge">{{ T("pe_coming_soon", "COMING SOON") }}</span>
-      </button>
-    </div>
-  </section>
-
   {% if ps.ok %}
 
   {# ── Planet Header ── #}

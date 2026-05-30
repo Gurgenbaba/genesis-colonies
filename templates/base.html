@@ -84,6 +84,12 @@
           </div>
         {% endif %}
 
+        {% if not SIMPLE_LAYOUT and AUTH_USER %}
+        <div class="gc-hslot gc-hslot-planet-switcher">
+          {% include "partials/header_planet_switcher.html" %}
+        </div>
+        {% endif %}
+
         {% if not SIMPLE_LAYOUT %}
         <div class="gc-hud-user" aria-label="{{ T('account', 'Account') }}">
           {% if AUTH_USER and AUTH_USER.id %}

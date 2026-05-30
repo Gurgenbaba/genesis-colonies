@@ -272,6 +272,24 @@ def inject_globals():
     except Exception:
         pass
 
+    header_planets: list[dict[str, Any]] = []
+    header_active_planet: dict[str, Any] | None = None
+    try:
+        user_id = session.get("user_id")
+        if user_id is not None:
+            from game.planet_evolution.service import list_player_planets_for_switcher
+
+            header_planets = list_player_planets_for_switcher(int(user_id))
+            for row in header_planets:
+                if row.get("is_active"):
+                    header_active_planet = row
+                    break
+            if header_active_planet is None and header_planets:
+                header_active_planet = header_planets[0]
+    except Exception:
+        header_planets = []
+        header_active_planet = None
+
     return dict(
         T=T,
         T_DATA=T_DATA,
@@ -295,6 +313,9 @@ def inject_globals():
         rank_text=rank_text,
         my_rank=my_rank,
         total_players=total_players,
+
+        HEADER_PLANETS=header_planets,
+        HEADER_ACTIVE_PLANET=header_active_planet,
     )
 
 
@@ -2143,6 +2164,31 @@ def _payload_from_live_context(
 
     active_planet_id = get_active_planet_id(user_id)
     payload["active_planet_id"] = int(active_planet_id)
+    payload["active_planet_name"] = str(planet.get("name") or "")
+    try:
+        from game.galaxy import get_planet_coordinates
+        from game.planet_evolution.ux_copy import planet_class_label_key
+
+        coords = get_planet_coordinates(planet)
+        payload["active_planet"] = {
+            "planet_id": int(active_planet_id),
+            "name": str(planet.get("name") or ""),
+            "coordinates_formatted": coords.get("formatted") or "",
+            "planet_class": str(planet.get("planet_class") or "terrestrial"),
+            "planet_class_label_key": planet_class_label_key(
+                str(planet.get("planet_class") or "terrestrial")
+            ),
+            "is_homeworld": bool(planet.get("is_homeworld")),
+        }
+    except Exception:
+        payload["active_planet"] = {
+            "planet_id": int(active_planet_id),
+            "name": str(planet.get("name") or ""),
+            "coordinates_formatted": "",
+            "planet_class": str(planet.get("planet_class") or "terrestrial"),
+            "planet_class_label_key": "planet_class_terrestrial",
+            "is_homeworld": bool(planet.get("is_homeworld")),
+        }
 
     if include_panel:
         planet = get_context_planet(user_id)
@@ -2513,14 +2559,13 @@ def planet_evolution_view():
         return redirect(url_for("login"))
 
     user_id = int(ctx["player_view"]["id"])
-    from game.planet_evolution.service import get_planet_state_payload, list_player_planets
+    from game.planet_evolution.service import get_planet_state_payload
     from game.planet_evolution.repository import get_active_planet_id
 
     conn = db()
     try:
         active_id = get_active_planet_id(user_id, conn=conn)
         planet_state = get_planet_state_payload(active_id, player_id=user_id, conn=conn)
-        planets = list_player_planets(user_id, conn=conn)
         conn.commit()
     except Exception:
         rollback(conn)
@@ -2532,7 +2577,6 @@ def planet_evolution_view():
         "planet_evolution.html",
         player=ctx["player_view"],
         planet_state=planet_state,
-        planets=planets,
         build_queue=ctx["build_queue"],
         research_status=ctx["research"],
     )
@@ -2542,9 +2586,9 @@ def planet_evolution_view():
 @require_login
 def api_planets_list():
     user_id = int(session["user_id"])
-    from game.planet_evolution.service import list_player_planets
+    from game.planet_evolution.service import list_player_planets_for_switcher
 
-    return jsonify({"ok": True, "planets": list_player_planets(user_id)})
+    return jsonify({"ok": True, "planets": list_player_planets_for_switcher(user_id)})
 
 
 @app.route("/api/planets/active", methods=["POST"])
@@ -2557,9 +2601,15 @@ def api_planets_set_active():
         return jsonify({"ok": False, "reason": "missing_planet_id"}), 400
     from game.planet_evolution.service import set_active_planet
 
-    ok, reason = set_active_planet(int(session["user_id"]), planet_id)
+    user_id = int(session["user_id"])
+    ok, reason = set_active_planet(user_id, planet_id)
     state, _ = _build_game_state_payload(include_panel=True, finish_source="api_planets_active")
-    return jsonify({"ok": ok, "reason": reason, "state": state})
+    planets = None
+    if ok:
+        from game.planet_evolution.service import list_player_planets_for_switcher
+
+        planets = list_player_planets_for_switcher(user_id)
+    return jsonify({"ok": ok, "reason": reason, "state": state, "planets": planets})
 
 
 @app.route("/api/planets/<int:planet_id>/state")

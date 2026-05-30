@@ -890,6 +890,11 @@
   "research_active": "Active",
 
   "nav_messages": "Messages",
+  "header_planet_label": "Planet",
+  "header_planet_switcher_title": "Switch active colony",
+  "header_planet_switcher_menu": "Your colonies",
+  "header_planet_homeworld": "Homeworld",
+  "header_planet_colony": "Colony",
   "messages.title": "Messages",
   "messages.subtitle": "Internal communication and reports.",
   "messages.empty": "No messages.",

@@ -1850,6 +1850,10 @@
         _last.activePlanetId = activePlanetId;
       }
 
+      if (typeof GC.updateHeaderPlanetSwitcherFromState === "function") {
+        GC.updateHeaderPlanetSwitcherFromState(data);
+      }
+
       const p = data.player || {};
       const energy = data.energy || {};
       const resources = data.resources || {};
@@ -2636,6 +2640,166 @@
     GC.setSafeInterval(tick, 1000);
   }
 
+  function planetSwitchReasonText(reason) {
+    if (!reason) return t("pe_error_generic", "Aktion fehlgeschlagen.");
+    const pe = t(`pe_reason_${reason}`, "");
+    if (pe && pe !== `pe_reason_${reason}`) return pe;
+    return String(reason);
+  }
+
+  function updateHeaderPlanetSwitcherFromPlanets(planets) {
+    const root = document.getElementById("gc-planet-switcher");
+    if (!root || !Array.isArray(planets)) return;
+    const active = planets.find((p) => p.is_active) || planets[0];
+    if (!active) return;
+    root.dataset.activePlanetId = String(active.planet_id || "");
+    const nameEl = root.querySelector("[data-planet-switcher-name]");
+    const coordEl = root.querySelector("[data-planet-switcher-coord]");
+    if (nameEl) nameEl.textContent = active.name || "";
+    if (coordEl) {
+      const coord = active.coordinates_formatted || "";
+      coordEl.textContent = coord;
+      coordEl.hidden = !coord;
+    }
+    root.querySelectorAll(".gc-planet-switcher-item").forEach((btn) => {
+      const pid = Number(btn.dataset.planetId || 0);
+      const on = pid === Number(active.planet_id);
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+  }
+
+  GC.updateHeaderPlanetSwitcherFromState = function updateHeaderPlanetSwitcherFromState(data) {
+    if (!data) return;
+    const ap = data.active_planet;
+    if (ap && ap.planet_id) {
+      updateHeaderPlanetSwitcherFromPlanets([
+        {
+          planet_id: ap.planet_id,
+          name: ap.name,
+          coordinates_formatted: ap.coordinates_formatted,
+          planet_class: ap.planet_class,
+          planet_class_label_key: ap.planet_class_label_key,
+          is_active: true,
+        },
+      ]);
+      return;
+    }
+    const activeId = Number(data.active_planet_id || 0);
+    if (!activeId) return;
+    const root = document.getElementById("gc-planet-switcher");
+    if (!root) return;
+    root.dataset.activePlanetId = String(activeId);
+    root.querySelectorAll(".gc-planet-switcher-item").forEach((btn) => {
+      const pid = Number(btn.dataset.planetId || 0);
+      const on = pid === activeId;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+      if (on && btn.dataset.planetName) {
+        const nameEl = root.querySelector("[data-planet-switcher-name]");
+        if (nameEl) nameEl.textContent = btn.dataset.planetName;
+        const coordEl = root.querySelector("[data-planet-switcher-coord]");
+        if (coordEl) {
+          const coord = btn.dataset.planetCoord || "";
+          coordEl.textContent = coord;
+          coordEl.hidden = !coord;
+        }
+      }
+    });
+  };
+
+  function initHeaderPlanetSwitcher() {
+    if (GC._headerPlanetSwitcherBound) return;
+    GC._headerPlanetSwitcherBound = true;
+
+    const root = document.getElementById("gc-planet-switcher");
+    if (!root) return;
+
+    const trigger = document.getElementById("gc-planet-switcher-trigger");
+    const menu = document.getElementById("gc-planet-switcher-menu");
+    const multi = root.dataset.multi === "1";
+
+    const headerEl = document.querySelector(".gc-header-cmd");
+
+    const closeMenu = () => {
+      if (!menu) return;
+      menu.hidden = true;
+      root.classList.remove("is-open");
+      headerEl?.classList.remove("gc-header-planet-menu-open");
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+    };
+
+    const openMenu = () => {
+      if (!menu || !multi) return;
+      menu.hidden = false;
+      root.classList.add("is-open");
+      headerEl?.classList.add("gc-header-planet-menu-open");
+      if (trigger) trigger.setAttribute("aria-expanded", "true");
+    };
+
+    if (trigger && multi) {
+      trigger.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (menu && menu.hidden) openMenu();
+        else closeMenu();
+      });
+    }
+
+    document.addEventListener("click", (e) => {
+      if (!root.contains(e.target)) closeMenu();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeMenu();
+    });
+
+    root.addEventListener("click", async (e) => {
+      const item = e.target.closest(".gc-planet-switcher-item");
+      if (!item || !root.contains(item)) return;
+      if (item.classList.contains("is-active")) {
+        closeMenu();
+        return;
+      }
+      const planetId = parseInt(item.dataset.planetId || "0", 10);
+      if (!planetId) return;
+
+      root.classList.add("is-busy");
+      item.disabled = true;
+      closeMenu();
+
+      try {
+        const res = await GC.fetchGameAction("/api/planets/active", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+          body: JSON.stringify({ planet_id: planetId }),
+        });
+        if (res?.ok) {
+          applyActionState(res, "planet_switch");
+          if (Array.isArray(res.planets)) {
+            updateHeaderPlanetSwitcherFromPlanets(res.planets);
+          } else if (res.state) {
+            GC.updateHeaderPlanetSwitcherFromState(res.state);
+          }
+          const name = item.dataset.planetName || "";
+          ["build-queue-planet-label", "research-planet-label"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el || !name) return;
+            el.textContent = id === "build-queue-planet-label" ? `· ${name}` : name;
+          });
+          await GC.reloadCurrentPage();
+        } else {
+          showNotify(planetSwitchReasonText(res?.reason), "error");
+        }
+      } catch (err) {
+        if (!err?.authRedirect) {
+          showNotify(t("pe_error_generic", "Aktion fehlgeschlagen."), "error");
+        }
+      } finally {
+        root.classList.remove("is-busy");
+        item.disabled = false;
+      }
+    });
+  }
+
   function bindPlanetEvolutionOnce() {
     if (GC._peActionsBound) return;
     GC._peActionsBound = true;
@@ -2745,27 +2909,6 @@
         return;
       }
 
-      const planetBtn = e.target.closest(".pe-planet-btn");
-      if (planetBtn && root.contains(planetBtn)) {
-        planetBtn.disabled = true;
-        const planetId = parseInt(planetBtn.dataset.planetId || "0", 10);
-        const res = await postAction("/api/planets/active", { planet_id: planetId });
-        if (res?.ok) {
-          if (res.state && typeof applyActionState === "function") {
-            applyActionState(res, "planet_switch");
-          } else if (res.state) {
-            GC.lastState = res.state;
-            _lastQueueSignature = "";
-            _last.activePlanetId = null;
-          }
-          await GC.reloadCurrentPage();
-        } else {
-          planetBtn.disabled = false;
-          alert(reasonText(res?.reason));
-        }
-        return;
-      }
-
       const researchBtn = e.target.closest(".pe-research-btn");
       if (researchBtn && root.contains(researchBtn)) {
         if (researchBtn.disabled || researchBtn.getAttribute("aria-disabled") === "true") return;
@@ -2866,10 +3009,6 @@
         return;
       }
 
-      const colonizeBtn = e.target.closest("#pe-colonize-btn");
-      if (colonizeBtn && root.contains(colonizeBtn)) {
-        alert(tt("pe_colonize_unavailable_hint", "Derzeit nicht verfügbar – Galaxie & System kommen in einem späteren Update."));
-      }
     });
   }
 
@@ -4852,6 +4991,7 @@
     initSkipLink();
     initGameActions();
     bindPlanetEvolutionOnce();
+    initHeaderPlanetSwitcher();
     initGcPopoversOnce();
     initVisibilityPolling();
     initMobileNav();

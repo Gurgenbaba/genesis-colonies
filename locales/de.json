@@ -1719,6 +1719,11 @@
   "policy_automation_directive": "Automatisierungs-Direktive",
 
   "nav_messages": "Nachrichten",
+  "header_planet_label": "Planet",
+  "header_planet_switcher_title": "Aktive Kolonie wechseln",
+  "header_planet_switcher_menu": "Deine Kolonien",
+  "header_planet_homeworld": "Heimatwelt",
+  "header_planet_colony": "Kolonie",
   "messages.title": "Nachrichten",
   "messages.subtitle": "Interne Kommunikation und Berichte.",
   "messages.empty": "Keine Nachrichten.",

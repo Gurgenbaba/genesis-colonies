@@ -1,0 +1,56 @@
+{% set hp_planets = HEADER_PLANETS if HEADER_PLANETS is defined else [] %}
+{% set hp_active = HEADER_ACTIVE_PLANET if HEADER_ACTIVE_PLANET is defined else none %}
+{% if hp_active %}
+{% set hp_multi = (hp_planets|length > 1) %}
+<div class="gc-planet-switcher"
+     id="gc-planet-switcher"
+     data-multi="{{ '1' if hp_multi else '0' }}"
+     data-active-planet-id="{{ hp_active.planet_id }}">
+  <button type="button"
+          class="gc-hud-panel gc-planet-switcher-trigger"
+          id="gc-planet-switcher-trigger"
+          aria-haspopup="{{ 'listbox' if hp_multi else 'false' }}"
+          aria-expanded="false"
+          {% if hp_multi %}aria-controls="gc-planet-switcher-menu"{% endif %}
+          {% if not hp_multi %}aria-disabled="true"{% endif %}
+          title="{{ T('header_planet_switcher_title') }}">
+    <span class="gc-hud-panel-tag">{{ T('header_planet_label') }}</span>
+    <span class="gc-planet-switcher-body">
+      <span class="gc-planet-switcher-name" data-planet-switcher-name>{{ hp_active.name }}</span>
+      {% if hp_active.coordinates_formatted %}
+      <span class="gc-planet-switcher-coord gc-mono" data-planet-switcher-coord>{{ hp_active.coordinates_formatted }}</span>
+      {% endif %}
+    </span>
+    {% if hp_multi %}
+    <span class="gc-planet-switcher-chevron" aria-hidden="true">▾</span>
+    {% endif %}
+  </button>
+
+  {% if hp_multi %}
+  <div class="gc-planet-switcher-menu"
+       id="gc-planet-switcher-menu"
+       role="listbox"
+       aria-label="{{ T('header_planet_switcher_menu') }}"
+       hidden>
+    {% for p in hp_planets %}
+    <button type="button"
+            class="gc-planet-switcher-item{% if p.is_active %} is-active{% endif %}"
+            role="option"
+            aria-selected="{{ 'true' if p.is_active else 'false' }}"
+            data-planet-id="{{ p.planet_id }}"
+            data-planet-name="{{ p.name|e }}"
+            data-planet-coord="{{ p.coordinates_formatted|e }}"
+            data-planet-class-key="{{ p.planet_class_label_key|e }}"
+            data-planet-class="{{ p.planet_class|e }}"
+            data-planet-homeworld="{{ '1' if p.is_homeworld else '0' }}">
+      <span class="gc-planet-switcher-item-name">{{ p.name }}</span>
+      <span class="gc-planet-switcher-item-meta gc-mono">
+        {% if p.coordinates_formatted %}{{ p.coordinates_formatted }}{% endif %}
+        {% if p.is_homeworld %} · {{ T('header_planet_homeworld') }}{% else %} · {{ T('header_planet_colony') }}{% endif %}
+      </span>
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}

@@ -49,6 +49,39 @@ from .repository import (
 )
 
 
+def _planet_switcher_row(
+    planet_row: Dict[str, Any],
+    *,
+    active_id: int,
+    conn: sqlite3.Connection,
+) -> Dict[str, Any]:
+    from ..galaxy import GalaxyCoordinateError, get_planet_coordinates
+    from .ux_copy import planet_class_label_key
+
+    pid = int(planet_row["id"])
+    level, xp, _xp_remaining = level_progress(pid, conn)
+    planet_class = str(planet_row.get("planet_class") or "terrestrial")
+    coords_formatted = ""
+    try:
+        coords_formatted = get_planet_coordinates(planet_row)["formatted"]
+    except GalaxyCoordinateError:
+        coords_formatted = ""
+
+    return {
+        "planet_id": pid,
+        "name": planet_row.get("name"),
+        "is_homeworld": bool(planet_row.get("is_homeworld")),
+        "planet_level": level,
+        "planet_xp": xp,
+        "specialization_key": planet_row.get("specialization_key"),
+        "specialization_tier": int(planet_row.get("specialization_tier") or 0),
+        "is_active": pid == int(active_id),
+        "planet_class": planet_class,
+        "planet_class_label_key": planet_class_label_key(planet_class),
+        "coordinates_formatted": coords_formatted,
+    }
+
+
 def list_player_planets(player_id: int, conn: Optional[sqlite3.Connection] = None) -> List[Dict[str, Any]]:
     own = conn is None
     if own:
@@ -56,26 +89,21 @@ def list_player_planets(player_id: int, conn: Optional[sqlite3.Connection] = Non
     try:
         active = get_active_planet_id(int(player_id), conn=conn)
         planets = get_planets_by_player(int(player_id), conn=conn)
-        out = []
-        for p in planets:
-            pid = int(p["id"])
-            level, xp, xp_remaining = level_progress(pid, conn)
-            out.append(
-                {
-                    "planet_id": pid,
-                    "name": p.get("name"),
-                    "is_homeworld": bool(p.get("is_homeworld")),
-                    "planet_level": level,
-                    "planet_xp": xp,
-                    "specialization_key": p.get("specialization_key"),
-                    "specialization_tier": int(p.get("specialization_tier") or 0),
-                    "is_active": pid == active,
-                }
-            )
-        return out
+        return [
+            _planet_switcher_row(p, active_id=active, conn=conn)
+            for p in planets
+        ]
     finally:
         if own and conn is not None:
             conn.close()
+
+
+def list_player_planets_for_switcher(
+    player_id: int,
+    conn: Optional[sqlite3.Connection] = None,
+) -> List[Dict[str, Any]]:
+    """Header/API planet list with coordinates and class badges."""
+    return list_player_planets(player_id, conn=conn)
 
 
 def get_planet_state_payload(
