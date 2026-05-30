@@ -355,7 +355,9 @@ class EffectResolver:
 
         energy_metal = int(10 * (metal_lvl ** 1.25)) if metal_lvl > 0 else 0
         energy_crystal = int(6 * (crystal_lvl ** 1.25)) if crystal_lvl > 0 else 0
-        energy_used = energy_metal + energy_crystal
+        fuel_cell_lvl = _bld(b, "fuel_cell_plant")
+        energy_fuel_cell = int(8 * (fuel_cell_lvl ** 1.25)) if fuel_cell_lvl > 0 else 0
+        energy_used = energy_metal + energy_crystal + energy_fuel_cell
 
         mine_energy_factor = float(mods.get("mine_energy_factor", 1.0) or 1.0)
         energy_used = int(energy_used * mine_energy_factor)
@@ -383,6 +385,14 @@ class EffectResolver:
 
         return metal_rate, crystal_rate
 
+    def fuel_cells_rate_per_sec(self) -> float:
+        """Brennzellen-Produktion: 20/h * level * 1.35^(level-1)."""
+        lvl = _bld(self.buildings, "fuel_cell_plant")
+        if lvl <= 0:
+            return 0.0
+        per_hour = 20.0 * lvl * (1.35 ** max(0, lvl - 1))
+        return per_hour / 3600.0
+
     def get_storage_capacity(self) -> Dict[str, int]:
         mods = self.get_modifiers()
         b = self.buildings
@@ -405,11 +415,14 @@ class EffectResolver:
     def get_building_production_per_hour(self, ratio: float) -> Dict[str, int]:
         prod_speed = self.production_speed_setting()
         m_rate, c_rate = self.production_rates_per_sec()
+        fc_rate = self.fuel_cells_rate_per_sec()
         metal_ph = int(m_rate * float(ratio) * 3600 * prod_speed)
         crystal_ph = int(c_rate * float(ratio) * 3600 * prod_speed)
+        fuel_cell_ph = int(fc_rate * float(ratio) * 3600 * prod_speed)
         return {
             "metal_mine": metal_ph,
             "crystal_mine": crystal_ph,
+            "fuel_cell_plant": fuel_cell_ph,
             "solar_plant": 0,
             "research_lab": 0,
             "academy": 0,

@@ -96,9 +96,56 @@ def _build_activity_line(
     }
 
 
+def _fleet_movement_activity_lines(
+    movements: List[Dict[str, Any]],
+    *,
+    now: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    ts = float(now if now is not None else time.time())
+    lines: List[Dict[str, Any]] = []
+    for mv in movements or []:
+        if not isinstance(mv, dict):
+            continue
+        status = str(mv.get("status") or "")
+        end_at = float(mv.get("arrival_at") or 0)
+        if status == "returning" and mv.get("return_at"):
+            end_at = float(mv["return_at"])
+        remaining = max(0, int(end_at - ts)) if end_at > 0 else 0
+        mission = str(mv.get("mission_type") or "transport")
+        target = str(mv.get("target_coords") or "")
+        ship_count = sum(int(v) for v in (mv.get("ships") or {}).values())
+        summary = f"{target} · {ship_count}"
+        lines.append(
+            _build_activity_line(
+                key=f"fleet_{_safe_int(mv.get('id'))}",
+                state="active",
+                summary=summary,
+                remaining=remaining,
+                finish_at=int(end_at),
+                href_key="fleet_view",
+                label_key=f"fleet_mission_{mission}",
+            )
+        )
+    if not lines:
+        lines.append(
+            _build_activity_line(
+                key="fleet",
+                state="idle",
+                summary="",
+                href_key="fleet_view",
+                label_key="overview_fleet_idle",
+            )
+        )
+    return lines
+
+
 def build_activity_lines(
     build_queue: Dict[str, Any],
     research: Dict[str, Any],
+    *,
+    shipyard_queue: Optional[Dict[str, Any]] = None,
+    fleet_movements: Optional[List[Dict[str, Any]]] = None,
+    now: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     lines: List[Dict[str, Any]] = []
 
@@ -162,16 +209,38 @@ def build_activity_lines(
             )
         )
 
-    # TODO: Wire fleet missions when fleet system ships.
-    lines.append(
-        _build_activity_line(
-            key="fleet",
-            state="idle",
-            summary="",
-            href_key="fleet_view",
-            label_key="overview_fleet_idle",
+    sy_jobs = []
+    if isinstance(shipyard_queue, dict):
+        raw_jobs = shipyard_queue.get("queue")
+        if isinstance(raw_jobs, list):
+            sy_jobs = raw_jobs
+    if sy_jobs:
+        head = sy_jobs[0]
+        sk = str(head.get("ship_key") or "")
+        amt = _safe_int(head.get("amount"))
+        lines.append(
+            _build_activity_line(
+                key="shipyard",
+                state="active",
+                summary=f"×{amt}" if amt else "",
+                remaining=_safe_int(head.get("remaining")),
+                finish_at=_safe_int(head.get("finish_at")),
+                href_key="shipyard_view",
+                label_key=f"fleet_ship_{sk}" if sk else "overview_activity_shipyard",
+            )
         )
-    )
+    else:
+        lines.append(
+            _build_activity_line(
+                key="shipyard",
+                state="idle",
+                summary="",
+                href_key="shipyard_view",
+                label_key="overview_shipyard_idle",
+            )
+        )
+
+    lines.extend(_fleet_movement_activity_lines(fleet_movements or [], now=now))
     return lines
 
 
@@ -250,6 +319,40 @@ def fetch_recent_log(player_id: int, *, limit: int = 5, conn=None) -> List[Dict[
         return []
 
 
+def _load_overview_queue_fleet(
+    user_id: int,
+    planet_id: int,
+    *,
+    conn=None,
+) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    shipyard_queue: Dict[str, Any] = {}
+    fleet_movements: List[Dict[str, Any]] = []
+    own = conn is None
+    if own:
+        from .db import db as _db
+
+        conn = _db()
+    try:
+        from .fleet import fleet_schema_ready, list_active_movements
+
+        if fleet_schema_ready(conn):
+            fleet_movements = list_active_movements(int(user_id), conn=conn)
+        from .shipyard import get_shipyard_level
+        from .shipyard_queue import shipyard_queue_for_client, shipyard_queue_table_ready
+
+        if shipyard_queue_table_ready(conn):
+            sy_level = get_shipyard_level(int(user_id), int(planet_id), conn=conn)
+            shipyard_queue = shipyard_queue_for_client(
+                int(user_id), int(planet_id), sy_level, conn=conn
+            )
+    except Exception:
+        pass
+    finally:
+        if own and conn is not None:
+            conn.close()
+    return shipyard_queue, fleet_movements
+
+
 def build_overview_status(
     *,
     user_id: int,
@@ -264,18 +367,31 @@ def build_overview_status(
     planet: Dict[str, Any],
     include_log: bool = True,
     conn=None,
+    shipyard_queue: Optional[Dict[str, Any]] = None,
+    fleet_movements: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    eff = int(round(float(ratio or 1.0) * 100))
-    eff = max(0, min(100, eff))
-
     metal_ph = _safe_int(prod_per_hour.get("metal_mine") if isinstance(prod_per_hour, dict) else 0)
     crystal_ph = _safe_int(prod_per_hour.get("crystal_mine") if isinstance(prod_per_hour, dict) else 0)
 
-    energy_hint = (
-        "zero"
-        if int(energy_total or 0) <= 0
-        else ("ok" if float(ratio or 1.0) >= 1.0 else "low")
-    )
+    ratio_f = float(ratio or 1.0)
+    if int(energy_total or 0) <= 0:
+        energy_hint = "zero"
+    elif ratio_f >= 1.0:
+        energy_hint = "ok"
+    elif ratio_f >= 0.5:
+        energy_hint = "low"
+    else:
+        energy_hint = "critical"
+
+    planet_id = _safe_int(planet.get("id"))
+    if shipyard_queue is None or fleet_movements is None:
+        loaded_sy, loaded_fleet = _load_overview_queue_fleet(
+            int(user_id), planet_id, conn=conn
+        )
+        if shipyard_queue is None:
+            shipyard_queue = loaded_sy
+        if fleet_movements is None:
+            fleet_movements = loaded_fleet
 
     status: Dict[str, Any] = {
         "planet": build_planet_meta(planet),
@@ -295,10 +411,14 @@ def build_overview_status(
             "total": int(energy_total or 0),
             "used": int(energy_used or 0),
             "ratio": float(ratio or 1.0),
-            "efficiency_pct": eff,
             "hint": energy_hint,
         },
-        "activities": build_activity_lines(build_queue, research),
+        "activities": build_activity_lines(
+            build_queue,
+            research,
+            shipyard_queue=shipyard_queue,
+            fleet_movements=fleet_movements,
+        ),
         "warnings": build_overview_warnings(
             ratio=float(ratio or 1.0),
             energy_total=int(energy_total or 0),

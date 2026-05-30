@@ -74,8 +74,11 @@
       timer: null,
       abort: null,
       started: false,
-      interval: 2500,
-      intervalHidden: 8000,
+      interval: 8000,
+      intervalHidden: 12000,
+      bootstrapIntervalMs: 300000,
+      lastBootstrapAt: 0,
+      bootstrapInFlight: null,
     },
     stateSaveTimer: null,
     eventsBound: false,
@@ -844,6 +847,34 @@
     }
   }
 
+  function isPollTimerActive() {
+    return CHAT.polling.started && !!CHAT.polling.timer;
+  }
+
+  async function maybeRefreshBootstrap(force = false) {
+    const now = Date.now();
+    const minGap = CHAT.polling.bootstrapIntervalMs || 60000;
+    if (!force && CHAT.polling.lastBootstrapAt && (now - CHAT.polling.lastBootstrapAt) < minGap) {
+      return true;
+    }
+    if (CHAT.polling.bootstrapInFlight) {
+      return CHAT.polling.bootstrapInFlight;
+    }
+    CHAT.polling.lastBootstrapAt = now;
+    CHAT.polling.bootstrapInFlight = refreshBootstrap()
+      .then((ok) => ok)
+      .finally(() => {
+        CHAT.polling.bootstrapInFlight = null;
+      });
+    return CHAT.polling.bootstrapInFlight;
+  }
+
+  function scheduleBootstrapRefresh(force = false) {
+    maybeRefreshBootstrap(force).catch((e) => {
+      if (e?.name !== "AbortError") chatDebug("[chat] bootstrap refresh", e);
+    });
+  }
+
   function clearPollTimer() {
     if (CHAT.polling.timer) {
       clearTimeout(CHAT.polling.timer);
@@ -870,21 +901,6 @@
     }
 
     const panelVisible = isChatPanelVisible();
-    if (!panelVisible) {
-      CHAT.polling.bootstrapEvery = (CHAT.polling.bootstrapEvery || 0) + 1;
-      if (CHAT.polling.bootstrapEvery >= 4) {
-        CHAT.polling.bootstrapEvery = 0;
-        try {
-          await refreshBootstrap();
-        } catch (e) {
-          if (e?.name !== "AbortError") chatDebug("[chat] bootstrap refresh", e);
-        }
-        schedulePoll();
-        return;
-      }
-    } else {
-      CHAT.polling.bootstrapEvery = 0;
-    }
 
     const roomId = CHAT.activeRoomId;
     const after = CHAT.lastMsgIdByRoom[roomId] || 0;
@@ -908,7 +924,7 @@
       });
       if (!data.ok) {
         if (data.error === "room_not_found" || data.error === "no_permission") {
-          await refreshBootstrap();
+          await maybeRefreshBootstrap(true);
           const fallback = CHAT.bootstrap?.rooms?.find((r) => r.room_type === "global")?.id || CHAT.bootstrap?.active_room_id;
           if (fallback && Number(fallback) !== Number(CHAT.activeRoomId)) {
             await switchRoom(Number(fallback));
@@ -928,7 +944,7 @@
   }
 
   function startPolling() {
-    if (CHAT.polling.started) return;
+    if (isPollTimerActive()) return;
     CHAT.polling.started = true;
     schedulePoll();
   }
@@ -936,14 +952,12 @@
   function resumeChatPolling() {
     if (!CHAT.root || !cacheElements()) return;
     if (!CHAT.bootstrap) return;
+    if (isPollTimerActive()) return;
     CHAT.polling.started = true;
-    refreshBootstrap()
-      .catch((e) => {
-        if (e?.name !== "AbortError") chatDebug("[chat] resume bootstrap", e);
-      })
-      .finally(() => {
-        if (CHAT.root && CHAT.activeRoomId) schedulePoll();
-      });
+    const stale = !CHAT.polling.lastBootstrapAt
+      || (Date.now() - CHAT.polling.lastBootstrapAt) > (CHAT.polling.bootstrapIntervalMs || 300000);
+    if (stale) scheduleBootstrapRefresh(false);
+    schedulePoll();
   }
 
   async function sendMessage(text) {
@@ -1543,7 +1557,10 @@
     CHAT.root.removeAttribute("hidden");
 
     const ok = await bootstrap();
-    if (ok) startPolling();
+    if (ok) {
+      CHAT.polling.lastBootstrapAt = Date.now();
+      startPolling();
+    }
 
     if (typeof GC.registerCleanup === "function") {
       GC.registerCleanup(() => {
@@ -1566,10 +1583,4 @@
   GC.resumeChatPolling = resumeChatPolling;
   GC.TChat = CHAT;
   GC.whisperPlayer = whisperTo;
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initChatOnce, { once: true });
-  } else {
-    initChatOnce();
-  }
 })();

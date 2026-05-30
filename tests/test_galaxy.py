@@ -269,7 +269,7 @@ def test_galaxy_page_loads(galaxy_db, monkeypatch):
     assert "galaxy-system-range" in body
     assert "galaxy-range-current" in body or "[" in body
     assert "data-player-card" in body
-    assert "galaxy-colonize-btn" in body
+    assert "galaxy-fleet-action" in body
     assert "galaxy_colonizable" in body or "Kolonisierbar" in body or "Colonizable" in body
 
 

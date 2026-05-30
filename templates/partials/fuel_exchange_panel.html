@@ -1,0 +1,65 @@
+{# Premium fuel cell purchase (metal + crystal) #}
+{% set fx = fuel_exchange if fuel_exchange is defined and fuel_exchange else {} %}
+<section class="gc-panel gc-fuel-exchange-panel" id="gc-fuel-exchange-panel"
+         {% if not fx.enabled or not fx.ready %}data-disabled="1"{% endif %}
+         data-metal-per="{{ fx.metal_per_unit or 45 }}"
+         data-crystal-per="{{ fx.crystal_per_unit or 28 }}"
+         data-min="{{ fx.min_units or 10 }}"
+         data-daily-remaining="{{ fx.daily_units_remaining or 0 }}"
+         aria-label="{{ T('fuel_exchange_title') }}">
+  <div class="gc-panel-header">
+    <div class="gc-panel-head-left">
+      <span class="gc-panel-title">{{ T('fuel_exchange_title') }}</span>
+      <span class="gc-panel-subtitle hint">{{ T('fuel_exchange_hint') }}</span>
+    </div>
+  </div>
+
+  {% if fx.ready and fx.enabled %}
+  <div class="gc-fuel-exchange-rates">
+    <div class="gc-fuel-exchange-rate-card">
+      <img src="{{ url_for('static', filename='icons/ferronit.png') }}" alt="" class="gc-fuel-exchange-icon" loading="lazy">
+      <span class="gc-fuel-exchange-rate-val gc-mono">{{ fx.metal_per_unit|fmt_int }}</span>
+      <span class="gc-fuel-exchange-rate-label">{{ T('resource_metal') }}</span>
+    </div>
+    <span class="gc-fuel-exchange-plus" aria-hidden="true">+</span>
+    <div class="gc-fuel-exchange-rate-card">
+      <img src="{{ url_for('static', filename='icons/crytite.png') }}" alt="" class="gc-fuel-exchange-icon" loading="lazy">
+      <span class="gc-fuel-exchange-rate-val gc-mono">{{ fx.crystal_per_unit|fmt_int }}</span>
+      <span class="gc-fuel-exchange-rate-label">{{ T('resource_crystal') }}</span>
+    </div>
+    <span class="gc-fuel-exchange-equals" aria-hidden="true">=</span>
+    <div class="gc-fuel-exchange-rate-card gc-fuel-exchange-rate-card--fuel">
+      <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" alt="" class="gc-fuel-exchange-icon" loading="lazy">
+      <span class="gc-fuel-exchange-rate-val gc-mono">1</span>
+      <span class="gc-fuel-exchange-rate-label">{{ T('resource_fuel_cells') }}</span>
+    </div>
+  </div>
+
+  <p class="gc-fuel-exchange-limit hint">
+    {{ T('fuel_exchange_daily_remaining') }}:
+    <strong data-fuel-exchange-daily-remaining>{{ fx.daily_units_remaining|fmt_int }}</strong>
+    / {{ fx.daily_units_limit|fmt_int }}
+  </p>
+
+  <form class="gc-fuel-exchange-form" id="gc-fuel-exchange-form" novalidate>
+    <label class="gc-fuel-exchange-label" for="gc-fuel-exchange-units">{{ T('fuel_exchange_units') }}</label>
+    <input type="number" id="gc-fuel-exchange-units" class="gc-input gc-fuel-exchange-input"
+           min="{{ fx.min_units }}" step="1" inputmode="numeric"
+           placeholder="{{ fx.min_units }}" data-fuel-exchange-min="{{ fx.min_units }}">
+
+    <div class="gc-fuel-exchange-preview">
+      <span class="hint">{{ T('fuel_exchange_cost_preview') }}:</span>
+      <span class="gc-mono" data-fuel-exchange-cost-metal>–</span>
+      <span class="gc-mono" data-fuel-exchange-cost-crystal>–</span>
+    </div>
+
+    <p class="gc-fuel-exchange-error hint" data-fuel-exchange-error hidden></p>
+
+    <button type="submit" class="gc-btn gc-btn-primary gc-fuel-exchange-submit">
+      {{ T('fuel_exchange_confirm') }}
+    </button>
+  </form>
+  {% else %}
+  <p class="hint">{{ T('fuel_exchange_disabled') }}</p>
+  {% endif %}
+</section>

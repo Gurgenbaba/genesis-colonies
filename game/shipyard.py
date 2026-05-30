@@ -1,0 +1,650 @@
+"""Orbital Shipyard — Phase 1 instant ship construction."""
+
+from __future__ import annotations
+
+import math
+from typing import Any, Dict, List, Mapping, Tuple
+
+from .db import begin_write_transaction, commit, in_transaction, rollback
+from .fleet_calc import normalize_ships
+from .fleet_defs import (
+    ACTIVE_SHIP_KEYS,
+    SHIPS,
+    canonical_ship_key,
+    get_ship,
+    is_known_ship_key,
+)
+from .models import db, get_planet_buildings, lock_planet_for_update
+
+BUILD_TIME_LEVEL_FACTOR = 0.98  # −2% build time per shipyard level above 1 (Phase 2 queue)
+
+
+def get_shipyard_level(player_id: int, planet_id: int, *, conn=None) -> int:
+    """Orbital Shipyard level for a player-owned planet."""
+    return shipyard_level_for_planet(int(planet_id), conn=conn)
+
+
+def shipyard_level_for_planet(planet_id: int, *, conn=None) -> int:
+    buildings = get_planet_buildings(int(planet_id), conn=conn)
+    orbital = int(buildings.get("orbital_shipyard") or 0)
+    legacy = int(buildings.get("shipyard") or 0)
+    return max(0, orbital, legacy)
+
+
+def _effective_build_seconds(ship_key: str, shipyard_level: int) -> int:
+    spec = get_ship(ship_key)
+    if not spec:
+        return 0
+    base = max(1, int(spec.get("build_seconds") or 1))
+    lvl = max(1, int(shipyard_level or 1))
+    return max(1, int(math.ceil(base * (BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)))))
+
+
+def _unit_build_cost(ship_key: str) -> Dict[str, int]:
+    spec = get_ship(ship_key) or {}
+    raw = spec.get("build_cost") or {}
+    return {
+        "metal": max(0, int(raw.get("metal") or 0)),
+        "crystal": max(0, int(raw.get("crystal") or 0)),
+        "fuel_cells": max(0, int(raw.get("fuel_cells") or 0)),
+    }
+
+
+def ship_unlocked(
+    ship_key: str,
+    shipyard_level: int,
+    *,
+    player_id: int | None = None,
+    planet_id: int | None = None,
+    conn=None,
+) -> bool:
+    spec = get_ship(ship_key)
+    if not spec or spec.get("phase2_only"):
+        return False
+    need = int(spec.get("required_shipyard_level") or 99)
+    if int(shipyard_level) < need:
+        return False
+    if player_id is not None and planet_id is not None:
+        from .models import get_planet_buildings, get_research_levels
+        from .ship_requirements import check_ship_requirements
+
+        buildings = get_planet_buildings(int(planet_id), conn=conn)
+        research = get_research_levels(user_id=int(player_id), conn=conn)
+        ok, _ = check_ship_requirements(ship_key, buildings=buildings, research=research)
+        return ok
+    return True
+
+
+def _ship_catalog_entry(
+    ship_key: str,
+    shipyard_level: int,
+    *,
+    player_id: int | None = None,
+    planet_id: int | None = None,
+    conn=None,
+) -> Dict[str, Any]:
+    spec = get_ship(ship_key) or {}
+    cost = _unit_build_cost(ship_key)
+    unlocked = ship_unlocked(
+        ship_key,
+        shipyard_level,
+        player_id=player_id,
+        planet_id=planet_id,
+        conn=conn,
+    )
+    max_qty = (
+        max_build_amount_for_planet(0, 0, 0, ship_key, shipyard_level, player_id=player_id, planet_id=planet_id, conn=conn)
+        if unlocked
+        else 0
+    )
+    entry: Dict[str, Any] = {
+        "ship_key": ship_key,
+        "role": spec.get("role"),
+        "required_shipyard_level": int(spec.get("required_shipyard_level") or 99),
+        "unlocked": unlocked,
+        "cost_metal": cost["metal"],
+        "cost_crystal": cost["crystal"],
+        "cost_fuel_cells": cost["fuel_cells"],
+        "build_seconds": _effective_build_seconds(ship_key, shipyard_level),
+        "max_build": max_qty,
+        "can_build": False,
+        "icon": f"/static/img/ships/{ship_key}.svg",
+    }
+    if player_id is not None and planet_id is not None:
+        from .models import get_planet_buildings, get_research_levels
+        from .ship_requirements import requirements_summary_for_client
+
+        buildings = get_planet_buildings(int(planet_id), conn=conn)
+        research = get_research_levels(user_id=int(player_id), conn=conn)
+        entry["requirements"] = requirements_summary_for_client(
+            ship_key, buildings=buildings, research=research
+        )
+    return entry
+
+
+def list_buildable_ships(player_id: int, planet_id: int, *, conn=None) -> List[Dict[str, Any]]:
+    sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
+    metal, crystal, fuel = _planet_resources(planet_id, conn=conn)
+    from .shipyard_queue import MAX_SHIPYARD_QUEUE, queue_count, shipyard_queue_table_ready
+
+    queue_full = False
+    if shipyard_queue_table_ready(conn):
+        queue_full = queue_count(planet_id, conn=conn) >= MAX_SHIPYARD_QUEUE
+    out: List[Dict[str, Any]] = []
+    for key in sorted(ACTIVE_SHIP_KEYS):
+        if not ship_unlocked(key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn):
+            continue
+        entry = _ship_catalog_entry(
+            key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn
+        )
+        entry["max_build"] = max_build_amount_for_planet(
+            metal, crystal, fuel, key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn
+        )
+        entry["can_build"] = entry["max_build"] > 0 and not queue_full
+        out.append(entry)
+    return out
+
+
+def cancel_shipyard_job(
+    *,
+    player_id: int,
+    planet_id: int,
+    job_id: int,
+    conn=None,
+) -> Tuple[bool, str, Dict[str, Any] | None]:
+    own = conn is None
+    if own:
+        conn = db()
+    began_tx = False
+    try:
+        if not in_transaction(conn):
+            begin_write_transaction(conn)
+            began_tx = True
+        lock_planet_for_update(conn, int(planet_id))
+        sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
+        from .shipyard_queue import cancel_queue_job
+
+        ok, reason = cancel_queue_job(
+            player_id=int(player_id),
+            planet_id=int(planet_id),
+            job_id=int(job_id),
+            shipyard_level=sy_level,
+            conn=conn,
+        )
+        if not ok:
+            if own or began_tx:
+                rollback(conn)
+            return False, reason, None
+        if own or began_tx:
+            commit(conn)
+        return True, "", build_shipyard_api_payload(int(player_id), int(planet_id), conn=conn)
+    except Exception:
+        if own or began_tx:
+            rollback(conn)
+        raise
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
+def move_shipyard_job(
+    *,
+    player_id: int,
+    planet_id: int,
+    job_id: int,
+    direction: str,
+    conn=None,
+) -> Tuple[bool, str, Dict[str, Any] | None]:
+    own = conn is None
+    if own:
+        conn = db()
+    began_tx = False
+    try:
+        if not in_transaction(conn):
+            begin_write_transaction(conn)
+            began_tx = True
+        lock_planet_for_update(conn, int(planet_id))
+        sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
+        from .shipyard_queue import move_queue_job
+
+        ok, reason = move_queue_job(
+            player_id=int(player_id),
+            planet_id=int(planet_id),
+            job_id=int(job_id),
+            direction=str(direction or "").strip().lower(),
+            shipyard_level=sy_level,
+            conn=conn,
+        )
+        if not ok:
+            if own or began_tx:
+                rollback(conn)
+            return False, reason, None
+        if own or began_tx:
+            commit(conn)
+        return True, "", build_shipyard_api_payload(int(player_id), int(planet_id), conn=conn)
+    except Exception:
+        if own or began_tx:
+            rollback(conn)
+        raise
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
+def list_locked_ships(player_id: int, planet_id: int, *, conn=None) -> List[Dict[str, Any]]:
+    sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
+    out: List[Dict[str, Any]] = []
+    keys = sorted(set(ACTIVE_SHIP_KEYS) | {"eclipse_runner"})
+    for key in keys:
+        if ship_unlocked(key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn):
+            continue
+        out.append(_ship_catalog_entry(key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn))
+    return out
+
+
+def max_build_amount_for_planet(
+    metal_have: float,
+    crystal_have: float,
+    fuel_have: float,
+    ship_key: str,
+    shipyard_level: int,
+    *,
+    player_id: int | None = None,
+    planet_id: int | None = None,
+    conn=None,
+) -> int:
+    sk = canonical_ship_key(ship_key)
+    if not ship_unlocked(
+        sk, shipyard_level, player_id=player_id, planet_id=planet_id, conn=conn
+    ):
+        return 0
+    cost = _unit_build_cost(sk)
+    if cost["metal"] <= 0 and cost["crystal"] <= 0 and cost["fuel_cells"] <= 0:
+        return 0
+    limits: List[int] = []
+    if cost["metal"] > 0:
+        limits.append(int(metal_have) // cost["metal"])
+    else:
+        limits.append(999999)
+    if cost["crystal"] > 0:
+        limits.append(int(crystal_have) // cost["crystal"])
+    else:
+        limits.append(999999)
+    if cost["fuel_cells"] > 0:
+        limits.append(int(fuel_have) // cost["fuel_cells"])
+    else:
+        limits.append(999999)
+    return max(0, min(limits) if limits else 0)
+
+
+def can_build_ship(
+    player_id: int,
+    planet_id: int,
+    ship_key: str,
+    amount: int,
+    *,
+    conn=None,
+) -> Tuple[bool, str]:
+    sk = canonical_ship_key(ship_key)
+    if not is_known_ship_key(sk) or sk not in SHIPS:
+        return False, "unknown_ship"
+    try:
+        qty = int(amount)
+    except (TypeError, ValueError):
+        return False, "invalid_amount"
+    if qty <= 0:
+        return False, "invalid_amount"
+
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+            (int(planet_id), int(player_id)),
+        )
+        if not cur.fetchone():
+            return False, "planet_not_found"
+
+        sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
+        if sy_level <= 0:
+            return False, "shipyard_required"
+        spec = get_ship(sk) or {}
+        need_sy = int(spec.get("required_shipyard_level") or 99)
+        if sy_level < need_sy:
+            return False, "shipyard_level_too_low"
+        if not ship_unlocked(sk, sy_level, player_id=player_id, planet_id=planet_id, conn=conn):
+            return False, "requirements"
+
+        from .shipyard_queue import MAX_SHIPYARD_QUEUE, queue_count, shipyard_queue_table_ready
+
+        if shipyard_queue_table_ready(conn) and queue_count(planet_id, conn=conn) >= MAX_SHIPYARD_QUEUE:
+            return False, "queue_full"
+
+        metal, crystal, fuel = _planet_resources(planet_id, conn=conn)
+        max_qty = max_build_amount_for_planet(metal, crystal, fuel, sk, sy_level)
+        if qty > max_qty:
+            return False, "not_enough_resources"
+        return True, ""
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
+def _planet_resources(planet_id: int, *, conn) -> Tuple[float, float, float]:
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ? LIMIT 1;",
+        (int(planet_id),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return 0.0, 0.0, 0.0
+    return (
+        float(row["metal"] or 0),
+        float(row["crystal"] or 0),
+        float(row["fuel_cells"] or 0),
+    )
+
+
+def _try_spend_build_resources(
+    conn,
+    planet_id: int,
+    *,
+    metal: int,
+    crystal: int,
+    fuel_cells: int,
+) -> bool:
+    if metal < 0 or crystal < 0 or fuel_cells < 0:
+        raise ValueError("Costs must be >= 0")
+    if metal == 0 and crystal == 0 and fuel_cells == 0:
+        return True
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE planets
+        SET metal = metal - ?,
+            crystal = crystal - ?,
+            fuel_cells = fuel_cells - ?
+        WHERE id = ?
+          AND metal >= ?
+          AND crystal >= ?
+          AND fuel_cells >= ?;
+        """,
+        (
+            int(metal),
+            int(crystal),
+            float(fuel_cells),
+            int(planet_id),
+            int(metal),
+            int(crystal),
+            float(fuel_cells),
+        ),
+    )
+    return cur.rowcount == 1
+
+
+def build_ship(
+    *,
+    player_id: int,
+    planet_id: int,
+    ship_key: str,
+    amount: int,
+    conn=None,
+) -> Tuple[bool, str, Dict[str, Any] | None]:
+    """Enqueue ship construction (resources spent upfront; ships credited when job completes)."""
+    return build_ships(
+        player_id=player_id,
+        planet_id=planet_id,
+        ship_key=ship_key,
+        amount=amount,
+        conn=conn,
+    )
+
+
+def build_ships(
+    *,
+    player_id: int,
+    planet_id: int,
+    ship_key: str,
+    amount: int,
+    conn=None,
+) -> Tuple[bool, str, Dict[str, Any] | None]:
+    sk = canonical_ship_key(ship_key)
+    ok_check, reason = can_build_ship(player_id, planet_id, sk, amount, conn=conn)
+    if not ok_check:
+        return False, reason, None
+
+    qty = int(amount)
+    unit = _unit_build_cost(sk)
+    total_m = unit["metal"] * qty
+    total_c = unit["crystal"] * qty
+    total_f = unit["fuel_cells"] * qty
+
+    own = conn is None
+    if own:
+        conn = db()
+    began_tx = False
+    try:
+        if not in_transaction(conn):
+            begin_write_transaction(conn)
+            began_tx = True
+        lock_planet_for_update(conn, int(planet_id))
+
+        if not _try_spend_build_resources(
+            conn, int(planet_id), metal=total_m, crystal=total_c, fuel_cells=total_f
+        ):
+            if own or began_tx:
+                rollback(conn)
+            return False, "not_enough_resources", None
+
+        from .fleet import fleet_schema_ready
+        from .shipyard_queue import enqueue_ship_build, shipyard_queue_table_ready
+
+        if not fleet_schema_ready(conn):
+            if own or began_tx:
+                rollback(conn)
+            return False, "fleet_unavailable", None
+
+        sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
+        if not shipyard_queue_table_ready(conn):
+            if own or began_tx:
+                rollback(conn)
+            return False, "fleet_unavailable", None
+
+        ok_q, reason_q, job_id = enqueue_ship_build(
+            player_id=int(player_id),
+            planet_id=int(planet_id),
+            ship_key=sk,
+            amount=qty,
+            shipyard_level=sy_level,
+            cost={"metal": total_m, "crystal": total_c, "fuel_cells": total_f},
+            conn=conn,
+        )
+        if not ok_q:
+            if own or began_tx:
+                rollback(conn)
+            return False, reason_q or "queue_full", None
+
+        if own or began_tx:
+            commit(conn)
+
+        payload = build_shipyard_api_payload(
+            int(player_id), int(planet_id), conn=conn
+        )
+        payload["ship_key"] = sk
+        payload["amount"] = qty
+        payload["job_id"] = job_id
+        payload["cost"] = {"metal": total_m, "crystal": total_c, "fuel_cells": total_f}
+        return True, "", payload
+    except Exception:
+        if own or began_tx:
+            rollback(conn)
+        raise
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
+def get_ship_inventory(player_id: int, planet_id: int, *, conn=None) -> Dict[str, int]:
+    from .fleet import get_planet_ships
+
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+            (int(planet_id), int(player_id)),
+        )
+        if not cur.fetchone():
+            return {}
+        return get_planet_ships(int(planet_id), conn=conn)
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
+def add_ships_to_planet(
+    player_id: int,
+    planet_id: int,
+    ship_key: str,
+    amount: int,
+    *,
+    conn=None,
+) -> Tuple[bool, str, Dict[str, int] | None]:
+    sk = canonical_ship_key(ship_key)
+    if not is_known_ship_key(sk):
+        return False, "unknown_ship", None
+    try:
+        qty = int(amount)
+    except (TypeError, ValueError):
+        return False, "invalid_amount", None
+    if qty <= 0:
+        return False, "invalid_amount", None
+
+    from .fleet import add_planet_ships, fleet_schema_ready, get_planet_ships
+
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+            (int(planet_id), int(player_id)),
+        )
+        if not cur.fetchone():
+            return False, "planet_not_found", None
+        if not fleet_schema_ready(conn):
+            return False, "fleet_unavailable", None
+        if own:
+            begin_write_transaction(conn)
+        add_planet_ships(int(planet_id), int(player_id), {sk: qty}, conn=conn)
+        if own:
+            commit(conn)
+        return True, "", get_planet_ships(int(planet_id), conn=conn)
+    except Exception:
+        if own:
+            rollback(conn)
+        raise
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
+def resolve_owned_planet_id(
+    player_id: int,
+    planet_id: int | None = None,
+    *,
+    conn,
+) -> Tuple[int | None, str | None]:
+    """Resolve a player-owned planet id (explicit or active context)."""
+    if planet_id is not None:
+        pid = int(planet_id)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+            (pid, int(player_id)),
+        )
+        if not cur.fetchone():
+            return None, "planet_not_found"
+        return pid, None
+
+    from .planet_evolution.repository import get_context_planet
+
+    row = get_context_planet(int(player_id), conn=conn)
+    return int(row["id"]), None
+
+
+def _planet_meta(planet_id: int, *, conn) -> Dict[str, Any]:
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, name, galaxy, system, position FROM planets WHERE id = ? LIMIT 1;",
+        (int(planet_id),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"planet_id": int(planet_id), "planet_name": "", "planet_coords": ""}
+    coords = f"{int(row['galaxy'])}:{int(row['system'])}:{int(row['position'])}"
+    name = str(row["name"] or "").strip() or coords
+    return {
+        "planet_id": int(row["id"]),
+        "planet_name": name,
+        "planet_coords": coords,
+    }
+
+
+def _resources_dict(planet_id: int, *, conn) -> Dict[str, int]:
+    metal, crystal, fuel = _planet_resources(planet_id, conn=conn)
+    return {
+        "metal": int(metal),
+        "crystal": int(crystal),
+        "fuel_cells": int(fuel),
+    }
+
+
+def build_shipyard_api_payload(player_id: int, planet_id: int, *, conn=None) -> Dict[str, Any]:
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
+        resources = _resources_dict(planet_id, conn=conn)
+        buildable = list_buildable_ships(player_id, planet_id, conn=conn)
+        locked = list_locked_ships(player_id, planet_id, conn=conn)
+        from .shipyard_queue import shipyard_queue_for_client
+
+        ships = get_ship_inventory(player_id, planet_id, conn=conn)
+        meta = _planet_meta(planet_id, conn=conn)
+        queue = shipyard_queue_for_client(
+            player_id, planet_id, sy_level, conn=conn
+        )
+        return {
+            "orbital_shipyard_level": sy_level,
+            "buildable_ships": buildable,
+            "locked_ships": locked,
+            "current_ships": ships,
+            "resources": resources,
+            "fuel_cells": resources.get("fuel_cells", 0),
+            "shipyard_queue": queue,
+            **meta,
+        }
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
+def build_shipyard_page_context(player_id: int, planet: Mapping[str, Any], *, conn=None) -> Dict[str, Any]:
+    planet_id = int(planet["id"])
+    payload = build_shipyard_api_payload(player_id, planet_id, conn=conn)
+    from .fleet_defs import ship_defs_for_client
+
+    return {
+        "ready": True,
+        **payload,
+        "planet_id": planet_id,
+        "ship_defs": {row["key"]: row for row in ship_defs_for_client(include_phase2=True)},
+    }

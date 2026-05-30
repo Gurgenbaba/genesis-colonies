@@ -1,142 +1,302 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% set fleet_ctx = fleet if fleet is defined and fleet else {'ready': false} %}
+{% set player_obj = player if player is defined and player else None %}
+{% set p_metal = (player_obj.metal if player_obj and player_obj.metal is defined else 0) | int %}
+{% set p_crystal = (player_obj.crystal if player_obj and player_obj.crystal is defined else 0) | int %}
+{% set p_fuel = (fleet_ctx.resources.fuel_cells if fleet_ctx.resources is defined and fleet_ctx.resources.fuel_cells is defined else (player_obj.fuel_cells if player_obj and player_obj.fuel_cells is defined else 0)) | int %}
 
-{# ------------------------------------------------------------- #}
-{# Defensive Defaults (Fleet darf niemals crasht)                 #}
-{# ------------------------------------------------------------- #}
-{% set fleet_hint = T("fleet_hint") %}
-{% if fleet_hint == "fleet_hint" %}
-  {% set fleet_hint = "Hier verwaltest du später deine Flotten – Stationierung, Missionen und Bewegungen durchs Genesis-Universum." %}
-{% endif %}
+<div class="gc-page fleet-page" id="fleet-page"
+     data-ready="{{ '1' if fleet_ctx.ready else '0' }}"
+     data-planet-id="{{ fleet_ctx.planet_id if fleet_ctx.planet_id is defined else '' }}"
+     data-fuel-resource="{{ fleet_ctx.fuel_resource if fleet_ctx.fuel_resource is defined else 'fuel_cells' }}">
 
-{% set ov_t = T("fleet_overview_title") %}
-{% if ov_t == "fleet_overview_title" %}{% set ov_t = "Flottenübersicht" %}{% endif %}
-
-{% set ov_s = T("fleet_overview_subtitle") %}
-{% if ov_s == "fleet_overview_subtitle" %}
-  {% set ov_s = "Dieser Bereich wird später alle aktiven Flotten deiner Kolonie abbilden – inklusive Status, Position und Mission." %}
-{% endif %}
-
-{% set pc_t = T("fleet_planned_contents_title") %}
-{% if pc_t == "fleet_planned_contents_title" %}{% set pc_t = "Vorgesehene Inhalte:" %}{% endif %}
-
-{% set pc_i1 = T("fleet_planned_item_list") %}
-{% if pc_i1 == "fleet_planned_item_list" %}
-  {% set pc_i1 = "Liste aller Flotten (Heimat, unterwegs, haltend)" %}
-{% endif %}
-
-{% set pc_i2 = T("fleet_planned_item_stats") %}
-{% if pc_i2 == "fleet_planned_item_stats" %}
-  {% set pc_i2 = "Kurze Stats pro Flotte (Angriff, Deff, Transportkapazität)" %}
-{% endif %}
-
-{% set pc_i3 = T("fleet_planned_item_filter") %}
-{% if pc_i3 == "fleet_planned_item_filter" %}
-  {% set pc_i3 = "Filter nach Missionstyp (Angriff, Transport, Spionage, Halten)" %}
-{% endif %}
-
-{% set tag_raid = T("fleet_tag_raid") %}
-{% if tag_raid == "fleet_tag_raid" %}{% set tag_raid = "Raid" %}{% endif %}
-
-{% set tag_transport = T("fleet_tag_transport") %}
-{% if tag_transport == "fleet_tag_transport" %}{% set tag_transport = "Transport" %}{% endif %}
-
-{% set tag_spy = T("fleet_tag_spy") %}
-{% if tag_spy == "fleet_tag_spy" %}{% set tag_spy = "Spionage" %}{% endif %}
-
-{% set tag_def = T("fleet_tag_defense_fleet") %}
-{% if tag_def == "fleet_tag_defense_fleet" %}{% set tag_def = "Deff-Flotte" %}{% endif %}
-
-{% set cmd_t = T("fleet_commands_title") %}
-{% if cmd_t == "fleet_commands_title" %}{% set cmd_t = "Flottenbefehle" %}{% endif %}
-
-{% set cmd_s = T("fleet_commands_subtitle") %}
-{% if cmd_s == "fleet_commands_subtitle" %}
-  {% set cmd_s = "Hier entsteht später das Interface, mit dem du Missionen definierst und Flotten losschickst." %}
-{% endif %}
-
-{% set rm_1 = T("fleet_roadmap_coordinates") %}
-{% if rm_1 == "fleet_roadmap_coordinates" %}
-  {% set rm_1 = "Eingabe der Zielkoordinaten (Galaxie / System / Slot)" %}
-{% endif %}
-
-{% set rm_2 = T("fleet_roadmap_mission_type") %}
-{% if rm_2 == "fleet_roadmap_mission_type" %}
-  {% set rm_2 = "Auswahl des Missionstyps (Angriff, Transport, Spionage, Halten)" %}
-{% endif %}
-
-{% set rm_3 = T("fleet_roadmap_travel_calc") %}
-{% if rm_3 == "fleet_roadmap_travel_calc" %}
-  {% set rm_3 = "Flugdauer- und Treibstoffberechnung basierend auf Forschung & Antrieb" %}
-{% endif %}
-
-{% set rm_4 = T("fleet_roadmap_presets") %}
-{% if rm_4 == "fleet_roadmap_presets" %}
-  {% set rm_4 = "Vorauswahl von Flotten-Presets (z. B. schnelles Raid-Setup)" %}
-{% endif %}
-
-{% set note = T("fleet_placeholder_note") %}
-{% if note == "fleet_placeholder_note" %}
-  {% set note = "Aktuell ist dies eine visuelle Vorschau auf das kommende Flotten-System – das endgültige UI dockt hier direkt an, sobald die Kampf- & Flug-Logik steht." %}
-{% endif %}
-
-<div class="gc-page fleet-wrapper">
+  {% if fleet_ctx.ready %}
+  <script type="application/json" id="fleet-page-state">{{ fleet_ctx | tojson }}</script>
+  {% endif %}
 
   <header class="fleet-headline section-header">
-    <h2 class="section-title">{{ T("nav_fleet") }}</h2>
-    <p class="section-hint hint">{{ fleet_hint }}</p>
+    <div class="fleet-headline-row">
+      <div>
+        <h2 class="section-title">{{ T("fleet_title") }}</h2>
+        <p class="section-hint hint">{{ T("fleet_hint") }}</p>
+      </div>
+      <div class="fleet-slots-badge" aria-live="polite">
+        <span class="fleet-slots-label">{{ T("fleet_slots_label") }}</span>
+        <span class="fleet-slots-value gc-mono" data-fleet-slots>
+          {{ fleet_ctx.fleet_slots.active if fleet_ctx.fleet_slots is defined else 0 }}
+          /
+          {{ fleet_ctx.fleet_slots.max if fleet_ctx.fleet_slots is defined else 0 }}
+        </span>
+      </div>
+    </div>
   </header>
 
-  <div class="fleet-grid">
+  {% if fleet_ctx.ready and not fleet_ctx.has_ships %}
+  <section class="gc-panel fleet-panel fleet-no-ships-panel" aria-live="polite">
+    <p class="fleet-empty">{{ T("fleet_no_ships_hint") }}</p>
+    <a href="{{ url_for('shipyard_view') }}" class="gc-btn gc-btn-primary">{{ T("fleet_go_shipyard_btn") }}</a>
+  </section>
+  {% endif %}
 
-    <!-- LEFT: Overview -->
-    <section class="gc-panel fleet-panel">
+  {% if fleet_ctx.can_seed_test_ships %}
+  <section class="gc-panel fleet-panel fleet-dev-panel" aria-label="{{ T('fleet_dev_seed_title') }}">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("fleet_dev_seed_title") }}</span>
+      <span class="gc-panel-subtitle">{{ T("fleet_dev_seed_subtitle") }}</span>
+    </div>
+    <button type="button" class="gc-btn gc-btn-secondary" data-fleet-dev-seed>
+      {{ T("fleet_dev_seed_btn") }}
+    </button>
+  </section>
+  {% endif %}
+
+  {% if not fleet_ctx.ready %}
+  <section class="gc-panel fleet-panel">
+    <p class="fleet-unavailable">{{ T("fleet_unavailable") }}</p>
+  </section>
+  {% else %}
+
+  <div class="fleet-layout">
+
+    <section class="gc-panel fleet-panel fleet-active-panel" aria-labelledby="fleet-active-title">
       <div class="gc-panel-header">
         <div class="gc-panel-head-left">
-          <span class="gc-panel-title">{{ ov_t }}</span>
-          <span class="gc-panel-subtitle">{{ ov_s }}</span>
+          <span class="gc-panel-title" id="fleet-active-title">{{ T("fleet_active_title") }}</span>
+          <span class="gc-panel-subtitle">{{ T("fleet_active_subtitle") }}</span>
         </div>
       </div>
-
-      <div class="fleet-placeholder-box">
-        <div class="fleet-placeholder-title"><strong>{{ pc_t }}</strong></div>
-
-        <ul class="fleet-placeholder-list">
-          <li>{{ pc_i1 }}</li>
-          <li>{{ pc_i2 }}</li>
-          <li>{{ pc_i3 }}</li>
-        </ul>
-
-        <div class="fleet-tag-row">
-          <span class="fleet-tag">{{ tag_raid }}</span>
-          <span class="fleet-tag">{{ tag_transport }}</span>
-          <span class="fleet-tag">{{ tag_spy }}</span>
-          <span class="fleet-tag">{{ tag_def }}</span>
-        </div>
+      <div class="fleet-active-list" data-fleet-active-list>
+        {% if fleet_ctx.active_fleets %}
+          {% for mv in fleet_ctx.active_fleets %}
+          <article class="fleet-active-card" data-fleet-id="{{ mv.id }}" data-status="{{ mv.status }}">
+            <div class="fleet-active-row">
+              <span class="fleet-active-mission">{{ T("fleet_mission_" ~ mv.mission_type) }}</span>
+              <span class="fleet-active-status">{{ T("fleet_status_" ~ mv.status) }}</span>
+            </div>
+            <div class="fleet-active-coords gc-mono">{{ mv.origin_coords }} → {{ mv.target_coords }}</div>
+            <div class="fleet-active-ships">
+              {% for sk, qty in mv.ships.items() %}
+                <span class="fleet-ship-chip">{{ T("fleet_ship_" ~ sk, sk) }} × {{ qty|fmt_int }}</span>
+              {% endfor %}
+            </div>
+            {% if mv.resources.metal or mv.resources.crystal %}
+            <div class="fleet-active-cargo">
+              {% if mv.resources.metal %}<span>{{ T("resource_metal") }}: {{ mv.resources.metal|fmt_int }}</span>{% endif %}
+              {% if mv.resources.crystal %}<span>{{ T("resource_crystal") }}: {{ mv.resources.crystal|fmt_int }}</span>{% endif %}
+            </div>
+            {% endif %}
+            <div class="fleet-active-times gc-mono">
+              {% if mv.status == 'returning' and mv.return_at %}
+                <span>{{ T("fleet_return_at") }}: <time data-countdown="{{ mv.return_at }}"></time></span>
+              {% elif mv.status == 'holding' and mv.holding_until %}
+                <span>{{ T("fleet_holding_until") }}: <time data-countdown="{{ mv.holding_until }}"></time></span>
+              {% elif mv.arrival_at %}
+                <span>{{ T("fleet_arrival_at") }}: <time data-countdown="{{ mv.arrival_at }}"></time></span>
+              {% endif %}
+            </div>
+          </article>
+          {% endfor %}
+        {% else %}
+          <p class="fleet-empty" data-fleet-empty>{{ T("fleet_no_active") }}</p>
+        {% endif %}
       </div>
     </section>
 
-    <!-- RIGHT: Commands -->
-    <section class="gc-panel fleet-panel">
+    <section class="gc-panel fleet-panel fleet-send-panel" aria-labelledby="fleet-send-title">
       <div class="gc-panel-header">
         <div class="gc-panel-head-left">
-          <span class="gc-panel-title">{{ cmd_t }}</span>
-          <span class="gc-panel-subtitle">{{ cmd_s }}</span>
+          <span class="gc-panel-title" id="fleet-send-title">{{ T("fleet_send_title") }}</span>
+          <span class="gc-panel-subtitle">{{ T("fleet_send_subtitle") }}</span>
         </div>
       </div>
 
-      <ul class="fleet-roadmap-list">
-        <li>{{ rm_1 }}</li>
-        <li>{{ rm_2 }}</li>
-        <li>{{ rm_3 }}</li>
-        <li>{{ rm_4 }}</li>
-      </ul>
+      <div class="fleet-resource-summary gc-mono" aria-live="polite">
+        <span>{{ T("resource_metal") }}: <strong data-res="metal">{{ p_metal|fmt_int }}</strong></span>
+        <span>{{ T("resource_crystal") }}: <strong data-res="crystal">{{ p_crystal|fmt_int }}</strong></span>
+        <span>{{ T("resource_fuel_cells") }}: <strong data-res="fuel_cells">{{ p_fuel|fmt_int }}</strong></span>
+      </div>
 
-      <div class="fleet-note">{{ note }}</div>
+      <form id="fleet-send-form" class="fleet-send-form" method="post" action="#" data-no-pjax novalidate>
+        <div class="fleet-form-row">
+          <label class="fleet-form-label" for="fleet-preset-select">{{ T("fleet_preset_load") }}</label>
+          <div class="fleet-form-inline">
+            <select id="fleet-preset-select" class="gc-input fleet-preset-select" data-fleet-preset-select>
+              <option value="">{{ T("fleet_preset_none") }}</option>
+              {% for preset in fleet_ctx.presets %}
+              <option value="{{ preset.id }}">[{{ T("fleet_preset_type_" ~ preset.preset_type) }}] {{ preset.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" class="gc-btn gc-btn-secondary fleet-btn-save-preset" data-fleet-save-preset>
+              {{ T("fleet_preset_save") }}
+            </button>
+          </div>
+        </div>
+
+        <fieldset class="fleet-ships-fieldset">
+          <legend>{{ T("fleet_ships_title") }}</legend>
+          <div class="fleet-ships-grid" data-fleet-ships-grid>
+            {% for ship in fleet_ctx.ship_defs %}
+            {% set have = fleet_ctx.ships.get(ship.key, 0) if fleet_ctx.ships else 0 %}
+            <div class="fleet-ship-row" data-ship-key="{{ ship.key }}" data-ship-have="{{ have }}">
+              <button type="button" class="gc-ship-detail-trigger fleet-ship-name"
+                      data-ship-detail="{{ ship.key }}"
+                      title="{{ T('ship_detail_open') }}">{{ T(ship.name_key) }}</button>
+              <input type="number" min="0" max="{{ have }}" value="0"
+                     class="gc-input fleet-ship-input" data-ship-input="{{ ship.key }}"
+                     aria-label="{{ T(ship.name_key) }}">
+              <button type="button" class="gc-btn gc-btn-ghost fleet-ship-max" data-ship-max="{{ ship.key }}">
+                {{ T("fleet_btn_max") }}
+              </button>
+            </div>
+            {% endfor %}
+          </div>
+        </fieldset>
+
+        <div class="fleet-form-row fleet-coords-row">
+          <label class="fleet-form-label">{{ T("fleet_target_coords") }}</label>
+          <div class="fleet-coords-inputs">
+            <input type="number" name="target_galaxy" class="gc-input fleet-coord-input"
+                   min="1" value="{{ fleet_ctx.coordinates.galaxy }}" aria-label="Galaxy">
+            <span>:</span>
+            <input type="number" name="target_system" class="gc-input fleet-coord-input"
+                   min="1" max="499" value="{{ fleet_ctx.coordinates.system }}" aria-label="System">
+            <span>:</span>
+            <input type="number" name="target_position" class="gc-input fleet-coord-input"
+                   min="1" max="16" value="{{ fleet_ctx.coordinates.position }}" aria-label="Position">
+          </div>
+        </div>
+
+        <div class="fleet-form-row">
+          <label class="fleet-form-label">{{ T("fleet_quick_targets") }}</label>
+          <div class="fleet-colony-chips" data-fleet-colony-chips>
+            {% for col in fleet_ctx.colonies %}
+            <button type="button"
+                    class="fleet-colony-chip gc-btn gc-btn-ghost{% if col.is_active %} is-active{% endif %}"
+                    data-galaxy="{{ col.galaxy }}"
+                    data-system="{{ col.system }}"
+                    data-position="{{ col.position }}"
+                    {% if col.is_active %}aria-current="true" title="{{ T('fleet_quick_target_active') }}"{% endif %}>
+              {{ col.name }} <span class="gc-mono">{{ col.coordinates }}</span>
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="fleet-form-row">
+          <label class="fleet-form-label" for="fleet-mission">{{ T("fleet_mission_label") }}</label>
+          <select id="fleet-mission" name="mission_type" class="gc-input" data-fleet-mission>
+            {% for m in fleet_ctx.missions %}
+            <option value="{{ m }}">{{ T("fleet_mission_" ~ m) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="fleet-form-row fleet-colonize-name-row" data-fleet-colonize-row hidden>
+          <label class="fleet-form-label" for="fleet-colony-name">{{ T("fleet_colony_name_label") }}</label>
+          <input type="text" id="fleet-colony-name" class="gc-input" name="colony_name"
+                 maxlength="64" data-fleet-colony-name
+                 placeholder="{{ T('fleet_colony_name_placeholder') }}">
+        </div>
+
+        <div class="fleet-form-row">
+          <label class="fleet-form-label" for="fleet-speed">{{ T("fleet_speed_label") }}</label>
+          <select id="fleet-speed" name="speed_percent" class="gc-input" data-fleet-speed>
+            {% for sp in fleet_ctx.speed_options %}
+            <option value="{{ sp }}" {% if sp == 100 %}selected{% endif %}>{{ sp }}%</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <fieldset class="fleet-resources-fieldset">
+          <legend>{{ T("fleet_resources_title") }}</legend>
+          <div class="fleet-resource-row">
+            <label for="fleet-res-metal">{{ T("resource_metal") }}</label>
+            <input type="number" id="fleet-res-metal" name="metal" min="0" value="0"
+                   class="gc-input" data-fleet-res-metal>
+            <button type="button" class="gc-btn gc-btn-ghost" data-fleet-res-max="metal">{{ T("fleet_btn_max") }}</button>
+          </div>
+          <div class="fleet-resource-row">
+            <label for="fleet-res-crystal">{{ T("resource_crystal") }}</label>
+            <input type="number" id="fleet-res-crystal" name="crystal" min="0" value="0"
+                   class="gc-input" data-fleet-res-crystal>
+            <button type="button" class="gc-btn gc-btn-ghost" data-fleet-res-max="crystal">{{ T("fleet_btn_max") }}</button>
+          </div>
+        </fieldset>
+
+        <div class="fleet-preview-box" data-fleet-preview aria-live="polite">
+          <div class="fleet-preview-row"><span>{{ T("fleet_preview_cargo") }}</span><span data-preview-cargo>–</span></div>
+          <div class="fleet-preview-row"><span>{{ T("fleet_preview_cargo_free") }}</span><span data-preview-cargo-free>–</span></div>
+          <div class="fleet-preview-row">
+            <span>{{ T("fleet_preview_fuel") }} (<span data-fuel-resource-label>{{ T("resource_fuel_cells") }}</span>)</span>
+            <span data-preview-fuel>–</span>
+          </div>
+          <div class="fleet-preview-row"><span>{{ T("fleet_preview_fuel_available") }}</span><span data-preview-fuel-available>–</span></div>
+          <div class="fleet-preview-row"><span>{{ T("fleet_preview_flight") }}</span><span data-preview-flight>–</span></div>
+        </div>
+
+        <p class="fleet-form-error" data-fleet-error hidden></p>
+        <button type="submit" class="gc-btn gc-btn-primary fleet-send-submit">{{ T("fleet_send_submit") }}</button>
+      </form>
+    </section>
+
+    <section class="gc-panel fleet-panel fleet-shipyard-link-panel">
+      <p class="fleet-shipyard-link-hint">{{ T("fleet_shipyard_link_hint") }}</p>
+      <a href="{{ url_for('shipyard_view') }}" class="gc-btn gc-btn-secondary">{{ T("fleet_go_shipyard_btn") }}</a>
+    </section>
+
+    <section class="gc-panel fleet-panel fleet-presets-panel" aria-labelledby="fleet-presets-title">
+      <div class="gc-panel-header">
+        <div class="gc-panel-head-left">
+          <span class="gc-panel-title" id="fleet-presets-title">{{ T("fleet_presets_title") }}</span>
+          <span class="gc-panel-subtitle">{{ T("fleet_presets_subtitle") }}</span>
+        </div>
+      </div>
+      <ul class="fleet-preset-list" data-fleet-preset-list>
+        {% for preset in fleet_ctx.presets %}
+        <li class="fleet-preset-item" data-preset-id="{{ preset.id }}">
+          <span class="fleet-preset-type">{{ T("fleet_preset_type_" ~ preset.preset_type) }}</span>
+          <span class="fleet-preset-name">{{ preset.name }}</span>
+          <div class="fleet-preset-actions">
+            <button type="button" class="gc-btn gc-btn-ghost" data-preset-load="{{ preset.id }}">{{ T("fleet_preset_load_btn") }}</button>
+            <button type="button" class="gc-btn gc-btn-ghost gc-btn-danger" data-preset-delete="{{ preset.id }}">{{ T("fleet_preset_delete") }}</button>
+          </div>
+        </li>
+        {% else %}
+        <li class="fleet-preset-empty">{{ T("fleet_no_presets") }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="gc-panel fleet-panel fleet-mass-expo-panel" aria-labelledby="fleet-mass-expo-title">
+      <div class="gc-panel-header">
+        <div class="gc-panel-head-left">
+          <span class="gc-panel-title" id="fleet-mass-expo-title">{{ T("fleet_mass_expo_title") }}</span>
+          <span class="gc-panel-subtitle">{{ T("fleet_mass_expo_subtitle") }}</span>
+        </div>
+      </div>
+      <form id="fleet-mass-expo-form" class="fleet-mass-expo-form" method="post" action="#" data-no-pjax>
+        <div class="fleet-form-row">
+          <label for="fleet-mass-preset">{{ T("fleet_mass_expo_preset") }}</label>
+          <select id="fleet-mass-preset" class="gc-input" data-fleet-mass-preset required>
+            <option value="">{{ T("fleet_preset_none") }}</option>
+            {% for preset in fleet_ctx.presets %}
+            <option value="{{ preset.id }}">[{{ T("fleet_preset_type_" ~ preset.preset_type) }}] {{ preset.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fleet-form-row">
+          <label for="fleet-mass-waves">{{ T("fleet_mass_expo_waves") }}</label>
+          <input type="number" id="fleet-mass-waves" class="gc-input" min="1" max="99" value="1" data-fleet-mass-waves>
+        </div>
+        <p class="fleet-mass-result" data-fleet-mass-result hidden></p>
+        <button type="submit" class="gc-btn gc-btn-primary">{{ T("fleet_mass_expo_start") }}</button>
+      </form>
     </section>
 
   </div>
+  {% endif %}
 </div>
-
 {% endblock %}
+

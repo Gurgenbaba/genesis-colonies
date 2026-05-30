@@ -1,136 +1,195 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% set sy = shipyard if shipyard is defined and shipyard else {'ready': false, 'orbital_shipyard_level': 0} %}
+{% set player_obj = player if player is defined and player else None %}
+{% set p_metal = (sy.resources.metal if sy.resources is defined else (player_obj.metal if player_obj else 0)) | int %}
+{% set p_crystal = (sy.resources.crystal if sy.resources is defined else (player_obj.crystal if player_obj else 0)) | int %}
+{% set p_fuel = (sy.fuel_cells if sy.fuel_cells is defined else 0) | int %}
 
-{# ------------------------------------------------------------- #}
-{# Defensive Defaults (Werft darf niemals crasht)                 #}
-{# ------------------------------------------------------------- #}
-{% set shipyard_hint = T("shipyard_hint") %}
-{% if shipyard_hint == "shipyard_hint" %}
-  {% set shipyard_hint = "Frühphase der Werft – UI steht, die eigentliche Schiffslogik folgt in einem späteren Development-Step." %}
-{% endif %}
+<div class="gc-page shipyard-page" id="shipyard-page"
+     data-ready="{{ '1' if sy.ready is not defined or sy.ready != false else '0' }}"
+     data-planet-id="{{ sy.planet_id if sy.planet_id is defined else '' }}"
+     data-shipyard-level="{{ sy.orbital_shipyard_level if sy.orbital_shipyard_level is defined else 0 }}">
 
-{% set s1 = T("shipyard_panel_status_title") %}
-{% if s1 == "shipyard_panel_status_title" %}{% set s1 = "Aktuelle Werft-Situation" %}{% endif %}
-
-{% set s2 = T("shipyard_panel_status_subtitle") %}
-{% if s2 == "shipyard_panel_status_subtitle" %}
-  {% set s2 = "Deine Kolonie ist bereit für den Flottenausbau – hier entsteht später die komplette Schiffsproduktion inklusive Queue, Kostenübersicht und Bauzeiten." %}
-{% endif %}
-
-{% set p1 = T("shipyard_planned_title") %}
-{% if p1 == "shipyard_planned_title" %}{% set p1 = "Geplante Inhalte dieses Panels:" %}{% endif %}
-
-{% set i1 = T("shipyard_planned_item_list") %}
-{% if i1 == "shipyard_planned_item_list" %}
-  {% set i1 = "Liste verfügbarer Schiffsmodelle (z. B. Späher, Jäger, Kreuzer, Transporter)" %}
-{% endif %}
-
-{% set i2 = T("shipyard_planned_item_costs") %}
-{% if i2 == "shipyard_planned_item_costs" %}
-  {% set i2 = "Rohstoffkosten & Bauzeiten pro Schiffstyp auf Basis deiner Forschung" %}
-{% endif %}
-
-{% set i3 = T("shipyard_planned_item_queue") %}
-{% if i3 == "shipyard_planned_item_queue" %}
-  {% set i3 = "Aktive Werft-Queue mit Fortschritt und verbleibender Bauzeit" %}
-{% endif %}
-
-{% set t1 = T("shipyard_tag_queue") %}
-{% if t1 == "shipyard_tag_queue" %}{% set t1 = "Queue-System" %}{% endif %}
-
-{% set t2 = T("shipyard_tag_production") %}
-{% if t2 == "shipyard_tag_production" %}{% set t2 = "Schiffsproduktion" %}{% endif %}
-
-{% set t3 = T("shipyard_tag_fleet") %}
-{% if t3 == "shipyard_tag_fleet" %}{% set t3 = "Flottenaufbau" %}{% endif %}
-
-{% set r1 = T("shipyard_panel_roadmap_title") %}
-{% if r1 == "shipyard_panel_roadmap_title" %}{% set r1 = "Kommende Werft-Features" %}{% endif %}
-
-{% set r2 = T("shipyard_panel_roadmap_subtitle") %}
-{% if r2 == "shipyard_panel_roadmap_subtitle" %}
-  {% set r2 = "Dieses Modul ist als vollwertiges System geplant und wird später eng mit Forschung und Flottenansicht verzahnt." %}
-{% endif %}
-
-{% set rli1 = T("shipyard_roadmap_item_slots") %}
-{% if rli1 == "shipyard_roadmap_item_slots" %}
-  {% set rli1 = "Schiffsproduktion in mehreren Slots mit Warteschlange pro Planet" %}
-{% endif %}
-
-{% set rli2 = T("shipyard_roadmap_item_presets") %}
-{% if rli2 == "shipyard_roadmap_item_presets" %}
-  {% set rli2 = "Flotten-Presets (z. B. Raid-, Transport- und Deff-Flotten)" %}
-{% endif %}
-
-{% set rli3 = T("shipyard_roadmap_item_synergy") %}
-{% if rli3 == "shipyard_roadmap_item_synergy" %}
-  {% set rli3 = "Direkte Synergien mit Techs (Antrieb, Waffen, Panzerung)" %}
-{% endif %}
-
-{% set rli4 = T("shipyard_roadmap_item_galaxy") %}
-{% if rli4 == "shipyard_roadmap_item_galaxy" %}
-  {% set rli4 = "Anbindung an Flotten-UI & spätere Galaxie-Karte" %}
-{% endif %}
-
-{% set note = T("shipyard_placeholder_note") %}
-{% if note == "shipyard_placeholder_note" %}
-  {% set note = "Aktuell dient diese Ansicht als UI-Platzhalter, damit das Interface vollständig wirkt und Navigation & Look & Feel bereits konsistent sind." %}
-{% endif %}
-
-<div class="gc-page shipyard-wrapper">
+  {% if sy.ready is not defined or sy.ready != false %}
+  <script type="application/json" id="shipyard-page-state">{{ sy | tojson }}</script>
+  {% endif %}
 
   <header class="shipyard-headline section-header">
-    <h2 class="section-title">{{ T("nav_shipyard") }}</h2>
-    <p class="section-hint hint">{{ shipyard_hint }}</p>
+    <h2 class="section-title">{{ T("shipyard_title") }}</h2>
+    <p class="section-hint hint">{{ T("shipyard_hint") }}</p>
+    {% if sy.planet_name is defined and sy.planet_name %}
+    <p class="shipyard-planet-scope gc-mono" data-shipyard-planet-scope>
+      {{ T("shipyard_planet_scope", name=sy.planet_name) }}
+      {% if sy.planet_coords is defined and sy.planet_coords %}
+      <span class="shipyard-planet-coords" data-shipyard-planet-coords>({{ sy.planet_coords }})</span>
+      {% endif %}
+    </p>
+    {% endif %}
   </header>
 
-  <div class="shipyard-grid">
+  {% if sy.ready is defined and sy.ready == false %}
+  <section class="gc-panel shipyard-panel">
+    <p class="shipyard-empty">{{ T("fleet_unavailable") }}</p>
+  </section>
+  {% else %}
 
-    <!-- LEFT -->
-    <section class="gc-panel shipyard-panel">
-      <div class="gc-panel-header">
-        <span class="gc-panel-title">{{ s1 }}</span>
-        <span class="gc-panel-subtitle">{{ s2 }}</span>
-      </div>
+  <section class="gc-panel shipyard-panel shipyard-status-panel">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("shipyard_level_title") }}</span>
+      <span class="gc-panel-subtitle gc-mono" data-shipyard-level-label>{{ T("shipyard_level_value", level=sy.orbital_shipyard_level) }}</span>
+    </div>
+    <div class="shipyard-resource-summary gc-mono" aria-live="polite">
+      <span>{{ T("resource_metal") }}: <strong data-sy-res="metal">{{ p_metal|fmt_int }}</strong></span>
+      <span>{{ T("resource_crystal") }}: <strong data-sy-res="crystal">{{ p_crystal|fmt_int }}</strong></span>
+      <span>{{ T("resource_fuel_cells") }}: <strong data-sy-res="fuel_cells">{{ p_fuel|fmt_int }}</strong></span>
+    </div>
+  </section>
 
-      <div class="shipyard-placeholder-box">
-        <div class="shipyard-placeholder-title">
-          <strong>{{ p1 }}</strong>
+  <section class="gc-panel shipyard-panel" aria-labelledby="shipyard-queue-title">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title" id="shipyard-queue-title">{{ T("shipyard_queue_title") }}</span>
+      <span class="gc-panel-subtitle gc-mono" data-shipyard-queue-subtitle>
+        {% set qsum = sy.shipyard_queue.summary if sy.shipyard_queue is defined and sy.shipyard_queue.summary is defined else {} %}
+        {{ T("shipyard_queue_slots", count=qsum.count|default(0), limit=qsum.limit|default(3)) }}
+      </span>
+    </div>
+    <p class="shipyard-queue-hint hint">{{ T("shipyard_queue_hint", refund=qsum.refund_percent|default(60)) }}</p>
+    <div class="shipyard-queue-list" data-shipyard-queue-list aria-live="polite">
+      {% set qjobs = sy.shipyard_queue.queue if sy.shipyard_queue is defined and sy.shipyard_queue.queue is defined else [] %}
+      {% if qjobs %}
+        {% for job in qjobs %}
+        <article class="shipyard-queue-job{% if job.is_active %} is-active{% endif %}"
+                 data-queue-job-id="{{ job.id }}"
+                 data-finish-at="{{ job.finish_at }}">
+          <div class="shipyard-queue-job-main">
+            <span class="shipyard-queue-ship">{{ T("fleet_ship_" ~ job.ship_key) }} × {{ job.amount|fmt_int }}</span>
+            <span class="shipyard-queue-eta gc-mono" data-queue-remaining="{{ job.remaining }}">
+              {{ T("shipyard_queue_remaining", seconds=job.remaining|fmt_int) }}
+            </span>
+          </div>
+          <div class="shipyard-queue-job-actions">
+            <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shipyard-queue-up="{{ job.id }}"
+                    {% if loop.first %}disabled{% endif %} aria-label="{{ T('shipyard_queue_move_up') }}">▲</button>
+            <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shipyard-queue-down="{{ job.id }}"
+                    {% if loop.last %}disabled{% endif %} aria-label="{{ T('shipyard_queue_move_down') }}">▼</button>
+            <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-btn-danger" data-shipyard-queue-cancel="{{ job.id }}">
+              {{ T("shipyard_queue_cancel_btn") }}
+            </button>
+          </div>
+        </article>
+        {% endfor %}
+      {% else %}
+        <p class="shipyard-empty" data-shipyard-queue-empty>{{ T("shipyard_queue_empty") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="gc-panel shipyard-panel" aria-labelledby="shipyard-inventory-title">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title" id="shipyard-inventory-title">{{ T("shipyard_inventory_title") }}</span>
+      <span class="gc-panel-subtitle">{{ T("shipyard_inventory_subtitle") }}</span>
+    </div>
+    <div class="shipyard-inventory-list" data-shipyard-inventory>
+      {% set inv = sy.current_ships if sy.current_ships is defined else {} %}
+      {% if inv %}
+        {% for sk, qty in inv.items() %}
+        <div class="shipyard-inventory-row" data-inv-ship="{{ sk }}">
+          <button type="button" class="gc-ship-detail-trigger shipyard-ship-name"
+                  data-ship-detail="{{ sk }}"
+                  title="{{ T('ship_detail_open') }}">{{ T("fleet_ship_" ~ sk) }}</button>
+          <span class="shipyard-ship-qty gc-mono">{{ qty|fmt_int }}</span>
         </div>
+        {% endfor %}
+      {% else %}
+        <p class="shipyard-empty" data-shipyard-no-ships>{{ T("shipyard_no_ships") }}</p>
+      {% endif %}
+    </div>
+  </section>
 
-        <ul class="shipyard-placeholder-list">
-          <li>{{ i1 }}</li>
-          <li>{{ i2 }}</li>
-          <li>{{ i3 }}</li>
-        </ul>
-
-        <div class="shipyard-tag-row">
-          <span class="shipyard-tag">{{ t1 }}</span>
-          <span class="shipyard-tag">{{ t2 }}</span>
-          <span class="shipyard-tag">{{ t3 }}</span>
+  <section class="gc-panel shipyard-panel" aria-labelledby="shipyard-buildable-title">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title" id="shipyard-buildable-title">{{ T("shipyard_buildable_title") }}</span>
+      <span class="gc-panel-subtitle">{{ T("shipyard_buildable_subtitle") }}</span>
+    </div>
+    <div class="shipyard-ship-list" data-shipyard-buildable-list>
+      {% set buildable_ships = sy.buildable_ships if sy.buildable_ships is defined else [] %}
+      {% for ship in buildable_ships %}
+      <article class="shipyard-ship-card" data-ship-card="{{ ship.ship_key }}" data-unlocked="1">
+        <img src="{{ url_for('static', filename='img/ships/' ~ ship.ship_key ~ '.svg') }}"
+             alt="" class="shipyard-ship-thumb" width="48" height="48" loading="lazy">
+        <div class="shipyard-ship-card-head">
+          <h3 class="shipyard-ship-card-title">
+            <button type="button" class="gc-ship-detail-trigger"
+                    data-ship-detail="{{ ship.ship_key }}"
+                    title="{{ T('ship_detail_open') }}">{{ T("fleet_ship_" ~ ship.ship_key) }}</button>
+          </h3>
+          <span class="shipyard-ship-role">{{ T("shipyard_role_" ~ ship.role) }}</span>
         </div>
-      </div>
-    </section>
+        <p class="shipyard-ship-desc hint">{{ T("fleet_ship_" ~ ship.ship_key ~ "_desc") }}</p>
+        <div class="shipyard-ship-cost gc-mono">
+          <span>{{ T("resource_metal") }} {{ ship.cost_metal|fmt_int }}</span>
+          <span>{{ T("resource_crystal") }} {{ ship.cost_crystal|fmt_int }}</span>
+          {% if ship.cost_fuel_cells %}
+          <span>{{ T("resource_fuel_cells") }} {{ ship.cost_fuel_cells|fmt_int }}</span>
+          {% endif %}
+        </div>
+        <p class="shipyard-ship-build-time gc-mono hint">{{ T("shipyard_build_time_per_unit", seconds=ship.build_seconds|fmt_int) }}</p>
+        <div class="shipyard-ship-actions">
+          <input type="number" min="1" max="999" value="1"
+                 class="gc-input shipyard-qty-input" data-shipyard-qty="{{ ship.ship_key }}"
+                 aria-label="{{ T('shipyard_amount_label') }}">
+          <button type="button" class="gc-btn gc-btn-ghost" data-shipyard-max="{{ ship.ship_key }}">
+            {{ T("shipyard_btn_max") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-primary"
+                  data-shipyard-build="{{ ship.ship_key }}"
+                  {% if not ship.can_build %}disabled{% endif %}>
+            {{ T("shipyard_build_btn") }}
+          </button>
+        </div>
+        {% if not ship.can_build %}
+        <p class="shipyard-hint-warn">{{ T("shipyard_not_enough_resources") }}</p>
+        {% endif %}
+      </article>
+      {% else %}
+      <p class="shipyard-empty">{{ T("shipyard_no_buildable") }}</p>
+      {% endfor %}
+    </div>
+  </section>
 
-    <!-- RIGHT -->
-    <section class="gc-panel shipyard-panel">
-      <div class="gc-panel-header">
-        <span class="gc-panel-title">{{ r1 }}</span>
-        <span class="gc-panel-subtitle">{{ r2 }}</span>
-      </div>
+  {% if sy.locked_ships is defined and sy.locked_ships %}
+  <section class="gc-panel shipyard-panel" aria-labelledby="shipyard-locked-title">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title" id="shipyard-locked-title">{{ T("shipyard_locked_title") }}</span>
+      <span class="gc-panel-subtitle">{{ T("shipyard_locked_subtitle") }}</span>
+    </div>
+    <div class="shipyard-ship-list shipyard-ship-list-locked" data-shipyard-locked-list>
+      {% for ship in sy.locked_ships %}
+      <article class="shipyard-ship-card is-locked" data-ship-card="{{ ship.ship_key }}" data-unlocked="0">
+        <img src="{{ url_for('static', filename='img/ships/' ~ ship.ship_key ~ '.svg') }}"
+             alt="" class="shipyard-ship-thumb" width="48" height="48" loading="lazy">
+        <div class="shipyard-ship-card-head">
+          <h3 class="shipyard-ship-card-title">
+            <button type="button" class="gc-ship-detail-trigger"
+                    data-ship-detail="{{ ship.ship_key }}"
+                    title="{{ T('ship_detail_open') }}">{{ T("fleet_ship_" ~ ship.ship_key) }}</button>
+          </h3>
+          <span class="shipyard-ship-role">{{ T("shipyard_role_" ~ ship.role) }}</span>
+        </div>
+        <p class="shipyard-ship-desc hint">{{ T("fleet_ship_" ~ ship.ship_key ~ "_desc") }}</p>
+        <p class="shipyard-locked-reason">{{ T("shipyard_locked_level", level=ship.required_shipyard_level) }}</p>
+        <div class="shipyard-ship-actions">
+          <input type="number" min="1" max="999" value="1" class="gc-input shipyard-qty-input" disabled>
+          <button type="button" class="gc-btn gc-btn-secondary" disabled>{{ T("shipyard_build_btn") }}</button>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
 
-      <ul class="shipyard-roadmap-list">
-        <li>{{ rli1 }}</li>
-        <li>{{ rli2 }}</li>
-        <li>{{ rli3 }}</li>
-        <li>{{ rli4 }}</li>
-      </ul>
-
-      <div class="shipyard-note">{{ note }}</div>
-    </section>
-
-  </div>
+  {% endif %}
 </div>
-
 {% endblock %}

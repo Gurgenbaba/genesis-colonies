@@ -313,6 +313,7 @@ def inject_globals():
 
         AUTH_USER=auth_user,
         AUTH_ADMIN=auth_admin,
+        GC_DEBUG_ENABLED=is_debug_enabled(),
 
         GAME_SETTINGS=settings,
         motd_enabled=motd_enabled,
@@ -672,20 +673,29 @@ def trader_hub_view():
         return redirect(url_for("login"))
 
     from game.exchange import exchange_schema_ready, get_exchange_status
+    from game.fuel_exchange import fuel_exchange_schema_ready, get_fuel_exchange_status
     from game.planet_evolution.repository import get_context_planet
+    from game.scrapyard import scrapyard_status
 
     exchange = {}
+    fuel_exchange = {}
+    scrapyard = {}
     conn = db()
     try:
         planet = get_context_planet(int(session["user_id"]), conn=conn)
+        pid = int(planet["id"])
+        uid = int(session["user_id"])
         if exchange_schema_ready(conn):
             exchange = get_exchange_status(
-                player_id=int(session["user_id"]),
-                planet_id=int(planet["id"]),
+                player_id=uid,
+                planet_id=pid,
                 metal=float(ctx["player_view"]["metal"]),
                 crystal=float(ctx["player_view"]["crystal"]),
                 conn=conn,
             )
+        if fuel_exchange_schema_ready(conn):
+            fuel_exchange = get_fuel_exchange_status(uid, pid, conn=conn)
+        scrapyard = scrapyard_status(uid, pid, conn=conn)
     finally:
         conn.close()
 
@@ -694,6 +704,8 @@ def trader_hub_view():
         player=ctx["player_view"],
         storage_caps=ctx["storage_caps"],
         exchange=exchange,
+        fuel_exchange=fuel_exchange,
+        scrapyard=scrapyard,
     )
 
 
@@ -1022,13 +1034,30 @@ def api_galaxy_system():
 @app.route("/shipyard")
 @require_login
 def shipyard_view():
-    player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    player_view, _, planet_row, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
     if player_view is None:
         return redirect(url_for("login"))
+
+    from game.fleet import fleet_schema_ready
+    from game.planet_evolution.repository import get_context_planet
+    from game.shipyard import build_shipyard_page_context
+
+    conn = db()
+    try:
+        planet = get_context_planet(int(session.get("user_id") or 0), conn=conn)
+        shipyard_ctx = (
+            build_shipyard_page_context(int(session.get("user_id") or 0), planet, conn=conn)
+            if fleet_schema_ready(conn)
+            else {"ready": False, "orbital_shipyard_level": 0}
+        )
+    finally:
+        conn.close()
 
     return render_template(
         "shipyard.html",
         player=player_view,
+        planet=planet_row,
+        shipyard=shipyard_ctx,
         energy_total=energy_total,
         energy_used=energy_used,
         storage_caps=storage_caps,
@@ -1058,12 +1087,35 @@ def fleet_view():
     if player_view is None:
         return redirect(url_for("login"))
 
+    from game.config import is_debug_enabled
+    from game.fleet import build_fleet_page_context, fleet_schema_ready
+    from game.models import load_player
+    from game.planet_evolution.repository import get_context_planet
+
+    fleet_ctx: Dict[str, Any] = {"ready": False}
+    conn = db()
+    try:
+        planet = get_context_planet(int(player_view["id"]), conn=conn)
+        player_row = load_player(int(player_view["id"]), conn=conn)
+        can_seed = is_debug_enabled() or bool(player_row and player_row.get("is_admin"))
+        if fleet_schema_ready(conn):
+            fleet_ctx = build_fleet_page_context(
+                player_id=int(player_view["id"]),
+                planet_id=int(planet["id"]),
+                planet=dict(planet),
+                conn=conn,
+                can_seed_test_ships=can_seed,
+            )
+    finally:
+        conn.close()
+
     return render_template(
         "fleet.html",
         player=player_view,
         energy_total=energy_total,
         energy_used=energy_used,
         storage_caps=storage_caps,
+        fleet=fleet_ctx,
     )
 
 
@@ -2113,6 +2165,7 @@ def _payload_from_live_context(
             "name": player_view["name"],
             "metal": round(float(player_view["metal"]), 2),
             "crystal": round(float(player_view["crystal"]), 2),
+            "fuel_cells": round(float(player_view.get("fuel_cells") or 0), 2),
             "energy_used": int(energy_used),
             "energy_total": int(energy_total),
             "energy_ratio": float(ratio),
@@ -2121,6 +2174,7 @@ def _payload_from_live_context(
         "resources": {
             "metal": round(float(player_view["metal"]), 2),
             "crystal": round(float(player_view["crystal"]), 2),
+            "fuel_cells": round(float(player_view.get("fuel_cells") or 0), 2),
             "energy_used": int(energy_used),
             "energy_total": int(energy_total),
             "energy_ratio": float(ratio),
@@ -2153,7 +2207,11 @@ def _payload_from_live_context(
             "energy_hint": (
                 "zero"
                 if int(energy_total) <= 0
-                else ("ok" if float(ratio) >= 1.0 else "low")
+                else (
+                    "ok"
+                    if float(ratio) >= 1.0
+                    else ("low" if float(ratio) >= 0.5 else "critical")
+                )
             ),
         },
     }
@@ -2439,6 +2497,690 @@ def api_exchange():
         job=result if ok else None,
         finish_source="api_exchange",
     )
+
+
+@app.route("/api/trader/scrapyard", methods=["POST"])
+@require_login
+def api_scrapyard_recycle():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    from game.planet_evolution.repository import get_context_planet
+    from game.scrapyard import recycle_ships
+
+    try:
+        amount = int(data.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    ship_key = str(data.get("ship_key") or "").strip()
+
+    conn = db()
+    try:
+        planet = get_context_planet(user_id, conn=conn)
+        ok, reason, result = recycle_ships(
+            player_id=user_id,
+            planet_id=int(planet["id"]),
+            ship_key=ship_key,
+            amount=amount,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    return _action_json_response(
+        ok,
+        reason,
+        payload=result if not ok else None,
+        job=result if ok else None,
+        finish_source="api_scrapyard",
+    )
+
+
+@app.route("/api/trader/fuel-exchange", methods=["POST"])
+@require_login
+def api_fuel_exchange_buy():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    from game.fuel_exchange import buy_fuel_cells, fuel_exchange_schema_ready
+    from game.planet_evolution.repository import get_context_planet
+
+    if not fuel_exchange_schema_ready(db()):
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fuel_exchange")
+        return jsonify({"ok": False, "reason": "fuel_exchange_unavailable", "state": state}), 503
+
+    try:
+        units = int(data.get("units") or data.get("amount") or 0)
+    except (TypeError, ValueError):
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fuel_exchange")
+        return jsonify({"ok": False, "reason": "invalid_amount", "state": state}), 400
+
+    conn = db()
+    try:
+        planet = get_context_planet(user_id, conn=conn)
+        ok, reason, result = buy_fuel_cells(
+            player_id=user_id,
+            planet_id=int(planet["id"]),
+            units=units,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    return _action_json_response(
+        ok,
+        reason,
+        payload=result if not ok else None,
+        job=result if ok else None,
+        finish_source="api_fuel_exchange",
+    )
+
+
+@app.route("/api/fleet/preview", methods=["POST"])
+@require_login
+def api_fleet_preview():
+    from game.fleet import fleet_schema_ready, preview_fleet_flight
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.fleet_calc import normalize_ships
+    from game.planet_evolution.repository import get_context_planet
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+
+    data = request.get_json(silent=True) or {}
+    conn = db()
+    try:
+        planet = get_context_planet(user_id, conn=conn)
+        origin_id = int(data.get("origin_planet_id") or planet["id"])
+        if int(planet["id"]) != origin_id:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+                (origin_id, user_id),
+            )
+            origin_row = cur.fetchone()
+            if not origin_row:
+                return jsonify(fleet_err("origin_not_found")), 400
+            origin_planet = dict(origin_row)
+        else:
+            origin_planet = dict(planet)
+
+        ships = normalize_ships(data.get("ships") or {})
+        if not ships and data.get("ships"):
+            return jsonify(fleet_err("unknown_ship")), 400
+
+        try:
+            speed_percent = int(data.get("speed_percent") or 100)
+        except (TypeError, ValueError):
+            speed_percent = 100
+
+        preview = preview_fleet_flight(
+            origin_planet=origin_planet,
+            target_galaxy=int(data.get("target_galaxy") or origin_planet.get("galaxy") or 1),
+            target_system=int(data.get("target_system") or origin_planet.get("system") or 1),
+            target_position=int(data.get("target_position") or 1),
+            ships=ships,
+            resources=data.get("resources") or {},
+            speed_percent=speed_percent,
+            player_id=user_id,
+            conn=conn,
+        )
+        return jsonify(fleet_ok({"preview": preview}, message_key="fleet_preview_ok"))
+    finally:
+        conn.close()
+
+
+@app.route("/api/fleet/state", methods=["GET"])
+@require_login
+def api_fleet_state():
+    from game.fleet import fleet_schema_ready, get_fleet_live_state
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.planet_evolution.repository import get_context_planet
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+
+    conn = db()
+    try:
+        from game.shipyard import resolve_owned_planet_id
+
+        raw_pid = request.args.get("planet_id")
+        req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+        planet_id, err = resolve_owned_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            return jsonify(fleet_err(err)), 404
+        state = get_fleet_live_state(player_id=user_id, planet_id=int(planet_id), conn=conn)
+        if not state.get("ready"):
+            return jsonify(fleet_err(str(state.get("error") or "fleet_unavailable"))), 400
+        return jsonify(fleet_ok(state, message_key="fleet_state_ok"))
+    finally:
+        conn.close()
+
+
+@app.route("/api/fleet/send", methods=["POST"])
+@require_login
+def api_fleet_send():
+    from game.fleet import fleet_schema_ready, send_fleet
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.fleet_calc import normalize_ships
+    from game.planet_evolution.repository import get_context_planet
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_send")
+        body = fleet_err("fleet_unavailable", data={"state": state})
+        return jsonify(body), 503
+
+    data = request.get_json(silent=True) or {}
+    conn = db()
+    try:
+        planet = get_context_planet(user_id, conn=conn)
+        origin_id = int(data.get("origin_planet_id") or planet["id"])
+        ships = normalize_ships(data.get("ships") or {})
+        if not ships and data.get("ships"):
+            return jsonify(fleet_err("unknown_ship")), 400
+        try:
+            speed_percent = int(data.get("speed_percent") or 100)
+        except (TypeError, ValueError):
+            speed_percent = 100
+
+        ok, reason, result = send_fleet(
+            player_id=user_id,
+            origin_planet_id=origin_id,
+            target_galaxy=int(data.get("target_galaxy") or 0),
+            target_system=int(data.get("target_system") or 0),
+            target_position=int(data.get("target_position") or 0),
+            mission_type=str(data.get("mission_type") or ""),
+            ships=ships,
+            resources=data.get("resources") or {},
+            speed_percent=speed_percent,
+            preset_id=int(data["preset_id"]) if data.get("preset_id") else None,
+            batch_id=int(data["batch_id"]) if data.get("batch_id") else None,
+            colony_name=str(data.get("colony_name") or "").strip() or None,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    if ok and result:
+        live = {
+            "fleet": result.get("fleet"),
+            "updated_ships": result.get("updated_ships"),
+            "updated_resources": result.get("updated_resources"),
+            "active_slots": result.get("active_slots"),
+            "fuel_cost": result.get("fuel_cost"),
+        }
+        return jsonify(fleet_ok(live, message_key="fleet_send_success"))
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_send")
+    return jsonify(fleet_err(reason or "generic", data={"state": state})), 400
+
+
+@app.route("/api/fleet/presets", methods=["GET"])
+@require_login
+def api_fleet_presets_list():
+    from game.fleet import fleet_schema_ready, list_presets
+    from game.fleet_api import fleet_err, fleet_ok
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+    return jsonify(fleet_ok({"presets": list_presets(user_id)}, message_key="fleet_presets_ok"))
+
+
+@app.route("/api/fleet/presets", methods=["POST"])
+@require_login
+def api_fleet_presets_create():
+    from game.fleet import create_preset, fleet_schema_ready
+    from game.fleet_api import fleet_err, fleet_ok
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+
+    data = request.get_json(silent=True) or {}
+    ok, reason, preset = create_preset(
+        user_id,
+        name=str(data.get("name") or ""),
+        preset_type=str(data.get("preset_type") or "custom"),
+        ships_json=data.get("ships_json") or data.get("ships") or {},
+        resources_json=data.get("resources_json") or data.get("resources"),
+        speed_percent=int(data.get("speed_percent") or 100),
+        mission_type=data.get("mission_type"),
+        target_galaxy=data.get("target_galaxy"),
+        target_system=data.get("target_system"),
+        target_position=data.get("target_position"),
+    )
+    if ok:
+        return jsonify(fleet_ok({"preset": preset}, message_key="fleet_preset_saved"))
+    return jsonify(fleet_err(reason)), 400
+
+
+@app.route("/api/fleet/presets/<int:preset_id>", methods=["PUT", "PATCH"])
+@require_login
+def api_fleet_presets_update(preset_id: int):
+    from game.fleet import fleet_schema_ready, update_preset
+    from game.fleet_api import fleet_err, fleet_ok
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+
+    data = request.get_json(silent=True) or {}
+    fields = dict(data)
+    if "ships" in fields and "ships_json" not in fields:
+        fields["ships_json"] = fields.pop("ships")
+    if "resources" in fields and "resources_json" not in fields:
+        fields["resources_json"] = fields.pop("resources")
+
+    ok, reason, preset = update_preset(preset_id, user_id, fields)
+    if ok:
+        return jsonify(fleet_ok({"preset": preset}, message_key="fleet_preset_updated"))
+    return jsonify(fleet_err(reason)), 400
+
+
+@app.route("/api/fleet/presets/<int:preset_id>", methods=["DELETE"])
+@require_login
+def api_fleet_presets_delete(preset_id: int):
+    from game.fleet import delete_preset, fleet_schema_ready
+    from game.fleet_api import fleet_err, fleet_ok
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+
+    ok, reason = delete_preset(preset_id, user_id)
+    if ok:
+        return jsonify(fleet_ok({"preset_id": preset_id}, message_key="fleet_preset_deleted"))
+    return jsonify(fleet_err(reason)), 404
+
+
+@app.route("/api/fleet/dev/seed-ships", methods=["POST"])
+@require_login
+def api_fleet_dev_seed_ships():
+    """Dev/admin only: stack test ships on active planet (no shipyard required)."""
+    from game.config import is_debug_enabled
+    from game.fleet import fleet_schema_ready, seed_planet_ships_stack
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.models import load_player
+    from game.planet_evolution.repository import get_context_planet
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+
+    player = load_player(user_id)
+    allow = is_debug_enabled() or bool(player and player.get("is_admin"))
+    if not allow:
+        return jsonify(fleet_err("forbidden")), 403
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+
+    data = request.get_json(silent=True) or {}
+    conn = db()
+    try:
+        planet = get_context_planet(user_id, conn=conn)
+        planet_id = int(data.get("planet_id") or planet["id"])
+        ok, reason, ships = seed_planet_ships_stack(
+            planet_id,
+            user_id,
+            ships=data.get("ships"),
+            replace=bool(data.get("replace")),
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    if ok:
+        return jsonify(fleet_ok({"ships": ships, "planet_id": planet_id}, message_key="fleet_dev_seed_ok"))
+    return jsonify(fleet_err(reason)), 400
+
+
+@app.route("/api/dev/fleet/seed-ships", methods=["POST"])
+@require_login
+def api_dev_fleet_seed_ships():
+    """Alias for dev/admin test ship seed."""
+    return api_fleet_dev_seed_ships()
+
+
+@app.route("/api/ships/<ship_key>")
+@require_login
+def api_ship_detail(ship_key: str):
+    from game.models import get_planet_buildings, get_research_levels
+    from game.planet_evolution.repository import get_context_planet
+    from game.ship_detail import build_ship_detail_card
+
+    buildings = None
+    research = None
+    user_id = int(session.get("user_id") or 0)
+    if user_id:
+        conn = db()
+        try:
+            planet = get_context_planet(user_id, conn=conn)
+            buildings = get_planet_buildings(int(planet["id"]), conn=conn)
+            research = get_research_levels(user_id=user_id, conn=conn)
+        finally:
+            conn.close()
+
+    card, err = build_ship_detail_card(ship_key, buildings=buildings, research=research)
+    if err:
+        return (
+            render_template(
+                "partials/ship_detail_error.html",
+                error_key=err,
+            ),
+            404,
+        )
+    return render_template("partials/ship_detail_view.html", card=card)
+
+
+@app.route("/api/shipyard", methods=["GET"])
+@require_login
+def api_shipyard_state():
+    from game.fleet import fleet_schema_ready
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.planet_evolution.repository import get_context_planet
+    from game.shipyard import build_shipyard_api_payload
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+
+    conn = db()
+    try:
+        if not fleet_schema_ready(conn):
+            return jsonify(fleet_err("fleet_unavailable")), 503
+        from game.shipyard import resolve_owned_planet_id
+
+        raw_pid = request.args.get("planet_id")
+        req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+        planet_id, err = resolve_owned_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            return jsonify(fleet_err(err)), 404
+        payload = build_shipyard_api_payload(user_id, int(planet_id), conn=conn)
+    finally:
+        conn.close()
+
+    return jsonify(fleet_ok(payload))
+
+
+@app.route("/api/shipyard/build", methods=["POST"])
+@require_login
+def api_shipyard_build():
+    from game.fleet import fleet_schema_ready
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.planet_evolution.repository import get_context_planet
+    from game.shipyard import build_ship
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+
+    data = request.get_json(silent=True) or {}
+    ship_key = str(data.get("ship_key") or "").strip()
+    try:
+        amount = int(data.get("amount") or 1)
+    except (TypeError, ValueError):
+        amount = 0
+
+    conn = db()
+    try:
+        if not fleet_schema_ready(conn):
+            return jsonify(fleet_err("fleet_unavailable")), 503
+        from game.shipyard import resolve_owned_planet_id
+
+        raw_pid = data.get("planet_id")
+        req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+        planet_id, err = resolve_owned_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            return jsonify(fleet_err(err)), 404
+        ok, reason, result = build_ship(
+            player_id=user_id,
+            planet_id=int(planet_id),
+            ship_key=ship_key,
+            amount=amount,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    if ok:
+        return jsonify(fleet_ok(result, message_key="shipyard_build_ok"))
+    return jsonify(fleet_err(reason)), 400
+
+
+@app.route("/api/shipyard/queue/cancel", methods=["POST"])
+@require_login
+def api_shipyard_queue_cancel():
+    from game.fleet import fleet_schema_ready
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.shipyard import cancel_shipyard_job, resolve_owned_planet_id
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        job_id = int(data.get("job_id") or 0)
+    except (TypeError, ValueError):
+        job_id = 0
+    if job_id <= 0:
+        return jsonify(fleet_err("invalid_job")), 400
+
+    conn = db()
+    try:
+        if not fleet_schema_ready(conn):
+            return jsonify(fleet_err("fleet_unavailable")), 503
+        raw_pid = data.get("planet_id")
+        req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+        planet_id, err = resolve_owned_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            return jsonify(fleet_err(err)), 404
+        ok, reason, payload = cancel_shipyard_job(
+            player_id=user_id,
+            planet_id=int(planet_id),
+            job_id=job_id,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    if ok:
+        return jsonify(fleet_ok(payload, message_key="shipyard_cancel_ok"))
+    return jsonify(fleet_err(reason)), 400
+
+
+@app.route("/api/shipyard/queue/move", methods=["POST"])
+@require_login
+def api_shipyard_queue_move():
+    from game.fleet import fleet_schema_ready
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.shipyard import move_shipyard_job, resolve_owned_planet_id
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        job_id = int(data.get("job_id") or 0)
+    except (TypeError, ValueError):
+        job_id = 0
+    direction = str(data.get("direction") or "").strip().lower()
+    if job_id <= 0 or direction not in ("up", "down"):
+        return jsonify(fleet_err("invalid_request")), 400
+
+    conn = db()
+    try:
+        if not fleet_schema_ready(conn):
+            return jsonify(fleet_err("fleet_unavailable")), 503
+        raw_pid = data.get("planet_id")
+        req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+        planet_id, err = resolve_owned_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            return jsonify(fleet_err(err)), 404
+        ok, reason, payload = move_shipyard_job(
+            player_id=user_id,
+            planet_id=int(planet_id),
+            job_id=job_id,
+            direction=direction,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    if ok:
+        return jsonify(fleet_ok(payload, message_key="shipyard_move_ok"))
+    return jsonify(fleet_err(reason)), 400
+
+
+@app.route("/api/fleet/logistics/collect", methods=["POST"])
+@require_login
+def api_fleet_logistics_collect():
+    from game.fleet import collect_resources, fleet_schema_ready
+    from game.fleet_api import fleet_err, fleet_ok
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+
+    data = request.get_json(silent=True) or {}
+    ok, reason, payload = collect_resources(
+        player_id=user_id,
+        target_planet_id=int(data.get("target_planet_id") or 0),
+        source_planet_ids=[int(x) for x in (data.get("source_planet_ids") or [])],
+        resources_mode=str(data.get("resources_mode") or "all"),
+        resources=data.get("resources"),
+        ships_selection_mode=str(data.get("ships_selection_mode") or "manual"),
+        preset_id=int(data["preset_id"]) if data.get("preset_id") else None,
+    )
+    if payload:
+        status = 200 if payload.get("validated") else 400
+        if payload.get("validated"):
+            return jsonify(fleet_ok(payload, message_key="fleet_logistics_not_implemented")), status
+        return jsonify(fleet_err(reason or "logistics_not_implemented", data=payload)), status
+    return jsonify(fleet_err(reason)), 400
+
+
+@app.route("/api/fleet/logistics/distribute", methods=["POST"])
+@require_login
+def api_fleet_logistics_distribute():
+    from game.fleet import distribute_resources, fleet_schema_ready
+    from game.fleet_api import fleet_err, fleet_ok
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+
+    data = request.get_json(silent=True) or {}
+    ok, reason, payload = distribute_resources(
+        player_id=user_id,
+        origin_planet_id=int(data.get("origin_planet_id") or 0),
+        target_planet_ids=[int(x) for x in (data.get("target_planet_ids") or [])],
+        resources_mode=str(data.get("resources_mode") or "equal"),
+        resources=data.get("resources"),
+        ships_selection_mode=str(data.get("ships_selection_mode") or "manual"),
+        preset_id=int(data["preset_id"]) if data.get("preset_id") else None,
+    )
+    if payload:
+        status = 200 if payload.get("validated") else 400
+        if payload.get("validated"):
+            return jsonify(fleet_ok(payload, message_key="fleet_logistics_not_implemented")), status
+        return jsonify(fleet_err(reason or "logistics_not_implemented", data=payload)), status
+    return jsonify(fleet_err(reason)), 400
+
+
+@app.route("/api/fleet/mass-expedition", methods=["POST"])
+@require_login
+def api_fleet_mass_expedition():
+    from game.fleet import fleet_schema_ready, mass_expedition
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.planet_evolution.repository import get_context_planet
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+
+    data = request.get_json(silent=True) or {}
+    conn = db()
+    try:
+        planet = get_context_planet(user_id, conn=conn)
+        origin_id = int(data.get("origin_planet_id") or planet["id"])
+        ok, reason, result = mass_expedition(
+            player_id=user_id,
+            origin_planet_id=origin_id,
+            preset_id=int(data.get("preset_id") or 0),
+            waves=int(data.get("waves") or 1),
+            target_slots=int(data["target_slots"]) if data.get("target_slots") is not None else None,
+            speed_percent=int(data["speed_percent"]) if data.get("speed_percent") is not None else None,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    if ok and result:
+        return jsonify(fleet_ok(result, message_key="fleet_mass_expo_success"))
+    return jsonify(fleet_err(reason)), 400
+
+
+@app.route("/api/admin/planet/<int:planet_id>/ships", methods=["POST"])
+@require_admin_api
+def api_admin_planet_ships(planet_id: int):
+    from game.fleet import fleet_schema_ready, seed_planet_ships_stack
+    from game.fleet_api import fleet_err, fleet_ok
+
+    if not fleet_schema_ready(db()):
+        return _admin_json(fleet_err("fleet_unavailable"))
+
+    data = _admin_body()
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+        row = cur.fetchone()
+        if not row:
+            return _admin_json(fleet_err("planet_not_found"))
+        owner_id = int(row["player_id"])
+        ok, reason, ships = seed_planet_ships_stack(
+            int(planet_id),
+            owner_id,
+            ships=data.get("ships"),
+            replace=bool(data.get("replace")),
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    if ok:
+        return _admin_json(fleet_ok({"ships": ships, "planet_id": planet_id}, message_key="fleet_dev_seed_ok"))
+    return _admin_json(fleet_err(reason))
 
 
 @app.route("/api/buildings/upgrade", methods=["POST"])

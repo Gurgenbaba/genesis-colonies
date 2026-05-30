@@ -246,6 +246,7 @@ def notify_player(
     category: str = "system",
     metadata: dict[str, Any] | None = None,
     sender_name: str | None = None,
+    conn=None,
 ) -> dict[str, Any]:
     """Helper for other systems to deliver inbox messages (plain text subject/body)."""
     pid = _valid_player_id(player_id)
@@ -259,6 +260,7 @@ def notify_player(
         sender_player_id=None,
         sender_name=sender_name or "System",
         metadata=metadata,
+        conn=conn,
     )
 
 
@@ -294,6 +296,8 @@ def notify_combat(
     subject: str,
     body: str,
     metadata: dict[str, Any] | None = None,
+    *,
+    conn=None,
 ) -> dict[str, Any]:
     return notify_player(
         player_id,
@@ -302,6 +306,7 @@ def notify_combat(
         category="combat",
         metadata=metadata,
         sender_name="Kampfbericht",
+        conn=conn,
     )
 
 
@@ -310,6 +315,8 @@ def notify_espionage(
     subject: str,
     body: str,
     metadata: dict[str, Any] | None = None,
+    *,
+    conn=None,
 ) -> dict[str, Any]:
     return notify_player(
         player_id,
@@ -318,6 +325,7 @@ def notify_espionage(
         category="espionage",
         metadata=metadata,
         sender_name="Spionagebericht",
+        conn=conn,
     )
 
 
@@ -326,6 +334,8 @@ def notify_expedition(
     subject: str,
     body: str,
     metadata: dict[str, Any] | None = None,
+    *,
+    conn=None,
 ) -> dict[str, Any]:
     return notify_player(
         player_id,
@@ -334,6 +344,7 @@ def notify_expedition(
         category="expedition",
         metadata=metadata,
         sender_name="Expeditionsbericht",
+        conn=conn,
     )
 
 

@@ -278,14 +278,15 @@
     },
     polling: {
       running: false,
+      started: false,
       timeoutId: null,
       inFlight: false,
       abort: null,
       lastInterval: 0,
       backoff: 0,
-      intervalActive: 1000,
-      intervalIdle: 4000,
-      intervalHidden: 12000,
+      intervalActive: 3000,
+      intervalIdle: 5000,
+      intervalHidden: 15000,
     },
     modules: {},
   };
@@ -453,6 +454,8 @@
     if (path.endsWith("/research")) return "research";
     if (path.endsWith("/planet-evolution")) return "planet_evolution";
     if (path.endsWith("/trader-hub")) return "trader_hub";
+    if (path.endsWith("/fleet")) return "fleet";
+    if (path.endsWith("/shipyard")) return "shipyard";
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
     if (path.endsWith("/messages")) return "messages";
@@ -525,6 +528,7 @@
     console.debug("[GC] polling stopped");
     const p = GC.polling;
     p.running = false;
+    p.started = false;
     if (p.timeoutId) {
       clearTimeout(p.timeoutId);
       p.timeoutId = null;
@@ -534,6 +538,33 @@
     p.inFlight = false;
     p.abort = null;
   };
+
+  /** Dedicated poll timer — not registered in pageLifecycle (survives until stopPolling). */
+  function scheduleGameStatePoll(ms) {
+    const p = GC.polling;
+    if (p.timeoutId) clearTimeout(p.timeoutId);
+    p.timeoutId = setTimeout(p._pollTick || (p._pollTick = async function gameStatePollTick() {
+      const pol = GC.polling;
+      if (!pol.running || !shouldRunGameLoop() || _authLoopAborted) {
+        GC.stopPolling();
+        return;
+      }
+      try {
+        await GC.refreshGameState("poll");
+      } catch (_) {}
+      if (!pol.running || !shouldRunGameLoop() || _authLoopAborted) {
+        GC.stopPolling();
+        return;
+      }
+      GC.startProgressTicker();
+      const active = lastHadActiveJob || lastHadActiveResearch;
+      let interval = pol.intervalIdle;
+      if (active) interval = pol.intervalActive;
+      if (document.hidden) interval = pol.intervalHidden;
+      pol.lastInterval = interval;
+      scheduleGameStatePoll(interval);
+    }), Math.max(0, ms));
+  }
 
   GC.stopStatusPoller = GC.stopPolling;
   GC.shouldRunGameLoop = shouldRunGameLoop;
@@ -550,41 +581,30 @@
       console.debug("[GC] polling skipped (auth aborted)");
       return;
     }
-    GC.stopPolling();
+
     const p = GC.polling;
+    let next = p.intervalIdle;
+    if (anyActive) next = p.intervalActive;
+    if (document.hidden) next = p.intervalHidden;
+    if (p.backoff && isError) next = Math.max(next, p.backoff);
+
+    if (p.running && p.timeoutId && !isError) {
+      p.lastInterval = next;
+      console.debug("[GC] polling already active", next, "ms");
+      return;
+    }
+
+    GC.stopPolling();
     if (document.hidden) {
       console.debug("[GC] polling paused (hidden tab)");
       return;
     }
-    let next = p.intervalIdle;
-    if (anyActive) next = p.intervalActive;
-    if (p.backoff && isError) next = Math.max(next, p.backoff);
 
     p.running = true;
+    p.started = true;
     p.lastInterval = next;
     console.debug("[GC] polling started", next, "ms");
-
-    const tick = async () => {
-      if (!p.running || !shouldRunGameLoop() || _authLoopAborted) {
-        GC.stopPolling();
-        return;
-      }
-      try {
-        await GC.refreshGameState("poll");
-      } catch (_) {}
-      if (!p.running || !shouldRunGameLoop() || _authLoopAborted) {
-        GC.stopPolling();
-        return;
-      }
-      GC.startProgressTicker();
-      const active = lastHadActiveJob || lastHadActiveResearch;
-      let interval = p.intervalIdle;
-      if (active) interval = p.intervalActive;
-      if (document.hidden) interval = p.intervalHidden;
-      p.lastInterval = interval;
-      p.timeoutId = GC.setSafeTimeout(tick, interval);
-    };
-    p.timeoutId = GC.setSafeTimeout(tick, next);
+    scheduleGameStatePoll(next);
   };
 
   GC.initPage = function initPage(opts) {
@@ -634,7 +654,6 @@
       GC.refreshGameState("page_init");
       GC.startProgressTicker();
       if (typeof GC.initChat === "function") GC.initChat();
-      if (typeof GC.resumeChatPolling === "function") GC.resumeChatPolling();
     };
 
     if (page === "messages") {
@@ -980,8 +999,9 @@
   }
 
   function patchOverviewEnergyHint(overview, data) {
-    const hint = document.querySelector(".overview-hint, #overview-energy-hint");
-    if (!hint) return;
+    const hint = document.getElementById("overview-energy-hint");
+    const strip = document.getElementById("overview-energy-strip");
+    if (!hint && !strip) return;
 
     const hintKey = overview?.energy_hint ?? overview?.status?.energy?.hint;
     const total = Math.floor(
@@ -1001,13 +1021,24 @@
     if (!state) {
       if (total <= 0) state = "zero";
       else if (ratio >= 1) state = "ok";
-      else state = "low";
+      else if (ratio >= 0.5) state = "low";
+      else state = "critical";
     }
 
-    hint.classList.remove("overview-energy-zero", "overview-energy-ok", "overview-energy-low");
-    if (state === "zero") hint.classList.add("overview-energy-zero");
-    else if (state === "ok") hint.classList.add("overview-energy-ok");
-    else hint.classList.add("overview-energy-low");
+    const stateClasses = [
+      "overview-energy-zero",
+      "overview-energy-ok",
+      "overview-energy-low",
+      "overview-energy-critical",
+    ];
+    [hint, strip].forEach((el) => {
+      if (!el) return;
+      el.classList.remove(...stateClasses);
+      if (state === "zero") el.classList.add("overview-energy-zero");
+      else if (state === "ok") el.classList.add("overview-energy-ok");
+      else if (state === "low") el.classList.add("overview-energy-low");
+      else if (state === "critical") el.classList.add("overview-energy-critical");
+    });
   }
 
   function patchOverviewStatus(overview, data, buildings, prod) {
@@ -1046,6 +1077,73 @@
     const activities = status?.activities;
     if (!actList || !Array.isArray(activities)) return;
 
+    const hrefFor = (key) => {
+      const map = {
+        build: "/buildings",
+        research: "/research",
+        shipyard: "/shipyard",
+        fleet: "/fleet",
+      };
+      if (map[key]) return map[key];
+      if (String(key || "").startsWith("fleet_")) return "/fleet";
+      return "/overview";
+    };
+
+    const renderActivities = () => {
+      actList.replaceChildren();
+      activities.forEach((act) => {
+        const li = document.createElement("li");
+        li.className = `overview-activity-row overview-activity-${act.key} overview-activity-${act.state || "idle"}`;
+        li.dataset.activityKey = act.key;
+        if (act.finish_at) li.dataset.finishAt = String(act.finish_at);
+        if (act.remaining != null) li.dataset.remaining = String(act.remaining);
+
+        const link = document.createElement("a");
+        link.className = "overview-activity-link";
+        link.href = hrefFor(act.key);
+
+        const typeSpan = document.createElement("span");
+        typeSpan.className = "overview-activity-type";
+        const typeKey = act.key.startsWith("fleet_") ? "fleet" : act.key;
+        typeSpan.textContent = t(`overview_activity_${typeKey}`, typeKey);
+
+        const body = document.createElement("span");
+        body.className = "overview-activity-body";
+
+        if (act.state === "active") {
+          const nameEl = document.createElement("span");
+          nameEl.className = "overview-activity-name";
+          nameEl.textContent = t(act.label_key, act.label_key);
+          const detailEl = document.createElement("span");
+          detailEl.className = "overview-activity-detail gc-mono";
+          detailEl.textContent = act.summary || "";
+          const etaEl = document.createElement("span");
+          etaEl.className = "overview-activity-eta gc-mono";
+          etaEl.dataset.activityEta = "1";
+          etaEl.textContent = act.remaining_display || formatEta(act.remaining || 0);
+          body.append(nameEl, detailEl, etaEl);
+        } else {
+          const idleEl = document.createElement("span");
+          idleEl.className = "overview-activity-idle";
+          idleEl.textContent = t(act.label_key, "Ready");
+          body.appendChild(idleEl);
+        }
+
+        link.append(typeSpan, body);
+        li.appendChild(link);
+        actList.appendChild(li);
+      });
+    };
+
+    const keysMatch =
+      actList.querySelectorAll("[data-activity-key]").length === activities.length &&
+      activities.every((act) => actList.querySelector(`[data-activity-key="${act.key}"]`));
+
+    if (!keysMatch) {
+      renderActivities();
+      return;
+    }
+
     activities.forEach((act) => {
       const row = actList.querySelector(`[data-activity-key="${act.key}"]`);
       if (!row) return;
@@ -1060,8 +1158,10 @@
 
       const etaEl = row.querySelector("[data-activity-eta]");
       const detailEl = row.querySelector(".overview-activity-detail");
+      const nameEl = row.querySelector(".overview-activity-name");
 
       if (act.state === "active") {
+        if (nameEl) _setIfChanged(nameEl, t(act.label_key, act.label_key));
         if (detailEl && act.summary) _setIfChanged(detailEl, act.summary);
         if (etaEl) {
           etaEl.style.display = "";
@@ -1235,7 +1335,7 @@
     metal_storage: { levelId: "level-metal_storage", statusId: "status-metal_storage", btnId: "btn-metal_storage" },
     crystal_storage: { levelId: "level-crystal_storage", statusId: "status-crystal_storage", btnId: "btn-crystal_storage" },
     command_center: { levelId: "level-command_center", statusId: "status-command_center", btnId: "btn-command_center" },
-    shipyard: { levelId: "level-shipyard", statusId: "status-shipyard", btnId: "btn-shipyard" },
+    orbital_shipyard: { levelId: "level-orbital_shipyard", statusId: "status-orbital_shipyard", btnId: "btn-orbital_shipyard" },
     defense_factory: { levelId: "level-defense_factory", statusId: "status-defense_factory", btnId: "btn-defense_factory" },
     barracks: { levelId: "level-barracks", statusId: "status-barracks", btnId: "btn-barracks" },
     radar_array: { levelId: "level-radar_array", statusId: "status-radar_array", btnId: "btn-radar_array" },
@@ -1255,7 +1355,7 @@
     metal_storage: "Ferronit-Depot",
     crystal_storage: "Crytite-Silo",
     command_center: "Kommandozentrale",
-    shipyard: "Werft",
+    orbital_shipyard: "Orbitalwerft",
     defense_factory: "Verteidigungsfabrik",
     barracks: "Orbital-Kaserne",
     radar_array: "Deep-Space-Radar-Array",
@@ -1515,7 +1615,7 @@
       const totalRaw = job.total || job.total_seconds || 0;
       const total = Math.max(1, parseInt(totalRaw, 10) || (remaining + 1));
       const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
-      const iconSrc = `/static/img/buildings/${bType}.png`;
+      const iconSrc = buildingIconUrl(bType);
       const isActive = index === 0;
       const finishTime = Number(job.finish_time || 0);
 
@@ -1799,12 +1899,27 @@
   const _last = {
     metal: null,
     crystal: null,
+    fuelCells: null,
     energyUsed: null,
     energyTotal: null,
     storageMetal: null,
     storageCrystal: null,
+    prodMetal: null,
+    prodCrystal: null,
+    prodFuelCells: null,
     activePlanetId: null,
   };
+
+  const BUILDING_ICON_FILE = {
+    orbital_shipyard: "shipyard",
+    fuel_cell_plant: "solar_plant",
+  };
+
+  function buildingIconUrl(buildingType) {
+    const key = String(buildingType || "").trim();
+    const file = BUILDING_ICON_FILE[key] || key;
+    return `/static/img/buildings/${file}.png`;
+  }
 
   // =========================
   // Messages unread badges (game-state polling)
@@ -1857,6 +1972,23 @@
         _last.activePlanetId = activePlanetId;
       }
 
+      const shipyardPage = document.getElementById("shipyard-page");
+      if (shipyardPage && shipyardPage.dataset.ready === "1") {
+        const domPid = Number(shipyardPage.dataset.planetId || 0);
+        if (
+          activePlanetId > 0 &&
+          domPid > 0 &&
+          activePlanetId !== domPid &&
+          shipyardPage.dataset.planetReloading !== "1" &&
+          typeof GC.reloadCurrentPage === "function"
+        ) {
+          shipyardPage.dataset.planetReloading = "1";
+          Promise.resolve(GC.reloadCurrentPage()).finally(() => {
+            delete shipyardPage.dataset.planetReloading;
+          });
+        }
+      }
+
       if (typeof GC.updateHeaderPlanetSwitcherFromState === "function") {
         GC.updateHeaderPlanetSwitcherFromState(data);
       }
@@ -1878,14 +2010,20 @@
 
       const metal = Math.floor(Number(p.metal ?? resources.metal ?? 0));
       const crystal = Math.floor(Number(p.crystal ?? resources.crystal ?? 0));
+      const fuelCells = Math.floor(Number(p.fuel_cells ?? resources.fuel_cells ?? 0));
       const used = Math.floor(Number(p.energy_used ?? energy.used ?? resources.energy_used ?? 0));
       const total = Math.floor(Number(p.energy_total ?? energy.total ?? resources.energy_total ?? 0));
+
+      const prodMetal = Math.floor(Number(prod.metal_mine ?? prod.metal ?? 0));
+      const prodCrystal = Math.floor(Number(prod.crystal_mine ?? prod.crystal ?? 0));
+      const prodFuelCells = Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0));
 
       // --- Top-Bar Ressourcen (alle sichtbaren Instanzen aktualisieren) ---
       const metalValEls = document.querySelectorAll(".res-value.metal");
       const metalCapEls = document.querySelectorAll(".res-cap.metal");
       const cryValEls = document.querySelectorAll(".res-value.crystal");
       const cryCapEls = document.querySelectorAll(".res-cap.crystal");
+      const fuelValEls = document.querySelectorAll(".res-value.fuel_cells");
 
       if (_last.metal !== metal) {
         metalValEls.forEach((el) => { el.textContent = fmtNumber(metal); });
@@ -1903,6 +2041,41 @@
       if (_last.storageCrystal !== storageCrystal && storageCrystal > 0) {
         cryCapEls.forEach((el) => { el.textContent = fmtNumber(storageCrystal); });
         _last.storageCrystal = storageCrystal;
+      }
+
+      if (_last.fuelCells !== fuelCells) {
+        fuelValEls.forEach((el) => { el.textContent = fmtNumber(fuelCells); });
+        _last.fuelCells = fuelCells;
+      }
+
+      const rateLabel = (key, perHour) => {
+        const ph = Math.floor(Number(perHour) || 0);
+        const el = document.querySelector(`[data-res-rate="${key}"]`);
+        if (!el) return;
+        if (ph > 0) {
+          const sign = ph >= 0 ? "+" : "";
+          el.textContent = `${sign}${fmtNumber(ph)}/h`;
+          el.style.visibility = "visible";
+          el.removeAttribute("hidden");
+          el.removeAttribute("aria-hidden");
+        } else {
+          el.textContent = "";
+          el.style.visibility = "hidden";
+          el.setAttribute("aria-hidden", "true");
+        }
+      };
+
+      if (_last.prodMetal !== prodMetal) {
+        rateLabel("metal", prodMetal);
+        _last.prodMetal = prodMetal;
+      }
+      if (_last.prodCrystal !== prodCrystal) {
+        rateLabel("crystal", prodCrystal);
+        _last.prodCrystal = prodCrystal;
+      }
+      if (_last.prodFuelCells !== prodFuelCells) {
+        rateLabel("fuel_cells", prodFuelCells);
+        _last.prodFuelCells = prodFuelCells;
       }
 
       const energyText = `${fmtNumber(used)}/${fmtNumber(total)}`;
@@ -2179,8 +2352,15 @@
         if (data.server_time) setServerTime(data.server_time);
 
         const anyActive = applyGameStateData(data, reason);
-        if (reason !== "poll" || anyActive) {
-          GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch);
+        const wantPolling = anyActive || lastHadActiveJob || lastHadActiveResearch;
+        if (reason === "poll") {
+          const p = GC.polling;
+          if (wantPolling && p.running && p.lastInterval > p.intervalActive + 100) {
+            GC.stopPolling();
+            GC.startPolling(true);
+          }
+        } else if (reason === "page_init" || reason === "tab_visible" || !GC.polling.running) {
+          GC.startPolling(wantPolling);
         }
         return data;
       } catch (err) {
@@ -2199,7 +2379,7 @@
         logStatusPollErrorOnce(reason, err);
         markStatusWidgetOffline();
         p.backoff = Math.min(60000, (p.backoff || 2000) * 1.6);
-        if (reason !== "poll" && shouldRunGameLoop() && !_authLoopAborted) {
+        if (reason !== "poll" && shouldRunGameLoop() && !_authLoopAborted && !GC.polling.running) {
           GC.startPolling(lastHadActiveJob || lastHadActiveResearch, true);
         }
         throw err;
@@ -2476,6 +2656,1013 @@
 
   function initTraderHub() {
     initExchangePanel();
+    initFuelExchangePanel();
+    initScrapyardPanel();
+  }
+
+  function parseFleetPageData(page) {
+    const el = document.getElementById("fleet-page-state");
+    if (el && el.textContent) {
+      try { return JSON.parse(el.textContent); } catch (_) {}
+    }
+    return {};
+  }
+
+  function getFleetRuntime(page) {
+    if (!page._fleetRt) {
+      page._fleetRt = {
+        data: parseFleetPageData(page),
+        lastPreview: null,
+        sending: false,
+        previewTimer: null,
+      };
+    }
+    return page._fleetRt;
+  }
+
+  function fleetFuelLabel(tt, fuelResource) {
+    if (fuelResource === "fuel_cells") return tt("resource_fuel_cells", "Fuel Cells");
+    if (fuelResource === "metal") return tt("resource_metal", "Ferronit");
+    return tt("resource_crystal", "Crytite");
+  }
+
+  function bindFleetOnce() {
+    if (GC._fleetEventsBound) return;
+    GC._fleetEventsBound = true;
+
+    const tt = (key, fallback) => t(key, fallback);
+    const fleetPayload = (res) => ((res && res.data && typeof res.data === "object") ? res.data : res) || {};
+    const apiError = (res) => (res && (res.error || res.reason)) || "generic";
+    const reasonText = (reason) => tt(`fleet_error_${reason}`, tt("fleet_error_generic", "Fleet action failed."));
+
+    const getPage = () => {
+      const page = document.getElementById("fleet-page");
+      return page && page.dataset.ready === "1" ? page : null;
+    };
+
+    const getForm = (page) => page.querySelector("#fleet-send-form");
+
+    const getShipsSelection = (page) => {
+      const ships = {};
+      page.querySelectorAll("[data-ship-input]").forEach((inp) => {
+        const key = inp.getAttribute("data-ship-input");
+        const val = parseInt(inp.value || "0", 10);
+        if (key && val > 0) ships[key] = val;
+      });
+      return ships;
+    };
+
+    const getResourcesSelection = (page) => ({
+      metal: parseInt(page.querySelector("[data-fleet-res-metal]")?.value || "0", 10) || 0,
+      crystal: parseInt(page.querySelector("[data-fleet-res-crystal]")?.value || "0", 10) || 0,
+    });
+
+    const getTargetCoords = (page) => {
+      const form = getForm(page);
+      return {
+        target_galaxy: parseInt(form?.querySelector('[name="target_galaxy"]')?.value || "1", 10),
+        target_system: parseInt(form?.querySelector('[name="target_system"]')?.value || "1", 10),
+        target_position: parseInt(form?.querySelector('[name="target_position"]')?.value || "1", 10),
+      };
+    };
+
+    const formatFleetDuration = (sec) => {
+      const s = Math.max(0, Math.ceil(Number(sec) || 0));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const secR = s % 60;
+      if (h > 0) return `${h}h ${m}m`;
+      if (m > 0) return `${m}m ${secR}s`;
+      return `${secR}s`;
+    };
+
+    const renderShipChips = (ships) => Object.entries(ships || {})
+      .map(([key, qty]) => `<span class="fleet-ship-chip">${tt(`fleet_ship_${key}`, key)} × ${Number(qty).toLocaleString()}</span>`)
+      .join("");
+
+    const renderActiveFleets = (page, fleets) => {
+      const activeListEl = page.querySelector("[data-fleet-active-list]");
+      if (!activeListEl) return;
+      const list = Array.isArray(fleets) ? fleets : [];
+      if (!list.length) {
+        activeListEl.innerHTML = `<p class="fleet-empty" data-fleet-empty>${tt("fleet_no_active", "No active fleets.")}</p>`;
+        return;
+      }
+      activeListEl.innerHTML = list.map((mv) => {
+        const countdown = mv.status === "returning" && mv.return_at
+          ? `<span>${tt("fleet_return_at")}: <time data-countdown="${mv.return_at}"></time></span>`
+          : mv.status === "holding" && mv.holding_until
+            ? `<span>${tt("fleet_holding_until")}: <time data-countdown="${mv.holding_until}"></time></span>`
+            : mv.arrival_at
+              ? `<span>${tt("fleet_arrival_at")}: <time data-countdown="${mv.arrival_at}"></time></span>`
+              : "";
+        const cargo = [];
+        if (mv.resources?.metal) cargo.push(`${tt("resource_metal")}: ${Number(mv.resources.metal).toLocaleString()}`);
+        if (mv.resources?.crystal) cargo.push(`${tt("resource_crystal")}: ${Number(mv.resources.crystal).toLocaleString()}`);
+        return `<article class="fleet-active-card" data-fleet-id="${mv.id}" data-status="${mv.status}">
+          <div class="fleet-active-row">
+            <span class="fleet-active-mission">${tt(`fleet_mission_${mv.mission_type}`, mv.mission_type)}</span>
+            <span class="fleet-active-status">${tt(`fleet_status_${mv.status}`, mv.status)}</span>
+          </div>
+          <div class="fleet-active-coords gc-mono">${mv.origin_coords || ""} → ${mv.target_coords || ""}</div>
+          <div class="fleet-active-ships">${renderShipChips(mv.ships)}</div>
+          ${cargo.length ? `<div class="fleet-active-cargo">${cargo.map((c) => `<span>${c}</span>`).join(" ")}</div>` : ""}
+          <div class="fleet-active-times gc-mono">${countdown}</div>
+        </article>`;
+      }).join("");
+    };
+
+    const renderPresetSelect = (page, presets) => {
+      const optionHtml = `<option value="">${tt("fleet_preset_none", "— none —")}</option>` +
+        (presets || []).map((p) =>
+          `<option value="${p.id}">[${tt(`fleet_preset_type_${p.preset_type}`, p.preset_type)}] ${String(p.name || "").replace(/</g, "&lt;")}</option>`
+        ).join("");
+      [page.querySelector("[data-fleet-preset-select]"), page.querySelector("[data-fleet-mass-preset]")].forEach((sel) => {
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = optionHtml;
+        if (current) sel.value = current;
+      });
+    };
+
+    const renderPresetList = (page, presets) => {
+      const presetListEl = page.querySelector("[data-fleet-preset-list]");
+      if (!presetListEl) return;
+      const list = Array.isArray(presets) ? presets : [];
+      if (!list.length) {
+        presetListEl.innerHTML = `<li class="fleet-preset-empty">${tt("fleet_no_presets", "No presets saved yet.")}</li>`;
+        return;
+      }
+      presetListEl.innerHTML = list.map((p) =>
+        `<li class="fleet-preset-item" data-preset-id="${p.id}">
+          <span class="fleet-preset-type">${tt(`fleet_preset_type_${p.preset_type}`, p.preset_type)}</span>
+          <span class="fleet-preset-name">${String(p.name || "").replace(/</g, "&lt;")}</span>
+          <div class="fleet-preset-actions">
+            <button type="button" class="gc-btn gc-btn-ghost" data-preset-load="${p.id}">${tt("fleet_preset_load_btn", "Load")}</button>
+            <button type="button" class="gc-btn gc-btn-ghost gc-btn-danger" data-preset-delete="${p.id}">${tt("fleet_preset_delete", "Delete")}</button>
+          </div>
+        </li>`
+      ).join("");
+    };
+
+    const applyLiveState = (page, state) => {
+      const rt = getFleetRuntime(page);
+      if (!state || typeof state !== "object") return;
+      if (state.resources) {
+        rt.data.resources = state.resources;
+        ["metal", "crystal", "fuel_cells"].forEach((res) => {
+          page.querySelectorAll(`[data-res="${res}"]`).forEach((el) => {
+            el.textContent = Number(state.resources[res] || 0).toLocaleString();
+          });
+        });
+      }
+      if (state.ships) {
+        rt.data.ships = state.ships;
+        const totalShips = Object.values(state.ships).reduce((a, b) => a + (Number(b) || 0), 0);
+        rt.data.has_ships = totalShips > 0;
+        const noShipsPanel = page.querySelector(".fleet-no-ships-panel");
+        const sendPanel = page.querySelector(".fleet-send-panel");
+        if (noShipsPanel) noShipsPanel.hidden = totalShips > 0;
+        if (sendPanel) sendPanel.hidden = totalShips <= 0;
+        page.querySelectorAll(".fleet-ship-row").forEach((row) => {
+          const key = row.getAttribute("data-ship-key");
+          if (!key) return;
+          const have = state.ships[key] || 0;
+          row.setAttribute("data-ship-have", String(have));
+          row.classList.toggle("fleet-ship-row-empty", have <= 0);
+          row.hidden = false;
+          const inp = row.querySelector("[data-ship-input]");
+          if (inp) {
+            inp.max = String(have);
+            if (have <= 0) {
+              inp.value = "0";
+              inp.disabled = true;
+            } else {
+              inp.disabled = false;
+              if (parseInt(inp.value || "0", 10) > have) inp.value = String(have);
+            }
+          }
+          const maxBtn = row.querySelector("[data-ship-max]");
+          if (maxBtn) maxBtn.disabled = have <= 0;
+        });
+      }
+      const slotsEl = page.querySelector("[data-fleet-slots]");
+      if (state.fleet_slots && slotsEl) {
+        slotsEl.textContent = `${state.fleet_slots.active} / ${state.fleet_slots.max}`;
+      }
+      if (state.active_fleets) {
+        rt.data.active_fleets = state.active_fleets;
+        renderActiveFleets(page, state.active_fleets);
+      }
+      if (state.presets) {
+        rt.data.presets = state.presets;
+        renderPresetList(page, state.presets);
+        renderPresetSelect(page, state.presets);
+      }
+    };
+
+    const refreshFleetState = async (page) => {
+      try {
+        const planetId = parseInt(page.dataset.planetId || "0", 10);
+        const q = planetId ? `?planet_id=${planetId}` : "";
+        const res = await GC.fetchJSON(`/api/fleet/state${q}`, { cache: "no-store" });
+        if (res?.ok) applyLiveState(page, fleetPayload(res));
+      } catch (_) {}
+    };
+    GC.refreshFleetState = refreshFleetState;
+
+    const runPreview = async (page) => {
+      const rt = getFleetRuntime(page);
+      const form = getForm(page);
+      if (!form) return;
+      const previewCargo = page.querySelector("[data-preview-cargo]");
+      const previewCargoFree = page.querySelector("[data-preview-cargo-free]");
+      const previewFuel = page.querySelector("[data-preview-fuel]");
+      const previewFuelAvail = page.querySelector("[data-preview-fuel-available]");
+      const previewFlight = page.querySelector("[data-preview-flight]");
+      const ships = getShipsSelection(page);
+      if (!Object.keys(ships).length) {
+        rt.lastPreview = null;
+        if (previewCargo) previewCargo.textContent = "–";
+        if (previewCargoFree) previewCargoFree.textContent = "–";
+        if (previewFuel) previewFuel.textContent = "–";
+        if (previewFuelAvail) previewFuelAvail.textContent = "–";
+        if (previewFlight) previewFlight.textContent = "–";
+        return;
+      }
+      try {
+        const res = await GC.fetchJSON("/api/fleet/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+          body: JSON.stringify({
+            origin_planet_id: rt.data.planet_id,
+            ships,
+            resources: getResourcesSelection(page),
+            speed_percent: parseInt(form.querySelector("[data-fleet-speed]")?.value || "100", 10),
+            ...getTargetCoords(page),
+          }),
+        });
+        const p = fleetPayload(res).preview || res.preview;
+        if (res?.ok && p) {
+          rt.lastPreview = p;
+          if (previewCargo) previewCargo.textContent = `${p.cargo_used || 0} / ${p.cargo_total || 0}`;
+          if (previewCargoFree) previewCargoFree.textContent = String(p.cargo_free || 0);
+          if (previewFuel) previewFuel.textContent = String(p.fuel_cost || 0);
+          if (previewFuelAvail) previewFuelAvail.textContent = String(p.fuel_available ?? rt.data.resources?.fuel_cells ?? "–");
+          if (previewFlight) previewFlight.textContent = formatFleetDuration(p.flight_seconds);
+        }
+      } catch (_) {}
+    };
+
+    const schedulePreview = (page) => {
+      const rt = getFleetRuntime(page);
+      if (rt.previewTimer) clearTimeout(rt.previewTimer);
+      rt.previewTimer = setTimeout(() => runPreview(page), 300);
+    };
+
+    const loadPresetById = (page, presetId) => {
+      const rt = getFleetRuntime(page);
+      const form = getForm(page);
+      const preset = (rt.data.presets || []).find((p) => String(p.id) === String(presetId));
+      if (!preset || !form) return;
+      page.querySelectorAll("[data-ship-input]").forEach((inp) => { inp.value = "0"; });
+      Object.entries(preset.ships || {}).forEach(([key, qty]) => {
+        const inp = form.querySelector(`[data-ship-input="${key}"]`);
+        if (inp) inp.value = String(qty);
+      });
+      if (preset.speed_percent) {
+        const sp = form.querySelector("[data-fleet-speed]");
+        if (sp) sp.value = String(preset.speed_percent);
+      }
+      if (preset.mission_type) {
+        const ms = form.querySelector("[data-fleet-mission]");
+        if (ms) ms.value = preset.mission_type;
+      }
+      if (preset.target_galaxy != null) form.querySelector('[name="target_galaxy"]').value = String(preset.target_galaxy);
+      if (preset.target_system != null) form.querySelector('[name="target_system"]').value = String(preset.target_system);
+      if (preset.target_position != null) form.querySelector('[name="target_position"]').value = String(preset.target_position);
+      schedulePreview(page);
+    };
+
+    const applyQuickTarget = (page, chip) => {
+      const form = getForm(page);
+      if (!form || !chip) return;
+      const g = form.querySelector('[name="target_galaxy"]');
+      const s = form.querySelector('[name="target_system"]');
+      const p = form.querySelector('[name="target_position"]');
+      if (g) g.value = chip.getAttribute("data-galaxy") || chip.dataset.galaxy || "";
+      if (s) s.value = chip.getAttribute("data-system") || chip.dataset.system || "";
+      if (p) p.value = chip.getAttribute("data-position") || chip.dataset.position || "";
+      page.querySelectorAll(".fleet-colony-chip").forEach((c) => c.classList.remove("is-selected"));
+      chip.classList.add("is-selected");
+      schedulePreview(page);
+    };
+
+    GC.scheduleFleetPreview = schedulePreview;
+    GC.refreshFleetState = refreshFleetState;
+    GC.runFleetPreview = runPreview;
+
+    document.addEventListener("click", async (e) => {
+      const page = getPage();
+      if (!page) return;
+      const rt = getFleetRuntime(page);
+      const form = getForm(page);
+      const fuelResource = rt.data.fuel_resource || page.dataset.fuelResource || "fuel_cells";
+
+      const maxShip = e.target.closest("[data-ship-max]");
+      if (maxShip && page.contains(maxShip)) {
+        e.preventDefault();
+        const key = maxShip.getAttribute("data-ship-max");
+        const row = maxShip.closest("[data-ship-key]");
+        const have = parseInt(row?.getAttribute("data-ship-have") || "0", 10);
+        const inp = form?.querySelector(`[data-ship-input="${key}"]`);
+        if (inp) inp.value = String(have);
+        schedulePreview(page);
+        return;
+      }
+
+      const resMax = e.target.closest("[data-fleet-res-max]");
+      if (resMax && page.contains(resMax)) {
+        e.preventDefault();
+        const res = resMax.getAttribute("data-fleet-res-max");
+        if (!rt.lastPreview) await runPreview(page);
+        const cargoFree = parseInt(rt.lastPreview?.cargo_free ?? "0", 10) || 0;
+        const bal = rt.data.resources?.[res] || 0;
+        let val = Math.min(bal, cargoFree > 0 ? cargoFree : bal);
+        const inp = page.querySelector(`[data-fleet-res-${res}]`);
+        if (inp) inp.value = String(Math.max(0, val));
+        schedulePreview(page);
+        return;
+      }
+
+      const chip = e.target.closest(".fleet-colony-chip");
+      if (chip && page.contains(chip)) {
+        e.preventDefault();
+        applyQuickTarget(page, chip);
+        return;
+      }
+
+      const loadBtn = e.target.closest("[data-preset-load]");
+      if (loadBtn && page.contains(loadBtn)) {
+        e.preventDefault();
+        loadPresetById(page, loadBtn.getAttribute("data-preset-load"));
+        return;
+      }
+
+      const delBtn = e.target.closest("[data-preset-delete]");
+      if (delBtn && page.contains(delBtn)) {
+        e.preventDefault();
+        const id = delBtn.getAttribute("data-preset-delete");
+        if (!id || !window.confirm(tt("fleet_preset_delete_confirm", "Delete this preset?"))) return;
+        try {
+          const res = await GC.fetchGameAction(`/api/fleet/presets/${id}`, { method: "DELETE" });
+          if (res?.ok) {
+            showNotify(tt("fleet_preset_deleted", "Preset deleted."), "success");
+            rt.data.presets = (rt.data.presets || []).filter((p) => String(p.id) !== String(id));
+            renderPresetList(page, rt.data.presets);
+            renderPresetSelect(page, rt.data.presets);
+          } else {
+            showNotify(reasonText(apiError(res)), "error");
+          }
+        } catch (_) {
+          showNotify(reasonText("generic"), "error");
+        }
+        return;
+      }
+
+      const savePreset = e.target.closest("[data-fleet-save-preset]");
+      if (savePreset && page.contains(savePreset)) {
+        e.preventDefault();
+        const name = window.prompt(tt("fleet_preset_name_prompt", "Preset name:"));
+        if (!name || !name.trim()) return;
+        const type = window.prompt(tt("fleet_preset_type_prompt", "Type (raid/farm/spy/transport/deploy/expedition/custom):"), "custom") || "custom";
+        try {
+          const res = await GC.fetchGameAction("/api/fleet/presets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: name.trim(),
+              preset_type: type.trim().toLowerCase(),
+              ships_json: getShipsSelection(page),
+              resources_json: getResourcesSelection(page),
+              speed_percent: parseInt(form.querySelector("[data-fleet-speed]")?.value || "100", 10),
+              mission_type: form.querySelector("[data-fleet-mission]")?.value,
+              ...getTargetCoords(page),
+            }),
+          });
+          if (res?.ok) {
+            showNotify(tt("fleet_preset_saved", "Preset saved."), "success");
+            const preset = fleetPayload(res).preset;
+            if (preset) {
+              rt.data.presets = [preset, ...(rt.data.presets || []).filter((p) => p.id !== preset.id)];
+              renderPresetList(page, rt.data.presets);
+              renderPresetSelect(page, rt.data.presets);
+            } else {
+              await refreshFleetState(page);
+            }
+          } else {
+            showNotify(reasonText(apiError(res)), "error");
+          }
+        } catch (_) {
+          showNotify(reasonText("generic"), "error");
+        }
+        return;
+      }
+
+      const devSeed = e.target.closest("[data-fleet-dev-seed]");
+      if (devSeed && page.contains(devSeed)) {
+        e.preventDefault();
+        try {
+          const res = await GC.fetchGameAction("/api/dev/fleet/seed-ships", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ planet_id: rt.data.planet_id }),
+          });
+          if (res?.ok) {
+            showNotify(tt("fleet_dev_seed_ok", "Test ships added."), "success");
+            await refreshFleetState(page);
+            schedulePreview(page);
+          } else {
+            showNotify(reasonText(apiError(res)), "error");
+          }
+        } catch (_) {
+          showNotify(reasonText("generic"), "error");
+        }
+        return;
+      }
+
+    });
+
+    document.addEventListener("change", (e) => {
+      const page = getPage();
+      if (!page) return;
+      if (e.target.matches("[data-fleet-preset-select]")) {
+        const id = e.target.value;
+        if (id) loadPresetById(page, id);
+        return;
+      }
+      if (e.target.matches("[data-fleet-mission]")) {
+        const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
+        if (colonizeRow) colonizeRow.hidden = e.target.value !== "colonize";
+      }
+      if (e.target.closest("#fleet-send-form")) schedulePreview(page);
+    });
+
+    document.addEventListener("input", (e) => {
+      const page = getPage();
+      if (!page) return;
+      if (e.target.closest("#fleet-send-form")) schedulePreview(page);
+    });
+
+    document.addEventListener("submit", async (e) => {
+      const sendForm = e.target.closest ? e.target.closest("#fleet-send-form") : null;
+      const page = getPage();
+      if (sendForm && page && page.contains(sendForm)) {
+        e.preventDefault();
+        e.stopPropagation();
+        const rt = getFleetRuntime(page);
+        const form = sendForm;
+        if (rt.sending) return;
+        const errorEl = page.querySelector("[data-fleet-error]");
+        if (errorEl) { errorEl.hidden = true; errorEl.textContent = ""; }
+        const submitBtn = form.querySelector(".fleet-send-submit");
+        rt.sending = true;
+        if (submitBtn) submitBtn.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/fleet/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              origin_planet_id: rt.data.planet_id,
+              ships: getShipsSelection(page),
+              resources: getResourcesSelection(page),
+              speed_percent: parseInt(form.querySelector("[data-fleet-speed]")?.value || "100", 10),
+              mission_type: form.querySelector("[data-fleet-mission]")?.value,
+              colony_name: form.querySelector("[data-fleet-colony-name]")?.value || undefined,
+              ...getTargetCoords(page),
+            }),
+          });
+          if (res?.ok) {
+            showNotify(tt("fleet_send_success", "Fleet dispatched."), "success");
+            const payload = fleetPayload(res);
+            applyLiveState(page, {
+              resources: payload.updated_resources,
+              ships: payload.updated_ships,
+              fleet_slots: payload.active_slots,
+            });
+            await refreshFleetState(page);
+            page.querySelectorAll("[data-ship-input]").forEach((inp) => { inp.value = "0"; });
+            const mInp = page.querySelector("[data-fleet-res-metal]");
+            const cInp = page.querySelector("[data-fleet-res-crystal]");
+            if (mInp) mInp.value = "0";
+            if (cInp) cInp.value = "0";
+            schedulePreview(page);
+            applyActionState(res?.data?.state ? res : res, "fleet_send_success");
+          } else {
+            if (errorEl) {
+              errorEl.textContent = reasonText(apiError(res));
+              errorEl.hidden = false;
+            }
+            applyActionState(res, "fleet_send_error");
+          }
+        } catch (_) {
+          if (errorEl) {
+            errorEl.textContent = reasonText("generic");
+            errorEl.hidden = false;
+          }
+        } finally {
+          rt.sending = false;
+          if (submitBtn) submitBtn.disabled = false;
+        }
+        return;
+      }
+
+      if (!page) return;
+      const rt = getFleetRuntime(page);
+      const form = getForm(page);
+
+      const massForm = e.target.closest("#fleet-mass-expo-form");
+      if (massForm && page.contains(massForm)) {
+        e.preventDefault();
+        if (massForm.dataset.submitting === "1") return;
+        massForm.dataset.submitting = "1";
+        const massBtn = massForm.querySelector('button[type="submit"]');
+        const massResult = page.querySelector("[data-fleet-mass-result]");
+        if (massBtn) massBtn.disabled = true;
+        if (massResult) { massResult.hidden = true; massResult.textContent = ""; }
+        const presetId = page.querySelector("[data-fleet-mass-preset]")?.value;
+        const waves = parseInt(page.querySelector("[data-fleet-mass-waves]")?.value || "1", 10);
+        if (!presetId) {
+          massForm.dataset.submitting = "0";
+          if (massBtn) massBtn.disabled = false;
+          return;
+        }
+        try {
+          const res = await GC.fetchGameAction("/api/fleet/mass-expedition", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              origin_planet_id: rt.data.planet_id,
+              preset_id: parseInt(presetId, 10),
+              waves,
+            }),
+          });
+          if (res?.ok) {
+            const data = fleetPayload(res);
+            const started = (data.started || []).length;
+            const skipped = (data.skipped || []).length;
+            if (massResult) {
+              massResult.textContent = tt("fleet_mass_expo_result", "Started %(started)s, skipped %(skipped)s.")
+                .replace("%(started)s", String(started)).replace("%(skipped)s", String(skipped));
+              massResult.hidden = false;
+            }
+            showNotify(tt("fleet_mass_expo_success", "Mass expedition launched."), "success");
+            await refreshFleetState(page);
+            schedulePreview(page);
+          } else {
+            showNotify(reasonText(apiError(res)), "error");
+          }
+        } catch (_) {
+          showNotify(reasonText("generic"), "error");
+        } finally {
+          massForm.dataset.submitting = "0";
+          if (massBtn) massBtn.disabled = false;
+        }
+      }
+    });
+  }
+
+  function initFleet() {
+    bindFleetOnce();
+    const page = document.getElementById("fleet-page");
+    if (!page || page.dataset.ready !== "1") return;
+
+    const rt = getFleetRuntime(page);
+    rt.data = parseFleetPageData(page);
+    if (rt.data?.planet_id) page.dataset.planetId = String(rt.data.planet_id);
+    if (typeof GC.refreshFleetState === "function") GC.refreshFleetState(page);
+
+    const fuelResource = rt.data.fuel_resource || page.dataset.fuelResource || "fuel_cells";
+    const fuelLabelEl = page.querySelector("[data-fuel-resource-label]");
+    if (fuelLabelEl) {
+      fuelLabelEl.textContent = fleetFuelLabel((k, f) => t(k, f), fuelResource);
+    }
+
+    const tickCountdowns = () => {
+      const p = document.getElementById("fleet-page");
+      if (!p) return;
+      const now = getApproxServerNow() || Math.floor(Date.now() / 1000);
+      p.querySelectorAll("[data-countdown]").forEach((el) => {
+        const target = parseInt(el.getAttribute("data-countdown") || "0", 10);
+        const s = Math.max(0, target - now);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const secR = s % 60;
+        el.textContent = h > 0 ? `${h}h ${m}m` : (m > 0 ? `${m}m ${secR}s` : `${secR}s`);
+      });
+    };
+    tickCountdowns();
+    GC.setSafeInterval(tickCountdowns, 1000);
+    GC.runFleetPreview(page);
+    applyFleetUrlPrefill(page);
+  }
+
+  function applyFleetUrlPrefill(page) {
+    const params = new URLSearchParams(window.location.search);
+    const form = page.querySelector("#fleet-send-form");
+    if (!form) return;
+    const mission = params.get("mission");
+    if (mission) {
+      const ms = form.querySelector("[data-fleet-mission]");
+      if (ms) ms.value = mission;
+      const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
+      if (colonizeRow) colonizeRow.hidden = mission !== "colonize";
+    }
+    const g = params.get("target_galaxy");
+    const s = params.get("target_system");
+    const p = params.get("target_position");
+    if (g != null) form.querySelector('[name="target_galaxy"]').value = g;
+    if (s != null) form.querySelector('[name="target_system"]').value = s;
+    if (p != null) form.querySelector('[name="target_position"]').value = p;
+    const colonyName = params.get("colony_name");
+    if (colonyName) {
+      const inp = form.querySelector("[data-fleet-colony-name]");
+      if (inp) inp.value = colonyName;
+    }
+    GC.runFleetPreview(page);
+  }
+
+  let _shipyardBound = false;
+
+  function parseShipyardPageData(page) {
+    const el = document.getElementById("shipyard-page-state");
+    if (!el) return null;
+    try {
+      return JSON.parse(el.textContent || "{}");
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function renderShipyardInventory(page, ships) {
+    const inv = page.querySelector("[data-shipyard-inventory]");
+    if (!inv) return;
+    const tt = (key, fb) => t(key, fb);
+    const entries = Object.entries(ships || {}).filter(([, qty]) => Number(qty) > 0);
+    inv.replaceChildren();
+    if (!entries.length) {
+      const empty = document.createElement("p");
+      empty.className = "shipyard-empty";
+      empty.dataset.shipyardNoShips = "1";
+      empty.textContent = tt("shipyard_no_ships", "No ships on this planet.");
+      inv.appendChild(empty);
+      return;
+    }
+    entries.sort(([a], [b]) => a.localeCompare(b));
+    entries.forEach(([sk, qty]) => {
+      const row = document.createElement("div");
+      row.className = "shipyard-inventory-row";
+      row.dataset.invShip = sk;
+      const nameBtn = document.createElement("button");
+      nameBtn.type = "button";
+      nameBtn.className = "gc-ship-detail-trigger shipyard-ship-name";
+      nameBtn.dataset.shipDetail = sk;
+      nameBtn.title = tt("ship_detail_open", "View ship properties");
+      nameBtn.textContent = tt(`fleet_ship_${sk}`, sk);
+      const qtyEl = document.createElement("span");
+      qtyEl.className = "shipyard-ship-qty gc-mono";
+      qtyEl.textContent = fmtNumber(Number(qty) || 0);
+      row.append(nameBtn, qtyEl);
+      inv.appendChild(row);
+    });
+  }
+
+  function formatShipyardRemaining(seconds) {
+    const s = Math.max(0, Math.floor(Number(seconds) || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const secR = s % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${secR}s`;
+    return `${secR}s`;
+  }
+
+  function renderShipyardQueue(page, queueData) {
+    const list = page.querySelector("[data-shipyard-queue-list]");
+    const sub = page.querySelector("[data-shipyard-queue-subtitle]");
+    if (!list) return;
+    const tt = (key, fb) => t(key, fb);
+    const qd = queueData || { queue: [], summary: { count: 0, limit: 3, refund_percent: 60 } };
+    const jobs = qd.queue || [];
+    const summary = qd.summary || {};
+    const count = summary.count ?? jobs.length;
+    const limit = summary.limit ?? 3;
+    if (sub) {
+      sub.textContent = tt("shipyard_queue_slots", "%(count)s / %(limit)s orders")
+        .replace("%(count)s", String(count))
+        .replace("%(limit)s", String(limit));
+    }
+    list.replaceChildren();
+    if (!jobs.length) {
+      const empty = document.createElement("p");
+      empty.className = "shipyard-empty";
+      empty.dataset.shipyardQueueEmpty = "1";
+      empty.textContent = tt("shipyard_queue_empty", "No ships in production.");
+      list.appendChild(empty);
+      return;
+    }
+    jobs.forEach((job, index) => {
+      const art = document.createElement("article");
+      art.className = `shipyard-queue-job${job.is_active ? " is-active" : ""}`;
+      art.dataset.queueJobId = String(job.id);
+      art.dataset.finishAt = String(job.finish_at || "");
+      const main = document.createElement("div");
+      main.className = "shipyard-queue-job-main";
+      const shipLbl = document.createElement("span");
+      shipLbl.className = "shipyard-queue-ship";
+      shipLbl.textContent = `${tt(`fleet_ship_${job.ship_key}`, job.ship_key)} × ${fmtNumber(job.amount || 0)}`;
+      const eta = document.createElement("span");
+      eta.className = "shipyard-queue-eta gc-mono";
+      eta.dataset.queueRemaining = String(job.remaining ?? 0);
+      eta.textContent = tt("shipyard_queue_remaining", "%(seconds)s left")
+        .replace("%(seconds)s", formatShipyardRemaining(job.remaining));
+      main.append(shipLbl, eta);
+      const actions = document.createElement("div");
+      actions.className = "shipyard-queue-job-actions";
+      const upBtn = document.createElement("button");
+      upBtn.type = "button";
+      upBtn.className = "gc-btn gc-btn-ghost gc-btn-xs";
+      upBtn.dataset.shipyardQueueUp = String(job.id);
+      upBtn.setAttribute("aria-label", tt("shipyard_queue_move_up", "Raise priority"));
+      upBtn.textContent = "▲";
+      if (index === 0) upBtn.disabled = true;
+      const downBtn = document.createElement("button");
+      downBtn.type = "button";
+      downBtn.className = "gc-btn gc-btn-ghost gc-btn-xs";
+      downBtn.dataset.shipyardQueueDown = String(job.id);
+      downBtn.setAttribute("aria-label", tt("shipyard_queue_move_down", "Lower priority"));
+      downBtn.textContent = "▼";
+      if (index === jobs.length - 1) downBtn.disabled = true;
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "gc-btn gc-btn-ghost gc-btn-xs gc-btn-danger";
+      cancelBtn.dataset.shipyardQueueCancel = String(job.id);
+      cancelBtn.textContent = tt("shipyard_queue_cancel_btn", "Cancel");
+      actions.append(upBtn, downBtn, cancelBtn);
+      art.append(main, actions);
+      list.appendChild(art);
+    });
+  }
+
+  function tickShipyardQueueCountdowns() {
+    const page = document.getElementById("shipyard-page");
+    if (!page || page.dataset.ready !== "1") return;
+    const now = getApproxServerNow() || Math.floor(Date.now() / 1000);
+    let overdue = false;
+    page.querySelectorAll("[data-finish-at]").forEach((row) => {
+      const finishAt = parseInt(row.getAttribute("data-finish-at") || "0", 10);
+      const eta = row.querySelector("[data-queue-remaining]");
+      if (!eta || !finishAt) return;
+      const rem = Math.max(0, finishAt - now);
+      eta.textContent = t("shipyard_queue_remaining", "%(seconds)s left")
+        .replace("%(seconds)s", formatShipyardRemaining(rem));
+      if (rem <= 0 && row.classList.contains("is-active")) overdue = true;
+    });
+    if (overdue && !page.dataset.queueRefreshBusy) {
+      page.dataset.queueRefreshBusy = "1";
+      refreshShipyardState(page).finally(() => {
+        delete page.dataset.queueRefreshBusy;
+        if (typeof GC.refreshFleetState === "function") {
+          const fleetPage = document.getElementById("fleet-page");
+          if (fleetPage && fleetPage.dataset.ready === "1") GC.refreshFleetState(fleetPage);
+        }
+      });
+    }
+  }
+
+  function applyShipyardState(page, data) {
+    if (!page || !data) return;
+    const tt = (key, fb) => t(key, fb);
+
+    if (data.planet_id) page.dataset.planetId = String(data.planet_id);
+
+    if (data.orbital_shipyard_level != null) {
+      page.dataset.shipyardLevel = String(data.orbital_shipyard_level);
+      const lvlEl = page.querySelector("[data-shipyard-level-label]");
+      if (lvlEl) {
+        const lvlText = tt("shipyard_level_value", "Level %(level)s");
+        lvlEl.textContent = lvlText.replace("%(level)s", fmtNumber(data.orbital_shipyard_level));
+      }
+    }
+
+    if (data.planet_name) {
+      const scopeEl = page.querySelector("[data-shipyard-planet-scope]");
+      if (scopeEl) {
+        const label = tt("shipyard_planet_scope", "Active planet: %(name)s").replace(
+          "%(name)s",
+          String(data.planet_name)
+        );
+        scopeEl.textContent = label;
+        let coordsEl = scopeEl.querySelector("[data-shipyard-planet-coords]");
+        if (data.planet_coords) {
+          if (!coordsEl) {
+            coordsEl = document.createElement("span");
+            coordsEl.className = "shipyard-planet-coords";
+            coordsEl.dataset.shipyardPlanetCoords = "1";
+            scopeEl.appendChild(document.createTextNode(" "));
+            scopeEl.appendChild(coordsEl);
+          }
+          coordsEl.textContent = `(${data.planet_coords})`;
+        } else if (coordsEl) {
+          coordsEl.remove();
+        }
+      }
+    }
+
+    const res = data.resources || {};
+    page.querySelectorAll("[data-sy-res]").forEach((node) => {
+      const key = node.getAttribute("data-sy-res");
+      if (key && res[key] != null) node.textContent = fmtNumber(Number(res[key]) || 0);
+    });
+
+    if (data.current_ships) renderShipyardInventory(page, data.current_ships);
+    if (data.shipyard_queue) renderShipyardQueue(page, data.shipyard_queue);
+
+    (data.buildable_ships || []).forEach((ship) => {
+      const card = page.querySelector(`[data-ship-card="${ship.ship_key}"]`);
+      if (!card || card.dataset.unlocked !== "1") return;
+      const btn = card.querySelector("[data-shipyard-build]");
+      const maxBtn = card.querySelector("[data-shipyard-max]");
+      if (btn) btn.disabled = !ship.can_build;
+      if (maxBtn) maxBtn.dataset.maxQty = String(ship.max_build || 0);
+      const warn = card.querySelector(".shipyard-hint-warn");
+      if (warn) warn.hidden = !!ship.can_build;
+    });
+  }
+
+  async function refreshShipyardState(page) {
+    const planetId = parseInt(page.dataset.planetId || "0", 10);
+    const q = planetId ? `?planet_id=${planetId}` : "";
+    const res = await GC.fetchGameAction(`/api/shipyard${q}`, { method: "GET" });
+    if (res?.ok && res.data) {
+      applyShipyardState(page, res.data);
+      return res.data;
+    }
+    return null;
+  }
+
+  function bindShipyardOnce() {
+    if (_shipyardBound) return;
+    _shipyardBound = true;
+    const tt = (key, fallback) => t(key, fallback);
+    const apiError = (res) => (res && (res.error || res.reason)) || "generic";
+    const reasonText = (reason) => tt(`shipyard_error_${reason}`, tt(`fleet_error_${reason}`, reason || "Error"));
+
+    document.addEventListener("click", async (e) => {
+      const page = document.getElementById("shipyard-page");
+      if (!page || page.dataset.ready !== "1") return;
+
+      const maxBtn = e.target.closest("[data-shipyard-max]");
+      if (maxBtn && page.contains(maxBtn)) {
+        e.preventDefault();
+        const shipKey = maxBtn.getAttribute("data-shipyard-max");
+        const qtyInp = page.querySelector(`[data-shipyard-qty="${shipKey}"]`);
+        const maxQty = parseInt(maxBtn.dataset.maxQty || "0", 10);
+        if (qtyInp && maxQty > 0) qtyInp.value = String(maxQty);
+        return;
+      }
+
+      const cancelBtn = e.target.closest("[data-shipyard-queue-cancel]");
+      if (cancelBtn && page.contains(cancelBtn)) {
+        e.preventDefault();
+        const jobId = parseInt(cancelBtn.getAttribute("data-shipyard-queue-cancel") || "0", 10);
+        const planetId = parseInt(page.dataset.planetId || "0", 10);
+        if (!jobId) return;
+        cancelBtn.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/shipyard/queue/cancel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ job_id: jobId, planet_id: planetId || undefined }),
+          });
+          if (res?.ok) {
+            showNotify(tt("shipyard_cancel_ok", "Order cancelled."), "success");
+            if (res.data) applyShipyardState(page, res.data);
+            else await refreshShipyardState(page);
+            if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_cancel");
+          } else {
+            showNotify(reasonText(res?.error || apiError(res)), "error");
+          }
+        } catch (_) {
+          showNotify(reasonText("generic"), "error");
+        } finally {
+          cancelBtn.disabled = false;
+        }
+        return;
+      }
+
+      const moveUp = e.target.closest("[data-shipyard-queue-up]");
+      const moveDown = e.target.closest("[data-shipyard-queue-down]");
+      const moveBtn = moveUp || moveDown;
+      if (moveBtn && page.contains(moveBtn)) {
+        e.preventDefault();
+        const jobId = parseInt(
+          moveBtn.getAttribute("data-shipyard-queue-up") ||
+          moveBtn.getAttribute("data-shipyard-queue-down") || "0",
+          10
+        );
+        const planetId = parseInt(page.dataset.planetId || "0", 10);
+        if (!jobId) return;
+        moveBtn.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/shipyard/queue/move", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              job_id: jobId,
+              direction: moveUp ? "up" : "down",
+              planet_id: planetId || undefined,
+            }),
+          });
+          if (res?.ok) {
+            if (res.data) applyShipyardState(page, res.data);
+            else await refreshShipyardState(page);
+          } else {
+            showNotify(reasonText(res?.error || apiError(res)), "error");
+          }
+        } catch (_) {
+          showNotify(reasonText("generic"), "error");
+        } finally {
+          moveBtn.disabled = false;
+        }
+        return;
+      }
+
+      const buildBtn = e.target.closest("[data-shipyard-build]");
+      if (!buildBtn || !page.contains(buildBtn) || buildBtn.disabled) return;
+      e.preventDefault();
+      const shipKey = buildBtn.getAttribute("data-shipyard-build");
+      const qtyInp = page.querySelector(`[data-shipyard-qty="${shipKey}"]`);
+      const amount = parseInt(qtyInp?.value || "1", 10) || 1;
+      const planetId = parseInt(page.dataset.planetId || "0", 10);
+      buildBtn.disabled = true;
+      try {
+        const res = await GC.fetchGameAction("/api/shipyard/build", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ship_key: shipKey, amount, planet_id: planetId || undefined }),
+        });
+        if (res?.ok) {
+          showNotify(tt("shipyard_queue_enqueued", "Ships queued for construction."), "success");
+          if (res.data) applyShipyardState(page, res.data);
+          else await refreshShipyardState(page);
+          if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_build");
+        } else {
+          showNotify(reasonText(res?.error || apiError(res)), "error");
+        }
+      } catch (_) {
+        showNotify(reasonText("generic"), "error");
+      } finally {
+        buildBtn.disabled = false;
+      }
+    });
+  }
+
+  function initShipyard() {
+    bindShipyardOnce();
+    const page = document.getElementById("shipyard-page");
+    if (!page || page.dataset.ready !== "1") return;
+    const data = parseShipyardPageData(page);
+    if (!data) return;
+    applyShipyardState(page, data);
+    if (!page.dataset.queueTickBound) {
+      page.dataset.queueTickBound = "1";
+      GC.setSafeInterval(tickShipyardQueueCountdowns, 1000);
+    }
+    if (!page.dataset.queuePollBound) {
+      page.dataset.queuePollBound = "1";
+      GC.setSafeInterval(() => {
+        const p = document.getElementById("shipyard-page");
+        if (p && p.dataset.ready === "1" && !p.dataset.queueRefreshBusy) {
+          refreshShipyardState(p).catch(() => {});
+        }
+      }, 12000);
+    }
+    tickShipyardQueueCountdowns();
+    const activePid = Number(GC.lastState?.active_planet_id || 0);
+    const domPid = Number(page.dataset.planetId || 0);
+    if (
+      activePid > 0 &&
+      domPid > 0 &&
+      activePid !== domPid &&
+      page.dataset.planetReloading !== "1" &&
+      typeof GC.reloadCurrentPage === "function"
+    ) {
+      page.dataset.planetReloading = "1";
+      Promise.resolve(GC.reloadCurrentPage()).finally(() => {
+        delete page.dataset.planetReloading;
+      });
+    }
   }
 
   function initExchangePanel() {
@@ -2605,6 +3792,134 @@
 
     panel._patchExchangeFromState = patchExchangeFromState;
     updatePreview();
+  }
+
+  function initFuelExchangePanel() {
+    const panel = document.getElementById("gc-fuel-exchange-panel");
+    if (!panel || panel.dataset.disabled === "1") return;
+    const form = panel.querySelector("#gc-fuel-exchange-form");
+    const unitsInput = panel.querySelector("#gc-fuel-exchange-units");
+    const metalEl = panel.querySelector("[data-fuel-exchange-cost-metal]");
+    const crystalEl = panel.querySelector("[data-fuel-exchange-cost-crystal]");
+    const errorEl = panel.querySelector("[data-fuel-exchange-error]");
+    const submitBtn = panel.querySelector(".gc-fuel-exchange-submit");
+    if (!form || !unitsInput) return;
+
+    const tt = (key, fallback) => t(key, fallback);
+    const metalPer = parseInt(panel.dataset.metalPer || "45", 10);
+    const crystalPer = parseInt(panel.dataset.crystalPer || "28", 10);
+    const minUnits = parseInt(panel.dataset.min || "10", 10);
+    const reasonText = (reason) => tt(`fuel_exchange_error_${reason}`, tt("fuel_exchange_error_generic", "Purchase failed."));
+
+    const updatePreview = () => {
+      const u = parseInt(unitsInput.value || "0", 10);
+      if (!u || u < minUnits) {
+        if (metalEl) metalEl.textContent = "–";
+        if (crystalEl) crystalEl.textContent = "–";
+        return;
+      }
+      if (metalEl) metalEl.textContent = `${(u * metalPer).toLocaleString()} ${tt("resource_metal", "Ferronit")}`;
+      if (crystalEl) crystalEl.textContent = `${(u * crystalPer).toLocaleString()} ${tt("resource_crystal", "Crytite")}`;
+    };
+
+    if (panel.dataset.fuelExchangeBound) return;
+    panel.dataset.fuelExchangeBound = "1";
+    unitsInput.addEventListener("input", updatePreview);
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (errorEl) { errorEl.hidden = true; errorEl.textContent = ""; }
+      const units = parseInt(unitsInput.value || "0", 10);
+      if (!units || units < minUnits) {
+        if (errorEl) {
+          errorEl.textContent = reasonText("below_minimum");
+          errorEl.hidden = false;
+        }
+        return;
+      }
+      if (submitBtn) submitBtn.disabled = true;
+      try {
+        const res = await GC.fetchGameAction("/api/trader/fuel-exchange", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+          body: JSON.stringify({ units }),
+        });
+        if (res?.ok) {
+          unitsInput.value = "";
+          updatePreview();
+          applyActionState(res, "fuel_exchange_success");
+          showNotify(tt("fuel_exchange_success", "Fuel cells purchased."), "success");
+          const rem = res?.job?.daily_units_remaining;
+          const remEl = panel.querySelector("[data-fuel-exchange-daily-remaining]");
+          if (remEl != null && typeof rem === "number") remEl.textContent = String(rem);
+        } else {
+          applyActionState(res, "fuel_exchange_error");
+          if (errorEl) {
+            errorEl.textContent = reasonText(res?.reason);
+            errorEl.hidden = false;
+          }
+        }
+      } catch (_) {
+        if (errorEl) {
+          errorEl.textContent = reasonText("generic");
+          errorEl.hidden = false;
+        }
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    });
+    updatePreview();
+  }
+
+  function initScrapyardPanel() {
+    const panel = document.getElementById("gc-scrapyard-panel");
+    if (!panel || panel.dataset.disabled === "1") return;
+    if (panel.dataset.scrapyardBound) return;
+    panel.dataset.scrapyardBound = "1";
+
+    const tt = (key, fallback) => t(key, fallback);
+    const errorEl = panel.querySelector("[data-scrapyard-error]");
+    const reasonText = (reason) => tt(`scrapyard_error_${reason}`, tt("scrapyard_error_generic", "Recycle failed."));
+
+    panel.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-scrap-recycle]");
+      if (!btn) return;
+      const shipKey = btn.getAttribute("data-scrap-recycle");
+      const row = btn.closest("[data-scrap-ship]");
+      const qtyInp = row?.querySelector(`[data-scrap-qty="${shipKey}"]`);
+      const amount = parseInt(qtyInp?.value || "0", 10);
+      const max = parseInt(row?.getAttribute("data-scrap-max") || "0", 10);
+      if (!amount || amount > max) return;
+      if (!window.confirm(tt("scrapyard_confirm", "Recycle ships for partial refund?"))) return;
+
+      btn.disabled = true;
+      if (errorEl) { errorEl.hidden = true; errorEl.textContent = ""; }
+      try {
+        const res = await GC.fetchGameAction("/api/trader/scrapyard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+          body: JSON.stringify({ ship_key: shipKey, amount }),
+        });
+        if (res?.ok) {
+          applyActionState(res, "scrapyard_success");
+          showNotify(tt("scrapyard_success", "Ships recycled."), "success");
+          window.location.reload();
+        } else {
+          applyActionState(res, "scrapyard_error");
+          if (errorEl) {
+            errorEl.textContent = reasonText(res?.reason);
+            errorEl.hidden = false;
+          }
+        }
+      } catch (_) {
+        if (errorEl) {
+          errorEl.textContent = reasonText("generic");
+          errorEl.hidden = false;
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    });
   }
 
   function patchExchangePanel(exchange) {
@@ -3563,6 +4878,8 @@
 
   GC.modules.overview = initOverview;
   GC.modules.trader_hub = initTraderHub;
+  GC.modules.fleet = initFleet;
+  GC.modules.shipyard = initShipyard;
   GC.modules.buildings = initBuildings;
   GC.modules.research = initResearch;
   GC.modules.planet_evolution = initPlanetEvolution;
@@ -3773,10 +5090,23 @@
     return !!(link.matches(PJAX_NAV_LINK) || link.closest("#main-content"));
   }
 
+  function normalizePjaxUrl(url) {
+    try {
+      const u = new URL(url, window.location.origin);
+      return `${u.pathname}${u.search}`;
+    } catch (_) {
+      return String(url || "");
+    }
+  }
+
   function pjaxNavigateFromLink(link) {
     const href = link.getAttribute("href");
     if (!href) return;
-    GC.navigateTo(href);
+    if (link.dataset.pjaxBusy === "1") return;
+    link.dataset.pjaxBusy = "1";
+    Promise.resolve(GC.navigateTo(href)).finally(() => {
+      link.dataset.pjaxBusy = "0";
+    });
   }
 
   function _syncNavActive(url) {
@@ -3803,10 +5133,24 @@
 
   GC.navigateTo = async function navigateTo(url, opts = {}) {
     const push = opts.push !== false;
+    const target = normalizePjaxUrl(url);
+
+    if (GC.pjaxInFlight && GC._pjaxTarget === target) {
+      console.debug("[GC] PJAX dedupe", target);
+      return GC.pjaxInFlight;
+    }
+
+    const current = normalizePjaxUrl(window.location.href);
+    if (!push && target === current && !opts.force) {
+      console.debug("[GC] PJAX skip same URL", target);
+      return Promise.resolve();
+    }
+
     if (GC._pjaxAbort) {
       try { GC._pjaxAbort.abort(); } catch (_) {}
     }
 
+    GC._pjaxTarget = target;
     GC.pjaxInFlight = (async () => {
       const ctrl = new AbortController();
       GC._pjaxAbort = ctrl;
@@ -3875,6 +5219,7 @@
     });
 
     document.addEventListener("submit", (e) => {
+      if (e.defaultPrevented) return;
       const form = e.target;
       if (!form || form.tagName !== "FORM" || form.hasAttribute("data-no-pjax")) return;
       if ((form.getAttribute("method") || "get").toLowerCase() !== "get") return;
@@ -4252,11 +5597,9 @@
       }
       if (!shouldRunGameLoop() || _authLoopAborted) return;
       _authLoopAborted = false;
-      GC.refreshGameState("tab_visible").then(() => {
-        GC.startPolling(lastHadActiveJob || lastHadActiveResearch);
-      });
+      GC.refreshGameState("tab_visible");
       GC.startProgressTicker();
-      if (typeof GC.resumeChatPolling === "function") GC.resumeChatPolling();
+      if (typeof GC.initChat === "function") GC.initChat();
     });
   }
 
@@ -5046,6 +6389,239 @@
     }
   }
 
+  const SHIP_DETAIL = {
+    root: null,
+    dialog: null,
+    titleEl: null,
+    content: null,
+    loadingEl: null,
+    errorEl: null,
+    abort: null,
+    open: false,
+    currentKey: null,
+    reqId: 0,
+  };
+
+  function cacheShipDetailElements() {
+    if (SHIP_DETAIL.root && SHIP_DETAIL.content) return SHIP_DETAIL.root;
+    SHIP_DETAIL.root = document.getElementById("gc-ship-detail-root");
+    if (!SHIP_DETAIL.root) return null;
+    SHIP_DETAIL.dialog = SHIP_DETAIL.root.querySelector(".gc-player-card-dialog");
+    SHIP_DETAIL.titleEl = document.getElementById("gc-ship-detail-title");
+    SHIP_DETAIL.content = SHIP_DETAIL.root.querySelector("[data-sd-content]");
+    SHIP_DETAIL.loadingEl = SHIP_DETAIL.root.querySelector("[data-sd-loading]");
+    SHIP_DETAIL.errorEl = SHIP_DETAIL.root.querySelector("[data-sd-error]");
+    return SHIP_DETAIL.root;
+  }
+
+  function sdSetLoading(on) {
+    cacheShipDetailElements();
+    const show = !!on;
+    if (SHIP_DETAIL.loadingEl) {
+      SHIP_DETAIL.loadingEl.hidden = !show;
+      SHIP_DETAIL.loadingEl.setAttribute("aria-hidden", show ? "false" : "true");
+    }
+    if (show && SHIP_DETAIL.errorEl) {
+      SHIP_DETAIL.errorEl.hidden = true;
+      SHIP_DETAIL.errorEl.textContent = "";
+    }
+    if (SHIP_DETAIL.root) {
+      SHIP_DETAIL.root.classList.toggle("is-loading", show);
+      SHIP_DETAIL.root.setAttribute("aria-busy", show ? "true" : "false");
+    }
+  }
+
+  function sdSetError(msg) {
+    cacheShipDetailElements();
+    sdSetLoading(false);
+    if (SHIP_DETAIL.content) SHIP_DETAIL.content.innerHTML = "";
+    if (SHIP_DETAIL.errorEl) {
+      SHIP_DETAIL.errorEl.textContent = msg || t("ship_detail_load_error", "Could not load ship data.");
+      SHIP_DETAIL.errorEl.hidden = false;
+      SHIP_DETAIL.errorEl.setAttribute("aria-hidden", "false");
+    }
+  }
+
+  function sdClearError() {
+    cacheShipDetailElements();
+    if (SHIP_DETAIL.errorEl) {
+      SHIP_DETAIL.errorEl.hidden = true;
+      SHIP_DETAIL.errorEl.textContent = "";
+      SHIP_DETAIL.errorEl.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function sdAbortFetch() {
+    if (SHIP_DETAIL.abort) {
+      try { SHIP_DETAIL.abort.abort(); } catch (_) {}
+      SHIP_DETAIL.abort = null;
+    }
+  }
+
+  function sdResetModalState() {
+    cacheShipDetailElements();
+    sdAbortFetch();
+    sdSetLoading(false);
+    sdClearError();
+    if (SHIP_DETAIL.content) SHIP_DETAIL.content.innerHTML = "";
+    if (SHIP_DETAIL.dialog) SHIP_DETAIL.dialog.setAttribute("data-theme", "cyan");
+    if (SHIP_DETAIL.titleEl) {
+      SHIP_DETAIL.titleEl.textContent = t("ship_detail_title", "Ship specifications");
+    }
+  }
+
+  function openShipDetailModal(focusClose) {
+    const root = cacheShipDetailElements();
+    if (!root) return;
+    root.hidden = false;
+    root.setAttribute("aria-hidden", "false");
+    document.body.classList.add("gc-ship-detail-open");
+    SHIP_DETAIL.open = true;
+    if (focusClose) {
+      const closeBtn = root.querySelector("[data-sd-close].gc-player-card-close");
+      if (closeBtn) closeBtn.focus({ preventScroll: true });
+    }
+  }
+
+  function closeShipDetailModal() {
+    const root = cacheShipDetailElements();
+    if (!root) return;
+    sdResetModalState();
+    root.hidden = true;
+    root.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("gc-ship-detail-open");
+    SHIP_DETAIL.open = false;
+    SHIP_DETAIL.currentKey = null;
+  }
+
+  async function fetchShipDetailHtml(shipKey, reqToken) {
+    sdAbortFetch();
+    const ctrl = new AbortController();
+    SHIP_DETAIL.abort = ctrl;
+    const key = encodeURIComponent(String(shipKey || "").trim());
+    try {
+      const res = await fetch(`/api/ships/${key}`, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "text/html",
+        },
+        signal: ctrl.signal,
+      });
+      if (reqToken !== SHIP_DETAIL.reqId) {
+        return { ok: false, aborted: true };
+      }
+      const html = await res.text();
+      if (reqToken !== SHIP_DETAIL.reqId) {
+        return { ok: false, aborted: true };
+      }
+      if (!res.ok) {
+        return { ok: false, html, status: res.status };
+      }
+      return { ok: true, html, status: res.status };
+    } catch (e) {
+      if (e && e.name === "AbortError") {
+        return { ok: false, aborted: true };
+      }
+      throw e;
+    } finally {
+      if (SHIP_DETAIL.abort === ctrl) SHIP_DETAIL.abort = null;
+    }
+  }
+
+  function mountShipDetailHtml(html) {
+    cacheShipDetailElements();
+    if (!SHIP_DETAIL.content) return;
+    sdClearError();
+    sdSetLoading(false);
+
+    const wrap = document.createElement("div");
+    wrap.innerHTML = html;
+    const shell = wrap.querySelector(".gc-ship-detail-shell, .gc-player-card-shell");
+    SHIP_DETAIL.content.innerHTML = "";
+    if (shell) {
+      SHIP_DETAIL.content.appendChild(shell);
+      const nameEl = shell.querySelector(".gc-player-card-commander");
+      if (nameEl && SHIP_DETAIL.titleEl) {
+        SHIP_DETAIL.titleEl.textContent = nameEl.textContent.trim();
+      }
+      const theme = shell.getAttribute("data-theme") || "cyan";
+      if (SHIP_DETAIL.dialog) SHIP_DETAIL.dialog.setAttribute("data-theme", theme);
+    } else {
+      SHIP_DETAIL.content.appendChild(wrap);
+    }
+  }
+
+  function sdPrepareOpen(shipKey) {
+    const key = String(shipKey || "").trim();
+    if (!key) return false;
+    const wasOpen = SHIP_DETAIL.open;
+    SHIP_DETAIL.reqId += 1;
+    SHIP_DETAIL.currentKey = key;
+    sdResetModalState();
+    openShipDetailModal(!wasOpen);
+    sdSetLoading(true);
+    return true;
+  }
+
+  async function loadShipDetail(shipKey) {
+    if (!sdPrepareOpen(shipKey)) return;
+    const reqToken = SHIP_DETAIL.reqId;
+    try {
+      const result = await fetchShipDetailHtml(shipKey, reqToken);
+      if (result.aborted || reqToken !== SHIP_DETAIL.reqId) return;
+      if (!result.ok) {
+        if (result.html && result.html.includes("gc-ship-detail-shell")) {
+          mountShipDetailHtml(result.html);
+        } else {
+          sdSetError(t("ship_detail_not_found", t("ship_detail_load_error", "Could not load ship data.")));
+        }
+        return;
+      }
+      mountShipDetailHtml(result.html);
+    } catch (_) {
+      if (reqToken !== SHIP_DETAIL.reqId) return;
+      sdSetError(t("ship_detail_load_error", "Could not load ship data."));
+    }
+  }
+
+  function initShipDetailOnce() {
+    if (GC._shipDetailBound) return;
+    GC._shipDetailBound = true;
+
+    document.addEventListener("click", (e) => {
+      const closeEl = e.target.closest("[data-sd-close]");
+      if (closeEl) {
+        const root = cacheShipDetailElements();
+        if (root && SHIP_DETAIL.open) {
+          e.preventDefault();
+          closeShipDetailModal();
+        }
+        return;
+      }
+
+      const trigger = e.target.closest("[data-ship-detail]");
+      if (!trigger) return;
+      const shipKey = trigger.getAttribute("data-ship-detail");
+      if (!shipKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      loadShipDetail(shipKey);
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const trigger = e.target.closest("[data-ship-detail]");
+      if (!trigger || document.activeElement !== trigger) return;
+      e.preventDefault();
+      loadShipDetail(trigger.getAttribute("data-ship-detail"));
+    });
+  }
+
+  GC.openShipDetail = loadShipDetail;
+  GC.closeShipDetail = closeShipDetailModal;
+
   function initPlayerCardOnce() {
     if (GC._playerCardBound) return;
     GC._playerCardBound = true;
@@ -5080,7 +6656,8 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
-      if (PLAYER_CARD.open) closePlayerCardModal();
+      if (SHIP_DETAIL.open) closeShipDetailModal();
+      else if (PLAYER_CARD.open) closePlayerCardModal();
     });
   }
 
@@ -5098,6 +6675,7 @@
     initSkipLink();
     initGameActions();
     bindPlanetEvolutionOnce();
+    bindFleetOnce();
     initHeaderPlanetSwitcher();
     initGcPopoversOnce();
     initVisibilityPolling();
@@ -5106,8 +6684,8 @@
     initSupportModule();
     initStickyResourceBar();
     initPjax();
+    initShipDetailOnce();
     initPlayerCardOnce();
-    if (typeof GC.initChat === "function") GC.initChat();
 
     document.addEventListener("click", (e) => {
       const link = e.target.closest('a.logout-btn, a[href*="/logout"]');

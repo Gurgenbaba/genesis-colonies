@@ -97,6 +97,34 @@ def player_has_due_queue_work(
                     return True
         except Exception:
             pass
+        try:
+            from .shipyard_queue import shipyard_queue_table_ready
+
+            if shipyard_queue_table_ready(conn):
+                if pid_filter is not None:
+                    cur.execute(
+                        """
+                        SELECT 1 FROM shipyard_queue
+                        WHERE planet_id = ? AND status = 'queued' AND finish_at <= ?
+                        LIMIT 1;
+                        """,
+                        (pid_filter, ts),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM shipyard_queue sq
+                        INNER JOIN planets p ON p.id = sq.planet_id
+                        WHERE p.player_id = ? AND sq.status = 'queued' AND sq.finish_at <= ?
+                        LIMIT 1;
+                        """,
+                        (int(player_id), ts),
+                    )
+                if cur.fetchone():
+                    return True
+        except Exception:
+            pass
         return False
     finally:
         if owns_conn and conn is not None:

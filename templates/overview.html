@@ -86,37 +86,8 @@
         </div>
       </div>
 
-      <div class="overview-resources overview-resources-compact">
-        <article class="overview-res-card" aria-label="{{ T('resource_metal', 'Ferronit') }}">
-          <img src="{{ url_for('static', filename='icons/ferronit.png') }}" alt="" class="overview-res-icon">
-          <div class="overview-res-meta">
-            <span class="overview-res-label">{{ T("resource_metal", "Ferronit") }}</span>
-            <span id="overview-metal-val" class="overview-res-main">
-              <span class="gc-val" data-res="metal">{{ (res.metal or 0)|fmt_int }}</span>
-              <span class="gc-cap">/ {{ (res.metal_cap or 0)|fmt_int }}</span>
-            </span>
-            <span class="overview-res-cap">
-              +<span data-ph="metal">{{ (res.metal_per_hour or 0)|fmt_int }}</span> / h
-            </span>
-          </div>
-        </article>
-
-        <article class="overview-res-card" aria-label="{{ T('resource_crystal', 'Crytite') }}">
-          <img src="{{ url_for('static', filename='icons/crytite.png') }}" alt="" class="overview-res-icon">
-          <div class="overview-res-meta">
-            <span class="overview-res-label">{{ T("resource_crystal", "Crytite") }}</span>
-            <span id="overview-crystal-val" class="overview-res-main">
-              <span class="gc-val" data-res="crystal">{{ (res.crystal or 0)|fmt_int }}</span>
-              <span class="gc-cap">/ {{ (res.crystal_cap or 0)|fmt_int }}</span>
-            </span>
-            <span class="overview-res-cap">
-              +<span data-ph="crystal">{{ (res.crystal_per_hour or 0)|fmt_int }}</span> / h
-            </span>
-          </div>
-        </article>
-      </div>
-
-      <div class="overview-energy-strip">
+      <div class="overview-energy-strip{% if (nrg.total or 0) == 0 %} overview-energy-zero{% elif (nrg.ratio or 1) >= 1 %} overview-energy-ok{% elif (nrg.ratio or 1) >= 0.5 %} overview-energy-low{% else %} overview-energy-critical{% endif %}"
+           id="overview-energy-strip">
         <div class="overview-energy-head">
           <span class="overview-energy-label">{{ T("overview_label_energy", "Energie-Bilanz") }}</span>
           <span class="overview-energy-values gc-mono" id="overview-energy-val">
@@ -124,23 +95,20 @@
             <span class="gc-cap">/ <span data-energy-total>{{ (nrg.total or 0)|fmt_int }}</span></span>
           </span>
         </div>
-        <div class="overview-energy-meta">
-          <span>
-            {{ T("overview_label_efficiency", "Effizienz") }}:
-            <strong id="overview-efficiency" data-efficiency>{{ (nrg.efficiency_pct or 100)|fmt_int }}</strong> %
-          </span>
-        </div>
         <div class="overview-hint overview-energy-hint
                     {% if (nrg.total or 0) == 0 %}overview-energy-zero
                     {% elif (nrg.ratio or 1) >= 1 %}overview-energy-ok
-                    {% else %}overview-energy-low{% endif %}"
+                    {% elif (nrg.ratio or 1) >= 0.5 %}overview-energy-low
+                    {% else %}overview-energy-critical{% endif %}"
              id="overview-energy-hint">
           {% if (nrg.total or 0) == 0 %}
             {{ T("overview_hint_energy_zero", "Keine Energie – baue Solarkollektoren.") }}
           {% elif (nrg.ratio or 1) >= 1 %}
             {{ T("overview_hint_energy_good", "Energie stabil.") }}
-          {% else %}
+          {% elif (nrg.ratio or 1) >= 0.5 %}
             {{ T("overview_hint_energy_low", "Energieengpass – Produktion gedrosselt.") }}
+          {% else %}
+            {{ T("overview_hint_energy_critical", "Kritischer Energiemangel – sofort Solarkollektoren ausbauen.") }}
           {% endif %}
         </div>
       </div>

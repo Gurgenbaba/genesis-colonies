@@ -171,6 +171,19 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "cost_factor": 1.8,
         "requirements": {"buildings": {"research_lab": 3}, "research": {"armor_tech": 1}},
     },
+    "fuel_efficiency": {
+        "label": "Brennzellen-Optimierung",
+        "label_key": "research_fuel_efficiency",
+        "description": "Reduziert Flotten-Treibstoffverbrauch um 3 % pro Stufe (min. 50 %).",
+        "description_key": "desc_research_fuel_efficiency",
+        "category": "propulsion",
+        "icon": "engine_tech.png",
+        "base_cost_m": 2400,
+        "base_cost_c": 1200,
+        "base_time": 1400,
+        "cost_factor": 1.75,
+        "requirements": {"buildings": {"research_lab": 2}, "research": {"energy_tech": 1}},
+    },
 }
 
 

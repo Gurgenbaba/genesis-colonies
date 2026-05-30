@@ -193,6 +193,7 @@ def init_db() -> None:
             is_homeworld INTEGER NOT NULL DEFAULT 0,
             metal REAL NOT NULL DEFAULT 0 CHECK(metal >= 0),
             crystal REAL NOT NULL DEFAULT 0 CHECK(crystal >= 0),
+            fuel_cells REAL NOT NULL DEFAULT 500 CHECK(fuel_cells >= 0),
             last_update REAL NOT NULL,
             energy_total INTEGER NOT NULL DEFAULT 0,
             energy_used INTEGER NOT NULL DEFAULT 0,
@@ -204,6 +205,7 @@ def init_db() -> None:
         ("galaxy", "INTEGER NOT NULL DEFAULT 1"),
         ("system", "INTEGER"),
         ("position", "INTEGER"),
+        ("fuel_cells", "REAL NOT NULL DEFAULT 500 CHECK(fuel_cells >= 0)"),
     ):
         try:
             cur.execute(f"ALTER TABLE planets ADD COLUMN {col} {typedef};")
@@ -225,6 +227,7 @@ def init_db() -> None:
             crystal_storage INTEGER DEFAULT 0 CHECK(crystal_storage >= 0),
             command_center INTEGER DEFAULT 0 CHECK(command_center >= 0),
             shipyard INTEGER DEFAULT 0 CHECK(shipyard >= 0),
+            fuel_cell_plant INTEGER DEFAULT 0 CHECK(fuel_cell_plant >= 0),
             defense_factory INTEGER DEFAULT 0 CHECK(defense_factory >= 0),
             barracks INTEGER DEFAULT 0 CHECK(barracks >= 0),
             radar_array INTEGER DEFAULT 0 CHECK(radar_array >= 0),
@@ -243,6 +246,8 @@ def init_db() -> None:
         ("nanofactory",       "INTEGER DEFAULT 0 CHECK(nanofactory >= 0)"),
         ("geothermal_nexus",  "INTEGER DEFAULT 0 CHECK(geothermal_nexus >= 0)"),
         ("planet_core_nexus", "INTEGER DEFAULT 0 CHECK(planet_core_nexus >= 0)"),
+        ("fuel_cell_plant",   "INTEGER DEFAULT 0 CHECK(fuel_cell_plant >= 0)"),
+        ("orbital_shipyard",  "INTEGER DEFAULT 0 CHECK(orbital_shipyard >= 0)"),
     ]
     for col, ddl in new_building_cols:
         try:
@@ -656,10 +661,10 @@ def ensure_player_and_homeworld(
             cur.execute(
                 """
                 INSERT INTO planets (
-                    player_id, name, is_homeworld, metal, crystal, last_update,
+                    player_id, name, is_homeworld, metal, crystal, fuel_cells, last_update,
                     galaxy, system, position
                 )
-                VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?);
+                VALUES (?, ?, 1, ?, ?, 500, ?, ?, ?, ?);
                 """,
                 (
                     int(player_id),
@@ -813,6 +818,7 @@ def save_planet(planet: Dict[str, Any], conn: sqlite3.Connection | None = None) 
             UPDATE planets
             SET metal        = MAX(0, ?),
                 crystal      = MAX(0, ?),
+                fuel_cells   = MAX(0, ?),
                 last_update  = ?,
                 energy_total = ?,
                 energy_used  = ?
@@ -821,6 +827,7 @@ def save_planet(planet: Dict[str, Any], conn: sqlite3.Connection | None = None) 
             (
                 planet["metal"],
                 planet["crystal"],
+                planet.get("fuel_cells", 0),
                 planet.get("last_update", time.time()),
                 int(planet.get("energy_total", 0)),
                 int(planet.get("energy_used", 0)),
@@ -1052,7 +1059,7 @@ BUILDING_KEYS = [
     "metal_mine", "crystal_mine", "solar_plant",
     "research_lab", "academy",
     "metal_storage", "crystal_storage",
-    "command_center", "shipyard", "defense_factory",
+    "command_center", "shipyard", "orbital_shipyard", "fuel_cell_plant", "defense_factory",
     "barracks", "radar_array", "shield_generator",
     "terraformer", "nanofactory", "geothermal_nexus",
     "planet_core_nexus",

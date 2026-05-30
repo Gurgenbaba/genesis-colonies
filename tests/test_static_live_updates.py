@@ -61,16 +61,29 @@ def test_chat_js_poll_updates_last_id_and_resume_bootstrap():
     assert "applyIncomingPollMessages" in src
     assert "bumpLastMsgId" in src
     assert "isActivelyViewingRoom" in src
-    assert "refreshBootstrap()" in src
+    assert "maybeRefreshBootstrap" in src
     assert "resumeChatPolling" in src
+    assert "bootstrapIntervalMs" in src
     assert "chatDebug" in src
+    assert "DOMContentLoaded" not in src.split("initChatOnce")[1][-400:]
+
+
+def test_main_js_game_state_polling_idempotent():
+    src = _read("static/main.js")
+    assert "started: false" in src.split("polling:")[1][:200]
+    assert "scheduleGameStatePoll" in src
+    assert "polling already active" in src
+    assert "intervalIdle: 5000" in src
+    assert "normalizePjaxUrl" in src
+    assert "PJAX dedupe" in src
+    assert "dataset.pjaxBusy" in src
 
 
 def test_main_js_init_page_resumes_chat_after_pjax():
     src = _read("static/main.js")
     assert "GC.initChat()" in src
-    assert "GC.resumeChatPolling()" in src
-    assert 'mod();' in src or "mod({ force: true })" not in src.split("page === \"messages\"")[1][:120]
+    init_section = src.split("function initPage")[1].split("function formatDuration")[0]
+    assert "GC.resumeChatPolling()" not in init_section
 
 
 def test_main_js_pjax_covers_main_content_links():
@@ -87,6 +100,22 @@ def test_main_js_galaxy_prefetch_on_init():
     assert "prefetchGalaxyAdjacent" in src
     assert 'path.endsWith("/galaxy")' in src
     assert "bindGalaxyKeyboardOnce" not in src
+
+
+def test_fleet_form_excluded_from_pjax_get_submit():
+    tpl = _read("templates/fleet.html")
+    assert 'id="fleet-send-form"' in tpl
+    assert "data-no-pjax" in tpl
+    assert 'method="post"' in tpl
+    js = _read("static/main.js")
+    assert "e.defaultPrevented" in js.split("function initPjax")[1].split("function init")[0]
+
+
+def test_chat_bootstrap_not_in_message_poll_tick():
+    src = _read("static/js/chat.js")
+    poll_body = src.split("async function pollTick")[1].split("function startPolling")[0]
+    assert "if (!panelVisible)" not in poll_body or "maybeRefreshBootstrap(false)" not in poll_body
+    assert "bootstrapIntervalMs: 300000" in src
 
 
 def test_galaxy_template_pjax_nav_urls():

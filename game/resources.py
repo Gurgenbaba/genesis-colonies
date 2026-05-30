@@ -228,8 +228,10 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
 
         if delta > 0:
             m_rate, c_rate = resolver.production_rates_per_sec()
+            fc_rate = resolver.fuel_cells_rate_per_sec()
             delta_metal = int(m_rate * ratio * delta * prod_speed)
             delta_crystal = int(c_rate * ratio * delta * prod_speed)
+            delta_fuel_cells = int(fc_rate * ratio * delta * prod_speed)
 
             apply_production_delta(
                 planet,
@@ -239,6 +241,11 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
                 research=research,
                 mods=mods,
             )
+            if delta_fuel_cells > 0:
+                planet["fuel_cells"] = max(
+                    0.0,
+                    float(planet.get("fuel_cells") or 0) + delta_fuel_cells,
+                )
 
         planet["last_update"] = now
         planet["energy_total"] = int(energy_total)
@@ -294,6 +301,7 @@ def update_resources(player: dict, conn=None):
     player_view = dict(player)
     player_view["metal"] = planet["metal"]
     player_view["crystal"] = planet["crystal"]
+    player_view["fuel_cells"] = planet.get("fuel_cells", 0)
     player_view["energy_total"] = energy_total
     player_view["energy_used"] = energy_used
 

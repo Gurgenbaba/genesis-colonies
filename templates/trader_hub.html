@@ -9,7 +9,7 @@
 <div class="gc-page trader-hub-page">
   <header class="gc-page-header section-header">
     <h1 class="section-title">{{ T("trader_hub_title", "Trader Hub") }}</h1>
-    <p class="section-hint hint">{{ T("trader_hub_hint", "Soforttausch Ferronit und Crytite auf deiner aktiven Kolonie.") }}</p>
+    <p class="section-hint hint">{{ T("trader_hub_hint") }}</p>
   </header>
 
   <section class="gc-panel trader-hub-balance" aria-label="{{ T('trader_hub_balance', 'Kolonie-Bestand') }}">
@@ -39,6 +39,10 @@
     </div>
   </section>
 
-  {% include "partials/exchange_panel.html" %}
+  <div class="trader-hub-grid">
+    {% include "partials/exchange_panel.html" %}
+    {% include "partials/fuel_exchange_panel.html" %}
+    {% include "partials/scrapyard_panel.html" %}
+  </div>
 </div>
 {% endblock %}

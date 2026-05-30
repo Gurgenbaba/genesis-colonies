@@ -1,0 +1,30 @@
+{# Global ship properties modal (persists across PJAX) #}
+<div id="gc-ship-detail-root"
+     class="gc-player-card-modal gc-ship-detail-modal"
+     hidden
+     aria-hidden="true">
+  <div class="gc-player-card-overlay" data-sd-close tabindex="-1"></div>
+  <div class="gc-player-card-dialog"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="gc-ship-detail-title"
+       data-theme="cyan">
+    <header class="gc-player-card-head">
+      <h2 id="gc-ship-detail-title" class="gc-player-card-head-title">
+        {{ T("ship_detail_title") }}
+      </h2>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              data-sd-close
+              aria-label="{{ T('ship_detail_close') }}">✕</button>
+    </header>
+    <div id="gc-ship-detail-body" class="gc-player-card-body" aria-live="polite">
+      <div class="gc-player-card-content" data-sd-content></div>
+      <div class="gc-player-card-loading" data-sd-loading hidden aria-hidden="true">
+        <span class="gc-player-card-spinner" aria-hidden="true"></span>
+        <span class="gc-player-card-loading-text">{{ T("ship_detail_loading") }}</span>
+      </div>
+      <div class="gc-player-card-error" data-sd-error hidden aria-hidden="true" role="alert"></div>
+    </div>
+  </div>
+</div>

@@ -31,7 +31,7 @@ _BUILDING_KEYS = [
     "metal_mine", "crystal_mine", "solar_plant",
     "research_lab", "academy",
     "metal_storage", "crystal_storage",
-    "command_center", "shipyard", "defense_factory",
+    "command_center", "orbital_shipyard", "fuel_cell_plant", "defense_factory",
     "barracks", "radar_array", "shield_generator",
     "terraformer", "nanofactory", "geothermal_nexus",
     "planet_core_nexus",
@@ -49,6 +49,8 @@ def _empty_result(source: str) -> Dict[str, Any]:
             "ascension": 0,
             "shipyard": 0,
             "defense": 0,
+            "fleet_arrivals": 0,
+            "fleet_returns": 0,
         },
         "affected_players": [],
         "affected_planets": [],
@@ -473,6 +475,22 @@ def finish_due_work(
                     result["errors"].append(msg)
                     logger.exception("queue_engine planet evolution finish failed: %s", msg)
 
+                try:
+                    from .shipyard_queue import finish_due_shipyard_jobs_for_planet
+
+                    n_sy = finish_due_shipyard_jobs_for_planet(
+                        conn, pid_planet, pid_player, now=float(now)
+                    )
+                    if n_sy > 0:
+                        result["finished"]["shipyard"] += n_sy
+                        affected_players.add(pid_player)
+                        affected_planets.add(pid_planet)
+                except Exception as exc:
+                    result["ok"] = False
+                    msg = f"shipyard planet={pid_planet}: {exc}"
+                    result["errors"].append(msg)
+                    logger.exception("queue_engine shipyard finish failed: %s", msg)
+
             for uid in research_targets:
                 try:
                     n = finish_player_research_jobs(conn, uid, float(now))
@@ -484,6 +502,23 @@ def finish_due_work(
                     msg = f"research user={uid}: {exc}"
                     result["errors"].append(msg)
                     logger.exception("queue_engine research finish failed: %s", msg)
+
+            try:
+                from .fleet import fleet_schema_ready, process_fleet_tick
+
+                if fleet_schema_ready(conn):
+                    fleet_player = int(player_id) if player_id is not None else None
+                    fleet_result = process_fleet_tick(player_id=fleet_player, now=float(now), conn=conn)
+                    result["finished"]["fleet_arrivals"] += int(fleet_result.get("processed_arrivals") or 0)
+                    result["finished"]["fleet_returns"] += int(fleet_result.get("processed_returns") or 0)
+                    if fleet_result.get("errors"):
+                        for err in fleet_result["errors"]:
+                            result["errors"].append(f"fleet: {err}")
+            except Exception as exc:
+                result["ok"] = False
+                msg = f"fleet tick: {exc}"
+                result["errors"].append(msg)
+                logger.exception("queue_engine fleet tick failed: %s", msg)
 
             if update_scores and affected_players:
                 from .score_events import apply_score_updates_for_players

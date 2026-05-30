@@ -15,7 +15,7 @@
 </head>
 
 {% set SIMPLE_LAYOUT = request.endpoint in ['landing', 'login', 'register', 'forgot_password', 'reset_password', 'verify_email'] %}
-{% set WIP_ENDPOINTS = ['shipyard_view', 'defense_view', 'fleet_view', 'alliance_view'] %}
+{% set WIP_ENDPOINTS = ['defense_view', 'alliance_view'] %}
 {% set _motd_enabled = (motd_enabled if motd_enabled is defined else False) %}
 {% set _motd_text = (motd_text if motd_text is defined else "") %}
 {% set _player_stats = (PLAYER_STATS if PLAYER_STATS is defined and PLAYER_STATS else {}) %}
@@ -132,6 +132,30 @@
                 <span class="res-sep" aria-hidden="true">/</span>
                 <span class="res-cap metal">{{ (storage_caps.metal if storage_caps is defined else 0)|fmt_int }}</span>
               </div>
+              <span class="res-rate metal" data-res-rate="metal" aria-hidden="true" style="visibility:hidden"></span>
+            </div>
+
+            <div class="hud-res-panel hud-res-crystal" title="{{ T('resource_crystal') }}">
+              <span class="hud-res-label">{{ T('resource_crystal') }}</span>
+              <div class="hud-res-body res-block res-block-crystal">
+                <img src="{{ url_for('static', filename='icons/crytite.png') }}" class="res-icon" alt="{{ T('resource_crystal') }}">
+                <span class="res-value crystal">{{ (player.crystal if player is defined else 0)|fmt_int }}</span>
+                <span class="res-sep" aria-hidden="true">/</span>
+                <span class="res-cap crystal">{{ (storage_caps.crystal if storage_caps is defined else 0)|fmt_int }}</span>
+              </div>
+              <span class="res-rate crystal" data-res-rate="crystal" aria-hidden="true" style="visibility:hidden"></span>
+            </div>
+
+            {% set fc_have = (player.fuel_cells if player is defined and player.fuel_cells is defined else 0) | int %}
+            <div class="hud-res-panel hud-res-fuel-cells hud-res-no-storage"
+                 title="{{ T('resource_fuel_cells') }} — {{ T('resource_fuel_cells_no_storage') }}">
+              <span class="hud-res-label">{{ T('resource_fuel_cells') }}</span>
+              <div class="hud-res-body res-block res-block-fuel-cells">
+                <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" class="res-icon" alt="{{ T('resource_fuel_cells') }}"
+                     onerror="this.onerror=null;this.src='{{ url_for('static', filename='icons/energy.png') }}';">
+                <span class="res-value fuel_cells">{{ fc_have|fmt_int }}</span>
+              </div>
+              <span class="res-rate fuel_cells" data-res-rate="fuel_cells" aria-hidden="true" style="visibility:hidden"></span>
             </div>
 
             {% set eu = (energy_used if energy_used is defined else 0) | int %}
@@ -145,16 +169,7 @@
                 <img src="{{ url_for('static', filename='icons/energy.png') }}" class="res-icon" alt="{{ T('energy', 'Energie') }}">
                 <span id="res-energy">{{ eu|fmt_int }}/{{ et|fmt_int }}</span>
               </div>
-            </div>
-
-            <div class="hud-res-panel hud-res-crystal" title="{{ T('resource_crystal') }}">
-              <span class="hud-res-label">{{ T('resource_crystal') }}</span>
-              <div class="hud-res-body res-block res-block-crystal">
-                <img src="{{ url_for('static', filename='icons/crytite.png') }}" class="res-icon" alt="{{ T('resource_crystal') }}">
-                <span class="res-value crystal">{{ (player.crystal if player is defined else 0)|fmt_int }}</span>
-                <span class="res-sep" aria-hidden="true">/</span>
-                <span class="res-cap crystal">{{ (storage_caps.crystal if storage_caps is defined else 0)|fmt_int }}</span>
-              </div>
+              <span class="res-rate energy" data-res-rate="energy" aria-hidden="true" style="visibility:hidden"></span>
             </div>
 
           </div>
@@ -197,9 +212,8 @@
         </a>
 
         <a href="{{ url_for('shipyard_view') }}"
-           class="gc-nav-link gc-nav-wip {% if request.endpoint == 'shipyard_view' %}active{% endif %}">
+           class="gc-nav-link {% if request.endpoint == 'shipyard_view' %}active{% endif %}">
           {{ T("nav_shipyard") }}
-          <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
         </a>
 
         <a href="{{ url_for('defense_view') }}"
@@ -209,9 +223,8 @@
         </a>
 
         <a href="{{ url_for('fleet_view') }}"
-           class="gc-nav-link gc-nav-wip {% if request.endpoint == 'fleet_view' %}active{% endif %}">
+           class="gc-nav-link {% if request.endpoint == 'fleet_view' %}active{% endif %}">
           {{ T("nav_fleet") }}
-          <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
         </a>
 
         <a href="{{ url_for('galaxy_view') }}"
@@ -299,6 +312,7 @@
   {% if not SIMPLE_LAYOUT and AUTH_USER and AUTH_USER.id %}
   {% include "partials/chat.html" %}
   {% include "partials/player_card_modal.html" %}
+  {% include "partials/ship_detail_modal.html" %}
   {% include "partials/planet_manage_modal.html" %}
   {% include "partials/messages_compose_dialog.html" %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/chat.css') }}?v={{ GC_ASSET_VERSION }}">
@@ -348,14 +362,14 @@
         <a href="{{ url_for('galaxy_view') }}" class="gc-nav-drawer-link {% if request.endpoint == 'galaxy_view' %}active{% endif %}">
           {{ T("nav_galaxy") }}
         </a>
-        <a href="{{ url_for('shipyard_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'shipyard_view' %}active{% endif %}">
-          {{ T("nav_shipyard") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        <a href="{{ url_for('shipyard_view') }}" class="gc-nav-drawer-link {% if request.endpoint == 'shipyard_view' %}active{% endif %}">
+          {{ T("nav_shipyard") }}
         </a>
         <a href="{{ url_for('defense_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'defense_view' %}active{% endif %}">
           {{ T("nav_defense") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
         </a>
-        <a href="{{ url_for('fleet_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'fleet_view' %}active{% endif %}">
-          {{ T("nav_fleet") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        <a href="{{ url_for('fleet_view') }}" class="gc-nav-drawer-link {% if request.endpoint == 'fleet_view' %}active{% endif %}">
+          {{ T("nav_fleet") }}
         </a>
         <a href="{{ url_for('alliance_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'alliance_view' %}active{% endif %}">
           {{ T("nav_alliance") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>

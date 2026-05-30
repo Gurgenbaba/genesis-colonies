@@ -32,12 +32,13 @@ BUILDING_ORDER: List[str] = [
     "metal_mine",
     "crystal_mine",
     "solar_plant",
+    "fuel_cell_plant",
     "research_lab",
     "academy",
     "metal_storage",
     "crystal_storage",
     "command_center",
-    "shipyard",
+    "orbital_shipyard",
     "defense_factory",
     "barracks",
     "radar_array",
@@ -54,12 +55,13 @@ BUILDING_TAB: Dict[str, str] = {
     "metal_mine": "resources",
     "crystal_mine": "resources",
     "solar_plant": "resources",
+    "fuel_cell_plant": "resources",
     "research_lab": "research",
     "academy": "research",
     "metal_storage": "resources",
     "crystal_storage": "resources",
     "command_center": "infrastructure",
-    "shipyard": "military",
+    "orbital_shipyard": "military",
     "defense_factory": "military",
     "barracks": "military",
     "radar_array": "military",
@@ -70,7 +72,15 @@ BUILDING_TAB: Dict[str, str] = {
     "planet_core_nexus": "infrastructure",
 }
 
-BUILDING_ICON: Dict[str, str] = {key: f"img/buildings/{key}.png" for key in BUILDING_ORDER}
+_BUILDING_ICON_OVERRIDES: Dict[str, str] = {
+    "orbital_shipyard": "img/buildings/shipyard.png",
+    "fuel_cell_plant": "img/buildings/solar_plant.png",
+}
+
+BUILDING_ICON: Dict[str, str] = {
+    key: _BUILDING_ICON_OVERRIDES.get(key, f"img/buildings/{key}.png")
+    for key in BUILDING_ORDER
+}
 
 # =============================================================================
 #   KONFIG: Kosten, Zeit, Requirements
@@ -80,12 +90,13 @@ BASE_COST: Dict[str, Tuple[int, int]] = {
     "metal_mine": (75, 25),
     "crystal_mine": (40, 28),
     "solar_plant": (45, 11),
+    "fuel_cell_plant": (120, 80),
     "research_lab": (200, 400),
     "academy": (400, 600),
     "metal_storage": (1000, 0),
     "crystal_storage": (0, 1000),
     "command_center": (500, 200),
-    "shipyard": (400, 300),
+    "orbital_shipyard": (400, 300),
     "defense_factory": (600, 400),
     "barracks": (300, 200),
     "radar_array": (200, 600),
@@ -100,12 +111,13 @@ COST_FACTOR: Dict[str, float] = {
     "metal_mine": 1.5,
     "crystal_mine": 1.6,
     "solar_plant": 1.5,
+    "fuel_cell_plant": 1.55,
     "research_lab": 1.8,
     "academy": 1.8,
     "metal_storage": 1.7,
     "crystal_storage": 1.7,
     "command_center": 2.0,
-    "shipyard": 1.9,
+    "orbital_shipyard": 1.9,
     "defense_factory": 1.9,
     "barracks": 1.7,
     "radar_array": 1.7,
@@ -120,12 +132,13 @@ BUILD_TIME_BASE: Dict[str, int] = {
     "metal_mine": 51,
     "crystal_mine": 51,
     "solar_plant": 68,
+    "fuel_cell_plant": 90,
     "research_lab": 120,
     "academy": 180,
     "metal_storage": 120,
     "crystal_storage": 120,
     "command_center": 240,
-    "shipyard": 200,
+    "orbital_shipyard": 200,
     "defense_factory": 220,
     "barracks": 160,
     "radar_array": 160,
@@ -140,12 +153,13 @@ BUILD_TIME_FACTOR: Dict[str, float] = {
     "metal_mine": 1.4,
     "crystal_mine": 1.4,
     "solar_plant": 1.5,
+    "fuel_cell_plant": 1.45,
     "research_lab": 1.6,
     "academy": 1.6,
     "metal_storage": 1.6,
     "crystal_storage": 1.6,
     "command_center": 1.7,
-    "shipyard": 1.7,
+    "orbital_shipyard": 1.7,
     "defense_factory": 1.7,
     "barracks": 1.6,
     "radar_array": 1.6,
@@ -164,6 +178,8 @@ BUILDING_REQUIREMENTS: Dict[str, Dict[str, Dict[str, int]]] = {
     "crystal_mine": {},
     "solar_plant": {},
 
+    "fuel_cell_plant": {"buildings": {"solar_plant": 1, "crystal_mine": 2}},
+
     "research_lab": {"buildings": {"metal_mine": 3, "crystal_mine": 2}},
     "academy": {"buildings": {"research_lab": 2}},
 
@@ -171,8 +187,8 @@ BUILDING_REQUIREMENTS: Dict[str, Dict[str, Dict[str, int]]] = {
     "crystal_storage": {"buildings": {"crystal_mine": 4}},
 
     "command_center": {},
-    "shipyard": {"buildings": {"command_center": 2}},
-    "defense_factory": {"buildings": {"shipyard": 2}},
+    "orbital_shipyard": {"buildings": {"command_center": 2}},
+    "defense_factory": {"buildings": {"orbital_shipyard": 2}},
     "barracks": {"buildings": {"command_center": 1}},
     "radar_array": {"buildings": {"command_center": 3}},
     "shield_generator": {"buildings": {"command_center": 4, "defense_factory": 2}},

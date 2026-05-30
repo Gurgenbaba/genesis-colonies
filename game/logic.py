@@ -84,6 +84,7 @@ def _read_player_live_state_no_writes(
     player_view = dict(player)
     player_view["metal"] = planet["metal"]
     player_view["crystal"] = planet["crystal"]
+    player_view["fuel_cells"] = planet.get("fuel_cells", 0)
     player_view["energy_total"] = int(energy_total)
     player_view["energy_used"] = int(energy_used)
     return player_view, buildings, ratio, int(energy_total), int(energy_used), storage_caps
@@ -167,6 +168,7 @@ def read_player_live_state_for_poll(
             player_view = dict(player)
             player_view["metal"] = planet["metal"]
             player_view["crystal"] = planet["crystal"]
+            player_view["fuel_cells"] = planet.get("fuel_cells", 0)
             player_view["energy_total"] = int(energy_total)
             player_view["energy_used"] = int(energy_used)
 
@@ -250,6 +252,7 @@ def refresh_player_live_state(
         player_view = dict(player)
         player_view["metal"] = planet["metal"]
         player_view["crystal"] = planet["crystal"]
+        player_view["fuel_cells"] = planet.get("fuel_cells", 0)
         player_view["energy_total"] = int(energy_total)
         player_view["energy_used"] = int(energy_used)
 
