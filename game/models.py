@@ -200,6 +200,16 @@ def init_db() -> None:
         );
     """)
 
+    for col, typedef in (
+        ("galaxy", "INTEGER NOT NULL DEFAULT 1"),
+        ("system", "INTEGER"),
+        ("position", "INTEGER"),
+    ):
+        try:
+            cur.execute(f"ALTER TABLE planets ADD COLUMN {col} {typedef};")
+        except sqlite3.OperationalError:
+            pass
+
     # ------------------------------------------------------------
     # PLANET BUILDINGS (spaltenbasiert)
     # ------------------------------------------------------------
@@ -640,12 +650,27 @@ def ensure_player_and_homeworld(
             except Exception:
                 pass
 
+            from game.galaxy import assign_free_coordinates
+
+            galaxy, system, position = assign_free_coordinates(conn)
             cur.execute(
                 """
-                INSERT INTO planets (player_id, name, is_homeworld, metal, crystal, last_update)
-                VALUES (?, ?, 1, ?, ?, ?);
+                INSERT INTO planets (
+                    player_id, name, is_homeworld, metal, crystal, last_update,
+                    galaxy, system, position
+                )
+                VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?);
                 """,
-                (int(player_id), "Aurora Prime", start_metal, start_crystal, now),
+                (
+                    int(player_id),
+                    "Aurora Prime",
+                    start_metal,
+                    start_crystal,
+                    now,
+                    int(galaxy),
+                    int(system),
+                    int(position),
+                ),
             )
             pid = cur.lastrowid
 

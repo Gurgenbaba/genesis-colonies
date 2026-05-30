@@ -15,7 +15,7 @@
 </head>
 
 {% set SIMPLE_LAYOUT = request.endpoint in ['landing', 'login', 'register', 'forgot_password', 'reset_password', 'verify_email'] %}
-{% set WIP_ENDPOINTS = ['galaxy_view', 'shipyard_view', 'defense_view', 'fleet_view', 'alliance_view'] %}
+{% set WIP_ENDPOINTS = ['shipyard_view', 'defense_view', 'fleet_view', 'alliance_view'] %}
 {% set _motd_enabled = (motd_enabled if motd_enabled is defined else False) %}
 {% set _motd_text = (motd_text if motd_text is defined else "") %}
 {% set _player_stats = (PLAYER_STATS if PLAYER_STATS is defined and PLAYER_STATS else {}) %}
@@ -208,7 +208,7 @@
         </a>
 
         <a href="{{ url_for('galaxy_view') }}"
-           class="gc-nav-link gc-nav-wip {% if request.endpoint == 'galaxy_view' %}active{% endif %}">
+           class="gc-nav-link {% if request.endpoint == 'galaxy_view' %}active{% endif %}">
           {{ T("nav_galaxy") }}
           <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
         </a>
@@ -339,8 +339,8 @@
         <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" id="gc-nav-drawer-close" aria-label="{{ T('close', 'Schließen') }}">✕</button>
       </div>
       <div class="gc-nav-drawer-links">
-        <a href="{{ url_for('galaxy_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'galaxy_view' %}active{% endif %}">
-          {{ T("nav_galaxy") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        <a href="{{ url_for('galaxy_view') }}" class="gc-nav-drawer-link {% if request.endpoint == 'galaxy_view' %}active{% endif %}">
+          {{ T("nav_galaxy") }}
         </a>
         <a href="{{ url_for('shipyard_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'shipyard_view' %}active{% endif %}">
           {{ T("nav_shipyard") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>

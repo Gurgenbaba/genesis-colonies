@@ -344,19 +344,33 @@ def main() -> None:
         new_migrations = [p for p in sql_files if p.name not in applied]
         if not new_migrations:
             print("Alle Migrationen sind bereits angewendet.")
-            return
+        else:
+            print(f"Neue Migrationen: {len(new_migrations)}")
+            _ensure_galaxy_coordinates(conn)
 
-        print(f"Neue Migrationen: {len(new_migrations)}")
+            for path in new_migrations:
+                filename = path.name
+                print(f"\n==> Migration: {filename}")
+                sql_text = path.read_text(encoding="utf-8")
+                apply_migration(conn, filename, sql_text)
 
-        for path in new_migrations:
-            filename = path.name
-            print(f"\n==> Migration: {filename}")
-            sql_text = path.read_text(encoding="utf-8")
-            apply_migration(conn, filename, sql_text)
+            print("\nAlle neuen Migrationen erfolgreich angewendet.")
 
-        print("\nAlle neuen Migrationen erfolgreich angewendet.")
+        _ensure_galaxy_coordinates(conn)
     finally:
         conn.close()
+
+
+def _ensure_galaxy_coordinates(conn: sqlite3.Connection) -> None:
+    """Backfill / dedupe planet coordinates before unique index enforcement."""
+    try:
+        from game.galaxy import repair_missing_coordinates
+
+        repaired = repair_missing_coordinates(conn)
+        if repaired:
+            print(f"[galaxy] Repariert: {repaired} Planet(en) ohne oder doppelte Koordinaten.")
+    except Exception as e:
+        print(f"[galaxy] Koordinaten-Reparatur übersprungen: {e}")
 
 
 if __name__ == "__main__":

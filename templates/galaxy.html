@@ -2,176 +2,98 @@
 
 {% block content %}
 
-{# ------------------------------------------------------------- #}
-{# Defensive Defaults (Galaxy darf niemals crasht)                #}
-{# ------------------------------------------------------------- #}
-{% set galaxy_hint = T("galaxy_hint") %}
-{% if galaxy_hint == "galaxy_hint" %}
-  {% set galaxy_hint = "Scanner-Ansicht des aktuellen Sektors. Später siehst du hier Flotten, Kolonien und Asteroidenfelder." %}
-{% endif %}
+{% set nav = galaxy_nav if galaxy_nav is defined else {} %}
+{% set sys = system_data if system_data is defined else {'slots': []} %}
+{% set slots = sys.slots if sys.slots is defined else [] %}
 
-{% set sector_label = T("galaxy_sector_overview") %}
-{% if sector_label == "galaxy_sector_overview" %}
-  {% set sector_label = "Sektor-Übersicht" %}
-{% endif %}
+<div class="gc-page galaxy-page">
 
-{% set probes_label = T("galaxy_probes_ready") %}
-{% if probes_label == "galaxy_probes_ready" %}
-  {% set probes_label = "Sonden bereit" %}
-{% endif %}
-
-{% set slot_free = T("galaxy_colony_slot_free") %}
-{% if slot_free == "galaxy_colony_slot_free" %}
-  {% set slot_free = "Kolonieslot frei" %}
-{% endif %}
-
-{% set sector_commanders = (sector_commanders if sector_commanders is defined and sector_commanders else []) %}
-
-<div class="gc-page galaxy-wrapper">
-
-  <!-- HEADLINE -->
-  <header class="galaxy-headline section-header">
-    <h2 class="section-title">{{ T("nav_galaxy") }}</h2>
-    <p class="section-hint hint">{{ galaxy_hint }}</p>
+  <header class="galaxy-hero section-header">
+    <h2 class="section-title galaxy-hero-title">{{ T("nav_galaxy", "Galaxy") }}</h2>
+    <p class="galaxy-hero-sub">{{ T("galaxy_current_position", "Aktuelle Position") }}</p>
+    <div class="galaxy-hero-position">
+      <span class="galaxy-hero-galaxy">{{ T("galaxy_label_galaxy", "Galaxy") }} {{ nav.galaxy or 1 }}</span>
+      <span class="galaxy-hero-system">{{ T("galaxy_label_system", "System") }} {{ nav.system or 1 }}</span>
+    </div>
   </header>
 
-  <section class="gc-panel galaxy-shell">
+  <section class="gc-panel galaxy-panel">
 
-    <!-- PANEL HEADER / CONTROLS -->
-    <div class="gc-panel-header galaxy-shell-header">
-
-      <!-- LEFT: Title + Subtitle -->
+    <div class="gc-panel-header galaxy-panel-header">
       <div class="gc-panel-head-left">
-        <span class="gc-panel-title galaxy-shell-title">{{ sector_label }}</span>
-        <span class="gc-panel-subtitle">{{ probes_label }}</span>
+        <span class="gc-panel-title">{{ T("galaxy_system_scan", "System-Scan") }}</span>
+        <span class="gc-panel-subtitle gc-mono">[{{ nav.galaxy or 1 }}:{{ nav.system or 1 }}:1–15]</span>
       </div>
 
-      <!-- RIGHT: Controls (placeholder UI, später dynamisch) -->
-      <div class="gc-panel-head-right galaxy-controls">
-        <div class="galaxy-coord-block" aria-label="Galaxy">
-          <span class="galaxy-coord-label">Galaxy</span>
-          <span class="galaxy-coord-value">1</span>
-        </div>
+      <nav class="galaxy-nav-bar" aria-label="{{ T('galaxy_nav_label', 'System-Navigation') }}">
+        <a href="{{ url_for('galaxy_view', system=nav.prev_system) }}"
+           class="gc-btn gc-btn-ghost gc-btn-xs galaxy-nav-btn {% if not nav.has_prev %}is-disabled{% endif %}"
+           {% if not nav.has_prev %}aria-disabled="true" tabindex="-1"{% endif %}
+           title="{{ T('galaxy_prev_system', 'Vorheriges System') }}">&laquo;</a>
+        <a href="{{ url_for('galaxy_view', system=nav.prev_system) }}"
+           class="gc-btn gc-btn-ghost gc-btn-xs galaxy-nav-btn {% if not nav.has_prev %}is-disabled{% endif %}"
+           {% if not nav.has_prev %}aria-disabled="true" tabindex="-1"{% endif %}
+           title="{{ T('galaxy_prev_system', 'Vorheriges System') }}">&lt;</a>
 
-        <div class="galaxy-coord-block" aria-label="System">
-          <span class="galaxy-coord-label">System</span>
-          <span class="galaxy-coord-value">001</span>
-        </div>
+        <form class="galaxy-jump-form" method="get" action="{{ url_for('galaxy_view') }}">
+          <label class="galaxy-jump-label" for="galaxy-jump-system">{{ T("galaxy_label_system", "System") }}</label>
+          <input id="galaxy-jump-system"
+                 class="galaxy-jump-input gc-mono"
+                 type="number"
+                 name="system"
+                 min="{{ nav.system_min or 1 }}"
+                 max="{{ nav.system_max or 499 }}"
+                 value="{{ nav.system or 1 }}"
+                 required>
+          <button type="submit" class="gc-btn gc-btn-primary gc-btn-xs">{{ T("galaxy_jump", "Sprung") }}</button>
+        </form>
 
-        <div class="galaxy-nav-buttons" aria-label="Navigation (in Planung)">
-          <button class="gc-btn gc-btn-ghost gc-btn-xs" type="button" disabled>‹ Gal -</button>
-          <button class="gc-btn gc-btn-ghost gc-btn-xs" type="button" disabled>Sys -</button>
-          <button class="gc-btn gc-btn-ghost gc-btn-xs" type="button" disabled>Sys +</button>
-          <button class="gc-btn gc-btn-ghost gc-btn-xs" type="button" disabled>Gal +</button>
-        </div>
-
-        <span class="gc-panel-tag galaxy-shell-tag">{{ probes_label }}</span>
-      </div>
-
+        <a href="{{ url_for('galaxy_view', system=nav.next_system) }}"
+           class="gc-btn gc-btn-ghost gc-btn-xs galaxy-nav-btn {% if not nav.has_next %}is-disabled{% endif %}"
+           {% if not nav.has_next %}aria-disabled="true" tabindex="-1"{% endif %}
+           title="{{ T('galaxy_next_system', 'Nächstes System') }}">&gt;</a>
+        <a href="{{ url_for('galaxy_view', system=nav.next_system) }}"
+           class="gc-btn gc-btn-ghost gc-btn-xs galaxy-nav-btn {% if not nav.has_next %}is-disabled{% endif %}"
+           {% if not nav.has_next %}aria-disabled="true" tabindex="-1"{% endif %}
+           title="{{ T('galaxy_next_system', 'Nächstes System') }}">&raquo;</a>
+      </nav>
     </div>
 
-    <!-- GRID: SYSTEM CARDS -->
-    <div class="galaxy-grid">
-
-      <div class="galaxy-system-card">
-        <div class="gs-icon">Aur</div>
-        <div class="gs-text">
-          <div class="gs-name">Aurora Prime</div>
-          <div class="gs-coord">[1:1:3]</div>
-          <div class="gs-info">
-            <span class="gs-pill gs-pill-free">{{ slot_free }}</span>
-          </div>
+    <div class="galaxy-slot-list" role="list">
+      {% for slot in slots %}
+      <article class="galaxy-slot-row {% if slot.occupied %}is-occupied{% else %}is-empty{% endif %}" role="listitem">
+        <div class="galaxy-slot-pos gc-mono">{{ slot.position }}</div>
+        <div class="galaxy-slot-body">
+          {% if slot.occupied %}
+            <div class="galaxy-slot-name">{{ slot.planet_name }}</div>
+            <div class="galaxy-slot-commander">{{ slot.commander_name }}</div>
+            <div class="galaxy-slot-coord gc-mono">{{ slot.coordinates_formatted }}</div>
+          {% else %}
+            <div class="galaxy-slot-name galaxy-slot-empty-label">{{ T("galaxy_empty_slot", "Empty Slot") }}</div>
+            <div class="galaxy-slot-coord gc-mono">{{ slot.coordinates_formatted }}</div>
+          {% endif %}
         </div>
-      </div>
-
-      <div class="galaxy-system-card">
-        <div class="gs-icon">Neb</div>
-        <div class="gs-text">
-          <div class="gs-name">Nebula IX</div>
-          <div class="gs-coord">[1:2:5]</div>
-          <div class="gs-info">
-            <span class="gs-pill gs-pill-free">{{ slot_free }}</span>
-          </div>
+        <div class="galaxy-slot-badge">
+          {% if slot.occupied %}
+            <span class="gs-pill gs-pill-occupied">{{ T("galaxy_occupied", "Occupied") }}</span>
+          {% else %}
+            <span class="gs-pill gs-pill-free">{{ T("galaxy_status_free", "Free") }}</span>
+          {% endif %}
         </div>
-      </div>
-
-      <div class="galaxy-system-card">
-        <div class="gs-icon">Ver</div>
-        <div class="gs-text">
-          <div class="gs-name">Vertex</div>
-          <div class="gs-coord">[1:3:7]</div>
-          <div class="gs-info">
-            <span class="gs-pill gs-pill-free">{{ slot_free }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="galaxy-system-card">
-        <div class="gs-icon">Ecl</div>
-        <div class="gs-text">
-          <div class="gs-name">Eclipse</div>
-          <div class="gs-coord">[1:4:4]</div>
-          <div class="gs-info">
-            <span class="gs-pill gs-pill-free">{{ slot_free }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="galaxy-system-card">
-        <div class="gs-icon">Obs</div>
-        <div class="gs-text">
-          <div class="gs-name">Obsidian</div>
-          <div class="gs-coord">[1:5:2]</div>
-          <div class="gs-info">
-            <span class="gs-pill gs-pill-free">{{ slot_free }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="galaxy-system-card">
-        <div class="gs-icon">Hor</div>
-        <div class="gs-text">
-          <div class="gs-name">Horizon</div>
-          <div class="gs-coord">[1:6:3]</div>
-          <div class="gs-info">
-            <span class="gs-pill gs-pill-free">{{ slot_free }}</span>
-          </div>
-        </div>
-      </div>
-
+      </article>
+      {% endfor %}
     </div>
 
-    {% if sector_commanders and sector_commanders|length > 0 %}
-    <div class="galaxy-sector-commanders">
-      <div class="galaxy-legend-title">
-        {{ T("galaxy_sector_commanders") if T("galaxy_sector_commanders") != "galaxy_sector_commanders" else "Commander im Sektor" }}
-      </div>
-      <ul class="galaxy-commander-list">
-        {% for cmd in sector_commanders %}
-          <li class="galaxy-commander-item">
-            {{ player_name_link(cmd.player_id, cmd.nickname) }}
-            <span class="galaxy-commander-score gc-mono">{{ (cmd.score_total or 0)|fmt_int }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
-    {% endif %}
-
-    <!-- LEGEND / PLACEHOLDER -->
     <div class="galaxy-legend">
-      <div class="galaxy-legend-title">
-        {{ T("galaxy_legend_title") if T("galaxy_legend_title") != "galaxy_legend_title" else "Scanner-Legende" }}
-      </div>
+      <div class="galaxy-legend-title">{{ T("galaxy_legend_title", "Scanner-Legende") }}</div>
       <div class="galaxy-legend-items">
         <span class="gl-item">
           <span class="gs-pill gs-pill-free"></span>
-          {{ T("galaxy_legend_free_slot") if T("galaxy_legend_free_slot") != "galaxy_legend_free_slot" else "Freier Kolonieslot" }}
+          {{ T("galaxy_legend_free_slot", "Freier Slot") }}
         </span>
-        <span class="gl-item gl-item-disabled">
-          {{ T("galaxy_legend_enemy_planned") if T("galaxy_legend_enemy_planned") != "galaxy_legend_enemy_planned" else "● Feindliche Kolonie (in Planung)" }}
-        </span>
-        <span class="gl-item gl-item-disabled">
-          {{ T("galaxy_legend_asteroids_planned") if T("galaxy_legend_asteroids_planned") != "galaxy_legend_asteroids_planned" else "◆ Asteroidenfeld / Expedition (in Planung)" }}
+        <span class="gl-item">
+          <span class="gs-pill gs-pill-occupied"></span>
+          {{ T("galaxy_legend_occupied", "Besetzter Slot") }}
         </span>
       </div>
     </div>

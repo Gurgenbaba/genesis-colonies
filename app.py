@@ -849,18 +849,31 @@ def galaxy_view():
     if player_view is None:
         return redirect(url_for("login"))
 
-    sector_commanders = []
+    from game.galaxy import (
+        GALAXY_MAX,
+        GALAXY_MIN,
+        SYSTEM_MAX,
+        SYSTEM_MIN,
+        get_planet_coordinates,
+        list_system,
+    )
+    from game.planet_evolution.repository import get_context_planet
+
+    galaxy = GALAXY_MIN
+    system = SYSTEM_MIN
     try:
-        for row in get_ranking_rows(limit=6, offset=0):
-            sector_commanders.append(
-                {
-                    "player_id": row["player_id"],
-                    "nickname": row["nickname"],
-                    "score_total": row["score_total"],
-                }
-            )
+        planet = get_context_planet(int(session["user_id"]))
+        coords = get_planet_coordinates(planet)
+        galaxy = int(coords["galaxy"])
+        system = int(coords["system"])
     except Exception:
-        sector_commanders = []
+        pass
+
+    req_system = request.args.get("system", type=int)
+    if req_system is not None:
+        system = max(SYSTEM_MIN, min(SYSTEM_MAX, int(req_system)))
+
+    system_data = list_system(galaxy, system)
 
     return render_template(
         "galaxy.html",
@@ -868,8 +881,38 @@ def galaxy_view():
         energy_total=energy_total,
         energy_used=energy_used,
         storage_caps=storage_caps,
-        sector_commanders=sector_commanders,
+        galaxy_nav={
+            "galaxy": galaxy,
+            "system": system,
+            "galaxy_min": GALAXY_MIN,
+            "galaxy_max": GALAXY_MAX,
+            "system_min": SYSTEM_MIN,
+            "system_max": SYSTEM_MAX,
+            "prev_system": max(SYSTEM_MIN, system - 1),
+            "next_system": min(SYSTEM_MAX, system + 1),
+            "has_prev": system > SYSTEM_MIN,
+            "has_next": system < SYSTEM_MAX,
+        },
+        system_data=system_data,
     )
+
+
+@app.route("/api/galaxy/system")
+@require_login_api
+def api_galaxy_system():
+    from game.galaxy import GALAXY_MIN, SYSTEM_MAX, SYSTEM_MIN, list_system
+
+    galaxy = request.args.get("galaxy", default=GALAXY_MIN, type=int)
+    system = request.args.get("system", type=int)
+    if system is None:
+        return jsonify({"ok": False, "error": "system_required"}), 400
+    system = max(SYSTEM_MIN, min(SYSTEM_MAX, int(system)))
+    try:
+        data = list_system(int(galaxy), system)
+        return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        logger.exception("api_galaxy_system failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/shipyard")

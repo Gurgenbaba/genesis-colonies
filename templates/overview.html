@@ -47,7 +47,7 @@
             <span class="overview-hero-name" id="overview-planet-name">{{ planet.name or T('overview_label_planet', 'Kolonie') }}</span>
           </button>
         </div>
-        <p class="overview-hero-coords gc-mono" id="overview-planet-coords">{{ planet.coordinates.display if planet.coordinates is defined else 'G1 · Sektor ? · Position ?' }}</p>
+        <p class="overview-hero-coords gc-mono" id="overview-planet-coords">{{ planet.coordinates.display }}</p>
       </div>
       <span class="overview-hero-class gc-chip-angular">
         {{ T(planet.planet_class_label_key, planet.planet_class or 'terrestrial') }}
@@ -63,7 +63,7 @@
       </div>
       <div class="overview-meta-item">
         <dt>{{ T("overview_label_coordinates", "Koordinaten") }}</dt>
-        <dd class="gc-mono">{{ planet.coordinates.display if planet.coordinates is defined else '–' }}</dd>
+        <dd class="gc-mono">{{ planet.coordinates.display }}</dd>
       </div>
       <div class="overview-meta-item">
         <dt>{{ T("overview_label_planet_class", "Planetentyp") }}</dt>

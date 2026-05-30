@@ -573,7 +573,21 @@ def colonize_planet(
             rollback(conn)
             return False, "max_colonies", None
 
+        from game.galaxy import (
+            assign_free_coordinates,
+            assert_coordinate_available,
+            GalaxyCoordinateError,
+        )
         from .dna import generate_planet_dna
+
+        if system is None or position is None:
+            galaxy, system, position = assign_free_coordinates(conn, galaxy=int(galaxy))
+        else:
+            try:
+                assert_coordinate_available(conn, int(galaxy), int(system), int(position))
+            except GalaxyCoordinateError:
+                rollback(conn)
+                return False, "coordinate_occupied", None
 
         dna = generate_planet_dna(galaxy=int(galaxy), system=system, position=position)
         now = time.time()
@@ -591,8 +605,8 @@ def colonize_planet(
                 250.0,
                 now,
                 int(galaxy),
-                system,
-                position,
+                int(system),
+                int(position),
                 str(dna.get("planet_class") or "terrestrial"),
                 int(dna.get("dna_seed") or 0),
                 now,

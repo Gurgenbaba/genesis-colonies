@@ -50,19 +50,13 @@ def _format_remaining(seconds: int) -> str:
     return f"{rm}:{rs:02d}"
 
 
-def _coordinates_display(planet: Dict[str, Any]) -> str:
-    galaxy = _safe_int(planet.get("galaxy"), 1)
-    system = planet.get("system")
-    position = planet.get("position")
-    system_txt = str(system) if system not in (None, "") else "?"
-    pos_txt = str(position) if position not in (None, "") else "?"
-    return f"G{galaxy} · Sektor {system_txt} · Position {pos_txt}"
-
-
 def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
+    from .galaxy import get_planet_coordinates
+
     planet_class = str(planet.get("planet_class") or "terrestrial")
     temp = temperature_range_for_class(planet_class)
     is_homeworld = bool(int(planet.get("is_homeworld") or 0))
+    coords = get_planet_coordinates(planet)
     return {
         "planet_id": _safe_int(planet.get("id")),
         "name": str(planet.get("name") or "Kolonie"),
@@ -71,10 +65,10 @@ def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
         "planet_class": planet_class,
         "planet_class_label_key": planet_class_label_key(planet_class),
         "coordinates": {
-            "galaxy": _safe_int(planet.get("galaxy"), 1),
-            "system": planet.get("system"),
-            "position": planet.get("position"),
-            "display": _coordinates_display(planet),
+            "galaxy": coords["galaxy"],
+            "system": coords["system"],
+            "position": coords["position"],
+            "display": coords["formatted"],
         },
         "temperature": temp,
     }

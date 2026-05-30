@@ -44,6 +44,18 @@ def _pct(current: float, cap: float) -> int:
     return max(0, min(100, int(round(100.0 * float(current) / float(cap)))))
 
 
+def _planet_location_display(planet: Dict[str, Any]) -> Dict[str, Any]:
+    from game.galaxy import get_planet_coordinates
+
+    coords = get_planet_coordinates(planet)
+    return {
+        "galaxy": coords["galaxy"],
+        "system": coords["system"],
+        "position": coords["position"],
+        "display": coords["formatted"],
+    }
+
+
 def _planet_status(
     planet: Dict[str, Any],
     culture: Dict[str, Any],
@@ -780,12 +792,7 @@ def build_dashboard_extras(
             "status": status,
             "planet_class_label_key": planet_class_label_key(planet.get("planet_class") or "terrestrial"),
         },
-        "location": {
-            "galaxy": int(planet.get("galaxy") or 1),
-            "system": planet.get("system"),
-            "position": planet.get("position"),
-            "display": f"G{int(planet.get('galaxy') or 1)} · Sektor {planet.get('system') or '?'} · Position {planet.get('position') or '?'}",
-        },
+        "location": _planet_location_display(planet),
         "planet_score": compute_single_planet_score(planet_id, conn=conn),
         "traits": _trait_cards(dna, reveal),
         "progression": {
