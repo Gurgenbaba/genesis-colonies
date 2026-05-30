@@ -67,6 +67,12 @@ def _planet_switcher_row(
     except GalaxyCoordinateError:
         coords_formatted = ""
 
+    position = planet_row.get("position")
+    try:
+        position_i = int(position) if position is not None and position != "" else None
+    except (TypeError, ValueError):
+        position_i = None
+
     return {
         "planet_id": pid,
         "name": planet_row.get("name"),
@@ -79,6 +85,7 @@ def _planet_switcher_row(
         "planet_class": planet_class,
         "planet_class_label_key": planet_class_label_key(planet_class),
         "coordinates_formatted": coords_formatted,
+        "position": position_i,
     }
 
 

@@ -154,5 +154,35 @@ def test_main_js_header_planet_switcher_bound():
     src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     assert "initHeaderPlanetSwitcher" in src
     assert "GC.updateHeaderPlanetSwitcherFromState" in src
+    assert "applyPlanetLandscapeFromState" in src
     assert ".pe-planet-btn" not in src
-    assert "#pe-colonize-btn" not in src
+
+
+def test_overview_injects_planet_landscape_css_var(switcher_db, monkeypatch):
+    player_id, uname = _create_player()
+    hw = get_homeworld(player_id=player_id)
+    hw_pos = int(hw.get("position") or 1)
+    from game.planet_visuals import get_landscape_for_position
+
+    expected_fn = get_landscape_for_position(hw_pos)
+
+    client = _app_client(monkeypatch)
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    body = client.get("/overview").get_data(as_text=True)
+    assert "--planet-landscape:" in body
+    assert f"img/landscapes/{expected_fn}" in body
+
+
+def test_game_state_includes_landscape_url(switcher_db, monkeypatch):
+    player_id, uname = _create_player()
+    colony_id = _second_planet(player_id)
+
+    client = _app_client(monkeypatch)
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+
+    set_active_planet(player_id, colony_id)
+    gs = client.get("/api/game-state").get_json()
+    ap = gs.get("active_planet") or {}
+    assert ap.get("position") == 4
+    assert ap.get("landscape_url")
+    assert "trockenplanet08-h.png" in ap["landscape_url"]

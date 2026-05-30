@@ -215,6 +215,12 @@
     return /HTTP 401|HTTP 403|not_logged_in|non_json_response|invalid_json_response/i.test(msg);
   }
 
+  function applyPlanetLandscapeFromState(data) {
+    const url = data?.active_planet?.landscape_url;
+    if (!url) return;
+    document.body.style.setProperty("--planet-landscape", `url('${url}')`);
+  }
+
   function applyActionState(json, reason) {
     if (!json || !json.state) return false;
     const anyActive = applyGameStateData(json.state, reason);
@@ -1853,6 +1859,8 @@
       if (typeof GC.updateHeaderPlanetSwitcherFromState === "function") {
         GC.updateHeaderPlanetSwitcherFromState(data);
       }
+
+      applyPlanetLandscapeFromState(data);
 
       const p = data.player || {};
       const energy = data.energy || {};
@@ -3743,6 +3751,10 @@
         const fetchedBody = doc.body;
         if (fetchedBody?.dataset && fetchedBody.dataset.endpoint !== undefined) {
           document.body.dataset.endpoint = fetchedBody.dataset.endpoint || "";
+        }
+        const landscape = fetchedBody?.style?.getPropertyValue("--planet-landscape");
+        if (landscape) {
+          document.body.style.setProperty("--planet-landscape", landscape.trim());
         }
 
         _syncNavActive(url);

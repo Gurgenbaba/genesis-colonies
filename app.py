@@ -290,6 +290,19 @@ def inject_globals():
         header_planets = []
         header_active_planet = None
 
+    current_planet_landscape_url = None
+    try:
+        user_id = session.get("user_id")
+        if user_id is not None:
+            from game.planet_visuals import landscape_filename_for_planet
+
+            landscape_fn = landscape_filename_for_planet(header_active_planet)
+            current_planet_landscape_url = url_for(
+                "static", filename=f"img/landscapes/{landscape_fn}"
+            )
+    except Exception:
+        current_planet_landscape_url = None
+
     return dict(
         T=T,
         T_DATA=T_DATA,
@@ -316,6 +329,7 @@ def inject_globals():
 
         HEADER_PLANETS=header_planets,
         HEADER_ACTIVE_PLANET=header_active_planet,
+        current_planet_landscape_url=current_planet_landscape_url,
     )
 
 
@@ -2169,7 +2183,11 @@ def _payload_from_live_context(
         from game.galaxy import get_planet_coordinates
         from game.planet_evolution.ux_copy import planet_class_label_key
 
+        from game.planet_visuals import get_landscape_for_position
+
         coords = get_planet_coordinates(planet)
+        position = int(coords.get("position") or 0)
+        landscape_fn = get_landscape_for_position(position)
         payload["active_planet"] = {
             "planet_id": int(active_planet_id),
             "name": str(planet.get("name") or ""),
@@ -2179,8 +2197,12 @@ def _payload_from_live_context(
                 str(planet.get("planet_class") or "terrestrial")
             ),
             "is_homeworld": bool(planet.get("is_homeworld")),
+            "position": position,
+            "landscape_url": url_for("static", filename=f"img/landscapes/{landscape_fn}"),
         }
     except Exception:
+        from game.planet_visuals import DEFAULT_LANDSCAPE
+
         payload["active_planet"] = {
             "planet_id": int(active_planet_id),
             "name": str(planet.get("name") or ""),
@@ -2188,6 +2210,8 @@ def _payload_from_live_context(
             "planet_class": str(planet.get("planet_class") or "terrestrial"),
             "planet_class_label_key": "planet_class_terrestrial",
             "is_homeworld": bool(planet.get("is_homeworld")),
+            "position": None,
+            "landscape_url": url_for("static", filename=f"img/landscapes/{DEFAULT_LANDSCAPE}"),
         }
 
     if include_panel:
