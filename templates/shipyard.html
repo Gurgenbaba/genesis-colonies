@@ -149,8 +149,10 @@
             {{ T("shipyard_build_btn") }}
           </button>
         </div>
-        {% if not ship.can_build %}
-        <p class="shipyard-hint-warn">{{ T("shipyard_not_enough_resources") }}</p>
+        {% if not ship.can_build and ship.block_reason == 'queue_full' %}
+        <p class="shipyard-hint-warn" data-shipyard-block-reason="queue_full">{{ T("shipyard_block_queue_full") }}</p>
+        {% elif not ship.can_build %}
+        <p class="shipyard-hint-warn" data-shipyard-block-reason="not_enough_resources">{{ T("shipyard_not_enough_resources") }}</p>
         {% endif %}
       </article>
       {% else %}

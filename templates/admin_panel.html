@@ -385,6 +385,24 @@
       </section>
 
       <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_balance_section_shipyard", "Orbitalwerft") }}</span>
+      </div>
+      <section class="admin-section">
+        <div class="admin-form-grid-2">
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-shipyard-speed">{{ T("admin_balance_shipyard_speed", "Schiffbau-Geschwindigkeit") }}</label>
+            <input class="admin-input" id="admin-balance-shipyard-speed" type="number" min="0.1" step="0.1" data-balance-key="shipyard_speed">
+            <p class="admin-small-hint">{{ T("admin_balance_shipyard_speed_hint", "Höher = kürzere Bauzeit pro Schiff (Multiplikator).") }}</p>
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-shipyard-queue">{{ T("admin_balance_shipyard_queue_limit", "Werft-Bauschleife") }}</label>
+            <input class="admin-input" id="admin-balance-shipyard-queue" type="number" min="1" max="20" step="1" data-balance-key="shipyard_queue_limit">
+            <p class="admin-small-hint">{{ T("admin_balance_shipyard_queue_hint", "Max. gleichzeitige Schiffbau-Aufträge pro Planet.") }}</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="admin-section-title">
         <span class="admin-section-title-text">{{ T("admin_balance_section_scores", "Score-Gewichte") }}</span>
       </div>
       <section class="admin-section">
@@ -465,59 +483,18 @@
                    min="1" max="15">
           </div>
 
-          <div class="admin-field">
-            <label class="admin-label" for="queue_limit">
-              {{ T("admin_label_queue_limit") if T("admin_label_queue_limit") != "admin_label_queue_limit" else "Maximale Bau-Queue pro Planet" }}
-            </label>
-            <input class="admin-input" id="queue_limit" type="number" name="queue_limit"
-                   value="{{ (settings.queue_limit if settings and settings.queue_limit is defined else 1) }}"
-                   min="1" max="20">
-          </div>
-
-          <div class="admin-field">
-            <label class="admin-label" for="research_queue_limit">
-              {{ T("admin_label_research_queue_limit", "Maximale Forschungs-Queue pro Spieler") }}
-            </label>
-            <input class="admin-input" id="research_queue_limit" type="number" name="research_queue_limit"
-                   value="{{ (settings.research_queue_limit if settings and settings.research_queue_limit is defined else 3) }}"
-                   min="1" max="20">
-          </div>
-
         </div>
+        <p class="admin-small-hint">{{ T("admin_legacy_balance_redirect", "Produktion, Gebäudebau, Forschung, Queues und Startressourcen: Tab „Balance“.") }}</p>
       </section>
 
       <div class="admin-section-title">
         <span class="admin-section-title-text">
-          {{ T("admin_label_speed") if T("admin_label_speed") != "admin_label_speed" else "Geschwindigkeiten" }}
+          {{ T("admin_label_fleet_speeds", "Flotten-Geschwindigkeit") }}
         </span>
       </div>
 
       <section class="admin-section">
         <div class="admin-form-grid-3">
-
-          <div class="admin-field">
-            <label class="admin-label" for="production_speed">
-              {{ T("admin_label_production_speed") if T("admin_label_production_speed") != "admin_label_production_speed" else "Produktionsgeschwindigkeit" }}
-            </label>
-            <input class="admin-input" id="production_speed" type="number" step="0.1" name="production_speed"
-                   value="{{ (settings.production_speed if settings and settings.production_speed is defined else 1) }}">
-          </div>
-
-          <div class="admin-field">
-            <label class="admin-label" for="build_speed">
-              {{ T("admin_label_build_speed") if T("admin_label_build_speed") != "admin_label_build_speed" else "Baugeschwindigkeit" }}
-            </label>
-            <input class="admin-input" id="build_speed" type="number" step="0.1" name="build_speed"
-                   value="{{ (settings.build_speed if settings and settings.build_speed is defined else 1) }}">
-          </div>
-
-          <div class="admin-field">
-            <label class="admin-label" for="research_speed">
-              {{ T("admin_label_research_speed") if T("admin_label_research_speed") != "admin_label_research_speed" else "Forschungsgeschwindigkeit" }}
-            </label>
-            <input class="admin-input" id="research_speed" type="number" step="0.1" name="research_speed"
-                   value="{{ (settings.research_speed if settings and settings.research_speed is defined else 1) }}">
-          </div>
 
           <div class="admin-field">
             <label class="admin-label" for="fleet_speed_war">
@@ -546,39 +523,13 @@
         </div>
       </section>
 
-      <div class="admin-section-title">
-        <span class="admin-section-title-text">
-          {{ T("admin_section_start_values") if T("admin_section_start_values") != "admin_section_start_values" else "Startwerte für neue Spieler" }}
-        </span>
-      </div>
-
       <section class="admin-section">
-        <div class="admin-form-grid-2">
-
-          <div class="admin-field">
-            <label class="admin-label" for="start_metal">
-              {{ T("admin_label_start_metal") if T("admin_label_start_metal") != "admin_label_start_metal" else "Start-Ferronit" }}
-            </label>
-            <input class="admin-input" id="start_metal" type="number" name="start_metal"
-                   value="{{ (settings.start_metal if settings and settings.start_metal is defined else 0) }}">
-          </div>
-
-          <div class="admin-field">
-            <label class="admin-label" for="start_crystal">
-              {{ T("admin_label_start_crystal") if T("admin_label_start_crystal") != "admin_label_start_crystal" else "Start-Crytite" }}
-            </label>
-            <input class="admin-input" id="start_crystal" type="number" name="start_crystal"
-                   value="{{ (settings.start_crystal if settings and settings.start_crystal is defined else 0) }}">
-          </div>
-
-        </div>
-
         <div class="admin-row-full">
           <label class="admin-checkbox-row" for="apply_start">
             <input type="checkbox" name="apply_start_to_existing" value="1" id="apply_start">
             <span>
               {{ T("admin_apply_start_to_existing") if T("admin_apply_start_to_existing") != "admin_apply_start_to_existing"
-                 else "Neue Startressourcen auch auf bestehende Homeworlds anwenden (als Mindestwert)" }}
+                 else "Startressourcen aus dem Balance-Tab auch auf bestehende Homeworlds anwenden (als Mindestwert)" }}
             </span>
           </label>
         </div>

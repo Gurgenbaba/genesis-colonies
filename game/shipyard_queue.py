@@ -9,9 +9,22 @@ from .db import begin_write_transaction, commit, db, rollback
 from .fleet_defs import canonical_ship_key, get_ship, is_known_ship_key
 from .models import lock_planet_for_update
 
-MAX_SHIPYARD_QUEUE = 3
+MAX_SHIPYARD_QUEUE = 3  # fallback default; prefer get_shipyard_queue_limit()
 CANCEL_REFUND_RATIO = 0.6
 QUEUE_STATUS_QUEUED = "queued"
+
+
+def get_shipyard_queue_limit(*, conn=None) -> int:
+    """Max concurrent shipyard jobs per planet (Admin → Balance)."""
+    try:
+        from .models import get_game_settings
+
+        settings = get_game_settings(conn=conn) if conn is not None else get_game_settings()
+        raw = (settings or {}).get("shipyard_queue_limit", MAX_SHIPYARD_QUEUE)
+        limit = int(float(raw))
+        return max(1, min(20, limit))
+    except (TypeError, ValueError):
+        return MAX_SHIPYARD_QUEUE
 
 
 def shipyard_queue_table_ready(conn) -> bool:
@@ -29,10 +42,12 @@ def _now() -> float:
     return time.time()
 
 
-def _job_duration_seconds(ship_key: str, amount: int, shipyard_level: int) -> int:
+def _job_duration_seconds(
+    ship_key: str, amount: int, shipyard_level: int, *, conn=None
+) -> int:
     from .shipyard import _effective_build_seconds
 
-    unit = max(1, _effective_build_seconds(ship_key, shipyard_level))
+    unit = max(1, _effective_build_seconds(ship_key, shipyard_level, conn=conn))
     return max(1, unit * max(1, int(amount)))
 
 
@@ -74,7 +89,7 @@ def recalculate_queue_finish_times(
     for row in rows:
         sk = canonical_ship_key(str(row["ship_key"]))
         amt = int(row["amount"] or 1)
-        duration = _job_duration_seconds(sk, amt, shipyard_level)
+        duration = _job_duration_seconds(sk, amt, shipyard_level, conn=conn)
         started = schedule_at
         finish = schedule_at + duration
         cursor.execute(
@@ -136,7 +151,7 @@ def enqueue_ship_build(
 ) -> Tuple[bool, str, int | None]:
     if not shipyard_queue_table_ready(conn):
         return False, "fleet_unavailable", None
-    if queue_count(planet_id, conn=conn) >= MAX_SHIPYARD_QUEUE:
+    if queue_count(planet_id, conn=conn) >= get_shipyard_queue_limit(conn=conn):
         return False, "queue_full", None
 
     sk = canonical_ship_key(ship_key)
@@ -317,7 +332,7 @@ def shipyard_queue_for_client(
         amt = int(row["amount"] or 0)
         finish_at = float(row["finish_at"] or 0)
         started_at = float(row["started_at"] or 0)
-        total = _job_duration_seconds(sk, amt, shipyard_level)
+        total = _job_duration_seconds(sk, amt, shipyard_level, conn=conn)
         remaining = max(0, int(finish_at - ts))
         jobs.append(
             {
@@ -341,7 +356,7 @@ def shipyard_queue_for_client(
         "queue": jobs,
         "summary": {
             "count": len(jobs),
-            "limit": MAX_SHIPYARD_QUEUE,
+            "limit": get_shipyard_queue_limit(conn=conn),
             "first_finish_in": first_remaining,
             "refund_percent": int(CANCEL_REFUND_RATIO * 100),
         },

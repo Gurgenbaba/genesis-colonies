@@ -19,6 +19,18 @@ from .models import db, get_planet_buildings, lock_planet_for_update
 BUILD_TIME_LEVEL_FACTOR = 0.98  # −2% build time per shipyard level above 1 (Phase 2 queue)
 
 
+def _shipyard_speed_multiplier(*, conn=None) -> float:
+    """Universe-wide ship build speed from Admin → Balance (higher = faster)."""
+    try:
+        from .models import get_game_settings
+
+        settings = get_game_settings(conn=conn) if conn is not None else get_game_settings()
+        raw = float((settings or {}).get("shipyard_speed", 1.0) or 1.0)
+        return max(0.1, min(10.0, raw))
+    except (TypeError, ValueError):
+        return 1.0
+
+
 def get_shipyard_level(player_id: int, planet_id: int, *, conn=None) -> int:
     """Orbital Shipyard level for a player-owned planet."""
     return shipyard_level_for_planet(int(planet_id), conn=conn)
@@ -31,13 +43,15 @@ def shipyard_level_for_planet(planet_id: int, *, conn=None) -> int:
     return max(0, orbital, legacy)
 
 
-def _effective_build_seconds(ship_key: str, shipyard_level: int) -> int:
+def _effective_build_seconds(ship_key: str, shipyard_level: int, *, conn=None) -> int:
     spec = get_ship(ship_key)
     if not spec:
         return 0
     base = max(1, int(spec.get("build_seconds") or 1))
     lvl = max(1, int(shipyard_level or 1))
-    return max(1, int(math.ceil(base * (BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)))))
+    seconds = max(1, int(math.ceil(base * (BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)))))
+    speed = _shipyard_speed_multiplier(conn=conn)
+    return max(1, int(math.ceil(seconds / speed)))
 
 
 def _unit_build_cost(ship_key: str) -> Dict[str, int]:
@@ -105,9 +119,10 @@ def _ship_catalog_entry(
         "cost_metal": cost["metal"],
         "cost_crystal": cost["crystal"],
         "cost_fuel_cells": cost["fuel_cells"],
-        "build_seconds": _effective_build_seconds(ship_key, shipyard_level),
+        "build_seconds": _effective_build_seconds(ship_key, shipyard_level, conn=conn),
         "max_build": max_qty,
         "can_build": False,
+        "block_reason": "",
         "icon": f"/static/img/ships/{ship_key}.svg",
     }
     if player_id is not None and planet_id is not None:
@@ -125,11 +140,11 @@ def _ship_catalog_entry(
 def list_buildable_ships(player_id: int, planet_id: int, *, conn=None) -> List[Dict[str, Any]]:
     sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
     metal, crystal, fuel = _planet_resources(planet_id, conn=conn)
-    from .shipyard_queue import MAX_SHIPYARD_QUEUE, queue_count, shipyard_queue_table_ready
+    from .shipyard_queue import get_shipyard_queue_limit, queue_count, shipyard_queue_table_ready
 
     queue_full = False
     if shipyard_queue_table_ready(conn):
-        queue_full = queue_count(planet_id, conn=conn) >= MAX_SHIPYARD_QUEUE
+        queue_full = queue_count(planet_id, conn=conn) >= get_shipyard_queue_limit(conn=conn)
     out: List[Dict[str, Any]] = []
     for key in sorted(ACTIVE_SHIP_KEYS):
         if not ship_unlocked(key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn):
@@ -140,7 +155,15 @@ def list_buildable_ships(player_id: int, planet_id: int, *, conn=None) -> List[D
         entry["max_build"] = max_build_amount_for_planet(
             metal, crystal, fuel, key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn
         )
-        entry["can_build"] = entry["max_build"] > 0 and not queue_full
+        if queue_full:
+            entry["block_reason"] = "queue_full"
+            entry["can_build"] = False
+        elif entry["max_build"] <= 0:
+            entry["block_reason"] = "not_enough_resources"
+            entry["can_build"] = False
+        else:
+            entry["block_reason"] = ""
+            entry["can_build"] = True
         out.append(entry)
     return out
 
@@ -317,9 +340,11 @@ def can_build_ship(
         if not ship_unlocked(sk, sy_level, player_id=player_id, planet_id=planet_id, conn=conn):
             return False, "requirements"
 
-        from .shipyard_queue import MAX_SHIPYARD_QUEUE, queue_count, shipyard_queue_table_ready
+        from .shipyard_queue import get_shipyard_queue_limit, queue_count, shipyard_queue_table_ready
 
-        if shipyard_queue_table_ready(conn) and queue_count(planet_id, conn=conn) >= MAX_SHIPYARD_QUEUE:
+        if shipyard_queue_table_ready(conn) and queue_count(planet_id, conn=conn) >= get_shipyard_queue_limit(
+            conn=conn
+        ):
             return False, "queue_full"
 
         metal, crystal, fuel = _planet_resources(planet_id, conn=conn)

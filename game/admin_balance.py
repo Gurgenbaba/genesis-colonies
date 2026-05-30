@@ -17,6 +17,8 @@ BALANCE_SETTING_KEYS: Tuple[str, ...] = (
     "research_speed",
     "queue_limit",
     "research_queue_limit",
+    "shipyard_speed",
+    "shipyard_queue_limit",
     "score_weight_buildings",
     "score_weight_research",
     "exchange_enabled",
@@ -27,12 +29,13 @@ BALANCE_SETTING_KEYS: Tuple[str, ...] = (
 )
 
 _INT_NONNEG = frozenset({"start_metal", "start_crystal", "exchange_daily_limit", "exchange_min_amount"})
-_INT_POS = frozenset({"queue_limit", "research_queue_limit"})
+_INT_POS = frozenset({"queue_limit", "research_queue_limit", "shipyard_queue_limit"})
 _FLOAT_POS = frozenset(
     {
         "production_speed",
         "build_speed",
         "research_speed",
+        "shipyard_speed",
         "exchange_rate_metal_to_crystal",
         "exchange_rate_crystal_to_metal",
     }
@@ -48,6 +51,8 @@ PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
     "research_speed": 0.85,
     "queue_limit": 5,
     "research_queue_limit": 2,
+    "shipyard_speed": 1.0,
+    "shipyard_queue_limit": 3,
     "score_weight_buildings": 1.0,
     "score_weight_research": 0.7,
     "exchange_enabled": True,

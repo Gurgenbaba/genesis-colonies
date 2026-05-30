@@ -4487,8 +4487,11 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 6px;
 }
 
-.gc-chat-fab{
-  display: none !important;
+/* Desktop: TCHAT launcher lives in .gc-special-bar; mobile uses floating FAB (chat.css) */
+@media (min-width: 769px){
+  .gc-chat-fab{
+    display: none !important;
+  }
 }
 
 @media (max-width: 768px){

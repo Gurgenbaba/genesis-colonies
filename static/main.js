@@ -3496,7 +3496,19 @@
       if (btn) btn.disabled = !ship.can_build;
       if (maxBtn) maxBtn.dataset.maxQty = String(ship.max_build || 0);
       const warn = card.querySelector(".shipyard-hint-warn");
-      if (warn) warn.hidden = !!ship.can_build;
+      if (warn) {
+        if (ship.can_build) {
+          warn.hidden = true;
+        } else {
+          warn.hidden = false;
+          const br = ship.block_reason || "not_enough_resources";
+          warn.dataset.shipyardBlockReason = br;
+          warn.textContent = tt(
+            `shipyard_block_${br}`,
+            tt("shipyard_not_enough_resources", "Not enough resources for this build.")
+          );
+        }
+      }
     });
   }
 
@@ -5711,9 +5723,14 @@
           win.hidden = true;
         });
         root.classList.remove("is-open");
-        const chatFab = document.querySelector("[data-chat-fab]");
-        if (chatFab) chatFab.click();
         setActiveBarButton("chat");
+        if (typeof GC.openTChat === "function") {
+          GC.openTChat();
+        } else if (typeof GC.initChat === "function") {
+          GC.initChat();
+          const chatFab = document.querySelector("[data-chat-fab]");
+          if (chatFab) chatFab.click();
+        }
         return;
       }
 

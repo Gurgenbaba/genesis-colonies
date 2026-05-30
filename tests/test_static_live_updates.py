@@ -86,6 +86,17 @@ def test_main_js_init_page_resumes_chat_after_pjax():
     assert "GC.resumeChatPolling()" not in init_section
 
 
+def test_chat_open_tchat_api_and_desktop_fab_scoped():
+    chat_js = _read("static/js/chat.js")
+    assert "GC.openTChat = openTChat" in chat_js
+    assert "async function openTChat" in chat_js
+    main_js = _read("static/main.js")
+    assert "GC.openTChat" in main_js
+    css = _read("static/style.css")
+    assert ".gc-chat-fab{\n  display: none !important;\n}" not in css
+    assert "@media (min-width: 769px)" in css
+
+
 def test_main_js_pjax_covers_main_content_links():
     src = _read("static/main.js")
     assert "isPjaxEligibleLink" in src

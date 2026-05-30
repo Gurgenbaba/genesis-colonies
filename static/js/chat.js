@@ -1569,18 +1569,35 @@
     }
   }
 
+  let _initChatPromise = null;
+
   function initChatOnce() {
-    if (!document.getElementById("gc-chat-root")) return;
+    const root = document.getElementById("gc-chat-root");
+    if (!root) return Promise.resolve(false);
     if (GC._chatInitialized) {
       resumeChatPolling();
-      return;
+      return _initChatPromise || Promise.resolve(true);
     }
     GC._chatInitialized = true;
-    initChat();
+    _initChatPromise = initChat();
+    return _initChatPromise;
+  }
+
+  async function openTChat() {
+    if (!document.getElementById("gc-chat-root")) return;
+    await initChatOnce();
+    setOpen(true);
   }
 
   GC.initChat = initChatOnce;
+  GC.openTChat = openTChat;
   GC.resumeChatPolling = resumeChatPolling;
   GC.TChat = CHAT;
   GC.whisperPlayer = whisperTo;
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => initChatOnce(), { once: true });
+  } else {
+    queueMicrotask(() => initChatOnce());
+  }
 })();

@@ -41,6 +41,8 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     "galaxy_count": "5",
     "queue_limit": "5",
     "research_queue_limit": "2",
+    "shipyard_speed": "1.0",
+    "shipyard_queue_limit": "3",
     "start_metal": "3000",
     "start_crystal": "1500",
 
