@@ -850,30 +850,64 @@ def galaxy_view():
         return redirect(url_for("login"))
 
     from game.galaxy import (
-        GALAXY_MAX,
-        GALAXY_MIN,
-        SYSTEM_MAX,
-        SYSTEM_MIN,
+        build_galaxy_nav,
+        build_minimap_range,
         get_planet_coordinates,
         list_system,
+        resolve_view_coordinates,
     )
-    from game.planet_evolution.repository import get_context_planet
+    from game.planet_evolution.repository import get_active_planet_id, get_context_planet
 
-    galaxy = GALAXY_MIN
-    system = SYSTEM_MIN
+    user_id = int(session["user_id"])
+    galaxy = 1
+    system = 1
+    active_planet_id: int | None = None
+    has_url_view = (
+        request.args.get("galaxy", type=int) is not None
+        or request.args.get("system", type=int) is not None
+        or bool(request.args.get("q") or request.args.get("coord"))
+    )
     try:
-        planet = get_context_planet(int(session["user_id"]))
-        coords = get_planet_coordinates(planet)
-        galaxy = int(coords["galaxy"])
-        system = int(coords["system"])
+        active_planet_id = get_active_planet_id(user_id) or None
+        if not has_url_view:
+            planet = get_context_planet(user_id)
+            coords = get_planet_coordinates(planet)
+            galaxy = int(coords["galaxy"])
+            system = int(coords["system"])
     except Exception:
-        pass
+        active_planet_id = None
 
-    req_system = request.args.get("system", type=int)
-    if req_system is not None:
-        system = max(SYSTEM_MIN, min(SYSTEM_MAX, int(req_system)))
+    carry_system = None
+    try:
+        if request.args.get("galaxy", type=int) is not None and request.args.get("system", type=int) is None:
+            carry_system = int(session.get("galaxy_view_system") or 0) or None
+    except (TypeError, ValueError):
+        carry_system = None
 
-    system_data = list_system(galaxy, system)
+    galaxy, system, highlight_pos = resolve_view_coordinates(
+        default_galaxy=galaxy,
+        default_system=system,
+        req_galaxy=request.args.get("galaxy", type=int),
+        req_system=request.args.get("system", type=int),
+        coord_query=request.args.get("q") or request.args.get("coord"),
+        carry_system=carry_system,
+    )
+    session["galaxy_view_galaxy"] = int(galaxy)
+    session["galaxy_view_system"] = int(system)
+
+    galaxy_nav = build_galaxy_nav(galaxy, system)
+    system_data = list_system(
+        galaxy,
+        system,
+        viewer_player_id=user_id,
+        active_planet_id=active_planet_id,
+        highlight_position=highlight_pos,
+    )
+    minimap = build_minimap_range(
+        galaxy,
+        system,
+        viewer_player_id=user_id,
+    )
 
     return render_template(
         "galaxy.html",
@@ -881,35 +915,70 @@ def galaxy_view():
         energy_total=energy_total,
         energy_used=energy_used,
         storage_caps=storage_caps,
-        galaxy_nav={
-            "galaxy": galaxy,
-            "system": system,
-            "galaxy_min": GALAXY_MIN,
-            "galaxy_max": GALAXY_MAX,
-            "system_min": SYSTEM_MIN,
-            "system_max": SYSTEM_MAX,
-            "prev_system": max(SYSTEM_MIN, system - 1),
-            "next_system": min(SYSTEM_MAX, system + 1),
-            "has_prev": system > SYSTEM_MIN,
-            "has_next": system < SYSTEM_MAX,
-        },
+        galaxy_nav=galaxy_nav,
         system_data=system_data,
+        minimap=minimap,
+        viewer_player_id=user_id,
     )
 
 
 @app.route("/api/galaxy/system")
 @require_login_api
 def api_galaxy_system():
-    from game.galaxy import GALAXY_MIN, SYSTEM_MAX, SYSTEM_MIN, list_system
+    from game.galaxy import (
+        GalaxyCoordinateError,
+        clamp_galaxy,
+        clamp_system,
+        get_universe_config,
+        list_system,
+        resolve_view_coordinates,
+    )
 
-    galaxy = request.args.get("galaxy", default=GALAXY_MIN, type=int)
-    system = request.args.get("system", type=int)
-    if system is None:
+    user_id = int(session["user_id"])
+    cfg = get_universe_config()
+    system_raw = request.args.get("system", type=int)
+    req_galaxy = request.args.get("galaxy", type=int)
+    if system_raw is None and req_galaxy is None:
         return jsonify({"ok": False, "error": "system_required"}), 400
-    system = max(SYSTEM_MIN, min(SYSTEM_MAX, int(system)))
+
+    carry_system = None
+    if req_galaxy is not None and system_raw is None:
+        try:
+            carry_system = int(session.get("galaxy_view_system") or 0) or None
+        except (TypeError, ValueError):
+            carry_system = None
+
     try:
-        data = list_system(int(galaxy), system)
-        return jsonify({"ok": True, "data": data})
+        galaxy, system, _ = resolve_view_coordinates(
+            default_galaxy=1,
+            default_system=1,
+            req_galaxy=request.args.get("galaxy", type=int),
+            req_system=system_raw,
+            coord_query=request.args.get("q") or request.args.get("coord"),
+            carry_system=carry_system,
+        )
+    except GalaxyCoordinateError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+    try:
+        from game.planet_evolution.repository import get_active_planet_id
+
+        active_pid = get_active_planet_id(user_id)
+        data = list_system(
+            galaxy,
+            system,
+            viewer_player_id=user_id,
+            active_planet_id=active_pid,
+        )
+        session["galaxy_view_galaxy"] = int(galaxy)
+        session["galaxy_view_system"] = int(system)
+        return jsonify(
+            {
+                "ok": True,
+                "data": data,
+                "bounds": cfg,
+            }
+        )
     except Exception as e:
         logger.exception("api_galaxy_system failed")
         return jsonify({"ok": False, "error": str(e)}), 500

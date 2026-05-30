@@ -9,21 +9,56 @@ Universe layout (v1):
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .db import db, table_exists, column_exists
 
 GALAXY_MIN = 1
-GALAXY_MAX = 1
 SYSTEM_MIN = 1
 SYSTEM_MAX = 499
 POSITION_MIN = 1
 POSITION_MAX = 15
+MINIMAP_RADIUS = 4
+
+_COORD_QUERY_RE = re.compile(
+    r"^\s*\[?\s*(\d+)\s*:\s*(\d+)\s*(?::\s*(\d+)\s*)?\]?\s*$"
+)
 
 
 class GalaxyCoordinateError(ValueError):
     """Invalid or unavailable galaxy coordinates."""
+
+
+def get_galaxy_max(conn: Optional[sqlite3.Connection] = None) -> int:
+    """Playable galaxies from game settings (admin: galaxy_count)."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        from .models import get_game_settings
+
+        settings = get_game_settings(conn=conn) if conn is not None else get_game_settings()
+        raw = settings.get("galaxy_count", "1")
+        return max(1, min(20, int(raw)))
+    except Exception:
+        return 1
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
+def get_universe_config(conn: Optional[sqlite3.Connection] = None) -> Dict[str, int]:
+    galaxy_max = get_galaxy_max(conn)
+    return {
+        "galaxy_min": GALAXY_MIN,
+        "galaxy_max": galaxy_max,
+        "system_min": SYSTEM_MIN,
+        "system_max": SYSTEM_MAX,
+        "position_min": POSITION_MIN,
+        "position_max": POSITION_MAX,
+    }
 
 
 def _safe_int(raw: Any, default: int = 0) -> int:
@@ -35,14 +70,50 @@ def _safe_int(raw: Any, default: int = 0) -> int:
         return int(default)
 
 
-def validate_coordinates(galaxy: int, system: int, position: int) -> None:
+def validate_coordinates(
+    galaxy: int,
+    system: int,
+    position: int,
+    *,
+    galaxy_max: Optional[int] = None,
+    conn: Optional[sqlite3.Connection] = None,
+) -> None:
     g, s, p = int(galaxy), int(system), int(position)
-    if g < GALAXY_MIN or g > GALAXY_MAX:
+    gmax = int(galaxy_max if galaxy_max is not None else get_galaxy_max(conn))
+    if g < GALAXY_MIN or g > gmax:
         raise GalaxyCoordinateError(f"galaxy out of range: {g}")
     if s < SYSTEM_MIN or s > SYSTEM_MAX:
         raise GalaxyCoordinateError(f"system out of range: {s}")
     if p < POSITION_MIN or p > POSITION_MAX:
         raise GalaxyCoordinateError(f"position out of range: {p}")
+
+
+def clamp_galaxy(galaxy: int, *, conn: Optional[sqlite3.Connection] = None) -> int:
+    gmax = get_galaxy_max(conn)
+    return max(GALAXY_MIN, min(gmax, int(galaxy)))
+
+
+def clamp_system(system: int) -> int:
+    return max(SYSTEM_MIN, min(SYSTEM_MAX, int(system)))
+
+
+def parse_coordinate_query(raw: str) -> Optional[Dict[str, int]]:
+    """
+    Parse [G:S:P], G:S:P, or G:S (position omitted → system jump only).
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    m = _COORD_QUERY_RE.match(text)
+    if not m:
+        return None
+    galaxy = int(m.group(1))
+    system = int(m.group(2))
+    position = int(m.group(3)) if m.group(3) is not None else None
+    out: Dict[str, int] = {"galaxy": galaxy, "system": system}
+    if position is not None:
+        out["position"] = position
+    return out
 
 
 def format_coordinates(galaxy: int, system: int, position: int) -> str:
@@ -167,7 +238,8 @@ def assign_free_coordinates(
     Must be called inside a write transaction when assigning to avoid races.
     """
     g = int(galaxy)
-    if g < GALAXY_MIN or g > GALAXY_MAX:
+    gmax = get_galaxy_max(conn)
+    if g < GALAXY_MIN or g > gmax:
         raise GalaxyCoordinateError(f"galaxy out of range: {g}")
 
     occupied = _load_occupied(conn, exclude_planet_id=exclude_planet_id)
@@ -250,10 +322,174 @@ def repair_missing_coordinates(conn: Optional[sqlite3.Connection] = None) -> int
     return updated
 
 
+def _slot_planet_meta(
+    planet_row: Dict[str, Any],
+    conn: sqlite3.Connection,
+) -> Dict[str, Any]:
+    from .overview_page import temperature_range_for_class
+    from .planet_evolution.scoring import compute_single_planet_score
+    from .planet_evolution.ux_copy import planet_class_label_key
+
+    planet_class = str(planet_row.get("planet_class") or "terrestrial")
+    temp = temperature_range_for_class(planet_class)
+    planet_id = int(planet_row.get("planet_id") or planet_row.get("id") or 0)
+    score = compute_single_planet_score(planet_id, conn) if planet_id else 0
+    return {
+        "planet_class": planet_class,
+        "planet_class_label_key": planet_class_label_key(planet_class),
+        "temperature_display": temp["display"],
+        "planet_score": int(score),
+    }
+
+
+def build_minimap_range(
+    galaxy: int,
+    center_system: int,
+    *,
+    viewer_player_id: Optional[int] = None,
+    conn: Optional[sqlite3.Connection] = None,
+    radius: int = MINIMAP_RADIUS,
+) -> List[Dict[str, Any]]:
+    """Systems around center_system with occupancy hints for range navigation."""
+    galaxy = clamp_galaxy(galaxy, conn=conn)
+    center = clamp_system(center_system)
+    lo = max(SYSTEM_MIN, center - int(radius))
+    hi = min(SYSTEM_MAX, center + int(radius))
+
+    own = conn is None
+    if own:
+        conn = db()
+    assert conn is not None
+
+    counts: Dict[int, int] = {}
+    own_systems: Set[int] = set()
+    if _coords_schema_ready(conn):
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT system, COUNT(*) AS c
+            FROM planets
+            WHERE galaxy = ?
+              AND system BETWEEN ? AND ?
+              AND position IS NOT NULL
+            GROUP BY system;
+            """,
+            (int(galaxy), lo, hi),
+        )
+        for row in cur.fetchall():
+            counts[int(row["system"])] = int(row["c"])
+
+        if viewer_player_id is not None:
+            cur.execute(
+                """
+                SELECT DISTINCT system
+                FROM planets
+                WHERE galaxy = ?
+                  AND system BETWEEN ? AND ?
+                  AND player_id = ?
+                  AND position IS NOT NULL;
+                """,
+                (int(galaxy), lo, hi, int(viewer_player_id)),
+            )
+            own_systems = {int(r["system"]) for r in cur.fetchall()}
+
+    cells: List[Dict[str, Any]] = []
+    for sys_num in range(lo, hi + 1):
+        occupied = counts.get(sys_num, 0)
+        cells.append(
+            {
+                "system": sys_num,
+                "occupied_count": occupied,
+                "has_occupancy": occupied > 0,
+                "has_own_planet": sys_num in own_systems,
+                "is_current": sys_num == center,
+            }
+        )
+
+    if own:
+        conn.close()
+    return cells
+
+
+def build_galaxy_nav(
+    galaxy: int,
+    system: int,
+    *,
+    conn: Optional[sqlite3.Connection] = None,
+) -> Dict[str, Any]:
+    cfg = get_universe_config(conn)
+    gmax = cfg["galaxy_max"]
+    galaxy = clamp_galaxy(galaxy, conn=conn)
+    system = clamp_system(system)
+    return {
+        "galaxy": galaxy,
+        "system": system,
+        "galaxy_min": cfg["galaxy_min"],
+        "galaxy_max": gmax,
+        "system_min": cfg["system_min"],
+        "system_max": cfg["system_max"],
+        "prev_system": max(cfg["system_min"], system - 1),
+        "next_system": min(cfg["system_max"], system + 1),
+        "has_prev": system > cfg["system_min"],
+        "has_next": system < cfg["system_max"],
+        "prev_galaxy": max(cfg["galaxy_min"], galaxy - 1),
+        "next_galaxy": min(gmax, galaxy + 1),
+        "has_prev_galaxy": galaxy > cfg["galaxy_min"],
+        "has_next_galaxy": galaxy < gmax,
+        "multi_galaxy": gmax > 1,
+    }
+
+
+def resolve_view_coordinates(
+    *,
+    default_galaxy: int,
+    default_system: int,
+    req_galaxy: Optional[int] = None,
+    req_system: Optional[int] = None,
+    coord_query: Optional[str] = None,
+    carry_system: Optional[int] = None,
+    conn: Optional[sqlite3.Connection] = None,
+) -> Tuple[int, int, Optional[int]]:
+    """
+    Merge URL/query inputs into a validated view target.
+    When only ``req_galaxy`` is set, keeps ``carry_system`` (last viewed system) if valid.
+    Returns (galaxy, system, optional_highlight_position).
+    """
+    galaxy = clamp_galaxy(default_galaxy, conn=conn)
+    system = clamp_system(default_system)
+    highlight_pos: Optional[int] = None
+    parsed_query: Optional[Dict[str, int]] = None
+
+    if coord_query:
+        parsed_query = parse_coordinate_query(coord_query)
+        if parsed_query:
+            galaxy = clamp_galaxy(parsed_query["galaxy"], conn=conn)
+            system = clamp_system(parsed_query["system"])
+            if "position" in parsed_query:
+                highlight_pos = max(
+                    POSITION_MIN,
+                    min(POSITION_MAX, int(parsed_query["position"])),
+                )
+
+    if req_galaxy is not None:
+        galaxy = clamp_galaxy(req_galaxy, conn=conn)
+        if req_system is None and parsed_query is None and carry_system is not None:
+            system = clamp_system(int(carry_system))
+
+    if req_system is not None:
+        system = clamp_system(req_system)
+
+    return galaxy, system, highlight_pos
+
+
 def list_system(
     galaxy: int,
     system: int,
     conn: Optional[sqlite3.Connection] = None,
+    *,
+    viewer_player_id: Optional[int] = None,
+    active_planet_id: Optional[int] = None,
+    highlight_position: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Return exactly 15 slot entries for the given system (positions 1–15).
@@ -268,8 +504,10 @@ def list_system(
     by_position: Dict[int, Dict[str, Any]] = {}
     if _coords_schema_ready(conn):
         cur = conn.cursor()
+        has_planet_class = column_exists(conn, "planets", "planet_class")
+        class_col = "p.planet_class" if has_planet_class else "'terrestrial' AS planet_class"
         cur.execute(
-            """
+            f"""
             SELECT
                 p.id AS planet_id,
                 p.name AS planet_name,
@@ -277,7 +515,8 @@ def list_system(
                 p.system,
                 p.position,
                 p.player_id,
-                pl.name AS commander_name
+                pl.name AS commander_name,
+                {class_col}
             FROM planets p
             INNER JOIN players pl ON pl.id = p.player_id
             WHERE p.galaxy = ?
@@ -290,13 +529,27 @@ def list_system(
             pos = int(row["position"])
             if pos < POSITION_MIN or pos > POSITION_MAX:
                 continue
-            coords = get_planet_coordinates(dict(row))
+            row_dict = dict(row)
+            coords = get_planet_coordinates(row_dict)
+            meta = _slot_planet_meta(row_dict, conn)
+            pid = int(row["planet_id"])
+            player_id = int(row["player_id"])
+            is_own = (
+                viewer_player_id is not None
+                and player_id == int(viewer_player_id)
+            )
+            is_active = (
+                active_planet_id is not None and pid == int(active_planet_id)
+            )
+            is_highlighted = (
+                highlight_position is not None and pos == int(highlight_position)
+            )
             by_position[pos] = {
                 "position": pos,
                 "occupied": True,
-                "player_id": int(row["player_id"]),
+                "player_id": player_id,
                 "commander_name": str(row["commander_name"] or ""),
-                "planet_id": int(row["planet_id"]),
+                "planet_id": pid,
                 "planet_name": str(row["planet_name"] or ""),
                 "coordinates": {
                     "galaxy": coords["galaxy"],
@@ -304,6 +557,14 @@ def list_system(
                     "position": coords["position"],
                 },
                 "coordinates_formatted": coords["formatted"],
+                "planet_class": meta["planet_class"],
+                "planet_class_label_key": meta["planet_class_label_key"],
+                "temperature_display": meta["temperature_display"],
+                "planet_score": meta["planet_score"],
+                "is_own_planet": is_own,
+                "is_active_planet": is_active,
+                "is_highlighted": is_highlighted,
+                "colony_target": False,
             }
 
     slots: List[Dict[str, Any]] = []
@@ -311,6 +572,9 @@ def list_system(
         if pos in by_position:
             slots.append(by_position[pos])
         else:
+            is_highlighted = (
+                highlight_position is not None and pos == int(highlight_position)
+            )
             slots.append(
                 {
                     "position": pos,
@@ -325,6 +589,14 @@ def list_system(
                         "position": pos,
                     },
                     "coordinates_formatted": format_coordinates(galaxy, system, pos),
+                    "planet_class": None,
+                    "planet_class_label_key": None,
+                    "temperature_display": None,
+                    "planet_score": None,
+                    "is_own_planet": False,
+                    "is_active_planet": False,
+                    "is_highlighted": is_highlighted,
+                    "colony_target": True,
                 }
             )
 
@@ -333,6 +605,7 @@ def list_system(
         "system": int(system),
         "slots": slots,
         "slot_count": POSITION_MAX,
+        "highlight_position": highlight_position,
     }
 
     if own:

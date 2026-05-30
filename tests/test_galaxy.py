@@ -11,10 +11,14 @@ import game.db as dbmod
 import game.models as models
 from game.galaxy import (
     assign_free_coordinates,
+    build_galaxy_nav,
+    build_minimap_range,
     format_coordinates,
     get_planet_coordinates,
     list_system,
+    parse_coordinate_query,
     repair_missing_coordinates,
+    resolve_view_coordinates,
 )
 from game.models import create_user, db, ensure_player_and_homeworld, get_planets_by_player, init_db
 from game.overview_page import build_planet_meta
@@ -94,6 +98,104 @@ def test_format_coordinates():
     assert format_coordinates(1, 42, 8) == "[1:42:8]"
 
 
+def test_parse_coordinate_query():
+    assert parse_coordinate_query("[1:42:8]") == {"galaxy": 1, "system": 42, "position": 8}
+    assert parse_coordinate_query("2:100") == {"galaxy": 2, "system": 100}
+    assert parse_coordinate_query("invalid") is None
+
+
+def test_resolve_view_coordinates_search():
+    g, s, pos = resolve_view_coordinates(default_galaxy=1, default_system=1, coord_query="1:77:3")
+    assert g == 1 and s == 77 and pos == 3
+
+
+def test_resolve_url_galaxy_and_system():
+    g, s, pos = resolve_view_coordinates(
+        default_galaxy=1,
+        default_system=1,
+        req_galaxy=1,
+        req_system=304,
+    )
+    assert g == 1 and s == 304 and pos is None
+
+
+def test_galaxy_change_preserves_system():
+    g, s, _ = resolve_view_coordinates(
+        default_galaxy=1,
+        default_system=304,
+        req_galaxy=2,
+        carry_system=304,
+    )
+    assert g == 2 and s == 304
+
+
+def test_clamp_respects_bounds(galaxy_db, monkeypatch):
+    monkeypatch.setattr(
+        "game.galaxy.get_galaxy_max",
+        lambda conn=None: 3,
+    )
+    from game.galaxy import clamp_galaxy, clamp_system
+
+    assert clamp_galaxy(99) == 3
+    assert clamp_galaxy(0) == 1
+    assert clamp_system(0) == 1
+    assert clamp_system(999) == 499
+
+
+def test_build_minimap_range(galaxy_db):
+    cells = build_minimap_range(1, 10, viewer_player_id=1)
+    assert len(cells) == 9
+    assert any(c["is_current"] for c in cells)
+
+
+def test_occupied_slot_includes_meta(galaxy_db):
+    uid = _create_player()
+    planet = get_planets_by_player(uid)[0]
+    coords = get_planet_coordinates(planet)
+    data = list_system(
+        coords["galaxy"],
+        coords["system"],
+        viewer_player_id=uid,
+        active_planet_id=int(planet["id"]),
+    )
+    slot = next(
+        s for s in data["slots"] if s["occupied"] and s["planet_id"] == int(planet["id"])
+    )
+    assert slot["planet_class_label_key"]
+    assert slot["temperature_display"]
+    assert slot["planet_score"] is not None
+    assert slot["is_own_planet"] is True
+    assert slot["is_active_planet"] is True
+
+
+def test_galaxy_page_url_system_304(galaxy_db, monkeypatch):
+    import app as app_module
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+    uname = f"url_{uuid.uuid4().hex[:8]}"
+    ok, _, user = create_user(uname, "test-pass-123")
+    assert ok
+    client = app_module.app.test_client()
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    resp = client.get("/galaxy?galaxy=1&system=304")
+    assert resp.status_code == 200
+    assert "304" in resp.get_data(as_text=True)
+
+
+def test_empty_slot_colony_target(galaxy_db):
+    data = list_system(1, 499)
+    empty = next(s for s in data["slots"] if not s["occupied"])
+    assert empty["colony_target"] is True
+
+
+def test_build_galaxy_nav_multi_galaxy_flag(galaxy_db, monkeypatch):
+    monkeypatch.setenv("GC_GAME_SETTINGS", "")
+    nav = build_galaxy_nav(1, 5)
+    assert "multi_galaxy" in nav
+    assert nav["has_prev_galaxy"] is False
+
+
 def test_get_planet_coordinates(galaxy_db):
     uid = _create_player()
     planet = get_planets_by_player(uid)[0]
@@ -161,8 +263,13 @@ def test_galaxy_page_loads(galaxy_db, monkeypatch):
     resp = client.get("/galaxy")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    assert "galaxy-slot-row" in body
-    assert "galaxy-hero" in body
+    assert "galaxy-slot-card" in body
+    assert "galaxy-topbar" in body
+    assert "galaxy-system-range" in body
+    assert "galaxy-range-current" in body or "[" in body
+    assert "data-player-card" in body
+    assert "galaxy-colonize-btn" in body
+    assert "galaxy_colonizable" in body or "Kolonisierbar" in body or "Colonizable" in body
 
 
 def test_api_galaxy_system(galaxy_db, monkeypatch):

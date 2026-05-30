@@ -2470,42 +2470,182 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 /* =========================
    19) Galaxy
    ========================= */
-.galaxy-page .galaxy-hero{
+.galaxy-page-head{
+  margin-bottom: 12px;
+}
+.galaxy-topbar{
   margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  background: linear-gradient(180deg, rgba(8, 18, 38, 0.92) 0%, rgba(5, 10, 22, 0.88) 100%);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
 }
-.galaxy-hero-title{
-  margin-bottom: 4px;
+.galaxy-topbar-main{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.galaxy-hero-sub{
-  color: var(--gc-text-dim);
+.galaxy-topbar-pills{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.galaxy-pill{
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  background: rgba(7, 14, 32, 0.72);
+}
+.galaxy-pill-galaxy{
+  border-color: rgba(127, 255, 217, 0.35);
+  background: rgba(0, 32, 28, 0.55);
+}
+.galaxy-pill-system{
+  border-color: rgba(70, 229, 255, 0.4);
+  background: rgba(0, 36, 52, 0.55);
+}
+.galaxy-pill-scan{
   font-size: 0.82rem;
+  color: var(--gc-text-dim);
+}
+.galaxy-pill-label{
+  font-size: 0.7rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin: 0 0 8px;
+  color: var(--gc-text-dim);
 }
-.galaxy-hero-position{
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
+.galaxy-pill-value{
   font-family: Orbitron, Inter, system-ui, sans-serif;
-  color: var(--gc-primary-2);
   font-size: 1.05rem;
-  letter-spacing: 0.04em;
+  font-weight: 800;
+  color: var(--gc-primary-2);
 }
-.galaxy-panel-header{
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.galaxy-nav-bar{
+.galaxy-topbar-galaxy-nav{
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
 }
-.galaxy-nav-btn.is-disabled{
+.galaxy-topbar-arrow{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.25);
+  background: rgba(5, 10, 22, 0.65);
+  color: var(--gc-text-soft);
+  text-decoration: none;
+  font-size: 1.1rem;
+}
+.galaxy-topbar-arrow:hover:not(.is-disabled){
+  border-color: rgba(70, 229, 255, 0.5);
+  color: var(--gc-primary-2);
+}
+.galaxy-topbar-arrow.is-disabled{
   opacity: 0.35;
   pointer-events: none;
+}
+.galaxy-system-range{
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(120, 190, 255, 0.12);
+}
+.galaxy-system-range-label{
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+}
+.galaxy-system-range-track{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 10px;
+  font-size: 0.92rem;
+}
+.galaxy-range-item{
+  color: var(--gc-text-dim);
+  text-decoration: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color .12s ease, background .12s ease;
+}
+.galaxy-range-item.has-data{
+  color: var(--gc-text-soft);
+}
+.galaxy-range-item.has-own{
+  color: rgba(180, 255, 220, 0.95);
+  text-shadow: 0 0 12px rgba(35, 242, 166, 0.25);
+}
+.galaxy-range-item:hover{
+  color: var(--gc-primary-2);
+  background: rgba(70, 229, 255, 0.08);
+}
+.galaxy-range-current{
+  color: var(--gc-primary-2);
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.55);
+  background: rgba(0, 40, 56, 0.65);
+  box-shadow: 0 0 18px rgba(70, 229, 255, 0.2);
+}
+.galaxy-controls-row{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.galaxy-controls-row .is-disabled{
+  opacity: 0.35;
+  pointer-events: none;
+}
+.galaxy-search-bar{
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  background: rgba(5, 10, 22, 0.62);
+}
+.galaxy-search-label{
+  color: var(--gc-text-dim);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.galaxy-search-input{
+  flex: 1 1 180px;
+  min-width: 140px;
+  padding: 8px 10px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.28);
+  background: rgba(7, 14, 32, 0.88);
+  color: var(--gc-text-soft);
+  font-size: 0.9rem;
+}
+.galaxy-search-hint{
+  flex: 1 1 100%;
+  color: var(--gc-text-dim);
+  font-size: 0.78rem;
+}
+.galaxy-jump-input--galaxy{
+  width: 52px;
 }
 .galaxy-jump-form{
   display: flex;
@@ -2531,70 +2671,271 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   color: var(--gc-text-soft);
   font-size: 0.88rem;
 }
-.galaxy-slot-list{
-  margin-top: 12px;
+.galaxy-slots{
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
-.galaxy-slot-row{
+.galaxy-slot-card{
   display: grid;
-  grid-template-columns: 48px 1fr auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 14px;
+  grid-template-columns: 52px 56px 1fr auto;
+  gap: 0 14px;
+  align-items: stretch;
   border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(120, 190, 255, 0.16);
-  background: rgba(5, 10, 22, 0.58);
-  transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+  overflow: hidden;
+  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
 }
-.galaxy-slot-row:hover{
-  transform: translateY(-1px);
-  border-color: rgba(70,229,255,0.38);
-  box-shadow: var(--gc-border-glow), 0 18px 44px rgba(0,0,0,0.45);
+/* Empty: dark, recessed */
+.galaxy-slot-card.is-empty{
+  border: 1px solid rgba(60, 80, 110, 0.2);
+  background: rgba(3, 6, 14, 0.72);
+  opacity: 0.82;
 }
-.galaxy-slot-row.is-occupied{
-  border-color: rgba(255, 160, 60, 0.28);
+.galaxy-slot-card.is-empty .galaxy-slot-pos-col{
+  background: rgba(4, 8, 18, 0.9);
+  border-right: 1px solid rgba(50, 70, 100, 0.15);
 }
-.galaxy-slot-pos{
-  font-size: 1.1rem;
+.galaxy-slot-card.is-empty .galaxy-slot-card-main{
+  padding: 12px 14px 12px 0;
+}
+.galaxy-slot-card.is-empty .galaxy-slot-planet-name,
+.galaxy-slot-card.is-empty .galaxy-slot-coord{
+  color: var(--gc-text-dim);
+}
+/* Occupied: bright, active */
+.galaxy-slot-card.is-occupied{
+  border: 1px solid rgba(255, 175, 90, 0.42);
+  background: linear-gradient(105deg, rgba(48, 28, 10, 0.55) 0%, rgba(12, 22, 42, 0.95) 42%, rgba(8, 16, 32, 0.98) 100%);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 210, 140, 0.12);
+}
+.galaxy-slot-card.is-occupied:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 0 24px rgba(255, 160, 60, 0.15), 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+.galaxy-slot-card.is-active-planet.is-occupied,
+.galaxy-slot-card.is-own.is-occupied{
+  border-color: rgba(70, 229, 255, 0.65);
+  box-shadow: var(--gc-border-glow), 0 0 28px rgba(70, 229, 255, 0.18);
+  background: linear-gradient(105deg, rgba(0, 52, 72, 0.65) 0%, rgba(36, 22, 8, 0.5) 38%, rgba(10, 20, 38, 0.98) 100%);
+}
+.galaxy-slot-card.is-highlighted{
+  outline: 2px solid rgba(255, 220, 120, 0.5);
+  outline-offset: 1px;
+}
+.galaxy-slot-pos-col{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 6px;
+  background: rgba(6, 12, 28, 0.85);
+  border-right: 1px solid rgba(120, 190, 255, 0.12);
+}
+.galaxy-slot-card.is-occupied .galaxy-slot-pos-col{
+  background: rgba(20, 14, 8, 0.75);
+  border-right-color: rgba(255, 160, 60, 0.2);
+}
+.galaxy-slot-pos-label{
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+  margin-bottom: 4px;
+}
+.galaxy-slot-pos-num{
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
   color: var(--gc-primary);
-  font-weight: 700;
 }
-.galaxy-slot-name{
+.galaxy-slot-card.is-occupied .galaxy-slot-pos-num{
+  color: rgba(255, 210, 140, 0.95);
+  text-shadow: 0 0 14px rgba(255, 160, 60, 0.35);
+}
+.galaxy-slot-orbit-col{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+  position: relative;
+}
+.galaxy-orbit-rail{
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.galaxy-orbit-line{
+  position: absolute;
+  left: 50%;
+  top: -8px;
+  bottom: -8px;
+  width: 2px;
+  margin-left: -1px;
+  background: linear-gradient(180deg, transparent, rgba(70, 229, 255, 0.25) 15%, rgba(70, 229, 255, 0.25) 85%, transparent);
+  pointer-events: none;
+}
+.galaxy-slot-card.is-empty .galaxy-orbit-line{
+  background: linear-gradient(180deg, transparent, rgba(50, 70, 100, 0.2) 20%, rgba(50, 70, 100, 0.2) 80%, transparent);
+}
+.galaxy-orbit-body{
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: 0 0 16px currentColor;
+}
+.galaxy-orbit-body--empty{
+  background: transparent;
+  border: 2px dashed rgba(80, 110, 140, 0.35);
+  box-shadow: none;
+  width: 22px;
+  height: 22px;
+}
+.galaxy-orbit-body--terrestrial{ background: radial-gradient(circle at 32% 28%, #8fd4a8, #2a6b4a 70%); color: rgba(80, 220, 140, 0.5); }
+.galaxy-orbit-body--oceanic{ background: radial-gradient(circle at 32% 28%, #6ec8e8, #1a4a6e 70%); color: rgba(70, 200, 255, 0.5); }
+.galaxy-orbit-body--barren{ background: radial-gradient(circle at 32% 28%, #b8a898, #5a5048 70%); color: rgba(180, 160, 140, 0.4); }
+.galaxy-orbit-body--ice{ background: radial-gradient(circle at 32% 28%, #d8f0ff, #6a9ac8 70%); color: rgba(180, 220, 255, 0.5); }
+.galaxy-orbit-body--volcanic{ background: radial-gradient(circle at 32% 28%, #ffb060, #8a3010 70%); color: rgba(255, 140, 60, 0.55); }
+.galaxy-orbit-body--ruin{ background: radial-gradient(circle at 32% 28%, #a890c8, #4a3868 70%); color: rgba(160, 120, 220, 0.45); }
+.galaxy-orbit-body--gas_moon{ background: radial-gradient(circle at 32% 28%, #9098b8, #3a4058 70%); color: rgba(140, 150, 200, 0.4); }
+.galaxy-slot-card-main{
+  padding: 12px 0;
+  min-width: 0;
+}
+.galaxy-slot-card-head{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.galaxy-slot-planet-name{
+  margin: 0;
+  font-size: 1rem;
   font-weight: 800;
   color: var(--gc-text);
 }
-.galaxy-slot-empty-label{
-  color: var(--gc-text-dim);
-  font-weight: 600;
-}
-.galaxy-slot-commander{
-  margin-top: 2px;
-  color: var(--gc-text-soft);
-  font-size: 0.88rem;
+.galaxy-slot-card.is-occupied .galaxy-slot-planet-name{
+  font-size: 1.05rem;
+  color: #fff;
+  text-shadow: 0 0 20px rgba(255, 200, 120, 0.15);
 }
 .galaxy-slot-coord{
-  margin-top: 4px;
+  font-size: 0.78rem;
   color: var(--gc-text-dim);
-  font-size: 0.82rem;
 }
-.galaxy-slot-badge{
-  flex-shrink: 0;
+.galaxy-slot-card.is-occupied .galaxy-slot-coord{
+  color: rgba(255, 220, 180, 0.75);
+}
+.galaxy-slot-commander-row{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.88rem;
+}
+.galaxy-slot-commander-label{
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gc-text-dim);
+}
+.galaxy-slot-commander-link.gc-player-name{
+  font-weight: 700;
+  color: var(--gc-primary-2);
+}
+.galaxy-slot-stats{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.galaxy-stat{
+  padding: 5px 10px;
+  border-radius: var(--gc-radius-sm);
+  font-size: 0.78rem;
+  border: 1px solid rgba(120, 190, 255, 0.2);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--gc-text-soft);
+}
+.galaxy-slot-card.is-occupied .galaxy-stat{
+  background: rgba(255, 255, 255, 0.06);
+}
+.galaxy-stat-score{
+  border-color: rgba(255, 190, 80, 0.35);
+  color: rgba(255, 220, 160, 0.95);
+}
+.galaxy-stat-class{
+  border-color: rgba(70, 229, 255, 0.28);
+}
+.galaxy-slot-empty-hint{
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  color: rgba(100, 120, 150, 0.85);
+}
+.galaxy-slot-card-aside{
+  display: flex;
+  align-items: center;
+  padding: 12px 14px 12px 0;
+}
+.galaxy-slot-card.is-empty .galaxy-slot-card-aside{
+  opacity: 0.7;
+}
+.gs-pill-you{
+  border-color: rgba(70, 229, 255, 0.65);
+  background: rgba(0, 32, 48, 0.6);
+  color: var(--gc-primary-2);
+}
+.gs-pill-own{
+  border-color: rgba(35, 242, 166, 0.55);
+  background: rgba(0, 22, 16, 0.55);
+  color: rgba(180, 255, 220, 0.95);
+}
+.gs-pill-colonizable{
+  border-color: rgba(35, 242, 166, 0.5);
+  background: rgba(0, 22, 16, 0.55);
+  color: rgba(180, 255, 220, 0.95);
+}
+.galaxy-colonize-btn{
+  margin-top: 8px;
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.galaxy-colonize-btn:disabled{
+  pointer-events: none;
 }
 .gs-pill-occupied{
   border-color: rgba(255, 160, 60, 0.55);
   background: rgba(32, 18, 6, 0.55);
   color: rgba(255, 210, 140, 0.95);
 }
-@media (max-width: 720px){
-  .galaxy-slot-row{
-    grid-template-columns: 40px 1fr;
+@media (max-width: 820px){
+  .galaxy-slot-card{
+    grid-template-columns: 44px 48px 1fr;
+    grid-template-rows: auto auto;
   }
-  .galaxy-slot-badge{
-    grid-column: 2;
-    justify-self: start;
-    margin-top: 4px;
+  .galaxy-slot-card-aside{
+    grid-column: 1 / -1;
+    padding: 0 12px 12px;
+    justify-content: flex-start;
+  }
+  .galaxy-system-range-track{
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 520px){
+  .galaxy-slot-card{
+    grid-template-columns: 40px 44px 1fr;
+  }
+  .galaxy-orbit-body{
+    width: 22px;
+    height: 22px;
   }
 }
 
