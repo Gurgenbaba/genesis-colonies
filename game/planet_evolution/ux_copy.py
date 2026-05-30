@@ -191,6 +191,70 @@ _RISK_LABEL_KEYS = {
     "experimental_failure": "pe_trait_chip_risk_experimental",
 }
 
+# Planet research icons reuse global research art (pe tech keys have no dedicated PNGs).
+_PE_RESEARCH_BRANCH_ICONS: Dict[str, str] = {
+    "INDUSTRY": "bauoptimierung.png",
+    "SCIENCE": "metallveredelung.png",
+    "ENERGY": "energieeffizienz.png",
+    "ECOLOGY": "lagertechnik.png",
+    "TRADE": "hyperraum-navigation.png",
+    "GOVERNANCE": "lagertechnik.png",
+    "ANCIENT TECH": "kryo-antriebstechnik.png",
+    "EXPERIMENTAL": "metallveredelung.png",
+    "MILITARY": "waffenentwicklung.png",
+    "ORBITAL": "drohnenoptimierung.png",
+}
+
+_PE_RESEARCH_PREFIX_BRANCH: Dict[str, str] = {
+    "industry": "INDUSTRY",
+    "science": "SCIENCE",
+    "energy": "ENERGY",
+    "ecology": "ECOLOGY",
+    "trade": "TRADE",
+    "governance": "GOVERNANCE",
+    "gov": "GOVERNANCE",
+    "ancient": "ANCIENT TECH",
+    "experimental": "EXPERIMENTAL",
+    "military": "MILITARY",
+    "orbital": "ORBITAL",
+}
+
+_PE_RESEARCH_BRANCH_FALLBACK: Dict[str, str] = {
+    "INDUSTRY": "🏭",
+    "SCIENCE": "🔬",
+    "ENERGY": "⚡",
+    "ECOLOGY": "🌿",
+    "TRADE": "🛸",
+    "GOVERNANCE": "🏛",
+    "ANCIENT TECH": "🏺",
+    "EXPERIMENTAL": "🧪",
+    "MILITARY": "🛡",
+    "ORBITAL": "🛰",
+}
+
+
+def _planet_research_branch(tech_key: str, category: Optional[str] = None) -> str:
+    if category:
+        b = str(category).strip()
+        if b in _PE_RESEARCH_BRANCH_ICONS:
+            return b
+        bu = b.upper()
+        if bu in _PE_RESEARCH_BRANCH_ICONS:
+            return bu
+    prefix = str(tech_key or "").split("_", 1)[0].lower()
+    return _PE_RESEARCH_PREFIX_BRANCH.get(prefix, "SCIENCE")
+
+
+def planet_research_icon(tech_key: str, category: Optional[str] = None) -> str:
+    """Return static/img/research filename for a planet research tech."""
+    branch_key = _planet_research_branch(tech_key, category)
+    return _PE_RESEARCH_BRANCH_ICONS.get(branch_key, "metallveredelung.png")
+
+
+def planet_research_icon_fallback(tech_key: str, category: Optional[str] = None) -> str:
+    branch_key = _planet_research_branch(tech_key, category)
+    return _PE_RESEARCH_BRANCH_FALLBACK.get(branch_key, "🧬")
+
 
 def _unlock_label_key(raw: str) -> str:
     s = str(raw or "").strip()

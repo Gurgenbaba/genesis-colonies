@@ -271,6 +271,23 @@ def test_research_ux_can_afford_when_funded(evo_db):
     assert affordable[0]["unavailable_reason_key"] is None
 
 
+def test_planet_research_icon_maps_branch_to_existing_asset():
+    from game.planet_evolution.ux_copy import planet_research_icon, planet_research_icon_fallback
+
+    assert planet_research_icon("industry_t1_automation", "INDUSTRY") == "bauoptimierung.png"
+    assert planet_research_icon("science_t1_field_labs", "SCIENCE") == "metallveredelung.png"
+    assert planet_research_icon("ancient_t1_ruins_survey", "ANCIENT TECH") == "kryo-antriebstechnik.png"
+    assert planet_research_icon("unknown_t9_x", None) == "metallveredelung.png"
+    assert planet_research_icon_fallback("industry_t1_automation", "INDUSTRY") == "🏭"
+
+
+def test_planet_evolution_template_uses_research_icon_field():
+    tpl = (Path(__file__).resolve().parents[1] / "templates" / "planet_evolution.html").read_text(encoding="utf-8")
+    assert "tech.icon" in tpl
+    assert "job.icon" in tpl
+    assert "tech_key ~ '.png'" not in tpl
+
+
 def test_planet_evolution_template_shows_cost_and_disabled_afford():
     tpl = (Path(__file__).resolve().parents[1] / "templates" / "planet_evolution.html").read_text(encoding="utf-8")
     assert "pe_research_card_meta" in tpl

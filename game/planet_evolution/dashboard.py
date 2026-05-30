@@ -33,6 +33,8 @@ from .ux_copy import (
     humanize_requirements,
     level_unlock_label_key,
     planet_class_label_key,
+    planet_research_icon,
+    planet_research_icon_fallback,
     polarity_label_key,
     trait_effect_lines,
 )
@@ -235,6 +237,8 @@ def _enrich_research_card(
 
     return {
         "tech_key": tech_key,
+        "icon": planet_research_icon(tech_key, cfg.get("category")),
+        "icon_fallback": planet_research_icon_fallback(tech_key, cfg.get("category")),
         "label_key": tech.get("label_key") or tech_key,
         "unlock_key": tech.get("description_key") or cfg.get("description_key"),
         "tier": tech.get("tier"),
@@ -283,6 +287,8 @@ def _research_ux(
             {
                 "job_id": job.get("id"),
                 "tech_key": tech_key,
+                "icon": planet_research_icon(tech_key, cfg.get("category")),
+                "icon_fallback": planet_research_icon_fallback(tech_key, cfg.get("category")),
                 "label_key": cfg.get("label_key") or tech_key,
                 "unlock_key": cfg.get("description_key"),
                 "progress_pct": int(round(100.0 * elapsed / span)),

@@ -5,7 +5,7 @@
 <article class="research-job pe-planet-research-job{% if is_first %} research-job-active pe-planet-research-active{% else %} research-job-queued{% endif %}"
          {% if is_first and job.finish_at %}data-finish-time="{{ job.finish_at|int }}" data-total="{{ job.total_seconds or 1 }}"{% endif %}>
   <div class="research-job-icon">
-    <img src="{{ url_for('static', filename='img/research/' ~ job.tech_key ~ '.png') }}"
+    <img src="{{ url_for('static', filename='img/research/' ~ (job.icon or 'metallveredelung.png')) }}"
          alt="" loading="lazy" onerror="this.style.visibility='hidden'">
   </div>
   <div class="research-job-body">
@@ -474,7 +474,11 @@
            data-tech-key="{{ tech.tech_key }}"
            role="listitem">
         <div class="gc-prog-main pe-research-prog-main">
-          {{ render_prog_identity(T(tech.label_key, tech.tech_key), url_for('static', filename='img/research/' ~ tech.tech_key ~ '.png'), fallback='🧬', desc_text=T(tech.unlock_key, '') if tech.unlock_key else '') }}
+          {{ render_prog_identity(
+               T(tech.label_key, tech.tech_key),
+               url_for('static', filename='img/research/' ~ (tech.icon or 'metallveredelung.png')),
+               fallback=tech.icon_fallback or '🧬',
+               desc_text=T(tech.unlock_key, '') if tech.unlock_key else '') }}
 
           <div class="gc-prog-col gc-prog-costs">
             {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, tech.target_level) }}
