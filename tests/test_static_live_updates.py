@@ -63,9 +63,11 @@ def test_chat_js_poll_updates_last_id_and_resume_bootstrap():
     assert "isActivelyViewingRoom" in src
     assert "maybeRefreshBootstrap" in src
     assert "resumeChatPolling" in src
-    assert "bootstrapIntervalMs" in src
+    assert "bootstrapIntervalMs: 60000" in src
     assert "chatDebug" in src
-    assert "DOMContentLoaded" not in src.split("initChatOnce")[1][-400:]
+    assert "installGlobalChatHandlers" in src
+    tail = src.split("GC.initChat = initChat")[1]
+    assert "DOMContentLoaded" not in tail
 
 
 def test_main_js_game_state_polling_idempotent():
@@ -126,7 +128,7 @@ def test_chat_bootstrap_not_in_message_poll_tick():
     src = _read("static/js/chat.js")
     poll_body = src.split("async function pollTick")[1].split("function startPolling")[0]
     assert "if (!panelVisible)" not in poll_body or "maybeRefreshBootstrap(false)" not in poll_body
-    assert "bootstrapIntervalMs: 300000" in src
+    assert "runInitialBootstrap" in src
 
 
 def test_galaxy_template_pjax_nav_urls():

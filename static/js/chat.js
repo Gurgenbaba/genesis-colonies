@@ -76,12 +76,17 @@
       started: false,
       interval: 8000,
       intervalHidden: 12000,
-      bootstrapIntervalMs: 300000,
+      bootstrapIntervalMs: 60000,
       lastBootstrapAt: 0,
       bootstrapInFlight: null,
     },
     stateSaveTimer: null,
-    eventsBound: false,
+    uiBound: false,
+    rootEventsBound: false,
+    dragBound: false,
+    emojiDismissBound: false,
+    whisperBound: false,
+    lifecycleBound: false,
     stickToBottom: true,
     pendingNew: 0,
     isMobile: false,
@@ -855,6 +860,7 @@
     const now = Date.now();
     const minGap = CHAT.polling.bootstrapIntervalMs || 60000;
     if (!force && CHAT.polling.lastBootstrapAt && (now - CHAT.polling.lastBootstrapAt) < minGap) {
+      chatDebug("chat:bootstrap skipped/reused");
       return true;
     }
     if (CHAT.polling.bootstrapInFlight) {
@@ -1298,7 +1304,7 @@
   function initDragResize() {
     const handle = qs("[data-chat-drag-handle]");
     const resizeEl = qs("[data-chat-resize]");
-    if (!handle || !CHAT.panel || CHAT.isMobile) return;
+    if (!handle || !CHAT.panel || CHAT.isMobile || CHAT.dragBound) return;
 
     handle.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || CHAT.isMaximized) return;
@@ -1402,23 +1408,37 @@
     return true;
   }
 
-  function bindEvents() {
-    if (CHAT.eventsBound || !CHAT.root) return;
-    CHAT.eventsBound = true;
+  function getChatRoot() {
+    return document.getElementById("gc-chat-root");
+  }
 
-    /* Delegation: chrome buttons must work even if DOM is re-mounted */
-    CHAT.root.addEventListener("click", (e) => {
-      if (e.target.closest("[data-chat-fab]")) {
+  /** Document-level open/close — survives PJAX and runs before bootstrap. */
+  function installGlobalChatHandlers() {
+    if (CHAT.uiBound) return;
+    CHAT.uiBound = true;
+    chatDebug("chat:bound");
+
+    document.addEventListener("click", (e) => {
+      const fab = e.target.closest("[data-chat-fab]");
+      if (fab) {
+        const root = getChatRoot();
+        if (!root || !root.contains(fab)) return;
         e.preventDefault();
         e.stopPropagation();
-        setOpen(true);
+        chatDebug("chat:open");
+        void openTChat();
         return;
       }
-      if (!e.target.closest(".gc-chat-panel")) return;
+
+      const root = getChatRoot();
+      if (!root) return;
+      const panel = e.target.closest(".gc-chat-panel");
+      if (!panel || !root.contains(panel)) return;
 
       if (e.target.closest("[data-chat-minimize]") || e.target.closest("[data-chat-close]")) {
         e.preventDefault();
         e.stopPropagation();
+        if (!cacheElements()) return;
         if (CHAT.isMaximized) {
           CHAT.isMaximized = false;
           CHAT.root.classList.remove("is-maximized");
@@ -1429,9 +1449,60 @@
       if (e.target.closest("[data-chat-maximize]")) {
         e.preventDefault();
         e.stopPropagation();
+        if (!cacheElements()) return;
         toggleMaximize();
       }
     });
+
+    if (!CHAT.whisperBound) {
+      CHAT.whisperBound = true;
+      document.addEventListener("click", (e) => {
+        const w = e.target.closest("[data-chat-whisper]");
+        if (!w) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const pid = w.dataset.playerId;
+        const pname = w.dataset.playerName || w.textContent?.trim();
+        if (pid) whisperTo(Number(pid), pname);
+      });
+    }
+
+    if (!CHAT.emojiDismissBound) {
+      CHAT.emojiDismissBound = true;
+      document.addEventListener("click", (e) => {
+        if (!CHAT.emojiPicker || CHAT.emojiPicker.hidden) return;
+        if (e.target.closest("[data-chat-emoji-toggle], [data-chat-emoji-picker]")) return;
+        hideEmojiPicker();
+      });
+    }
+
+    if (!CHAT.lifecycleBound) {
+      CHAT.lifecycleBound = true;
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) persistState(readPanelStateForSave(), true);
+        schedulePoll();
+      });
+      window.addEventListener("beforeunload", () => {
+        try {
+          const body = {
+            ...(CHAT.uiState || {}),
+            ...readPanelStateForSave(),
+            version: STATE_VERSION,
+            saved_at: Math.floor(Date.now() / 1000),
+            is_open: CHAT.root?.classList.contains("is-open"),
+            is_minimized: !CHAT.root?.classList.contains("is-open"),
+            active_room_id: CHAT.activeRoomId,
+          };
+          CHAT.uiState = sanitizeUiState(body);
+          saveLocalUiState(CHAT.uiState);
+        } catch (_) {}
+      });
+    }
+  }
+
+  function bindRootEvents() {
+    if (!CHAT.root || CHAT.rootEventsBound) return;
+    CHAT.rootEventsBound = true;
 
     CHAT.root.addEventListener(
       "pointerdown",
@@ -1464,12 +1535,6 @@
       e.preventDefault();
       e.stopPropagation();
       toggleEmojiPicker();
-    });
-
-    document.addEventListener("click", (e) => {
-      if (!CHAT.emojiPicker || CHAT.emojiPicker.hidden) return;
-      if (e.target.closest("[data-chat-emoji-toggle], [data-chat-emoji-picker]")) return;
-      hideEmojiPicker();
     });
 
     CHAT.messagesEl?.addEventListener("scroll", () => {
@@ -1515,89 +1580,98 @@
       if (!sender) return;
       whisperTo(sender.dataset.playerId, sender.dataset.playerName);
     });
-
-    document.addEventListener("click", (e) => {
-      const w = e.target.closest("[data-chat-whisper]");
-      if (!w) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const pid = w.dataset.playerId;
-      const pname = w.dataset.playerName || w.textContent?.trim();
-      if (pid) whisperTo(Number(pid), pname);
-    });
-
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) persistState(readPanelStateForSave(), true);
-      schedulePoll();
-    });
-    window.addEventListener("beforeunload", () => {
-      try {
-        const body = {
-          ...(CHAT.uiState || {}),
-          ...readPanelStateForSave(),
-          version: STATE_VERSION,
-          saved_at: Math.floor(Date.now() / 1000),
-          is_open: CHAT.root?.classList.contains("is-open"),
-          is_minimized: !CHAT.root?.classList.contains("is-open"),
-          active_room_id: CHAT.activeRoomId,
-        };
-        CHAT.uiState = sanitizeUiState(body);
-        saveLocalUiState(CHAT.uiState);
-      } catch (_) {}
-    });
   }
 
-  async function initChat() {
-    if (!cacheElements()) return;
+  async function runInitialBootstrap() {
+    if (GC._chatBootstrapDone && CHAT.bootstrap) {
+      chatDebug("chat:bootstrap skipped/reused");
+      return true;
+    }
+    chatDebug("chat:bootstrap load");
+    const ok = await bootstrap();
+    if (ok) {
+      GC._chatBootstrapDone = true;
+      CHAT.polling.lastBootstrapAt = Date.now();
+    }
+    return ok;
+  }
+
+  async function initChatCore() {
+    if (!getChatRoot()) {
+      chatDebug("chat:init skipped (no root)");
+      return false;
+    }
+    installGlobalChatHandlers();
+    if (!cacheElements()) {
+      chatDebug("chat:init skipped (cache)");
+      return false;
+    }
+    chatDebug("chat:init");
     CHAT.isMobile = window.matchMedia("(max-width: 768px)").matches;
-    bindEvents();
+    bindRootEvents();
     initEmojiPicker();
-    initDragResize();
+    if (!CHAT.dragBound) {
+      initDragResize();
+      CHAT.dragBound = true;
+    }
     CHAT.root.hidden = false;
     CHAT.root.removeAttribute("hidden");
 
-    const ok = await bootstrap();
-    if (ok) {
-      CHAT.polling.lastBootstrapAt = Date.now();
-      startPolling();
-    }
+    const ok = await runInitialBootstrap();
+    if (ok) startPolling();
 
-    if (typeof GC.registerCleanup === "function") {
+    if (!GC._chatCleanupRegistered && typeof GC.registerCleanup === "function") {
+      GC._chatCleanupRegistered = true;
       GC.registerCleanup(() => {
         stopPolling();
       }, { persistent: true });
     }
+    return ok;
   }
 
   let _initChatPromise = null;
 
-  function initChatOnce() {
-    const root = document.getElementById("gc-chat-root");
-    if (!root) return Promise.resolve(false);
-    if (GC._chatInitialized) {
+  function initChat() {
+    installGlobalChatHandlers();
+    if (!getChatRoot()) return Promise.resolve(false);
+
+    if (GC._chatBootstrapDone) {
+      if (cacheElements()) bindRootEvents();
       resumeChatPolling();
-      return _initChatPromise || Promise.resolve(true);
+      return Promise.resolve(true);
     }
-    GC._chatInitialized = true;
-    _initChatPromise = initChat();
+
+    if (_initChatPromise) {
+      if (cacheElements()) bindRootEvents();
+      return _initChatPromise;
+    }
+
+    _initChatPromise = initChatCore()
+      .catch((err) => {
+        console.error("[chat] init failed", err);
+        _initChatPromise = null;
+        return false;
+      })
+      .then((ok) => {
+        if (!ok) _initChatPromise = null;
+        return ok;
+      });
     return _initChatPromise;
   }
 
   async function openTChat() {
-    if (!document.getElementById("gc-chat-root")) return;
-    await initChatOnce();
+    if (!getChatRoot()) return;
+    chatDebug("chat:open");
+    await initChat();
+    if (!CHAT.root && !cacheElements()) return;
     setOpen(true);
   }
 
-  GC.initChat = initChatOnce;
+  installGlobalChatHandlers();
+
+  GC.initChat = initChat;
   GC.openTChat = openTChat;
   GC.resumeChatPolling = resumeChatPolling;
   GC.TChat = CHAT;
   GC.whisperPlayer = whisperTo;
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => initChatOnce(), { once: true });
-  } else {
-    queueMicrotask(() => initChatOnce());
-  }
 })();
