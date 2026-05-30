@@ -185,4 +185,4 @@ def test_game_state_includes_landscape_url(switcher_db, monkeypatch):
     ap = gs.get("active_planet") or {}
     assert ap.get("position") == 4
     assert ap.get("landscape_url")
-    assert "trockenplanet08-h.png" in ap["landscape_url"]
+    assert "trockenplanet08-h.jpg" in ap["landscape_url"]

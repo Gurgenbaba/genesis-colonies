@@ -4,24 +4,24 @@ from __future__ import annotations
 
 from typing import Dict
 
-DEFAULT_LANDSCAPE = "normaltempplanet01-h.png"
+DEFAULT_LANDSCAPE = "normaltempplanet01-h.jpg"
 
 _LANDSCAPE_BY_POSITION: Dict[int, str] = {
-    1: "trockenplanet01-h.png",
-    2: "trockenplanet04-h.png",
-    3: "trockenplanet06-h.png",
-    4: "trockenplanet08-h.png",
-    5: "normaltempplanet04-h.png",
-    6: "normaltempplanet03-h.png",
-    7: "normaltempplanet01-h.png",
-    8: "wasserplanet07-h.png",
-    9: "wasserplanet08-h.png",
-    10: "dschungelplanet08-h.png",
-    11: "dschungelplanet07-h.png",
-    12: "gasplanet05-h.png",
-    13: "eisplanet04-h.png",
-    14: "eisplanet06-h.png",
-    15: "eisplanet09-h.png",
+    1: "trockenplanet01-h.jpg",
+    2: "trockenplanet04-h.jpg",
+    3: "trockenplanet06-h.jpg",
+    4: "trockenplanet08-h.jpg",
+    5: "normaltempplanet04-h.jpg",
+    6: "normaltempplanet03-h.jpg",
+    7: "normaltempplanet01-h.jpg",
+    8: "wasserplanet07-h.jpg",
+    9: "wasserplanet08-h.jpg",
+    10: "dschungelplanet08-h.jpg",
+    11: "dschungelplanet07-h.jpg",
+    12: "gasplanet05-h.jpg",
+    13: "eisplanet04-h.jpg",
+    14: "eisplanet06-h.jpg",
+    15: "eisplanet09-h.jpg",
 }
 
 
