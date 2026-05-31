@@ -368,15 +368,12 @@
 
   function resetMessagesPageState() {
     const prev = GC.messagesPageState;
-    if (prev?.listAbort) {
-      try {
-        prev.listAbort.abort();
-      } catch (_) {}
-      prev.listAbort = null;
-    }
     if (prev) {
       prev.requestSeq += 1;
       prev.loading = false;
+      prev.listInflight = null;
+      prev.inflightFilter = null;
+      prev.listAbort = null;
       prev.unreadSyncedFromApi = false;
     }
     GC.messagesPageState = null;
@@ -462,6 +459,7 @@
       const tabBtn = e.target.closest("#messages-tabs .tab-btn[data-filter]");
       if (tabBtn) {
         e.preventDefault();
+        e.stopPropagation();
         const tabsEl = document.getElementById("messages-tabs");
         tabsEl?.querySelectorAll(".tab-btn").forEach((b) => {
           const active = b === tabBtn;
@@ -471,7 +469,7 @@
         state.filter = tabBtn.dataset.filter || "all";
         state.selectedId = null;
         state.setDetailVisible?.(false);
-        state.loadList?.();
+        state.loadList?.(true, { force: true });
         return;
       }
 
@@ -526,6 +524,8 @@
       selectedId: null,
       requestSeq: 0,
       listAbort: null,
+      listInflight: null,
+      inflightFilter: null,
       unreadSyncedFromApi: false,
       loading: false,
       listLoaded: false,
@@ -546,13 +546,33 @@
 
     function showLoadingList() {
       state.loading = true;
-      state.listLoaded = false;
-      showListMessage(`<div class="gc-messages-empty">${esc(t("messages.loading"))}</div>`);
+      const dom = getMessagesDom();
+      if (!state.listLoaded) {
+        state.listLoaded = false;
+        showListMessage(`<div class="gc-messages-empty">${esc(t("messages.loading"))}</div>`);
+      } else if (dom?.list) {
+        dom.list.classList.add("is-loading");
+      }
+    }
+
+    function cancelInboxFetch() {
+      if (state.listAbort) {
+        try {
+          state.listAbort.abort();
+        } catch (_) {}
+        state.listAbort = null;
+      }
+      state.listInflight = null;
+      state.inflightFilter = null;
+      state.loading = false;
+      getMessagesDom()?.list?.classList.remove("is-loading");
     }
 
     function showErrorList(errKey, withRetry = true) {
       state.loading = false;
       state.listLoaded = true;
+      const dom = getMessagesDom();
+      dom?.list?.classList.remove("is-loading");
       const errLabel = esc(t(`messages.error_${errKey}`, t("messages.error_load")));
       const retryBtn = withRetry
         ? `<button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-messages-retry>` +
@@ -561,18 +581,20 @@
       showListMessage(
         `<div class="gc-messages-empty"><p>${errLabel}</p>${retryBtn}</div>`
       );
-      const dom = getMessagesDom();
       dom?.list?.querySelector("[data-messages-retry]")?.addEventListener("click", () => {
-        loadList();
+        loadList(true, { force: true });
       });
     }
 
     function renderList() {
       const dom = getMessagesDom();
       if (!dom?.list) return;
+      dom.list.classList.remove("is-loading");
 
       if (state.loading || !state.listLoaded) {
-        showListMessage(`<div class="gc-messages-empty">${esc(t("messages.loading"))}</div>`);
+        if (!state.listLoaded) {
+          showListMessage(`<div class="gc-messages-empty">${esc(t("messages.loading"))}</div>`);
+        }
         return;
       }
 
@@ -647,18 +669,28 @@
       dom.detailActions.appendChild(mkBtn(t("messages.delete"), "delete", "danger"));
     }
 
+    function clearLoadingIfStale(requestId) {
+      if (state.requestSeq !== requestId) return;
+      state.loading = false;
+      getMessagesDom()?.list?.classList.remove("is-loading");
+    }
+
     function finishLoadAttempt(requestId) {
       if (!isCurrentRequest(state, initSeq, requestId)) return false;
       state.loading = false;
       return true;
     }
 
-    async function loadList(retryNotReady = true) {
-      if (!isCurrentInit(state, initSeq)) return;
-
+    async function loadListImpl(retryNotReady = true) {
       const requestId = ++state.requestSeq;
       const ctrl = new AbortController();
       state.listAbort = ctrl;
+      const timeoutMs = 20000;
+      const timeoutId = setTimeout(() => {
+        try {
+          ctrl.abort();
+        } catch (_) {}
+      }, timeoutMs);
 
       showLoadingList();
 
@@ -672,9 +704,7 @@
         });
 
         if (!isCurrentRequest(state, initSeq, requestId)) {
-          if (state.requestSeq === requestId) {
-            state.loading = false;
-          }
+          clearLoadingIfStale(requestId);
           return;
         }
 
@@ -687,7 +717,7 @@
           ) {
             await new Promise((r) => setTimeout(r, 400));
             if (isCurrentRequest(state, initSeq, requestId)) {
-              return loadList(false);
+              return loadListImpl(false);
             }
             return;
           }
@@ -702,6 +732,7 @@
 
         state.messages = data.data?.messages || [];
         state.listLoaded = true;
+        state.unreadSyncedFromApi = true;
         syncUnreadFromResponse(data);
         renderList();
         console.debug("[messages] inbox loaded", {
@@ -721,12 +752,11 @@
         }
       } catch (err) {
         if (err?.name === "AbortError") {
+          clearLoadingIfStale(requestId);
           return;
         }
         if (!isCurrentRequest(state, initSeq, requestId)) {
-          if (state.requestSeq === requestId) {
-            state.loading = false;
-          }
+          clearLoadingIfStale(requestId);
           return;
         }
         if (finishLoadAttempt(requestId)) {
@@ -734,7 +764,33 @@
           showErrorList("error_load");
         }
       } finally {
+        clearTimeout(timeoutId);
         if (state.listAbort === ctrl) state.listAbort = null;
+      }
+    }
+
+    async function loadList(retryNotReady = true, opts = {}) {
+      if (!isCurrentInit(state, initSeq)) return;
+      const force = Boolean(opts && opts.force);
+
+      if (state.listInflight) {
+        if (!force && state.inflightFilter === state.filter) {
+          return state.listInflight;
+        }
+        cancelInboxFetch();
+        state.requestSeq += 1;
+      }
+
+      state.inflightFilter = state.filter;
+      const run = loadListImpl(retryNotReady);
+      state.listInflight = run;
+      try {
+        return await run;
+      } finally {
+        if (state.listInflight === run) {
+          state.listInflight = null;
+          state.inflightFilter = null;
+        }
       }
     }
 
@@ -822,15 +878,11 @@
 
     GC.messagesPageState = state;
 
-    const startLoad = () => {
-      if (!isCurrentInit(state, initSeq)) return;
-      loadList();
-    };
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(startLoad);
-    } else {
-      queueMicrotask(startLoad);
-    }
+    queueMicrotask(() => {
+      if (GC.messagesPageState === state && isCurrentInit(state, initSeq)) {
+        loadList(true, { force: true });
+      }
+    });
   }
 
   GC.modules = GC.modules || {};

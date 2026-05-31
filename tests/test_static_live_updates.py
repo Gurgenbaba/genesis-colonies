@@ -36,18 +36,35 @@ def test_messages_js_initial_load_and_stale_request_guards():
     assert "isCurrentRequest(state, initSeq, requestId)" in src
     assert "showLoadingList" in src
     assert "showErrorList" in src
-    assert "requestAnimationFrame(startLoad)" in src
+    assert "queueMicrotask" in src.split("GC.messagesPageState = state")[1][:400]
+    assert "force: true" in src.split("GC.messagesPageState = state")[1][:400]
+    assert "clearLoadingIfStale" in src
+    assert "inflightFilter" in src
+    init_section = src.split("function initMessagesPage")[1][:900]
+    assert 'const filter = "all"' in init_section
     assert "bypass GC.fetchJSON" in src
     assert "await GC.fetchJSON" not in src
     assert "loadGen" not in src
 
 
+def test_main_js_messages_inbox_reload_only_on_unread_increase():
+    src = _read("static/main.js")
+    unread_section = src.split("if (typeof data.unread_messages_count === \"number\")")[1].split("// --- Overview-Ressourcen")[0]
+    assert "emptyInboxNeedsFill" not in unread_section
+    assert "unreadSyncedFromApi" not in unread_section
+    assert "GC.messagesPageState.listLoaded" in unread_section
+    assert "unreadIncreased &&" in unread_section
+    tabs_section = src.split("function bindBuildingTabsOnce")[1].split("function initBuildings")[0]
+    assert '#messages-tabs' in tabs_section
+
+
 def test_messages_js_tab_and_initial_share_load_list():
     src = _read("static/js/messages.js")
     assert "state.loadList = loadList" in src
-    assert "state.loadList?.()" in src
+    assert "state.loadList?.(true, { force: true })" in src
     tab_section = src.split("tabBtn.dataset.filter")[1][:400]
     assert "loadList" in tab_section
+    assert "force: true" in tab_section
 
 
 def test_messages_js_spy_report_and_category_label():

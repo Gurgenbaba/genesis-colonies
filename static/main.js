@@ -2263,14 +2263,10 @@
 
       if (typeof data.unread_messages_count === "number") {
         const onMessagesPage = GC.detectPage() === "messages";
-        const inboxSynced =
-          onMessagesPage &&
-          GC.messagesPageState &&
-          GC.messagesPageState.unreadSyncedFromApi;
         const prevUnread = _lastMessagesUnreadPoll;
         const unreadIncreased =
           prevUnread !== null && data.unread_messages_count > prevUnread;
-        if (!skipMessagesUnread && (!inboxSynced || unreadIncreased)) {
+        if (!skipMessagesUnread) {
           _lastMessagesUnreadPoll = data.unread_messages_count;
           updateMessagesUnreadBadges(data.unread_messages_count);
 
@@ -2284,20 +2280,17 @@
             showNotify(msg, "info");
           }
 
+          // Inbox list load is owned by messages.js (init/tab). Only refresh when unread
+          // count rises after the inbox has already loaded — never on empty filtered tabs.
           if (
+            unreadIncreased &&
             onMessagesPage &&
             GC.messagesPageState &&
-            typeof GC.messagesPageState.loadList === "function" &&
-            !GC.messagesPageState.loading
+            GC.messagesPageState.listLoaded &&
+            !GC.messagesPageState.loading &&
+            typeof GC.messagesPageState.loadList === "function"
           ) {
-            const emptyInboxNeedsFill =
-              data.unread_messages_count > 0 &&
-              (!Array.isArray(GC.messagesPageState.messages) ||
-                GC.messagesPageState.messages.length === 0);
-            if (unreadIncreased || (prevUnread === null && emptyInboxNeedsFill)) {
-              GC.messagesPageState.unreadSyncedFromApi = false;
-              GC.messagesPageState.loadList();
-            }
+            GC.messagesPageState.loadList();
           }
         }
       }
@@ -2571,7 +2564,7 @@
 
     document.addEventListener("click", (e) => {
       const btn = e.target.closest(".building-tabs .tab-btn");
-      if (!btn) return;
+      if (!btn || btn.closest("#messages-tabs")) return;
       if (btn.tagName === "A") e.preventDefault();
       activateBuildingTab(btn, true);
     });

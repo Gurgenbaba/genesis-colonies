@@ -7756,6 +7756,11 @@ body.gc-planet-manage-open { overflow: hidden; }
   display: grid;
 }
 
+.gc-messages-list.is-loading {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
 .gc-messages-item {
   position: relative;
   display: grid;

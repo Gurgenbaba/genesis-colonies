@@ -101,6 +101,30 @@ def _row_to_dict(row: Any, *, recipient_name: str | None = None) -> dict[str, An
     return out
 
 
+def _row_to_list_item(row: Any) -> dict[str, Any]:
+    """Inbox list row — omit body/metadata (loaded on detail fetch)."""
+    sender_raw = row["sender_player_id"]
+    sender_player_id = _safe_int(sender_raw, 0) if sender_raw is not None else None
+    if sender_player_id is not None and sender_player_id <= 0:
+        sender_player_id = None
+    out: dict[str, Any] = {
+        "id": _safe_int(row["id"]),
+        "recipient_player_id": _safe_int(row["recipient_player_id"]),
+        "sender_player_id": sender_player_id,
+        "sender_name": str(row["sender_name"]) if row["sender_name"] is not None else None,
+        "category": str(row["category"] or "system"),
+        "subject": str(row["subject"] or ""),
+        "is_read": bool(_safe_int(row["is_read"], 0)),
+        "is_archived": bool(_safe_int(row["is_archived"], 0)),
+        "created_at": _safe_int(row["created_at"], 0),
+        "read_at": _safe_int(row["read_at"], 0) if row["read_at"] is not None else None,
+    }
+    if sender_player_id is not None:
+        out["reply_to_player_id"] = sender_player_id
+        out["reply_to_name"] = out["sender_name"]
+    return out
+
+
 def _category_clause(category: str | None) -> tuple[str, list[Any]]:
     cat = str(category or "").strip().lower()
     if not cat or cat == "all":
@@ -140,10 +164,28 @@ def normalize_inbox_rows(conn, player_id: int) -> None:
     )
 
 
+def _inbox_needs_normalize(conn, player_id: int) -> bool:
+    """Cheap check — skip write transaction when migration 021 already normalized rows."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT 1
+        FROM player_messages
+        WHERE recipient_player_id = ?
+          AND (deleted_at = 0 OR is_archived IS NULL OR is_read IS NULL)
+        LIMIT 1;
+        """,
+        (int(player_id),),
+    )
+    return cur.fetchone() is not None
+
+
 def _prepare_inbox(conn, player_id: int) -> None:
     if not _table_ready(conn):
         return
     pid = int(player_id)
+    if not _inbox_needs_normalize(conn, pid):
+        return
     if in_transaction(conn):
         normalize_inbox_rows(conn, pid)
         return
@@ -419,8 +461,7 @@ def list_messages(
         cur.execute(
             f"""
             SELECT id, recipient_player_id, sender_player_id, sender_name,
-                   category, subject, body, is_read, is_archived,
-                   metadata_json, created_at, read_at
+                   category, subject, is_read, is_archived, created_at, read_at
             FROM player_messages
             WHERE {where}
             ORDER BY created_at DESC, id DESC
@@ -428,8 +469,8 @@ def list_messages(
             """,
             (*params, lim, off),
         )
-        rows = [_row_to_dict(r) for r in cur.fetchall()]
-        unread = unread_count(int(player_id), conn=conn)
+        rows = [_row_to_list_item(r) for r in cur.fetchall()]
+        unread = unread_count(int(player_id), conn=conn, prepare=False)
         logger.debug(
             "list_messages player_id=%s category=%r item_count=%s unread=%s",
             int(player_id),
@@ -621,14 +662,15 @@ def delete_message(player_id: int, message_id: int) -> dict[str, Any]:
         conn.close()
 
 
-def unread_count(player_id: int, *, conn=None) -> int:
+def unread_count(player_id: int, *, conn=None, prepare: bool = True) -> int:
     own_conn = conn is None
     if own_conn:
         conn = db()
     try:
         if not _table_ready(conn):
             return 0
-        _prepare_inbox(conn, int(player_id))
+        if prepare:
+            _prepare_inbox(conn, int(player_id))
         cur = conn.cursor()
         cur.execute(
             f"""

@@ -364,6 +364,30 @@ def test_cooldown_enforced(temp_db):
     assert second["error"] == "cooldown"
 
 
+def test_list_messages_omits_body_and_metadata_for_inbox(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("list_light")
+    notify_player(
+        pid,
+        "Spy subject",
+        "Full report body text",
+        category="espionage",
+        metadata={"report_version": 2, "intel_tiers": {"fleet": True}},
+    )
+    _close_db()
+
+    listed = list_messages(pid)
+    assert listed["ok"] is True
+    assert len(listed["data"]["messages"]) == 1
+    item = listed["data"]["messages"][0]
+    assert item["subject"] == "Spy subject"
+    assert "body" not in item
+    assert "metadata" not in item
+
+
 def test_xss_stored_as_plain_text(temp_db):
     _run_migrate(temp_db)
     init_db()
@@ -377,7 +401,8 @@ def test_xss_stored_as_plain_text(temp_db):
     listed = list_messages(pid)
     msg = listed["data"]["messages"][0]
     assert "<script>" in msg["subject"]
-    assert "<script>" in msg["body"]
+    detail = get_message(pid, msg["id"], mark_read=False)
+    assert "<script>" in detail["data"]["message"]["body"]
 
 
 def test_api_returns_unread_after_mutations(app_client, temp_db):
