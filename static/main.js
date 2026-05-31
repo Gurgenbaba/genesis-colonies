@@ -520,8 +520,10 @@
   function hydratePageFromLastState(opts) {
     if (!GC.lastState || GC.lastState.ok !== true) return false;
     const queueRoot = document.getElementById("build-queue-root");
-    if (queueRoot && queueRoot.dataset.planetId) {
-      const domPlanetId = Number(queueRoot.dataset.planetId || 0);
+    const traderRoot = document.getElementById("trader-hub-page");
+    const domPlanetEl = queueRoot || traderRoot;
+    if (domPlanetEl && domPlanetEl.dataset.planetId) {
+      const domPlanetId = Number(domPlanetEl.dataset.planetId || 0);
       const statePlanetId = Number(
         GC.lastState.active_planet_id || GC.lastState.build_queue?.planet_id || 0
       );
@@ -650,6 +652,7 @@
   GC.initPage = function initPage(opts) {
     const page = GC.detectPage();
     const force = opts && opts.force;
+    const skipGameState = Boolean(opts && opts.skipGameState);
 
     if (GC.pageLifecycle.initialized && GC.currentPage === page && !force) {
       console.debug("[GC] initPage skipped (same page)", page);
@@ -691,7 +694,11 @@
     _statusPollErrorLogged = false;
 
     const afterInit = () => {
-      GC.refreshGameState("page_init");
+      if (!skipGameState && typeof GC.refreshGameState === "function") {
+        GC.refreshGameState("page_init");
+      } else if (skipGameState) {
+        GC.startPolling(lastHadActiveJob || lastHadActiveResearch);
+      }
       GC.startProgressTicker();
       if (typeof GC.initChat === "function") GC.initChat();
     };
@@ -2317,6 +2324,9 @@
       patchOverviewResearch(research);
       patchOverviewStatus(data.overview, data, buildings, prod);
       if (data.exchange) patchExchangePanel(data.exchange);
+      if (data.fuel_exchange) patchFuelExchangePanel(data.fuel_exchange);
+      if (data.scrapyard) patchScrapyardPanel(data.scrapyard);
+      patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal);
       if (data.planet_teaser) patchPlanetTeaser(data.planet_teaser);
 
       if (data.buildings_panel) {
@@ -3828,18 +3838,51 @@
     const errorEl = panel.querySelector("[data-exchange-error]");
     const remainingEl = panel.querySelector("[data-exchange-daily-remaining]");
     const submitBtn = panel.querySelector(".gc-exchange-submit");
+    const rateDisplayEl = panel.querySelector("[data-exchange-rate-display]");
+    const giveIconEl = panel.querySelector("[data-exchange-give-icon]");
+    const receiveIconEl = panel.querySelector("[data-exchange-receive-icon]");
+    const giveLabelEl = panel.querySelector("[data-exchange-give-label]");
+    const receiveLabelEl = panel.querySelector("[data-exchange-receive-label]");
+    const dirBtns = panel.querySelectorAll("[data-exchange-dir]");
     if (!form || !amountInput || !previewEl) return;
 
     const tt = (key, fallback) => t(key, fallback);
-    const rateM2C = parseFloat(panel.dataset.rateM2c || "0.8");
-    const rateC2M = parseFloat(panel.dataset.rateC2m || "0.8");
-    const minAmount = parseInt(panel.dataset.min || "100", 10);
+    const iconBase = "/static/icons/";
+    const minAmount = parseInt(panel.dataset.min || amountInput.dataset.exchangeMin || "100", 10);
+
+    const readRates = () => ({
+      m2c: parseFloat(panel.dataset.rateM2c || "0.8"),
+      c2m: parseFloat(panel.dataset.rateC2m || "0.8"),
+    });
 
     const reasonText = (reason) => tt(`exchange_error_${reason}`, tt("exchange_error_generic", "Exchange failed."));
 
-    const selectedDirection = () => {
-      const checked = form.querySelector('input[name="exchange_dir"]:checked');
-      return checked ? checked.value : "metal_to_crystal";
+    const selectedDirection = () => panel.dataset.dir || "metal_to_crystal";
+
+    const setDirection = (dir) => {
+      const next = dir === "crystal_to_metal" ? "crystal_to_metal" : "metal_to_crystal";
+      panel.dataset.dir = next;
+      dirBtns.forEach((btn) => {
+        const active = btn.getAttribute("data-exchange-dir") === next;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      const rates = readRates();
+      const isM2C = next === "metal_to_crystal";
+      if (giveIconEl) giveIconEl.src = `${iconBase}${isM2C ? "ferronit" : "crytite"}.png`;
+      if (receiveIconEl) receiveIconEl.src = `${iconBase}${isM2C ? "crytite" : "ferronit"}.png`;
+      if (giveLabelEl) {
+        giveLabelEl.textContent = isM2C
+          ? tt("resource_metal", "Ferronit")
+          : tt("resource_crystal", "Crytite");
+      }
+      if (receiveLabelEl) {
+        receiveLabelEl.textContent = isM2C
+          ? tt("resource_crystal", "Crytite")
+          : tt("resource_metal", "Ferronit");
+      }
+      if (rateDisplayEl) rateDisplayEl.textContent = String(isM2C ? rates.m2c : rates.c2m);
+      updatePreview();
     };
 
     const updatePreview = () => {
@@ -3848,8 +3891,9 @@
         previewEl.textContent = "–";
         return;
       }
+      const rates = readRates();
       const dir = selectedDirection();
-      const rate = dir === "metal_to_crystal" ? rateM2C : rateC2M;
+      const rate = dir === "metal_to_crystal" ? rates.m2c : rates.c2m;
       const receive = Math.floor(raw * rate);
       const receiveLabel = dir === "metal_to_crystal"
         ? tt("resource_crystal", "Crytite")
@@ -3858,9 +3902,9 @@
     };
 
     const patchExchangeFromState = (exchange) => {
-      if (!exchange || !remainingEl) return;
-      if (typeof exchange.daily_remaining === "number") {
-        remainingEl.textContent = String(exchange.daily_remaining);
+      if (!exchange) return;
+      if (typeof exchange.daily_remaining === "number" && remainingEl) {
+        remainingEl.textContent = fmtNumber(exchange.daily_remaining);
       }
       if (typeof exchange.rate_metal_to_crystal === "number") {
         panel.dataset.rateM2c = String(exchange.rate_metal_to_crystal);
@@ -3868,12 +3912,22 @@
       if (typeof exchange.rate_crystal_to_metal === "number") {
         panel.dataset.rateC2m = String(exchange.rate_crystal_to_metal);
       }
+      if (typeof exchange.min_amount === "number") {
+        panel.dataset.min = String(exchange.min_amount);
+        amountInput.min = String(exchange.min_amount);
+        amountInput.dataset.exchangeMin = String(exchange.min_amount);
+      }
+      setDirection(selectedDirection());
     };
 
     if (!panel.dataset.exchangeBound) {
       panel.dataset.exchangeBound = "1";
 
-      form.addEventListener("change", updatePreview);
+      dirBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          setDirection(btn.getAttribute("data-exchange-dir") || "metal_to_crystal");
+        });
+      });
       amountInput.addEventListener("input", updatePreview);
 
       form.addEventListener("submit", async (e) => {
@@ -3884,7 +3938,8 @@
         }
 
         const amount = parseInt(amountInput.value || "0", 10);
-        if (!amount || amount < minAmount) {
+        const minNow = parseInt(panel.dataset.min || String(minAmount), 10);
+        if (!amount || amount < minNow) {
           if (errorEl) {
             errorEl.textContent = reasonText("below_minimum");
             errorEl.hidden = false;
@@ -3893,6 +3948,7 @@
         }
 
         const dir = selectedDirection();
+        const rates = readRates();
         const fromRes = dir === "metal_to_crystal" ? "metal" : "crystal";
         const giveLabel = fromRes === "metal"
           ? tt("resource_metal", "Ferronit")
@@ -3900,7 +3956,7 @@
         const receiveLabel = fromRes === "metal"
           ? tt("resource_crystal", "Crytite")
           : tt("resource_metal", "Ferronit");
-        const rate = fromRes === "metal" ? rateM2C : rateC2M;
+        const rate = fromRes === "metal" ? rates.m2c : rates.c2m;
         const receive = Math.floor(amount * rate);
         const confirmMsg = tt(
           "exchange_confirm_prompt",
@@ -3921,7 +3977,7 @@
             body: JSON.stringify({ direction: dir, amount }),
           });
           if (res?.ok) {
-            amountInput.value = "";
+            amountInput.value = String(minNow);
             updatePreview();
             applyActionState(res, "exchange_success");
             showNotify(tt("exchange_success", "Exchange completed."), "success");
@@ -3944,7 +4000,8 @@
     }
 
     panel._patchExchangeFromState = patchExchangeFromState;
-    updatePreview();
+    if (!amountInput.value) amountInput.value = String(minAmount);
+    setDirection(selectedDirection());
   }
 
   function initFuelExchangePanel() {
@@ -3959,69 +4016,135 @@
     if (!form || !unitsInput) return;
 
     const tt = (key, fallback) => t(key, fallback);
-    const metalPer = parseInt(panel.dataset.metalPer || "45", 10);
-    const crystalPer = parseInt(panel.dataset.crystalPer || "28", 10);
-    const minUnits = parseInt(panel.dataset.min || "10", 10);
+    const readConfig = () => ({
+      metalPer: parseInt(panel.dataset.metalPer || "45", 10),
+      crystalPer: parseInt(panel.dataset.crystalPer || "28", 10),
+      minUnits: parseInt(panel.dataset.min || unitsInput.dataset.fuelExchangeMin || "10", 10),
+    });
     const reasonText = (reason) => tt(`fuel_exchange_error_${reason}`, tt("fuel_exchange_error_generic", "Purchase failed."));
 
     const updatePreview = () => {
+      const cfg = readConfig();
       const u = parseInt(unitsInput.value || "0", 10);
-      if (!u || u < minUnits) {
+      if (!u || u < cfg.minUnits) {
         if (metalEl) metalEl.textContent = "–";
         if (crystalEl) crystalEl.textContent = "–";
         return;
       }
-      if (metalEl) metalEl.textContent = `${(u * metalPer).toLocaleString()} ${tt("resource_metal", "Ferronit")}`;
-      if (crystalEl) crystalEl.textContent = `${(u * crystalPer).toLocaleString()} ${tt("resource_crystal", "Crytite")}`;
+      if (metalEl) metalEl.textContent = `${(u * cfg.metalPer).toLocaleString()} ${tt("resource_metal", "Ferronit")}`;
+      if (crystalEl) crystalEl.textContent = `${(u * cfg.crystalPer).toLocaleString()} ${tt("resource_crystal", "Crytite")}`;
     };
 
-    if (panel.dataset.fuelExchangeBound) return;
-    panel.dataset.fuelExchangeBound = "1";
-    unitsInput.addEventListener("input", updatePreview);
-
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (errorEl) { errorEl.hidden = true; errorEl.textContent = ""; }
-      const units = parseInt(unitsInput.value || "0", 10);
-      if (!units || units < minUnits) {
-        if (errorEl) {
-          errorEl.textContent = reasonText("below_minimum");
-          errorEl.hidden = false;
-        }
-        return;
+    const patchFuelFromState = (fx) => {
+      if (!fx) return;
+      if (typeof fx.metal_per_unit === "number") panel.dataset.metalPer = String(fx.metal_per_unit);
+      if (typeof fx.crystal_per_unit === "number") panel.dataset.crystalPer = String(fx.crystal_per_unit);
+      if (typeof fx.min_units === "number") {
+        panel.dataset.min = String(fx.min_units);
+        unitsInput.min = String(fx.min_units);
+        unitsInput.dataset.fuelExchangeMin = String(fx.min_units);
       }
-      if (submitBtn) submitBtn.disabled = true;
-      try {
-        const res = await GC.fetchGameAction("/api/trader/fuel-exchange", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-          body: JSON.stringify({ units }),
-        });
-        if (res?.ok) {
-          unitsInput.value = "";
-          updatePreview();
-          applyActionState(res, "fuel_exchange_success");
-          showNotify(tt("fuel_exchange_success", "Fuel cells purchased."), "success");
-          const rem = res?.job?.daily_units_remaining;
-          const remEl = panel.querySelector("[data-fuel-exchange-daily-remaining]");
-          if (remEl != null && typeof rem === "number") remEl.textContent = String(rem);
-        } else {
-          applyActionState(res, "fuel_exchange_error");
+      if (typeof fx.daily_units_remaining === "number") {
+        const remEl = panel.querySelector("[data-fuel-exchange-daily-remaining]");
+        if (remEl) remEl.textContent = fmtNumber(fx.daily_units_remaining);
+      }
+      updatePreview();
+    };
+
+    if (!panel.dataset.fuelExchangeBound) {
+      panel.dataset.fuelExchangeBound = "1";
+      unitsInput.addEventListener("input", updatePreview);
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (errorEl) { errorEl.hidden = true; errorEl.textContent = ""; }
+        const cfg = readConfig();
+        const units = parseInt(unitsInput.value || "0", 10);
+        if (!units || units < cfg.minUnits) {
           if (errorEl) {
-            errorEl.textContent = reasonText(res?.reason);
+            errorEl.textContent = reasonText("below_minimum");
             errorEl.hidden = false;
           }
+          return;
         }
-      } catch (_) {
-        if (errorEl) {
-          errorEl.textContent = reasonText("generic");
-          errorEl.hidden = false;
+        if (submitBtn) submitBtn.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/trader/fuel-exchange", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+            body: JSON.stringify({ units }),
+          });
+          if (res?.ok) {
+            unitsInput.value = String(cfg.minUnits);
+            updatePreview();
+            applyActionState(res, "fuel_exchange_success");
+            showNotify(tt("fuel_exchange_success", "Fuel cells purchased."), "success");
+          } else {
+            applyActionState(res, "fuel_exchange_error");
+            if (errorEl) {
+              errorEl.textContent = reasonText(res?.reason);
+              errorEl.hidden = false;
+            }
+          }
+        } catch (_) {
+          if (errorEl) {
+            errorEl.textContent = reasonText("generic");
+            errorEl.hidden = false;
+          }
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
         }
-      } finally {
-        if (submitBtn) submitBtn.disabled = false;
-      }
-    });
+      });
+    }
+
+    panel._patchFuelFromState = patchFuelFromState;
+    if (!unitsInput.value) unitsInput.value = String(readConfig().minUnits);
     updatePreview();
+  }
+
+  function renderScrapyardRows(ships) {
+    const tt = (key, fallback, vars) => t(key, fallback, vars);
+    if (!Array.isArray(ships) || ships.length === 0) {
+      return `<p class="hint" data-scrapyard-empty>${tt("scrapyard_empty", "No ships to recycle.")}</p>`;
+    }
+    return ships.map((row) => {
+      const key = String(row.ship_key || "");
+      const amount = Number(row.amount || 0);
+      const icon = String(row.icon || "");
+      const shipName = tt(`fleet_ship_${key}`, key);
+      const minM = Number(row.preview_refund_min?.metal || 0);
+      const maxM = Number(row.preview_refund_max?.metal || 0);
+      const minC = Number(row.preview_refund_min?.crystal || 0);
+      const maxC = Number(row.preview_refund_max?.crystal || 0);
+      const haveLabel = tt("scrapyard_have", "Available: %(count)s").replace("%(count)s", amount.toLocaleString());
+      const refundLabel = tt("scrapyard_refund_range", "Refund");
+      const metalLabel = tt("resource_metal", "Ferronit");
+      const crystalLabel = tt("resource_crystal", "Crytite");
+      const recycleLabel = tt("scrapyard_recycle_btn", "Recycle");
+      const amountLabel = tt("scrapyard_amount", "Amount");
+      return `
+        <article class="gc-scrapyard-row" data-scrap-ship="${key}" data-scrap-max="${amount}">
+          <div class="gc-scrapyard-row-main">
+            <img src="${icon}" alt="" class="gc-scrapyard-ship-icon" width="40" height="40" loading="lazy">
+            <div>
+              <span class="gc-scrapyard-ship-name">${shipName}</span>
+              <span class="gc-scrapyard-have gc-mono">${haveLabel}</span>
+            </div>
+          </div>
+          <div class="gc-scrapyard-refund hint gc-mono">
+            ${refundLabel}:
+            ${minM.toLocaleString()}–${maxM.toLocaleString()} ${metalLabel},
+            ${minC.toLocaleString()}–${maxC.toLocaleString()} ${crystalLabel}
+          </div>
+          <div class="gc-scrapyard-actions">
+            <input type="number" class="gc-input gc-scrapyard-qty" min="1" max="${amount}" value="1"
+                   data-scrap-qty="${key}" aria-label="${amountLabel}">
+            <button type="button" class="gc-btn gc-btn-secondary" data-scrap-recycle="${key}">
+              ${recycleLabel}
+            </button>
+          </div>
+        </article>`;
+    }).join("");
   }
 
   function initScrapyardPanel() {
@@ -4056,7 +4179,6 @@
         if (res?.ok) {
           applyActionState(res, "scrapyard_success");
           showNotify(tt("scrapyard_success", "Ships recycled."), "success");
-          window.location.reload();
         } else {
           applyActionState(res, "scrapyard_error");
           if (errorEl) {
@@ -4080,6 +4202,34 @@
     if (panel && typeof panel._patchExchangeFromState === "function") {
       panel._patchExchangeFromState(exchange);
     }
+  }
+
+  function patchFuelExchangePanel(fuelExchange) {
+    const panel = document.getElementById("gc-fuel-exchange-panel");
+    if (panel && typeof panel._patchFuelFromState === "function") {
+      panel._patchFuelFromState(fuelExchange);
+    }
+  }
+
+  function patchScrapyardPanel(scrapyard) {
+    const panel = document.getElementById("gc-scrapyard-panel");
+    if (!panel || !scrapyard || scrapyard.ready === false) return;
+    const list = panel.querySelector("[data-scrapyard-list]");
+    if (!list || !Array.isArray(scrapyard.ships)) return;
+    list.innerHTML = renderScrapyardRows(scrapyard.ships);
+  }
+
+  function patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal) {
+    const page = document.getElementById("trader-hub-page");
+    if (!page) return;
+    const metalVal = page.querySelector('[data-res="metal"]');
+    const crystalVal = page.querySelector('[data-res="crystal"]');
+    const metalCap = page.querySelector('[data-cap="metal"]');
+    const crystalCap = page.querySelector('[data-cap="crystal"]');
+    if (metalVal) _setIfChanged(metalVal, fmtNumber(metal));
+    if (crystalVal) _setIfChanged(crystalVal, fmtNumber(crystal));
+    if (metalCap && storageMetal > 0) _setIfChanged(metalCap, `/ ${fmtNumber(storageMetal)}`);
+    if (crystalCap && storageCrystal > 0) _setIfChanged(crystalCap, `/ ${fmtNumber(storageCrystal)}`);
   }
 
   function initResearch() {}
@@ -5387,6 +5537,10 @@
     GC.pjaxInFlight = (async () => {
       const ctrl = new AbortController();
       GC._pjaxAbort = ctrl;
+      let statePromise = null;
+      if (shouldRunGameLoop() && typeof GC.refreshGameState === "function") {
+        statePromise = GC.refreshGameState("pjax_nav");
+      }
       try {
         GC.cleanupPage();
         const res = await fetch(url, {
@@ -5425,7 +5579,12 @@
         _syncNavActive(url);
         if (push) history.pushState({ gcPjax: true }, "", url);
 
-        await GC.initPage({ force: true });
+        if (statePromise) {
+          try {
+            await statePromise;
+          } catch (_) {}
+        }
+        await GC.initPage({ force: true, skipGameState: Boolean(statePromise) });
         if (document.querySelector(".galaxy-page")) prefetchGalaxyAdjacent();
       } catch (err) {
         if (err?.name === "AbortError") return;

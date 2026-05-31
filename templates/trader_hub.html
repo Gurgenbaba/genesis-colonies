@@ -22,7 +22,7 @@
           <span class="overview-res-label">{{ T("resource_metal") }}</span>
           <span class="overview-res-main">
             <span class="gc-val" data-res="metal">{{ p_metal|fmt_int }}</span>
-            <span class="gc-cap">/ {{ (caps.metal if caps and caps.metal is defined else (caps.get('metal', 0) if caps is mapping else 0))|fmt_int }}</span>
+            <span class="gc-cap" data-cap="metal">/ {{ (caps.metal if caps and caps.metal is defined else (caps.get('metal', 0) if caps is mapping else 0))|fmt_int }}</span>
           </span>
         </div>
       </article>
@@ -33,7 +33,7 @@
           <span class="overview-res-label">{{ T("resource_crystal") }}</span>
           <span class="overview-res-main">
             <span class="gc-val" data-res="crystal">{{ p_crystal|fmt_int }}</span>
-            <span class="gc-cap">/ {{ (caps.crystal if caps and caps.crystal is defined else (caps.get('crystal', 0) if caps is mapping else 0))|fmt_int }}</span>
+            <span class="gc-cap" data-cap="crystal">/ {{ (caps.crystal if caps and caps.crystal is defined else (caps.get('crystal', 0) if caps is mapping else 0))|fmt_int }}</span>
           </span>
         </div>
       </article>

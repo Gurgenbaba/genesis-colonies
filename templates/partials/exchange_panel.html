@@ -5,6 +5,7 @@
          data-rate-m2c="{{ ex.rate_metal_to_crystal or 0.8 }}"
          data-rate-c2m="{{ ex.rate_crystal_to_metal or 0.8 }}"
          data-min="{{ ex.min_amount or 100 }}"
+         data-dir="metal_to_crystal"
          aria-label="{{ T('exchange_title') }}">
   <div class="gc-panel-header">
     <div class="gc-panel-head-left">
@@ -14,9 +15,37 @@
   </div>
 
   {% if ex.enabled %}
-  <div class="gc-exchange-rates hint">
-    <span>{{ T('exchange_rate_metal_to_crystal') }}: 1 → {{ ex.rate_metal_to_crystal }}</span>
-    <span>{{ T('exchange_rate_crystal_to_metal') }}: 1 → {{ ex.rate_crystal_to_metal }}</span>
+  <div class="gc-exchange-direction-toggle" role="tablist" aria-label="{{ T('exchange_title') }}">
+    <button type="button"
+            class="gc-exchange-dir-btn is-active"
+            role="tab"
+            aria-selected="true"
+            data-exchange-dir="metal_to_crystal">
+      {{ T('exchange_metal_to_crystal') }}
+    </button>
+    <button type="button"
+            class="gc-exchange-dir-btn"
+            role="tab"
+            aria-selected="false"
+            data-exchange-dir="crystal_to_metal">
+      {{ T('exchange_crystal_to_metal') }}
+    </button>
+  </div>
+
+  <div class="gc-fuel-exchange-rates gc-exchange-formula" aria-live="polite">
+    <div class="gc-fuel-exchange-rate-card" data-exchange-give-card>
+      <img src="{{ url_for('static', filename='icons/ferronit.png') }}"
+           alt="" class="gc-fuel-exchange-icon" data-exchange-give-icon loading="lazy">
+      <span class="gc-fuel-exchange-rate-val gc-mono">1</span>
+      <span class="gc-fuel-exchange-rate-label" data-exchange-give-label>{{ T('resource_metal') }}</span>
+    </div>
+    <span class="gc-exchange-arrow" aria-hidden="true">→</span>
+    <div class="gc-fuel-exchange-rate-card" data-exchange-receive-card>
+      <img src="{{ url_for('static', filename='icons/crytite.png') }}"
+           alt="" class="gc-fuel-exchange-icon" data-exchange-receive-icon loading="lazy">
+      <span class="gc-fuel-exchange-rate-val gc-mono" data-exchange-rate-display>{{ ex.rate_metal_to_crystal }}</span>
+      <span class="gc-fuel-exchange-rate-label" data-exchange-receive-label>{{ T('resource_crystal') }}</span>
+    </div>
   </div>
 
   <div class="gc-exchange-limit hint">
@@ -26,28 +55,15 @@
   </div>
 
   <form class="gc-exchange-form" id="gc-exchange-form" novalidate>
-    <div class="gc-exchange-direction">
-      <label class="gc-exchange-dir">
-        <input type="radio" name="exchange_dir" value="metal_to_crystal" checked>
-        <span>{{ T('exchange_metal_to_crystal') }}</span>
-      </label>
-      <label class="gc-exchange-dir">
-        <input type="radio" name="exchange_dir" value="crystal_to_metal">
-        <span>{{ T('exchange_crystal_to_metal') }}</span>
-      </label>
-    </div>
-
-    <div class="gc-exchange-row">
-      <label class="gc-exchange-label" for="gc-exchange-amount">{{ T('exchange_amount') }}</label>
-      <input type="number"
-             id="gc-exchange-amount"
-             class="gc-input gc-exchange-input"
-             min="{{ ex.min_amount }}"
-             step="1"
-             inputmode="numeric"
-             placeholder="{{ ex.min_amount }}"
-             data-exchange-min="{{ ex.min_amount }}">
-    </div>
+    <label class="gc-exchange-label" for="gc-exchange-amount">{{ T('exchange_amount') }}</label>
+    <input type="number"
+           id="gc-exchange-amount"
+           class="gc-input gc-exchange-input"
+           min="{{ ex.min_amount }}"
+           step="1"
+           inputmode="numeric"
+           value="{{ ex.min_amount }}"
+           data-exchange-min="{{ ex.min_amount }}">
 
     <p class="gc-exchange-preview hint">
       {{ T('exchange_preview') }}:

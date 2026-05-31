@@ -219,7 +219,9 @@ def test_trader_hub_page_includes_exchange_panel(exchange_db, tmp_path, monkeypa
     html = res.get_data(as_text=True)
     assert "trader-hub-page" in html
     assert "gc-exchange-panel" in html
-    assert "gc-exchange-form" in html
+    assert "gc-exchange-formula" in html
+    assert "gc-fuel-exchange-panel" in html
+    assert "gc-scrapyard-panel" in html
 
 
 def test_overview_page_excludes_exchange_panel(exchange_db, tmp_path, monkeypatch):

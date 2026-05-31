@@ -132,7 +132,7 @@ def read_player_live_state_for_poll(
 
         try:
             if need_write:
-                if own_conn and not in_transaction(conn):
+                if not in_transaction(conn):
                     begin_write_transaction(conn)
 
                 if has_due or has_pending:
@@ -155,7 +155,7 @@ def read_player_live_state_for_poll(
                 )
                 storage_caps = get_storage_capacity(buildings, user_id=uid, conn=conn)
 
-                if own_conn and in_transaction(conn):
+                if in_transaction(conn):
                     from .models import commit
 
                     commit(conn)

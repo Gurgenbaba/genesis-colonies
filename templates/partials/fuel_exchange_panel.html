@@ -45,7 +45,7 @@
     <label class="gc-fuel-exchange-label" for="gc-fuel-exchange-units">{{ T('fuel_exchange_units') }}</label>
     <input type="number" id="gc-fuel-exchange-units" class="gc-input gc-fuel-exchange-input"
            min="{{ fx.min_units }}" step="1" inputmode="numeric"
-           placeholder="{{ fx.min_units }}" data-fuel-exchange-min="{{ fx.min_units }}">
+           value="{{ fx.min_units }}" data-fuel-exchange-min="{{ fx.min_units }}">
 
     <div class="gc-fuel-exchange-preview">
       <span class="hint">{{ T('fuel_exchange_cost_preview') }}:</span>

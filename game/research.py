@@ -177,7 +177,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "description": "Reduziert Flotten-Treibstoffverbrauch um 3 % pro Stufe (min. 50 %).",
         "description_key": "desc_research_fuel_efficiency",
         "category": "propulsion",
-        "icon": "engine_tech.png",
+        "icon": "kryo-antriebstechnik.png",
         "base_cost_m": 2400,
         "base_cost_c": 1200,
         "base_time": 1400,

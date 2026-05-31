@@ -408,9 +408,10 @@ def _load_page_live_context(
 
     conn = db()
     src = str(finish_source or "page_load")
+    use_poll_live_path = not src.startswith("api_")
     try:
         try:
-            if src == "game_state":
+            if use_poll_live_path:
                 from game.logic import read_player_live_state_for_poll
 
                 player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
@@ -422,6 +423,7 @@ def _load_page_live_context(
                     conn=conn,
                     finish_source=src,
                 )
+                conn.commit()
             build_queue = get_build_queue_status(user_id=user_id, skip_finish=True, conn=conn)
             research = get_research_status(
                 user_id=user_id,
@@ -434,15 +436,14 @@ def _load_page_live_context(
                 ratio=ratio,
                 user_id=user_id,
             )
-            if src != "game_state":
-                conn.commit()
         except sqlite3.OperationalError:
             rollback(conn)
-            if src != "game_state":
+            if not use_poll_live_path:
                 raise
             logger.warning(
-                "game_state live context locked, using read-only fallback user_id=%s",
+                "page live context locked, using read-only fallback user_id=%s source=%s",
                 user_id,
+                src,
                 exc_info=True,
             )
             from game.logic import _read_player_live_state_no_writes
@@ -2354,6 +2355,22 @@ def _payload_from_live_context(
                 )
         finally:
             conn_ex.close()
+    except Exception:
+        pass
+
+    try:
+        from game.fuel_exchange import fuel_exchange_schema_ready, get_fuel_exchange_status
+        from game.scrapyard import scrapyard_status
+
+        conn_tr = db()
+        try:
+            planet_tr = get_context_planet(user_id, conn=conn_tr)
+            pid_tr = int(planet_tr["id"])
+            if fuel_exchange_schema_ready(conn_tr):
+                payload["fuel_exchange"] = get_fuel_exchange_status(user_id, pid_tr, conn=conn_tr)
+            payload["scrapyard"] = scrapyard_status(user_id, pid_tr, conn=conn_tr)
+        finally:
+            conn_tr.close()
     except Exception:
         pass
 
