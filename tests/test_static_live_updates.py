@@ -87,6 +87,21 @@ def test_main_js_game_state_polling_idempotent():
     assert "if (GC.pjaxInFlight) return null;" in src
 
 
+def test_main_js_progress_ticker_uses_server_time_and_interval():
+    src = _read("static/main.js")
+    assert "bootstrapServerTimeFromDom" in src
+    assert "data-server-time" in _read("templates/base.html")
+    assert "SERVER_TIME=int(time.time())" in _read("app.py")
+    time_section = src.split("function getApproxServerNow()")[1].split("bootstrapServerTimeFromDom();")[0]
+    assert "Math.floor(Date.now() / 1000)" in time_section
+    ticker_section = src.split("GC.startProgressTicker = function startProgressTicker()")[1].split("GC.stopPolling")[0]
+    assert "setInterval(tick, 1000)" in ticker_section
+    assert "requestAnimationFrame(tick)" not in ticker_section
+    update_section = src.split("function updateAllProgressBars()")[1].split("function updateBuildQueueLive")[0]
+    assert "if (!serverNow) return;" not in update_section
+    assert "pe-planet-research-fill" in update_section
+
+
 def test_main_js_init_page_resumes_chat_after_pjax():
     src = _read("static/main.js")
     assert "GC.initChat()" in src

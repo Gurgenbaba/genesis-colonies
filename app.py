@@ -334,6 +334,7 @@ def inject_globals():
         HEADER_PLANETS=header_planets,
         HEADER_ACTIVE_PLANET=header_active_planet,
         current_planet_landscape_url=current_planet_landscape_url,
+        SERVER_TIME=int(time.time()),
     )
 
 

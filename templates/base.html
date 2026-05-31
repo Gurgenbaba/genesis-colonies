@@ -25,6 +25,7 @@
       data-theme="dark"
       data-endpoint="{{ request.endpoint or '' }}"
       data-auth-page="{{ '1' if SIMPLE_LAYOUT else '0' }}"
+      {% if not SIMPLE_LAYOUT %}data-server-time="{{ SERVER_TIME }}"{% endif %}
       {% if current_planet_landscape_url %}style="--planet-landscape: url('{{ current_planet_landscape_url }}');"{% endif %}>
 
   <!-- Skip Link (Keyboard/Screenreader) -->

@@ -128,11 +128,20 @@
     TIME.clientPerfAt = performance.now();
   }
 
-  function getApproxServerNow() {
-    if (!TIME.serverNow || !TIME.clientPerfAt) return 0;
-    const dt = (performance.now() - TIME.clientPerfAt) / 1000;
-    return TIME.serverNow + dt;
+  function bootstrapServerTimeFromDom() {
+    const raw = document.body?.dataset?.serverTime;
+    if (raw) setServerTime(raw);
   }
+
+  function getApproxServerNow() {
+    if (TIME.serverNow && TIME.clientPerfAt) {
+      const dt = (performance.now() - TIME.clientPerfAt) / 1000;
+      return TIME.serverNow + dt;
+    }
+    return Math.floor(Date.now() / 1000);
+  }
+
+  bootstrapServerTimeFromDom();
 
   let _statusPollErrorLogged = false;
   let _authLoopAborted = false;
@@ -543,28 +552,33 @@
   }
 
   let _progressTickerActive = false;
+  let _progressTickerIntervalId = null;
 
   GC.stopProgressTicker = function stopProgressTicker() {
     _progressTickerActive = false;
+    if (_progressTickerIntervalId != null) {
+      clearInterval(_progressTickerIntervalId);
+      _progressTickerIntervalId = null;
+    }
   };
 
   GC.startProgressTicker = function startProgressTicker() {
     if (!shouldRunGameLoop()) return;
-    if (_progressTickerActive) return;
+    if (_progressTickerIntervalId != null) return;
     _progressTickerActive = true;
     const tick = () => {
       if (!_progressTickerActive || !shouldRunGameLoop() || _authLoopAborted) {
-        _progressTickerActive = false;
+        GC.stopProgressTicker();
+        return;
+      }
+      if (!_hasActiveProgressJobs()) {
+        GC.stopProgressTicker();
         return;
       }
       updateAllProgressBars();
-      if (_hasActiveProgressJobs()) {
-        GC.requestFrame(tick);
-      } else {
-        _progressTickerActive = false;
-      }
     };
-    GC.requestFrame(tick);
+    tick();
+    _progressTickerIntervalId = setInterval(tick, 1000);
   };
 
   GC.stopPolling = function stopPolling() {
@@ -694,9 +708,10 @@
     _authLoopAborted = false;
     _statusPollErrorLogged = false;
 
-    const afterInit = () => {
+    const afterInit = async () => {
+      bootstrapServerTimeFromDom();
       if (!skipGameState && typeof GC.refreshGameState === "function") {
-        GC.refreshGameState("page_init");
+        await GC.refreshGameState("page_init");
       } else if (skipGameState) {
         GC.startPolling(lastHadActiveJob || lastHadActiveResearch);
       }
@@ -1450,7 +1465,9 @@
       !!document.querySelector(".build-job.build-job-active") ||
       !!document.querySelector(".research-job.research-job-active") ||
       !!document.getElementById("overview-research-active") ||
-      !!document.querySelector(".planet-evolution-page .pe-planet-research-active")
+      !!document.querySelector(".planet-evolution-page .pe-planet-research-active") ||
+      !!document.querySelector("#overview-activities .overview-activity-row[data-finish-at]") ||
+      !!document.querySelector("#shipyard-page [data-finish-at]")
     );
   }
 
@@ -1638,7 +1655,6 @@
       const overdue =
         first &&
         first.finish_time &&
-        getApproxServerNow() &&
         Number(first.finish_time) <= getApproxServerNow();
       if (!overdue) {
         _updateBuildQueueSubtitle(count, limit, firstEta);
@@ -1793,7 +1809,7 @@
 
     if (sig === _lastResearchQueueSignature) {
       const finishTime = first ? Number(first.finish_at || first.finish_time || 0) : 0;
-      const overdue = finishTime > 0 && getApproxServerNow() && finishTime <= getApproxServerNow();
+      const overdue = finishTime > 0 && finishTime <= getApproxServerNow();
       if (!overdue) {
         _updateResearchQueueSubtitle(count, limit, firstEta);
         GC.startProgressTicker();
@@ -1877,7 +1893,6 @@
 
   function updateAllProgressBars() {
     const serverNow = getApproxServerNow();
-    if (!serverNow) return;
 
     const path = window.location.pathname || "";
     const isResearchPage = path.endsWith("/research");
@@ -1965,7 +1980,20 @@
       const total = Math.max(1, Number(peActive.dataset.total || 1));
       if (finishTime) {
         const remaining = Math.max(0, finishTime - serverNow);
+        const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
+        const fill = peActive.querySelector(".pe-planet-research-fill");
+        const etaEl = peActive.querySelector("[data-pe-research-eta]");
+        const pctEl = peActive.querySelector("[data-pe-research-pct]");
+        if (fill) _applyProgressFill(fill, pct);
+        if (etaEl) {
+          const s = Math.max(0, Math.ceil(remaining));
+          const h = Math.floor(s / 3600);
+          const m = Math.floor((s % 3600) / 60);
+          _setIfChanged(etaEl, h > 0 ? `~${h}h ${m}m` : `~${m}m`);
+        }
+        if (pctEl) _setIfChanged(pctEl, `${Math.round(pct)}%`);
         if (remaining <= 0) {
+          _applyProgressFill(fill, 100);
           requestFinishRefresh("planet_evolution");
         }
       }
@@ -4285,39 +4313,8 @@
   function initResearch() {}
 
   function syncPlanetEvolutionResearchTicker() {
-    const active = document.querySelector(".planet-evolution-page .pe-planet-research-active");
-    if (!active) return;
-
-    const finish = Number(active.dataset.finishTime || 0);
-    const total = Math.max(1, Number(active.dataset.total || 1));
-    const fill = active.querySelector(".pe-planet-research-fill");
-    const etaEl = active.querySelector("[data-pe-research-eta]");
-    const pctEl = active.querySelector("[data-pe-research-pct]");
-
-    const formatEta = (sec) => {
-      const s = Math.max(0, Math.ceil(sec));
-      const h = Math.floor(s / 3600);
-      const m = Math.floor((s % 3600) / 60);
-      return h > 0 ? `~${h}h ${m}m` : `~${m}m`;
-    };
-
-    const tick = () => {
-      const now = getApproxServerNow() || Math.floor(Date.now() / 1000);
-      const remaining = Math.max(0, finish - now);
-      const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
-      if (fill) {
-        fill.style.width = `${pct}%`;
-        fill.setAttribute("aria-valuenow", String(Math.round(pct)));
-      }
-      if (etaEl) etaEl.textContent = formatEta(remaining);
-      if (pctEl) pctEl.textContent = `${Math.round(pct)}%`;
-      if (remaining <= 0) {
-        requestFinishRefresh("planet_evolution");
-      }
-    };
-
-    tick();
-    GC.setSafeInterval(tick, 1000);
+    if (!document.querySelector(".planet-evolution-page .pe-planet-research-active")) return;
+    GC.startProgressTicker();
   }
 
   function planetSwitchReasonText(reason) {
