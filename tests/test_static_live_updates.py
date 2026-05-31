@@ -172,6 +172,23 @@ def test_chat_bootstrap_not_in_message_poll_tick():
     assert "runInitialBootstrap" in src
 
 
+def test_main_js_fleet_countdown_uses_integer_seconds():
+    src = _read("static/main.js")
+    assert "function formatCountdownRemain" in src
+    tick_body = src.split("const tickFleetCountdowns = () =>")[1].split("tickFleetCountdowns();")[0]
+    assert "Math.floor(getApproxServerNow()" in tick_body
+    assert "formatCountdownRemain(target - now)" in tick_body
+
+
+def test_style_uses_readable_level_font():
+    css = _read("static/style.css")
+    assert "--gc-font-level" in css
+    assert "JetBrains Mono" in css
+    assert ".gc-level-badge" in css
+    badge_block = css.split(".gc-level-badge{")[1].split("}")[0]
+    assert "var(--gc-font-level)" in badge_block
+
+
 def test_main_js_patches_resource_bar_energy_warning():
     src = _read("static/main.js")
     assert "function patchResourceBarEnergyWarning" in src

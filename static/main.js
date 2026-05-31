@@ -736,6 +736,16 @@
     return `${m}:${String(sec).padStart(2, "0")}`;
   }
 
+  function formatCountdownRemain(seconds) {
+    const s = Math.max(0, Math.floor(Number(seconds) || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const secR = s % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${secR}s`;
+    return `${secR}s`;
+  }
+
   function showNotify(message, category = "info") {
     const text = String(message || "").trim();
     if (!text) return;
@@ -2870,15 +2880,7 @@
       };
     };
 
-    const formatFleetDuration = (sec) => {
-      const s = Math.max(0, Math.ceil(Number(sec) || 0));
-      const h = Math.floor(s / 3600);
-      const m = Math.floor((s % 3600) / 60);
-      const secR = s % 60;
-      if (h > 0) return `${h}h ${m}m`;
-      if (m > 0) return `${m}m ${secR}s`;
-      return `${secR}s`;
-    };
+    const formatFleetDuration = (sec) => formatCountdownRemain(sec);
 
     const renderShipChips = (ships) => Object.entries(ships || {})
       .map(([key, qty]) => `<span class="fleet-ship-chip">${tt(`fleet_ship_${key}`, key)} × ${Number(qty).toLocaleString()}</span>`)
@@ -3096,7 +3098,8 @@
           if (previewFuelAvail) previewFuelAvail.textContent = String(p.fuel_available ?? rt.data.resources?.fuel_cells ?? "–");
           if (previewFlight) previewFlight.textContent = formatFleetDuration(p.flight_seconds);
           if (previewArrival && p.arrival_at) {
-            previewArrival.textContent = formatFleetDuration(Math.max(0, Math.ceil(Number(p.arrival_at) - (getApproxServerNow() || Date.now() / 1000))));
+            const nowSec = Math.floor(getApproxServerNow() || Date.now() / 1000);
+            previewArrival.textContent = formatFleetDuration(Math.max(0, Number(p.arrival_at) - nowSec));
           } else if (previewArrival) {
             previewArrival.textContent = formatFleetDuration(p.flight_seconds);
           }
@@ -3458,15 +3461,12 @@
     const tickFleetCountdowns = () => {
       const p = document.getElementById("fleet-page");
       if (!p || p.dataset.ready !== "1") return;
-      const now = getApproxServerNow() || Math.floor(Date.now() / 1000);
+      const now = Math.floor(getApproxServerNow() || Date.now() / 1000);
       let overdue = false;
       p.querySelectorAll("[data-countdown]").forEach((el) => {
         const target = parseInt(el.getAttribute("data-countdown") || "0", 10);
-        const s = Math.max(0, target - now);
-        const h = Math.floor(s / 3600);
-        const m = Math.floor((s % 3600) / 60);
-        const secR = s % 60;
-        el.textContent = h > 0 ? `${h}h ${m}m` : (m > 0 ? `${m}m ${secR}s` : `${secR}s`);
+        el.textContent = formatCountdownRemain(target - now);
+        const s = Math.max(0, Math.floor(Number(target) - now));
         if (target > 0 && s <= 0) overdue = true;
       });
       if (overdue && !p.dataset.fleetRefreshBusy && typeof GC.refreshFleetState === "function") {
@@ -3599,13 +3599,7 @@
   }
 
   function formatShipyardRemaining(seconds) {
-    const s = Math.max(0, Math.floor(Number(seconds) || 0));
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const secR = s % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m ${secR}s`;
-    return `${secR}s`;
+    return formatCountdownRemain(seconds);
   }
 
   function renderShipyardQueue(page, queueData) {

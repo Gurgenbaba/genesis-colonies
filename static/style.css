@@ -24,7 +24,7 @@
 /* =========================
    0) Fonts & Reset
    ========================= */
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Orbitron:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 *,
 *::before,
@@ -97,6 +97,7 @@ button, input, textarea { font: inherit; }
   --gc-border-glow-strong: 0 0 0 1px rgba(70, 229, 255, 0.45), 0 0 8px rgba(70, 229, 255, 0.12);
 
   --gc-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --gc-font-level: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Segoe UI", sans-serif;
 
   --gc-scanline: repeating-linear-gradient(
     0deg,
@@ -2395,9 +2396,12 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   border: 1px solid rgba(70, 229, 255, 0.34);
   background: rgba(70, 229, 255, 0.10);
   color: rgba(180, 245, 255, 0.98);
-  font-family: Orbitron, var(--gc-mono);
-  font-size: 0.78rem;
-  font-weight: 800;
+  font-family: var(--gc-font-level);
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  letter-spacing: 0.03em;
   line-height: 1.1;
   box-shadow: 0 0 12px rgba(70, 229, 255, 0.10);
 }
@@ -2609,9 +2613,11 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 
 .research-lab-chip .lab-level-highlight{
-  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-family: var(--gc-font-level);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
   color: var(--gc-primary-2);
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .research-shell{
@@ -2661,7 +2667,13 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 
 .lab-meta-row{ color: var(--gc-text-soft); margin-bottom: 6px; font-size: 0.86rem; }
-.lab-level-highlight{ font-family: Orbitron, Inter, system-ui, sans-serif; color: var(--gc-primary-2); font-weight: 900; }
+.lab-level-highlight{
+  font-family: var(--gc-font-level);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  color: var(--gc-primary-2);
+  font-weight: 700;
+}
 .lab-hint{ color: var(--gc-text-soft); font-size: 0.84rem; line-height: 1.35; }
 .lab-hint-compact{
   display: -webkit-box;
@@ -2746,7 +2758,9 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   border: 1px solid rgba(70, 229, 255, 0.35);
   background: rgba(5, 10, 22, 0.58);
   color: var(--gc-text-soft);
-  font-family: var(--gc-mono);
+  font-family: var(--gc-font-level);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
   font-size: 0.82rem;
 }
 
