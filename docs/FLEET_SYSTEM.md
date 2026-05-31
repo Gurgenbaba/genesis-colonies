@@ -2,7 +2,7 @@
 
 Flotten, Schiffe, Missionen und Tick (v1.5.3).
 
-Kanonische Module: `game/fleet.py`, `game/fleet_calc.py`, `game/fleet_defs.py`, `game/fleet_api.py`.
+Kanonische Module: `game/fleet.py`, `game/fleet_calc.py`, `game/fleet_defs.py`, `game/fleet_api.py`, `game/expedition_events.py`.
 
 **Kein zweites Fleet-State-System** — alle Bewegungen in `fleet_movements`.
 
@@ -73,7 +73,17 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 | **spy** | Tiered probe intel (resources → fleet → buildings → activity); structured inbox report; Schiffe return |
 | **attack** | **Placeholder** — „combat not active“; Schiffe return |
 | **hold** | `holding` für 3600s, dann return (ally only wenn Alliance-Schema) |
-| **expedition** | Event engine: weighted outcomes, cargo cap, optional delay; structured inbox report |
+| **expedition** | Event engine (`expedition_events.py`): weighted outcomes, cargo cap, optional delay; inbox event-card report (GC-402C) |
+
+### Expedition (GC-402 / 402B / 402C)
+
+| Ticket | Backend / UI | Module |
+|--------|----------------|--------|
+| **GC-402** | Weighted event roll on arrival; `report_version: 2` metadata | `game/expedition_events.py`, `game/fleet.py` |
+| **GC-402B** | Fleet send preview: mission hints, ok/blocked status, expedition auto-position 16 | `static/main.js`, `templates/fleet.html` |
+| **GC-402C** | Inbox debrief: event card, risk/find meta, loot chips, theme colors per event type | `static/js/messages.js`, `static/style.css` |
+
+Event keys: `void_scan`, `mineral_deposit`, `fuel_cache`, `debris_salvage`, `nav_interference`, `distress_beacon`, `sensor_glitch`, `ancient_stash`. Roll ist deterministisch pro `movement_id`.
 | **colonize** | `colonize_planet()`; verbraucht `seed_ark` |
 
 Logistics (`collect` / `distribute`): API existiert, antwortet `logistics_not_implemented`.
@@ -122,8 +132,11 @@ Response envelope: `{ ok, error, message_key, data }` via `fleet_api.py`.
 - `refreshFleetState()` on init, after actions, countdown zero
 - Realigns `planet_id` from `GC.lastState.active_planet_id`
 - Galaxy prefill: `applyFleetUrlPrefill()` from query params
+- **GC-402B:** Mission feedback panel (`data-fleet-mission-feedback`), preview status `is-ok` / `is-blocked`, expedition → position 16
 
 Template: `templates/fleet.html` — embedded JSON state, `#fleet-page[data-planet-id]`.
+
+Inbox expedition reports: `static/js/messages.js` → `renderExpeditionReport()` (GC-402C event cards).
 
 ---
 

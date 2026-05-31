@@ -101,7 +101,9 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | Fleet Logistics (collect/distribute) | 📋 | API returns not_implemented |
 | Recycler-Mission | 💡 | Ship def exists |
 | Espionage (beyond probe report) | ✅ | GC-401 tiered intel + inbox UI |
-| Expedition event engine | ✅ | GC-402 weighted events + inbox UI |
+| Expedition event engine | ✅ | GC-402 weighted events + structured metadata |
+| Expedition fleet mission feedback | ✅ | GC-402B preview hints, status, auto-position 16 |
+| Expedition report visual upgrade | ✅ | GC-402C sci-fi event-card inbox UI |
 
 Docs: [FLEET_SYSTEM.md](FLEET_SYSTEM.md)
 
