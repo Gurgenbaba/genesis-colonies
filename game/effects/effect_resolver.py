@@ -216,11 +216,13 @@ class EffectResolver:
             cargo_multiplier *= 1.0 + 0.02 * leng
             sources.append(self._source_entry("fleet_speed_multiplier", "engine_tech", fleet_speed_multiplier, leng, prepared=True))
 
-        # --- Buildings: nanofactory (+30% build speed per level) ---
+        # --- Buildings: nanofactory (+30% build speed per level, all buildings) ---
         nano = _bld(b, "nanofactory")
         if nano > 0:
             build_time_speed *= 1.0 + 0.30 * nano
             sources.append(self._source_entry("build_time_speed", "nanofactory", build_time_speed, nano))
+
+        # command_center nanofactory-only build boost applied in get_build_time_seconds()
 
         # --- Buildings: academy (+5% research speed per level) ---
         academy = _bld(b, "academy")
@@ -462,6 +464,10 @@ class EffectResolver:
 
         mods = self.get_modifiers()
         build_time_speed = float(mods.get("build_time_speed", 1.0) or 1.0)
+        if str(building_type) == "nanofactory":
+            command_center = _bld(self.buildings, "command_center")
+            if command_center > 0:
+                build_time_speed *= 1.0 + 0.25 * command_center
         effective_speed = max(0.1, build_time_speed * self.build_speed_setting())
         seconds /= effective_speed
         return max(int(seconds), 1)

@@ -346,7 +346,7 @@
   "desc_crystal_storage": "Erhöht das Crytite-Lager um Faktor 1,8 pro Stufe (Basis 100.000). Skaliert mit Lagertechnik und Terraformer.",
 
   "building_command_center": "Kommandozentrale",
-  "desc_command_center": "Schaltet Militär- und Spätgame-Gebäude frei (Werft, Kaserne, Radar, Verteidigung, Nexus). Kein Produktionsbonus.",
+  "desc_command_center": "Schaltet Militär- und Spätgame-Gebäude frei. Verkürzt die Bauzeit der Nanofabrik um 25 % pro Stufe.",
 
   "building_orbital_shipyard": "Orbitalwerft",
   "desc_orbital_shipyard": "Schaltet Schiffsbau frei. Höhere Stufen schalten bessere Schiffsklassen frei und verkürzen Schiffsbauzeiten um 10 % pro Stufe.",

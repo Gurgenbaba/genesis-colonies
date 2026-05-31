@@ -213,6 +213,25 @@ class TestBuildingEffects:
         assert t1 < t0
         assert t1 <= int(t0 / 1.29)
 
+    def test_command_center_reduces_nanofactory_build_time_only(self):
+        pid = _create_player("cmd")
+        _set_buildings(pid, {"metal_mine": 1})
+        clear_effect_resolver_cache(pid)
+        mine_base = get_build_time("metal_mine", 4, user_id=pid)
+        _set_buildings(pid, {"metal_mine": 1, "command_center": 3})
+        clear_effect_resolver_cache(pid)
+        mine_with_cc = get_build_time("metal_mine", 4, user_id=pid)
+        assert mine_with_cc == mine_base
+
+        _set_buildings(pid, {"command_center": 2})
+        clear_effect_resolver_cache(pid)
+        nano_cc2 = get_build_time("nanofactory", 1, user_id=pid)
+        _set_buildings(pid, {"command_center": 4})
+        clear_effect_resolver_cache(pid)
+        nano_cc4 = get_build_time("nanofactory", 1, user_id=pid)
+        assert nano_cc4 < nano_cc2
+        assert abs(nano_cc4 - int(nano_cc2 * 1.5 / 2.0)) <= 1
+
     def test_academy_speeds_research(self):
         pid = _create_player("academy")
         _set_buildings(pid, {"research_lab": 4})

@@ -640,7 +640,7 @@
   "desc_crystal_storage": "Specialized silos for Crytite. Crucial for financing large high-tech projects.",
 
   "command_center": "Command Center",
-  "desc_command_center": "Strategic heart of your colony. Coordinates all facilities and unlocks central infrastructure and military buildings.",
+  "desc_command_center": "Unlocks military and late-game buildings. Reduces Nano-Assembly build time by 25% per level.",
 
   "shipyard": "Shipyard",
   "building_orbital_shipyard": "Orbital Shipyard",
