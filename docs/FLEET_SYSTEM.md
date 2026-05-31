@@ -19,7 +19,7 @@ Kanonische Module: `game/fleet.py`, `game/fleet_calc.py`, `game/fleet_defs.py`, 
 
 **Movement statuses:** `outbound`, `holding`, `returning`, `completed` (+ `cancelled`, `failed` im CHECK)
 
-**Missions:** `transport`, `deploy`, `spy`, `attack`, `hold`, `expedition`, `colonize`
+**Missions:** `transport`, `collect`, `deploy`, `spy`, `attack`, `hold`, `expedition`, `colonize`
 
 Gate: `fleet_schema_ready()` — Features degradieren gracefully ohne Migration.
 
@@ -69,6 +69,7 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 | Mission | Verhalten |
 |---------|-----------|
 | **transport** | Cargo an Ziel; Schiffe kehren leer zurück; Messages |
+| **collect** | Eigene Kolonie: lädt Ressourcen bis Cargo-Cap (optional Abflug-Cargo); Ziel verliert Ressourcen; Rückflug; Origin erhält Fracht; Report |
 | **deploy** | Schiffe + Ressourcen bleiben; movement completed |
 | **spy** | Tiered probe intel (resources → fleet → buildings → activity); structured inbox report; Schiffe return |
 | **attack** | **Placeholder** — „combat not active“; Schiffe return |
@@ -86,7 +87,7 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 Event keys: `void_scan`, `mineral_deposit`, `fuel_cache`, `debris_salvage`, `nav_interference`, `distress_beacon`, `sensor_glitch`, `ancient_stash`. Roll ist deterministisch pro `movement_id`.
 | **colonize** | `colonize_planet()`; verbraucht `seed_ark` |
 
-Logistics (`collect` / `distribute`): API existiert, antwortet `logistics_not_implemented`.
+Logistics bulk API (`collect_resources` / `distribute_resources`): weiterhin `logistics_not_implemented` (Phase 2). Einzel-Collect über Fleet-Send-Mission `collect`.
 
 ---
 
@@ -156,7 +157,7 @@ Inbox expedition reports: `static/js/messages.js` → `renderExpeditionReport()`
 ## Placeholder / Phase 2
 
 - Combat resolver (attack)
-- Logistics collect/distribute
+- Logistics bulk collect/distribute API
 - Recycler mission (`harvest_reclaimer` def only)
 - `fleet_presets.mission_type` CHECK fehlt `colonize` (nur movements migriert in 032)
 

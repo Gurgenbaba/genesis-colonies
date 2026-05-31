@@ -3601,6 +3601,25 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .fleet-mission-select{
   max-width: 320px;
 }
+.fleet-page .gc-fieldset,
+.fleet-ships-fieldset,
+.fleet-resources-fieldset{
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(120, 190, 255, 0.12);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(5, 10, 22, 0.35);
+  min-width: 0;
+}
+.fleet-page .gc-fieldset-legend{
+  padding: 0 6px;
+  margin-bottom: 8px;
+  color: rgba(127, 255, 217, 0.72);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .fleet-resources-fieldset{
   padding: 10px 12px;
   border-radius: var(--gc-radius-sm);
@@ -3633,13 +3652,14 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .fleet-page .fleet-resource-summary strong{ color: var(--gc-neon-cyan); }
 .fleet-target-block{
   position: relative;
+  z-index: 5;
   padding: 12px;
   margin-bottom: 14px;
   border-radius: var(--gc-radius-sm);
   border: 1px solid var(--gc-panel-border-strong);
   background: var(--gc-panel-bg);
   box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0, 0, 0, 0.45);
-  overflow: hidden;
+  overflow: visible;
 }
 .fleet-target-block::before{
   content: "";
@@ -3678,6 +3698,51 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   .fleet-mission-speed-row{ grid-template-columns: 1fr; }
 }
 .fleet-form-row--inline{ margin-bottom: 0; }
+.fleet-send-form > .fleet-form-row:first-child{
+  position: relative;
+  z-index: 6;
+}
+.fleet-ships-fieldset,
+.fleet-resources-fieldset{
+  position: relative;
+  z-index: 1;
+}
+.fleet-page .gc-hud-select.is-open{
+  z-index: 40;
+}
+.fleet-page .gc-hud-select-menu{
+  z-index: 50;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  background: linear-gradient(180deg, rgba(8, 14, 28, 0.98), rgba(6, 10, 22, 0.96));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55), var(--gc-border-glow);
+}
+.fleet-page .gc-hud-select-trigger{
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 10px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  background: linear-gradient(180deg, rgba(8, 14, 28, 0.98), rgba(6, 10, 22, 0.96));
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  color: rgba(215, 246, 255, 0.94);
+}
+.fleet-page .gc-hud-select-trigger:hover{
+  border-color: rgba(70, 229, 255, 0.38);
+  box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.fleet-page .gc-hud-select.is-open .gc-hud-select-trigger{
+  border-color: rgba(70, 229, 255, 0.48);
+  box-shadow: var(--gc-border-glow-strong), inset 0 0 12px rgba(70, 229, 255, 0.06);
+}
+.fleet-page .gc-hud-select-value{
+  color: rgba(215, 246, 255, 0.94);
+}
+.fleet-page .gc-hud-select-chevron{
+  color: rgba(127, 255, 217, 0.65);
+}
 .fleet-form-inline .gc-hud-select{
   flex: 1 1 200px;
   min-width: 0;
@@ -3948,6 +4013,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   background: rgba(8, 16, 36, 0.42);
 }
 .fleet-active-mission--expedition{ color: var(--gc-neon-gold); }
+.fleet-active-mission--collect{ color: var(--gc-neon-cyan); }
+.fleet-active-mission--transport{ color: rgba(127, 255, 217, 0.88); }
 .fleet-active-mission--spy{ color: #7dd3fc; }
 .fleet-active-mission--attack{ color: #fca5a5; }
 .fleet-active-mission--colonize{ color: #86efac; }

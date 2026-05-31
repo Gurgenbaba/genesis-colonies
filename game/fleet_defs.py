@@ -8,11 +8,12 @@ SHIP_ROLES = frozenset(
     {"cargo", "combat", "spy", "recycle", "expedition", "scout", "utility", "colony"}
 )
 
-MISSION_TYPES = frozenset({"transport", "deploy", "spy", "attack", "hold", "expedition", "colonize"})
+MISSION_TYPES = frozenset({"transport", "collect", "deploy", "spy", "attack", "hold", "expedition", "colonize"})
 
 # Player-facing mission order on fleet send UI.
 FLEET_MISSION_ORDER: List[str] = [
     "transport",
+    "collect",
     "deploy",
     "spy",
     "attack",

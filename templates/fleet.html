@@ -40,18 +40,6 @@
   </section>
   {% endif %}
 
-  {% if fleet_ctx.can_seed_test_ships %}
-  <section class="gc-panel fleet-panel fleet-dev-panel" aria-label="{{ T('fleet_dev_seed_title') }}">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title">{{ T("fleet_dev_seed_title") }}</span>
-      <span class="gc-panel-subtitle">{{ T("fleet_dev_seed_subtitle") }}</span>
-    </div>
-    <button type="button" class="gc-btn gc-btn-secondary" data-fleet-dev-seed>
-      {{ T("fleet_dev_seed_btn") }}
-    </button>
-  </section>
-  {% endif %}
-
   {% if not fleet_ctx.ready %}
   <section class="gc-panel fleet-panel">
     <p class="fleet-unavailable">{{ T("fleet_unavailable") }}</p>
@@ -351,7 +339,7 @@
       <form id="fleet-mass-expo-form" class="fleet-mass-expo-form" method="post" action="#" data-no-pjax>
         <div class="fleet-form-row">
           <label for="fleet-mass-preset">{{ T("fleet_mass_expo_preset") }}</label>
-          <select id="fleet-mass-preset" class="gc-input" data-fleet-mass-preset data-gc-hud-select required>
+          <select id="fleet-mass-preset" class="fleet-preset-select" data-fleet-mass-preset data-gc-hud-select required>
             <option value="">{{ T("fleet_preset_none") }}</option>
             {% for preset in fleet_ctx.presets %}
             <option value="{{ preset.id }}">[{{ T("fleet_preset_type_" ~ preset.preset_type) }}] {{ preset.name }}</option>

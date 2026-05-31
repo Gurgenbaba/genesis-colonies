@@ -1120,24 +1120,19 @@ def fleet_view():
     if player_view is None:
         return redirect(url_for("login"))
 
-    from game.config import is_debug_enabled
     from game.fleet import build_fleet_page_context, fleet_schema_ready
-    from game.models import load_player
     from game.planet_evolution.repository import get_context_planet
 
     fleet_ctx: Dict[str, Any] = {"ready": False}
     conn = db()
     try:
         planet = get_context_planet(int(player_view["id"]), conn=conn)
-        player_row = load_player(int(player_view["id"]), conn=conn)
-        can_seed = is_debug_enabled() or bool(player_row and player_row.get("is_admin"))
         if fleet_schema_ready(conn):
             fleet_ctx = build_fleet_page_context(
                 player_id=int(player_view["id"]),
                 planet_id=int(planet["id"]),
                 planet=dict(planet),
                 conn=conn,
-                can_seed_test_ships=can_seed,
             )
     finally:
         conn.close()

@@ -3071,6 +3071,7 @@
 
       const genericHints = {
         transport: "fleet_mission_hint_transport",
+        collect: "fleet_mission_hint_collect",
         deploy: "fleet_mission_hint_deploy",
         attack: "fleet_mission_hint_attack",
         hold: "fleet_mission_hint_hold",
@@ -3530,28 +3531,6 @@
             } else {
               await refreshFleetState(page);
             }
-          } else {
-            showNotify(reasonText(apiError(res)), "error");
-          }
-        } catch (_) {
-          showNotify(reasonText("generic"), "error");
-        }
-        return;
-      }
-
-      const devSeed = e.target.closest("[data-fleet-dev-seed]");
-      if (devSeed && page.contains(devSeed)) {
-        e.preventDefault();
-        try {
-          const res = await GC.fetchGameAction("/api/dev/fleet/seed-ships", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ planet_id: rt.data.planet_id }),
-          });
-          if (res?.ok) {
-            showNotify(tt("fleet_dev_seed_ok", "Test ships added."), "success");
-            await refreshFleetState(page);
-            schedulePreview(page);
           } else {
             showNotify(reasonText(apiError(res)), "error");
           }

@@ -66,7 +66,7 @@ TARGET_TYPES = frozenset(
 
 # Default allowed missions per resolved target type (hold added dynamically for allies).
 _BASE_ALLOWED_MISSIONS: Dict[str, Set[str]] = {
-    "own_planet": {"transport", "deploy"},
+    "own_planet": {"transport", "collect", "deploy"},
     "ally_planet": {"transport"},
     "foreign_planet": {"spy", "attack"},
     "empty_slot": {"colonize"},
@@ -85,6 +85,7 @@ _MISSION_BLOCK_REASONS: Dict[str, Dict[str, str]] = {
         "deploy": "mission_blocked_ally_planet",
         "spy": "mission_blocked_ally_planet",
         "attack": "mission_blocked_ally_planet",
+        "collect": "mission_blocked_ally_planet",
         "expedition": "mission_blocked_not_expedition_slot",
         "colonize": "mission_blocked_occupied",
         "hold": "mission_blocked_no_alliance",
@@ -93,6 +94,7 @@ _MISSION_BLOCK_REASONS: Dict[str, Dict[str, str]] = {
         "transport": "mission_blocked_foreign_planet",
         "deploy": "mission_blocked_foreign_planet",
         "hold": "mission_blocked_foreign_planet",
+        "collect": "mission_blocked_foreign_planet",
         "expedition": "mission_blocked_not_expedition_slot",
         "colonize": "mission_blocked_occupied",
     },
@@ -102,6 +104,7 @@ _MISSION_BLOCK_REASONS: Dict[str, Dict[str, str]] = {
         "spy": "mission_blocked_empty_slot",
         "attack": "mission_blocked_empty_slot",
         "hold": "mission_blocked_empty_slot",
+        "collect": "mission_blocked_empty_slot",
         "expedition": "mission_blocked_not_expedition_slot",
     },
     "expedition_slot": {
@@ -110,6 +113,7 @@ _MISSION_BLOCK_REASONS: Dict[str, Dict[str, str]] = {
         "spy": "mission_blocked_expedition_slot",
         "attack": "mission_blocked_expedition_slot",
         "hold": "mission_blocked_expedition_slot",
+        "collect": "mission_blocked_expedition_slot",
         "colonize": "mission_blocked_expedition_slot",
     },
 }
@@ -672,7 +676,7 @@ def validate_fleet_send(
         if int(ships_n.get("seed_ark") or 0) < 1:
             return False, "colonize_requires_ark", {"target": target_info, "preview": preview}
 
-    if mission in ("transport", "deploy", "spy", "attack", "hold"):
+    if mission in ("transport", "deploy", "spy", "attack", "hold", "collect"):
         if not target_info.get("target_planet_id"):
             return False, "invalid_target", {"target": target_info, "preview": preview}
 
@@ -796,9 +800,12 @@ def _mission_allowed(mission: str, ships: Mapping[str, int], resources: Mapping[
     if m == "spy":
         if not _fleet_has_role(ships, "spy"):
             return False, "spy_requires_probe"
-    if m in ("transport", "deploy"):
+    if m in ("transport", "deploy", "collect"):
         if loaded_resource_total(resources) > 0 and calculate_total_cargo(ships) <= 0:
             return False, "cargo_required_for_resources"
+    if m == "collect":
+        if calculate_total_cargo(ships) <= 0:
+            return False, "cargo_required_for_collect"
     if m == "expedition" and not _fleet_has_role(ships, "expedition"):
         if calculate_total_cargo(ships) <= 0 and not _fleet_has_role(ships, "combat"):
             pass
@@ -1398,6 +1405,54 @@ def _credit_planet_resources(planet_id: int, resources: Mapping[str, Any], *, co
     )
 
 
+def _debit_planet_resources(planet_id: int, resources: Mapping[str, Any], *, conn) -> bool:
+    loaded = calculate_loaded_resources(resources)
+    if loaded["metal"] <= 0 and loaded["crystal"] <= 0 and loaded["fuel_cells"] <= 0:
+        return True
+    lock_planet_for_update(conn, int(planet_id))
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ? LIMIT 1;",
+        (int(planet_id),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return False
+    new_metal = float(row["metal"]) - loaded["metal"]
+    new_crystal = float(row["crystal"]) - loaded["crystal"]
+    new_fuel_cells = float(row["fuel_cells"] or 0) - loaded["fuel_cells"]
+    if new_metal < 0 or new_crystal < 0 or new_fuel_cells < 0:
+        return False
+    cur.execute(
+        "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+        (new_metal, new_crystal, new_fuel_cells, int(planet_id)),
+    )
+    return True
+
+
+def _calculate_collect_load(
+    available: Mapping[str, Any],
+    remaining_cap: int,
+) -> Dict[str, int]:
+    """Load resources from a planet up to remaining cargo (metal → crystal → fuel_cells)."""
+    cap = max(0, int(remaining_cap))
+    if cap <= 0:
+        return {"metal": 0, "crystal": 0, "fuel_cells": 0}
+    avail = {
+        "metal": max(0, int(float(available.get("metal") or 0))),
+        "crystal": max(0, int(float(available.get("crystal") or 0))),
+        "fuel_cells": max(0, int(float(available.get("fuel_cells") or 0))),
+    }
+    loaded = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+    for key in ("metal", "crystal", "fuel_cells"):
+        if cap <= 0:
+            break
+        take = min(avail[key], cap)
+        loaded[key] = take
+        cap -= take
+    return loaded
+
+
 def _player_name(player_id: int, *, conn) -> str:
     cur = conn.cursor()
     cur.execute("SELECT name FROM players WHERE id = ? LIMIT 1;", (int(player_id),))
@@ -1824,6 +1879,46 @@ def _format_transport_report(
     )
 
 
+def _format_collect_report(
+    *,
+    coords: str,
+    origin_name: str,
+    target_name: str,
+    collected: Mapping[str, Any],
+    total_cargo: Mapping[str, Any],
+) -> str:
+    from .i18n import tr
+
+    collected_txt = _format_transport_cargo(collected)
+    total_txt = _format_transport_cargo(total_cargo)
+    if loaded_resource_total(collected) <= 0:
+        return tr(
+            "fleet_collect_report_empty",
+            "Collect at %(coords)s (%(target)s) — no resources loaded. Fleet returning to %(origin)s.",
+            coords=coords,
+            target=target_name,
+            origin=origin_name,
+        )
+    if loaded_resource_total(total_cargo) > loaded_resource_total(collected):
+        return tr(
+            "fleet_collect_report_with_departure",
+            "Collect at %(coords)s (%(target)s): %(collected)s loaded (total cargo: %(total)s). Returning to %(origin)s.",
+            coords=coords,
+            target=target_name,
+            origin=origin_name,
+            collected=collected_txt,
+            total=total_txt,
+        )
+    return tr(
+        "fleet_collect_report",
+        "Collect at %(coords)s (%(target)s): %(cargo)s loaded. Fleet returning to %(origin)s.",
+        coords=coords,
+        target=target_name,
+        origin=origin_name,
+        cargo=collected_txt,
+    )
+
+
 def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
     mission = movement["mission_type"]
     player_id = int(movement["player_id"])
@@ -1906,6 +2001,91 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
                     },
                     conn=conn,
                 )
+        return
+
+    if mission == "collect":
+        flight_seconds = int(movement.get("flight_seconds") or 1)
+        return_at = now + flight_seconds
+        current_loaded = calculate_loaded_resources(resources)
+        cargo_total = calculate_total_cargo(ships)
+        remaining_cap = max(0, cargo_total - loaded_resource_total(current_loaded))
+        collected = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+        target_name = ""
+        origin_name = ""
+
+        if target_id and remaining_cap > 0:
+            snapshot = _target_planet_snapshot(int(target_id), conn=conn)
+            target_name = str(snapshot.get("planet_name") or "")
+            owner_id = int(snapshot.get("owner_id") or 0)
+            if owner_id == player_id:
+                res = snapshot.get("resources") or {}
+                collected = _calculate_collect_load(
+                    {
+                        "metal": res.get("metal", 0),
+                        "crystal": res.get("crystal", 0),
+                        "fuel_cells": res.get("fuel_cells", 0),
+                    },
+                    remaining_cap,
+                )
+                if loaded_resource_total(collected) > 0:
+                    if not _debit_planet_resources(int(target_id), collected, conn=conn):
+                        collected = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+
+        final_resources = calculate_loaded_resources(
+            {
+                "metal": current_loaded["metal"] + collected["metal"],
+                "crystal": current_loaded["crystal"] + collected["crystal"],
+                "fuel_cells": current_loaded["fuel_cells"] + collected["fuel_cells"],
+            }
+        )
+        claimed = _claim_movement_status(
+            conn,
+            movement_id,
+            ("outbound",),
+            "returning",
+            now,
+            extra_sql=", return_at = ?, resources_json = ?",
+            extra_params=(return_at, _json_dumps(final_resources)),
+        )
+        if not claimed:
+            return
+
+        origin_id = int(movement["origin_planet_id"])
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM planets WHERE id = ? LIMIT 1;", (origin_id,))
+        orow = cur.fetchone()
+        origin_name = str(orow["name"] if orow else "")
+        if not target_name and target_id:
+            snapshot = _target_planet_snapshot(int(target_id), conn=conn)
+            target_name = str(snapshot.get("planet_name") or "")
+
+        from .i18n import tr
+
+        body = _format_collect_report(
+            coords=coords,
+            origin_name=origin_name,
+            target_name=target_name,
+            collected=collected,
+            total_cargo=final_resources,
+        )
+        notify_transport(
+            player_id,
+            tr(
+                "fleet_collect_report_subject",
+                "Collect report %(coords)s",
+                coords=coords,
+            ),
+            body,
+            metadata={
+                "fleet_id": movement_id,
+                "mission_type": "collect",
+                "target_coords": coords,
+                "collected": calculate_loaded_resources(collected),
+                "resources": final_resources,
+                "direction": "outbound",
+            },
+            conn=conn,
+        )
         return
 
     if mission == "deploy":
