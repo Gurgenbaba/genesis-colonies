@@ -47,6 +47,7 @@ from .galaxy import (
 )
 from .expedition_events import (
     build_expedition_report,
+    calculate_expedition_loot_cap,
     count_expedition_ships,
     resolve_expedition_outcome,
 )
@@ -2022,7 +2023,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         return
 
     if mission == "expedition":
-        cargo_total = calculate_total_cargo(ships)
+        cargo_total = calculate_expedition_loot_cap(ships)
         flight_seconds_base = int(movement.get("flight_seconds") or 1)
         outcome = resolve_expedition_outcome(
             movement_id,

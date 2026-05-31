@@ -9,11 +9,14 @@ from .fleet_defs import SHIPS, VALID_RESOURCE_KEYS
 
 EXPEDITION_REPORT_VERSION = 2
 
+# Expedition loot uses expedition-hull cargo × multiplier (not transport cargo semantics).
+EXPEDITION_LOOT_CARGO_MULTIPLIER = 50
+
 # Weighted event table (sum = 100). Server-authoritative; extend here only.
 _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     {
         "key": "void_scan",
-        "weight": 15,
+        "weight": 10,
         "label_key": "expedition_event_void_scan",
         "desc_key": "expedition_event_void_scan_desc",
         "severity": "minor",
@@ -21,27 +24,27 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "mineral_deposit",
-        "weight": 30,
+        "weight": 32,
         "label_key": "expedition_event_mineral_deposit",
         "desc_key": "expedition_event_mineral_deposit_desc",
         "severity": "normal",
-        "rewards": {"metal": (500, 2500), "crystal": (200, 1200)},
+        "rewards": {"metal": (15000, 75000), "crystal": (8000, 45000)},
     },
     {
         "key": "fuel_cache",
-        "weight": 15,
+        "weight": 16,
         "label_key": "expedition_event_fuel_cache",
         "desc_key": "expedition_event_fuel_cache_desc",
         "severity": "normal",
-        "rewards": {"fuel_cells": (10, 80)},
+        "rewards": {"fuel_cells": (250, 2000)},
     },
     {
         "key": "debris_salvage",
-        "weight": 10,
+        "weight": 12,
         "label_key": "expedition_event_debris_salvage",
         "desc_key": "expedition_event_debris_salvage_desc",
         "severity": "minor",
-        "rewards": {"metal": (150, 900)},
+        "rewards": {"metal": (5000, 35000)},
     },
     {
         "key": "nav_interference",
@@ -54,16 +57,16 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "distress_beacon",
-        "weight": 8,
+        "weight": 9,
         "label_key": "expedition_event_distress_beacon",
         "desc_key": "expedition_event_distress_beacon_desc",
         "severity": "normal",
-        "rewards": {"metal": (100, 600), "crystal": (50, 300), "fuel_cells": (5, 25)},
+        "rewards": {"metal": (4000, 25000), "crystal": (2000, 15000), "fuel_cells": (100, 600)},
         "delay_chance": 0.25,
     },
     {
         "key": "sensor_glitch",
-        "weight": 7,
+        "weight": 6,
         "label_key": "expedition_event_sensor_glitch",
         "desc_key": "expedition_event_sensor_glitch_desc",
         "severity": "minor",
@@ -71,11 +74,11 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "ancient_stash",
-        "weight": 5,
+        "weight": 8,
         "label_key": "expedition_event_ancient_stash",
         "desc_key": "expedition_event_ancient_stash_desc",
         "severity": "major",
-        "rewards": {"metal": (2000, 5000), "crystal": (1000, 3000), "fuel_cells": (20, 100)},
+        "rewards": {"metal": (60000, 180000), "crystal": (30000, 90000), "fuel_cells": (400, 2500)},
     },
 )
 
@@ -96,6 +99,27 @@ def count_expedition_ships(ships: Mapping[str, int]) -> int:
         if spec.get("role") == "expedition":
             total += amount
     return total
+
+
+def calculate_expedition_loot_cap(ships: Mapping[str, int]) -> int:
+    """Loot cap from expedition hull cargo × multiplier (combat escorts don't inflate loot)."""
+    expedition_cargo = 0
+    for key, qty in ships.items():
+        amount = int(qty or 0)
+        if amount <= 0:
+            continue
+        spec = SHIPS.get(str(key)) or {}
+        if spec.get("role") != "expedition":
+            continue
+        expedition_cargo += int(spec.get("cargo") or 0) * amount
+    if expedition_cargo <= 0:
+        for key, qty in ships.items():
+            amount = int(qty or 0)
+            if amount <= 0:
+                continue
+            spec = SHIPS.get(str(key)) or {}
+            expedition_cargo += int(spec.get("cargo") or 0) * amount
+    return max(0, expedition_cargo * EXPEDITION_LOOT_CARGO_MULTIPLIER)
 
 
 def _pick_event_key(rng: random.Random, expedition_ship_count: int) -> str:

@@ -73,7 +73,7 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 | **spy** | Tiered probe intel (resources → fleet → buildings → activity); structured inbox report; Schiffe return |
 | **attack** | **Placeholder** — „combat not active“; Schiffe return |
 | **hold** | `holding` für 3600s, dann return (ally only wenn Alliance-Schema) |
-| **expedition** | Event engine (`expedition_events.py`): weighted outcomes, cargo cap, optional delay; inbox event-card report (GC-402C) |
+| **expedition** | Event engine (`expedition_events.py`): weighted outcomes, loot cap = expedition-hull cargo × 50, optional delay; inbox event-card report (GC-402C) |
 
 ### Expedition (GC-402 / 402B / 402C)
 

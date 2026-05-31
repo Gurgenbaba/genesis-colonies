@@ -33,7 +33,11 @@ from game.fleet import (
     _build_spy_report_body,
     _target_planet_snapshot,
 )
-from game.expedition_events import expedition_event_keys, resolve_expedition_outcome
+from game.expedition_events import (
+    calculate_expedition_loot_cap,
+    expedition_event_keys,
+    resolve_expedition_outcome,
+)
 from game.fleet_calc import (
     apply_departure_deduction,
     calculate_distance,
@@ -942,6 +946,12 @@ def test_expedition_event_engine_report(fleet_db):
     conn.close()
 
 
+def test_expedition_loot_cap_uses_expedition_hull_cargo_multiplier():
+    cap = calculate_expedition_loot_cap({"solar_skiff": 1, "falcon_interceptor": 5})
+    assert cap == 2000 * 50
+    assert calculate_expedition_loot_cap({"solar_skiff": 2}) == 4000 * 50
+
+
 def test_expedition_outcome_deterministic_and_cargo_cap():
     first = resolve_expedition_outcome(
         42,
@@ -982,7 +992,7 @@ def test_expedition_outcome_more_hulls_shift_from_empty():
             empty_hits += 1
         if high["reward_total"] > 0:
             reward_hits += 1
-    assert empty_hits >= 50
+    assert empty_hits >= 40
     assert reward_hits >= 200
 
 
