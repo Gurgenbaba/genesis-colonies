@@ -1085,6 +1085,14 @@
     });
   }
 
+  function patchResourceBarEnergyWarning(used, total) {
+    const container = document.getElementById("energy-container");
+    if (!container) return;
+    const u = Math.floor(Number(used) || 0);
+    const t = Math.floor(Number(total) || 0);
+    container.classList.toggle("energy-warning", t > 0 && u > t);
+  }
+
   function patchOverviewEnergyHint(overview, data) {
     const hint = document.getElementById("overview-energy-hint");
     const strip = document.getElementById("overview-energy-strip");
@@ -2211,6 +2219,7 @@
         _last.energyUsed = used;
         _last.energyTotal = total;
       }
+      patchResourceBarEnergyWarning(used, total);
 
       // === SCORE / RANK ===
       if (data.score) {

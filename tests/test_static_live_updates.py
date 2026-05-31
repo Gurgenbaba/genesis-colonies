@@ -172,6 +172,14 @@ def test_chat_bootstrap_not_in_message_poll_tick():
     assert "runInitialBootstrap" in src
 
 
+def test_main_js_patches_resource_bar_energy_warning():
+    src = _read("static/main.js")
+    assert "function patchResourceBarEnergyWarning" in src
+    assert 'classList.toggle("energy-warning"' in src
+    apply_body = src.split("function applyGameStateData")[1].split("function ")[0]
+    assert "patchResourceBarEnergyWarning(used, total)" in apply_body
+
+
 def test_galaxy_template_pjax_nav_urls():
     tpl = _read("templates/galaxy.html")
     assert 'id="galaxy-page-root"' in tpl
