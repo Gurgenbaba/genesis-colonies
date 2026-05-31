@@ -216,10 +216,10 @@ class EffectResolver:
             cargo_multiplier *= 1.0 + 0.02 * leng
             sources.append(self._source_entry("fleet_speed_multiplier", "engine_tech", fleet_speed_multiplier, leng, prepared=True))
 
-        # --- Buildings: nanofactory (+3% build speed per level) ---
+        # --- Buildings: nanofactory (+30% build speed per level) ---
         nano = _bld(b, "nanofactory")
         if nano > 0:
-            build_time_speed *= 1.0 + 0.03 * nano
+            build_time_speed *= 1.0 + 0.30 * nano
             sources.append(self._source_entry("build_time_speed", "nanofactory", build_time_speed, nano))
 
         # --- Buildings: academy (+5% research speed per level) ---

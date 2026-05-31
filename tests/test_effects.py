@@ -207,10 +207,11 @@ class TestBuildingEffects:
         pid = _create_player("nano")
         _set_buildings(pid, {"metal_mine": 1})
         t0 = get_build_time("metal_mine", 4, user_id=pid)
-        _set_buildings(pid, {"metal_mine": 1, "nanofactory": 3})
+        _set_buildings(pid, {"metal_mine": 1, "nanofactory": 1})
         clear_effect_resolver_cache(pid)
         t1 = get_build_time("metal_mine", 4, user_id=pid)
         assert t1 < t0
+        assert t1 <= int(t0 / 1.29)
 
     def test_academy_speeds_research(self):
         pid = _create_player("academy")

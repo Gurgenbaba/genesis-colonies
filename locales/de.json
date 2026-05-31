@@ -349,7 +349,7 @@
   "desc_command_center": "Schaltet Militär- und Spätgame-Gebäude frei (Werft, Kaserne, Radar, Verteidigung, Nexus). Kein Produktionsbonus.",
 
   "building_orbital_shipyard": "Orbitalwerft",
-  "desc_orbital_shipyard": "Schaltet Schiffsbau frei. Höhere Stufen schalten bessere Schiffsklassen frei und verkürzen Bauzeiten leicht.",
+  "desc_orbital_shipyard": "Schaltet Schiffsbau frei. Höhere Stufen schalten bessere Schiffsklassen frei und verkürzen Schiffsbauzeiten um 10 % pro Stufe.",
   "building_shipyard": "Orbitalwerft",
   "desc_shipyard": "Schaltet Schiffsbau frei. Höhere Stufen schalten bessere Schiffsklassen frei.",
 
@@ -369,7 +369,7 @@
   "desc_terraformer": "Der Terraformer schafft sichere Infrastrukturflächen — keine extra Gebäudeplätze, sondern nutzbare Industrie- und Lagerzonen. Erhöht Metall- und Crytite-Lagerkapazität um 5 % pro Stufe. Stapelt mit Lagern und Lagertechnik.",
 
   "building_nanofactory": "Nano-Assemblierungsanlage",
-  "desc_nanofactory": "Verkürzt Bauzeiten aller Gebäude um 3 % pro Stufe. Stapelt mit Bauoptimierung und Labor.",
+  "desc_nanofactory": "Verkürzt Bauzeiten aller Gebäude um 30 % pro Stufe. Stapelt mit Bauoptimierung und Labor.",
 
   "building_geothermal_nexus": "Geothermie-Nexus",
   "desc_geothermal_nexus": "+3 % Aetherion der Solarkollektoren pro Stufe. +2 Max-Stufe für Minen, Solar und Lager je Geothermie-Stufe.",

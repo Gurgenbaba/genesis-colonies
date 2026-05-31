@@ -71,14 +71,14 @@ def test_locale_mechanics_descriptions():
             assert "5 %" in locale["desc_terraformer"] and "Lager" in locale["desc_terraformer"]
             assert "Infrastruktur" in locale["desc_terraformer"]
             assert "5 %" in locale["desc_academy"] and "Forschung" in locale["desc_academy"]
-            assert "3 %" in locale["desc_nanofactory"] and "Bauzeit" in locale["desc_nanofactory"]
+            assert "30 %" in locale["desc_nanofactory"] and "Bauzeit" in locale["desc_nanofactory"]
             assert "10 %" in locale["desc_mining_tech"] and "4 %" in locale["desc_mining_tech"]
             assert "25 %" in locale["desc_storage_tech"] and "Lager" in locale["desc_storage_tech"]
         else:
             assert "5%" in locale["desc_terraformer"] and "storage" in locale["desc_terraformer"].lower()
             assert "infrastructure" in locale["desc_terraformer"].lower()
             assert "5%" in locale["desc_academy"] and "research" in locale["desc_academy"].lower()
-            assert "3%" in locale["desc_nanofactory"] and "build" in locale["desc_nanofactory"].lower()
+            assert "30%" in locale["desc_nanofactory"] and "build" in locale["desc_nanofactory"].lower()
             assert "10%" in locale["desc_mining_tech"] and "4%" in locale["desc_mining_tech"]
             assert "25%" in locale["desc_storage_tech"] and "storage" in locale["desc_storage_tech"].lower()
 
