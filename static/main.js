@@ -2959,6 +2959,7 @@
         }
       }
       updateFleetFormMode(page);
+      if (missionSel) GC.syncHudSelect(missionSel);
     };
 
     const updateFleetFormMode = (page) => {
@@ -3102,6 +3103,8 @@
         const current = sel.value;
         sel.innerHTML = optionHtml;
         if (current) sel.value = current;
+        if (typeof GC.rebuildHudSelect === "function") GC.rebuildHudSelect(sel);
+        else if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(sel);
       });
     };
 
@@ -3332,11 +3335,17 @@
       });
       if (preset.speed_percent) {
         const sp = form.querySelector("[data-fleet-speed]");
-        if (sp) sp.value = String(preset.speed_percent);
+        if (sp) {
+          sp.value = String(preset.speed_percent);
+          GC.syncHudSelect(sp);
+        }
       }
       if (preset.mission_type) {
         const ms = form.querySelector("[data-fleet-mission]");
-        if (ms) ms.value = preset.mission_type;
+        if (ms) {
+          ms.value = preset.mission_type;
+          GC.syncHudSelect(ms);
+        }
       }
       if (preset.target_galaxy != null) form.querySelector('[name="target_galaxy"]').value = String(preset.target_galaxy);
       if (preset.target_system != null) form.querySelector('[name="target_system"]').value = String(preset.target_system);
@@ -3358,10 +3367,12 @@
       const ms = form.querySelector("[data-fleet-mission]");
       if (mission && ms) {
         ms.value = mission;
+        GC.syncHudSelect(ms);
         const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
         if (colonizeRow) colonizeRow.hidden = mission !== "colonize";
       } else if (ms && ms.value === "expedition") {
         ms.value = "transport";
+        GC.syncHudSelect(ms);
         const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
         if (colonizeRow) colonizeRow.hidden = true;
       }
@@ -3703,6 +3714,7 @@
     };
     tickFleetCountdowns();
     GC.setSafeInterval(tickFleetCountdowns, 1000);
+    if (typeof GC.initHudSelects === "function") GC.initHudSelects(page);
     applyFleetUrlPrefill(page);
   }
 
@@ -3716,7 +3728,10 @@
     const p = params.get("target_position");
     if (mission) {
       const ms = form.querySelector("[data-fleet-mission]");
-      if (ms) ms.value = mission;
+      if (ms) {
+        ms.value = mission;
+        if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
+      }
       const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
       if (colonizeRow) colonizeRow.hidden = mission !== "colonize";
       if (mission === "expedition" && p == null) {
@@ -4571,6 +4586,137 @@
     if (pe && pe !== `pe_reason_${reason}`) return pe;
     return String(reason);
   }
+
+  function closeAllHudSelects(except) {
+    document.querySelectorAll(".gc-hud-select.is-open").forEach((wrap) => {
+      if (except && wrap === except) return;
+      const menu = wrap.querySelector(".gc-hud-select-menu");
+      const trigger = wrap.querySelector(".gc-hud-select-trigger");
+      if (menu) menu.hidden = true;
+      wrap.classList.remove("is-open");
+      if (trigger) trigger.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function syncHudSelect(select) {
+    if (!select || !select._gcHudSelect) return;
+    const { menu, valueEl, trigger } = select._gcHudSelect;
+    const opt = select.options[select.selectedIndex];
+    if (valueEl) valueEl.textContent = opt ? opt.textContent.trim() : "";
+    if (trigger) trigger.disabled = !!select.disabled;
+    if (menu) {
+      menu.querySelectorAll(".gc-hud-select-item").forEach((item) => {
+        const active = item.dataset.value === select.value;
+        item.classList.toggle("is-active", active);
+        item.setAttribute("aria-selected", active ? "true" : "false");
+      });
+    }
+  }
+
+  function rebuildHudSelect(select) {
+    if (!select || !select._gcHudSelect) return;
+    const { menu } = select._gcHudSelect;
+    if (!menu) return;
+    menu.innerHTML = "";
+    Array.from(select.options).forEach((opt) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "gc-hud-select-item";
+      btn.dataset.value = opt.value;
+      btn.setAttribute("role", "option");
+      btn.textContent = opt.textContent.trim();
+      if (opt.disabled) btn.disabled = true;
+      menu.appendChild(btn);
+    });
+    syncHudSelect(select);
+  }
+
+  function enhanceHudSelect(select) {
+    if (!select || select.dataset.gcHudSelectEnhanced === "1") return;
+    select.dataset.gcHudSelectEnhanced = "1";
+    select.classList.add("gc-hud-select-native");
+
+    const wrap = document.createElement("div");
+    wrap.className = "gc-hud-select";
+    select.parentNode.insertBefore(wrap, select);
+    wrap.appendChild(select);
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "gc-hud-panel gc-hud-select-trigger";
+    trigger.setAttribute("aria-haspopup", "listbox");
+    trigger.setAttribute("aria-expanded", "false");
+    if (select.id) trigger.setAttribute("aria-controls", `${select.id}-hud-menu`);
+
+    const valueEl = document.createElement("span");
+    valueEl.className = "gc-hud-select-value";
+
+    const chevron = document.createElement("span");
+    chevron.className = "gc-hud-select-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "▾";
+
+    trigger.appendChild(valueEl);
+    trigger.appendChild(chevron);
+
+    const menu = document.createElement("div");
+    menu.className = "gc-hud-select-menu";
+    menu.hidden = true;
+    menu.setAttribute("role", "listbox");
+    if (select.id) menu.id = `${select.id}-hud-menu`;
+
+    wrap.insertBefore(trigger, select);
+    wrap.appendChild(menu);
+
+    select._gcHudSelect = { wrap, trigger, menu, valueEl };
+
+    rebuildHudSelect(select);
+
+    trigger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (select.disabled || trigger.disabled) return;
+      const isOpen = !menu.hidden;
+      closeAllHudSelects();
+      if (!isOpen) {
+        menu.hidden = false;
+        wrap.classList.add("is-open");
+        trigger.setAttribute("aria-expanded", "true");
+      }
+    });
+
+    menu.addEventListener("click", (e) => {
+      const item = e.target.closest(".gc-hud-select-item");
+      if (!item || item.disabled) return;
+      const next = item.dataset.value ?? "";
+      if (select.value !== next) {
+        select.value = next;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        syncHudSelect(select);
+      }
+      menu.hidden = true;
+      wrap.classList.remove("is-open");
+      trigger.setAttribute("aria-expanded", "false");
+    });
+
+    select.addEventListener("change", () => syncHudSelect(select));
+  }
+
+  function initHudSelects(root) {
+    if (!GC._hudSelectBound) {
+      GC._hudSelectBound = true;
+      document.addEventListener("click", () => closeAllHudSelects());
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeAllHudSelects();
+      });
+    }
+    const scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll("select[data-gc-hud-select]").forEach(enhanceHudSelect);
+  }
+
+  GC.initHudSelects = initHudSelects;
+  GC.syncHudSelect = syncHudSelect;
+  GC.rebuildHudSelect = rebuildHudSelect;
 
   function rebuildHeaderPlanetSwitcher(planets) {
     const root = document.getElementById("gc-planet-switcher");

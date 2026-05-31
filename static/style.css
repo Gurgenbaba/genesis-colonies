@@ -3484,13 +3484,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 .fleet-ship-role-pill{
   font-size: 0.62rem;
-  font-family: var(--gc-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 2px 6px;
-  border-radius: 999px;
   color: var(--gc-neon-gold);
-  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-color: rgba(255, 176, 32, 0.35);
   background: rgba(255, 176, 32, 0.08);
 }
 .fleet-ship-stock{
@@ -3502,10 +3497,11 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   width: 72px;
   padding: 6px 8px;
   text-align: center;
-  border-radius: 6px;
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.22);
   background: rgba(3, 8, 18, 0.85);
   color: var(--gc-neon-cyan);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
 }
 .fleet-ship-input:focus{
   outline: none;
@@ -3550,7 +3546,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .fleet-coord-input:focus{
   outline: none;
   background: rgba(70, 229, 255, 0.06);
-  border-radius: 4px;
+  border-radius: 0;
 }
 .fleet-coords-strip.is-expedition .fleet-coord-input--position{
   color: var(--gc-neon-gold);
@@ -3597,15 +3593,42 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 .fleet-page .fleet-resource-summary strong{ color: var(--gc-neon-cyan); }
 .fleet-target-block{
+  position: relative;
   padding: 12px;
   margin-bottom: 14px;
   border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(120, 190, 255, 0.14);
-  background: linear-gradient(180deg, rgba(8, 16, 36, 0.72) 0%, rgba(5, 10, 22, 0.55) 100%);
+  border: 1px solid var(--gc-panel-border-strong);
+  background: var(--gc-panel-bg);
+  box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.fleet-target-block::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--gc-scanline);
+  pointer-events: none;
+  opacity: 0.25;
+}
+.fleet-target-block::after{
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-top: 1px solid var(--gc-neon-cyan);
+  border-left: 1px solid var(--gc-neon-cyan);
+  pointer-events: none;
 }
 .fleet-send-panel.is-expedition-mode .fleet-target-block{
   border-color: rgba(70, 229, 255, 0.28);
-  box-shadow: inset 0 0 0 1px rgba(70, 229, 255, 0.06);
+  box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(70, 229, 255, 0.06);
+}
+.fleet-target-block > *,
+.fleet-preview-hud > *{
+  position: relative;
+  z-index: 1;
 }
 .fleet-mission-speed-row{
   display: grid;
@@ -3616,60 +3639,84 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   .fleet-mission-speed-row{ grid-template-columns: 1fr; }
 }
 .fleet-form-row--inline{ margin-bottom: 0; }
-.fleet-page .fleet-control,
-.fleet-page select.fleet-control,
-.fleet-page .fleet-preset-select{
+.fleet-form-inline .gc-hud-select{
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.fleet-mission-speed-row .gc-hud-select,
+.fleet-mass-expo-form .gc-hud-select{
   width: 100%;
+}
+.fleet-page .gc-input,
+.fleet-page input.gc-input{
+  width: 100%;
+  min-height: 38px;
   padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(70, 229, 255, 0.22);
-  background: rgba(3, 8, 18, 0.88);
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.28);
+  background: rgba(5, 10, 22, 0.88);
   color: var(--gc-text);
   font-size: 0.88rem;
-  appearance: none;
-  background-image:
-    linear-gradient(45deg, transparent 50%, rgba(70, 229, 255, 0.65) 50%),
-    linear-gradient(135deg, rgba(70, 229, 255, 0.65) 50%, transparent 50%);
-  background-position:
-    calc(100% - 16px) calc(50% - 2px),
-    calc(100% - 11px) calc(50% - 2px);
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
-.fleet-page .fleet-control:focus,
-.fleet-page select.fleet-control:focus{
+.fleet-page .gc-input:hover{
+  border-color: rgba(70, 229, 255, 0.42);
+  background-color: rgba(6, 12, 26, 0.92);
+}
+.fleet-page .gc-input:focus{
   outline: none;
-  border-color: rgba(70, 229, 255, 0.45);
-  box-shadow: 0 0 0 2px rgba(70, 229, 255, 0.12);
+  border-color: rgba(70, 229, 255, 0.88);
+  box-shadow:
+    0 0 0 2px rgba(70, 229, 255, 0.14),
+    inset 0 0 12px rgba(70, 229, 255, 0.06);
+  background-color: rgba(4, 10, 22, 0.96);
 }
 .fleet-colony-chips{ display: flex; flex-wrap: wrap; gap: 8px; }
 .fleet-colony-chip{
+  position: relative;
   display: inline-flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
   min-width: 120px;
   padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(120, 190, 255, 0.18);
-  background: rgba(5, 10, 22, 0.55);
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid var(--gc-border-bright);
+  background: var(--gc-panel-bg-2);
   color: var(--gc-text-soft);
   font-size: 0.78rem;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
+}
+.fleet-colony-chip::after{
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-top: 1px solid var(--gc-neon-cyan);
+  border-left: 1px solid var(--gc-neon-cyan);
+  opacity: 0.45;
+  pointer-events: none;
 }
 .fleet-colony-chip:hover{
-  border-color: rgba(70, 229, 255, 0.35);
-  background: rgba(70, 229, 255, 0.06);
+  border-color: var(--gc-neon-cyan);
+  background: rgba(70, 229, 255, 0.08);
   color: var(--gc-text);
+  box-shadow: inset 0 0 12px rgba(70, 229, 255, 0.08);
 }
+.fleet-colony-chip:hover::after{ opacity: 1; }
 .fleet-colony-chip.is-selected,
 .fleet-colony-chip.is-active.is-selected{
-  border-color: rgba(70, 229, 255, 0.5);
+  border-color: var(--gc-neon-cyan);
   background: rgba(70, 229, 255, 0.1);
   color: var(--gc-text);
-  box-shadow: 0 0 0 1px rgba(70, 229, 255, 0.15);
+  box-shadow: var(--gc-border-glow-strong);
 }
+.fleet-colony-chip.is-selected::after{ opacity: 1; }
 .fleet-chip-label{
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -3681,24 +3728,48 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   opacity: 0.9;
 }
 .fleet-colony-chip--expedition{
-  border-color: rgba(255, 176, 32, 0.28);
+  border-color: rgba(255, 176, 32, 0.35);
   background: rgba(255, 176, 32, 0.04);
   color: var(--gc-text-soft);
+}
+.fleet-colony-chip--expedition::after{
+  border-color: var(--gc-neon-gold);
 }
 .fleet-colony-chip--expedition .fleet-chip-label{ color: var(--gc-neon-gold); }
 .fleet-colony-chip--expedition.is-selected,
 .fleet-colony-chip--expedition:hover{
-  border-color: rgba(255, 176, 32, 0.5);
+  border-color: var(--gc-neon-gold);
   background: rgba(255, 176, 32, 0.1);
-  box-shadow: 0 0 12px rgba(255, 176, 32, 0.12);
+  box-shadow: inset 0 0 12px rgba(255, 176, 32, 0.08), 0 0 0 1px rgba(255, 176, 32, 0.2);
 }
 .fleet-preview-hud{
+  position: relative;
   margin: 14px 0;
   padding: 12px;
   border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(120, 190, 255, 0.18);
-  background:
-    linear-gradient(180deg, rgba(6, 14, 32, 0.92) 0%, rgba(4, 8, 18, 0.88) 100%);
+  border: 1px solid var(--gc-panel-border-strong);
+  background: var(--gc-panel-bg);
+  box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.fleet-preview-hud::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--gc-scanline);
+  pointer-events: none;
+  opacity: 0.25;
+}
+.fleet-preview-hud::after{
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-top: 1px solid var(--gc-neon-cyan);
+  border-left: 1px solid var(--gc-neon-cyan);
+  pointer-events: none;
 }
 .fleet-preview-hud.is-expedition{
   border-color: rgba(70, 229, 255, 0.28);
@@ -3719,15 +3790,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   border-bottom: 1px solid rgba(120, 190, 255, 0.12);
 }
 .fleet-preview-mission-badge{
-  display: inline-flex;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-family: var(--gc-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--gc-neon-cyan);
-  border: 1px solid rgba(70, 229, 255, 0.28);
+  border-color: rgba(70, 229, 255, 0.28);
   background: rgba(70, 229, 255, 0.08);
 }
 .fleet-preview-hud.is-expedition .fleet-preview-mission-badge{
@@ -3788,20 +3852,13 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   width: 100%;
   padding: 6px 8px;
   text-align: center;
-  border-radius: 6px;
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.18);
   background: rgba(3, 8, 18, 0.85);
   color: var(--gc-neon-cyan);
-}
-.fleet-slots-badge{
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(70, 229, 255, 0.22);
-  background: rgba(5, 10, 22, 0.65);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
 }
 .fleet-slots-value{ color: var(--gc-neon-cyan); font-weight: 700; }
-.fleet-colony-chips{ display: flex; flex-wrap: wrap; gap: 6px; }
-.fleet-colony-chip{ font-size: 0.82rem; }
 .fleet-preview-box{
   margin: 12px 0;
   padding: 10px 12px;
@@ -3887,7 +3944,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   height: 2rem;
   display: grid;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--gc-radius-sm);
   font-size: 1.1rem;
   line-height: 1;
   color: var(--gc-expedition-accent, #7dd3fc);
@@ -3911,7 +3968,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   display: inline-flex;
   margin-top: 6px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--gc-radius-sm);
   font-size: 0.62rem;
   font-family: var(--gc-mono);
   letter-spacing: 0.1em;
@@ -3994,7 +4051,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   flex-direction: column;
   gap: 4px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(94, 234, 212, 0.22);
   background: rgba(45, 212, 191, 0.07);
 }
@@ -4024,7 +4081,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--gc-radius-sm);
   border: 1px dashed rgba(148, 163, 184, 0.18);
   background: rgba(148, 163, 184, 0.04);
 }
@@ -4058,8 +4115,9 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .fleet-active-card{
   padding: 10px 12px;
   border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(120, 190, 255, 0.14);
-  background: rgba(7, 14, 32, 0.52);
+  border: 1px solid var(--gc-panel-border);
+  background: var(--gc-panel-bg-2);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
 .fleet-active-row{
   display: flex;
@@ -4073,7 +4131,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   display: inline-block;
   margin: 2px 4px 2px 0;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--gc-radius-sm);
   background: rgba(70, 229, 255, 0.08);
   font-size: 0.78rem;
 }
@@ -4089,7 +4147,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .fleet-preset-type{
   font-size: 0.75rem;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.25);
 }
 .fleet-preset-actions{ margin-left: auto; display: flex; gap: 4px; }
@@ -4097,7 +4155,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .fleet-coming-soon{
   font-size: 0.75rem;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--gc-radius-sm);
   background: rgba(255, 200, 80, 0.12);
   color: #ffc850;
 }
@@ -8247,6 +8305,109 @@ body.gc-planet-manage-open { overflow: hidden; }
 .gc-planet-switcher.is-busy{
   opacity: 0.6;
   pointer-events: none;
+}
+
+/* Shared HUD select — same pattern as header planet switcher */
+.gc-hud-select{
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.gc-hud-select.is-open{
+  z-index: 120;
+}
+.gc-hud-select-native{
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.gc-hud-select-trigger{
+  width: 100%;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.gc-hud-select-trigger:hover{
+  border-color: rgba(70, 229, 255, 0.32);
+  box-shadow: var(--gc-border-glow), 0 10px 22px rgba(0, 0, 0, 0.32);
+}
+.gc-hud-select-value{
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(215, 246, 255, 0.94);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gc-hud-select-chevron{
+  flex: 0 0 auto;
+  font-size: 0.65rem;
+  line-height: 1;
+  color: rgba(127, 255, 217, 0.65);
+}
+.gc-hud-select-menu{
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  background: linear-gradient(180deg, rgba(8, 14, 28, 0.98), rgba(6, 10, 22, 0.96));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+  max-height: min(240px, 45vh);
+  overflow-y: auto;
+}
+.gc-hud-select-menu[hidden]{
+  display: none !important;
+}
+.gc-hud-select-item{
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--gc-radius-sm);
+  background: transparent;
+  color: rgba(215, 246, 255, 0.94);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.gc-hud-select-item:hover{
+  background: rgba(70, 229, 255, 0.06);
+  border-color: rgba(70, 229, 255, 0.14);
+}
+.gc-hud-select-item.is-active{
+  background: rgba(70, 229, 255, 0.1);
+  border-color: rgba(70, 229, 255, 0.28);
+}
+.gc-hud-select-item:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.gc-hud-select.is-open .gc-hud-select-trigger{
+  border-color: rgba(70, 229, 255, 0.38);
+  box-shadow: var(--gc-border-glow);
+}
+.gc-hud-select-trigger:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 @media (max-width: 980px){

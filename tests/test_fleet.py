@@ -1848,6 +1848,8 @@ def test_fleet_ui_active_buttons_have_handlers():
         "updateFleetFormMode",
         "data-preview-mission-badge",
         "fleet-colony-chip--expedition",
+        "initHudSelects",
+        "data-gc-hud-select",
         "tickFleetCountdowns",
         "fleetRefreshBusy",
     ]
@@ -1878,6 +1880,7 @@ def test_quick_target_template_sets_coord_inputs():
     assert "fleet-preview-hud" in tpl
     assert "data-preview-mission-badge" in tpl
     assert "data-fleet-send-btn" in tpl
+    assert "data-gc-hud-select" in tpl
 
 
 def test_fuel_efficiency_reduces_cost():

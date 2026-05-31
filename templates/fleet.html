@@ -123,7 +123,7 @@
         <div class="fleet-form-row">
           <label class="fleet-form-label" for="fleet-preset-select">{{ T("fleet_preset_load") }}</label>
           <div class="fleet-form-inline">
-            <select id="fleet-preset-select" class="gc-input fleet-preset-select" data-fleet-preset-select>
+            <select id="fleet-preset-select" class="fleet-preset-select" data-fleet-preset-select data-gc-hud-select>
               <option value="">{{ T("fleet_preset_none") }}</option>
               {% for preset in fleet_ctx.presets %}
               <option value="{{ preset.id }}">[{{ T("fleet_preset_type_" ~ preset.preset_type) }}] {{ preset.name }}</option>
@@ -188,7 +188,7 @@
           <div class="fleet-mission-speed-row">
             <div class="fleet-form-row fleet-form-row--inline">
               <label class="fleet-form-label" for="fleet-mission">{{ T("fleet_mission_label") }}</label>
-              <select id="fleet-mission" name="mission_type" class="fleet-control fleet-mission-select" data-fleet-mission>
+              <select id="fleet-mission" name="mission_type" class="fleet-control fleet-mission-select" data-fleet-mission data-gc-hud-select>
                 {% for m in fleet_ctx.missions %}
                 <option value="{{ m }}">{{ T("fleet_mission_" ~ m) }}</option>
                 {% endfor %}
@@ -196,7 +196,7 @@
             </div>
             <div class="fleet-form-row fleet-form-row--inline">
               <label class="fleet-form-label" for="fleet-speed">{{ T("fleet_speed_label") }}</label>
-              <select id="fleet-speed" name="speed_percent" class="fleet-control" data-fleet-speed>
+              <select id="fleet-speed" name="speed_percent" class="fleet-control" data-fleet-speed data-gc-hud-select>
                 {% for sp in fleet_ctx.speed_options %}
                 <option value="{{ sp }}" {% if sp == 100 %}selected{% endif %}>{{ sp }}%</option>
                 {% endfor %}
@@ -216,7 +216,7 @@
                         data-ship-detail="{{ ship.key }}"
                         title="{{ T('ship_detail_open') }}">{{ T(ship.name_key) }}</button>
                 {% if ship.role == 'expedition' %}
-                <span class="fleet-ship-role-pill">{{ T("shipyard_role_expedition") }}</span>
+                <span class="gc-panel-tag fleet-ship-role-pill">{{ T("shipyard_role_expedition") }}</span>
                 {% endif %}
                 <span class="fleet-ship-stock gc-mono">×{{ have|fmt_int }}</span>
               </div>
@@ -264,7 +264,7 @@
 
         <div class="fleet-preview-hud" data-fleet-preview aria-live="polite">
           <div class="fleet-preview-hud-head">
-            <span class="fleet-preview-mission-badge" data-preview-mission-badge>{{ T("fleet_mission_transport") }}</span>
+            <span class="gc-panel-tag fleet-preview-mission-badge" data-preview-mission-badge>{{ T("fleet_mission_transport") }}</span>
             <span class="fleet-preview-mission-status" data-preview-mission-status>–</span>
           </div>
           <div class="fleet-preview-grid">
@@ -353,7 +353,7 @@
       <form id="fleet-mass-expo-form" class="fleet-mass-expo-form" method="post" action="#" data-no-pjax>
         <div class="fleet-form-row">
           <label for="fleet-mass-preset">{{ T("fleet_mass_expo_preset") }}</label>
-          <select id="fleet-mass-preset" class="gc-input" data-fleet-mass-preset required>
+          <select id="fleet-mass-preset" class="gc-input" data-fleet-mass-preset data-gc-hud-select required>
             <option value="">{{ T("fleet_preset_none") }}</option>
             {% for preset in fleet_ctx.presets %}
             <option value="{{ preset.id }}">[{{ T("fleet_preset_type_" ~ preset.preset_type) }}] {{ preset.name }}</option>
