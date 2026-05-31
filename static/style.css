@@ -3483,10 +3483,49 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   text-align: left;
 }
 .fleet-ship-role-pill{
+  flex: 0 0 auto;
   font-size: 0.62rem;
+  letter-spacing: 0.06em;
+}
+.fleet-ship-role-pill--expedition{
   color: var(--gc-neon-gold);
   border-color: rgba(255, 176, 32, 0.35);
   background: rgba(255, 176, 32, 0.08);
+}
+.fleet-ship-role-pill--cargo{
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(148, 163, 184, 0.08);
+}
+.fleet-ship-role-pill--combat{
+  color: #fca5a5;
+  border-color: rgba(252, 165, 165, 0.35);
+  background: rgba(252, 165, 165, 0.08);
+}
+.fleet-ship-role-pill--spy{
+  color: #7dd3fc;
+  border-color: rgba(125, 211, 252, 0.35);
+  background: rgba(125, 211, 252, 0.08);
+}
+.fleet-ship-role-pill--recycle{
+  color: #5eead4;
+  border-color: rgba(94, 234, 212, 0.35);
+  background: rgba(94, 234, 212, 0.08);
+}
+.fleet-ship-role-pill--scout{
+  color: var(--gc-neon-cyan);
+  border-color: rgba(70, 229, 255, 0.35);
+  background: rgba(70, 229, 255, 0.08);
+}
+.fleet-ship-role-pill--colony{
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.35);
+  background: rgba(134, 239, 172, 0.08);
+}
+.fleet-ship-role-pill--utility{
+  color: #cbd5e1;
+  border-color: rgba(203, 213, 225, 0.35);
+  background: rgba(203, 213, 225, 0.08);
 }
 .fleet-ship-stock{
   margin-left: auto;
