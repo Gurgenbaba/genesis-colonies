@@ -79,6 +79,11 @@ def test_main_js_game_state_polling_idempotent():
     assert "normalizePjaxUrl" in src
     assert "PJAX dedupe" in src
     assert "dataset.pjaxBusy" in src
+    assert "_finishRefreshArmed" in src
+    nav_section = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
+    assert "GC.cleanupPage();" in nav_section
+    assert nav_section.index("GC.cleanupPage();") < nav_section.index("refreshGameState(\"pjax_nav\")")
+    assert "if (GC.pjaxInFlight) return null;" in src
 
 
 def test_main_js_init_page_resumes_chat_after_pjax():

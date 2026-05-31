@@ -239,6 +239,7 @@
 
   let _planetPageReloadPromise = null;
   function reloadPageForActivePlanet(activePlanetId, reason) {
+    if (GC.pjaxInFlight) return null;
     const domPid = getDomPlanetId();
     if (!activePlanetId || !domPid || activePlanetId === domPid) return null;
     if (_planetPageReloadPromise) return _planetPageReloadPromise;
@@ -981,10 +982,20 @@
   }
 
   let _finishRefreshTimer = null;
+  const _finishRefreshArmed = { buildings: false, research: false };
+
+  function clearFinishRefreshArmed(type, queueList) {
+    const first = Array.isArray(queueList) && queueList.length ? queueList[0] : null;
+    const finishAt = first ? Number(first.finish_at || first.finish_time || 0) : 0;
+    const now = getApproxServerNow();
+    if (!finishAt || (now && finishAt > now)) {
+      _finishRefreshArmed[type] = false;
+    }
+  }
 
   function requestFinishRefresh(type) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
-    if (_finishRefreshTimer) return;
+    if (_finishRefreshArmed[type] || _finishRefreshTimer) return;
 
     _finishRefreshTimer = GC.setSafeTimeout(() => {
       _finishRefreshTimer = null;
@@ -1002,6 +1013,7 @@
         return;
       }
       GC.finishLocks[type] = true;
+      _finishRefreshArmed[type] = true;
       if (GC.refreshInFlight) {
         Promise.resolve(GC.refreshInFlight).finally(run);
         return;
@@ -1636,6 +1648,7 @@
 
     if (!queueList || queueList.length === 0) {
       _updateBuildQueueSubtitle(0, limit, firstEta);
+      _finishRefreshArmed.buildings = false;
       const none =
         t("build_queue_none", null) ||
         t("build_queue_empty", null) ||
@@ -1696,6 +1709,7 @@
 
     html += `</div>`;
     root.innerHTML = html;
+    clearFinishRefreshArmed("buildings", queueList);
     GC.startProgressTicker();
   }
 
@@ -1848,6 +1862,7 @@
 
     html += `</div>`;
     root.innerHTML = html;
+    clearFinishRefreshArmed("research", queueList);
     GC.startProgressTicker();
   }
 
@@ -5537,12 +5552,18 @@
     GC.pjaxInFlight = (async () => {
       const ctrl = new AbortController();
       GC._pjaxAbort = ctrl;
+      GC.cleanupPage();
+      let stateOk = false;
       let statePromise = null;
       if (shouldRunGameLoop() && typeof GC.refreshGameState === "function") {
-        statePromise = GC.refreshGameState("pjax_nav");
+        statePromise = GC.refreshGameState("pjax_nav")
+          .then((data) => {
+            stateOk = !!(data && data.ok !== false);
+            return data;
+          })
+          .catch(() => null);
       }
       try {
-        GC.cleanupPage();
         const res = await fetch(url, {
           credentials: "same-origin",
           cache: "no-store",
@@ -5584,7 +5605,7 @@
             await statePromise;
           } catch (_) {}
         }
-        await GC.initPage({ force: true, skipGameState: Boolean(statePromise) });
+        await GC.initPage({ force: true, skipGameState: stateOk });
         if (document.querySelector(".galaxy-page")) prefetchGalaxyAdjacent();
       } catch (err) {
         if (err?.name === "AbortError") return;

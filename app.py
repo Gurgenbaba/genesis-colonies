@@ -408,7 +408,7 @@ def _load_page_live_context(
 
     conn = db()
     src = str(finish_source or "page_load")
-    use_poll_live_path = not src.startswith("api_")
+    use_poll_live_path = src == "game_state"
     try:
         try:
             if use_poll_live_path:
