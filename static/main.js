@@ -287,7 +287,7 @@
   // GC – zentraler Spielzustand + Page Lifecycle (SPA/PJAX)
   // =========================
   const GC = {
-    finishLocks: { buildings: false, research: false },
+    finishLocks: { buildings: false, research: false, planet_evolution: false },
     refreshInFlight: null,
     lastState: null,
     refreshGameState: null,
@@ -982,7 +982,7 @@
   }
 
   let _finishRefreshTimer = null;
-  const _finishRefreshArmed = { buildings: false, research: false };
+  const _finishRefreshArmed = { buildings: false, research: false, planet_evolution: false };
 
   function clearFinishRefreshArmed(type, queueList) {
     const first = Array.isArray(queueList) && queueList.length ? queueList[0] : null;
@@ -995,7 +995,8 @@
 
   function requestFinishRefresh(type) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
-    if (_finishRefreshArmed[type] || _finishRefreshTimer) return;
+    const key = type === "buildings" || type === "research" || type === "planet_evolution" ? type : "buildings";
+    if (_finishRefreshArmed[key] || _finishRefreshTimer) return;
 
     _finishRefreshTimer = GC.setSafeTimeout(() => {
       _finishRefreshTimer = null;
@@ -1003,17 +1004,17 @@
       _lastResearchQueueSignature = "";
 
       const run = () => {
-        Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${type}_finished`) : null).finally(() => {
-          GC.finishLocks[type] = false;
+        Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${key}_finished`) : null).finally(() => {
+          GC.finishLocks[key] = false;
         });
       };
 
-      if (GC.finishLocks[type]) {
+      if (GC.finishLocks[key]) {
         GC.setSafeTimeout(run, 150);
         return;
       }
-      GC.finishLocks[type] = true;
-      _finishRefreshArmed[type] = true;
+      GC.finishLocks[key] = true;
+      _finishRefreshArmed[key] = true;
       if (GC.refreshInFlight) {
         Promise.resolve(GC.refreshInFlight).finally(run);
         return;
@@ -1448,7 +1449,8 @@
       RESEARCHQ.active.finishTime > 0 ||
       !!document.querySelector(".build-job.build-job-active") ||
       !!document.querySelector(".research-job.research-job-active") ||
-      !!document.getElementById("overview-research-active")
+      !!document.getElementById("overview-research-active") ||
+      !!document.querySelector(".planet-evolution-page .pe-planet-research-active")
     );
   }
 
@@ -1948,7 +1950,25 @@
         const remaining = Math.max(0, finishAt - serverNow);
         const etaEl = row.querySelector("[data-activity-eta]");
         if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
+        if (remaining <= 0) {
+          const actKey = String(row.dataset.activityKey || "");
+          if (actKey === "build") requestFinishRefresh("buildings");
+          else if (actKey === "research") requestFinishRefresh("research");
+          else requestFinishRefresh("planet_evolution");
+        }
       });
+    }
+
+    const peActive = document.querySelector(".planet-evolution-page .pe-planet-research-active");
+    if (peActive) {
+      const finishTime = Number(peActive.dataset.finishTime || 0);
+      const total = Math.max(1, Number(peActive.dataset.total || 1));
+      if (finishTime) {
+        const remaining = Math.max(0, finishTime - serverNow);
+        if (remaining <= 0) {
+          requestFinishRefresh("planet_evolution");
+        }
+      }
     }
   }
 
@@ -4291,6 +4311,9 @@
       }
       if (etaEl) etaEl.textContent = formatEta(remaining);
       if (pctEl) pctEl.textContent = `${Math.round(pct)}%`;
+      if (remaining <= 0) {
+        requestFinishRefresh("planet_evolution");
+      }
     };
 
     tick();

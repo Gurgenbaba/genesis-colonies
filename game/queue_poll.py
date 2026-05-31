@@ -95,6 +95,29 @@ def player_has_due_queue_work(
                     )
                 if cur.fetchone():
                     return True
+                if pid_filter is not None:
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM planet_ascension_queue paq
+                        WHERE paq.planet_id = ? AND paq.state = 'active' AND paq.finish_at <= ?
+                        LIMIT 1;
+                        """,
+                        (pid_filter, ts),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM planet_ascension_queue paq
+                        INNER JOIN planets p ON p.id = paq.planet_id
+                        WHERE p.player_id = ? AND paq.state = 'active' AND paq.finish_at <= ?
+                        LIMIT 1;
+                        """,
+                        (int(player_id), ts),
+                    )
+                if cur.fetchone():
+                    return True
         except Exception:
             pass
         try:
@@ -255,6 +278,24 @@ def player_has_pending_queue_work(
                         FROM planet_research_queue prq
                         INNER JOIN planets p ON p.id = prq.planet_id
                         WHERE p.player_id = ?
+                        LIMIT 1;
+                        """,
+                        (int(player_id),),
+                    )
+                if cur.fetchone():
+                    return True
+                if pid_filter is not None:
+                    cur.execute(
+                        "SELECT 1 FROM planet_ascension_queue WHERE planet_id = ? AND state = 'active' LIMIT 1;",
+                        (pid_filter,),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM planet_ascension_queue paq
+                        INNER JOIN planets p ON p.id = paq.planet_id
+                        WHERE p.player_id = ? AND paq.state = 'active'
                         LIMIT 1;
                         """,
                         (int(player_id),),

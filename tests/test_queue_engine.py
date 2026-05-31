@@ -31,6 +31,7 @@ from game.queue_engine import (
     clear_request_finish_dedup,
     finish_due_work,
     finish_due_work_once,
+    finish_player_due_work,
 )
 from flask import Flask
 
@@ -503,3 +504,42 @@ def test_finish_active_planet_due_work_retries_after_dedup(temp_db):
 
     assert int(result["finished"]["buildings"]) >= 1
     assert int(get_planet_buildings(planet_id).get("metal_mine", 0)) >= 1
+
+
+def test_finish_player_due_work_completes_build_on_inactive_colony(temp_db):
+    """Poll refresh must finish builds on all colonies, not only the active one."""
+    from game.galaxy import assign_free_coordinates
+    from game.planet_evolution.repository import set_active_planet_id
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("multi_colony_finish")
+    hw = get_homeworld(pid)
+    hw_id = int(hw["id"])
+
+    conn = db()
+    galaxy, system, position = assign_free_coordinates(conn)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO planets (
+            player_id, name, is_homeworld, metal, crystal, last_update,
+            galaxy, system, position
+        ) VALUES (?, 'Colony Beta', 0, 500, 500, ?, ?, ?, ?);
+        """,
+        (pid, time.time(), int(galaxy), int(system), int(position)),
+    )
+    colony_id = int(cur.lastrowid)
+    set_active_planet_id(pid, hw_id, conn)
+    add_build_job(colony_id, "metal_mine", time.time() - 120, time.time() - 1, conn=conn)
+    conn.commit()
+
+    result = finish_player_due_work(pid, conn, source="test_multi_colony")
+    conn.commit()
+    conn.close()
+
+    assert int(result["finished"]["buildings"]) >= 1
+    assert int(get_planet_buildings(colony_id).get("metal_mine", 0)) >= 1
+    assert int(get_planet_buildings(hw_id).get("metal_mine", 0)) == 0

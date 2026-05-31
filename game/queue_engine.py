@@ -203,6 +203,57 @@ def finish_active_planet_due_work(
     return aggregate
 
 
+def finish_player_due_work(
+    player_id: int,
+    conn: sqlite3.Connection,
+    *,
+    source: str = "live_state",
+    update_scores: bool = True,
+    recalc_ranks: bool = True,
+) -> Dict[str, Any]:
+    """
+    Finish due queue work for one player (all colonies + account research).
+
+    Prefer this over finish_active_planet_due_work for poll/page refresh so builds
+    on inactive colonies still complete while the user is elsewhere.
+    """
+    from .queue_poll import player_has_due_queue_work
+
+    uid = int(player_id)
+    src = str(source or "live_state")
+    aggregate = _empty_result(src)
+    last = aggregate
+
+    for pass_idx in range(_MAX_FINISH_PASSES):
+        last = finish_due_work_once(
+            player_id=uid,
+            conn=conn,
+            source=src if pass_idx == 0 else f"{src}_retry",
+            update_scores=update_scores,
+            recalc_ranks=recalc_ranks if pass_idx == 0 else False,
+            force=pass_idx > 0,
+        )
+        for key in aggregate["finished"]:
+            aggregate["finished"][key] += int(last.get("finished", {}).get(key, 0) or 0)
+        aggregate["score_updates"] += int(last.get("score_updates", 0) or 0)
+        aggregate["derived_sync_count"] += int(last.get("derived_sync_count", 0) or 0)
+        if last.get("errors"):
+            aggregate["errors"].extend(last["errors"])
+            aggregate["ok"] = False
+
+        if not player_has_due_queue_work(uid, conn=conn):
+            break
+        finished_this_pass = sum(int(v or 0) for v in last.get("finished", {}).values())
+        if finished_this_pass > 0:
+            continue
+        if last.get("skipped_due_to_dedup") and pass_idx + 1 < _MAX_FINISH_PASSES:
+            continue
+        break
+
+    aggregate["dedup_scope_key"] = last.get("dedup_scope_key")
+    return aggregate
+
+
 def finish_due_work_once(
     player_id: Optional[int] = None,
     planet_id: Optional[int] = None,

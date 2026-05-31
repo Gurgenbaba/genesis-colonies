@@ -97,14 +97,19 @@ def read_player_live_state_for_poll(
     """
     Game-state polling path: throttled queue finish, no rank/score seeding writes.
 
-    - Finishes queue work while jobs are pending or due on the active planet.
+    - Finishes due queue work player-wide when due or on poll interval.
     - Skips rank recalculation on poll (recalc_ranks=False).
     - May still persist resource accrual when idle time warrants it.
     """
     from .db import begin_write_transaction, in_transaction
     from .models import db as _db, load_player, rollback
-    from .queue_engine import finish_active_planet_due_work
-    from .queue_poll import player_has_due_queue_work, player_has_pending_queue_work
+    from .queue_engine import finish_player_due_work
+    from .queue_poll import (
+        player_has_due_queue_work,
+        player_has_pending_queue_work,
+        record_poll_queue_finish,
+        seconds_until_poll_finish_allowed,
+    )
 
     uid = int(player_id)
     own_conn = conn is None
@@ -126,21 +131,24 @@ def read_player_live_state_for_poll(
         last = float(last_raw) if last_raw is not None else now
         persist_resources = (now - last) >= 60.0
 
-        has_due = player_has_due_queue_work(uid, conn=conn, planet_id=planet_id)
-        has_pending = player_has_pending_queue_work(uid, conn=conn, planet_id=planet_id)
-        need_write = bool(has_due or has_pending or persist_resources)
+        has_due = player_has_due_queue_work(uid, conn=conn)
+        has_pending = player_has_pending_queue_work(uid, conn=conn)
+        should_finish = has_due or (
+            has_pending and seconds_until_poll_finish_allowed(uid, conn=conn) <= 0.0
+        )
+        need_write = bool(should_finish or persist_resources)
 
         try:
             if need_write:
-                if has_due or has_pending:
-                    finish_active_planet_due_work(
+                if should_finish:
+                    finish_player_due_work(
                         uid,
-                        planet_id,
                         conn,
                         source="game_state",
                         update_scores=True,
                         recalc_ranks=False,
                     )
+                    record_poll_queue_finish(uid, conn=conn)
                     from .live_state import mark_request_live_refreshed
 
                     mark_request_live_refreshed()
@@ -213,7 +221,7 @@ def refresh_player_live_state(
     """
     from .db import begin_write_transaction, commit, in_transaction
     from .models import db as _db, get_homeworld, load_player
-    from .queue_engine import finish_active_planet_due_work
+    from .queue_engine import finish_player_due_work
 
     uid = int(player_id)
     own_conn = conn is None
@@ -228,11 +236,9 @@ def refresh_player_live_state(
             raise RuntimeError(f"player {uid} not found")
 
         planet = get_context_planet(uid, conn=conn)
-        planet_id = int(planet["id"])
 
-        finish_active_planet_due_work(
+        finish_player_due_work(
             uid,
-            planet_id,
             conn,
             source=str(finish_source or "live_state"),
         )
