@@ -41,6 +41,7 @@ game/*.db
 Thumbs.db
 .vscode/
 .vs/
+.cursor/
 
 # Logs
 *.log

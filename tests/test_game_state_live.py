@@ -200,3 +200,20 @@ def test_api_game_state_single_finish_via_coerce(game_client):
         assert r.status_code == 200
         assert r.get_json()["ok"] is True
         assert len(calls) == 1
+
+
+def test_api_game_state_poll_is_lightweight(game_client):
+    client, _pid = game_client
+    r = client.get("/api/game-state")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body.get("ok") is True
+    assert "player" in body
+    assert "build_queue" in body
+    assert "unread_messages_count" in body
+    assert "buildings_panel" not in body
+    assert "exchange" not in body
+    assert "fuel_exchange" not in body
+    assert "scrapyard" not in body
+    assert "planet_teaser" not in body
+    assert body.get("overview", {}).get("status") is None

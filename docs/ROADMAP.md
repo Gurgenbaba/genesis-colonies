@@ -164,7 +164,7 @@ Details: [SECURITY.md](SECURITY.md)
 | Tutorial / Onboarding | 💡 |
 | Season / Universe-Reset | 💡 |
 | CI Pipeline | 💡 |
-| Automated Backups | 📋 teilweise [DEPLOYMENT.md](DEPLOYMENT.md) |
+| Automated Backups | 📋 Operator-intern |
 
 ---
 

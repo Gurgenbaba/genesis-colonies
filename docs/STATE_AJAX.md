@@ -2,6 +2,8 @@
 
 Single live pipeline for the player UI (no full reload on game actions).
 
+Siehe auch: [PLANET_SCOPE.md](PLANET_SCOPE.md) (Planetwechsel), [ARCHITECTURE.md](ARCHITECTURE.md) (Gesamtüberblick).
+
 ## Endpoints
 
 | Route | Role |
@@ -14,6 +16,20 @@ Single live pipeline for the player UI (no full reload on game actions).
 | `POST /api/research/cancel` | Cancel research job → `{ ok, reason, state } |
 
 Actions use `_player_context_for_action()` (read-only DB) then **one** `refresh_player_live_state` inside `_build_game_state_payload` after the mutation.
+
+## Poll vs. action payload
+
+`GET /api/game-state` uses a **lightweight poll path** (`finish_source=game_state`):
+
+- Single SQLite connection per request
+- No `buildings_panel`, exchange/trader/scrapyard/teaser blocks
+- No `overview.status` (shipyard/fleet activity queries skipped)
+- Inbox unread count read-only (`prepare=False`)
+- Resource persist writes throttled (≥120 s since last planet update)
+
+Full panel payload is returned on **page load** and after **POST actions** (build, trade, fleet, …).
+
+Production client intervals (override via `GC_POLL_*` env): active 8 s, idle 12 s, hidden 30 s.
 
 ## Server pipeline
 

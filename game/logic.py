@@ -129,7 +129,7 @@ def read_player_live_state_for_poll(
         now = time.time()
         last_raw = planet.get("last_update")
         last = float(last_raw) if last_raw is not None else now
-        persist_resources = (now - last) >= 60.0
+        persist_resources = (now - last) >= 120.0
 
         has_due = player_has_due_queue_work(uid, conn=conn)
         has_pending = player_has_pending_queue_work(uid, conn=conn)

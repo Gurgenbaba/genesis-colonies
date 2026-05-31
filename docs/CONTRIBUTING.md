@@ -13,27 +13,34 @@ Richtlinien für Entwickler, die am Projekt mitarbeiten. Ziel: konsistente, revi
 | pytest | separat installieren (`pip install pytest`) |
 | Git | optional |
 
-Kein Node.js, kein Docker (optional für Deployment-Tests).
+Kein Node.js. Docker nur für internen Operator-Deploy — keine öffentliche Hosting-Anleitung im Repo.
 
 ---
 
 ## Ersteinrichtung
 
-```bash
-git clone <repo-url> genesis-colonies
-cd genesis-colonies
-python scripts/install.py --venv --admin
-source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
-python app.py
-```
+Nur für **autorisierte Mitwirkende** mit explizitem Repository-Zugang. Details intern — nicht für Self-Hosting oder öffentliche Spiegel gedacht.
 
-Health prüfen:
+Health prüfen (lokale Dev-Instanz):
 
 ```bash
 curl -s http://127.0.0.1:5000/health
 ```
 
-Ausführlich: [README](../README.md), [DEPLOYMENT.md](DEPLOYMENT.md).
+Siehe [LICENSE](../LICENSE) und [README](../README.md).
+
+---
+
+## Ticket-Workflow
+
+Arbeit erfolgt als **Tickets** (GC-XXX), nicht als Epic-Direct-Implementierung.
+
+1. Vor der Arbeit: relevante Master-Docs lesen ([ARCHITECTURE.md](ARCHITECTURE.md) + System-Doc)
+2. Ticket definiert: Problem, betroffene Dateien (max. 3–5), Akzeptanzkriterien
+3. Nur Ticket-Scope bearbeiten — kein Projekt-Vollscan, kein ungefragtes Refactoring
+4. Architektur-Änderungen → Master-Doc mit aktualisieren
+
+**Master-Docs:** [WORKFLOW.md](WORKFLOW.md), `PLANET_SCOPE`, `PLANET_EVOLUTION`, `ECONOMY_SYSTEM`, `BUILDINGS_SYSTEM`, `RESEARCH_SYSTEM`, `FLEET_SYSTEM`, `GALAXY_SYSTEM`, `ROADMAP`.
 
 ---
 
@@ -90,7 +97,7 @@ Ausführlich: [README](../README.md), [DEPLOYMENT.md](DEPLOYMENT.md).
 migrations/NNN_kurz_beschreibung.sql
 ```
 
-- `NNN` = dreistellig, aufsteigend (aktuell bis `010`)
+- `NNN` = dreistellig, aufsteigend (aktuell bis `032`)
 - Lowercase, Underscores
 - Idempotente Statements bevorzugen: `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`
 - `ALTER TABLE ADD COLUMN` — Runner überspringt `duplicate column name`
@@ -126,7 +133,7 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-Erwartung: **alle Tests grün** (aktuell 31 Tests).
+Erwartung: **alle Tests grün** (aktuell 513 Tests).
 
 ### Wann welcher Test
 
@@ -223,8 +230,9 @@ Für UI/UX-Änderungen zusätzlich [ALPHA_TESTPLAN.md](ALPHA_TESTPLAN.md) — mi
 
 | Änderung | Datei aktualisieren |
 |----------|---------------------|
-| Neue Env-Variable | `.env.example`, `docs/DEPLOYMENT.md`, README |
+| Neue Env-Variable | `.env.example`, README |
 | Architektur / Flow | `docs/ARCHITECTURE.md` |
+| Domänen-Logik | jeweiliges System-Doc (`FLEET_SYSTEM.md`, …) |
 | Security-Verhalten | `docs/SECURITY.md` |
 | Meilenstein / Feature-Plan | `docs/ROADMAP.md` |
 

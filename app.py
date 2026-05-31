@@ -393,6 +393,8 @@ def _load_page_live_context(
     *,
     finish_source: str = "page_load",
     include_panel: bool = False,
+    conn=None,
+    close_conn: bool = True,
 ) -> Optional[Dict[str, Any]]:
     """
     One finish + derived sync + read-only queue/research per page/API request.
@@ -404,10 +406,14 @@ def _load_page_live_context(
         return None
 
     user_id = int(user_id)
-    if not load_player(user_id):
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
+    if not load_player(user_id, conn=conn):
+        if own_conn and close_conn:
+            conn.close()
         return None
 
-    conn = db()
     src = str(finish_source or "page_load")
     use_poll_live_path = src == "game_state"
     try:
@@ -474,7 +480,8 @@ def _load_page_live_context(
         rollback(conn)
         raise
     finally:
-        conn.close()
+        if own_conn or close_conn:
+            conn.close()
 
     return {
         "player_view": player_view,
@@ -488,6 +495,10 @@ def _load_page_live_context(
         "prod_per_hour": prod_per_hour,
         "include_panel": include_panel,
     }
+
+
+def _is_game_state_poll_source(finish_source: str) -> bool:
+    return str(finish_source or "") == "game_state"
 
 
 # --------------------------------------------------------------------------
@@ -2179,6 +2190,8 @@ def _payload_from_live_context(
     *,
     user_id: int,
     include_panel: bool = True,
+    lightweight: bool = False,
+    conn=None,
 ) -> Dict[str, Any]:
     """Build JSON payload from an already-refreshed live context."""
     from game.logic import get_research_modifiers
@@ -2192,6 +2205,10 @@ def _payload_from_live_context(
     build_queue = ctx["build_queue"]
     research = ctx["research"]
     prod_per_hour = ctx["prod_per_hour"]
+
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
 
     energy_efficiency_pct = int(round(float(ratio) * 100))
     mods = get_research_modifiers(user_id)
@@ -2259,20 +2276,24 @@ def _payload_from_live_context(
     from game.overview_page import build_overview_status
     from game.planet_evolution.repository import get_active_planet_id, get_context_planet
 
-    planet = get_context_planet(user_id)
-    payload["overview"]["status"] = build_overview_status(
-        user_id=user_id,
-        player_view=player_view,
-        ratio=float(ratio),
-        energy_total=int(energy_total),
-        energy_used=int(energy_used),
-        storage_caps=storage_caps,
-        prod_per_hour=prod_per_hour,
-        build_queue=build_queue,
-        research=research,
-        planet=planet,
-        include_log=False,
-    )
+    planet = get_context_planet(user_id, conn=conn)
+    if lightweight:
+        payload["overview"]["status"] = None
+    else:
+        payload["overview"]["status"] = build_overview_status(
+            user_id=user_id,
+            player_view=player_view,
+            ratio=float(ratio),
+            energy_total=int(energy_total),
+            energy_used=int(energy_used),
+            storage_caps=storage_caps,
+            prod_per_hour=prod_per_hour,
+            build_queue=build_queue,
+            research=research,
+            planet=planet,
+            include_log=False,
+            conn=conn,
+        )
 
     active_planet_id = get_active_planet_id(user_id)
     payload["active_planet_id"] = int(active_planet_id)
@@ -2313,7 +2334,6 @@ def _payload_from_live_context(
         }
 
     if include_panel:
-        planet = get_context_planet(user_id)
         payload["buildings_panel"] = get_buildings_panel_rows(
             planet,
             buildings,
@@ -2336,62 +2356,60 @@ def _payload_from_live_context(
     }
 
     try:
-        payload["unread_messages_count"] = messages_logic.unread_count(user_id)
+        payload["unread_messages_count"] = messages_logic.unread_count(
+            user_id,
+            conn=conn,
+            prepare=not lightweight,
+        )
     except Exception:
         payload["unread_messages_count"] = 0
 
     try:
         from game.planet_evolution.service import list_player_planets_for_switcher
 
-        payload["planets"] = list_player_planets_for_switcher(user_id)
+        payload["planets"] = list_player_planets_for_switcher(user_id, conn=conn)
     except Exception:
         payload["planets"] = []
 
-    try:
-        from game.exchange import exchange_schema_ready, get_exchange_status
-
-        conn_ex = db()
+    if not lightweight:
         try:
-            if exchange_schema_ready(conn_ex):
-                planet = get_context_planet(user_id, conn=conn_ex)
+            from game.exchange import exchange_schema_ready, get_exchange_status
+
+            if exchange_schema_ready(conn):
                 payload["exchange"] = get_exchange_status(
                     player_id=user_id,
                     planet_id=int(planet["id"]),
                     metal=float(player_view["metal"]),
                     crystal=float(player_view["crystal"]),
-                    conn=conn_ex,
+                    conn=conn,
                 )
-        finally:
-            conn_ex.close()
-    except Exception:
-        pass
+        except Exception:
+            pass
 
-    try:
-        from game.fuel_exchange import fuel_exchange_schema_ready, get_fuel_exchange_status
-        from game.scrapyard import scrapyard_status
-
-        conn_tr = db()
         try:
-            planet_tr = get_context_planet(user_id, conn=conn_tr)
-            pid_tr = int(planet_tr["id"])
-            if fuel_exchange_schema_ready(conn_tr):
-                payload["fuel_exchange"] = get_fuel_exchange_status(user_id, pid_tr, conn=conn_tr)
-            payload["scrapyard"] = scrapyard_status(user_id, pid_tr, conn=conn_tr)
-        finally:
-            conn_tr.close()
-    except Exception:
-        pass
+            from game.fuel_exchange import fuel_exchange_schema_ready, get_fuel_exchange_status
+            from game.scrapyard import scrapyard_status
 
-    try:
-        from game.planet_evolution.teaser import get_overview_planet_teaser
+            pid_tr = int(planet["id"])
+            if fuel_exchange_schema_ready(conn):
+                payload["fuel_exchange"] = get_fuel_exchange_status(user_id, pid_tr, conn=conn)
+            payload["scrapyard"] = scrapyard_status(user_id, pid_tr, conn=conn)
+        except Exception:
+            pass
 
-        payload["planet_teaser"] = get_overview_planet_teaser(
-            user_id,
-            metal=float(player_view["metal"]),
-            crystal=float(player_view["crystal"]),
-        )
-    except Exception:
-        payload["planet_teaser"] = {"visible": False}
+        try:
+            from game.planet_evolution.teaser import get_overview_planet_teaser
+
+            payload["planet_teaser"] = get_overview_planet_teaser(
+                user_id,
+                metal=float(player_view["metal"]),
+                crystal=float(player_view["crystal"]),
+            )
+        except Exception:
+            payload["planet_teaser"] = {"visible": False}
+
+    if own_conn and conn is not None:
+        conn.close()
 
     return payload
 
@@ -2410,14 +2428,33 @@ def _build_game_state_payload(
         return {"ok": False, "error": "not_logged_in"}, 0
 
     user_id = int(user["id"])
-    ctx = _load_page_live_context(
-        finish_source=str(finish_source or "game_state"),
-        include_panel=include_panel,
-    )
-    if ctx is None:
-        return {"ok": False, "error": "not_logged_in"}, 0
+    lightweight = _is_game_state_poll_source(finish_source)
+    if lightweight:
+        include_panel = False
 
-    return _payload_from_live_context(ctx, user_id=user_id, include_panel=include_panel), user_id
+    conn = db()
+    try:
+        ctx = _load_page_live_context(
+            finish_source=str(finish_source or "game_state"),
+            include_panel=include_panel,
+            conn=conn,
+            close_conn=False,
+        )
+        if ctx is None:
+            return {"ok": False, "error": "not_logged_in"}, 0
+
+        return (
+            _payload_from_live_context(
+                ctx,
+                user_id=user_id,
+                include_panel=include_panel,
+                lightweight=lightweight,
+                conn=conn,
+            ),
+            user_id,
+        )
+    finally:
+        conn.close()
 
 
 def _player_context_for_action() -> Optional[Tuple[Any, Dict[str, int]]]:

@@ -247,6 +247,6 @@ Admin-Panel rendert dynamische Tabellen aus API — Admin-only, trotzdem vertrau
 
 ## Verwandte Dokumente
 
-- [DEPLOYMENT.md](DEPLOYMENT.md) — Production Checkliste
+- [LICENSE](../LICENSE) — Nutzungsbeschränkungen
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Auth-Guards, Idempotenz-Flows
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Security-relevante Tests

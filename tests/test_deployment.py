@@ -185,10 +185,13 @@ def test_env_example_exists():
     assert "GC_DB_BACKEND" in text
 
 
-def test_railway_deploy_doc_exists():
-    doc = ROOT / "docs" / "DEPLOY_RAILWAY.md"
-    assert doc.exists()
-    text = doc.read_text(encoding="utf-8")
-    assert "GC_DB_PATH=/data/game.db" in text
-    assert "PostgreSQL" in text or "postgres" in text.lower()
-    assert "/health" in text
+def test_railway_infra_files_exist():
+    """Operator deploy uses railway.toml + Dockerfile (no public deploy guide in repo)."""
+    railway = ROOT / "railway.toml"
+    dockerfile = ROOT / "Dockerfile"
+    entrypoint = ROOT / "scripts" / "docker-entrypoint.sh"
+    assert railway.exists()
+    assert dockerfile.exists()
+    assert entrypoint.exists()
+    assert "dockerfile" in railway.read_text(encoding="utf-8").lower()
+    assert "/health" in railway.read_text(encoding="utf-8")
