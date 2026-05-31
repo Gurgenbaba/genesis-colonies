@@ -2287,7 +2287,8 @@
           if (
             onMessagesPage &&
             GC.messagesPageState &&
-            typeof GC.messagesPageState.loadList === "function"
+            typeof GC.messagesPageState.loadList === "function" &&
+            !GC.messagesPageState.loading
           ) {
             const emptyInboxNeedsFill =
               data.unread_messages_count > 0 &&

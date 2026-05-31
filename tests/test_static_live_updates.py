@@ -50,10 +50,11 @@ def test_messages_js_tab_and_initial_share_load_list():
     assert "loadList" in tab_section
 
 
-def test_messages_js_debug_gated():
+def test_messages_js_spy_report_and_category_label():
     src = _read("static/js/messages.js")
-    assert "msgDebug" in src
-    assert "GC.DEBUG" in src
+    assert "function categoryLabel(cat)" in src
+    assert "function renderSpyReport(meta)" in src
+    assert "renderMessageBody(msg)" in src
 
 
 def test_chat_js_poll_updates_last_id_and_resume_bootstrap():

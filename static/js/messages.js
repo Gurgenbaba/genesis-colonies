@@ -218,6 +218,10 @@
     return { html: null, plain: msg.body || "" };
   }
 
+  function categoryLabel(cat) {
+    return t(`messages.category.${cat}`, cat);
+  }
+
   function formatTime(ts) {
     const n = Number(ts);
     if (!Number.isFinite(n) || n <= 0) return "–";
@@ -652,6 +656,13 @@
     async function loadList(retryNotReady = true) {
       if (!isCurrentInit(state, initSeq)) return;
 
+      if (state.listAbort) {
+        try {
+          state.listAbort.abort();
+        } catch (_) {}
+        state.listAbort = null;
+      }
+
       const requestId = ++state.requestSeq;
       const ctrl = new AbortController();
       state.listAbort = ctrl;
@@ -716,7 +727,11 @@
             state._loadRetryScheduled = true;
             queueMicrotask(() => {
               state._loadRetryScheduled = false;
-              if (isCurrentInit(state, initSeq) && !state.listLoaded) loadList(retryNotReady);
+              if (isCurrentInit(state, initSeq) && !state.listLoaded) {
+                loadList(retryNotReady);
+              } else if (isCurrentInit(state, initSeq)) {
+                state.loading = false;
+              }
             });
           }
           return;
@@ -815,7 +830,15 @@
 
     GC.messagesPageState = state;
 
-    loadList();
+    const startLoad = () => {
+      if (!isCurrentInit(state, initSeq)) return;
+      loadList();
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(startLoad);
+    } else {
+      queueMicrotask(startLoad);
+    }
   }
 
   GC.modules = GC.modules || {};
