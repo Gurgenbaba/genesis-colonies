@@ -2478,9 +2478,18 @@
 
       GC.lastState = data;
       GC.startProgressTicker();
-      scheduleShipyardRefreshFromState();
+      if (gameStateIncludePanel()) {
+        scheduleShipyardRefreshFromState(true);
+      } else {
+        scheduleShipyardRefreshFromState();
+      }
 
       return hasActiveBuild || hasActiveResearchNow;
+  }
+
+  function gameStateIncludePanel() {
+    const page = typeof GC.detectPage === "function" ? GC.detectPage() : "";
+    return page === "buildings" || page === "research" || page === "shipyard";
   }
 
   async function refreshGameState(reason) {
@@ -2517,7 +2526,8 @@
 
     (async () => {
       try {
-        const data = await GC.fetchJSON("/api/game-state", { cache: "no-store", signal: ctrl.signal });
+        const panelQ = gameStateIncludePanel() ? "?include_panel=1" : "";
+        const data = await GC.fetchJSON(`/api/game-state${panelQ}`, { cache: "no-store", signal: ctrl.signal });
         if (!data || data.ok === false) {
           if (isAuthStatusFailure(null, data)) handleAuthFailure("game-state-payload");
           resolveFlight(null);
@@ -4157,6 +4167,11 @@
         if (btn.dataset.building !== "1") btn.classList.remove("is-loading");
       }
       if (maxBtn) maxBtn.dataset.maxQty = String(ship.max_build || 0);
+      const buildTimeEl = card.querySelector(".shipyard-ship-build-time");
+      if (buildTimeEl && ship.build_seconds != null) {
+        const tpl = tt("shipyard_build_time_per_unit", "Build time: %(seconds)s s per ship");
+        buildTimeEl.textContent = tpl.replace("%(seconds)s", fmtNumber(Number(ship.build_seconds) || 0));
+      }
       const warn = card.querySelector(".shipyard-hint-warn");
       if (warn) {
         if (ship.can_build) {

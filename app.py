@@ -2418,6 +2418,7 @@ def _build_game_state_payload(
     include_panel: bool = True,
     *,
     finish_source: str = "game_state",
+    force_include_panel: bool = False,
 ) -> Tuple[dict, int]:
     """
     Zentraler Spielzustand für Polling + AJAX-Refresh (kein Page-Reload).
@@ -2429,7 +2430,7 @@ def _build_game_state_payload(
 
     user_id = int(user["id"])
     lightweight = _is_game_state_poll_source(finish_source)
-    if lightweight:
+    if lightweight and not force_include_panel:
         include_panel = False
 
     conn = db()
@@ -2510,7 +2511,12 @@ def api_status():
 @app.route("/api/game-state")
 @require_login
 def api_game_state():
-    payload, _player_id = _build_game_state_payload(include_panel=True, finish_source="game_state")
+    want_panel = request.args.get("include_panel", "").lower() in ("1", "true", "yes")
+    payload, _player_id = _build_game_state_payload(
+        include_panel=True,
+        finish_source="game_state",
+        force_include_panel=want_panel,
+    )
     if not payload.get("ok"):
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
     return jsonify(payload)
