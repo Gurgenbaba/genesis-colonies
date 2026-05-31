@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, Mapping, Tuple
+import time
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 from .fleet_defs import FLEET_FUEL_RESOURCE, canonical_ship_key, get_ship, is_known_ship_key
 
-FLIGHT_TIME_BASE = 10.0
+# OGame-style flight-time divisor (seconds scale with distance and slowest hull speed).
+FLIGHT_TIME_DIVISOR = 35000.0
 FUEL_DISTANCE_DIVISOR = 35000.0
 FUEL_EFFICIENCY_PER_LEVEL = 0.03
 FUEL_EFFICIENCY_MIN_FACTOR = 0.5
@@ -66,12 +68,94 @@ def calculate_flight_seconds(
     slowest_ship_speed: int,
     speed_percent: int,
 ) -> int:
+    """OGame-style leg duration: (35000 / speed) * sqrt(distance / 10) adjusted by speed %."""
     if distance <= 0 or slowest_ship_speed <= 0:
         return 0
     pct = max(10, min(100, int(speed_percent)))
     speed_factor = pct / 100.0
-    seconds = (float(distance) * FLIGHT_TIME_BASE) / float(slowest_ship_speed) / speed_factor
+    dist = max(1.0, float(distance))
+    base = (FLIGHT_TIME_DIVISOR / float(slowest_ship_speed)) * math.sqrt(dist / 10.0)
+    seconds = base / speed_factor
     return max(1, int(math.ceil(seconds)))
+
+
+def movement_countdown_end_at(movement: Mapping[str, Any]) -> int:
+    """Absolute unix timestamp the client should count down to for this movement."""
+    status = str(movement.get("status") or "").strip().lower()
+    if status == "returning":
+        return max(0, int(movement.get("return_at") or movement.get("return_arrival_at") or 0))
+    if status == "holding":
+        return max(0, int(movement.get("holding_until") or 0))
+    if status == "outbound":
+        return max(0, int(movement.get("arrival_at") or 0))
+    return max(0, int(movement.get("countdown_at") or 0))
+
+
+def enrich_movement_timing(
+    movement: Mapping[str, Any],
+    *,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Attach canonical timing fields for fleet UI, overview, and APIs."""
+    ts = float(now if now is not None else time.time())
+    out = dict(movement)
+    status = str(movement.get("status") or "").strip().lower()
+    departure_at = max(0, int(movement.get("departure_at") or movement.get("departed_at") or 0))
+    arrival_at = max(0, int(movement.get("arrival_at") or 0))
+    return_at = max(0, int(movement.get("return_at") or 0))
+    holding_until = max(0, int(movement.get("holding_until") or 0))
+    duration_seconds = max(0, int(movement.get("duration_seconds") or movement.get("flight_seconds") or 0))
+
+    countdown_at = movement_countdown_end_at(out)
+    remaining_seconds = max(0, int(countdown_at - ts)) if countdown_at > 0 else 0
+
+    return_started_at = 0
+    return_arrival_at = 0
+    if status == "returning" and return_at > 0:
+        return_arrival_at = return_at
+        if duration_seconds > 0:
+            return_started_at = max(0, return_at - duration_seconds)
+        elif arrival_at > 0:
+            return_started_at = arrival_at
+
+    out.update(
+        {
+            "departed_at": departure_at,
+            "departure_at": departure_at,
+            "duration_seconds": duration_seconds,
+            "flight_seconds": duration_seconds,
+            "countdown_at": countdown_at,
+            "remaining_seconds": remaining_seconds,
+            "return_started_at": return_started_at,
+            "return_arrival_at": return_arrival_at,
+        }
+    )
+    return out
+
+
+def build_outbound_timing(*, departure_at: float, duration_seconds: int) -> Dict[str, int]:
+    """Outbound leg timestamps persisted on send."""
+    dep = max(0, int(departure_at))
+    dur = max(1, int(duration_seconds))
+    return {
+        "departure_at": dep,
+        "departed_at": dep,
+        "arrival_at": dep + dur,
+        "duration_seconds": dur,
+        "flight_seconds": dur,
+    }
+
+
+def build_return_timing(*, return_started_at: float, duration_seconds: int) -> Dict[str, int]:
+    """Return leg timestamps set when a mission starts its return flight."""
+    started = max(0, int(return_started_at))
+    dur = max(1, int(duration_seconds))
+    return_at = started + dur
+    return {
+        "return_started_at": started,
+        "return_arrival_at": return_at,
+        "return_at": return_at,
+    }
 
 
 def calculate_fuel_cost(

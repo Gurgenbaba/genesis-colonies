@@ -2058,6 +2058,9 @@
           const actKey = String(row.dataset.activityKey || "");
           if (actKey === "build") requestFinishRefresh("buildings");
           else if (actKey === "research") requestFinishRefresh("research");
+          else if (actKey.startsWith("fleet")) {
+            if (typeof GC.refreshGameState === "function") GC.refreshGameState("fleet_finished");
+          }
           else requestFinishRefresh("planet_evolution");
         }
       });
@@ -3114,13 +3117,22 @@
         return;
       }
       activeListEl.innerHTML = list.map((mv) => {
-        const countdown = mv.status === "returning" && mv.return_at
-          ? `<span>${tt("fleet_return_at")}: <time data-countdown="${mv.return_at}"></time></span>`
-          : mv.status === "holding" && mv.holding_until
-            ? `<span>${tt("fleet_holding_until")}: <time data-countdown="${mv.holding_until}"></time></span>`
-            : mv.arrival_at
-              ? `<span>${tt("fleet_arrival_at")}: <time data-countdown="${mv.arrival_at}"></time></span>`
-              : "";
+        const countdownAt = Number(
+          mv.countdown_at
+          || (mv.status === "returning" ? (mv.return_arrival_at || mv.return_at) : 0)
+          || (mv.status === "holding" ? mv.holding_until : 0)
+          || (mv.status === "outbound" ? mv.arrival_at : 0)
+          || 0
+        );
+        const countdown = countdownAt > 0
+          ? `<span>${tt(
+              mv.status === "returning"
+                ? "fleet_return_at"
+                : mv.status === "holding"
+                  ? "fleet_holding_until"
+                  : "fleet_arrival_at"
+            )}: <time data-countdown="${countdownAt}"></time></span>`
+          : "";
         const cargo = [];
         if (mv.resources?.metal) cargo.push(`${tt("resource_metal")}: ${Number(mv.resources.metal).toLocaleString()}`);
         if (mv.resources?.fuel_cells) cargo.push(`${tt("resource_fuel_cells")}: ${Number(mv.resources.fuel_cells).toLocaleString()}`);
@@ -3346,12 +3358,16 @@
           if (previewCargoFree) previewCargoFree.textContent = String(p.cargo_free || 0);
           if (previewFuel) previewFuel.textContent = String(p.fuel_cost || 0);
           if (previewFuelAvail) previewFuelAvail.textContent = String(p.fuel_available ?? rt.data.resources?.fuel_cells ?? "–");
-          if (previewFlight) previewFlight.textContent = formatFleetDuration(p.flight_seconds);
-          if (previewArrival && p.arrival_at) {
-            const nowSec = Math.floor(getApproxServerNow() || Date.now() / 1000);
-            previewArrival.textContent = formatFleetDuration(Math.max(0, Number(p.arrival_at) - nowSec));
-          } else if (previewArrival) {
-            previewArrival.textContent = formatFleetDuration(p.flight_seconds);
+          if (previewFlight) {
+            previewFlight.textContent = formatFleetDuration(p.duration_seconds ?? p.flight_seconds ?? 0);
+          }
+          if (previewArrival) {
+            if (p.arrival_at) {
+              const nowSec = Math.floor(getApproxServerNow() || Date.now() / 1000);
+              previewArrival.textContent = formatFleetDuration(Math.max(0, Number(p.arrival_at) - nowSec));
+            } else {
+              previewArrival.textContent = "–";
+            }
           }
           if (sendBtn) sendBtn.disabled = !p.can_send;
         } else {

@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Optional
 
+from .fleet_calc import enrich_movement_timing
 from .planet_evolution.ux_copy import planet_class_label_key
 
 # TODO: Persist planet surface temperature in DB; until then derive from planet_class.
@@ -108,10 +109,11 @@ def _fleet_movement_activity_lines(
         if not isinstance(mv, dict):
             continue
         status = str(mv.get("status") or "")
-        end_at = float(mv.get("arrival_at") or 0)
-        if status == "returning" and mv.get("return_at"):
-            end_at = float(mv["return_at"])
-        remaining = max(0, int(end_at - ts)) if end_at > 0 else 0
+        if status not in ("outbound", "holding", "returning"):
+            continue
+        enriched = enrich_movement_timing(mv, now=ts)
+        end_at = int(enriched.get("countdown_at") or 0)
+        remaining = int(enriched.get("remaining_seconds") or 0)
         mission = str(mv.get("mission_type") or "transport")
         target = str(mv.get("target_coords") or "")
         ship_count = sum(int(v) for v in (mv.get("ships") or {}).values())
@@ -122,7 +124,7 @@ def _fleet_movement_activity_lines(
                 state="active",
                 summary=summary,
                 remaining=remaining,
-                finish_at=int(end_at),
+                finish_at=end_at,
                 href_key="fleet_view",
                 label_key=f"fleet_mission_{mission}",
             )

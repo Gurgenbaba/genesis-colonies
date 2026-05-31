@@ -45,6 +45,7 @@ from game.fleet_calc import (
     calculate_flight_seconds,
     calculate_fuel_cost,
     calculate_total_cargo,
+    enrich_movement_timing,
     fuel_efficiency_factor,
     normalize_ships,
     validate_departure_balances,
@@ -223,6 +224,193 @@ def test_speed_percent_validation_range():
     sec_fast = calculate_flight_seconds(1000, 5000, 100)
     sec_slow = calculate_flight_seconds(1000, 5000, 10)
     assert sec_slow >= sec_fast
+
+
+def test_calculate_flight_seconds_ogame_scale():
+    same_system = calculate_flight_seconds(20, 5000, 100)
+    cross_system = calculate_flight_seconds(3815, 5000, 100)
+    assert same_system >= 1
+    assert cross_system > same_system
+    assert cross_system >= 60
+
+
+def test_enrich_movement_timing_outbound_returning_and_holding():
+    now = 1_700_000_000.0
+    outbound = enrich_movement_timing(
+        {
+            "status": "outbound",
+            "departure_at": int(now),
+            "arrival_at": int(now) + 300,
+            "flight_seconds": 300,
+        },
+        now=now,
+    )
+    assert outbound["countdown_at"] == int(now) + 300
+    assert outbound["remaining_seconds"] == 300
+    assert outbound["duration_seconds"] == 300
+
+    returning = enrich_movement_timing(
+        {
+            "status": "returning",
+            "departure_at": int(now),
+            "arrival_at": int(now) + 300,
+            "return_at": int(now) + 500,
+            "flight_seconds": 200,
+        },
+        now=now + 350,
+    )
+    assert returning["countdown_at"] == int(now) + 500
+    assert returning["return_arrival_at"] == int(now) + 500
+    assert returning["return_started_at"] == int(now) + 300
+    assert returning["remaining_seconds"] == 150
+
+    holding = enrich_movement_timing(
+        {
+            "status": "holding",
+            "departure_at": int(now),
+            "arrival_at": int(now) + 120,
+            "holding_until": int(now) + 3720,
+            "flight_seconds": 120,
+        },
+        now=now + 200,
+    )
+    assert holding["countdown_at"] == int(now) + 3720
+    assert holding["remaining_seconds"] == 3520
+
+
+def test_preview_send_flight_timing_parity(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000 WHERE id = ?;", (pid,))
+    _seed_ships(pid, uid, {"mule_courier": 3}, conn=conn)
+    cur.execute("SELECT * FROM planets WHERE id = ?;", (pid,))
+    origin = dict(cur.fetchone())
+    conn.commit()
+
+    preview = build_fleet_send_preview(
+        player_id=uid,
+        origin_planet=origin,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 0},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert preview["can_send"]
+    preview_dur = int(preview["duration_seconds"])
+    assert preview_dur == int(preview["flight_seconds"])
+    assert int(preview["arrival_at"]) - int(preview["departure_at"]) == preview_dur
+
+    ok, reason, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 0},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert ok, reason
+    fleet = result["fleet"]
+    assert int(fleet["flight_seconds"]) == preview_dur
+    assert int(fleet["arrival_at"]) - int(fleet["departure_at"]) == preview_dur
+    assert abs(int(fleet["arrival_at"]) - int(preview["arrival_at"])) <= 2
+    conn.close()
+
+
+def test_transport_return_timing_after_arrival(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000 WHERE id = ?;", (pid,))
+    _seed_ships(pid, uid, {"mule_courier": 3}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 100},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    cur.execute(
+        "SELECT flight_seconds FROM fleet_movements WHERE id = ?;",
+        (fleet_id,),
+    )
+    leg = int(cur.fetchone()["flight_seconds"])
+    now = time.time()
+    cur.execute(
+        "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+        (now - 1, fleet_id),
+    )
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute(
+        "SELECT status, return_at FROM fleet_movements WHERE id = ?;",
+        (fleet_id,),
+    )
+    mv = dict(cur.fetchone())
+    assert mv["status"] == "returning"
+    assert int(mv["return_at"]) >= int(now) + leg - 2
+    assert int(mv["return_at"]) <= int(now) + leg + 2
+    conn.close()
+
+
+def test_overview_fleet_timing_matches_active_movement(fleet_db):
+    from game.fleet import list_active_movements
+    from game.overview_page import _fleet_movement_activity_lines
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000 WHERE id = ?;", (pid,))
+    _seed_ships(pid, uid, {"mule_courier": 3}, conn=conn)
+    conn.commit()
+
+    ok, _, _ = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        conn=conn,
+    )
+    assert ok
+    now = time.time()
+    movements = list_active_movements(uid, conn=conn)
+    assert movements
+    mv = movements[0]
+    lines = _fleet_movement_activity_lines(movements, now=now)
+    fleet_line = next(line for line in lines if line["key"].startswith("fleet_"))
+    assert fleet_line["finish_at"] == mv["countdown_at"]
+    assert fleet_line["remaining"] == mv["remaining_seconds"]
+    conn.close()
 
 
 # --- Schema ---

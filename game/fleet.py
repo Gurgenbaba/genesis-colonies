@@ -12,12 +12,15 @@ from .db import begin_write_transaction, commit, db, lock_planet_for_update, rol
 from .fleet_calc import (
     apply_departure_deduction,
     build_flight_preview_payload,
+    build_outbound_timing,
+    build_return_timing,
     calculate_distance,
     calculate_fleet_speed,
     calculate_flight_seconds,
     calculate_fuel_cost,
     calculate_loaded_resources,
     calculate_total_cargo,
+    enrich_movement_timing,
     loaded_resource_total,
     normalize_ships,
     validate_departure_balances,
@@ -726,7 +729,9 @@ def build_fleet_send_preview(
             conn=conn,
         )
         now = _now()
-        arrival_at = now + int(flight.get("flight_seconds") or 0) if ships_n else None
+        flight_seconds = int(flight.get("flight_seconds") or 0)
+        outbound = build_outbound_timing(departure_at=now, duration_seconds=flight_seconds)
+        arrival_at = outbound["arrival_at"] if ships_n else None
 
         can_send = False
         block_reason = ""
@@ -755,7 +760,9 @@ def build_fleet_send_preview(
             "mission_block_reason": mission_reason if not mission_ok else "",
             "can_send": can_send and mission_ok,
             "block_reason": block_reason or (mission_reason if not mission_ok else ""),
+            "departure_at": outbound["departure_at"] if ships_n else None,
             "arrival_at": arrival_at,
+            "duration_seconds": outbound["duration_seconds"] if ships_n else 0,
         }
     finally:
         if own and conn is not None:
@@ -923,7 +930,7 @@ def list_active_movements(player_id: int, *, conn=None) -> List[Dict[str, Any]]:
                 )
             except GalaxyCoordinateError:
                 mv["origin_coords"] = ""
-            out.append(mv)
+            out.append(enrich_movement_timing(mv, now=_now()))
         return out
     finally:
         if own and conn is not None:
@@ -1274,7 +1281,8 @@ def send_fleet(
 
         now = _now()
         flight_seconds = int(preview["flight_seconds"])
-        arrival_at = now + flight_seconds
+        outbound = build_outbound_timing(departure_at=now, duration_seconds=flight_seconds)
+        arrival_at = outbound["arrival_at"]
 
         cur.execute(
             """
@@ -1314,8 +1322,10 @@ def send_fleet(
             commit(conn)
 
         result = {
-            "fleet": _row_to_movement(
-                conn.execute("SELECT * FROM fleet_movements WHERE id = ?;", (fleet_id,)).fetchone()
+            "fleet": enrich_movement_timing(
+                _row_to_movement(
+                    conn.execute("SELECT * FROM fleet_movements WHERE id = ?;", (fleet_id,)).fetchone()
+                )
             ),
             "updated_ships": get_planet_ships(int(origin_planet_id), conn=conn),
             "updated_resources": {
@@ -1356,16 +1366,31 @@ def _claim_movement_status(
     return int(cur.rowcount or 0) > 0
 
 
+def _return_leg_seconds(movement: Mapping[str, Any]) -> int:
+    return max(1, int(movement.get("flight_seconds") or movement.get("duration_seconds") or 0))
+
+
+def _return_timing_from_now(
+    movement: Mapping[str, Any],
+    *,
+    now: float,
+    delay_seconds: int = 0,
+) -> Dict[str, int]:
+    started = int(now) + max(0, int(delay_seconds))
+    return build_return_timing(return_started_at=started, duration_seconds=_return_leg_seconds(movement))
+
+
 def _start_return(
     movement: Dict[str, Any],
     *,
     conn,
     now: float,
     remaining_resources: Mapping[str, Any] | None = None,
+    delay_seconds: int = 0,
 ) -> bool:
     resources = remaining_resources if remaining_resources is not None else movement.get("resources") or {}
-    flight_seconds = int(movement.get("flight_seconds") or 1)
-    return_at = now + flight_seconds
+    timing = _return_timing_from_now(movement, now=now, delay_seconds=delay_seconds)
+    return_at = timing["return_at"]
     return _claim_movement_status(
         conn,
         int(movement["id"]),
@@ -1929,8 +1954,8 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
     coords = movement.get("target_coords") or ""
 
     if mission == "transport":
-        flight_seconds = int(movement.get("flight_seconds") or 1)
-        return_at = now + flight_seconds
+        timing = _return_timing_from_now(movement, now=now)
+        return_at = timing["return_at"]
         claimed = _claim_movement_status(
             conn,
             movement_id,
@@ -2004,8 +2029,8 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         return
 
     if mission == "collect":
-        flight_seconds = int(movement.get("flight_seconds") or 1)
-        return_at = now + flight_seconds
+        timing = _return_timing_from_now(movement, now=now)
+        return_at = timing["return_at"]
         current_loaded = calculate_loaded_resources(resources)
         cargo_total = calculate_total_cargo(ships)
         remaining_cap = max(0, cargo_total - loaded_resource_total(current_loaded))
@@ -2105,8 +2130,8 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         probe_count = _spy_probe_count(ships)
         body, meta = _build_spy_report_body(snapshot, probe_count)
         meta["fleet_id"] = movement_id
-        flight_seconds = int(movement.get("flight_seconds") or 1)
-        return_at = now + flight_seconds
+        timing = _return_timing_from_now(movement, now=now)
+        return_at = timing["return_at"]
         claimed = _claim_movement_status(
             conn,
             movement_id,
@@ -2149,8 +2174,8 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
             defending_ships=defending_ships,
         )
         meta["fleet_id"] = movement_id
-        flight_seconds = int(movement.get("flight_seconds") or 1)
-        return_at = now + flight_seconds
+        timing = _return_timing_from_now(movement, now=now)
+        return_at = timing["return_at"]
         claimed = _claim_movement_status(
             conn,
             movement_id,
@@ -2213,8 +2238,8 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         )
         rewards = outcome["rewards"]
         delay_extra = int(outcome.get("delay_extra") or 0)
-        flight_seconds = flight_seconds_base + delay_extra
-        return_at = now + flight_seconds
+        timing = _return_timing_from_now(movement, now=now, delay_seconds=delay_extra)
+        return_at = timing["return_at"]
         claimed = _claim_movement_status(
             conn,
             movement_id,
@@ -2282,8 +2307,8 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         return_ships = {k: v for k, v in return_ships.items() if int(v or 0) > 0}
 
         if return_ships:
-            flight_seconds = int(movement.get("flight_seconds") or 1)
-            return_at = now + flight_seconds
+            timing = _return_timing_from_now(movement, now=now)
+            return_at = timing["return_at"]
             claimed = _claim_movement_status(
                 conn,
                 movement_id,
