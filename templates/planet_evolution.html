@@ -12,7 +12,12 @@
     <div class="job-header">
       <span class="job-name">{{ T(job.label_key, job.tech_key) }}</span>
       <span class="job-time{% if not is_first %} job-time-muted{% endif %}"{% if is_first %} data-pe-research-eta{% endif %}>
-        {% if is_first %}~{{ (job.seconds_remaining // 3600) }}h {{ ((job.seconds_remaining % 3600) // 60) }}m{% else %}{{ T("status_in_queue", "In Warteschlange") }}{% endif %}
+        {% if is_first %}
+          {% set rem = job.seconds_remaining|int %}
+          {% if rem >= 3600 %}{{ rem // 3600 }}h {{ (rem % 3600) // 60 }}m {{ rem % 60 }}s
+          {% elif rem >= 60 %}{{ rem // 60 }}m {{ rem % 60 }}s
+          {% else %}{{ rem }}s{% endif %}
+        {% else %}{{ T("status_in_queue", "In Warteschlange") }}{% endif %}
       </span>
     </div>
     <div class="research-bar research-bar-large" aria-label="{{ T('progress', 'Fortschritt') }}">

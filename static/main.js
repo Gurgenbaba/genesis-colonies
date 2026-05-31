@@ -1019,9 +1019,21 @@
       _lastResearchQueueSignature = "";
 
       const run = () => {
-        Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${key}_finished`) : null).finally(() => {
-          GC.finishLocks[key] = false;
-        });
+        const refresh = () => {
+          if (
+            key === "planet_evolution" &&
+            document.querySelector(".planet-evolution-page") &&
+            typeof GC.reloadCurrentPage === "function"
+          ) {
+            return Promise.resolve(GC.reloadCurrentPage()).finally(() => {
+              GC.finishLocks[key] = false;
+            });
+          }
+          return Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${key}_finished`) : null).finally(() => {
+            GC.finishLocks[key] = false;
+          });
+        };
+        refresh();
       };
 
       if (GC.finishLocks[key]) {
@@ -1891,6 +1903,31 @@
     fillEl.setAttribute("aria-valuenow", String(Math.round(clamped)));
   }
 
+  function updatePlanetEvolutionResearchProgress(serverNow) {
+    const now = serverNow ?? getApproxServerNow();
+    let overdue = false;
+    document.querySelectorAll(".planet-evolution-page .pe-planet-research-active").forEach((peActive) => {
+      const finishTime = Number(peActive.dataset.finishTime || 0);
+      const total = Math.max(1, Number(peActive.dataset.total || 1));
+      if (!finishTime) return;
+      const remaining = Math.max(0, finishTime - now);
+      const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
+      const fill = peActive.querySelector(".pe-planet-research-fill");
+      const etaEl = peActive.querySelector("[data-pe-research-eta]");
+      const pctEl = peActive.querySelector("[data-pe-research-pct]");
+      if (fill) _applyProgressFill(fill, pct);
+      if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
+      if (pctEl) _setIfChanged(pctEl, `${Math.round(pct)}%`);
+      if (remaining <= 0) overdue = true;
+    });
+    if (overdue) {
+      document.querySelectorAll(".planet-evolution-page .pe-planet-research-fill").forEach((fill) => {
+        _applyProgressFill(fill, 100);
+      });
+      requestFinishRefresh("planet_evolution");
+    }
+  }
+
   function updateAllProgressBars() {
     const serverNow = getApproxServerNow();
 
@@ -1974,30 +2011,7 @@
       });
     }
 
-    const peActive = document.querySelector(".planet-evolution-page .pe-planet-research-active");
-    if (peActive) {
-      const finishTime = Number(peActive.dataset.finishTime || 0);
-      const total = Math.max(1, Number(peActive.dataset.total || 1));
-      if (finishTime) {
-        const remaining = Math.max(0, finishTime - serverNow);
-        const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
-        const fill = peActive.querySelector(".pe-planet-research-fill");
-        const etaEl = peActive.querySelector("[data-pe-research-eta]");
-        const pctEl = peActive.querySelector("[data-pe-research-pct]");
-        if (fill) _applyProgressFill(fill, pct);
-        if (etaEl) {
-          const s = Math.max(0, Math.ceil(remaining));
-          const h = Math.floor(s / 3600);
-          const m = Math.floor((s % 3600) / 60);
-          _setIfChanged(etaEl, h > 0 ? `~${h}h ${m}m` : `~${m}m`);
-        }
-        if (pctEl) _setIfChanged(pctEl, `${Math.round(pct)}%`);
-        if (remaining <= 0) {
-          _applyProgressFill(fill, 100);
-          requestFinishRefresh("planet_evolution");
-        }
-      }
-    }
+    updatePlanetEvolutionResearchProgress(serverNow);
   }
 
   function updateBuildQueueLive() {
@@ -4314,6 +4328,7 @@
 
   function syncPlanetEvolutionResearchTicker() {
     if (!document.querySelector(".planet-evolution-page .pe-planet-research-active")) return;
+    updatePlanetEvolutionResearchProgress();
     GC.startProgressTicker();
   }
 

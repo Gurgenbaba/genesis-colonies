@@ -97,9 +97,11 @@ def test_main_js_progress_ticker_uses_server_time_and_interval():
     ticker_section = src.split("GC.startProgressTicker = function startProgressTicker()")[1].split("GC.stopPolling")[0]
     assert "setInterval(tick, 1000)" in ticker_section
     assert "requestAnimationFrame(tick)" not in ticker_section
-    update_section = src.split("function updateAllProgressBars()")[1].split("function updateBuildQueueLive")[0]
-    assert "if (!serverNow) return;" not in update_section
-    assert "pe-planet-research-fill" in update_section
+    update_section = src.split("function updatePlanetEvolutionResearchProgress")[1].split("function updateAllProgressBars")[0]
+    assert "querySelectorAll(\".planet-evolution-page .pe-planet-research-active\")" in update_section
+    assert "formatEta(Math.ceil(remaining))" in update_section
+    update_all = src.split("function updateAllProgressBars()")[1].split("function updateBuildQueueLive")[0]
+    assert "updatePlanetEvolutionResearchProgress(serverNow)" in update_all
 
 
 def test_main_js_init_page_resumes_chat_after_pjax():
