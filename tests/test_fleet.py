@@ -29,6 +29,8 @@ from game.fleet import (
     resolve_fleet_target,
     send_fleet,
     update_preset,
+    _build_spy_report_body,
+    _target_planet_snapshot,
 )
 from game.alliance import add_alliance_member, create_alliance
 from game.fleet_calc import (
@@ -701,8 +703,118 @@ def test_spy_creates_report(fleet_db):
     assert msgs["ok"]
     assert len(msgs["data"]["messages"]) >= 1
     meta = msgs["data"]["messages"][0].get("metadata") or {}
-    assert "resources" in meta
-    assert "ships" in meta or "buildings" in meta
+    assert meta.get("report_version") == 2
+    assert meta.get("intel_tiers", {}).get("target") is True
+    assert meta.get("intel_tiers", {}).get("resources") is False
+    assert meta.get("resources") == {}
+    conn.close()
+
+
+def _spy_report_meta(
+    conn,
+    *,
+    uid: int,
+    origin_pid: int,
+    target_g: int,
+    target_s: int,
+    target_p: int,
+    probes: int,
+) -> dict:
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=origin_pid,
+        target_galaxy=target_g,
+        target_system=target_s,
+        target_position=target_p,
+        mission_type="spy",
+        ships={"veil_probe": probes},
+        conn=conn,
+    )
+    assert ok, result
+    fleet_id = result["fleet"]["id"]
+    cur = conn.cursor()
+    cur.execute("UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;", (time.time() - 1, fleet_id))
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    msgs = list_messages(uid, category="espionage")
+    return msgs["data"]["messages"][0].get("metadata") or {}
+
+
+def test_spy_report_tier2_reveals_resources(fleet_db):
+    _foreign_uid, foreign_pid, (g, s, p) = _foreign_planet_standalone()
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _fund_planet(cur, foreign_pid, metal=12000, crystal=3400, fuel_cells=99)
+    _seed_ships(pid, uid, {"veil_probe": 5}, conn=conn)
+    conn.commit()
+
+    meta = _spy_report_meta(conn, uid=uid, origin_pid=pid, target_g=g, target_s=s, target_p=p, probes=2)
+    tiers = meta.get("intel_tiers") or {}
+    assert tiers.get("resources") is True
+    assert tiers.get("fuel") is False
+    res = meta.get("resources") or {}
+    assert res.get("metal") == 12000
+    assert res.get("crystal") == 3400
+    assert "fuel_cells" not in res
+    conn.close()
+
+
+def test_spy_report_tier4_reveals_fleet(fleet_db):
+    foreign_uid, foreign_pid, (g, s, p) = _foreign_planet_standalone()
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"veil_probe": 6}, conn=conn)
+    _seed_ships(foreign_pid, foreign_uid, {"falcon_interceptor": 3, "mule_courier": 2}, conn=conn)
+    conn.commit()
+
+    meta = _spy_report_meta(conn, uid=uid, origin_pid=pid, target_g=g, target_s=s, target_p=p, probes=4)
+    tiers = meta.get("intel_tiers") or {}
+    assert tiers.get("fleet") is True
+    assert tiers.get("buildings") is False
+    ships = meta.get("ships") or {}
+    assert ships
+    assert sum(int(v) for v in ships.values()) > 0
+    conn.close()
+
+
+def test_spy_report_tier5_reveals_buildings_and_energy(fleet_db):
+    foreign_uid, foreign_pid, (g, s, p) = _foreign_planet_standalone()
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"veil_probe": 6}, conn=conn)
+    cur.execute(
+        """
+        UPDATE planet_buildings
+        SET metal_mine = 5, solar_plant = 3, orbital_shipyard = 2
+        WHERE planet_id = ?;
+        """,
+        (int(foreign_pid),),
+    )
+    cur.execute(
+        "UPDATE planets SET energy_total = 120, energy_used = 80 WHERE id = ?;",
+        (int(foreign_pid),),
+    )
+    conn.commit()
+
+    snapshot = _target_planet_snapshot(int(foreign_pid), conn=conn)
+    _, meta = _build_spy_report_body(snapshot, 5)
+    tiers = meta.get("intel_tiers") or {}
+    assert tiers.get("buildings") is True
+    assert tiers.get("activity") is False
+    assert meta.get("energy", {}).get("balance") == 40
+    buildings = meta.get("buildings") or {}
+    assert buildings.get("metal_mine") == 5
+    assert len(buildings) == 1
     conn.close()
 
 

@@ -1,6 +1,6 @@
 # Genesis Colonies — Roadmap
 
-Geplante Entwicklungsphasen und Meilensteine. Stand: **v1.5.1** (Alpha).
+Geplante Entwicklungsphasen und Meilensteine. Stand: **v1.5.3** (Alpha).
 
 Status-Legende:
 
@@ -11,64 +11,123 @@ Status-Legende:
 | 📋 | Geplant |
 | 💡 | Idee / Backlog |
 
+**Epics → Tickets:** Epics werden nicht direkt implementiert. Siehe Ticket-Workflow in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ---
 
 ## Phase 0 — Foundation ✅
-
-Infrastruktur und Architektur-Basis (abgeschlossen).
 
 | Item | Status |
 |------|--------|
 | Flask + SQLite + Jinja2 | ✅ |
 | Installer (`scripts/install.py`) | ✅ |
 | Environment & Config Guards | ✅ |
-| SQL-Migrationen (`006`–`010`) | ✅ |
+| SQL-Migrationen (`006`–`032`) | ✅ |
 | Health Endpoint (`/health`) | ✅ |
 | Docker + Gunicorn Deployment | ✅ |
 | DB-Abstraction (`game/db.py`) | ✅ |
 | Bootstrap & Migration Guard | ✅ |
-| pytest-Suite (31 Tests) | ✅ |
+| pytest-Suite (**513 Tests**) | ✅ |
 
 ---
 
 ## Phase 1 — Economy Core ✅
 
-Spielbarer Wirtschaftskern.
-
 | Item | Status |
 |------|--------|
 | Auth (Register/Login/Logout) | ✅ |
-| Ressourcen-Tick (Ferronit, Crytite, Aetherion) | ✅ |
+| E-Mail-Verifikation & Passwort-Reset | ✅ |
+| Ressourcen-Tick (Ferronit, Crytite, Brennzellen) | ✅ |
+| Energie-System + EffectResolver | ✅ |
 | Gebäude bauen / upgraden | ✅ |
 | Bau-Queue mit Limit | ✅ |
-| Forschung + Queue | ✅ |
+| Account-Forschung + Queue | ✅ |
 | Tech-Tree Visualisierung | ✅ |
 | Ranking & Player Scores | ✅ |
 | SPA/PJAX Navigation | ✅ |
 | Live-Polling + rAF Queue-UI | ✅ |
 | Idempotente Build/Research APIs | ✅ |
+| Queue-Engine (zentral) | ✅ |
 | Race-safe Queue Tests | ✅ |
+
+Docs: [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md), [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md), [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md)
 
 ---
 
 ## Phase 2 — Operations & Admin ✅
 
-Betrieb und Administration.
-
 | Item | Status |
 |------|--------|
-| Admin Control Center (8 Tabs) | ✅ |
+| Admin Control Center | ✅ |
 | Admin JSON API (`/api/admin/*`) | ✅ |
 | Audit Log | ✅ |
 | Queue-Management (cancel, finish-due, clear) | ✅ |
 | Player/Planet-Tools | ✅ |
+| Balance Editor (`admin_balance`) | ✅ |
 | Legacy Admin Forms (parallel) | ✅ |
 | MOTD & Universe Settings | ✅ |
 | Ban-System | ✅ |
+| Support-Tickets (Spieler + Admin) | ✅ |
 
 ---
 
-## Phase 3 — Security Hardening 📋
+## Phase 3 — Multi-Kolonie & Planet Evolution ✅
+
+| Item | Status |
+|------|--------|
+| Planet Scope (`active_planet_id`) | ✅ |
+| Header Planet Switcher | ✅ |
+| Kolonisierung (Fleet + API) | ✅ |
+| Planet Evolution (DNA, Traits, Level) | ✅ |
+| Planet-Forschung (separat von Account-Tech) | ✅ |
+| Specialization, Policies, Events | ✅ |
+| Trade Routes / Economy Chains | ✅ |
+| Planet löschen (Non-Homeworld) | ✅ |
+
+Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md)
+
+---
+
+## Phase 4 — Military & Expansion 🔄
+
+| Item | Status | Notizen |
+|------|--------|---------|
+| **Galaxie** — Karte, Slots, Koordinaten | ✅ | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) |
+| **Werft** — Schiffsbau, Queue, fuel_cells | ✅ | `orbital_shipyard` |
+| **Flotte** — Send, Tick, Missionen | ✅ | Combat placeholder |
+| **Trader Hub** — Exchange, Fuel, Scrapyard | ✅ | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
+| **Verteidigung** — Türme, Schilder | 📋 | UI only `/defense` |
+| Kampf-Auflösung | 📋 | Attack mission → stub report |
+| Fleet Logistics (collect/distribute) | 📋 | API returns not_implemented |
+| Recycler-Mission | 💡 | Ship def exists |
+| Espionage (beyond probe report) | ✅ | GC-401 tiered intel + inbox UI |
+
+Docs: [FLEET_SYSTEM.md](FLEET_SYSTEM.md)
+
+Empfohlene Reihenfolge (verbleibend):
+
+```
+Combat Resolver → Defense buildings → Logistics → Recycler
+```
+
+---
+
+## Phase 5 — Social & Meta 🔄
+
+| Item | Status | Notizen |
+|------|--------|---------|
+| **PlayerCard** — Profil, Stats | ✅ | `/api/player-card/*` |
+| **Messages** — Inbox, Send | ✅ | Flotten-/System-Mails |
+| **Chat** — Rooms, DM, Alliance room | ✅ | Rate limit in-process |
+| Chat Admin (mute, ban, delete) | ✅ | |
+| **Allianz** — Hub UI | 🔄 | `alliance.py` minimal; `/alliance` teils UI |
+| Allianz Gründung / Rechte / Diplomatie | 📋 | |
+| **Ranking** — Live API | ✅ | |
+| Marketplace (Spieler-Handel) | 💡 | |
+
+---
+
+## Phase 6 — Security Hardening 📋
 
 Vor öffentlichem Production-Launch.
 
@@ -76,118 +135,90 @@ Vor öffentlichem Production-Launch.
 |------|-----------|--------|
 | Passwort-KDF (bcrypt/argon2) | P0 | 📋 |
 | Rate-Limiting Login/Register | P0 | 📋 |
-| Session-Cookie Flags (`Secure`, `SameSite`) | P1 | 📋 |
-| CSRF-Schutz HTML-Forms | P1 | 📋 |
-| Security-Headers (HSTS, nosniff) | P2 | 📋 |
-| Failed-Login-Logging | P2 | 📋 |
+| Session-Cookie Flags | P1 | 📋 |
+| CSRF HTML-Forms | P1 | 📋 |
+| Security-Headers | P2 | 📋 |
 
 Details: [SECURITY.md](SECURITY.md)
 
 ---
 
-## Phase 4 — Military & Expansion 🔄
-
-Kampf und Reichweite — UI-Vorschau existiert, Mechanik fehlt.
-
-| Item | Status | Abhängigkeiten |
-|------|--------|----------------|
-| **Galaxie** — Karte, Slots, Kolonisierung | 📋 UI ✅ | Planet-Modell, Koordinaten-System |
-| **Werft** — Schiffsbau, Queue | 📋 UI ✅ | Tech-Tree, Ressourcen, Queue-Pattern |
-| **Verteidigung** — Türme, Schilder | 📋 UI ✅ | Gebäude-System, Kampf-Formeln |
-| **Flotte** — Missionen, Bewegung | 📋 UI ✅ | Werft, Galaxie, Travel-Time |
-| Kampf-Auflösung (Kampfberichte) | 📋 | Flotte, Verteidigung |
-| Espionage | 💡 | Forschung, Galaxie |
-
-Empfohlene Reihenfolge:
-
-```
-Galaxie (Koordinaten) → Werft (Units) → Flotte (Movement) → Verteidigung → Combat Resolver
-```
-
----
-
-## Phase 5 — Social & Meta 📋
+## Phase 7 — Platform & Scale 📋
 
 | Item | Status | Notizen |
-|------|--------|---------|
-| **Allianz** — Gründung, Mitglieder, Rechte | 📋 UI ✅ | Eigene Tabellen, Permissions |
-| **PlayerCard** — Profil, Stats, Historie | 📋 | Ranking-Daten wiederverwenden |
-| **Chat** — Allianz / Universe | 📋 | Redis oder Polling; Moderation |
-| **Marketplace** — Handel | 💡 | Economy-Balance kritisch |
-| Nachrichten / Berichte-Inbox | 💡 | Flottenberichte, System-Mails |
+|------|--------|--------|
+| PostgreSQL Backend | 📋 | Hooks in `game/db.py` |
+| Multi-Worker / horizontale Skalierung | 📋 | Benötigt Postgres + Locks |
+| Redis Sessions/Cache/Chat rate limit | 💡 | |
+| WebSocket Push (optional) | 💡 | Polling bleibt Fallback |
+| i18n UI-Switch (DE/EN) | 🔄 | `game/i18n.py`, `en.json`; Default `de` |
+| CDN / Asset-Pipeline | 💡 | `VERSION` Cache-Bust |
 
 ---
 
-## Phase 6 — Platform & Scale 📋
-
-| Item | Status | Notizen |
-|------|--------|---------|
-| PostgreSQL Backend | 📋 | Hooks in `game/db.py` vorhanden |
-| Horizontale Skalierung (Multi-Worker) | 📋 | Benötigt Postgres + Locks |
-| Redis Sessions/Cache | 💡 | `REDIS_URL` in `.env.example` |
-| E-Mail (`MAIL_*`) | 💡 | Registrierung, Berichte |
-| WebSocket Push (optional) | 💡 | Polling als Fallback behalten |
-| i18n UI-Switch (DE/EN) | 🔄 | `en.json` existiert; `GC_LOCALE` hardcoded `de` |
-| CDN / Asset-Pipeline | 💡 | Aktuell statische Dateien + `VERSION` Cache-Bust |
-
----
-
-## Phase 7 — Polish & Live Ops 💡
+## Phase 8 — Polish & Live Ops 💡
 
 | Item | Status |
 |------|--------|
-| Balancing-Tooling (Admin) | 💡 |
-| Analytics / Metrics Export | 💡 |
-| Automated Backups (Operator-Docs) | 📋 teilweise in DEPLOYMENT |
-| Bugbot / CI Pipeline | 💡 |
-| Tutorial / Onboarding Flow | 💡 |
-| Season / Universe-Reset-Zyklen | 💡 |
+| Balancing-Tooling (Admin) | 🔄 teilweise |
+| Tutorial / Onboarding | 💡 |
+| Season / Universe-Reset | 💡 |
+| CI Pipeline | 💡 |
+| Automated Backups | 📋 teilweise [DEPLOYMENT.md](DEPLOYMENT.md) |
 
 ---
 
-## Meilenstein-Übersicht (Timeline-Richtung)
+## Meilenstein-Übersicht
 
 ```
-2025 Q1–Q2   Phase 0–2 ✅  Foundation, Economy, Admin
-2025 Q3      Phase 3       Security Hardening
-2025 Q4      Phase 4a      Galaxie + Werft (spielbar)
-2026 Q1      Phase 4b      Flotte + Verteidigung + Combat
-2026 Q2      Phase 5       Allianz + Chat
-2026+        Phase 6       Postgres, Scale, i18n
+2025 Q1–Q2   Phase 0–2 ✅   Foundation, Economy, Admin
+2025 Q3–Q4   Phase 3–4 🔄   Multi-Kolonie, Galaxy, Fleet
+2026 Q1      Phase 4b 📋     Combat, Defense, Logistics
+2026 Q2      Phase 5–6       Alliance polish, Security, Scale
 ```
 
-*Timeline ist orientierend — keine festen Release-Daten.*
+*Timeline orientierend — keine festen Release-Daten.*
 
 ---
 
 ## Technische Schulden (bekannt)
 
-| Thema | Impact | Ziel-Phase |
-|-------|--------|------------|
-| SHA-256 Passwörter | Security | Phase 3 |
-| Kein Rate-Limiting | Abuse | Phase 3 |
-| `GC_LOCALE` hardcoded | i18n | Phase 6 |
-| Legacy Admin Forms doppelt | Wartung | Phase 2→3 Cleanup |
-| SQLite Single-Writer | Scale | Phase 6 |
-| WIP-Seiten ohne Backend | UX-Erwartung | Phase 4 |
+| Thema | Impact | Ziel |
+|-------|--------|------|
+| SHA-256 Passwörter | Security | Phase 6 |
+| Kein Rate-Limiting (Login) | Abuse | Phase 6 |
+| Chat rate limit in-process | Multi-worker | Redis |
+| Combat / Defense placeholder | Gameplay | Phase 4b |
+| Legacy Admin Forms doppelt | Wartung | Cleanup |
+| SQLite Single-Writer | Scale | Phase 7 |
+| README vs VERSION drift | Docs | README auf 1.5.3 |
+| `fleet_presets` CHECK ohne colonize | Schema | Migration fix |
 
 ---
 
-## Wie Roadmap-Items priorisieren
+## Epic → Ticket Mapping (Beispiele)
 
-1. **Spieler-sichtbarer Wert** — neue Mechanik schlägt Refactor
-2. **Security vor Launch** — Phase 3 blockiert Public Beta
-3. **Wiederverwendung** — Queues, Idempotenz, Admin-Muster für neue Module nutzen
-4. **Tests mitliefern** — jede Queue/DB-Änderung braucht pytest-Abdeckung
+| Epic | Beispiel-Tickets |
+|------|------------------|
+| EPIC-02 Fleet | GC-301 Planet Scope Sync, GC-302 Preview origin |
+| EPIC-03 Galaxy | GC-310 Live slot API client |
+| EPIC-04 Economy | GC-320 Fuel bar sync |
+| EPIC-05 Planet Evolution | GC-330 Policy cooldown UI |
 
-Vorschläge: Issue mit Label `roadmap` + Verweis auf Phase.
+---
+
+## Priorisierung
+
+1. **Spieler-sichtbarer Wert** — Mechanik vor Refactor
+2. **Security vor Public Beta** — Phase 6 blockiert Launch
+3. **Kanonische Systeme** — kein Parallel-Build (siehe [ARCHITECTURE.md](ARCHITECTURE.md))
+4. **Tests mitliefern** — jede Queue/DB-Änderung braucht pytest
 
 ---
 
 ## Verwandte Dokumente
 
-- [README](../README.md) — Aktueller Feature-Status
-- [ARCHITECTURE.md](ARCHITECTURE.md) — Erweiterungspunkte im Code
-- [SECURITY.md](SECURITY.md) — Phase-3-Details
-- [CONTRIBUTING.md](CONTRIBUTING.md) — Beitrags-Workflow
-- [ALPHA_TESTPLAN.md](ALPHA_TESTPLAN.md) — Manuelle Tests pro Release
+- [ARCHITECTURE.md](ARCHITECTURE.md) — Systemübersicht
+- [ALPHA_TESTPLAN.md](ALPHA_TESTPLAN.md) — Manuelle Tests
+- [SECURITY.md](SECURITY.md) — Phase 6 Details
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Ticket-Workflow

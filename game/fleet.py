@@ -1399,11 +1399,21 @@ def _player_name(player_id: int, *, conn) -> str:
     return str(row["name"] if row else f"Player {player_id}")
 
 
+SPY_INTEL_TIER_TARGET = 1
+SPY_INTEL_TIER_RESOURCES = 2
+SPY_INTEL_TIER_FUEL = 3
+SPY_INTEL_TIER_FLEET = 4
+SPY_INTEL_TIER_BUILDINGS = 5
+SPY_INTEL_TIER_ACTIVITY = 6
+SPY_REPORT_VERSION = 2
+
+
 def _target_planet_snapshot(planet_id: int, *, conn) -> Dict[str, Any]:
     cur = conn.cursor()
     cur.execute(
         """
         SELECT p.id, p.name, p.player_id, p.metal, p.crystal, p.fuel_cells,
+               p.energy_total, p.energy_used,
                p.galaxy, p.system, p.position, pl.name AS owner_name
         FROM planets p
         INNER JOIN players pl ON pl.id = p.player_id
@@ -1433,6 +1443,8 @@ def _target_planet_snapshot(planet_id: int, *, conn) -> Dict[str, Any]:
             if lvl > 0:
                 buildings[str(key)] = lvl
     ships = get_planet_ships(int(planet_id), conn=conn)
+    energy_total = int(data.get("energy_total") or 0)
+    energy_used = int(data.get("energy_used") or 0)
     return {
         "planet_id": int(planet_id),
         "planet_name": str(data.get("name") or ""),
@@ -1444,9 +1456,47 @@ def _target_planet_snapshot(planet_id: int, *, conn) -> Dict[str, Any]:
             "crystal": int(float(data.get("crystal") or 0)),
             "fuel_cells": int(float(data.get("fuel_cells") or 0)),
         },
+        "energy": {
+            "total": energy_total,
+            "used": energy_used,
+            "balance": energy_total - energy_used,
+        },
         "buildings": buildings,
         "ships": ships,
+        "activity": _target_fleet_activity(int(planet_id), conn=conn),
     }
+
+
+def _target_fleet_activity(planet_id: int, *, conn) -> List[Dict[str, Any]]:
+    if not table_exists(conn, "fleet_movements"):
+        return []
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT mission_type, status, target_galaxy, target_system, target_position
+        FROM fleet_movements
+        WHERE origin_planet_id = ?
+          AND status IN ('outbound', 'holding', 'returning')
+        ORDER BY departure_at DESC
+        LIMIT 8;
+        """,
+        (int(planet_id),),
+    )
+    rows: List[Dict[str, Any]] = []
+    for row in cur.fetchall():
+        data = dict(row)
+        rows.append(
+            {
+                "mission": str(data.get("mission_type") or ""),
+                "status": str(data.get("status") or ""),
+                "coords": format_coordinates(
+                    int(data["target_galaxy"]),
+                    int(data["target_system"]),
+                    int(data["target_position"]),
+                ),
+            }
+        )
+    return rows
 
 
 def _spy_probe_count(ships: Mapping[str, int]) -> int:
@@ -1458,58 +1508,237 @@ def _spy_probe_count(ships: Mapping[str, int]) -> int:
     return max(0, total)
 
 
-def _build_spy_report_body(snapshot: Mapping[str, Any], probe_count: int) -> Tuple[str, Dict[str, Any]]:
-    coords = str(snapshot.get("coords") or "")
-    owner = str(snapshot.get("owner_name") or "")
-    res = snapshot.get("resources") or {}
-    buildings = snapshot.get("buildings") or {}
+def _spy_ship_priority(ship_key: str, qty: int) -> int:
+    spec = get_ship(str(ship_key)) or {}
+    power = int(spec.get("attack") or 0) + int(spec.get("hull") or 0) + int(spec.get("cargo") or 0)
+    return int(qty) * max(1, power)
+
+
+def _spy_select_partial_items(
+    items: Mapping[str, int],
+    *,
+    max_items: int,
+    seed: int,
+    priority_fn,
+) -> Dict[str, int]:
+    if max_items <= 0 or not items:
+        return {}
+    ranked = sorted(
+        ((str(key), int(val or 0)) for key, val in items.items() if int(val or 0) > 0),
+        key=lambda pair: (-priority_fn(pair[0], pair[1]), pair[0]),
+    )
+    if len(ranked) <= max_items:
+        return {key: qty for key, qty in ranked}
+    rng = random.Random(int(seed))
+    pool = list(ranked)
+    rng.shuffle(pool)
+    pool.sort(key=lambda pair: (-priority_fn(pair[0], pair[1]), pair[0]))
+    selected = pool[:max_items]
+    return {key: qty for key, qty in selected}
+
+
+def _resolve_spy_intel(
+    snapshot: Mapping[str, Any],
+    probe_count: int,
+) -> Dict[str, Any]:
+    probes = max(0, int(probe_count))
+    planet_id = int(snapshot.get("planet_id") or 0)
+    resources = snapshot.get("resources") or {}
     ships = snapshot.get("ships") or {}
+    buildings = snapshot.get("buildings") or {}
+    energy = snapshot.get("energy") or {}
+    activity = snapshot.get("activity") or []
+
+    tiers = {
+        "target": probes >= SPY_INTEL_TIER_TARGET,
+        "resources": probes >= SPY_INTEL_TIER_RESOURCES,
+        "fuel": probes >= SPY_INTEL_TIER_FUEL,
+        "fleet": probes >= SPY_INTEL_TIER_FLEET,
+        "buildings": probes >= SPY_INTEL_TIER_BUILDINGS,
+        "activity": probes >= SPY_INTEL_TIER_ACTIVITY,
+    }
+
+    visible_resources: Dict[str, int] = {}
+    if tiers["resources"]:
+        visible_resources["metal"] = int(resources.get("metal") or 0)
+        visible_resources["crystal"] = int(resources.get("crystal") or 0)
+    if tiers["fuel"]:
+        visible_resources["fuel_cells"] = int(resources.get("fuel_cells") or 0)
+
+    visible_ships: Dict[str, int] = {}
+    if tiers["fleet"] and ships:
+        max_types = max(1, probes - SPY_INTEL_TIER_FLEET + 1)
+        visible_ships = _spy_select_partial_items(
+            ships,
+            max_items=max_types,
+            seed=planet_id * 9973 + probes,
+            priority_fn=_spy_ship_priority,
+        )
 
     visible_buildings: Dict[str, int] = {}
-    visible_ships: Dict[str, int] = {}
-    if probe_count >= 1:
-        visible_buildings = dict(buildings)
-        visible_ships = dict(ships)
-        if probe_count < len(ships):
-            trimmed: Dict[str, int] = {}
-            for idx, (sk, qty) in enumerate(sorted(ships.items())):
-                if idx >= probe_count:
-                    break
-                trimmed[sk] = int(qty)
-            visible_ships = trimmed
-        if probe_count < len(buildings):
-            trimmed_b: Dict[str, int] = {}
-            for idx, (bk, lvl) in enumerate(sorted(buildings.items())):
-                if idx >= probe_count:
-                    break
-                trimmed_b[bk] = int(lvl)
-            visible_buildings = trimmed_b
+    if tiers["buildings"] and buildings:
+        max_types = max(1, probes - SPY_INTEL_TIER_BUILDINGS + 1)
+        visible_buildings = _spy_select_partial_items(
+            buildings,
+            max_items=max_types,
+            seed=planet_id * 7919 + probes,
+            priority_fn=lambda key, lvl: int(lvl),
+        )
 
-    lines = [
-        f"Target: {coords}",
-        f"Commander: {owner}",
-        f"Resources — Metal: {res.get('metal', 0):,}, Crystal: {res.get('crystal', 0):,}, Fuel Cells: {res.get('fuel_cells', 0):,}",
-    ]
-    if visible_buildings:
-        btxt = ", ".join(f"{k} L{lvl}" for k, lvl in sorted(visible_buildings.items()))
-        lines.append(f"Buildings: {btxt}")
-    else:
-        lines.append("Buildings: insufficient probe data")
-    if visible_ships:
-        stxt = ", ".join(f"{k} ×{qty}" for k, qty in sorted(visible_ships.items()))
-        lines.append(f"Ships: {stxt}")
-    else:
-        lines.append("Ships: none detected or insufficient probe data")
+    visible_energy = None
+    if tiers["buildings"]:
+        visible_energy = {
+            "total": int(energy.get("total") or 0),
+            "used": int(energy.get("used") or 0),
+            "balance": int(energy.get("balance") or 0),
+        }
 
-    metadata = {
+    visible_activity: List[Dict[str, Any]] = []
+    if tiers["activity"] and activity:
+        max_rows = max(1, probes - SPY_INTEL_TIER_ACTIVITY + 1)
+        visible_activity = list(activity[:max_rows])
+
+    return {
+        "intel_tiers": tiers,
+        "resources": visible_resources,
+        "ships": visible_ships,
+        "buildings": visible_buildings,
+        "energy": visible_energy,
+        "activity": visible_activity,
+    }
+
+
+def _format_spy_kv_section(title: str, lines: Sequence[str]) -> str:
+    if not lines:
+        return ""
+    return f"{title}\n" + "\n".join(f"  {line}" for line in lines)
+
+
+def _build_spy_report_body(snapshot: Mapping[str, Any], probe_count: int) -> Tuple[str, Dict[str, Any]]:
+    from .i18n import fmt_int, tr
+
+    coords = str(snapshot.get("coords") or "")
+    owner = str(snapshot.get("owner_name") or "")
+    planet_name = str(snapshot.get("planet_name") or "")
+    intel = _resolve_spy_intel(snapshot, probe_count)
+    tiers = intel["intel_tiers"]
+
+    body_lines: List[str] = []
+    if tiers["target"]:
+        body_lines.append(
+            tr(
+                "fleet_spy_report_target",
+                "Target: %(coords)s — %(owner)s (%(planet)s)",
+                coords=coords,
+                owner=owner,
+                planet=planet_name or tr("fleet_spy_report_unknown_planet", "Unknown colony"),
+            )
+        )
+        body_lines.append(
+            tr(
+                "fleet_spy_report_probes",
+                "Probes deployed: %(count)s",
+                count=fmt_int(probe_count),
+            )
+        )
+
+    resource_lines: List[str] = []
+    visible_resources = intel["resources"] or {}
+    if tiers["resources"]:
+        resource_lines.append(
+            f"{tr('resource_metal', 'Ferronit')}: {fmt_int(visible_resources.get('metal', 0))}"
+        )
+        resource_lines.append(
+            f"{tr('resource_crystal', 'Crytite')}: {fmt_int(visible_resources.get('crystal', 0))}"
+        )
+    if tiers["fuel"]:
+        resource_lines.append(
+            f"{tr('resource_fuel_cells', 'Fuel Cells')}: {fmt_int(visible_resources.get('fuel_cells', 0))}"
+        )
+    if resource_lines:
+        body_lines.append(_format_spy_kv_section(tr("fleet_spy_report_section_resources", "Resources"), resource_lines))
+    elif probe_count >= SPY_INTEL_TIER_TARGET:
+        body_lines.append(tr("fleet_spy_report_resources_locked", "Resources: insufficient probe data"))
+
+    ship_lines: List[str] = []
+    visible_ships = intel["ships"] or {}
+    if tiers["fleet"]:
+        if visible_ships:
+            for key, qty in sorted(visible_ships.items()):
+                spec = get_ship(str(key)) or {}
+                label = tr(str(spec.get("name_key") or key), str(key))
+                ship_lines.append(f"{label} ×{fmt_int(qty)}")
+        else:
+            ship_lines.append(tr("fleet_spy_report_fleet_empty", "No ships detected in orbit"))
+        body_lines.append(_format_spy_kv_section(tr("fleet_spy_report_section_fleet", "Orbital fleet"), ship_lines))
+    elif probe_count >= SPY_INTEL_TIER_RESOURCES:
+        body_lines.append(tr("fleet_spy_report_fleet_locked", "Orbital fleet: insufficient probe data"))
+
+    building_lines: List[str] = []
+    visible_buildings = intel["buildings"] or {}
+    visible_energy = intel["energy"]
+    if tiers["buildings"]:
+        if visible_buildings:
+            for key, lvl in sorted(visible_buildings.items()):
+                label = tr(f"building_{key}", str(key))
+                building_lines.append(f"{label} L{fmt_int(lvl)}")
+        else:
+            building_lines.append(tr("fleet_spy_report_buildings_empty", "No surface installations detected"))
+        if visible_energy:
+            building_lines.append(
+                tr(
+                    "fleet_spy_report_energy",
+                    "Energy balance: %(balance)s (generated %(total)s / used %(used)s)",
+                    balance=fmt_int(visible_energy.get("balance", 0)),
+                    total=fmt_int(visible_energy.get("total", 0)),
+                    used=fmt_int(visible_energy.get("used", 0)),
+                )
+            )
+        body_lines.append(
+            _format_spy_kv_section(tr("fleet_spy_report_section_buildings", "Surface installations"), building_lines)
+        )
+    elif probe_count >= SPY_INTEL_TIER_FLEET:
+        body_lines.append(tr("fleet_spy_report_buildings_locked", "Surface installations: insufficient probe data"))
+
+    activity_lines: List[str] = []
+    visible_activity = intel["activity"] or []
+    if tiers["activity"]:
+        if visible_activity:
+            for row in visible_activity:
+                mission_key = f"fleet_mission_{row.get('mission', '')}"
+                mission_label = tr(mission_key, str(row.get("mission") or ""))
+                activity_lines.append(
+                    tr(
+                        "fleet_spy_report_activity_row",
+                        "%(mission)s → %(coords)s (%(status)s)",
+                        mission=mission_label,
+                        coords=str(row.get("coords") or ""),
+                        status=str(row.get("status") or ""),
+                    )
+                )
+        else:
+            activity_lines.append(tr("fleet_spy_report_activity_empty", "No outbound fleet activity detected"))
+        body_lines.append(
+            _format_spy_kv_section(tr("fleet_spy_report_section_activity", "Fleet activity"), activity_lines)
+        )
+    elif probe_count >= SPY_INTEL_TIER_BUILDINGS:
+        body_lines.append(tr("fleet_spy_report_activity_locked", "Fleet activity: insufficient probe data"))
+
+    metadata: Dict[str, Any] = {
+        "report_version": SPY_REPORT_VERSION,
         "target_coords": coords,
         "target_owner": owner,
-        "probe_count": probe_count,
-        "resources": res,
-        "buildings": visible_buildings,
-        "ships": visible_ships,
+        "target_planet": planet_name,
+        "target_planet_id": int(snapshot.get("planet_id") or 0),
+        "probe_count": int(probe_count),
+        "intel_tiers": tiers,
+        "resources": intel["resources"],
+        "ships": intel["ships"],
+        "buildings": intel["buildings"],
+        "energy": intel["energy"],
+        "activity": intel["activity"],
     }
-    return "\n".join(lines), metadata
+    return "\n\n".join(line for line in body_lines if line), metadata
 
 
 def _build_combat_report_body(
@@ -1724,9 +1953,15 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         )
         if not claimed:
             return
+        from .i18n import tr
+
         notify_espionage(
             player_id,
-            f"Spy report {coords}",
+            tr(
+                "fleet_report_spy_subject_coords",
+                "Espionage report — %(coords)s",
+                coords=coords,
+            ),
             body,
             metadata=meta,
             conn=conn,

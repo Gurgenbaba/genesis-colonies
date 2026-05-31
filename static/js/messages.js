@@ -38,8 +38,184 @@
       .replace(/"/g, "&quot;");
   }
 
-  function categoryLabel(cat) {
-    return t(`messages.category.${cat}`, cat);
+  function formatInt(n) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return "0";
+    try {
+      return Math.trunc(v).toLocaleString();
+    } catch (_) {
+      return String(Math.trunc(v));
+    }
+  }
+
+  function shipLabel(key) {
+    return t(`fleet_ship_${key}`, key);
+  }
+
+  function buildingLabel(key) {
+    return t(`building_${key}`, key);
+  }
+
+  function missionLabel(mission) {
+    return t(`fleet_mission_${mission}`, mission);
+  }
+
+  function renderSpyReport(meta) {
+    const tiers = meta.intel_tiers || {};
+    const sections = [];
+
+    sections.push(
+      `<div class="gc-spy-report-head">` +
+        `<div class="gc-spy-report-coords">${esc(meta.target_coords || "—")}</div>` +
+        `<div class="gc-spy-report-owner">${esc(meta.target_owner || "—")}</div>` +
+        (meta.target_planet
+          ? `<div class="gc-spy-report-planet">${esc(meta.target_planet)}</div>`
+          : "") +
+        `<div class="gc-spy-report-probes">${esc(t("fleet_spy_report_probes", "Probes deployed: %(count)s").replace("%(count)s", formatInt(meta.probe_count || 0)))}</div>` +
+      `</div>`
+    );
+
+    function section(title, bodyHtml, locked, lockedText) {
+      if (locked) {
+        return (
+          `<section class="gc-spy-report-section gc-spy-report-section--locked">` +
+          `<h3 class="gc-spy-report-section-title">${esc(title)}</h3>` +
+          `<p class="gc-spy-report-locked">${esc(lockedText)}</p>` +
+          `</section>`
+        );
+      }
+      return (
+        `<section class="gc-spy-report-section">` +
+        `<h3 class="gc-spy-report-section-title">${esc(title)}</h3>` +
+        `<div class="gc-spy-report-section-body">${bodyHtml}</div>` +
+        `</section>`
+      );
+    }
+
+    const res = meta.resources || {};
+    let resHtml = "";
+    if (tiers.resources || tiers.fuel) {
+      const rows = [];
+      if (tiers.resources) {
+        rows.push(
+          `<div class="gc-spy-report-kv"><span>${esc(t("resource_metal", "Ferronit"))}</span><strong>${esc(formatInt(res.metal || 0))}</strong></div>`
+        );
+        rows.push(
+          `<div class="gc-spy-report-kv"><span>${esc(t("resource_crystal", "Crytite"))}</span><strong>${esc(formatInt(res.crystal || 0))}</strong></div>`
+        );
+      }
+      if (tiers.fuel) {
+        rows.push(
+          `<div class="gc-spy-report-kv"><span>${esc(t("resource_fuel_cells", "Fuel Cells"))}</span><strong>${esc(formatInt(res.fuel_cells || 0))}</strong></div>`
+        );
+      }
+      resHtml = rows.join("");
+    }
+    sections.push(
+      section(
+        t("fleet_spy_report_section_resources", "Resources"),
+        resHtml || `<p class="gc-spy-report-empty">${esc(t("fleet_spy_report_resources_locked", "Resources: insufficient probe data"))}</p>`,
+        !tiers.resources && !tiers.fuel,
+        t("fleet_spy_report_resources_locked", "Resources: insufficient probe data")
+      )
+    );
+
+    const ships = meta.ships || {};
+    let fleetHtml = "";
+    if (tiers.fleet) {
+      const entries = Object.entries(ships).filter(([, qty]) => Number(qty) > 0);
+      fleetHtml = entries.length
+        ? entries
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(
+              ([key, qty]) =>
+                `<div class="gc-spy-report-kv"><span>${esc(shipLabel(key))}</span><strong>×${esc(formatInt(qty))}</strong></div>`
+            )
+            .join("")
+        : `<p class="gc-spy-report-empty">${esc(t("fleet_spy_report_fleet_empty", "No ships detected in orbit"))}</p>`;
+    }
+    sections.push(
+      section(
+        t("fleet_spy_report_section_fleet", "Orbital fleet"),
+        fleetHtml,
+        !tiers.fleet,
+        t("fleet_spy_report_fleet_locked", "Orbital fleet: insufficient probe data")
+      )
+    );
+
+    const buildings = meta.buildings || {};
+    let buildHtml = "";
+    if (tiers.buildings) {
+      const entries = Object.entries(buildings).filter(([, lvl]) => Number(lvl) > 0);
+      buildHtml = entries.length
+        ? entries
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(
+              ([key, lvl]) =>
+                `<div class="gc-spy-report-kv"><span>${esc(buildingLabel(key))}</span><strong>L${esc(formatInt(lvl))}</strong></div>`
+            )
+            .join("")
+        : `<p class="gc-spy-report-empty">${esc(t("fleet_spy_report_buildings_empty", "No surface installations detected"))}</p>`;
+      if (meta.energy) {
+        buildHtml +=
+          `<div class="gc-spy-report-energy">${esc(
+            t(
+              "fleet_spy_report_energy",
+              "Energy balance: %(balance)s (generated %(total)s / used %(used)s)"
+            )
+              .replace("%(balance)s", formatInt(meta.energy.balance || 0))
+              .replace("%(total)s", formatInt(meta.energy.total || 0))
+              .replace("%(used)s", formatInt(meta.energy.used || 0))
+          )}</div>`;
+      }
+    }
+    sections.push(
+      section(
+        t("fleet_spy_report_section_buildings", "Surface installations"),
+        buildHtml,
+        !tiers.buildings,
+        t("fleet_spy_report_buildings_locked", "Surface installations: insufficient probe data")
+      )
+    );
+
+    const activity = Array.isArray(meta.activity) ? meta.activity : [];
+    let activityHtml = "";
+    if (tiers.activity) {
+      activityHtml = activity.length
+        ? activity
+            .map(
+              (row) =>
+                `<div class="gc-spy-report-activity-row">${esc(
+                  t(
+                    "fleet_spy_report_activity_row",
+                    "%(mission)s → %(coords)s (%(status)s)"
+                  )
+                    .replace("%(mission)s", missionLabel(row.mission || ""))
+                    .replace("%(coords)s", row.coords || "")
+                    .replace("%(status)s", row.status || "")
+                )}</div>`
+            )
+            .join("")
+        : `<p class="gc-spy-report-empty">${esc(t("fleet_spy_report_activity_empty", "No outbound fleet activity detected"))}</p>`;
+    }
+    sections.push(
+      section(
+        t("fleet_spy_report_section_activity", "Fleet activity"),
+        activityHtml,
+        !tiers.activity,
+        t("fleet_spy_report_activity_locked", "Fleet activity: insufficient probe data")
+      )
+    );
+
+    return `<div class="gc-spy-report">${sections.join("")}</div>`;
+  }
+
+  function renderMessageBody(msg) {
+    const meta = msg.metadata || {};
+    if (msg.category === "espionage" && meta.report_version >= 2 && meta.intel_tiers) {
+      return { html: renderSpyReport(meta), plain: msg.body || "" };
+    }
+    return { html: null, plain: msg.body || "" };
   }
 
   function formatTime(ts) {
@@ -431,8 +607,16 @@
       if (dom.detailMeta) {
         dom.detailMeta.textContent = `${sender} · ${categoryLabel(msg.category)} · ${formatTime(msg.created_at)}`;
       }
-      if (dom.detailBody) dom.detailBody.textContent = msg.body || "";
-
+      const rendered = renderMessageBody(msg);
+      if (dom.detailBody) {
+        if (rendered.html) {
+          dom.detailBody.classList.add("gc-messages-detail-body--report");
+          dom.detailBody.innerHTML = rendered.html;
+        } else {
+          dom.detailBody.classList.remove("gc-messages-detail-body--report");
+          dom.detailBody.textContent = rendered.plain;
+        }
+      }
       if (!dom.detailActions) return;
       dom.detailActions.innerHTML = "";
 
