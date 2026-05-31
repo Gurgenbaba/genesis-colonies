@@ -411,6 +411,19 @@
     })();
   </script>
 
+  <script id="gc-client-config" type="application/json">{{ GC_CLIENT_CONFIG | tojson }}</script>
+  <script>
+    (function () {
+      try {
+        const el = document.getElementById('gc-client-config');
+        window.GC_CLIENT_CONFIG = el ? JSON.parse(el.textContent) : {};
+      } catch (e) {
+        console.error('GC_CLIENT_CONFIG parse error', e);
+        window.GC_CLIENT_CONFIG = {};
+      }
+    })();
+  </script>
+
   <script src="{{ url_for('static', filename='main.js') }}?v={{ GC_ASSET_VERSION }}"></script>
   {% if not SIMPLE_LAYOUT and AUTH_USER and AUTH_USER.id %}
   <script src="{{ url_for('static', filename='js/chat.js') }}?v={{ GC_ASSET_VERSION }}"></script>

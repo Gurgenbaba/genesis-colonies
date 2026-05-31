@@ -16,5 +16,6 @@ ensure_db_parent_dir()
 echo "[GC] Applying migrations..."
 python migrate.py
 
-echo "[GC] Starting gunicorn on 0.0.0.0:${PORT}..."
-exec gunicorn -w 2 -b "0.0.0.0:${PORT}" --timeout 120 app:app
+WORKERS="${GUNICORN_WORKERS:-1}"
+echo "[GC] Starting gunicorn on 0.0.0.0:${PORT} (workers=${WORKERS})..."
+exec gunicorn -w "${WORKERS}" -b "0.0.0.0:${PORT}" --timeout 120 app:app

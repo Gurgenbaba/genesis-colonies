@@ -317,8 +317,19 @@
       intervalIdle: 5000,
       intervalHidden: 15000,
     },
+    shipyardPollMs: 5000,
     modules: {},
   };
+
+  (function applyClientRuntimeConfig() {
+    const cfg = typeof window !== "undefined" ? window.GC_CLIENT_CONFIG : null;
+    if (!cfg || typeof cfg !== "object") return;
+    const pol = GC.polling;
+    if (Number(cfg.poll_active_ms) > 0) pol.intervalActive = Number(cfg.poll_active_ms);
+    if (Number(cfg.poll_idle_ms) > 0) pol.intervalIdle = Number(cfg.poll_idle_ms);
+    if (Number(cfg.poll_hidden_ms) > 0) pol.intervalHidden = Number(cfg.poll_hidden_ms);
+    if (Number(cfg.shipyard_poll_ms) > 0) GC.shipyardPollMs = Number(cfg.shipyard_poll_ms);
+  })();
 
   GC.registerCleanup = function registerCleanup(fn, opts) {
     if (typeof fn !== "function") return;
@@ -3436,7 +3447,7 @@
         return;
       }
       if (!p.dataset.queueRefreshBusy) refreshShipyardState(p).catch(() => {});
-    }, 5000);
+    }, Math.max(3000, Number(GC.shipyardPollMs) || 5000));
   }
 
   function parseShipyardPageData(page) {

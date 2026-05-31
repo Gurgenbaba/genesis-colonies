@@ -98,6 +98,57 @@ def get_secret_key() -> str:
     return os.environ.get("SECRET_KEY", "").strip()
 
 
+def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return max(minimum, int(raw))
+    except ValueError:
+        return default
+
+
+def get_gunicorn_workers() -> int:
+    """
+    Gunicorn worker count. SQLite allows one writer — default 1 for sqlite deployments.
+    Override with GUNICORN_WORKERS when using a future Postgres backend.
+    """
+    backend = os.environ.get("GC_DB_BACKEND", "sqlite").strip().lower()
+    default = 1 if backend == "sqlite" else 2
+    return _env_int("GUNICORN_WORKERS", default, minimum=1)
+
+
+def get_client_runtime_config() -> dict[str, int]:
+    """
+    Client poll intervals (ms) injected into templates as GC_CLIENT_CONFIG.
+
+    Production defaults are slower to reduce SQLite lock pressure on small hosts.
+    Override: GC_POLL_ACTIVE_MS, GC_POLL_IDLE_MS, GC_POLL_HIDDEN_MS, GC_SHIPYARD_POLL_MS.
+    """
+    if is_production():
+        defaults = {
+            "poll_active_ms": 5000,
+            "poll_idle_ms": 8000,
+            "poll_hidden_ms": 20000,
+            "shipyard_poll_ms": 8000,
+        }
+    else:
+        defaults = {
+            "poll_active_ms": 3000,
+            "poll_idle_ms": 5000,
+            "poll_hidden_ms": 15000,
+            "shipyard_poll_ms": 5000,
+        }
+    return {
+        "poll_active_ms": _env_int("GC_POLL_ACTIVE_MS", defaults["poll_active_ms"], minimum=2000),
+        "poll_idle_ms": _env_int("GC_POLL_IDLE_MS", defaults["poll_idle_ms"], minimum=3000),
+        "poll_hidden_ms": _env_int("GC_POLL_HIDDEN_MS", defaults["poll_hidden_ms"], minimum=10000),
+        "shipyard_poll_ms": _env_int(
+            "GC_SHIPYARD_POLL_MS", defaults["shipyard_poll_ms"], minimum=3000
+        ),
+    }
+
+
 def validate_config(*, strict: bool | None = None) -> list[str]:
     """
     Validate environment. Returns list of error strings (empty = OK).

@@ -303,11 +303,14 @@ def inject_globals():
     except Exception:
         current_planet_landscape_url = None
 
+    from game.config import get_client_runtime_config
+
     return dict(
         T=T,
         T_DATA=T_DATA,
         GC_LOCALE=GC_LOCALE,
         GC_ASSET_VERSION=GC_ASSET_VERSION,
+        GC_CLIENT_CONFIG=get_client_runtime_config(),
         player_name_link=player_name_link,
         CURRENT_PLAYER_ID=_current_player_id(),
 
