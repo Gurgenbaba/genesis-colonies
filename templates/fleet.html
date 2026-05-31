@@ -77,12 +77,10 @@
             </div>
             {% endif %}
             <div class="fleet-active-times gc-mono">
-              {% if mv.status == 'returning' and mv.return_at %}
-                <span>{{ T("fleet_return_at") }}: <time data-countdown="{{ mv.return_at }}"></time></span>
-              {% elif mv.status == 'holding' and mv.holding_until %}
-                <span>{{ T("fleet_holding_until") }}: <time data-countdown="{{ mv.holding_until }}"></time></span>
-              {% elif mv.arrival_at %}
-                <span>{{ T("fleet_arrival_at") }}: <time data-countdown="{{ mv.arrival_at }}"></time></span>
+              {% if mv.countdown_at %}
+                {% set leg_key = mv.status_label or mv.leg_label_key or ("fleet_leg_returning" if mv.status == "returning" else ("fleet_leg_holding" if mv.status == "holding" else "fleet_leg_outbound")) %}
+                {% set leg_phase = mv.phase or mv.leg_phase or mv.status %}
+                <span class="fleet-active-leg">{{ T(leg_key) }}: <time class="fleet-active-countdown gc-mono" data-countdown-at="{{ mv.countdown_at }}" data-countdown-scope="fleet" data-countdown-key="{{ mv.id }}:{{ leg_phase }}:{{ mv.countdown_at }}">–</time></span>
               {% endif %}
             </div>
           </article>

@@ -83,16 +83,25 @@ def _build_activity_line(
     summary: str,
     remaining: int = 0,
     finish_at: int = 0,
+    countdown_at: int = 0,
+    phase: str = "",
+    status_label: str = "",
+    movement_id: int = 0,
     href_key: str,
     label_key: str,
 ) -> Dict[str, Any]:
+    end_at = int(countdown_at or finish_at or 0)
     return {
         "key": key,
         "state": state,
         "summary": summary,
         "remaining": int(remaining),
         "remaining_display": _format_remaining(remaining) if state == "active" else "",
-        "finish_at": int(finish_at or 0),
+        "finish_at": end_at,
+        "countdown_at": end_at,
+        "phase": str(phase or ""),
+        "status_label": str(status_label or ""),
+        "movement_id": int(movement_id or 0),
         "href_key": href_key,
         "label_key": label_key,
     }
@@ -117,6 +126,8 @@ def _fleet_movement_activity_lines(
         mission = str(mv.get("mission_type") or "transport")
         target = str(mv.get("target_coords") or "")
         ship_count = sum(int(v) for v in (mv.get("ships") or {}).values())
+        phase = str(enriched.get("phase") or enriched.get("leg_phase") or "")
+        status_label = str(enriched.get("status_label") or enriched.get("leg_label_key") or "")
         summary = f"{target} · {ship_count}"
         lines.append(
             _build_activity_line(
@@ -125,6 +136,10 @@ def _fleet_movement_activity_lines(
                 summary=summary,
                 remaining=remaining,
                 finish_at=end_at,
+                countdown_at=end_at,
+                phase=phase,
+                status_label=status_label,
+                movement_id=_safe_int(mv.get("id")),
                 href_key="fleet_view",
                 label_key=f"fleet_mission_{mission}",
             )

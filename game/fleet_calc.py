@@ -109,6 +109,13 @@ def enrich_movement_timing(
     countdown_at = movement_countdown_end_at(out)
     remaining_seconds = max(0, int(countdown_at - ts)) if countdown_at > 0 else 0
 
+    leg_phase = status if status in ("outbound", "returning", "holding") else ""
+    leg_label_key = {
+        "outbound": "fleet_leg_outbound",
+        "returning": "fleet_leg_returning",
+        "holding": "fleet_leg_holding",
+    }.get(leg_phase, "")
+
     return_started_at = 0
     return_arrival_at = 0
     if status == "returning" and return_at > 0:
@@ -126,6 +133,10 @@ def enrich_movement_timing(
             "flight_seconds": duration_seconds,
             "countdown_at": countdown_at,
             "remaining_seconds": remaining_seconds,
+            "phase": leg_phase,
+            "status_label": leg_label_key,
+            "leg_phase": leg_phase,
+            "leg_label_key": leg_label_key,
             "return_started_at": return_started_at,
             "return_arrival_at": return_arrival_at,
         }

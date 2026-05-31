@@ -248,6 +248,10 @@ def test_enrich_movement_timing_outbound_returning_and_holding():
     assert outbound["countdown_at"] == int(now) + 300
     assert outbound["remaining_seconds"] == 300
     assert outbound["duration_seconds"] == 300
+    assert outbound["leg_phase"] == "outbound"
+    assert outbound["leg_label_key"] == "fleet_leg_outbound"
+    assert outbound["phase"] == "outbound"
+    assert outbound["status_label"] == "fleet_leg_outbound"
 
     returning = enrich_movement_timing(
         {
@@ -263,6 +267,10 @@ def test_enrich_movement_timing_outbound_returning_and_holding():
     assert returning["return_arrival_at"] == int(now) + 500
     assert returning["return_started_at"] == int(now) + 300
     assert returning["remaining_seconds"] == 150
+    assert returning["leg_phase"] == "returning"
+    assert returning["leg_label_key"] == "fleet_leg_returning"
+    assert returning["phase"] == "returning"
+    assert returning["status_label"] == "fleet_leg_returning"
 
     holding = enrich_movement_timing(
         {
@@ -276,6 +284,8 @@ def test_enrich_movement_timing_outbound_returning_and_holding():
     )
     assert holding["countdown_at"] == int(now) + 3720
     assert holding["remaining_seconds"] == 3520
+    assert holding["phase"] == "holding"
+    assert holding["status_label"] == "fleet_leg_holding"
 
 
 def test_preview_send_flight_timing_parity(fleet_db):
@@ -409,7 +419,11 @@ def test_overview_fleet_timing_matches_active_movement(fleet_db):
     lines = _fleet_movement_activity_lines(movements, now=now)
     fleet_line = next(line for line in lines if line["key"].startswith("fleet_"))
     assert fleet_line["finish_at"] == mv["countdown_at"]
+    assert fleet_line["countdown_at"] == mv["countdown_at"]
     assert fleet_line["remaining"] == mv["remaining_seconds"]
+    assert fleet_line["phase"] == mv["phase"]
+    assert fleet_line["status_label"] == mv["status_label"]
+    assert fleet_line["label_key"] == f"fleet_mission_{mv['mission_type']}"
     conn.close()
 
 
