@@ -191,7 +191,9 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
 
     try:
         if own_conn:
-            conn.execute("BEGIN IMMEDIATE")
+            from .db import begin_write_transaction
+
+            begin_write_transaction(conn)
 
         if not skip_queue_finish:
             finish_due_work_once(
@@ -333,7 +335,9 @@ def sync_derived_state_after_queue_finish(
 
     try:
         if own_conn:
-            conn.execute("BEGIN IMMEDIATE")
+            from .db import begin_write_transaction
+
+            begin_write_transaction(conn)
 
         for raw_pid in planet_ids or []:
             planet_id = int(raw_pid)

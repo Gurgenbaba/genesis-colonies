@@ -80,6 +80,7 @@ def test_main_js_game_state_polling_idempotent():
     assert "PJAX dedupe" in src
     assert "dataset.pjaxBusy" in src
     assert "_finishRefreshArmed" in src
+    assert "resolveFlight" in src
     nav_section = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
     assert "GC.cleanupPage();" in nav_section
     assert nav_section.index("GC.cleanupPage();") < nav_section.index("refreshGameState(\"pjax_nav\")")

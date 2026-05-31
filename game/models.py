@@ -517,7 +517,7 @@ def create_user(username: str, password: str, is_admin: int = 0, email: str | No
     cur = conn.cursor()
 
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write_transaction(conn)
 
         normalized_email = str(email or "").strip().lower() if email else None
 
@@ -624,7 +624,7 @@ def ensure_player_and_homeworld(
 
     try:
         if own_conn:
-            conn.execute("BEGIN IMMEDIATE")
+            begin_write_transaction(conn)
 
         harden_planets_schema(conn)
 
@@ -813,7 +813,7 @@ def save_planet(planet: Dict[str, Any], conn: sqlite3.Connection | None = None) 
     cur = conn.cursor()
     try:
         if own_conn:
-            conn.execute("BEGIN IMMEDIATE")
+            begin_write_transaction(conn)
 
         cur.execute(
             """
@@ -1021,7 +1021,7 @@ def adjust_homeworld_resources(
     cur = conn.cursor()
 
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write_transaction(conn)
 
         if player_id is None:
             cur.execute(
@@ -1101,7 +1101,7 @@ def save_planet_buildings(planet_id: int, buildings: Dict[str, int]) -> None:
     keys = list(BUILDING_KEYS)
 
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write_transaction(conn)
         cur.execute(
             f"""
             UPDATE planet_buildings SET
@@ -1160,7 +1160,7 @@ def add_build_job(
     cur = conn.cursor()
     try:
         if own_conn:
-            conn.execute("BEGIN IMMEDIATE")
+            begin_write_transaction(conn)
 
         cur.execute(
             """
@@ -1193,7 +1193,7 @@ def delete_build_job(job_id: int, conn: sqlite3.Connection | None = None) -> Non
     cur = conn.cursor()
     try:
         if own_conn:
-            conn.execute("BEGIN IMMEDIATE")
+            begin_write_transaction(conn)
         cur.execute("DELETE FROM build_queue WHERE id = ?;", (int(job_id),))
         if own_conn:
             conn.commit()
@@ -1301,7 +1301,7 @@ def save_game_settings(
     conn = db()
     cur = conn.cursor()
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write_transaction(conn)
         for key, value_str in safe_updates.items():
             cur.execute(
                 """
@@ -1346,7 +1346,7 @@ def save_research_level(tech_key: str, level: int, user_id: int) -> None:
     conn = db()
     cur = conn.cursor()
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write_transaction(conn)
         cur.execute(
             """
             INSERT INTO research_levels (user_id, tech_key, level)
@@ -1397,7 +1397,7 @@ def add_research_job(
     cur = conn.cursor()
     try:
         if own_conn:
-            conn.execute("BEGIN IMMEDIATE")
+            begin_write_transaction(conn)
 
         cur.execute(
             """
@@ -1430,7 +1430,7 @@ def delete_research_job(job_id: int, conn: sqlite3.Connection | None = None) -> 
     cur = conn.cursor()
     try:
         if own_conn:
-            conn.execute("BEGIN IMMEDIATE")
+            begin_write_transaction(conn)
         cur.execute("DELETE FROM research_queue WHERE id = ?;", (int(job_id),))
         if own_conn:
             conn.commit()
@@ -1543,7 +1543,7 @@ def finish_due_build_jobs(
 
     try:
         if owns_conn:
-            conn.execute("BEGIN IMMEDIATE")
+            begin_write_transaction(conn)
 
         count = finish_planet_build_jobs(conn, int(planet_id), int(player_id), float(now))
 
@@ -1589,7 +1589,7 @@ def finish_due_research_jobs(
 
     try:
         if owns_conn:
-            conn.execute("BEGIN IMMEDIATE")
+            begin_write_transaction(conn)
 
         count = finish_player_research_jobs(conn, int(user_id), float(now))
 

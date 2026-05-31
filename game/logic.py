@@ -132,9 +132,6 @@ def read_player_live_state_for_poll(
 
         try:
             if need_write:
-                if not in_transaction(conn):
-                    begin_write_transaction(conn)
-
                 if has_due or has_pending:
                     finish_active_planet_due_work(
                         uid,
@@ -147,6 +144,9 @@ def read_player_live_state_for_poll(
                     from .live_state import mark_request_live_refreshed
 
                     mark_request_live_refreshed()
+
+                if not in_transaction(conn):
+                    begin_write_transaction(conn)
 
                 planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
                     planet,
@@ -211,6 +211,7 @@ def refresh_player_live_state(
     1) finish due queue work + sync derived planet state
     2) recompute resources/energy via EffectResolver (skip second finish pass)
     """
+    from .db import begin_write_transaction, commit, in_transaction
     from .models import db as _db, get_homeworld, load_player
     from .queue_engine import finish_active_planet_due_work
 
@@ -220,9 +221,6 @@ def refresh_player_live_state(
         conn = _db()
 
     try:
-        if own_conn:
-            conn.execute("BEGIN IMMEDIATE")
-
         from .planet_evolution.repository import get_context_planet
 
         player = load_player(uid, conn=conn)
@@ -242,6 +240,9 @@ def refresh_player_live_state(
 
         mark_request_live_refreshed()
 
+        if not in_transaction(conn):
+            begin_write_transaction(conn)
+
         planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
             planet,
             conn=conn,
@@ -257,7 +258,7 @@ def refresh_player_live_state(
         player_view["energy_used"] = int(energy_used)
 
         if own_conn:
-            conn.commit()
+            commit(conn)
 
         from .live_state import mark_request_live_refreshed
 

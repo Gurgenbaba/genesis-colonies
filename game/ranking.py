@@ -13,7 +13,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from .db import column_exists, db, table_exists
+from .db import begin_write_transaction, column_exists, db, table_exists
 
 logger = logging.getLogger(__name__)
 
@@ -557,7 +557,7 @@ def recalculate_ranks(conn=None) -> int:
     try:
         with _RANKING_LOCK:
             if owns_conn:
-                conn.execute("BEGIN IMMEDIATE")
+                begin_write_transaction(conn)
             count = _apply()
             if owns_conn:
                 conn.commit()
@@ -592,7 +592,7 @@ def recalculate_all_rankings(
     try:
         with _RANKING_LOCK:
             if owns_conn:
-                conn.execute("BEGIN IMMEDIATE")
+                begin_write_transaction(conn)
 
             _ensure_score_rows(conn)
             cur = conn.cursor()

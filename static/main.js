@@ -2382,17 +2382,14 @@
 
     if (GC.refreshInFlight) {
       if (isFinishReason) {
-        return GC.refreshInFlight.finally(() => {
-          GC.refreshInFlight = null;
-          return refreshGameState(reason);
-        });
+        return GC.refreshInFlight.finally(() => refreshGameState(reason));
       }
       return GC.refreshInFlight;
     }
 
     const p = GC.polling;
     p.inFlight = true;
-    if (p.abort && !isFinishReason && reasonStr !== "poll") {
+    if (p.abort && !isFinishReason && reasonStr !== "poll" && reasonStr !== "pjax_nav") {
       try {
         p.abort.abort();
       } catch (_) {}
@@ -2401,11 +2398,20 @@
     const ctrl = new AbortController();
     p.abort = ctrl;
 
-    GC.refreshInFlight = (async () => {
+    let resolveFlight;
+    let rejectFlight;
+    const flight = new Promise((resolve, reject) => {
+      resolveFlight = resolve;
+      rejectFlight = reject;
+    });
+    GC.refreshInFlight = flight;
+
+    (async () => {
       try {
         const data = await GC.fetchJSON("/api/game-state", { cache: "no-store", signal: ctrl.signal });
         if (!data || data.ok === false) {
           if (isAuthStatusFailure(null, data)) handleAuthFailure("game-state-payload");
+          resolveFlight(null);
           return null;
         }
 
@@ -2425,17 +2431,23 @@
         } else if (reason === "page_init" || reason === "tab_visible" || !GC.polling.running) {
           GC.startPolling(wantPolling);
         }
+        resolveFlight(data);
         return data;
       } catch (err) {
-        if (err?.name === "AbortError") return null;
+        if (err?.name === "AbortError") {
+          resolveFlight(null);
+          return null;
+        }
 
         if (isAuthStatusFailure(err)) {
           handleAuthFailure(reason);
+          resolveFlight(null);
           return null;
         }
 
         if (!shouldRunGameLoop()) {
           GC.stopPolling();
+          resolveFlight(null);
           return null;
         }
 
@@ -2445,15 +2457,18 @@
         if (reason !== "poll" && shouldRunGameLoop() && !_authLoopAborted && !GC.polling.running) {
           GC.startPolling(lastHadActiveJob || lastHadActiveResearch, true);
         }
+        rejectFlight(err);
         throw err;
       } finally {
         p.inFlight = false;
         p.abort = null;
-        GC.refreshInFlight = null;
+        if (GC.refreshInFlight === flight) {
+          GC.refreshInFlight = null;
+        }
       }
     })();
 
-    return GC.refreshInFlight;
+    return flight;
   }
 
   GC.refreshGameState = refreshGameState;

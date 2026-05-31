@@ -185,6 +185,38 @@ def test_api_player_card_without_score_row_returns_200(temp_db, monkeypatch):
     assert b"gc-player-card-shell" in res.data or b"gc-player-card-error-state" in res.data
 
 
+def test_sqlite_write_mutex_serializes_parallel_begins(temp_db):
+    import threading
+
+    from game.db import begin_write_transaction, commit, db, rollback
+
+    errors: list[str] = []
+    barrier = threading.Barrier(4)
+
+    def worker() -> None:
+        conn = db()
+        try:
+            barrier.wait(timeout=5)
+            begin_write_transaction(conn)
+            conn.execute("UPDATE players SET last_seen = last_seen WHERE id = (SELECT MIN(id) FROM players);")
+            commit(conn)
+        except Exception as exc:
+            errors.append(str(exc))
+            try:
+                rollback(conn)
+            except Exception:
+                pass
+        finally:
+            conn.close()
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    assert errors == [], errors
+
+
 def test_new_player_has_score_row_and_appears_in_ranking(temp_db):
     pid = _create_player("fresh_zero")
     conn = db()

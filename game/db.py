@@ -13,12 +13,44 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator, Optional
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "game.db"
+
+_SQLITE_WRITE_MUTEX = threading.RLock()
+_WRITE_MUTEX_DEPTH = threading.local()
+
+
+def _write_mutex_depth() -> int:
+    return int(getattr(_WRITE_MUTEX_DEPTH, "n", 0) or 0)
+
+
+def _write_mutex_acquire() -> None:
+    if _write_mutex_depth() == 0:
+        _SQLITE_WRITE_MUTEX.acquire()
+    _WRITE_MUTEX_DEPTH.n = _write_mutex_depth() + 1
+
+
+def _write_mutex_release() -> None:
+    depth = _write_mutex_depth()
+    if depth <= 0:
+        return
+    depth -= 1
+    _WRITE_MUTEX_DEPTH.n = depth
+    if depth == 0:
+        _SQLITE_WRITE_MUTEX.release()
+
+
+def _is_sqlite_lock_error(exc: BaseException) -> bool:
+    if not isinstance(exc, sqlite3.OperationalError):
+        return False
+    msg = str(exc).lower()
+    return "locked" in msg or "busy" in msg
 
 def get_db_backend() -> str:
     return os.environ.get("GC_DB_BACKEND", "sqlite").strip().lower()
@@ -65,7 +97,8 @@ def db() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA busy_timeout=15000")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
@@ -75,27 +108,62 @@ def in_transaction(conn: sqlite3.Connection) -> bool:
     return False
 
 
-def begin_write_transaction(conn: sqlite3.Connection) -> None:
+def begin_write_transaction(conn: sqlite3.Connection, *, retries: int = 8) -> None:
     """
     Start a write transaction with appropriate locking.
 
     SQLite: BEGIN IMMEDIATE (single-writer lock, race-safe queues).
     Postgres (future): BEGIN — pair with lock_planet_for_update() / lock_player_for_update().
+
+    Serializes writers within the process to avoid SQLITE_BUSY under Flask threading.
     """
     if in_transaction(conn):
         return
-    if get_db_backend() == "postgres":
-        conn.execute("BEGIN")
-    else:
-        conn.execute("BEGIN IMMEDIATE")
+    _write_mutex_acquire()
+    try:
+        last_err: Optional[BaseException] = None
+        for attempt in range(max(1, int(retries))):
+            try:
+                if get_db_backend() == "postgres":
+                    conn.execute("BEGIN")
+                else:
+                    conn.execute("BEGIN IMMEDIATE")
+                return
+            except sqlite3.OperationalError as exc:
+                last_err = exc
+                if not _is_sqlite_lock_error(exc) or attempt + 1 >= retries:
+                    _write_mutex_release()
+                    raise
+                time.sleep(min(0.25, 0.02 * (2**attempt)))
+        if last_err is not None:
+            _write_mutex_release()
+            raise last_err
+    except Exception:
+        if not in_transaction(conn):
+            _write_mutex_release()
+        raise
 
 
 def commit(conn: sqlite3.Connection) -> None:
     conn.commit()
+    if not in_transaction(conn):
+        _write_mutex_release()
 
 
 def rollback(conn: sqlite3.Connection) -> None:
     conn.rollback()
+    if not in_transaction(conn):
+        _write_mutex_release()
+
+
+@contextmanager
+def sqlite_write_lock() -> Generator[None, None, None]:
+    """Process-wide writer lock for short multi-statement blocks outside transactions."""
+    _write_mutex_acquire()
+    try:
+        yield
+    finally:
+        _write_mutex_release()
 
 
 def lock_planet_for_update(conn: sqlite3.Connection, planet_id: int) -> None:

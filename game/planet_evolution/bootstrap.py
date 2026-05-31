@@ -21,55 +21,71 @@ from .repository import (
 
 
 def ensure_planet_evolution(planet_id: int, conn: sqlite3.Connection) -> Dict[str, Any]:
+    from ..db import begin_write_transaction, commit, in_transaction, rollback
+
     if not evolution_schema_ready(conn):
         return {"ready": False, "reason": "schema_missing"}
 
-    reload_definitions(conn)
-    planet = get_planet_row(planet_id, conn=conn)
-    if not planet:
-        return {"ready": False, "reason": "planet_not_found"}
+    began = False
+    try:
+        if not in_transaction(conn):
+            begin_write_transaction(conn)
+            began = True
 
-    cur = conn.cursor()
-    created = False
+        reload_definitions(conn)
+        planet = get_planet_row(planet_id, conn=conn)
+        if not planet:
+            if began:
+                rollback(conn)
+            return {"ready": False, "reason": "planet_not_found"}
 
-    if not get_planet_dna(planet_id, conn=conn):
-        is_homeworld = bool(planet.get("is_homeworld"))
-        dna = generate_planet_dna(
-            galaxy=int(planet.get("galaxy") or 1),
-            system=planet.get("system"),
-            position=planet.get("position"),
-            planet_class=planet.get("planet_class"),
-            is_homeworld=is_homeworld,
-        )
-        save_planet_dna(planet_id, dna, conn)
-        cur.execute(
-            """
-            UPDATE planets SET
-                dna_seed = ?,
-                planet_class = ?,
-                culture_archetype = COALESCE(NULLIF(culture_archetype, ''), ?)
-            WHERE id = ?;
-            """,
-            (
-                int(dna.get("dna_seed") or 0),
-                str(dna.get("planet_class") or "terrestrial"),
-                CULTURE_ARCHETYPES[0],
-                int(planet_id),
-            ),
-        )
-        created = True
+        cur = conn.cursor()
+        created = False
 
-    archetype = str(planet.get("culture_archetype") or CULTURE_ARCHETYPES[0])
-    ensure_planet_culture(planet_id, conn, archetype=archetype)
+        if not get_planet_dna(planet_id, conn=conn):
+            is_homeworld = bool(planet.get("is_homeworld"))
+            dna = generate_planet_dna(
+                galaxy=int(planet.get("galaxy") or 1),
+                system=planet.get("system"),
+                position=planet.get("position"),
+                planet_class=planet.get("planet_class"),
+                is_homeworld=is_homeworld,
+            )
+            save_planet_dna(planet_id, dna, conn)
+            cur.execute(
+                """
+                UPDATE planets SET
+                    dna_seed = ?,
+                    planet_class = ?,
+                    culture_archetype = COALESCE(NULLIF(culture_archetype, ''), ?)
+                WHERE id = ?;
+                """,
+                (
+                    int(dna.get("dna_seed") or 0),
+                    str(dna.get("planet_class") or "terrestrial"),
+                    CULTURE_ARCHETYPES[0],
+                    int(planet_id),
+                ),
+            )
+            created = True
 
-    if not planet.get("last_evolution_tick"):
-        cur.execute(
-            "UPDATE planets SET last_evolution_tick = ? WHERE id = ?;",
-            (time.time(), int(planet_id)),
-        )
+        archetype = str(planet.get("culture_archetype") or CULTURE_ARCHETYPES[0])
+        ensure_planet_culture(planet_id, conn, archetype=archetype)
 
-    compile_planet_mechanics(planet_id, conn)
-    return {"ready": True, "planet_id": int(planet_id), "dna_created": created}
+        if not planet.get("last_evolution_tick"):
+            cur.execute(
+                "UPDATE planets SET last_evolution_tick = ? WHERE id = ?;",
+                (time.time(), int(planet_id)),
+            )
+
+        compile_planet_mechanics(planet_id, conn)
+        if began:
+            commit(conn)
+        return {"ready": True, "planet_id": int(planet_id), "dna_created": created}
+    except Exception:
+        if began:
+            rollback(conn)
+        raise
 
 
 def backfill_all_planets_evolution(conn: Optional[sqlite3.Connection] = None) -> Dict[str, Any]:

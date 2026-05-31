@@ -423,7 +423,7 @@ def _load_page_live_context(
                     conn=conn,
                     finish_source=src,
                 )
-                conn.commit()
+                commit(conn)
             build_queue = get_build_queue_status(user_id=user_id, skip_finish=True, conn=conn)
             research = get_research_status(
                 user_id=user_id,
@@ -641,12 +641,19 @@ def overview():
     planet_teaser = {"visible": False}
     conn = db()
     try:
-        planet_teaser = get_overview_planet_teaser(
-            int(session["user_id"]),
-            metal=float(ctx["player_view"]["metal"]),
-            crystal=float(ctx["player_view"]["crystal"]),
-            conn=conn,
-        )
+        try:
+            planet_teaser = get_overview_planet_teaser(
+                int(session["user_id"]),
+                metal=float(ctx["player_view"]["metal"]),
+                crystal=float(ctx["player_view"]["crystal"]),
+                conn=conn,
+            )
+        except sqlite3.OperationalError:
+            logger.warning(
+                "overview planet teaser skipped (database locked) user_id=%s",
+                session.get("user_id"),
+                exc_info=True,
+            )
     finally:
         conn.close()
 
@@ -2495,7 +2502,7 @@ def api_exchange_rates():
             crystal=float(player_view["crystal"]),
             conn=conn,
         )
-        conn.commit()
+        commit(conn)
         return jsonify({"ok": True, "exchange": status})
     except Exception:
         rollback(conn)
@@ -3436,7 +3443,7 @@ def planet_evolution_view():
     try:
         active_id = get_active_planet_id(user_id, conn=conn)
         planet_state = get_planet_state_payload(active_id, player_id=user_id, conn=conn)
-        conn.commit()
+        commit(conn)
     except Exception:
         rollback(conn)
         raise

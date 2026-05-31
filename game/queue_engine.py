@@ -431,118 +431,126 @@ def finish_due_work(
     affected_players: Set[int] = set()
     affected_planets: Set[int] = set()
 
-    try:
-        with _ENGINE_LOCK:
-            if owns_conn and not in_transaction(conn):
-                begin_write_transaction(conn)
+    def _execute_finish() -> None:
+        nonlocal result, affected_players, affected_planets
 
-            planet_targets = _resolve_planet_targets(conn, player_id, planet_id)
-            research_targets = _resolve_research_targets(conn, player_id, planet_id)
+        planet_targets = _resolve_planet_targets(conn, player_id, planet_id)
+        research_targets = _resolve_research_targets(conn, player_id, planet_id)
 
-            for pid_planet, pid_player in planet_targets:
-                try:
-                    n = finish_planet_build_jobs(conn, pid_planet, pid_player, float(now))
-                    if n > 0:
-                        result["finished"]["buildings"] += n
-                        affected_players.add(pid_player)
-                        affected_planets.add(pid_planet)
-                except Exception as exc:
-                    result["ok"] = False
-                    msg = f"build planet={pid_planet} player={pid_player}: {exc}"
-                    result["errors"].append(msg)
-                    logger.exception("queue_engine build finish failed: %s", msg)
-
-                try:
-                    from .planet_evolution.repository import evolution_schema_ready
-
-                    if evolution_schema_ready(conn):
-                        from .planet_evolution.planet_research import finish_planet_research_jobs
-                        from .planet_evolution.ascension import finish_ascension_jobs
-
-                        n_pr = finish_planet_research_jobs(conn, pid_planet, float(now))
-                        if n_pr > 0:
-                            result["finished"]["planet_research"] += n_pr
-                            affected_players.add(pid_player)
-                            affected_planets.add(pid_planet)
-                        n_as = finish_ascension_jobs(conn, pid_planet, float(now))
-                        if n_as > 0:
-                            result["finished"]["ascension"] += n_as
-                            affected_players.add(pid_player)
-                            affected_planets.add(pid_planet)
-                except Exception as exc:
-                    result["ok"] = False
-                    msg = f"planet_evolution planet={pid_planet}: {exc}"
-                    result["errors"].append(msg)
-                    logger.exception("queue_engine planet evolution finish failed: %s", msg)
-
-                try:
-                    from .shipyard_queue import finish_due_shipyard_jobs_for_planet
-
-                    n_sy = finish_due_shipyard_jobs_for_planet(
-                        conn, pid_planet, pid_player, now=float(now)
-                    )
-                    if n_sy > 0:
-                        result["finished"]["shipyard"] += n_sy
-                        affected_players.add(pid_player)
-                        affected_planets.add(pid_planet)
-                except Exception as exc:
-                    result["ok"] = False
-                    msg = f"shipyard planet={pid_planet}: {exc}"
-                    result["errors"].append(msg)
-                    logger.exception("queue_engine shipyard finish failed: %s", msg)
-
-            for uid in research_targets:
-                try:
-                    n = finish_player_research_jobs(conn, uid, float(now))
-                    if n > 0:
-                        result["finished"]["research"] += n
-                        affected_players.add(uid)
-                except Exception as exc:
-                    result["ok"] = False
-                    msg = f"research user={uid}: {exc}"
-                    result["errors"].append(msg)
-                    logger.exception("queue_engine research finish failed: %s", msg)
-
+        for pid_planet, pid_player in planet_targets:
             try:
-                from .fleet import fleet_schema_ready, process_fleet_tick
-
-                if fleet_schema_ready(conn):
-                    fleet_player = int(player_id) if player_id is not None else None
-                    fleet_result = process_fleet_tick(player_id=fleet_player, now=float(now), conn=conn)
-                    result["finished"]["fleet_arrivals"] += int(fleet_result.get("processed_arrivals") or 0)
-                    result["finished"]["fleet_returns"] += int(fleet_result.get("processed_returns") or 0)
-                    if fleet_result.get("errors"):
-                        for err in fleet_result["errors"]:
-                            result["errors"].append(f"fleet: {err}")
+                n = finish_planet_build_jobs(conn, pid_planet, pid_player, float(now))
+                if n > 0:
+                    result["finished"]["buildings"] += n
+                    affected_players.add(pid_player)
+                    affected_planets.add(pid_planet)
             except Exception as exc:
                 result["ok"] = False
-                msg = f"fleet tick: {exc}"
+                msg = f"build planet={pid_planet} player={pid_player}: {exc}"
                 result["errors"].append(msg)
-                logger.exception("queue_engine fleet tick failed: %s", msg)
+                logger.exception("queue_engine build finish failed: %s", msg)
 
-            if update_scores and affected_players:
-                from .score_events import apply_score_updates_for_players
+            try:
+                from .planet_evolution.repository import evolution_schema_ready
 
-                result["score_updates"] = apply_score_updates_for_players(
-                    affected_players,
-                    conn=conn,
-                    recalc_ranks=recalc_ranks,
+                if evolution_schema_ready(conn):
+                    from .planet_evolution.planet_research import finish_planet_research_jobs
+                    from .planet_evolution.ascension import finish_ascension_jobs
+
+                    n_pr = finish_planet_research_jobs(conn, pid_planet, float(now))
+                    if n_pr > 0:
+                        result["finished"]["planet_research"] += n_pr
+                        affected_players.add(pid_player)
+                        affected_planets.add(pid_planet)
+                    n_as = finish_ascension_jobs(conn, pid_planet, float(now))
+                    if n_as > 0:
+                        result["finished"]["ascension"] += n_as
+                        affected_players.add(pid_player)
+                        affected_planets.add(pid_planet)
+            except Exception as exc:
+                result["ok"] = False
+                msg = f"planet_evolution planet={pid_planet}: {exc}"
+                result["errors"].append(msg)
+                logger.exception("queue_engine planet evolution finish failed: %s", msg)
+
+            try:
+                from .shipyard_queue import finish_due_shipyard_jobs_for_planet
+
+                n_sy = finish_due_shipyard_jobs_for_planet(
+                    conn, pid_planet, pid_player, now=float(now)
                 )
-                result["rank_recalculated"] = bool(recalc_ranks and result["score_updates"] > 0)
+                if n_sy > 0:
+                    result["finished"]["shipyard"] += n_sy
+                    affected_players.add(pid_player)
+                    affected_planets.add(pid_planet)
+            except Exception as exc:
+                result["ok"] = False
+                msg = f"shipyard planet={pid_planet}: {exc}"
+                result["errors"].append(msg)
+                logger.exception("queue_engine shipyard finish failed: %s", msg)
 
-            derived_synced = 0
-            if affected_planets or affected_players:
-                from .resources import sync_derived_state_after_queue_finish
+        for uid in research_targets:
+            try:
+                n = finish_player_research_jobs(conn, uid, float(now))
+                if n > 0:
+                    result["finished"]["research"] += n
+                    affected_players.add(uid)
+            except Exception as exc:
+                result["ok"] = False
+                msg = f"research user={uid}: {exc}"
+                result["errors"].append(msg)
+                logger.exception("queue_engine research finish failed: %s", msg)
 
-                derived_synced = sync_derived_state_after_queue_finish(
-                    planet_ids=affected_planets,
-                    player_ids=affected_players,
-                    conn=conn,
-                )
-            result["derived_sync_count"] = int(derived_synced)
+        try:
+            from .fleet import fleet_schema_ready, process_fleet_tick
 
-            if owns_conn:
-                commit(conn)
+            if fleet_schema_ready(conn):
+                fleet_player = int(player_id) if player_id is not None else None
+                fleet_result = process_fleet_tick(player_id=fleet_player, now=float(now), conn=conn)
+                result["finished"]["fleet_arrivals"] += int(fleet_result.get("processed_arrivals") or 0)
+                result["finished"]["fleet_returns"] += int(fleet_result.get("processed_returns") or 0)
+                if fleet_result.get("errors"):
+                    for err in fleet_result["errors"]:
+                        result["errors"].append(f"fleet: {err}")
+        except Exception as exc:
+            result["ok"] = False
+            msg = f"fleet tick: {exc}"
+            result["errors"].append(msg)
+            logger.exception("queue_engine fleet tick failed: %s", msg)
+
+        if update_scores and affected_players:
+            from .score_events import apply_score_updates_for_players
+
+            result["score_updates"] = apply_score_updates_for_players(
+                affected_players,
+                conn=conn,
+                recalc_ranks=recalc_ranks,
+            )
+            result["rank_recalculated"] = bool(recalc_ranks and result["score_updates"] > 0)
+
+        derived_synced = 0
+        if affected_planets or affected_players:
+            from .resources import sync_derived_state_after_queue_finish
+
+            derived_synced = sync_derived_state_after_queue_finish(
+                planet_ids=affected_planets,
+                player_ids=affected_players,
+                conn=conn,
+            )
+        result["derived_sync_count"] = int(derived_synced)
+
+        if owns_conn:
+            commit(conn)
+
+    try:
+        # Caller may already hold begin_write_transaction (write mutex). Never wait
+        # for _ENGINE_LOCK while holding that mutex — lock order is engine then write.
+        if in_transaction(conn):
+            _execute_finish()
+        else:
+            with _ENGINE_LOCK:
+                begin_write_transaction(conn)
+                _execute_finish()
 
     except Exception as exc:
         if owns_conn:
