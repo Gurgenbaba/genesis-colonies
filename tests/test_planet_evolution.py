@@ -70,6 +70,29 @@ def test_dna_deterministic(evo_db):
     assert a["geology_traits"] == b["geology_traits"]
 
 
+def test_planet_class_varies_by_coordinates(evo_db):
+    from game.planet_evolution.dna import effective_planet_class, planet_class_for_coordinates
+
+    reload_definitions()
+    classes = {
+        planet_class_for_coordinates(galaxy=1, system=1, position=pos)
+        for pos in range(1, 16)
+    }
+    assert len(classes) > 1
+
+    stale_row = {
+        "galaxy": 1,
+        "system": 302,
+        "position": 7,
+        "planet_class": "terrestrial",
+        "dna_seed": 0,
+        "is_homeworld": 0,
+    }
+    assert effective_planet_class(stale_row) == planet_class_for_coordinates(
+        galaxy=1, system=302, position=7
+    )
+
+
 def test_dna_seed_fits_sqlite_signed_integer(evo_db):
     reload_definitions()
     salts = ("genesis_colonies_v1", "alt_salt_probe", "")

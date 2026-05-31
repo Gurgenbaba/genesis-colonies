@@ -658,27 +658,65 @@ def ensure_player_and_homeworld(
                 pass
 
             from game.galaxy import assign_free_coordinates
+            from game.planet_evolution.dna import _stable_seed, planet_class_for_coordinates
 
             galaxy, system, position = assign_free_coordinates(conn)
-            cur.execute(
-                """
-                INSERT INTO planets (
-                    player_id, name, is_homeworld, metal, crystal, fuel_cells, last_update,
-                    galaxy, system, position
-                )
-                VALUES (?, ?, 1, ?, ?, 500, ?, ?, ?, ?);
-                """,
-                (
-                    int(player_id),
-                    "Aurora Prime",
-                    start_metal,
-                    start_crystal,
-                    now,
-                    int(galaxy),
-                    int(system),
-                    int(position),
-                ),
+            planet_class = planet_class_for_coordinates(
+                galaxy=int(galaxy),
+                system=system,
+                position=position,
+                is_homeworld=True,
             )
+            try:
+                settings = get_game_settings()
+                salt = settings.get("planet_evolution_server_salt", "genesis_colonies_v1")
+            except Exception:
+                salt = "genesis_colonies_v1"
+            dna_seed = _stable_seed(galaxy, system or 0, position or 0, salt)
+            has_class_col = column_exists(conn, "planets", "planet_class")
+            has_seed_col = column_exists(conn, "planets", "dna_seed")
+            if has_class_col and has_seed_col:
+                cur.execute(
+                    """
+                    INSERT INTO planets (
+                        player_id, name, is_homeworld, metal, crystal, fuel_cells, last_update,
+                        galaxy, system, position, planet_class, dna_seed
+                    )
+                    VALUES (?, ?, 1, ?, ?, 500, ?, ?, ?, ?, ?, ?);
+                    """,
+                    (
+                        int(player_id),
+                        "Aurora Prime",
+                        start_metal,
+                        start_crystal,
+                        now,
+                        int(galaxy),
+                        int(system),
+                        int(position),
+                        planet_class,
+                        int(dna_seed),
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO planets (
+                        player_id, name, is_homeworld, metal, crystal, fuel_cells, last_update,
+                        galaxy, system, position
+                    )
+                    VALUES (?, ?, 1, ?, ?, 500, ?, ?, ?, ?);
+                    """,
+                    (
+                        int(player_id),
+                        "Aurora Prime",
+                        start_metal,
+                        start_crystal,
+                        now,
+                        int(galaxy),
+                        int(system),
+                        int(position),
+                    ),
+                )
             pid = cur.lastrowid
 
             cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (int(pid),))

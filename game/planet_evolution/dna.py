@@ -126,6 +126,55 @@ def _compute_rarity_tier(anomaly: List[str], hidden: List[str], affinities: Dict
     return tiers[min(len(tiers) - 1, score)]
 
 
+def planet_class_for_coordinates(
+    *,
+    galaxy: int,
+    system: Optional[int],
+    position: Optional[int],
+    is_homeworld: bool = False,
+    server_salt: Optional[str] = None,
+) -> str:
+    """Deterministic planet class from galaxy coordinates (no PE schema required)."""
+    try:
+        settings = get_game_settings()
+        salt = server_salt or settings.get("planet_evolution_server_salt", "genesis_colonies_v1")
+    except Exception:
+        salt = server_salt or "genesis_colonies_v1"
+    seed = _stable_seed(galaxy, system or 0, position or 0, salt)
+    rng = random.Random(seed)
+    if is_homeworld:
+        # Homeworlds stay playable; full DNA bootstrap may add ferronit_rich_crust later.
+        return _class_for_seed(rng)
+    return _class_for_seed(rng)
+
+
+def expected_planet_class(planet: Dict[str, Any]) -> str:
+    """Coordinate-derived class for a planet row."""
+    return planet_class_for_coordinates(
+        galaxy=int(planet.get("galaxy") or 1),
+        system=planet.get("system"),
+        position=planet.get("position"),
+        is_homeworld=bool(planet.get("is_homeworld")),
+    )
+
+
+def effective_planet_class(planet: Dict[str, Any]) -> str:
+    """
+    Resolve the class shown in UI.
+
+    Ignores the migration default ``terrestrial`` until DNA has been synced from
+    coordinates (dna_seed unset).
+    """
+    stored = str(planet.get("planet_class") or "").strip().lower()
+    dna_seed = int(planet.get("dna_seed") or 0)
+    expected = expected_planet_class(planet)
+    if stored and stored != "terrestrial":
+        return stored
+    if dna_seed > 0 and stored:
+        return stored
+    return expected
+
+
 def generate_planet_dna(
     *,
     galaxy: int = 1,

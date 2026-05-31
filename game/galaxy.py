@@ -329,11 +329,12 @@ def _slot_planet_meta(
     planet_row: Dict[str, Any],
     conn: sqlite3.Connection,
 ) -> Dict[str, Any]:
+    from .planet_evolution.dna import effective_planet_class
     from .overview_page import temperature_range_for_class
     from .planet_evolution.scoring import compute_single_planet_score
     from .planet_evolution.ux_copy import planet_class_label_key
 
-    planet_class = str(planet_row.get("planet_class") or "terrestrial")
+    planet_class = effective_planet_class(planet_row)
     temp = temperature_range_for_class(planet_class)
     planet_id = int(planet_row.get("planet_id") or planet_row.get("id") or 0)
     score = compute_single_planet_score(planet_id, conn) if planet_id else 0

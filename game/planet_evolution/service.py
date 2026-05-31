@@ -56,11 +56,12 @@ def _planet_switcher_row(
     conn: sqlite3.Connection,
 ) -> Dict[str, Any]:
     from ..galaxy import GalaxyCoordinateError, get_planet_coordinates
+    from .dna import effective_planet_class
     from .ux_copy import planet_class_label_key
 
     pid = int(planet_row["id"])
     level, xp, _xp_remaining = level_progress(pid, conn)
-    planet_class = str(planet_row.get("planet_class") or "terrestrial")
+    planet_class = effective_planet_class(planet_row)
     coords_formatted = ""
     try:
         coords_formatted = get_planet_coordinates(planet_row)["formatted"]

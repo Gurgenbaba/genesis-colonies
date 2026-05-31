@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 from ..models import db
 from .constants import CULTURE_ARCHETYPES
 from .definitions import reload_definitions
-from .dna import generate_planet_dna
+from .dna import effective_planet_class, expected_planet_class, generate_planet_dna
 from .mechanics import compile_planet_mechanics
 from .repository import (
     ensure_planet_culture,
@@ -41,14 +41,20 @@ def ensure_planet_evolution(planet_id: int, conn: sqlite3.Connection) -> Dict[st
 
         cur = conn.cursor()
         created = False
+        regen_dna = False
 
-        if not get_planet_dna(planet_id, conn=conn):
+        expected_class = expected_planet_class(planet)
+        stored_class = str(planet.get("planet_class") or "").strip().lower()
+        existing_dna = get_planet_dna(planet_id, conn=conn)
+        if not existing_dna or stored_class != expected_class or int(planet.get("dna_seed") or 0) <= 0:
+            regen_dna = True
+
+        if regen_dna:
             is_homeworld = bool(planet.get("is_homeworld"))
             dna = generate_planet_dna(
                 galaxy=int(planet.get("galaxy") or 1),
                 system=planet.get("system"),
                 position=planet.get("position"),
-                planet_class=planet.get("planet_class"),
                 is_homeworld=is_homeworld,
             )
             save_planet_dna(planet_id, dna, conn)
@@ -62,12 +68,17 @@ def ensure_planet_evolution(planet_id: int, conn: sqlite3.Connection) -> Dict[st
                 """,
                 (
                     int(dna.get("dna_seed") or 0),
-                    str(dna.get("planet_class") or "terrestrial"),
+                    str(dna.get("planet_class") or expected_class),
                     CULTURE_ARCHETYPES[0],
                     int(planet_id),
                 ),
             )
-            created = True
+            created = not bool(existing_dna)
+        elif stored_class != expected_class:
+            cur.execute(
+                "UPDATE planets SET planet_class = ? WHERE id = ?;",
+                (expected_class, int(planet_id)),
+            )
 
         archetype = str(planet.get("culture_archetype") or CULTURE_ARCHETYPES[0])
         ensure_planet_culture(planet_id, conn, archetype=archetype)

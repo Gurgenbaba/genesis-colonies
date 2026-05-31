@@ -2278,6 +2278,7 @@ def _payload_from_live_context(
     payload["active_planet_name"] = str(planet.get("name") or "")
     try:
         from game.galaxy import get_planet_coordinates
+        from game.planet_evolution.dna import effective_planet_class
         from game.planet_evolution.ux_copy import planet_class_label_key
 
         from game.planet_visuals import get_landscape_for_position
@@ -2285,14 +2286,13 @@ def _payload_from_live_context(
         coords = get_planet_coordinates(planet)
         position = int(coords.get("position") or 0)
         landscape_fn = get_landscape_for_position(position)
+        planet_class = effective_planet_class(planet)
         payload["active_planet"] = {
             "planet_id": int(active_planet_id),
             "name": str(planet.get("name") or ""),
             "coordinates_formatted": coords.get("formatted") or "",
-            "planet_class": str(planet.get("planet_class") or "terrestrial"),
-            "planet_class_label_key": planet_class_label_key(
-                str(planet.get("planet_class") or "terrestrial")
-            ),
+            "planet_class": planet_class,
+            "planet_class_label_key": planet_class_label_key(planet_class),
             "is_homeworld": bool(planet.get("is_homeworld")),
             "position": position,
             "landscape_url": url_for("static", filename=f"img/landscapes/{landscape_fn}"),
@@ -3440,10 +3440,20 @@ def planet_evolution_view():
     from game.planet_evolution.repository import get_active_planet_id
 
     conn = db()
+    planet_state: Dict[str, Any] = {"ok": False, "error": "unavailable"}
     try:
-        active_id = get_active_planet_id(user_id, conn=conn)
-        planet_state = get_planet_state_payload(active_id, player_id=user_id, conn=conn)
-        commit(conn)
+        try:
+            active_id = get_active_planet_id(user_id, conn=conn)
+            planet_state = get_planet_state_payload(active_id, player_id=user_id, conn=conn)
+            commit(conn)
+        except sqlite3.OperationalError:
+            rollback(conn)
+            logger.warning(
+                "planet evolution state skipped (database locked) user_id=%s",
+                user_id,
+                exc_info=True,
+            )
+            planet_state = {"ok": False, "error": "database_locked", "locked": True}
     except Exception:
         rollback(conn)
         raise

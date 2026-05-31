@@ -52,8 +52,9 @@ def _format_remaining(seconds: int) -> str:
 
 def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
     from .galaxy import get_planet_coordinates
+    from .planet_evolution.dna import effective_planet_class
 
-    planet_class = str(planet.get("planet_class") or "terrestrial")
+    planet_class = effective_planet_class(planet)
     temp = temperature_range_for_class(planet_class)
     is_homeworld = bool(int(planet.get("is_homeworld") or 0))
     coords = get_planet_coordinates(planet)
