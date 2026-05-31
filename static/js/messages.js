@@ -656,13 +656,6 @@
     async function loadList(retryNotReady = true) {
       if (!isCurrentInit(state, initSeq)) return;
 
-      if (state.listAbort) {
-        try {
-          state.listAbort.abort();
-        } catch (_) {}
-        state.listAbort = null;
-      }
-
       const requestId = ++state.requestSeq;
       const ctrl = new AbortController();
       state.listAbort = ctrl;
@@ -678,7 +671,12 @@
           signal: ctrl.signal,
         });
 
-        if (!isCurrentRequest(state, initSeq, requestId)) return;
+        if (!isCurrentRequest(state, initSeq, requestId)) {
+          if (state.requestSeq === requestId) {
+            state.loading = false;
+          }
+          return;
+        }
 
         if (!data || !data.ok) {
           const err = data?.error || "error_load";
@@ -723,20 +721,14 @@
         }
       } catch (err) {
         if (err?.name === "AbortError") {
-          if (isCurrentInit(state, initSeq) && !state.listLoaded && !state._loadRetryScheduled) {
-            state._loadRetryScheduled = true;
-            queueMicrotask(() => {
-              state._loadRetryScheduled = false;
-              if (isCurrentInit(state, initSeq) && !state.listLoaded) {
-                loadList(retryNotReady);
-              } else if (isCurrentInit(state, initSeq)) {
-                state.loading = false;
-              }
-            });
+          return;
+        }
+        if (!isCurrentRequest(state, initSeq, requestId)) {
+          if (state.requestSeq === requestId) {
+            state.loading = false;
           }
           return;
         }
-        if (!isCurrentRequest(state, initSeq, requestId)) return;
         if (finishLoadAttempt(requestId)) {
           console.debug("[messages] inbox load error", err);
           showErrorList("error_load");
