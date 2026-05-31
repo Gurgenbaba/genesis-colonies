@@ -762,6 +762,7 @@ def build_fleet_send_preview(
             "block_reason": block_reason or (mission_reason if not mission_ok else ""),
             "departure_at": outbound["departure_at"] if ships_n else None,
             "arrival_at": arrival_at,
+            "countdown_at": arrival_at,
             "duration_seconds": outbound["duration_seconds"] if ships_n else 0,
         }
     finally:
@@ -2870,6 +2871,7 @@ def build_fleet_page_context(
         ships = get_planet_ships(planet_id, conn=conn)
         slots = get_fleet_slot_status(player_id, conn=conn)
         presets = list_presets(player_id, conn=conn)
+        process_fleet_tick(player_id=int(player_id), conn=conn)
         movements = list_active_movements(player_id, conn=conn)
 
         from .models import get_planet_buildings

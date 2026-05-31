@@ -140,9 +140,9 @@
                   {% if act.countdown_at or act.finish_at %}
                   data-countdown-at="{{ (act.countdown_at or act.finish_at)|int }}"
                   data-countdown-scope="overview"
-                  data-countdown-format="eta"
+                  data-countdown-format="{{ 'fleet' if act.key.startswith('fleet_') else 'eta' }}"
                   data-countdown-key="{{ act.movement_id or act.key.replace('fleet_', '') }}:{{ act.phase or act.state }}:{{ (act.countdown_at or act.finish_at)|int }}"
-                  {% endif %}>{{ act.remaining_display }}</span>
+                  {% endif %}>{% if act.key.startswith('fleet_') %}–{% else %}{{ act.remaining_display }}{% endif %}</span>
               {% else %}
                 <span class="overview-activity-idle">{{ T(act.label_key, 'Bereit') }}</span>
               {% endif %}

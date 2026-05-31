@@ -389,7 +389,7 @@ def test_transport_return_timing_after_arrival(fleet_db):
 
 def test_overview_fleet_timing_matches_active_movement(fleet_db):
     from game.fleet import list_active_movements
-    from game.overview_page import _fleet_movement_activity_lines
+    from game.overview_page import _fleet_movement_activity_lines, _format_fleet_countdown
 
     conn = db()
     uid = _player(conn=conn)
@@ -424,6 +424,7 @@ def test_overview_fleet_timing_matches_active_movement(fleet_db):
     assert fleet_line["phase"] == mv["phase"]
     assert fleet_line["status_label"] == mv["status_label"]
     assert fleet_line["label_key"] == f"fleet_mission_{mv['mission_type']}"
+    assert fleet_line["remaining_display"] == _format_fleet_countdown(mv["remaining_seconds"])
     conn.close()
 
 

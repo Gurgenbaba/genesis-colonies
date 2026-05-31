@@ -51,6 +51,19 @@ def _format_remaining(seconds: int) -> str:
     return f"{rm}:{rs:02d}"
 
 
+def _format_fleet_countdown(seconds: int) -> str:
+    """Match client formatCountdownRemain (fleet page + overview fleet rows)."""
+    sec = max(0, int(seconds or 0))
+    rh = sec // 3600
+    rm = (sec % 3600) // 60
+    rs = sec % 60
+    if rh > 0:
+        return f"{rh}h {rm}m"
+    if rm > 0:
+        return f"{rm}m {rs}s"
+    return f"{rs}s"
+
+
 def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
     from .galaxy import get_planet_coordinates
     from .planet_evolution.dna import effective_planet_class
@@ -144,6 +157,7 @@ def _fleet_movement_activity_lines(
                 label_key=f"fleet_mission_{mission}",
             )
         )
+        lines[-1]["remaining_display"] = _format_fleet_countdown(remaining)
     if not lines:
         lines.append(
             _build_activity_line(
@@ -351,9 +365,10 @@ def _load_overview_queue_fleet(
 
         conn = _db()
     try:
-        from .fleet import fleet_schema_ready, list_active_movements
+        from .fleet import fleet_schema_ready, list_active_movements, process_fleet_tick
 
         if fleet_schema_ready(conn):
+            process_fleet_tick(player_id=int(user_id), conn=conn)
             fleet_movements = list_active_movements(int(user_id), conn=conn)
         from .shipyard import get_shipyard_level
         from .shipyard_queue import shipyard_queue_for_client, shipyard_queue_table_ready

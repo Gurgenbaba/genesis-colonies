@@ -124,8 +124,6 @@
   function setServerTime(serverTimeSec) {
     const v = Number(serverTimeSec);
     if (!Number.isFinite(v) || v <= 0) return;
-    const approx = getApproxServerNow();
-    if (TIME.serverNow && Number.isFinite(approx) && Math.abs(v - approx) < 1.0) return;
     TIME.serverNow = v;
     TIME.clientPerfAt = performance.now();
   }
@@ -748,6 +746,11 @@
     return `${secR}s`;
   }
 
+  function formatMovementCountdown(seconds, format) {
+    if (format === "eta") return formatEta(seconds);
+    return formatCountdownRemain(seconds);
+  }
+
   function showNotify(message, category = "info") {
     const text = String(message || "").trim();
     if (!text) return;
@@ -1246,10 +1249,12 @@
             const mvId = act.movement_id || String(act.key || "").replace(/^fleet_/, "");
             etaEl.dataset.countdownAt = String(endAt);
             etaEl.dataset.countdownScope = "overview";
-            etaEl.dataset.countdownFormat = "eta";
+            etaEl.dataset.countdownFormat = act.key.startsWith("fleet_") ? "fleet" : "eta";
             etaEl.dataset.countdownKey = `${mvId}:${phase}:${endAt}`;
             const rem = Math.max(0, Math.ceil(endAt - getApproxServerNow()));
-            etaEl.textContent = formatEta(rem);
+            etaEl.textContent = act.key.startsWith("fleet_")
+              ? formatCountdownRemain(rem)
+              : formatEta(rem);
           } else {
             etaEl.textContent = act.remaining_display || formatEta(act.remaining || 0);
           }
@@ -1301,7 +1306,7 @@
             const mvId = act.movement_id || String(act.key || "").replace(/^fleet_/, "");
             etaEl.dataset.countdownAt = String(endAt);
             etaEl.dataset.countdownScope = "overview";
-            etaEl.dataset.countdownFormat = "eta";
+            etaEl.dataset.countdownFormat = act.key.startsWith("fleet_") ? "fleet" : "eta";
             etaEl.dataset.countdownKey = `${mvId}:${phase}:${endAt}`;
           } else {
             delete etaEl.dataset.countdownAt;
@@ -2007,8 +2012,7 @@
       const countdownAt = Number(el.dataset.countdownAt || 0);
       if (!countdownAt) return;
       const remaining = Math.max(0, Math.ceil(countdownAt - now));
-      const fmt = el.dataset.countdownFormat === "eta" ? formatEta : formatCountdownRemain;
-      _setIfChanged(el, fmt(remaining));
+      _setIfChanged(el, formatMovementCountdown(remaining, el.dataset.countdownFormat || "fleet"));
       if (remaining <= 0) {
         const scope = el.dataset.countdownScope || "";
         if (scope === "fleet") fleetExpired = true;
@@ -3209,10 +3213,9 @@
       }
 
       const signature = list.map((mv) => `${mv.id}:${mv.phase || mv.leg_phase || mv.status}:${mv.countdown_at || 0}`).join("|");
-      if (activeListEl.dataset.fleetSig === signature) return;
-      activeListEl.dataset.fleetSig = signature;
-
-      activeListEl.innerHTML = list.map((mv) => {
+      if (activeListEl.dataset.fleetSig !== signature) {
+        activeListEl.dataset.fleetSig = signature;
+        activeListEl.innerHTML = list.map((mv) => {
         const countdownAt = Number(mv.countdown_at || 0);
         const phase = mv.phase || mv.leg_phase || mv.status || "";
         const legKey = mv.status_label || mv.leg_label_key || (
@@ -3242,7 +3245,8 @@
           ${cargo.length ? `<div class="fleet-active-cargo">${cargo.map((c) => `<span>${c}</span>`).join(" ")}</div>` : ""}
           <div class="fleet-active-times gc-mono">${countdown}</div>
         </article>`;
-      }).join("");
+        }).join("");
+      }
       updateMovementCountdowns(getApproxServerNow());
       GC.startProgressTicker();
     };
@@ -3459,12 +3463,15 @@
           if (previewFuel) previewFuel.textContent = String(p.fuel_cost || 0);
           if (previewFuelAvail) previewFuelAvail.textContent = String(p.fuel_available ?? rt.data.resources?.fuel_cells ?? "–");
           if (previewFlight) {
-            previewFlight.textContent = formatFleetDuration(p.duration_seconds ?? p.flight_seconds ?? 0);
+            previewFlight.textContent = formatCountdownRemain(p.duration_seconds ?? p.flight_seconds ?? 0);
           }
           if (previewArrival) {
-            if (p.arrival_at) {
-              const nowSec = Math.floor(getApproxServerNow() || Date.now() / 1000);
-              previewArrival.textContent = formatFleetDuration(Math.max(0, Number(p.arrival_at) - nowSec));
+            if (p.countdown_at) {
+              const nowSec = getApproxServerNow();
+              previewArrival.textContent = formatCountdownRemain(Math.max(0, Math.ceil(Number(p.countdown_at) - nowSec)));
+            } else if (p.arrival_at) {
+              const nowSec = getApproxServerNow();
+              previewArrival.textContent = formatCountdownRemain(Math.max(0, Math.ceil(Number(p.arrival_at) - nowSec)));
             } else {
               previewArrival.textContent = "–";
             }
