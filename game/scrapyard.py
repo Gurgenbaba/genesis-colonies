@@ -90,8 +90,7 @@ def recycle_ships(
     if own:
         conn = db()
     try:
-        if own:
-            begin_write_transaction(conn)
+        begin_write_transaction(conn)
         lock_planet_for_update(conn, int(planet_id))
         cur = conn.cursor()
         cur.execute(
@@ -99,22 +98,19 @@ def recycle_ships(
             (int(planet_id), int(player_id)),
         )
         if not cur.fetchone():
-            if own:
-                rollback(conn)
+            rollback(conn)
             return False, "planet_not_found", None
 
         have = int(get_planet_ships(int(planet_id), conn=conn).get(sk, 0))
         if qty > have:
-            if own:
-                rollback(conn)
+            rollback(conn)
             return False, "not_enough_ships", None
 
         ratio = scrap_refund_ratio()
         refund = scrap_value_for_ship(sk, qty, ratio=ratio)
         ok, reason = deduct_planet_ships(int(planet_id), {sk: qty}, conn=conn)
         if not ok:
-            if own:
-                rollback(conn)
+            rollback(conn)
             return False, reason, None
 
         if refund["metal"] or refund["crystal"] or refund["fuel_cells"]:
@@ -134,8 +130,7 @@ def recycle_ships(
                 ),
             )
 
-        if own:
-            commit(conn)
+        commit(conn)
 
         return True, "", {
             "ship_key": sk,
@@ -145,8 +140,7 @@ def recycle_ships(
             "ships": get_planet_ships(int(planet_id), conn=conn),
         }
     except Exception:
-        if own:
-            rollback(conn)
+        rollback(conn)
         raise
     finally:
         if own and conn is not None:

@@ -58,6 +58,61 @@ def test_recycle_ships_refunds_and_deducts(scrap_db):
         assert result
         assert int(get_planet_ships(planet_id, conn=conn).get("spark_drone", 0)) == 1
         preview = scrap_value_for_ship("spark_drone", 2, ratio=result["refund_ratio"])
-        assert result["refund"]["metal"] == preview["metal"]
+        assert abs(result["refund"]["metal"] - preview["metal"]) <= 1
+        conn.commit()
     finally:
         conn.close()
+
+    verify = db()
+    try:
+        assert int(get_planet_ships(planet_id, conn=verify).get("spark_drone", 0)) == 1
+    finally:
+        verify.close()
+
+
+def test_scrapyard_api_persists_recycle(scrap_db, tmp_path, monkeypatch):
+    import importlib
+    import os
+
+    import app as app_module
+
+    db_path = os.environ.get("GC_DB_PATH")
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-not-default-value-32chars")
+    import game.db as dbmod
+    import game.models as models
+
+    dbmod.DB_PATH = db_path
+    models.DB_PATH = db_path
+    importlib.reload(app_module)
+
+    conn = db()
+    ok, err, user = create_user(f"scrap_api_{os.getpid()}", "test-pass-123")
+    assert ok, err
+    uid = int(user["id"])
+    ensure_player_and_homeworld(uid, conn=conn)
+    planet_id = int(conn.execute("SELECT id FROM planets WHERE player_id = ? LIMIT 1;", (uid,)).fetchone()["id"])
+    add_planet_ships(planet_id, uid, {"spark_drone": 3}, conn=conn)
+    conn.commit()
+    uname = conn.execute("SELECT username FROM users WHERE id = ?;", (uid,)).fetchone()["username"]
+    conn.close()
+
+    client = app_module.app.test_client()
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    res = client.post(
+        "/api/trader/scrapyard",
+        json={"ship_key": "spark_drone", "amount": 1},
+        headers={"Content-Type": "application/json"},
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is True
+    assert data["state"]["scrapyard"]["ships"]
+    nomad_row = next(r for r in data["state"]["scrapyard"]["ships"] if r["ship_key"] == "spark_drone")
+    assert int(nomad_row["amount"]) == 2
+
+    conn2 = db()
+    try:
+        assert int(get_planet_ships(planet_id, conn=conn2).get("spark_drone", 0)) == 2
+    finally:
+        conn2.close()

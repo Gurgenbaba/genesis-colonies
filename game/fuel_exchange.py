@@ -136,8 +136,7 @@ def buy_fuel_cells(
     if own:
         conn = db()
     try:
-        if own:
-            begin_write_transaction(conn)
+        begin_write_transaction(conn)
         lock_planet_for_update(conn, int(planet_id))
         cur = conn.cursor()
         cur.execute(
@@ -149,8 +148,7 @@ def buy_fuel_cells(
         )
         row = cur.fetchone()
         if not row:
-            if own:
-                rollback(conn)
+            rollback(conn)
             return False, "planet_not_found", None
         planet = dict(row)
         now = time.time()
@@ -160,8 +158,7 @@ def buy_fuel_cells(
             used = 0.0
             reset_at = float(int(now // DAY_SECONDS) * DAY_SECONDS + DAY_SECONDS)
         if used + qty > cfg["daily_units_limit"]:
-            if own:
-                rollback(conn)
+            rollback(conn)
             return False, "daily_limit", None
 
         metal_cost = qty * cfg["metal_per_unit"]
@@ -169,8 +166,7 @@ def buy_fuel_cells(
         metal_have = float(planet["metal"] or 0)
         crystal_have = float(planet["crystal"] or 0)
         if metal_have < metal_cost or crystal_have < crystal_cost:
-            if own:
-                rollback(conn)
+            rollback(conn)
             return False, "not_enough_resources", None
 
         cur.execute(
@@ -195,12 +191,10 @@ def buy_fuel_cells(
             ),
         )
         if cur.rowcount != 1:
-            if own:
-                rollback(conn)
+            rollback(conn)
             return False, "not_enough_resources", None
 
-        if own:
-            commit(conn)
+        commit(conn)
 
         return True, "", {
             "units": qty,
@@ -214,8 +208,7 @@ def buy_fuel_cells(
             "daily_units_remaining": max(0, cfg["daily_units_limit"] - int(used + qty)),
         }
     except Exception:
-        if own:
-            rollback(conn)
+        rollback(conn)
         raise
     finally:
         if own and conn is not None:
