@@ -420,3 +420,111 @@ def test_api_shipyard_get_and_build(shipyard_db, monkeypatch):
     err = rv3.get_json()
     assert err["ok"] is False
     assert err["error"] == "shipyard_level_too_low"
+
+
+def test_progressive_shipyard_delivery(shipyard_db):
+    """Multi-ship orders deliver one unit at a time as each build step completes."""
+    from game.fleet import get_planet_ships
+    from game.shipyard import build_ship, unit_build_seconds
+    from game.shipyard_queue import (
+        finish_due_shipyard_jobs_for_planet,
+        list_shipyard_queue_rows,
+        queue_count,
+        shipyard_queue_for_client,
+    )
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, metal=500000, crystal=500000)
+    cur.execute(
+        "UPDATE planet_buildings SET orbital_shipyard = 1 WHERE planet_id = ?;",
+        (pid,),
+    )
+    _grant_ship_test_prereqs(cur, pid, uid)
+    conn.commit()
+
+    qty = 10
+    ok, reason, _ = build_ship(
+        player_id=uid, planet_id=pid, ship_key="mule_courier", amount=qty, conn=conn
+    )
+    assert ok, reason
+
+    cur.execute(
+        "SELECT started_at, finish_at, amount FROM shipyard_queue WHERE planet_id = ?;",
+        (pid,),
+    )
+    job = cur.fetchone()
+    started = float(job["started_at"])
+    finish = float(job["finish_at"])
+    unit = unit_build_seconds("mule_courier", 1, conn=conn)
+    assert int(job["amount"]) == qty
+    assert int(finish - started) == unit * qty
+
+    q_before = shipyard_queue_for_client(uid, pid, 1, conn=conn, now=started + unit - 0.5)
+    assert q_before["queue"][0]["units_delivered"] == 0
+    assert q_before["queue"][0]["order_total_seconds"] == unit * qty
+
+    finish_due_shipyard_jobs_for_planet(conn, pid, uid, now=started + unit - 0.5)
+    assert get_planet_ships(pid, conn=conn).get("mule_courier", 0) == 0
+    assert queue_count(pid, conn=conn) == 1
+
+    finish_due_shipyard_jobs_for_planet(conn, pid, uid, now=started + unit + 0.01)
+    assert get_planet_ships(pid, conn=conn).get("mule_courier", 0) == 1
+    q_after = shipyard_queue_for_client(uid, pid, 1, conn=conn, now=started + unit + 0.01)
+    assert q_after["queue"][0]["units_delivered"] == 1
+    assert q_after["queue"][0]["remaining"] == q_after["queue"][0]["order_remaining"]
+    rows = list_shipyard_queue_rows(pid, conn=conn)
+    assert len(rows) == 1
+    assert int(rows[0]["amount"]) == qty - 1
+
+    finish_due_shipyard_jobs_for_planet(conn, pid, uid, now=started + 4 * unit + 0.01)
+    assert get_planet_ships(pid, conn=conn).get("mule_courier", 0) == 4
+
+    finish_due_shipyard_jobs_for_planet(conn, pid, uid, now=finish + 1)
+    assert get_planet_ships(pid, conn=conn).get("mule_courier", 0) == qty
+    assert queue_count(pid, conn=conn) == 0
+    conn.close()
+
+
+def test_progressive_ships_available_for_fleet_preview(shipyard_db, monkeypatch):
+    """Ships credited mid-order are visible in fleet state without waiting for job completion."""
+    import app as app_mod
+
+    from game.shipyard import build_ship, unit_build_seconds
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, metal=500000, crystal=500000)
+    cur.execute(
+        "UPDATE planet_buildings SET orbital_shipyard = 1 WHERE planet_id = ?;",
+        (pid,),
+    )
+    _grant_ship_test_prereqs(cur, pid, uid)
+    conn.commit()
+
+    ok, reason, _ = build_ship(
+        player_id=uid, planet_id=pid, ship_key="mule_courier", amount=3, conn=conn
+    )
+    assert ok, reason
+    cur.execute("SELECT started_at FROM shipyard_queue WHERE planet_id = ?;", (pid,))
+    started = float(cur.fetchone()["started_at"])
+    unit = unit_build_seconds("mule_courier", 1, conn=conn)
+    conn.close()
+
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    import time
+
+    monkeypatch.setattr(time, "time", lambda: started + unit + 0.01)
+    rv = client.get(f"/api/fleet/state?planet_id={pid}")
+    assert rv.status_code == 200
+    data = rv.get_json()
+    assert data["ok"] is True
+    assert data["data"]["ships"].get("mule_courier", 0) == 1
+    assert data["data"]["has_ships"] is True

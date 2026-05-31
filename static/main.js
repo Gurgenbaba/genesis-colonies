@@ -1488,16 +1488,24 @@
     },
   };
 
+  const SHIPYARDQ = {
+    active: {
+      finishTime: 0,
+      totalSeconds: 0,
+    },
+  };
+
   function _hasActiveProgressJobs() {
     return (
       BUILDQ.active.finishTime > 0 ||
       RESEARCHQ.active.finishTime > 0 ||
+      SHIPYARDQ.active.finishTime > 0 ||
       !!document.querySelector(".build-job.build-job-active") ||
       !!document.querySelector(".research-job.research-job-active") ||
+      !!document.querySelector(".shipyard-job.shipyard-job-active") ||
       !!document.getElementById("overview-research-active") ||
       !!document.querySelector(".planet-evolution-page .pe-planet-research-active") ||
-      !!document.querySelector("#overview-activities .overview-activity-row[data-finish-at]") ||
-      !!document.querySelector("#shipyard-page [data-finish-at]")
+      !!document.querySelector("#overview-activities .overview-activity-row[data-finish-at]")
     );
   }
 
@@ -1991,6 +1999,32 @@
         if (remaining <= 0) {
           _applyProgressFill(fillEl, 100);
           requestFinishRefresh("research");
+        }
+      }
+    }
+
+    const shipyardActive = document.querySelector(".shipyard-job.shipyard-job-active");
+    if (shipyardActive) {
+      const orderFinish = Number(shipyardActive.getAttribute("data-finish-time") || 0);
+      const nextUnitFinish = Number(shipyardActive.getAttribute("data-next-finish-time") || 0);
+      const total = Math.max(1, Number(shipyardActive.getAttribute("data-total") || 1));
+      if (orderFinish) {
+        const orderRemaining = Math.max(0, orderFinish - serverNow);
+        const pct = 100 * (1 - orderRemaining / total);
+        const etaEl = document.getElementById("shipyard-eta-live");
+        const fillEl = document.getElementById("shipyard-bar-fill-live");
+        if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(orderRemaining)));
+        _applyProgressFill(fillEl, pct);
+        const subEta = document.getElementById("shipyard-queue-subtitle-eta");
+        if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(orderRemaining)));
+        if (nextUnitFinish > 0 && nextUnitFinish <= serverNow) {
+          const unitKey = `${shipyardActive.dataset.queueJobId || ""}:${nextUnitFinish}`;
+          if (_shipyardUnitFinishKey !== unitKey) {
+            _shipyardUnitFinishKey = unitKey;
+            scheduleShipyardRefreshFromState(true);
+          }
+        } else if (orderRemaining <= 0) {
+          scheduleShipyardRefreshFromState(true);
         }
       }
     }
@@ -3759,35 +3793,44 @@
   }
 
   let _shipyardRefreshTimer = null;
-  function scheduleShipyardRefreshFromState() {
+  let _shipyardUnitFinishKey = "";
+
+  function scheduleShipyardRefreshFromState(immediate) {
     const page = document.getElementById("shipyard-page");
     if (!page || page.dataset.ready !== "1") return;
-    if (_shipyardRefreshTimer != null) return;
+    if (_shipyardRefreshTimer != null) {
+      clearTimeout(_shipyardRefreshTimer);
+      _shipyardRefreshTimer = null;
+    }
+    _lastShipyardQueueSignature = "";
+    const delay = immediate ? 0 : 150;
     _shipyardRefreshTimer = GC.setSafeTimeout(() => {
       _shipyardRefreshTimer = null;
+      if (page.dataset.queueRefreshBusy === "1") return;
+      page.dataset.queueRefreshBusy = "1";
       refreshShipyardState(page)
-        .then(() => {
+        .then((data) => {
+          if (data?.current_ships) renderShipyardInventory(page, data.current_ships);
+          _shipyardUnitFinishKey = "";
           if (typeof GC.refreshFleetState === "function") {
             const fleetPage = document.getElementById("fleet-page");
             if (fleetPage && fleetPage.dataset.ready === "1") GC.refreshFleetState(fleetPage);
           }
         })
-        .catch(() => {});
-    }, 250);
+        .finally(() => {
+          delete page.dataset.queueRefreshBusy;
+        });
+    }, delay);
   }
 
   let _shipyardBound = false;
   let _shipyardPollIntervalId = null;
-  let _shipyardQueueTickIntervalId = null;
+  let _lastShipyardQueueSignature = "";
 
   function stopShipyardTimers() {
     if (_shipyardPollIntervalId != null) {
       clearInterval(_shipyardPollIntervalId);
       _shipyardPollIntervalId = null;
-    }
-    if (_shipyardQueueTickIntervalId != null) {
-      clearInterval(_shipyardQueueTickIntervalId);
-      _shipyardQueueTickIntervalId = null;
     }
   }
 
@@ -3795,7 +3838,7 @@
     stopShipyardTimers();
     const page = document.getElementById("shipyard-page");
     if (!page || page.dataset.ready !== "1") return;
-    _shipyardQueueTickIntervalId = GC.setSafeInterval(tickShipyardQueueCountdowns, 1000);
+    GC.startProgressTicker();
     _shipyardPollIntervalId = GC.setSafeInterval(() => {
       const p = document.getElementById("shipyard-page");
       if (!p || p.dataset.ready !== "1" || !document.body.contains(p)) {
@@ -3804,6 +3847,212 @@
       }
       if (!p.dataset.queueRefreshBusy) refreshShipyardState(p).catch(() => {});
     }, Math.max(3000, Number(GC.shipyardPollMs) || 5000));
+  }
+
+  function _shipyardQueueSignature(queueList, summary) {
+    try {
+      const count = summary?.count ?? (queueList?.length ?? 0);
+      const items = (queueList || [])
+        .map(
+          (j) =>
+            `${j.id}:${j.units_delivered ?? 0}:${j.amount_remaining ?? j.amount}:${j.next_finish_at || j.finish_at || 0}`
+        )
+        .join("|");
+      return `${count}|${items}`;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function _updateShipyardQueueSubtitle(count, limit, firstEta) {
+    const subEl = document.querySelector("[data-shipyard-queue-subtitle]");
+    if (!subEl) return;
+
+    if (!count) {
+      const fb = t("shipyard_queue_slots", "%(count)s / %(limit)s orders");
+      _setIfChanged(
+        subEl,
+        fb.replace("%(count)s", "0").replace("%(limit)s", String(limit || 3))
+      );
+      return;
+    }
+
+    const jobsLabel = t("shipyard_queue_jobs", "Aufträge");
+    const nextLabel = t("build_queue_next", "Nächste Fertigstellung in");
+    const lim = limit || 3;
+    const html = `${count}/${lim} ${jobsLabel} · ${nextLabel}: <span id="shipyard-queue-subtitle-eta">${firstEta}</span>`;
+    if (subEl.innerHTML !== html) subEl.innerHTML = html;
+  }
+
+  function shipyardIconUrl(shipKey) {
+    const sk = String(shipKey || "").trim();
+    return `/static/img/ships/${sk}.svg`;
+  }
+
+  function renderShipyardQueue(page, queueData) {
+    const list = page.querySelector("[data-shipyard-queue-list]");
+    if (!list) return;
+    const tt = (key, fb) => t(key, fb);
+    const qd = queueData || { queue: [], summary: { count: 0, limit: 3, refund_percent: 60 } };
+    const jobs = qd.queue || [];
+    const summary = qd.summary || {};
+    const count = summary.count ?? jobs.length;
+    const limit = summary.limit ?? 3;
+    const first = jobs.length ? jobs[0] : null;
+
+    if (first && first.is_active && first.finish_at) {
+      const finishTime = Number(first.finish_at || 0);
+      const totalRaw = Number(first.order_total_seconds || first.total_seconds || 0);
+      const now = getApproxServerNow();
+      const remaining = Math.max(0, Math.floor(finishTime - (now || 0)));
+      const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
+      SHIPYARDQ.active.finishTime = finishTime;
+      SHIPYARDQ.active.totalSeconds = total;
+    } else {
+      SHIPYARDQ.active.finishTime = 0;
+      SHIPYARDQ.active.totalSeconds = 0;
+    }
+
+    const sig = _shipyardQueueSignature(jobs, summary);
+    const firstEta =
+      typeof summary?.first_finish_in !== "undefined"
+        ? formatEta(summary.first_finish_in)
+        : formatEta(first?.order_remaining ?? first?.remaining ?? 0);
+
+    if (sig === _lastShipyardQueueSignature) {
+      const finishTime = first ? Number(first.finish_at || 0) : 0;
+      const nextUnitFinish = first ? Number(first.next_finish_at || 0) : 0;
+      const now = getApproxServerNow();
+      const overdue =
+        (finishTime > 0 && finishTime <= now) ||
+        (nextUnitFinish > 0 && nextUnitFinish <= now);
+      if (!overdue) {
+        _updateShipyardQueueSubtitle(count, limit, firstEta);
+        GC.startProgressTicker();
+        return;
+      }
+    }
+    _lastShipyardQueueSignature = sig;
+
+    _updateShipyardQueueSubtitle(count, limit, firstEta);
+    list.replaceChildren();
+
+    if (!jobs.length) {
+      const empty = document.createElement("p");
+      empty.className = "shipyard-empty";
+      empty.dataset.shipyardQueueEmpty = "1";
+      empty.textContent = tt("shipyard_queue_empty", "No ships in production.");
+      list.appendChild(empty);
+      if (!_hasActiveProgressJobs()) GC.stopProgressTicker();
+      return;
+    }
+
+    const wrap = document.createElement("div");
+    wrap.className = "shipyard-queue-list-inner";
+
+    jobs.forEach((job, index) => {
+      const isActive = Boolean(job.is_active || index === 0);
+      const shipName = tt(`fleet_ship_${job.ship_key}`, job.ship_key);
+      const totalUnits = Math.max(1, Number(job.amount_total || job.amount || 1));
+      const delivered = Math.max(0, Number(job.units_delivered || 0));
+      const remainingUnits = Math.max(0, Number(job.amount_remaining ?? totalUnits - delivered));
+      const progressLabel = tt("shipyard_queue_progress", "%(done)s / %(total)s")
+        .replace("%(done)s", fmtNumber(delivered))
+        .replace("%(total)s", fmtNumber(totalUnits));
+      const orderRemaining = parseInt(job.order_remaining ?? job.remaining, 10) || 0;
+      const orderTotal = Math.max(
+        1,
+        parseInt(job.order_total_seconds || job.total_seconds, 10) || orderRemaining + 1
+      );
+      const pct = isActive ? Math.max(0, Math.min(100, 100 * (1 - orderRemaining / orderTotal))) : 0;
+      const iconSrc = job.icon || shipyardIconUrl(job.ship_key);
+
+      const art = document.createElement("article");
+      art.className = `shipyard-job${isActive ? " shipyard-job-active" : " shipyard-job-queued"}`;
+      art.dataset.queueJobId = String(job.id);
+      if (isActive) {
+        art.dataset.finishTime = String(job.finish_at || 0);
+        art.dataset.nextFinishTime = String(job.next_finish_at || 0);
+        art.dataset.total = String(orderTotal);
+      }
+
+      const icon = document.createElement("div");
+      icon.className = "shipyard-job-icon";
+      const img = document.createElement("img");
+      img.src = iconSrc;
+      img.alt = "";
+      img.loading = "lazy";
+      img.onerror = function onShipyardIconError() {
+        this.onerror = null;
+        this.src = shipyardIconUrl(job.ship_key).replace(".svg", ".png");
+      };
+      icon.appendChild(img);
+
+      const body = document.createElement("div");
+      body.className = "shipyard-job-body";
+
+      const header = document.createElement("div");
+      header.className = "job-header";
+      const nameEl = document.createElement("span");
+      nameEl.className = "job-name";
+      nameEl.textContent =
+        totalUnits > 1 ? `${shipName} · ${progressLabel}` : shipName;
+      const timeEl = document.createElement("span");
+      timeEl.className = `job-time${isActive ? "" : " job-time-muted"}`;
+      if (isActive) timeEl.id = "shipyard-eta-live";
+      timeEl.textContent = isActive
+        ? formatEta(orderRemaining)
+        : tt("status_in_queue", "In Warteschlange");
+      header.append(nameEl, timeEl);
+
+      const bar = document.createElement("div");
+      bar.className = "build-bar build-bar-large";
+      const fill = document.createElement("div");
+      fill.className = "build-bar-fill gc-progress-smooth";
+      if (isActive) fill.id = "shipyard-bar-fill-live";
+      fill.style.width = `${isActive ? pct : 0}%`;
+      fill.setAttribute("role", "progressbar");
+      fill.setAttribute("aria-valuenow", String(isActive ? pct : 0));
+      fill.setAttribute("aria-valuemin", "0");
+      fill.setAttribute("aria-valuemax", "100");
+      bar.appendChild(fill);
+
+      const actions = document.createElement("div");
+      actions.className = "shipyard-queue-job-actions job-actions";
+      const upBtn = document.createElement("button");
+      upBtn.type = "button";
+      upBtn.className = "gc-btn gc-btn-ghost gc-btn-xs";
+      upBtn.dataset.shipyardQueueUp = String(job.id);
+      upBtn.setAttribute("aria-label", tt("shipyard_queue_move_up", "Raise priority"));
+      upBtn.textContent = "▲";
+      if (index === 0) upBtn.disabled = true;
+      const downBtn = document.createElement("button");
+      downBtn.type = "button";
+      downBtn.className = "gc-btn gc-btn-ghost gc-btn-xs";
+      downBtn.dataset.shipyardQueueDown = String(job.id);
+      downBtn.setAttribute("aria-label", tt("shipyard_queue_move_down", "Lower priority"));
+      downBtn.textContent = "▼";
+      if (index === jobs.length - 1) downBtn.disabled = true;
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "gc-btn gc-btn-ghost gc-btn-xs gc-btn-danger";
+      cancelBtn.dataset.shipyardQueueCancel = String(job.id);
+      cancelBtn.textContent = tt("shipyard_queue_cancel_btn", "Cancel");
+      actions.append(upBtn, downBtn, cancelBtn);
+
+      const badge = document.createElement("span");
+      badge.className = isActive ? "job-badge-active" : "job-badge-queued";
+      badge.textContent = isActive
+        ? tt("buildings_btn_active", "Aktiv")
+        : `#${index + 1}`;
+
+      body.append(header, bar, actions, badge);
+      art.append(icon, body);
+      wrap.appendChild(art);
+    });
+
+    list.appendChild(wrap);
+    GC.startProgressTicker();
   }
 
   function parseShipyardPageData(page) {
@@ -3847,103 +4096,6 @@
       row.append(nameBtn, qtyEl);
       inv.appendChild(row);
     });
-  }
-
-  function formatShipyardRemaining(seconds) {
-    return formatCountdownRemain(seconds);
-  }
-
-  function renderShipyardQueue(page, queueData) {
-    const list = page.querySelector("[data-shipyard-queue-list]");
-    const sub = page.querySelector("[data-shipyard-queue-subtitle]");
-    if (!list) return;
-    const tt = (key, fb) => t(key, fb);
-    const qd = queueData || { queue: [], summary: { count: 0, limit: 3, refund_percent: 60 } };
-    const jobs = qd.queue || [];
-    const summary = qd.summary || {};
-    const count = summary.count ?? jobs.length;
-    const limit = summary.limit ?? 3;
-    if (sub) {
-      sub.textContent = tt("shipyard_queue_slots", "%(count)s / %(limit)s orders")
-        .replace("%(count)s", String(count))
-        .replace("%(limit)s", String(limit));
-    }
-    list.replaceChildren();
-    if (!jobs.length) {
-      const empty = document.createElement("p");
-      empty.className = "shipyard-empty";
-      empty.dataset.shipyardQueueEmpty = "1";
-      empty.textContent = tt("shipyard_queue_empty", "No ships in production.");
-      list.appendChild(empty);
-      return;
-    }
-    jobs.forEach((job, index) => {
-      const art = document.createElement("article");
-      art.className = `shipyard-queue-job${job.is_active ? " is-active" : ""}`;
-      art.dataset.queueJobId = String(job.id);
-      art.dataset.finishAt = String(job.finish_at || "");
-      const main = document.createElement("div");
-      main.className = "shipyard-queue-job-main";
-      const shipLbl = document.createElement("span");
-      shipLbl.className = "shipyard-queue-ship";
-      shipLbl.textContent = `${tt(`fleet_ship_${job.ship_key}`, job.ship_key)} × ${fmtNumber(job.amount || 0)}`;
-      const eta = document.createElement("span");
-      eta.className = "shipyard-queue-eta gc-mono";
-      eta.dataset.queueRemaining = String(job.remaining ?? 0);
-      eta.textContent = tt("shipyard_queue_remaining", "%(seconds)s left")
-        .replace("%(seconds)s", formatShipyardRemaining(job.remaining));
-      main.append(shipLbl, eta);
-      const actions = document.createElement("div");
-      actions.className = "shipyard-queue-job-actions";
-      const upBtn = document.createElement("button");
-      upBtn.type = "button";
-      upBtn.className = "gc-btn gc-btn-ghost gc-btn-xs";
-      upBtn.dataset.shipyardQueueUp = String(job.id);
-      upBtn.setAttribute("aria-label", tt("shipyard_queue_move_up", "Raise priority"));
-      upBtn.textContent = "▲";
-      if (index === 0) upBtn.disabled = true;
-      const downBtn = document.createElement("button");
-      downBtn.type = "button";
-      downBtn.className = "gc-btn gc-btn-ghost gc-btn-xs";
-      downBtn.dataset.shipyardQueueDown = String(job.id);
-      downBtn.setAttribute("aria-label", tt("shipyard_queue_move_down", "Lower priority"));
-      downBtn.textContent = "▼";
-      if (index === jobs.length - 1) downBtn.disabled = true;
-      const cancelBtn = document.createElement("button");
-      cancelBtn.type = "button";
-      cancelBtn.className = "gc-btn gc-btn-ghost gc-btn-xs gc-btn-danger";
-      cancelBtn.dataset.shipyardQueueCancel = String(job.id);
-      cancelBtn.textContent = tt("shipyard_queue_cancel_btn", "Cancel");
-      actions.append(upBtn, downBtn, cancelBtn);
-      art.append(main, actions);
-      list.appendChild(art);
-    });
-  }
-
-  function tickShipyardQueueCountdowns() {
-    const page = document.getElementById("shipyard-page");
-    if (!page || page.dataset.ready !== "1") return;
-    const now = getApproxServerNow() || Math.floor(Date.now() / 1000);
-    let overdue = false;
-    page.querySelectorAll("[data-finish-at]").forEach((row) => {
-      const finishAt = parseInt(row.getAttribute("data-finish-at") || "0", 10);
-      const eta = row.querySelector("[data-queue-remaining]");
-      if (!eta || !finishAt) return;
-      const rem = Math.max(0, finishAt - now);
-      eta.textContent = t("shipyard_queue_remaining", "%(seconds)s left")
-        .replace("%(seconds)s", formatShipyardRemaining(rem));
-      if (rem <= 0 && row.classList.contains("is-active")) overdue = true;
-    });
-    if (overdue && !page.dataset.queueRefreshBusy) {
-      page.dataset.queueRefreshBusy = "1";
-      refreshShipyardState(page).finally(() => {
-        delete page.dataset.queueRefreshBusy;
-        if (typeof GC.refreshFleetState === "function") {
-          const fleetPage = document.getElementById("fleet-page");
-          if (fleetPage && fleetPage.dataset.ready === "1") GC.refreshFleetState(fleetPage);
-        }
-      });
-    }
   }
 
   function applyShipyardState(page, data) {
@@ -4165,7 +4317,7 @@
     applyShipyardState(page, data);
     startShipyardTimers();
     GC.registerCleanup(stopShipyardTimers);
-    tickShipyardQueueCountdowns();
+    GC.startProgressTicker();
   }
 
   function initExchangePanel() {

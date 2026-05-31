@@ -42,13 +42,147 @@ def _now() -> float:
     return time.time()
 
 
+def _unit_build_seconds(ship_key: str, shipyard_level: int, *, conn=None) -> int:
+    from .shipyard import unit_build_seconds
+
+    return max(1, unit_build_seconds(ship_key, shipyard_level, conn=conn))
+
+
 def _job_duration_seconds(
     ship_key: str, amount: int, shipyard_level: int, *, conn=None
 ) -> int:
-    from .shipyard import _effective_build_seconds
-
-    unit = max(1, _effective_build_seconds(ship_key, shipyard_level, conn=conn))
+    unit = _unit_build_seconds(ship_key, shipyard_level, conn=conn)
     return max(1, unit * max(1, int(amount)))
+
+
+def _job_scheduled_duration_seconds(row: Mapping[str, Any]) -> int:
+    started = float(row.get("started_at") or 0)
+    finish = float(row.get("finish_at") or 0)
+    return max(1, int(finish - started))
+
+
+def _job_total_units(
+    row: Mapping[str, Any], shipyard_level: int, *, conn
+) -> int:
+    """Original order size (stable while amount tracks remaining units)."""
+    sk = canonical_ship_key(str(row["ship_key"]))
+    remaining = max(0, int(row.get("amount") or 0))
+    unit_sec = _unit_build_seconds(sk, shipyard_level, conn=conn)
+    scheduled = max(1, int(round(_job_scheduled_duration_seconds(row) / unit_sec)))
+    return max(remaining, scheduled)
+
+
+def _units_elapsed_for_job(
+    row: Mapping[str, Any],
+    shipyard_level: int,
+    *,
+    now: float,
+    conn,
+) -> int:
+    from .queue_poll import DUE_TIME_EPSILON_SEC
+
+    sk = canonical_ship_key(str(row["ship_key"]))
+    started = float(row.get("started_at") or 0)
+    unit_sec = _unit_build_seconds(sk, shipyard_level, conn=conn)
+    total = _job_total_units(row, shipyard_level, conn=conn)
+    elapsed = float(now) + float(DUE_TIME_EPSILON_SEC) - started
+    if elapsed < unit_sec:
+        return 0
+    return min(total, int(elapsed // unit_sec))
+
+
+def progressive_units_to_deliver(
+    row: Mapping[str, Any],
+    shipyard_level: int,
+    *,
+    now: float,
+    conn,
+) -> int:
+    """How many ships from this job are due for delivery at ``now``."""
+    remaining = max(0, int(row.get("amount") or 0))
+    if remaining <= 0:
+        return 0
+
+    from .queue_poll import DUE_TIME_EPSILON_SEC
+
+    finish = float(row.get("finish_at") or 0)
+    if float(now) + float(DUE_TIME_EPSILON_SEC) >= finish:
+        return remaining
+
+    total = _job_total_units(row, shipyard_level, conn=conn)
+    already_delivered = total - remaining
+    units_elapsed = _units_elapsed_for_job(row, shipyard_level, now=now, conn=conn)
+    return max(0, min(remaining, units_elapsed - already_delivered))
+
+
+def _next_unit_finish_at(
+    row: Mapping[str, Any], shipyard_level: int, *, conn
+) -> float:
+    """Unix time when the next ship in this job completes."""
+    sk = canonical_ship_key(str(row["ship_key"]))
+    started = float(row.get("started_at") or 0)
+    unit_sec = _unit_build_seconds(sk, shipyard_level, conn=conn)
+    total = _job_total_units(row, shipyard_level, conn=conn)
+    remaining = max(0, int(row.get("amount") or 0))
+    delivered = max(0, total - remaining)
+    return started + (delivered + 1) * unit_sec
+
+
+def _job_row_for_client(
+    row: Mapping[str, Any],
+    *,
+    idx: int,
+    shipyard_level: int,
+    now: float,
+    conn,
+) -> Dict[str, Any]:
+    from .fleet_defs import ship_icon_static_path
+
+    sk = canonical_ship_key(str(row["ship_key"]))
+    amount_remaining = max(0, int(row.get("amount") or 0))
+    total_units = _job_total_units(row, shipyard_level, conn=conn)
+    units_delivered = max(0, total_units - amount_remaining)
+    unit_sec = _unit_build_seconds(sk, shipyard_level, conn=conn)
+    started_at = float(row.get("started_at") or 0)
+    finish_at = float(row.get("finish_at") or 0)
+    order_total_seconds = _job_scheduled_duration_seconds(row)
+    is_active = idx == 0
+    order_remaining = max(0, int(finish_at - now))
+
+    if is_active:
+        next_finish_at = _next_unit_finish_at(row, shipyard_level, conn=conn)
+        unit_remaining = max(0, int(next_finish_at - now))
+        remaining = order_remaining
+        progress_total = order_total_seconds
+    else:
+        next_finish_at = finish_at
+        unit_remaining = 0
+        remaining = order_remaining
+        progress_total = order_total_seconds
+
+    return {
+        "id": int(row["id"]),
+        "ship_key": sk,
+        "icon": ship_icon_static_path(sk),
+        "amount": total_units,
+        "amount_total": total_units,
+        "amount_remaining": amount_remaining,
+        "units_delivered": units_delivered,
+        "unit_seconds": unit_sec,
+        "next_finish_at": next_finish_at,
+        "unit_remaining": unit_remaining,
+        "order_remaining": order_remaining,
+        "queue_position": int(row.get("queue_position") or idx),
+        "started_at": started_at,
+        "finish_at": finish_at,
+        "remaining": remaining,
+        "total_seconds": max(1, progress_total),
+        "order_total_seconds": order_total_seconds,
+        "is_active": is_active,
+        "cost_metal": int(row.get("cost_metal") or 0),
+        "cost_crystal": int(row.get("cost_crystal") or 0),
+        "cost_fuel_cells": int(float(row.get("cost_fuel_cells") or 0)),
+    }
 
 
 def list_shipyard_queue_rows(planet_id: int, *, conn) -> List[Dict[str, Any]]:
@@ -269,7 +403,23 @@ def finish_due_shipyard_jobs_for_planet(
     *,
     now: Optional[float] = None,
 ) -> int:
-    """Complete due shipyard jobs on a planet; credits ships to planet_ships."""
+    """Deliver due ships on a planet; returns count of fully completed queue jobs."""
+    return _finish_due_shipyard_jobs_impl(
+        conn,
+        int(planet_id),
+        int(player_id),
+        now=float(now if now is not None else _now()),
+    )
+
+
+def _finish_due_shipyard_jobs_impl(
+    conn,
+    planet_id: int,
+    player_id: int,
+    *,
+    now: float,
+) -> int:
+    """Progressive per-ship delivery for the active shipyard job(s)."""
     if not shipyard_queue_table_ready(conn):
         return 0
 
@@ -279,35 +429,43 @@ def finish_due_shipyard_jobs_for_planet(
     if not fleet_schema_ready(conn):
         return 0
 
-    ts = float(now if now is not None else _now())
-    from .queue_poll import DUE_TIME_EPSILON_SEC
-
-    due_cutoff = ts + float(DUE_TIME_EPSILON_SEC)
+    ts = float(now)
     rows = list_shipyard_queue_rows(planet_id, conn=conn)
     if not rows:
         return 0
 
     sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
-    completed = 0
+    completed_jobs = 0
     cur = conn.cursor()
 
     while rows:
         head = rows[0]
-        if float(head["finish_at"]) > due_cutoff:
+        to_deliver = progressive_units_to_deliver(head, sy_level, now=ts, conn=conn)
+        if to_deliver <= 0:
             break
-        sk = canonical_ship_key(str(head["ship_key"]))
-        qty = int(head["amount"] or 0)
-        if is_known_ship_key(sk) and qty > 0:
-            add_planet_ships(int(planet_id), int(player_id), {sk: qty}, conn=conn)
-        cur.execute("DELETE FROM shipyard_queue WHERE id = ?;", (int(head["id"]),))
-        completed += 1
-        rows = list_shipyard_queue_rows(planet_id, conn=conn)
 
-    if completed:
+        sk = canonical_ship_key(str(head["ship_key"]))
+        if is_known_ship_key(sk):
+            add_planet_ships(int(planet_id), int(player_id), {sk: to_deliver}, conn=conn)
+
+        remaining = max(0, int(head["amount"] or 0) - to_deliver)
+        if remaining <= 0:
+            cur.execute("DELETE FROM shipyard_queue WHERE id = ?;", (int(head["id"]),))
+            completed_jobs += 1
+            rows = list_shipyard_queue_rows(planet_id, conn=conn)
+            continue
+
+        cur.execute(
+            "UPDATE shipyard_queue SET amount = ? WHERE id = ?;",
+            (remaining, int(head["id"])),
+        )
+        break
+
+    if completed_jobs:
         _renumber_positions(conn, planet_id)
         recalculate_queue_finish_times(planet_id, sy_level, conn=conn, now=ts)
 
-    return completed
+    return completed_jobs
 
 
 def shipyard_queue_for_client(
@@ -328,27 +486,14 @@ def shipyard_queue_for_client(
     rows = list_shipyard_queue_rows(planet_id, conn=conn) if shipyard_queue_table_ready(conn) else []
     jobs: List[Dict[str, Any]] = []
     for idx, row in enumerate(rows):
-        sk = str(row["ship_key"])
-        amt = int(row["amount"] or 0)
-        finish_at = float(row["finish_at"] or 0)
-        started_at = float(row["started_at"] or 0)
-        total = _job_duration_seconds(sk, amt, shipyard_level, conn=conn)
-        remaining = max(0, int(finish_at - ts))
         jobs.append(
-            {
-                "id": int(row["id"]),
-                "ship_key": sk,
-                "amount": amt,
-                "queue_position": int(row.get("queue_position") or idx),
-                "started_at": started_at,
-                "finish_at": finish_at,
-                "remaining": remaining,
-                "total_seconds": total,
-                "is_active": idx == 0,
-                "cost_metal": int(row.get("cost_metal") or 0),
-                "cost_crystal": int(row.get("cost_crystal") or 0),
-                "cost_fuel_cells": int(float(row.get("cost_fuel_cells") or 0)),
-            }
+            _job_row_for_client(
+                row,
+                idx=idx,
+                shipyard_level=shipyard_level,
+                now=ts,
+                conn=conn,
+            )
         )
 
     first_remaining = jobs[0]["remaining"] if jobs else 0

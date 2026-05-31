@@ -360,6 +360,23 @@ def finish_planet_build_jobs(
     return len(due)
 
 
+def finish_planet_shipyard_jobs(
+    conn: sqlite3.Connection,
+    planet_id: int,
+    player_id: int,
+    now: float,
+) -> int:
+    """
+    Deliver due ships for one planet's shipyard queue (progressive per unit).
+    Returns count of fully completed queue jobs.
+    """
+    from .shipyard_queue import _finish_due_shipyard_jobs_impl
+
+    return _finish_due_shipyard_jobs_impl(
+        conn, int(planet_id), int(player_id), now=float(now)
+    )
+
+
 def finish_player_research_jobs(
     conn: sqlite3.Connection,
     user_id: int,
@@ -525,10 +542,8 @@ def finish_due_work(
                 logger.exception("queue_engine planet evolution finish failed: %s", msg)
 
             try:
-                from .shipyard_queue import finish_due_shipyard_jobs_for_planet
-
-                n_sy = finish_due_shipyard_jobs_for_planet(
-                    conn, pid_planet, pid_player, now=float(now)
+                n_sy = finish_planet_shipyard_jobs(
+                    conn, pid_planet, pid_player, float(now)
                 )
                 if n_sy > 0:
                     result["finished"]["shipyard"] += n_sy

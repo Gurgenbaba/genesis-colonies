@@ -59,27 +59,57 @@
     <div class="shipyard-queue-list" data-shipyard-queue-list aria-live="polite">
       {% set qjobs = sy.shipyard_queue.queue if sy.shipyard_queue is defined and sy.shipyard_queue.queue is defined else [] %}
       {% if qjobs %}
+      <div class="shipyard-queue-list-inner">
         {% for job in qjobs %}
-        <article class="shipyard-queue-job{% if job.is_active %} is-active{% endif %}"
+        {% set total_units = job.amount_total|default(job.amount)|int %}
+        {% set delivered = job.units_delivered|default(0)|int %}
+        {% set is_active = job.is_active|default(loop.first) %}
+        {% set order_total = job.order_total_seconds|default(job.total_seconds)|default(1)|int %}
+        {% set order_rem = job.order_remaining|default(job.remaining)|default(0)|int %}
+        {% set pct = (100 * (1 - order_rem / order_total)) if is_active and order_total > 0 else 0 %}
+        <article class="shipyard-job{% if is_active %} shipyard-job-active{% else %} shipyard-job-queued{% endif %}"
                  data-queue-job-id="{{ job.id }}"
-                 data-finish-at="{{ job.finish_at }}">
-          <div class="shipyard-queue-job-main">
-            <span class="shipyard-queue-ship">{{ T("fleet_ship_" ~ job.ship_key) }} × {{ job.amount|fmt_int }}</span>
-            <span class="shipyard-queue-eta gc-mono" data-queue-remaining="{{ job.remaining }}">
-              {{ T("shipyard_queue_remaining", seconds=job.remaining|fmt_int) }}
-            </span>
+                 {% if is_active %}data-finish-time="{{ job.finish_at|int }}" data-next-finish-time="{{ job.next_finish_at|default(job.finish_at)|int }}" data-total="{{ order_total }}"{% endif %}>
+          <div class="shipyard-job-icon">
+            <img src="{{ job.icon|default('/static/img/ships/' ~ job.ship_key ~ '.svg') }}" alt="" loading="lazy"
+                 onerror="this.onerror=null;this.src='/static/img/ships/{{ job.ship_key }}.png'">
           </div>
-          <div class="shipyard-queue-job-actions">
-            <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shipyard-queue-up="{{ job.id }}"
-                    {% if loop.first %}disabled{% endif %} aria-label="{{ T('shipyard_queue_move_up') }}">▲</button>
-            <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shipyard-queue-down="{{ job.id }}"
-                    {% if loop.last %}disabled{% endif %} aria-label="{{ T('shipyard_queue_move_down') }}">▼</button>
-            <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-btn-danger" data-shipyard-queue-cancel="{{ job.id }}">
-              {{ T("shipyard_queue_cancel_btn") }}
-            </button>
+          <div class="shipyard-job-body">
+            <div class="job-header">
+              <span class="job-name">
+                {% if total_units > 1 %}
+                  {{ T("fleet_ship_" ~ job.ship_key) }} · {{ T("shipyard_queue_progress", done=delivered, total=total_units) }}
+                {% else %}
+                  {{ T("fleet_ship_" ~ job.ship_key) }}
+                {% endif %}
+              </span>
+              <span class="job-time{% if not is_active %} job-time-muted{% endif %}"{% if is_active %} id="shipyard-eta-live"{% endif %}>
+                {% if is_active %}{{ T("shipyard_queue_remaining", seconds=order_rem|fmt_int) }}{% else %}{{ T("status_in_queue") }}{% endif %}
+              </span>
+            </div>
+            <div class="build-bar build-bar-large">
+              <div class="build-bar-fill gc-progress-smooth"{% if is_active %} id="shipyard-bar-fill-live"{% endif %}
+                   style="width:{{ pct|round(0, 'floor') }}%"
+                   role="progressbar" aria-valuenow="{{ pct|round(0, 'floor') }}" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="shipyard-queue-job-actions job-actions">
+              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shipyard-queue-up="{{ job.id }}"
+                      {% if loop.first %}disabled{% endif %} aria-label="{{ T('shipyard_queue_move_up') }}">▲</button>
+              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shipyard-queue-down="{{ job.id }}"
+                      {% if loop.last %}disabled{% endif %} aria-label="{{ T('shipyard_queue_move_down') }}">▼</button>
+              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-btn-danger" data-shipyard-queue-cancel="{{ job.id }}">
+                {{ T("shipyard_queue_cancel_btn") }}
+              </button>
+            </div>
+            {% if is_active %}
+            <span class="job-badge-active">{{ T("buildings_btn_active") }}</span>
+            {% else %}
+            <span class="job-badge-queued">#{{ loop.index }}</span>
+            {% endif %}
           </div>
         </article>
         {% endfor %}
+      </div>
       {% else %}
         <p class="shipyard-empty" data-shipyard-queue-empty>{{ T("shipyard_queue_empty") }}</p>
       {% endif %}

@@ -55,6 +55,11 @@ def _effective_build_seconds(ship_key: str, shipyard_level: int, *, conn=None) -
     return max(1, int(math.ceil(seconds / speed)))
 
 
+def unit_build_seconds(ship_key: str, shipyard_level: int, *, conn=None) -> int:
+    """Per-ship build time for one unit (progressive shipyard delivery)."""
+    return _effective_build_seconds(ship_key, shipyard_level, conn=conn)
+
+
 def _unit_build_cost(ship_key: str) -> Dict[str, int]:
     spec = get_ship(ship_key) or {}
     raw = spec.get("build_cost") or {}
