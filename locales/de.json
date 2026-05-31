@@ -1039,7 +1039,7 @@
   "fleet_error_mission_blocked_own_planet": "Mission auf eigene Kolonie nicht erlaubt.",
   "fleet_error_mission_blocked_ally_planet": "Mission auf verbündete Kolonie nicht erlaubt.",
   "fleet_error_mission_blocked_foreign_planet": "Mission auf fremde Kolonie nicht erlaubt.",
-  "fleet_error_mission_blocked_empty_slot": "Keine Flottenmission auf leeren Slot.",
+  "fleet_error_mission_blocked_empty_slot": "Auf freiem Slot ist nur Kolonisierung möglich.",
   "fleet_error_mission_blocked_expedition_slot": "Nur Expeditionen auf Expeditionsposition.",
   "fleet_error_mission_blocked_not_expedition_slot": "Expedition nur auf Position 16.",
   "fleet_error_mission_blocked_occupied": "Position ist belegt.",

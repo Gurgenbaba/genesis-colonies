@@ -1164,7 +1164,107 @@ def test_resolve_fleet_target_empty_slot(fleet_db):
     uid = _player(conn=conn)
     target = resolve_fleet_target(uid, 1, 499, 12, conn=conn)
     assert target["target_type"] == "empty_slot"
-    assert target["allowed_missions"] == []
+    assert target["allowed_missions"] == ["colonize"]
+    assert mission_allowed_for_target("colonize", target)[0] is True
+    assert mission_allowed_for_target("transport", target)[0] is False
+    conn.close()
+
+
+def test_colonize_fleet_send_to_empty_slot(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, fuel_cells=50000)
+    _seed_ships(pid, uid, {"seed_ark": 1, "mule_courier": 2}, conn=conn)
+    conn.commit()
+
+    ok, reason, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=1,
+        target_system=499,
+        target_position=12,
+        mission_type="colonize",
+        ships={"seed_ark": 1},
+        resources={"colony_name": "New Outpost"},
+        conn=conn,
+    )
+    assert ok, reason
+    assert result["fleet"]["status"] == "outbound"
+    assert result["fleet"]["mission_type"] == "colonize"
+    conn.commit()
+    conn.close()
+
+    verify = db()
+    try:
+        row = verify.execute(
+            "SELECT status FROM fleet_movements WHERE player_id = ? ORDER BY id DESC LIMIT 1;",
+            (uid,),
+        ).fetchone()
+        assert row is not None
+        assert row["status"] == "outbound"
+    finally:
+        verify.close()
+
+
+def test_colonize_requires_ark_on_empty_slot(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    _seed_ships(pid, uid, {"mule_courier": 5}, conn=conn)
+    conn.commit()
+
+    ok, reason, _ = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=1,
+        target_system=498,
+        target_position=11,
+        mission_type="colonize",
+        ships={"mule_courier": 1},
+        conn=conn,
+    )
+    assert not ok
+    assert reason == "colonize_requires_ark"
+    conn.close()
+
+
+def test_colonize_arrival_completes_without_return(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, fuel_cells=50000)
+    _seed_ships(pid, uid, {"seed_ark": 1}, conn=conn)
+    conn.commit()
+
+    ok, reason, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=1,
+        target_system=497,
+        target_position=10,
+        mission_type="colonize",
+        ships={"seed_ark": 1},
+        resources={"colony_name": "Ark Colony"},
+        conn=conn,
+    )
+    assert ok, reason
+    fleet_id = result["fleet"]["id"]
+    before_count = len(get_planets_by_player(uid, conn=conn))
+
+    cur.execute(
+        "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+        (time.time() - 1, fleet_id),
+    )
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute("SELECT status FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    assert cur.fetchone()["status"] == "completed"
+    assert len(get_planets_by_player(uid, conn=conn)) == before_count + 1
     conn.close()
 
 
@@ -1442,6 +1542,69 @@ def test_galaxy_fleet_links_have_query_params(fleet_db, monkeypatch):
     assert f"target_position={EXPEDITION_POSITION}" in body
 
 
+def test_api_fleet_state_processes_due_return(fleet_db, monkeypatch):
+    import importlib
+
+    import app as app_module
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"mule_courier": 3}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 100},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    now = time.time()
+    cur.execute(
+        """
+        UPDATE fleet_movements
+        SET arrival_at = ?, status = 'returning', return_at = ?
+        WHERE id = ?;
+        """,
+        (now - 200, now - 1, fleet_id),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    r = client.get(f"/api/fleet/state?planet_id={pid}")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert data["data"]["active_fleets"] == []
+
+    verify = db()
+    try:
+        row = verify.execute(
+            "SELECT status FROM fleet_movements WHERE id = ?;",
+            (fleet_id,),
+        ).fetchone()
+        assert row["status"] == "completed"
+    finally:
+        verify.close()
+
+
 def test_fleet_ui_active_buttons_have_handlers():
     """Non-disabled fleet buttons must be wired in initFleet (static contract)."""
     from pathlib import Path
@@ -1469,6 +1632,8 @@ def test_fleet_ui_active_buttons_have_handlers():
         "rt.sending",
         "data-fleet-send-btn",
         "data-preview-target-type",
+        "tickFleetCountdowns",
+        "fleetRefreshBusy",
     ]
     for needle in required_bindings:
         assert needle in js, f"missing initFleet binding: {needle}"

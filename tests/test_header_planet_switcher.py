@@ -154,6 +154,7 @@ def test_main_js_header_planet_switcher_bound():
     src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     assert "initHeaderPlanetSwitcher" in src
     assert "GC.updateHeaderPlanetSwitcherFromState" in src
+    assert "rebuildHeaderPlanetSwitcher" in src
     assert "applyPlanetLandscapeFromState" in src
     assert "gc-has-planet-landscape" in src
     assert "reloadPageForActivePlanet" in src
@@ -196,6 +197,20 @@ def test_overview_injects_planet_landscape_css_var(switcher_db, monkeypatch):
     body = client.get("/overview").get_data(as_text=True)
     assert "--planet-landscape:" in body
     assert f"img/landscapes/{expected_fn}" in body
+
+
+def test_game_state_includes_planets_list(switcher_db, monkeypatch):
+    player_id, uname = _create_player()
+    colony_id = _second_planet(player_id)
+
+    client = _app_client(monkeypatch)
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    gs = client.get("/api/game-state").get_json()
+    assert gs.get("ok") is True
+    planets = gs.get("planets") or []
+    assert len(planets) == 2
+    ids = {int(p["planet_id"]) for p in planets}
+    assert colony_id in ids
 
 
 def test_game_state_includes_landscape_url(switcher_db, monkeypatch):

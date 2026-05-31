@@ -63,7 +63,7 @@ _BASE_ALLOWED_MISSIONS: Dict[str, Set[str]] = {
     "own_planet": {"transport", "deploy"},
     "ally_planet": {"transport"},
     "foreign_planet": {"spy", "attack"},
-    "empty_slot": set(),
+    "empty_slot": {"colonize"},
     "expedition_slot": {"expedition"},
 }
 
@@ -498,7 +498,7 @@ def resolve_fleet_target(
                 "target_player_id": None,
                 "target_owner_name": None,
                 "coords": coords,
-                "allowed_missions": [],
+                "allowed_missions": sorted(_BASE_ALLOWED_MISSIONS["empty_slot"]),
                 "reason_if_blocked": None,
             }
 
@@ -630,7 +630,7 @@ def validate_fleet_send(
         return False, ship_reason, {"target": target_info}
 
     cargo = calculate_total_cargo(ships_n)
-    loaded_total = resources_n["metal"] + resources_n["crystal"]
+    loaded_total = loaded_resource_total(resources_n)
     if loaded_total > 0 and loaded_total > cargo:
         return False, "not_enough_cargo", {"target": target_info}
 
@@ -1851,12 +1851,6 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         tg = int(movement.get("target_galaxy") or 0)
         ts = int(movement.get("target_system") or 0)
         tp = int(movement.get("target_position") or 0)
-        return_ships = dict(ships)
-        ark_used = min(1, int(return_ships.get("seed_ark") or 0))
-        if ark_used:
-            return_ships["seed_ark"] = int(return_ships.get("seed_ark") or 0) - ark_used
-            if return_ships["seed_ark"] <= 0:
-                return_ships.pop("seed_ark", None)
 
         ok_col, reason, _extra = colonize_planet(
             player_id,
@@ -1878,17 +1872,29 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
             )
             return
 
-        flight_seconds = int(movement.get("flight_seconds") or 1)
-        return_at = now + flight_seconds
-        claimed = _claim_movement_status(
-            conn,
-            movement_id,
-            ("outbound",),
-            "returning",
-            now,
-            extra_sql=", return_at = ?, ships_json = ?, resources_json = ?",
-            extra_params=(return_at, _json_dumps(return_ships), _json_dumps({})),
-        )
+        return_ships = dict(ships)
+        ark_used = min(1, int(return_ships.get("seed_ark") or 0))
+        if ark_used:
+            return_ships["seed_ark"] = int(return_ships.get("seed_ark") or 0) - ark_used
+            if return_ships["seed_ark"] <= 0:
+                return_ships.pop("seed_ark", None)
+        return_ships = {k: v for k, v in return_ships.items() if int(v or 0) > 0}
+
+        if return_ships:
+            flight_seconds = int(movement.get("flight_seconds") or 1)
+            return_at = now + flight_seconds
+            claimed = _claim_movement_status(
+                conn,
+                movement_id,
+                ("outbound",),
+                "returning",
+                now,
+                extra_sql=", return_at = ?, ships_json = ?, resources_json = ?",
+                extra_params=(return_at, _json_dumps(return_ships), _json_dumps({})),
+            )
+        else:
+            claimed = _complete_movement(movement_id, conn=conn, now=now, from_status="outbound")
+
         if claimed:
             notify_combat(
                 player_id,
@@ -2324,6 +2330,7 @@ def get_fleet_live_state(
             return {"ready": False, "error": "planet_not_found"}
         planet = dict(row)
         _finish_due_shipyard_on_planet(conn, int(planet_id), int(player_id))
+        process_fleet_tick(player_id=int(player_id), conn=conn)
         ships = get_planet_ships(planet_id, conn=conn)
         return {
             "ready": True,

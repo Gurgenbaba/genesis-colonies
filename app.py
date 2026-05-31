@@ -2329,6 +2329,13 @@ def _payload_from_live_context(
         payload["unread_messages_count"] = 0
 
     try:
+        from game.planet_evolution.service import list_player_planets_for_switcher
+
+        payload["planets"] = list_player_planets_for_switcher(user_id)
+    except Exception:
+        payload["planets"] = []
+
+    try:
         from game.exchange import exchange_schema_ready, get_exchange_status
 
         conn_ex = db()
@@ -2710,17 +2717,27 @@ def api_fleet_state():
 
     conn = db()
     try:
+        from game.db import begin_write_transaction, commit, rollback
         from game.shipyard import resolve_owned_planet_id
 
+        begin_write_transaction(conn)
         raw_pid = request.args.get("planet_id")
         req_pid = int(raw_pid) if raw_pid not in (None, "") else None
         planet_id, err = resolve_owned_planet_id(user_id, req_pid, conn=conn)
         if err:
+            rollback(conn)
             return jsonify(fleet_err(err)), 404
         state = get_fleet_live_state(player_id=user_id, planet_id=int(planet_id), conn=conn)
         if not state.get("ready"):
+            rollback(conn)
             return jsonify(fleet_err(str(state.get("error") or "fleet_unavailable"))), 400
+        commit(conn)
         return jsonify(fleet_ok(state, message_key="fleet_state_ok"))
+    except Exception:
+        from game.db import rollback
+
+        rollback(conn)
+        raise
     finally:
         conn.close()
 

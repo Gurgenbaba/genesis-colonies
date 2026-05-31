@@ -125,6 +125,26 @@ def player_has_due_queue_work(
                     return True
         except Exception:
             pass
+        try:
+            from .fleet import fleet_schema_ready
+
+            if fleet_schema_ready(conn):
+                cur.execute(
+                    """
+                    SELECT 1 FROM fleet_movements
+                    WHERE player_id = ? AND (
+                        (status = 'outbound' AND arrival_at <= ?)
+                        OR (status = 'holding' AND holding_until <= ?)
+                        OR (status = 'returning' AND return_at <= ?)
+                    )
+                    LIMIT 1;
+                    """,
+                    (int(player_id), ts, ts, ts),
+                )
+                if cur.fetchone():
+                    return True
+        except Exception:
+            pass
         return False
     finally:
         if owns_conn and conn is not None:
