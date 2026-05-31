@@ -199,6 +199,33 @@
       {% endfor %}
     </div>
 
+    {% if expedition_slot is defined and expedition_slot %}
+    <article class="galaxy-slot-card is-expedition is-empty" role="listitem" id="galaxy-slot-expedition">
+      <div class="galaxy-slot-pos-col" aria-hidden="true">
+        <span class="galaxy-slot-pos-label">{{ T("galaxy_slot_position", "Pos") }}</span>
+        <span class="galaxy-slot-pos-num gc-mono">{{ expedition_slot.position }}</span>
+      </div>
+      <div class="galaxy-slot-orbit-col" aria-hidden="true">
+        <div class="galaxy-orbit-rail">
+          <span class="galaxy-orbit-line"></span>
+          <span class="galaxy-orbit-body galaxy-orbit-body--expedition"></span>
+        </div>
+      </div>
+      <div class="galaxy-slot-card-main">
+        <header class="galaxy-slot-card-head is-dim">
+          <h3 class="galaxy-slot-planet-name">{{ T("galaxy_expedition_slot_title") }}</h3>
+          <span class="galaxy-slot-coord gc-mono">{{ expedition_slot.coordinates_formatted }}</span>
+        </header>
+        <p class="galaxy-slot-empty-hint">{{ T("galaxy_expedition_slot_hint") }}</p>
+        {% set slot = expedition_slot %}
+        {% include "partials/galaxy_fleet_actions.html" %}
+      </div>
+      <div class="galaxy-slot-card-aside">
+        <span class="gs-pill gs-pill-expedition">{{ T("galaxy_expedition_slot_badge") }}</span>
+      </div>
+    </article>
+    {% endif %}
+
     <div class="galaxy-legend">
       <div class="galaxy-legend-title">{{ T("galaxy_legend_title") }}</div>
       <div class="galaxy-legend-items">

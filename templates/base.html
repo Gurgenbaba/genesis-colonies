@@ -20,7 +20,7 @@
 {% set _motd_text = (motd_text if motd_text is defined else "") %}
 {% set _player_stats = (PLAYER_STATS if PLAYER_STATS is defined and PLAYER_STATS else {}) %}
 
-<body class="gc-body gc-theme-dark {{ body_bg|default('') }} {% if SIMPLE_LAYOUT %}gc-body-simple{% else %}gc-body-ingame{% endif %}"
+<body class="gc-body gc-theme-dark {{ body_bg|default('') }} {% if SIMPLE_LAYOUT %}gc-body-simple{% else %}gc-body-ingame{% endif %}{% if current_planet_landscape_url %} gc-has-planet-landscape{% endif %}"
       data-theme="dark"
       data-endpoint="{{ request.endpoint or '' }}"
       data-auth-page="{{ '1' if SIMPLE_LAYOUT else '0' }}"

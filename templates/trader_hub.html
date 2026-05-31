@@ -6,7 +6,8 @@
 {% set p_metal = (player_obj.metal if player_obj and player_obj.metal is defined else 0) | int %}
 {% set p_crystal = (player_obj.crystal if player_obj and player_obj.crystal is defined else 0) | int %}
 
-<div class="gc-page trader-hub-page">
+<div class="gc-page trader-hub-page" id="trader-hub-page"
+     data-planet-id="{{ HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else '' }}">
   <header class="gc-page-header section-header">
     <h1 class="section-title">{{ T("trader_hub_title", "Trader Hub") }}</h1>
     <p class="section-hint hint">{{ T("trader_hub_hint") }}</p>

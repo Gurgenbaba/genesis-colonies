@@ -109,6 +109,36 @@ def create_alliance(tag: str, name: str, founder_id: int, conn=None) -> Dict[str
             conn.close()
 
 
+def are_players_allied(player_id: int, other_player_id: int, *, conn=None) -> bool:
+    """True when both players share the same alliance (Phase 1: alliance_members table)."""
+    a = int(player_id)
+    b = int(other_player_id)
+    if a <= 0 or b <= 0 or a == b:
+        return False
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not table_exists(conn, "alliance_members"):
+            return False
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT am1.alliance_id
+            FROM alliance_members am1
+            INNER JOIN alliance_members am2
+                ON am2.alliance_id = am1.alliance_id AND am2.player_id = ?
+            WHERE am1.player_id = ?
+            LIMIT 1;
+            """,
+            (b, a),
+        )
+        return cur.fetchone() is not None
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def add_alliance_member(alliance_id: int, player_id: int, role: str = "member", conn=None) -> None:
     own = conn is None
     if own:

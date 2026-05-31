@@ -155,7 +155,32 @@ def test_main_js_header_planet_switcher_bound():
     assert "initHeaderPlanetSwitcher" in src
     assert "GC.updateHeaderPlanetSwitcherFromState" in src
     assert "applyPlanetLandscapeFromState" in src
+    assert "gc-has-planet-landscape" in src
+    assert "reloadPageForActivePlanet" in src
+    assert "getDomPlanetId" in src
+    assert "trader-hub-page" in src
+    assert 'force: true' in src
     assert ".pe-planet-btn" not in src
+
+
+def test_trader_hub_template_scoped_to_active_planet():
+    tpl = (ROOT / "templates" / "trader_hub.html").read_text(encoding="utf-8")
+    assert 'id="trader-hub-page"' in tpl
+    assert "data-planet-id" in tpl
+    assert "HEADER_ACTIVE_PLANET" in tpl
+
+
+def test_landscape_css_uses_gc_bg_layer():
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    assert "gc-has-planet-landscape" in css
+    assert "gc-has-planet-landscape .gc-bg" in css
+    assert '[style*="--planet-landscape"]::before' not in css
+
+
+def test_base_template_landscape_class():
+    tpl = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "gc-has-planet-landscape" in tpl
+    assert "current_planet_landscape_url" in tpl
 
 
 def test_overview_injects_planet_landscape_css_var(switcher_db, monkeypatch):
@@ -186,3 +211,20 @@ def test_game_state_includes_landscape_url(switcher_db, monkeypatch):
     assert ap.get("position") == 4
     assert ap.get("landscape_url")
     assert "trockenplanet08-h.jpg" in ap["landscape_url"]
+
+
+def test_trader_hub_and_shipyard_render_active_planet_id(switcher_db, monkeypatch):
+    player_id, uname = _create_player()
+    hw_id = int(get_homeworld(player_id=player_id)["id"])
+    colony_id = _second_planet(player_id)
+
+    client = _app_client(monkeypatch)
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+
+    set_active_planet(player_id, colony_id)
+    trader = client.get("/trader-hub", headers={"X-PJAX": "true"}).get_data(as_text=True)
+    assert f'data-planet-id="{colony_id}"' in trader
+
+    set_active_planet(player_id, hw_id)
+    shipyard = client.get("/shipyard", headers={"X-PJAX": "true"}).get_data(as_text=True)
+    assert f'data-planet-id="{hw_id}"' in shipyard

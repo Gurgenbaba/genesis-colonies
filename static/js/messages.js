@@ -328,7 +328,14 @@
     const initSeq = ++_messagesInitSeq;
     resetMessagesPageState();
 
-    const filter = readActiveFilterFromDom();
+    const tabsEl = document.getElementById("messages-tabs");
+    tabsEl?.querySelectorAll(".tab-btn[data-filter]").forEach((btn) => {
+      const isAll = (btn.dataset.filter || "") === "all";
+      btn.classList.toggle("active", isAll);
+      btn.setAttribute("aria-selected", isAll ? "true" : "false");
+    });
+
+    const filter = "all";
     console.debug("[messages] init", { initSeq, filter });
     msgDebug("[messages] init detail", { pjax: Boolean(options && options.pjax) });
 
@@ -624,15 +631,7 @@
 
     GC.messagesPageState = state;
 
-    const startLoad = () => {
-      if (!isCurrentInit(state, initSeq)) return;
-      loadList();
-    };
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(startLoad);
-    } else {
-      queueMicrotask(startLoad);
-    }
+    loadList();
   }
 
   GC.modules = GC.modules || {};

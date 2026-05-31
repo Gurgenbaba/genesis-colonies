@@ -216,9 +216,38 @@
   }
 
   function applyPlanetLandscapeFromState(data) {
-    const url = data?.active_planet?.landscape_url;
+    const url = String(data?.active_planet?.landscape_url || "").trim();
     if (!url) return;
-    document.body.style.setProperty("--planet-landscape", `url('${url}')`);
+    document.body.classList.add("gc-has-planet-landscape");
+    document.body.style.setProperty("--planet-landscape", `url("${url}")`);
+  }
+
+  function getDomPlanetId() {
+    const roots = [
+      document.getElementById("shipyard-page"),
+      document.getElementById("fleet-page"),
+      document.getElementById("trader-hub-page"),
+      document.getElementById("build-queue-root"),
+    ];
+    for (const el of roots) {
+      if (!el) continue;
+      const pid = Number(el.dataset.planetId || 0);
+      if (pid > 0) return pid;
+    }
+    return 0;
+  }
+
+  let _planetPageReloadPromise = null;
+  function reloadPageForActivePlanet(activePlanetId, reason) {
+    const domPid = getDomPlanetId();
+    if (!activePlanetId || !domPid || activePlanetId === domPid) return null;
+    if (_planetPageReloadPromise) return _planetPageReloadPromise;
+    if (typeof GC.reloadCurrentPage !== "function") return null;
+    console.debug("[GC] planet page reload", { activePlanetId, domPid, reason });
+    _planetPageReloadPromise = Promise.resolve(GC.reloadCurrentPage({ force: true })).finally(() => {
+      _planetPageReloadPromise = null;
+    });
+    return _planetPageReloadPromise;
   }
 
   function applyActionState(json, reason) {
@@ -468,10 +497,10 @@
 
   GC.getServerNow = getApproxServerNow;
 
-  GC.reloadCurrentPage = function reloadCurrentPage() {
+  GC.reloadCurrentPage = function reloadCurrentPage(opts) {
     const target = `${window.location.pathname || "/"}${window.location.search || ""}`;
     if (typeof GC.navigateTo === "function") {
-      return GC.navigateTo(target, { push: false });
+      return GC.navigateTo(target, { push: false, force: true, ...(opts || {}) });
     }
     window.location.reload();
     return Promise.resolve();
@@ -1878,6 +1907,16 @@
         }
       }
     }
+
+    if (isOverviewPage) {
+      document.querySelectorAll("#overview-activities .overview-activity-row[data-finish-at]").forEach((row) => {
+        const finishAt = Number(row.dataset.finishAt || 0);
+        if (!finishAt) return;
+        const remaining = Math.max(0, finishAt - serverNow);
+        const etaEl = row.querySelector("[data-activity-eta]");
+        if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
+      });
+    }
   }
 
   function updateBuildQueueLive() {
@@ -1972,21 +2011,8 @@
         _last.activePlanetId = activePlanetId;
       }
 
-      const shipyardPage = document.getElementById("shipyard-page");
-      if (shipyardPage && shipyardPage.dataset.ready === "1") {
-        const domPid = Number(shipyardPage.dataset.planetId || 0);
-        if (
-          activePlanetId > 0 &&
-          domPid > 0 &&
-          activePlanetId !== domPid &&
-          shipyardPage.dataset.planetReloading !== "1" &&
-          typeof GC.reloadCurrentPage === "function"
-        ) {
-          shipyardPage.dataset.planetReloading = "1";
-          Promise.resolve(GC.reloadCurrentPage()).finally(() => {
-            delete shipyardPage.dataset.planetReloading;
-          });
-        }
+      if (_reason !== "planet_switch") {
+        reloadPageForActivePlanet(activePlanetId, _reason || "state");
       }
 
       if (typeof GC.updateHeaderPlanetSwitcherFromState === "function") {
@@ -2307,6 +2333,7 @@
 
       GC.lastState = data;
       GC.startProgressTicker();
+      scheduleShipyardRefreshFromState();
 
       return hasActiveBuild || hasActiveResearchNow;
   }
@@ -2715,6 +2742,7 @@
     const getResourcesSelection = (page) => ({
       metal: parseInt(page.querySelector("[data-fleet-res-metal]")?.value || "0", 10) || 0,
       crystal: parseInt(page.querySelector("[data-fleet-res-crystal]")?.value || "0", 10) || 0,
+      fuel_cells: parseInt(page.querySelector("[data-fleet-res-fuel-cells]")?.value || "0", 10) || 0,
     });
 
     const getTargetCoords = (page) => {
@@ -2863,7 +2891,12 @@
 
     const refreshFleetState = async (page) => {
       try {
-        const planetId = parseInt(page.dataset.planetId || "0", 10);
+        let planetId = parseInt(page.dataset.planetId || "0", 10);
+        const statePid = Number(GC.lastState?.active_planet_id || 0);
+        if (statePid > 0 && (!planetId || statePid !== planetId)) {
+          planetId = statePid;
+          page.dataset.planetId = String(statePid);
+        }
         const q = planetId ? `?planet_id=${planetId}` : "";
         const res = await GC.fetchJSON(`/api/fleet/state${q}`, { cache: "no-store" });
         if (res?.ok) applyLiveState(page, fleetPayload(res));
@@ -2880,14 +2913,28 @@
       const previewFuel = page.querySelector("[data-preview-fuel]");
       const previewFuelAvail = page.querySelector("[data-preview-fuel-available]");
       const previewFlight = page.querySelector("[data-preview-flight]");
+      const previewTargetType = page.querySelector("[data-preview-target-type]");
+      const previewTargetOwner = page.querySelector("[data-preview-target-owner]");
+      const previewMissionStatus = page.querySelector("[data-preview-mission-status]");
+      const previewArrival = page.querySelector("[data-preview-arrival]");
+      const sendBtn = page.querySelector("[data-fleet-send-btn]");
       const ships = getShipsSelection(page);
-      if (!Object.keys(ships).length) {
+      const missionType = form.querySelector("[data-fleet-mission]")?.value || "transport";
+      const resetPreview = () => {
         rt.lastPreview = null;
+        if (previewTargetType) previewTargetType.textContent = "–";
+        if (previewTargetOwner) previewTargetOwner.textContent = "–";
+        if (previewMissionStatus) previewMissionStatus.textContent = "–";
         if (previewCargo) previewCargo.textContent = "–";
         if (previewCargoFree) previewCargoFree.textContent = "–";
         if (previewFuel) previewFuel.textContent = "–";
         if (previewFuelAvail) previewFuelAvail.textContent = "–";
         if (previewFlight) previewFlight.textContent = "–";
+        if (previewArrival) previewArrival.textContent = "–";
+        if (sendBtn) sendBtn.disabled = true;
+      };
+      if (!Object.keys(ships).length) {
+        resetPreview();
         return;
       }
       try {
@@ -2899,19 +2946,51 @@
             ships,
             resources: getResourcesSelection(page),
             speed_percent: parseInt(form.querySelector("[data-fleet-speed]")?.value || "100", 10),
+            mission_type: missionType,
             ...getTargetCoords(page),
           }),
         });
         const p = fleetPayload(res).preview || res.preview;
         if (res?.ok && p) {
           rt.lastPreview = p;
+          const target = p.target || {};
+          if (previewTargetType) {
+            previewTargetType.textContent = target.target_type
+              ? tt(`fleet_target_${target.target_type}`, target.target_type)
+              : "–";
+          }
+          if (previewTargetOwner) {
+            previewTargetOwner.textContent = target.target_owner_name || (target.target_type === "expedition_slot"
+              ? tt("fleet_target_expedition_label", "Deep space")
+              : target.target_type === "empty_slot"
+                ? tt("fleet_target_empty_label", "—")
+                : "–");
+          }
+          if (previewMissionStatus) {
+            if (p.can_send) {
+              previewMissionStatus.textContent = tt("fleet_preview_mission_ok", "Mission allowed");
+            } else {
+              const reason = p.block_reason || p.mission_block_reason || "generic";
+              previewMissionStatus.textContent = reasonText(reason);
+            }
+          }
           if (previewCargo) previewCargo.textContent = `${p.cargo_used || 0} / ${p.cargo_total || 0}`;
           if (previewCargoFree) previewCargoFree.textContent = String(p.cargo_free || 0);
           if (previewFuel) previewFuel.textContent = String(p.fuel_cost || 0);
           if (previewFuelAvail) previewFuelAvail.textContent = String(p.fuel_available ?? rt.data.resources?.fuel_cells ?? "–");
           if (previewFlight) previewFlight.textContent = formatFleetDuration(p.flight_seconds);
+          if (previewArrival && p.arrival_at) {
+            previewArrival.textContent = formatFleetDuration(Math.max(0, Math.ceil(Number(p.arrival_at) - (getApproxServerNow() || Date.now() / 1000))));
+          } else if (previewArrival) {
+            previewArrival.textContent = formatFleetDuration(p.flight_seconds);
+          }
+          if (sendBtn) sendBtn.disabled = !p.can_send;
+        } else {
+          resetPreview();
         }
-      } catch (_) {}
+      } catch (_) {
+        resetPreview();
+      }
     };
 
     const schedulePreview = (page) => {
@@ -3104,6 +3183,7 @@
       if (e.target.matches("[data-fleet-mission]")) {
         const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
         if (colonizeRow) colonizeRow.hidden = e.target.value !== "colonize";
+        schedulePreview(page);
       }
       if (e.target.closest("#fleet-send-form")) schedulePreview(page);
     });
@@ -3125,9 +3205,18 @@
         if (rt.sending) return;
         const errorEl = page.querySelector("[data-fleet-error]");
         if (errorEl) { errorEl.hidden = true; errorEl.textContent = ""; }
-        const submitBtn = form.querySelector(".fleet-send-submit");
+        const submitBtn = form.querySelector(".fleet-send-submit") || form.querySelector("[data-fleet-send-btn]");
         rt.sending = true;
         if (submitBtn) submitBtn.disabled = true;
+        if (!rt.lastPreview?.can_send) {
+          if (errorEl) {
+            errorEl.textContent = reasonText(rt.lastPreview?.block_reason || "generic");
+            errorEl.hidden = false;
+          }
+          rt.sending = false;
+          if (submitBtn) submitBtn.disabled = !rt.lastPreview?.can_send;
+          return;
+        }
         try {
           const res = await GC.fetchGameAction("/api/fleet/send", {
             method: "POST",
@@ -3154,8 +3243,10 @@
             page.querySelectorAll("[data-ship-input]").forEach((inp) => { inp.value = "0"; });
             const mInp = page.querySelector("[data-fleet-res-metal]");
             const cInp = page.querySelector("[data-fleet-res-crystal]");
+            const fInp = page.querySelector("[data-fleet-res-fuel-cells]");
             if (mInp) mInp.value = "0";
             if (cInp) cInp.value = "0";
+            if (fInp) fInp.value = "0";
             schedulePreview(page);
             applyActionState(res?.data?.state ? res : res, "fleet_send_success");
           } else {
@@ -3172,7 +3263,7 @@
           }
         } finally {
           rt.sending = false;
-          if (submitBtn) submitBtn.disabled = false;
+          if (submitBtn) submitBtn.disabled = !(rt.lastPreview && rt.lastPreview.can_send);
         }
         return;
       }
@@ -3292,6 +3383,24 @@
     GC.runFleetPreview(page);
   }
 
+  let _shipyardRefreshTimer = null;
+  function scheduleShipyardRefreshFromState() {
+    const page = document.getElementById("shipyard-page");
+    if (!page || page.dataset.ready !== "1") return;
+    if (_shipyardRefreshTimer != null) return;
+    _shipyardRefreshTimer = GC.setSafeTimeout(() => {
+      _shipyardRefreshTimer = null;
+      refreshShipyardState(page)
+        .then(() => {
+          if (typeof GC.refreshFleetState === "function") {
+            const fleetPage = document.getElementById("fleet-page");
+            if (fleetPage && fleetPage.dataset.ready === "1") GC.refreshFleetState(fleetPage);
+          }
+        })
+        .catch(() => {});
+    }, 250);
+  }
+
   let _shipyardBound = false;
   let _shipyardPollIntervalId = null;
   let _shipyardQueueTickIntervalId = null;
@@ -3319,7 +3428,7 @@
         return;
       }
       if (!p.dataset.queueRefreshBusy) refreshShipyardState(p).catch(() => {});
-    }, 12000);
+    }, 5000);
   }
 
   function parseShipyardPageData(page) {
@@ -3688,20 +3797,6 @@
     startShipyardTimers();
     GC.registerCleanup(stopShipyardTimers);
     tickShipyardQueueCountdowns();
-    const activePid = Number(GC.lastState?.active_planet_id || 0);
-    const domPid = Number(page.dataset.planetId || 0);
-    if (
-      activePid > 0 &&
-      domPid > 0 &&
-      activePid !== domPid &&
-      page.dataset.planetReloading !== "1" &&
-      typeof GC.reloadCurrentPage === "function"
-    ) {
-      page.dataset.planetReloading = "1";
-      Promise.resolve(GC.reloadCurrentPage()).finally(() => {
-        delete page.dataset.planetReloading;
-      });
-    }
   }
 
   function initExchangePanel() {
@@ -5220,8 +5315,12 @@
           document.body.dataset.endpoint = fetchedBody.dataset.endpoint || "";
         }
         const landscape = fetchedBody?.style?.getPropertyValue("--planet-landscape");
-        if (landscape) {
+        if (landscape && landscape.trim()) {
+          document.body.classList.add("gc-has-planet-landscape");
           document.body.style.setProperty("--planet-landscape", landscape.trim());
+        } else {
+          document.body.classList.remove("gc-has-planet-landscape");
+          document.body.style.removeProperty("--planet-landscape");
         }
 
         _syncNavActive(url);

@@ -121,12 +121,13 @@ def calculate_loaded_resources(resources: Mapping[str, Any] | None) -> Dict[str,
     raw = resources or {}
     metal = max(0, int(float(raw.get("metal") or 0)))
     crystal = max(0, int(float(raw.get("crystal") or 0)))
-    return {"metal": metal, "crystal": crystal}
+    fuel_cells = max(0, int(float(raw.get("fuel_cells") or 0)))
+    return {"metal": metal, "crystal": crystal, "fuel_cells": fuel_cells}
 
 
 def loaded_resource_total(resources: Mapping[str, Any] | None) -> int:
     loaded = calculate_loaded_resources(resources)
-    return loaded["metal"] + loaded["crystal"]
+    return loaded["metal"] + loaded["crystal"] + loaded["fuel_cells"]
 
 
 def validate_departure_balances(
@@ -142,9 +143,11 @@ def validate_departure_balances(
 
     if loaded["metal"] > metal_have or loaded["crystal"] > crystal_have:
         return False, "not_enough_resources"
+    if loaded["fuel_cells"] > fuel_cells_have:
+        return False, "not_enough_resources"
 
     if FLEET_FUEL_RESOURCE == "fuel_cells":
-        if fuel > fuel_cells_have:
+        if loaded["fuel_cells"] + fuel > fuel_cells_have:
             return False, "not_enough_fuel"
     elif FLEET_FUEL_RESOURCE == "crystal":
         crystal_needed = loaded["crystal"] + fuel
@@ -175,7 +178,7 @@ def apply_departure_deduction(
     fuel = max(0, int(fuel_cost))
     new_metal = float(metal_have) - loaded["metal"]
     new_crystal = float(crystal_have) - loaded["crystal"]
-    new_fuel_cells = float(fuel_cells_have)
+    new_fuel_cells = float(fuel_cells_have) - loaded["fuel_cells"]
     if FLEET_FUEL_RESOURCE == "fuel_cells":
         new_fuel_cells -= fuel
     elif FLEET_FUEL_RESOURCE == "crystal":
@@ -196,9 +199,12 @@ def build_flight_preview_payload(
     fuel_cells_have: float = 0,
 ) -> Dict[str, Any]:
     loaded = calculate_loaded_resources(resources)
-    loaded_total = loaded["metal"] + loaded["crystal"]
+    loaded_total = loaded["metal"] + loaded["crystal"] + loaded["fuel_cells"]
     fuel = max(0, int(fuel_cost))
     available = max(0, int(float(fuel_cells_have)))
+    fuel_needed = fuel
+    if FLEET_FUEL_RESOURCE == "fuel_cells":
+        fuel_needed = loaded["fuel_cells"] + fuel
     return {
         "distance": distance,
         "fleet_speed": fleet_speed,
@@ -206,8 +212,8 @@ def build_flight_preview_payload(
         "fuel_cost": fuel,
         "fuel_resource": FLEET_FUEL_RESOURCE,
         "fuel_available": available,
-        "fuel_after_send": max(0, available - fuel),
-        "can_afford_fuel": available >= fuel,
+        "fuel_after_send": max(0, available - fuel_needed),
+        "can_afford_fuel": available >= fuel_needed,
         "cargo_total": cargo_total,
         "cargo_free": max(0, cargo_total - loaded_total),
         "cargo_used": loaded_total,

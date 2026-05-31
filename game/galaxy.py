@@ -20,6 +20,7 @@ SYSTEM_MIN = 1
 SYSTEM_MAX = 499
 POSITION_MIN = 1
 POSITION_MAX = 15
+EXPEDITION_SLOT_POSITION = 16
 MINIMAP_RADIUS = 4
 
 _COORD_QUERY_RE = re.compile(
@@ -84,6 +85,8 @@ def validate_coordinates(
         raise GalaxyCoordinateError(f"galaxy out of range: {g}")
     if s < SYSTEM_MIN or s > SYSTEM_MAX:
         raise GalaxyCoordinateError(f"system out of range: {s}")
+    if p == EXPEDITION_SLOT_POSITION:
+        return
     if p < POSITION_MIN or p > POSITION_MAX:
         raise GalaxyCoordinateError(f"position out of range: {p}")
 
@@ -501,6 +504,8 @@ def list_system(
     if own:
         conn = db()
 
+    from .alliance import are_players_allied
+
     by_position: Dict[int, Dict[str, Any]] = {}
     if _coords_schema_ready(conn):
         cur = conn.cursor()
@@ -538,6 +543,11 @@ def list_system(
                 viewer_player_id is not None
                 and player_id == int(viewer_player_id)
             )
+            is_ally = (
+                not is_own
+                and viewer_player_id is not None
+                and are_players_allied(int(viewer_player_id), player_id, conn=conn)
+            )
             is_active = (
                 active_planet_id is not None and pid == int(active_planet_id)
             )
@@ -562,6 +572,7 @@ def list_system(
                 "temperature_display": meta["temperature_display"],
                 "planet_score": meta["planet_score"],
                 "is_own_planet": is_own,
+                "is_ally_planet": is_ally,
                 "is_active_planet": is_active,
                 "is_highlighted": is_highlighted,
                 "colony_target": False,
@@ -594,6 +605,7 @@ def list_system(
                     "temperature_display": None,
                     "planet_score": None,
                     "is_own_planet": False,
+                    "is_ally_planet": False,
                     "is_active_planet": False,
                     "is_highlighted": is_highlighted,
                     "colony_target": True,

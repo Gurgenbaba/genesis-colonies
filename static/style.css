@@ -172,42 +172,10 @@ button, input, textarea { font: inherit; }
   padding-right: var(--gc-safe-right);
 }
 
-/* Planet landscape — atmospheric backdrop (only when active) */
-body.gc-body-ingame[style*="--planet-landscape"]::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(0, 8, 18, 0.82), rgba(0, 8, 18, 0.90)),
-    var(--planet-landscape);
-  background-size: cover;
-  background-position: center center;
-  background-repeat: no-repeat;
-  z-index: -2;
-  pointer-events: none;
-  filter: saturate(1.04) brightness(0.78) contrast(1.02);
-}
-
-body.gc-body-ingame[style*="--planet-landscape"]::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background:
-    radial-gradient(circle at center, transparent 35%, rgba(0, 0, 0, 0.38) 100%),
-    radial-gradient(circle at 50% 15%, rgba(0, 255, 255, 0.05), transparent 40%),
-    linear-gradient(
-      90deg,
-      rgba(0, 0, 0, 0.62),
-      rgba(0, 0, 0, 0.14) 22%,
-      rgba(0, 0, 0, 0.14) 78%,
-      rgba(0, 0, 0, 0.62)
-    );
-  z-index: -1;
-  pointer-events: none;
-}
-
-/* UI tokens — stronger separation from bright landscapes */
-body.gc-body-ingame[style*="--planet-landscape"] {
+/* Planet landscape — rendered on .gc-bg (above body fill, below UI) */
+body.gc-body-ingame.gc-has-planet-landscape {
+  background-color: transparent;
+  background-image: none;
   --gc-panel: rgba(2, 10, 20, 0.92);
   --gc-panel-strong: rgba(2, 8, 16, 0.96);
   --gc-panel-bg: rgba(2, 10, 20, 0.92);
@@ -217,11 +185,32 @@ body.gc-body-ingame[style*="--planet-landscape"] {
   --gc-header-h: auto;
 }
 
-body.gc-body-ingame[style*="--planet-landscape"] .gc-bg {
-  opacity: 0;
+body.gc-body-ingame.gc-has-planet-landscape .gc-bg {
+  opacity: 1;
+  background-image:
+    linear-gradient(rgba(0, 8, 18, 0.34), rgba(0, 8, 18, 0.50)),
+    var(--planet-landscape);
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  filter: saturate(1.08) brightness(0.92) contrast(1.04);
 }
 
-body.gc-body-ingame[style*="--planet-landscape"] .gc-sidebar {
+body.gc-body-ingame.gc-has-planet-landscape .gc-bg::after {
+  background:
+    radial-gradient(circle at center, transparent 42%, rgba(0, 0, 0, 0.22) 100%),
+    radial-gradient(circle at 50% 15%, rgba(0, 255, 255, 0.05), transparent 42%),
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.34),
+      rgba(0, 0, 0, 0.08) 24%,
+      rgba(0, 0, 0, 0.08) 76%,
+      rgba(0, 0, 0, 0.34)
+    );
+  opacity: 0.92;
+}
+
+body.gc-body-ingame.gc-has-planet-landscape .gc-sidebar {
   background: rgba(2, 8, 18, 0.95);
   backdrop-filter: blur(16px) saturate(1.08);
   -webkit-backdrop-filter: blur(16px) saturate(1.08);
@@ -232,27 +221,27 @@ body.gc-body-ingame[style*="--planet-landscape"] .gc-sidebar {
     0 14px 36px rgba(0, 0, 0, 0.48);
 }
 
-body.gc-body-ingame[style*="--planet-landscape"] .gc-nav-link {
+body.gc-body-ingame.gc-has-planet-landscape .gc-nav-link {
   background: rgba(2, 8, 16, 0.42);
 }
 
-body.gc-body-ingame[style*="--planet-landscape"] .gc-nav-link:hover {
+body.gc-body-ingame.gc-has-planet-landscape .gc-nav-link:hover {
   background: rgba(70, 229, 255, 0.11);
 }
 
-body.gc-body-ingame[style*="--planet-landscape"] .gc-nav-link.active {
+body.gc-body-ingame.gc-has-planet-landscape .gc-nav-link.active {
   background: rgba(70, 229, 255, 0.14);
 }
 
-body.gc-body-ingame[style*="--planet-landscape"] .gc-panel,
-body.gc-body-ingame[style*="--planet-landscape"] .section-header {
+body.gc-body-ingame.gc-has-planet-landscape .gc-panel,
+body.gc-body-ingame.gc-has-planet-landscape .section-header {
   box-shadow:
     var(--gc-border-glow),
     inset 0 0 0 1px rgba(0, 0, 0, 0.52),
     0 10px 30px rgba(0, 0, 0, 0.38);
 }
 
-body.gc-body-ingame[style*="--planet-landscape"] .gc-header-cmd {
+body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd {
   background:
     radial-gradient(900px 70px at 30% 0%, rgba(120, 255, 220, 0.07), transparent 60%),
     linear-gradient(180deg, var(--gc-hdr-bg-1), var(--gc-hdr-bg-2));
@@ -260,17 +249,17 @@ body.gc-body-ingame[style*="--planet-landscape"] .gc-header-cmd {
   -webkit-backdrop-filter: blur(12px);
 }
 
-body.gc-body-ingame[style*="--planet-landscape"] .gc-header-cmd .gc-header-inner {
+body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd .gc-header-inner {
   gap: 7px;
   padding: 9px 16px;
   min-height: var(--gc-header-h);
 }
 
-body.gc-body-ingame[style*="--planet-landscape"] .gc-hud-panel {
+body.gc-body-ingame.gc-has-planet-landscape .gc-hud-panel {
   background: linear-gradient(180deg, rgba(6, 12, 24, 0.94), rgba(4, 8, 18, 0.88));
 }
 
-body.gc-body-ingame[style*="--planet-landscape"] .gc-header-cmd .resource-bar.resource-bar-cmd {
+body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd .resource-bar.resource-bar-cmd {
   gap: 6px;
 }
 

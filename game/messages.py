@@ -348,6 +348,25 @@ def notify_expedition(
     )
 
 
+def notify_transport(
+    player_id: int,
+    subject: str,
+    body: str,
+    metadata: dict[str, Any] | None = None,
+    *,
+    conn=None,
+) -> dict[str, Any]:
+    return notify_player(
+        player_id,
+        subject,
+        body,
+        category="system",
+        metadata=metadata,
+        sender_name="Transportbericht",
+        conn=conn,
+    )
+
+
 def _inbox_visibility_clause(*, archived: bool = False) -> str:
     """Shared inbox filters for list + unread_count (non-archive tab)."""
     if archived:

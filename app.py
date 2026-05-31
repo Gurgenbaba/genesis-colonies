@@ -39,7 +39,7 @@ from game.models import (
     get_idempotent_action,
     save_idempotent_action,
 )
-from game.db import commit, rollback
+from game.db import begin_write_transaction, commit, rollback
 
 logger = logging.getLogger(__name__)
 
@@ -903,12 +903,14 @@ def galaxy_view():
         list_system,
         resolve_view_coordinates,
     )
+    from game.fleet import build_expedition_slot, _hold_mission_enabled
     from game.planet_evolution.repository import get_active_planet_id, get_context_planet
 
     user_id = int(session["user_id"])
     galaxy = 1
     system = 1
     active_planet_id: int | None = None
+    hold_mission_enabled = False
     has_url_view = (
         request.args.get("galaxy", type=int) is not None
         or request.args.get("system", type=int) is not None
@@ -942,6 +944,12 @@ def galaxy_view():
     session["galaxy_view_galaxy"] = int(galaxy)
     session["galaxy_view_system"] = int(system)
 
+    conn = db()
+    try:
+        hold_mission_enabled = _hold_mission_enabled(conn=conn)
+    finally:
+        conn.close()
+
     galaxy_nav = build_galaxy_nav(galaxy, system)
     system_data = list_system(
         galaxy,
@@ -966,6 +974,8 @@ def galaxy_view():
         system_data=system_data,
         minimap=minimap,
         viewer_player_id=user_id,
+        expedition_slot=build_expedition_slot(galaxy, system),
+        hold_mission_enabled=hold_mission_enabled,
     )
 
 
@@ -2134,6 +2144,24 @@ def api_chat_admin_unmute():
 # API (AJAX / main.js)
 # --------------------------------------------------------------------------
 
+def _fleet_write_transaction(work):
+    """Run fleet DB mutation with BEGIN IMMEDIATE and explicit commit/rollback."""
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, result = work(conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+        return ok, reason, result
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
 def _payload_from_live_context(
     ctx: Dict[str, Any],
     *,
@@ -2583,7 +2611,7 @@ def api_fuel_exchange_buy():
 @app.route("/api/fleet/preview", methods=["POST"])
 @require_login
 def api_fleet_preview():
-    from game.fleet import fleet_schema_ready, preview_fleet_flight
+    from game.fleet import build_fleet_send_preview, fleet_schema_ready
     from game.fleet_api import fleet_err, fleet_ok
     from game.fleet_calc import normalize_ships
     from game.planet_evolution.repository import get_context_planet
@@ -2621,20 +2649,50 @@ def api_fleet_preview():
         except (TypeError, ValueError):
             speed_percent = 100
 
-        preview = preview_fleet_flight(
+        mission_type = str(data.get("mission_type") or "transport")
+        preview = build_fleet_send_preview(
+            player_id=user_id,
             origin_planet=origin_planet,
             target_galaxy=int(data.get("target_galaxy") or origin_planet.get("galaxy") or 1),
             target_system=int(data.get("target_system") or origin_planet.get("system") or 1),
             target_position=int(data.get("target_position") or 1),
+            mission_type=mission_type,
             ships=ships,
             resources=data.get("resources") or {},
             speed_percent=speed_percent,
-            player_id=user_id,
             conn=conn,
         )
         return jsonify(fleet_ok({"preview": preview}, message_key="fleet_preview_ok"))
     finally:
         conn.close()
+
+
+@app.route("/api/fleet/resolve-target", methods=["GET", "POST"])
+@require_login
+def api_fleet_resolve_target():
+    from game.fleet import fleet_schema_ready, resolve_fleet_target
+    from game.fleet_api import fleet_err, fleet_ok
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+    else:
+        data = request.args
+
+    try:
+        galaxy = int(data.get("galaxy") or data.get("target_galaxy") or 1)
+        system = int(data.get("system") or data.get("target_system") or 1)
+        position = int(data.get("position") or data.get("target_position") or 1)
+    except (TypeError, ValueError):
+        return jsonify(fleet_err("invalid_target")), 400
+
+    target = resolve_fleet_target(user_id, galaxy, system, position)
+    return jsonify(fleet_ok({"target": target}, message_key="fleet_target_ok"))
 
 
 @app.route("/api/fleet/state", methods=["GET"])
@@ -2684,19 +2742,18 @@ def api_fleet_send():
         return jsonify(body), 503
 
     data = request.get_json(silent=True) or {}
-    conn = db()
+    ships = normalize_ships(data.get("ships") or {})
+    if not ships and data.get("ships"):
+        return jsonify(fleet_err("unknown_ship")), 400
     try:
+        speed_percent = int(data.get("speed_percent") or 100)
+    except (TypeError, ValueError):
+        speed_percent = 100
+
+    def _send(conn):
         planet = get_context_planet(user_id, conn=conn)
         origin_id = int(data.get("origin_planet_id") or planet["id"])
-        ships = normalize_ships(data.get("ships") or {})
-        if not ships and data.get("ships"):
-            return jsonify(fleet_err("unknown_ship")), 400
-        try:
-            speed_percent = int(data.get("speed_percent") or 100)
-        except (TypeError, ValueError):
-            speed_percent = 100
-
-        ok, reason, result = send_fleet(
+        return send_fleet(
             player_id=user_id,
             origin_planet_id=origin_id,
             target_galaxy=int(data.get("target_galaxy") or 0),
@@ -2711,8 +2768,8 @@ def api_fleet_send():
             colony_name=str(data.get("colony_name") or "").strip() or None,
             conn=conn,
         )
-    finally:
-        conn.close()
+
+    ok, reason, result = _fleet_write_transaction(_send)
 
     if ok and result:
         live = {
@@ -2837,19 +2894,23 @@ def api_fleet_dev_seed_ships():
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     data = request.get_json(silent=True) or {}
-    conn = db()
-    try:
+    seeded_planet_id = {"id": 0}
+
+    def _seed(conn):
+        from game.planet_evolution.repository import get_context_planet
+
         planet = get_context_planet(user_id, conn=conn)
-        planet_id = int(data.get("planet_id") or planet["id"])
-        ok, reason, ships = seed_planet_ships_stack(
-            planet_id,
+        seeded_planet_id["id"] = int(data.get("planet_id") or planet["id"])
+        return seed_planet_ships_stack(
+            seeded_planet_id["id"],
             user_id,
             ships=data.get("ships"),
             replace=bool(data.get("replace")),
             conn=conn,
         )
-    finally:
-        conn.close()
+
+    ok, reason, ships = _fleet_write_transaction(_seed)
+    planet_id = int(seeded_planet_id["id"])
 
     if ok:
         return jsonify(fleet_ok({"ships": ships, "planet_id": planet_id}, message_key="fleet_dev_seed_ok"))
@@ -2899,25 +2960,30 @@ def api_ship_detail(ship_key: str):
 def api_shipyard_state():
     from game.fleet import fleet_schema_ready
     from game.fleet_api import fleet_err, fleet_ok
-    from game.planet_evolution.repository import get_context_planet
-    from game.shipyard import build_shipyard_api_payload
+    from game.shipyard import build_shipyard_api_payload, resolve_owned_planet_id
 
     user_id = int(session.get("user_id") or 0)
     if not user_id:
         return jsonify(fleet_err("not_logged_in")), 401
 
+    raw_pid = request.args.get("planet_id")
+    req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+
     conn = db()
     try:
+        begin_write_transaction(conn)
         if not fleet_schema_ready(conn):
+            rollback(conn)
             return jsonify(fleet_err("fleet_unavailable")), 503
-        from game.shipyard import resolve_owned_planet_id
-
-        raw_pid = request.args.get("planet_id")
-        req_pid = int(raw_pid) if raw_pid not in (None, "") else None
         planet_id, err = resolve_owned_planet_id(user_id, req_pid, conn=conn)
         if err:
+            rollback(conn)
             return jsonify(fleet_err(err)), 404
         payload = build_shipyard_api_payload(user_id, int(planet_id), conn=conn)
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
     finally:
         conn.close()
 
@@ -3120,7 +3186,6 @@ def api_fleet_logistics_distribute():
 def api_fleet_mass_expedition():
     from game.fleet import fleet_schema_ready, mass_expedition
     from game.fleet_api import fleet_err, fleet_ok
-    from game.planet_evolution.repository import get_context_planet
 
     user_id = int(session.get("user_id") or 0)
     if not user_id:
@@ -3129,11 +3194,13 @@ def api_fleet_mass_expedition():
         return jsonify(fleet_err("fleet_unavailable")), 503
 
     data = request.get_json(silent=True) or {}
-    conn = db()
-    try:
+
+    def _mass_expo(conn):
+        from game.planet_evolution.repository import get_context_planet
+
         planet = get_context_planet(user_id, conn=conn)
         origin_id = int(data.get("origin_planet_id") or planet["id"])
-        ok, reason, result = mass_expedition(
+        return mass_expedition(
             player_id=user_id,
             origin_planet_id=origin_id,
             preset_id=int(data.get("preset_id") or 0),
@@ -3142,8 +3209,8 @@ def api_fleet_mass_expedition():
             speed_percent=int(data["speed_percent"]) if data.get("speed_percent") is not None else None,
             conn=conn,
         )
-    finally:
-        conn.close()
+
+    ok, reason, result = _fleet_write_transaction(_mass_expo)
 
     if ok and result:
         return jsonify(fleet_ok(result, message_key="fleet_mass_expo_success"))
@@ -3160,23 +3227,23 @@ def api_admin_planet_ships(planet_id: int):
         return _admin_json(fleet_err("fleet_unavailable"))
 
     data = _admin_body()
-    conn = db()
-    try:
+
+    def _seed(conn):
         cur = conn.cursor()
         cur.execute("SELECT player_id FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
         row = cur.fetchone()
         if not row:
-            return _admin_json(fleet_err("planet_not_found"))
+            return False, "planet_not_found", None
         owner_id = int(row["player_id"])
-        ok, reason, ships = seed_planet_ships_stack(
+        return seed_planet_ships_stack(
             int(planet_id),
             owner_id,
             ships=data.get("ships"),
             replace=bool(data.get("replace")),
             conn=conn,
         )
-    finally:
-        conn.close()
+
+    ok, reason, ships = _fleet_write_transaction(_seed)
 
     if ok:
         return _admin_json(fleet_ok({"ships": ships, "planet_id": planet_id}, message_key="fleet_dev_seed_ok"))

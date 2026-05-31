@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import time
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from .db import begin_write_transaction, commit, db, lock_planet_for_update, rollback, table_exists
 from .fleet_calc import (
@@ -44,7 +45,7 @@ from .galaxy import (
     get_planet_coordinates,
     validate_coordinates,
 )
-from .messages import notify_combat, notify_espionage, notify_expedition
+from .messages import notify_combat, notify_espionage, notify_expedition, notify_player, notify_transport
 from .models import get_planets_by_player, get_research_levels
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,60 @@ logger = logging.getLogger(__name__)
 FALLBACK_FLEET_SLOTS = 3
 BASE_FLEET_SLOTS = 1
 COMPUTER_TECH_KEY = "computer_tech"
+
+TARGET_TYPES = frozenset(
+    {"own_planet", "ally_planet", "foreign_planet", "empty_slot", "expedition_slot"}
+)
+
+# Default allowed missions per resolved target type (hold added dynamically for allies).
+_BASE_ALLOWED_MISSIONS: Dict[str, Set[str]] = {
+    "own_planet": {"transport", "deploy"},
+    "ally_planet": {"transport"},
+    "foreign_planet": {"spy", "attack"},
+    "empty_slot": set(),
+    "expedition_slot": {"expedition"},
+}
+
+_MISSION_BLOCK_REASONS: Dict[str, Dict[str, str]] = {
+    "own_planet": {
+        "attack": "mission_blocked_own_planet",
+        "spy": "mission_blocked_own_planet",
+        "hold": "mission_blocked_own_planet",
+        "expedition": "mission_blocked_not_expedition_slot",
+        "colonize": "mission_blocked_occupied",
+    },
+    "ally_planet": {
+        "deploy": "mission_blocked_ally_planet",
+        "spy": "mission_blocked_ally_planet",
+        "attack": "mission_blocked_ally_planet",
+        "expedition": "mission_blocked_not_expedition_slot",
+        "colonize": "mission_blocked_occupied",
+        "hold": "mission_blocked_no_alliance",
+    },
+    "foreign_planet": {
+        "transport": "mission_blocked_foreign_planet",
+        "deploy": "mission_blocked_foreign_planet",
+        "hold": "mission_blocked_foreign_planet",
+        "expedition": "mission_blocked_not_expedition_slot",
+        "colonize": "mission_blocked_occupied",
+    },
+    "empty_slot": {
+        "transport": "mission_blocked_empty_slot",
+        "deploy": "mission_blocked_empty_slot",
+        "spy": "mission_blocked_empty_slot",
+        "attack": "mission_blocked_empty_slot",
+        "hold": "mission_blocked_empty_slot",
+        "expedition": "mission_blocked_not_expedition_slot",
+    },
+    "expedition_slot": {
+        "transport": "mission_blocked_expedition_slot",
+        "deploy": "mission_blocked_expedition_slot",
+        "spy": "mission_blocked_expedition_slot",
+        "attack": "mission_blocked_expedition_slot",
+        "hold": "mission_blocked_expedition_slot",
+        "colonize": "mission_blocked_expedition_slot",
+    },
+}
 
 
 def _now() -> float:
@@ -365,6 +420,338 @@ def _resolve_planet_at_coords(
     return int(row["id"]) if row else None
 
 
+def are_players_allied(player_id: int, other_player_id: int, *, conn=None) -> bool:
+    """Delegate to alliance module — same-alliance check for fleet targets."""
+    from .alliance import are_players_allied as _allied
+
+    return _allied(int(player_id), int(other_player_id), conn=conn)
+
+
+def _hold_mission_enabled(*, conn) -> bool:
+    from .db import table_exists
+
+    return table_exists(conn, "alliance_members")
+
+
+def resolve_fleet_target(
+    player_id: int,
+    galaxy: int,
+    system: int,
+    position: int,
+    *,
+    conn=None,
+) -> Dict[str, Any]:
+    """
+    Resolve fleet target coordinates to type, owner, and allowed missions.
+
+    Returns dict with keys:
+      target_type, target_planet_id, target_player_id, target_owner_name,
+      coords, allowed_missions, reason_if_blocked
+    """
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        g, s, p = int(galaxy), int(system), int(position)
+        if p == EXPEDITION_POSITION:
+            try:
+                validate_coordinates(g, s, 15, conn=conn)
+            except GalaxyCoordinateError:
+                return {
+                    "target_type": "expedition_slot",
+                    "target_planet_id": None,
+                    "target_player_id": None,
+                    "target_owner_name": None,
+                    "coords": format_coordinates(g, s, EXPEDITION_POSITION),
+                    "allowed_missions": [],
+                    "reason_if_blocked": "invalid_target",
+                }
+            return {
+                "target_type": "expedition_slot",
+                "target_planet_id": None,
+                "target_player_id": None,
+                "target_owner_name": None,
+                "coords": format_coordinates(g, s, EXPEDITION_POSITION),
+                "allowed_missions": sorted(_BASE_ALLOWED_MISSIONS["expedition_slot"]),
+                "reason_if_blocked": None,
+            }
+
+        try:
+            validate_coordinates(g, s, p, conn=conn)
+            coords = format_coordinates(g, s, p)
+        except GalaxyCoordinateError:
+            return {
+                "target_type": "empty_slot",
+                "target_planet_id": None,
+                "target_player_id": None,
+                "target_owner_name": None,
+                "coords": f"[{g}:{s}:{p}]",
+                "allowed_missions": [],
+                "reason_if_blocked": "invalid_target",
+            }
+
+        planet_id = _resolve_planet_at_coords(g, s, p, conn=conn)
+        if planet_id is None:
+            return {
+                "target_type": "empty_slot",
+                "target_planet_id": None,
+                "target_player_id": None,
+                "target_owner_name": None,
+                "coords": coords,
+                "allowed_missions": [],
+                "reason_if_blocked": None,
+            }
+
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT p.id, p.player_id, pl.name AS owner_name
+            FROM planets p
+            INNER JOIN players pl ON pl.id = p.player_id
+            WHERE p.id = ?
+            LIMIT 1;
+            """,
+            (int(planet_id),),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {
+                "target_type": "empty_slot",
+                "target_planet_id": None,
+                "target_player_id": None,
+                "target_owner_name": None,
+                "coords": coords,
+                "allowed_missions": [],
+                "reason_if_blocked": "invalid_target",
+            }
+
+        owner_id = int(row["player_id"])
+        owner_name = str(row["owner_name"] or "")
+        if owner_id == int(player_id):
+            target_type = "own_planet"
+        elif are_players_allied(int(player_id), owner_id, conn=conn):
+            target_type = "ally_planet"
+        else:
+            target_type = "foreign_planet"
+
+        allowed = set(_BASE_ALLOWED_MISSIONS.get(target_type, set()))
+        if target_type == "ally_planet" and _hold_mission_enabled(conn=conn):
+            allowed.add("hold")
+
+        return {
+            "target_type": target_type,
+            "target_planet_id": int(planet_id),
+            "target_player_id": owner_id,
+            "target_owner_name": owner_name,
+            "coords": coords,
+            "allowed_missions": sorted(allowed),
+            "reason_if_blocked": None,
+        }
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
+def mission_allowed_for_target(mission: str, target: Mapping[str, Any]) -> Tuple[bool, str]:
+    """Check whether mission is allowed for resolved target."""
+    m = str(mission or "").strip().lower()
+    if m not in MISSION_TYPES:
+        return False, "invalid_mission"
+    target_type = str(target.get("target_type") or "")
+    if target_type not in TARGET_TYPES:
+        return False, "invalid_target"
+    allowed = set(target.get("allowed_missions") or [])
+    if m in allowed:
+        return True, ""
+    block_map = _MISSION_BLOCK_REASONS.get(target_type, {})
+    return False, block_map.get(m, "mission_not_allowed")
+
+
+def validate_fleet_send(
+    *,
+    player_id: int,
+    origin_planet_id: int,
+    target_galaxy: int,
+    target_system: int,
+    target_position: int,
+    mission_type: str,
+    ships: Mapping[str, int],
+    resources: Mapping[str, Any] | None,
+    speed_percent: int,
+    conn,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Full pre-send validation including target resolution and balances preview."""
+    mission = str(mission_type or "").strip().lower()
+    ships_n = normalize_ships(ships)
+    resources_n = calculate_loaded_resources(resources)
+    pct = int(speed_percent)
+
+    if mission not in MISSION_TYPES:
+        return False, "invalid_mission", None
+    if not ships_n:
+        return False, "no_ships", None
+    if pct < 10 or pct > 100:
+        return False, "invalid_speed_percent", None
+
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+        (int(origin_planet_id), int(player_id)),
+    )
+    origin_row = cur.fetchone()
+    if not origin_row:
+        return False, "origin_not_found", None
+    origin_planet = dict(origin_row)
+
+    target_info = resolve_fleet_target(
+        player_id,
+        target_galaxy,
+        target_system,
+        target_position,
+        conn=conn,
+    )
+
+    origin = _origin_coords(origin_planet)
+    target = (int(target_galaxy), int(target_system), int(target_position))
+    if mission == "expedition":
+        if int(target_position) != EXPEDITION_POSITION:
+            return False, "mission_blocked_not_expedition_slot", {"target": target_info}
+        target = (int(target_galaxy), int(target_system), EXPEDITION_POSITION)
+
+    if origin == target and mission not in ("expedition",):
+        return False, "same_origin_target", {"target": target_info}
+
+    ok_mission, m_reason = mission_allowed_for_target(mission, target_info)
+    if not ok_mission:
+        return False, m_reason, {"target": target_info}
+
+    ok_ship_mission, ship_reason = _mission_allowed(mission, ships_n, resources_n)
+    if not ok_ship_mission:
+        return False, ship_reason, {"target": target_info}
+
+    cargo = calculate_total_cargo(ships_n)
+    loaded_total = resources_n["metal"] + resources_n["crystal"]
+    if loaded_total > 0 and loaded_total > cargo:
+        return False, "not_enough_cargo", {"target": target_info}
+
+    preview = preview_fleet_flight(
+        origin_planet=origin_planet,
+        target_galaxy=target[0],
+        target_system=target[1],
+        target_position=target[2],
+        ships=ships_n,
+        resources=resources_n,
+        speed_percent=pct,
+        player_id=player_id,
+        conn=conn,
+    )
+    fuel_cost = int(preview["fuel_cost"])
+    metal_have = float(origin_planet.get("metal") or 0)
+    crystal_have = float(origin_planet.get("crystal") or 0)
+    fuel_cells_have = float(origin_planet.get("fuel_cells") or 0)
+
+    ok_bal, bal_reason = validate_departure_balances(
+        metal_have, crystal_have, fuel_cells_have, resources_n, fuel_cost
+    )
+    if not ok_bal:
+        return False, bal_reason, {"target": target_info, "preview": preview}
+
+    slots = get_fleet_slot_status(player_id, conn=conn)
+    if slots["free"] <= 0:
+        return False, "fleet_slots_full", {"target": target_info, "preview": preview}
+
+    if mission == "colonize":
+        if target_info["target_type"] != "empty_slot":
+            return False, "coordinate_occupied", {"target": target_info, "preview": preview}
+        if int(ships_n.get("seed_ark") or 0) < 1:
+            return False, "colonize_requires_ark", {"target": target_info, "preview": preview}
+
+    if mission in ("transport", "deploy", "spy", "attack", "hold"):
+        if not target_info.get("target_planet_id"):
+            return False, "invalid_target", {"target": target_info, "preview": preview}
+
+    return True, "", {"target": target_info, "preview": preview, "origin_planet": origin_planet}
+
+
+def build_fleet_send_preview(
+    *,
+    player_id: int,
+    origin_planet: Dict[str, Any],
+    target_galaxy: int,
+    target_system: int,
+    target_position: int,
+    mission_type: str,
+    ships: Mapping[str, int],
+    resources: Mapping[str, Any] | None,
+    speed_percent: int,
+    conn=None,
+) -> Dict[str, Any]:
+    """Flight preview enriched with target resolution and send eligibility."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        mission = str(mission_type or "").strip().lower()
+        ships_n = normalize_ships(ships)
+        resources_n = calculate_loaded_resources(resources)
+        target_info = resolve_fleet_target(
+            player_id,
+            target_galaxy,
+            target_system,
+            target_position,
+            conn=conn,
+        )
+        tg, ts, tp = int(target_galaxy), int(target_system), int(target_position)
+        if mission == "expedition" and tp != EXPEDITION_POSITION:
+            tp = EXPEDITION_POSITION
+        flight = preview_fleet_flight(
+            origin_planet=origin_planet,
+            target_galaxy=tg,
+            target_system=ts,
+            target_position=tp,
+            ships=ships_n,
+            resources=resources_n,
+            speed_percent=int(speed_percent),
+            player_id=player_id,
+            conn=conn,
+        )
+        now = _now()
+        arrival_at = now + int(flight.get("flight_seconds") or 0) if ships_n else None
+
+        can_send = False
+        block_reason = ""
+        if ships_n:
+            ok, reason, _extra = validate_fleet_send(
+                player_id=player_id,
+                origin_planet_id=int(origin_planet["id"]),
+                target_galaxy=tg,
+                target_system=ts,
+                target_position=int(target_position),
+                mission_type=mission,
+                ships=ships_n,
+                resources=resources_n,
+                speed_percent=int(speed_percent),
+                conn=conn,
+            )
+            can_send = ok
+            block_reason = reason or ""
+
+        mission_ok, mission_reason = mission_allowed_for_target(mission, target_info)
+        return {
+            **flight,
+            "target": target_info,
+            "mission_type": mission,
+            "mission_allowed": mission_ok,
+            "mission_block_reason": mission_reason if not mission_ok else "",
+            "can_send": can_send and mission_ok,
+            "block_reason": block_reason or (mission_reason if not mission_ok else ""),
+            "arrival_at": arrival_at,
+        }
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def _planet_owned_by(player_id: int, planet_id: int, *, conn) -> bool:
     cur = conn.cursor()
     cur.execute(
@@ -462,6 +849,36 @@ def preview_fleet_flight(
 
 def mission_safe_expedition(target: Tuple[int, int, int]) -> bool:
     return int(target[2]) == EXPEDITION_POSITION
+
+
+def build_expedition_slot(galaxy: int, system: int) -> Dict[str, Any]:
+    """Synthetic galaxy slot for expedition position 16."""
+    g, s = int(galaxy), int(system)
+    coords = format_coordinates(g, s, EXPEDITION_POSITION)
+    return {
+        "position": EXPEDITION_POSITION,
+        "occupied": False,
+        "is_expedition_slot": True,
+        "player_id": None,
+        "commander_name": None,
+        "planet_id": None,
+        "planet_name": None,
+        "coordinates": {
+            "galaxy": g,
+            "system": s,
+            "position": EXPEDITION_POSITION,
+        },
+        "coordinates_formatted": coords,
+        "planet_class": None,
+        "planet_class_label_key": None,
+        "temperature_display": None,
+        "planet_score": None,
+        "is_own_planet": False,
+        "is_ally_planet": False,
+        "is_active_planet": False,
+        "is_highlighted": False,
+        "colony_target": False,
+    }
 
 
 def list_active_movements(player_id: int, *, conn=None) -> List[Dict[str, Any]]:
@@ -774,84 +1191,37 @@ def send_fleet(
                 rollback(conn)
             return False, reason, None
 
-        origin = _origin_coords(origin_planet)
+        if mission == "expedition" and int(target_position) != EXPEDITION_POSITION:
+            if own:
+                rollback(conn)
+            return False, "mission_blocked_not_expedition_slot", None
+
         target = (int(target_galaxy), int(target_system), int(target_position))
-        if mission == "expedition" and target_position != EXPEDITION_POSITION:
+        if mission == "expedition":
             target = (int(target_galaxy), int(target_system), EXPEDITION_POSITION)
             target_position = EXPEDITION_POSITION
 
-        if origin == target and mission not in ("expedition",):
-            if own:
-                rollback(conn)
-            return False, "same_origin_target", None
-
-        ok_mission, m_reason = _mission_allowed(mission, ships_n, resources_n)
-        if not ok_mission:
-            if own:
-                rollback(conn)
-            return False, m_reason, None
-
-        cargo = calculate_total_cargo(ships_n)
-        loaded_total = resources_n["metal"] + resources_n["crystal"]
-        if loaded_total > 0 and loaded_total > cargo:
-            if own:
-                rollback(conn)
-            return False, "not_enough_cargo", None
-
-        metal_have = float(origin_planet.get("metal") or 0)
-        crystal_have = float(origin_planet.get("crystal") or 0)
-        fuel_cells_have = float(origin_planet.get("fuel_cells") or 0)
-
-        preview = preview_fleet_flight(
-            origin_planet=origin_planet,
+        ok_send, send_reason, send_ctx = validate_fleet_send(
+            player_id=player_id,
+            origin_planet_id=int(origin_planet_id),
             target_galaxy=target[0],
             target_system=target[1],
-            target_position=target[2],
+            target_position=int(target_position),
+            mission_type=mission,
             ships=ships_n,
             resources=resources_n,
             speed_percent=pct,
-            player_id=player_id,
             conn=conn,
         )
-        fuel_cost = int(preview["fuel_cost"])
-
-        ok_bal, bal_reason = validate_departure_balances(
-            metal_have, crystal_have, fuel_cells_have, resources_n, fuel_cost
-        )
-        if not ok_bal:
+        if not ok_send:
             if own:
                 rollback(conn)
-            return False, bal_reason, None
+            return False, send_reason, None
 
-        slots = get_fleet_slot_status(player_id, conn=conn)
-        if slots["free"] <= 0:
-            if own:
-                rollback(conn)
-            return False, "fleet_slots_full", None
-
-        target_planet_id = _resolve_planet_at_coords(target[0], target[1], target[2], conn=conn)
-
-        if mission == "colonize":
-            if target_planet_id is not None:
-                if own:
-                    rollback(conn)
-                return False, "coordinate_occupied", None
-            if int(ships_n.get("seed_ark") or 0) < 1:
-                if own:
-                    rollback(conn)
-                return False, "colonize_requires_ark", None
-
-        if mission in ("transport", "deploy") and target_planet_id is None:
-            if own:
-                rollback(conn)
-            return False, "invalid_target", None
-
-        if mission in ("transport", "deploy") and not _planet_owned_by(
-            player_id, int(target_planet_id), conn=conn
-        ):
-            if own:
-                rollback(conn)
-            return False, "target_not_owned", None
+        origin_planet = send_ctx["origin_planet"]
+        preview = send_ctx["preview"]
+        target_info = send_ctx["target"]
+        target_planet_id = target_info.get("target_planet_id")
 
         ok_deduct, d_reason = deduct_planet_ships(int(origin_planet_id), ships_n, conn=conn)
         if not ok_deduct:
@@ -859,6 +1229,10 @@ def send_fleet(
                 rollback(conn)
             return False, d_reason, None
 
+        metal_have = float(origin_planet.get("metal") or 0)
+        crystal_have = float(origin_planet.get("crystal") or 0)
+        fuel_cells_have = float(origin_planet.get("fuel_cells") or 0)
+        fuel_cost = int(preview["fuel_cost"])
         new_metal, new_crystal, new_fuel_cells = apply_departure_deduction(
             metal_have, crystal_have, fuel_cells_have, resources_n, fuel_cost
         )
@@ -996,21 +1370,243 @@ def _complete_movement(movement_id: int, *, conn, now: float, from_status: str =
 
 def _credit_planet_resources(planet_id: int, resources: Mapping[str, Any], *, conn) -> None:
     loaded = calculate_loaded_resources(resources)
-    if loaded["metal"] <= 0 and loaded["crystal"] <= 0:
+    if loaded["metal"] <= 0 and loaded["crystal"] <= 0 and loaded["fuel_cells"] <= 0:
         return
     lock_planet_for_update(conn, int(planet_id))
     cur = conn.cursor()
-    cur.execute("SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+    cur.execute(
+        "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ? LIMIT 1;",
+        (int(planet_id),),
+    )
     row = cur.fetchone()
     if not row:
         return
     cur.execute(
-        "UPDATE planets SET metal = ?, crystal = ? WHERE id = ?;",
+        "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
         (
             float(row["metal"]) + loaded["metal"],
             float(row["crystal"]) + loaded["crystal"],
+            float(row["fuel_cells"] or 0) + loaded["fuel_cells"],
             int(planet_id),
         ),
+    )
+
+
+def _player_name(player_id: int, *, conn) -> str:
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM players WHERE id = ? LIMIT 1;", (int(player_id),))
+    row = cur.fetchone()
+    return str(row["name"] if row else f"Player {player_id}")
+
+
+def _target_planet_snapshot(planet_id: int, *, conn) -> Dict[str, Any]:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT p.id, p.name, p.player_id, p.metal, p.crystal, p.fuel_cells,
+               p.galaxy, p.system, p.position, pl.name AS owner_name
+        FROM planets p
+        INNER JOIN players pl ON pl.id = p.player_id
+        WHERE p.id = ?
+        LIMIT 1;
+        """,
+        (int(planet_id),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {}
+    data = dict(row)
+    coords = format_coordinates(
+        int(data["galaxy"]), int(data["system"]), int(data["position"])
+    )
+    buildings: Dict[str, int] = {}
+    cur.execute("SELECT * FROM planet_buildings WHERE planet_id = ? LIMIT 1;", (int(planet_id),))
+    brow = cur.fetchone()
+    if brow:
+        for key in brow.keys():
+            if key in ("id", "planet_id", "player_id"):
+                continue
+            try:
+                lvl = int(brow[key] or 0)
+            except (TypeError, ValueError):
+                continue
+            if lvl > 0:
+                buildings[str(key)] = lvl
+    ships = get_planet_ships(int(planet_id), conn=conn)
+    return {
+        "planet_id": int(planet_id),
+        "planet_name": str(data.get("name") or ""),
+        "owner_id": int(data["player_id"]),
+        "owner_name": str(data.get("owner_name") or ""),
+        "coords": coords,
+        "resources": {
+            "metal": int(float(data.get("metal") or 0)),
+            "crystal": int(float(data.get("crystal") or 0)),
+            "fuel_cells": int(float(data.get("fuel_cells") or 0)),
+        },
+        "buildings": buildings,
+        "ships": ships,
+    }
+
+
+def _spy_probe_count(ships: Mapping[str, int]) -> int:
+    total = 0
+    for key, amount in ships.items():
+        spec = get_ship(str(key))
+        if spec and str(spec.get("role") or "") == "spy":
+            total += int(amount or 0)
+    return max(0, total)
+
+
+def _build_spy_report_body(snapshot: Mapping[str, Any], probe_count: int) -> Tuple[str, Dict[str, Any]]:
+    coords = str(snapshot.get("coords") or "")
+    owner = str(snapshot.get("owner_name") or "")
+    res = snapshot.get("resources") or {}
+    buildings = snapshot.get("buildings") or {}
+    ships = snapshot.get("ships") or {}
+
+    visible_buildings: Dict[str, int] = {}
+    visible_ships: Dict[str, int] = {}
+    if probe_count >= 1:
+        visible_buildings = dict(buildings)
+        visible_ships = dict(ships)
+        if probe_count < len(ships):
+            trimmed: Dict[str, int] = {}
+            for idx, (sk, qty) in enumerate(sorted(ships.items())):
+                if idx >= probe_count:
+                    break
+                trimmed[sk] = int(qty)
+            visible_ships = trimmed
+        if probe_count < len(buildings):
+            trimmed_b: Dict[str, int] = {}
+            for idx, (bk, lvl) in enumerate(sorted(buildings.items())):
+                if idx >= probe_count:
+                    break
+                trimmed_b[bk] = int(lvl)
+            visible_buildings = trimmed_b
+
+    lines = [
+        f"Target: {coords}",
+        f"Commander: {owner}",
+        f"Resources — Metal: {res.get('metal', 0):,}, Crystal: {res.get('crystal', 0):,}, Fuel Cells: {res.get('fuel_cells', 0):,}",
+    ]
+    if visible_buildings:
+        btxt = ", ".join(f"{k} L{lvl}" for k, lvl in sorted(visible_buildings.items()))
+        lines.append(f"Buildings: {btxt}")
+    else:
+        lines.append("Buildings: insufficient probe data")
+    if visible_ships:
+        stxt = ", ".join(f"{k} ×{qty}" for k, qty in sorted(visible_ships.items()))
+        lines.append(f"Ships: {stxt}")
+    else:
+        lines.append("Ships: none detected or insufficient probe data")
+
+    metadata = {
+        "target_coords": coords,
+        "target_owner": owner,
+        "probe_count": probe_count,
+        "resources": res,
+        "buildings": visible_buildings,
+        "ships": visible_ships,
+    }
+    return "\n".join(lines), metadata
+
+
+def _build_combat_report_body(
+    *,
+    attacker_id: int,
+    attacker_name: str,
+    defender_id: int,
+    defender_name: str,
+    coords: str,
+    attacking_ships: Mapping[str, int],
+    defending_ships: Mapping[str, int],
+) -> Tuple[str, Dict[str, Any]]:
+    atk_txt = ", ".join(f"{k} ×{v}" for k, v in sorted(attacking_ships.items())) or "—"
+    def_txt = ", ".join(f"{k} ×{v}" for k, v in sorted(defending_ships.items())) or "—"
+    body = (
+        f"Coordinates: {coords}\n"
+        f"Attacker: {attacker_name}\n"
+        f"Defender: {defender_name}\n"
+        f"Attacking fleet: {atk_txt}\n"
+        f"Defending fleet: {def_txt}\n"
+        f"Result: undecided — combat simulation not active (Phase 1)."
+    )
+    metadata = {
+        "target_coords": coords,
+        "attacker_id": attacker_id,
+        "attacker_name": attacker_name,
+        "defender_id": defender_id,
+        "defender_name": defender_name,
+        "attacking_ships": dict(attacking_ships),
+        "defending_ships": dict(defending_ships),
+        "result": "undecided",
+    }
+    return body, metadata
+
+
+def _roll_expedition_rewards(movement_id: int, cargo_total: int) -> Dict[str, int]:
+    """Deterministic expedition loot roll (idempotent per movement id)."""
+    rng = random.Random(int(movement_id) * 7919 + 104729)
+    roll = rng.random()
+    rewards = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+    if roll < 0.15:
+        return rewards
+    if roll < 0.55:
+        rewards["metal"] = rng.randint(500, 2500)
+        rewards["crystal"] = rng.randint(200, 1200)
+    elif roll < 0.75:
+        rewards["fuel_cells"] = rng.randint(10, 80)
+    loaded = rewards["metal"] + rewards["crystal"] + rewards["fuel_cells"]
+    if cargo_total > 0 and loaded > cargo_total:
+        scale = cargo_total / max(1, loaded)
+        rewards["metal"] = int(rewards["metal"] * scale)
+        rewards["crystal"] = int(rewards["crystal"] * scale)
+        rewards["fuel_cells"] = int(rewards["fuel_cells"] * scale)
+    return rewards
+
+
+def _format_transport_cargo(resources: Mapping[str, Any]) -> str:
+    from .i18n import fmt_int, tr
+
+    loaded = calculate_loaded_resources(resources)
+    parts: list[str] = []
+    if loaded["metal"]:
+        parts.append(f"{tr('resource_metal', 'Ferronit')}: {fmt_int(loaded['metal'])}")
+    if loaded["crystal"]:
+        parts.append(f"{tr('resource_crystal', 'Crytite')}: {fmt_int(loaded['crystal'])}")
+    if loaded["fuel_cells"]:
+        parts.append(f"{tr('resource_fuel_cells', 'Brennzellen')}: {fmt_int(loaded['fuel_cells'])}")
+    if not parts:
+        return tr("fleet_transport_report_cargo_empty", "keine Ressourcen")
+    return ", ".join(parts)
+
+
+def _format_transport_report(
+    *,
+    coords: str,
+    origin_name: str,
+    target_name: str,
+    resources: Mapping[str, Any],
+    incoming: bool,
+) -> str:
+    from .i18n import tr
+
+    cargo_txt = _format_transport_cargo(resources)
+    if incoming:
+        return tr(
+            "fleet_transport_report_incoming",
+            "Eingehender Transport bei %(coords)s von %(origin)s. Geliefert: %(cargo)s.",
+            coords=coords,
+            origin=origin_name,
+            cargo=cargo_txt,
+        )
+    return tr(
+        "fleet_transport_report_outbound",
+        "Transport nach %(coords)s (%(target)s) abgeschlossen. Geliefert: %(cargo)s.",
+        coords=coords,
+        target=target_name,
+        cargo=cargo_txt,
     )
 
 
@@ -1021,6 +1617,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
     ships = movement.get("ships") or {}
     resources = movement.get("resources") or {}
     movement_id = int(movement["id"])
+    coords = movement.get("target_coords") or ""
 
     if mission == "transport":
         flight_seconds = int(movement.get("flight_seconds") or 1)
@@ -1038,6 +1635,63 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
             return
         if target_id:
             _credit_planet_resources(int(target_id), resources, conn=conn)
+            snapshot = _target_planet_snapshot(int(target_id), conn=conn)
+            origin_id = int(movement["origin_planet_id"])
+            cur = conn.cursor()
+            cur.execute("SELECT name FROM planets WHERE id = ? LIMIT 1;", (origin_id,))
+            orow = cur.fetchone()
+            origin_name = str(orow["name"] if orow else "")
+            sender_body = _format_transport_report(
+                coords=coords,
+                origin_name=origin_name,
+                target_name=str(snapshot.get("planet_name") or ""),
+                resources=resources,
+                incoming=False,
+            )
+            from .i18n import tr
+
+            notify_transport(
+                player_id,
+                tr(
+                    "fleet_transport_report_subject",
+                    "Transportbericht %(coords)s",
+                    coords=coords,
+                ),
+                sender_body,
+                metadata={
+                    "fleet_id": movement_id,
+                    "target_coords": coords,
+                    "resources": calculate_loaded_resources(resources),
+                    "direction": "outbound",
+                },
+                conn=conn,
+            )
+            target_owner = int(snapshot.get("owner_id") or 0)
+            if target_owner and target_owner != player_id:
+                incoming_body = _format_transport_report(
+                    coords=coords,
+                    origin_name=_player_name(player_id, conn=conn),
+                    target_name=str(snapshot.get("planet_name") or ""),
+                    resources=resources,
+                    incoming=True,
+                )
+                notify_transport(
+                    target_owner,
+                    tr(
+                        "fleet_transport_report_subject_incoming",
+                        "Eingehender Transport %(coords)s",
+                        coords=coords,
+                    ),
+                    incoming_body,
+                    metadata={
+                        "fleet_id": movement_id,
+                        "sender_id": player_id,
+                        "target_coords": coords,
+                        "resources": calculate_loaded_resources(resources),
+                        "direction": "incoming",
+                    },
+                    conn=conn,
+                )
         return
 
     if mission == "deploy":
@@ -1053,34 +1707,82 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         return
 
     if mission == "spy":
-        if not _start_return(movement, conn=conn, now=now):
+        snapshot = _target_planet_snapshot(int(target_id), conn=conn) if target_id else {}
+        probe_count = _spy_probe_count(ships)
+        body, meta = _build_spy_report_body(snapshot, probe_count)
+        meta["fleet_id"] = movement_id
+        flight_seconds = int(movement.get("flight_seconds") or 1)
+        return_at = now + flight_seconds
+        claimed = _claim_movement_status(
+            conn,
+            movement_id,
+            ("outbound",),
+            "returning",
+            now,
+            extra_sql=", return_at = ?",
+            extra_params=(return_at,),
+        )
+        if not claimed:
             return
-        coords = movement.get("target_coords") or ""
         notify_espionage(
             player_id,
             f"Spy report {coords}",
-            f"Phase 1 placeholder espionage report for target {coords}. Deep scan system pending.",
-            metadata={"fleet_id": movement_id, "target_coords": coords},
+            body,
+            metadata=meta,
             conn=conn,
         )
         return
 
     if mission == "attack":
-        if not _start_return(movement, conn=conn, now=now):
+        snapshot = _target_planet_snapshot(int(target_id), conn=conn) if target_id else {}
+        defender_id = int(snapshot.get("owner_id") or 0)
+        defender_name = str(snapshot.get("owner_name") or "")
+        attacker_name = _player_name(player_id, conn=conn)
+        defending_ships = snapshot.get("ships") or {}
+        body, meta = _build_combat_report_body(
+            attacker_id=player_id,
+            attacker_name=attacker_name,
+            defender_id=defender_id,
+            defender_name=defender_name,
+            coords=coords,
+            attacking_ships=ships,
+            defending_ships=defending_ships,
+        )
+        meta["fleet_id"] = movement_id
+        flight_seconds = int(movement.get("flight_seconds") or 1)
+        return_at = now + flight_seconds
+        claimed = _claim_movement_status(
+            conn,
+            movement_id,
+            ("outbound",),
+            "returning",
+            now,
+            extra_sql=", return_at = ?",
+            extra_params=(return_at,),
+        )
+        if not claimed:
             return
-        coords = movement.get("target_coords") or ""
         notify_combat(
             player_id,
             f"Combat report {coords}",
-            f"Phase 1 placeholder combat report for target {coords}. Full combat engine pending.",
-            metadata={"fleet_id": movement_id, "target_coords": coords},
+            body,
+            metadata=meta,
             conn=conn,
         )
+        if defender_id and defender_id != player_id:
+            notify_combat(
+                defender_id,
+                f"Attack report {coords}",
+                body,
+                metadata={**meta, "perspective": "defender"},
+                conn=conn,
+            )
         return
 
     if mission == "hold":
         holding_until = now + DEFAULT_HOLD_SECONDS
-        conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             UPDATE fleet_movements
             SET status = 'holding', holding_until = ?, updated_at = ?
@@ -1088,16 +1790,54 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
             """,
             (holding_until, now, movement_id),
         )
+        if cur.rowcount and target_id:
+            snapshot = _target_planet_snapshot(int(target_id), conn=conn)
+            notify_player(
+                player_id,
+                f"Fleet holding {coords}",
+                f"Your fleet is holding position at {coords} ({snapshot.get('owner_name', '')}).",
+                category="system",
+                metadata={"fleet_id": movement_id, "holding_until": holding_until},
+                conn=conn,
+            )
         return
 
     if mission == "expedition":
-        if not _start_return(movement, conn=conn, now=now):
+        cargo_total = calculate_total_cargo(ships)
+        rewards = _roll_expedition_rewards(movement_id, cargo_total)
+        reward_total = rewards["metal"] + rewards["crystal"] + rewards["fuel_cells"]
+        delay_extra = 0
+        rng = random.Random(movement_id * 9176)
+        if rng.random() < 0.1:
+            delay_extra = int(movement.get("flight_seconds") or 60)
+        flight_seconds = int(movement.get("flight_seconds") or 1) + delay_extra
+        return_at = now + flight_seconds
+        claimed = _claim_movement_status(
+            conn,
+            movement_id,
+            ("outbound",),
+            "returning",
+            now,
+            extra_sql=", return_at = ?, resources_json = ?",
+            extra_params=(return_at, _json_dumps(rewards)),
+        )
+        if not claimed:
             return
+        if reward_total > 0:
+            body = (
+                f"Expedition at {coords} found resources: "
+                f"Metal {rewards['metal']:,}, Crystal {rewards['crystal']:,}, "
+                f"Fuel Cells {rewards['fuel_cells']:,}."
+            )
+        elif delay_extra:
+            body = f"Expedition at {coords} encountered delays. Return flight extended."
+        else:
+            body = f"Expedition at {coords} found nothing of value."
         notify_expedition(
             player_id,
-            "Expedition report",
-            "Phase 1 placeholder expedition report. Deep expedition rewards pending.",
-            metadata={"fleet_id": movement_id},
+            f"Expedition report {coords}",
+            body,
+            metadata={"fleet_id": movement_id, "rewards": rewards, "delay_extra": delay_extra},
             conn=conn,
         )
         return

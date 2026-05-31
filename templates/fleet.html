@@ -223,9 +223,18 @@
                    class="gc-input" data-fleet-res-crystal>
             <button type="button" class="gc-btn gc-btn-ghost" data-fleet-res-max="crystal">{{ T("fleet_btn_max") }}</button>
           </div>
+          <div class="fleet-resource-row">
+            <label for="fleet-res-fuel-cells">{{ T("resource_fuel_cells") }}</label>
+            <input type="number" id="fleet-res-fuel-cells" name="fuel_cells" min="0" value="0"
+                   class="gc-input" data-fleet-res-fuel-cells>
+            <button type="button" class="gc-btn gc-btn-ghost" data-fleet-res-max="fuel_cells">{{ T("fleet_btn_max") }}</button>
+          </div>
         </fieldset>
 
         <div class="fleet-preview-box" data-fleet-preview aria-live="polite">
+          <div class="fleet-preview-row"><span>{{ T("fleet_preview_target_type") }}</span><span data-preview-target-type>–</span></div>
+          <div class="fleet-preview-row"><span>{{ T("fleet_preview_target_owner") }}</span><span data-preview-target-owner>–</span></div>
+          <div class="fleet-preview-row"><span>{{ T("fleet_preview_mission_status") }}</span><span data-preview-mission-status>–</span></div>
           <div class="fleet-preview-row"><span>{{ T("fleet_preview_cargo") }}</span><span data-preview-cargo>–</span></div>
           <div class="fleet-preview-row"><span>{{ T("fleet_preview_cargo_free") }}</span><span data-preview-cargo-free>–</span></div>
           <div class="fleet-preview-row">
@@ -234,10 +243,11 @@
           </div>
           <div class="fleet-preview-row"><span>{{ T("fleet_preview_fuel_available") }}</span><span data-preview-fuel-available>–</span></div>
           <div class="fleet-preview-row"><span>{{ T("fleet_preview_flight") }}</span><span data-preview-flight>–</span></div>
+          <div class="fleet-preview-row"><span>{{ T("fleet_preview_arrival") }}</span><span data-preview-arrival>–</span></div>
         </div>
 
         <p class="fleet-form-error" data-fleet-error hidden></p>
-        <button type="submit" class="gc-btn gc-btn-primary fleet-send-submit">{{ T("fleet_send_submit") }}</button>
+        <button type="submit" class="gc-btn gc-btn-primary fleet-send-submit" data-fleet-send-btn disabled>{{ T("fleet_send_submit") }}</button>
       </form>
     </section>
 
