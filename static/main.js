@@ -2882,6 +2882,109 @@
 
     const formatFleetDuration = (sec) => formatCountdownRemain(sec);
 
+    const buildShipRoleMap = (page) => {
+      const rt = getFleetRuntime(page);
+      const map = {};
+      (rt.data.ship_defs || []).forEach((spec) => {
+        if (spec?.key) map[spec.key] = spec.role || "";
+      });
+      return map;
+    };
+
+    const countShipsByRole = (page, ships, role) => {
+      const roleMap = buildShipRoleMap(page);
+      return Object.entries(ships || {}).reduce((total, [key, qty]) => {
+        if (roleMap[key] !== role) return total;
+        return total + (parseInt(qty, 10) || 0);
+      }, 0);
+    };
+
+    const applyExpeditionTarget = (page) => {
+      const form = getForm(page);
+      if (!form) return;
+      const rt = getFleetRuntime(page);
+      const expPos = parseInt(rt.data.expedition_position || "16", 10);
+      const posInp = form.querySelector('[name="target_position"]');
+      if (posInp) posInp.value = String(expPos);
+    };
+
+    const formatMissionHint = (key, vars = {}) => {
+      let text = tt(key, key);
+      Object.entries(vars).forEach(([name, value]) => {
+        text = text.replace(new RegExp(`%\\(${name}\\)s`, "g"), String(value ?? ""));
+      });
+      return text;
+    };
+
+    const resolveMissionFeedback = (page, missionType, preview, ships) => {
+      const mission = String(missionType || "transport").toLowerCase();
+      const target = preview?.target || {};
+      const rt = getFleetRuntime(page);
+      const expPos = parseInt(rt.data.expedition_position || "16", 10);
+      const hints = [];
+
+      if (mission === "expedition") {
+        const expoShips = countShipsByRole(page, ships, "expedition");
+        const cargoTotal = parseInt(preview?.cargo_total || "0", 10) || 0;
+        if (target.target_type && target.target_type !== "expedition_slot") {
+          hints.push({
+            tone: "warn",
+            text: formatMissionHint("fleet_expedition_hint_wrong_position", { position: expPos }),
+          });
+        } else if (expoShips <= 0 && cargoTotal <= 0) {
+          hints.push({ tone: "warn", text: formatMissionHint("fleet_expedition_hint_no_hull") });
+        } else {
+          hints.push({
+            tone: "ok",
+            text: formatMissionHint("fleet_expedition_hint_ready", { ships: expoShips, cargo: cargoTotal }),
+          });
+        }
+        hints.push({ tone: "info", text: formatMissionHint("fleet_expedition_hint_events") });
+        return hints;
+      }
+
+      if (mission === "spy") {
+        const probes = countShipsByRole(page, ships, "spy");
+        hints.push({
+          tone: probes > 0 ? "info" : "warn",
+          text: probes > 0
+            ? formatMissionHint("fleet_mission_hint_spy", { count: probes })
+            : formatMissionHint("fleet_mission_hint_spy_none"),
+        });
+        return hints;
+      }
+
+      const genericHints = {
+        transport: "fleet_mission_hint_transport",
+        deploy: "fleet_mission_hint_deploy",
+        attack: "fleet_mission_hint_attack",
+        hold: "fleet_mission_hint_hold",
+        colonize: "fleet_mission_hint_colonize",
+      };
+      if (genericHints[mission]) {
+        hints.push({ tone: "info", text: formatMissionHint(genericHints[mission]) });
+      }
+      return hints;
+    };
+
+    const updateMissionFeedback = (page, preview, missionType, ships) => {
+      const panel = page.querySelector("[data-fleet-mission-feedback]");
+      const textEl = page.querySelector("[data-fleet-mission-feedback-text]");
+      if (!panel || !textEl) return;
+      const hints = resolveMissionFeedback(page, missionType, preview, ships);
+      if (!hints.length || !Object.keys(ships || {}).length) {
+        panel.hidden = true;
+        textEl.textContent = "";
+        panel.className = "fleet-mission-feedback";
+        return;
+      }
+      const primary = hints[0];
+      const extra = hints.slice(1).map((h) => h.text).join(" ");
+      textEl.textContent = extra ? `${primary.text} ${extra}` : primary.text;
+      panel.className = `fleet-mission-feedback is-${primary.tone || "info"}`;
+      panel.hidden = false;
+    };
+
     const renderShipChips = (ships) => Object.entries(ships || {})
       .map(([key, qty]) => `<span class="fleet-ship-chip">${tt(`fleet_ship_${key}`, key)} × ${Number(qty).toLocaleString()}</span>`)
       .join("");
@@ -2904,10 +3007,11 @@
               : "";
         const cargo = [];
         if (mv.resources?.metal) cargo.push(`${tt("resource_metal")}: ${Number(mv.resources.metal).toLocaleString()}`);
-        if (mv.resources?.crystal) cargo.push(`${tt("resource_crystal")}: ${Number(mv.resources.crystal).toLocaleString()}`);
-        return `<article class="fleet-active-card" data-fleet-id="${mv.id}" data-status="${mv.status}">
+        if (mv.resources?.fuel_cells) cargo.push(`${tt("resource_fuel_cells")}: ${Number(mv.resources.fuel_cells).toLocaleString()}`);
+        const mission = String(mv.mission_type || "custom");
+        return `<article class="fleet-active-card fleet-active-card--${mission}" data-fleet-id="${mv.id}" data-status="${mv.status}" data-mission="${mission}">
           <div class="fleet-active-row">
-            <span class="fleet-active-mission">${tt(`fleet_mission_${mv.mission_type}`, mv.mission_type)}</span>
+            <span class="fleet-active-mission fleet-active-mission--${mission}">${tt(`fleet_mission_${mv.mission_type}`, mv.mission_type)}</span>
             <span class="fleet-active-status">${tt(`fleet_status_${mv.status}`, mv.status)}</span>
           </div>
           <div class="fleet-active-coords gc-mono">${mv.origin_coords || ""} → ${mv.target_coords || ""}</div>
@@ -3035,6 +3139,7 @@
       const previewTargetOwner = page.querySelector("[data-preview-target-owner]");
       const previewMissionStatus = page.querySelector("[data-preview-mission-status]");
       const previewArrival = page.querySelector("[data-preview-arrival]");
+      const missionFeedback = page.querySelector("[data-fleet-mission-feedback]");
       const sendBtn = page.querySelector("[data-fleet-send-btn]");
       const ships = getShipsSelection(page);
       const missionType = form.querySelector("[data-fleet-mission]")?.value || "transport";
@@ -3042,13 +3147,22 @@
         rt.lastPreview = null;
         if (previewTargetType) previewTargetType.textContent = "–";
         if (previewTargetOwner) previewTargetOwner.textContent = "–";
-        if (previewMissionStatus) previewMissionStatus.textContent = "–";
+        if (previewMissionStatus) {
+          previewMissionStatus.textContent = "–";
+          previewMissionStatus.classList.remove("is-ok", "is-blocked");
+        }
         if (previewCargo) previewCargo.textContent = "–";
         if (previewCargoFree) previewCargoFree.textContent = "–";
         if (previewFuel) previewFuel.textContent = "–";
         if (previewFuelAvail) previewFuelAvail.textContent = "–";
         if (previewFlight) previewFlight.textContent = "–";
         if (previewArrival) previewArrival.textContent = "–";
+        if (missionFeedback) {
+          missionFeedback.hidden = true;
+          missionFeedback.className = "fleet-mission-feedback";
+          const fbText = missionFeedback.querySelector("[data-fleet-mission-feedback-text]");
+          if (fbText) fbText.textContent = "";
+        }
         if (sendBtn) sendBtn.disabled = true;
       };
       if (!Object.keys(ships).length) {
@@ -3085,13 +3199,17 @@
                 : "–");
           }
           if (previewMissionStatus) {
+            previewMissionStatus.classList.remove("is-ok", "is-blocked");
             if (p.can_send) {
               previewMissionStatus.textContent = tt("fleet_preview_mission_ok", "Mission allowed");
+              previewMissionStatus.classList.add("is-ok");
             } else {
               const reason = p.block_reason || p.mission_block_reason || "generic";
               previewMissionStatus.textContent = reasonText(reason);
+              previewMissionStatus.classList.add("is-blocked");
             }
           }
+          updateMissionFeedback(page, p, missionType, ships);
           if (previewCargo) previewCargo.textContent = `${p.cargo_used || 0} / ${p.cargo_total || 0}`;
           if (previewCargoFree) previewCargoFree.textContent = String(p.cargo_free || 0);
           if (previewFuel) previewFuel.textContent = String(p.fuel_cost || 0);
@@ -3302,6 +3420,7 @@
       if (e.target.matches("[data-fleet-mission]")) {
         const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
         if (colonizeRow) colonizeRow.hidden = e.target.value !== "colonize";
+        if (e.target.value === "expedition") applyExpeditionTarget(page);
         schedulePreview(page);
       }
       if (e.target.closest("#fleet-send-form")) schedulePreview(page);
@@ -3487,15 +3606,24 @@
     const form = page.querySelector("#fleet-send-form");
     if (!form) return;
     const mission = params.get("mission");
+    const g = params.get("target_galaxy");
+    const s = params.get("target_system");
+    const p = params.get("target_position");
     if (mission) {
       const ms = form.querySelector("[data-fleet-mission]");
       if (ms) ms.value = mission;
       const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
       if (colonizeRow) colonizeRow.hidden = mission !== "colonize";
+      if (mission === "expedition" && p == null) {
+        let expPos = 16;
+        try {
+          const st = JSON.parse(page.querySelector("#fleet-page-state")?.textContent || "{}");
+          expPos = parseInt(st.expedition_position || "16", 10) || 16;
+        } catch (_) {}
+        const posInp = form.querySelector('[name="target_position"]');
+        if (posInp) posInp.value = String(expPos);
+      }
     }
-    const g = params.get("target_galaxy");
-    const s = params.get("target_system");
-    const p = params.get("target_position");
     if (g != null) form.querySelector('[name="target_galaxy"]').value = g;
     if (s != null) form.querySelector('[name="target_system"]').value = s;
     if (p != null) form.querySelector('[name="target_position"]').value = p;

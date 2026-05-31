@@ -45,6 +45,11 @@ from .galaxy import (
     get_planet_coordinates,
     validate_coordinates,
 )
+from .expedition_events import (
+    build_expedition_report,
+    count_expedition_ships,
+    resolve_expedition_outcome,
+)
 from .messages import notify_combat, notify_espionage, notify_expedition, notify_player, notify_transport
 from .models import get_planets_by_player, get_research_levels
 
@@ -1774,27 +1779,6 @@ def _build_combat_report_body(
     return body, metadata
 
 
-def _roll_expedition_rewards(movement_id: int, cargo_total: int) -> Dict[str, int]:
-    """Deterministic expedition loot roll (idempotent per movement id)."""
-    rng = random.Random(int(movement_id) * 7919 + 104729)
-    roll = rng.random()
-    rewards = {"metal": 0, "crystal": 0, "fuel_cells": 0}
-    if roll < 0.15:
-        return rewards
-    if roll < 0.55:
-        rewards["metal"] = rng.randint(500, 2500)
-        rewards["crystal"] = rng.randint(200, 1200)
-    elif roll < 0.75:
-        rewards["fuel_cells"] = rng.randint(10, 80)
-    loaded = rewards["metal"] + rewards["crystal"] + rewards["fuel_cells"]
-    if cargo_total > 0 and loaded > cargo_total:
-        scale = cargo_total / max(1, loaded)
-        rewards["metal"] = int(rewards["metal"] * scale)
-        rewards["crystal"] = int(rewards["crystal"] * scale)
-        rewards["fuel_cells"] = int(rewards["fuel_cells"] * scale)
-    return rewards
-
-
 def _format_transport_cargo(resources: Mapping[str, Any]) -> str:
     from .i18n import fmt_int, tr
 
@@ -2039,13 +2023,16 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
 
     if mission == "expedition":
         cargo_total = calculate_total_cargo(ships)
-        rewards = _roll_expedition_rewards(movement_id, cargo_total)
-        reward_total = rewards["metal"] + rewards["crystal"] + rewards["fuel_cells"]
-        delay_extra = 0
-        rng = random.Random(movement_id * 9176)
-        if rng.random() < 0.1:
-            delay_extra = int(movement.get("flight_seconds") or 60)
-        flight_seconds = int(movement.get("flight_seconds") or 1) + delay_extra
+        flight_seconds_base = int(movement.get("flight_seconds") or 1)
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=cargo_total,
+            expedition_ship_count=count_expedition_ships(ships),
+            flight_seconds=flight_seconds_base,
+        )
+        rewards = outcome["rewards"]
+        delay_extra = int(outcome.get("delay_extra") or 0)
+        flight_seconds = flight_seconds_base + delay_extra
         return_at = now + flight_seconds
         claimed = _claim_movement_status(
             conn,
@@ -2058,21 +2045,19 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         )
         if not claimed:
             return
-        if reward_total > 0:
-            body = (
-                f"Expedition at {coords} found resources: "
-                f"Metal {rewards['metal']:,}, Crystal {rewards['crystal']:,}, "
-                f"Fuel Cells {rewards['fuel_cells']:,}."
-            )
-        elif delay_extra:
-            body = f"Expedition at {coords} encountered delays. Return flight extended."
-        else:
-            body = f"Expedition at {coords} found nothing of value."
+        body, meta = build_expedition_report(coords, ships, outcome)
+        meta["fleet_id"] = movement_id
+        from .i18n import tr
+
         notify_expedition(
             player_id,
-            f"Expedition report {coords}",
+            tr(
+                "fleet_report_expedition_subject_coords",
+                "Expedition report — %(coords)s",
+                coords=coords,
+            ),
             body,
-            metadata={"fleet_id": movement_id, "rewards": rewards, "delay_extra": delay_extra},
+            metadata=meta,
             conn=conn,
         )
         return

@@ -3477,6 +3477,239 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   font-size: 0.88rem;
   color: var(--gc-text-soft);
 }
+.fleet-preview-mission-status{
+  font-weight: 600;
+  text-align: right;
+}
+.fleet-preview-mission-status.is-ok{ color: var(--gc-success, #5fd38d); }
+.fleet-preview-mission-status.is-blocked{ color: var(--gc-danger, #ff6b6b); }
+.fleet-mission-feedback{
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.16);
+  background: rgba(5, 10, 22, 0.45);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--gc-text-soft);
+}
+.fleet-mission-feedback.is-info{
+  border-color: rgba(70, 229, 255, 0.22);
+  background: rgba(70, 229, 255, 0.06);
+}
+.fleet-mission-feedback.is-ok{
+  border-color: rgba(95, 211, 141, 0.28);
+  background: rgba(95, 211, 141, 0.08);
+  color: var(--gc-text);
+}
+.fleet-mission-feedback.is-warn{
+  border-color: rgba(255, 196, 86, 0.28);
+  background: rgba(255, 196, 86, 0.08);
+  color: var(--gc-text);
+}
+.fleet-mission-feedback-text{ margin: 0; }
+.fleet-active-card--expedition{
+  border-color: rgba(167, 139, 250, 0.28);
+  background: rgba(40, 24, 70, 0.42);
+}
+.fleet-active-mission--expedition{ color: #c4b5fd; }
+.fleet-active-mission--spy{ color: #7dd3fc; }
+.fleet-active-mission--attack{ color: #fca5a5; }
+.fleet-active-mission--colonize{ color: #86efac; }
+.gc-expedition-report{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gc-expedition-card{
+  position: relative;
+  overflow: hidden;
+  padding: 14px 14px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.18);
+  background:
+    linear-gradient(135deg, rgba(8, 16, 36, 0.92) 0%, rgba(5, 10, 22, 0.88) 100%);
+}
+.gc-expedition-card::before{
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--gc-expedition-accent, rgba(125, 211, 252, 0.75));
+}
+.gc-expedition-card-top{
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.gc-expedition-card-icon{
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--gc-expedition-accent, #7dd3fc);
+  border: 1px solid color-mix(in srgb, var(--gc-expedition-accent, #7dd3fc) 35%, transparent);
+  background: color-mix(in srgb, var(--gc-expedition-accent, #7dd3fc) 12%, transparent);
+}
+.gc-expedition-card-headings{
+  flex: 1;
+  min-width: 0;
+}
+.gc-expedition-card-title{
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-text);
+  line-height: 1.25;
+}
+.gc-expedition-card-badge{
+  display: inline-flex;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-family: var(--gc-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gc-expedition-accent, #7dd3fc);
+  border: 1px solid color-mix(in srgb, var(--gc-expedition-accent, #7dd3fc) 40%, transparent);
+  background: color-mix(in srgb, var(--gc-expedition-accent, #7dd3fc) 10%, transparent);
+}
+.gc-expedition-card-meta{
+  margin: 10px 0 0;
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+  color: var(--gc-text-soft);
+}
+.gc-expedition-card-desc{
+  margin: 10px 0 0;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--gc-text);
+}
+.gc-expedition-card-coords{
+  margin-top: 10px;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  color: var(--gc-neon-cyan);
+  opacity: 0.85;
+}
+.gc-expedition-card--fund{
+  --gc-expedition-accent: #5eead4;
+  border-color: rgba(45, 212, 191, 0.28);
+  background: linear-gradient(135deg, rgba(6, 28, 28, 0.92) 0%, rgba(5, 14, 24, 0.9) 100%);
+}
+.gc-expedition-card--disturbance{
+  --gc-expedition-accent: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.32);
+  background: linear-gradient(135deg, rgba(36, 24, 6, 0.92) 0%, rgba(14, 12, 8, 0.9) 100%);
+}
+.gc-expedition-card--alert{
+  --gc-expedition-accent: #fb923c;
+  border-color: rgba(251, 146, 60, 0.32);
+  background: linear-gradient(135deg, rgba(36, 14, 8, 0.92) 0%, rgba(18, 8, 10, 0.9) 100%);
+}
+.gc-expedition-card--relic{
+  --gc-expedition-accent: #c4b5fd;
+  border-color: rgba(196, 181, 253, 0.34);
+  background: linear-gradient(135deg, rgba(28, 12, 44, 0.94) 0%, rgba(18, 10, 28, 0.92) 100%);
+}
+.gc-expedition-card--anomaly{
+  --gc-expedition-accent: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.28);
+  background: linear-gradient(135deg, rgba(12, 18, 32, 0.92) 0%, rgba(8, 12, 22, 0.9) 100%);
+}
+.gc-expedition-panel{
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.12);
+  background: rgba(5, 10, 22, 0.42);
+}
+.gc-expedition-panel-title{
+  margin: 0 0 6px;
+  font-size: 0.68rem;
+  font-family: var(--gc-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gc-text-soft);
+}
+.gc-expedition-fleet-summary{
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--gc-text);
+}
+.gc-expedition-loot-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+.gc-expedition-loot-chip{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(94, 234, 212, 0.22);
+  background: rgba(45, 212, 191, 0.07);
+}
+.gc-expedition-loot-chip--metal{
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(148, 163, 184, 0.06);
+}
+.gc-expedition-loot-chip--crystal{
+  border-color: rgba(125, 211, 252, 0.24);
+  background: rgba(125, 211, 252, 0.07);
+}
+.gc-expedition-loot-chip--fuel{
+  border-color: rgba(251, 191, 36, 0.24);
+  background: rgba(251, 191, 36, 0.07);
+}
+.gc-expedition-loot-label{
+  font-size: 0.72rem;
+  color: var(--gc-text-soft);
+}
+.gc-expedition-loot-value{
+  font-family: var(--gc-mono);
+  font-size: 0.95rem;
+  color: var(--gc-neon-cyan);
+}
+.gc-expedition-loot-empty{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px dashed rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.04);
+}
+.gc-expedition-loot-empty-mark{
+  font-family: var(--gc-mono);
+  font-size: 0.9rem;
+  color: rgba(148, 163, 184, 0.45);
+}
+.gc-expedition-loot-empty-text{
+  font-size: 0.78rem;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  color: rgba(148, 163, 184, 0.72);
+}
+.gc-expedition-panel--loot-empty .gc-expedition-panel-title{
+  opacity: 0.75;
+}
+.gc-expedition-report--ancient_stash .gc-expedition-loot-chip{
+  border-color: rgba(196, 181, 253, 0.28);
+  background: rgba(196, 181, 253, 0.08);
+}
+.gc-expedition-report--ancient_stash .gc-expedition-loot-value{
+  color: #fcd34d;
+}
 .fleet-form-error{
   color: var(--gc-danger, #ff6b6b);
   font-size: 0.88rem;

@@ -70,9 +70,9 @@
       <div class="fleet-active-list" data-fleet-active-list>
         {% if fleet_ctx.active_fleets %}
           {% for mv in fleet_ctx.active_fleets %}
-          <article class="fleet-active-card" data-fleet-id="{{ mv.id }}" data-status="{{ mv.status }}">
+          <article class="fleet-active-card fleet-active-card--{{ mv.mission_type }}" data-fleet-id="{{ mv.id }}" data-status="{{ mv.status }}" data-mission="{{ mv.mission_type }}">
             <div class="fleet-active-row">
-              <span class="fleet-active-mission">{{ T("fleet_mission_" ~ mv.mission_type) }}</span>
+              <span class="fleet-active-mission fleet-active-mission--{{ mv.mission_type }}">{{ T("fleet_mission_" ~ mv.mission_type) }}</span>
               <span class="fleet-active-status">{{ T("fleet_status_" ~ mv.status) }}</span>
             </div>
             <div class="fleet-active-coords gc-mono">{{ mv.origin_coords }} → {{ mv.target_coords }}</div>
@@ -81,10 +81,11 @@
                 <span class="fleet-ship-chip">{{ T("fleet_ship_" ~ sk, sk) }} × {{ qty|fmt_int }}</span>
               {% endfor %}
             </div>
-            {% if mv.resources.metal or mv.resources.crystal %}
+            {% if mv.resources.metal or mv.resources.crystal or mv.resources.fuel_cells %}
             <div class="fleet-active-cargo">
               {% if mv.resources.metal %}<span>{{ T("resource_metal") }}: {{ mv.resources.metal|fmt_int }}</span>{% endif %}
               {% if mv.resources.crystal %}<span>{{ T("resource_crystal") }}: {{ mv.resources.crystal|fmt_int }}</span>{% endif %}
+              {% if mv.resources.fuel_cells %}<span>{{ T("resource_fuel_cells") }}: {{ mv.resources.fuel_cells|fmt_int }}</span>{% endif %}
             </div>
             {% endif %}
             <div class="fleet-active-times gc-mono">
@@ -234,7 +235,10 @@
         <div class="fleet-preview-box" data-fleet-preview aria-live="polite">
           <div class="fleet-preview-row"><span>{{ T("fleet_preview_target_type") }}</span><span data-preview-target-type>–</span></div>
           <div class="fleet-preview-row"><span>{{ T("fleet_preview_target_owner") }}</span><span data-preview-target-owner>–</span></div>
-          <div class="fleet-preview-row"><span>{{ T("fleet_preview_mission_status") }}</span><span data-preview-mission-status>–</span></div>
+          <div class="fleet-preview-row fleet-preview-row--mission">
+            <span>{{ T("fleet_preview_mission_status") }}</span>
+            <span class="fleet-preview-mission-status" data-preview-mission-status>–</span>
+          </div>
           <div class="fleet-preview-row"><span>{{ T("fleet_preview_cargo") }}</span><span data-preview-cargo>–</span></div>
           <div class="fleet-preview-row"><span>{{ T("fleet_preview_cargo_free") }}</span><span data-preview-cargo-free>–</span></div>
           <div class="fleet-preview-row">
@@ -244,6 +248,10 @@
           <div class="fleet-preview-row"><span>{{ T("fleet_preview_fuel_available") }}</span><span data-preview-fuel-available>–</span></div>
           <div class="fleet-preview-row"><span>{{ T("fleet_preview_flight") }}</span><span data-preview-flight>–</span></div>
           <div class="fleet-preview-row"><span>{{ T("fleet_preview_arrival") }}</span><span data-preview-arrival>–</span></div>
+        </div>
+
+        <div class="fleet-mission-feedback" data-fleet-mission-feedback hidden aria-live="polite">
+          <p class="fleet-mission-feedback-text" data-fleet-mission-feedback-text></p>
         </div>
 
         <p class="fleet-form-error" data-fleet-error hidden></p>

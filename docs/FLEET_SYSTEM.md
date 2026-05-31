@@ -73,7 +73,7 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 | **spy** | Tiered probe intel (resources → fleet → buildings → activity); structured inbox report; Schiffe return |
 | **attack** | **Placeholder** — „combat not active“; Schiffe return |
 | **hold** | `holding` für 3600s, dann return (ally only wenn Alliance-Schema) |
-| **expedition** | Deterministisches Loot + optional delay |
+| **expedition** | Event engine: weighted outcomes, cargo cap, optional delay; structured inbox report |
 | **colonize** | `colonize_planet()`; verbraucht `seed_ark` |
 
 Logistics (`collect` / `distribute`): API existiert, antwortet `logistics_not_implemented`.

@@ -71,6 +71,9 @@ def test_messages_js_spy_report_and_category_label():
     src = _read("static/js/messages.js")
     assert "function categoryLabel(cat)" in src
     assert "function renderSpyReport(meta)" in src
+    assert "function renderExpeditionReport(meta)" in src
+    assert "expeditionEventVisual" in src
+    assert "gc-expedition-card" in src
     assert "renderMessageBody(msg)" in src
 
 

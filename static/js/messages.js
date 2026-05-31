@@ -210,10 +210,213 @@
     return `<div class="gc-spy-report">${sections.join("")}</div>`;
   }
 
+  function expeditionSeverityLabel(severity) {
+    const key = `fleet_expedition_report_severity_${severity || "normal"}`;
+    return t(key, severity || "normal");
+  }
+
+  function expeditionEventVisual(eventKey) {
+    const map = {
+      void_scan: { theme: "anomaly", icon: "◌" },
+      sensor_glitch: { theme: "anomaly", icon: "◌" },
+      mineral_deposit: { theme: "fund", icon: "◆" },
+      fuel_cache: { theme: "fund", icon: "⚡" },
+      debris_salvage: { theme: "fund", icon: "▣" },
+      nav_interference: { theme: "disturbance", icon: "⚠" },
+      distress_beacon: { theme: "alert", icon: "✦" },
+      ancient_stash: { theme: "relic", icon: "✧" },
+    };
+    return map[eventKey] || { theme: "anomaly", icon: "◎" };
+  }
+
+  function expeditionEventBadge(eventKey, severity) {
+    const badges = {
+      nav_interference: "fleet_expedition_badge_disturbance",
+      sensor_glitch: "fleet_expedition_badge_anomaly",
+      void_scan: "fleet_expedition_badge_anomaly",
+      distress_beacon: "fleet_expedition_badge_alert",
+      ancient_stash: "fleet_expedition_badge_relic",
+    };
+    const key = badges[eventKey] || `fleet_expedition_badge_${severity || "normal"}`;
+    return t(key, expeditionSeverityLabel(severity));
+  }
+
+  function expeditionRiskLabel(eventKey) {
+    const high = new Set(["distress_beacon", "ancient_stash"]);
+    const medium = new Set(["nav_interference"]);
+    if (high.has(eventKey)) return t("fleet_expedition_report_risk_high", "elevated");
+    if (medium.has(eventKey)) return t("fleet_expedition_report_risk_medium", "moderate");
+    return t("fleet_expedition_report_risk_low", "low");
+  }
+
+  function expeditionFindLabel(rewards, severity, eventKey) {
+    const total =
+      Number(rewards?.metal || 0) +
+      Number(rewards?.crystal || 0) +
+      Number(rewards?.fuel_cells || 0);
+    if (total <= 0) {
+      if (eventKey === "nav_interference" || eventKey === "sensor_glitch") {
+        return t("fleet_expedition_report_find_trace", "trace");
+      }
+      return t("fleet_expedition_report_find_none", "none");
+    }
+    if (severity === "major" || eventKey === "ancient_stash") {
+      return t("fleet_expedition_report_find_major", "major");
+    }
+    if (severity === "minor" || total < 800) {
+      return t("fleet_expedition_report_find_small", "small");
+    }
+    return t("fleet_expedition_report_find_standard", "standard");
+  }
+
+  function expeditionReturnLabel(delayExtra) {
+    const delay = Number(delayExtra || 0);
+    if (delay > 0) {
+      return t("fleet_expedition_report_return_delayed", "Return +%(seconds)s").replace(
+        "%(seconds)s",
+        formatInt(delay)
+      );
+    }
+    return t("fleet_expedition_report_return_nominal", "Return nominal");
+  }
+
+  function expeditionFleetStatus(delayExtra, rewardTotal) {
+    if (Number(delayExtra || 0) > 0) {
+      return t("fleet_expedition_report_fleet_status_delayed", "Return delayed");
+    }
+    if (Number(rewardTotal || 0) > 0) {
+      return t("fleet_expedition_report_fleet_status_loaded", "Cargo secured");
+    }
+    return t("fleet_expedition_report_fleet_status_returning", "Returning");
+  }
+
+  function expeditionLootTotal(rewards) {
+    return (
+      Number(rewards?.metal || 0) +
+      Number(rewards?.crystal || 0) +
+      Number(rewards?.fuel_cells || 0)
+    );
+  }
+
+  function renderExpeditionReport(meta) {
+    const eventKey = meta.event_key || "void_scan";
+    const eventLabel = t(
+      meta.event_label_key || `expedition_event_${eventKey}`,
+      eventKey
+    );
+    const descKey = meta.event_desc_key || `expedition_event_${eventKey}_desc`;
+    const desc = t(descKey, "");
+    const severity = meta.event_severity || "normal";
+    const visual = expeditionEventVisual(eventKey);
+    const rewards = meta.rewards || {};
+    const lootTotal = expeditionLootTotal(rewards);
+    const cargoTotal = Number(meta.cargo_total || 0);
+    const delayExtra = Number(meta.delay_extra || 0);
+    const badge = expeditionEventBadge(eventKey, severity);
+    const risk = expeditionRiskLabel(eventKey);
+    const find = expeditionFindLabel(rewards, severity, eventKey);
+    const returnLabel = expeditionReturnLabel(delayExtra);
+    const metaLine = t(
+      "fleet_expedition_report_meta_line",
+      "%(return)s · Risk: %(risk)s · Find: %(find)s"
+    )
+      .replace("%(return)s", returnLabel)
+      .replace("%(risk)s", risk)
+      .replace("%(find)s", find);
+
+    const fleet = meta.fleet_ships || {};
+    const fleetEntries = Object.entries(fleet).filter(([, qty]) => Number(qty) > 0);
+    const fleetShipsText = fleetEntries.length
+      ? fleetEntries
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, qty]) => `${formatInt(qty)}× ${shipLabel(key)}`)
+          .join(" · ")
+      : t("fleet_expedition_report_fleet_unknown", "Fleet composition unknown");
+    const fleetSummary = t(
+      "fleet_expedition_report_fleet_summary",
+      "%(ships)s · Cargo %(used)s/%(total)s · Status: %(status)s"
+    )
+      .replace("%(ships)s", fleetShipsText)
+      .replace("%(used)s", formatInt(lootTotal))
+      .replace("%(total)s", formatInt(cargoTotal))
+      .replace("%(status)s", expeditionFleetStatus(delayExtra, lootTotal));
+
+    const sections = [];
+
+    sections.push(
+      `<header class="gc-expedition-card gc-expedition-card--${esc(visual.theme)}" data-event="${esc(eventKey)}">` +
+        `<div class="gc-expedition-card-top">` +
+          `<span class="gc-expedition-card-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
+          `<div class="gc-expedition-card-headings">` +
+            `<h3 class="gc-expedition-card-title">${esc(eventLabel)}</h3>` +
+            `<span class="gc-expedition-card-badge">${esc(badge)}</span>` +
+          `</div>` +
+        `</div>` +
+        `<p class="gc-expedition-card-meta gc-mono">${esc(metaLine)}</p>` +
+        (desc ? `<p class="gc-expedition-card-desc">${esc(desc)}</p>` : "") +
+        `<div class="gc-expedition-card-coords gc-mono">${esc(meta.target_coords || "—")}</div>` +
+      `</header>`
+    );
+
+    sections.push(
+      `<section class="gc-expedition-panel gc-expedition-panel--fleet">` +
+        `<h4 class="gc-expedition-panel-title">${esc(t("fleet_expedition_report_section_fleet", "Expedition fleet"))}</h4>` +
+        `<p class="gc-expedition-fleet-summary">${esc(fleetSummary)}</p>` +
+      `</section>`
+    );
+
+    const rewardRows = [];
+    if (Number(rewards.metal || 0) > 0) {
+      rewardRows.push(
+        `<div class="gc-expedition-loot-chip gc-expedition-loot-chip--metal">` +
+          `<span class="gc-expedition-loot-label">${esc(t("resource_metal", "Ferronit"))}</span>` +
+          `<strong class="gc-expedition-loot-value">${esc(formatInt(rewards.metal))}</strong>` +
+        `</div>`
+      );
+    }
+    if (Number(rewards.crystal || 0) > 0) {
+      rewardRows.push(
+        `<div class="gc-expedition-loot-chip gc-expedition-loot-chip--crystal">` +
+          `<span class="gc-expedition-loot-label">${esc(t("resource_crystal", "Crytite"))}</span>` +
+          `<strong class="gc-expedition-loot-value">${esc(formatInt(rewards.crystal))}</strong>` +
+        `</div>`
+      );
+    }
+    if (Number(rewards.fuel_cells || 0) > 0) {
+      rewardRows.push(
+        `<div class="gc-expedition-loot-chip gc-expedition-loot-chip--fuel">` +
+          `<span class="gc-expedition-loot-label">${esc(t("resource_fuel_cells", "Fuel Cells"))}</span>` +
+          `<strong class="gc-expedition-loot-value">${esc(formatInt(rewards.fuel_cells))}</strong>` +
+        `</div>`
+      );
+    }
+
+    const lootBody = rewardRows.length
+      ? `<div class="gc-expedition-loot-grid">${rewardRows.join("")}</div>`
+      : `<div class="gc-expedition-loot-empty">` +
+          `<span class="gc-expedition-loot-empty-mark" aria-hidden="true">—</span>` +
+          `<span class="gc-expedition-loot-empty-text">${esc(
+            t("fleet_expedition_report_loot_empty", "No recoverable find")
+          )}</span>` +
+        `</div>`;
+
+    sections.push(
+      `<section class="gc-expedition-panel gc-expedition-panel--loot gc-expedition-panel--loot-${rewardRows.length ? "found" : "empty"}">` +
+        `<h4 class="gc-expedition-panel-title">${esc(t("fleet_expedition_report_section_loot", "Recovered cargo"))}</h4>` +
+        lootBody +
+      `</section>`
+    );
+
+    return `<div class="gc-expedition-report gc-expedition-report--${esc(eventKey)}">${sections.join("")}</div>`;
+  }
+
   function renderMessageBody(msg) {
     const meta = msg.metadata || {};
     if (msg.category === "espionage" && meta.report_version >= 2 && meta.intel_tiers) {
       return { html: renderSpyReport(meta), plain: msg.body || "" };
+    }
+    if (msg.category === "expedition" && meta.report_version >= 2 && meta.event_key) {
+      return { html: renderExpeditionReport(meta), plain: msg.body || "" };
     }
     return { html: null, plain: msg.body || "" };
   }

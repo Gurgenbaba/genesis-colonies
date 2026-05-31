@@ -32,7 +32,7 @@ from game.fleet import (
     _build_spy_report_body,
     _target_planet_snapshot,
 )
-from game.alliance import add_alliance_member, create_alliance
+from game.expedition_events import expedition_event_keys, resolve_expedition_outcome
 from game.fleet_calc import (
     apply_departure_deduction,
     calculate_distance,
@@ -45,7 +45,7 @@ from game.fleet_calc import (
     validate_departure_balances,
 )
 from game.fleet_defs import EXPEDITION_POSITION, FLEET_FUEL_RESOURCE
-from game.messages import list_messages
+from game.messages import get_message, list_messages
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, init_db
 from game.planet_evolution.service import colonize_planet
 
@@ -857,7 +857,7 @@ def test_attack_placeholder_report(fleet_db):
     conn.close()
 
 
-def test_expedition_placeholder_report(fleet_db):
+def test_expedition_event_engine_report(fleet_db):
     conn = db()
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
@@ -886,7 +886,59 @@ def test_expedition_placeholder_report(fleet_db):
 
     msgs = list_messages(uid, category="expedition")
     assert len(msgs["data"]["messages"]) >= 1
+    msg_id = msgs["data"]["messages"][0]["id"]
+    detail = get_message(uid, msg_id, mark_read=False)
+    assert detail["ok"]
+    meta = detail["data"]["message"].get("metadata") or {}
+    assert meta.get("report_version") == 2
+    assert meta.get("event_key") in expedition_event_keys()
+    assert "rewards" in meta
+    assert meta.get("fleet_ships", {}).get("solar_skiff") == 1
     conn.close()
+
+
+def test_expedition_outcome_deterministic_and_cargo_cap():
+    first = resolve_expedition_outcome(
+        42,
+        cargo_total=500,
+        expedition_ship_count=1,
+        flight_seconds=120,
+    )
+    second = resolve_expedition_outcome(
+        42,
+        cargo_total=500,
+        expedition_ship_count=1,
+        flight_seconds=120,
+    )
+    assert first == second
+    assert first["event_key"] in expedition_event_keys()
+    reward_total = sum(int(first["rewards"].get(k) or 0) for k in ("metal", "crystal", "fuel_cells"))
+    assert reward_total <= 500
+
+
+def test_expedition_outcome_more_hulls_shift_from_empty():
+    empty_events = {"void_scan", "sensor_glitch"}
+    empty_hits = 0
+    reward_hits = 0
+    for movement_id in range(1, 401):
+        low = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=50000,
+            expedition_ship_count=0,
+            flight_seconds=60,
+        )
+        high = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=50000,
+            expedition_ship_count=5,
+            flight_seconds=60,
+        )
+        if low["event_key"] in empty_events:
+            empty_hits += 1
+        if high["reward_total"] > 0:
+            reward_hits += 1
+    assert empty_hits >= 50
+    assert reward_hits >= 200
 
 
 def test_tick_idempotent(fleet_db):
@@ -1744,6 +1796,9 @@ def test_fleet_ui_active_buttons_have_handlers():
         "rt.sending",
         "data-fleet-send-btn",
         "data-preview-target-type",
+        "data-fleet-mission-feedback",
+        "updateMissionFeedback",
+        "applyExpeditionTarget",
         "tickFleetCountdowns",
         "fleetRefreshBusy",
     ]
@@ -1768,6 +1823,7 @@ def test_quick_target_template_sets_coord_inputs():
     assert 'name="target_position"' in tpl
     assert "data-galaxy" in tpl and "fleet-colony-chip" in tpl
     assert "data-preview-target-type" in tpl
+    assert "data-fleet-mission-feedback" in tpl
     assert "data-fleet-send-btn" in tpl
 
 
