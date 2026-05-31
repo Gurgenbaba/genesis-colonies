@@ -1,13 +1,22 @@
-"""Server-side translations for game logic (default locale: de)."""
+"""Server-side translations for game logic and inbox notifications."""
 
 from __future__ import annotations
 
+import contextvars
 import json
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
+
+from .db import column_exists, db
 
 _LOCALES_DIR = Path(__file__).resolve().parent.parent / "locales"
-_DEFAULT_LOCALE = "de"
+DEFAULT_LOCALE = "de"
+SUPPORTED_LOCALES = frozenset({"de", "en"})
+
+_current_locale: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "locale", default=DEFAULT_LOCALE
+)
 
 
 @lru_cache(maxsize=4)
@@ -21,9 +30,80 @@ def _load_locale(locale: str) -> dict[str, str]:
         return {}
 
 
-def tr(key: str, default: str | None = None, **fmt: object) -> str:
+def normalize_locale(locale: str | None) -> str:
+    loc = str(locale or DEFAULT_LOCALE).strip().lower()
+    return loc if loc in SUPPORTED_LOCALES else DEFAULT_LOCALE
+
+
+def get_locale_dict(locale: str | None = None) -> dict[str, str]:
+    return _load_locale(normalize_locale(locale))
+
+
+def current_locale() -> str:
+    return normalize_locale(_current_locale.get())
+
+
+def set_request_locale(locale: str | None) -> str:
+    loc = normalize_locale(locale)
+    _current_locale.set(loc)
+    return loc
+
+
+def ensure_locale_schema(conn=None) -> None:
+    own = conn is None
+    c = conn or db()
+    try:
+        if not column_exists(c, "users", "locale"):
+            cur = c.cursor()
+            cur.execute("ALTER TABLE users ADD COLUMN locale TEXT NOT NULL DEFAULT 'de';")
+        if own:
+            c.commit()
+    finally:
+        if own:
+            c.close()
+
+
+def get_player_locale(player_id: int, *, conn=None) -> str:
+    pid = int(player_id or 0)
+    if pid <= 0:
+        return DEFAULT_LOCALE
+    own = conn is None
+    c = conn or db()
+    try:
+        ensure_locale_schema(c)
+        row = c.execute("SELECT locale FROM users WHERE id = ? LIMIT 1;", (pid,)).fetchone()
+        if not row:
+            return DEFAULT_LOCALE
+        return normalize_locale(row["locale"])
+    except Exception:
+        return DEFAULT_LOCALE
+    finally:
+        if own:
+            c.close()
+
+
+def set_player_locale(player_id: int, locale: str, *, conn=None) -> str:
+    pid = int(player_id or 0)
+    loc = normalize_locale(locale)
+    if pid <= 0:
+        return loc
+    own = conn is None
+    c = conn or db()
+    try:
+        ensure_locale_schema(c)
+        c.execute("UPDATE users SET locale = ? WHERE id = ?;", (loc, pid))
+        if own:
+            c.commit()
+    finally:
+        if own:
+            c.close()
+    return loc
+
+
+def tr(key: str, default: str | None = None, *, locale: str | None = None, **fmt: object) -> str:
     """Translate key from locale JSON; optional %(name)s formatting."""
-    text = _load_locale(_DEFAULT_LOCALE).get(key)
+    loc = normalize_locale(locale) if locale is not None else current_locale()
+    text = _load_locale(loc).get(key)
     if text is None:
         text = default if default is not None else key
     if not fmt:
@@ -34,7 +114,8 @@ def tr(key: str, default: str | None = None, **fmt: object) -> str:
         return text
 
 
-def fmt_int(value: object) -> str:
+def fmt_int(value: object, *, locale: str | None = None) -> str:
+    del locale  # number format stays de-DE style for now
     try:
         n = int(round(float(value)))
     except (TypeError, ValueError):

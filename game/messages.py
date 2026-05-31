@@ -339,15 +339,18 @@ def notify_combat(
     body: str,
     metadata: dict[str, Any] | None = None,
     *,
+    locale: str | None = None,
     conn=None,
 ) -> dict[str, Any]:
+    from .i18n import tr
+
     return notify_player(
         player_id,
         subject,
         body,
         category="combat",
         metadata=metadata,
-        sender_name="Kampfbericht",
+        sender_name=tr("messages_sender_combat", "Kampfbericht", locale=locale),
         conn=conn,
     )
 
@@ -358,15 +361,18 @@ def notify_espionage(
     body: str,
     metadata: dict[str, Any] | None = None,
     *,
+    locale: str | None = None,
     conn=None,
 ) -> dict[str, Any]:
+    from .i18n import tr
+
     return notify_player(
         player_id,
         subject,
         body,
         category="espionage",
         metadata=metadata,
-        sender_name="Spionagebericht",
+        sender_name=tr("messages_sender_espionage", "Spionagebericht", locale=locale),
         conn=conn,
     )
 
@@ -377,15 +383,18 @@ def notify_expedition(
     body: str,
     metadata: dict[str, Any] | None = None,
     *,
+    locale: str | None = None,
     conn=None,
 ) -> dict[str, Any]:
+    from .i18n import tr
+
     return notify_player(
         player_id,
         subject,
         body,
         category="expedition",
         metadata=metadata,
-        sender_name="Expeditionsbericht",
+        sender_name=tr("messages_sender_expedition", "Expeditionsbericht", locale=locale),
         conn=conn,
     )
 
@@ -396,15 +405,18 @@ def notify_transport(
     body: str,
     metadata: dict[str, Any] | None = None,
     *,
+    locale: str | None = None,
     conn=None,
 ) -> dict[str, Any]:
+    from .i18n import tr
+
     return notify_player(
         player_id,
         subject,
         body,
         category="system",
         metadata=metadata,
-        sender_name="Transportbericht",
+        sender_name=tr("messages_sender_transport", "Transportbericht", locale=locale),
         conn=conn,
     )
 

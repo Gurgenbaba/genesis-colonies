@@ -1,0 +1,112 @@
+"""Per-player locale for inbox notifications."""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+import game.db as dbmod
+import game.models as models
+from game.db import db
+from game.i18n import get_player_locale, set_player_locale, tr
+from game.messages import notify_transport
+from game.models import create_user, init_db, load_player
+
+ROOT = Path(__file__).resolve().parent.parent
+MIGRATE_SCRIPT = ROOT / "migrate.py"
+
+
+@pytest.fixture()
+def temp_db(tmp_path, monkeypatch):
+    db_file = tmp_path / "locale_messages_test.db"
+    monkeypatch.setenv("GC_DB_PATH", str(db_file))
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    monkeypatch.setattr(dbmod, "DB_PATH", db_file)
+    monkeypatch.setattr(models, "DB_PATH", db_file)
+    return db_file
+
+
+def _run_migrate(db_path: Path) -> None:
+    env = __import__("os").environ.copy()
+    env["GC_DB_PATH"] = str(db_path)
+    result = subprocess.run(
+        [sys.executable, str(MIGRATE_SCRIPT)],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def _create_player(username: str) -> int:
+    import uuid
+
+    uname = f"{username}_{uuid.uuid4().hex[:8]}"
+    ok, err, user = create_user(uname, "test-pass-123")
+    assert ok and user, err
+    try:
+        db().close()
+    except Exception:
+        pass
+    player = load_player(int(user["id"]))
+    assert player
+    return int(player["id"])
+
+
+def test_tr_respects_explicit_locale():
+    de = tr(
+        "fleet_transport_report_outbound",
+        locale="de",
+        coords="[1:1:1]",
+        target="Colony",
+        cargo="keine Ressourcen",
+    )
+    en = tr(
+        "fleet_transport_report_outbound",
+        locale="en",
+        coords="[1:1:1]",
+        target="Colony",
+        cargo="no resources",
+    )
+    assert "Transport nach" in de
+    assert "Transport to" in en
+
+
+def test_notify_transport_uses_recipient_locale(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    pid = _create_player("locale_notify")
+    set_player_locale(pid, "en")
+
+    res = notify_transport(
+        pid,
+        tr("fleet_transport_report_subject", locale="en", coords="[1:2:3]"),
+        tr(
+            "fleet_transport_report_outbound",
+            locale="en",
+            coords="[1:2:3]",
+            target="Colony",
+            cargo="no resources",
+        ),
+        locale="en",
+    )
+    assert res["ok"]
+
+    conn = db()
+    try:
+        row = conn.execute(
+            "SELECT subject, body, sender_name FROM player_messages WHERE recipient_player_id = ?;",
+            (pid,),
+        ).fetchone()
+        assert row
+        assert "Transport report" in row["subject"]
+        assert "Transport to" in row["body"]
+        assert row["sender_name"] == "Transport report"
+    finally:
+        conn.close()
+
+    assert get_player_locale(pid) == "en"

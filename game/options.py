@@ -13,6 +13,7 @@ from .db import begin_write_transaction, column_exists, commit, db, rollback
 from .models import hash_password, verify_user
 from .planet_evolution.repository import get_context_planet
 from .playercard import _strip_control, sanitize_text_field
+from .i18n import get_player_locale, normalize_locale, set_player_locale, ensure_locale_schema
 
 NAME_MIN = 2
 NAME_MAX = 32
@@ -195,6 +196,7 @@ def get_options_snapshot(player_id: int, conn=None) -> Dict[str, Any]:
     own = conn is None
     c = conn or db()
     try:
+        ensure_locale_schema(c)
         ensure_account_options_schema(c)
         cur = c.cursor()
         email_sel = "u.email" if column_exists(c, "users", "email") else "NULL AS email"
@@ -222,6 +224,7 @@ def get_options_snapshot(player_id: int, conn=None) -> Dict[str, Any]:
             "username": str(row["username"] or ""),
             "email": str(row["email"] or "") if row["email"] is not None else "",
             "email_verified": bool(int(row["email_verified"] or 0)),
+            "locale": get_player_locale(int(player_id), conn=c),
             "active_planet_id": int(planet["id"]) if planet and planet.get("id") else None,
             "active_planet_name": str(planet.get("name") or "") if planet else "",
             # Backward-compatible keys for older clients
@@ -530,3 +533,30 @@ def update_password(
         return False, "options_error_password_wrong", {}
     finally:
         conn.close()
+
+
+def update_locale(
+    player_id: int,
+    locale: str,
+    *,
+    conn=None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    raw = str(locale or "").strip().lower()
+    if raw not in {"de", "en"}:
+        return False, "options_error_invalid_locale", {}
+    loc = normalize_locale(raw)
+    own = conn is None
+    c = conn or db()
+    try:
+        ensure_locale_schema(c)
+        set_player_locale(int(player_id), loc, conn=c)
+        if own:
+            c.commit()
+        return True, "options_saved", {"locale": loc}
+    except Exception:
+        if own:
+            rollback(c)
+        return False, "options_error_invalid_locale", {}
+    finally:
+        if own:
+            c.close()

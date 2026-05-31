@@ -2110,6 +2110,7 @@ def test_transport_report_uses_german_resource_names(fleet_db):
         target_name="Colony",
         resources={"metal": 2222, "crystal": 2222, "fuel_cells": 100},
         incoming=False,
+        locale="de",
     )
     assert "Transport nach" in body
     assert "Ferronit" in body
@@ -2117,6 +2118,22 @@ def test_transport_report_uses_german_resource_names(fleet_db):
     assert "Brennzellen" in body
     assert "Metal:" not in body
     assert "Crystal:" not in body
+
+
+def test_transport_report_uses_english_for_en_locale(fleet_db):
+    from game.fleet import _format_transport_report
+
+    body = _format_transport_report(
+        coords="[1:1:1]",
+        origin_name="Homeworld",
+        target_name="Colony",
+        resources={"metal": 100, "crystal": 0, "fuel_cells": 0},
+        incoming=True,
+        locale="en",
+    )
+    assert "Incoming transport at" in body
+    assert "Ferronit" in body
+    assert "Transport nach" not in body
 
 
 def test_transport_can_carry_fuel_cells(fleet_db):

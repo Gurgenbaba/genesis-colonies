@@ -111,17 +111,28 @@ GC_ASSET_VERSION = get_asset_version()
 BACKGROUND_CLASSES = ["bg-1", "bg-2", "bg-3", "bg-4"]
 GC_LOCALE = "de"
 
-T_DATA: dict[str, Any] = {}
-try:
-    with open(LOCALES_DIR / "de.json", "r", encoding="utf-8") as f:
-        T_DATA = json.load(f)
-except Exception:
-    T_DATA = {}
+from game.i18n import (
+    DEFAULT_LOCALE,
+    current_locale,
+    get_locale_dict,
+    get_player_locale,
+    normalize_locale,
+    set_player_locale,
+    set_request_locale,
+)
+
+
+def _load_t_data(locale: str | None = None) -> dict[str, Any]:
+    return get_locale_dict(locale)
+
+
+T_DATA: dict[str, Any] = _load_t_data(GC_LOCALE)
 
 
 def T(key: str, *fmt_args, **fmt_kwargs) -> str:
-    if key in T_DATA:
-        txt = T_DATA[key]
+    data = get_locale_dict(current_locale())
+    if key in data:
+        txt = data[key]
     elif len(fmt_args) == 1 and isinstance(fmt_args[0], str):
         txt = fmt_args[0]
         fmt_args = ()
@@ -202,6 +213,15 @@ def _current_player_id() -> int | None:
 def choose_background():
     if "bg_class" not in session:
         session["bg_class"] = f"bg-{random.randint(1, 4)}"
+    try:
+        uid = session.get("user_id")
+        if uid:
+            locale = get_player_locale(int(uid))
+        else:
+            locale = normalize_locale(request.cookies.get("gc_locale"))
+        set_request_locale(locale)
+    except Exception:
+        set_request_locale(DEFAULT_LOCALE)
 
 
 # --------------------------------------------------------------------------
@@ -305,10 +325,11 @@ def inject_globals():
 
     from game.config import get_client_runtime_config
 
+    active_locale = current_locale()
     return dict(
         T=T,
-        T_DATA=T_DATA,
-        GC_LOCALE=GC_LOCALE,
+        T_DATA=get_locale_dict(active_locale),
+        GC_LOCALE=active_locale,
         GC_ASSET_VERSION=GC_ASSET_VERSION,
         GC_CLIENT_CONFIG=get_client_runtime_config(),
         player_name_link=player_name_link,
@@ -1925,6 +1946,24 @@ def api_options_password():
         status = 429 if err == "options_error_rate_limited" else 400
         return _options_api_response(False, err, data, status)
     return _options_api_response(True, err, data)
+
+
+@app.route("/api/options/locale", methods=["POST"])
+@require_login_api
+def api_options_locale():
+    pid = session.get("user_id")
+    if not pid:
+        return _options_api_response(False, "not_logged_in", None, 401)
+    payload = request.get_json(silent=True) or {}
+    ok, err, data = options_logic.update_locale(int(pid), payload.get("locale"))
+    if not ok:
+        return _options_api_response(False, err, data, 400)
+    from flask import make_response
+
+    body, status = _options_api_response(True, err, data)
+    resp = make_response(body, status)
+    resp.set_cookie("gc_locale", (data or {}).get("locale", "de"), max_age=365 * 24 * 3600, samesite="Lax")
+    return resp
 
 
 @app.route("/api/options/resend-verification", methods=["POST"])

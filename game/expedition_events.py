@@ -208,50 +208,55 @@ def build_expedition_report(
     coords: str,
     ships: Mapping[str, int],
     outcome: Mapping[str, Any],
+    *,
+    locale: str | None = None,
 ) -> Tuple[str, Dict[str, Any]]:
     from .i18n import fmt_int, tr
 
+    def _t(key, default=None, **kw):
+        return tr(key, default, locale=locale, **kw)
+
     event_key = str(outcome.get("event_key") or "void_scan")
     event = _EVENT_BY_KEY.get(event_key) or {}
-    label = tr(str(event.get("label_key") or event_key), event_key)
-    desc = tr(str(event.get("desc_key") or event_key), "")
+    label = _t(str(event.get("label_key") or event_key), event_key)
+    desc = _t(str(event.get("desc_key") or event_key), "")
     rewards = dict(outcome.get("rewards") or {})
     delay_extra = int(outcome.get("delay_extra") or 0)
     expedition_ships = int(outcome.get("expedition_ship_count") or 0)
 
     body_lines: list[str] = [
-        tr("fleet_expedition_report_coords", "Coordinates: %(coords)s", coords=coords),
-        tr("fleet_expedition_report_event", "Event: %(event)s", event=label),
+        _t("fleet_expedition_report_coords", "Coordinates: %(coords)s", coords=coords),
+        _t("fleet_expedition_report_event", "Event: %(event)s", event=label),
     ]
     if desc:
         body_lines.append(desc)
 
     reward_lines: list[str] = []
     if int(rewards.get("metal") or 0):
-        reward_lines.append(f"{tr('resource_metal', 'Ferronit')}: {fmt_int(rewards['metal'])}")
+        reward_lines.append(f"{_t('resource_metal', 'Ferronit')}: {fmt_int(rewards['metal'])}")
     if int(rewards.get("crystal") or 0):
-        reward_lines.append(f"{tr('resource_crystal', 'Crytite')}: {fmt_int(rewards['crystal'])}")
+        reward_lines.append(f"{_t('resource_crystal', 'Crytite')}: {fmt_int(rewards['crystal'])}")
     if int(rewards.get("fuel_cells") or 0):
         reward_lines.append(
-            f"{tr('resource_fuel_cells', 'Fuel Cells')}: {fmt_int(rewards['fuel_cells'])}"
+            f"{_t('resource_fuel_cells', 'Fuel Cells')}: {fmt_int(rewards['fuel_cells'])}"
         )
     if reward_lines:
-        body_lines.append(tr("fleet_expedition_report_section_loot", "Recovered cargo"))
+        body_lines.append(_t("fleet_expedition_report_section_loot", "Recovered cargo"))
         body_lines.extend(f"  {line}" for line in reward_lines)
     elif delay_extra:
         body_lines.append(
-            tr(
+            _t(
                 "fleet_expedition_report_delay_only",
                 "Return flight extended by %(seconds)s s due to navigation interference.",
                 seconds=fmt_int(delay_extra),
             )
         )
     else:
-        body_lines.append(tr("fleet_expedition_report_no_loot", "No recoverable cargo."))
+        body_lines.append(_t("fleet_expedition_report_no_loot", "No recoverable cargo."))
 
     if delay_extra and reward_lines:
         body_lines.append(
-            tr(
+            _t(
                 "fleet_expedition_report_delay",
                 "Return delay: +%(seconds)s s",
                 seconds=fmt_int(delay_extra),

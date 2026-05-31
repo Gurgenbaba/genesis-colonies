@@ -1700,8 +1700,18 @@ def _format_spy_kv_section(title: str, lines: Sequence[str]) -> str:
     return f"{title}\n" + "\n".join(f"  {line}" for line in lines)
 
 
-def _build_spy_report_body(snapshot: Mapping[str, Any], probe_count: int) -> Tuple[str, Dict[str, Any]]:
+def _build_spy_report_body(
+    snapshot: Mapping[str, Any],
+    probe_count: int,
+    *,
+    locale: str | None = None,
+) -> Tuple[str, Dict[str, Any]]:
     from .i18n import fmt_int, tr
+
+    loc = locale
+
+    def _t(key, default=None, **kw):
+        return tr(key, default, locale=loc, **kw)
 
     coords = str(snapshot.get("coords") or "")
     owner = str(snapshot.get("owner_name") or "")
@@ -1712,16 +1722,16 @@ def _build_spy_report_body(snapshot: Mapping[str, Any], probe_count: int) -> Tup
     body_lines: List[str] = []
     if tiers["target"]:
         body_lines.append(
-            tr(
+            _t(
                 "fleet_spy_report_target",
                 "Target: %(coords)s — %(owner)s (%(planet)s)",
                 coords=coords,
                 owner=owner,
-                planet=planet_name or tr("fleet_spy_report_unknown_planet", "Unknown colony"),
+                planet=planet_name or _t("fleet_spy_report_unknown_planet", "Unknown colony"),
             )
         )
         body_lines.append(
-            tr(
+            _t(
                 "fleet_spy_report_probes",
                 "Probes deployed: %(count)s",
                 count=fmt_int(probe_count),
@@ -1732,19 +1742,19 @@ def _build_spy_report_body(snapshot: Mapping[str, Any], probe_count: int) -> Tup
     visible_resources = intel["resources"] or {}
     if tiers["resources"]:
         resource_lines.append(
-            f"{tr('resource_metal', 'Ferronit')}: {fmt_int(visible_resources.get('metal', 0))}"
+            f"{_t('resource_metal', 'Ferronit')}: {fmt_int(visible_resources.get('metal', 0))}"
         )
         resource_lines.append(
-            f"{tr('resource_crystal', 'Crytite')}: {fmt_int(visible_resources.get('crystal', 0))}"
+            f"{_t('resource_crystal', 'Crytite')}: {fmt_int(visible_resources.get('crystal', 0))}"
         )
     if tiers["fuel"]:
         resource_lines.append(
-            f"{tr('resource_fuel_cells', 'Fuel Cells')}: {fmt_int(visible_resources.get('fuel_cells', 0))}"
+            f"{_t('resource_fuel_cells', 'Fuel Cells')}: {fmt_int(visible_resources.get('fuel_cells', 0))}"
         )
     if resource_lines:
-        body_lines.append(_format_spy_kv_section(tr("fleet_spy_report_section_resources", "Resources"), resource_lines))
+        body_lines.append(_format_spy_kv_section(_t("fleet_spy_report_section_resources", "Resources"), resource_lines))
     elif probe_count >= SPY_INTEL_TIER_TARGET:
-        body_lines.append(tr("fleet_spy_report_resources_locked", "Resources: insufficient probe data"))
+        body_lines.append(_t("fleet_spy_report_resources_locked", "Resources: insufficient probe data"))
 
     ship_lines: List[str] = []
     visible_ships = intel["ships"] or {}
@@ -1752,13 +1762,13 @@ def _build_spy_report_body(snapshot: Mapping[str, Any], probe_count: int) -> Tup
         if visible_ships:
             for key, qty in sorted(visible_ships.items()):
                 spec = get_ship(str(key)) or {}
-                label = tr(str(spec.get("name_key") or key), str(key))
+                label = _t(str(spec.get("name_key") or key), str(key))
                 ship_lines.append(f"{label} ×{fmt_int(qty)}")
         else:
-            ship_lines.append(tr("fleet_spy_report_fleet_empty", "No ships detected in orbit"))
-        body_lines.append(_format_spy_kv_section(tr("fleet_spy_report_section_fleet", "Orbital fleet"), ship_lines))
+            ship_lines.append(_t("fleet_spy_report_fleet_empty", "No ships detected in orbit"))
+        body_lines.append(_format_spy_kv_section(_t("fleet_spy_report_section_fleet", "Orbital fleet"), ship_lines))
     elif probe_count >= SPY_INTEL_TIER_RESOURCES:
-        body_lines.append(tr("fleet_spy_report_fleet_locked", "Orbital fleet: insufficient probe data"))
+        body_lines.append(_t("fleet_spy_report_fleet_locked", "Orbital fleet: insufficient probe data"))
 
     building_lines: List[str] = []
     visible_buildings = intel["buildings"] or {}
@@ -1766,13 +1776,13 @@ def _build_spy_report_body(snapshot: Mapping[str, Any], probe_count: int) -> Tup
     if tiers["buildings"]:
         if visible_buildings:
             for key, lvl in sorted(visible_buildings.items()):
-                label = tr(f"building_{key}", str(key))
+                label = _t(f"building_{key}", str(key))
                 building_lines.append(f"{label} L{fmt_int(lvl)}")
         else:
-            building_lines.append(tr("fleet_spy_report_buildings_empty", "No surface installations detected"))
+            building_lines.append(_t("fleet_spy_report_buildings_empty", "No surface installations detected"))
         if visible_energy:
             building_lines.append(
-                tr(
+                _t(
                     "fleet_spy_report_energy",
                     "Energy balance: %(balance)s (generated %(total)s / used %(used)s)",
                     balance=fmt_int(visible_energy.get("balance", 0)),
@@ -1781,10 +1791,10 @@ def _build_spy_report_body(snapshot: Mapping[str, Any], probe_count: int) -> Tup
                 )
             )
         body_lines.append(
-            _format_spy_kv_section(tr("fleet_spy_report_section_buildings", "Surface installations"), building_lines)
+            _format_spy_kv_section(_t("fleet_spy_report_section_buildings", "Surface installations"), building_lines)
         )
     elif probe_count >= SPY_INTEL_TIER_FLEET:
-        body_lines.append(tr("fleet_spy_report_buildings_locked", "Surface installations: insufficient probe data"))
+        body_lines.append(_t("fleet_spy_report_buildings_locked", "Surface installations: insufficient probe data"))
 
     activity_lines: List[str] = []
     visible_activity = intel["activity"] or []
@@ -1792,9 +1802,9 @@ def _build_spy_report_body(snapshot: Mapping[str, Any], probe_count: int) -> Tup
         if visible_activity:
             for row in visible_activity:
                 mission_key = f"fleet_mission_{row.get('mission', '')}"
-                mission_label = tr(mission_key, str(row.get("mission") or ""))
+                mission_label = _t(mission_key, str(row.get("mission") or ""))
                 activity_lines.append(
-                    tr(
+                    _t(
                         "fleet_spy_report_activity_row",
                         "%(mission)s → %(coords)s (%(status)s)",
                         mission=mission_label,
@@ -1803,12 +1813,12 @@ def _build_spy_report_body(snapshot: Mapping[str, Any], probe_count: int) -> Tup
                     )
                 )
         else:
-            activity_lines.append(tr("fleet_spy_report_activity_empty", "No outbound fleet activity detected"))
+            activity_lines.append(_t("fleet_spy_report_activity_empty", "No outbound fleet activity detected"))
         body_lines.append(
-            _format_spy_kv_section(tr("fleet_spy_report_section_activity", "Fleet activity"), activity_lines)
+            _format_spy_kv_section(_t("fleet_spy_report_section_activity", "Fleet activity"), activity_lines)
         )
     elif probe_count >= SPY_INTEL_TIER_BUILDINGS:
-        body_lines.append(tr("fleet_spy_report_activity_locked", "Fleet activity: insufficient probe data"))
+        body_lines.append(_t("fleet_spy_report_activity_locked", "Fleet activity: insufficient probe data"))
 
     metadata: Dict[str, Any] = {
         "report_version": SPY_REPORT_VERSION,
@@ -1860,19 +1870,22 @@ def _build_combat_report_body(
     return body, metadata
 
 
-def _format_transport_cargo(resources: Mapping[str, Any]) -> str:
+def _format_transport_cargo(resources: Mapping[str, Any], *, locale: str | None = None) -> str:
     from .i18n import fmt_int, tr
+
+    def _t(key, default=None, **kw):
+        return tr(key, default, locale=locale, **kw)
 
     loaded = calculate_loaded_resources(resources)
     parts: list[str] = []
     if loaded["metal"]:
-        parts.append(f"{tr('resource_metal', 'Ferronit')}: {fmt_int(loaded['metal'])}")
+        parts.append(f"{_t('resource_metal', 'Ferronit')}: {fmt_int(loaded['metal'])}")
     if loaded["crystal"]:
-        parts.append(f"{tr('resource_crystal', 'Crytite')}: {fmt_int(loaded['crystal'])}")
+        parts.append(f"{_t('resource_crystal', 'Crytite')}: {fmt_int(loaded['crystal'])}")
     if loaded["fuel_cells"]:
-        parts.append(f"{tr('resource_fuel_cells', 'Brennzellen')}: {fmt_int(loaded['fuel_cells'])}")
+        parts.append(f"{_t('resource_fuel_cells', 'Brennzellen')}: {fmt_int(loaded['fuel_cells'])}")
     if not parts:
-        return tr("fleet_transport_report_cargo_empty", "keine Ressourcen")
+        return _t("fleet_transport_report_cargo_empty", "keine Ressourcen")
     return ", ".join(parts)
 
 
@@ -1883,14 +1896,16 @@ def _format_transport_report(
     target_name: str,
     resources: Mapping[str, Any],
     incoming: bool,
+    locale: str | None = None,
 ) -> str:
     from .i18n import tr
 
-    cargo_txt = _format_transport_cargo(resources)
+    cargo_txt = _format_transport_cargo(resources, locale=locale)
     if incoming:
         return tr(
             "fleet_transport_report_incoming",
             "Eingehender Transport bei %(coords)s von %(origin)s. Geliefert: %(cargo)s.",
+            locale=locale,
             coords=coords,
             origin=origin_name,
             cargo=cargo_txt,
@@ -1898,6 +1913,7 @@ def _format_transport_report(
     return tr(
         "fleet_transport_report_outbound",
         "Transport nach %(coords)s (%(target)s) abgeschlossen. Geliefert: %(cargo)s.",
+        locale=locale,
         coords=coords,
         target=target_name,
         cargo=cargo_txt,
@@ -1911,15 +1927,17 @@ def _format_collect_report(
     target_name: str,
     collected: Mapping[str, Any],
     total_cargo: Mapping[str, Any],
+    locale: str | None = None,
 ) -> str:
     from .i18n import tr
 
-    collected_txt = _format_transport_cargo(collected)
-    total_txt = _format_transport_cargo(total_cargo)
+    collected_txt = _format_transport_cargo(collected, locale=locale)
+    total_txt = _format_transport_cargo(total_cargo, locale=locale)
     if loaded_resource_total(collected) <= 0:
         return tr(
             "fleet_collect_report_empty",
             "Collect at %(coords)s (%(target)s) — no resources loaded. Fleet returning to %(origin)s.",
+            locale=locale,
             coords=coords,
             target=target_name,
             origin=origin_name,
@@ -1928,6 +1946,7 @@ def _format_collect_report(
         return tr(
             "fleet_collect_report_with_departure",
             "Collect at %(coords)s (%(target)s): %(collected)s loaded (total cargo: %(total)s). Returning to %(origin)s.",
+            locale=locale,
             coords=coords,
             target=target_name,
             origin=origin_name,
@@ -1937,6 +1956,7 @@ def _format_collect_report(
     return tr(
         "fleet_collect_report",
         "Collect at %(coords)s (%(target)s): %(cargo)s loaded. Fleet returning to %(origin)s.",
+        locale=locale,
         coords=coords,
         target=target_name,
         origin=origin_name,
@@ -1952,6 +1972,9 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
     resources = movement.get("resources") or {}
     movement_id = int(movement["id"])
     coords = movement.get("target_coords") or ""
+    from .i18n import get_player_locale, tr
+
+    sender_locale = get_player_locale(player_id, conn=conn)
 
     if mission == "transport":
         timing = _return_timing_from_now(movement, now=now)
@@ -1981,14 +2004,15 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
                 target_name=str(snapshot.get("planet_name") or ""),
                 resources=resources,
                 incoming=False,
+                locale=sender_locale,
             )
-            from .i18n import tr
 
             notify_transport(
                 player_id,
                 tr(
                     "fleet_transport_report_subject",
                     "Transportbericht %(coords)s",
+                    locale=sender_locale,
                     coords=coords,
                 ),
                 sender_body,
@@ -1998,22 +2022,26 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
                     "resources": calculate_loaded_resources(resources),
                     "direction": "outbound",
                 },
+                locale=sender_locale,
                 conn=conn,
             )
             target_owner = int(snapshot.get("owner_id") or 0)
             if target_owner and target_owner != player_id:
+                target_locale = get_player_locale(target_owner, conn=conn)
                 incoming_body = _format_transport_report(
                     coords=coords,
                     origin_name=_player_name(player_id, conn=conn),
                     target_name=str(snapshot.get("planet_name") or ""),
                     resources=resources,
                     incoming=True,
+                    locale=target_locale,
                 )
                 notify_transport(
                     target_owner,
                     tr(
                         "fleet_transport_report_subject_incoming",
                         "Eingehender Transport %(coords)s",
+                        locale=target_locale,
                         coords=coords,
                     ),
                     incoming_body,
@@ -2024,6 +2052,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
                         "resources": calculate_loaded_resources(resources),
                         "direction": "incoming",
                     },
+                    locale=target_locale,
                     conn=conn,
                 )
         return
@@ -2084,20 +2113,20 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
             snapshot = _target_planet_snapshot(int(target_id), conn=conn)
             target_name = str(snapshot.get("planet_name") or "")
 
-        from .i18n import tr
-
         body = _format_collect_report(
             coords=coords,
             origin_name=origin_name,
             target_name=target_name,
             collected=collected,
             total_cargo=final_resources,
+            locale=sender_locale,
         )
         notify_transport(
             player_id,
             tr(
                 "fleet_collect_report_subject",
                 "Collect report %(coords)s",
+                locale=sender_locale,
                 coords=coords,
             ),
             body,
@@ -2109,6 +2138,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
                 "resources": final_resources,
                 "direction": "outbound",
             },
+            locale=sender_locale,
             conn=conn,
         )
         return
@@ -2128,7 +2158,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
     if mission == "spy":
         snapshot = _target_planet_snapshot(int(target_id), conn=conn) if target_id else {}
         probe_count = _spy_probe_count(ships)
-        body, meta = _build_spy_report_body(snapshot, probe_count)
+        body, meta = _build_spy_report_body(snapshot, probe_count, locale=sender_locale)
         meta["fleet_id"] = movement_id
         timing = _return_timing_from_now(movement, now=now)
         return_at = timing["return_at"]
@@ -2143,17 +2173,17 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         )
         if not claimed:
             return
-        from .i18n import tr
-
         notify_espionage(
             player_id,
             tr(
                 "fleet_report_spy_subject_coords",
                 "Espionage report — %(coords)s",
+                locale=sender_locale,
                 coords=coords,
             ),
             body,
             metadata=meta,
+            locale=sender_locale,
             conn=conn,
         )
         return
@@ -2164,7 +2194,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         defender_name = str(snapshot.get("owner_name") or "")
         attacker_name = _player_name(player_id, conn=conn)
         defending_ships = snapshot.get("ships") or {}
-        body, meta = _build_combat_report_body(
+        attacker_body, meta = _build_combat_report_body(
             attacker_id=player_id,
             attacker_name=attacker_name,
             defender_id=defender_id,
@@ -2189,17 +2219,39 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
             return
         notify_combat(
             player_id,
-            f"Combat report {coords}",
-            body,
+            tr(
+                "fleet_report_combat_subject_coords",
+                "Combat report — %(coords)s",
+                locale=sender_locale,
+                coords=coords,
+            ),
+            attacker_body,
             metadata=meta,
+            locale=sender_locale,
             conn=conn,
         )
         if defender_id and defender_id != player_id:
+            defender_locale = get_player_locale(defender_id, conn=conn)
+            defender_body, _def_meta = _build_combat_report_body(
+                attacker_id=player_id,
+                attacker_name=attacker_name,
+                defender_id=defender_id,
+                defender_name=defender_name,
+                coords=coords,
+                attacking_ships=ships,
+                defending_ships=defending_ships,
+            )
             notify_combat(
                 defender_id,
-                f"Attack report {coords}",
-                body,
+                tr(
+                    "fleet_report_combat_subject_defender",
+                    "Attack report — %(coords)s",
+                    locale=defender_locale,
+                    coords=coords,
+                ),
+                defender_body,
                 metadata={**meta, "perspective": "defender"},
+                locale=defender_locale,
                 conn=conn,
             )
         return
@@ -2251,19 +2303,20 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         )
         if not claimed:
             return
-        body, meta = build_expedition_report(coords, ships, outcome)
+        body, meta = build_expedition_report(coords, ships, outcome, locale=sender_locale)
         meta["fleet_id"] = movement_id
-        from .i18n import tr
 
         notify_expedition(
             player_id,
             tr(
                 "fleet_report_expedition_subject_coords",
                 "Expedition report — %(coords)s",
+                locale=sender_locale,
                 coords=coords,
             ),
             body,
             metadata=meta,
+            locale=sender_locale,
             conn=conn,
         )
         return
