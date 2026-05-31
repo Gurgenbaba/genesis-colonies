@@ -1845,6 +1845,8 @@ def test_fleet_ui_active_buttons_have_handlers():
         "updateMissionFeedback",
         "applyExpeditionTarget",
         "syncExpeditionMissionTarget",
+        "updateFleetFormMode",
+        "data-preview-mission-badge",
         "fleet-colony-chip--expedition",
         "tickFleetCountdowns",
         "fleetRefreshBusy",
@@ -1873,6 +1875,8 @@ def test_quick_target_template_sets_coord_inputs():
     assert "data-fleet-mission-feedback" in tpl
     assert "fleet-colony-chip--expedition" in tpl
     assert "fleet-coords-strip" in tpl
+    assert "fleet-preview-hud" in tpl
+    assert "data-preview-mission-badge" in tpl
     assert "data-fleet-send-btn" in tpl
 
 

@@ -2913,18 +2913,39 @@
       if (!form) return;
       const rt = getFleetRuntime(page);
       const expPos = parseInt(rt.data.expedition_position || "16", 10);
+      const g = parseInt(form.querySelector('[name="target_galaxy"]')?.value || "0", 10);
+      const s = parseInt(form.querySelector('[name="target_system"]')?.value || "0", 10);
       const pos = parseInt(form.querySelector('[name="target_position"]')?.value || "0", 10);
       const missionSel = form.querySelector("[data-fleet-mission]");
+      const mission = missionSel?.value || "transport";
       const strip = page.querySelector("[data-fleet-coords-strip]");
       const hint = page.querySelector("[data-fleet-coords-hint]");
+      const sendPanel = page.querySelector(".fleet-send-panel");
+      const previewHud = page.querySelector("[data-fleet-preview]");
       const isExpoSlot = pos === expPos;
 
       if (strip) strip.classList.toggle("is-expedition", isExpoSlot);
+      if (sendPanel) sendPanel.classList.toggle("is-expedition-mode", mission === "expedition" || isExpoSlot);
+      if (previewHud) previewHud.classList.toggle("is-expedition", mission === "expedition" && isExpoSlot);
+
       if (isExpoSlot && missionSel && missionSel.value !== "expedition") {
         missionSel.value = "expedition";
         const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
         if (colonizeRow) colonizeRow.hidden = true;
       }
+
+      page.querySelectorAll(".fleet-colony-chip").forEach((chip) => {
+        const cg = parseInt(chip.getAttribute("data-galaxy") || chip.dataset.galaxy || "0", 10);
+        const cs = parseInt(chip.getAttribute("data-system") || chip.dataset.system || "0", 10);
+        const cp = parseInt(chip.getAttribute("data-position") || chip.dataset.position || "0", 10);
+        const chipMission = chip.getAttribute("data-mission") || chip.dataset.mission || "";
+        const coordMatch = cg === g && cs === s && cp === pos;
+        const selected = chip.classList.contains("fleet-colony-chip--expedition")
+          ? coordMatch && mission === "expedition"
+          : coordMatch && !chipMission;
+        chip.classList.toggle("is-selected", selected);
+      });
+
       if (hint) {
         if (isExpoSlot) {
           hint.textContent = tt("fleet_expedition_coords_hint", "Deep-space expedition slot — position 16 only.");
@@ -2937,8 +2958,18 @@
           hint.hidden = true;
         }
       }
-      page.querySelectorAll(".fleet-colony-chip--expedition").forEach((chip) => {
-        chip.classList.toggle("is-selected", isExpoSlot && missionSel?.value === "expedition");
+      updateFleetFormMode(page);
+    };
+
+    const updateFleetFormMode = (page) => {
+      const form = getForm(page);
+      if (!form) return;
+      const mission = form.querySelector("[data-fleet-mission]")?.value || "transport";
+      const resFieldset = page.querySelector("[data-fleet-resources-fieldset]");
+      const showResources = ["transport", "deploy", "colonize"].includes(mission);
+      if (resFieldset) resFieldset.hidden = !showResources;
+      page.querySelectorAll("[data-fleet-mission] option").forEach((opt) => {
+        opt.disabled = false;
       });
     };
 
@@ -3177,6 +3208,7 @@
       const previewTargetType = page.querySelector("[data-preview-target-type]");
       const previewTargetOwner = page.querySelector("[data-preview-target-owner]");
       const previewMissionStatus = page.querySelector("[data-preview-mission-status]");
+      const previewMissionBadge = page.querySelector("[data-preview-mission-badge]");
       const previewArrival = page.querySelector("[data-preview-arrival]");
       const missionFeedback = page.querySelector("[data-fleet-mission-feedback]");
       const sendBtn = page.querySelector("[data-fleet-send-btn]");
@@ -3190,6 +3222,7 @@
           previewMissionStatus.textContent = "–";
           previewMissionStatus.classList.remove("is-ok", "is-blocked");
         }
+        if (previewMissionBadge) previewMissionBadge.textContent = "–";
         if (previewCargo) previewCargo.textContent = "–";
         if (previewCargoFree) previewCargoFree.textContent = "–";
         if (previewFuel) previewFuel.textContent = "–";
@@ -3237,6 +3270,9 @@
                 ? tt("fleet_target_empty_label", "—")
                 : "–");
           }
+          if (previewMissionBadge) {
+            previewMissionBadge.textContent = tt(`fleet_mission_${missionType}`, missionType);
+          }
           if (previewMissionStatus) {
             previewMissionStatus.classList.remove("is-ok", "is-blocked");
             if (p.can_send) {
@@ -3247,6 +3283,15 @@
               previewMissionStatus.textContent = reasonText(reason);
               previewMissionStatus.classList.add("is-blocked");
             }
+          }
+          const previewHud = page.querySelector("[data-fleet-preview]");
+          if (previewHud) {
+            previewHud.classList.toggle(
+              "is-expedition",
+              missionType === "expedition" && target.target_type === "expedition_slot"
+            );
+            previewHud.classList.toggle("is-ready", !!p.can_send);
+            previewHud.classList.toggle("is-blocked", !p.can_send);
           }
           updateMissionFeedback(page, p, missionType, ships);
           if (previewCargo) previewCargo.textContent = `${p.cargo_used || 0} / ${p.cargo_total || 0}`;
@@ -3296,6 +3341,7 @@
       if (preset.target_galaxy != null) form.querySelector('[name="target_galaxy"]').value = String(preset.target_galaxy);
       if (preset.target_system != null) form.querySelector('[name="target_system"]').value = String(preset.target_system);
       if (preset.target_position != null) form.querySelector('[name="target_position"]').value = String(preset.target_position);
+      syncExpeditionMissionTarget(page);
       schedulePreview(page);
     };
 
@@ -3309,11 +3355,15 @@
       if (s) s.value = chip.getAttribute("data-system") || chip.dataset.system || "";
       if (p) p.value = chip.getAttribute("data-position") || chip.dataset.position || "";
       const mission = chip.getAttribute("data-mission") || chip.dataset.mission;
-      if (mission) {
-        const ms = form.querySelector("[data-fleet-mission]");
-        if (ms) ms.value = mission;
+      const ms = form.querySelector("[data-fleet-mission]");
+      if (mission && ms) {
+        ms.value = mission;
         const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
         if (colonizeRow) colonizeRow.hidden = mission !== "colonize";
+      } else if (ms && ms.value === "expedition") {
+        ms.value = "transport";
+        const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
+        if (colonizeRow) colonizeRow.hidden = true;
       }
       page.querySelectorAll(".fleet-colony-chip").forEach((c) => c.classList.remove("is-selected"));
       chip.classList.add("is-selected");
@@ -3323,6 +3373,7 @@
 
     GC.scheduleFleetPreview = schedulePreview;
     GC.syncExpeditionMissionTarget = syncExpeditionMissionTarget;
+    GC.updateFleetFormMode = updateFleetFormMode;
     GC.refreshFleetState = refreshFleetState;
     GC.runFleetPreview = runPreview;
 
