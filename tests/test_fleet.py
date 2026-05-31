@@ -12,6 +12,7 @@ from game import db as gdb
 from game.db import db
 from game.fleet import (
     add_planet_ships,
+    build_fleet_send_preview,
     collect_resources,
     count_active_fleet_slots,
     create_preset,
@@ -854,6 +855,50 @@ def test_attack_placeholder_report(fleet_db):
     assert len(defender_msgs["data"]["messages"]) >= 1
     cur.execute("SELECT status FROM fleet_movements WHERE id = ?;", (fleet_id,))
     assert cur.fetchone()["status"] == "returning"
+    conn.close()
+
+
+def test_expedition_preview_slot_requires_expedition_mission(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    g, s, _ = _planet_coords(pid, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"solar_skiff": 2}, conn=conn)
+    cur.execute("SELECT * FROM planets WHERE id = ?;", (pid,))
+    origin = dict(cur.fetchone())
+    conn.commit()
+
+    blocked = build_fleet_send_preview(
+        player_id=uid,
+        origin_planet=origin,
+        target_galaxy=g,
+        target_system=s,
+        target_position=EXPEDITION_POSITION,
+        mission_type="transport",
+        ships={"solar_skiff": 1},
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert blocked["can_send"] is False
+    assert blocked["block_reason"] == "mission_blocked_expedition_slot"
+
+    allowed = build_fleet_send_preview(
+        player_id=uid,
+        origin_planet=origin,
+        target_galaxy=g,
+        target_system=s,
+        target_position=EXPEDITION_POSITION,
+        mission_type="expedition",
+        ships={"solar_skiff": 1},
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert allowed["can_send"] is True
+    assert allowed["target"]["target_type"] == "expedition_slot"
     conn.close()
 
 
@@ -1799,6 +1844,8 @@ def test_fleet_ui_active_buttons_have_handlers():
         "data-fleet-mission-feedback",
         "updateMissionFeedback",
         "applyExpeditionTarget",
+        "syncExpeditionMissionTarget",
+        "fleet-colony-chip--expedition",
         "tickFleetCountdowns",
         "fleetRefreshBusy",
     ]
@@ -1824,6 +1871,8 @@ def test_quick_target_template_sets_coord_inputs():
     assert "data-galaxy" in tpl and "fleet-colony-chip" in tpl
     assert "data-preview-target-type" in tpl
     assert "data-fleet-mission-feedback" in tpl
+    assert "fleet-colony-chip--expedition" in tpl
+    assert "fleet-coords-strip" in tpl
     assert "data-fleet-send-btn" in tpl
 
 

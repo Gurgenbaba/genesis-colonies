@@ -3447,20 +3447,152 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .fleet-ships-grid{
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 .fleet-ship-row{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.12);
+  background: rgba(5, 10, 22, 0.45);
+}
+.fleet-ship-row.is-empty{ opacity: 0.55; }
+.fleet-ship-row-main{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 180px;
+}
+.fleet-ship-row-controls{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.fleet-ship-name{
+  font-weight: 600;
+  color: var(--gc-text);
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+}
+.fleet-ship-role-pill{
+  font-size: 0.62rem;
+  font-family: var(--gc-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #c4b5fd;
+  border: 1px solid rgba(196, 181, 253, 0.35);
+  background: rgba(196, 181, 253, 0.08);
+}
+.fleet-ship-stock{
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--gc-text-soft);
+}
+.fleet-ship-input{
+  width: 72px;
+  padding: 6px 8px;
+  text-align: center;
+  border-radius: 6px;
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  background: rgba(3, 8, 18, 0.85);
+  color: var(--gc-neon-cyan);
+}
+.fleet-ship-input:focus{
+  outline: none;
+  border-color: rgba(70, 229, 255, 0.45);
+  box-shadow: 0 0 0 2px rgba(70, 229, 255, 0.12);
+}
+.fleet-coords-strip{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.2);
+  background: rgba(3, 8, 18, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.fleet-coords-strip.is-expedition{
+  border-color: rgba(196, 181, 253, 0.38);
+  background: linear-gradient(135deg, rgba(28, 12, 44, 0.72) 0%, rgba(5, 10, 22, 0.85) 100%);
+  box-shadow: inset 0 0 0 1px rgba(196, 181, 253, 0.08);
+}
+.fleet-coords-bracket,
+.fleet-coords-sep{
+  color: var(--gc-neon-cyan);
+  font-family: var(--gc-mono);
+  font-size: 0.95rem;
+  opacity: 0.75;
+  user-select: none;
+}
+.fleet-coord-input{
+  width: 56px;
+  padding: 4px 2px;
+  border: none;
+  background: transparent;
+  color: var(--gc-neon-cyan);
+  font-size: 0.95rem;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.fleet-coord-input--position{ width: 44px; color: #c4b5fd; }
+.fleet-coord-input:focus{
+  outline: none;
+  background: rgba(70, 229, 255, 0.06);
+  border-radius: 4px;
+}
+.fleet-coords-strip.is-expedition .fleet-coord-input--position{
+  color: #e9d5ff;
+}
+.fleet-coords-hint{
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+}
+.fleet-colony-chip--expedition{
+  border-color: rgba(196, 181, 253, 0.28);
+  color: #ddd6fe;
+}
+.fleet-colony-chip--expedition.is-selected,
+.fleet-colony-chip--expedition:hover{
+  border-color: rgba(196, 181, 253, 0.5);
+  background: rgba(196, 181, 253, 0.1);
+}
+.fleet-chip-icon{
+  opacity: 0.85;
+  margin-right: 2px;
+}
+.fleet-mission-select{
+  max-width: 320px;
+}
+.fleet-resources-fieldset{
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.12);
+  background: rgba(5, 10, 22, 0.35);
+}
+.fleet-resource-row{
   display: grid;
   grid-template-columns: 1fr 100px 64px;
   gap: 8px;
   align-items: center;
+  margin-bottom: 6px;
 }
-.fleet-coords-inputs{
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.fleet-resource-row:last-child{ margin-bottom: 0; }
+.fleet-resource-row input{
+  text-align: center;
+  font-family: var(--gc-mono);
 }
-.fleet-coord-input{ width: 72px; }
 .fleet-colony-chips{ display: flex; flex-wrap: wrap; gap: 6px; }
 .fleet-colony-chip{ font-size: 0.82rem; }
 .fleet-preview-box{
