@@ -2139,6 +2139,7 @@ def test_api_fleet_send_persists_movement(fleet_db, monkeypatch):
     body = resp.get_json()
     assert body["ok"] is True
     assert body["data"]["fleet"]["status"] == "outbound"
+    assert body.get("state") and body["state"].get("ok") is True
 
     verify = db()
     try:

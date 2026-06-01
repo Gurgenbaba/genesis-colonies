@@ -266,8 +266,10 @@
   }
 
   function applyActionState(json, reason) {
-    if (!json || !json.state) return false;
-    const anyActive = applyGameStateData(json.state, reason);
+    if (!json) return false;
+    const state = json.state || (json.data && json.data.state);
+    if (!state) return false;
+    const anyActive = applyGameStateData(state, reason);
     GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch);
     GC.startProgressTicker();
     return anyActive;
@@ -2700,11 +2702,22 @@
     return page === "buildings" || page === "research" || page === "shipyard";
   }
 
-  /** Lightweight HUD refresh — no PJAX, no poll abort, no page side-effects. */
+  /** Lightweight HUD refresh — standalone fetch, no pageLifecycle abort. */
   async function refreshHudFromGameState(reason) {
     if (!shouldRunGameLoop() || _authLoopAborted) return null;
     try {
-      const data = await GC.fetchJSON("/api/game-state", { cache: "no-store" });
+      const res = await fetch("/api/game-state", {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) handleAuthFailure("admin_hud");
+        return null;
+      }
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (!ct.includes("application/json")) return null;
+      const data = await res.json();
       if (!data || data.ok === false) {
         if (isAuthStatusFailure(null, data)) handleAuthFailure("admin_hud");
         return null;
@@ -2809,8 +2822,8 @@
         if (reason !== "poll" && shouldRunGameLoop() && !_authLoopAborted && !GC.polling.running) {
           GC.startPolling(lastHadActiveJob || lastHadActiveResearch, true);
         }
-        rejectFlight(err);
-        throw err;
+        resolveFlight(null);
+        return null;
       } finally {
         p.inFlight = false;
         p.abort = null;
@@ -3495,11 +3508,10 @@
 
     const refreshFleetState = async (page) => {
       try {
-        let planetId = parseInt(page.dataset.planetId || "0", 10);
-        const statePid = Number(GC.lastState?.active_planet_id || 0);
-        if (statePid > 0 && (!planetId || statePid !== planetId)) {
-          planetId = statePid;
-          page.dataset.planetId = String(statePid);
+        const rt = getFleetRuntime(page);
+        let planetId = parseInt(page.dataset.planetId || rt.data?.planet_id || "0", 10);
+        if (!planetId) {
+          planetId = Number(GC.lastState?.active_planet_id || 0);
         }
         const q = planetId ? `?planet_id=${planetId}` : "";
         const res = await GC.fetchJSON(`/api/fleet/state${q}`, { cache: "no-store" });
@@ -3888,7 +3900,18 @@
               ships: payload.updated_ships,
               fleet_slots: payload.active_slots,
             });
-            await refreshFleetState(page);
+            if (payload.fleet) {
+              const prev = Array.isArray(rt.data.active_fleets) ? rt.data.active_fleets : [];
+              const fleetId = payload.fleet.id;
+              applyLiveState(page, {
+                active_fleets: [payload.fleet, ...prev.filter((f) => f.id !== fleetId)],
+              });
+            }
+            if (res.state) {
+              applyActionState(res, "fleet_send_success");
+            } else {
+              await refreshFleetState(page);
+            }
             page.querySelectorAll("[data-ship-input]").forEach((inp) => { inp.value = "0"; });
             const mInp = page.querySelector("[data-fleet-res-metal]");
             const cInp = page.querySelector("[data-fleet-res-crystal]");
@@ -3897,7 +3920,6 @@
             if (cInp) cInp.value = "0";
             if (fInp) fInp.value = "0";
             schedulePreview(page);
-            applyActionState(res?.data?.state ? res : res, "fleet_send_success");
           } else {
             if (errorEl) {
               errorEl.textContent = reasonText(apiError(res));
@@ -6385,17 +6407,6 @@
     GC.pjaxInFlight = (async () => {
       const ctrl = new AbortController();
       GC._pjaxAbort = ctrl;
-      GC.cleanupPage();
-      let stateOk = false;
-      let statePromise = null;
-      if (shouldRunGameLoop() && typeof GC.refreshGameState === "function") {
-        statePromise = GC.refreshGameState("pjax_nav")
-          .then((data) => {
-            stateOk = !!(data && data.ok !== false);
-            return data;
-          })
-          .catch(() => null);
-      }
       try {
         const res = await fetch(url, {
           credentials: "same-origin",
@@ -6412,6 +6423,8 @@
         const doc = new DOMParser().parseFromString(html, "text/html");
         const newMain = doc.getElementById("main-content");
         if (!newMain) throw new Error("main-content missing");
+
+        GC.cleanupPage();
 
         const main = document.getElementById("main-content");
         main.innerHTML = newMain.innerHTML;
@@ -6433,12 +6446,7 @@
         _syncNavActive(url);
         if (push) history.pushState({ gcPjax: true }, "", url);
 
-        if (statePromise) {
-          try {
-            await statePromise;
-          } catch (_) {}
-        }
-        await GC.initPage({ force: true, skipGameState: stateOk });
+        await GC.initPage({ force: true });
         if (document.querySelector(".galaxy-page")) prefetchGalaxyAdjacent();
       } catch (err) {
         if (err?.name === "AbortError") return;

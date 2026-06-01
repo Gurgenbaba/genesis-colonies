@@ -2357,9 +2357,21 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
                 return
             notify_combat(
                 player_id,
-                f"Colonization failed {coords}",
-                f"Could not establish colony at {coords}: {reason}.",
+                tr(
+                    "fleet_report_colonize_failed_subject_coords",
+                    "Colonization failed — %(coords)s",
+                    locale=sender_locale,
+                    coords=coords,
+                ),
+                tr(
+                    "fleet_report_colonize_failed_body",
+                    "Could not establish colony at %(coords)s: %(reason)s.",
+                    locale=sender_locale,
+                    coords=coords,
+                    reason=reason,
+                ),
                 metadata={"fleet_id": movement_id, "reason": reason},
+                locale=sender_locale,
                 conn=conn,
             )
             return
@@ -2390,9 +2402,21 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         if claimed:
             notify_combat(
                 player_id,
-                f"Colony established {coords}",
-                f"New colony «{colony_name}» founded at {coords}.",
+                tr(
+                    "fleet_report_colonize_success_subject_coords",
+                    "Colony established — %(coords)s",
+                    locale=sender_locale,
+                    coords=coords,
+                ),
+                tr(
+                    "fleet_report_colonize_success_body",
+                    "New colony «%(colony_name)s» founded at %(coords)s.",
+                    locale=sender_locale,
+                    colony_name=colony_name,
+                    coords=coords,
+                ),
                 metadata={"fleet_id": movement_id, "colony_name": colony_name},
+                locale=sender_locale,
                 conn=conn,
             )
         return

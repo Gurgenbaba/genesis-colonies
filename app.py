@@ -2898,6 +2898,7 @@ def api_fleet_send():
     ok, reason, result = _fleet_write_transaction(_send)
 
     if ok and result:
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_send")
         live = {
             "fleet": result.get("fleet"),
             "updated_ships": result.get("updated_ships"),
@@ -2905,7 +2906,9 @@ def api_fleet_send():
             "active_slots": result.get("active_slots"),
             "fuel_cost": result.get("fuel_cost"),
         }
-        return jsonify(fleet_ok(live, message_key="fleet_send_success"))
+        body = fleet_ok(live, message_key="fleet_send_success")
+        body["state"] = state
+        return jsonify(body)
 
     state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_send")
     return jsonify(fleet_err(reason or "generic", data={"state": state})), 400

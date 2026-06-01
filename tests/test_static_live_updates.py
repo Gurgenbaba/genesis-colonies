@@ -104,7 +104,11 @@ def test_main_js_game_state_polling_idempotent():
     assert "resolveFlight" in src
     nav_section = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
     assert "GC.cleanupPage();" in nav_section
-    assert nav_section.index("GC.cleanupPage();") < nav_section.index("refreshGameState(\"pjax_nav\")")
+    assert "main-content missing" in nav_section
+    cleanup_idx = nav_section.index("GC.cleanupPage();")
+    fetch_idx = nav_section.index("await fetch(url")
+    assert fetch_idx < cleanup_idx, "cleanupPage must run only after HTML fetch succeeds"
+    assert 'refreshGameState("pjax_nav")' not in nav_section
     assert "if (GC.pjaxInFlight) return null;" in src
 
 
