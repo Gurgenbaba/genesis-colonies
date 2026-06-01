@@ -43,7 +43,7 @@ Modifier: `buildtime_tech`, `nanofactory`, `build_speed` (Settings).
 
 | Gebäude | Voraussetzung |
 |---------|---------------|
-| `fuel_cell_plant` | solar_plant ≥1, crystal_mine ≥2 |
+| `fuel_cell_plant` | solar_plant ≥1, crystal_mine ≥2 — produziert Brennzellen **und** integriertes Lager (skaliert mit Stufe) |
 | `research_lab` | metal_mine ≥3, crystal_mine ≥2 |
 | `orbital_shipyard` | command_center ≥2 |
 | `terraformer` | command_center ≥4, storages ≥3, storage_tech ≥1 |

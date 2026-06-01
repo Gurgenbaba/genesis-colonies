@@ -244,9 +244,15 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
                 mods=mods,
             )
             if delta_fuel_cells > 0:
+                caps = get_storage_capacity(buildings, research=research, mods=mods)
+                fuel_cap = int(caps.get("fuel_cells") or 0)
+                current_fuel = max(0, int(float(planet.get("fuel_cells") or 0)))
+                if fuel_cap > 0:
+                    free_fuel = max(0, fuel_cap - current_fuel)
+                    delta_fuel_cells = min(int(delta_fuel_cells), free_fuel)
                 planet["fuel_cells"] = max(
                     0.0,
-                    float(planet.get("fuel_cells") or 0) + delta_fuel_cells,
+                    float(current_fuel) + delta_fuel_cells,
                 )
 
         planet["last_update"] = now

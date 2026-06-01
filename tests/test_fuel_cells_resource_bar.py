@@ -70,9 +70,9 @@ def test_base_template_shows_fuel_cells_panel():
     html = (root / "templates" / "base.html").read_text(encoding="utf-8")
     css = (root / "static" / "style.css").read_text(encoding="utf-8")
     assert "hud-res-fuel-cells" in html
-    assert "hud-res-no-storage" in html
     assert "res-value fuel_cells" in html
-    assert "res-cap fuel_cells" not in html
+    assert "res-cap fuel_cells" in html
+    assert "hud-res-no-storage" not in html
     assert "repeat(4, minmax(0, 1fr))" in css
 
 
@@ -81,6 +81,7 @@ def test_main_js_patches_fuel_cells():
     js = (root / "static" / "main.js").read_text(encoding="utf-8")
     assert "function applyGameStateData" in js
     assert "fuelValEls" in js
+    assert "fuelCapEls" in js
     assert "prodFuelCells" in js
     assert "buildingIconUrl" in js
     assert "syncResourceLiveBaseline" in js
@@ -162,6 +163,10 @@ def test_shipyard_build_reduces_fuel_cells(fuel_db):
         (pid,),
     )
     cur.execute("UPDATE planet_buildings SET orbital_shipyard = 2 WHERE planet_id = ?;", (pid,))
+    cur.executemany(
+        "INSERT OR REPLACE INTO research_levels (user_id, tech_key, level) VALUES (?, ?, ?);",
+        [(uid, "engine_tech", 1), (uid, "navigation_tech", 1)],
+    )
     conn.commit()
     before = float(cur.execute("SELECT fuel_cells FROM planets WHERE id = ?;", (pid,)).fetchone()["fuel_cells"])
     ok, reason, _ = build_ship(

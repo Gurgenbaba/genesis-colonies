@@ -35,12 +35,13 @@ def _player():
     return uid
 
 
-def test_base_template_fuel_cells_without_storage_cap():
+def test_base_template_fuel_cells_with_storage_cap():
     root = Path(__file__).resolve().parent.parent
     html = (root / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "hud-res-no-storage" in html
+    assert "hud-res-fuel-cells" in html
     assert "res-value fuel_cells" in html
-    assert "res-cap fuel_cells" not in html
+    assert "res-cap fuel_cells" in html
+    assert "hud-res-no-storage" not in html
 
 
 def test_base_includes_ship_detail_modal_shell():

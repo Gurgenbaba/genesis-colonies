@@ -2296,6 +2296,7 @@
     prodFuelCells: 0,
     capMetal: 0,
     capCrystal: 0,
+    capFuelCells: 0,
   };
   let _resourceTickerId = null;
   let _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
@@ -2342,6 +2343,7 @@
     _resourceLive.prodFuelCells = Math.max(0, Math.floor(Number(snapshot.prodFuelCells) || 0));
     _resourceLive.capMetal = Math.max(0, Math.floor(Number(snapshot.storageMetal) || 0));
     _resourceLive.capCrystal = Math.max(0, Math.floor(Number(snapshot.storageCrystal) || 0));
+    _resourceLive.capFuelCells = Math.max(0, Math.floor(Number(snapshot.storageFuelCells) || 0));
     _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
     patchLiveResourceAmounts(_resourceLive.metal, _resourceLive.crystal, _resourceLive.fuelCells);
     startResourceTicker();
@@ -2360,10 +2362,11 @@
     const hours = elapsed / 3600;
     const capM = _resourceLive.capMetal > 0 ? _resourceLive.capMetal : Number.MAX_SAFE_INTEGER;
     const capC = _resourceLive.capCrystal > 0 ? _resourceLive.capCrystal : Number.MAX_SAFE_INTEGER;
+    const capF = _resourceLive.capFuelCells > 0 ? _resourceLive.capFuelCells : Number.MAX_SAFE_INTEGER;
     return {
       metal: Math.min(capM, Math.floor(_resourceLive.metal + _resourceLive.prodMetal * hours)),
       crystal: Math.min(capC, Math.floor(_resourceLive.crystal + _resourceLive.prodCrystal * hours)),
-      fuelCells: Math.floor(_resourceLive.fuelCells + _resourceLive.prodFuelCells * hours),
+      fuelCells: Math.min(capF, Math.floor(_resourceLive.fuelCells + _resourceLive.prodFuelCells * hours)),
     };
   }
 
@@ -2403,6 +2406,7 @@
     energyTotal: null,
     storageMetal: null,
     storageCrystal: null,
+    storageFuelCells: null,
     prodMetal: null,
     prodCrystal: null,
     prodFuelCells: null,
@@ -2497,6 +2501,7 @@
 
       const storageMetal = Math.floor(Number(storage.metal || 0));
       const storageCrystal = Math.floor(Number(storage.crystal || 0));
+      const storageFuelCells = Math.floor(Number(storage.fuel_cells || 0));
 
       const metal = Math.floor(Number(p.metal ?? resources.metal ?? 0));
       const crystal = Math.floor(Number(p.crystal ?? resources.crystal ?? 0));
@@ -2514,6 +2519,7 @@
       const cryValEls = document.querySelectorAll(".res-value.crystal");
       const cryCapEls = document.querySelectorAll(".res-cap.crystal");
       const fuelValEls = document.querySelectorAll(".res-value.fuel_cells");
+      const fuelCapEls = document.querySelectorAll(".res-cap.fuel_cells");
 
       if (forceResourceBar || _last.metal !== metal) {
         metalValEls.forEach((el) => { el.textContent = fmtNumber(metal); });
@@ -2536,6 +2542,10 @@
       if (forceResourceBar || _last.fuelCells !== fuelCells) {
         fuelValEls.forEach((el) => { el.textContent = fmtNumber(fuelCells); });
         _last.fuelCells = fuelCells;
+      }
+      if (forceResourceBar || (_last.storageFuelCells !== storageFuelCells && storageFuelCells > 0)) {
+        fuelCapEls.forEach((el) => { el.textContent = fmtNumber(storageFuelCells); });
+        _last.storageFuelCells = storageFuelCells;
       }
 
       const rateLabel = (key, perHour) => {
@@ -2595,6 +2605,7 @@
         prodFuelCells,
         storageMetal,
         storageCrystal,
+        storageFuelCells,
       });
 
       // === SCORE / RANK ===
@@ -4767,12 +4778,17 @@
       "fuel_cells:metal": "fuel_cells_to_metal",
       "fuel_cells:crystal": "fuel_cells_to_crystal",
     };
+    const RECEIVE_FOR_GIVE = {
+      metal: ["crystal", "fuel_cells"],
+      crystal: ["metal", "fuel_cells"],
+      fuel_cells: ["metal", "crystal"],
+    };
 
     const readRates = () => ({
       m2c: parseFloat(panel.dataset.rateM2c || "0.8"),
       c2m: parseFloat(panel.dataset.rateC2m || "0.8"),
-      fuelMetalPer: parseInt(panel.dataset.fuelMetalPer || "45", 10),
-      fuelCrystalPer: parseInt(panel.dataset.fuelCrystalPer || "28", 10),
+      fuelMetalPer: parseFloat(panel.dataset.fuelMetalPer || "45"),
+      fuelCrystalPer: parseFloat(panel.dataset.fuelCrystalPer || "28"),
       minAmount: parseInt(panel.dataset.min || "100", 10),
       fuelMin: parseInt(panel.dataset.fuelMin || "10", 10),
     });
@@ -4788,25 +4804,36 @@
     const alternateReceive = (give, currentReceive) => {
       if (give === "metal") return currentReceive === "crystal" ? "fuel_cells" : "crystal";
       if (give === "crystal") return currentReceive === "metal" ? "fuel_cells" : "metal";
-      return currentReceive === "metal" ? "crystal" : "metal";
+      if (give === "fuel_cells") return currentReceive === "metal" ? "crystal" : "metal";
+      return "crystal";
     };
 
     const alternateGive = (receive, currentGive) => {
       if (receive === "metal") return currentGive === "crystal" ? "fuel_cells" : "crystal";
       if (receive === "crystal") return currentGive === "metal" ? "fuel_cells" : "metal";
-      return currentGive === "metal" ? "crystal" : "metal";
+      if (receive === "fuel_cells") return currentGive === "metal" ? "crystal" : "metal";
+      return "metal";
     };
 
     const updateTileStates = (give, receive) => {
       giveTiles.forEach((btn) => {
-        const active = btn.getAttribute("data-exchange-give") === give;
+        const res = btn.getAttribute("data-exchange-give") || "";
+        const active = res === give;
+        const canGive = (RECEIVE_FOR_GIVE[res] || []).length > 0;
         btn.classList.toggle("is-active", active);
+        btn.classList.toggle("is-disabled", !canGive);
         btn.setAttribute("aria-pressed", active ? "true" : "false");
+        btn.disabled = !canGive;
+        btn.removeAttribute("title");
       });
       receiveTiles.forEach((btn) => {
-        const active = btn.getAttribute("data-exchange-receive") === receive;
+        const res = btn.getAttribute("data-exchange-receive") || "";
+        const active = res === receive;
+        const enabled = (RECEIVE_FOR_GIVE[give] || []).includes(res);
         btn.classList.toggle("is-active", active);
+        btn.classList.toggle("is-disabled", !enabled);
         btn.setAttribute("aria-pressed", active ? "true" : "false");
+        btn.disabled = !enabled;
       });
     };
 
@@ -4816,7 +4843,7 @@
       if (from === "fuel_cells") return cfg.fuelMin;
       if (to === "fuel_cells") {
         const per = from === "metal" ? cfg.fuelMetalPer : cfg.fuelCrystalPer;
-        return Math.max(cfg.minAmount, per);
+        return Math.max(cfg.minAmount, Math.ceil(Math.max(0.001, per)));
       }
       return cfg.minAmount;
     };
@@ -4828,10 +4855,10 @@
       if (!raw || raw <= 0) return 0;
       if (from === "metal" && to === "crystal") return Math.floor(raw * cfg.m2c);
       if (from === "crystal" && to === "metal") return Math.floor(raw * cfg.c2m);
-      if (from === "metal" && to === "fuel_cells") return Math.floor(raw / Math.max(1, cfg.fuelMetalPer));
-      if (from === "crystal" && to === "fuel_cells") return Math.floor(raw / Math.max(1, cfg.fuelCrystalPer));
-      if (from === "fuel_cells" && to === "metal") return raw * Math.max(1, cfg.fuelMetalPer);
-      if (from === "fuel_cells" && to === "crystal") return raw * Math.max(1, cfg.fuelCrystalPer);
+      if (from === "metal" && to === "fuel_cells") return Math.floor(raw / Math.max(0.001, cfg.fuelMetalPer));
+      if (from === "crystal" && to === "fuel_cells") return Math.floor(raw / Math.max(0.001, cfg.fuelCrystalPer));
+      if (from === "fuel_cells" && to === "metal") return Math.floor(raw * Math.max(0.001, cfg.fuelMetalPer));
+      if (from === "fuel_cells" && to === "crystal") return Math.floor(raw * Math.max(0.001, cfg.fuelCrystalPer));
       return 0;
     };
 
@@ -4840,8 +4867,8 @@
       const { from, to } = routeParts(dir);
       if (from === "metal" && to === "crystal") return cfg.m2c;
       if (from === "crystal" && to === "metal") return cfg.c2m;
-      if (from === "metal" && to === "fuel_cells") return 1 / Math.max(1, cfg.fuelMetalPer);
-      if (from === "crystal" && to === "fuel_cells") return 1 / Math.max(1, cfg.fuelCrystalPer);
+      if (from === "metal" && to === "fuel_cells") return 1 / Math.max(0.001, cfg.fuelMetalPer);
+      if (from === "crystal" && to === "fuel_cells") return 1 / Math.max(0.001, cfg.fuelCrystalPer);
       if (from === "fuel_cells" && to === "metal") return cfg.fuelMetalPer;
       if (from === "fuel_cells" && to === "crystal") return cfg.fuelCrystalPer;
       return 0;
@@ -4932,6 +4959,7 @@
 
       giveTiles.forEach((btn) => {
         btn.addEventListener("click", () => {
+          if (btn.disabled || btn.classList.contains("is-disabled")) return;
           const give = btn.getAttribute("data-exchange-give") || "metal";
           const { to } = routeParts(selectedDirection());
           setResourcePair(give, to);
@@ -4939,6 +4967,7 @@
       });
       receiveTiles.forEach((btn) => {
         btn.addEventListener("click", () => {
+          if (btn.disabled || btn.classList.contains("is-disabled")) return;
           const receive = btn.getAttribute("data-exchange-receive") || "crystal";
           const { from } = routeParts(selectedDirection());
           setResourcePair(from, receive);

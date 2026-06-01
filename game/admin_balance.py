@@ -30,9 +30,21 @@ BALANCE_SETTING_KEYS: Tuple[str, ...] = (
     "exchange_rate_crystal_to_metal",
     "exchange_daily_limit",
     "exchange_min_amount",
+    "fuel_exchange_enabled",
+    "fuel_exchange_metal_per_unit",
+    "fuel_exchange_crystal_per_unit",
+    "fuel_exchange_min_units",
+    "fuel_production_per_hour",
 )
 
-_INT_NONNEG = frozenset({"start_metal", "start_crystal", "exchange_daily_limit", "exchange_min_amount"})
+_INT_NONNEG = frozenset({
+    "start_metal",
+    "start_crystal",
+    "exchange_daily_limit",
+    "exchange_min_amount",
+    "fuel_exchange_min_units",
+    "fuel_production_per_hour",
+})
 _INT_POS = frozenset({"queue_limit", "research_queue_limit", "shipyard_queue_limit"})
 _FLOAT_POS = frozenset(
     {
@@ -45,10 +57,12 @@ _FLOAT_POS = frozenset(
         "shipyard_speed",
         "exchange_rate_metal_to_crystal",
         "exchange_rate_crystal_to_metal",
+        "fuel_exchange_metal_per_unit",
+        "fuel_exchange_crystal_per_unit",
     }
 )
 _FLOAT_NONNEG = frozenset({"score_weight_buildings", "score_weight_research", "score_weight_fleet"})
-_BOOL_KEYS = frozenset({"exchange_enabled"})
+_BOOL_KEYS = frozenset({"exchange_enabled", "fuel_exchange_enabled"})
 
 PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
     "start_metal": 3000,
@@ -68,6 +82,11 @@ PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
     "exchange_rate_crystal_to_metal": float(DEFAULT_GAME_SETTINGS["exchange_rate_crystal_to_metal"]),
     "exchange_daily_limit": int(DEFAULT_GAME_SETTINGS["exchange_daily_limit"]),
     "exchange_min_amount": int(DEFAULT_GAME_SETTINGS["exchange_min_amount"]),
+    "fuel_exchange_enabled": True,
+    "fuel_exchange_metal_per_unit": float(DEFAULT_GAME_SETTINGS["fuel_exchange_metal_per_unit"]),
+    "fuel_exchange_crystal_per_unit": float(DEFAULT_GAME_SETTINGS["fuel_exchange_crystal_per_unit"]),
+    "fuel_exchange_min_units": int(DEFAULT_GAME_SETTINGS["fuel_exchange_min_units"]),
+    "fuel_production_per_hour": int(DEFAULT_GAME_SETTINGS["fuel_production_per_hour"]),
 }
 
 

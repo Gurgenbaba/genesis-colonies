@@ -536,6 +536,30 @@
             <label class="admin-label" for="admin-balance-rate-c2m">{{ T("exchange_rate_crystal_to_metal", "Crytite → Ferronit") }}</label>
             <input class="admin-input" id="admin-balance-rate-c2m" type="number" min="0.01" step="0.01" data-balance-key="exchange_rate_crystal_to_metal">
           </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-fuel-enabled">{{ T("admin_balance_fuel_exchange_enabled", "Brennzellen-Tausch") }}</label>
+            <select class="admin-input" id="admin-balance-fuel-enabled" data-balance-key="fuel_exchange_enabled">
+              <option value="1">{{ T("admin_yes", "Ja") }}</option>
+              <option value="0">{{ T("admin_no", "Nein") }}</option>
+            </select>
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-fuel-metal">{{ T("admin_balance_fuel_metal_per_unit", "Ferronit pro Brennzelle (Kauf)") }}</label>
+            <input class="admin-input" id="admin-balance-fuel-metal" type="number" min="0.01" step="0.01" data-balance-key="fuel_exchange_metal_per_unit">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-fuel-crystal">{{ T("admin_balance_fuel_crystal_per_unit", "Crytite pro Brennzelle (Kauf)") }}</label>
+            <input class="admin-input" id="admin-balance-fuel-crystal" type="number" min="0.01" step="0.01" data-balance-key="fuel_exchange_crystal_per_unit">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-fuel-min">{{ T("admin_balance_fuel_min_units", "Min. Brennzellen-Menge") }}</label>
+            <input class="admin-input" id="admin-balance-fuel-min" type="number" min="1" step="1" data-balance-key="fuel_exchange_min_units">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-fuel-prod">{{ T("admin_balance_fuel_production_per_hour", "Brennzellen-Produktion /h (Basis Stufe 1)") }}</label>
+            <input class="admin-input" id="admin-balance-fuel-prod" type="number" min="1" step="1" data-balance-key="fuel_production_per_hour">
+            <span class="admin-small-hint">{{ T("admin_balance_fuel_production_hint", "Pro Werksstufe steigen Produktion und integriertes Lager (~25 h Puffer).") }}</span>
+          </div>
         </div>
       </section>
     </section>

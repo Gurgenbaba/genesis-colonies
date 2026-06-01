@@ -388,12 +388,30 @@ class EffectResolver:
         return metal_rate, crystal_rate
 
     def fuel_cells_rate_per_sec(self) -> float:
-        """Brennzellen-Produktion: 20/h * level * 1.35^(level-1)."""
+        """Brennzellen-Produktion: fuel_production_per_hour * level * 1.35^(level-1)."""
+        per_hour = self.fuel_cells_production_per_hour()
+        return per_hour / 3600.0 if per_hour > 0 else 0.0
+
+    def fuel_cells_production_per_hour(self) -> float:
         lvl = _bld(self.buildings, "fuel_cell_plant")
         if lvl <= 0:
             return 0.0
-        per_hour = 20.0 * lvl * (1.35 ** max(0, lvl - 1))
-        return per_hour / 3600.0
+        base_ph = float(self._settings_dict().get("fuel_production_per_hour", 4) or 4)
+        return base_ph * lvl * (1.35 ** max(0, lvl - 1))
+
+    def fuel_cells_storage_capacity(self) -> int:
+        """
+        Internal storage at the fuel cell plant — same level scaling as production.
+        Capacity ~= 25 h of full production output (tunable constant).
+        """
+        lvl = _bld(self.buildings, "fuel_cell_plant")
+        if lvl <= 0:
+            return 2_147_483_647
+        per_hour = self.fuel_cells_production_per_hour()
+        storage_factor = float(self.get_modifiers().get("storage_factor", 1.0) or 1.0)
+        terra_lvl = _bld(self.buildings, "terraformer")
+        storage_factor *= 1.0 + 0.05 * terra_lvl
+        return max(0, int(per_hour * 25.0 * storage_factor))
 
     def get_storage_capacity(self) -> Dict[str, int]:
         mods = self.get_modifiers()
@@ -412,6 +430,7 @@ class EffectResolver:
         return {
             "metal": int(m_cap * storage_factor),
             "crystal": int(c_cap * storage_factor),
+            "fuel_cells": self.fuel_cells_storage_capacity(),
         }
 
     def get_building_production_per_hour(self, ratio: float) -> Dict[str, int]:

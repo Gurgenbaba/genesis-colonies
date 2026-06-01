@@ -149,13 +149,15 @@
             </div>
 
             {% set fc_have = (player.fuel_cells if player is defined and player.fuel_cells is defined else 0) | int %}
-            <div class="hud-res-panel hud-res-fuel-cells hud-res-no-storage"
-                 title="{{ T('resource_fuel_cells') }} — {{ T('resource_fuel_cells_no_storage') }}">
+            {% set fc_cap = (storage_caps.fuel_cells if storage_caps is defined and storage_caps.fuel_cells is defined else 0) | int %}
+            <div class="hud-res-panel hud-res-fuel-cells" title="{{ T('resource_fuel_cells') }}">
               <span class="hud-res-label">{{ T('resource_fuel_cells') }}</span>
               <div class="hud-res-body res-block res-block-fuel-cells">
                 <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" class="res-icon" alt="{{ T('resource_fuel_cells') }}"
                      onerror="this.onerror=null;this.src='{{ url_for('static', filename='icons/energy.png') }}';">
                 <span class="res-value fuel_cells">{{ fc_have|fmt_int }}</span>
+                <span class="res-sep" aria-hidden="true">/</span>
+                <span class="res-cap fuel_cells">{{ fc_cap|fmt_int }}</span>
               </div>
               <span class="res-rate fuel_cells" data-res-rate="fuel_cells" aria-hidden="true" style="visibility:hidden"></span>
             </div>

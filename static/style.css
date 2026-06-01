@@ -1912,6 +1912,20 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   background: rgba(70, 229, 255, 0.08);
   color: var(--gc-neon-cyan);
 }
+.trader-hub-page .gc-trader-resource-tile.is-disabled,
+.trader-hub-page .gc-trader-resource-tile:disabled{
+  opacity: 0.38;
+  cursor: not-allowed;
+  border-color: rgba(120, 190, 255, 0.08);
+  background: rgba(3, 8, 18, 0.35);
+  color: var(--gc-text-dim);
+  pointer-events: none;
+}
+.trader-hub-page .gc-trader-resource-tile.is-disabled:hover,
+.trader-hub-page .gc-trader-resource-tile:disabled:hover{
+  border-color: rgba(120, 190, 255, 0.08);
+  background: rgba(3, 8, 18, 0.35);
+}
 .trader-hub-page .gc-trader-exchange-form{
   display: grid;
   gap: 0.75rem;

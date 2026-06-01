@@ -46,12 +46,19 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     "start_metal": "3000",
     "start_crystal": "1500",
 
-    # Instant resource exchange (Trader Hub)
+    # Instant resource exchange (Trader Hub) — Speedgame defaults
     "exchange_enabled": "1",
-    "exchange_rate_metal_to_crystal": "0.8",
-    "exchange_rate_crystal_to_metal": "0.8",
-    "exchange_daily_limit": "500000000",
+    "exchange_rate_metal_to_crystal": "0.85",
+    "exchange_rate_crystal_to_metal": "0.85",
+    "exchange_daily_limit": "2000000000",
     "exchange_min_amount": "100",
+
+    # Fuel cells (production + Trader Hub routes)
+    "fuel_exchange_enabled": "1",
+    "fuel_exchange_metal_per_unit": "20",
+    "fuel_exchange_crystal_per_unit": "14",
+    "fuel_exchange_min_units": "10",
+    "fuel_production_per_hour": "4",
 
     # historischer Alias (build_speed)
     "speed": "1.1",

@@ -12,7 +12,7 @@ Formeln: autoritativ in `game/effects/effect_resolver.py` — siehe [EFFECTS.md]
 |-----|---------|-------------|-------|
 | `metal` | Ferronit | Ja (`metal_storage` + Tech) | Planet |
 | `crystal` | Crytite | Ja (`crystal_storage` + Tech) | Planet |
-| `fuel_cells` | Brennzellen | **Nein** (unbounded) | Planet |
+| `fuel_cells` | Brennzellen | Ja (integriert in `fuel_cell_plant`, skaliert mit Stufe) | Planet |
 | `energy_total` / `energy_used` | Energie | Derived, persisted | Planet |
 
 **Kein Deuterium** — Fuel für Schiffe = `fuel_cells`.
@@ -30,7 +30,7 @@ finish_due_work_once()          # optional, wenn nicht skip_queue_finish
 elapsed = now - last_update
 EffectResolver → rates, energy
 apply_production_delta(metal, crystal)  # capped by storage
-fuel_cells += delta                     # uncapped
+fuel_cells += delta                     # capped by fuel_cell_plant storage
 save last_update, energy_*
 evolution_tick_planet()         # wenn Schema ready
 ```
@@ -58,9 +58,11 @@ Aufgerufen von:
 |-----------|-------|
 | Metal | `0.04 × metal_mine^1.4 × metal_prod_factor` |
 | Crystal | `0.03 × crystal_mine^1.35 × crystal_prod_factor` |
-| Fuel cells | `20/h × fuel_cell_plant_level × 1.35^(level-1)` |
+| Fuel cells | `fuel_production_per_hour` × `fuel_cell_plant_level` × `1.35^(level-1)` |
 
-Modifier: `mining_tech`, `drone_tech`, `storage_tech`, Settings (`resource_speed`).
+Modifier: `mining_tech`, `drone_tech`, `storage_tech`, Settings (`production_speed`, `fuel_production_per_hour`).
+
+**Brennzellenwerk:** Kein separates Lagergebäude — integriertes Lager skaliert mit der Werksstufe (~25 h Produktionspuffer × `storage_factor` / Terraformer).
 
 ---
 
@@ -96,12 +98,12 @@ Ein zentrales Tauschsystem für `metal`, `crystal`, `fuel_cells`.
 
 | Route | Rate (Default) |
 |-------|----------------|
-| metal → crystal | `exchange_rate_metal_to_crystal` (0.8) |
-| crystal → metal | `exchange_rate_crystal_to_metal` (0.8) |
-| metal → fuel_cells | `1 / fuel_exchange_metal_per_unit` (45 Ferronit → 1 Brennzelle) |
-| crystal → fuel_cells | `1 / fuel_exchange_crystal_per_unit` (28 Crytite → 1 Brennzelle) |
-| fuel_cells → metal | `fuel_exchange_metal_per_unit` (45 Ferronit pro Brennzelle) |
-| fuel_cells → crystal | `fuel_exchange_crystal_per_unit` (28 Crytite pro Brennzelle) |
+| metal → crystal | `exchange_rate_metal_to_crystal` (0.85) |
+| crystal → metal | `exchange_rate_crystal_to_metal` (0.85) |
+| metal → fuel_cells | `1 / fuel_exchange_metal_per_unit` (20 Ferronit → 1 Brennzelle) |
+| crystal → fuel_cells | `1 / fuel_exchange_crystal_per_unit` (14 Crytite → 1 Brennzelle) |
+| fuel_cells → metal | `fuel_exchange_metal_per_unit` (20 Ferronit pro Brennzelle) |
+| fuel_cells → crystal | `fuel_exchange_crystal_per_unit` (14 Crytite pro Brennzelle) |
 
 Gleiche Ressource als Input/Output ist verboten.
 
@@ -110,14 +112,15 @@ Gleiche Ressource als Input/Output ist verboten.
 | Setting | Default |
 |---------|---------|
 | `exchange_enabled` | 1 |
-| `exchange_rate_metal_to_crystal` | 0.8 |
-| `exchange_rate_crystal_to_metal` | 0.8 |
-| `exchange_daily_limit` | 500.000.000 |
+| `exchange_rate_metal_to_crystal` | 0.85 |
+| `exchange_rate_crystal_to_metal` | 0.85 |
+| `exchange_daily_limit` | 2.000.000.000 |
 | `exchange_min_amount` | 100 |
-| `fuel_exchange_enabled` | 1 (steuert Brennzellen-Routen) |
-| `fuel_exchange_metal_per_unit` | 45 |
-| `fuel_exchange_crystal_per_unit` | 28 |
+| `fuel_exchange_enabled` | 1 |
+| `fuel_exchange_metal_per_unit` | 20 |
+| `fuel_exchange_crystal_per_unit` | 14 |
 | `fuel_exchange_min_units` | 10 |
+| `fuel_production_per_hour` | 4 (Stufe 1; Lager skaliert mit) |
 
 ### Regeln
 

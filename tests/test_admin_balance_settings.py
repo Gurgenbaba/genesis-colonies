@@ -187,3 +187,11 @@ def test_save_balance_settings_unit():
     settings, err = save_balance_settings({"start_metal": 100})
     assert err is None
     assert settings["start_metal"] == 100
+
+    settings, err = save_balance_settings({
+        "fuel_exchange_metal_per_unit": "2,5",
+        "fuel_exchange_crystal_per_unit": "1.25",
+    })
+    assert err is None
+    assert settings["fuel_exchange_metal_per_unit"] == pytest.approx(2.5)
+    assert settings["fuel_exchange_crystal_per_unit"] == pytest.approx(1.25)

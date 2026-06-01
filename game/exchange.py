@@ -16,13 +16,13 @@ EXCHANGE_RESOURCES = ("metal", "crystal", "fuel_cells")
 
 _EXCHANGE_SETTING_DEFAULTS = {
     "exchange_enabled": "1",
-    "exchange_rate_metal_to_crystal": "0.8",
-    "exchange_rate_crystal_to_metal": "0.8",
-    "exchange_daily_limit": "500000000",
+    "exchange_rate_metal_to_crystal": "0.85",
+    "exchange_rate_crystal_to_metal": "0.85",
+    "exchange_daily_limit": "2000000000",
     "exchange_min_amount": "100",
     "fuel_exchange_enabled": "1",
-    "fuel_exchange_metal_per_unit": "45",
-    "fuel_exchange_crystal_per_unit": "28",
+    "fuel_exchange_metal_per_unit": "20",
+    "fuel_exchange_crystal_per_unit": "14",
     "fuel_exchange_min_units": "10",
 }
 
@@ -69,12 +69,12 @@ def get_exchange_config(conn=None) -> Dict[str, Any]:
         return {
             "enabled": enabled,
             "fuel_enabled": fuel_enabled,
-            "rate_metal_to_crystal": _float_setting(settings, "exchange_rate_metal_to_crystal", "0.8"),
-            "rate_crystal_to_metal": _float_setting(settings, "exchange_rate_crystal_to_metal", "0.8"),
-            "daily_limit": _int_setting(settings, "exchange_daily_limit", "500000000"),
+            "rate_metal_to_crystal": _float_setting(settings, "exchange_rate_metal_to_crystal", "0.85"),
+            "rate_crystal_to_metal": _float_setting(settings, "exchange_rate_crystal_to_metal", "0.85"),
+            "daily_limit": _int_setting(settings, "exchange_daily_limit", "2000000000"),
             "min_amount": _int_setting(settings, "exchange_min_amount", "100"),
-            "fuel_metal_per_unit": _int_setting(settings, "fuel_exchange_metal_per_unit", "45"),
-            "fuel_crystal_per_unit": _int_setting(settings, "fuel_exchange_crystal_per_unit", "28"),
+            "fuel_metal_per_unit": _float_setting(settings, "fuel_exchange_metal_per_unit", "45"),
+            "fuel_crystal_per_unit": _float_setting(settings, "fuel_exchange_crystal_per_unit", "28"),
             "fuel_min_units": _int_setting(settings, "fuel_exchange_min_units", "10"),
         }
     finally:
@@ -94,6 +94,11 @@ def _daily_used(player_row: Dict[str, Any], now: float) -> float:
     return max(0.0, used)
 
 
+def _fuel_unit_cost(cfg: Dict[str, Any], from_resource: str) -> float:
+    key = "fuel_metal_per_unit" if from_resource == "metal" else "fuel_crystal_per_unit"
+    return max(0.001, float(cfg.get(key, 1) or 1))
+
+
 def _preview_receive(from_resource: str, to_resource: str, amount: int, cfg: Dict[str, Any]) -> int:
     give_amount = int(amount)
     if give_amount <= 0:
@@ -103,15 +108,15 @@ def _preview_receive(from_resource: str, to_resource: str, amount: int, cfg: Dic
     if from_resource == "crystal" and to_resource == "metal":
         return max(0, int(math.floor(give_amount * float(cfg["rate_crystal_to_metal"]))))
     if from_resource == "metal" and to_resource == "fuel_cells":
-        per = max(1, int(cfg["fuel_metal_per_unit"]))
-        return max(0, give_amount // per)
+        per = _fuel_unit_cost(cfg, "metal")
+        return max(0, int(math.floor(give_amount / per)))
     if from_resource == "crystal" and to_resource == "fuel_cells":
-        per = max(1, int(cfg["fuel_crystal_per_unit"]))
-        return max(0, give_amount // per)
+        per = _fuel_unit_cost(cfg, "crystal")
+        return max(0, int(math.floor(give_amount / per)))
     if from_resource == "fuel_cells" and to_resource == "metal":
-        return max(0, give_amount * max(1, int(cfg["fuel_metal_per_unit"])))
+        return max(0, int(math.floor(give_amount * _fuel_unit_cost(cfg, "metal"))))
     if from_resource == "fuel_cells" and to_resource == "crystal":
-        return max(0, give_amount * max(1, int(cfg["fuel_crystal_per_unit"])))
+        return max(0, int(math.floor(give_amount * _fuel_unit_cost(cfg, "crystal"))))
     return 0
 
 
@@ -121,15 +126,13 @@ def _route_rate(from_resource: str, to_resource: str, cfg: Dict[str, Any]) -> fl
     if from_resource == "crystal" and to_resource == "metal":
         return float(cfg["rate_crystal_to_metal"])
     if from_resource == "metal" and to_resource == "fuel_cells":
-        per = max(1, int(cfg["fuel_metal_per_unit"]))
-        return 1.0 / float(per)
+        return 1.0 / _fuel_unit_cost(cfg, "metal")
     if from_resource == "crystal" and to_resource == "fuel_cells":
-        per = max(1, int(cfg["fuel_crystal_per_unit"]))
-        return 1.0 / float(per)
+        return 1.0 / _fuel_unit_cost(cfg, "crystal")
     if from_resource == "fuel_cells" and to_resource == "metal":
-        return float(max(1, int(cfg["fuel_metal_per_unit"])))
+        return _fuel_unit_cost(cfg, "metal")
     if from_resource == "fuel_cells" and to_resource == "crystal":
-        return float(max(1, int(cfg["fuel_crystal_per_unit"])))
+        return _fuel_unit_cost(cfg, "crystal")
     return 0.0
 
 
@@ -146,9 +149,9 @@ def _min_give_amount(from_resource: str, to_resource: str, cfg: Dict[str, Any]) 
         return max(1, int(cfg["fuel_min_units"]))
     if to_resource == "fuel_cells":
         if from_resource == "metal":
-            return max(int(cfg["min_amount"]), max(1, int(cfg["fuel_metal_per_unit"])))
+            return max(int(cfg["min_amount"]), int(math.ceil(_fuel_unit_cost(cfg, "metal"))))
         if from_resource == "crystal":
-            return max(int(cfg["min_amount"]), max(1, int(cfg["fuel_crystal_per_unit"])))
+            return max(int(cfg["min_amount"]), int(math.ceil(_fuel_unit_cost(cfg, "crystal"))))
     return max(1, int(cfg["min_amount"]))
 
 

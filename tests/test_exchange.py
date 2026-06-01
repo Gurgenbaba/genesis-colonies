@@ -51,10 +51,12 @@ def test_exchange_schema_ready(exchange_db):
 def test_exchange_config_defaults(exchange_db):
     cfg = get_exchange_config()
     assert cfg["enabled"] is True
-    assert cfg["rate_metal_to_crystal"] == 0.8
-    assert cfg["rate_crystal_to_metal"] == 0.8
-    assert cfg["daily_limit"] == 500000000
+    assert cfg["rate_metal_to_crystal"] == 0.85
+    assert cfg["rate_crystal_to_metal"] == 0.85
+    assert cfg["daily_limit"] == 2000000000
     assert cfg["min_amount"] == 100
+    assert cfg["fuel_metal_per_unit"] == 20
+    assert cfg["fuel_crystal_per_unit"] == 14
 
 
 def test_exchange_metal_to_crystal(exchange_db):
@@ -74,13 +76,13 @@ def test_exchange_metal_to_crystal(exchange_db):
         conn=conn,
     )
     assert ok, reason
-    assert result["receive_amount"] == 800
+    assert result["receive_amount"] == 850
     assert result["receive_resource"] == "crystal"
 
     cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (pid,))
     row = cur.fetchone()
     assert int(row["metal"]) == 9000
-    assert int(row["crystal"]) == 800
+    assert int(row["crystal"]) == 850
 
     cur.execute("SELECT COUNT(*) AS c FROM exchange_log WHERE player_id = ?;", (uid,))
     assert int(cur.fetchone()["c"]) == 1
@@ -122,13 +124,49 @@ def test_exchange_fuel_cells_to_metal(exchange_db):
         conn=conn,
     )
     assert ok, reason
-    assert result["receive_amount"] == 450
+    assert result["receive_amount"] == 200
     assert result["receive_resource"] == "metal"
 
     cur.execute("SELECT metal, fuel_cells FROM planets WHERE id = ?;", (pid,))
     row = cur.fetchone()
-    assert int(row["metal"]) == 450
+    assert int(row["metal"]) == 200
     assert int(row["fuel_cells"]) == 90
+    conn.close()
+
+
+def test_fuel_production_respects_storage_cap(exchange_db):
+    import time
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE planet_buildings SET fuel_cell_plant = 5 WHERE planet_id = ?;",
+        (pid,),
+    )
+    status = get_exchange_status(
+        player_id=uid,
+        planet_id=pid,
+        metal=0,
+        crystal=0,
+        fuel_cells=0,
+        conn=conn,
+    )
+    fuel_cap = int(status["storage"].get("fuel_cells") or 0)
+    assert fuel_cap > 0
+    cur.execute("SELECT * FROM planets WHERE id = ?;", (pid,))
+    planet = dict(cur.fetchone())
+    planet["fuel_cells"] = fuel_cap
+    planet["last_update"] = time.time() - 3600
+    conn.commit()
+
+    from game.resources import update_planet_resources
+
+    update_planet_resources(planet, conn=conn, skip_queue_finish=True)
+    conn.commit()
+    cur.execute("SELECT fuel_cells FROM planets WHERE id = ?;", (pid,))
+    assert int(cur.fetchone()["fuel_cells"]) == fuel_cap
     conn.close()
 
 
@@ -145,7 +183,7 @@ def test_exchange_metal_to_fuel_cells(exchange_db):
         planet_id=pid,
         direction="metal_to_fuel_cells",
         from_resource="metal",
-        amount=450,
+        amount=200,
         conn=conn,
     )
     assert ok, reason
@@ -154,7 +192,7 @@ def test_exchange_metal_to_fuel_cells(exchange_db):
 
     cur.execute("SELECT metal, fuel_cells FROM planets WHERE id = ?;", (pid,))
     row = cur.fetchone()
-    assert int(row["metal"]) == 9550
+    assert int(row["metal"]) == 9800
     assert int(row["fuel_cells"]) == 10
     conn.close()
 
@@ -178,7 +216,7 @@ def test_exchange_fuel_cells_uncapped(exchange_db):
     assert ok, reason
 
     cur.execute("SELECT fuel_cells FROM planets WHERE id = ?;", (pid,))
-    assert int(cur.fetchone()["fuel_cells"]) == 100
+    assert int(cur.fetchone()["fuel_cells"]) == 200
     conn.close()
 
 
@@ -213,11 +251,11 @@ def test_exchange_allows_storage_overflow(exchange_db):
         conn=conn,
     )
     assert ok, reason
-    assert result["receive_amount"] == 800
+    assert result["receive_amount"] == 850
 
     cur.execute("SELECT metal FROM planets WHERE id = ?;", (pid,))
     metal_after = int(cur.fetchone()["metal"])
-    assert metal_after == metal_cap + 800
+    assert metal_after == metal_cap + 850
     assert metal_after > metal_cap
     conn.close()
 
@@ -324,7 +362,7 @@ def test_exchange_api_route(exchange_db, tmp_path, monkeypatch):
     assert res.status_code == 200
     data = res.get_json()
     assert data["ok"] is True
-    assert data["job"]["receive_amount"] == 400
+    assert data["job"]["receive_amount"] == 425
 
 
 def test_trader_hub_page_includes_exchange_panel(exchange_db, tmp_path, monkeypatch):
