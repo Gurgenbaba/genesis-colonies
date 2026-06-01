@@ -50,6 +50,7 @@ from game.fleet_calc import (
     normalize_ships,
     validate_departure_balances,
 )
+from game.alliance import add_alliance_member, create_alliance
 from game.fleet_defs import EXPEDITION_POSITION, FLEET_FUEL_RESOURCE
 from game.messages import get_message, list_messages
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, init_db
@@ -1169,8 +1170,10 @@ def test_spy_creates_report(fleet_db):
 
     msgs = list_messages(uid, category="espionage")
     assert msgs["ok"]
-    assert len(msgs["data"]["messages"]) >= 1
-    meta = msgs["data"]["messages"][0].get("metadata") or {}
+    messages = msgs["data"]["messages"]
+    assert len(messages) >= 1
+    detail = get_message(uid, messages[0]["id"], mark_read=False)
+    meta = detail["data"]["message"].get("metadata") or {}
     assert meta.get("report_version") == 2
     assert meta.get("intel_tiers", {}).get("target") is True
     assert meta.get("intel_tiers", {}).get("resources") is False
@@ -1206,7 +1209,10 @@ def _spy_report_meta(
     process_fleet_tick(player_id=uid, conn=conn)
     conn.commit()
     msgs = list_messages(uid, category="espionage")
-    return msgs["data"]["messages"][0].get("metadata") or {}
+    messages = msgs["data"]["messages"]
+    assert messages
+    detail = get_message(uid, messages[0]["id"], mark_read=False)
+    return detail["data"]["message"].get("metadata") or {}
 
 
 def test_spy_report_tier2_reveals_resources(fleet_db):
@@ -1314,8 +1320,10 @@ def test_attack_placeholder_report(fleet_db):
     conn.commit()
 
     msgs = list_messages(uid, category="combat")
-    assert len(msgs["data"]["messages"]) >= 1
-    meta = msgs["data"]["messages"][0].get("metadata") or {}
+    messages = msgs["data"]["messages"]
+    assert len(messages) >= 1
+    detail = get_message(uid, messages[0]["id"], mark_read=False)
+    meta = detail["data"]["message"].get("metadata") or {}
     assert meta.get("result") == "undecided"
     assert "attacking_ships" in meta
     defender_msgs = list_messages(foreign_uid, category="combat")
