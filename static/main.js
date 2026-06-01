@@ -4721,7 +4721,6 @@
             body: JSON.stringify({ job_id: jobId, planet_id: planetId || undefined }),
           });
           if (res?.ok) {
-            showNotify(tt("shipyard_cancel_ok", "Order cancelled."), "success");
             if (res.data) applyShipyardState(page, res.data);
             else await refreshShipyardState(page);
             if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_cancel");
@@ -4791,7 +4790,6 @@
           body: JSON.stringify({ ship_key: shipKey, amount, planet_id: planetId || undefined }),
         });
         if (res?.ok) {
-          showNotify(tt("shipyard_queue_enqueued", "Ships queued for construction."), "success");
           if (res.data) applyShipyardState(page, res.data);
           else await refreshShipyardState(page);
           if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_build");
@@ -5191,7 +5189,6 @@
             body: JSON.stringify({ job_id: jobId, planet_id: planetId || undefined }),
           });
           if (res?.ok) {
-            showNotify(tt("defense_cancel_ok", "Order cancelled."), "success");
             const payload = normalizeDefenseApiPayload(res);
             if (payload) applyDefenseState(page, payload);
             else await refreshDefenseState(page);
@@ -5225,7 +5222,6 @@
           body: JSON.stringify({ defense_key: defenseKey, amount, planet_id: planetId || undefined }),
         });
         if (res?.ok) {
-          showNotify(tt("defense_build_ok", "Defense units queued."), "success");
           const payload = normalizeDefenseApiPayload(res);
           if (payload) applyDefenseState(page, payload);
           else await refreshDefenseState(page);

@@ -879,13 +879,8 @@ def research_start(tech_key):
         else:
             flash(T("research_msg_error"), "error")
     else:
-        info = payload or {}
-        lvl = info.get("level", 0)
-        secs = info.get("seconds", 0)
-        flash(T("research_msg_started", level=lvl, seconds=secs), "success")
-
-        # Score steigt bei FINISH. Cache-Flush hier optional.
-        # invalidate_player_score_cache(int(player_view["id"]))
+        # Queue update is visible in the UI — no success flash needed.
+        pass
 
     return redirect(url_for("research_view"))
 
