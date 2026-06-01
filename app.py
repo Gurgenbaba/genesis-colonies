@@ -1121,9 +1121,24 @@ def defense_view():
     if player_view is None:
         return redirect(url_for("login"))
 
+    from game.defense_page import build_defense_page_context
+    from game.planet_evolution.repository import get_context_planet
+
+    conn = db()
+    try:
+        planet = get_context_planet(int(session.get("user_id") or 0), conn=conn)
+        defense_ctx = build_defense_page_context(
+            int(session.get("user_id") or 0),
+            planet,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
     return render_template(
         "defense.html",
         player=player_view,
+        defense=defense_ctx,
         energy_total=energy_total,
         energy_used=energy_used,
         storage_caps=storage_caps,
@@ -2422,6 +2437,15 @@ def _payload_from_live_context(
         except Exception:
             pass
 
+        try:
+            from game.live_state import defense_panel_for_game_state
+
+            defense_panel = defense_panel_for_game_state(user_id, conn=conn)
+            if defense_panel is not None:
+                payload["defense"] = defense_panel
+        except Exception:
+            pass
+
     if not lightweight:
         try:
             from game.planet_evolution.teaser import get_overview_planet_teaser
@@ -2525,6 +2549,31 @@ def _action_json_response(
     if ok and job is not None:
         resp["job"] = job
     return jsonify(resp)
+
+
+def _defense_json_response(
+    ok: bool,
+    reason: str = "",
+    *,
+    queue: Any = None,
+    defenses: Any = None,
+    finish_source: str = "api_defense",
+    status: int = 200,
+) -> Any:
+    """Canonical defense envelope: { ok, state, queue, defenses }."""
+    from game.defense_api import defense_err, defense_ok, empty_defense_slices
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source=finish_source)
+    if queue is None or defenses is None:
+        empty_q, empty_d = empty_defense_slices()
+        queue = empty_q if queue is None else queue
+        defenses = empty_d if defenses is None else defenses
+    body = (
+        defense_ok(state=state, queue=queue, defenses=defenses, reason=reason)
+        if ok
+        else defense_err(reason or "generic", state=state, queue=queue, defenses=defenses)
+    )
+    return jsonify(body), status if not ok else 200
 
 
 @app.route("/api/status")
@@ -3083,6 +3132,39 @@ def api_ship_detail(ship_key: str):
     return render_template("partials/ship_detail_view.html", card=card)
 
 
+@app.route("/api/defense-units/<defense_key>")
+@require_login
+def api_defense_detail(defense_key: str):
+    from game.defense_detail import build_defense_detail_card
+    from game.models import get_planet_buildings, get_research_levels
+    from game.planet_evolution.repository import get_context_planet
+
+    buildings = None
+    research = None
+    user_id = int(session.get("user_id") or 0)
+    if user_id:
+        conn = db()
+        try:
+            planet = get_context_planet(user_id, conn=conn)
+            buildings = get_planet_buildings(int(planet["id"]), conn=conn)
+            research = get_research_levels(user_id=user_id, conn=conn)
+        finally:
+            conn.close()
+
+    card, err = build_defense_detail_card(
+        defense_key, buildings=buildings, research=research
+    )
+    if err:
+        return (
+            render_template(
+                "partials/ship_detail_error.html",
+                error_key=err,
+            ),
+            404,
+        )
+    return render_template("partials/defense_detail_view.html", card=card)
+
+
 @app.route("/api/shipyard", methods=["GET"])
 @require_login
 def api_shipyard_state():
@@ -3116,6 +3198,275 @@ def api_shipyard_state():
         conn.close()
 
     return jsonify(fleet_ok(payload))
+
+
+@app.route("/api/defense/state", methods=["GET"])
+@require_login
+def api_defense_state_canonical():
+    from game.defense_api import (
+        defense_schema_available,
+        fetch_defense_slices,
+        resolve_context_planet_id,
+    )
+    from game.fleet_api import fleet_err
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+
+    raw_pid = request.args.get("planet_id")
+    req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        if not defense_schema_available(conn):
+            rollback(conn)
+            return _defense_json_response(False, "defense_unavailable", finish_source="api_defense_state", status=503)
+        planet_id, err = resolve_context_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            rollback(conn)
+            return _defense_json_response(False, err, finish_source="api_defense_state", status=404)
+        queue, defenses = fetch_defense_slices(user_id, int(planet_id), conn=conn)
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    return _defense_json_response(True, finish_source="api_defense_state", queue=queue, defenses=defenses)
+
+
+@app.route("/api/defense/overview", methods=["GET"])
+@require_login
+def api_defense_overview():
+    from game.defense_api import (
+        build_overview_slice,
+        defense_err,
+        defense_ok,
+        defense_schema_available,
+        empty_defense_slices,
+        fetch_defense_slices,
+        resolve_context_planet_id,
+    )
+    from game.fleet_api import fleet_err
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+
+    raw_pid = request.args.get("planet_id")
+    req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        if not defense_schema_available(conn):
+            rollback(conn)
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="api_defense_overview")
+            empty_q, empty_d = empty_defense_slices()
+            return jsonify(defense_err("defense_unavailable", state=state, queue=empty_q, defenses=empty_d)), 503
+        planet_id, err = resolve_context_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            rollback(conn)
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="api_defense_overview")
+            empty_q, empty_d = empty_defense_slices()
+            return jsonify(defense_err(err, state=state, queue=empty_q, defenses=empty_d)), 404
+        overview = build_overview_slice(user_id, int(planet_id), conn=conn)
+        queue, defenses = fetch_defense_slices(user_id, int(planet_id), conn=conn)
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_defense_overview")
+    body = defense_ok(state=state, queue=queue, defenses={**defenses, "overview": overview})
+    return jsonify(body)
+
+
+@app.route("/api/defense", methods=["GET"])
+@require_login
+def api_defense_state():
+    from game.defense import build_defense_api_payload, defense_queue_table_ready
+    from game.defense_page import build_defense_page_context
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.models import defense_schema_ready
+    from game.shipyard import resolve_owned_planet_id
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+
+    raw_pid = request.args.get("planet_id")
+    req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        if not defense_schema_ready(conn) or not defense_queue_table_ready(conn):
+            rollback(conn)
+            return jsonify(fleet_err("defense_unavailable")), 503
+        planet_id, err = resolve_owned_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            rollback(conn)
+            return jsonify(fleet_err(err)), 404
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+        row = cur.fetchone()
+        if not row:
+            rollback(conn)
+            return jsonify(fleet_err("planet_not_found")), 404
+        payload = build_defense_page_context(user_id, dict(row), conn=conn)
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    return jsonify(fleet_ok(payload))
+
+
+@app.route("/api/defense/build", methods=["POST"])
+@require_login
+def api_defense_build():
+    from game.defense import build_defense
+    from game.defense_api import (
+        defense_schema_available,
+        fetch_defense_slices,
+        resolve_context_planet_id,
+    )
+    from game.live_state import defense_finish_source
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    defense_key = str(data.get("defense_key") or "").strip()
+    try:
+        amount = int(data.get("amount") or 1)
+    except (TypeError, ValueError):
+        amount = 0
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    finish_source = defense_finish_source("build")
+    conn = db()
+    try:
+        if not defense_schema_available(conn):
+            return _defense_json_response(
+                False,
+                "defense_unavailable",
+                finish_source=finish_source,
+                status=503,
+            )
+        raw_pid = data.get("planet_id")
+        req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+        planet_id, err = resolve_context_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            return _defense_json_response(False, err, finish_source=finish_source, status=404)
+        ok, reason, _result = build_defense(
+            player_id=user_id,
+            planet_id=int(planet_id),
+            defense_key=defense_key,
+            amount=amount,
+            conn=conn,
+        )
+        if not ok:
+            return _defense_json_response(False, reason or "generic", finish_source=finish_source, status=400)
+        queue, defenses = fetch_defense_slices(user_id, int(planet_id), conn=conn)
+    finally:
+        conn.close()
+
+    resp = _defense_json_response(
+        True,
+        reason="defense_build_ok",
+        queue=queue,
+        defenses=defenses,
+        finish_source=finish_source,
+    )
+    response_obj = resp[0].get_json() if isinstance(resp, tuple) else resp.get_json()
+    if request_id and isinstance(response_obj, dict):
+        save_idempotent_action(user_id, request_id, response_obj)
+    return resp
+
+
+@app.route("/api/defense/cancel", methods=["POST"])
+@require_login
+def api_defense_cancel():
+    from game.defense_api import (
+        cancel_defense_job,
+        defense_schema_available,
+        fetch_defense_slices,
+        resolve_context_planet_id,
+    )
+    from game.live_state import defense_finish_source
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        job_id = int(data.get("job_id") or 0)
+    except (TypeError, ValueError):
+        job_id = 0
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    finish_source = defense_finish_source("cancel")
+    if job_id <= 0:
+        return _defense_json_response(False, "invalid_job", finish_source=finish_source, status=400)
+
+    conn = db()
+    try:
+        if not defense_schema_available(conn):
+            return _defense_json_response(
+                False,
+                "defense_unavailable",
+                finish_source=finish_source,
+                status=503,
+            )
+        raw_pid = data.get("planet_id")
+        req_pid = int(raw_pid) if raw_pid not in (None, "") else None
+        planet_id, err = resolve_context_planet_id(user_id, req_pid, conn=conn)
+        if err:
+            return _defense_json_response(False, err, finish_source=finish_source, status=404)
+        ok, reason = cancel_defense_job(
+            player_id=user_id,
+            planet_id=int(planet_id),
+            job_id=job_id,
+            conn=conn,
+        )
+        if not ok:
+            return _defense_json_response(False, reason or "generic", finish_source=finish_source, status=400)
+        queue, defenses = fetch_defense_slices(user_id, int(planet_id), conn=conn)
+    finally:
+        conn.close()
+
+    resp = _defense_json_response(
+        True,
+        reason="defense_cancel_ok",
+        queue=queue,
+        defenses=defenses,
+        finish_source=finish_source,
+    )
+    response_obj = resp[0].get_json() if isinstance(resp, tuple) else resp.get_json()
+    if request_id and isinstance(response_obj, dict):
+        save_idempotent_action(user_id, request_id, response_obj)
+    return resp
 
 
 @app.route("/api/shipyard/build", methods=["POST"])

@@ -377,6 +377,23 @@ def finish_planet_shipyard_jobs(
     )
 
 
+def finish_planet_defense_jobs(
+    conn: sqlite3.Connection,
+    planet_id: int,
+    player_id: int,
+    now: float,
+) -> int:
+    """
+    Deliver due defense units for one planet's defense queue (progressive per unit).
+    Returns count of fully completed queue jobs.
+    """
+    from .defense import _finish_due_defense_jobs_impl
+
+    return _finish_due_defense_jobs_impl(
+        conn, int(planet_id), int(player_id), now=float(now)
+    )
+
+
 def finish_player_research_jobs(
     conn: sqlite3.Connection,
     user_id: int,
@@ -554,6 +571,20 @@ def finish_due_work(
                 msg = f"shipyard planet={pid_planet}: {exc}"
                 result["errors"].append(msg)
                 logger.exception("queue_engine shipyard finish failed: %s", msg)
+
+            try:
+                n_def = finish_planet_defense_jobs(
+                    conn, pid_planet, pid_player, float(now)
+                )
+                if n_def > 0:
+                    result["finished"]["defense"] += n_def
+                    affected_players.add(pid_player)
+                    affected_planets.add(pid_planet)
+            except Exception as exc:
+                result["ok"] = False
+                msg = f"defense planet={pid_planet}: {exc}"
+                result["errors"].append(msg)
+                logger.exception("queue_engine defense finish failed: %s", msg)
 
         for uid in research_targets:
             try:

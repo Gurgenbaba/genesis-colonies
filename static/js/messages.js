@@ -143,6 +143,49 @@
       )
     );
 
+    const defense = meta.defense || {};
+    let defenseHtml = "";
+    if (tiers.defense) {
+      const rows = [
+        `<div class="gc-spy-report-kv"><span>${esc(t("fleet_spy_report_defense_total", "Defense units"))}</span><strong>${esc(formatInt(defense.total_units || 0))}</strong></div>`,
+        `<div class="gc-spy-report-kv"><span>${esc(t("fleet_spy_report_defense_power", "Defense power"))}</span><strong>${esc(formatInt(defense.defense_power || 0))}</strong></div>`,
+        `<div class="gc-spy-report-kv"><span>${esc(t("fleet_spy_report_shield_power", "Shield power"))}</span><strong>${esc(formatInt(defense.shield_power || 0))}</strong></div>`,
+      ];
+      const units = defense.units || {};
+      const unitEntries = Object.entries(units).filter(([, qty]) => Number(qty) > 0);
+      if (unitEntries.length) {
+        defenseHtml =
+          rows.join("") +
+          unitEntries
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(
+              ([key, qty]) =>
+                `<div class="gc-spy-report-kv"><span>${esc(t(`defense_${key}`, key))}</span><strong>×${esc(formatInt(qty))}</strong></div>`
+            )
+            .join("");
+      } else {
+        defenseHtml =
+          rows.join("") +
+          `<p class="gc-spy-report-empty">${esc(t("fleet_spy_report_defense_empty", "No defensive structures detected"))}</p>`;
+      }
+      if (defense.accuracy_pct != null && !defense.exact) {
+        defenseHtml += `<div class="gc-spy-report-energy">${esc(
+          t("fleet_spy_report_defense_accuracy", "Intel accuracy: ~%(pct)s%% (espionage research)").replace(
+            "%(pct)s",
+            formatInt(defense.accuracy_pct || 0)
+          )
+        )}</div>`;
+      }
+    }
+    sections.push(
+      section(
+        t("fleet_spy_report_section_defense", "Planetary defense"),
+        defenseHtml,
+        !tiers.defense,
+        t("fleet_spy_report_defense_locked", "Planetary defense: insufficient probe data")
+      )
+    );
+
     const buildings = meta.buildings || {};
     let buildHtml = "";
     if (tiers.buildings) {

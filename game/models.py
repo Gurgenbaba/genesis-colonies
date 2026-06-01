@@ -3,7 +3,7 @@ import time
 import hashlib
 import math
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any, Optional, Tuple, List, Mapping
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -1661,4 +1661,131 @@ def finish_due_research_jobs(
         raise
     finally:
         if owns_conn:
+            conn.close()
+
+
+# ======================================================================
+# DEFENSE (planet-scoped stock — GC-410)
+# ======================================================================
+
+
+def defense_schema_ready(conn: sqlite3.Connection) -> bool:
+    return table_exists(conn, "planet_defense")
+
+
+def get_planet_defense(
+    planet_id: int,
+    conn: sqlite3.Connection | None = None,
+) -> Dict[str, int]:
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    try:
+        if not defense_schema_ready(conn):
+            return {}
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT defense_key, amount FROM planet_defense WHERE planet_id = ? AND amount > 0;",
+            (int(planet_id),),
+        )
+        return {str(r["defense_key"]): int(r["amount"]) for r in cur.fetchall()}
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def set_planet_defense(
+    planet_id: int,
+    defense: Mapping[str, int],
+    *,
+    conn: sqlite3.Connection,
+) -> None:
+    from .defense_defs import all_defense_keys
+
+    cur = conn.cursor()
+    for key in all_defense_keys():
+        qty = max(0, int(defense.get(key, 0) or 0))
+        cur.execute(
+            """
+            SELECT id FROM planet_defense
+            WHERE planet_id = ? AND defense_key = ?
+            LIMIT 1;
+            """,
+            (int(planet_id), key),
+        )
+        row = cur.fetchone()
+        if qty <= 0:
+            if row:
+                cur.execute("DELETE FROM planet_defense WHERE id = ?;", (int(row["id"]),))
+            continue
+        if row:
+            cur.execute(
+                "UPDATE planet_defense SET amount = ? WHERE id = ?;",
+                (qty, int(row["id"])),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO planet_defense (planet_id, defense_key, amount)
+                VALUES (?, ?, ?);
+                """,
+                (int(planet_id), key, qty),
+            )
+
+
+def add_planet_defense(
+    planet_id: int,
+    defense: Mapping[str, int],
+    *,
+    conn: sqlite3.Connection,
+) -> None:
+    from .defense_defs import is_known_defense_key
+
+    current = get_planet_defense(int(planet_id), conn=conn)
+    merged = dict(current)
+    for key, amount in defense.items():
+        dk = str(key or "").strip()
+        if not is_known_defense_key(dk):
+            continue
+        merged[dk] = max(0, int(merged.get(dk, 0)) + int(amount))
+    set_planet_defense(int(planet_id), merged, conn=conn)
+
+
+def get_player_defense_counts(
+    player_id: int,
+    conn: sqlite3.Connection | None = None,
+) -> Dict[str, int]:
+    """All defense units owned by a player across their planets."""
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    try:
+        if not defense_schema_ready(conn):
+            return {}
+        from .defense_defs import is_known_defense_key
+
+        totals: Dict[str, int] = {}
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT pd.defense_key, SUM(pd.amount) AS amt
+            FROM planet_defense pd
+            INNER JOIN planets p ON p.id = pd.planet_id
+            WHERE p.player_id = ? AND pd.amount > 0
+            GROUP BY pd.defense_key;
+            """,
+            (int(player_id),),
+        )
+        for row in cur.fetchall():
+            dk = str(row["defense_key"])
+            if not is_known_defense_key(dk):
+                continue
+            totals[dk] = int(row["amt"] or 0)
+        return totals
+    finally:
+        if own_conn:
             conn.close()

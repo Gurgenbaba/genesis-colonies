@@ -101,7 +101,12 @@
     </div>
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("playercard_defense_score") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_defense') or 0)|fmt_int }}</span>
+      <span class="gc-player-card-stat-value gc-mono">
+        {{ (card.get('score_defense') or 0)|fmt_int }}
+        {% if card.get('rank_defense') %}
+        <span class="gc-player-card-stat-sub">#{{ card.get('rank_defense')|fmt_int }}</span>
+        {% endif %}
+      </span>
     </div>
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("playercard_home_planet") }}</span>

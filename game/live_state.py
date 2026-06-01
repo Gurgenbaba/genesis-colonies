@@ -4,6 +4,8 @@ Request-scoped guard for the single-pass live refresh pipeline.
 
 from __future__ import annotations
 
+from typing import Any, Dict, Optional
+
 
 def mark_request_live_refreshed() -> None:
     """Mark that finish + derived sync already ran this HTTP request."""
@@ -33,3 +35,31 @@ def coerce_skip_finish(skip_finish: bool) -> bool:
     if skip_finish:
         return True
     return request_live_state_already_refreshed()
+
+
+def defense_finish_source(action: str) -> str:
+    """Stable finish_source token for defense mutations."""
+    key = str(action or "action").strip().lower() or "action"
+    return f"api_defense_{key}"
+
+
+def defense_panel_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
+    """Defense queue + stock slice for /api/game-state include_panel."""
+    from game.defense import build_defense_api_payload, defense_queue_table_ready
+    from game.models import defense_schema_ready
+    from game.planet_evolution.repository import get_context_planet
+
+    if not defense_schema_ready(conn) or not defense_queue_table_ready(conn):
+        return None
+
+    planet = get_context_planet(user_id, conn=conn)
+    if not planet:
+        return None
+
+    pid = int(planet["id"])
+    payload = build_defense_api_payload(int(user_id), pid, conn=conn)
+    queue = payload.pop("defense_queue", {"queue": [], "summary": {}})
+    return {
+        "queue": queue,
+        "defenses": {"ready": True, **payload},
+    }

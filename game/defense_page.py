@@ -1,0 +1,98 @@
+"""Defense page — server-rendered context and API payload enrichment."""
+
+from __future__ import annotations
+
+from typing import Any, Dict, Mapping
+
+from .defense import (
+    build_defense_api_payload,
+    defense_queue_table_ready,
+    defense_unlocked,
+    get_defense_factory_level,
+)
+from .defense_defs import ACTIVE_DEFENSE_KEYS, DEFENSES, defense_defs_for_client, defense_icon_static_path
+from .models import defense_schema_ready
+
+
+def _planet_meta(planet_id: int, *, conn) -> Dict[str, Any]:
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, name, galaxy, system, position FROM planets WHERE id = ? LIMIT 1;",
+        (int(planet_id),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"planet_id": int(planet_id), "planet_name": "", "planet_coords": ""}
+    coords = f"{int(row['galaxy'])}:{int(row['system'])}:{int(row['position'])}"
+    name = str(row["name"] or "").strip() or coords
+    return {
+        "planet_id": int(row["id"]),
+        "planet_name": name,
+        "planet_coords": coords,
+    }
+
+
+def _locked_defense_catalog(
+    player_id: int,
+    planet_id: int,
+    factory_level: int,
+    *,
+    conn,
+) -> list[Dict[str, Any]]:
+    out: list[Dict[str, Any]] = []
+    for key in sorted(ACTIVE_DEFENSE_KEYS):
+        if defense_unlocked(key, factory_level, player_id=player_id, planet_id=planet_id, conn=conn):
+            continue
+        spec = DEFENSES.get(key) or {}
+        cost = spec.get("build_cost") or {}
+        out.append(
+            {
+                "defense_key": key,
+                "name_key": str(spec.get("name_key") or f"defense_{key}"),
+                "description_key": str(spec.get("description_key") or f"defense_{key}_desc"),
+                "role": str(spec.get("role") or "turret"),
+                "icon": defense_icon_static_path(key),
+                "required_defense_factory_level": int(spec.get("required_defense_factory_level") or 99),
+                "cost_metal": int(cost.get("metal") or 0),
+                "cost_crystal": int(cost.get("crystal") or 0),
+                "build_seconds": 0,
+                "unlocked": False,
+            }
+        )
+    return out
+
+
+def build_defense_page_context(
+    player_id: int,
+    planet: Mapping[str, Any],
+    *,
+    conn,
+) -> Dict[str, Any]:
+    """Full context for defense.html and initial client state."""
+    pid = int(planet["id"])
+    meta = _planet_meta(pid, conn=conn)
+    ready = defense_schema_ready(conn) and defense_queue_table_ready(conn)
+
+    if not ready:
+        return {
+            "ready": False,
+            "defense_factory_level": 0,
+            **meta,
+        }
+
+    payload = build_defense_api_payload(int(player_id), pid, conn=conn)
+    factory_level = get_defense_factory_level(int(player_id), pid, conn=conn)
+    locked = _locked_defense_catalog(int(player_id), pid, factory_level, conn=conn)
+
+    stock = payload.get("current_defense") or {}
+    for entry in payload.get("buildable_defense") or []:
+        dk = str(entry.get("defense_key") or "")
+        entry["stock"] = int(stock.get(dk, 0) or 0)
+
+    return {
+        "ready": True,
+        **payload,
+        **meta,
+        "locked_defense": locked,
+        "defense_defs": {row["key"]: row for row in defense_defs_for_client()},
+    }

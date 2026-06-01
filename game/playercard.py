@@ -19,7 +19,7 @@ from .models import (
 )
 import sqlite3
 
-from .ranking import get_player_rank, read_player_scores_for_playercard
+from .ranking import get_player_category_ranks, get_player_rank, read_player_scores_for_playercard
 
 # ---------------------------------------------------------------------------
 # Limits & validation
@@ -464,10 +464,13 @@ def _build_public_card_payload(
     score = read_player_scores_for_playercard(tid, conn=conn)
     rank: int | None = None
     total_players = 0
+    category_ranks: Dict[str, Any] = {}
     try:
         rank, total_players = get_player_rank(tid, conn=conn)
+        category_ranks = get_player_category_ranks(tid, conn=conn)
     except sqlite3.OperationalError:
         rank, total_players = None, 0
+        category_ranks = {}
     homeworld = get_homeworld(tid, conn=conn)
     colonies = _count_colonies(tid, conn=conn)
     last_seen = int(player.get("last_seen") or 0)
@@ -500,7 +503,11 @@ def _build_public_card_payload(
         "score_research": int(score.get("score_research", 0) or 0),
         "score_fleet": int(score.get("score_fleet", 0) or 0),
         "score_defense": int(score.get("score_defense", 0) or 0),
+        "score_military": int(score.get("score_military", 0) or 0),
         "score_planet_evolution": int(score.get("score_planet_evolution", 0) or 0),
+        "rank_defense": category_ranks.get("defense"),
+        "rank_fleet": category_ranks.get("fleet"),
+        "rank_military": category_ranks.get("military"),
         "home_planet": escape(str(homeworld.get("name") or "—")),
         "colonies": colonies,
         "badges": _selected_badges(card, unlocked),

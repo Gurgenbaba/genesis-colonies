@@ -89,15 +89,17 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "description_key": "fleet_ship_spark_drone_desc",
         "role": "scout",
         "required_shipyard_level": 1,
-        "requirements": {"buildings": {"orbital_shipyard": 1, "research_lab": 1}},
+        "requirements": {"buildings": {"orbital_shipyard": 1, "research_lab": 1}, "research": {"energy_tech": 2}},
         "build_cost": {"metal": 500, "crystal": 200, "fuel_cells": 0},
         "build_seconds": 30,
+        "score_value": 700,
         "speed": 20000,
         "cargo": 10,
         "fuel": 5,
         "attack": 1,
         "shield": 5,
         "hull": 200,
+        "rapid_fire_targets": {"veil_probe": 2},
         "crew": 1,
     },
     "mule_courier": {
@@ -105,15 +107,17 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "description_key": "fleet_ship_mule_courier_desc",
         "role": "cargo",
         "required_shipyard_level": 1,
-        "requirements": {"buildings": {"orbital_shipyard": 1}, "research": {"mining_tech": 1}},
+        "requirements": {"buildings": {"orbital_shipyard": 1}, "research": {"mining_tech": 3}},
         "build_cost": {"metal": 2000, "crystal": 2000, "fuel_cells": 0},
         "build_seconds": 120,
+        "score_value": 4000,
         "speed": 5000,
         "cargo": 5000,
         "fuel": 10,
         "attack": 5,
         "shield": 10,
         "hull": 400,
+        "rapid_fire_targets": {},
         "crew": 3,
     },
     "veil_probe": {
@@ -123,16 +127,18 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "required_shipyard_level": 1,
         "requirements": {
             "buildings": {"orbital_shipyard": 1, "research_lab": 2},
-            "research": {"drone_tech": 1},
+            "research": {"drone_tech": 3},
         },
         "build_cost": {"metal": 1000, "crystal": 500, "fuel_cells": 0},
         "build_seconds": 60,
+        "score_value": 1500,
         "speed": 100000000,
         "cargo": 0,
         "fuel": 1,
         "attack": 0,
         "shield": 0,
         "hull": 500,
+        "rapid_fire_targets": {},
         "crew": 0,
     },
     "solar_skiff": {
@@ -142,16 +148,18 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "required_shipyard_level": 2,
         "requirements": {
             "buildings": {"orbital_shipyard": 2},
-            "research": {"engine_tech": 1, "navigation_tech": 1},
+            "research": {"engine_tech": 3, "navigation_tech": 3},
         },
         "build_cost": {"metal": 4000, "crystal": 3000, "fuel_cells": 10},
         "build_seconds": 300,
+        "score_value": 7000,
         "speed": 8000,
         "cargo": 2000,
         "fuel": 3,
         "attack": 5,
         "shield": 15,
         "hull": 800,
+        "rapid_fire_targets": {},
         "crew": 4,
     },
     "falcon_interceptor": {
@@ -161,16 +169,18 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "required_shipyard_level": 2,
         "requirements": {
             "buildings": {"orbital_shipyard": 2, "barracks": 1},
-            "research": {"weapon_tech": 2},
+            "research": {"weapon_tech": 5},
         },
         "build_cost": {"metal": 3000, "crystal": 1000, "fuel_cells": 0},
         "build_seconds": 180,
+        "score_value": 4000,
         "speed": 12500,
         "cargo": 50,
         "fuel": 20,
         "attack": 50,
         "shield": 10,
         "hull": 400,
+        "rapid_fire_targets": {"spark_drone": 3, "veil_probe": 2},
         "crew": 5,
     },
     "ironclad_frigate": {
@@ -180,16 +190,18 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "required_shipyard_level": 4,
         "requirements": {
             "buildings": {"orbital_shipyard": 4, "barracks": 2},
-            "research": {"weapon_tech": 4, "armor_tech": 2},
+            "research": {"weapon_tech": 7, "armor_tech": 4},
         },
         "build_cost": {"metal": 15000, "crystal": 7000, "fuel_cells": 0},
         "build_seconds": 600,
+        "score_value": 22000,
         "speed": 10000,
         "cargo": 100,
         "fuel": 75,
         "attack": 150,
         "shield": 25,
         "hull": 1000,
+        "rapid_fire_targets": {"falcon_interceptor": 2, "mule_courier": 2},
         "crew": 12,
     },
     "atlas_hauler": {
@@ -199,16 +211,18 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "required_shipyard_level": 4,
         "requirements": {
             "buildings": {"orbital_shipyard": 4},
-            "research": {"storage_tech": 3, "mining_tech": 2},
+            "research": {"storage_tech": 5, "mining_tech": 4},
         },
         "build_cost": {"metal": 6000, "crystal": 6000, "fuel_cells": 0},
         "build_seconds": 480,
+        "score_value": 12000,
         "speed": 7500,
         "cargo": 25000,
         "fuel": 50,
         "attack": 5,
         "shield": 25,
         "hull": 1200,
+        "rapid_fire_targets": {},
         "crew": 8,
     },
     "harvest_reclaimer": {
@@ -218,16 +232,18 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "required_shipyard_level": 5,
         "requirements": {
             "buildings": {"orbital_shipyard": 5},
-            "research": {"drone_tech": 3, "fuel_efficiency": 2},
+            "research": {"drone_tech": 5, "fuel_efficiency": 4},
         },
         "build_cost": {"metal": 10000, "crystal": 6000, "fuel_cells": 20},
         "build_seconds": 540,
+        "score_value": 16000,
         "speed": 2000,
         "cargo": 20000,
         "fuel": 300,
         "attack": 1,
         "shield": 10,
         "hull": 1600,
+        "rapid_fire_targets": {},
         "crew": 10,
     },
     "seed_ark": {
@@ -237,16 +253,18 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "required_shipyard_level": 6,
         "requirements": {
             "buildings": {"orbital_shipyard": 6, "command_center": 3},
-            "research": {"navigation_tech": 3, "storage_tech": 2},
+            "research": {"navigation_tech": 6, "storage_tech": 5},
         },
         "build_cost": {"metal": 50000, "crystal": 30000, "fuel_cells": 100},
         "build_seconds": 3600,
+        "score_value": 80000,
         "speed": 1500,
         "cargo": 5000,
         "fuel": 200,
         "attack": 10,
         "shield": 50,
         "hull": 3000,
+        "rapid_fire_targets": {},
         "crew": 50,
     },
     "eclipse_runner": {
@@ -256,17 +274,19 @@ SHIPS: Dict[str, Dict[str, Any]] = {
         "required_shipyard_level": 7,
         "build_cost": {"metal": 12000, "crystal": 8000, "fuel_cells": 50},
         "build_seconds": 900,
+        "score_value": 20000,
         "speed": 6000,
         "cargo": 5000,
         "fuel": 40,
         "attack": 25,
         "shield": 40,
         "hull": 2000,
+        "rapid_fire_targets": {"spark_drone": 2},
         "crew": 8,
         "phase2_only": True,
         "requirements": {
             "buildings": {"orbital_shipyard": 7},
-            "research": {"engine_tech": 4, "shield_tech": 2},
+            "research": {"engine_tech": 7, "shield_tech": 5},
         },
     },
 }
@@ -295,6 +315,23 @@ def all_ship_keys() -> FrozenSet[str]:
 
 def get_ship(ship_key: str) -> Dict[str, Any] | None:
     return SHIPS.get(canonical_ship_key(ship_key))
+
+
+def ship_score_value(ship_key: str) -> int:
+    """Ranking / combat empire value per hull (falls back to build cost)."""
+    from .combat_models import combat_stats_for_ship
+
+    stats = combat_stats_for_ship(ship_key)
+    if stats is None:
+        return 0
+    return int(stats.score_value)
+
+
+def ship_combat_stats(ship_key: str):
+    """Combat profile for resolver — see ``game.combat_models``."""
+    from .combat_models import combat_stats_for_ship
+
+    return combat_stats_for_ship(ship_key)
 
 
 def ship_defs_for_client(*, include_phase2: bool = False) -> List[Dict[str, Any]]:

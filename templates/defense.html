@@ -1,136 +1,444 @@
 {% extends "base.html" %}
 
+
+
 {% block content %}
 
-{# ------------------------------------------------------------- #}
-{# Defensive Defaults (Defense darf niemals crasht)               #}
-{# ------------------------------------------------------------- #}
-{% set defense_hint = T("defense_hint") %}
-{% if defense_hint == "defense_hint" %}
-  {% set defense_hint = "Verteidigungs-Zentrale deiner Kolonie – hier planst du später Schilde, Geschütze und planetare Abwehrsysteme." %}
-{% endif %}
+{% set df = defense if defense is defined and defense else {'ready': false, 'defense_factory_level': 0} %}
 
-{% set pt = T("defense_panel_planetary_title") %}
-{% if pt == "defense_panel_planetary_title" %}{% set pt = "Planetare Verteidigung" %}{% endif %}
+{% set player_obj = player if player is defined and player else None %}
 
-{% set ps = T("defense_panel_planetary_subtitle") %}
-{% if ps == "defense_panel_planetary_subtitle" %}
-  {% set ps = "Dieser Bereich wird später zur Schaltzentrale für deine Def-Strukturen: von leichten Lasern bis hin zu schweren Orbit-Batterien." %}
-{% endif %}
+{% set p_metal = (df.resources.metal if df.resources is defined else (player_obj.metal if player_obj else 0)) | int %}
 
-{% set ct = T("defense_planned_contents_title") %}
-{% if ct == "defense_planned_contents_title" %}{% set ct = "Geplante Inhalte dieses Panels:" %}{% endif %}
+{% set p_crystal = (df.resources.crystal if df.resources is defined else (player_obj.crystal if player_obj else 0)) | int %}
 
-{% set pi1 = T("defense_planned_item_overview") %}
-{% if pi1 == "defense_planned_item_overview" %}
-  {% set pi1 = "Übersicht über alle Defense-Strukturen pro Kolonie" %}
-{% endif %}
 
-{% set pi2 = T("defense_planned_item_build_buttons") %}
-{% if pi2 == "defense_planned_item_build_buttons" %}
-  {% set pi2 = "Bau- und Upgrade-Buttons für Laser, Raketen, Schilde & Turrets" %}
-{% endif %}
 
-{% set pi3 = T("defense_planned_item_power_score") %}
-{% if pi3 == "defense_planned_item_power_score" %}
-  {% set pi3 = "Kompakte Einschätzung der Gesamt-Defensivkraft (Score / Balken)" %}
-{% endif %}
+<div class="gc-page defense-page shipyard-page" id="defense-page"
 
-{% set tag1 = T("defense_tag_shield_setup") %}
-{% if tag1 == "defense_tag_shield_setup" %}{% set tag1 = "Shield-Setup" %}{% endif %}
+     data-ready="{{ '1' if df.ready is not defined or df.ready != false else '0' }}"
 
-{% set tag2 = T("defense_tag_turrets") %}
-{% if tag2 == "defense_tag_turrets" %}{% set tag2 = "Geschütze" %}{% endif %}
+     data-planet-id="{{ df.planet_id if df.planet_id is defined else '' }}"
 
-{% set tag3 = T("defense_tag_defense_matrix") %}
-{% if tag3 == "defense_tag_defense_matrix" %}{% set tag3 = "Abwehrmatrix" %}{% endif %}
+     data-factory-level="{{ df.defense_factory_level if df.defense_factory_level is defined else 0 }}">
 
-{% set mt = T("defense_panel_mechanics_title") %}
-{% if mt == "defense_panel_mechanics_title" %}{% set mt = "Zukünftige Mechaniken" %}{% endif %}
 
-{% set ms = T("defense_panel_mechanics_subtitle") %}
-{% if ms == "defense_panel_mechanics_subtitle" %}
-  {% set ms = "Die Verteidigung greift später direkt mit Radar, Flotten und Kampfberichten ineinander." %}
-{% endif %}
 
-{% set r1 = T("defense_roadmap_synergy") %}
-{% if r1 == "defense_roadmap_synergy" %}
-  {% set r1 = "Synergien mit Schildgenerator & Radar-Array (Frühwarnung & Bonuswerte)" %}
-{% endif %}
+  {% if df.ready is not defined or df.ready != false %}
 
-{% set r2 = T("defense_roadmap_calc") %}
-{% if r2 == "defense_roadmap_calc" %}
-  {% set r2 = "Kalkulation von Deff-Werten gegen typische Angreiferflotten" %}
-{% endif %}
+  <script type="application/json" id="defense-page-state">{{ df | tojson }}</script>
 
-{% set r3 = T("defense_roadmap_reports") %}
-{% if r3 == "defense_roadmap_reports" %}
-  {% set r3 = "Verknüpfung mit Kampfberichten und Log-Ansicht im Flotten-Modul" %}
-{% endif %}
+  {% endif %}
 
-{% set r4 = T("defense_roadmap_repair") %}
-{% if r4 == "defense_roadmap_repair" %}
-  {% set r4 = "Mögliche Auto-Reparatur nach Kämpfen (abhängig von Forschung)" %}
-{% endif %}
 
-{% set note = T("defense_placeholder_note") %}
-{% if note == "defense_placeholder_note" %}
-  {% set note = "Solange die Kampf-Engine noch in Entwicklung ist, dient diese Seite als stylischer Platzhalter und sorgt dafür, dass das Interface bereits vollständig wirkt." %}
-{% endif %}
-
-<div class="gc-page defense-wrapper">
 
   <header class="defense-headline section-header">
-    <h2 class="section-title">{{ T("nav_defense") }}</h2>
-    <p class="section-hint hint">{{ defense_hint }}</p>
+
+    <h2 class="section-title">{{ T("defense_title") }}</h2>
+
+    <p class="section-hint hint">{{ T("defense_hint") }}</p>
+
+    {% if df.planet_name is defined and df.planet_name %}
+
+    <p class="defense-planet-scope gc-mono" data-defense-planet-scope>
+
+      {{ T("defense_planet_scope", name=df.planet_name) }}
+
+      {% if df.planet_coords is defined and df.planet_coords %}
+
+      <span class="defense-planet-coords" data-defense-planet-coords>({{ df.planet_coords }})</span>
+
+      {% endif %}
+
+    </p>
+
+    {% endif %}
+
   </header>
 
-  <div class="defense-grid">
 
-    <!-- LEFT -->
-    <section class="gc-panel defense-panel">
-      <div class="gc-panel-header">
-        <span class="gc-panel-title">{{ pt }}</span>
-        <span class="gc-panel-subtitle">{{ ps }}</span>
+
+  {% if df.ready is defined and df.ready == false %}
+
+  <section class="gc-panel defense-panel">
+
+    <p class="shipyard-empty">{{ T("defense_unavailable") }}</p>
+
+  </section>
+
+  {% else %}
+
+
+
+  <section class="gc-panel shipyard-panel shipyard-status-panel">
+
+    <div class="gc-panel-header">
+
+      <span class="gc-panel-title">{{ T("defense_factory_title") }}</span>
+
+      <span class="gc-panel-subtitle gc-mono" data-defense-factory-label>
+
+        {{ T("defense_factory_level", level=df.defense_factory_level|default(0)) }}
+
+      </span>
+
+    </div>
+
+    <div class="shipyard-resource-summary gc-mono" aria-live="polite">
+
+      <span>{{ T("resource_metal") }}: <strong data-df-res="metal">{{ p_metal|fmt_int }}</strong></span>
+
+      <span>{{ T("resource_crystal") }}: <strong data-df-res="crystal">{{ p_crystal|fmt_int }}</strong></span>
+
+    </div>
+
+  </section>
+
+
+
+  <section class="gc-panel shipyard-panel" aria-labelledby="defense-queue-title">
+
+    <div class="gc-panel-header">
+
+      <span class="gc-panel-title" id="defense-queue-title">{{ T("defense_queue_title") }}</span>
+
+      <span class="gc-panel-subtitle gc-mono" data-defense-queue-subtitle>
+
+        {% set qsum = df.defense_queue.summary if df.defense_queue is defined and df.defense_queue.summary is defined else {} %}
+
+        {{ T("defense_queue_slots", count=qsum.count|default(0), limit=qsum.limit|default(3)) }}
+
+      </span>
+
+    </div>
+
+    <p class="shipyard-queue-hint hint">{{ T("defense_queue_hint", refund=qsum.refund_percent|default(60)) }}</p>
+
+    <div class="shipyard-queue-list" data-defense-queue-list aria-live="polite">
+
+      {% set qjobs = df.defense_queue.queue if df.defense_queue is defined and df.defense_queue.queue is defined else [] %}
+
+      {% if qjobs %}
+
+      <div class="shipyard-queue-list-inner">
+
+        {% for job in qjobs %}
+
+        {% set total_units = job.amount_total|default(job.amount)|int %}
+
+        {% set delivered = job.units_delivered|default(0)|int %}
+
+        {% set is_active = job.is_active|default(loop.first) %}
+
+        {% set order_total = job.order_total_seconds|default(job.total_seconds)|default(1)|int %}
+
+        {% set order_rem = job.order_remaining|default(job.remaining)|default(0)|int %}
+
+        {% set pct = (100 * (1 - order_rem / order_total)) if is_active and order_total > 0 else 0 %}
+
+        <article class="shipyard-job{% if is_active %} shipyard-job-active{% else %} shipyard-job-queued{% endif %}"
+
+                 data-queue-job-id="{{ job.id }}"
+
+                 {% if is_active %}data-finish-time="{{ job.finish_at|int }}" data-next-finish-time="{{ job.next_finish_at|default(job.finish_at)|int }}" data-total="{{ order_total }}"{% endif %}>
+
+          <div class="shipyard-job-icon">
+
+            <img src="{{ job.icon|default('/static/img/defense/' ~ job.defense_key ~ '.svg') }}" alt="" loading="lazy">
+
+          </div>
+
+          <div class="shipyard-job-body">
+
+            <div class="job-header">
+
+              <span class="job-name">
+
+                {% if total_units > 1 %}
+
+                  {{ T("defense_" ~ job.defense_key) }} · {{ T("shipyard_queue_progress", done=delivered, total=total_units) }}
+
+                {% else %}
+
+                  {{ T("defense_" ~ job.defense_key) }}
+
+                {% endif %}
+
+              </span>
+
+              <span class="job-time{% if not is_active %} job-time-muted{% endif %}"{% if is_active %} id="defense-eta-live"{% endif %}>
+
+                {% if is_active %}{{ T("shipyard_queue_remaining", seconds=order_rem|fmt_int) }}{% else %}{{ T("status_in_queue") }}{% endif %}
+
+              </span>
+
+            </div>
+
+            <div class="build-bar build-bar-large">
+
+              <div class="build-bar-fill gc-progress-smooth"{% if is_active %} id="defense-bar-fill-live"{% endif %}
+
+                   style="width:{{ pct|round(0, 'floor') }}%"
+
+                   role="progressbar" aria-valuenow="{{ pct|round(0, 'floor') }}" aria-valuemin="0" aria-valuemax="100"></div>
+
+            </div>
+
+            <div class="shipyard-queue-job-actions job-actions">
+
+              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-btn-danger" data-defense-queue-cancel="{{ job.id }}">
+
+                {{ T("shipyard_queue_cancel_btn") }}
+
+              </button>
+
+            </div>
+
+            {% if is_active %}
+
+            <span class="job-badge-active">{{ T("buildings_btn_active") }}</span>
+
+            {% else %}
+
+            <span class="job-badge-queued">#{{ loop.index }}</span>
+
+            {% endif %}
+
+          </div>
+
+        </article>
+
+        {% endfor %}
+
       </div>
 
-      <div class="defense-placeholder-box">
-        <div class="defense-placeholder-title">
-          <strong>{{ ct }}</strong>
+      {% else %}
+
+      <p class="shipyard-empty" data-defense-queue-empty>{{ T("defense_queue_empty") }}</p>
+
+      {% endif %}
+
+    </div>
+
+  </section>
+
+
+
+  <section class="gc-panel shipyard-panel" aria-labelledby="defense-inventory-title">
+
+    <div class="gc-panel-header">
+
+      <span class="gc-panel-title" id="defense-inventory-title">{{ T("defense_inventory_title") }}</span>
+
+      <span class="gc-panel-subtitle">{{ T("defense_inventory_subtitle") }}</span>
+
+    </div>
+
+    <div class="shipyard-inventory-list" data-defense-inventory>
+
+      {% set inv = df.current_defense if df.current_defense is defined else {} %}
+
+      {% set has_inv = false %}
+
+      {% for dk, qty in inv.items() %}
+
+      {% if qty|int > 0 %}{% set has_inv = true %}{% endif %}
+
+      {% endfor %}
+
+      {% if has_inv %}
+
+        {% for dk, qty in inv.items() %}
+
+        {% if qty|int > 0 %}
+
+        <div class="shipyard-inventory-row" data-inv-defense="{{ dk }}">
+
+          <button type="button" class="gc-ship-detail-trigger shipyard-ship-name"
+                  data-defense-detail="{{ dk }}"
+                  title="{{ T('defense_detail_open') }}">{{ T("defense_" ~ dk) }}</button>
+
+          <span class="shipyard-ship-qty gc-mono">{{ qty|fmt_int }}</span>
+
         </div>
 
-        <ul class="defense-placeholder-list">
-          <li>{{ pi1 }}</li>
-          <li>{{ pi2 }}</li>
-          <li>{{ pi3 }}</li>
-        </ul>
+        {% endif %}
 
-        <div class="defense-tag-row">
-          <span class="defense-tag">{{ tag1 }}</span>
-          <span class="defense-tag">{{ tag2 }}</span>
-          <span class="defense-tag">{{ tag3 }}</span>
+        {% endfor %}
+
+      {% else %}
+
+        <p class="shipyard-empty" data-defense-no-units>{{ T("defense_no_units") }}</p>
+
+      {% endif %}
+
+    </div>
+
+  </section>
+
+
+
+  <section class="gc-panel shipyard-panel" aria-labelledby="defense-buildable-title">
+
+    <div class="gc-panel-header">
+
+      <span class="gc-panel-title" id="defense-buildable-title">{{ T("defense_buildable_title") }}</span>
+
+      <span class="gc-panel-subtitle">{{ T("defense_buildable_subtitle") }}</span>
+
+    </div>
+
+    <div class="shipyard-ship-list" data-defense-buildable-list>
+
+      {% set buildable = df.buildable_defense if df.buildable_defense is defined else [] %}
+
+      {% for unit in buildable %}
+
+      <article class="shipyard-ship-card defense-unit-card" data-defense-card="{{ unit.defense_key }}" data-unlocked="1">
+
+        <img src="{{ unit.icon|default('/static/img/defense/' ~ unit.defense_key ~ '.svg') }}" alt="" class="shipyard-ship-thumb" width="48" height="48" loading="lazy">
+
+        <div class="shipyard-ship-card-head">
+
+          <h3 class="shipyard-ship-card-title">
+
+            <button type="button" class="gc-ship-detail-trigger"
+                    data-defense-detail="{{ unit.defense_key }}"
+                    title="{{ T('defense_detail_open') }}">{{ T(unit.name_key|default("defense_" ~ unit.defense_key)) }}</button>
+
+          </h3>
+
+          <span class="shipyard-ship-role">{{ T("defense_role_" ~ unit.role|default("turret")) }}</span>
+
         </div>
-      </div>
-    </section>
 
-    <!-- RIGHT -->
-    <section class="gc-panel defense-panel">
-      <div class="gc-panel-header">
-        <span class="gc-panel-title">{{ mt }}</span>
-        <span class="gc-panel-subtitle">{{ ms }}</span>
-      </div>
+        <p class="shipyard-ship-desc hint">{{ T(unit.description_key|default("defense_" ~ unit.defense_key ~ "_desc")) }}</p>
 
-      <ul class="defense-roadmap-list">
-        <li>{{ r1 }}</li>
-        <li>{{ r2 }}</li>
-        <li>{{ r3 }}</li>
-        <li>{{ r4 }}</li>
-      </ul>
+        <div class="shipyard-ship-cost gc-mono">
 
-      <div class="defense-note">{{ note }}</div>
-    </section>
+          <span>{{ T("resource_metal") }} {{ unit.cost_metal|fmt_int }}</span>
 
-  </div>
+          <span>{{ T("resource_crystal") }} {{ unit.cost_crystal|fmt_int }}</span>
+
+        </div>
+
+        <p class="shipyard-ship-build-time gc-mono hint">{{ T("defense_build_time_per_unit", seconds=unit.build_seconds|fmt_int) }}</p>
+
+        <div class="shipyard-ship-actions">
+
+          <input type="number" min="1" max="999" value="1"
+
+                 class="gc-input shipyard-qty-input" data-defense-qty="{{ unit.defense_key }}"
+
+                 aria-label="{{ T('defense_amount_label') }}">
+
+          <button type="button" class="gc-btn gc-btn-ghost" data-defense-max="{{ unit.defense_key }}" data-max-qty="{{ unit.max_build|default(0) }}">
+
+            {{ T("shipyard_btn_max") }}
+
+          </button>
+
+          <button type="button" class="gc-btn gc-btn-primary"
+
+                  data-defense-build="{{ unit.defense_key }}"
+
+                  data-can-build="{{ '1' if unit.can_build else '0' }}"
+
+                  {% if not unit.can_build %}disabled aria-disabled="true"{% endif %}>
+
+            {{ T("defense_build_btn") }}
+
+          </button>
+
+        </div>
+
+        {% if not unit.can_build and unit.block_reason == 'queue_full' %}
+
+        <p class="shipyard-hint-warn">{{ T("shipyard_block_queue_full") }}</p>
+
+        {% elif not unit.can_build %}
+
+        <p class="shipyard-hint-warn">{{ T("shipyard_not_enough_resources") }}</p>
+
+        {% endif %}
+
+      </article>
+
+      {% else %}
+
+      <p class="shipyard-empty">{{ T("defense_no_buildable") }}</p>
+
+      {% endfor %}
+
+    </div>
+
+  </section>
+
+
+
+  {% if df.locked_defense is defined and df.locked_defense %}
+
+  <section class="gc-panel shipyard-panel" aria-labelledby="defense-locked-title">
+
+    <div class="gc-panel-header">
+
+      <span class="gc-panel-title" id="defense-locked-title">{{ T("defense_locked_title") }}</span>
+
+      <span class="gc-panel-subtitle">{{ T("defense_locked_subtitle") }}</span>
+
+    </div>
+
+    <div class="shipyard-ship-list shipyard-ship-list-locked" data-defense-locked-list>
+
+      {% for unit in df.locked_defense %}
+
+      <article class="shipyard-ship-card defense-unit-card is-locked" data-defense-card="{{ unit.defense_key }}" data-unlocked="0">
+
+        <img src="{{ unit.icon }}" alt="" class="shipyard-ship-thumb" width="48" height="48" loading="lazy">
+
+        <div class="shipyard-ship-card-head">
+
+          <h3 class="shipyard-ship-card-title">
+
+            <button type="button" class="gc-ship-detail-trigger"
+                    data-defense-detail="{{ unit.defense_key }}"
+                    title="{{ T('defense_detail_open') }}">{{ T(unit.name_key|default("defense_" ~ unit.defense_key)) }}</button>
+
+          </h3>
+
+          <span class="shipyard-ship-role">{{ T("defense_role_" ~ unit.role|default("turret")) }}</span>
+
+        </div>
+
+        <p class="shipyard-ship-desc hint">{{ T(unit.description_key|default("defense_" ~ unit.defense_key ~ "_desc")) }}</p>
+
+        <p class="shipyard-locked-reason">{{ T("defense_locked_level", level=unit.required_defense_factory_level) }}</p>
+
+        <div class="shipyard-ship-actions">
+
+          <input type="number" min="1" max="999" value="1" class="gc-input shipyard-qty-input" disabled>
+
+          <button type="button" class="gc-btn gc-btn-secondary" disabled>{{ T("defense_build_btn") }}</button>
+
+        </div>
+
+      </article>
+
+      {% endfor %}
+
+    </div>
+
+  </section>
+
+  {% endif %}
+
+
+
+  {% endif %}
+
 </div>
 
+
+
 {% endblock %}
+

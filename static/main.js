@@ -238,6 +238,7 @@
   function getDomPlanetId() {
     const roots = [
       document.getElementById("shipyard-page"),
+      document.getElementById("defense-page"),
       document.getElementById("fleet-page"),
       document.getElementById("trader-hub-page"),
       document.getElementById("build-queue-root"),
@@ -539,6 +540,7 @@
     if (path.endsWith("/trader-hub")) return "trader_hub";
     if (path.endsWith("/fleet")) return "fleet";
     if (path.endsWith("/shipyard")) return "shipyard";
+    if (path.endsWith("/defense")) return "defense";
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
     if (path.endsWith("/messages")) return "messages";
@@ -1590,6 +1592,13 @@
     },
   };
 
+  const DEFENSEQ = {
+    active: {
+      finishTime: 0,
+      totalSeconds: 0,
+    },
+  };
+
   function _hasLiveCountdownAt() {
     const now = getApproxServerNow();
     for (const el of document.querySelectorAll("[data-countdown-at]")) {
@@ -1604,10 +1613,12 @@
     const buildFinish = BUILDQ.active.finishTime > now;
     const researchFinish = RESEARCHQ.active.finishTime > now;
     const shipyardFinish = SHIPYARDQ.active.finishTime > now;
+    const defenseFinish = DEFENSEQ.active.finishTime > now;
     return (
       buildFinish ||
       researchFinish ||
       shipyardFinish ||
+      defenseFinish ||
       !!document.querySelector(".build-job.build-job-active") ||
       !!document.querySelector(".research-job.research-job-active") ||
       !!document.querySelector(".shipyard-job.shipyard-job-active") ||
@@ -2260,6 +2271,32 @@
       }
     }
 
+    const defenseActive = document.getElementById("defense-page")?.querySelector(".shipyard-job.shipyard-job-active");
+    if (defenseActive) {
+      const orderFinish = Number(defenseActive.getAttribute("data-finish-time") || 0);
+      const nextUnitFinish = Number(defenseActive.getAttribute("data-next-finish-time") || 0);
+      const total = Math.max(1, Number(defenseActive.getAttribute("data-total") || 1));
+      if (orderFinish) {
+        const orderRemaining = Math.max(0, orderFinish - serverNow);
+        const pct = 100 * (1 - orderRemaining / total);
+        const etaEl = document.getElementById("defense-eta-live");
+        const fillEl = document.getElementById("defense-bar-fill-live");
+        if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(orderRemaining)));
+        _applyProgressFill(fillEl, pct);
+        const subEta = document.getElementById("defense-queue-subtitle-eta");
+        if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(orderRemaining)));
+        if (nextUnitFinish > 0 && nextUnitFinish <= serverNow) {
+          const unitKey = `${defenseActive.dataset.queueJobId || ""}:${nextUnitFinish}`;
+          if (_defenseUnitFinishKey !== unitKey) {
+            _defenseUnitFinishKey = unitKey;
+            scheduleDefenseRefreshFromState(true);
+          }
+        } else if (orderRemaining <= 0) {
+          scheduleDefenseRefreshFromState(true);
+        }
+      }
+    }
+
     const ovBox = document.getElementById("overview-research-active");
     if (ovBox) {
       const finishAt = Number(ovBox.dataset.finishAt || 0);
@@ -2867,8 +2904,10 @@
       GC.startProgressTicker();
       if (gameStateIncludePanel()) {
         scheduleShipyardRefreshFromState(true);
+        scheduleDefenseRefreshFromState(true);
       } else {
         scheduleShipyardRefreshFromState();
+        scheduleDefenseRefreshFromState();
       }
 
       return hasActiveBuild || hasActiveResearchNow;
@@ -2876,7 +2915,7 @@
 
   function gameStateIncludePanel() {
     const page = typeof GC.detectPage === "function" ? GC.detectPage() : "";
-    return page === "buildings" || page === "research" || page === "shipyard" || page === "trader_hub";
+    return page === "buildings" || page === "research" || page === "shipyard" || page === "defense" || page === "trader_hub";
   }
 
   /** Lightweight HUD refresh — standalone fetch, no pageLifecycle abort. */
@@ -4782,6 +4821,442 @@
     GC.startProgressTicker();
   }
 
+  let _defenseRefreshTimer = null;
+  let _defenseUnitFinishKey = "";
+  let _defenseBound = false;
+  let _defensePollIntervalId = null;
+  let _lastDefenseQueueSignature = "";
+
+  function defenseIconUrl(defenseKey) {
+    return `/static/img/defense/${String(defenseKey || "").trim()}.svg`;
+  }
+
+  function defenseLabel(defenseKey) {
+    const k = String(defenseKey || "").trim();
+    return t(`defense_${k}`, k);
+  }
+
+  function normalizeDefenseApiPayload(res) {
+    if (!res) return null;
+    if (res.data && typeof res.data === "object") return res.data;
+    if (res.defenses && typeof res.defenses === "object") {
+      return {
+        ...res.defenses,
+        defense_queue: res.queue || res.defenses.defense_queue,
+      };
+    }
+    return null;
+  }
+
+  function renderDefenseInventory(page, stock) {
+    const inv = page.querySelector("[data-defense-inventory]");
+    if (!inv) return;
+    const tt = (key, fb) => t(key, fb);
+    const entries = Object.entries(stock || {}).filter(([, qty]) => Number(qty) > 0);
+    inv.replaceChildren();
+    if (!entries.length) {
+      const empty = document.createElement("p");
+      empty.className = "shipyard-empty";
+      empty.dataset.defenseNoUnits = "1";
+      empty.textContent = tt("defense_no_units", "No defense units on this planet yet.");
+      inv.appendChild(empty);
+      return;
+    }
+    entries.sort(([a], [b]) => a.localeCompare(b));
+    entries.forEach(([dk, qty]) => {
+      const row = document.createElement("div");
+      row.className = "shipyard-inventory-row";
+      row.dataset.invDefense = dk;
+      const nameBtn = document.createElement("button");
+      nameBtn.type = "button";
+      nameBtn.className = "gc-ship-detail-trigger shipyard-ship-name";
+      nameBtn.dataset.defenseDetail = dk;
+      nameBtn.title = tt("defense_detail_open", "View defense properties");
+      nameBtn.textContent = defenseLabel(dk);
+      const qtyEl = document.createElement("span");
+      qtyEl.className = "shipyard-ship-qty gc-mono";
+      qtyEl.textContent = fmtNumber(qty);
+      row.append(nameBtn, qtyEl);
+      inv.appendChild(row);
+    });
+  }
+
+  function parseDefensePageData(page) {
+    const el = document.getElementById("defense-page-state");
+    if (!el) return null;
+    try {
+      return JSON.parse(el.textContent || "{}");
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function _defenseQueueSignature(queueList, summary) {
+    try {
+      const count = summary?.count ?? (queueList?.length ?? 0);
+      const items = (queueList || [])
+        .map(
+          (j) =>
+            `${j.id}:${j.units_delivered ?? 0}:${j.amount_remaining ?? j.amount}:${j.next_finish_at || j.finish_at || 0}`
+        )
+        .join("|");
+      return `${count}|${items}`;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function _updateDefenseQueueSubtitle(count, limit, firstEta) {
+    const subEl = document.querySelector("[data-defense-queue-subtitle]");
+    if (!subEl) return;
+    const fb = t("defense_queue_slots", "%(count)s / %(limit)s orders");
+    const jobsLabel = t("shipyard_queue_jobs", "Orders");
+    const nextLabel = t("build_queue_next", "Next completion in");
+    const html = `${count}/${limit} ${jobsLabel} · ${nextLabel}: <span id="defense-queue-subtitle-eta">${firstEta}</span>`;
+    if (subEl.innerHTML !== html) subEl.innerHTML = html;
+  }
+
+  function renderDefenseQueue(page, queuePayload) {
+    const list = page.querySelector("[data-defense-queue-list]");
+    if (!list) return;
+    const tt = (key, fb) => t(key, fb);
+    const jobs = queuePayload?.queue || [];
+    const summary = queuePayload?.summary || {};
+    const sig = _defenseQueueSignature(jobs, summary);
+    if (sig && sig === _lastDefenseQueueSignature) return;
+    _lastDefenseQueueSignature = sig;
+
+    const activeJob = jobs.find((j) => j.is_active) || jobs[0];
+    if (activeJob && activeJob.finish_at) {
+      DEFENSEQ.active.finishTime = Number(activeJob.finish_at);
+      DEFENSEQ.active.totalSeconds = Number(activeJob.order_total_seconds || activeJob.total_seconds || 1);
+    } else {
+      DEFENSEQ.active.finishTime = 0;
+      DEFENSEQ.active.totalSeconds = 0;
+    }
+
+    _updateDefenseQueueSubtitle(
+      summary.count ?? jobs.length,
+      summary.limit ?? 3,
+      activeJob ? formatEta(Math.ceil(activeJob.order_remaining ?? activeJob.remaining ?? 0)) : "–"
+    );
+
+    list.replaceChildren();
+    if (!jobs.length) {
+      const empty = document.createElement("p");
+      empty.className = "shipyard-empty";
+      empty.dataset.defenseQueueEmpty = "1";
+      empty.textContent = tt("defense_queue_empty", "No defense orders in queue.");
+      list.appendChild(empty);
+      return;
+    }
+
+    const wrap = document.createElement("div");
+    wrap.className = "shipyard-queue-list-inner";
+    jobs.forEach((job, idx) => {
+      const isActive = !!job.is_active || idx === 0;
+      const totalUnits = Number(job.amount_total ?? job.amount ?? 1);
+      const delivered = Number(job.units_delivered ?? 0);
+      const orderTotal = Number(job.order_total_seconds ?? job.total_seconds ?? 1);
+      const orderRem = Number(job.order_remaining ?? job.remaining ?? 0);
+      const pct = isActive && orderTotal > 0 ? 100 * (1 - orderRem / orderTotal) : 0;
+      const iconSrc = job.icon || defenseIconUrl(job.defense_key);
+
+      const art = document.createElement("article");
+      art.className = `shipyard-job${isActive ? " shipyard-job-active" : " shipyard-job-queued"}`;
+      art.dataset.queueJobId = String(job.id);
+      if (isActive) {
+        art.dataset.finishTime = String(Math.floor(job.finish_at || 0));
+        art.dataset.nextFinishTime = String(Math.floor(job.next_finish_at || job.finish_at || 0));
+        art.dataset.total = String(orderTotal);
+      }
+
+      const icon = document.createElement("div");
+      icon.className = "shipyard-job-icon";
+      const img = document.createElement("img");
+      img.src = iconSrc;
+      img.alt = "";
+      img.loading = "lazy";
+      icon.appendChild(img);
+
+      const body = document.createElement("div");
+      body.className = "shipyard-job-body";
+
+      const header = document.createElement("div");
+      header.className = "job-header";
+      const name = document.createElement("span");
+      name.className = "job-name";
+      name.textContent =
+        totalUnits > 1
+          ? `${defenseLabel(job.defense_key)} · ${tt("shipyard_queue_progress", "%(done)s / %(total)s")
+              .replace("%(done)s", String(delivered))
+              .replace("%(total)s", String(totalUnits))}`
+          : defenseLabel(job.defense_key);
+      const timeEl = document.createElement("span");
+      timeEl.className = `job-time${isActive ? "" : " job-time-muted"}`;
+      if (isActive) timeEl.id = "defense-eta-live";
+      timeEl.textContent = isActive
+        ? tt("shipyard_queue_remaining", "%(seconds)s s").replace("%(seconds)s", String(Math.ceil(orderRem)))
+        : tt("status_in_queue", "Queued");
+      header.append(name, timeEl);
+
+      const bar = document.createElement("div");
+      bar.className = "build-bar build-bar-large";
+      const fill = document.createElement("div");
+      fill.className = "build-bar-fill gc-progress-smooth";
+      if (isActive) fill.id = "defense-bar-fill-live";
+      fill.style.width = `${Math.floor(pct)}%`;
+      bar.appendChild(fill);
+
+      const actions = document.createElement("div");
+      actions.className = "shipyard-queue-job-actions job-actions";
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "gc-btn gc-btn-ghost gc-btn-xs gc-btn-danger";
+      cancelBtn.dataset.defenseQueueCancel = String(job.id);
+      cancelBtn.textContent = tt("shipyard_queue_cancel_btn", "Cancel");
+      actions.appendChild(cancelBtn);
+
+      const badge = document.createElement("span");
+      badge.className = isActive ? "job-badge-active" : "job-badge-queued";
+      badge.textContent = isActive
+        ? tt("buildings_btn_active", "Active")
+        : `#${idx + 1}`;
+
+      body.append(header, bar, actions, badge);
+      art.append(icon, body);
+      wrap.appendChild(art);
+    });
+    list.appendChild(wrap);
+    GC.startProgressTicker();
+  }
+
+  function applyDefenseState(page, data) {
+    if (!page || !data) return;
+    const tt = (key, fallback) => t(key, fallback);
+    if (data.planet_id != null) page.dataset.planetId = String(data.planet_id);
+    if (data.defense_factory_level != null) {
+      page.dataset.factoryLevel = String(data.defense_factory_level);
+      const lvlEl = page.querySelector("[data-defense-factory-label]");
+      if (lvlEl) {
+        lvlEl.textContent = tt("defense_factory_level", "Level %(level)s").replace(
+          "%(level)s",
+          fmtNumber(data.defense_factory_level)
+        );
+      }
+    }
+    if (data.planet_name) {
+      const scopeEl = page.querySelector("[data-defense-planet-scope]");
+      if (scopeEl) {
+        const label = tt("defense_planet_scope", "Active planet: %(name)s").replace(
+          "%(name)s",
+          String(data.planet_name)
+        );
+        scopeEl.textContent = label;
+        let coordsEl = scopeEl.querySelector("[data-defense-planet-coords]");
+        if (data.planet_coords) {
+          if (!coordsEl) {
+            coordsEl = document.createElement("span");
+            coordsEl.className = "defense-planet-coords";
+            coordsEl.dataset.defensePlanetCoords = "1";
+            scopeEl.appendChild(document.createTextNode(" "));
+            scopeEl.appendChild(coordsEl);
+          }
+          coordsEl.textContent = `(${data.planet_coords})`;
+        } else if (coordsEl) {
+          coordsEl.remove();
+        }
+      }
+    }
+    if (data.resources) {
+      Object.entries(data.resources).forEach(([key, val]) => {
+        const el = page.querySelector(`[data-df-res="${key}"]`);
+        if (el) el.textContent = fmtNumber(val);
+      });
+    }
+    if (data.current_defense) {
+      renderDefenseInventory(page, data.current_defense);
+    }
+    if (data.defense_queue) renderDefenseQueue(page, data.defense_queue);
+    (data.buildable_defense || []).forEach((unit) => {
+      const card = page.querySelector(`[data-defense-card="${unit.defense_key}"]`);
+      if (!card) return;
+      const stockEl = card.querySelector(`[data-defense-stock="${unit.defense_key}"]`);
+      if (stockEl && unit.stock != null) stockEl.textContent = fmtNumber(unit.stock);
+      const maxBtn = card.querySelector(`[data-defense-max="${unit.defense_key}"]`);
+      if (maxBtn) maxBtn.dataset.maxQty = String(unit.max_build || 0);
+      const btn = card.querySelector(`[data-defense-build="${unit.defense_key}"]`);
+      if (btn) {
+        btn.dataset.canBuild = unit.can_build ? "1" : "0";
+        btn.disabled = !unit.can_build;
+      }
+      const buildTimeEl = card.querySelector(".shipyard-ship-build-time");
+      if (buildTimeEl && unit.build_seconds != null) {
+        buildTimeEl.textContent = tt("defense_build_time_per_unit", "Build time: %(seconds)s s per unit").replace(
+          "%(seconds)s",
+          fmtNumber(unit.build_seconds)
+        );
+      }
+    });
+  }
+
+  async function refreshDefenseState(page) {
+    const planetId = parseInt(page.dataset.planetId || "0", 10);
+    const q = planetId ? `?planet_id=${planetId}` : "";
+    const res = await GC.fetchGameAction(`/api/defense${q}`, { method: "GET" });
+    const payload = normalizeDefenseApiPayload(res);
+    if (res?.ok && payload) {
+      applyDefenseState(page, payload);
+      return payload;
+    }
+    return null;
+  }
+
+  function scheduleDefenseRefreshFromState(immediate) {
+    const page = document.getElementById("defense-page");
+    if (!page || page.dataset.ready !== "1") return;
+    if (_defenseRefreshTimer != null) {
+      clearTimeout(_defenseRefreshTimer);
+      _defenseRefreshTimer = null;
+    }
+    _lastDefenseQueueSignature = "";
+    const delay = immediate ? 0 : 150;
+    _defenseRefreshTimer = GC.setSafeTimeout(() => {
+      _defenseRefreshTimer = null;
+      if (page.dataset.queueRefreshBusy === "1") return;
+      page.dataset.queueRefreshBusy = "1";
+      refreshDefenseState(page)
+        .finally(() => {
+          delete page.dataset.queueRefreshBusy;
+          _defenseUnitFinishKey = "";
+        });
+    }, delay);
+  }
+
+  function stopDefenseTimers() {
+    if (_defensePollIntervalId != null) {
+      clearInterval(_defensePollIntervalId);
+      _defensePollIntervalId = null;
+    }
+  }
+
+  function startDefenseTimers() {
+    stopDefenseTimers();
+    const page = document.getElementById("defense-page");
+    if (!page || page.dataset.ready !== "1") return;
+    GC.startProgressTicker();
+    _defensePollIntervalId = GC.setSafeInterval(() => {
+      const p = document.getElementById("defense-page");
+      if (!p || p.dataset.ready !== "1" || !document.body.contains(p)) {
+        stopDefenseTimers();
+        return;
+      }
+      if (!p.dataset.queueRefreshBusy) refreshDefenseState(p).catch(() => {});
+    }, Math.max(3000, Number(GC.shipyardPollMs) || 5000));
+  }
+
+  function bindDefenseOnce() {
+    if (_defenseBound) return;
+    _defenseBound = true;
+    const tt = (key, fallback) => t(key, fallback);
+    const apiError = (res) => (res && (res.error || res.reason)) || "generic";
+    const reasonText = (reason) =>
+      tt(`defense_error_${reason}`, tt(`fleet_error_${reason}`, reason || "Error"));
+
+    document.addEventListener("click", async (e) => {
+      const page = document.getElementById("defense-page");
+      if (!page || page.dataset.ready !== "1") return;
+
+      const maxBtn = e.target.closest("[data-defense-max]");
+      if (maxBtn && page.contains(maxBtn)) {
+        e.preventDefault();
+        const dk = maxBtn.getAttribute("data-defense-max");
+        const qtyInp = page.querySelector(`[data-defense-qty="${dk}"]`);
+        const maxQty = parseInt(maxBtn.dataset.maxQty || "0", 10);
+        if (qtyInp && maxQty > 0) qtyInp.value = String(maxQty);
+        return;
+      }
+
+      const cancelBtn = e.target.closest("[data-defense-queue-cancel]");
+      if (cancelBtn && page.contains(cancelBtn)) {
+        e.preventDefault();
+        const jobId = parseInt(cancelBtn.getAttribute("data-defense-queue-cancel") || "0", 10);
+        const planetId = parseInt(page.dataset.planetId || "0", 10);
+        if (!jobId) return;
+        cancelBtn.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/defense/cancel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ job_id: jobId, planet_id: planetId || undefined }),
+          });
+          if (res?.ok) {
+            showNotify(tt("defense_cancel_ok", "Order cancelled."), "success");
+            const payload = normalizeDefenseApiPayload(res);
+            if (payload) applyDefenseState(page, payload);
+            else await refreshDefenseState(page);
+            if (typeof GC.refreshGameState === "function") await GC.refreshGameState("defense_cancel");
+          } else {
+            showNotify(reasonText(res?.error || apiError(res)), "error");
+          }
+        } catch (_) {
+          showNotify(reasonText("generic"), "error");
+        } finally {
+          cancelBtn.disabled = false;
+        }
+        return;
+      }
+
+      const buildBtn = e.target.closest("[data-defense-build]");
+      if (!buildBtn || !page.contains(buildBtn) || buildBtn.disabled) return;
+      if (buildBtn.dataset.building === "1" || buildBtn.dataset.canBuild === "0") return;
+      e.preventDefault();
+      const defenseKey = buildBtn.getAttribute("data-defense-build");
+      const qtyInp = page.querySelector(`[data-defense-qty="${defenseKey}"]`);
+      const amount = parseInt(qtyInp?.value || "1", 10) || 1;
+      const planetId = parseInt(page.dataset.planetId || "0", 10);
+      buildBtn.dataset.building = "1";
+      buildBtn.disabled = true;
+      buildBtn.classList.add("is-loading");
+      try {
+        const res = await GC.fetchGameAction("/api/defense/build", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ defense_key: defenseKey, amount, planet_id: planetId || undefined }),
+        });
+        if (res?.ok) {
+          showNotify(tt("defense_build_ok", "Defense units queued."), "success");
+          const payload = normalizeDefenseApiPayload(res);
+          if (payload) applyDefenseState(page, payload);
+          else await refreshDefenseState(page);
+          if (typeof GC.refreshGameState === "function") await GC.refreshGameState("defense_build");
+        } else {
+          showNotify(reasonText(res?.error || apiError(res)), "error");
+        }
+      } catch (_) {
+        showNotify(reasonText("generic"), "error");
+      } finally {
+        delete buildBtn.dataset.building;
+        buildBtn.classList.remove("is-loading");
+        buildBtn.disabled = buildBtn.dataset.canBuild !== "1";
+      }
+    });
+  }
+
+  function initDefense() {
+    bindDefenseOnce();
+    const page = document.getElementById("defense-page");
+    if (!page || page.dataset.ready !== "1") return;
+    const data = parseDefensePageData(page);
+    if (!data) return;
+    applyDefenseState(page, data);
+    startDefenseTimers();
+    GC.registerCleanup(stopDefenseTimers);
+    GC.startProgressTicker();
+  }
+
+  GC.refreshDefenseState = refreshDefenseState;
+
   function initExchangePanel() {
     const panel = document.getElementById("gc-exchange-panel");
     if (!panel || panel.dataset.disabled === "1") return;
@@ -6056,7 +6531,7 @@
     const cur = payload?.current_player || {};
     const top = Array.isArray(payload?.top_players) ? payload.top_players : [];
     return RANKING_TABS.filter((tab) => {
-      if (tab.id === "total" || tab.id === "building" || tab.id === "research" || tab.id === "fleet" || tab.id === "evolution") return true;
+      if (tab.id === "total" || tab.id === "building" || tab.id === "research" || tab.id === "fleet" || tab.id === "defense" || tab.id === "evolution") return true;
       const curScore = Number(cur[tab.scoreKey]) || 0;
       const anyScore = top.some((row) => (Number(row[tab.scoreKey]) || 0) > 0);
       return curScore > 0 || anyScore;
@@ -6423,6 +6898,7 @@
   GC.modules.trader_hub = initTraderHub;
   GC.modules.fleet = initFleet;
   GC.modules.shipyard = initShipyard;
+  GC.modules.defense = initDefense;
   GC.modules.buildings = initBuildings;
   GC.modules.research = initResearch;
   GC.modules.planet_evolution = initPlanetEvolution;
@@ -8096,7 +8572,7 @@
 
     const wrap = document.createElement("div");
     wrap.innerHTML = html;
-    const shell = wrap.querySelector(".gc-ship-detail-shell, .gc-player-card-shell");
+    const shell = wrap.querySelector(".gc-ship-detail-shell, .gc-defense-detail-shell, .gc-player-card-shell");
     SHIP_DETAIL.content.innerHTML = "";
     if (shell) {
       SHIP_DETAIL.content.appendChild(shell);
@@ -8121,6 +8597,66 @@
     openShipDetailModal(!wasOpen);
     sdSetLoading(true);
     return true;
+  }
+
+  async function fetchDefenseDetailHtml(defenseKey, reqToken) {
+    sdAbortFetch();
+    const ctrl = new AbortController();
+    SHIP_DETAIL.abort = ctrl;
+    const key = encodeURIComponent(String(defenseKey || "").trim());
+    try {
+      const res = await fetch(`/api/defense-units/${key}`, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "text/html",
+        },
+        signal: ctrl.signal,
+      });
+      if (reqToken !== SHIP_DETAIL.reqId) {
+        return { ok: false, aborted: true };
+      }
+      const html = await res.text();
+      if (reqToken !== SHIP_DETAIL.reqId) {
+        return { ok: false, aborted: true };
+      }
+      if (!res.ok) {
+        return { ok: false, html, status: res.status };
+      }
+      return { ok: true, html, status: res.status };
+    } catch (e) {
+      if (e && e.name === "AbortError") {
+        return { ok: false, aborted: true };
+      }
+      throw e;
+    } finally {
+      if (SHIP_DETAIL.abort === ctrl) SHIP_DETAIL.abort = null;
+    }
+  }
+
+  async function loadDefenseDetail(defenseKey) {
+    if (!sdPrepareOpen(defenseKey)) return;
+    if (SHIP_DETAIL.titleEl) {
+      SHIP_DETAIL.titleEl.textContent = t("defense_detail_title", "Defense specifications");
+    }
+    const reqToken = SHIP_DETAIL.reqId;
+    try {
+      const result = await fetchDefenseDetailHtml(defenseKey, reqToken);
+      if (result.aborted || reqToken !== SHIP_DETAIL.reqId) return;
+      if (!result.ok) {
+        if (result.html && result.html.includes("gc-ship-detail-shell")) {
+          mountShipDetailHtml(result.html);
+        } else {
+          sdSetError(t("defense_detail_not_found", t("defense_detail_load_error", "Could not load defense data.")));
+        }
+        return;
+      }
+      mountShipDetailHtml(result.html);
+    } catch (_) {
+      if (reqToken !== SHIP_DETAIL.reqId) return;
+      sdSetError(t("defense_detail_load_error", "Could not load defense data."));
+    }
   }
 
   async function loadShipDetail(shipKey) {
@@ -8159,6 +8695,16 @@
         return;
       }
 
+      const defTrigger = e.target.closest("[data-defense-detail]");
+      if (defTrigger) {
+        const defenseKey = defTrigger.getAttribute("data-defense-detail");
+        if (!defenseKey) return;
+        e.preventDefault();
+        e.stopPropagation();
+        loadDefenseDetail(defenseKey);
+        return;
+      }
+
       const trigger = e.target.closest("[data-ship-detail]");
       if (!trigger) return;
       const shipKey = trigger.getAttribute("data-ship-detail");
@@ -8170,6 +8716,12 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
+      const defTrigger = e.target.closest("[data-defense-detail]");
+      if (defTrigger && document.activeElement === defTrigger) {
+        e.preventDefault();
+        loadDefenseDetail(defTrigger.getAttribute("data-defense-detail"));
+        return;
+      }
       const trigger = e.target.closest("[data-ship-detail]");
       if (!trigger || document.activeElement !== trigger) return;
       e.preventDefault();
@@ -8178,6 +8730,7 @@
   }
 
   GC.openShipDetail = loadShipDetail;
+  GC.openDefenseDetail = loadDefenseDetail;
   GC.closeShipDetail = closeShipDetailModal;
 
   function initPlayerCardOnce() {

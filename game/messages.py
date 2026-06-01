@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -366,15 +366,95 @@ def notify_espionage(
 ) -> dict[str, Any]:
     from .i18n import tr
 
+    meta = normalize_espionage_metadata(metadata)
     return notify_player(
         player_id,
         subject,
         body,
         category="espionage",
-        metadata=metadata,
+        metadata=meta,
         sender_name=tr("messages_sender_espionage", "Spionagebericht", locale=locale),
         conn=conn,
     )
+
+
+def normalize_espionage_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    """Ensure structured spy report blocks (incl. defense) are present for inbox renderers."""
+    meta = dict(metadata or {})
+    tiers = meta.get("intel_tiers")
+    if isinstance(tiers, dict) and "defense" not in tiers:
+        tiers = dict(tiers)
+        tiers.setdefault("defense", False)
+        meta["intel_tiers"] = tiers
+    if "defense" not in meta:
+        meta["defense"] = {}
+    return meta
+
+
+def append_spy_defense_report_lines(
+    body_lines: list[str],
+    defense: Mapping[str, Any],
+    *,
+    tiers: Mapping[str, Any],
+    probe_count: int,
+    tr,
+    fmt_int,
+) -> None:
+    """Append plain-text defense intel section to a spy report body."""
+    from .defense_defs import get_defense
+
+    if tiers.get("defense"):
+        lines: list[str] = []
+        total_units = int(defense.get("total_units") or 0)
+        defense_power = int(defense.get("defense_power") or 0)
+        shield_power = int(defense.get("shield_power") or 0)
+        lines.append(
+            tr(
+                "fleet_spy_report_defense_total",
+                "Defense units: %(count)s",
+                count=fmt_int(total_units),
+            )
+        )
+        lines.append(
+            tr(
+                "fleet_spy_report_defense_power",
+                "Defense power: %(power)s",
+                power=fmt_int(defense_power),
+            )
+        )
+        lines.append(
+            tr(
+                "fleet_spy_report_shield_power",
+                "Shield power: %(power)s",
+                power=fmt_int(shield_power),
+            )
+        )
+        units = defense.get("units") or {}
+        if units:
+            for key, qty in sorted(units.items()):
+                spec = get_defense(str(key)) or {}
+                label = tr(str(spec.get("name_key") or key), str(key))
+                lines.append(f"{label} ×{fmt_int(int(qty or 0))}")
+        elif total_units <= 0:
+            lines.append(tr("fleet_spy_report_defense_empty", "No defensive structures detected"))
+        accuracy_pct = defense.get("accuracy_pct")
+        if accuracy_pct is not None and not defense.get("exact"):
+            lines.append(
+                tr(
+                    "fleet_spy_report_defense_accuracy",
+                    "Intel accuracy: ~%(pct)s%% (espionage research)",
+                    pct=fmt_int(int(accuracy_pct)),
+                )
+            )
+        title = tr("fleet_spy_report_section_defense", "Planetary defense")
+        body_lines.append(f"{title}\n" + "\n".join(f"  {line}" for line in lines))
+    elif int(probe_count) >= 4:
+        body_lines.append(
+            tr(
+                "fleet_spy_report_defense_locked",
+                "Planetary defense: insufficient probe data",
+            )
+        )
 
 
 def notify_expedition(

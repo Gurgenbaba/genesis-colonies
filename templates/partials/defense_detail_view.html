@@ -1,0 +1,76 @@
+{# Defense unit detail partial (AJAX) #}
+{% set card = card if card is defined and card else {} %}
+
+<div class="gc-player-card-shell gc-ship-detail-shell gc-defense-detail-shell"
+     data-defense-key="{{ card.get('defense_key', '') }}"
+     data-theme="cyan">
+
+  <div class="gc-player-card-profile">
+    <div class="gc-player-card-hero gc-player-card-hero-compact">
+      {% if card.get('icon') %}
+      <img src="{{ card.icon }}" alt="" class="gc-ship-detail-icon" width="72" height="72" loading="lazy">
+      {% endif %}
+      <div class="gc-player-card-identity">
+        <h3 class="gc-player-card-commander">{{ T(card.get('name_key', ''), card.get('defense_key', '')) }}</h3>
+        {% if card.get('role_key') %}
+        <p class="gc-ship-detail-role">{{ T(card.get('role_key', ''), card.get('role', '')) }}</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if card.get('description_key') %}
+  <div class="gc-player-card-bio gc-ship-detail-desc">
+    <p>{{ T(card.get('description_key', ''), '') }}</p>
+  </div>
+  {% endif %}
+
+  <div class="gc-player-card-stats">
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_attack") }}</span>
+      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('attack') or 0)|fmt_int }}</span>
+    </div>
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_shield") }}</span>
+      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('shield') or 0)|fmt_int }}</span>
+    </div>
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_hull") }}</span>
+      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('hull') or 0)|fmt_int }}</span>
+    </div>
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("defense_detail_stat_score") }}</span>
+      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_value') or 0)|fmt_int }}</span>
+    </div>
+  </div>
+
+  <div class="gc-ship-detail-build">
+    <span class="gc-player-card-stat-label">{{ T("ship_detail_build_section") }}</span>
+    <div class="gc-ship-detail-cost gc-mono">
+      <span>{{ T("resource_metal") }} {{ (card.get('build_cost_metal') or 0)|fmt_int }}</span>
+      <span>{{ T("resource_crystal") }} {{ (card.get('build_cost_crystal') or 0)|fmt_int }}</span>
+    </div>
+    <p class="gc-ship-detail-meta">
+      {{ T("ship_detail_build_time", seconds=(card.get('build_seconds') or 0)|fmt_int) }}
+      ·
+      {{ T("defense_detail_factory_level", level=(card.get('required_defense_factory_level') or 0)|fmt_int) }}
+    </p>
+  </div>
+
+  {% if card.get('requirements_items') %}
+  <div class="gc-ship-detail-reqs">
+    <span class="gc-player-card-stat-label">{{ T("ship_detail_requirements") }}</span>
+    <ul class="gc-ship-detail-req-list">
+      {% for item in card.requirements_items %}
+      <li class="gc-ship-detail-req-item{% if item.met %} is-met{% endif %}">
+        {% if item.type == 'building' %}
+        <span>{{ T('building_' ~ item.key, item.key) }} {{ item.current|fmt_int }}/{{ item.required|fmt_int }}</span>
+        {% else %}
+        <span>{{ T(item.key, item.key) }} {{ item.current|fmt_int }}/{{ item.required|fmt_int }}</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>

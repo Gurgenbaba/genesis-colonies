@@ -2,6 +2,7 @@
 Galactic ranking service – single source of truth for scores and ranks.
 
 total_score = weighted(building) + weighted(research) + weighted(fleet) + defense + evolution
+military_score = fleet_score + defense_score (derived, for ranking API / profile)
 Component weights from game_settings: score_weight_buildings, score_weight_research, score_weight_fleet.
 """
 
@@ -47,12 +48,15 @@ def _sanitize_scores(scores: Dict[str, Any]) -> Dict[str, int]:
     defense = _safe_int(scores.get("defense_score", scores.get("score_defense", 0)))
     evolution = _safe_int(scores.get("evolution_score", scores.get("score_planet_evolution", 0)))
     total = _safe_int(building + research + fleet + defense + evolution)
+    from .scoring import compute_military_score
+
     return {
         "total_score": total,
         "building_score": building,
         "research_score": research,
         "fleet_score": fleet,
         "defense_score": defense,
+        "military_score": compute_military_score(fleet, defense),
         "evolution_score": evolution,
     }
 
@@ -133,6 +137,13 @@ def _compute_fleet_sum_costs(player_id: int, conn) -> int:
     return _safe_int(fleet_sum)
 
 
+def _compute_defense_sum_costs(player_id: int, conn) -> int:
+    """Raw defense empire sum (amount × score_value) before exponent."""
+    from .scoring import compute_defense_empire_sum
+
+    return _safe_int(compute_defense_empire_sum(int(player_id), conn=conn))
+
+
 def compute_player_scores(
     player_id: int,
     conn=None,
@@ -190,7 +201,8 @@ def compute_player_scores(
         fleet_score = _safe_int(
             ((fleet_sum_costs**exp) * w_fleet) if fleet_sum_costs > 0 else 0
         )
-        defense_score = 0
+        defense_sum_costs = _compute_defense_sum_costs(int(player_id), conn)
+        defense_score = _safe_int((defense_sum_costs**exp) if defense_sum_costs > 0 else 0)
         evolution_score = 0
         try:
             from .planet_evolution.scoring import compute_player_evolution_score
@@ -242,19 +254,24 @@ def _normalize_db_row(row: Optional[dict]) -> Dict[str, int]:
 
 def format_scores_for_playercard(normalized: Dict[str, int]) -> Dict[str, int]:
     """Map internal normalized scores to PlayerCard template/API field names."""
+    fleet = int(normalized.get("fleet_score", 0) or 0)
+    defense = int(normalized.get("defense_score", 0) or 0)
+    military = int(normalized.get("military_score", fleet + defense) or 0)
     return {
         "score_total": int(normalized.get("total_score", 0) or 0),
         "score_buildings": int(normalized.get("building_score", 0) or 0),
         "score_research": int(normalized.get("research_score", 0) or 0),
-        "score_fleet": int(normalized.get("fleet_score", 0) or 0),
-        "score_defense": int(normalized.get("defense_score", 0) or 0),
+        "score_fleet": fleet,
+        "score_defense": defense,
+        "score_military": military,
         "score_planet_evolution": int(normalized.get("evolution_score", 0) or 0),
         # Backward-compatible aliases (ranking/HUD internals)
         "total_score": int(normalized.get("total_score", 0) or 0),
         "building_score": int(normalized.get("building_score", 0) or 0),
         "research_score": int(normalized.get("research_score", 0) or 0),
-        "fleet_score": int(normalized.get("fleet_score", 0) or 0),
-        "defense_score": int(normalized.get("defense_score", 0) or 0),
+        "fleet_score": fleet,
+        "defense_score": defense,
+        "military_score": military,
         "evolution_score": int(normalized.get("evolution_score", 0) or 0),
     }
 
@@ -784,7 +801,15 @@ def get_player_score_cached(
     Cached score read for HUD/header. Keys: total, buildings, research (+ fleet/defense when present).
     """
     if not player_id:
-        return {"total": 0, "buildings": 0, "research": 0, "fleet": 0, "defense": 0, "evolution": 0}
+        return {
+            "total": 0,
+            "buildings": 0,
+            "research": 0,
+            "fleet": 0,
+            "defense": 0,
+            "military": 0,
+            "evolution": 0,
+        }
 
     pid = int(player_id)
     now = time.time()
@@ -796,6 +821,7 @@ def get_player_score_cached(
             "research": int(s.get("research_score", 0)),
             "fleet": int(s.get("fleet_score", 0)),
             "defense": int(s.get("defense_score", 0)),
+            "military": int(s.get("military_score", 0)),
             "evolution": int(s.get("evolution_score", 0)),
         }
 
@@ -1234,6 +1260,23 @@ def get_player_category_ranks(player_id: int, conn=None) -> Dict[str, Any]:
         )
         ranks["defense"] = int(cur.fetchone()["better"]) + 1
 
+    if column_exists(conn, "player_scores", "score_fleet") and column_exists(
+        conn, "player_scores", "score_defense"
+    ):
+        my_mil = my_fleet + my_def
+        cur.execute(
+            """
+            SELECT COUNT(*) AS better FROM player_scores
+            WHERE (COALESCE(score_fleet, 0) + COALESCE(score_defense, 0)) > ?
+               OR (
+                    (COALESCE(score_fleet, 0) + COALESCE(score_defense, 0)) = ?
+                    AND player_id < ?
+                  )
+            """,
+            (my_mil, my_mil, int(player_id)),
+        )
+        ranks["military"] = int(cur.fetchone()["better"]) + 1
+
     if column_exists(conn, "player_scores", "score_planet_evolution"):
         cur.execute(
             """
@@ -1268,6 +1311,7 @@ def _current_player_payload(
         "research_score": int(my_scores.get("research", 0)),
         "fleet_score": int(my_scores.get("fleet", 0)),
         "defense_score": int(my_scores.get("defense", 0)),
+        "military_score": int(my_scores.get("military", 0)),
         "evolution_score": int(my_scores.get("evolution", 0)),
         "ranks": category_ranks,
     }
@@ -1280,6 +1324,7 @@ def _current_player_payload(
         current["research_score"] = in_top["research_score"]
         current["fleet_score"] = in_top["fleet_score"]
         current["defense_score"] = in_top["defense_score"]
+        current["military_score"] = in_top.get("military_score", 0)
         current["evolution_score"] = in_top.get("evolution_score", 0)
 
     return current
@@ -1423,4 +1468,5 @@ def recompute_and_upsert_score(
         "score_research": scores["research_score"],
         "score_fleet": scores["fleet_score"],
         "score_defense": scores["defense_score"],
+        "score_military": scores["military_score"],
     }

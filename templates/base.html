@@ -16,7 +16,7 @@
 </head>
 
 {% set SIMPLE_LAYOUT = request.endpoint in ['landing', 'login', 'register', 'forgot_password', 'reset_password', 'verify_email'] %}
-{% set WIP_ENDPOINTS = ['defense_view', 'alliance_view'] %}
+{% set WIP_ENDPOINTS = ['alliance_view'] %}
 {% set _motd_enabled = (motd_enabled if motd_enabled is defined else False) %}
 {% set _motd_text = (motd_text if motd_text is defined else "") %}
 {% set _player_stats = (PLAYER_STATS if PLAYER_STATS is defined and PLAYER_STATS else {}) %}
@@ -221,9 +221,8 @@
         </a>
 
         <a href="{{ url_for('defense_view') }}"
-           class="gc-nav-link gc-nav-wip {% if request.endpoint == 'defense_view' %}active{% endif %}">
+           class="gc-nav-link {% if request.endpoint == 'defense_view' %}active{% endif %}">
           {{ T("nav_defense") }}
-          <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
         </a>
 
         <a href="{{ url_for('fleet_view') }}"
@@ -369,8 +368,8 @@
         <a href="{{ url_for('shipyard_view') }}" class="gc-nav-drawer-link {% if request.endpoint == 'shipyard_view' %}active{% endif %}">
           {{ T("nav_shipyard") }}
         </a>
-        <a href="{{ url_for('defense_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'defense_view' %}active{% endif %}">
-          {{ T("nav_defense") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        <a href="{{ url_for('defense_view') }}" class="gc-nav-drawer-link {% if request.endpoint == 'defense_view' %}active{% endif %}">
+          {{ T("nav_defense") }}
         </a>
         <a href="{{ url_for('fleet_view') }}" class="gc-nav-drawer-link {% if request.endpoint == 'fleet_view' %}active{% endif %}">
           {{ T("nav_fleet") }}

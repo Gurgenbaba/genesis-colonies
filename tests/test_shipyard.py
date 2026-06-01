@@ -64,6 +64,7 @@ def _grant_ship_test_prereqs(cur, planet_id: int, user_id: int) -> None:
         (int(planet_id),),
     )
     for tech in (
+        "energy_tech",
         "mining_tech",
         "drone_tech",
         "engine_tech",
