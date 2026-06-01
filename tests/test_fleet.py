@@ -890,6 +890,49 @@ def test_collect_with_departure_cargo(fleet_db):
     conn.close()
 
 
+def test_collect_fills_max_cargo_capacity(fleet_db):
+    from game.fleet_calc import loaded_resource_total
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000 WHERE id = ?;", (pid,))
+    cur.execute(
+        "UPDATE planets SET metal = 8000, crystal = 10000, fuel_cells = 5000 WHERE id = ?;",
+        (colony2,),
+    )
+    _seed_ships(pid, uid, {"mule_courier": 2}, conn=conn)
+    conn.commit()
+
+    ok, reason, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="collect",
+        ships={"mule_courier": 2},
+        conn=conn,
+    )
+    assert ok, reason
+    fleet_id = result["fleet"]["id"]
+    cur.execute("UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;", (time.time() - 1, fleet_id))
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute("SELECT resources_json FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    resources = json.loads(cur.fetchone()["resources_json"])
+    assert loaded_resource_total(resources) == 10000
+    assert resources["metal"] == 8000
+    assert resources["crystal"] == 2000
+    assert resources["fuel_cells"] == 0
+    conn.close()
+
+
 def test_collect_foreign_blocked(fleet_db):
     foreign_uid, foreign_pid, (g, s, p) = _foreign_planet_standalone()
     conn = db()

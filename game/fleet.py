@@ -1479,6 +1479,24 @@ def _calculate_collect_load(
     return loaded
 
 
+def _planet_resources_for_collect_load(planet_id: int, *, conn) -> Dict[str, int]:
+    """Tick target production, then return collectable resource amounts."""
+    lock_planet_for_update(conn, int(planet_id))
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+    row = cur.fetchone()
+    if not row:
+        return {"metal": 0, "crystal": 0, "fuel_cells": 0}
+    from .resources import update_planet_resources
+
+    planet, *_rest = update_planet_resources(dict(row), conn=conn)
+    return {
+        "metal": max(0, int(float(planet.get("metal") or 0))),
+        "crystal": max(0, int(float(planet.get("crystal") or 0))),
+        "fuel_cells": max(0, int(float(planet.get("fuel_cells") or 0))),
+    }
+
+
 def _player_name(player_id: int, *, conn) -> str:
     cur = conn.cursor()
     cur.execute("SELECT name FROM players WHERE id = ? LIMIT 1;", (int(player_id),))
@@ -2061,6 +2079,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
     if mission == "collect":
         timing = _return_timing_from_now(movement, now=now)
         return_at = timing["return_at"]
+        ships = normalize_ships(ships)
         current_loaded = calculate_loaded_resources(resources)
         cargo_total = calculate_total_cargo(ships)
         remaining_cap = max(0, cargo_total - loaded_resource_total(current_loaded))
@@ -2073,15 +2092,8 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
             target_name = str(snapshot.get("planet_name") or "")
             owner_id = int(snapshot.get("owner_id") or 0)
             if owner_id == player_id:
-                res = snapshot.get("resources") or {}
-                collected = _calculate_collect_load(
-                    {
-                        "metal": res.get("metal", 0),
-                        "crystal": res.get("crystal", 0),
-                        "fuel_cells": res.get("fuel_cells", 0),
-                    },
-                    remaining_cap,
-                )
+                available = _planet_resources_for_collect_load(int(target_id), conn=conn)
+                collected = _calculate_collect_load(available, remaining_cap)
                 if loaded_resource_total(collected) > 0:
                     if not _debit_planet_resources(int(target_id), collected, conn=conn):
                         collected = {"metal": 0, "crystal": 0, "fuel_cells": 0}

@@ -3109,7 +3109,7 @@
       if (!form) return;
       const mission = form.querySelector("[data-fleet-mission]")?.value || "transport";
       const resFieldset = page.querySelector("[data-fleet-resources-fieldset]");
-      const showResources = ["transport", "deploy", "colonize"].includes(mission);
+      const showResources = ["transport", "deploy", "colonize", "collect"].includes(mission);
       if (resFieldset) resFieldset.hidden = !showResources;
       page.querySelectorAll("[data-fleet-mission] option").forEach((opt) => {
         opt.disabled = false;
