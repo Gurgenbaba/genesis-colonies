@@ -2305,6 +2305,72 @@ def test_api_fleet_state_processes_due_return(fleet_db, monkeypatch):
         verify.close()
 
 
+def test_api_game_state_completes_due_fleet_return(fleet_db, monkeypatch):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000 WHERE id = ?;", (pid,))
+    _seed_ships(pid, uid, {"mule_courier": 2}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="collect",
+        ships={"mule_courier": 1},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    now = time.time()
+    cur.execute(
+        """
+        UPDATE fleet_movements
+        SET arrival_at = ?, status = 'returning', return_at = ?, resources_json = ?
+        WHERE id = ?;
+        """,
+        (now - 200, now - 1, json.dumps({"metal": 1000, "crystal": 0, "fuel_cells": 0}), fleet_id),
+    )
+    conn.commit()
+    conn.close()
+
+    import importlib
+
+    import app as app_module
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    r = client.get("/api/game-state")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    activities = data["overview"]["status"]["activities"]
+    fleet_rows = [a for a in activities if str(a.get("key", "")).startswith("fleet")]
+    assert len(fleet_rows) == 1
+    assert fleet_rows[0]["key"] == "fleet"
+    assert fleet_rows[0]["state"] == "idle"
+
+    verify = db()
+    try:
+        row = verify.execute(
+            "SELECT status FROM fleet_movements WHERE id = ?;",
+            (fleet_id,),
+        ).fetchone()
+        assert row["status"] == "completed"
+    finally:
+        verify.close()
+
+
 def test_fleet_ui_active_buttons_have_handlers():
     """Non-disabled fleet buttons must be wired in initFleet (static contract)."""
     from pathlib import Path

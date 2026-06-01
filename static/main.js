@@ -124,6 +124,10 @@
   function setServerTime(serverTimeSec) {
     const v = Number(serverTimeSec);
     if (!Number.isFinite(v) || v <= 0) return;
+    const approx = getApproxServerNow();
+    if (TIME.serverNow && Number.isFinite(approx) && v + 1.0 < approx) {
+      return;
+    }
     TIME.serverNow = v;
     TIME.clientPerfAt = performance.now();
   }
@@ -3213,7 +3217,8 @@
       }
 
       const signature = list.map((mv) => `${mv.id}:${mv.phase || mv.leg_phase || mv.status}:${mv.countdown_at || 0}`).join("|");
-      if (activeListEl.dataset.fleetSig !== signature) {
+      const sigChanged = activeListEl.dataset.fleetSig !== signature;
+      if (sigChanged) {
         activeListEl.dataset.fleetSig = signature;
         activeListEl.innerHTML = list.map((mv) => {
         const countdownAt = Number(mv.countdown_at || 0);
@@ -3289,6 +3294,7 @@
     const applyLiveState = (page, state) => {
       const rt = getFleetRuntime(page);
       if (!state || typeof state !== "object") return;
+      if (state.server_time) setServerTime(state.server_time);
       if (state.resources) {
         rt.data.resources = state.resources;
         ["metal", "crystal", "fuel_cells"].forEach((res) => {

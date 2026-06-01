@@ -2311,23 +2311,20 @@ def _payload_from_live_context(
     from game.planet_evolution.repository import get_active_planet_id, get_context_planet
 
     planet = get_context_planet(user_id, conn=conn)
-    if lightweight:
-        payload["overview"]["status"] = None
-    else:
-        payload["overview"]["status"] = build_overview_status(
-            user_id=user_id,
-            player_view=player_view,
-            ratio=float(ratio),
-            energy_total=int(energy_total),
-            energy_used=int(energy_used),
-            storage_caps=storage_caps,
-            prod_per_hour=prod_per_hour,
-            build_queue=build_queue,
-            research=research,
-            planet=planet,
-            include_log=False,
-            conn=conn,
-        )
+    payload["overview"]["status"] = build_overview_status(
+        user_id=user_id,
+        player_view=player_view,
+        ratio=float(ratio),
+        energy_total=int(energy_total),
+        energy_used=int(energy_used),
+        storage_caps=storage_caps,
+        prod_per_hour=prod_per_hour,
+        build_queue=build_queue,
+        research=research,
+        planet=planet,
+        include_log=False,
+        conn=conn,
+    )
 
     active_planet_id = get_active_planet_id(user_id)
     payload["active_planet_id"] = int(active_planet_id)
@@ -2545,6 +2542,13 @@ def api_status():
 @app.route("/api/game-state")
 @require_login
 def api_game_state():
+    user_id = int(session.get("user_id") or 0)
+    if user_id:
+        from game.fleet import fleet_schema_ready, process_fleet_tick
+
+        if fleet_schema_ready(db()):
+            process_fleet_tick(player_id=user_id)
+
     want_panel = request.args.get("include_panel", "").lower() in ("1", "true", "yes")
     payload, _player_id = _build_game_state_payload(
         include_panel=True,

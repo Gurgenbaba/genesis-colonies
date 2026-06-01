@@ -2827,6 +2827,7 @@ def get_fleet_live_state(
         return {
             "ready": True,
             "planet_id": int(planet_id),
+            "server_time": time.time(),
             "ships": ships,
             "has_ships": sum(int(v) for v in ships.values()) > 0,
             "resources": {

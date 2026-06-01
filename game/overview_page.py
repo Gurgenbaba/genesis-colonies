@@ -368,7 +368,9 @@ def _load_overview_queue_fleet(
         from .fleet import fleet_schema_ready, list_active_movements, process_fleet_tick
 
         if fleet_schema_ready(conn):
-            process_fleet_tick(player_id=int(user_id), conn=conn)
+            # External conn: caller must run process_fleet_tick + commit before listing.
+            if own:
+                process_fleet_tick(player_id=int(user_id), conn=conn)
             fleet_movements = list_active_movements(int(user_id), conn=conn)
         from .shipyard import get_shipyard_level
         from .shipyard_queue import shipyard_queue_for_client, shipyard_queue_table_ready
