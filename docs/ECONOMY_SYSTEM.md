@@ -72,6 +72,7 @@ Modifier: `mining_tech`, `drone_tech`, `storage_tech`, Settings (`production_spe
 - Wachstum via Storage-Gebäude + `STORAGE_GROW^1.8`
 - Multiplier: `storage_tech`, `terraformer`, `storage_factor`
 - Produktion kann Storage nicht überschreiten; bestehendes Overflow wird nicht getrimmt
+- **Trader Hub + Schrottplatz** dürfen jederzeit über Cap gutschreiben (Overflow bleibt erhalten)
 
 ---
 

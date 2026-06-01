@@ -2349,6 +2349,17 @@
     startResourceTicker();
   }
 
+  function projectLiveResourceAmount(current, prodPerHour, cap, hours) {
+    const cur = Math.max(0, Math.floor(Number(current) || 0));
+    const prod = Math.max(0, Math.floor(Number(prodPerHour) || 0));
+    const h = Math.max(0, Number(hours) || 0);
+    const capN = Math.floor(Number(cap) || 0);
+    if (capN <= 0) return Math.floor(cur + prod * h);
+    // Overflow (trader/scrapyard/rewards): never clamp existing stock; production only fills to cap.
+    if (cur >= capN) return cur;
+    return Math.min(capN, Math.floor(cur + prod * h));
+  }
+
   function projectLiveResourceAmounts(nowSec) {
     if (!_resourceLive.planetId || !_resourceLive.syncedAt) return null;
     const elapsed = Math.max(0, Number(nowSec) - _resourceLive.syncedAt);
@@ -2360,13 +2371,10 @@
       };
     }
     const hours = elapsed / 3600;
-    const capM = _resourceLive.capMetal > 0 ? _resourceLive.capMetal : Number.MAX_SAFE_INTEGER;
-    const capC = _resourceLive.capCrystal > 0 ? _resourceLive.capCrystal : Number.MAX_SAFE_INTEGER;
-    const capF = _resourceLive.capFuelCells > 0 ? _resourceLive.capFuelCells : Number.MAX_SAFE_INTEGER;
     return {
-      metal: Math.min(capM, Math.floor(_resourceLive.metal + _resourceLive.prodMetal * hours)),
-      crystal: Math.min(capC, Math.floor(_resourceLive.crystal + _resourceLive.prodCrystal * hours)),
-      fuelCells: Math.min(capF, Math.floor(_resourceLive.fuelCells + _resourceLive.prodFuelCells * hours)),
+      metal: projectLiveResourceAmount(_resourceLive.metal, _resourceLive.prodMetal, _resourceLive.capMetal, hours),
+      crystal: projectLiveResourceAmount(_resourceLive.crystal, _resourceLive.prodCrystal, _resourceLive.capCrystal, hours),
+      fuelCells: projectLiveResourceAmount(_resourceLive.fuelCells, _resourceLive.prodFuelCells, _resourceLive.capFuelCells, hours),
     };
   }
 
@@ -2797,7 +2805,7 @@
       patchOverviewStatus(data.overview, data, buildings, prod);
       if (data.exchange) patchExchangePanel(data.exchange);
       if (data.scrapyard) patchScrapyardPanel(data.scrapyard);
-      patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, data.player?.fuel_cells);
+      patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, fuelCells, storageFuelCells);
       if (data.planet_teaser) patchPlanetTeaser(data.planet_teaser);
 
       if (data.buildings_panel) {
@@ -5158,7 +5166,7 @@
     list.innerHTML = renderScrapyardRows(scrapyard.ships);
   }
 
-  function patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, fuelCells) {
+  function patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, fuelCells, storageFuelCells) {
     const page = document.getElementById("trader-hub-page");
     if (!page) return;
     const metalVal = page.querySelector('[data-res="metal"]');
@@ -5166,13 +5174,16 @@
     const fuelVal = page.querySelector('[data-res="fuel_cells"]');
     const metalCap = page.querySelector('[data-cap="metal"]');
     const crystalCap = page.querySelector('[data-cap="crystal"]');
+    const fuelCap = page.querySelector('[data-cap="fuel_cells"]');
     const metalBar = page.querySelector('[data-res-bar="metal"]');
     const crystalBar = page.querySelector('[data-res-bar="crystal"]');
+    const fuelBar = page.querySelector('[data-res-bar="fuel_cells"]');
     if (metalVal) _setIfChanged(metalVal, fmtNumber(metal));
     if (crystalVal) _setIfChanged(crystalVal, fmtNumber(crystal));
     if (fuelVal && typeof fuelCells === "number") _setIfChanged(fuelVal, fmtNumber(fuelCells));
     if (metalCap && storageMetal > 0) _setIfChanged(metalCap, `/ ${fmtNumber(storageMetal)}`);
     if (crystalCap && storageCrystal > 0) _setIfChanged(crystalCap, `/ ${fmtNumber(storageCrystal)}`);
+    if (fuelCap && storageFuelCells > 0) _setIfChanged(fuelCap, `/ ${fmtNumber(storageFuelCells)}`);
     if (metalBar && storageMetal > 0) {
       const pct = Math.min(100, Math.floor((Number(metal) / storageMetal) * 100));
       metalBar.style.width = `${pct}%`;
@@ -5180,6 +5191,10 @@
     if (crystalBar && storageCrystal > 0) {
       const pct = Math.min(100, Math.floor((Number(crystal) / storageCrystal) * 100));
       crystalBar.style.width = `${pct}%`;
+    }
+    if (fuelBar && storageFuelCells > 0) {
+      const pct = Math.min(100, Math.floor((Number(fuelCells) / storageFuelCells) * 100));
+      fuelBar.style.width = `${pct}%`;
     }
   }
 

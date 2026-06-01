@@ -143,6 +143,33 @@ def apply_production_delta(
     planet["crystal"] = current_crystal + int(delta_crystal)
 
 
+def apply_fuel_production_delta(
+    planet: dict,
+    buildings: Dict[str, int],
+    delta_fuel_cells: int = 0,
+    research: Optional[Dict[str, int]] = None,
+    mods: Optional[Dict[str, float]] = None,
+) -> None:
+    """
+    Brennzellen-Produktion:
+    - Zuwachs stoppt am Werks-Lager (wie Minen-Produktion).
+    - Bestehendes Overflow (Tausch/Schrott/Rewards) wird nie abgeschnitten.
+    """
+    if delta_fuel_cells <= 0:
+        return
+    caps = get_storage_capacity(buildings, research=research, mods=mods)
+    fuel_cap = int(caps.get("fuel_cells") or 0)
+    current_fuel = max(0, int(float(planet.get("fuel_cells") or 0)))
+    if fuel_cap > 0 and current_fuel >= fuel_cap:
+        return
+    if fuel_cap > 0:
+        free_fuel = max(0, fuel_cap - current_fuel)
+        delta_fuel_cells = min(int(delta_fuel_cells), free_fuel)
+    if delta_fuel_cells <= 0:
+        return
+    planet["fuel_cells"] = max(0.0, float(current_fuel) + delta_fuel_cells)
+
+
 def apply_resource_delta_unbounded(
     planet: dict,
     delta_metal: int = 0,
@@ -243,17 +270,13 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
                 research=research,
                 mods=mods,
             )
-            if delta_fuel_cells > 0:
-                caps = get_storage_capacity(buildings, research=research, mods=mods)
-                fuel_cap = int(caps.get("fuel_cells") or 0)
-                current_fuel = max(0, int(float(planet.get("fuel_cells") or 0)))
-                if fuel_cap > 0:
-                    free_fuel = max(0, fuel_cap - current_fuel)
-                    delta_fuel_cells = min(int(delta_fuel_cells), free_fuel)
-                planet["fuel_cells"] = max(
-                    0.0,
-                    float(current_fuel) + delta_fuel_cells,
-                )
+            apply_fuel_production_delta(
+                planet,
+                buildings,
+                delta_fuel_cells=delta_fuel_cells,
+                research=research,
+                mods=mods,
+            )
 
         planet["last_update"] = now
         planet["energy_total"] = int(energy_total)

@@ -87,6 +87,35 @@ def test_main_js_patches_fuel_cells():
     assert "syncResourceLiveBaseline" in js
     assert "tickLiveResourceBar" in js
     assert "projectLiveResourceAmounts" in js
+    assert "projectLiveResourceAmount" in js
+    assert "Overflow (trader/scrapyard/rewards)" in js
+
+
+def test_fuel_overflow_not_trimmed_on_production_tick(fuel_db):
+    from game.resources import update_planet_resources
+
+    conn = db()
+    uid = _player(conn=conn)
+    planet = dict(get_homeworld(player_id=uid, conn=conn))
+    pid = int(planet["id"])
+    overflow_amount = 5_000_000
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE planet_buildings SET fuel_cell_plant = 10, solar_plant = 10 WHERE planet_id = ?;",
+        (pid,),
+    )
+    cur.execute(
+        "UPDATE planets SET fuel_cells = ?, last_update = ? WHERE id = ?;",
+        (overflow_amount, time.time() - 7200, pid),
+    )
+    conn.commit()
+    cur.execute("SELECT * FROM planets WHERE id = ?;", (pid,))
+    planet = dict(cur.fetchone())
+    update_planet_resources(planet, conn=conn)
+    conn.commit()
+    after = int(cur.execute("SELECT fuel_cells FROM planets WHERE id = ?;", (pid,)).fetchone()["fuel_cells"])
+    conn.close()
+    assert after >= overflow_amount
 
 
 def test_fuel_cell_plant_production_increases_balance(fuel_db):
