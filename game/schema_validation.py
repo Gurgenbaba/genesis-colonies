@@ -23,7 +23,7 @@ _CORE_TABLE_SPECS: Tuple[Tuple[str, Tuple[str, ...], Tuple[str, ...]], ...] = (
     (
         "player_scores",
         ("player_id", "score_total", "score_buildings", "score_research"),
-        ("score_fleet", "score_defense", "rank_total", "rank_building", "rank_research"),
+        ("score_fleet", "score_defense", "rank_total", "rank_building", "rank_research", "rank_fleet"),
     ),
 )
 

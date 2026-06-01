@@ -130,6 +130,9 @@ def recycle_ships(
                 ),
             )
 
+        from .ranking import on_player_score_changed
+
+        on_player_score_changed(int(player_id), conn=conn)
         commit(conn)
 
         return True, "", {

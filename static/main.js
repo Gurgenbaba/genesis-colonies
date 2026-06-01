@@ -5867,13 +5867,65 @@
   }
 
   const RANKING_TABS = [
-    { id: "total", scoreKey: "total_score", rankKey: "rank_total", labelKey: "ranking_tab_total", fallback: "Total" },
-    { id: "building", scoreKey: "building_score", rankKey: "rank_building", labelKey: "ranking_tab_buildings", fallback: "Buildings" },
-    { id: "research", scoreKey: "research_score", rankKey: "rank_research", labelKey: "ranking_tab_research", fallback: "Research" },
-    { id: "evolution", scoreKey: "evolution_score", rankKey: null, labelKey: "ranking_tab_evolution", fallback: "Planet Evolution" },
-    { id: "fleet", scoreKey: "fleet_score", rankKey: null, labelKey: "ranking_tab_fleet", fallback: "Fleet" },
-    { id: "defense", scoreKey: "defense_score", rankKey: null, labelKey: "ranking_tab_defense", fallback: "Defense" },
+    {
+      id: "total",
+      scoreKey: "total_score",
+      rankKey: "rank_total",
+      labelKey: "ranking_tab_total",
+      colLabelKey: "ranking_col_total",
+      fallback: "Total",
+      colFallback: "Total Score",
+    },
+    {
+      id: "building",
+      scoreKey: "building_score",
+      rankKey: "rank_building",
+      labelKey: "ranking_tab_buildings",
+      colLabelKey: "ranking_col_buildings",
+      fallback: "Buildings",
+      colFallback: "Buildings",
+    },
+    {
+      id: "research",
+      scoreKey: "research_score",
+      rankKey: "rank_research",
+      labelKey: "ranking_tab_research",
+      colLabelKey: "ranking_col_research",
+      fallback: "Research",
+      colFallback: "Research",
+    },
+    {
+      id: "evolution",
+      scoreKey: "evolution_score",
+      rankKey: null,
+      labelKey: "ranking_tab_evolution",
+      colLabelKey: "ranking_col_evolution",
+      fallback: "Planet Evolution",
+      colFallback: "Evolution",
+    },
+    {
+      id: "fleet",
+      scoreKey: "fleet_score",
+      rankKey: "rank_fleet",
+      labelKey: "ranking_tab_fleet",
+      colLabelKey: "ranking_col_fleet",
+      fallback: "Fleet",
+      colFallback: "Fleet",
+    },
+    {
+      id: "defense",
+      scoreKey: "defense_score",
+      rankKey: null,
+      labelKey: "ranking_tab_defense",
+      colLabelKey: "ranking_col_defense",
+      fallback: "Defense",
+      colFallback: "Defense",
+    },
   ];
+
+  function rankingColLabel(tab) {
+    return rankingT(tab.colLabelKey || tab.labelKey, tab.colFallback || tab.fallback);
+  }
 
   function rankingT(key, fallback) {
     const loc = window.GC_LOCALE || {};
@@ -5899,7 +5951,7 @@
     const cur = payload?.current_player || {};
     const top = Array.isArray(payload?.top_players) ? payload.top_players : [];
     return RANKING_TABS.filter((tab) => {
-      if (tab.id === "total" || tab.id === "building" || tab.id === "research" || tab.id === "evolution") return true;
+      if (tab.id === "total" || tab.id === "building" || tab.id === "research" || tab.id === "fleet" || tab.id === "evolution") return true;
       const curScore = Number(cur[tab.scoreKey]) || 0;
       const anyScore = top.some((row) => (Number(row[tab.scoreKey]) || 0) > 0);
       return curScore > 0 || anyScore;
@@ -6092,7 +6144,7 @@
       `<span class="gc-ranking-my-value">${rankText}</span>` +
       `</div>` +
       `<div class="gc-ranking-my-score">` +
-      `<span class="gc-ranking-my-label">${rankingEscapeHtml(rankingT(tab.labelKey, tab.fallback))}</span>` +
+      `<span class="gc-ranking-my-label">${rankingEscapeHtml(rankingColLabel(tab))}</span>` +
       `<span class="gc-ranking-my-value gc-mono">${fmtNumber(score)}</span>` +
       `</div>`;
   }
@@ -6131,7 +6183,7 @@
 
     const rows = rankingSortedRows(payload, tabId);
     const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
-    const scoreLabel = rankingEscapeHtml(rankingT(tab.labelKey, tab.fallback));
+    const scoreLabel = rankingEscapeHtml(rankingColLabel(tab));
 
     if (!rows.length) {
       tableEl.innerHTML = `<p class="ranking-empty">${rankingEscapeHtml(rankingT("ranking_empty", "No data yet."))}</p>`;

@@ -24,6 +24,7 @@ BALANCE_SETTING_KEYS: Tuple[str, ...] = (
     "shipyard_queue_limit",
     "score_weight_buildings",
     "score_weight_research",
+    "score_weight_fleet",
     "exchange_enabled",
     "exchange_rate_metal_to_crystal",
     "exchange_rate_crystal_to_metal",
@@ -46,7 +47,7 @@ _FLOAT_POS = frozenset(
         "exchange_rate_crystal_to_metal",
     }
 )
-_FLOAT_NONNEG = frozenset({"score_weight_buildings", "score_weight_research"})
+_FLOAT_NONNEG = frozenset({"score_weight_buildings", "score_weight_research", "score_weight_fleet"})
 _BOOL_KEYS = frozenset({"exchange_enabled"})
 
 PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
@@ -61,6 +62,7 @@ PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
     "shipyard_queue_limit": 3,
     "score_weight_buildings": 1.0,
     "score_weight_research": 0.7,
+    "score_weight_fleet": 1.0,
     "exchange_enabled": True,
     "exchange_rate_metal_to_crystal": float(DEFAULT_GAME_SETTINGS["exchange_rate_metal_to_crystal"]),
     "exchange_rate_crystal_to_metal": float(DEFAULT_GAME_SETTINGS["exchange_rate_crystal_to_metal"]),

@@ -59,6 +59,7 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     # --- Score Defaults (Ranking) — Preset B: building 1.0, research 0.7 ---
     "score_weight_buildings": "1.0",
     "score_weight_research": "0.7",
+    "score_weight_fleet": "1.0",
     "score_cost_exponent": "1.0",  # 1.0 = linear, >1 = stärker
     "score_softcap": "0.0",        # 0 = aus, z.B. 250000
 }
@@ -348,6 +349,7 @@ def init_db() -> None:
         ("rank_total", "INTEGER"),
         ("rank_building", "INTEGER"),
         ("rank_research", "INTEGER"),
+        ("rank_fleet", "INTEGER"),
     ):
         if not column_exists(conn, "player_scores", col):
             cur.execute(f"ALTER TABLE player_scores ADD COLUMN {col} {ddl};")

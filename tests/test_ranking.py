@@ -347,7 +347,42 @@ def test_compute_player_scores_returns_zero_for_new_player(temp_db):
 
     assert scores["building_score"] == 0
     assert scores["research_score"] == 0
+    assert scores["fleet_score"] == 0
     assert scores["total_score"] == 0
+
+
+def test_compute_player_scores_includes_fleet(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("fleet_owner")
+    conn = db()
+    planet = conn.execute(
+        "SELECT id FROM planets WHERE player_id = ? AND is_homeworld = 1 LIMIT 1;",
+        (pid,),
+    ).fetchone()
+    assert planet
+    conn.execute(
+        """
+        INSERT INTO planet_ships (player_id, planet_id, ship_key, amount, created_at, updated_at)
+        VALUES (?, ?, 'spark_drone', 10, CAST(strftime('%s','now') AS INTEGER), CAST(strftime('%s','now') AS INTEGER))
+        ON CONFLICT DO NOTHING;
+        """,
+        (pid, int(planet["id"])),
+    )
+    conn.commit()
+    conn.close()
+    _close_db()
+
+    scores = compute_player_scores(pid)
+    # spark_drone: 500 metal + 200 crystal = 700 per hull × 10 = 7000
+    assert scores["fleet_score"] == 7000
+    assert scores["total_score"] == 7000
+
+    refresh = build_ranking_api_payload(pid, limit=10, refresh=True)
+    assert refresh["current_player"]["fleet_score"] == 7000
+    assert refresh["current_player"]["ranks"].get("fleet") == 1
 
 
 def test_migration_014_idempotent(temp_db):
@@ -359,6 +394,7 @@ def test_migration_014_idempotent(temp_db):
     conn.close()
     assert "score_fleet" in cols
     assert "rank_total" in cols
+    assert "rank_fleet" in cols
 
 
 def test_api_ranking_requires_login(app_client):

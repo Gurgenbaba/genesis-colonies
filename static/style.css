@@ -4322,12 +4322,21 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
    ========================= */
 .ranking-panel-full{ width: 100%; }
 
+.ranking-page,
+.ranking-panel-body,
+.ranking-table-content{
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 .gc-ranking-panel-head{
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .gc-ranking-panel-head-text{
@@ -4343,6 +4352,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 14px;
   flex-wrap: wrap;
   margin-left: auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .gc-ranking-my-rank,
@@ -4354,7 +4365,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.18);
   background: rgba(5, 10, 22, 0.62);
-  min-width: 120px;
+  min-width: 0;
+  max-width: min(168px, 100%);
 }
 
 .gc-ranking-my-label{
@@ -4362,6 +4374,10 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .gc-ranking-my-value{
@@ -4374,21 +4390,29 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .gc-ranking-tabs{
   padding: 4px 0 8px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .ranking-hint{ margin-top: 10px; color: var(--gc-text-soft); }
 
 .ranking-table-wrapper{
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* Social ranking list */
-.gc-ranking{ width: 100%; }
+.gc-ranking{
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
 
 .gc-ranking-desktop{ display: block; }
 .gc-ranking-mobile{ display: none; }
@@ -4415,6 +4439,9 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .gc-ranking-table tbody td.gc-ranking-score{
   text-align: right;
   width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gc-ranking-table thead th.gc-ranking-place,

@@ -1,8 +1,8 @@
 """
 Galactic ranking service – single source of truth for scores and ranks.
 
-total_score = weighted(building) + weighted(research) + fleet + defense + evolution
-Component weights from game_settings: score_weight_buildings, score_weight_research.
+total_score = weighted(building) + weighted(research) + weighted(fleet) + defense + evolution
+Component weights from game_settings: score_weight_buildings, score_weight_research, score_weight_fleet.
 """
 
 from __future__ import annotations
@@ -95,7 +95,7 @@ def _score_exponent(conn) -> float:
         return 1.0
 
 
-def _score_weights(conn) -> Tuple[float, float]:
+def _score_weights(conn) -> Tuple[float, float, float]:
     from .models import get_game_settings
 
     settings = get_game_settings(conn=conn) or {}
@@ -107,7 +107,30 @@ def _score_weights(conn) -> Tuple[float, float]:
         w_research = float(settings.get("score_weight_research", 1.0) or 1.0)
     except (TypeError, ValueError):
         w_research = 1.0
-    return max(0.0, w_build), max(0.0, w_research)
+    try:
+        w_fleet = float(settings.get("score_weight_fleet", 1.0) or 1.0)
+    except (TypeError, ValueError):
+        w_fleet = 1.0
+    return max(0.0, w_build), max(0.0, w_research), max(0.0, w_fleet)
+
+
+def _compute_fleet_sum_costs(player_id: int, conn) -> int:
+    """Sum metal+crystal build costs for all owned hulls (planets + active movements)."""
+    from .fleet import get_player_owned_ship_counts
+    from .shipyard import _unit_build_cost
+
+    totals = get_player_owned_ship_counts(int(player_id), conn=conn)
+    fleet_sum = 0
+    for ship_key, qty in totals.items():
+        count = int(qty or 0)
+        if count <= 0:
+            continue
+        cost = _unit_build_cost(str(ship_key))
+        unit = int(cost.get("metal") or 0) + int(cost.get("crystal") or 0)
+        if unit <= 0:
+            continue
+        fleet_sum += unit * count
+    return _safe_int(fleet_sum)
 
 
 def compute_player_scores(
@@ -126,7 +149,7 @@ def compute_player_scores(
 
     try:
         exp = _score_exponent(conn)
-        w_build, w_research = _score_weights(conn)
+        w_build, w_research, w_fleet = _score_weights(conn)
         from .buildings import BASE_COST, BUILDING_ORDER, COST_FACTOR
         from .research import RESEARCH_TECHS
 
@@ -163,7 +186,10 @@ def compute_player_scores(
             ((research_sum_costs**exp) * w_research) if research_sum_costs > 0 else 0
         )
 
-        fleet_score = 0
+        fleet_sum_costs = _compute_fleet_sum_costs(int(player_id), conn)
+        fleet_score = _safe_int(
+            ((fleet_sum_costs**exp) * w_fleet) if fleet_sum_costs > 0 else 0
+        )
         defense_score = 0
         evolution_score = 0
         try:
@@ -531,27 +557,49 @@ def recalculate_ranks(conn=None) -> int:
             rows,
             key=lambda r: (-r["research_score"], -r["building_score"], r["player_id"]),
         )
+        fleet_sorted = sorted(
+            rows,
+            key=lambda r: (-r["fleet_score"], -r["building_score"], r["player_id"]),
+        )
 
         rank_total_map = {r["player_id"]: idx for idx, r in enumerate(total_sorted, start=1)}
         rank_building_map = {r["player_id"]: idx for idx, r in enumerate(building_sorted, start=1)}
         rank_research_map = {r["player_id"]: idx for idx, r in enumerate(research_sorted, start=1)}
+        rank_fleet_map = {r["player_id"]: idx for idx, r in enumerate(fleet_sorted, start=1)}
 
+        has_rank_fleet = column_exists(conn, "player_scores", "rank_fleet")
         cur = conn.cursor()
         for row in rows:
             pid = row["player_id"]
-            cur.execute(
-                """
-                UPDATE player_scores
-                SET rank_total = ?, rank_building = ?, rank_research = ?
-                WHERE player_id = ?
-                """,
-                (
-                    rank_total_map.get(pid),
-                    rank_building_map.get(pid),
-                    rank_research_map.get(pid),
-                    pid,
-                ),
-            )
+            if has_rank_fleet:
+                cur.execute(
+                    """
+                    UPDATE player_scores
+                    SET rank_total = ?, rank_building = ?, rank_research = ?, rank_fleet = ?
+                    WHERE player_id = ?
+                    """,
+                    (
+                        rank_total_map.get(pid),
+                        rank_building_map.get(pid),
+                        rank_research_map.get(pid),
+                        rank_fleet_map.get(pid),
+                        pid,
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE player_scores
+                    SET rank_total = ?, rank_building = ?, rank_research = ?
+                    WHERE player_id = ?
+                    """,
+                    (
+                        rank_total_map.get(pid),
+                        rank_building_map.get(pid),
+                        rank_research_map.get(pid),
+                        pid,
+                    ),
+                )
         return len(rows)
 
     try:
@@ -966,6 +1014,8 @@ def get_sorted_ranking_entries(
     rank_select = ""
     if column_exists(conn, "player_scores", "rank_total"):
         rank_select = ", ps.rank_total, ps.rank_building, ps.rank_research"
+        if column_exists(conn, "player_scores", "rank_fleet"):
+            rank_select += ", ps.rank_fleet"
     cur.execute(
         f"""
         SELECT
@@ -1013,6 +1063,7 @@ def get_sorted_ranking_entries(
                 "rank_total": int(d["rank_total"]) if d.get("rank_total") is not None else None,
                 "rank_building": int(d["rank_building"]) if d.get("rank_building") is not None else None,
                 "rank_research": int(d["rank_research"]) if d.get("rank_research") is not None else None,
+                "rank_fleet": int(d["rank_fleet"]) if d.get("rank_fleet") is not None else None,
                 **scores,
                 **social,
             }
@@ -1143,8 +1194,11 @@ def get_player_category_ranks(player_id: int, conn=None) -> Dict[str, Any]:
     my_evo = _safe_int(score_row["score_planet_evolution"]) if "score_planet_evolution" in keys else 0
 
     if column_exists(conn, "player_scores", "rank_total"):
+        rank_cols = ["rank_total", "rank_building", "rank_research"]
+        if column_exists(conn, "player_scores", "rank_fleet"):
+            rank_cols.append("rank_fleet")
         cur.execute(
-            "SELECT rank_total, rank_building, rank_research FROM player_scores WHERE player_id = ?",
+            f"SELECT {', '.join(rank_cols)} FROM player_scores WHERE player_id = ?",
             (int(player_id),),
         )
         row = cur.fetchone()
@@ -1155,8 +1209,10 @@ def get_player_category_ranks(player_id: int, conn=None) -> Dict[str, Any]:
                 ranks["building"] = int(row["rank_building"])
             if row["rank_research"] is not None:
                 ranks["research"] = int(row["rank_research"])
+            if "rank_fleet" in row.keys() and row["rank_fleet"] is not None:
+                ranks["fleet"] = int(row["rank_fleet"])
 
-    if column_exists(conn, "player_scores", "score_fleet"):
+    if "fleet" not in ranks and column_exists(conn, "player_scores", "score_fleet"):
         cur.execute(
             """
             SELECT COUNT(*) AS better FROM player_scores

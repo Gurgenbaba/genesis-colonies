@@ -284,6 +284,57 @@ def get_planet_ships(planet_id: int, *, conn=None) -> Dict[str, int]:
             conn.close()
 
 
+def get_player_owned_ship_counts(player_id: int, *, conn=None) -> Dict[str, int]:
+    """All hulls owned by a player: planet hangars plus active fleet movements."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not fleet_schema_ready(conn):
+            return {}
+        totals: Dict[str, int] = {}
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT ship_key, SUM(amount) AS amt
+            FROM planet_ships
+            WHERE player_id = ? AND amount > 0
+            GROUP BY ship_key;
+            """,
+            (int(player_id),),
+        )
+        for row in cur.fetchall():
+            sk = canonical_ship_key(str(row["ship_key"]))
+            if not is_known_ship_key(sk):
+                continue
+            totals[sk] = totals.get(sk, 0) + _safe_int(row["amt"])
+
+        if table_exists(conn, "fleet_movements"):
+            placeholders = ",".join("?" for _ in ACTIVE_FLEET_STATUSES)
+            cur.execute(
+                f"""
+                SELECT ships_json
+                FROM fleet_movements
+                WHERE player_id = ? AND status IN ({placeholders});
+                """,
+                (int(player_id), *ACTIVE_FLEET_STATUSES),
+            )
+            for row in cur.fetchall():
+                ships = _json_loads(row["ships_json"], {}) or {}
+                for key, amount in ships.items():
+                    sk = canonical_ship_key(str(key))
+                    if not is_known_ship_key(sk):
+                        continue
+                    qty = max(0, _safe_int(amount))
+                    if qty <= 0:
+                        continue
+                    totals[sk] = totals.get(sk, 0) + qty
+        return totals
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def set_planet_ships(
     planet_id: int,
     player_id: int,
@@ -2805,6 +2856,9 @@ def seed_planet_ships_stack(
             set_planet_ships(int(planet_id), int(player_id), normalized, conn=conn)
         else:
             add_planet_ships(int(planet_id), int(player_id), normalized, conn=conn)
+        from .ranking import on_player_score_changed
+
+        on_player_score_changed(int(player_id), conn=conn)
         if own:
             commit(conn)
         return True, "", get_planet_ships(int(planet_id), conn=conn)
