@@ -1,7 +1,7 @@
-{# Unified 3-resource trader (Trader Hub) #}
+{# Unified 3-resource trader — Genesis console layout #}
 {% set ex = exchange if exchange is defined and exchange else {} %}
 {% set default_dir = 'metal_to_crystal' %}
-<section class="gc-exchange-panel gc-panel" id="gc-exchange-panel"
+<section class="gc-exchange-panel gc-trader-panel gc-panel" id="gc-exchange-panel"
          {% if not ex.enabled %}data-disabled="1"{% endif %}
          data-rate-m2c="{{ ex.rate_metal_to_crystal or 0.8 }}"
          data-rate-c2m="{{ ex.rate_crystal_to_metal or 0.8 }}"
@@ -11,68 +11,99 @@
          data-min="{{ ex.min_amount or 100 }}"
          data-dir="{{ default_dir }}"
          aria-label="{{ T('exchange_title') }}">
-  <div class="gc-panel-header">
-    <div class="gc-panel-head-left">
-      <span class="gc-panel-title">{{ T('exchange_title') }}</span>
-      <span class="gc-panel-subtitle hint">{{ T('exchange_hint') }}</span>
-    </div>
+  <div class="gc-trader-panel-head">
+    <h2 class="gc-trader-panel-title">{{ T('exchange_title')|upper }}</h2>
+    <p class="gc-trader-panel-hint hint">{{ T('exchange_hint') }}</p>
   </div>
 
   {% if ex.enabled %}
-  <div class="gc-exchange-route-picker">
-    <label class="gc-exchange-label" for="gc-exchange-route">{{ T('exchange_route') }}</label>
-    <select id="gc-exchange-route" class="gc-input gc-exchange-route-select" data-exchange-route>
-      <option value="metal_to_crystal" selected>{{ T('exchange_metal_to_crystal') }}</option>
-      <option value="crystal_to_metal">{{ T('exchange_crystal_to_metal') }}</option>
-      <option value="metal_to_fuel_cells">{{ T('exchange_metal_to_fuel_cells') }}</option>
-      <option value="crystal_to_fuel_cells">{{ T('exchange_crystal_to_fuel_cells') }}</option>
-      <option value="fuel_cells_to_metal">{{ T('exchange_fuel_cells_to_metal') }}</option>
-      <option value="fuel_cells_to_crystal">{{ T('exchange_fuel_cells_to_crystal') }}</option>
-    </select>
-  </div>
+  <select id="gc-exchange-route" class="gc-trader-select gc-exchange-route-select visually-hidden" data-exchange-route tabindex="-1" aria-hidden="true">
+    <option value="metal_to_crystal" selected>{{ T('exchange_metal_to_crystal') }}</option>
+    <option value="crystal_to_metal">{{ T('exchange_crystal_to_metal') }}</option>
+    <option value="metal_to_fuel_cells">{{ T('exchange_metal_to_fuel_cells') }}</option>
+    <option value="crystal_to_fuel_cells">{{ T('exchange_crystal_to_fuel_cells') }}</option>
+    <option value="fuel_cells_to_metal">{{ T('exchange_fuel_cells_to_metal') }}</option>
+    <option value="fuel_cells_to_crystal">{{ T('exchange_fuel_cells_to_crystal') }}</option>
+  </select>
 
-  <div class="gc-fuel-exchange-rates gc-exchange-formula" aria-live="polite">
-    <div class="gc-fuel-exchange-rate-card" data-exchange-give-card>
-      <img src="{{ url_for('static', filename='icons/ferronit.png') }}"
-           alt="" class="gc-fuel-exchange-icon" data-exchange-give-icon loading="lazy">
-      <span class="gc-fuel-exchange-rate-val gc-mono">1</span>
-      <span class="gc-fuel-exchange-rate-label" data-exchange-give-label>{{ T('resource_metal') }}</span>
+  <div class="gc-trader-exchange-pick">
+    <div class="gc-trader-pick-col">
+      <span class="gc-trader-pick-label">{{ T('exchange_give_label', 'I give')|upper }}</span>
+      <div class="gc-trader-resource-tiles" data-exchange-give-tiles role="group" aria-label="{{ T('exchange_give_label', 'I give') }}">
+        <button type="button" class="gc-trader-resource-tile is-active" data-exchange-give="metal" aria-pressed="true">
+          <img src="{{ url_for('static', filename='icons/ferronit.png') }}" alt="" width="28" height="28" loading="lazy">
+          <span>{{ T('resource_metal') }}</span>
+        </button>
+        <button type="button" class="gc-trader-resource-tile" data-exchange-give="crystal" aria-pressed="false">
+          <img src="{{ url_for('static', filename='icons/crytite.png') }}" alt="" width="28" height="28" loading="lazy">
+          <span>{{ T('resource_crystal') }}</span>
+        </button>
+        <button type="button" class="gc-trader-resource-tile" data-exchange-give="fuel_cells" aria-pressed="false">
+          <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" alt="" width="28" height="28" loading="lazy">
+          <span>{{ T('resource_fuel_cells') }}</span>
+        </button>
+      </div>
     </div>
-    <span class="gc-exchange-arrow" aria-hidden="true">→</span>
-    <div class="gc-fuel-exchange-rate-card" data-exchange-receive-card>
-      <img src="{{ url_for('static', filename='icons/crytite.png') }}"
-           alt="" class="gc-fuel-exchange-icon" data-exchange-receive-icon loading="lazy">
-      <span class="gc-fuel-exchange-rate-val gc-mono" data-exchange-rate-display>{{ ex.rate_metal_to_crystal }}</span>
-      <span class="gc-fuel-exchange-rate-label" data-exchange-receive-label>{{ T('resource_crystal') }}</span>
+    <span class="gc-trader-pick-swap" aria-hidden="true">⇄</span>
+    <div class="gc-trader-pick-col">
+      <span class="gc-trader-pick-label">{{ T('exchange_receive_label', 'I receive')|upper }}</span>
+      <div class="gc-trader-resource-tiles" data-exchange-receive-tiles role="group" aria-label="{{ T('exchange_receive_label', 'I receive') }}">
+        <button type="button" class="gc-trader-resource-tile" data-exchange-receive="metal" aria-pressed="false">
+          <img src="{{ url_for('static', filename='icons/ferronit.png') }}" alt="" width="28" height="28" loading="lazy">
+          <span>{{ T('resource_metal') }}</span>
+        </button>
+        <button type="button" class="gc-trader-resource-tile is-active" data-exchange-receive="crystal" aria-pressed="true">
+          <img src="{{ url_for('static', filename='icons/crytite.png') }}" alt="" width="28" height="28" loading="lazy">
+          <span>{{ T('resource_crystal') }}</span>
+        </button>
+        <button type="button" class="gc-trader-resource-tile" data-exchange-receive="fuel_cells" aria-pressed="false">
+          <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" alt="" width="28" height="28" loading="lazy">
+          <span>{{ T('resource_fuel_cells') }}</span>
+        </button>
+      </div>
     </div>
   </div>
 
-  <div class="gc-exchange-limit hint">
-    {{ T('exchange_daily_remaining') }}:
-    <strong data-exchange-daily-remaining>{{ ex.daily_remaining|fmt_int }}</strong>
-    / {{ ex.daily_limit|fmt_int }}
-  </div>
+  <form class="gc-exchange-form gc-trader-exchange-form" id="gc-exchange-form" novalidate>
+    <div class="gc-trader-amount-row">
+      <div class="gc-trader-amount-field">
+        <label class="gc-trader-field-label" for="gc-exchange-amount">{{ T('exchange_amount_give', 'Amount to give')|upper }}</label>
+        <input type="number"
+               id="gc-exchange-amount"
+               class="gc-trader-input gc-exchange-input"
+               min="{{ ex.min_amount }}"
+               step="1"
+               inputmode="numeric"
+               value="{{ ex.min_amount }}"
+               data-exchange-min="{{ ex.min_amount }}">
+      </div>
+      <span class="gc-trader-amount-arrow" aria-hidden="true">→</span>
+      <div class="gc-trader-amount-field">
+        <span class="gc-trader-field-label">{{ T('exchange_amount_receive', 'Amount to receive (approx.)')|upper }}</span>
+        <output class="gc-trader-input gc-trader-output gc-mono" data-exchange-preview aria-live="polite">–</output>
+      </div>
+    </div>
 
-  <form class="gc-exchange-form" id="gc-exchange-form" novalidate>
-    <label class="gc-exchange-label" for="gc-exchange-amount">{{ T('exchange_amount') }}</label>
-    <input type="number"
-           id="gc-exchange-amount"
-           class="gc-input gc-exchange-input"
-           min="{{ ex.min_amount }}"
-           step="1"
-           inputmode="numeric"
-           value="{{ ex.min_amount }}"
-           data-exchange-min="{{ ex.min_amount }}">
+    <div class="gc-exchange-formula gc-trader-info-bar" aria-live="polite">
+      <div class="gc-trader-info-cell">
+        <span class="gc-trader-info-label">{{ T('exchange_rate_label', 'Exchange rate')|upper }}</span>
+        <strong class="gc-mono" data-exchange-rate-display>{{ ex.rate_metal_to_crystal }}</strong>
+      </div>
+      <div class="gc-trader-info-cell">
+        <span class="gc-trader-info-label">{{ T('exchange_fee_label', 'Fee')|upper }}</span>
+        <strong class="gc-mono">0%</strong>
+      </div>
+      <div class="gc-trader-info-cell gc-trader-info-cell--accent">
+        <span class="gc-trader-info-label">{{ T('exchange_you_receive', 'You receive approx.')|upper }}</span>
+        <strong class="gc-mono" data-exchange-receive-summary>–</strong>
+      </div>
+    </div>
 
-    <p class="gc-exchange-preview hint">
-      {{ T('exchange_preview') }}:
-      <strong data-exchange-preview>–</strong>
-    </p>
+    <p class="gc-exchange-error gc-trader-error hint" data-exchange-error hidden></p>
 
-    <p class="gc-exchange-error hint" data-exchange-error hidden></p>
-
-    <button type="submit" class="gc-btn gc-btn-primary gc-exchange-submit">
-      {{ T('exchange_confirm') }}
+    <button type="submit" class="gc-btn gc-btn-primary gc-trader-submit gc-exchange-submit">
+      {{ T('exchange_confirm')|upper }}
+      <span class="gc-trader-submit-arrow" aria-hidden="true">›</span>
     </button>
   </form>
   {% else %}

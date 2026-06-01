@@ -3,57 +3,82 @@
 {% block content %}
 {% set player_obj = (player if player is defined and player else None) %}
 {% set caps = (storage_caps if storage_caps is defined and storage_caps else {'metal': 0, 'crystal': 0}) %}
+{% set ex = exchange if exchange is defined and exchange else {} %}
 {% set p_metal = (player_obj.metal if player_obj and player_obj.metal is defined else 0) | int %}
 {% set p_crystal = (player_obj.crystal if player_obj and player_obj.crystal is defined else 0) | int %}
 {% set p_fuel = (player_obj.fuel_cells if player_obj and player_obj.fuel_cells is defined else 0) | int %}
+{% set cap_metal = (caps.metal if caps and caps.metal is defined else (caps.get('metal', 0) if caps is mapping else 0)) | int %}
+{% set cap_crystal = (caps.crystal if caps and caps.crystal is defined else (caps.get('crystal', 0) if caps is mapping else 0)) | int %}
+{% set pct_metal = (p_metal * 100 // cap_metal) if cap_metal > 0 else 0 %}
+{% set pct_crystal = (p_crystal * 100 // cap_crystal) if cap_crystal > 0 else 0 %}
 
-<div class="gc-page trader-hub-page gc-trader-hub-ui" id="trader-hub-page"
+<div class="gc-page trader-hub-page gc-trader-shell" id="trader-hub-page"
      data-planet-id="{{ HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else '' }}">
-  <header class="gc-page-header section-header">
-    <h1 class="section-title">{{ T("trader_hub_title", "Trader Hub") }}</h1>
-    <p class="section-hint hint">{{ T("trader_hub_hint") }}</p>
+
+  <header class="gc-trader-header">
+    <div class="gc-trader-header-main">
+      <h1 class="gc-trader-title">{{ T("trader_hub_title", "Trader Hub")|upper }}</h1>
+      <p class="gc-trader-subtitle hint">{{ T("trader_hub_hint") }}</p>
+    </div>
+    <div class="gc-trader-daily-limit" aria-label="{{ T('exchange_daily_remaining') }}">
+      <span class="gc-trader-daily-label">{{ T('trader_hub_daily_limit', 'Daily limit (per commander)') }}</span>
+      <span class="gc-trader-daily-values gc-mono">
+        <strong data-exchange-daily-remaining>{{ ex.daily_remaining|fmt_int if ex.daily_remaining is defined else '–' }}</strong>
+        <span class="gc-trader-daily-sep">/</span>
+        <span data-exchange-daily-limit>{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}</span>
+      </span>
+    </div>
   </header>
 
-  <section class="gc-panel trader-hub-balance" aria-label="{{ T('trader_hub_balance', 'Kolonie-Bestand') }}">
-    <div class="overview-resources trader-hub-resources">
-      <article class="overview-res-card" aria-label="{{ T('resource_metal') }}">
-        <img src="{{ url_for('static', filename='icons/ferronit.png') }}"
-             alt="{{ T('resource_metal') }}" class="overview-res-icon" loading="lazy">
-        <div class="overview-res-meta">
-          <span class="overview-res-label">{{ T("resource_metal") }}</span>
-          <span class="overview-res-main">
-            <span class="gc-val" data-res="metal">{{ p_metal|fmt_int }}</span>
-            <span class="gc-cap" data-cap="metal">/ {{ (caps.metal if caps and caps.metal is defined else (caps.get('metal', 0) if caps is mapping else 0))|fmt_int }}</span>
-          </span>
+  <section class="gc-trader-resources" aria-label="{{ T('trader_hub_balance', 'Colony balance') }}">
+    <article class="gc-trader-resource-card" aria-label="{{ T('resource_metal') }}">
+      <img src="{{ url_for('static', filename='icons/ferronit.png') }}"
+           alt="" class="gc-trader-resource-icon" loading="lazy">
+      <div class="gc-trader-resource-meta">
+        <span class="gc-trader-resource-label">{{ T("resource_metal")|upper }}</span>
+        <span class="gc-trader-resource-values gc-mono">
+          <span class="gc-val" data-res="metal">{{ p_metal|fmt_int }}</span>
+          <span class="gc-cap" data-cap="metal">/ {{ cap_metal|fmt_int }}</span>
+        </span>
+        <div class="gc-trader-resource-bar" aria-hidden="true">
+          <span class="gc-trader-resource-bar-fill" data-res-bar="metal" style="width: {{ [pct_metal, 100]|min }}%;"></span>
         </div>
-      </article>
-      <article class="overview-res-card" aria-label="{{ T('resource_crystal') }}">
-        <img src="{{ url_for('static', filename='icons/crytite.png') }}"
-             alt="{{ T('resource_crystal') }}" class="overview-res-icon" loading="lazy">
-        <div class="overview-res-meta">
-          <span class="overview-res-label">{{ T("resource_crystal") }}</span>
-          <span class="overview-res-main">
-            <span class="gc-val" data-res="crystal">{{ p_crystal|fmt_int }}</span>
-            <span class="gc-cap" data-cap="crystal">/ {{ (caps.crystal if caps and caps.crystal is defined else (caps.get('crystal', 0) if caps is mapping else 0))|fmt_int }}</span>
-          </span>
+      </div>
+    </article>
+    <article class="gc-trader-resource-card" aria-label="{{ T('resource_crystal') }}">
+      <img src="{{ url_for('static', filename='icons/crytite.png') }}"
+           alt="" class="gc-trader-resource-icon" loading="lazy">
+      <div class="gc-trader-resource-meta">
+        <span class="gc-trader-resource-label">{{ T("resource_crystal")|upper }}</span>
+        <span class="gc-trader-resource-values gc-mono">
+          <span class="gc-val" data-res="crystal">{{ p_crystal|fmt_int }}</span>
+          <span class="gc-cap" data-cap="crystal">/ {{ cap_crystal|fmt_int }}</span>
+        </span>
+        <div class="gc-trader-resource-bar" aria-hidden="true">
+          <span class="gc-trader-resource-bar-fill" data-res-bar="crystal" style="width: {{ [pct_crystal, 100]|min }}%;"></span>
         </div>
-      </article>
-      <article class="overview-res-card" aria-label="{{ T('resource_fuel_cells') }}">
-        <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}"
-             alt="{{ T('resource_fuel_cells') }}" class="overview-res-icon" loading="lazy">
-        <div class="overview-res-meta">
-          <span class="overview-res-label">{{ T("resource_fuel_cells") }}</span>
-          <span class="overview-res-main">
-            <span class="gc-val" data-res="fuel_cells">{{ p_fuel|fmt_int }}</span>
-          </span>
-        </div>
-      </article>
-    </div>
+      </div>
+    </article>
+    <article class="gc-trader-resource-card gc-trader-resource-card--fuel" aria-label="{{ T('resource_fuel_cells') }}">
+      <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}"
+           alt="" class="gc-trader-resource-icon" loading="lazy">
+      <div class="gc-trader-resource-meta">
+        <span class="gc-trader-resource-label">{{ T("resource_fuel_cells")|upper }}</span>
+        <span class="gc-trader-resource-values gc-mono">
+          <span class="gc-val" data-res="fuel_cells">{{ p_fuel|fmt_int }}</span>
+        </span>
+      </div>
+    </article>
   </section>
 
-  <div class="trader-hub-grid trader-hub-panels">
+  <div class="gc-trader-columns">
     {% include "partials/exchange_panel.html" %}
     {% include "partials/scrapyard_panel.html" %}
   </div>
+
+  <footer class="gc-trader-footer hint">
+    <span class="gc-trader-footer-icon" aria-hidden="true">ⓘ</span>
+    {{ T('trader_hub_footer_note', 'All transactions are final. Metal and crystal output is limited by storage capacity on the active colony.') }}
+  </footer>
 </div>
 {% endblock %}
