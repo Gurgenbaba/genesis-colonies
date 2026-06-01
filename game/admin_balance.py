@@ -146,6 +146,81 @@ def _display_value(key: str, raw: Any) -> Any:
     return raw
 
 
+def build_balance_hud_snapshot(player_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Read-only HUD payload after balance changes — no queue finish, no fleet tick.
+    Avoids blocking the dev server on a full /api/game-state refresh.
+    """
+    from .db import db
+    from .logic import _read_player_live_state_no_writes, get_building_production_per_hour
+    from .models import load_player
+    from .planet_evolution.repository import get_context_planet
+
+    uid = int(player_id)
+    conn = db()
+    try:
+        player = load_player(uid, conn=conn)
+        if not player:
+            return None
+        planet = get_context_planet(uid, conn=conn)
+        player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
+            _read_player_live_state_no_writes(uid, conn, player, planet)
+        )
+        prod = get_building_production_per_hour(
+            buildings,
+            ratio,
+            user_id=uid,
+            conn=conn,
+        )
+        metal = int(float(player_view.get("metal") or 0))
+        crystal = int(float(player_view.get("crystal") or 0))
+        fuel_cells = int(float(player_view.get("fuel_cells") or 0))
+        payload: Dict[str, Any] = {
+            "ok": True,
+            "player": {
+                "metal": metal,
+                "crystal": crystal,
+                "fuel_cells": fuel_cells,
+                "energy_used": int(energy_used),
+                "energy_total": int(energy_total),
+            },
+            "resources": {
+                "metal": metal,
+                "crystal": crystal,
+                "fuel_cells": fuel_cells,
+                "energy_used": int(energy_used),
+                "energy_total": int(energy_total),
+            },
+            "production_per_hour": prod,
+            "storage": storage_caps,
+            "energy": {
+                "total": int(energy_total),
+                "used": int(energy_used),
+                "ratio": float(ratio),
+            },
+        }
+        try:
+            import time
+
+            from .ranking import get_player_rank, get_player_score_cached
+
+            score = get_player_score_cached(uid, read_only=True) or {}
+            rank, total_players = get_player_rank(uid)
+            payload["score"] = {
+                "total": int(score.get("total") or 0),
+                "buildings": int(score.get("buildings") or 0),
+                "research": int(score.get("research") or 0),
+                "rank": int(rank) if rank else 0,
+                "total_players": int(total_players or 0),
+            }
+            payload["server_time"] = int(time.time())
+        except Exception:
+            pass
+        return payload
+    finally:
+        conn.close()
+
+
 def get_balance_settings() -> Dict[str, Any]:
     settings = get_game_settings() or {}
     out: Dict[str, Any] = {}

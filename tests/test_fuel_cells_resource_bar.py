@@ -83,6 +83,9 @@ def test_main_js_patches_fuel_cells():
     assert "fuelValEls" in js
     assert "prodFuelCells" in js
     assert "buildingIconUrl" in js
+    assert "syncResourceLiveBaseline" in js
+    assert "tickLiveResourceBar" in js
+    assert "projectLiveResourceAmounts" in js
 
 
 def test_fuel_cell_plant_production_increases_balance(fuel_db):

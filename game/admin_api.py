@@ -949,7 +949,7 @@ def api_get_balance_settings() -> Dict[str, Any]:
 
 
 def api_save_balance_settings(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
-    from game.admin_balance import save_balance_settings
+    from game.admin_balance import build_balance_hud_snapshot, save_balance_settings
 
     if not isinstance(body, dict):
         return _err("invalid_payload", "Expected JSON object")
@@ -964,12 +964,14 @@ def api_save_balance_settings(admin_id: int, body: Dict[str, Any]) -> Dict[str, 
         target_type="system",
         payload={"keys": sorted(body.keys())},
     )
-    return _ok(settings=settings)
+    hud = build_balance_hud_snapshot(int(admin_id))
+    return _ok(settings=settings, hud=hud)
 
 
 def api_apply_balance_preset_b(admin_id: int) -> Dict[str, Any]:
-    from game.admin_balance import apply_preset_b
+    from game.admin_balance import apply_preset_b, build_balance_hud_snapshot
 
     settings = apply_preset_b()
     audit(int(admin_id), "balance_preset_b", target_type="system")
-    return _ok(settings=settings)
+    hud = build_balance_hud_snapshot(int(admin_id))
+    return _ok(settings=settings, hud=hud)

@@ -379,6 +379,7 @@
     lc.timeouts = [];
     lc.abortControllers = [];
     GC.stopProgressTicker();
+    stopResourceTicker();
     GC.stopPolling();
     _statusPollErrorLogged = false;
     _lastQueueSignature = "";
@@ -2283,6 +2284,116 @@
   let lastResearchQueueCount = null;
   let lastResearchQueueFull = null;
 
+  /** Client-side resource projection for the active planet (synced on each game-state). */
+  const _resourceLive = {
+    planetId: 0,
+    syncedAt: 0,
+    metal: 0,
+    crystal: 0,
+    fuelCells: 0,
+    prodMetal: 0,
+    prodCrystal: 0,
+    prodFuelCells: 0,
+    capMetal: 0,
+    capCrystal: 0,
+  };
+  let _resourceTickerId = null;
+  let _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
+
+  function patchLiveResourceAmounts(metal, crystal, fuelCells) {
+    const m = Math.max(0, Math.floor(Number(metal) || 0));
+    const c = Math.max(0, Math.floor(Number(crystal) || 0));
+    const f = Math.max(0, Math.floor(Number(fuelCells) || 0));
+    if (_resourceDisplay.metal !== m) {
+      document.querySelectorAll(".res-value.metal, [data-res=\"metal\"]").forEach((el) => {
+        _setIfChanged(el, fmtNumber(m));
+      });
+      _resourceDisplay.metal = m;
+    }
+    if (_resourceDisplay.crystal !== c) {
+      document.querySelectorAll(".res-value.crystal, [data-res=\"crystal\"]").forEach((el) => {
+        _setIfChanged(el, fmtNumber(c));
+      });
+      _resourceDisplay.crystal = c;
+    }
+    if (_resourceDisplay.fuelCells !== f) {
+      document.querySelectorAll(".res-value.fuel_cells, [data-res=\"fuel_cells\"]").forEach((el) => {
+        _setIfChanged(el, fmtNumber(f));
+      });
+      _resourceDisplay.fuelCells = f;
+    }
+    const ovMetalVal = document.querySelector('#overview-metal-val .gc-val[data-res="metal"]');
+    const ovCryVal = document.querySelector('#overview-crystal-val .gc-val[data-res="crystal"]');
+    if (ovMetalVal) _setIfChanged(ovMetalVal, fmtNumber(m));
+    if (ovCryVal) _setIfChanged(ovCryVal, fmtNumber(c));
+  }
+
+  function syncResourceLiveBaseline(snapshot) {
+    if (!snapshot || !snapshot.planetId) return;
+    const planetId = Number(snapshot.planetId);
+    if (!Number.isFinite(planetId) || planetId <= 0) return;
+    _resourceLive.planetId = planetId;
+    _resourceLive.syncedAt = getApproxServerNow();
+    _resourceLive.metal = Math.max(0, Math.floor(Number(snapshot.metal) || 0));
+    _resourceLive.crystal = Math.max(0, Math.floor(Number(snapshot.crystal) || 0));
+    _resourceLive.fuelCells = Math.max(0, Math.floor(Number(snapshot.fuelCells) || 0));
+    _resourceLive.prodMetal = Math.max(0, Math.floor(Number(snapshot.prodMetal) || 0));
+    _resourceLive.prodCrystal = Math.max(0, Math.floor(Number(snapshot.prodCrystal) || 0));
+    _resourceLive.prodFuelCells = Math.max(0, Math.floor(Number(snapshot.prodFuelCells) || 0));
+    _resourceLive.capMetal = Math.max(0, Math.floor(Number(snapshot.storageMetal) || 0));
+    _resourceLive.capCrystal = Math.max(0, Math.floor(Number(snapshot.storageCrystal) || 0));
+    _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
+    patchLiveResourceAmounts(_resourceLive.metal, _resourceLive.crystal, _resourceLive.fuelCells);
+    startResourceTicker();
+  }
+
+  function projectLiveResourceAmounts(nowSec) {
+    if (!_resourceLive.planetId || !_resourceLive.syncedAt) return null;
+    const elapsed = Math.max(0, Number(nowSec) - _resourceLive.syncedAt);
+    if (elapsed <= 0) {
+      return {
+        metal: _resourceLive.metal,
+        crystal: _resourceLive.crystal,
+        fuelCells: _resourceLive.fuelCells,
+      };
+    }
+    const hours = elapsed / 3600;
+    const capM = _resourceLive.capMetal > 0 ? _resourceLive.capMetal : Number.MAX_SAFE_INTEGER;
+    const capC = _resourceLive.capCrystal > 0 ? _resourceLive.capCrystal : Number.MAX_SAFE_INTEGER;
+    return {
+      metal: Math.min(capM, Math.floor(_resourceLive.metal + _resourceLive.prodMetal * hours)),
+      crystal: Math.min(capC, Math.floor(_resourceLive.crystal + _resourceLive.prodCrystal * hours)),
+      fuelCells: Math.floor(_resourceLive.fuelCells + _resourceLive.prodFuelCells * hours),
+    };
+  }
+
+  function tickLiveResourceBar() {
+    if (!shouldRunGameLoop() || _authLoopAborted || !_resourceLive.planetId) return;
+    const projected = projectLiveResourceAmounts(getApproxServerNow());
+    if (!projected) return;
+    patchLiveResourceAmounts(projected.metal, projected.crystal, projected.fuelCells);
+  }
+
+  function startResourceTicker() {
+    if (!shouldRunGameLoop() || _authLoopAborted || !_resourceLive.planetId) return;
+    if (_resourceTickerId != null) return;
+    tickLiveResourceBar();
+    _resourceTickerId = setInterval(tickLiveResourceBar, 1000);
+  }
+
+  function stopResourceTicker() {
+    if (_resourceTickerId != null) {
+      clearInterval(_resourceTickerId);
+      _resourceTickerId = null;
+    }
+    _resourceLive.planetId = 0;
+    _resourceLive.syncedAt = 0;
+    _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
+  }
+
+  GC.syncResourceLiveBaseline = syncResourceLiveBaseline;
+  GC.tickLiveResourceBar = tickLiveResourceBar;
+
   // Keep last values to avoid DOM churn
   const _last = {
     metal: null,
@@ -2343,6 +2454,7 @@
       if (!data || data.ok === false) return false;
       const skipMessagesUnread = Boolean(opts && opts.skipMessagesUnread);
       const hudOnly = Boolean(opts && opts.hudOnly);
+      const forceResourceBar = Boolean(opts && (opts.forceResourceBar || hudOnly));
 
       if (data.server_time) setServerTime(data.server_time);
 
@@ -2403,61 +2515,61 @@
       const cryCapEls = document.querySelectorAll(".res-cap.crystal");
       const fuelValEls = document.querySelectorAll(".res-value.fuel_cells");
 
-      if (_last.metal !== metal) {
+      if (forceResourceBar || _last.metal !== metal) {
         metalValEls.forEach((el) => { el.textContent = fmtNumber(metal); });
         _last.metal = metal;
       }
-      if (_last.crystal !== crystal) {
+      if (forceResourceBar || _last.crystal !== crystal) {
         cryValEls.forEach((el) => { el.textContent = fmtNumber(crystal); });
         _last.crystal = crystal;
       }
 
-      if (_last.storageMetal !== storageMetal && storageMetal > 0) {
+      if (forceResourceBar || (_last.storageMetal !== storageMetal && storageMetal > 0)) {
         metalCapEls.forEach((el) => { el.textContent = fmtNumber(storageMetal); });
         _last.storageMetal = storageMetal;
       }
-      if (_last.storageCrystal !== storageCrystal && storageCrystal > 0) {
+      if (forceResourceBar || (_last.storageCrystal !== storageCrystal && storageCrystal > 0)) {
         cryCapEls.forEach((el) => { el.textContent = fmtNumber(storageCrystal); });
         _last.storageCrystal = storageCrystal;
       }
 
-      if (_last.fuelCells !== fuelCells) {
+      if (forceResourceBar || _last.fuelCells !== fuelCells) {
         fuelValEls.forEach((el) => { el.textContent = fmtNumber(fuelCells); });
         _last.fuelCells = fuelCells;
       }
 
       const rateLabel = (key, perHour) => {
         const ph = Math.floor(Number(perHour) || 0);
-        const el = document.querySelector(`[data-res-rate="${key}"]`);
-        if (!el) return;
-        if (ph > 0) {
-          const sign = ph >= 0 ? "+" : "";
-          el.textContent = `${sign}${fmtNumber(ph)}/h`;
-          el.style.visibility = "visible";
-          el.removeAttribute("hidden");
-          el.removeAttribute("aria-hidden");
-        } else {
-          el.textContent = "";
-          el.style.visibility = "hidden";
-          el.setAttribute("aria-hidden", "true");
-        }
+        document.querySelectorAll(`[data-res-rate="${key}"]`).forEach((el) => {
+          if (ph > 0) {
+            const sign = ph >= 0 ? "+" : "";
+            el.textContent = `${sign}${fmtNumber(ph)}/h`;
+            el.style.visibility = "visible";
+            el.removeAttribute("hidden");
+            el.removeAttribute("aria-hidden");
+          } else {
+            el.textContent = "";
+            el.style.visibility = "hidden";
+            el.setAttribute("aria-hidden", "true");
+          }
+        });
       };
 
-      if (_last.prodMetal !== prodMetal) {
+      if (forceResourceBar || _last.prodMetal !== prodMetal) {
         rateLabel("metal", prodMetal);
         _last.prodMetal = prodMetal;
       }
-      if (_last.prodCrystal !== prodCrystal) {
+      if (forceResourceBar || _last.prodCrystal !== prodCrystal) {
         rateLabel("crystal", prodCrystal);
         _last.prodCrystal = prodCrystal;
       }
-      if (_last.prodFuelCells !== prodFuelCells) {
+      if (forceResourceBar || _last.prodFuelCells !== prodFuelCells) {
         rateLabel("fuel_cells", prodFuelCells);
         _last.prodFuelCells = prodFuelCells;
       }
 
       const energyText = `${fmtNumber(used)}/${fmtNumber(total)}`;
-      if (_last.energyUsed !== used || _last.energyTotal !== total) {
+      if (forceResourceBar || _last.energyUsed !== used || _last.energyTotal !== total) {
         setText("res-energy", energyText);
         document.querySelectorAll("[data-energy-used]").forEach((el) => {
           _setIfChanged(el, fmtNumber(used));
@@ -2469,6 +2581,21 @@
         _last.energyTotal = total;
       }
       patchResourceBarEnergyWarning(used, total);
+
+      const livePlanetId = activePlanetId > 0
+        ? activePlanetId
+        : Number(data.active_planet_id || data.build_queue?.planet_id || 0);
+      syncResourceLiveBaseline({
+        planetId: livePlanetId,
+        metal,
+        crystal,
+        fuelCells,
+        prodMetal,
+        prodCrystal,
+        prodFuelCells,
+        storageMetal,
+        storageCrystal,
+      });
 
       // === SCORE / RANK ===
       if (data.score) {
@@ -2845,6 +2972,12 @@
 
   GC.refreshGameState = refreshGameState;
   GC.refreshHudFromGameState = refreshHudFromGameState;
+  GC.applyHudFromGameState = function applyHudFromGameState(data, reason) {
+    if (!data || data.ok === false) return false;
+    applyGameStateData(data, reason || "admin_hud", { hudOnly: true, forceResourceBar: true });
+    clearStatusWidgetOffline();
+    return true;
+  };
 
   // =========================
   // Building tabs (delegated – survives PJAX)

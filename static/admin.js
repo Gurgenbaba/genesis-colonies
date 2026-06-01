@@ -288,18 +288,30 @@
     host.textContent = `×${prod} / ×${build} / ×${research}`;
   }
 
-  /** Push fresh resources/production into HUD — must not trigger PJAX or poll teardown. */
-  async function syncLiveGameState(reason) {
-    if (typeof GC.shouldRunGameLoop === "function" && !GC.shouldRunGameLoop()) return null;
-    if (typeof GC.refreshHudFromGameState === "function") {
-      return GC.refreshHudFromGameState(reason || "admin_balance_save");
+  /** Apply lightweight HUD from balance save response (no full game-state tick). */
+  function applyBalanceHudSnapshot(hud, reason) {
+    if (!hud || hud.ok === false) return false;
+    if (typeof GC.applyHudFromGameState === "function") {
+      return GC.applyHudFromGameState(hud, reason || "admin_balance_save");
     }
-    return null;
+    return false;
   }
 
-  async function afterBalanceMutation(settings, reason) {
+  /** Deferred fallback only — full game-state is heavy and can block the dev server. */
+  function scheduleDeferredHudRefresh(reason) {
+    if (typeof GC.shouldRunGameLoop === "function" && !GC.shouldRunGameLoop()) return;
+    if (typeof GC.refreshHudFromGameState !== "function") return;
+    window.setTimeout(() => {
+      GC.refreshHudFromGameState(reason || "admin_balance_save");
+    }, 1200);
+  }
+
+  async function afterBalanceMutation(settings, reason, extras) {
     updateAdminSpeedKpi(settings || {});
-    await syncLiveGameState(reason || "admin_balance_save");
+    const hud = extras && extras.hud;
+    applyBalanceHudSnapshot(hud, reason || "admin_balance_save");
+    // Follow-up sync for accrued resources (snapshot is read-only, no queue tick).
+    scheduleDeferredHudRefresh(reason || "admin_balance_save");
   }
 
   async function loadAdminBalance() {
@@ -322,7 +334,7 @@
       if (qs("#admin-balance-apply-start")) qs("#admin-balance-apply-start").checked = false;
       notify(t("admin_balance_saved", "Balance-Einstellungen gespeichert."), "success");
       setBalanceStatus(t("admin_balance_saved", "Balance-Einstellungen gespeichert."));
-      await afterBalanceMutation(res.settings, "admin_balance_save");
+      await afterBalanceMutation(res.settings, "admin_balance_save", { hud: res.hud });
     } else {
       showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
       setBalanceStatus("");
@@ -336,7 +348,7 @@
       populateBalanceForm(res.settings || {});
       notify(t("admin_balance_preset_applied", "Preset B angewendet."), "success");
       setBalanceStatus(t("admin_balance_preset_applied", "Preset B angewendet."));
-      await afterBalanceMutation(res.settings, "admin_balance_preset");
+      await afterBalanceMutation(res.settings, "admin_balance_preset", { hud: res.hud });
     } else {
       showAlert(res.message || res.error, "error");
     }

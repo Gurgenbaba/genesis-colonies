@@ -106,7 +106,11 @@ def test_balance_save_valid_values(app_client):
     }
     r = client.post("/api/admin/balance", json=payload)
     assert r.status_code == 200
-    assert r.get_json()["ok"] is True
+    data = r.get_json()
+    assert data["ok"] is True
+    assert isinstance(data.get("hud"), dict)
+    assert data["hud"].get("ok") is True
+    assert "production_per_hour" in data["hud"]
 
     stored = get_game_settings()
     assert int(stored["start_metal"]) == 2500
@@ -148,6 +152,8 @@ def test_balance_preset_b_applies_values(app_client):
     assert r.status_code == 200
     data = r.get_json()
     assert data["ok"] is True
+    assert isinstance(data.get("hud"), dict)
+    assert data["hud"].get("ok") is True
 
     settings = data["settings"]
     assert settings["start_metal"] == PRESET_B_BALANCE["start_metal"]

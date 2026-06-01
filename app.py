@@ -2546,8 +2546,12 @@ def api_game_state():
     if user_id:
         from game.fleet import fleet_schema_ready, process_fleet_tick
 
-        if fleet_schema_ready(db()):
-            process_fleet_tick(player_id=user_id)
+        conn = db()
+        try:
+            if fleet_schema_ready(conn):
+                process_fleet_tick(player_id=user_id, conn=conn)
+        finally:
+            conn.close()
 
     want_panel = request.args.get("include_panel", "").lower() in ("1", "true", "yes")
     payload, _player_id = _build_game_state_payload(
@@ -4033,4 +4037,6 @@ if __name__ == "__main__":
     if is_production() and is_debug_enabled():
         print("[GC] ERROR: Refusing to run production with FLASK_DEBUG=1", file=sys.stderr)
         raise SystemExit(1)
-    app.run(host=host, port=port, debug=is_debug_enabled())
+    threaded_raw = os.environ.get("GC_FLASK_THREADED", "1" if not is_production() else "0").strip().lower()
+    threaded = threaded_raw in ("1", "true", "yes", "on")
+    app.run(host=host, port=port, debug=is_debug_enabled(), threaded=threaded)
