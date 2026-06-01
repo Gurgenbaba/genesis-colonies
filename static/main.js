@@ -1554,17 +1554,30 @@
     },
   };
 
+  function _hasLiveCountdownAt() {
+    const now = getApproxServerNow();
+    for (const el of document.querySelectorAll("[data-countdown-at]")) {
+      const at = Number(el.dataset.countdownAt || 0);
+      if (at > now) return true;
+    }
+    return false;
+  }
+
   function _hasActiveProgressJobs() {
+    const now = getApproxServerNow();
+    const buildFinish = BUILDQ.active.finishTime > now;
+    const researchFinish = RESEARCHQ.active.finishTime > now;
+    const shipyardFinish = SHIPYARDQ.active.finishTime > now;
     return (
-      BUILDQ.active.finishTime > 0 ||
-      RESEARCHQ.active.finishTime > 0 ||
-      SHIPYARDQ.active.finishTime > 0 ||
+      buildFinish ||
+      researchFinish ||
+      shipyardFinish ||
       !!document.querySelector(".build-job.build-job-active") ||
       !!document.querySelector(".research-job.research-job-active") ||
       !!document.querySelector(".shipyard-job.shipyard-job-active") ||
       !!document.getElementById("overview-research-active") ||
       !!document.querySelector(".planet-evolution-page .pe-planet-research-active") ||
-      !!document.querySelector("[data-countdown-at]")
+      _hasLiveCountdownAt()
     );
   }
 
@@ -2016,6 +2029,10 @@
   const _movementCountdownRefreshPending = { fleet: false, overview: false };
   const _movementCountdownExpiryState = new Map();
   let _movementCountdownRefreshTimer = null;
+  let _lastGlobalMovementExpiryRefreshMs = 0;
+  let _queuedChainRefreshReason = null;
+
+  const MOVEMENT_EXPIRY_REFRESH_MS = 5000;
 
   function _movementCountdownKey(el) {
     return String(el.dataset.countdownKey || `${el.dataset.countdownScope || ""}:${el.dataset.countdownAt || ""}`);
@@ -2023,14 +2040,33 @@
 
   function _clearMovementCountdownExpiryState() {
     _movementCountdownExpiryState.clear();
+    _lastGlobalMovementExpiryRefreshMs = 0;
+  }
+
+  function _movementExpiryCooldownMs(key) {
+    const staleHits = _movementCountdownExpiryState.get(`${key}:stale`) || 0;
+    if (staleHits >= 3) return MOVEMENT_EXPIRY_REFRESH_MS * 4;
+    if (staleHits >= 1) return MOVEMENT_EXPIRY_REFRESH_MS * 2;
+    return MOVEMENT_EXPIRY_REFRESH_MS;
   }
 
   function _shouldRefreshExpiredCountdown(key) {
     const nowMs = Date.now();
+    if (nowMs - _lastGlobalMovementExpiryRefreshMs < MOVEMENT_EXPIRY_REFRESH_MS) return false;
     const last = _movementCountdownExpiryState.get(key) || 0;
-    if (nowMs - last < 3000) return false;
+    const cooldown = _movementExpiryCooldownMs(key);
+    if (nowMs - last < cooldown) return false;
     _movementCountdownExpiryState.set(key, nowMs);
     return true;
+  }
+
+  function _noteMovementCountdownStillStale(key) {
+    const hits = (_movementCountdownExpiryState.get(`${key}:stale`) || 0) + 1;
+    _movementCountdownExpiryState.set(`${key}:stale`, hits);
+  }
+
+  function _clearMovementCountdownStale(key) {
+    _movementCountdownExpiryState.delete(`${key}:stale`);
   }
 
   function requestMovementCountdownRefresh(scope) {
@@ -2047,6 +2083,15 @@
       _movementCountdownRefreshTimer = null;
       if (_movementCountdownRefreshPending[pendingKey]) return;
       _movementCountdownRefreshPending[pendingKey] = true;
+      _lastGlobalMovementExpiryRefreshMs = Date.now();
+
+      const staleKeys = [];
+      document.querySelectorAll("[data-countdown-at]").forEach((el) => {
+        const countdownAt = Number(el.dataset.countdownAt || 0);
+        if (!countdownAt) return;
+        const remaining = Math.max(0, Math.ceil(countdownAt - getApproxServerNow()));
+        if (remaining <= 0) staleKeys.push(_movementCountdownKey(el));
+      });
 
       const fleetPage = document.getElementById("fleet-page");
       let refreshPromise;
@@ -2063,6 +2108,17 @@
 
       Promise.resolve(refreshPromise).finally(() => {
         _movementCountdownRefreshPending[pendingKey] = false;
+        staleKeys.forEach((key) => {
+          let stillStale = false;
+          document.querySelectorAll("[data-countdown-at]").forEach((el) => {
+            if (_movementCountdownKey(el) !== key) return;
+            const countdownAt = Number(el.dataset.countdownAt || 0);
+            if (!countdownAt) return;
+            if (Math.max(0, Math.ceil(countdownAt - getApproxServerNow())) <= 0) stillStale = true;
+          });
+          if (stillStale) _noteMovementCountdownStillStale(key);
+          else _clearMovementCountdownStale(key);
+        });
       });
     }, 300);
   }
@@ -2085,6 +2141,7 @@
         else if (scope === "overview") overviewExpired = true;
       } else {
         _movementCountdownExpiryState.delete(key);
+        _clearMovementCountdownStale(key);
       }
     });
 
@@ -2643,7 +2700,8 @@
 
     if (GC.refreshInFlight) {
       if (isChainReason) {
-        return GC.refreshInFlight.finally(() => refreshGameState(reason));
+        _queuedChainRefreshReason = reasonStr;
+        return GC.refreshInFlight;
       }
       return GC.refreshInFlight;
     }
@@ -2726,6 +2784,13 @@
         p.abort = null;
         if (GC.refreshInFlight === flight) {
           GC.refreshInFlight = null;
+        }
+        const queued = _queuedChainRefreshReason;
+        if (queued) {
+          _queuedChainRefreshReason = null;
+          queueMicrotask(() => {
+            if (shouldRunGameLoop() && !_authLoopAborted) refreshGameState(queued);
+          });
         }
       }
     })();

@@ -566,16 +566,21 @@ def create_user(username: str, password: str, is_admin: int = 0, email: str | No
 # ======================================================================
 
 def touch_player_online(player_id: int) -> None:
+    """Mark player online; throttled to at most once per 30s to reduce write contention."""
     if not player_id:
         return
+    now = _now_ts()
+    touch_before = now - 30
     conn = db()
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE players SET last_seen = ? WHERE id = ?",
-        (_now_ts(), int(player_id))
-    )
-    conn.commit()
-    conn.close()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE players SET last_seen = ? WHERE id = ? AND (last_seen IS NULL OR last_seen < ?)",
+            (now, int(player_id), touch_before),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_player_stats() -> dict:

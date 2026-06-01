@@ -130,9 +130,18 @@ def test_main_js_movement_countdown_expiry_debounced():
     assert "requestMovementCountdownRefresh" in src
     assert "_movementCountdownExpiryState" in src
     assert "fleet_countdown_expired" in src
+    assert "_hasLiveCountdownAt" in src
+    assert "MOVEMENT_EXPIRY_REFRESH_MS" in src
+    assert "_queuedChainRefreshReason" in src
+    assert "_noteMovementCountdownStillStale" in src
     refresh_section = src.split("async function refreshGameState(reason)")[1].split("GC.refreshGameState = refreshGameState")[0]
     assert "isChainReason" in refresh_section
     assert 'reasonStr === "fleet_countdown_expired"' in refresh_section
+    assert "_queuedChainRefreshReason = reasonStr" in refresh_section
+    assert "queueMicrotask" in refresh_section
+    progress_section = src.split("function _hasActiveProgressJobs()")[1].split("// progress ticker")[0]
+    assert "_hasLiveCountdownAt()" in progress_section
+    assert '[data-countdown-at]' not in progress_section
 
 
 def test_main_js_init_page_resumes_chat_after_pjax():
@@ -189,8 +198,9 @@ def test_main_js_fleet_countdown_uses_integer_seconds():
     src = _read("static/main.js")
     assert "function formatCountdownRemain" in src
     tick_body = src.split("const tickFleetCountdowns = () =>")[1].split("tickFleetCountdowns();")[0]
-    assert "Math.floor(getApproxServerNow()" in tick_body
-    assert "formatCountdownRemain(target - now)" in tick_body
+    assert "updateMovementCountdowns(getApproxServerNow())" in tick_body
+    countdown_body = src.split("function updateMovementCountdowns(serverNow)")[1].split("function updateAllProgressBars")[0]
+    assert "Math.ceil(countdownAt - now)" in countdown_body
 
 
 def test_style_uses_readable_level_font():
