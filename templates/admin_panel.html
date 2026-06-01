@@ -68,7 +68,7 @@
           <div class="admin-metric-label">
             {{ T("admin_metric_speed_label") if T("admin_metric_speed_label") != "admin_metric_speed_label" else "Speed-Faktoren" }}
           </div>
-          <div class="admin-metric-value">
+          <div class="admin-metric-value" id="admin-kpi-speed">
             ×{{ (settings.production_speed if settings and settings.production_speed is defined else 1) }}
             /
             ×{{ (settings.build_speed if settings and settings.build_speed is defined else 1) }}
@@ -109,7 +109,7 @@
       <button type="button" class="admin-tab-btn" data-admin-tab="messages" role="tab">{{ T("admin_messages_title", "Nachrichten") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="runtime" role="tab">{{ T("admin_runtime_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="balance" role="tab">{{ T("admin_balance_title", "Balance") }}</button>
-      <button type="button" class="admin-tab-btn" data-admin-tab="settings" role="tab">{{ T("admin_settings_title") }}</button>
+      <button type="button" class="admin-tab-btn" data-admin-tab="server" role="tab">{{ T("admin_server_title", "Server") }}</button>
     </nav>
 
     <section id="admin-tab-health" class="admin-panel admin-tab-panel is-active" data-admin-panel="health" role="tabpanel">
@@ -147,6 +147,73 @@
       
       <div id="admin-players-list" class="admin-table-wrap"></div>
       <div id="admin-player-detail" class="admin-card admin-detail"></div>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_section_bans", "Account-Banns") }}</span>
+      </div>
+      <section class="admin-section">
+        <p class="admin-small-hint">{{ T("admin_ban_hint") }}</p>
+        <div class="admin-action-row admin-action-row-wrap">
+          <input type="number" class="admin-input admin-input-sm" id="admin-ban-player-id"
+                 placeholder="{{ T('admin_label_ban_player_id', 'Spieler-ID') }}" min="1">
+          <input type="text" class="admin-input admin-input-sm" id="admin-ban-reason"
+                 placeholder="{{ T('admin_label_ban_reason', 'Grund') }}">
+          <input type="number" class="admin-input admin-input-sm" id="admin-ban-hours"
+                 placeholder="{{ T('admin_label_ban_hours', 'Stunden (0=perm.)') }}" min="0" value="24">
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="ban-player-form">
+            {{ T("admin_btn_ban_player", "Spieler bannen") }}
+          </button>
+        </div>
+        {% if banned_players and banned_players|length > 0 %}
+        <div class="ban-table-wrapper admin-table-wrap">
+          <table class="ban-table table-std admin-table">
+            <thead>
+              <tr>
+                <th>{{ T("admin_col_id", "ID") }}</th>
+                <th>{{ T("admin_col_username", "Username") }}</th>
+                <th>{{ T("admin_col_player_name", "Name") }}</th>
+                <th>{{ T("admin_label_ban_reason", "Grund") }}</th>
+                <th>{{ T("admin_col_created", "Erstellt") }}</th>
+                <th>{{ T("admin_col_expires", "Gültig bis") }}</th>
+                <th class="text-right">{{ T("admin_col_action", "Aktion") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ban in banned_players %}
+              <tr>
+                <td>{{ ban.player_id }}</td>
+                <td>
+                  {% if ban.player_id and ban.username %}
+                    {{ player_name_link(ban.player_id, ban.username) }}
+                  {% else %}
+                    {{ ban.username or "–" }}
+                  {% endif %}
+                </td>
+                <td>{{ ban.player_name or "–" }}</td>
+                <td>{{ ban.reason or "–" }}</td>
+                <td>{{ ban.created_text }}</td>
+                <td>
+                  {% if ban.is_permanent %}
+                    <span class="ban-permanent">{{ T("admin_ban_permanent", "permanent") }}</span>
+                  {% else %}
+                    {{ ban.expires_text }}
+                  {% endif %}
+                </td>
+                <td class="text-right">
+                  <button type="button" class="gc-btn gc-btn-outline gc-btn-xs"
+                          data-admin-action="player-unban" data-player-id="{{ ban.player_id }}">
+                    {{ T("admin_btn_unban_player", "Aufheben") }}
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <span class="admin-small-hint">{{ T("admin_no_bans") }}</span>
+        {% endif %}
+      </section>
     </section>
 
     <section id="admin-tab-planets" class="admin-panel admin-tab-panel" data-admin-panel="planets" role="tabpanel" hidden>
@@ -207,27 +274,20 @@
       </div>
 
       <div class="admin-card">
-        <h3 class="admin-subtitle">{{ T("admin_chat_mute_title") }}</h3>
+        <h3 class="admin-subtitle">{{ T("admin_chat_moderation_title", "Moderation") }}</h3>
+        <p class="admin-small-hint">{{ T("admin_chat_moderation_hint", "Stummschaltung (temporär) und Chat-Bann (dauerhaft) sind getrennte Maßnahmen.") }}</p>
         <div class="admin-action-row admin-action-row-wrap">
-          <input type="number" class="admin-input admin-input-sm" id="admin-chat-mute-player" placeholder="{{ T('admin_chat_mute_player_id') }}">
+          <input type="number" class="admin-input admin-input-sm" id="admin-chat-mod-player" placeholder="{{ T('admin_chat_mute_player_id') }}">
           <select class="admin-input admin-input-sm" id="admin-chat-mute-scope">
             <option value="global">{{ T("admin_chat_mute_scope_global") }}</option>
             <option value="room">{{ T("admin_chat_mute_scope_room") }}</option>
             <option value="alliance">{{ T("admin_chat_mute_scope_alliance") }}</option>
           </select>
           <input type="number" class="admin-input admin-input-sm" id="admin-chat-mute-minutes" placeholder="{{ T('admin_chat_mute_minutes') }}" value="60">
-          <input type="text" class="admin-input admin-input-sm" id="admin-chat-mute-reason" placeholder="{{ T('admin_chat_mute_reason') }}">
+          <input type="text" class="admin-input admin-input-sm" id="admin-chat-mod-reason" placeholder="{{ T('admin_chat_mute_reason') }}">
           <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="chat-mute-player">
             {{ T("admin_chat_mute_btn") }}
           </button>
-        </div>
-      </div>
-
-      <div class="admin-card">
-        <h3 class="admin-subtitle">{{ T("admin_chat_moderation_title", "Chat-Ban / Unmute") }}</h3>
-        <div class="admin-action-row admin-action-row-wrap">
-          <input type="number" class="admin-input admin-input-sm" id="admin-chat-mod-player" placeholder="{{ T('admin_chat_mute_player_id') }}">
-          <input type="text" class="admin-input admin-input-sm" id="admin-chat-ban-reason" placeholder="{{ T('admin_chat_mute_reason') }}">
           <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="chat-ban-player">
             {{ T("admin_chat_ban_btn", "Chat bannen") }}
           </button>
@@ -345,6 +405,12 @@
             <input class="admin-input" id="admin-balance-start-crystal" type="number" min="0" step="1" data-balance-key="start_crystal">
           </div>
         </div>
+        <div class="admin-row-full">
+          <label class="admin-checkbox-row" for="admin-balance-apply-start">
+            <input type="checkbox" id="admin-balance-apply-start" value="1">
+            <span>{{ T("admin_apply_start_to_existing") }}</span>
+          </label>
+        </div>
       </section>
 
       <div class="admin-section-title">
@@ -363,6 +429,26 @@
           <div class="admin-field">
             <label class="admin-label" for="admin-balance-research-speed">{{ T("admin_label_research_speed", "Forschung") }}</label>
             <input class="admin-input" id="admin-balance-research-speed" type="number" min="0.01" step="0.01" data-balance-key="research_speed">
+          </div>
+        </div>
+      </section>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_label_fleet_speeds", "Flotten-Geschwindigkeit") }}</span>
+      </div>
+      <section class="admin-section">
+        <div class="admin-form-grid-3">
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-fleet-war">{{ T("admin_label_fleet_speed_war", "Krieg") }}</label>
+            <input class="admin-input" id="admin-balance-fleet-war" type="number" min="0.01" step="0.1" data-balance-key="fleet_speed_war">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-fleet-holding">{{ T("admin_label_fleet_speed_holding", "Halten") }}</label>
+            <input class="admin-input" id="admin-balance-fleet-holding" type="number" min="0.01" step="0.1" data-balance-key="fleet_speed_holding">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-fleet-peaceful">{{ T("admin_label_fleet_speed_peaceful", "Friedlich") }}</label>
+            <input class="admin-input" id="admin-balance-fleet-peaceful" type="number" min="0.01" step="0.1" data-balance-key="fleet_speed_peaceful">
           </div>
         </div>
       </section>
@@ -450,128 +536,59 @@
       </section>
     </section>
 
-    <section id="admin-tab-settings" class="admin-panel admin-tab-panel" data-admin-panel="settings" role="tabpanel" hidden>
-    <div class="admin-card admin-legacy-banner">
-      <h2 class="admin-panel-title">{{ T("admin_legacy_settings_title") }}</h2>
-      <p class="admin-small-hint">{{ T("admin_legacy_settings_hint") }}</p>
+    <section id="admin-tab-server" class="admin-panel admin-tab-panel" data-admin-panel="server" role="tabpanel" hidden>
+    <div class="admin-card">
+      <h2 class="admin-panel-title">{{ T("admin_server_title", "Server") }}</h2>
+      <p class="admin-small-hint">{{ T("admin_server_hint", "Universum, MOTD, Ressourcen-Tools und Wipe. Pacing & Balance: Tab „Balance“.") }}</p>
     </div>
     <form method="POST" action="{{ url_for('admin_update') }}">
 
       <div class="admin-section-title">
-        <span class="admin-section-title-text">
-          {{ T("admin_section_game_settings") if T("admin_section_game_settings") != "admin_section_game_settings" else "Allgemeine Einstellungen" }}
-        </span>
+        <span class="admin-section-title-text">{{ T("admin_section_game_settings", "Allgemeine Einstellungen") }}</span>
       </div>
 
       <section class="admin-section">
         <div class="admin-form-grid-2">
-
           <div class="admin-field">
-            <label class="admin-label" for="universe_name">
-              {{ T("universe_name") if T("universe_name") != "universe_name" else "Universums-Name" }}
-            </label>
+            <label class="admin-label" for="universe_name">{{ T("universe_name", "Universums-Name") }}</label>
             <input class="admin-input" id="universe_name" type="text" name="universe_name"
                    value="{{ (settings.universe_name if settings and settings.universe_name is defined else '') }}">
           </div>
-
           <div class="admin-field">
-            <label class="admin-label" for="galaxy_count">
-              {{ T("admin_label_galaxy_count") if T("admin_label_galaxy_count") != "admin_label_galaxy_count" else "Anzahl Galaxien" }}
-            </label>
+            <label class="admin-label" for="galaxy_count">{{ T("admin_label_galaxy_count", "Anzahl Galaxien") }}</label>
             <input class="admin-input" id="galaxy_count" type="number" name="galaxy_count"
                    value="{{ (settings.galaxy_count if settings and settings.galaxy_count is defined else 1) }}"
                    min="1" max="15">
           </div>
-
-        </div>
-        <p class="admin-small-hint">{{ T("admin_legacy_balance_redirect", "Produktion, Gebäudebau, Forschung, Queues und Startressourcen: Tab „Balance“.") }}</p>
-      </section>
-
-      <div class="admin-section-title">
-        <span class="admin-section-title-text">
-          {{ T("admin_label_fleet_speeds", "Flotten-Geschwindigkeit") }}
-        </span>
-      </div>
-
-      <section class="admin-section">
-        <div class="admin-form-grid-3">
-
-          <div class="admin-field">
-            <label class="admin-label" for="fleet_speed_war">
-              {{ T("admin_label_fleet_speed_war") if T("admin_label_fleet_speed_war") != "admin_label_fleet_speed_war" else "Flotten-Speed (Krieg)" }}
-            </label>
-            <input class="admin-input" id="fleet_speed_war" type="number" step="0.1" name="fleet_speed_war"
-                   value="{{ (settings.fleet_speed_war if settings and settings.fleet_speed_war is defined else 1) }}">
-          </div>
-
-          <div class="admin-field">
-            <label class="admin-label" for="fleet_speed_holding">
-              {{ T("admin_label_fleet_speed_holding") if T("admin_label_fleet_speed_holding") != "admin_label_fleet_speed_holding" else "Flotten-Speed (Halten)" }}
-            </label>
-            <input class="admin-input" id="fleet_speed_holding" type="number" step="0.1" name="fleet_speed_holding"
-                   value="{{ (settings.fleet_speed_holding if settings and settings.fleet_speed_holding is defined else 1) }}">
-          </div>
-
-          <div class="admin-field">
-            <label class="admin-label" for="fleet_speed_peaceful">
-              {{ T("admin_label_fleet_speed_peaceful") if T("admin_label_fleet_speed_peaceful") != "admin_label_fleet_speed_peaceful" else "Flotten-Speed (Friedlich)" }}
-            </label>
-            <input class="admin-input" id="fleet_speed_peaceful" type="number" step="0.1" name="fleet_speed_peaceful"
-                   value="{{ (settings.fleet_speed_peaceful if settings and settings.fleet_speed_peaceful is defined else 1) }}">
-          </div>
-
-        </div>
-      </section>
-
-      <section class="admin-section">
-        <div class="admin-row-full">
-          <label class="admin-checkbox-row" for="apply_start">
-            <input type="checkbox" name="apply_start_to_existing" value="1" id="apply_start">
-            <span>
-              {{ T("admin_apply_start_to_existing") if T("admin_apply_start_to_existing") != "admin_apply_start_to_existing"
-                 else "Startressourcen aus dem Balance-Tab auch auf bestehende Homeworlds anwenden (als Mindestwert)" }}
-            </span>
-          </label>
         </div>
       </section>
 
       <div class="admin-section-title">
-        <span class="admin-section-title-text">
-          {{ T("admin_section_motd") if T("admin_section_motd") != "admin_section_motd" else "Universums-Meldung (MOTD)" }}
-        </span>
+        <span class="admin-section-title-text">{{ T("admin_section_motd", "Universums-Meldung (MOTD)") }}</span>
       </div>
 
       <section class="admin-section">
         <div class="admin-row">
           <div class="admin-field admin-field-wide">
-            <label class="admin-label" for="motd_text">
-              {{ T("admin_motd_label") if T("admin_motd_label") != "admin_motd_label" else "Anzeige-Text im Spiel" }}
-            </label>
-            <span class="admin-small-hint">
-              {{ T("admin_motd_hint") if T("admin_motd_hint") != "admin_motd_hint" else "Kurze Info, z. B. Server-News, Wartungsankündigungen, Events..." }}
-            </span>
+            <label class="admin-label" for="motd_text">{{ T("admin_motd_label", "Anzeige-Text im Spiel") }}</label>
+            <span class="admin-small-hint">{{ T("admin_motd_hint") }}</span>
             <textarea class="admin-textarea" name="motd_text" id="motd_text"
                       placeholder="Kurze Info, z. B. Server-News, Wartung, Events...">{{ (settings.motd_text if settings and settings.motd_text is defined else "") }}</textarea>
           </div>
         </div>
-
         <div class="admin-row-full">
           <label class="admin-checkbox-row" for="motd_enabled">
             <input type="checkbox" id="motd_enabled" name="motd_enabled" value="1"
                    {% if settings and settings.motd_enabled is defined and settings.motd_enabled %}checked{% endif %}>
-            <span>
-              {{ T("admin_motd_enabled_label") if T("admin_motd_enabled_label") != "admin_motd_enabled_label" else "MOTD aktuell aktiv anzeigen" }}
-            </span>
+            <span>{{ T("admin_motd_enabled_label", "MOTD aktuell aktiv anzeigen") }}</span>
           </label>
         </div>
-
         <div class="admin-btn-row">
           <button class="gc-btn gc-btn-primary gc-btn-sm" type="submit">
-            {{ T("admin_btn_save_settings") if T("admin_btn_save_settings") != "admin_btn_save_settings" else "Einstellungen speichern" }}
+            {{ T("admin_btn_save_settings", "Einstellungen speichern") }}
           </button>
         </div>
       </section>
-
     </form>
 
     <!-- ============================================================= -->
@@ -693,138 +710,7 @@
       </form>
     </section>
 
-    <!-- ============================================================= -->
-    <!-- PLAYER BANS                                                   -->
-    <!-- ============================================================= -->
-    <div class="admin-section-title">
-      <span class="admin-section-title-text">
-        {{ T("admin_section_players") if T("admin_section_players") != "admin_section_players" else "Spieler-Verwaltung (Banns)" }}
-      </span>
-    </div>
-
-    <section class="admin-section">
-      <p class="admin-small-hint">
-        {{ T("admin_ban_hint") if T("admin_ban_hint") != "admin_ban_hint"
-           else "Schnelles Bann-Management. Feineres Player-Handling (Stats, Planeten, etc.) folgt später." }}
-      </p>
-
-      <form method="post" action="{{ url_for('admin_ban_user') }}">
-        <div class="admin-form-grid-3">
-          <div class="admin-field">
-            <label class="admin-label" for="ban_player_id">
-              {{ T("admin_label_ban_player_id") if T("admin_label_ban_player_id") != "admin_label_ban_player_id" else "Spieler-ID" }}
-            </label>
-            <input class="admin-input" id="ban_player_id" type="number" name="ban_player_id" placeholder="z.B. 1">
-          </div>
-
-          <div class="admin-field">
-            <label class="admin-label" for="ban_reason">
-              {{ T("admin_label_ban_reason") if T("admin_label_ban_reason") != "admin_label_ban_reason" else "Grund" }}
-            </label>
-            <input class="admin-input" id="ban_reason" type="text" name="ban_reason" placeholder="z.B. Multicount, Beleidigung, Botting">
-          </div>
-
-          <div class="admin-field">
-            <label class="admin-label" for="ban_hours">
-              {{ T("admin_label_ban_hours") if T("admin_label_ban_hours") != "admin_label_ban_hours" else "Dauer (Stunden)" }}
-            </label>
-            <input class="admin-input" id="ban_hours" type="number" name="ban_hours" placeholder="0 = permanent">
-          </div>
-        </div>
-
-        <div class="admin-btn-row">
-          <button class="gc-btn gc-btn-danger gc-btn-sm" type="submit">
-            {{ T("admin_btn_ban_player") if T("admin_btn_ban_player") != "admin_btn_ban_player" else "Spieler bannen" }}
-          </button>
-        </div>
-      </form>
-
-      <hr class="admin-divider">
-
-      <form method="post" action="{{ url_for('admin_unban_user') }}">
-        <div class="admin-form-grid-2">
-          <div class="admin-field">
-            <label class="admin-label" for="unban_player_id">
-              {{ T("admin_label_unban_player_id") if T("admin_label_unban_player_id") != "admin_label_unban_player_id" else "Spieler-ID (Bann aufheben)" }}
-            </label>
-            <input class="admin-input" id="unban_player_id" type="number" name="unban_player_id" placeholder="z.B. 1">
-          </div>
-        </div>
-
-        <div class="admin-btn-row">
-          <button class="gc-btn gc-btn-outline gc-btn-sm" type="submit">
-            {{ T("admin_btn_unban_player") if T("admin_btn_unban_player") != "admin_btn_unban_player" else "Bann aufheben" }}
-          </button>
-        </div>
-      </form>
-    </section>
-
-    <!-- ============================================================= -->
-    <!-- ACTIVE BANS LIST                                              -->
-    <!-- ============================================================= -->
-    <div class="admin-section-title">
-      <span class="admin-section-title-text">
-        {{ T("admin_section_bans") if T("admin_section_bans") != "admin_section_bans" else "Aktive Banns" }}
-      </span>
-    </div>
-
-    <section class="admin-section">
-      {% if banned_players and banned_players|length > 0 %}
-        <div class="ban-table-wrapper">
-          <table class="ban-table table-std">
-            <thead>
-              <tr>
-                <th>Spieler-ID</th>
-                <th>Username</th>
-                <th>Player-Name</th>
-                <th>Grund</th>
-                <th>Erstellt am</th>
-                <th>Gültig bis</th>
-                <th class="text-right">Aktion</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for ban in banned_players %}
-                <tr>
-                  <td>{{ ban.player_id }}</td>
-                  <td>
-                    {% if ban.player_id and ban.username %}
-                      {{ player_name_link(ban.player_id, ban.username) }}
-                    {% else %}
-                      {{ ban.username or "–" }}
-                    {% endif %}
-                  </td>
-                  <td>{{ ban.player_name or "–" }}</td>
-                  <td>{{ ban.reason or "–" }}</td>
-                  <td>{{ ban.created_text }}</td>
-                  <td>
-                    {% if ban.is_permanent %}
-                      <span class="ban-permanent">permanent</span>
-                    {% else %}
-                      {{ ban.expires_text }}
-                    {% endif %}
-                  </td>
-                  <td class="text-right">
-                    <form method="post" action="{{ url_for('admin_unban_user') }}" class="ban-actions-form">
-                      <input type="hidden" name="unban_player_id" value="{{ ban.player_id }}">
-                      <button type="submit" class="gc-btn gc-btn-outline gc-btn-xs">
-                        {{ T("admin_btn_unban_player") if T("admin_btn_unban_player") != "admin_btn_unban_player" else "Aufheben" }}
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% else %}
-        <span class="admin-small-hint">
-          {{ T("admin_no_bans") if T("admin_no_bans") != "admin_no_bans" else "Aktuell sind keine Spieler gebannt." }}
-        </span>
-      {% endif %}
-    </section>
-
-    </section><!-- /admin-tab-settings -->
+    </section><!-- /admin-tab-server -->
 
   </div>
 </div>

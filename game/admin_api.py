@@ -354,8 +354,11 @@ def ban_player_api(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dict[
         hours_val = int(hours) if hours is not None else 24 * 365 * 10
     except (TypeError, ValueError):
         hours_val = 24 * 365 * 10
-    hours_val = max(1, min(hours_val, 24 * 365 * 50))
-    banned_until = int(time.time()) + hours_val * 3600
+    if hours_val <= 0:
+        banned_until = int(time.time()) + 50 * 365 * 24 * 3600
+    else:
+        hours_val = min(hours_val, 24 * 365 * 50)
+        banned_until = int(time.time()) + hours_val * 3600
     now = int(time.time())
 
     conn = db()

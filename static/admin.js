@@ -8,6 +8,7 @@
   const LOCALE = window.GC_LOCALE || {};
   let _activeTab = "health";
   let _isProduction = false;
+  let _adminPanelBootstrapped = false;
   let _selectedSupportTicketId = null;
   let _selectedAdminMessageId = null;
 
@@ -81,6 +82,8 @@
   }
 
   /** Dedicated admin fetch – never uses GC.fetchJSON (game auth redirect logic). */
+  const ADMIN_API_TIMEOUT_MS = 45000;
+
   async function adminApi(url, options) {
     const opts = {
       method: "GET",
@@ -93,12 +96,39 @@
       opts.headers = { ...opts.headers, "Content-Type": "application/json" };
       opts.body = JSON.stringify(opts.body);
     }
+
+    const timeoutCtrl = new AbortController();
+    const parentSignal = opts.signal;
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      timeoutCtrl.abort();
+    }, ADMIN_API_TIMEOUT_MS);
+
+    if (parentSignal) {
+      if (parentSignal.aborted) {
+        clearTimeout(timeoutId);
+        return { ok: false, error: "aborted", message: "Request aborted", httpStatus: 0 };
+      }
+      parentSignal.addEventListener("abort", () => timeoutCtrl.abort(), { once: true });
+    }
+
     let res;
     try {
-      res = await fetch(url, opts);
+      res = await fetch(url, { ...opts, signal: timeoutCtrl.signal });
     } catch (err) {
+      clearTimeout(timeoutId);
+      if (timedOut) {
+        return {
+          ok: false,
+          error: "timeout",
+          message: t("admin_request_timeout", "Zeitüberschreitung — Server antwortet nicht."),
+          httpStatus: 0,
+        };
+      }
       return { ok: false, error: "network_error", message: err.message, httpStatus: 0 };
     }
+    clearTimeout(timeoutId);
     let data = {};
     try {
       data = await res.json();
@@ -237,12 +267,39 @@
       if (!key) return;
       payload[key] = el.value;
     });
+    const applyStart = qs("#admin-balance-apply-start");
+    if (applyStart && applyStart.checked) {
+      payload.apply_start_to_existing = 1;
+    }
     return payload;
   }
 
   function setBalanceStatus(msg) {
     const host = qs("#admin-balance-status");
     if (host) host.textContent = msg || "";
+  }
+
+  function updateAdminSpeedKpi(settings) {
+    const host = qs("#admin-kpi-speed");
+    if (!host || !settings) return;
+    const prod = settings.production_speed ?? 1;
+    const build = settings.build_speed ?? 1;
+    const research = settings.research_speed ?? 1;
+    host.textContent = `×${prod} / ×${build} / ×${research}`;
+  }
+
+  /** Push fresh resources/production into HUD — must not trigger PJAX or poll teardown. */
+  async function syncLiveGameState(reason) {
+    if (typeof GC.shouldRunGameLoop === "function" && !GC.shouldRunGameLoop()) return null;
+    if (typeof GC.refreshHudFromGameState === "function") {
+      return GC.refreshHudFromGameState(reason || "admin_balance_save");
+    }
+    return null;
+  }
+
+  async function afterBalanceMutation(settings, reason) {
+    updateAdminSpeedKpi(settings || {});
+    await syncLiveGameState(reason || "admin_balance_save");
   }
 
   async function loadAdminBalance() {
@@ -257,14 +314,18 @@
   }
 
   async function saveAdminBalance() {
+    setBalanceStatus(t("admin_balance_saving", "Speichern…"));
     const payload = collectBalancePayload();
     const res = await adminPost("/api/admin/balance", payload);
     if (res.ok) {
       populateBalanceForm(res.settings || {});
+      if (qs("#admin-balance-apply-start")) qs("#admin-balance-apply-start").checked = false;
       notify(t("admin_balance_saved", "Balance-Einstellungen gespeichert."), "success");
       setBalanceStatus(t("admin_balance_saved", "Balance-Einstellungen gespeichert."));
+      await afterBalanceMutation(res.settings, "admin_balance_save");
     } else {
       showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      setBalanceStatus("");
     }
     return res;
   }
@@ -275,6 +336,7 @@
       populateBalanceForm(res.settings || {});
       notify(t("admin_balance_preset_applied", "Preset B angewendet."), "success");
       setBalanceStatus(t("admin_balance_preset_applied", "Preset B angewendet."));
+      await afterBalanceMutation(res.settings, "admin_balance_preset");
     } else {
       showAlert(res.message || res.error, "error");
     }
@@ -1097,7 +1159,7 @@
       return res;
     }
     if (act === "chat-mute-player") {
-      const pid = parseInt(qs("#admin-chat-mute-player")?.value, 10);
+      const pid = parseInt(qs("#admin-chat-mod-player")?.value, 10);
       const mins = parseInt(qs("#admin-chat-mute-minutes")?.value, 10) || 60;
       if (!Number.isFinite(pid) || pid <= 0) {
         showAlert(t("admin_chat_mute_invalid", "Ungültige Spieler-ID."), "error");
@@ -1107,7 +1169,7 @@
         player_id: pid,
         scope: qs("#admin-chat-mute-scope")?.value || "global",
         muted_until: Math.floor(Date.now() / 1000) + mins * 60,
-        reason: qs("#admin-chat-mute-reason")?.value || "",
+        reason: qs("#admin-chat-mod-reason")?.value || "",
       });
       if (res.ok) notify(t("admin_chat_mute_ok", "Spieler stummgeschaltet."), "success");
       else showAlert(res.message, "error");
@@ -1121,7 +1183,7 @@
       }
       const res = await adminPost("/api/chat/admin/ban", {
         player_id: pid,
-        reason: qs("#admin-chat-ban-reason")?.value || "",
+        reason: qs("#admin-chat-mod-reason")?.value || "",
       });
       if (res.ok) notify(t("admin_chat_ban_ok", "Spieler aus Chat gebannt."), "success");
       else showAlert(res.message, "error");
@@ -1195,10 +1257,37 @@
       await loadAdminPlayer(btn.dataset.playerId);
       return res;
     }
+    if (act === "ban-player-form") {
+      const playerId = parseInt(qs("#admin-ban-player-id")?.value, 10);
+      if (!Number.isFinite(playerId) || playerId <= 0) {
+        showAlert(t("admin_ban_invalid_id", "Ungültige Spieler-ID."), "error");
+        return null;
+      }
+      const c = prompt(t("admin_confirm_ban", "Tippe BAN PLAYER"));
+      if (c !== "BAN PLAYER") return null;
+      const hoursRaw = qs("#admin-ban-hours")?.value;
+      const hours = hoursRaw === "" || hoursRaw == null ? 24 : parseInt(hoursRaw, 10);
+      const res = await adminPost(`/api/admin/player/${playerId}/ban`, {
+        confirm_text: c,
+        reason: (qs("#admin-ban-reason")?.value || "").trim(),
+        hours: Number.isFinite(hours) ? hours : 24,
+      });
+      if (res.ok) {
+        notify(t("admin_action_success", "OK"), "success");
+        window.location.reload();
+      } else showAlert(res.message, "error");
+      return res;
+    }
     if (act === "player-unban") {
       const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/unban`, {});
-      notify(t("admin_action_success", "OK"), "success");
-      await loadAdminPlayer(btn.dataset.playerId);
+      if (res.ok) {
+        notify(t("admin_action_success", "OK"), "success");
+        if (btn.closest("#admin-players-list, .ban-table-wrapper")) {
+          window.location.reload();
+        } else {
+          await loadAdminPlayer(btn.dataset.playerId);
+        }
+      } else showAlert(res.message, "error");
       return res;
     }
     if (act === "player-repair-hw") {
@@ -1328,17 +1417,21 @@
 
     bindAdminPanelOnce();
 
-    showAlert("");
-    const healthOut = qs("#admin-health-output");
-    if (healthOut) healthOut.innerHTML = loadingHtml();
+    if (!_adminPanelBootstrapped) {
+      _adminPanelBootstrapped = true;
+      showAlert("");
+      const healthOut = qs("#admin-health-output");
+      if (healthOut) healthOut.innerHTML = loadingHtml();
+      switchTab("health");
+      loadAdminRuntime().then(() => loadTab("health"));
+    }
 
-    switchTab("health");
-    loadAdminRuntime().then(() => loadTab("health"));
     console.debug("[GC] admin panel initialized");
   }
 
   GC.teardownAdminPanel = function teardownAdminPanel() {
     _activeTab = "health";
+    _adminPanelBootstrapped = false;
   };
 
   GC.modules = GC.modules || {};
@@ -1356,6 +1449,7 @@
   if (typeof GC.registerCleanup === "function") {
     GC.registerCleanup(function adminPanelCleanup() {
       _activeTab = "health";
+      _adminPanelBootstrapped = false;
     }, { persistent: true });
   }
 

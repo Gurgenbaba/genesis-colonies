@@ -177,12 +177,13 @@ button, input, textarea { font: inherit; }
 body.gc-body-ingame.gc-has-planet-landscape {
   background-color: transparent;
   background-image: none;
-  --gc-panel: rgba(2, 10, 20, 0.92);
-  --gc-panel-strong: rgba(2, 8, 16, 0.96);
-  --gc-panel-bg: rgba(2, 10, 20, 0.92);
-  --gc-panel-bg-2: rgba(4, 12, 24, 0.88);
-  --gc-hdr-bg-1: rgba(4, 10, 20, 0.92);
-  --gc-hdr-bg-2: rgba(6, 12, 24, 0.86);
+  /* Panels: leicht transparent, aber über Landscape gut lesbar */
+  --gc-panel: rgba(2, 10, 20, 0.97);
+  --gc-panel-strong: rgba(2, 8, 16, 0.98);
+  --gc-panel-bg: rgba(2, 10, 20, 0.97);
+  --gc-panel-bg-2: rgba(4, 12, 24, 0.94);
+  --gc-hdr-bg-1: rgba(4, 10, 20, 0.96);
+  --gc-hdr-bg-2: rgba(6, 12, 24, 0.92);
   --gc-header-h: auto;
 }
 
@@ -236,10 +237,46 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-nav-link.active {
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-panel,
 body.gc-body-ingame.gc-has-planet-landscape .section-header {
+  background: var(--gc-panel-bg);
+  backdrop-filter: blur(14px) saturate(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(1.06);
   box-shadow:
     var(--gc-border-glow),
     inset 0 0 0 1px rgba(0, 0, 0, 0.52),
     0 10px 30px rgba(0, 0, 0, 0.38);
+}
+
+body.gc-body-ingame.gc-has-planet-landscape .gc-panel::before {
+  opacity: 0.1;
+}
+
+body.gc-body-ingame.gc-has-planet-landscape .overview-res-card,
+body.gc-body-ingame.gc-has-planet-landscape .overview-hint,
+body.gc-body-ingame.gc-has-planet-landscape .trader-hub-page .gc-exchange-dir-btn,
+body.gc-body-ingame.gc-has-planet-landscape .trader-hub-page .gc-fuel-exchange-rate-card,
+body.gc-body-ingame.gc-has-planet-landscape .trader-hub-page .gc-scrapyard-row,
+body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-stat-card,
+body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-trait-card,
+body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-identity-teaser,
+body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-event-item,
+body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-history-item,
+body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-policy-item,
+body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-research-job {
+  background: var(--gc-panel-bg-2);
+  backdrop-filter: blur(10px) saturate(1.04);
+  -webkit-backdrop-filter: blur(10px) saturate(1.04);
+}
+
+body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-trait-positive {
+  background: rgba(4, 18, 10, 0.94);
+}
+
+body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-trait-negative {
+  background: rgba(22, 8, 6, 0.94);
+}
+
+body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-trait-rare {
+  background: rgba(12, 8, 22, 0.94);
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd {
@@ -702,9 +739,9 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd .resource-bar.resourc
   padding: 12px 14px 10px 14px;
   margin-bottom: 16px;
   border-radius: var(--gc-radius-sm);
-  background: rgba(7, 14, 32, 0.55);
+  background: var(--gc-panel-bg);
   border: 1px solid rgba(120, 190, 255, 0.16);
-  box-shadow: 0 0 26px rgba(70, 229, 255, 0.06);
+  box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0, 0, 0, 0.42);
 }
 
 .section-title{
@@ -1576,8 +1613,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 0.15rem;
   padding: 0.45rem 0.55rem;
   border: 1px solid rgba(0, 212, 255, 0.18);
-  border-radius: 8px;
-  background: rgba(0, 20, 40, 0.35);
+  border-radius: var(--gc-radius-sm);
+  background: var(--gc-panel-bg-2);
   min-width: 4.5rem;
 }
 .gc-fuel-exchange-rate-card--fuel{
@@ -1621,8 +1658,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 0.45rem;
   padding: 0.55rem 0.65rem;
   border: 1px solid rgba(0, 212, 255, 0.12);
-  border-radius: 8px;
-  background: rgba(0, 16, 32, 0.4);
+  border-radius: var(--gc-radius-sm);
+  background: var(--gc-panel-bg-2);
 }
 .gc-scrapyard-row-main{
   display: flex;
@@ -1753,8 +1790,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   flex: 1 1 8rem;
   padding: 0.4rem 0.55rem;
   border: 1px solid rgba(0, 212, 255, 0.22);
-  border-radius: 8px;
-  background: rgba(0, 20, 40, 0.35);
+  border-radius: var(--gc-radius-sm);
+  background: var(--gc-panel-bg-2);
   color: var(--gc-text-soft);
   font-size: 0.78rem;
   cursor: pointer;
@@ -6954,11 +6991,11 @@ body.gc-planet-manage-open { overflow: hidden; }
   padding: 0.65rem 0.75rem;
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(127, 255, 217, 0.28);
-  background: rgba(70, 229, 255, 0.06);
+  background: var(--gc-panel-bg-2);
 }
 .planet-evolution-page .pe-identity-teaser-ready{
   border-color: rgba(127, 255, 217, 0.45);
-  background: rgba(127, 255, 217, 0.08);
+  background: rgba(4, 16, 20, 0.94);
 }
 .planet-evolution-page .pe-identity-teaser-title{
   margin: 0 0 0.35rem;
@@ -7407,8 +7444,8 @@ body.gc-planet-manage-open { overflow: hidden; }
 .planet-evolution-page .pe-stat-card {
   padding: 0.75rem;
   border: 1px solid var(--gc-panel-border);
-  border-radius: var(--gc-radius-sm, 6px);
-  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--gc-radius-sm);
+  background: var(--gc-panel-bg-2);
 }
 .planet-evolution-page .pe-stat-card header {
   font-size: 0.78rem;
@@ -7432,6 +7469,7 @@ body.gc-planet-manage-open { overflow: hidden; }
   border: 1px solid var(--gc-panel-border);
   border-radius: var(--gc-radius-sm);
   margin-bottom: 0.5rem;
+  background: var(--gc-panel-bg-2);
 }
 .planet-evolution-page .pe-research-job-head {
   display: flex;
@@ -7462,15 +7500,15 @@ body.gc-planet-manage-open { overflow: hidden; }
 }
 .planet-evolution-page .pe-trait-positive {
   border-color: rgba(95, 214, 122, 0.4);
-  background: rgba(95, 214, 122, 0.06);
+  background: rgba(4, 18, 10, 0.92);
 }
 .planet-evolution-page .pe-trait-negative {
   border-color: rgba(255, 120, 80, 0.4);
-  background: rgba(255, 80, 40, 0.06);
+  background: rgba(22, 8, 6, 0.92);
 }
 .planet-evolution-page .pe-trait-rare {
   border-color: rgba(180, 140, 255, 0.45);
-  background: rgba(180, 140, 255, 0.08);
+  background: rgba(12, 8, 22, 0.92);
 }
 .planet-evolution-page .pe-trait-card header {
   display: flex;
@@ -7507,6 +7545,7 @@ body.gc-planet-manage-open { overflow: hidden; }
   padding: 0.65rem 0.75rem;
   border: 1px solid var(--gc-panel-border);
   border-radius: var(--gc-radius-sm);
+  background: var(--gc-panel-bg-2);
 }
 .planet-evolution-page .pe-policy-slot-card {
   margin-bottom: 0.75rem;

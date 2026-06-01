@@ -15,6 +15,9 @@ BALANCE_SETTING_KEYS: Tuple[str, ...] = (
     "production_speed",
     "build_speed",
     "research_speed",
+    "fleet_speed_war",
+    "fleet_speed_holding",
+    "fleet_speed_peaceful",
     "queue_limit",
     "research_queue_limit",
     "shipyard_speed",
@@ -35,6 +38,9 @@ _FLOAT_POS = frozenset(
         "production_speed",
         "build_speed",
         "research_speed",
+        "fleet_speed_war",
+        "fleet_speed_holding",
+        "fleet_speed_peaceful",
         "shipyard_speed",
         "exchange_rate_metal_to_crystal",
         "exchange_rate_crystal_to_metal",
@@ -180,13 +186,24 @@ def validate_balance_payload(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
 
 
 def save_balance_settings(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    cleaned, err = validate_balance_payload(payload)
+    data = dict(payload or {})
+    apply_start = data.pop("apply_start_to_existing", None)
+    apply_start_flag = apply_start in (True, 1, "1", "true", "on")
+
+    cleaned, err = validate_balance_payload(data)
     if err:
         return None, err
 
-    current = dict(get_game_settings() or {})
-    current.update(cleaned)
-    save_game_settings(current)
+    save_game_settings(cleaned)
+
+    if apply_start_flag:
+        from .admin import apply_start_resources_to_homeworlds
+
+        settings_now = get_game_settings() or {}
+        apply_start_resources_to_homeworlds(
+            int(cleaned.get("start_metal", settings_now.get("start_metal", 0)) or 0),
+            int(cleaned.get("start_crystal", settings_now.get("start_crystal", 0)) or 0),
+        )
 
     try:
         from .ranking import invalidate_all_score_cache

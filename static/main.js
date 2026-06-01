@@ -253,6 +253,7 @@
   let _planetPageReloadPromise = null;
   function reloadPageForActivePlanet(activePlanetId, reason) {
     if (GC.pjaxInFlight) return null;
+    if (typeof GC.detectPage === "function" && GC.detectPage() === "admin") return null;
     const domPid = getDomPlanetId();
     if (!activePlanetId || !domPid || activePlanetId === domPid) return null;
     if (_planetPageReloadPromise) return _planetPageReloadPromise;
@@ -2339,33 +2340,36 @@
   function applyGameStateData(data, _reason, opts) {
       if (!data || data.ok === false) return false;
       const skipMessagesUnread = Boolean(opts && opts.skipMessagesUnread);
+      const hudOnly = Boolean(opts && opts.hudOnly);
 
       if (data.server_time) setServerTime(data.server_time);
 
       const activePlanetId = Number(data.active_planet_id || data.build_queue?.planet_id || 0);
-      if (
-        _last.activePlanetId !== null &&
-        activePlanetId > 0 &&
-        _last.activePlanetId !== activePlanetId
-      ) {
-        // Build queue is per active colony — never reuse the previous planet's panel state.
-        _lastQueueSignature = "";
-        BUILDQ.active.finishTime = 0;
-        BUILDQ.active.totalSeconds = 0;
-      }
-      if (activePlanetId > 0) {
-        _last.activePlanetId = activePlanetId;
-      }
+      if (!hudOnly) {
+        if (
+          _last.activePlanetId !== null &&
+          activePlanetId > 0 &&
+          _last.activePlanetId !== activePlanetId
+        ) {
+          // Build queue is per active colony — never reuse the previous planet's panel state.
+          _lastQueueSignature = "";
+          BUILDQ.active.finishTime = 0;
+          BUILDQ.active.totalSeconds = 0;
+        }
+        if (activePlanetId > 0) {
+          _last.activePlanetId = activePlanetId;
+        }
 
-      if (_reason !== "planet_switch") {
-        reloadPageForActivePlanet(activePlanetId, _reason || "state");
-      }
+        if (_reason !== "planet_switch") {
+          reloadPageForActivePlanet(activePlanetId, _reason || "state");
+        }
 
-      if (typeof GC.updateHeaderPlanetSwitcherFromState === "function") {
-        GC.updateHeaderPlanetSwitcherFromState(data);
-      }
+        if (typeof GC.updateHeaderPlanetSwitcherFromState === "function") {
+          GC.updateHeaderPlanetSwitcherFromState(data);
+        }
 
-      applyPlanetLandscapeFromState(data);
+        applyPlanetLandscapeFromState(data);
+      }
 
       const p = data.player || {};
       const energy = data.energy || {};
@@ -2511,6 +2515,11 @@
 
         if (ovScoreBuild) animateNumber(ovScoreBuild, scoreBuildings, { duration: 650 });
         if (ovScoreRes) animateNumber(ovScoreRes, scoreResearch, { duration: 650 });
+      }
+
+      if (hudOnly) {
+        GC.lastState = data;
+        return false;
       }
 
       if (typeof data.unread_messages_count === "number") {
@@ -2691,6 +2700,29 @@
     return page === "buildings" || page === "research" || page === "shipyard";
   }
 
+  /** Lightweight HUD refresh — no PJAX, no poll abort, no page side-effects. */
+  async function refreshHudFromGameState(reason) {
+    if (!shouldRunGameLoop() || _authLoopAborted) return null;
+    try {
+      const data = await GC.fetchJSON("/api/game-state", { cache: "no-store" });
+      if (!data || data.ok === false) {
+        if (isAuthStatusFailure(null, data)) handleAuthFailure("admin_hud");
+        return null;
+      }
+      _statusPollErrorLogged = false;
+      clearStatusWidgetOffline();
+      applyGameStateData(data, reason || "admin_hud", { hudOnly: true });
+      return data;
+    } catch (err) {
+      if (isAuthStatusFailure(err)) {
+        handleAuthFailure("admin_hud");
+        return null;
+      }
+      console.warn("[GC] HUD refresh failed", reason, err);
+      return null;
+    }
+  }
+
   async function refreshGameState(reason) {
     if (!shouldRunGameLoop() || _authLoopAborted) return null;
 
@@ -2799,6 +2831,7 @@
   }
 
   GC.refreshGameState = refreshGameState;
+  GC.refreshHudFromGameState = refreshHudFromGameState;
 
   // =========================
   // Building tabs (delegated – survives PJAX)
@@ -6417,6 +6450,9 @@
       } finally {
         GC.pjaxInFlight = null;
         if (GC._pjaxAbort === ctrl) GC._pjaxAbort = null;
+        if (shouldRunGameLoop() && !_authLoopAborted && !GC.polling.running) {
+          GC.startPolling(lastHadActiveJob || lastHadActiveResearch);
+        }
       }
     })();
 

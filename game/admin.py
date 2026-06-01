@@ -132,13 +132,45 @@ def get_admin_settings() -> Dict[str, Any]:
     return s
 
 
+def apply_start_resources_to_homeworlds(start_metal: int, start_crystal: int) -> None:
+    """Set homeworld metal/crystal to at least start values (minimum bump)."""
+    sm = max(0, int(start_metal or 0))
+    sc = max(0, int(start_crystal or 0))
+    if sm <= 0 and sc <= 0:
+        return
+
+    conn = db()
+    try:
+        cur = conn.cursor()
+        if sm > 0:
+            cur.execute(
+                """
+                UPDATE planets
+                   SET metal = CASE WHEN metal < ? THEN ? ELSE metal END
+                 WHERE is_homeworld = 1;
+                """,
+                (sm, sm),
+            )
+        if sc > 0:
+            cur.execute(
+                """
+                UPDATE planets
+                   SET crystal = CASE WHEN crystal < ? THEN ? ELSE crystal END
+                 WHERE is_homeworld = 1;
+                """,
+                (sc, sc),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def update_admin_settings(form: Dict[str, Any]) -> None:
     """
-    Universums-Einstellungen aus dem Admin-Formular übernehmen und speichern.
+    Server-Einstellungen aus dem Admin-Formular übernehmen und speichern.
 
-    Zusätzlich:
-    - MOTD-Text & Enable-Flag
-    - Optional: Startressourcen als Mindestwert auf alle Homeworlds anwenden
+    Nur: Universums-Name, Galaxien, MOTD.
+    Pacing/Balance: Tab „Balance“ (JSON API).
     """
     current = get_game_settings() or {}
     if not isinstance(current, dict):
@@ -146,100 +178,18 @@ def update_admin_settings(form: Dict[str, Any]) -> None:
 
     new_settings = dict(current)
 
-    # ------------------- Strings -------------------
     universe_name = str(form.get("universe_name") or "").strip() or "Genesis Colonies"
     new_settings["universe_name"] = universe_name
 
-    # ------------------- Integers -------------------
     gal_count = _parse_int(form.get("galaxy_count"))
     if gal_count is not None and gal_count > 0:
         new_settings["galaxy_count"] = gal_count
 
-    queue_limit = _parse_int(form.get("queue_limit"))
-    if queue_limit is not None and queue_limit > 0:
-        new_settings["queue_limit"] = queue_limit
-
-    research_queue_limit = _parse_int(form.get("research_queue_limit"))
-    if research_queue_limit is not None and research_queue_limit > 0:
-        new_settings["research_queue_limit"] = research_queue_limit
-
-    start_metal = _parse_int(form.get("start_metal"))
-    if start_metal is not None and start_metal >= 0:
-        new_settings["start_metal"] = start_metal
-
-    start_crystal = _parse_int(form.get("start_crystal"))
-    if start_crystal is not None and start_crystal >= 0:
-        new_settings["start_crystal"] = start_crystal
-
-    # ------------------- Floats -------------------
-    prod_speed = _parse_float(form.get("production_speed"))
-    if prod_speed is not None and prod_speed > 0:
-        new_settings["production_speed"] = prod_speed
-
-    build_speed = _parse_float(form.get("build_speed"))
-    if build_speed is not None and build_speed > 0:
-        new_settings["build_speed"] = build_speed
-
-    research_speed = _parse_float(form.get("research_speed"))
-    if research_speed is not None and research_speed > 0:
-        new_settings["research_speed"] = research_speed
-
-    fleet_war = _parse_float(form.get("fleet_speed_war"))
-    if fleet_war is not None and fleet_war > 0:
-        new_settings["fleet_speed_war"] = fleet_war
-
-    fleet_hold = _parse_float(form.get("fleet_speed_holding"))
-    if fleet_hold is not None and fleet_hold > 0:
-        new_settings["fleet_speed_holding"] = fleet_hold
-
-    fleet_peace = _parse_float(form.get("fleet_speed_peaceful"))
-    if fleet_peace is not None and fleet_peace > 0:
-        new_settings["fleet_speed_peaceful"] = fleet_peace
-
-    # ------------------- MOTD -------------------
     motd_text = str(form.get("motd_text") or "").strip()
     motd_enabled = (form.get("motd_enabled") == "1") and bool(motd_text)
 
-    new_settings["motd_text"] = motd_text  # auch leer speichern -> löscht korrekt
+    new_settings["motd_text"] = motd_text
     new_settings["motd_enabled"] = 1 if motd_enabled else 0
-
-    # ------------------- Apply start resources to existing (minimum) -------------------
-    apply_start_flag = form.get("apply_start_to_existing") == "1"
-    if apply_start_flag:
-        sm = int(new_settings.get("start_metal", 0) or 0)
-        sc = int(new_settings.get("start_crystal", 0) or 0)
-
-        if sm > 0 or sc > 0:
-            conn = db()
-            try:
-                cur = conn.cursor()
-                if sm > 0:
-                    cur.execute(
-                        """
-                        UPDATE planets
-                           SET metal = CASE
-                               WHEN metal < ? THEN ?
-                               ELSE metal
-                           END
-                         WHERE is_homeworld = 1;
-                        """,
-                        (sm, sm),
-                    )
-                if sc > 0:
-                    cur.execute(
-                        """
-                        UPDATE planets
-                           SET crystal = CASE
-                               WHEN crystal < ? THEN ?
-                               ELSE crystal
-                           END
-                         WHERE is_homeworld = 1;
-                        """,
-                        (sc, sc),
-                    )
-                conn.commit()
-            finally:
-                conn.close()
 
     save_game_settings(new_settings)
 

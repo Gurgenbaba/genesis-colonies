@@ -506,3 +506,17 @@
     align-items: stretch;
   }
 }
+
+/* Landscape background — admin panels lesbar halten */
+body.gc-has-planet-landscape .admin-shell {
+  --admin-panel: var(--gc-panel-bg, rgba(2, 10, 20, 0.97));
+}
+
+body.gc-has-planet-landscape .admin-shell .admin-hero,
+body.gc-has-planet-landscape .admin-shell .admin-kpi-card,
+body.gc-has-planet-landscape .admin-shell .admin-card,
+body.gc-has-planet-landscape .admin-shell .admin-tabs,
+body.gc-has-planet-landscape .admin-shell .admin-section {
+  backdrop-filter: blur(12px) saturate(1.05);
+  -webkit-backdrop-filter: blur(12px) saturate(1.05);
+}
