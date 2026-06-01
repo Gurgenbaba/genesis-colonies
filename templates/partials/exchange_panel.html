@@ -1,7 +1,7 @@
 {# Unified 3-resource trader — Genesis console layout #}
 {% set ex = exchange if exchange is defined and exchange else {} %}
 {% set default_dir = 'metal_to_crystal' %}
-<section class="gc-exchange-panel gc-trader-panel gc-panel" id="gc-exchange-panel"
+<section class="gc-exchange-panel gc-panel trader-hub-panel" id="gc-exchange-panel"
          {% if not ex.enabled %}data-disabled="1"{% endif %}
          data-rate-m2c="{{ ex.rate_metal_to_crystal or 0.8 }}"
          data-rate-c2m="{{ ex.rate_crystal_to_metal or 0.8 }}"
@@ -11,9 +11,11 @@
          data-min="{{ ex.min_amount or 100 }}"
          data-dir="{{ default_dir }}"
          aria-label="{{ T('exchange_title') }}">
-  <div class="gc-trader-panel-head">
-    <h2 class="gc-trader-panel-title">{{ T('exchange_title')|upper }}</h2>
-    <p class="gc-trader-panel-hint hint">{{ T('exchange_hint') }}</p>
+  <div class="gc-panel-header">
+    <div class="gc-panel-head-left">
+      <span class="gc-panel-title">{{ T('exchange_title') }}</span>
+      <span class="gc-panel-subtitle hint">{{ T('exchange_hint') }}</span>
+    </div>
   </div>
 
   {% if ex.enabled %}

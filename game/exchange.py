@@ -338,13 +338,6 @@ def execute_exchange(
             rollback(conn)
             return False, "insufficient_balance", None
 
-        if receive_resource in ("metal", "crystal"):
-            caps = _storage_caps(planet_id, player_id, conn)
-            free = max(0, int(caps.get(receive_resource, 0) or 0) - int(balances[receive_resource]))
-            if receive_amount > free:
-                rollback(conn)
-                return False, "storage_full", {"receive_resource": receive_resource}
-
         new_metal = current_metal
         new_crystal = current_crystal
         new_fuel = current_fuel

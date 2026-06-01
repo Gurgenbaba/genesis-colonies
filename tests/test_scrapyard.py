@@ -70,6 +70,49 @@ def test_recycle_ships_refunds_and_deducts(scrap_db):
         verify.close()
 
 
+def test_recycle_allows_storage_overflow(scrap_db):
+    ok, _, user = create_user(f"scrap_ov_{uuid.uuid4().hex[:8]}", "test-pass-123")
+    assert ok
+    uid = int(user["id"])
+    conn = db()
+    try:
+        ensure_player_and_homeworld(uid, conn=conn)
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM planets WHERE player_id = ? LIMIT 1;", (uid,))
+        planet_id = int(cur.fetchone()["id"])
+        from game.models import get_planet_buildings, get_research_levels
+        from game.resources import get_storage_capacity
+
+        buildings = get_planet_buildings(planet_id, conn=conn)
+        research = get_research_levels(user_id=uid, conn=conn)
+        caps = get_storage_capacity(buildings, research=research)
+        metal_cap = int(caps.get("metal") or 0)
+        assert metal_cap > 0
+        cur.execute(
+            "UPDATE planets SET metal = ?, crystal = ? WHERE id = ?;",
+            (metal_cap, int(caps.get("crystal") or 0), planet_id),
+        )
+        add_planet_ships(planet_id, uid, {"spark_drone": 5}, conn=conn)
+        conn.commit()
+
+        ok_r, reason, result = recycle_ships(
+            player_id=uid,
+            planet_id=planet_id,
+            ship_key="spark_drone",
+            amount=3,
+            conn=conn,
+        )
+        assert ok_r, reason
+        assert result["refund"]["metal"] > 0
+
+        cur.execute("SELECT metal FROM planets WHERE id = ?;", (planet_id,))
+        metal_after = int(cur.fetchone()["metal"])
+        assert metal_after > metal_cap
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def test_scrapyard_api_persists_recycle(scrap_db, tmp_path, monkeypatch):
     import importlib
     import os

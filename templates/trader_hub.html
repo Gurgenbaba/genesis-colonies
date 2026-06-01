@@ -12,73 +12,70 @@
 {% set pct_metal = (p_metal * 100 // cap_metal) if cap_metal > 0 else 0 %}
 {% set pct_crystal = (p_crystal * 100 // cap_crystal) if cap_crystal > 0 else 0 %}
 
-<div class="gc-page trader-hub-page gc-trader-shell" id="trader-hub-page"
+<div class="gc-page trader-hub-page" id="trader-hub-page"
      data-planet-id="{{ HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else '' }}">
 
-  <header class="gc-trader-header">
-    <div class="gc-trader-header-main">
-      <h1 class="gc-trader-title">{{ T("trader_hub_title", "Trader Hub")|upper }}</h1>
-      <p class="gc-trader-subtitle hint">{{ T("trader_hub_hint") }}</p>
-    </div>
-    <div class="gc-trader-daily-limit" aria-label="{{ T('exchange_daily_remaining') }}">
-      <span class="gc-trader-daily-label">{{ T('trader_hub_daily_limit', 'Daily limit (per commander)') }}</span>
-      <span class="gc-trader-daily-values gc-mono">
-        <strong data-exchange-daily-remaining>{{ ex.daily_remaining|fmt_int if ex.daily_remaining is defined else '–' }}</strong>
-        <span class="gc-trader-daily-sep">/</span>
-        <span data-exchange-daily-limit>{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}</span>
-      </span>
+  <header class="section-header trader-hub-header">
+    <div class="fleet-headline-row">
+      <div>
+        <h1 class="section-title">{{ T("trader_hub_title", "Trader Hub") }}</h1>
+        <p class="section-hint hint">{{ T("trader_hub_hint") }}</p>
+      </div>
+      <div class="fleet-slots-badge trader-hub-daily-badge" aria-label="{{ T('exchange_daily_remaining') }}">
+        <span class="fleet-slots-label">{{ T('trader_hub_daily_limit', 'Daily limit (per commander)') }}</span>
+        <span class="fleet-slots-value gc-mono">
+          <strong data-exchange-daily-remaining>{{ ex.daily_remaining|fmt_int if ex.daily_remaining is defined else '–' }}</strong>
+          <span class="trader-hub-daily-sep">/</span>
+          <span data-exchange-daily-limit>{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}</span>
+        </span>
+      </div>
     </div>
   </header>
 
-  <section class="gc-trader-resources" aria-label="{{ T('trader_hub_balance', 'Colony balance') }}">
-    <article class="gc-trader-resource-card" aria-label="{{ T('resource_metal') }}">
+  <div class="overview-resources trader-hub-resources" aria-label="{{ T('trader_hub_balance', 'Colony balance') }}">
+    <article class="overview-res-card" aria-label="{{ T('resource_metal') }}">
       <img src="{{ url_for('static', filename='icons/ferronit.png') }}"
-           alt="" class="gc-trader-resource-icon" loading="lazy">
-      <div class="gc-trader-resource-meta">
-        <span class="gc-trader-resource-label">{{ T("resource_metal")|upper }}</span>
-        <span class="gc-trader-resource-values gc-mono">
+           alt="" class="overview-res-icon" loading="lazy">
+      <div class="overview-res-meta">
+        <span class="overview-res-label">{{ T("resource_metal") }}</span>
+        <span class="overview-res-main">
           <span class="gc-val" data-res="metal">{{ p_metal|fmt_int }}</span>
           <span class="gc-cap" data-cap="metal">/ {{ cap_metal|fmt_int }}</span>
         </span>
-        <div class="gc-trader-resource-bar" aria-hidden="true">
-          <span class="gc-trader-resource-bar-fill" data-res-bar="metal" style="width: {{ [pct_metal, 100]|min }}%;"></span>
+        <div class="trader-hub-res-bar" aria-hidden="true">
+          <span class="trader-hub-res-bar-fill" data-res-bar="metal" style="width: {{ [pct_metal, 100]|min }}%;"></span>
         </div>
       </div>
     </article>
-    <article class="gc-trader-resource-card" aria-label="{{ T('resource_crystal') }}">
+    <article class="overview-res-card" aria-label="{{ T('resource_crystal') }}">
       <img src="{{ url_for('static', filename='icons/crytite.png') }}"
-           alt="" class="gc-trader-resource-icon" loading="lazy">
-      <div class="gc-trader-resource-meta">
-        <span class="gc-trader-resource-label">{{ T("resource_crystal")|upper }}</span>
-        <span class="gc-trader-resource-values gc-mono">
+           alt="" class="overview-res-icon" loading="lazy">
+      <div class="overview-res-meta">
+        <span class="overview-res-label">{{ T("resource_crystal") }}</span>
+        <span class="overview-res-main">
           <span class="gc-val" data-res="crystal">{{ p_crystal|fmt_int }}</span>
           <span class="gc-cap" data-cap="crystal">/ {{ cap_crystal|fmt_int }}</span>
         </span>
-        <div class="gc-trader-resource-bar" aria-hidden="true">
-          <span class="gc-trader-resource-bar-fill" data-res-bar="crystal" style="width: {{ [pct_crystal, 100]|min }}%;"></span>
+        <div class="trader-hub-res-bar" aria-hidden="true">
+          <span class="trader-hub-res-bar-fill" data-res-bar="crystal" style="width: {{ [pct_crystal, 100]|min }}%;"></span>
         </div>
       </div>
     </article>
-    <article class="gc-trader-resource-card gc-trader-resource-card--fuel" aria-label="{{ T('resource_fuel_cells') }}">
+    <article class="overview-res-card" aria-label="{{ T('resource_fuel_cells') }}">
       <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}"
-           alt="" class="gc-trader-resource-icon" loading="lazy">
-      <div class="gc-trader-resource-meta">
-        <span class="gc-trader-resource-label">{{ T("resource_fuel_cells")|upper }}</span>
-        <span class="gc-trader-resource-values gc-mono">
+           alt="" class="overview-res-icon" loading="lazy">
+      <div class="overview-res-meta">
+        <span class="overview-res-label">{{ T("resource_fuel_cells") }}</span>
+        <span class="overview-res-main">
           <span class="gc-val" data-res="fuel_cells">{{ p_fuel|fmt_int }}</span>
         </span>
       </div>
     </article>
-  </section>
+  </div>
 
-  <div class="gc-trader-columns">
+  <div class="fleet-layout trader-hub-layout">
     {% include "partials/exchange_panel.html" %}
     {% include "partials/scrapyard_panel.html" %}
   </div>
-
-  <footer class="gc-trader-footer hint">
-    <span class="gc-trader-footer-icon" aria-hidden="true">ⓘ</span>
-    {{ T('trader_hub_footer_note', 'All transactions are final. Metal and crystal output is limited by storage capacity on the active colony.') }}
-  </footer>
 </div>
 {% endblock %}

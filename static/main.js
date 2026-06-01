@@ -5038,21 +5038,23 @@
       const recycleLabel = tt("scrapyard_recycle_btn", "Recycle");
       const amountLabel = tt("scrapyard_amount", "Amount");
       return `
-        <article class="gc-scrapyard-row gc-trader-scrap-card" data-scrap-ship="${key}" data-scrap-max="${amount}">
-          <div class="gc-trader-scrap-icon-wrap">
-            <img src="${icon}" alt="" class="gc-scrapyard-ship-icon" width="44" height="44" loading="lazy">
+        <article class="gc-scrapyard-row fleet-ship-row gc-trader-scrap-row" data-scrap-ship="${key}" data-scrap-max="${amount}">
+          <div class="fleet-ship-row-main gc-trader-scrap-main">
+            <div class="gc-trader-scrap-icon-wrap">
+              <img src="${icon}" alt="" class="gc-scrapyard-ship-icon" width="40" height="40" loading="lazy">
+            </div>
+            <div class="gc-trader-scrap-body">
+              <span class="gc-scrapyard-ship-name fleet-ship-name">${shipName}</span>
+              <span class="gc-scrapyard-have fleet-ship-stock gc-mono">${haveLabel}</span>
+              <span class="gc-trader-scrap-refund hint gc-mono">
+                ${tt("scrapyard_refund_estimate", "Refund (approx.)")}:
+                ${minM.toLocaleString()}–${maxM.toLocaleString()} ${metalLabel},
+                ${minC.toLocaleString()}–${maxC.toLocaleString()} ${crystalLabel}
+              </span>
+            </div>
           </div>
-          <div class="gc-trader-scrap-body">
-            <span class="gc-scrapyard-ship-name">${shipName.toUpperCase()}</span>
-            <span class="gc-scrapyard-have gc-mono">${haveLabel}</span>
-            <span class="gc-trader-scrap-refund hint gc-mono">
-              ${tt("scrapyard_refund_estimate", "Refund (approx.)")}:
-              ${minM.toLocaleString()}–${maxM.toLocaleString()} ${metalLabel},
-              ${minC.toLocaleString()}–${maxC.toLocaleString()} ${crystalLabel}
-            </span>
-          </div>
-          <div class="gc-scrapyard-actions gc-trader-scrap-actions">
-            <input type="number" class="gc-trader-input gc-scrapyard-qty" min="1" max="${amount}" value="1"
+          <div class="fleet-ship-row-controls gc-trader-scrap-actions">
+            <input type="number" class="gc-trader-input fleet-ship-input gc-scrapyard-qty" min="1" max="${amount}" value="1"
                    data-scrap-qty="${key}" aria-label="${amountLabel}">
             <button type="button" class="gc-btn gc-btn-secondary gc-trader-scrap-btn" data-scrap-recycle="${key}">
               ${recycleLabel.toUpperCase()}

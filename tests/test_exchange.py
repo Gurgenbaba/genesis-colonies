@@ -182,6 +182,46 @@ def test_exchange_fuel_cells_uncapped(exchange_db):
     conn.close()
 
 
+def test_exchange_allows_storage_overflow(exchange_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    status = get_exchange_status(
+        player_id=uid,
+        planet_id=pid,
+        metal=0,
+        crystal=100000,
+        fuel_cells=0,
+        conn=conn,
+    )
+    metal_cap = int(status["storage"].get("metal") or 0)
+    assert metal_cap > 0
+
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE planets SET metal = ?, crystal = 100000 WHERE id = ?;",
+        (metal_cap, pid),
+    )
+    conn.commit()
+
+    ok, reason, result = execute_exchange(
+        player_id=uid,
+        planet_id=pid,
+        from_resource="crystal",
+        to_resource="metal",
+        amount=1000,
+        conn=conn,
+    )
+    assert ok, reason
+    assert result["receive_amount"] == 800
+
+    cur.execute("SELECT metal FROM planets WHERE id = ?;", (pid,))
+    metal_after = int(cur.fetchone()["metal"])
+    assert metal_after == metal_cap + 800
+    assert metal_after > metal_cap
+    conn.close()
+
+
 def test_exchange_insufficient_balance(exchange_db):
     conn = db()
     uid = _player(conn=conn)
@@ -315,6 +355,7 @@ def test_trader_hub_page_includes_exchange_panel(exchange_db, tmp_path, monkeypa
     html = res.get_data(as_text=True)
     assert "trader-hub-page" in html
     assert "gc-exchange-panel" in html
+    assert "trader-hub-footer" not in html
     assert "gc-exchange-formula" in html
     assert "gc-exchange-route-select" in html
     assert "gc-fuel-exchange-panel" not in html

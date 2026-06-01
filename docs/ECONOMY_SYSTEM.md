@@ -122,8 +122,7 @@ Gleiche Ressource als Input/Output ist verboten.
 ### Regeln
 
 - Abbuchung/Gutschrift vom **context planet**
-- metal/crystal Output capped by storage capacity
-- fuel_cells Output uncapped
+- Trader Hub erlaubt **Overflow** über Lagerkapazität (Tausch + Schrottplatz)
 - Tageslimit zählt `give_amount` pro Spieler
 - Log: `exchange_log`
 
@@ -135,7 +134,7 @@ Migrationen: `024`, `025`, `031`, `036` (fuel_cells in exchange_log)
 
 ## Scrapyard
 
-Recycelt Schiffe vom context planet → Ressourcen-Rückerstattung nach `fleet_defs` / Scrapyard-Logik.
+Recycelt Schiffe vom context planet → Ressourcen-Rückerstattung nach `fleet_defs` / Scrapyard-Logik. Rückerstattung darf Lagerkapazität überschreiten (Overflow).
 
 ---
 

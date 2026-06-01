@@ -253,10 +253,6 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-panel::before {
 body.gc-body-ingame.gc-has-planet-landscape .overview-res-card,
 body.gc-body-ingame.gc-has-planet-landscape .overview-hint,
 body.gc-body-ingame.gc-has-planet-landscape .trader-hub-page .gc-exchange-dir-btn,
-body.gc-body-ingame.gc-has-planet-landscape .trader-hub-page .gc-fuel-exchange-rate-card,
-body.gc-body-ingame.gc-has-planet-landscape .trader-hub-page .gc-scrapyard-row,
-body.gc-body-ingame.gc-has-planet-landscape .trader-hub-page .gc-trader-resource-card,
-body.gc-body-ingame.gc-has-planet-landscape .trader-hub-page .gc-trader-panel,
 body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-stat-card,
 body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-trait-card,
 body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-identity-teaser,
@@ -1579,19 +1575,33 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .overview-res-main .gc-cap{ font-family: var(--gc-mono); font-size: 0.86rem; color: var(--gc-text-dim); }
 .overview-res-cap{ color: var(--gc-text-soft); font-size: 0.84rem; }
 
-.trader-hub-page .trader-hub-balance,
 .trader-hub-page .trader-hub-resources{
-  display: none;
-}
-.trader-hub-page .trader-hub-grid,
-.trader-hub-page .gc-trader-columns{
   display: grid;
-  gap: 1rem;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  align-items: start;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--gc-card-gap);
+  margin-bottom: 12px;
+}
+.trader-hub-page .trader-hub-layout{
+  margin-bottom: 12px;
+}
+.trader-hub-daily-sep{
+  opacity: 0.55;
+  margin: 0 0.15rem;
+}
+.trader-hub-res-bar{
+  height: 4px;
+  margin-top: 0.2rem;
+  border: 1px solid var(--gc-border);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+.trader-hub-res-bar-fill{
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(70, 229, 255, 0.55), rgba(127, 255, 217, 0.85));
 }
 .trader-hub-page .gc-exchange-panel,
-.trader-hub-page .gc-fuel-exchange-panel,
 .trader-hub-page .gc-scrapyard-panel{
   max-width: none;
 }
@@ -1615,12 +1625,6 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   border-radius: var(--gc-radius-sm);
   background: var(--gc-panel-bg-2);
   min-width: 4.5rem;
-}
-.trader-hub-page .gc-fuel-exchange-rate-card{
-  border-radius: 0;
-  border-color: rgba(70, 229, 255, 0.22);
-  background: rgba(3, 8, 18, 0.85);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
 }
 .gc-fuel-exchange-rate-card--fuel{
   border-color: rgba(255, 196, 0, 0.35);
@@ -1666,12 +1670,6 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   border-radius: var(--gc-radius-sm);
   background: var(--gc-panel-bg-2);
 }
-.trader-hub-page .gc-scrapyard-row{
-  border-radius: 0;
-  border-color: rgba(120, 190, 255, 0.12);
-  background: rgba(5, 10, 22, 0.45);
-  padding: 8px 10px;
-}
 .gc-scrapyard-row-main{
   display: flex;
   align-items: center;
@@ -1680,19 +1678,6 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .gc-scrapyard-ship-icon{
   flex-shrink: 0;
   filter: drop-shadow(0 0 6px rgba(0, 212, 255, 0.25));
-}
-.trader-hub-page .gc-scrapyard-ship-icon{
-  display: block;
-  width: 44px;
-  height: 44px;
-  padding: 4px;
-  border: 1px solid rgba(70, 229, 255, 0.22);
-  border-radius: 0;
-  background: rgba(3, 8, 18, 0.85);
-  box-sizing: border-box;
-  object-fit: contain;
-  filter: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
 }
 .gc-scrapyard-actions{
   display: flex;
@@ -1794,9 +1779,6 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .shipyard-ship-list-locked .shipyard-ship-thumb{
   opacity: 0.45;
 }
-.trader-hub-page .gc-exchange-panel{
-  max-width: none;
-}
 .gc-exchange-panel{
   margin-bottom: 12px;
   padding: 0.85rem 1rem;
@@ -1866,11 +1848,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   justify-self: start;
 }
 
-/* Trader Hub — Genesis trading console (GC-403) */
-.gc-trader-shell{
-  display: grid;
-  gap: 1rem;
-}
+/* Trader Hub — layout & controls (panels use shared gc-panel) */
 .visually-hidden{
   position: absolute !important;
   width: 1px !important;
@@ -1882,424 +1860,218 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   white-space: nowrap !important;
   border: 0 !important;
 }
-.gc-trader-header{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem 1.25rem;
-  padding-bottom: 0.35rem;
-  border-bottom: 1px solid rgba(70, 229, 255, 0.14);
-}
-.gc-trader-title{
-  margin: 0;
-  font-family: Orbitron, Inter, system-ui, sans-serif;
-  font-size: clamp(1.35rem, 2.2vw, 1.75rem);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  color: var(--gc-neon-cyan);
-  text-shadow: 0 0 18px rgba(70, 229, 255, 0.18);
-}
-.gc-trader-subtitle{
-  margin: 0.35rem 0 0;
-  max-width: 42rem;
-  font-size: 0.82rem;
-}
-.gc-trader-daily-limit{
-  display: grid;
-  gap: 0.25rem;
-  min-width: min(100%, 220px);
-  padding: 0.55rem 0.75rem;
-  border: 1px solid rgba(70, 229, 255, 0.28);
-  border-radius: 0;
-  background: rgba(3, 8, 18, 0.88);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35), inset 0 0 12px rgba(70, 229, 255, 0.04);
-}
-.gc-trader-daily-label{
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(127, 255, 217, 0.72);
-}
-.gc-trader-daily-values{
-  color: var(--gc-neon-cyan);
-  font-size: 0.92rem;
-}
-.gc-trader-daily-sep{
-  opacity: 0.55;
-  margin: 0 0.15rem;
-}
-.gc-trader-resources{
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-.gc-trader-resource-card{
-  display: flex;
-  align-items: flex-start;
-  gap: 0.65rem;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid rgba(70, 229, 255, 0.22);
-  border-radius: 0;
-  background: rgba(3, 8, 18, 0.82);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 14px rgba(0, 0, 0, 0.28);
-}
-.gc-trader-resource-icon{
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-.gc-trader-resource-meta{
-  display: grid;
-  gap: 0.2rem;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-.gc-trader-resource-label{
-  font-size: 0.68rem;
-  letter-spacing: 0.07em;
-  color: rgba(127, 255, 217, 0.72);
-}
-.gc-trader-resource-values{
-  color: var(--gc-neon-cyan);
-  font-size: 0.95rem;
-}
-.gc-trader-resource-values .gc-cap{
-  color: rgba(127, 255, 217, 0.55);
-  font-size: 0.82rem;
-}
-.gc-trader-resource-bar{
-  height: 4px;
-  margin-top: 0.15rem;
-  border: 1px solid rgba(70, 229, 255, 0.18);
-  border-radius: 0;
-  background: rgba(0, 0, 0, 0.35);
-  overflow: hidden;
-}
-.gc-trader-resource-bar-fill{
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, rgba(70, 229, 255, 0.55), rgba(127, 255, 217, 0.85));
-  box-shadow: 0 0 8px rgba(70, 229, 255, 0.35);
-}
-.gc-trader-resource-card--fuel .gc-trader-resource-values{
-  font-size: 1.05rem;
-}
-.gc-trader-panel{
-  border: 1px solid rgba(70, 229, 255, 0.22);
-  border-radius: 0;
-  background: rgba(3, 8, 18, 0.78);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.42), 0 12px 28px rgba(0, 0, 0, 0.28);
-  padding: 0.85rem 0.95rem;
-}
-.gc-trader-panel-head{
-  margin-bottom: 0.85rem;
-  padding-bottom: 0.55rem;
-  border-bottom: 1px solid rgba(70, 229, 255, 0.12);
-}
-.gc-trader-panel-title{
-  margin: 0;
-  font-size: 0.92rem;
-  letter-spacing: 0.08em;
-  color: rgba(215, 246, 255, 0.94);
-}
-.gc-trader-panel-hint{
-  margin: 0.35rem 0 0;
-  font-size: 0.78rem;
-  line-height: 1.35;
-}
-.gc-trader-select,
-.gc-trader-input{
-  border-radius: 0;
-  border: 1px solid rgba(70, 229, 255, 0.28);
-  background: rgba(5, 10, 22, 0.88);
-  color: rgba(215, 246, 255, 0.94);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
-}
-.gc-trader-shell select:not(.visually-hidden),
-.gc-trader-shell .gc-trader-select:not(.visually-hidden){
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  display: block;
-  width: 100%;
-  min-height: 38px;
-  padding: 8px 2.25rem 8px 10px;
-  font-size: 0.88rem;
-  font-weight: 600;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%237fffda' d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 12px 8px;
-  cursor: pointer;
-}
-.gc-trader-shell input[type="number"].gc-trader-input,
-.gc-trader-shell .gc-trader-input.gc-exchange-input,
-.gc-trader-shell .gc-trader-input.gc-scrapyard-qty{
-  width: 100%;
-  min-height: 38px;
-  padding: 8px 10px;
-  font-family: var(--gc-mono);
-  font-size: 0.88rem;
-  appearance: textfield;
-  -moz-appearance: textfield;
-}
-.gc-trader-shell input[type="number"]::-webkit-outer-spin-button,
-.gc-trader-shell input[type="number"]::-webkit-inner-spin-button{
-  -webkit-appearance: none;
-  margin: 0;
-}
-.gc-trader-shell .gc-trader-input:hover,
-.gc-trader-shell select:not(.visually-hidden):hover{
-  border-color: rgba(70, 229, 255, 0.45);
-  background-color: rgba(6, 12, 26, 0.92);
-}
-.gc-trader-shell .gc-trader-input:focus,
-.gc-trader-shell select:not(.visually-hidden):focus{
-  outline: none;
-  border-color: rgba(70, 229, 255, 0.88);
-  box-shadow: 0 0 0 2px rgba(70, 229, 255, 0.14), inset 0 0 12px rgba(70, 229, 255, 0.06);
-}
-.gc-trader-exchange-pick{
+.trader-hub-page .gc-trader-exchange-pick{
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 0.65rem;
   align-items: end;
   margin-bottom: 0.85rem;
 }
-.gc-trader-pick-label{
+.trader-hub-page .gc-trader-pick-label{
   display: block;
   margin-bottom: 0.4rem;
   font-size: 0.68rem;
   letter-spacing: 0.07em;
-  color: rgba(127, 255, 217, 0.72);
+  color: var(--gc-text-dim);
 }
-.gc-trader-pick-swap{
+.trader-hub-page .gc-trader-pick-swap{
   padding-bottom: 1.35rem;
-  color: rgba(127, 255, 217, 0.55);
+  color: var(--gc-text-dim);
   font-size: 1.1rem;
 }
-.gc-trader-resource-tiles{
+.trader-hub-page .gc-trader-resource-tiles{
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.35rem;
 }
-.gc-trader-resource-tile{
+.trader-hub-page .gc-trader-resource-tile{
   display: grid;
   justify-items: center;
   gap: 0.2rem;
   padding: 0.45rem 0.25rem;
-  border: 1px solid rgba(70, 229, 255, 0.18);
-  border-radius: 0;
-  background: rgba(3, 8, 18, 0.72);
-  color: rgba(215, 246, 255, 0.82);
+  border: 1px solid rgba(120, 190, 255, 0.12);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(5, 10, 22, 0.52);
+  color: var(--gc-text-soft);
   font-size: 0.62rem;
   line-height: 1.15;
   cursor: pointer;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
-.gc-trader-resource-tile img{
+.trader-hub-page .gc-trader-resource-tile img{
   width: 28px;
   height: 28px;
   object-fit: contain;
 }
-.gc-trader-resource-tile:hover{
-  border-color: rgba(70, 229, 255, 0.38);
-  background: rgba(70, 229, 255, 0.05);
+.trader-hub-page .gc-trader-resource-tile:hover{
+  border-color: rgba(70, 229, 255, 0.28);
+  background: rgba(7, 14, 32, 0.62);
 }
-.gc-trader-resource-tile.is-active{
-  border-color: rgba(70, 229, 255, 0.72);
+.trader-hub-page .gc-trader-resource-tile.is-active{
+  border-color: rgba(70, 229, 255, 0.42);
   background: rgba(70, 229, 255, 0.08);
-  box-shadow: inset 0 0 12px rgba(70, 229, 255, 0.08), 0 0 0 1px rgba(70, 229, 255, 0.18);
   color: var(--gc-neon-cyan);
 }
-.gc-trader-exchange-form{
+.trader-hub-page .gc-trader-exchange-form{
   display: grid;
   gap: 0.75rem;
 }
-.gc-trader-amount-row{
+.trader-hub-page .gc-trader-amount-row{
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 0.55rem;
   align-items: end;
 }
-.gc-trader-field-label{
+.trader-hub-page .gc-trader-field-label{
   display: block;
   margin-bottom: 0.35rem;
   font-size: 0.68rem;
   letter-spacing: 0.06em;
-  color: rgba(127, 255, 217, 0.72);
+  color: var(--gc-text-dim);
 }
-.gc-trader-amount-arrow{
+.trader-hub-page .gc-trader-amount-arrow{
   padding-bottom: 0.55rem;
-  color: rgba(127, 255, 217, 0.55);
+  color: var(--gc-text-dim);
   font-size: 1.15rem;
 }
-.gc-trader-output{
-  display: flex;
-  align-items: center;
+.trader-hub-page .gc-trader-input,
+.trader-hub-page .gc-trader-output{
+  width: 100%;
   min-height: 38px;
   padding: 8px 10px;
-  color: var(--gc-neon-cyan);
-  background: rgba(2, 6, 14, 0.92);
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.28);
+  background: rgba(5, 10, 22, 0.88);
+  color: var(--gc-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
-.gc-trader-info-bar{
+.trader-hub-page .gc-trader-output{
+  display: flex;
+  align-items: center;
+  color: var(--gc-neon-cyan);
+  font-family: var(--gc-mono);
+  background: rgba(3, 8, 18, 0.72);
+}
+.trader-hub-page input[type="number"].gc-trader-input,
+.trader-hub-page .fleet-ship-input.gc-trader-input{
+  font-family: var(--gc-mono);
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.trader-hub-page input[type="number"]::-webkit-outer-spin-button,
+.trader-hub-page input[type="number"]::-webkit-inner-spin-button{
+  -webkit-appearance: none;
+  margin: 0;
+}
+.trader-hub-page .gc-trader-input:hover,
+.trader-hub-page .gc-trader-output:hover{
+  border-color: rgba(70, 229, 255, 0.42);
+}
+.trader-hub-page .gc-trader-input:focus{
+  outline: none;
+  border-color: rgba(70, 229, 255, 0.88);
+  box-shadow: 0 0 0 2px rgba(70, 229, 255, 0.14), inset 0 0 12px rgba(70, 229, 255, 0.06);
+}
+.trader-hub-page .gc-trader-info-bar{
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.45rem;
   padding: 0.55rem 0.65rem;
-  border: 1px solid rgba(70, 229, 255, 0.18);
-  border-radius: 0;
-  background: rgba(2, 6, 14, 0.88);
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.16);
+  background: rgba(7, 14, 32, 0.52);
 }
-.gc-trader-info-cell{
+.trader-hub-page .gc-trader-info-cell{
   display: grid;
   gap: 0.15rem;
   min-width: 0;
 }
-.gc-trader-info-label{
+.trader-hub-page .gc-trader-info-label{
   font-size: 0.62rem;
   letter-spacing: 0.06em;
-  color: rgba(127, 255, 217, 0.58);
+  color: var(--gc-text-dim);
 }
-.gc-trader-info-cell strong{
-  color: rgba(215, 246, 255, 0.92);
+.trader-hub-page .gc-trader-info-cell strong{
+  color: var(--gc-text);
   font-size: 0.82rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.gc-trader-info-cell--accent strong{
+.trader-hub-page .gc-trader-info-cell--accent strong{
   color: var(--gc-neon-cyan);
 }
-.gc-trader-submit{
+.trader-hub-page .gc-trader-submit{
   width: 100%;
   justify-content: center;
-  border-radius: 0;
-  letter-spacing: 0.06em;
-  font-weight: 700;
 }
-.gc-trader-submit-arrow{
+.trader-hub-page .gc-trader-submit-arrow{
   margin-left: 0.35rem;
   opacity: 0.85;
 }
-.gc-trader-error{
+.trader-hub-page .gc-trader-error{
   margin: 0;
   color: #ff9a7a;
 }
-.gc-trader-scrap-list{
+.trader-hub-page .gc-trader-scrap-list{
   display: grid;
-  gap: 0.55rem;
+  gap: 8px;
 }
-.gc-trader-scrap-card{
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 0.65rem;
-  align-items: center;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid rgba(120, 190, 255, 0.14);
-  border-radius: 0;
-  background: rgba(5, 10, 22, 0.45);
+.trader-hub-page .gc-trader-scrap-row{
+  margin: 0;
 }
-.gc-trader-scrap-icon-wrap{
+.trader-hub-page .gc-trader-scrap-main{
+  align-items: flex-start;
+  gap: 10px;
+}
+.trader-hub-page .gc-trader-scrap-icon-wrap{
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
-  border: 1px solid rgba(70, 229, 255, 0.22);
-  border-radius: 0;
-  background: rgba(3, 8, 18, 0.88);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(3, 8, 18, 0.72);
 }
-.gc-trader-shell .gc-scrapyard-ship-icon{
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+.trader-hub-page .gc-scrapyard-ship-icon{
+  width: 34px;
+  height: 34px;
   object-fit: contain;
-  filter: none;
 }
-.gc-trader-scrap-body{
+.trader-hub-page .gc-trader-scrap-body{
   display: grid;
   gap: 0.12rem;
   min-width: 0;
 }
-.gc-trader-scrap-body .gc-scrapyard-ship-name{
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: rgba(215, 246, 255, 0.94);
+.trader-hub-page .gc-trader-scrap-body .gc-scrapyard-ship-name{
+  font-size: 0.82rem;
 }
-.gc-trader-scrap-body .gc-scrapyard-have{
-  font-size: 0.74rem;
-  color: rgba(127, 255, 217, 0.72);
-}
-.gc-trader-scrap-refund{
+.trader-hub-page .gc-trader-scrap-refund{
   font-size: 0.72rem;
   line-height: 1.3;
 }
-.gc-trader-scrap-actions{
-  display: grid;
-  gap: 0.35rem;
-  justify-items: stretch;
-  min-width: 92px;
+.trader-hub-page .gc-trader-scrap-actions{
+  flex-wrap: wrap;
 }
-.gc-trader-scrap-actions .gc-scrapyard-qty{
-  width: 100%;
-  min-height: 34px;
-  padding: 6px 8px;
-  text-align: center;
-  color: var(--gc-neon-cyan);
-}
-.gc-trader-scrap-btn{
-  width: 100%;
-  border-radius: 0;
-  letter-spacing: 0.05em;
+.trader-hub-page .gc-trader-scrap-btn{
   font-size: 0.72rem;
   font-weight: 700;
-}
-.gc-trader-footer{
-  display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
-  padding-top: 0.35rem;
-  border-top: 1px solid rgba(70, 229, 255, 0.1);
-  font-size: 0.74rem;
-  line-height: 1.4;
-  color: rgba(127, 255, 217, 0.58);
-}
-.gc-trader-footer-icon{
-  flex-shrink: 0;
-  color: rgba(70, 229, 255, 0.55);
-}
-@media (max-width: 1080px){
-  .trader-hub-page .gc-trader-columns{
-    grid-template-columns: 1fr;
-  }
+  letter-spacing: 0.05em;
 }
 @media (max-width: 820px){
-  .gc-trader-resources{
+  .trader-hub-page .trader-hub-resources{
     grid-template-columns: 1fr;
   }
-  .gc-trader-exchange-pick,
-  .gc-trader-amount-row,
-  .gc-trader-info-bar{
+  .trader-hub-page .gc-trader-exchange-pick,
+  .trader-hub-page .gc-trader-amount-row,
+  .trader-hub-page .gc-trader-info-bar{
     grid-template-columns: 1fr;
   }
-  .gc-trader-pick-swap,
-  .gc-trader-amount-arrow{
+  .trader-hub-page .gc-trader-pick-swap,
+  .trader-hub-page .gc-trader-amount-arrow{
     display: none;
-  }
-  .gc-trader-scrap-card{
-    grid-template-columns: auto 1fr;
-  }
-  .gc-trader-scrap-actions{
-    grid-column: 1 / -1;
-    grid-template-columns: 72px 1fr;
-    align-items: center;
   }
 }
 

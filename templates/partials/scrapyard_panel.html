@@ -1,11 +1,13 @@
-{# Scrapyard — recycle ships on active planet (Genesis console layout) #}
+{# Scrapyard — recycle ships on active planet #}
 {% set sy = scrapyard if scrapyard is defined and scrapyard else {} %}
-<section class="gc-panel gc-scrapyard-panel gc-trader-panel" id="gc-scrapyard-panel"
+<section class="gc-scrapyard-panel gc-panel trader-hub-panel" id="gc-scrapyard-panel"
          {% if not sy.ready %}data-disabled="1"{% endif %}
          aria-label="{{ T('scrapyard_title') }}">
-  <div class="gc-trader-panel-head">
-    <h2 class="gc-trader-panel-title">{{ T('scrapyard_title')|upper }}</h2>
-    <p class="gc-trader-panel-hint hint">{{ T('scrapyard_hint', min=sy.refund_min_percent|default(50), max=sy.refund_max_percent|default(75)) }}</p>
+  <div class="gc-panel-header">
+    <div class="gc-panel-head-left">
+      <span class="gc-panel-title">{{ T('scrapyard_title') }}</span>
+      <span class="gc-panel-subtitle hint">{{ T('scrapyard_hint', min=sy.refund_min_percent|default(50), max=sy.refund_max_percent|default(75)) }}</span>
+    </div>
   </div>
 
   {% if sy.ready %}
@@ -13,24 +15,26 @@
     {% set ships = sy.ships if sy.ships is defined else [] %}
     {% if ships %}
       {% for row in ships %}
-      <article class="gc-scrapyard-row gc-trader-scrap-card" data-scrap-ship="{{ row.ship_key }}" data-scrap-max="{{ row.amount }}">
-        <div class="gc-trader-scrap-icon-wrap">
-          <img src="{{ row.icon }}"
-               alt="" class="gc-scrapyard-ship-icon" width="44" height="44" loading="lazy">
+      <article class="gc-scrapyard-row fleet-ship-row gc-trader-scrap-row" data-scrap-ship="{{ row.ship_key }}" data-scrap-max="{{ row.amount }}">
+        <div class="fleet-ship-row-main gc-trader-scrap-main">
+          <div class="gc-trader-scrap-icon-wrap">
+            <img src="{{ row.icon }}"
+                 alt="" class="gc-scrapyard-ship-icon" width="40" height="40" loading="lazy">
+          </div>
+          <div class="gc-trader-scrap-body">
+            <span class="gc-scrapyard-ship-name fleet-ship-name">{{ T('fleet_ship_' ~ row.ship_key) }}</span>
+            <span class="gc-scrapyard-have fleet-ship-stock gc-mono">{{ T('scrapyard_have', count=row.amount|fmt_int) }}</span>
+            <span class="gc-trader-scrap-refund hint gc-mono">
+              {{ T('scrapyard_refund_estimate', 'Refund (approx.)') }}:
+              {{ row.preview_refund_min.metal|fmt_int }}–{{ row.preview_refund_max.metal|fmt_int }}
+              {{ T('resource_metal') }},
+              {{ row.preview_refund_min.crystal|fmt_int }}–{{ row.preview_refund_max.crystal|fmt_int }}
+              {{ T('resource_crystal') }}
+            </span>
+          </div>
         </div>
-        <div class="gc-trader-scrap-body">
-          <span class="gc-scrapyard-ship-name">{{ T('fleet_ship_' ~ row.ship_key)|upper }}</span>
-          <span class="gc-scrapyard-have gc-mono">{{ T('scrapyard_have', count=row.amount|fmt_int) }}</span>
-          <span class="gc-trader-scrap-refund hint gc-mono">
-            {{ T('scrapyard_refund_estimate', 'Refund (approx.)') }}:
-            {{ row.preview_refund_min.metal|fmt_int }}–{{ row.preview_refund_max.metal|fmt_int }}
-            {{ T('resource_metal') }},
-            {{ row.preview_refund_min.crystal|fmt_int }}–{{ row.preview_refund_max.crystal|fmt_int }}
-            {{ T('resource_crystal') }}
-          </span>
-        </div>
-        <div class="gc-scrapyard-actions gc-trader-scrap-actions">
-          <input type="number" class="gc-trader-input gc-scrapyard-qty" min="1" max="{{ row.amount }}" value="1"
+        <div class="fleet-ship-row-controls gc-trader-scrap-actions">
+          <input type="number" class="gc-trader-input fleet-ship-input gc-scrapyard-qty" min="1" max="{{ row.amount }}" value="1"
                  data-scrap-qty="{{ row.ship_key }}" aria-label="{{ T('scrapyard_amount') }}">
           <button type="button" class="gc-btn gc-btn-secondary gc-trader-scrap-btn" data-scrap-recycle="{{ row.ship_key }}">
             {{ T('scrapyard_recycle_btn')|upper }}
