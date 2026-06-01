@@ -125,6 +125,16 @@ def test_main_js_progress_ticker_uses_server_time_and_interval():
     assert "updatePlanetEvolutionResearchProgress(serverNow)" in update_all
 
 
+def test_main_js_movement_countdown_expiry_debounced():
+    src = _read("static/main.js")
+    assert "requestMovementCountdownRefresh" in src
+    assert "_movementCountdownExpiryState" in src
+    assert "fleet_countdown_expired" in src
+    refresh_section = src.split("async function refreshGameState(reason)")[1].split("GC.refreshGameState = refreshGameState")[0]
+    assert "isChainReason" in refresh_section
+    assert 'reasonStr === "fleet_countdown_expired"' in refresh_section
+
+
 def test_main_js_init_page_resumes_chat_after_pjax():
     src = _read("static/main.js")
     assert "GC.initChat()" in src

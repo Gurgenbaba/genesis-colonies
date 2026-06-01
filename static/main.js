@@ -355,6 +355,13 @@
 
   GC.cleanupPage = function cleanupPage() {
     console.debug("[GC] cleanupPage");
+    _clearMovementCountdownExpiryState();
+    if (_movementCountdownRefreshTimer) {
+      clearTimeout(_movementCountdownRefreshTimer);
+      _movementCountdownRefreshTimer = null;
+    }
+    _movementCountdownRefreshPending.fleet = false;
+    _movementCountdownRefreshPending.overview = false;
     const lc = GC.pageLifecycle;
     lc.rafIds.forEach((id) => { try { cancelAnimationFrame(id); } catch (_) {} });
     lc.intervals.forEach((id) => clearInterval(id));
@@ -1278,6 +1285,7 @@
 
     const sig = activitySignature(activities);
     if (actList.dataset.actSig !== sig) {
+      _clearMovementCountdownExpiryState();
       renderActivities();
       return;
     }
@@ -2006,6 +2014,58 @@
   }
 
   const _movementCountdownRefreshPending = { fleet: false, overview: false };
+  const _movementCountdownExpiryState = new Map();
+  let _movementCountdownRefreshTimer = null;
+
+  function _movementCountdownKey(el) {
+    return String(el.dataset.countdownKey || `${el.dataset.countdownScope || ""}:${el.dataset.countdownAt || ""}`);
+  }
+
+  function _clearMovementCountdownExpiryState() {
+    _movementCountdownExpiryState.clear();
+  }
+
+  function _shouldRefreshExpiredCountdown(key) {
+    const nowMs = Date.now();
+    const last = _movementCountdownExpiryState.get(key) || 0;
+    if (nowMs - last < 3000) return false;
+    _movementCountdownExpiryState.set(key, nowMs);
+    return true;
+  }
+
+  function requestMovementCountdownRefresh(scope) {
+    if (!shouldRunGameLoop() || _authLoopAborted) return;
+    const pendingKey = scope === "fleet" ? "fleet" : "overview";
+    if (_movementCountdownRefreshPending[pendingKey]) return;
+
+    if (_movementCountdownRefreshTimer) {
+      clearTimeout(_movementCountdownRefreshTimer);
+      _movementCountdownRefreshTimer = null;
+    }
+
+    _movementCountdownRefreshTimer = GC.setSafeTimeout(() => {
+      _movementCountdownRefreshTimer = null;
+      if (_movementCountdownRefreshPending[pendingKey]) return;
+      _movementCountdownRefreshPending[pendingKey] = true;
+
+      const fleetPage = document.getElementById("fleet-page");
+      let refreshPromise;
+      if (pendingKey === "fleet" && fleetPage && typeof GC.refreshFleetState === "function") {
+        fleetPage.dataset.fleetRefreshBusy = "1";
+        refreshPromise = GC.refreshFleetState(fleetPage).finally(() => {
+          delete fleetPage.dataset.fleetRefreshBusy;
+        });
+      } else if (typeof GC.refreshGameState === "function") {
+        refreshPromise = GC.refreshGameState("fleet_countdown_expired");
+      } else {
+        refreshPromise = Promise.resolve();
+      }
+
+      Promise.resolve(refreshPromise).finally(() => {
+        _movementCountdownRefreshPending[pendingKey] = false;
+      });
+    }, 300);
+  }
 
   function updateMovementCountdowns(serverNow) {
     const now = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
@@ -2017,39 +2077,19 @@
       if (!countdownAt) return;
       const remaining = Math.max(0, Math.ceil(countdownAt - now));
       _setIfChanged(el, formatMovementCountdown(remaining, el.dataset.countdownFormat || "fleet"));
+      const scope = el.dataset.countdownScope || "";
+      const key = _movementCountdownKey(el);
       if (remaining <= 0) {
-        const scope = el.dataset.countdownScope || "";
+        if (!_shouldRefreshExpiredCountdown(key)) return;
         if (scope === "fleet") fleetExpired = true;
         else if (scope === "overview") overviewExpired = true;
+      } else {
+        _movementCountdownExpiryState.delete(key);
       }
     });
 
-    const fleetPage = document.getElementById("fleet-page");
-    if (
-      fleetExpired &&
-      fleetPage &&
-      !fleetPage.dataset.fleetRefreshBusy &&
-      !_movementCountdownRefreshPending.fleet &&
-      typeof GC.refreshFleetState === "function"
-    ) {
-      _movementCountdownRefreshPending.fleet = true;
-      fleetPage.dataset.fleetRefreshBusy = "1";
-      GC.refreshFleetState(fleetPage).finally(() => {
-        _movementCountdownRefreshPending.fleet = false;
-        delete fleetPage.dataset.fleetRefreshBusy;
-      });
-    }
-
-    if (
-      overviewExpired &&
-      !_movementCountdownRefreshPending.overview &&
-      typeof GC.refreshGameState === "function"
-    ) {
-      _movementCountdownRefreshPending.overview = true;
-      GC.refreshGameState("fleet_countdown_expired").finally(() => {
-        _movementCountdownRefreshPending.overview = false;
-      });
-    }
+    if (fleetExpired) requestMovementCountdownRefresh("fleet");
+    if (overviewExpired) requestMovementCountdownRefresh("overview");
   }
 
   function updateAllProgressBars() {
@@ -2599,9 +2639,10 @@
 
     const reasonStr = String(reason || "");
     const isFinishReason = reasonStr.endsWith("_finished");
+    const isChainReason = isFinishReason || reasonStr === "fleet_countdown_expired";
 
     if (GC.refreshInFlight) {
-      if (isFinishReason) {
+      if (isChainReason) {
         return GC.refreshInFlight.finally(() => refreshGameState(reason));
       }
       return GC.refreshInFlight;
@@ -2609,7 +2650,7 @@
 
     const p = GC.polling;
     p.inFlight = true;
-    if (p.abort && !isFinishReason && reasonStr !== "poll" && reasonStr !== "pjax_nav") {
+    if (p.abort && !isChainReason && reasonStr !== "poll" && reasonStr !== "pjax_nav") {
       try {
         p.abort.abort();
       } catch (_) {}
@@ -3212,6 +3253,8 @@
       if (!activeListEl) return;
       const list = Array.isArray(fleets) ? fleets : [];
       if (!list.length) {
+        activeListEl.dataset.fleetSig = "";
+        _clearMovementCountdownExpiryState();
         activeListEl.innerHTML = `<p class="fleet-empty" data-fleet-empty>${tt("fleet_no_active", "No active fleets.")}</p>`;
         return;
       }
@@ -3220,6 +3263,7 @@
       const sigChanged = activeListEl.dataset.fleetSig !== signature;
       if (sigChanged) {
         activeListEl.dataset.fleetSig = signature;
+        _clearMovementCountdownExpiryState();
         activeListEl.innerHTML = list.map((mv) => {
         const countdownAt = Number(mv.countdown_at || 0);
         const phase = mv.phase || mv.leg_phase || mv.status || "";
