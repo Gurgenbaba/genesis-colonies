@@ -265,10 +265,26 @@
     return _planetPageReloadPromise;
   }
 
+  // Bumped on every POST action state apply — stale in-flight polls must not overwrite.
+  let _clientStateGen = 0;
+
   function applyActionState(json, reason) {
     if (!json) return false;
     const state = json.state || (json.data && json.data.state);
     if (!state) return false;
+
+    _clientStateGen += 1;
+    _lastQueueSignature = "";
+    _lastResearchQueueSignature = "";
+
+    const pol = GC.polling;
+    if (pol.abort) {
+      try {
+        pol.abort.abort();
+      } catch (_) {}
+      pol.abort = null;
+    }
+
     const anyActive = applyGameStateData(state, reason);
     GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch);
     GC.startProgressTicker();
@@ -381,6 +397,8 @@
     GC.stopProgressTicker();
     stopResourceTicker();
     GC.stopPolling();
+    GC.actionLocks.build = false;
+    GC.actionLocks.research = false;
     _statusPollErrorLogged = false;
     _lastQueueSignature = "";
     _lastResearchQueueSignature = "";
@@ -1028,9 +1046,15 @@
 
   let _finishRefreshTimer = null;
   const _finishRefreshArmed = { buildings: false, research: false, planet_evolution: false };
+  const _finishRefreshLastAt = { buildings: 0, research: 0, planet_evolution: 0 };
+  const FINISH_REFRESH_MIN_MS = 2500;
 
   function clearFinishRefreshArmed(type, queueList) {
-    const first = Array.isArray(queueList) && queueList.length ? queueList[0] : null;
+    if (!Array.isArray(queueList) || !queueList.length) {
+      _finishRefreshArmed[type] = false;
+      return;
+    }
+    const first = queueList[0];
     const finishAt = first ? Number(first.finish_at || first.finish_time || 0) : 0;
     const now = getApproxServerNow();
     if (!finishAt || (now && finishAt > now)) {
@@ -1038,9 +1062,16 @@
     }
   }
 
+  function releaseFinishRefreshLock(key) {
+    GC.finishLocks[key] = false;
+    _finishRefreshArmed[key] = false;
+  }
+
   function requestFinishRefresh(type) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
     const key = type === "buildings" || type === "research" || type === "planet_evolution" ? type : "buildings";
+    const nowMs = Date.now();
+    if (nowMs - (_finishRefreshLastAt[key] || 0) < FINISH_REFRESH_MIN_MS) return;
     if (_finishRefreshArmed[key] || _finishRefreshTimer) return;
 
     _finishRefreshTimer = GC.setSafeTimeout(() => {
@@ -1056,11 +1087,11 @@
             typeof GC.reloadCurrentPage === "function"
           ) {
             return Promise.resolve(GC.reloadCurrentPage()).finally(() => {
-              GC.finishLocks[key] = false;
+              releaseFinishRefreshLock(key);
             });
           }
           return Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${key}_finished`) : null).finally(() => {
-            GC.finishLocks[key] = false;
+            releaseFinishRefreshLock(key);
           });
         };
         refresh();
@@ -1072,6 +1103,7 @@
       }
       GC.finishLocks[key] = true;
       _finishRefreshArmed[key] = true;
+      _finishRefreshLastAt[key] = nowMs;
       if (GC.refreshInFlight) {
         Promise.resolve(GC.refreshInFlight).finally(run);
         return;
@@ -2906,6 +2938,7 @@
 
     const ctrl = new AbortController();
     p.abort = ctrl;
+    const stateGenAtStart = _clientStateGen;
 
     let resolveFlight;
     let rejectFlight;
@@ -2929,6 +2962,11 @@
         _statusPollErrorLogged = false;
         clearStatusWidgetOffline();
         if (data.server_time) setServerTime(data.server_time);
+
+        if (stateGenAtStart !== _clientStateGen) {
+          resolveFlight(null);
+          return null;
+        }
 
         const anyActive = applyGameStateData(data, reason);
         const wantPolling = anyActive || lastHadActiveJob || lastHadActiveResearch;
