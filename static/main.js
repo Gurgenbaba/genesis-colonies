@@ -2785,9 +2785,8 @@
       patchOverviewResearch(research);
       patchOverviewStatus(data.overview, data, buildings, prod);
       if (data.exchange) patchExchangePanel(data.exchange);
-      if (data.fuel_exchange) patchFuelExchangePanel(data.fuel_exchange);
       if (data.scrapyard) patchScrapyardPanel(data.scrapyard);
-      patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal);
+      patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, data.player?.fuel_cells);
       if (data.planet_teaser) patchPlanetTeaser(data.planet_teaser);
 
       if (data.buildings_panel) {
@@ -2826,7 +2825,7 @@
 
   function gameStateIncludePanel() {
     const page = typeof GC.detectPage === "function" ? GC.detectPage() : "";
-    return page === "buildings" || page === "research" || page === "shipyard";
+    return page === "buildings" || page === "research" || page === "shipyard" || page === "trader_hub";
   }
 
   /** Lightweight HUD refresh — standalone fetch, no pageLifecycle abort. */
@@ -3240,7 +3239,6 @@
 
   function initTraderHub() {
     initExchangePanel();
-    initFuelExchangePanel();
     initScrapyardPanel();
   }
 
@@ -4733,6 +4731,7 @@
 
     const form = panel.querySelector("#gc-exchange-form");
     const amountInput = panel.querySelector("#gc-exchange-amount");
+    const routeSelect = panel.querySelector("[data-exchange-route]");
     const previewEl = panel.querySelector("[data-exchange-preview]");
     const errorEl = panel.querySelector("[data-exchange-error]");
     const remainingEl = panel.querySelector("[data-exchange-daily-remaining]");
@@ -4742,62 +4741,115 @@
     const receiveIconEl = panel.querySelector("[data-exchange-receive-icon]");
     const giveLabelEl = panel.querySelector("[data-exchange-give-label]");
     const receiveLabelEl = panel.querySelector("[data-exchange-receive-label]");
-    const dirBtns = panel.querySelectorAll("[data-exchange-dir]");
-    if (!form || !amountInput || !previewEl) return;
+    if (!form || !amountInput || !previewEl || !routeSelect) return;
 
     const tt = (key, fallback) => t(key, fallback);
     const iconBase = "/static/icons/";
-    const minAmount = parseInt(panel.dataset.min || amountInput.dataset.exchangeMin || "100", 10);
+    const resourceIcons = {
+      metal: "ferronit",
+      crystal: "crytite",
+      fuel_cells: "fuel_cells",
+    };
+    const resourceLabels = {
+      metal: () => tt("resource_metal", "Ferronit"),
+      crystal: () => tt("resource_crystal", "Crytite"),
+      fuel_cells: () => tt("resource_fuel_cells", "Fuel cells"),
+    };
+    const ROUTES = {
+      metal_to_crystal: { from: "metal", to: "crystal" },
+      crystal_to_metal: { from: "crystal", to: "metal" },
+      metal_to_fuel_cells: { from: "metal", to: "fuel_cells" },
+      crystal_to_fuel_cells: { from: "crystal", to: "fuel_cells" },
+      fuel_cells_to_metal: { from: "fuel_cells", to: "metal" },
+      fuel_cells_to_crystal: { from: "fuel_cells", to: "crystal" },
+    };
 
     const readRates = () => ({
       m2c: parseFloat(panel.dataset.rateM2c || "0.8"),
       c2m: parseFloat(panel.dataset.rateC2m || "0.8"),
+      fuelMetalPer: parseInt(panel.dataset.fuelMetalPer || "45", 10),
+      fuelCrystalPer: parseInt(panel.dataset.fuelCrystalPer || "28", 10),
+      minAmount: parseInt(panel.dataset.min || "100", 10),
+      fuelMin: parseInt(panel.dataset.fuelMin || "10", 10),
     });
 
     const reasonText = (reason) => tt(`exchange_error_${reason}`, tt("exchange_error_generic", "Exchange failed."));
 
-    const selectedDirection = () => panel.dataset.dir || "metal_to_crystal";
+    const selectedDirection = () => panel.dataset.dir || routeSelect.value || "metal_to_crystal";
+
+    const routeParts = (dir) => ROUTES[dir] || ROUTES.metal_to_crystal;
+
+    const minForRoute = (dir) => {
+      const cfg = readRates();
+      const { from, to } = routeParts(dir);
+      if (from === "fuel_cells") return cfg.fuelMin;
+      if (to === "fuel_cells") {
+        const per = from === "metal" ? cfg.fuelMetalPer : cfg.fuelCrystalPer;
+        return Math.max(cfg.minAmount, per);
+      }
+      return cfg.minAmount;
+    };
+
+    const computeReceive = (dir, amount) => {
+      const cfg = readRates();
+      const { from, to } = routeParts(dir);
+      const raw = parseInt(String(amount || "0"), 10);
+      if (!raw || raw <= 0) return 0;
+      if (from === "metal" && to === "crystal") return Math.floor(raw * cfg.m2c);
+      if (from === "crystal" && to === "metal") return Math.floor(raw * cfg.c2m);
+      if (from === "metal" && to === "fuel_cells") return Math.floor(raw / Math.max(1, cfg.fuelMetalPer));
+      if (from === "crystal" && to === "fuel_cells") return Math.floor(raw / Math.max(1, cfg.fuelCrystalPer));
+      if (from === "fuel_cells" && to === "metal") return raw * Math.max(1, cfg.fuelMetalPer);
+      if (from === "fuel_cells" && to === "crystal") return raw * Math.max(1, cfg.fuelCrystalPer);
+      return 0;
+    };
+
+    const displayRate = (dir) => {
+      const cfg = readRates();
+      const { from, to } = routeParts(dir);
+      if (from === "metal" && to === "crystal") return cfg.m2c;
+      if (from === "crystal" && to === "metal") return cfg.c2m;
+      if (from === "metal" && to === "fuel_cells") return 1 / Math.max(1, cfg.fuelMetalPer);
+      if (from === "crystal" && to === "fuel_cells") return 1 / Math.max(1, cfg.fuelCrystalPer);
+      if (from === "fuel_cells" && to === "metal") return cfg.fuelMetalPer;
+      if (from === "fuel_cells" && to === "crystal") return cfg.fuelCrystalPer;
+      return 0;
+    };
 
     const setDirection = (dir) => {
-      const next = dir === "crystal_to_metal" ? "crystal_to_metal" : "metal_to_crystal";
+      const next = ROUTES[dir] ? dir : "metal_to_crystal";
       panel.dataset.dir = next;
-      dirBtns.forEach((btn) => {
-        const active = btn.getAttribute("data-exchange-dir") === next;
-        btn.classList.toggle("is-active", active);
-        btn.setAttribute("aria-selected", active ? "true" : "false");
-      });
-      const rates = readRates();
-      const isM2C = next === "metal_to_crystal";
-      if (giveIconEl) giveIconEl.src = `${iconBase}${isM2C ? "ferronit" : "crytite"}.png`;
-      if (receiveIconEl) receiveIconEl.src = `${iconBase}${isM2C ? "crytite" : "ferronit"}.png`;
-      if (giveLabelEl) {
-        giveLabelEl.textContent = isM2C
-          ? tt("resource_metal", "Ferronit")
-          : tt("resource_crystal", "Crytite");
+      if (routeSelect.value !== next) routeSelect.value = next;
+      const { from, to } = routeParts(next);
+      if (giveIconEl) giveIconEl.src = `${iconBase}${resourceIcons[from]}.png`;
+      if (receiveIconEl) receiveIconEl.src = `${iconBase}${resourceIcons[to]}.png`;
+      if (giveLabelEl) giveLabelEl.textContent = resourceLabels[from]();
+      if (receiveLabelEl) receiveLabelEl.textContent = resourceLabels[to]();
+      if (rateDisplayEl) {
+        const rate = displayRate(next);
+        rateDisplayEl.textContent = rate >= 1 ? String(Math.round(rate)) : rate.toFixed(3).replace(/\.?0+$/, "");
       }
-      if (receiveLabelEl) {
-        receiveLabelEl.textContent = isM2C
-          ? tt("resource_crystal", "Crytite")
-          : tt("resource_metal", "Ferronit");
+      const minNow = minForRoute(next);
+      panel.dataset.routeMin = String(minNow);
+      amountInput.min = String(minNow);
+      amountInput.dataset.exchangeMin = String(minNow);
+      if (!amountInput.value || parseInt(amountInput.value, 10) < minNow) {
+        amountInput.value = String(minNow);
       }
-      if (rateDisplayEl) rateDisplayEl.textContent = String(isM2C ? rates.m2c : rates.c2m);
       updatePreview();
     };
 
     const updatePreview = () => {
       const raw = parseInt(amountInput.value || "0", 10);
-      if (!raw || raw < minAmount) {
+      const minNow = parseInt(panel.dataset.routeMin || String(minForRoute(selectedDirection())), 10);
+      if (!raw || raw < minNow) {
         previewEl.textContent = "–";
         return;
       }
-      const rates = readRates();
       const dir = selectedDirection();
-      const rate = dir === "metal_to_crystal" ? rates.m2c : rates.c2m;
-      const receive = Math.floor(raw * rate);
-      const receiveLabel = dir === "metal_to_crystal"
-        ? tt("resource_crystal", "Crytite")
-        : tt("resource_metal", "Ferronit");
-      previewEl.textContent = `${receive.toLocaleString()} ${receiveLabel}`;
+      const { to } = routeParts(dir);
+      const receive = computeReceive(dir, raw);
+      previewEl.textContent = `${receive.toLocaleString()} ${resourceLabels[to]()}`;
     };
 
     const patchExchangeFromState = (exchange) => {
@@ -4811,10 +4863,17 @@
       if (typeof exchange.rate_crystal_to_metal === "number") {
         panel.dataset.rateC2m = String(exchange.rate_crystal_to_metal);
       }
+      if (typeof exchange.fuel_metal_per_unit === "number") {
+        panel.dataset.fuelMetalPer = String(exchange.fuel_metal_per_unit);
+      }
+      if (typeof exchange.fuel_crystal_per_unit === "number") {
+        panel.dataset.fuelCrystalPer = String(exchange.fuel_crystal_per_unit);
+      }
+      if (typeof exchange.fuel_min_units === "number") {
+        panel.dataset.fuelMin = String(exchange.fuel_min_units);
+      }
       if (typeof exchange.min_amount === "number") {
         panel.dataset.min = String(exchange.min_amount);
-        amountInput.min = String(exchange.min_amount);
-        amountInput.dataset.exchangeMin = String(exchange.min_amount);
       }
       setDirection(selectedDirection());
     };
@@ -4822,10 +4881,8 @@
     if (!panel.dataset.exchangeBound) {
       panel.dataset.exchangeBound = "1";
 
-      dirBtns.forEach((btn) => {
-        btn.addEventListener("click", () => {
-          setDirection(btn.getAttribute("data-exchange-dir") || "metal_to_crystal");
-        });
+      routeSelect.addEventListener("change", () => {
+        setDirection(routeSelect.value || "metal_to_crystal");
       });
       amountInput.addEventListener("input", updatePreview);
 
@@ -4837,7 +4894,8 @@
         }
 
         const amount = parseInt(amountInput.value || "0", 10);
-        const minNow = parseInt(panel.dataset.min || String(minAmount), 10);
+        const dir = selectedDirection();
+        const minNow = minForRoute(dir);
         if (!amount || amount < minNow) {
           if (errorEl) {
             errorEl.textContent = reasonText("below_minimum");
@@ -4846,25 +4904,16 @@
           return;
         }
 
-        const dir = selectedDirection();
-        const rates = readRates();
-        const fromRes = dir === "metal_to_crystal" ? "metal" : "crystal";
-        const giveLabel = fromRes === "metal"
-          ? tt("resource_metal", "Ferronit")
-          : tt("resource_crystal", "Crytite");
-        const receiveLabel = fromRes === "metal"
-          ? tt("resource_crystal", "Crytite")
-          : tt("resource_metal", "Ferronit");
-        const rate = fromRes === "metal" ? rates.m2c : rates.c2m;
-        const receive = Math.floor(amount * rate);
+        const { from, to } = routeParts(dir);
+        const receive = computeReceive(dir, amount);
         const confirmMsg = tt(
           "exchange_confirm_prompt",
           "Exchange %(amount)s %(give)s for ~%(receive)s %(get)s?"
         )
           .replace("%(amount)s", String(amount))
-          .replace("%(give)s", giveLabel)
+          .replace("%(give)s", resourceLabels[from]())
           .replace("%(receive)s", String(receive))
-          .replace("%(get)s", receiveLabel);
+          .replace("%(get)s", resourceLabels[to]());
 
         if (!window.confirm(confirmMsg)) return;
 
@@ -4873,7 +4922,7 @@
           const res = await GC.fetchGameAction("/api/exchange", {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-            body: JSON.stringify({ direction: dir, amount }),
+            body: JSON.stringify({ direction: dir, from: from, to: to, amount }),
           });
           if (res?.ok) {
             amountInput.value = String(minNow);
@@ -4899,106 +4948,8 @@
     }
 
     panel._patchExchangeFromState = patchExchangeFromState;
-    if (!amountInput.value) amountInput.value = String(minAmount);
+    if (!amountInput.value) amountInput.value = String(minForRoute(selectedDirection()));
     setDirection(selectedDirection());
-  }
-
-  function initFuelExchangePanel() {
-    const panel = document.getElementById("gc-fuel-exchange-panel");
-    if (!panel || panel.dataset.disabled === "1") return;
-    const form = panel.querySelector("#gc-fuel-exchange-form");
-    const unitsInput = panel.querySelector("#gc-fuel-exchange-units");
-    const metalEl = panel.querySelector("[data-fuel-exchange-cost-metal]");
-    const crystalEl = panel.querySelector("[data-fuel-exchange-cost-crystal]");
-    const errorEl = panel.querySelector("[data-fuel-exchange-error]");
-    const submitBtn = panel.querySelector(".gc-fuel-exchange-submit");
-    if (!form || !unitsInput) return;
-
-    const tt = (key, fallback) => t(key, fallback);
-    const readConfig = () => ({
-      metalPer: parseInt(panel.dataset.metalPer || "45", 10),
-      crystalPer: parseInt(panel.dataset.crystalPer || "28", 10),
-      minUnits: parseInt(panel.dataset.min || unitsInput.dataset.fuelExchangeMin || "10", 10),
-    });
-    const reasonText = (reason) => tt(`fuel_exchange_error_${reason}`, tt("fuel_exchange_error_generic", "Purchase failed."));
-
-    const updatePreview = () => {
-      const cfg = readConfig();
-      const u = parseInt(unitsInput.value || "0", 10);
-      if (!u || u < cfg.minUnits) {
-        if (metalEl) metalEl.textContent = "–";
-        if (crystalEl) crystalEl.textContent = "–";
-        return;
-      }
-      if (metalEl) metalEl.textContent = `${(u * cfg.metalPer).toLocaleString()} ${tt("resource_metal", "Ferronit")}`;
-      if (crystalEl) crystalEl.textContent = `${(u * cfg.crystalPer).toLocaleString()} ${tt("resource_crystal", "Crytite")}`;
-    };
-
-    const patchFuelFromState = (fx) => {
-      if (!fx) return;
-      if (typeof fx.metal_per_unit === "number") panel.dataset.metalPer = String(fx.metal_per_unit);
-      if (typeof fx.crystal_per_unit === "number") panel.dataset.crystalPer = String(fx.crystal_per_unit);
-      if (typeof fx.min_units === "number") {
-        panel.dataset.min = String(fx.min_units);
-        unitsInput.min = String(fx.min_units);
-        unitsInput.dataset.fuelExchangeMin = String(fx.min_units);
-      }
-      if (typeof fx.daily_units_remaining === "number") {
-        const remEl = panel.querySelector("[data-fuel-exchange-daily-remaining]");
-        if (remEl) remEl.textContent = fmtNumber(fx.daily_units_remaining);
-      }
-      updatePreview();
-    };
-
-    if (!panel.dataset.fuelExchangeBound) {
-      panel.dataset.fuelExchangeBound = "1";
-      unitsInput.addEventListener("input", updatePreview);
-
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        if (errorEl) { errorEl.hidden = true; errorEl.textContent = ""; }
-        const cfg = readConfig();
-        const units = parseInt(unitsInput.value || "0", 10);
-        if (!units || units < cfg.minUnits) {
-          if (errorEl) {
-            errorEl.textContent = reasonText("below_minimum");
-            errorEl.hidden = false;
-          }
-          return;
-        }
-        if (submitBtn) submitBtn.disabled = true;
-        try {
-          const res = await GC.fetchGameAction("/api/trader/fuel-exchange", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-            body: JSON.stringify({ units }),
-          });
-          if (res?.ok) {
-            unitsInput.value = String(cfg.minUnits);
-            updatePreview();
-            applyActionState(res, "fuel_exchange_success");
-            showNotify(tt("fuel_exchange_success", "Fuel cells purchased."), "success");
-          } else {
-            applyActionState(res, "fuel_exchange_error");
-            if (errorEl) {
-              errorEl.textContent = reasonText(res?.reason);
-              errorEl.hidden = false;
-            }
-          }
-        } catch (_) {
-          if (errorEl) {
-            errorEl.textContent = reasonText("generic");
-            errorEl.hidden = false;
-          }
-        } finally {
-          if (submitBtn) submitBtn.disabled = false;
-        }
-      });
-    }
-
-    panel._patchFuelFromState = patchFuelFromState;
-    if (!unitsInput.value) unitsInput.value = String(readConfig().minUnits);
-    updatePreview();
   }
 
   function renderScrapyardRows(ships) {
@@ -5103,13 +5054,6 @@
     }
   }
 
-  function patchFuelExchangePanel(fuelExchange) {
-    const panel = document.getElementById("gc-fuel-exchange-panel");
-    if (panel && typeof panel._patchFuelFromState === "function") {
-      panel._patchFuelFromState(fuelExchange);
-    }
-  }
-
   function patchScrapyardPanel(scrapyard) {
     const panel = document.getElementById("gc-scrapyard-panel");
     if (!panel || !scrapyard || scrapyard.ready === false) return;
@@ -5118,15 +5062,17 @@
     list.innerHTML = renderScrapyardRows(scrapyard.ships);
   }
 
-  function patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal) {
+  function patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, fuelCells) {
     const page = document.getElementById("trader-hub-page");
     if (!page) return;
     const metalVal = page.querySelector('[data-res="metal"]');
     const crystalVal = page.querySelector('[data-res="crystal"]');
+    const fuelVal = page.querySelector('[data-res="fuel_cells"]');
     const metalCap = page.querySelector('[data-cap="metal"]');
     const crystalCap = page.querySelector('[data-cap="crystal"]');
     if (metalVal) _setIfChanged(metalVal, fmtNumber(metal));
     if (crystalVal) _setIfChanged(crystalVal, fmtNumber(crystal));
+    if (fuelVal && typeof fuelCells === "number") _setIfChanged(fuelVal, fmtNumber(fuelCells));
     if (metalCap && storageMetal > 0) _setIfChanged(metalCap, `/ ${fmtNumber(storageMetal)}`);
     if (crystalCap && storageCrystal > 0) _setIfChanged(crystalCap, `/ ${fmtNumber(storageCrystal)}`);
   }

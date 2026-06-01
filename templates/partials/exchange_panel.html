@@ -1,11 +1,15 @@
-{# Instant Ferronit <-> Crytite exchange (Trader Hub) #}
+{# Unified 3-resource trader (Trader Hub) #}
 {% set ex = exchange if exchange is defined and exchange else {} %}
+{% set default_dir = 'metal_to_crystal' %}
 <section class="gc-exchange-panel gc-panel" id="gc-exchange-panel"
          {% if not ex.enabled %}data-disabled="1"{% endif %}
          data-rate-m2c="{{ ex.rate_metal_to_crystal or 0.8 }}"
          data-rate-c2m="{{ ex.rate_crystal_to_metal or 0.8 }}"
+         data-fuel-metal-per="{{ ex.fuel_metal_per_unit or 45 }}"
+         data-fuel-crystal-per="{{ ex.fuel_crystal_per_unit or 28 }}"
+         data-fuel-min="{{ ex.fuel_min_units or 10 }}"
          data-min="{{ ex.min_amount or 100 }}"
-         data-dir="metal_to_crystal"
+         data-dir="{{ default_dir }}"
          aria-label="{{ T('exchange_title') }}">
   <div class="gc-panel-header">
     <div class="gc-panel-head-left">
@@ -15,21 +19,16 @@
   </div>
 
   {% if ex.enabled %}
-  <div class="gc-exchange-direction-toggle" role="tablist" aria-label="{{ T('exchange_title') }}">
-    <button type="button"
-            class="gc-exchange-dir-btn is-active"
-            role="tab"
-            aria-selected="true"
-            data-exchange-dir="metal_to_crystal">
-      {{ T('exchange_metal_to_crystal') }}
-    </button>
-    <button type="button"
-            class="gc-exchange-dir-btn"
-            role="tab"
-            aria-selected="false"
-            data-exchange-dir="crystal_to_metal">
-      {{ T('exchange_crystal_to_metal') }}
-    </button>
+  <div class="gc-exchange-route-picker">
+    <label class="gc-exchange-label" for="gc-exchange-route">{{ T('exchange_route') }}</label>
+    <select id="gc-exchange-route" class="gc-input gc-exchange-route-select" data-exchange-route>
+      <option value="metal_to_crystal" selected>{{ T('exchange_metal_to_crystal') }}</option>
+      <option value="crystal_to_metal">{{ T('exchange_crystal_to_metal') }}</option>
+      <option value="metal_to_fuel_cells">{{ T('exchange_metal_to_fuel_cells') }}</option>
+      <option value="crystal_to_fuel_cells">{{ T('exchange_crystal_to_fuel_cells') }}</option>
+      <option value="fuel_cells_to_metal">{{ T('exchange_fuel_cells_to_metal') }}</option>
+      <option value="fuel_cells_to_crystal">{{ T('exchange_fuel_cells_to_crystal') }}</option>
+    </select>
   </div>
 
   <div class="gc-fuel-exchange-rates gc-exchange-formula" aria-live="polite">

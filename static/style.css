@@ -255,6 +255,7 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hint,
 body.gc-body-ingame.gc-has-planet-landscape .trader-hub-page .gc-exchange-dir-btn,
 body.gc-body-ingame.gc-has-planet-landscape .trader-hub-page .gc-fuel-exchange-rate-card,
 body.gc-body-ingame.gc-has-planet-landscape .trader-hub-page .gc-scrapyard-row,
+body.gc-body-ingame.gc-has-planet-landscape .trader-hub-page.gc-trader-hub-ui .overview-res-card,
 body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-stat-card,
 body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-trait-card,
 body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-identity-teaser,
@@ -1617,6 +1618,12 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   background: var(--gc-panel-bg-2);
   min-width: 4.5rem;
 }
+.trader-hub-page .gc-fuel-exchange-rate-card{
+  border-radius: 0;
+  border-color: rgba(70, 229, 255, 0.22);
+  background: rgba(3, 8, 18, 0.85);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
+}
 .gc-fuel-exchange-rate-card--fuel{
   border-color: rgba(255, 196, 0, 0.35);
 }
@@ -1661,6 +1668,12 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   border-radius: var(--gc-radius-sm);
   background: var(--gc-panel-bg-2);
 }
+.trader-hub-page .gc-scrapyard-row{
+  border-radius: 0;
+  border-color: rgba(120, 190, 255, 0.12);
+  background: rgba(5, 10, 22, 0.45);
+  padding: 8px 10px;
+}
 .gc-scrapyard-row-main{
   display: flex;
   align-items: center;
@@ -1669,6 +1682,19 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .gc-scrapyard-ship-icon{
   flex-shrink: 0;
   filter: drop-shadow(0 0 6px rgba(0, 212, 255, 0.25));
+}
+.trader-hub-page .gc-scrapyard-ship-icon{
+  display: block;
+  width: 44px;
+  height: 44px;
+  padding: 4px;
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  border-radius: 0;
+  background: rgba(3, 8, 18, 0.85);
+  box-sizing: border-box;
+  object-fit: contain;
+  filter: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
 }
 .gc-scrapyard-actions{
   display: flex;
@@ -1840,6 +1866,110 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 .gc-exchange-submit{
   justify-self: start;
+}
+
+/* Trader Hub — Genesis form controls (square HUD, no browser defaults) */
+.trader-hub-page.gc-trader-hub-ui .overview-res-card,
+.trader-hub-page.gc-trader-hub-ui .gc-panel,
+.trader-hub-page.gc-trader-hub-ui .gc-fuel-exchange-rate-card,
+.trader-hub-page.gc-trader-hub-ui .gc-scrapyard-row{
+  border-radius: 0;
+}
+.trader-hub-page.gc-trader-hub-ui select,
+.trader-hub-page.gc-trader-hub-ui .gc-exchange-route-select{
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 2.25rem 8px 10px;
+  border: 1px solid rgba(70, 229, 255, 0.28);
+  border-radius: 0;
+  background-color: rgba(5, 10, 22, 0.88);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%237fffda' d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 8px;
+  color: rgba(215, 246, 255, 0.94);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.25;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+.trader-hub-page.gc-trader-hub-ui select:hover,
+.trader-hub-page.gc-trader-hub-ui .gc-exchange-route-select:hover{
+  border-color: rgba(70, 229, 255, 0.42);
+  background-color: rgba(6, 12, 26, 0.92);
+}
+.trader-hub-page.gc-trader-hub-ui select:focus,
+.trader-hub-page.gc-trader-hub-ui .gc-exchange-route-select:focus{
+  outline: none;
+  border-color: rgba(70, 229, 255, 0.88);
+  box-shadow:
+    0 0 0 2px rgba(70, 229, 255, 0.14),
+    inset 0 0 12px rgba(70, 229, 255, 0.06);
+  background-color: rgba(4, 10, 22, 0.96);
+}
+.trader-hub-page.gc-trader-hub-ui select option{
+  background: rgba(6, 10, 22, 0.98);
+  color: rgba(215, 246, 255, 0.94);
+}
+.trader-hub-page.gc-trader-hub-ui input[type="number"],
+.trader-hub-page.gc-trader-hub-ui .gc-exchange-input,
+.trader-hub-page.gc-trader-hub-ui .gc-scrapyard-qty{
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 0;
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  background: rgba(3, 8, 18, 0.85);
+  color: var(--gc-neon-cyan);
+  font-family: var(--gc-mono);
+  font-size: 0.88rem;
+  text-align: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.trader-hub-page.gc-trader-hub-ui input[type="number"]::-webkit-outer-spin-button,
+.trader-hub-page.gc-trader-hub-ui input[type="number"]::-webkit-inner-spin-button{
+  -webkit-appearance: none;
+  margin: 0;
+}
+.trader-hub-page.gc-trader-hub-ui .gc-exchange-input{
+  width: 100%;
+  max-width: 12rem;
+  text-align: left;
+  color: var(--gc-text);
+  font-family: inherit;
+}
+.trader-hub-page.gc-trader-hub-ui .gc-scrapyard-qty{
+  width: 72px;
+  min-height: auto;
+  padding: 6px 8px;
+}
+.trader-hub-page.gc-trader-hub-ui input[type="number"]:hover,
+.trader-hub-page.gc-trader-hub-ui .gc-exchange-input:hover,
+.trader-hub-page.gc-trader-hub-ui .gc-scrapyard-qty:hover{
+  border-color: rgba(70, 229, 255, 0.45);
+  background: rgba(4, 10, 22, 0.92);
+}
+.trader-hub-page.gc-trader-hub-ui input[type="number"]:focus,
+.trader-hub-page.gc-trader-hub-ui .gc-exchange-input:focus,
+.trader-hub-page.gc-trader-hub-ui .gc-scrapyard-qty:focus{
+  outline: none;
+  border-color: rgba(70, 229, 255, 0.88);
+  box-shadow: 0 0 0 2px rgba(70, 229, 255, 0.12);
+}
+.trader-hub-page.gc-trader-hub-ui .gc-exchange-route-picker{
+  margin-bottom: 0.65rem;
+}
+.trader-hub-page.gc-trader-hub-ui .gc-scrapyard-row-main{
+  align-items: center;
+  gap: 8px;
 }
 
 .overview-score-card{ border-color: rgba(255, 196, 0, 0.25); }

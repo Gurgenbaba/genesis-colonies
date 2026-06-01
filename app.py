@@ -717,12 +717,10 @@ def trader_hub_view():
         return redirect(url_for("login"))
 
     from game.exchange import exchange_schema_ready, get_exchange_status
-    from game.fuel_exchange import fuel_exchange_schema_ready, get_fuel_exchange_status
     from game.planet_evolution.repository import get_context_planet
     from game.scrapyard import scrapyard_status
 
     exchange = {}
-    fuel_exchange = {}
     scrapyard = {}
     conn = db()
     try:
@@ -735,10 +733,9 @@ def trader_hub_view():
                 planet_id=pid,
                 metal=float(ctx["player_view"]["metal"]),
                 crystal=float(ctx["player_view"]["crystal"]),
+                fuel_cells=float(ctx["player_view"].get("fuel_cells") or 0),
                 conn=conn,
             )
-        if fuel_exchange_schema_ready(conn):
-            fuel_exchange = get_fuel_exchange_status(uid, pid, conn=conn)
         scrapyard = scrapyard_status(uid, pid, conn=conn)
     finally:
         conn.close()
@@ -748,7 +745,6 @@ def trader_hub_view():
         player=ctx["player_view"],
         storage_caps=ctx["storage_caps"],
         exchange=exchange,
-        fuel_exchange=fuel_exchange,
         scrapyard=scrapyard,
     )
 
@@ -2402,7 +2398,7 @@ def _payload_from_live_context(
     except Exception:
         payload["planets"] = []
 
-    if not lightweight:
+    if include_panel:
         try:
             from game.exchange import exchange_schema_ready, get_exchange_status
 
@@ -2412,22 +2408,21 @@ def _payload_from_live_context(
                     planet_id=int(planet["id"]),
                     metal=float(player_view["metal"]),
                     crystal=float(player_view["crystal"]),
+                    fuel_cells=float(player_view.get("fuel_cells") or 0),
                     conn=conn,
                 )
         except Exception:
             pass
 
         try:
-            from game.fuel_exchange import fuel_exchange_schema_ready, get_fuel_exchange_status
             from game.scrapyard import scrapyard_status
 
             pid_tr = int(planet["id"])
-            if fuel_exchange_schema_ready(conn):
-                payload["fuel_exchange"] = get_fuel_exchange_status(user_id, pid_tr, conn=conn)
             payload["scrapyard"] = scrapyard_status(user_id, pid_tr, conn=conn)
         except Exception:
             pass
 
+    if not lightweight:
         try:
             from game.planet_evolution.teaser import get_overview_planet_teaser
 
@@ -2586,6 +2581,7 @@ def api_exchange_rates():
             planet_id=int(planet["id"]),
             metal=float(player_view["metal"]),
             crystal=float(player_view["crystal"]),
+            fuel_cells=float(player_view.get("fuel_cells") or 0),
             conn=conn,
         )
         commit(conn)
@@ -2606,11 +2602,8 @@ def api_exchange():
 
     data = request.get_json(silent=True) or {}
     from_resource = (data.get("from") or data.get("from_resource") or "").strip().lower()
+    to_resource = (data.get("to") or data.get("to_resource") or "").strip().lower()
     direction = (data.get("direction") or "").strip().lower()
-    if direction == "metal_to_crystal":
-        from_resource = "metal"
-    elif direction == "crystal_to_metal":
-        from_resource = "crystal"
 
     try:
         amount = int(data.get("amount") or 0)
@@ -2632,6 +2625,8 @@ def api_exchange():
             player_id=user_id,
             planet_id=int(planet["id"]),
             from_resource=from_resource,
+            to_resource=to_resource or None,
+            direction=direction,
             amount=amount,
             conn=conn,
         )

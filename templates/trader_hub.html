@@ -5,8 +5,9 @@
 {% set caps = (storage_caps if storage_caps is defined and storage_caps else {'metal': 0, 'crystal': 0}) %}
 {% set p_metal = (player_obj.metal if player_obj and player_obj.metal is defined else 0) | int %}
 {% set p_crystal = (player_obj.crystal if player_obj and player_obj.crystal is defined else 0) | int %}
+{% set p_fuel = (player_obj.fuel_cells if player_obj and player_obj.fuel_cells is defined else 0) | int %}
 
-<div class="gc-page trader-hub-page" id="trader-hub-page"
+<div class="gc-page trader-hub-page gc-trader-hub-ui" id="trader-hub-page"
      data-planet-id="{{ HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else '' }}">
   <header class="gc-page-header section-header">
     <h1 class="section-title">{{ T("trader_hub_title", "Trader Hub") }}</h1>
@@ -37,12 +38,21 @@
           </span>
         </div>
       </article>
+      <article class="overview-res-card" aria-label="{{ T('resource_fuel_cells') }}">
+        <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}"
+             alt="{{ T('resource_fuel_cells') }}" class="overview-res-icon" loading="lazy">
+        <div class="overview-res-meta">
+          <span class="overview-res-label">{{ T("resource_fuel_cells") }}</span>
+          <span class="overview-res-main">
+            <span class="gc-val" data-res="fuel_cells">{{ p_fuel|fmt_int }}</span>
+          </span>
+        </div>
+      </article>
     </div>
   </section>
 
-  <div class="trader-hub-grid">
+  <div class="trader-hub-grid trader-hub-panels">
     {% include "partials/exchange_panel.html" %}
-    {% include "partials/fuel_exchange_panel.html" %}
     {% include "partials/scrapyard_panel.html" %}
   </div>
 </div>

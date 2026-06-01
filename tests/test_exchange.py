@@ -69,6 +69,7 @@ def test_exchange_metal_to_crystal(exchange_db):
         player_id=uid,
         planet_id=pid,
         from_resource="metal",
+        to_resource="crystal",
         amount=1000,
         conn=conn,
     )
@@ -83,6 +84,101 @@ def test_exchange_metal_to_crystal(exchange_db):
 
     cur.execute("SELECT COUNT(*) AS c FROM exchange_log WHERE player_id = ?;", (uid,))
     assert int(cur.fetchone()["c"]) == 1
+    conn.close()
+
+
+def test_exchange_same_resource_rejected(exchange_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+
+    ok, reason, _ = execute_exchange(
+        player_id=uid,
+        planet_id=pid,
+        from_resource="metal",
+        to_resource="metal",
+        amount=1000,
+        conn=conn,
+    )
+    assert not ok
+    assert reason == "invalid_resource"
+    conn.close()
+
+
+def test_exchange_fuel_cells_to_metal(exchange_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 0, crystal = 0, fuel_cells = 100 WHERE id = ?;", (pid,))
+    conn.commit()
+
+    ok, reason, result = execute_exchange(
+        player_id=uid,
+        planet_id=pid,
+        from_resource="fuel_cells",
+        to_resource="metal",
+        amount=10,
+        conn=conn,
+    )
+    assert ok, reason
+    assert result["receive_amount"] == 450
+    assert result["receive_resource"] == "metal"
+
+    cur.execute("SELECT metal, fuel_cells FROM planets WHERE id = ?;", (pid,))
+    row = cur.fetchone()
+    assert int(row["metal"]) == 450
+    assert int(row["fuel_cells"]) == 90
+    conn.close()
+
+
+def test_exchange_metal_to_fuel_cells(exchange_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 10000, fuel_cells = 0 WHERE id = ?;", (pid,))
+    conn.commit()
+
+    ok, reason, result = execute_exchange(
+        player_id=uid,
+        planet_id=pid,
+        direction="metal_to_fuel_cells",
+        from_resource="metal",
+        amount=450,
+        conn=conn,
+    )
+    assert ok, reason
+    assert result["receive_amount"] == 10
+    assert result["receive_resource"] == "fuel_cells"
+
+    cur.execute("SELECT metal, fuel_cells FROM planets WHERE id = ?;", (pid,))
+    row = cur.fetchone()
+    assert int(row["metal"]) == 9550
+    assert int(row["fuel_cells"]) == 10
+    conn.close()
+
+
+def test_exchange_fuel_cells_uncapped(exchange_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET crystal = 100000, fuel_cells = 0 WHERE id = ?;", (pid,))
+    conn.commit()
+
+    ok, reason, _ = execute_exchange(
+        player_id=uid,
+        planet_id=pid,
+        from_resource="crystal",
+        to_resource="fuel_cells",
+        amount=2800,
+        conn=conn,
+    )
+    assert ok, reason
+
+    cur.execute("SELECT fuel_cells FROM planets WHERE id = ?;", (pid,))
+    assert int(cur.fetchone()["fuel_cells"]) == 100
     conn.close()
 
 
@@ -220,7 +316,8 @@ def test_trader_hub_page_includes_exchange_panel(exchange_db, tmp_path, monkeypa
     assert "trader-hub-page" in html
     assert "gc-exchange-panel" in html
     assert "gc-exchange-formula" in html
-    assert "gc-fuel-exchange-panel" in html
+    assert "gc-exchange-route-select" in html
+    assert "gc-fuel-exchange-panel" not in html
     assert "gc-scrapyard-panel" in html
 
 

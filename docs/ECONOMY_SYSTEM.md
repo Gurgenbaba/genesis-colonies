@@ -1,6 +1,6 @@
 # Economy System
 
-Ressourcen, Produktion, Trader Hub und Exchange (v1.5.3).
+Ressourcen, Produktion, Trader Hub und Unified Resource Trader (v1.5.4).
 
 Formeln: autoritativ in `game/effects/effect_resolver.py` — siehe [EFFECTS.md](EFFECTS.md).
 
@@ -75,21 +75,37 @@ Modifier: `mining_tech`, `drone_tech`, `storage_tech`, Settings (`resource_speed
 
 ## Trader Hub (`/trader-hub`)
 
-Seite mit drei Panels (Partials):
+Seite mit zwei Panels (Partials):
 
 | Panel | Modul | API |
 |-------|-------|-----|
-| Metall ↔ Kristall | `game/exchange.py` | `POST /api/exchange` |
-| Brennzellen kaufen | `game/fuel_exchange.py` | `POST /api/trader/fuel-exchange` |
+| Unified Resource Trader | `game/exchange.py` | `POST /api/exchange` |
 | Schrottplatz | `game/scrapyard.py` | `POST /api/trader/scrapyard` |
 
-Scope: **context planet** für Salden; Exchange-Tageslimit **pro Spieler**.
+Scope: **context planet** für Salden; Tageslimit **pro Spieler**.
 
-Poll liefert `exchange`, `fuel_exchange`, `scrapyard` in `/api/game-state`.
+Poll liefert `exchange`, `scrapyard` in `/api/game-state`.
 
 ---
 
-## Instant Exchange (Metal ↔ Crystal)
+## Unified Resource Trader
+
+Ein zentrales Tauschsystem für `metal`, `crystal`, `fuel_cells`.
+
+### Erlaubte Routen
+
+| Route | Rate (Default) |
+|-------|----------------|
+| metal → crystal | `exchange_rate_metal_to_crystal` (0.8) |
+| crystal → metal | `exchange_rate_crystal_to_metal` (0.8) |
+| metal → fuel_cells | `1 / fuel_exchange_metal_per_unit` (45 Ferronit → 1 Brennzelle) |
+| crystal → fuel_cells | `1 / fuel_exchange_crystal_per_unit` (28 Crytite → 1 Brennzelle) |
+| fuel_cells → metal | `fuel_exchange_metal_per_unit` (45 Ferronit pro Brennzelle) |
+| fuel_cells → crystal | `fuel_exchange_crystal_per_unit` (28 Crytite pro Brennzelle) |
+
+Gleiche Ressource als Input/Output ist verboten.
+
+### Settings
 
 | Setting | Default |
 |---------|---------|
@@ -98,27 +114,22 @@ Poll liefert `exchange`, `fuel_exchange`, `scrapyard` in `/api/game-state`.
 | `exchange_rate_crystal_to_metal` | 0.8 |
 | `exchange_daily_limit` | 500.000.000 |
 | `exchange_min_amount` | 100 |
-
-- Abbuchung vom context planet
-- Gutschrift capped by storage capacity
-- Log: `exchange_log`
-- Migrationen: `024`, `025`
-
----
-
-## Fuel Exchange
-
-| Setting | Default |
-|---------|---------|
-| `fuel_exchange_enabled` | 1 |
+| `fuel_exchange_enabled` | 1 (steuert Brennzellen-Routen) |
 | `fuel_exchange_metal_per_unit` | 45 |
 | `fuel_exchange_crystal_per_unit` | 28 |
 | `fuel_exchange_min_units` | 10 |
-| `fuel_exchange_daily_units` | 5000 |
 
-- Kosten: metal **und** crystal pro Einheit
-- Tageslimit **pro Planet** (`fuel_exchange_daily_used`, Migration `031`)
-- Kein Storage-Cap auf fuel_cells
+### Regeln
+
+- Abbuchung/Gutschrift vom **context planet**
+- metal/crystal Output capped by storage capacity
+- fuel_cells Output uncapped
+- Tageslimit zählt `give_amount` pro Spieler
+- Log: `exchange_log`
+
+Legacy: `POST /api/trader/fuel-exchange` delegiert an metal → fuel_cells; `game/fuel_exchange.py` deprecated.
+
+Migrationen: `024`, `025`, `031`, `036` (fuel_cells in exchange_log)
 
 ---
 
@@ -140,8 +151,8 @@ Schiffsbau zieht metal, crystal **und fuel_cells** ab (siehe [FLEET_SYSTEM.md](F
 |-------|-------|
 | `game/resources.py` | Tick, deltas |
 | `game/effects/effect_resolver.py` | Formeln |
-| `game/exchange.py` | Metall/Kristall-Tausch |
-| `game/fuel_exchange.py` | Brennzellen-Kauf |
+| `game/exchange.py` | Unified Resource Trader |
+| `game/fuel_exchange.py` | Legacy-Wrapper (deprecated) |
 | `game/scrapyard.py` | Recycling |
 | `game/logic.py` | Poll-Fassade |
 | `templates/trader_hub.html` | UI |

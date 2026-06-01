@@ -53,14 +53,16 @@ def _login_client(trader_hub_db, monkeypatch):
 
 def test_game_state_includes_trader_panels(trader_hub_db, monkeypatch):
     client, _uid = _login_client(trader_hub_db, monkeypatch)
-    res = client.get("/api/game-state")
+    res = client.get("/api/game-state?include_panel=1")
     assert res.status_code == 200
     data = res.get_json()
     assert data["ok"] is True
     assert "exchange" in data
     assert data["exchange"].get("enabled") is True
-    assert "fuel_exchange" in data
-    assert data["fuel_exchange"].get("ready") is True
+    assert "fuel_metal_per_unit" in data["exchange"]
+    assert "balances" in data["exchange"]
+    assert "fuel_cells" in data["exchange"]["balances"]
+    assert "fuel_exchange" not in data
     assert "scrapyard" in data
     assert data["scrapyard"].get("ready") is True
 

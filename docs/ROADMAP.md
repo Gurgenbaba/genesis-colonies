@@ -95,7 +95,7 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | **Galaxie** — Karte, Slots, Koordinaten | ✅ | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) |
 | **Werft** — Schiffsbau, Queue, fuel_cells | ✅ | `orbital_shipyard` |
 | **Flotte** — Send, Tick, Missionen | ✅ | Combat placeholder |
-| **Trader Hub** — Exchange, Fuel, Scrapyard | ✅ | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
+| **Trader Hub** — Unified Exchange, Scrapyard | ✅ | GC-402 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
 | **Verteidigung** — Türme, Schilder | 📋 | UI only `/defense` |
 | Kampf-Auflösung | 📋 | Attack mission → stub report |
 | Fleet Logistics (collect/distribute) | 📋 | API returns not_implemented |
