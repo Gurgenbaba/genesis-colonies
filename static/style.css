@@ -9162,6 +9162,11 @@ body.gc-combat-report-open { overflow: hidden; }
 .gc-combat-report-modal .gc-combat-report-dialog {
   width: min(820px, 100%);
   max-height: min(92vh, 880px);
+  border-radius: var(--gc-radius-sm);
+}
+
+.gc-combat-report-shell .gc-player-card-stat {
+  border-radius: 0;
 }
 
 .gc-combat-report-modal .gc-player-card-body {
@@ -9176,10 +9181,32 @@ body.gc-combat-report-open { overflow: hidden; }
 }
 
 .gc-combat-report-hero {
-  padding: 14px 16px;
+  position: relative;
+  overflow: hidden;
+  padding: 14px 16px 14px 18px;
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.22);
   background: linear-gradient(135deg, rgba(8, 16, 32, 0.9), rgba(4, 8, 18, 0.85));
+}
+
+.gc-combat-report-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: rgba(70, 229, 255, 0.75);
+}
+
+.gc-combat-report-hero--victory::before {
+  background: rgba(80, 220, 140, 0.85);
+}
+
+.gc-combat-report-hero--defeat::before {
+  background: rgba(255, 120, 160, 0.85);
+}
+
+.gc-combat-report-hero--draw::before {
+  background: rgba(255, 190, 80, 0.85);
 }
 
 .gc-combat-report-hero--victory {
@@ -9209,7 +9236,7 @@ body.gc-combat-report-open { overflow: hidden; }
   display: grid;
   place-items: center;
   font-size: 1.35rem;
-  border-radius: 10px;
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.25);
   background: rgba(70, 229, 255, 0.08);
 }
@@ -9234,14 +9261,15 @@ body.gc-combat-report-open { overflow: hidden; }
 .gc-combat-report-result-badge {
   flex-shrink: 0;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 0;
   font-size: 0.68rem;
   font-family: var(--gc-font-display, Orbitron, sans-serif);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   border: 1px solid rgba(70, 229, 255, 0.35);
   color: var(--gc-neon-cyan);
   background: rgba(70, 229, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 .gc-combat-report-hero--victory .gc-combat-report-result-badge {
@@ -9297,10 +9325,11 @@ body.gc-combat-report-open { overflow: hidden; }
 .gc-combat-unit-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
+  gap: 8px;
+  padding: 5px 10px 5px 8px;
+  border-radius: 0;
   border: 1px solid rgba(120, 190, 255, 0.18);
+  border-left: 2px solid rgba(70, 229, 255, 0.45);
   background: rgba(8, 14, 28, 0.65);
   font-size: 0.8rem;
 }
@@ -9319,7 +9348,7 @@ body.gc-combat-report-open { overflow: hidden; }
 
 .gc-combat-round {
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
+  border-radius: 0;
   margin-bottom: 6px;
   overflow: hidden;
 }
@@ -9343,14 +9372,36 @@ body.gc-combat-report-open { overflow: hidden; }
 
 /* Inbox combat teaser card */
 .gc-combat-teaser {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 14px;
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.2);
   background: linear-gradient(160deg, rgba(10, 18, 34, 0.85), rgba(6, 10, 20, 0.9));
   text-align: left;
+}
+
+.gc-combat-teaser::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: rgba(70, 229, 255, 0.65);
+}
+
+.gc-combat-teaser--victory::before {
+  background: rgba(80, 220, 140, 0.75);
+}
+
+.gc-combat-teaser--defeat::before {
+  background: rgba(255, 120, 160, 0.75);
+}
+
+.gc-combat-teaser--draw::before {
+  background: rgba(255, 190, 80, 0.75);
 }
 
 .gc-combat-teaser--compact {
@@ -9371,7 +9422,7 @@ body.gc-combat-report-open { overflow: hidden; }
   display: grid;
   place-items: center;
   font-size: 1rem;
-  border-radius: 8px;
+  border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(70, 229, 255, 0.22);
   background: rgba(70, 229, 255, 0.08);
 }
@@ -9400,14 +9451,15 @@ body.gc-combat-report-open { overflow: hidden; }
 .gc-combat-teaser-badge {
   flex-shrink: 0;
   max-width: 42%;
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: 3px 8px;
+  border-radius: 0;
   font-size: 0.62rem;
   font-family: var(--gc-font-display, Orbitron, sans-serif);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   border: 1px solid rgba(70, 229, 255, 0.3);
   color: var(--gc-neon-cyan);
+  background: rgba(70, 229, 255, 0.08);
 }
 
 .gc-combat-teaser--victory .gc-combat-teaser-badge {
@@ -9442,6 +9494,20 @@ body.gc-combat-report-open { overflow: hidden; }
 
 .gc-messages-detail-body .gc-combat-teaser {
   margin-top: 4px;
+}
+
+/* Loot chips inside combat modal — square panels, no pills */
+.gc-combat-report-shell .gc-expedition-loot-chip {
+  border-radius: 0;
+  border-left-width: 2px;
+}
+
+.gc-combat-report-shell .gc-expedition-loot-grid {
+  gap: 6px;
+}
+
+.gc-combat-teaser-open.gc-btn {
+  border-radius: var(--gc-radius-sm);
 }
 
 .gc-messages-detail-actions {
