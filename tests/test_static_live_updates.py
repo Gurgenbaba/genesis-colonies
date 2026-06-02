@@ -209,6 +209,9 @@ def test_main_js_fleet_countdown_uses_integer_seconds():
     countdown_body = src.split("function updateMovementCountdowns(serverNow)")[1].split("function updateAllProgressBars")[0]
     assert "Math.ceil(countdownAt - now)" in countdown_body
     assert "MOVEMENT_EXPIRY_REFRESH_MS_SHORT" in src
+    assert "movementRemainingSeconds" in src
+    assert "data-server-remaining" in src
+    assert "patchActiveFleetCards" in src
     assert "_anyStaleMovementCountdownDom" in src
     stale_section = src.split("function requestMovementCountdownRefresh(scope)")[1].split("function updateMovementCountdowns")[0]
     assert "requestMovementCountdownRefresh(pendingKey)" in stale_section

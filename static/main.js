@@ -124,19 +124,19 @@
   function setServerTime(serverTimeSec) {
     const v = Number(serverTimeSec);
     if (!Number.isFinite(v) || v <= 0) return;
-    const hasSync = TIME.serverNow > 0 && TIME.clientPerfAt > 0;
-    if (hasSync) {
-      const approx = getApproxServerNow();
-      if (Number.isFinite(approx)) {
-        const drift = v - approx;
-        // Integer server_time polls often trail extrapolated clock — ignore small backward steps.
-        if (drift < 0 && drift > -2) return;
-        // Ignore duplicate second stamps that jump slightly forward.
-        if (drift > 0 && drift < 0.12) return;
-      }
-    }
     TIME.serverNow = v;
     TIME.clientPerfAt = performance.now();
+  }
+
+  function movementRemainingSeconds(countdownAt, serverNow, serverRemaining) {
+    const endAt = Number(countdownAt || 0);
+    if (!endAt) return 0;
+    const now = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
+    const fromEndAt = Math.max(0, Math.ceil(endAt - now));
+    const srv = Number(serverRemaining);
+    if (!Number.isFinite(srv) || srv < 0) return fromEndAt;
+    const fromServer = Math.max(0, Math.ceil(srv));
+    return Math.max(fromEndAt, fromServer);
   }
 
   function bootstrapServerTimeFromDom() {
@@ -1404,7 +1404,7 @@
     };
 
     const activitySignature = (acts) => (acts || []).map((act) =>
-      `${act.key}:${act.state}:${act.countdown_at || act.finish_at || 0}:${act.phase || ""}:${act.status_label || ""}:${act.label_key || ""}:${act.summary || ""}`
+      `${act.key}:${act.state}:${act.countdown_at || act.finish_at || 0}:${act.phase || ""}:${act.status_label || ""}:${act.remaining ?? ""}:${act.label_key || ""}:${act.summary || ""}`
     ).join("|");
 
     const renderActivities = () => {
@@ -1446,7 +1446,14 @@
             etaEl.dataset.countdownScope = "overview";
             etaEl.dataset.countdownFormat = act.key.startsWith("fleet_") ? "fleet" : "eta";
             etaEl.dataset.countdownKey = `${mvId}:${phase}:${endAt}`;
-            const rem = Math.max(0, Math.ceil(endAt - getApproxServerNow()));
+            if (act.key.startsWith("fleet_") && Number.isFinite(Number(act.remaining))) {
+              etaEl.dataset.serverRemaining = String(Math.max(0, Math.ceil(Number(act.remaining))));
+            } else {
+              delete etaEl.dataset.serverRemaining;
+            }
+            const rem = act.key.startsWith("fleet_")
+              ? movementRemainingSeconds(endAt, getApproxServerNow(), act.remaining)
+              : Math.max(0, Math.ceil(endAt - getApproxServerNow()));
             etaEl.textContent = act.key.startsWith("fleet_")
               ? formatCountdownRemain(rem)
               : formatEta(rem);
@@ -1504,11 +1511,24 @@
             etaEl.dataset.countdownScope = "overview";
             etaEl.dataset.countdownFormat = act.key.startsWith("fleet_") ? "fleet" : "eta";
             etaEl.dataset.countdownKey = `${mvId}:${phase}:${endAt}`;
+            if (act.key.startsWith("fleet_") && Number.isFinite(Number(act.remaining))) {
+              etaEl.dataset.serverRemaining = String(Math.max(0, Math.ceil(Number(act.remaining))));
+            } else {
+              delete etaEl.dataset.serverRemaining;
+            }
+            const rem = act.key.startsWith("fleet_")
+              ? movementRemainingSeconds(endAt, getApproxServerNow(), act.remaining)
+              : Math.max(0, Math.ceil(endAt - getApproxServerNow()));
+            _setIfChanged(
+              etaEl,
+              act.key.startsWith("fleet_") ? formatCountdownRemain(rem) : formatEta(rem)
+            );
           } else {
             delete etaEl.dataset.countdownAt;
             delete etaEl.dataset.countdownScope;
             delete etaEl.dataset.countdownFormat;
             delete etaEl.dataset.countdownKey;
+            delete etaEl.dataset.serverRemaining;
           }
         }
       } else if (etaEl) {
@@ -2288,9 +2308,9 @@
       if (!String(k).endsWith(":stale")) return;
       maxStale = Math.max(maxStale, Number(val) || 0);
     });
-    if (maxStale >= 5) return 1800;
-    if (maxStale >= 2) return 600;
-    return 80;
+    if (maxStale >= 8) return 400;
+    if (maxStale >= 4) return 200;
+    return 60;
   }
 
   function _anyStaleMovementCountdownDom() {
@@ -2334,33 +2354,42 @@
       document.querySelectorAll("[data-countdown-at]").forEach((el) => {
         const countdownAt = Number(el.dataset.countdownAt || 0);
         if (!countdownAt) return;
-        const remaining = Math.max(0, Math.ceil(countdownAt - getApproxServerNow()));
+        const srvRem = el.dataset.serverRemaining;
+        const remaining = movementRemainingSeconds(
+          countdownAt,
+          getApproxServerNow(),
+          srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
+        );
         if (remaining <= 0) staleKeys.push(_movementCountdownKey(el));
       });
 
       const fleetPage = document.getElementById("fleet-page");
-      let refreshPromise;
-      if (pendingKey === "fleet" && fleetPage && typeof GC.refreshFleetState === "function") {
+      const fleetReady = fleetPage && fleetPage.dataset.ready === "1";
+      let refreshPromise = Promise.resolve();
+      if (pendingKey === "fleet" && fleetReady && typeof GC.refreshFleetState === "function") {
         fleetPage.dataset.fleetRefreshBusy = "1";
         refreshPromise = GC.refreshFleetState(fleetPage).finally(() => {
           delete fleetPage.dataset.fleetRefreshBusy;
         });
-      } else if (typeof GC.refreshGameState === "function") {
-        refreshPromise = GC.refreshGameState("fleet_countdown_expired");
-      } else {
+      }
+      if (typeof GC.refreshGameState === "function") {
+        refreshPromise = refreshPromise.then(() =>
+          GC.refreshGameState("fleet_countdown_expired")
+        );
+      } else if (pendingKey !== "fleet" || !fleetReady) {
         refreshPromise = Promise.resolve();
       }
 
       Promise.resolve(refreshPromise).finally(() => {
         _movementCountdownRefreshPending[pendingKey] = false;
-        const fleetPage = document.getElementById("fleet-page");
+        const fleetPageLater = document.getElementById("fleet-page");
         if (
-          fleetPage &&
-          fleetPage.dataset.ready === "1" &&
+          fleetPageLater &&
+          fleetPageLater.dataset.ready === "1" &&
           typeof GC.refreshFleetState === "function" &&
           pendingKey === "overview"
         ) {
-          GC.refreshFleetState(fleetPage);
+          GC.refreshFleetState(fleetPageLater);
         }
         staleKeys.forEach((key) => {
           let stillStale = false;
@@ -2368,7 +2397,12 @@
             if (_movementCountdownKey(el) !== key) return;
             const countdownAt = Number(el.dataset.countdownAt || 0);
             if (!countdownAt) return;
-            if (Math.max(0, Math.ceil(countdownAt - getApproxServerNow())) <= 0) stillStale = true;
+            const srvRem = el.dataset.serverRemaining;
+            if (movementRemainingSeconds(
+              countdownAt,
+              getApproxServerNow(),
+              srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
+            ) <= 0) stillStale = true;
           });
           if (stillStale) _noteMovementCountdownStillStale(key);
           else _clearMovementCountdownStale(key);
@@ -2390,8 +2424,12 @@
     document.querySelectorAll("[data-countdown-at]").forEach((el) => {
       const countdownAt = Number(el.dataset.countdownAt || 0);
       if (!countdownAt) return;
-      const remainingSec = countdownAt - now;
-      const remaining = Math.max(0, Math.ceil(remainingSec));
+      const srvRem = el.dataset.serverRemaining;
+      const remaining = movementRemainingSeconds(
+        countdownAt,
+        now,
+        srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
+      );
       _setIfChanged(el, formatMovementCountdown(remaining, el.dataset.countdownFormat || "fleet"));
       const scope = el.dataset.countdownScope || "";
       const key = _movementCountdownKey(el);
@@ -3800,6 +3838,69 @@
       .map(([key, qty]) => `<span class="fleet-ship-chip">${tt(`fleet_ship_${key}`, key)} × ${Number(qty).toLocaleString()}</span>`)
       .join("");
 
+    const fleetLegKey = (mv, phase) => mv.status_label || mv.leg_label_key || (
+      phase === "returning"
+        ? "fleet_leg_returning"
+        : phase === "holding"
+          ? "fleet_leg_holding"
+          : "fleet_leg_outbound"
+    );
+
+    const fleetCountdownHtml = (mv) => {
+      const countdownAt = Number(mv.countdown_at || 0);
+      const phase = mv.phase || mv.leg_phase || mv.status || "";
+      const legLabel = tt(fleetLegKey(mv, phase), fleetLegKey(mv, phase));
+      const countdownKey = `${mv.id}:${phase}:${countdownAt}`;
+      const srvRem = Number(mv.remaining_seconds);
+      const srvAttr = Number.isFinite(srvRem) && srvRem >= 0 ? ` data-server-remaining="${Math.ceil(srvRem)}"` : "";
+      if (!countdownAt) return "";
+      return `<span class="fleet-active-leg">${legLabel}: <time class="fleet-active-countdown gc-mono" data-countdown-at="${countdownAt}" data-countdown-scope="fleet" data-countdown-key="${countdownKey}"${srvAttr}>–</time></span>`;
+    };
+
+    const patchActiveFleetCards = (page, list) => {
+      const now = getApproxServerNow();
+      list.forEach((mv) => {
+        const card = page.querySelector(`[data-fleet-id="${mv.id}"]`);
+        if (!card) return;
+        const phase = mv.phase || mv.leg_phase || mv.status || "";
+        const mission = String(mv.mission_type || "custom");
+        card.dataset.status = String(mv.status || "");
+        card.dataset.leg = phase;
+        card.dataset.mission = mission;
+        card.className = `fleet-active-card fleet-active-card--${mission}`;
+        const statusEl = card.querySelector(".fleet-active-status");
+        if (statusEl) _setIfChanged(statusEl, tt(`fleet_status_${mv.status}`, mv.status));
+        const missionEl = card.querySelector(".fleet-active-mission");
+        if (missionEl) {
+          missionEl.className = `fleet-active-mission fleet-active-mission--${mission}`;
+          _setIfChanged(missionEl, tt(`fleet_mission_${mv.mission_type}`, mv.mission_type));
+        }
+        const timesEl = card.querySelector(".fleet-active-times");
+        if (!timesEl) return;
+        const countdownAt = Number(mv.countdown_at || 0);
+        const cdEl = timesEl.querySelector("[data-countdown-at]");
+        const legKey = fleetLegKey(mv, phase);
+        const legChanged = !cdEl
+          || card.dataset.leg !== phase
+          || Number(cdEl.dataset.countdownAt || 0) !== countdownAt
+          || String(cdEl.dataset.countdownKey || "") !== `${mv.id}:${phase}:${countdownAt}`;
+        if (legChanged) {
+          timesEl.innerHTML = fleetCountdownHtml(mv);
+        } else if (cdEl) {
+          const srvRem = Number(mv.remaining_seconds);
+          if (Number.isFinite(srvRem) && srvRem >= 0) {
+            cdEl.dataset.serverRemaining = String(Math.ceil(srvRem));
+          } else {
+            delete cdEl.dataset.serverRemaining;
+          }
+          _setIfChanged(
+            cdEl,
+            formatCountdownRemain(movementRemainingSeconds(countdownAt, now, mv.remaining_seconds))
+          );
+        }
+      });
+    };
+
     const renderActiveFleets = (page, fleets) => {
       const activeListEl = page.querySelector("[data-fleet-active-list]");
       if (!activeListEl) return;
@@ -3812,34 +3913,21 @@
       }
 
       const signature = list.map((mv) => (
-        `${mv.id}:${mv.status}:${mv.phase || mv.leg_phase || ""}:${mv.countdown_at || 0}`
+        `${mv.id}:${mv.status}:${mv.phase || mv.leg_phase || ""}:${mv.countdown_at || 0}:${mv.remaining_seconds ?? ""}`
       )).join("|");
       const sigChanged = activeListEl.dataset.fleetSig !== signature;
       if (sigChanged) {
         activeListEl.dataset.fleetSig = signature;
         _clearMovementCountdownExpiryState();
-      }
-      if (sigChanged) {
         activeListEl.innerHTML = list.map((mv) => {
         const countdownAt = Number(mv.countdown_at || 0);
         const phase = mv.phase || mv.leg_phase || mv.status || "";
-        const legKey = mv.status_label || mv.leg_label_key || (
-          phase === "returning"
-            ? "fleet_leg_returning"
-            : phase === "holding"
-              ? "fleet_leg_holding"
-              : "fleet_leg_outbound"
-        );
-        const legLabel = tt(legKey, legKey);
-        const countdownKey = `${mv.id}:${phase}:${countdownAt}`;
-        const countdown = countdownAt > 0
-          ? `<span class="fleet-active-leg">${legLabel}: <time class="fleet-active-countdown gc-mono" data-countdown-at="${countdownAt}" data-countdown-scope="fleet" data-countdown-key="${countdownKey}">–</time></span>`
-          : "";
+        const mission = String(mv.mission_type || "custom");
+        const countdown = fleetCountdownHtml(mv);
         const cargo = [];
         if (mv.resources?.metal) cargo.push(`${tt("resource_metal")}: ${Number(mv.resources.metal).toLocaleString()}`);
         if (mv.resources?.crystal) cargo.push(`${tt("resource_crystal")}: ${Number(mv.resources.crystal).toLocaleString()}`);
         if (mv.resources?.fuel_cells) cargo.push(`${tt("resource_fuel_cells")}: ${Number(mv.resources.fuel_cells).toLocaleString()}`);
-        const mission = String(mv.mission_type || "custom");
         return `<article class="fleet-active-card fleet-active-card--${mission}" data-fleet-id="${mv.id}" data-status="${mv.status}" data-mission="${mission}" data-leg="${phase}">
           <div class="fleet-active-row">
             <span class="fleet-active-mission fleet-active-mission--${mission}">${tt(`fleet_mission_${mv.mission_type}`, mv.mission_type)}</span>
@@ -3851,6 +3939,8 @@
           <div class="fleet-active-times gc-mono">${countdown}</div>
         </article>`;
         }).join("");
+      } else {
+        patchActiveFleetCards(page, list);
       }
       updateMovementCountdowns(getApproxServerNow());
       GC.startProgressTicker();
