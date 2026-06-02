@@ -46,7 +46,7 @@
 
       {% if df.planet_coords is defined and df.planet_coords %}
 
-      <span class="defense-planet-coords" data-defense-planet-coords>({{ df.planet_coords }})</span>
+      <span class="defense-planet-coords" data-defense-planet-coords>({{ galaxy_coord_link(df.planet_coords) }})</span>
 
       {% endif %}
 

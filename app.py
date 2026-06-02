@@ -197,6 +197,29 @@ def player_name_link(
     return Markup(f"<span {' '.join(attrs)}>{display}</span>")
 
 
+@app.template_global()
+def galaxy_coord_link(
+    coords,
+    text=None,
+    extra_class: str = "gc-galaxy-coord-link gc-mono",
+) -> Markup:
+    """Clickable coordinate link to the galaxy view (highlights position when given)."""
+    from game.galaxy import galaxy_view_href
+
+    raw = str(coords or "").strip()
+    if not raw or raw == "—":
+        return Markup(escape(text if text is not None else "—"))
+    href = galaxy_view_href(raw)
+    display = escape(text if text is not None else raw)
+    if not href:
+        return Markup(display)
+    classes = escape(str(extra_class or "gc-galaxy-coord-link gc-mono").strip())
+    title = escape(T("galaxy_coord_link_title", "View in galaxy"))
+    return Markup(
+        f'<a href="{escape(href)}" class="{classes}" title="{title}">{display}</a>'
+    )
+
+
 def _current_player_id() -> int | None:
     try:
         uid = session.get("user_id")

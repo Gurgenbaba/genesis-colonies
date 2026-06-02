@@ -38,6 +38,40 @@
       .replace(/"/g, "&quot;");
   }
 
+  function coordLink(raw, label) {
+    if (typeof GC.coordLinkHtml === "function") {
+      return GC.coordLinkHtml(raw, { label: label != null ? label : raw });
+    }
+    const text = label != null ? label : raw;
+    return esc(text || "—");
+  }
+
+  function coordRoute(fromRaw, toRaw) {
+    if (typeof GC.coordRouteHtml === "function") {
+      return GC.coordRouteHtml(fromRaw, toRaw);
+    }
+    const from = String(fromRaw || "").trim();
+    const to = String(toRaw || "").trim();
+    if (from && to) return `${esc(from)} → ${esc(to)}`;
+    return esc(from || to || "—");
+  }
+
+  function coordLabelLink(templateKey, fallback, coords) {
+    const tpl = t(templateKey, fallback);
+    if (!tpl.includes("%(coords)s")) return esc(tpl);
+    const parts = tpl.split("%(coords)s");
+    if (parts.length !== 2) return esc(tpl);
+    const c = String(coords || "—");
+    return esc(parts[0]) + coordLink(c, c) + esc(parts[1]);
+  }
+
+  function linkifyCoordsText(text) {
+    if (typeof GC.linkifyCoordsInText === "function") {
+      return GC.linkifyCoordsInText(text);
+    }
+    return esc(text || "");
+  }
+
   function formatInt(n) {
     const v = Number(n);
     if (!Number.isFinite(v)) return "0";
@@ -178,12 +212,8 @@
   function combatCoordsRoute(meta) {
     const from = String(meta?.origin_coords || "").trim();
     const to = String(meta?.target_coords || "").trim();
-    if (from && to) {
-      return t("combat_report_route", "%(from)s → %(to)s")
-        .replace("%(from)s", from)
-        .replace("%(to)s", to);
-    }
-    return to || from || "—";
+    if (from && to) return coordRoute(from, to);
+    return coordLink(to || from, to || from);
   }
 
   function renderCombatBattleOverview(meta) {
@@ -207,14 +237,16 @@
     return (
       `<section class="gc-combat-report-overview">` +
         `<h4 class="gc-combat-report-panel-title">${esc(t("combat_report_battlefield", "Battlefield"))}</h4>` +
-        `<div class="gc-combat-report-battlefield gc-mono">${esc(combatCoordsRoute(meta))}</div>` +
+        `<div class="gc-combat-report-battlefield gc-mono">${combatCoordsRoute(meta)}</div>` +
         `<div class="gc-combat-report-sides">` +
           `<div class="gc-combat-report-side gc-combat-report-side--attacker">` +
             `<span class="gc-combat-report-side-role">${esc(t("combat_report_section_attacker", "Attacker"))}</span>` +
             `<strong class="gc-combat-report-side-name">${esc(meta.attacker_name || "—")}</strong>` +
             originPlanetLine +
-            `<span class="gc-combat-report-side-coords gc-mono">${esc(
-              t("combat_report_origin_coords", "Launched from: %(coords)s").replace("%(coords)s", originCoords)
+            `<span class="gc-combat-report-side-coords gc-mono">${coordLabelLink(
+              "combat_report_origin_coords",
+              "Launched from: %(coords)s",
+              originCoords
             )}</span>` +
             `<span class="gc-combat-report-side-units">${esc(
               t("combat_report_side_ships", "%(count)s ships").replace("%(count)s", formatInt(atkShips))
@@ -224,8 +256,10 @@
             `<span class="gc-combat-report-side-role">${esc(t("combat_report_section_defender", "Defender"))}</span>` +
             `<strong class="gc-combat-report-side-name">${esc(meta.defender_name || "—")}</strong>` +
             targetPlanetLine +
-            `<span class="gc-combat-report-side-coords gc-mono">${esc(
-              t("combat_report_target_coords", "Target planet: %(coords)s").replace("%(coords)s", targetCoords)
+            `<span class="gc-combat-report-side-coords gc-mono">${coordLabelLink(
+              "combat_report_target_coords",
+              "Target planet: %(coords)s",
+              targetCoords
             )}</span>` +
             `<span class="gc-combat-report-side-units">${esc(defUnitsLine)}</span>` +
           `</div>` +
@@ -261,7 +295,7 @@
         `<div class="gc-combat-teaser-top">` +
           `<span class="gc-combat-teaser-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
           `<div class="gc-combat-teaser-headings">` +
-            `<span class="gc-combat-teaser-coords gc-mono">${esc(combatCoordsRoute(meta))}</span>` +
+            `<span class="gc-combat-teaser-coords gc-mono">${combatCoordsRoute(meta)}</span>` +
             `<span class="gc-combat-teaser-vs">${esc(vsLine)}</span>` +
           `</div>` +
           `<span class="gc-combat-teaser-badge">${esc(resultLabel)}</span>` +
@@ -295,7 +329,7 @@
         `<div class="gc-combat-report-hero-top">` +
           `<span class="gc-combat-report-hero-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
           `<div class="gc-combat-report-hero-text">` +
-            `<div class="gc-combat-report-coords gc-mono">${esc(combatCoordsRoute(meta))}</div>` +
+            `<div class="gc-combat-report-coords gc-mono">${combatCoordsRoute(meta)}</div>` +
             `<div class="gc-combat-report-vs">${esc(
               t("combat_report_vs", "%(attacker)s vs %(defender)s")
                 .replace("%(attacker)s", meta.attacker_name || "—")
@@ -477,7 +511,7 @@
 
     sections.push(
       `<div class="gc-spy-report-head">` +
-        `<div class="gc-spy-report-coords">${esc(meta.target_coords || "—")}</div>` +
+        `<div class="gc-spy-report-coords gc-mono">${coordLink(meta.target_coords, meta.target_coords || "—")}</div>` +
         `<div class="gc-spy-report-owner">${esc(meta.target_owner || "—")}</div>` +
         (meta.target_planet
           ? `<div class="gc-spy-report-planet">${esc(meta.target_planet)}</div>`
@@ -640,13 +674,13 @@
             .map(
               (row) =>
                 `<div class="gc-spy-report-activity-row">${esc(
-                  t(
-                    "fleet_spy_report_activity_row",
-                    "%(mission)s → %(coords)s (%(status)s)"
-                  )
+                  t("fleet_spy_report_activity_row", "%(mission)s → %(coords)s (%(status)s)")
                     .replace("%(mission)s", missionLabel(row.mission || ""))
-                    .replace("%(coords)s", row.coords || "")
+                    .replace("%(coords)s", "%%COORD%%")
                     .replace("%(status)s", row.status || "")
+                ).replace(
+                  "%%COORD%%",
+                  coordLink(row.coords, row.coords || "—")
                 )}</div>`
             )
             .join("")
@@ -808,7 +842,7 @@
         `</div>` +
         `<p class="gc-expedition-card-meta gc-mono">${esc(metaLine)}</p>` +
         (desc ? `<p class="gc-expedition-card-desc">${esc(desc)}</p>` : "") +
-        `<div class="gc-expedition-card-coords gc-mono">${esc(meta.target_coords || "—")}</div>` +
+        `<div class="gc-expedition-card-coords gc-mono">${coordLink(meta.target_coords, meta.target_coords || "—")}</div>` +
       `</header>`
     );
 
@@ -1303,7 +1337,7 @@
             : "";
           return (
             `<button type="button" class="gc-messages-item${active}${unreadCls}${combatCls}" data-id="${m.id}">` +
-            `<span class="gc-messages-item-subject">${esc(m.subject)}</span>` +
+            `<span class="gc-messages-item-subject">${linkifyCoordsText(m.subject)}</span>` +
             (teaser ? `<span class="gc-messages-item-teaser">${teaser}</span>` : "") +
             `<span class="gc-messages-item-meta">${esc(categoryLabel(m.category))} · ${esc(formatTime(m.created_at))}</span>` +
             `</button>`
@@ -1320,7 +1354,9 @@
       const dom = getMessagesDom();
       if (!dom) return;
       setDetailVisible(true);
-      if (dom.detailSubject) dom.detailSubject.textContent = msg.subject || "";
+      if (dom.detailSubject) {
+        dom.detailSubject.innerHTML = linkifyCoordsText(msg.subject || "");
+      }
       const sender = msg.sender_name || categoryLabel(msg.category);
       if (dom.detailMeta) {
         dom.detailMeta.textContent = `${sender} · ${categoryLabel(msg.category)} · ${formatTime(msg.created_at)}`;

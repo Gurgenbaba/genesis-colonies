@@ -98,6 +98,14 @@ def test_format_coordinates():
     assert format_coordinates(1, 42, 8) == "[1:42:8]"
 
 
+def test_galaxy_view_href_full_position():
+    from game.galaxy import galaxy_view_href
+
+    assert galaxy_view_href("[1:42:8]") == "/galaxy?q=%5B1%3A42%3A8%5D"
+    assert galaxy_view_href("2:100:3") == "/galaxy?q=%5B2%3A100%3A3%5D"
+    assert galaxy_view_href("invalid") is None
+
+
 def test_parse_coordinate_query():
     assert parse_coordinate_query("[1:42:8]") == {"galaxy": 1, "system": 42, "position": 8}
     assert parse_coordinate_query("2:100") == {"galaxy": 2, "system": 100}

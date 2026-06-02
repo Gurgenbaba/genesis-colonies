@@ -100,6 +100,27 @@ def clamp_system(system: int) -> int:
     return max(SYSTEM_MIN, min(SYSTEM_MAX, int(system)))
 
 
+def galaxy_view_href(raw: str) -> Optional[str]:
+    """Relative URL to :func:`galaxy_view` with system/position highlight when parseable."""
+    from urllib.parse import quote
+
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    parsed = parse_coordinate_query(text)
+    if not parsed:
+        return None
+    if "position" in parsed:
+        q = format_coordinates(
+            int(parsed["galaxy"]),
+            int(parsed["system"]),
+            int(parsed["position"]),
+        )
+    else:
+        q = f"{int(parsed['galaxy'])}:{int(parsed['system'])}"
+    return f"/galaxy?q={quote(q)}"
+
+
 def parse_coordinate_query(raw: str) -> Optional[Dict[str, int]]:
     """
     Parse [G:S:P], G:S:P, or G:S (position omitted → system jump only).

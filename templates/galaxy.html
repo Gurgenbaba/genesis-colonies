@@ -160,7 +160,7 @@
           {% if slot.occupied %}
             <header class="galaxy-slot-card-head">
               <h3 class="galaxy-slot-planet-name">{{ slot.planet_name }}</h3>
-              <span class="galaxy-slot-coord gc-mono">{{ slot.coordinates_formatted }}</span>
+              <span class="galaxy-slot-coord gc-mono">{{ galaxy_coord_link(slot.coordinates_formatted) }}</span>
             </header>
             <div class="galaxy-slot-commander-row">
               <span class="galaxy-slot-commander-label">{{ T("overview_label_commander", "Commander") }}</span>
@@ -184,7 +184,7 @@
           {% else %}
             <header class="galaxy-slot-card-head is-dim">
               <h3 class="galaxy-slot-planet-name">{{ T("galaxy_empty_slot") }}</h3>
-              <span class="galaxy-slot-coord gc-mono">{{ slot.coordinates_formatted }}</span>
+              <span class="galaxy-slot-coord gc-mono">{{ galaxy_coord_link(slot.coordinates_formatted) }}</span>
             </header>
             <p class="galaxy-slot-empty-hint">{{ T("galaxy_colony_target_hint") }}</p>
             {% if slot.has_debris %}
@@ -229,7 +229,7 @@
       <div class="galaxy-slot-card-main">
         <header class="galaxy-slot-card-head is-dim">
           <h3 class="galaxy-slot-planet-name">{{ T("galaxy_expedition_slot_title") }}</h3>
-          <span class="galaxy-slot-coord gc-mono">{{ expedition_slot.coordinates_formatted }}</span>
+          <span class="galaxy-slot-coord gc-mono">{{ galaxy_coord_link(expedition_slot.coordinates_formatted) }}</span>
         </header>
         <p class="galaxy-slot-empty-hint">{{ T("galaxy_expedition_slot_hint") }}</p>
         {% set slot = expedition_slot %}

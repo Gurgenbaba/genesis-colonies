@@ -18,7 +18,7 @@
     <span class="gc-planet-switcher-body">
       <span class="gc-planet-switcher-name" data-planet-switcher-name>{{ hp_active.name }}</span>
       {% if hp_active.coordinates_formatted %}
-      <span class="gc-planet-switcher-coord gc-mono" data-planet-switcher-coord>{{ hp_active.coordinates_formatted }}</span>
+      <span class="gc-planet-switcher-coord gc-mono" data-planet-switcher-coord>{{ galaxy_coord_link(hp_active.coordinates_formatted) }}</span>
       {% endif %}
     </span>
     {% if hp_multi %}
@@ -45,7 +45,7 @@
             data-planet-homeworld="{{ '1' if p.is_homeworld else '0' }}">
       <span class="gc-planet-switcher-item-name">{{ p.name }}</span>
       <span class="gc-planet-switcher-item-meta gc-mono">
-        {% if p.coordinates_formatted %}{{ p.coordinates_formatted }}{% endif %}
+        {% if p.coordinates_formatted %}{{ galaxy_coord_link(p.coordinates_formatted) }}{% endif %}
         {% if p.is_homeworld %} · {{ T('header_planet_homeworld') }}{% else %} · {{ T('header_planet_colony') }}{% endif %}
       </span>
     </button>

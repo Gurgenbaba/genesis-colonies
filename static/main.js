@@ -365,6 +365,87 @@
     if (Number(cfg.shipyard_poll_ms) > 0) GC.shipyardPollMs = Number(cfg.shipyard_poll_ms);
   })();
 
+  function gcEscHtml(text) {
+    return String(text ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  GC.parseCoordString = function parseCoordString(raw) {
+    const text = String(raw || "").trim();
+    const m = text.match(/^\[?(\d+):(\d+):(\d+)\]?$/);
+    if (!m) return null;
+    const galaxy = parseInt(m[1], 10);
+    const system = parseInt(m[2], 10);
+    const position = parseInt(m[3], 10);
+    if (!Number.isFinite(galaxy) || !Number.isFinite(system) || !Number.isFinite(position)) {
+      return null;
+    }
+    return {
+      galaxy,
+      system,
+      position,
+      formatted: `[${galaxy}:${system}:${position}]`,
+    };
+  };
+
+  GC.galaxyUrlForCoords = function galaxyUrlForCoords(raw) {
+    const parsed = GC.parseCoordString(raw);
+    if (!parsed) return null;
+    return `/galaxy?q=${encodeURIComponent(parsed.formatted)}`;
+  };
+
+  GC.coordLinkHtml = function coordLinkHtml(raw, opts = {}) {
+    const label = opts.label != null ? String(opts.label) : String(raw || "");
+    const display = gcEscHtml(label);
+    if (!label || label === "—") return display;
+    const url = GC.galaxyUrlForCoords(raw);
+    if (!url) return display;
+    const cls = gcEscHtml(opts.className || "gc-galaxy-coord-link gc-mono");
+    const title = gcEscHtml(opts.title || t("galaxy_coord_link_title", "View in galaxy"));
+    return `<a href="${gcEscHtml(url)}" class="${cls}" title="${title}">${display}</a>`;
+  };
+
+  GC.coordRouteHtml = function coordRouteHtml(fromRaw, toRaw, sep) {
+    const sepStr = sep != null ? String(sep) : " → ";
+    const from = String(fromRaw || "").trim();
+    const to = String(toRaw || "").trim();
+    const parts = [];
+    if (from) parts.push(GC.coordLinkHtml(from, { label: from }));
+    if (from && to) parts.push(gcEscHtml(sepStr));
+    if (to) parts.push(GC.coordLinkHtml(to, { label: to }));
+    return parts.length ? parts.join("") : gcEscHtml("—");
+  };
+
+  GC.linkifyCoordsInText = function linkifyCoordsInText(text) {
+    const raw = String(text ?? "");
+    if (!raw) return gcEscHtml("—");
+    const re = /\[(\d+):(\d+):(\d+)\]/g;
+    let out = "";
+    let last = 0;
+    let match;
+    while ((match = re.exec(raw)) !== null) {
+      out += gcEscHtml(raw.slice(last, match.index));
+      out += GC.coordLinkHtml(match[0], { label: match[0] });
+      last = match.lastIndex;
+    }
+    out += gcEscHtml(raw.slice(last));
+    return out || gcEscHtml("—");
+  };
+
+  if (!GC._coordLinkBound) {
+    GC._coordLinkBound = true;
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (e.target.closest(".gc-galaxy-coord-link")) e.stopPropagation();
+      },
+      true
+    );
+  }
+
   GC.registerCleanup = function registerCleanup(fn, opts) {
     if (typeof fn !== "function") return;
     if (opts && opts.persistent) fn._gcPersistent = true;
@@ -3638,7 +3719,7 @@
             <span class="fleet-active-mission fleet-active-mission--${mission}">${tt(`fleet_mission_${mv.mission_type}`, mv.mission_type)}</span>
             <span class="fleet-active-status">${tt(`fleet_status_${mv.status}`, mv.status)}</span>
           </div>
-          <div class="fleet-active-coords gc-mono">${mv.origin_coords || ""} → ${mv.target_coords || ""}</div>
+          <div class="fleet-active-coords gc-mono">${GC.coordRouteHtml(mv.origin_coords, mv.target_coords)}</div>
           <div class="fleet-active-ships">${renderShipChips(mv.ships)}</div>
           ${cargo.length ? `<div class="fleet-active-cargo">${cargo.map((c) => `<span>${c}</span>`).join(" ")}</div>` : ""}
           <div class="fleet-active-times gc-mono">${countdown}</div>
@@ -4637,7 +4718,7 @@
             scopeEl.appendChild(document.createTextNode(" "));
             scopeEl.appendChild(coordsEl);
           }
-          coordsEl.textContent = `(${data.planet_coords})`;
+          coordsEl.innerHTML = `(${GC.coordLinkHtml(data.planet_coords, { label: data.planet_coords })})`;
         } else if (coordsEl) {
           coordsEl.remove();
         }
@@ -5071,7 +5152,7 @@
             scopeEl.appendChild(document.createTextNode(" "));
             scopeEl.appendChild(coordsEl);
           }
-          coordsEl.textContent = `(${data.planet_coords})`;
+          coordsEl.innerHTML = `(${GC.coordLinkHtml(data.planet_coords, { label: data.planet_coords })})`;
         } else if (coordsEl) {
           coordsEl.remove();
         }
@@ -5880,8 +5961,8 @@
     if (nameEl) nameEl.textContent = active.name || "";
     if (coordEl) {
       const coord = active.coordinates_formatted || "";
-      coordEl.textContent = coord;
       coordEl.hidden = !coord;
+      coordEl.innerHTML = coord ? GC.coordLinkHtml(coord, { label: coord }) : "";
     }
 
     if (trigger) {
@@ -5950,7 +6031,9 @@
       metaSpan.className = "gc-planet-switcher-item-meta gc-mono";
       const coord = p.coordinates_formatted || "";
       const suffix = p.is_homeworld ? hwLabel : colLabel;
-      metaSpan.textContent = coord ? `${coord} · ${suffix}` : suffix;
+      metaSpan.innerHTML = coord
+        ? `${GC.coordLinkHtml(coord, { label: coord })} · ${gcEscHtml(suffix)}`
+        : gcEscHtml(suffix);
 
       btn.appendChild(nameSpan);
       btn.appendChild(metaSpan);
@@ -5998,8 +6081,8 @@
         const coordEl = root.querySelector("[data-planet-switcher-coord]");
         if (coordEl) {
           const coord = btn.dataset.planetCoord || "";
-          coordEl.textContent = coord;
           coordEl.hidden = !coord;
+          coordEl.innerHTML = coord ? GC.coordLinkHtml(coord, { label: coord }) : "";
         }
       }
     });

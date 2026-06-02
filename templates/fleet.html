@@ -63,7 +63,7 @@
               <span class="fleet-active-mission fleet-active-mission--{{ mv.mission_type }}">{{ T("fleet_mission_" ~ mv.mission_type) }}</span>
               <span class="fleet-active-status">{{ T("fleet_status_" ~ mv.status) }}</span>
             </div>
-            <div class="fleet-active-coords gc-mono">{{ mv.origin_coords }} → {{ mv.target_coords }}</div>
+            <div class="fleet-active-coords gc-mono">{{ galaxy_coord_link(mv.origin_coords) }} → {{ galaxy_coord_link(mv.target_coords) }}</div>
             <div class="fleet-active-ships">
               {% for sk, qty in mv.ships.items() %}
                 <span class="fleet-ship-chip">{{ T("fleet_ship_" ~ sk, sk) }} × {{ qty|fmt_int }}</span>
@@ -134,7 +134,7 @@
                       title="{{ T('galaxy_expedition_slot_hint') }}">
                 <span class="fleet-chip-icon" aria-hidden="true">◌</span>
                 <span class="fleet-chip-label">{{ T("galaxy_expedition_slot_title") }}</span>
-                <span class="fleet-chip-coords gc-mono">{{ fleet_ctx.coordinates.galaxy }}:{{ fleet_ctx.coordinates.system }}:{{ fleet_ctx.expedition_position }}</span>
+                <span class="fleet-chip-coords gc-mono">{{ galaxy_coord_link(fleet_ctx.coordinates.galaxy ~ ':' ~ fleet_ctx.coordinates.system ~ ':' ~ fleet_ctx.expedition_position) }}</span>
               </button>
               {% for col in fleet_ctx.colonies %}
               <button type="button"
@@ -144,7 +144,7 @@
                       data-position="{{ col.position }}"
                       {% if col.is_active %}aria-current="true" title="{{ T('fleet_quick_target_active') }}"{% endif %}>
                 <span class="fleet-chip-label">{{ col.name }}</span>
-                <span class="fleet-chip-coords gc-mono">{{ col.coordinates }}</span>
+                <span class="fleet-chip-coords gc-mono">{{ galaxy_coord_link(col.coordinates) }}</span>
               </button>
               {% endfor %}
             </div>

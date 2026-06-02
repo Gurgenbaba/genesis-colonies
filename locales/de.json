@@ -785,6 +785,7 @@
   "galaxy_occupied": "Besetzt",
   "galaxy_status_free": "Frei",
   "galaxy_legend_occupied": "Besetzter Slot",
+  "galaxy_coord_link_title": "In Galaxie anzeigen",
   "galaxy_search_label": "Koordinaten-Suche",
   "galaxy_search_placeholder": "[1:42:8] oder 1:42",
   "galaxy_search_hint": "Vollständige Koordinate oder Galaxie:System",

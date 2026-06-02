@@ -9512,6 +9512,26 @@ body.gc-combat-report-open { overflow: hidden; }
   color: var(--gc-neon-cyan);
 }
 
+/* Clickable coordinate links → galaxy view */
+a.gc-galaxy-coord-link {
+  color: var(--gc-neon-cyan);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(70, 229, 255, 0.35);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+a.gc-galaxy-coord-link:hover,
+a.gc-galaxy-coord-link:focus-visible {
+  color: #fff;
+  border-bottom-color: rgba(70, 229, 255, 0.75);
+}
+
+.galaxy-slot-coord a.gc-galaxy-coord-link,
+.fleet-active-coords a.gc-galaxy-coord-link,
+.gc-planet-switcher-coord a.gc-galaxy-coord-link {
+  font-size: inherit;
+}
+
 .gc-combat-teaser-vs {
   font-size: 0.76rem;
   color: var(--gc-text-soft);

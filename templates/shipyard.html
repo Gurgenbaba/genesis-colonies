@@ -23,7 +23,7 @@
     <p class="shipyard-planet-scope gc-mono" data-shipyard-planet-scope>
       {{ T("shipyard_planet_scope", name=sy.planet_name) }}
       {% if sy.planet_coords is defined and sy.planet_coords %}
-      <span class="shipyard-planet-coords" data-shipyard-planet-coords>({{ sy.planet_coords }})</span>
+      <span class="shipyard-planet-coords" data-shipyard-planet-coords>({{ galaxy_coord_link(sy.planet_coords) }})</span>
       {% endif %}
     </p>
     {% endif %}

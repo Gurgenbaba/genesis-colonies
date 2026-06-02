@@ -1121,6 +1121,7 @@
   "galaxy_legend_title": "Scanner legend",
   "galaxy_legend_free_slot": "Free colony slot",
   "galaxy_legend_occupied": "Occupied slot",
+  "galaxy_coord_link_title": "View in galaxy",
   "galaxy_search_label": "Coordinate search",
   "galaxy_search_placeholder": "[1:42:8] or 1:42",
   "galaxy_search_hint": "Full coordinate or galaxy:system",
