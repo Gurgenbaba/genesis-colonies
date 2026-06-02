@@ -472,26 +472,33 @@
       lootTotal > 0
         ? `${formatInt(loot.metal || 0)} / ${formatInt(loot.crystal || 0)} / ${formatInt(loot.fuel_cells || 0)}`
         : t("combat_report_loot_none", "No plunder");
+    const coordsLine = compact
+      ? coordLink(meta.target_coords, meta.target_coords || "—")
+      : combatCoordsRoute(meta);
 
     return (
       `<div class="gc-combat-teaser gc-combat-teaser--${esc(visual.badge)}${compact ? " gc-combat-teaser--compact" : ""}" data-result="${esc(resultKey)}">` +
         `<div class="gc-combat-teaser-top">` +
           `<span class="gc-combat-teaser-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
           `<div class="gc-combat-teaser-headings">` +
-            `<span class="gc-combat-teaser-coords gc-mono">${combatCoordsRoute(meta)}</span>` +
-            `<span class="gc-combat-teaser-vs">${esc(vsLine)}</span>` +
+            `<span class="gc-combat-teaser-coords gc-mono">${coordsLine}</span>` +
+            `<span class="gc-combat-teaser-vs">${esc(compact ? resultLabel : vsLine)}</span>` +
           `</div>` +
           `<span class="gc-combat-teaser-badge">${esc(resultLabel)}` +
-          (resultSub ? `<span class="gc-combat-teaser-badge-sub">${esc(resultSub)}</span>` : "") +
+          (resultSub && !compact ? `<span class="gc-combat-teaser-badge-sub">${esc(resultSub)}</span>` : "") +
           `</span>` +
         `</div>` +
-        `<p class="gc-combat-teaser-meta gc-mono">${esc(
-          t("combat_report_rounds_total", "%(count)s rounds").replace("%(count)s", rounds)
-        )} · ${esc(lootHint)}</p>` +
+        (!compact
+          ? `<p class="gc-combat-teaser-meta gc-mono">${esc(
+              t("combat_report_rounds_total", "%(count)s rounds").replace("%(count)s", rounds)
+            )} · ${esc(lootHint)}</p>`
+          : "") +
         (!compact ? `<p class="gc-combat-teaser-hint">${esc(t("combat_report_teaser_hint", ""))}</p>` : "") +
-        `<span class="gc-btn gc-btn-primary gc-btn-sm gc-combat-teaser-open" role="button" tabindex="0"${inboxReportOpenAttrs(messageId, "combat")}>${esc(
-          t("combat_report_open_btn", "Open report")
-        )}</span>` +
+        (!compact
+          ? `<span class="gc-btn gc-btn-primary gc-btn-sm gc-combat-teaser-open" role="button" tabindex="0"${inboxReportOpenAttrs(messageId, "combat")}>${esc(
+              t("combat_report_open_btn", "Open report")
+            )}</span>`
+          : "") +
       `</div>`
     );
   }
@@ -828,9 +835,11 @@
             .replace("%(sections)s", formatInt(unlocked))
         )}</p>` +
         (!compact ? `<p class="gc-combat-teaser-hint">${esc(t("spy_report_teaser_hint", ""))}</p>` : "") +
-        `<span class="gc-btn gc-btn-primary gc-btn-sm gc-combat-teaser-open" role="button" tabindex="0"${inboxReportOpenAttrs(messageId, "spy")}>${esc(
-          t("spy_report_open_btn", "Open report")
-        )}</span>` +
+        (!compact
+          ? `<span class="gc-btn gc-btn-primary gc-btn-sm gc-combat-teaser-open" role="button" tabindex="0"${inboxReportOpenAttrs(messageId, "spy")}>${esc(
+              t("spy_report_open_btn", "Open report")
+            )}</span>`
+          : "") +
       `</div>`
     );
   }
@@ -1207,11 +1216,13 @@
           `</div>` +
           `<span class="gc-combat-teaser-badge">${esc(expeditionEventBadge(eventKey, meta.event_severity))}</span>` +
         `</div>` +
-        `<p class="gc-combat-teaser-meta gc-mono">${esc(lootHint)}</p>` +
+        (!compact ? `<p class="gc-combat-teaser-meta gc-mono">${esc(lootHint)}</p>` : "") +
         (!compact ? `<p class="gc-combat-teaser-hint">${esc(t("expedition_report_teaser_hint", ""))}</p>` : "") +
-        `<span class="gc-btn gc-btn-primary gc-btn-sm gc-combat-teaser-open" role="button" tabindex="0"${inboxReportOpenAttrs(messageId, "expedition")}>${esc(
-          t("expedition_report_open_btn", "Open report")
-        )}</span>` +
+        (!compact
+          ? `<span class="gc-btn gc-btn-primary gc-btn-sm gc-combat-teaser-open" role="button" tabindex="0"${inboxReportOpenAttrs(messageId, "expedition")}>${esc(
+              t("expedition_report_open_btn", "Open report")
+            )}</span>`
+          : "") +
       `</div>`
     );
   }
