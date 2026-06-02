@@ -3743,6 +3743,43 @@
       if (missionSel) GC.syncHudSelect(missionSel);
     };
 
+    const setColonizeRowVisible = (page, mission) => {
+      const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
+      if (colonizeRow) colonizeRow.hidden = mission !== "colonize";
+    };
+
+    const syncMissionAllowlistFromTarget = (page, target) => {
+      const sel = page.querySelector("[data-fleet-mission]");
+      if (!sel || !target) return;
+      const allowed = new Set(target.allowed_missions || []);
+      let currentOk = true;
+      Array.from(sel.options).forEach((opt) => {
+        const ok = allowed.size === 0 || allowed.has(opt.value);
+        opt.disabled = !ok;
+        if (opt.value === sel.value) currentOk = ok;
+      });
+      if (!currentOk) {
+        const first = Array.from(sel.options).find((o) => !o.disabled);
+        if (first) {
+          sel.value = first.value;
+          if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(sel);
+        }
+      }
+    };
+
+    const formatDebrisPreview = (debris) => {
+      const metal = Math.max(0, parseInt(debris?.metal || 0, 10));
+      const crystal = Math.max(0, parseInt(debris?.crystal || 0, 10));
+      if (!metal && !crystal) {
+        return tt("fleet_preview_no_debris", "No debris at target");
+      }
+      return tt(
+        "fleet_preview_debris_amounts",
+        "Metal %(metal)s · Crystal %(crystal)s",
+        { metal: fmtNumber(metal), crystal: fmtNumber(crystal) }
+      );
+    };
+
     const updateFleetFormMode = (page) => {
       const form = getForm(page);
       if (!form) return;
@@ -3750,9 +3787,12 @@
       const resFieldset = page.querySelector("[data-fleet-resources-fieldset]");
       const showResources = ["transport", "deploy", "colonize", "collect"].includes(mission);
       if (resFieldset) resFieldset.hidden = !showResources;
-      page.querySelectorAll("[data-fleet-mission] option").forEach((opt) => {
-        opt.disabled = false;
+      setColonizeRowVisible(page, mission);
+      page.querySelectorAll(".fleet-ship-row[data-ship-role='recycle']").forEach((row) => {
+        row.classList.toggle("fleet-ship-row--mission-focus", mission === "recycle");
       });
+      const debrisRow = page.querySelector("[data-preview-debris-row]");
+      if (debrisRow) debrisRow.hidden = mission !== "recycle";
     };
 
     const formatMissionHint = (key, vars = {}) => {
@@ -3803,6 +3843,29 @@
             ? formatMissionHint("fleet_mission_hint_spy", { count: probes })
             : formatMissionHint("fleet_mission_hint_spy_none"),
         });
+        return hints;
+      }
+
+      if (mission === "recycle") {
+        const reclaimers = countShipsByRole(page, ships, "recycle");
+        const debris = target.debris || {};
+        const dm = Math.max(0, parseInt(debris.metal || 0, 10));
+        const dc = Math.max(0, parseInt(debris.crystal || 0, 10));
+        if (dm + dc <= 0) {
+          hints.push({ tone: "warn", text: formatMissionHint("fleet_mission_hint_recycle_no_debris") });
+        } else if (reclaimers <= 0) {
+          hints.push({ tone: "warn", text: formatMissionHint("fleet_mission_hint_recycle_no_ship") });
+        } else {
+          hints.push({
+            tone: "ok",
+            text: formatMissionHint("fleet_mission_hint_recycle_ready", {
+              metal: fmtNumber(dm),
+              crystal: fmtNumber(dc),
+              ships: reclaimers,
+            }),
+          });
+        }
+        hints.push({ tone: "info", text: formatMissionHint("fleet_mission_hint_recycle") });
         return hints;
       }
 
@@ -4130,6 +4193,15 @@
                 ? tt("fleet_target_empty_label", "—")
                 : "–");
           }
+          const debrisRow = page.querySelector("[data-preview-debris-row]");
+          const previewDebris = page.querySelector("[data-preview-debris]");
+          if (debrisRow && previewDebris) {
+            const showDebris = missionType === "recycle";
+            debrisRow.hidden = !showDebris;
+            if (showDebris) previewDebris.textContent = formatDebrisPreview(target.debris);
+          }
+          syncMissionAllowlistFromTarget(page, target);
+          updateFleetFormMode(page);
           if (previewMissionBadge) {
             previewMissionBadge.textContent = tt(`fleet_mission_${missionType}`, missionType);
           }
@@ -4233,13 +4305,11 @@
       if (mission && ms) {
         ms.value = mission;
         GC.syncHudSelect(ms);
-        const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
-        if (colonizeRow) colonizeRow.hidden = mission !== "colonize";
+        setColonizeRowVisible(page, mission);
       } else if (ms && ms.value === "expedition") {
         ms.value = "transport";
         GC.syncHudSelect(ms);
-        const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
-        if (colonizeRow) colonizeRow.hidden = true;
+        setColonizeRowVisible(page, "transport");
       }
       page.querySelectorAll(".fleet-colony-chip").forEach((c) => c.classList.remove("is-selected"));
       chip.classList.add("is-selected");
@@ -4371,10 +4441,10 @@
         return;
       }
       if (e.target.matches("[data-fleet-mission]")) {
-        const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
-        if (colonizeRow) colonizeRow.hidden = e.target.value !== "colonize";
+        setColonizeRowVisible(page, e.target.value);
         if (e.target.value === "expedition") applyExpeditionTarget(page);
         syncExpeditionMissionTarget(page);
+        updateFleetFormMode(page);
         schedulePreview(page);
       }
       if (e.target.matches('[name="target_galaxy"], [name="target_system"], [name="target_position"]')) {
@@ -4572,8 +4642,8 @@
         ms.value = mission;
         if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
       }
-      const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
-      if (colonizeRow) colonizeRow.hidden = mission !== "colonize";
+      setColonizeRowVisible(page, mission || "transport");
+      updateFleetFormMode(page);
       if (mission === "expedition" && p == null) {
         let expPos = 16;
         try {

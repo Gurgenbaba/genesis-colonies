@@ -4322,6 +4322,14 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .fleet-active-mission--spy{ color: #7dd3fc; }
 .fleet-active-mission--attack{ color: #fca5a5; }
 .fleet-active-mission--colonize{ color: #86efac; }
+.fleet-active-mission--recycle{ color: #fbbf24; }
+.fleet-ship-row--mission-focus{
+  outline: 1px solid rgba(251, 191, 36, 0.45);
+  border-radius: var(--gc-radius-sm, 6px);
+}
+.galaxy-fleet-action--recycle{ color: #fbbf24; }
+.galaxy-fleet-action--recycle:hover{ color: #fcd34d; }
+.fleet-preview-stat--debris .fleet-preview-stat-value{ color: #fbbf24; }
 .gc-expedition-report{
   display: flex;
   flex-direction: column;

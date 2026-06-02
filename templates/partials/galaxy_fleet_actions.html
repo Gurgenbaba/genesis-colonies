@@ -6,6 +6,14 @@
 {% set hold_ok = hold_mission_enabled if hold_mission_enabled is defined else false %}
 
 <div class="galaxy-fleet-actions" role="group" aria-label="{{ T('galaxy_fleet_actions_label') }}">
+  {% if slot.has_debris %}
+  <a href="{{ base }}&mission=recycle"
+     class="galaxy-fleet-action galaxy-fleet-action--recycle"
+     title="{{ T('fleet_mission_recycle') }}">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+    <span class="galaxy-fleet-action-label">{{ T('fleet_mission_recycle') }}</span>
+  </a>
+  {% endif %}
   {% if slot.is_expedition_slot is defined and slot.is_expedition_slot %}
   <a href="{{ base }}&mission=expedition"
      class="galaxy-fleet-action galaxy-fleet-action--expedition"

@@ -17,7 +17,7 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Fleet** | `fleet.py`, `fleet_calc.py`, `fleet_api.py` | `/fleet` | `/api/fleet/*` | `test_fleet.py` (groß) | ✅ | Logistics API stub |
 | **Galaxy** | `galaxy.py` | `/galaxy`, PJAX | `GET /api/galaxy/system` | `test_galaxy.py` | ✅ | — |
 | **Combat** | `combat.py`, `combat_models.py` | Reports in Messages | Kein eigener Spieler-POST; Tick in `fleet.py` | `test_combat.py` (36 Tests) | ✅ | GC-700 = Lücken/Polish, kein Greenfield |
-| **Recycler** | `combat.py` debris + `fleet.py` mission `recycle` | Fleet send (kein dediziertes UI-Ticket) | `send_fleet` recycle | `test_recycler.py` | 🔄 | GC-800B UI/PJAX; GC-800A Backend ✅ |
+| **Recycler** | `combat.py` debris + `fleet.py` mission `recycle` | `/fleet` + Galaxy debris actions | `send_fleet` / preview | `test_recycler.py` | ✅ | GC-800C UX optional |
 | **Logistics** | `collect_resources` / `distribute_resources` stubs | Fleet-UI teils | Returns `logistics_not_implemented` | — | 📋 | GC-900 |
 | **Messages** | `messages.py` | `/messages`, `messages.js` | `/api/messages/*` | `test_messages.py` | ✅ | ⚠️ `href`-Fallback (GC-512C) |
 | **Chat** | `chat.py` | Shell + `chat.js` | `/api/chat/*` (eigenes Poll) | `test_chat.py`, `test_chat_init` | ✅ | Ausnahme GC-000 dokumentiert |

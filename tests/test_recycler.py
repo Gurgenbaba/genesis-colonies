@@ -165,6 +165,20 @@ def test_recycle_harvest_return_credits_origin(recycler_db):
     conn.close()
 
 
+def test_main_js_recycle_ui_wired():
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "static" / "main.js").read_text(encoding="utf-8")
+    assert "fleet_mission_recycle" not in src  # i18n keys only in locales
+    assert 'mission=recycle' in open(
+        Path(__file__).resolve().parents[1] / "templates/partials/galaxy_fleet_actions.html",
+        encoding="utf-8",
+    ).read()
+    assert "syncMissionAllowlistFromTarget" in src
+    assert 'mission === "recycle"' in src
+    assert "formatDebrisPreview" in src
+
+
 def test_harvest_debris_atomic(recycler_db):
     conn = db()
     add_debris_field(1, 100, 5, metal=1000, crystal=500, conn=conn)

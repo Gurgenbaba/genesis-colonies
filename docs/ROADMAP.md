@@ -100,7 +100,7 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | **Kampf-Auflösung** — Resolver, Reports, Loot, Debris, Ranking | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md); `test_combat.py` |
 | **GC-700** — Combat polish / gaps (kein Resolver-Neubau) | 📋 | Siehe [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) § GC-700 Readiness |
 | Fleet Logistics (collect/distribute) | 📋 | `logistics_not_implemented` in `fleet.py` → GC-900 |
-| Recycler-Mission | 📋 | Debris spawn ✅; harvest mission ❌ → GC-800 |
+| Recycler-Mission | ✅ | GC-800A Backend + GC-800B UI; GC-800C UX optional |
 | Espionage (beyond probe report) | ✅ | GC-401 tiered intel + inbox UI |
 | Expedition event engine | ✅ | GC-402 weighted events + structured metadata |
 | Expedition fleet mission feedback | ✅ | GC-402B preview hints, status, auto-position 16 |
@@ -111,7 +111,7 @@ Docs: [FLEET_SYSTEM.md](FLEET_SYSTEM.md), [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md)
 Empfohlene Reihenfolge (verbleibend — nach [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md)):
 
 ```
-GC-800 Recycler (debris harvest) → GC-900 Fleet Logistics → GC-700 Combat polish (nur Lücken)
+GC-800C Recycler UX (optional) → GC-900 Fleet Logistics → GC-700 Combat polish (nur Lücken)
 ```
 
 ---

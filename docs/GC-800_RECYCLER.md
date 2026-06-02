@@ -128,4 +128,4 @@ Siehe [ROADMAP.md](ROADMAP.md) Phase 4.
 | Ticket | Status |
 |--------|--------|
 | **GC-800A** Backend (`recycle` mission, debris harvest, report, `test_recycler.py`) | ✅ |
-| **GC-800B** UI/PJAX (Fleet mission option, Galaxy prefill) | 📋 |
+| **GC-800B** UI/PJAX (Fleet mission option, Galaxy prefill) | ✅ |
