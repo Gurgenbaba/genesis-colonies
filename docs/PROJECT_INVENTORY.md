@@ -1,6 +1,6 @@
 # Genesis Colonies — Project Inventory
 
-**Stand:** GC-601 (2026-06-02) — Code-Reality-Sync vor GC-700.
+**Stand:** GC-900A (2026-06-02) — Logistics spec; Implementierung GC-900B/C/D.
 
 Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `static/main.js`, pytest-Dateien, Master-Docs.
 
@@ -14,11 +14,11 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Trader Hub** | `exchange.py`, `scrapyard.py`, `fuel_exchange.py` | `/trader-hub` | `POST /api/exchange`, `/api/trader/scrapyard` | `test_trader_hub`, `test_exchange`, `test_scrapyard` | ✅ | — |
 | **Shipyard** | `shipyard.py`, `shipyard_queue.py` | `/shipyard` (`orbital_shipyard`) | `/api/shipyard*` (`{ok,data}`) | `test_shipyard.py`, `test_shipyard_queue`, `test_fleet` | ✅ | ⚠️ Envelope → `{ok,state}` (GC-512D) |
 | **Defense** | `defense.py`, `defense_api.py`, `defense_defs.py` | `/defense` | `/api/defense*`, `{ok,state,queue,defenses}` | `test_defense_phase1`, `test_defense_detail_modal` | ✅ | GC-600 done; Seiten-Poll dokumentiert |
-| **Fleet** | `fleet.py`, `fleet_calc.py`, `fleet_api.py` | `/fleet` | `/api/fleet/*` | `test_fleet.py` (groß) | ✅ | Logistics API stub |
+| **Fleet** | `fleet.py`, `fleet_calc.py`, `fleet_api.py` | `/fleet` | `/api/fleet/*` | `test_fleet.py` (groß) | ✅ | — |
 | **Galaxy** | `galaxy.py` | `/galaxy`, PJAX | `GET /api/galaxy/system` | `test_galaxy.py` | ✅ | — |
 | **Combat** | `combat.py`, `combat_models.py` | Reports in Messages | Kein eigener Spieler-POST; Tick in `fleet.py` | `test_combat.py` (36 Tests) | ✅ | GC-700 = Lücken/Polish, kein Greenfield |
 | **Recycler** | `combat.py` debris + `fleet.py` mission `recycle` | `/fleet` + Galaxy debris actions | `send_fleet` / preview | `test_recycler.py` | ✅ | GC-800C UX optional |
-| **Logistics** | `collect_resources` / `distribute_resources` stubs | Fleet-UI teils | Returns `logistics_not_implemented` | — | 📋 | GC-900 |
+| **Logistics** | `collect_resources` / `distribute_resources` stubs (`game/fleet.py`) | — (900C) | `POST /api/fleet/logistics/collect`, `…/distribute` → stub | — (900B: `test_fleet_logistics.py`) | 📋 | **GC-900B** Collect; Spec [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md) ✅ |
 | **Messages** | `messages.py` | `/messages`, `messages.js` | `/api/messages/*` | `test_messages.py` | ✅ | ⚠️ `href`-Fallback (GC-512C) |
 | **Chat** | `chat.py` | Shell + `chat.js` | `/api/chat/*` (eigenes Poll) | `test_chat.py`, `test_chat_init` | ✅ | Ausnahme GC-000 dokumentiert |
 | **Alliance** | `alliance.py` (minimal) | `/alliance` Platzhalter | — | — | 🔄 | Gründung, Rechte, Diplomatie |
@@ -74,8 +74,8 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 
 | Item | Priorität | Hinweis |
 |------|-----------|---------|
-| Recycler / Debris-Harvest-Mission | P1 (eigenes Epic GC-800) | Debris **spawn** existiert; **collect** fehlt |
-| Fleet Logistics (collect/distribute) | P1 (GC-900) | API stub `logistics_not_implemented` |
+| Recycler / Debris-Harvest-Mission | — | ✅ GC-800A/B (`recycle` mission) |
+| Fleet Logistics (collect/distribute) | P1 (GC-900) | Spec ✅; API stub `logistics_not_implemented` → **GC-900B** |
 | Combat-Balancing / neue Missionen | P2 | Kein Resolver-Neubau nötig |
 | PvP-Randfälle / Report-UX | P2 | Messages UI vorhanden |
 | Dedizierte Combat-Admin-Tools | P3 | Admin hat Queue-Tools |
@@ -94,7 +94,7 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 
 1. **Gap-Audit-Ticket:** Recycler (GC-800) vs. Combat-Polish trennen
 2. **Combat v2 nur wenn:** neue Missionstypen, Resolver-Regeländerungen, oder Report-Format v3 — jeweils max. 3–5 Dateien, Tests in `test_combat.py`
-3. **Vor GC-700:** GC-800 Recycler oder GC-900 Logistics — Roadmap-Blocker für Military-Loop
+3. **Vor GC-700:** GC-900B/C Logistics — Roadmap-Blocker für Military-Loop (GC-800 Recycler ✅)
 
 ---
 
@@ -108,8 +108,11 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 | GC-600 Defense Phase 1 validation | ✅ |
 | GC-601 Project Inventory | ✅ |
 | GC-700 Combat | 📋 Readiness oben — kein Greenfield |
-| GC-800 Recycler | 🔄 — [GC-800_RECYCLER.md](GC-800_RECYCLER.md); **GC-800A Backend ✅** |
-| GC-900 Fleet Logistics | 📋 |
+| GC-800 Recycler | ✅ — [GC-800_RECYCLER.md](GC-800_RECYCLER.md); GC-800C UX optional |
+| GC-900A Logistics spec | ✅ — [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md) |
+| GC-900B Collect backend | 📋 |
+| GC-900C Distribute backend/UI | 📋 |
+| GC-900D Logistics UX/polish | 📋 |
 
 ---
 
