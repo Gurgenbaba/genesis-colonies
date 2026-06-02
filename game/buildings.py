@@ -241,14 +241,31 @@ def get_upgrade_cost(building_type: str, current_level: int) -> Tuple[int, int]:
     return metal, crystal
 
 
-def get_build_time(building_type: str, target_level: int, user_id: Optional[int] = None) -> int:
+def get_build_time(
+    building_type: str,
+    target_level: int,
+    user_id: Optional[int] = None,
+    *,
+    conn=None,
+    buildings: Optional[Dict[str, int]] = None,
+    research_levels: Optional[Dict[str, int]] = None,
+) -> int:
     if user_id is None:
         base_time = BUILD_TIME_BASE.get(building_type, DEFAULT_BUILD_TIME_LEVEL_1)
         factor = BUILD_TIME_FACTOR.get(building_type, 1.5)
         lvl_factor = factor ** max(int(target_level) - 1, 0)
         return max(int(base_time * lvl_factor), 1)
 
-    resolver = get_effect_resolver(int(user_id), force_refresh=True)
+    if buildings is not None and research_levels is not None:
+        resolver = get_effect_resolver(
+            int(user_id),
+            buildings=buildings,
+            research=research_levels,
+            conn=conn,
+            force_refresh=True,
+        )
+    else:
+        resolver = get_effect_resolver(int(user_id), force_refresh=True)
     return resolver.get_build_time_seconds(building_type, int(target_level))
 
 
@@ -271,6 +288,7 @@ def recalculate_build_queue_finish_times(
         return
 
     buildings = get_planet_buildings(planet_id, conn=conn)
+    research_levels = get_research_levels(user_id=uid, conn=conn)
     cur = conn.cursor()
     schedule_at = ts
     queued_counts: Dict[str, int] = {}
@@ -280,7 +298,16 @@ def recalculate_build_queue_finish_times(
         current = int(buildings.get(btype, 0) or 0)
         queued_same = int(queued_counts.get(btype, 0))
         target_level = current + queued_same + 1
-        duration = int(get_build_time(btype, target_level, user_id=uid))
+        duration = int(
+            get_build_time(
+                btype,
+                target_level,
+                user_id=uid,
+                conn=conn,
+                buildings=buildings,
+                research_levels=research_levels,
+            )
+        )
 
         if idx == 0:
             start_existing = float(row["start_time"] or 0)
@@ -710,14 +737,21 @@ def queue_build_for_planet(
                 "planet_crystal": planet_crystal,
             }
 
-        settings = get_game_settings()
+        settings = get_game_settings(conn=conn)
         queue_limit = _resolve_build_queue_limit(settings)
 
         if len(rows_db) >= queue_limit:
             rollback(conn)
             return False, "queue_full", {"queue_count": len(rows_db), "queue_limit": queue_limit}
 
-        duration = get_build_time(building_type, target_level, user_id=user_id)
+        duration = get_build_time(
+            building_type,
+            target_level,
+            user_id=user_id,
+            conn=conn,
+            buildings=buildings,
+            research_levels=research_levels,
+        )
 
         last_finish_time = max(float(r["finish_time"]) for r in rows_db) if rows_db else now
         start_time = max(now, last_finish_time)
