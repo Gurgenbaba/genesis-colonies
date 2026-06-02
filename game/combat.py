@@ -679,6 +679,92 @@ def spawn_combat_debris_field(
     return add_debris_field(galaxy, system, position, metal, crystal, conn=conn)
 
 
+def get_debris_at_field(
+    galaxy: int,
+    system: int,
+    position: int,
+    *,
+    conn,
+) -> Dict[str, int]:
+    """Return metal/crystal at galaxy coordinates (0 if no field)."""
+    if not debris_schema_ready(conn):
+        return {"metal": 0, "crystal": 0}
+    from .galaxy import validate_coordinates
+
+    g, s, p = int(galaxy), int(system), int(position)
+    validate_coordinates(g, s, p)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT metal, crystal FROM debris_fields
+        WHERE galaxy = ? AND system = ? AND position = ?
+        LIMIT 1;
+        """,
+        (g, s, p),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"metal": 0, "crystal": 0}
+    return {
+        "metal": max(0, int(float(row["metal"]))),
+        "crystal": max(0, int(float(row["crystal"]))),
+    }
+
+
+def harvest_debris_at_field(
+    galaxy: int,
+    system: int,
+    position: int,
+    *,
+    harvested: Mapping[str, int],
+    conn,
+) -> bool:
+    """Atomically subtract harvested amounts from debris_fields."""
+    if not debris_schema_ready(conn):
+        return False
+    metal_take = max(0, int(harvested.get("metal") or 0))
+    crystal_take = max(0, int(harvested.get("crystal") or 0))
+    if metal_take <= 0 and crystal_take <= 0:
+        return True
+    from .galaxy import validate_coordinates
+
+    g, s, p = int(galaxy), int(system), int(position)
+    validate_coordinates(g, s, p)
+    now = int(time.time())
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE debris_fields
+        SET metal = metal - ?,
+            crystal = crystal - ?,
+            updated_at = ?
+        WHERE galaxy = ? AND system = ? AND position = ?
+          AND metal >= ? AND crystal >= ?;
+        """,
+        (
+            float(metal_take),
+            float(crystal_take),
+            now,
+            g,
+            s,
+            p,
+            float(metal_take),
+            float(crystal_take),
+        ),
+    )
+    if cur.rowcount != 1:
+        return False
+    cur.execute(
+        """
+        DELETE FROM debris_fields
+        WHERE galaxy = ? AND system = ? AND position = ?
+          AND metal <= 0 AND crystal <= 0;
+        """,
+        (g, s, p),
+    )
+    return True
+
+
 def spawn_combat_debris_at_planet(
     planet_id: int,
     *,

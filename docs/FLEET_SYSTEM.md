@@ -158,7 +158,7 @@ Inbox expedition reports: `static/js/messages.js` → `renderExpeditionReport()`
 ## Placeholder / Phase 2
 
 - Logistics bulk collect/distribute API
-- Recycler mission (`harvest_reclaimer` def only)
+- Recycler UI/PJAX polish (GC-800B) — Backend mission `recycle` ✅ GC-800A
 - `fleet_presets.mission_type` CHECK fehlt `colonize` (nur movements migriert in 032)
 
 ---

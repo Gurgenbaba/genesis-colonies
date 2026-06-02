@@ -120,3 +120,12 @@ GC-800 Recycler  →  GC-900 Logistics  →  GC-700 Combat Polish
 ```
 
 Siehe [ROADMAP.md](ROADMAP.md) Phase 4.
+
+---
+
+## Implementierungsstand
+
+| Ticket | Status |
+|--------|--------|
+| **GC-800A** Backend (`recycle` mission, debris harvest, report, `test_recycler.py`) | ✅ |
+| **GC-800B** UI/PJAX (Fleet mission option, Galaxy prefill) | 📋 |

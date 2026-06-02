@@ -131,8 +131,31 @@ _MISSION_BLOCK_REASONS: Dict[str, Dict[str, str]] = {
         "hold": "mission_blocked_expedition_slot",
         "collect": "mission_blocked_expedition_slot",
         "colonize": "mission_blocked_expedition_slot",
+        "recycle": "mission_blocked_expedition_slot",
     },
 }
+
+
+def _target_with_debris_recycle(
+    info: Dict[str, Any],
+    galaxy: int,
+    system: int,
+    position: int,
+    *,
+    conn,
+) -> Dict[str, Any]:
+    """Attach debris snapshot and allow recycle when the field has resources."""
+    from .combat import get_debris_at_field
+
+    out = dict(info)
+    debris = get_debris_at_field(int(galaxy), int(system), int(position), conn=conn)
+    out["debris"] = debris
+    total = int(debris.get("metal") or 0) + int(debris.get("crystal") or 0)
+    if total > 0:
+        allowed = set(out.get("allowed_missions") or [])
+        allowed.add("recycle")
+        out["allowed_missions"] = sorted(allowed)
+    return out
 
 
 def _now() -> float:
@@ -543,15 +566,21 @@ def resolve_fleet_target(
                     "allowed_missions": [],
                     "reason_if_blocked": "invalid_target",
                 }
-            return {
-                "target_type": "expedition_slot",
-                "target_planet_id": None,
-                "target_player_id": None,
-                "target_owner_name": None,
-                "coords": format_coordinates(g, s, EXPEDITION_POSITION),
-                "allowed_missions": sorted(_BASE_ALLOWED_MISSIONS["expedition_slot"]),
-                "reason_if_blocked": None,
-            }
+            return _target_with_debris_recycle(
+                {
+                    "target_type": "expedition_slot",
+                    "target_planet_id": None,
+                    "target_player_id": None,
+                    "target_owner_name": None,
+                    "coords": format_coordinates(g, s, EXPEDITION_POSITION),
+                    "allowed_missions": sorted(_BASE_ALLOWED_MISSIONS["expedition_slot"]),
+                    "reason_if_blocked": None,
+                },
+                g,
+                s,
+                EXPEDITION_POSITION,
+                conn=conn,
+            )
 
         try:
             validate_coordinates(g, s, p, conn=conn)
@@ -569,15 +598,21 @@ def resolve_fleet_target(
 
         planet_id = _resolve_planet_at_coords(g, s, p, conn=conn)
         if planet_id is None:
-            return {
-                "target_type": "empty_slot",
-                "target_planet_id": None,
-                "target_player_id": None,
-                "target_owner_name": None,
-                "coords": coords,
-                "allowed_missions": sorted(_BASE_ALLOWED_MISSIONS["empty_slot"]),
-                "reason_if_blocked": None,
-            }
+            return _target_with_debris_recycle(
+                {
+                    "target_type": "empty_slot",
+                    "target_planet_id": None,
+                    "target_player_id": None,
+                    "target_owner_name": None,
+                    "coords": coords,
+                    "allowed_missions": sorted(_BASE_ALLOWED_MISSIONS["empty_slot"]),
+                    "reason_if_blocked": None,
+                },
+                g,
+                s,
+                p,
+                conn=conn,
+            )
 
         cur = conn.cursor()
         cur.execute(
@@ -615,15 +650,21 @@ def resolve_fleet_target(
         if target_type == "ally_planet" and _hold_mission_enabled(conn=conn):
             allowed.add("hold")
 
-        return {
-            "target_type": target_type,
-            "target_planet_id": int(planet_id),
-            "target_player_id": owner_id,
-            "target_owner_name": owner_name,
-            "coords": coords,
-            "allowed_missions": sorted(allowed),
-            "reason_if_blocked": None,
-        }
+        return _target_with_debris_recycle(
+            {
+                "target_type": target_type,
+                "target_planet_id": int(planet_id),
+                "target_player_id": owner_id,
+                "target_owner_name": owner_name,
+                "coords": coords,
+                "allowed_missions": sorted(allowed),
+                "reason_if_blocked": None,
+            },
+            g,
+            s,
+            p,
+            conn=conn,
+        )
     finally:
         if own and conn is not None:
             conn.close()
@@ -637,6 +678,11 @@ def mission_allowed_for_target(mission: str, target: Mapping[str, Any]) -> Tuple
     target_type = str(target.get("target_type") or "")
     if target_type not in TARGET_TYPES:
         return False, "invalid_target"
+    if m == "recycle":
+        debris = target.get("debris") or {}
+        if int(debris.get("metal") or 0) + int(debris.get("crystal") or 0) <= 0:
+            return False, "no_debris_at_target"
+        return True, ""
     allowed = set(target.get("allowed_missions") or [])
     if m in allowed:
         return True, ""
@@ -695,7 +741,7 @@ def validate_fleet_send(
             return False, "mission_blocked_not_expedition_slot", {"target": target_info}
         target = (int(target_galaxy), int(target_system), EXPEDITION_POSITION)
 
-    if origin == target and mission not in ("expedition",):
+    if origin == target and mission not in ("expedition", "recycle"):
         return False, "same_origin_target", {"target": target_info}
 
     ok_mission, m_reason = mission_allowed_for_target(mission, target_info)
@@ -916,6 +962,13 @@ def _mission_allowed(mission: str, ships: Mapping[str, int], resources: Mapping[
             return False, "colonize_requires_ark"
         if loaded_resource_total(resources) > 0:
             return False, "colonize_no_cargo"
+    if m == "recycle":
+        if not _fleet_has_role(ships, "recycle"):
+            return False, "recycle_requires_reclaimer"
+        if calculate_total_cargo(ships) <= 0:
+            return False, "cargo_required_for_recycle"
+        if loaded_resource_total(resources) > 0:
+            return False, "recycle_no_departure_cargo"
     return True, ""
 
 
@@ -1856,6 +1909,34 @@ def _format_transport_report(
     )
 
 
+def _format_recycle_report(
+    *,
+    coords: str,
+    origin_name: str,
+    collected: Mapping[str, Any],
+    locale: str | None = None,
+) -> str:
+    from .i18n import tr
+
+    cargo_txt = _format_transport_cargo(collected, locale=locale)
+    if loaded_resource_total(collected) <= 0:
+        return tr(
+            "fleet_recycle_report_empty",
+            "Recycle at %(coords)s — no debris collected. Fleet returning to %(origin)s.",
+            locale=locale,
+            coords=coords,
+            origin=origin_name,
+        )
+    return tr(
+        "fleet_recycle_report",
+        "Recycle at %(coords)s: %(cargo)s loaded. Fleet returning to %(origin)s.",
+        locale=locale,
+        coords=coords,
+        origin=origin_name,
+        cargo=cargo_txt,
+    )
+
+
 def _format_collect_report(
     *,
     coords: str,
@@ -1911,6 +1992,74 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
     from .i18n import get_player_locale, tr
 
     sender_locale = get_player_locale(player_id, conn=conn)
+
+    if mission == "recycle":
+        timing = _return_timing_from_now(movement, now=now)
+        return_at = timing["return_at"]
+        ships_n = normalize_ships(ships)
+        cargo_total = calculate_total_cargo(ships_n)
+        collected = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+        tg = int(movement.get("target_galaxy") or 0)
+        ts = int(movement.get("target_system") or 0)
+        tp = int(movement.get("target_position") or 0)
+        if cargo_total > 0:
+            from .combat import get_debris_at_field, harvest_debris_at_field
+
+            debris = get_debris_at_field(tg, ts, tp, conn=conn)
+            pool = {
+                "metal": int(debris.get("metal") or 0),
+                "crystal": int(debris.get("crystal") or 0),
+                "fuel_cells": 0,
+            }
+            collected = _calculate_collect_load(pool, cargo_total)
+            if loaded_resource_total(collected) > 0 and not harvest_debris_at_field(
+                tg, ts, tp, harvested=collected, conn=conn
+            ):
+                collected = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+        final_resources = calculate_loaded_resources(collected)
+        claimed = _claim_movement_status(
+            conn,
+            movement_id,
+            ("outbound",),
+            "returning",
+            now,
+            extra_sql=", return_at = ?, resources_json = ?",
+            extra_params=(return_at, _json_dumps(final_resources)),
+        )
+        if not claimed:
+            return
+        origin_id = int(movement["origin_planet_id"])
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM planets WHERE id = ? LIMIT 1;", (origin_id,))
+        orow = cur.fetchone()
+        origin_name = str(orow["name"] if orow else "")
+        body = _format_recycle_report(
+            coords=coords,
+            origin_name=origin_name,
+            collected=collected,
+            locale=sender_locale,
+        )
+        notify_transport(
+            player_id,
+            tr(
+                "fleet_recycle_report_subject",
+                "Recycle report %(coords)s",
+                locale=sender_locale,
+                coords=coords,
+            ),
+            body,
+            metadata={
+                "fleet_id": movement_id,
+                "mission_type": "recycle",
+                "target_coords": coords,
+                "collected": calculate_loaded_resources(collected),
+                "resources": final_resources,
+                "direction": "outbound",
+            },
+            locale=sender_locale,
+            conn=conn,
+        )
+        return
 
     if mission == "transport":
         timing = _return_timing_from_now(movement, now=now)
