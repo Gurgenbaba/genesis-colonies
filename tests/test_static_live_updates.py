@@ -201,10 +201,12 @@ def test_chat_bootstrap_not_in_message_poll_tick():
 def test_main_js_fleet_countdown_uses_integer_seconds():
     src = _read("static/main.js")
     assert "function formatCountdownRemain" in src
+    assert "_progressTickerDelayMs" in src
     tick_body = src.split("const tickFleetCountdowns = () =>")[1].split("tickFleetCountdowns();")[0]
     assert "updateMovementCountdowns(getApproxServerNow())" in tick_body
     countdown_body = src.split("function updateMovementCountdowns(serverNow)")[1].split("function updateAllProgressBars")[0]
     assert "Math.ceil(countdownAt - now)" in countdown_body
+    assert "MOVEMENT_EXPIRY_REFRESH_MS_SHORT" in src
 
 
 def test_style_uses_readable_level_font():

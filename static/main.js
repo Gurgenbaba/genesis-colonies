@@ -124,9 +124,12 @@
   function setServerTime(serverTimeSec) {
     const v = Number(serverTimeSec);
     if (!Number.isFinite(v) || v <= 0) return;
-    const approx = getApproxServerNow();
-    if (TIME.serverNow && Number.isFinite(approx) && v + 1.0 < approx) {
-      return;
+    const hasSync = TIME.serverNow > 0 && TIME.clientPerfAt > 0;
+    const approx = hasSync ? getApproxServerNow() : null;
+    if (hasSync && Number.isFinite(approx)) {
+      const drift = Math.abs(v - approx);
+      // Reject only small backward jitter (<2s); accept larger corrections so fleet timers stay aligned.
+      if (v + 1.0 < approx && drift < 2) return;
     }
     TIME.serverNow = v;
     TIME.clientPerfAt = performance.now();
@@ -698,21 +701,45 @@
   }
 
   let _progressTickerActive = false;
-  let _progressTickerIntervalId = null;
+  let _progressTickerTimerId = null;
 
   GC.stopProgressTicker = function stopProgressTicker() {
     _progressTickerActive = false;
-    if (_progressTickerIntervalId != null) {
-      clearInterval(_progressTickerIntervalId);
-      _progressTickerIntervalId = null;
+    if (_progressTickerTimerId != null) {
+      clearTimeout(_progressTickerTimerId);
+      _progressTickerTimerId = null;
     }
   };
 
+  function _minMovementCountdownRemaining(serverNow) {
+    const now = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
+    let min = Infinity;
+    document.querySelectorAll("[data-countdown-at]").forEach((el) => {
+      const at = Number(el.dataset.countdownAt || 0);
+      if (!at) return;
+      const rem = Math.max(0, at - now);
+      if (rem < min) min = rem;
+    });
+    return Number.isFinite(min) ? min : Infinity;
+  }
+
+  function _progressTickerDelayMs(serverNow) {
+    const minRem = _minMovementCountdownRemaining(serverNow);
+    if (minRem <= 5) return 100;
+    if (minRem <= 30) return 250;
+    if (minRem <= 120) return 500;
+    return 1000;
+  }
+
   GC.startProgressTicker = function startProgressTicker() {
     if (!shouldRunGameLoop()) return;
-    if (_progressTickerIntervalId != null) return;
     _progressTickerActive = true;
+    if (_progressTickerTimerId != null) {
+      clearTimeout(_progressTickerTimerId);
+      _progressTickerTimerId = null;
+    }
     const tick = () => {
+      _progressTickerTimerId = null;
       if (!_progressTickerActive || !shouldRunGameLoop() || _authLoopAborted) {
         GC.stopProgressTicker();
         return;
@@ -721,10 +748,11 @@
         GC.stopProgressTicker();
         return;
       }
-      updateAllProgressBars();
+      const serverNow = getApproxServerNow();
+      updateAllProgressBars(serverNow);
+      _progressTickerTimerId = setTimeout(tick, _progressTickerDelayMs(serverNow));
     };
     tick();
-    _progressTickerIntervalId = setInterval(tick, 1000);
   };
 
   GC.stopPolling = function stopPolling() {
@@ -1484,6 +1512,8 @@
         delete etaEl.dataset.countdownKey;
       }
     });
+    updateMovementCountdowns(getApproxServerNow());
+    GC.startProgressTicker();
   }
 
   function patchOverviewResearch(research) {
@@ -1714,7 +1744,13 @@
     const now = getApproxServerNow();
     for (const el of document.querySelectorAll("[data-countdown-at]")) {
       const at = Number(el.dataset.countdownAt || 0);
-      if (at > now) return true;
+      if (!at) continue;
+      if (Math.ceil(at - now) > 0) return true;
+    }
+    const previewArrival = document.querySelector("[data-preview-arrival][data-countdown-at]");
+    if (previewArrival) {
+      const at = Number(previewArrival.dataset.countdownAt || 0);
+      if (at && Math.ceil(at - now) > 0) return true;
     }
     return false;
   }
@@ -2190,7 +2226,8 @@
   let _lastGlobalMovementExpiryRefreshMs = 0;
   let _queuedChainRefreshReason = null;
 
-  const MOVEMENT_EXPIRY_REFRESH_MS = 5000;
+  const MOVEMENT_EXPIRY_REFRESH_MS = 900;
+  const MOVEMENT_EXPIRY_REFRESH_MS_SHORT = 350;
 
   function _movementCountdownKey(el) {
     return String(el.dataset.countdownKey || `${el.dataset.countdownScope || ""}:${el.dataset.countdownAt || ""}`);
@@ -2201,18 +2238,20 @@
     _lastGlobalMovementExpiryRefreshMs = 0;
   }
 
-  function _movementExpiryCooldownMs(key) {
+  function _movementExpiryCooldownMs(key, urgent) {
+    if (urgent) return MOVEMENT_EXPIRY_REFRESH_MS_SHORT;
     const staleHits = _movementCountdownExpiryState.get(`${key}:stale`) || 0;
     if (staleHits >= 3) return MOVEMENT_EXPIRY_REFRESH_MS * 4;
     if (staleHits >= 1) return MOVEMENT_EXPIRY_REFRESH_MS * 2;
     return MOVEMENT_EXPIRY_REFRESH_MS;
   }
 
-  function _shouldRefreshExpiredCountdown(key) {
+  function _shouldRefreshExpiredCountdown(key, urgent) {
     const nowMs = Date.now();
-    if (nowMs - _lastGlobalMovementExpiryRefreshMs < MOVEMENT_EXPIRY_REFRESH_MS) return false;
+    const globalCooldown = urgent ? MOVEMENT_EXPIRY_REFRESH_MS_SHORT : MOVEMENT_EXPIRY_REFRESH_MS;
+    if (nowMs - _lastGlobalMovementExpiryRefreshMs < globalCooldown) return false;
     const last = _movementCountdownExpiryState.get(key) || 0;
-    const cooldown = _movementExpiryCooldownMs(key);
+    const cooldown = _movementExpiryCooldownMs(key, shortFlight);
     if (nowMs - last < cooldown) return false;
     _movementCountdownExpiryState.set(key, nowMs);
     return true;
@@ -2287,7 +2326,7 @@
           else _clearMovementCountdownStale(key);
         });
       });
-    }, 300);
+    }, 120);
   }
 
   function updateMovementCountdowns(serverNow) {
@@ -2298,12 +2337,14 @@
     document.querySelectorAll("[data-countdown-at]").forEach((el) => {
       const countdownAt = Number(el.dataset.countdownAt || 0);
       if (!countdownAt) return;
-      const remaining = Math.max(0, Math.ceil(countdownAt - now));
+      const remainingSec = countdownAt - now;
+      const remaining = Math.max(0, Math.ceil(remainingSec));
       _setIfChanged(el, formatMovementCountdown(remaining, el.dataset.countdownFormat || "fleet"));
       const scope = el.dataset.countdownScope || "";
       const key = _movementCountdownKey(el);
+      const urgent = scope === "fleet" || scope === "overview";
       if (remaining <= 0) {
-        if (!_shouldRefreshExpiredCountdown(key)) return;
+        if (!_shouldRefreshExpiredCountdown(key, urgent)) return;
         if (scope === "fleet") fleetExpired = true;
         else if (scope === "overview") overviewExpired = true;
       } else {
@@ -2312,12 +2353,19 @@
       }
     });
 
+    document.querySelectorAll("[data-preview-arrival][data-countdown-at]").forEach((el) => {
+      const countdownAt = Number(el.dataset.countdownAt || 0);
+      if (!countdownAt) return;
+      const remaining = Math.max(0, Math.ceil(countdownAt - now));
+      _setIfChanged(el, formatCountdownRemain(remaining));
+    });
+
     if (fleetExpired) requestMovementCountdownRefresh("fleet");
     if (overviewExpired) requestMovementCountdownRefresh("overview");
   }
 
-  function updateAllProgressBars() {
-    const serverNow = getApproxServerNow();
+  function updateAllProgressBars(serverNow) {
+    const serverNowTs = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
 
     const path = window.location.pathname || "";
     const isResearchPage = path.endsWith("/research");
@@ -2331,7 +2379,7 @@
     const buildFinish = buildFinishFromDom || buildFinishFromState;
     const buildTotal = buildFinishFromDom ? buildTotalFromDom : buildTotalFromState;
     if (buildFinish) {
-      const remaining = Math.max(0, buildFinish - serverNow);
+      const remaining = Math.max(0, buildFinish - serverNowTs);
       const pct = 100 * (1 - remaining / buildTotal);
       const etaEl = document.getElementById("build-eta-live");
       const fillEl = document.getElementById("build-bar-fill-live");
@@ -2350,7 +2398,7 @@
       const finishTime = Number(researchActive.getAttribute("data-finish-time") || 0);
       const total = Math.max(1, Number(researchActive.getAttribute("data-total") || 1));
       if (finishTime) {
-        const remaining = Math.max(0, finishTime - serverNow);
+        const remaining = Math.max(0, finishTime - serverNowTs);
         const pct = 100 * (1 - remaining / total);
         const etaEl = document.getElementById("research-eta-live");
         const fillEl = document.getElementById("research-bar-fill-live");
@@ -2371,7 +2419,7 @@
       const nextUnitFinish = Number(shipyardActive.getAttribute("data-next-finish-time") || 0);
       const total = Math.max(1, Number(shipyardActive.getAttribute("data-total") || 1));
       if (orderFinish) {
-        const orderRemaining = Math.max(0, orderFinish - serverNow);
+        const orderRemaining = Math.max(0, orderFinish - serverNowTs);
         const pct = 100 * (1 - orderRemaining / total);
         const etaEl = document.getElementById("shipyard-eta-live");
         const fillEl = document.getElementById("shipyard-bar-fill-live");
@@ -2379,7 +2427,7 @@
         _applyProgressFill(fillEl, pct);
         const subEta = document.getElementById("shipyard-queue-subtitle-eta");
         if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(orderRemaining)));
-        if (nextUnitFinish > 0 && nextUnitFinish <= serverNow) {
+        if (nextUnitFinish > 0 && nextUnitFinish <= serverNowTs) {
           const unitKey = `${shipyardActive.dataset.queueJobId || ""}:${nextUnitFinish}`;
           if (_shipyardUnitFinishKey !== unitKey) {
             _shipyardUnitFinishKey = unitKey;
@@ -2397,7 +2445,7 @@
       const nextUnitFinish = Number(defenseActive.getAttribute("data-next-finish-time") || 0);
       const total = Math.max(1, Number(defenseActive.getAttribute("data-total") || 1));
       if (orderFinish) {
-        const orderRemaining = Math.max(0, orderFinish - serverNow);
+        const orderRemaining = Math.max(0, orderFinish - serverNowTs);
         const pct = 100 * (1 - orderRemaining / total);
         const etaEl = document.getElementById("defense-eta-live");
         const fillEl = document.getElementById("defense-bar-fill-live");
@@ -2405,7 +2453,7 @@
         _applyProgressFill(fillEl, pct);
         const subEta = document.getElementById("defense-queue-subtitle-eta");
         if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(orderRemaining)));
-        if (nextUnitFinish > 0 && nextUnitFinish <= serverNow) {
+        if (nextUnitFinish > 0 && nextUnitFinish <= serverNowTs) {
           const unitKey = `${defenseActive.dataset.queueJobId || ""}:${nextUnitFinish}`;
           if (_defenseUnitFinishKey !== unitKey) {
             _defenseUnitFinishKey = unitKey;
@@ -2422,7 +2470,7 @@
       const finishAt = Number(ovBox.dataset.finishAt || 0);
       const total = Math.max(1, Number(ovBox.dataset.total || 1));
       if (finishAt) {
-        const remaining = Math.max(0, finishAt - serverNow);
+        const remaining = Math.max(0, finishAt - serverNowTs);
         const pct = 100 * (1 - remaining / total);
         const cdEl = document.getElementById("research-remaining");
         const barEl = document.getElementById("research-bar-fill");
@@ -2435,7 +2483,7 @@
       }
     }
 
-    updateMovementCountdowns(serverNow);
+    updateMovementCountdowns(serverNowTs);
 
     if (isOverviewPage) {
       document.querySelectorAll("#overview-activities .overview-activity-row[data-finish-at]").forEach((row) => {
@@ -2443,7 +2491,7 @@
         if (!etaEl || etaEl.dataset.countdownAt) return;
         const finishAt = Number(row.dataset.finishAt || 0);
         if (!finishAt) return;
-        const remaining = Math.max(0, finishAt - serverNow);
+        const remaining = Math.max(0, finishAt - serverNowTs);
         _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
         if (remaining <= 0) {
           const actKey = String(row.dataset.activityKey || "");
@@ -2455,7 +2503,7 @@
       });
     }
 
-    updatePlanetEvolutionResearchProgress(serverNow);
+    updatePlanetEvolutionResearchProgress(serverNowTs);
   }
 
   function updateBuildQueueLive() {
@@ -3714,6 +3762,8 @@
       if (sigChanged) {
         activeListEl.dataset.fleetSig = signature;
         _clearMovementCountdownExpiryState();
+      }
+      if (sigChanged) {
         activeListEl.innerHTML = list.map((mv) => {
         const countdownAt = Number(mv.countdown_at || 0);
         const phase = mv.phase || mv.leg_phase || mv.status || "";
@@ -3965,13 +4015,14 @@
             previewFlight.textContent = formatCountdownRemain(p.duration_seconds ?? p.flight_seconds ?? 0);
           }
           if (previewArrival) {
-            if (p.countdown_at) {
+            const arrivalAt = Number(p.countdown_at || p.arrival_at || 0);
+            if (arrivalAt > 0) {
+              previewArrival.dataset.countdownAt = String(arrivalAt);
               const nowSec = getApproxServerNow();
-              previewArrival.textContent = formatCountdownRemain(Math.max(0, Math.ceil(Number(p.countdown_at) - nowSec)));
-            } else if (p.arrival_at) {
-              const nowSec = getApproxServerNow();
-              previewArrival.textContent = formatCountdownRemain(Math.max(0, Math.ceil(Number(p.arrival_at) - nowSec)));
+              previewArrival.textContent = formatCountdownRemain(Math.max(0, Math.ceil(arrivalAt - nowSec)));
+              GC.startProgressTicker();
             } else {
+              delete previewArrival.dataset.countdownAt;
               previewArrival.textContent = "–";
             }
           }
