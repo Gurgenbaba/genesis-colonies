@@ -233,7 +233,7 @@ Details: [SECURITY.md](SECURITY.md)
 | **GC-802** — Fleet timer, galaxy prefill, planet-switch lifecycle | ✅ |
 | **GC-803** — Fleet preset & mass expedition test stabilization (`IntegrityError`) | ✅ |
 | **GC-900A** — Logistics spec + Option A ([GC-900_LOGISTICS.md](GC-900_LOGISTICS.md)) | ✅ |
-| **GC-900B** — Collect backend (`collect` mission + batch orchestration) | 📋 |
+| **GC-900B** — Collect backend (`collect` mission + batch orchestration) | ✅ |
 | **GC-900C** — Collect UI | 📋 |
 | **GC-900D** — Distribute backend | 📋 |
 | **GC-900E** — Distribute UI / polish | 📋 |

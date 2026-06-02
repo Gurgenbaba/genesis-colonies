@@ -1,6 +1,6 @@
 # Genesis Colonies — Project Inventory
 
-**Stand:** GC-900A (2026-06-02) — Logistics spec (Option A); Collect GC-900B → UI 900C; Distribute GC-900D/E.
+**Stand:** GC-900B (2026-06-02) — Collect Backend ✅; UI GC-900C; Distribute GC-900D/E.
 
 Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `static/main.js`, pytest-Dateien, Master-Docs.
 
@@ -18,7 +18,7 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Galaxy** | `galaxy.py` | `/galaxy`, PJAX | `GET /api/galaxy/system` | `test_galaxy.py` | ✅ | — |
 | **Combat** | `combat.py`, `combat_models.py` | Reports in Messages | Kein eigener Spieler-POST; Tick in `fleet.py` | `test_combat.py` (36 Tests) | ✅ | GC-700 = Lücken/Polish, kein Greenfield |
 | **Recycler** | `combat.py` debris + `fleet.py` mission `recycle` | `/fleet` + Galaxy debris actions | `send_fleet` / preview | `test_recycler.py` | ✅ | GC-800C UX optional |
-| **Logistics** | `collect_resources` (900B) / `distribute_resources` stub | — (900C Collect UI) | `POST /api/fleet/logistics/collect` · distribute stub | `test_fleet_logistics.py` (900B) | 🔄 | **GC-900B** Collect Backend; dann 900C UI, 900D/E Distribute |
+| **Logistics** | `collect_resources` ✅ Option A / `distribute_resources` stub | — (900C Collect UI) | `POST /api/fleet/logistics/collect` + `state` · distribute stub | `test_fleet_logistics.py` | 🔄 | **GC-900C** Collect UI; dann 900D/E Distribute |
 | **Messages** | `messages.py` | `/messages`, `messages.js` | `/api/messages/*` | `test_messages.py` | ✅ | ⚠️ `href`-Fallback (GC-512C) |
 | **Chat** | `chat.py` | Shell + `chat.js` | `/api/chat/*` (eigenes Poll) | `test_chat.py`, `test_chat_init` | ✅ | Ausnahme GC-000 dokumentiert |
 | **Alliance** | `alliance.py` (minimal) | `/alliance` Platzhalter | — | — | 🔄 | Gründung, Rechte, Diplomatie |
@@ -75,7 +75,7 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 | Item | Priorität | Hinweis |
 |------|-----------|---------|
 | Recycler / Debris-Harvest-Mission | — | ✅ GC-800A/B (`recycle` mission) |
-| Fleet Logistics Collect | P1 (GC-900B) | Option A: `batch_type` + N× `mission=collect`; Spec ✅ |
+| Fleet Logistics Collect | — | ✅ GC-900B: `batch_type` + N× `mission=collect` |
 | Fleet Logistics Distribute | P1 (GC-900D) | Stub bis 900D (Caps, Split, Reservierung) |
 | Combat-Balancing / neue Missionen | P2 | Kein Resolver-Neubau nötig |
 | PvP-Randfälle / Report-UX | P2 | Messages UI vorhanden |
@@ -111,7 +111,7 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 | GC-700 Combat | 📋 Readiness oben — kein Greenfield |
 | GC-800 Recycler | ✅ — [GC-800_RECYCLER.md](GC-800_RECYCLER.md); GC-800C UX optional |
 | GC-900A Logistics spec | ✅ — [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md) |
-| GC-900B Collect backend (Option A, no migration) | 📋 |
+| GC-900B Collect backend (Option A, no migration) | ✅ |
 | GC-900C Collect UI | 📋 |
 | GC-900D Distribute backend | 📋 |
 | GC-900E Distribute UI / polish | 📋 |
