@@ -231,7 +231,10 @@ Details: [SECURITY.md](SECURITY.md)
 | **GC-601** — [Project Inventory](PROJECT_INVENTORY.md) + Docs/Roadmap Reality Sync | ✅ |
 | **GC-801** — Resource bar + buildings panel action-state sync | ✅ |
 | **GC-802** — Fleet timer, galaxy prefill, planet-switch lifecycle | ✅ |
-| **GC-803** — Fleet preset & mass expedition test stabilization (`IntegrityError`) | 📋 |
+| **GC-803** — Fleet preset & mass expedition test stabilization (`IntegrityError`) | ✅ |
+| **GC-900A** — Logistics spec | 📋 |
+| **GC-900B** — Collect resources backend | 📋 |
+| **GC-900C** — Distribute resources backend/UI | 📋 |
 | Admin Control Center auf PJAX/State (statt `reload`) | 💡 |
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
 

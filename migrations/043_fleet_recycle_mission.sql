@@ -75,8 +75,16 @@ CREATE TABLE IF NOT EXISTS fleet_presets_new (
     FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
 );
 
-INSERT INTO fleet_presets_new
-SELECT * FROM fleet_presets;
+INSERT INTO fleet_presets_new (
+    id, player_id, name, preset_type, ships_json, resources_json,
+    speed_percent, mission_type, target_galaxy, target_system, target_position,
+    created_at, updated_at
+)
+SELECT
+    id, player_id, name, preset_type, ships_json, COALESCE(resources_json, '{}'),
+    speed_percent, mission_type, target_galaxy, target_system, target_position,
+    created_at, updated_at
+FROM fleet_presets;
 
 DROP TABLE fleet_presets;
 

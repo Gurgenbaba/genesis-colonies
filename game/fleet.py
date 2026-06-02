@@ -1174,7 +1174,7 @@ def create_preset(
                 name_n[:64],
                 pt,
                 _json_dumps(ships),
-                _json_dumps(resources_json) if resources_json else None,
+                _json_dumps(resources_json if resources_json is not None else {}),
                 pct,
                 mission_type,
                 target_galaxy,
@@ -1231,8 +1231,8 @@ def update_preset(
             ships = normalize_ships(fields["ships_json"])
             updates["ships_json"] = _json_dumps(ships)
         if "resources_json" in fields:
-            updates["resources_json"] = (
-                _json_dumps(fields["resources_json"]) if fields["resources_json"] else None
+            updates["resources_json"] = _json_dumps(
+                fields["resources_json"] if fields["resources_json"] is not None else {}
             )
         if "speed_percent" in fields:
             pct = int(fields["speed_percent"])
