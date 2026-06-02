@@ -108,7 +108,7 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 | GC-600 Defense Phase 1 validation | ✅ |
 | GC-601 Project Inventory | ✅ |
 | GC-700 Combat | 📋 Readiness oben — kein Greenfield |
-| GC-800 Recycler | 📋 |
+| GC-800 Recycler | 📋 — Spec: [GC-800_RECYCLER.md](GC-800_RECYCLER.md) |
 | GC-900 Fleet Logistics | 📋 |
 
 ---
