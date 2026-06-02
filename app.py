@@ -3125,6 +3125,55 @@ def api_dev_fleet_seed_ships():
     return api_fleet_dev_seed_ships()
 
 
+@app.route("/api/dev/combat/simulate-spy", methods=["POST"])
+@require_login
+def api_dev_combat_simulate_spy():
+    """DEV/admin: combat simulator from spy report metadata (no fleet dispatch)."""
+    from game.combat import simulate_combat_preview_from_spy
+    from game.config import is_debug_enabled
+    from game.fleet_api import fleet_err, fleet_ok
+    from game.messages import get_message
+    from game.models import load_player
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+
+    player = load_player(user_id)
+    allow = is_debug_enabled() or bool(player and player.get("is_admin"))
+    if not allow:
+        return jsonify(fleet_err("forbidden")), 403
+
+    data = request.get_json(silent=True) or {}
+    message_id = int(data.get("message_id") or 0)
+    spy_meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else None
+
+    if message_id > 0:
+        msg_row = get_message(user_id, message_id, mark_read=False)
+        if not msg_row.get("ok"):
+            return jsonify(fleet_err("message_not_found")), 404
+        msg = (msg_row.get("data") or {}).get("message")
+        if not msg:
+            return jsonify(fleet_err("message_not_found")), 404
+        if str(msg.get("category") or "") != "espionage":
+            return jsonify(fleet_err("invalid_message")), 400
+        spy_meta = dict(msg.get("metadata") or {})
+
+    if not spy_meta or int(spy_meta.get("report_version") or 0) < 2:
+        return jsonify(fleet_err("invalid_spy_report")), 400
+
+    try:
+        metadata = simulate_combat_preview_from_spy(
+            player_id=user_id,
+            spy_metadata=spy_meta,
+        )
+    except Exception:
+        current_app.logger.exception("dev combat simulate-spy failed user_id=%s", user_id)
+        return jsonify(fleet_err("combat_sim_failed")), 500
+
+    return jsonify(fleet_ok({"metadata": metadata, "simulated": True}))
+
+
 @app.route("/api/ships/<ship_key>")
 @require_login
 def api_ship_detail(ship_key: str):

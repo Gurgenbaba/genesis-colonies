@@ -9040,6 +9040,7 @@ body.gc-combat-report-open { overflow: hidden; }
   margin-top: 2px;
 }
 
+.gc-messages-item--report .gc-messages-item-subject,
 .gc-messages-item--combat .gc-messages-item-subject {
   font-family: var(--gc-font-display, Orbitron, sans-serif);
   font-size: 0.82rem;
@@ -9226,6 +9227,82 @@ body.gc-combat-report-open { overflow: hidden; }
 
 .gc-combat-report-hero--draw::before {
   background: rgba(255, 190, 80, 0.85);
+}
+
+.gc-combat-report-hero--open::before,
+.gc-combat-report-hero--intel::before {
+  background: rgba(120, 180, 255, 0.85);
+}
+
+.gc-combat-report-hero--expedition::before {
+  background: rgba(160, 120, 255, 0.8);
+}
+
+.gc-combat-report-hero--intel {
+  border-color: rgba(120, 180, 255, 0.35);
+  box-shadow: inset 0 0 24px rgba(120, 180, 255, 0.06);
+}
+
+.gc-combat-report-hero--expedition {
+  border-color: rgba(160, 120, 255, 0.35);
+  box-shadow: inset 0 0 24px rgba(160, 120, 255, 0.06);
+}
+
+.gc-combat-report-hero-desc {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--gc-text-soft);
+}
+
+.gc-combat-report-fleet-status {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: var(--gc-text-soft);
+}
+
+.gc-combat-report-shell--intel .gc-combat-report-overview--intel {
+  border-color: rgba(120, 180, 255, 0.22);
+}
+
+.gc-combat-report-panel--locked {
+  opacity: 0.72;
+}
+
+.gc-spy-report-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin-bottom: 10px;
+  font-size: 0.78rem;
+  color: var(--gc-text-soft);
+}
+
+.gc-spy-report-stats-row strong {
+  color: var(--gc-text);
+}
+
+.gc-combat-report-activity-row {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(70, 229, 255, 0.08);
+  font-size: 0.78rem;
+}
+
+.gc-combat-report-activity-row:last-child {
+  border-bottom: none;
+}
+
+.gc-spy-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(120, 180, 255, 0.15);
+}
+
+.gc-messages-detail-actions .gc-btn-danger {
+  text-decoration: none;
 }
 
 .gc-combat-report-hero--victory {
@@ -9692,6 +9769,26 @@ body.gc-combat-report-open { overflow: hidden; }
   background: rgba(255, 190, 80, 0.75);
 }
 
+.gc-combat-teaser--open::before,
+.gc-combat-teaser--intel::before {
+  background: rgba(120, 180, 255, 0.75);
+}
+
+.gc-combat-teaser--expedition::before {
+  background: rgba(160, 120, 255, 0.7);
+}
+
+.gc-combat-teaser--intel .gc-combat-teaser-badge,
+.gc-combat-teaser--open .gc-combat-teaser-badge {
+  border-color: rgba(120, 180, 255, 0.4);
+  color: #a5c4ff;
+}
+
+.gc-combat-teaser--expedition .gc-combat-teaser-badge {
+  border-color: rgba(160, 120, 255, 0.4);
+  color: #c4b5fd;
+}
+
 .gc-combat-teaser--compact {
   padding: 8px 10px;
   gap: 6px;
@@ -9808,6 +9905,7 @@ a.gc-galaxy-coord-link:focus-visible {
   align-self: flex-start;
 }
 
+.gc-messages-item--report .gc-combat-teaser-open,
 .gc-messages-item--combat .gc-combat-teaser-open {
   pointer-events: auto;
 }

@@ -2868,16 +2868,6 @@
           _lastMessagesUnreadPoll = data.unread_messages_count;
           updateMessagesUnreadBadges(data.unread_messages_count);
 
-          if (unreadIncreased && !onMessagesPage) {
-            const msg =
-              data.unread_messages_count === 1
-                ? t("messages.notify_new", "Neue Nachricht im Posteingang.")
-                : t("messages.notify_new_count", "Du hast %(count)s ungelesene Nachrichten.")
-                    .replace("%(count)s", String(data.unread_messages_count))
-                    .replace("{count}", String(data.unread_messages_count));
-            showNotify(msg, "info");
-          }
-
           // Inbox list load is owned by messages.js (init/tab). Only refresh when unread
           // count rises after the inbox has already loaded — never on empty filtered tabs.
           if (

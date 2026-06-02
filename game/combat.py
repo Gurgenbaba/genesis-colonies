@@ -1121,3 +1121,106 @@ def attacker_stacks_from_fleet(ships: Mapping[str, int]) -> List[CombatStack]:
 def battle_rng_for_movement(movement_id: int) -> random.Random:
     """Deterministic RNG seed per fleet movement for reproducible combat."""
     return random.Random(int(movement_id))
+
+
+def simulate_combat_preview_from_spy(
+    *,
+    player_id: int,
+    spy_metadata: Mapping[str, Any],
+    conn=None,
+) -> Dict[str, Any]:
+    """
+    DEV preview: run ``simulate_battle`` from spy intel + attacker hangar (no persistence).
+    """
+    from .galaxy import format_coordinates, get_planet_coordinates
+    from .i18n import get_player_locale
+    from .fleet import get_planet_ships
+    from .models import db
+    from .planet_evolution.repository import get_context_planet
+
+    own_conn = False
+    if conn is None:
+        conn = db()
+        own_conn = True
+
+    try:
+        planet = get_context_planet(int(player_id), conn=conn)
+        origin_id = int(planet["id"])
+        attacking_ships = dict(get_planet_ships(origin_id, conn=conn) or {})
+
+        coords = str(spy_metadata.get("target_coords") or "").strip()
+        target_planet_id = int(spy_metadata.get("target_planet_id") or 0)
+        defender_id = 0
+        if target_planet_id > 0:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT player_id FROM planets WHERE id = ? LIMIT 1;",
+                (target_planet_id,),
+            )
+            row = cur.fetchone()
+            if row:
+                defender_id = int(row["player_id"] or 0)
+
+        defending_ships = dict(spy_metadata.get("ships") or {})
+        def_block = spy_metadata.get("defense") or {}
+        defending_defense = dict(def_block.get("units") or def_block.get("stock") or {})
+
+        atk_stacks = attacker_stacks_from_fleet(attacking_ships)
+        def_stacks = defender_stacks_from_planet(defending_ships, defending_defense)
+        sim_seed = int(target_planet_id) * 6151 + int(player_id) + 17
+        combat_result = simulate_battle(
+            make_combat_side("attacker", atk_stacks),
+            make_combat_side("defender", def_stacks),
+            rng=random.Random(sim_seed),
+            attacker_player_id=int(player_id),
+            defender_player_id=int(defender_id) if defender_id > 0 else None,
+            attacker_planet_id=origin_id,
+            defender_planet_id=target_planet_id if target_planet_id > 0 else None,
+            conn=conn,
+        )
+
+        return_ships = remaining_stock(
+            attacking_ships,
+            combat_result.attacker_losses,
+            canonical_ship_keys=True,
+        )
+
+        from .fleet import _player_name
+
+        attacker_name = _player_name(int(player_id), conn=conn)
+        defender_name = str(spy_metadata.get("target_owner") or "—")
+        origin_coord_txt = ""
+        try:
+            pc = get_planet_coordinates(planet)
+            origin_coord_txt = format_coordinates(
+                int(pc["galaxy"]),
+                int(pc["system"]),
+                int(pc["position"]),
+            )
+        except Exception:
+            origin_coord_txt = ""
+
+        locale = get_player_locale(int(player_id), conn=conn)
+        _body, metadata = build_combat_report(
+            attacker_id=int(player_id),
+            attacker_name=attacker_name,
+            defender_id=int(defender_id),
+            defender_name=defender_name,
+            coords=coords,
+            attacking_ships=attacking_ships,
+            defending_ships=defending_ships,
+            defending_defense=defending_defense,
+            combat_result=combat_result,
+            return_ships=return_ships,
+            loot={},
+            origin_coords=origin_coord_txt,
+            origin_planet_name=str(planet.get("name") or ""),
+            target_planet_name=str(spy_metadata.get("target_planet") or ""),
+            locale=locale,
+        )
+        metadata["perspective"] = "attacker"
+        metadata["dev_simulated"] = True
+        return metadata
+    finally:
+        if own_conn:
+            conn.close()

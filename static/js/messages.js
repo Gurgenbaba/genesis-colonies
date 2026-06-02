@@ -121,7 +121,7 @@
       .join("");
   }
 
-  const COMBAT_MODAL = {
+  const REPORT_MODAL = {
     root: null,
     dialog: null,
     titleEl: null,
@@ -136,6 +136,77 @@
       Number(meta.report_version) >= 2 &&
       Boolean(meta.target_coords)
     );
+  }
+
+  function isSpyReportMsg(msg) {
+    const meta = msg?.metadata || {};
+    return msg?.category === "espionage" && Number(meta.report_version) >= 2 && Boolean(meta.intel_tiers);
+  }
+
+  function isExpeditionReportMsg(msg) {
+    const meta = msg?.metadata || {};
+    return msg?.category === "expedition" && Number(meta.report_version) >= 2 && Boolean(meta.event_key);
+  }
+
+  function getInboxReportKind(msg) {
+    if (isCombatReportMsg(msg)) return "combat";
+    if (isSpyReportMsg(msg)) return "spy";
+    if (isExpeditionReportMsg(msg)) return "expedition";
+    return null;
+  }
+
+  function inboxReportOpenAttrs(messageId, kind) {
+    if (messageId == null || !Number.isFinite(Number(messageId)) || !kind) return "";
+    return ` data-open-inbox-report="${Number(messageId)}" data-report-kind="${esc(kind)}"`;
+  }
+
+  function devCombatSimEnabled() {
+    const page = document.getElementById("messages-page");
+    return page?.dataset?.devCombat === "1";
+  }
+
+  function parseTargetCoordsForFleet(coords) {
+    const m = String(coords || "").match(/\[?(\d+):(\d+):(\d+)\]?/);
+    if (!m) return null;
+    return { galaxy: m[1], system: m[2], position: m[3] };
+  }
+
+  function fleetAttackHrefFromCoords(coords) {
+    const c = parseTargetCoordsForFleet(coords);
+    if (!c) return null;
+    return `/fleet?mission=attack&target_galaxy=${c.galaxy}&target_system=${c.system}&target_position=${c.position}`;
+  }
+
+  function navigateFleetAttack(coords) {
+    const href = fleetAttackHrefFromCoords(coords);
+    if (!href) return;
+    if (typeof GC.navigateTo === "function") {
+      GC.navigateTo(href);
+      return;
+    }
+    window.location.href = href;
+  }
+
+  function renderSpyReportActionBar(meta, messageId) {
+    const coords = meta?.target_coords;
+    const attackHref = fleetAttackHrefFromCoords(coords);
+    const parts = [];
+    if (attackHref) {
+      parts.push(
+        `<a href="${esc(attackHref)}" class="gc-btn gc-btn-danger gc-btn-sm" data-spy-action="attack">${esc(
+          t("spy_report_attack_btn", "Attack target")
+        )}</a>`
+      );
+    }
+    if (devCombatSimEnabled() && messageId != null && Number.isFinite(Number(messageId))) {
+      parts.push(
+        `<button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-spy-action="dev_sim" data-message-id="${Number(
+          messageId
+        )}">${esc(t("spy_report_dev_sim_btn", "DEV: Combat simulator"))}</button>`
+      );
+    }
+    if (!parts.length) return "";
+    return `<div class="gc-spy-report-actions">${parts.join("")}</div>`;
   }
 
   function combatViewerOutcome(meta) {
@@ -397,11 +468,6 @@
     const vsLine = t("combat_report_vs", "%(attacker)s vs %(defender)s")
       .replace("%(attacker)s", meta.attacker_name || "—")
       .replace("%(defender)s", meta.defender_name || "—");
-    const openAttrs =
-      messageId != null && Number.isFinite(Number(messageId))
-        ? ` data-open-combat-report="${Number(messageId)}"`
-        : "";
-
     const lootHint =
       lootTotal > 0
         ? `${formatInt(loot.metal || 0)} / ${formatInt(loot.crystal || 0)} / ${formatInt(loot.fuel_cells || 0)}`
@@ -423,7 +489,7 @@
           t("combat_report_rounds_total", "%(count)s rounds").replace("%(count)s", rounds)
         )} · ${esc(lootHint)}</p>` +
         (!compact ? `<p class="gc-combat-teaser-hint">${esc(t("combat_report_teaser_hint", ""))}</p>` : "") +
-        `<span class="gc-btn gc-btn-primary gc-btn-sm gc-combat-teaser-open" role="button" tabindex="0"${openAttrs}>${esc(
+        `<span class="gc-btn gc-btn-primary gc-btn-sm gc-combat-teaser-open" role="button" tabindex="0"${inboxReportOpenAttrs(messageId, "combat")}>${esc(
           t("combat_report_open_btn", "Open report")
         )}</span>` +
       `</div>`
@@ -574,65 +640,111 @@
     );
   }
 
-  function cacheCombatModalElements() {
-    if (COMBAT_MODAL.root && COMBAT_MODAL.content) return COMBAT_MODAL.root;
-    COMBAT_MODAL.root = document.getElementById("gc-combat-report-root");
-    if (!COMBAT_MODAL.root) return null;
-    COMBAT_MODAL.dialog = COMBAT_MODAL.root.querySelector(".gc-combat-report-dialog");
-    COMBAT_MODAL.titleEl = document.getElementById("gc-combat-report-title");
-    COMBAT_MODAL.content = COMBAT_MODAL.root.querySelector("[data-cr-content]");
-    return COMBAT_MODAL.root;
+  function cacheReportModalElements() {
+    if (REPORT_MODAL.root && REPORT_MODAL.content) return REPORT_MODAL.root;
+    REPORT_MODAL.root = document.getElementById("gc-combat-report-root");
+    if (!REPORT_MODAL.root) return null;
+    REPORT_MODAL.dialog = REPORT_MODAL.root.querySelector(".gc-combat-report-dialog");
+    REPORT_MODAL.titleEl = document.getElementById("gc-combat-report-title");
+    REPORT_MODAL.content = REPORT_MODAL.root.querySelector("[data-cr-content]");
+    return REPORT_MODAL.root;
   }
 
-  function openCombatReportModal(msg) {
-    if (!msg || !isCombatReportMsg(msg)) return;
-    const root = cacheCombatModalElements();
-    if (!root || !COMBAT_MODAL.content) return;
-    const meta = msg.metadata || {};
-    const visual = combatResultVisual(meta);
-    if (COMBAT_MODAL.dialog) {
-      COMBAT_MODAL.dialog.setAttribute("data-theme", visual.theme);
+  function renderInboxReportFull(msg, opts = {}) {
+    const meta = msg?.metadata || {};
+    const kind = getInboxReportKind(msg);
+    const reportOpts = { ...opts, messageId: opts.messageId ?? msg?.id };
+    if (kind === "combat") return renderCombatReportFull(meta);
+    if (kind === "spy") return renderSpyReportFull(meta, reportOpts);
+    if (kind === "expedition") return renderExpeditionReportFull(meta);
+    return "";
+  }
+
+  function reportModalTitle(msg) {
+    const meta = msg?.metadata || {};
+    const kind = getInboxReportKind(msg);
+    const coords = meta.target_coords || "—";
+    if (kind === "combat") {
+      const prefix = meta.dev_simulated
+        ? t("combat_report_dev_sim_title", "DEV combat simulation")
+        : t("combat_report_modal_title", "Combat report");
+      return `${prefix} — ${combatCoordsPlain(meta)}`;
     }
-    if (COMBAT_MODAL.titleEl) {
-      COMBAT_MODAL.titleEl.textContent = `${t("combat_report_modal_title", "Combat report")} — ${combatCoordsPlain(meta)}`;
+    if (kind === "spy") {
+      return `${t("spy_report_modal_title", "Spy report")} — ${coords}`;
     }
-    COMBAT_MODAL.content.innerHTML = renderCombatReportFull(meta);
+    if (kind === "expedition") {
+      const eventLabel = t(meta.event_label_key || `expedition_event_${meta.event_key}`, meta.event_key || "");
+      return `${t("expedition_report_modal_title", "Expedition report")} — ${eventLabel}`;
+    }
+    return t("messages.detail", "Message");
+  }
+
+  function reportModalTheme(msg) {
+    const meta = msg?.metadata || {};
+    const kind = getInboxReportKind(msg);
+    if (kind === "combat") return combatResultVisual(meta).theme;
+    if (kind === "spy") return "cyan";
+    if (kind === "expedition") return expeditionEventVisual(meta.event_key || "void_scan").theme;
+    return "cyan";
+  }
+
+  function openInboxReportModal(msg) {
+    if (!msg || !getInboxReportKind(msg)) return;
+    const root = cacheReportModalElements();
+    if (!root || !REPORT_MODAL.content) return;
+    if (REPORT_MODAL.dialog) {
+      REPORT_MODAL.dialog.setAttribute("data-theme", reportModalTheme(msg));
+    }
+    if (REPORT_MODAL.titleEl) {
+      REPORT_MODAL.titleEl.textContent = reportModalTitle(msg);
+    }
+    REPORT_MODAL.content.innerHTML = renderInboxReportFull(msg, { messageId: msg.id });
     root.hidden = false;
     root.setAttribute("aria-hidden", "false");
     document.body.classList.add("gc-combat-report-open");
-    COMBAT_MODAL.open = true;
+    REPORT_MODAL.open = true;
     const closeBtn = root.querySelector("[data-cr-close].gc-player-card-close");
     if (closeBtn) closeBtn.focus({ preventScroll: true });
   }
 
-  function closeCombatReportModal() {
-    const root = cacheCombatModalElements();
+  function closeInboxReportModal() {
+    const root = cacheReportModalElements();
     if (!root) return;
-    if (COMBAT_MODAL.content) COMBAT_MODAL.content.innerHTML = "";
+    if (REPORT_MODAL.content) REPORT_MODAL.content.innerHTML = "";
     root.hidden = true;
     root.setAttribute("aria-hidden", "true");
     document.body.classList.remove("gc-combat-report-open");
-    COMBAT_MODAL.open = false;
+    REPORT_MODAL.open = false;
   }
 
-  function resolveCombatMessage(messageId) {
+  const closeCombatReportModal = closeInboxReportModal;
+
+  function openCombatReportModal(msg) {
+    openInboxReportModal(msg);
+  }
+
+  function resolveInboxReportMessage(messageId, kind) {
     const id = Number(messageId);
     if (!Number.isFinite(id)) return null;
     const state = GC.messagesPageState;
     const cached = state?.messages?.find((m) => m.id === id);
-    if (cached && isCombatReportMsg(cached)) return cached;
+    if (cached && getInboxReportKind(cached) === kind) return cached;
     return null;
   }
 
-  async function openCombatReportById(messageId) {
-    let msg = resolveCombatMessage(messageId);
+  async function openInboxReportById(messageId, kind) {
+    let msg = resolveInboxReportMessage(messageId, kind);
     if (!msg) {
       const data = await messagesApi(`/api/messages/${messageId}`);
-      if (data?.ok && data.data?.message && isCombatReportMsg(data.data.message)) {
-        msg = data.data.message;
-      }
+      const loaded = data?.ok ? data.data?.message : null;
+      if (loaded && getInboxReportKind(loaded) === kind) msg = loaded;
     }
-    if (msg) openCombatReportModal(msg);
+    if (msg) openInboxReportModal(msg);
+  }
+
+  async function openCombatReportById(messageId) {
+    return openInboxReportById(messageId, "combat");
   }
 
   function buildingLabel(key) {
@@ -643,197 +755,333 @@
     return t(`fleet_mission_${mission}`, mission);
   }
 
-  function renderSpyReport(meta) {
+  function renderIntelPanel(title, bodyHtml, locked, lockedText, extraClass = "") {
+    if (locked) {
+      return renderCombatPanel(
+        title,
+        `<p class="gc-combat-report-empty">${esc(lockedText)}</p>`,
+        `gc-combat-report-panel--locked ${extraClass}`.trim()
+      );
+    }
+    return renderCombatPanel(title, bodyHtml, extraClass);
+  }
+
+  function renderBuildingGrid(buildings) {
+    const entries = Object.entries(buildings || {}).filter(([, lvl]) => Number(lvl) > 0);
+    if (!entries.length) {
+      return `<p class="gc-combat-report-empty">${esc(t("fleet_spy_report_buildings_empty", "No buildings"))}</p>`;
+    }
+    return (
+      `<div class="gc-combat-unit-grid">` +
+      entries
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(
+          ([key, lvl]) =>
+            `<div class="gc-combat-unit-chip gc-combat-unit-chip--building">` +
+            `<span class="gc-combat-unit-chip-name">${esc(buildingLabel(key))}</span>` +
+            `<strong class="gc-combat-unit-chip-qty">L${esc(formatInt(lvl))}</strong>` +
+            `</div>`
+        )
+        .join("") +
+      `</div>`
+    );
+  }
+
+  function renderSpyResourceChips(res, tiers) {
+    const rows = [];
+    if (tiers.resources) {
+      if (Number(res.metal || 0) > 0) rows.push(["metal", res.metal]);
+      if (Number(res.crystal || 0) > 0) rows.push(["crystal", res.crystal]);
+    }
+    if (tiers.fuel && Number(res.fuel_cells || 0) > 0) rows.push(["fuel_cells", res.fuel_cells]);
+    if (!rows.length) {
+      return `<p class="gc-combat-report-empty">${esc(t("fleet_spy_report_fleet_empty", "—"))}</p>`;
+    }
+    const loot = {};
+    rows.forEach(([k, v]) => {
+      loot[k] = v;
+    });
+    return renderCombatLootChips(loot);
+  }
+
+  function renderSpyReportTeaser(meta, opts = {}) {
+    const compact = Boolean(opts.compact);
+    const messageId = opts.messageId;
     const tiers = meta.intel_tiers || {};
+    const unlocked = Object.values(tiers).filter(Boolean).length;
+    const owner = meta.target_owner || "—";
+    const planet = meta.target_planet || t("fleet_spy_report_unknown_planet", "Unknown");
+
+    return (
+      `<div class="gc-combat-teaser gc-combat-teaser--open gc-combat-teaser--intel${compact ? " gc-combat-teaser--compact" : ""}">` +
+        `<div class="gc-combat-teaser-top">` +
+          `<span class="gc-combat-teaser-icon" aria-hidden="true">🔍</span>` +
+          `<div class="gc-combat-teaser-headings">` +
+            `<span class="gc-combat-teaser-coords gc-mono">${coordLink(meta.target_coords, meta.target_coords || "—")}</span>` +
+            `<span class="gc-combat-teaser-vs">${esc(`${owner} · ${planet}`)}</span>` +
+          `</div>` +
+          `<span class="gc-combat-teaser-badge">${esc(t("spy_report_badge", "Spy report"))}</span>` +
+        `</div>` +
+        `<p class="gc-combat-teaser-meta gc-mono">${esc(
+          t("spy_report_teaser_meta", "%(probes)s probes · %(sections)s intel sections")
+            .replace("%(probes)s", formatInt(meta.probe_count || 0))
+            .replace("%(sections)s", formatInt(unlocked))
+        )}</p>` +
+        (!compact ? `<p class="gc-combat-teaser-hint">${esc(t("spy_report_teaser_hint", ""))}</p>` : "") +
+        `<span class="gc-btn gc-btn-primary gc-btn-sm gc-combat-teaser-open" role="button" tabindex="0"${inboxReportOpenAttrs(messageId, "spy")}>${esc(
+          t("spy_report_open_btn", "Open report")
+        )}</span>` +
+      `</div>`
+    );
+  }
+
+  function renderSpyTargetOverview(meta) {
+    const coords = meta.target_coords || "—";
+    const owner = meta.target_owner || "—";
+    const planet = meta.target_planet || t("fleet_spy_report_unknown_planet", "Unknown");
+    return (
+      `<section class="gc-combat-report-overview gc-combat-report-overview--intel">` +
+        `<h4 class="gc-combat-report-panel-title">${esc(t("spy_report_target", "Target"))}</h4>` +
+        `<div class="gc-combat-report-battlefield gc-mono">${coordLink(coords, coords)}</div>` +
+        `<div class="gc-combat-report-sides">` +
+          `<div class="gc-combat-report-side gc-combat-report-side--defender">` +
+            `<span class="gc-combat-report-side-role">${esc(t("spy_report_target_owner", "Commander"))}</span>` +
+            `<strong class="gc-combat-report-side-name">${esc(owner)}</strong>` +
+            `<span class="gc-combat-report-side-planet">${esc(planet)}</span>` +
+            `<span class="gc-combat-report-side-coords gc-mono">${coordLabelLink(
+              "combat_report_target_coords",
+              "Target: %(coords)s",
+              coords
+            )}</span>` +
+            `<span class="gc-combat-report-side-units">${esc(
+              t("spy_report_probe_line", "%(count)s probes deployed").replace(
+                "%(count)s",
+                formatInt(meta.probe_count || 0)
+              )
+            )}</span>` +
+          `</div>` +
+          `<div class="gc-combat-report-side gc-combat-report-side--attacker">` +
+            `<span class="gc-combat-report-side-role">${esc(t("spy_report_intel_quality", "Intel quality"))}</span>` +
+            `<strong class="gc-combat-report-side-name">${esc(formatInt(meta.spy_accuracy_pct || 0))}%</strong>` +
+            `<span class="gc-combat-report-side-units">${esc(
+              t("spy_report_sections_unlocked", "%(count)s data sections")
+                .replace("%(count)s", formatInt(Object.values(meta.intel_tiers || {}).filter(Boolean).length))
+            )}</span>` +
+          `</div>` +
+        `</div>` +
+      `</section>`
+    );
+  }
+
+  function renderSpyReportFull(meta, opts = {}) {
+    const tiers = meta.intel_tiers || {};
+    const res = meta.resources || {};
+    const ships = meta.ships || {};
+    const defense = meta.defense || {};
+    const buildings = meta.buildings || {};
+    const activity = Array.isArray(meta.activity) ? meta.activity : [];
+    const fleetTotal = unitCountTotal(ships);
+    const defUnits = Number(defense.total_units || 0);
+    const buildCount = Object.values(buildings).filter((lvl) => Number(lvl) > 0).length;
+    const resTotal =
+      (tiers.resources ? Number(res.metal || 0) + Number(res.crystal || 0) : 0) +
+      (tiers.fuel ? Number(res.fuel_cells || 0) : 0);
+
     const sections = [];
 
     sections.push(
-      `<div class="gc-spy-report-head">` +
-        `<div class="gc-spy-report-coords gc-mono">${coordLink(meta.target_coords, meta.target_coords || "—")}</div>` +
-        `<div class="gc-spy-report-owner">${esc(meta.target_owner || "—")}</div>` +
-        (meta.target_planet
-          ? `<div class="gc-spy-report-planet">${esc(meta.target_planet)}</div>`
-          : "") +
-        `<div class="gc-spy-report-probes">${esc(t("fleet_spy_report_probes", "Probes deployed: %(count)s").replace("%(count)s", formatInt(meta.probe_count || 0)))}</div>` +
+      `<header class="gc-combat-report-hero gc-combat-report-hero--open gc-combat-report-hero--intel">` +
+        `<div class="gc-combat-report-hero-top">` +
+          `<span class="gc-combat-report-hero-icon" aria-hidden="true">🔍</span>` +
+          `<div class="gc-combat-report-hero-text">` +
+            `<div class="gc-combat-report-coords gc-mono">${coordLink(meta.target_coords, meta.target_coords || "—")}</div>` +
+            `<div class="gc-combat-report-vs">${esc(meta.target_owner || "—")} · ${esc(meta.target_planet || "—")}</div>` +
+          `</div>` +
+          `<span class="gc-combat-report-result-badge">` +
+            `<span class="gc-combat-report-result-main">${esc(t("spy_report_badge", "Spy report"))}</span>` +
+            `<span class="gc-combat-report-result-sub">${esc(
+              t("spy_report_accuracy_sub", "~%(pct)s%% accuracy").replace(
+                "%(pct)s",
+                formatInt(meta.spy_accuracy_pct || 0)
+              )
+            )}</span>` +
+          `</span>` +
+        `</div>` +
+      `</header>`
+    );
+
+    sections.push(
+      `<div class="gc-player-card-stats gc-combat-report-stats">` +
+        `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(t("spy_report_stat_probes", "Probes"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(meta.probe_count || 0))}</span>` +
+        `</div>` +
+        `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(t("spy_report_stat_fleet", "Fleet"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(fleetTotal))}</span>` +
+        `</div>` +
+        `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(t("spy_report_stat_defense", "Defense"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(defUnits))}</span>` +
+        `</div>` +
+        `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(t("spy_report_stat_resources", "Resources"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(resTotal))}</span>` +
+        `</div>` +
       `</div>`
     );
 
-    function section(title, bodyHtml, locked, lockedText) {
-      if (locked) {
-        return (
-          `<section class="gc-spy-report-section gc-spy-report-section--locked">` +
-          `<h3 class="gc-spy-report-section-title">${esc(title)}</h3>` +
-          `<p class="gc-spy-report-locked">${esc(lockedText)}</p>` +
-          `</section>`
-        );
-      }
-      return (
-        `<section class="gc-spy-report-section">` +
-        `<h3 class="gc-spy-report-section-title">${esc(title)}</h3>` +
-        `<div class="gc-spy-report-section-body">${bodyHtml}</div>` +
-        `</section>`
-      );
-    }
+    sections.push(renderSpyTargetOverview(meta));
 
-    const res = meta.resources || {};
-    let resHtml = "";
-    if (tiers.resources || tiers.fuel) {
-      const rows = [];
-      if (tiers.resources) {
-        rows.push(
-          `<div class="gc-spy-report-kv"><span>${esc(t("resource_metal", "Ferronit"))}</span><strong>${esc(formatInt(res.metal || 0))}</strong></div>`
-        );
-        rows.push(
-          `<div class="gc-spy-report-kv"><span>${esc(t("resource_crystal", "Crytite"))}</span><strong>${esc(formatInt(res.crystal || 0))}</strong></div>`
-        );
-      }
-      if (tiers.fuel) {
-        rows.push(
-          `<div class="gc-spy-report-kv"><span>${esc(t("resource_fuel_cells", "Fuel Cells"))}</span><strong>${esc(formatInt(res.fuel_cells || 0))}</strong></div>`
-        );
-      }
-      resHtml = rows.join("");
-    }
-    sections.push(
-      section(
-        t("fleet_spy_report_section_resources", "Resources"),
-        resHtml || `<p class="gc-spy-report-empty">${esc(t("fleet_spy_report_resources_locked", "Resources: insufficient probe data"))}</p>`,
-        !tiers.resources && !tiers.fuel,
-        t("fleet_spy_report_resources_locked", "Resources: insufficient probe data")
-      )
-    );
-
-    const ships = meta.ships || {};
     let fleetHtml = "";
     if (tiers.fleet) {
-      const entries = Object.entries(ships).filter(([, qty]) => Number(qty) > 0);
-      fleetHtml = entries.length
-        ? entries
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(
-              ([key, qty]) =>
-                `<div class="gc-spy-report-kv"><span>${esc(shipLabel(key))}</span><strong>×${esc(formatInt(qty))}</strong></div>`
-            )
-            .join("")
-        : `<p class="gc-spy-report-empty">${esc(t("fleet_spy_report_fleet_empty", "No ships detected in orbit"))}</p>`;
+      fleetHtml = renderCombatUnitGrid(ships, null);
     }
     sections.push(
-      section(
+      renderIntelPanel(
         t("fleet_spy_report_section_fleet", "Orbital fleet"),
         fleetHtml,
         !tiers.fleet,
-        t("fleet_spy_report_fleet_locked", "Orbital fleet: insufficient probe data")
+        t("fleet_spy_report_fleet_locked", "Locked"),
+        "gc-combat-report-panel--defender"
       )
     );
 
-    const defense = meta.defense || {};
     let defenseHtml = "";
     if (tiers.defense) {
-      const rows = [
-        `<div class="gc-spy-report-kv"><span>${esc(t("fleet_spy_report_defense_total", "Defense units"))}</span><strong>${esc(formatInt(defense.total_units || 0))}</strong></div>`,
-        `<div class="gc-spy-report-kv"><span>${esc(t("fleet_spy_report_defense_power", "Defense power"))}</span><strong>${esc(formatInt(defense.defense_power || 0))}</strong></div>`,
-        `<div class="gc-spy-report-kv"><span>${esc(t("fleet_spy_report_shield_power", "Shield power"))}</span><strong>${esc(formatInt(defense.shield_power || 0))}</strong></div>`,
-      ];
-      const units = defense.units || {};
-      const unitEntries = Object.entries(units).filter(([, qty]) => Number(qty) > 0);
-      if (unitEntries.length) {
-        defenseHtml =
-          rows.join("") +
-          unitEntries
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(
-              ([key, qty]) =>
-                `<div class="gc-spy-report-kv"><span>${esc(t(`defense_${key}`, key))}</span><strong>×${esc(formatInt(qty))}</strong></div>`
-            )
-            .join("");
-      } else {
-        defenseHtml =
-          rows.join("") +
-          `<p class="gc-spy-report-empty">${esc(t("fleet_spy_report_defense_empty", "No defensive structures detected"))}</p>`;
-      }
+      defenseHtml =
+        `<div class="gc-spy-report-stats-row gc-mono">` +
+          `<span>${esc(t("fleet_spy_report_defense_power", "Defense power"))}: <strong>${esc(formatInt(defense.defense_power || 0))}</strong></span>` +
+          `<span>${esc(t("fleet_spy_report_shield_power", "Shield power"))}: <strong>${esc(formatInt(defense.shield_power || 0))}</strong></span>` +
+        `</div>` +
+        renderCombatUnitGrid(defense.units || {}, defense.units || {});
       if (defense.accuracy_pct != null && !defense.exact) {
-        defenseHtml += `<div class="gc-spy-report-energy">${esc(
-          t("fleet_spy_report_defense_accuracy", "Intel accuracy: ~%(pct)s%% (espionage research)").replace(
+        defenseHtml += `<p class="gc-combat-report-empty">${esc(
+          t("fleet_spy_report_defense_accuracy", "Intel accuracy: ~%(pct)s%%").replace(
             "%(pct)s",
             formatInt(defense.accuracy_pct || 0)
           )
-        )}</div>`;
+        )}</p>`;
       }
     }
     sections.push(
-      section(
+      renderIntelPanel(
         t("fleet_spy_report_section_defense", "Planetary defense"),
         defenseHtml,
         !tiers.defense,
-        t("fleet_spy_report_defense_locked", "Planetary defense: insufficient probe data")
+        t("fleet_spy_report_defense_locked", "Locked"),
+        "gc-combat-report-panel--defender"
       )
     );
 
-    const buildings = meta.buildings || {};
+    let resHtml = "";
+    if (tiers.resources || tiers.fuel) {
+      resHtml = renderSpyResourceChips(res, tiers);
+    }
+    sections.push(
+      renderIntelPanel(
+        t("fleet_spy_report_section_resources", "Resources"),
+        resHtml,
+        !tiers.resources && !tiers.fuel,
+        t("fleet_spy_report_resources_locked", "Locked"),
+        "gc-combat-report-panel--loot"
+      )
+    );
+
     let buildHtml = "";
     if (tiers.buildings) {
-      const entries = Object.entries(buildings).filter(([, lvl]) => Number(lvl) > 0);
-      buildHtml = entries.length
-        ? entries
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(
-              ([key, lvl]) =>
-                `<div class="gc-spy-report-kv"><span>${esc(buildingLabel(key))}</span><strong>L${esc(formatInt(lvl))}</strong></div>`
-            )
-            .join("")
-        : `<p class="gc-spy-report-empty">${esc(t("fleet_spy_report_buildings_empty", "No surface installations detected"))}</p>`;
+      buildHtml = renderBuildingGrid(buildings);
       if (meta.energy) {
-        buildHtml +=
-          `<div class="gc-spy-report-energy">${esc(
-            t(
-              "fleet_spy_report_energy",
-              "Energy balance: %(balance)s (generated %(total)s / used %(used)s)"
-            )
-              .replace("%(balance)s", formatInt(meta.energy.balance || 0))
-              .replace("%(total)s", formatInt(meta.energy.total || 0))
-              .replace("%(used)s", formatInt(meta.energy.used || 0))
-          )}</div>`;
+        buildHtml += `<p class="gc-combat-report-empty">${esc(
+          t("fleet_spy_report_energy", "Energy: %(balance)s (%(total)s / %(used)s)")
+            .replace("%(balance)s", formatInt(meta.energy.balance || 0))
+            .replace("%(total)s", formatInt(meta.energy.total || 0))
+            .replace("%(used)s", formatInt(meta.energy.used || 0))
+        )}</p>`;
       }
     }
     sections.push(
-      section(
+      renderIntelPanel(
         t("fleet_spy_report_section_buildings", "Surface installations"),
-        buildHtml,
+        buildHtml || `<p class="gc-combat-report-empty">${esc(t("fleet_spy_report_buildings_empty", "—"))}</p>`,
         !tiers.buildings,
-        t("fleet_spy_report_buildings_locked", "Surface installations: insufficient probe data")
+        t("fleet_spy_report_buildings_locked", "Locked")
       )
     );
 
-    const activity = Array.isArray(meta.activity) ? meta.activity : [];
     let activityHtml = "";
     if (tiers.activity) {
       activityHtml = activity.length
         ? activity
             .map(
               (row) =>
-                `<div class="gc-spy-report-activity-row">${esc(
+                `<div class="gc-spy-report-activity-row gc-combat-report-activity-row">${esc(
                   t("fleet_spy_report_activity_row", "%(mission)s → %(coords)s (%(status)s)")
                     .replace("%(mission)s", missionLabel(row.mission || ""))
                     .replace("%(coords)s", "%%COORD%%")
                     .replace("%(status)s", row.status || "")
-                ).replace(
-                  "%%COORD%%",
-                  coordLink(row.coords, row.coords || "—")
-                )}</div>`
+                ).replace("%%COORD%%", coordLink(row.coords, row.coords || "—"))}</div>`
             )
             .join("")
-        : `<p class="gc-spy-report-empty">${esc(t("fleet_spy_report_activity_empty", "No outbound fleet activity detected"))}</p>`;
+        : `<p class="gc-combat-report-empty">${esc(t("fleet_spy_report_activity_empty", "No activity"))}</p>`;
     }
     sections.push(
-      section(
+      renderIntelPanel(
         t("fleet_spy_report_section_activity", "Fleet activity"),
         activityHtml,
         !tiers.activity,
-        t("fleet_spy_report_activity_locked", "Fleet activity: insufficient probe data")
+        t("fleet_spy_report_activity_locked", "Locked"),
+        "gc-combat-report-panel--rounds"
       )
     );
 
-    return `<div class="gc-spy-report">${sections.join("")}</div>`;
+    const actions = renderSpyReportActionBar(meta, opts.messageId);
+    return (
+      `<div class="gc-player-card-shell gc-combat-report-shell gc-combat-report-shell--intel" data-theme="cyan">` +
+      sections.join("") +
+      actions +
+      `</div>`
+    );
+  }
+
+  async function runDevCombatSimFromSpy(messageId) {
+    const id = Number(messageId);
+    if (!Number.isFinite(id)) return;
+    const btn = document.querySelector(`[data-spy-action="dev_sim"][data-message-id="${id}"]`);
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = t("spy_report_dev_sim_running", "Simulating…");
+    }
+    try {
+      const res = await GC.fetchGameAction("/api/dev/combat/simulate-spy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message_id: id }),
+      });
+      const meta = res?.data?.metadata;
+      if (!res?.ok || !meta) {
+        if (typeof GC.showNotify === "function") {
+          GC.showNotify(t("spy_report_dev_sim_error", "Simulation failed."), "error");
+        }
+        return;
+      }
+      const simMsg = {
+        id,
+        category: "combat",
+        subject: t("combat_report_dev_sim_title", "DEV combat simulation"),
+        metadata: meta,
+      };
+      openInboxReportModal(simMsg);
+    } catch (_) {
+      if (typeof GC.showNotify === "function") {
+        GC.showNotify(t("spy_report_dev_sim_error", "Simulation failed."), "error");
+      }
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = t("spy_report_dev_sim_btn", "DEV: Combat simulator");
+      }
+    }
   }
 
   function expeditionSeverityLabel(severity) {
@@ -924,16 +1172,57 @@
     );
   }
 
-  function renderExpeditionReport(meta) {
+  function expeditionHeroBadge(eventKey) {
+    const visual = expeditionEventVisual(eventKey);
+    const badgeByTheme = {
+      fund: "victory",
+      anomaly: "open",
+      disturbance: "draw",
+      alert: "defeat",
+      relic: "victory",
+    };
+    return { ...visual, badge: badgeByTheme[visual.theme] || "open" };
+  }
+
+  function renderExpeditionReportTeaser(meta, opts = {}) {
+    const compact = Boolean(opts.compact);
+    const messageId = opts.messageId;
     const eventKey = meta.event_key || "void_scan";
-    const eventLabel = t(
-      meta.event_label_key || `expedition_event_${eventKey}`,
-      eventKey
+    const eventLabel = t(meta.event_label_key || `expedition_event_${eventKey}`, eventKey);
+    const visual = expeditionHeroBadge(eventKey);
+    const rewards = meta.rewards || {};
+    const lootTotal = expeditionLootTotal(rewards);
+    const lootHint =
+      lootTotal > 0
+        ? `${formatInt(rewards.metal || 0)} / ${formatInt(rewards.crystal || 0)} / ${formatInt(rewards.fuel_cells || 0)}`
+        : t("combat_report_loot_none", "No plunder");
+
+    return (
+      `<div class="gc-combat-teaser gc-combat-teaser--${esc(visual.badge)} gc-combat-teaser--expedition${compact ? " gc-combat-teaser--compact" : ""}" data-event="${esc(eventKey)}">` +
+        `<div class="gc-combat-teaser-top">` +
+          `<span class="gc-combat-teaser-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
+          `<div class="gc-combat-teaser-headings">` +
+            `<span class="gc-combat-teaser-coords gc-mono">${coordLink(meta.target_coords, meta.target_coords || "—")}</span>` +
+            `<span class="gc-combat-teaser-vs">${esc(eventLabel)}</span>` +
+          `</div>` +
+          `<span class="gc-combat-teaser-badge">${esc(expeditionEventBadge(eventKey, meta.event_severity))}</span>` +
+        `</div>` +
+        `<p class="gc-combat-teaser-meta gc-mono">${esc(lootHint)}</p>` +
+        (!compact ? `<p class="gc-combat-teaser-hint">${esc(t("expedition_report_teaser_hint", ""))}</p>` : "") +
+        `<span class="gc-btn gc-btn-primary gc-btn-sm gc-combat-teaser-open" role="button" tabindex="0"${inboxReportOpenAttrs(messageId, "expedition")}>${esc(
+          t("expedition_report_open_btn", "Open report")
+        )}</span>` +
+      `</div>`
     );
+  }
+
+  function renderExpeditionReportFull(meta) {
+    const eventKey = meta.event_key || "void_scan";
+    const eventLabel = t(meta.event_label_key || `expedition_event_${eventKey}`, eventKey);
     const descKey = meta.event_desc_key || `expedition_event_${eventKey}_desc`;
     const desc = t(descKey, "");
     const severity = meta.event_severity || "normal";
-    const visual = expeditionEventVisual(eventKey);
+    const visual = expeditionHeroBadge(eventKey);
     const rewards = meta.rewards || {};
     const lootTotal = expeditionLootTotal(rewards);
     const cargoTotal = Number(meta.cargo_total || 0);
@@ -942,110 +1231,97 @@
     const risk = expeditionRiskLabel(eventKey);
     const find = expeditionFindLabel(rewards, severity, eventKey);
     const returnLabel = expeditionReturnLabel(delayExtra);
-    const metaLine = t(
-      "fleet_expedition_report_meta_line",
-      "%(return)s · Risk: %(risk)s · Find: %(find)s"
-    )
-      .replace("%(return)s", returnLabel)
-      .replace("%(risk)s", risk)
-      .replace("%(find)s", find);
-
     const fleet = meta.fleet_ships || {};
-    const fleetEntries = Object.entries(fleet).filter(([, qty]) => Number(qty) > 0);
-    const fleetShipsText = fleetEntries.length
-      ? fleetEntries
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([key, qty]) => `${formatInt(qty)}× ${shipLabel(key)}`)
-          .join(" · ")
-      : t("fleet_expedition_report_fleet_unknown", "Fleet composition unknown");
-    const fleetSummary = t(
-      "fleet_expedition_report_fleet_summary",
-      "%(ships)s · Cargo %(used)s/%(total)s · Status: %(status)s"
-    )
-      .replace("%(ships)s", fleetShipsText)
-      .replace("%(used)s", formatInt(lootTotal))
-      .replace("%(total)s", formatInt(cargoTotal))
-      .replace("%(status)s", expeditionFleetStatus(delayExtra, lootTotal));
+    const fleetTotal = unitCountTotal(fleet);
 
     const sections = [];
 
     sections.push(
-      `<header class="gc-expedition-card gc-expedition-card--${esc(visual.theme)}" data-event="${esc(eventKey)}">` +
-        `<div class="gc-expedition-card-top">` +
-          `<span class="gc-expedition-card-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
-          `<div class="gc-expedition-card-headings">` +
-            `<h3 class="gc-expedition-card-title">${esc(eventLabel)}</h3>` +
-            `<span class="gc-expedition-card-badge">${esc(badge)}</span>` +
+      `<header class="gc-combat-report-hero gc-combat-report-hero--${esc(visual.badge)} gc-combat-report-hero--expedition">` +
+        `<div class="gc-combat-report-hero-top">` +
+          `<span class="gc-combat-report-hero-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
+          `<div class="gc-combat-report-hero-text">` +
+            `<div class="gc-combat-report-coords gc-mono">${coordLink(meta.target_coords, meta.target_coords || "—")}</div>` +
+            `<div class="gc-combat-report-vs">${esc(eventLabel)}</div>` +
           `</div>` +
+          `<span class="gc-combat-report-result-badge">` +
+            `<span class="gc-combat-report-result-main">${esc(badge)}</span>` +
+            `<span class="gc-combat-report-result-sub">${esc(
+              t("fleet_expedition_report_meta_line", "%(return)s · Risk: %(risk)s · Find: %(find)s")
+                .replace("%(return)s", returnLabel)
+                .replace("%(risk)s", risk)
+                .replace("%(find)s", find)
+            )}</span>` +
+          `</span>` +
         `</div>` +
-        `<p class="gc-expedition-card-meta gc-mono">${esc(metaLine)}</p>` +
-        (desc ? `<p class="gc-expedition-card-desc">${esc(desc)}</p>` : "") +
-        `<div class="gc-expedition-card-coords gc-mono">${coordLink(meta.target_coords, meta.target_coords || "—")}</div>` +
+        (desc ? `<p class="gc-combat-report-hero-desc">${esc(desc)}</p>` : "") +
       `</header>`
     );
 
     sections.push(
-      `<section class="gc-expedition-panel gc-expedition-panel--fleet">` +
-        `<h4 class="gc-expedition-panel-title">${esc(t("fleet_expedition_report_section_fleet", "Expedition fleet"))}</h4>` +
-        `<p class="gc-expedition-fleet-summary">${esc(fleetSummary)}</p>` +
-      `</section>`
+      `<div class="gc-player-card-stats gc-combat-report-stats">` +
+        `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_loot", "Loot"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(lootTotal))}</span>` +
+        `</div>` +
+        `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_cargo", "Cargo"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(lootTotal))}/${esc(formatInt(cargoTotal))}</span>` +
+        `</div>` +
+        `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_delay", "Delay"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(delayExtra))}</span>` +
+        `</div>` +
+        `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_fleet", "Fleet"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(fleetTotal))}</span>` +
+        `</div>` +
+      `</div>`
     );
-
-    const rewardRows = [];
-    if (Number(rewards.metal || 0) > 0) {
-      rewardRows.push(
-        `<div class="gc-expedition-loot-chip gc-expedition-loot-chip--metal">` +
-          `<span class="gc-expedition-loot-label">${esc(t("resource_metal", "Ferronit"))}</span>` +
-          `<strong class="gc-expedition-loot-value">${esc(formatInt(rewards.metal))}</strong>` +
-        `</div>`
-      );
-    }
-    if (Number(rewards.crystal || 0) > 0) {
-      rewardRows.push(
-        `<div class="gc-expedition-loot-chip gc-expedition-loot-chip--crystal">` +
-          `<span class="gc-expedition-loot-label">${esc(t("resource_crystal", "Crytite"))}</span>` +
-          `<strong class="gc-expedition-loot-value">${esc(formatInt(rewards.crystal))}</strong>` +
-        `</div>`
-      );
-    }
-    if (Number(rewards.fuel_cells || 0) > 0) {
-      rewardRows.push(
-        `<div class="gc-expedition-loot-chip gc-expedition-loot-chip--fuel">` +
-          `<span class="gc-expedition-loot-label">${esc(t("resource_fuel_cells", "Fuel Cells"))}</span>` +
-          `<strong class="gc-expedition-loot-value">${esc(formatInt(rewards.fuel_cells))}</strong>` +
-        `</div>`
-      );
-    }
-
-    const lootBody = rewardRows.length
-      ? `<div class="gc-expedition-loot-grid">${rewardRows.join("")}</div>`
-      : `<div class="gc-expedition-loot-empty">` +
-          `<span class="gc-expedition-loot-empty-mark" aria-hidden="true">—</span>` +
-          `<span class="gc-expedition-loot-empty-text">${esc(
-            t("fleet_expedition_report_loot_empty", "No recoverable find")
-          )}</span>` +
-        `</div>`;
 
     sections.push(
-      `<section class="gc-expedition-panel gc-expedition-panel--loot gc-expedition-panel--loot-${rewardRows.length ? "found" : "empty"}">` +
-        `<h4 class="gc-expedition-panel-title">${esc(t("fleet_expedition_report_section_loot", "Recovered cargo"))}</h4>` +
-        lootBody +
-      `</section>`
+      renderCombatPanel(
+        t("fleet_expedition_report_section_fleet", "Expedition fleet"),
+        renderCombatUnitGrid(fleet, null) +
+          `<p class="gc-combat-report-fleet-status">${esc(
+            t("fleet_expedition_report_fleet_summary", "%(ships)s · Cargo %(used)s/%(total)s · Status: %(status)s")
+              .replace("%(ships)s", formatInt(fleetTotal))
+              .replace("%(used)s", formatInt(lootTotal))
+              .replace("%(total)s", formatInt(cargoTotal))
+              .replace("%(status)s", expeditionFleetStatus(delayExtra, lootTotal))
+          )}</p>`,
+        "gc-combat-report-panel--attacker"
+      )
     );
 
-    return `<div class="gc-expedition-report gc-expedition-report--${esc(eventKey)}">${sections.join("")}</div>`;
+    sections.push(
+      renderCombatPanel(
+        t("fleet_expedition_report_section_loot", "Recovered cargo"),
+        renderCombatLootChips(rewards),
+        `gc-combat-report-panel--loot${lootTotal > 0 ? " gc-combat-report-panel--loot-found" : ""}`
+      )
+    );
+
+    return (
+      `<div class="gc-player-card-shell gc-combat-report-shell gc-combat-report-shell--expedition" data-theme="${esc(visual.theme)}">` +
+      sections.join("") +
+      `</div>`
+    );
+  }
+
+  function renderInboxReportTeaser(msg, opts = {}) {
+    const meta = msg.metadata || {};
+    const kind = getInboxReportKind(msg);
+    if (kind === "combat") return renderCombatReportTeaser(meta, opts);
+    if (kind === "spy") return renderSpyReportTeaser(meta, opts);
+    if (kind === "expedition") return renderExpeditionReportTeaser(meta, opts);
+    return "";
   }
 
   function renderMessageBody(msg) {
-    const meta = msg.metadata || {};
-    if (isCombatReportMsg(msg)) {
-      return { html: null, plain: msg.body || "", combatReport: true };
-    }
-    if (msg.category === "espionage" && meta.report_version >= 2 && meta.intel_tiers) {
-      return { html: renderSpyReport(meta), plain: msg.body || "" };
-    }
-    if (msg.category === "expedition" && meta.report_version >= 2 && meta.event_key) {
-      return { html: renderExpeditionReport(meta), plain: msg.body || "" };
+    const kind = getInboxReportKind(msg);
+    if (kind) {
+      return { html: null, plain: msg.body || "", inboxReport: true, reportKind: kind };
     }
     return { html: null, plain: msg.body || "" };
   }
@@ -1257,25 +1533,31 @@
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && COMBAT_MODAL.open) {
+      if (e.key === "Escape" && REPORT_MODAL.open) {
         e.preventDefault();
-        closeCombatReportModal();
+        closeInboxReportModal();
         return;
       }
       if (e.key !== "Enter" && e.key !== " ") return;
       const item = e.target.closest(".gc-messages-item[data-id][role='button']");
       if (!item || !document.getElementById("messages-page")) return;
-      if (e.target.closest("a.gc-galaxy-coord-link, [data-open-combat-report]")) return;
+      if (
+        e.target.closest(
+          "a.gc-galaxy-coord-link, [data-open-inbox-report], [data-open-combat-report], [data-spy-action]"
+        )
+      ) {
+        return;
+      }
       e.preventDefault();
       const id = Number(item.dataset.id);
       if (Number.isFinite(id)) ensureMessagesState()?.openMessage?.(id);
     });
 
-    cacheCombatModalElements();
-    COMBAT_MODAL.root?.querySelectorAll("[data-cr-close]").forEach((el) => {
+    cacheReportModalElements();
+    REPORT_MODAL.root?.querySelectorAll("[data-cr-close]").forEach((el) => {
       el.addEventListener("click", (ev) => {
         ev.preventDefault();
-        closeCombatReportModal();
+        closeInboxReportModal();
       });
     });
 
@@ -1333,13 +1615,36 @@
         return;
       }
 
-      const openCombatBtn = e.target.closest("[data-open-combat-report]");
-      if (openCombatBtn) {
+      const spyAttack = e.target.closest('[data-spy-action="attack"]');
+      if (spyAttack) {
         e.preventDefault();
         e.stopPropagation();
-        const id = Number(openCombatBtn.dataset.openCombatReport);
+        const href = spyAttack.getAttribute("href");
+        if (href && typeof GC.navigateTo === "function") {
+          GC.navigateTo(href);
+        } else if (href) {
+          window.location.href = href;
+        }
+        return;
+      }
+
+      const spySimBtn = e.target.closest('[data-spy-action="dev_sim"]');
+      if (spySimBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const mid = Number(spySimBtn.dataset.messageId);
+        if (Number.isFinite(mid)) runDevCombatSimFromSpy(mid);
+        return;
+      }
+
+      const openReportBtn = e.target.closest("[data-open-inbox-report], [data-open-combat-report]");
+      if (openReportBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = Number(openReportBtn.dataset.openInboxReport || openReportBtn.dataset.openCombatReport);
+        const kind = openReportBtn.dataset.reportKind || "combat";
         if (Number.isFinite(id)) {
-          openCombatReportById(id);
+          openInboxReportById(id, kind);
         }
         return;
       }
@@ -1480,13 +1785,11 @@
           const unread = !m.is_read;
           const active = state.selectedId === m.id ? " is-active" : "";
           const unreadCls = unread ? " is-unread" : "";
-          const combatCls = isCombatReportMsg(m) ? " gc-messages-item--combat" : "";
-          const teaser =
-            isCombatReportMsg(m) ?
-              renderCombatReportTeaser(m.metadata || {}, { compact: true, messageId: m.id })
-            : "";
+          const reportKind = getInboxReportKind(m);
+          const reportCls = reportKind ? ` gc-messages-item--report gc-messages-item--${reportKind}` : "";
+          const teaser = reportKind ? renderInboxReportTeaser(m, { compact: true, messageId: m.id }) : "";
           return (
-            `<div role="button" tabindex="0" class="gc-messages-item${active}${unreadCls}${combatCls}" data-id="${m.id}">` +
+            `<div role="button" tabindex="0" class="gc-messages-item${active}${unreadCls}${reportCls}" data-id="${m.id}">` +
             `<span class="gc-messages-item-subject">${linkifyCoordsText(m.subject)}</span>` +
             (teaser ? `<span class="gc-messages-item-teaser">${teaser}</span>` : "") +
             `<span class="gc-messages-item-meta">${esc(categoryLabel(m.category))} · ${esc(formatTime(m.created_at))}</span>` +
@@ -1513,15 +1816,12 @@
       }
       const rendered = renderMessageBody(msg);
       if (dom.detailBody) {
-        if (rendered.combatReport) {
+        if (rendered.inboxReport) {
           dom.detailBody.classList.add("gc-messages-detail-body--report");
-          dom.detailBody.innerHTML = renderCombatReportTeaser(msg.metadata || {}, {
+          dom.detailBody.innerHTML = renderInboxReportTeaser(msg, {
             compact: false,
             messageId: msg.id,
           });
-        } else if (rendered.html) {
-          dom.detailBody.classList.add("gc-messages-detail-body--report");
-          dom.detailBody.innerHTML = rendered.html;
         } else {
           dom.detailBody.classList.remove("gc-messages-detail-body--report");
           dom.detailBody.innerHTML = renderPlainMessageHtml(rendered.plain);
@@ -1545,10 +1845,37 @@
         return b;
       };
 
-      if (rendered.combatReport) {
-        dom.detailActions.appendChild(
-          mkBtn(t("combat_report_open_full", "Open full report"), "open_combat_report", "primary")
-        );
+      if (rendered.inboxReport) {
+        const openKey =
+          rendered.reportKind === "spy"
+            ? "spy_report_open_full"
+            : rendered.reportKind === "expedition"
+              ? "expedition_report_open_full"
+              : "combat_report_open_full";
+        const openFallback =
+          rendered.reportKind === "spy"
+            ? "Open spy report"
+            : rendered.reportKind === "expedition"
+              ? "Open expedition report"
+              : "Open full report";
+        dom.detailActions.appendChild(mkBtn(t(openKey, openFallback), "open_inbox_report", "primary"));
+        if (rendered.reportKind === "spy") {
+          const meta = msg.metadata || {};
+          const attackHref = fleetAttackHrefFromCoords(meta.target_coords);
+          if (attackHref) {
+            const atk = document.createElement("a");
+            atk.href = attackHref;
+            atk.className = "gc-btn gc-btn-danger gc-btn-sm";
+            atk.dataset.spyAction = "attack";
+            atk.textContent = t("spy_report_attack_btn", "Attack target");
+            dom.detailActions.appendChild(atk);
+          }
+          if (devCombatSimEnabled()) {
+            dom.detailActions.appendChild(
+              mkBtn(t("spy_report_dev_sim_btn", "DEV: Combat simulator"), "spy_dev_sim", "outline")
+            );
+          }
+        }
       }
       if (!msg.is_read) dom.detailActions.appendChild(mkBtn(t("messages.read"), "read", "outline"));
       if (msg.reply_to_player_id || msg.sender_player_id) {
@@ -1737,8 +2064,14 @@
       } else if (action === "reply") {
         openCompose(msg.reply_to_name || msg.sender_name || "", msg.subject ? `Re: ${msg.subject}` : "");
         return;
-      } else if (action === "open_combat_report") {
-        openCombatReportModal(msg);
+      } else if (action === "open_inbox_report" || action === "open_combat_report") {
+        openInboxReportModal(msg);
+        return;
+      } else if (action === "spy_dev_sim") {
+        await runDevCombatSimFromSpy(msg.id);
+        return;
+      } else if (action === "spy_attack") {
+        navigateFleetAttack(msg.metadata?.target_coords);
         return;
       }
       await loadList();
@@ -1782,6 +2115,8 @@
   GC.initMessagesPage = initMessagesPage;
   GC.openMessagesCompose = openCompose;
   GC.ensureMessagesState = ensureMessagesState;
+  GC.openInboxReportModal = openInboxReportModal;
+  GC.closeInboxReportModal = closeInboxReportModal;
   GC.openCombatReportModal = openCombatReportModal;
   GC.closeCombatReportModal = closeCombatReportModal;
 

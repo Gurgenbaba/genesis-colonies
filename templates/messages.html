@@ -2,7 +2,9 @@
 
 {% block content %}
 
-<div class="gc-page gc-messages-page" id="messages-page" data-player-id="{{ CURRENT_PLAYER_ID or '' }}">
+<div class="gc-page gc-messages-page" id="messages-page"
+     data-player-id="{{ CURRENT_PLAYER_ID or '' }}"
+     data-dev-combat="{{ '1' if GC_DEBUG_ENABLED or AUTH_ADMIN else '0' }}">
 
   <header class="section-header">
     <h1 class="section-title">{{ T("messages.title") }}</h1>
