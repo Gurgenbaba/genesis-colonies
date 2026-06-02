@@ -1,106 +1,332 @@
 # Defense System
 
-Planet-scoped defensive structures (GC-410+). **No combat resolver** yet — persistence, definitions, ranking, and combat **data prep** (GC-416).
+Planet-scoped defensive structures — build queue, stock persistence, ranking, spy intel, and combat **data preparation** (v1.5.3).
 
-Kanonische Module: `game/defense_defs.py`, `game/combat_models.py`, `game/models.py` (planet_defense CRUD).
+Kanonische Module: `game/defense.py`, `game/defense_defs.py`, `game/defense_api.py`, `game/defense_page.py`, `game/models.py` (planet_defense CRUD).
 
----
-
-## Schema (Migration 039)
-
-| Tabelle | Rolle |
-|---------|-------|
-| `planet_defense` | `(planet_id, defense_key, amount)` — Bestand pro Kolonie |
-
-Gate: `defense_schema_ready()` — Features degradieren gracefully ohne Migration.
+**Kein Combat-Resolver** — Angriffe (`attack`-Mission) bleiben Placeholder ([FLEET_SYSTEM.md](FLEET_SYSTEM.md)). Defense-Werte (`attack`, `shield`, `hull`, `rapid_fire_targets`) sind für einen späteren Resolver vorbereitet ([Combat preparation](#combat-preparation-prepared)).
 
 ---
 
-## Defense Units
+## Übersicht
 
-Definiert in `game/defense_defs.py` (`DEFENSE_ORDER`):
+Das Defense-System verwaltet **stationäre Abwehreinheiten pro Kolonie**:
 
-| Key | Rolle |
-|-----|-------|
-| `sentinel_turret` | Leichtes Geschütz |
-| `plasma_arc` | Mittleres Energiewehr |
-| `ion_bastion` | Schweres Ionenwerk |
-| `flak_array` | Flugabwehr-Batterie |
-| `pulse_barrier` | Planetarer Schildemitter |
-| `orbital_shield` | Orbitale Schutzkuppel |
+- Bau über `defense_factory` und planet-scoped `defense_queue`
+- Bestand in `planet_defense`
+- Live-UI unter `/defense` (Parität mit Orbitalwerft)
+- Empire-weiter **Defense Score** für Ranking und PlayerCard
+- Spy-Berichte ab Stufe 5 (≥5 `veil_probe`)
 
-Jede Definition enthält:
+### Abgrenzung
 
-- `name_key` / `description_key` (i18n)
-- `build_cost` (metal, crystal)
-- `build_seconds` (Basis-Bauzeit für Queue)
-- `requirements` (buildings, research)
-- **Combat prep (GC-416):** `attack`, `shield`, `hull`, `score_value`, `rapid_fire_targets`
-
-Bau-Gebäude: `defense_factory` ([BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md)).
-
----
-
-## Combat preparation (GC-416)
-
-**Keine Kampfberechnung.** Werte liegen im Datenmodell für einen späteren Resolver.
-
-| Modul | Rolle |
-|-------|-------|
-| `game/combat_models.py` | Einheitlicher Zugriff: `CombatUnitStats`, `CombatStack`, `resolve_combat_unit()` |
-| `game/defense_defs.py` | Rohdaten + `defense_combat_stats()` |
-| `game/fleet_defs.py` | Schiffs-Rohdaten + `ship_combat_stats()` |
-
-Resolver-API (read-only):
-
-```python
-from game.combat_models import combat_stats_for_defense, stacks_from_counts, COMBAT_UNIT_DEFENSE
-
-stats = combat_stats_for_defense("flak_array")
-# CombatUnitStats(attack=250, shield=0, hull=1200, score_value=23000, rapid_fire_targets={...})
-
-stacks = stacks_from_counts(planet_defense_stock, unit_type=COMBAT_UNIT_DEFENSE)
-```
-
-`rapid_fire_targets`: Map Ziel-`unit_key` → Faktor (≥2). Semantik interpretiert der Resolver (Phase Combat).
-
-Schiffe: gleiches Schema über `combat_stats_for_ship()` / `COMBAT_UNIT_SHIP`.
+| Domäne | Defense | Andere Systeme |
+|--------|---------|----------------|
+| **Fleet** | Stationär am Planeten, kein Flug | Bewegliche Schiffe, Missionen, Tick — [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
+| **Buildings** | `defense_factory` schaltet Einheiten frei | Allgemeine Gebäude-Queue — [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) |
+| **Combat** | Werte in `defense_defs` / `combat_models` (read-only) | Keine Schadensberechnung, kein Fleet-Tick-Eingriff |
+| **Planet Evolution** | Unabhängig | DNA, Policies, Planet-Tech — [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
+| **Research** | Unlock-Requirements (`weapon_tech`, `shield_tech`, …) | Account-weite Levels — [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) |
 
 ---
 
 ## Planet Scope
 
-| Operation | Scope |
-|-----------|-------|
-| Bestand lesen | `get_planet_defense(planet_id)` |
-| Bestand schreiben | `set_planet_defense` / `add_planet_defense` |
-| Ranking | Summe über alle Planeten des Spielers |
+Defense folgt [PLANET_SCOPE.md](PLANET_SCOPE.md) — analog zu `planet_ships`.
 
-Defense gilt **pro Planet**, analog zu `planet_ships`.
+| Daten | Scope | Zugriff |
+|-------|-------|---------|
+| Bestand (`planet_defense`) | **Planet** | `get_planet_defense(planet_id)` |
+| Bau-Queue (`defense_queue`) | **Planet** | `list_defense_queue_rows(planet_id)` |
+| Planet-Ressourcen für Kosten | **Planet** | `planets.metal/crystal` des aktiven Planeten |
+| Research-Requirements | **Account** | `get_research_levels(user_id)` |
+| Gebäude-Requirements | **Planet** | `get_planet_buildings(planet_id)` |
+| Defense Score (Ranking) | **Empire** | Summe über alle Kolonien des Spielers |
+| Spy-Snapshot | **Ziel-Planet** | `get_planet_defense_intel(planet_id)` |
+
+### Kontext-Planet
+
+| Operation | Auflösung |
+|-----------|-----------|
+| SSR `/defense` | `get_context_planet(user_id)` |
+| `GET /api/defense*` | `?planet_id=` oder aktiver Kontext |
+| `POST /api/defense/build`, `/cancel` | `planet_id` im Body oder Kontext |
+| Planetwechsel | Client setzt `data-planet-id`; Poll nutzt neuen Kontext |
+
+Backend: `defense_api.resolve_context_planet_id()` → `shipyard.resolve_owned_planet_id()` (Besitz + Session-Kontext).
+
+Gate ohne Migration: `defense_schema_ready()` + `defense_queue_table_ready()` — APIs antworten `defense_unavailable` (503), UI zeigt leeren Zustand.
 
 ---
 
-## Ranking
+## Schema
 
-`compute_player_scores()` nutzt `score_value` pro Einheit (GC-414):
+| Tabelle | Migration | Rolle |
+|---------|-----------|-------|
+| `planet_defense` | `039_defense_foundations.sql` | `(planet_id, defense_key, amount)` — fertiger Bestand |
+| `defense_queue` | `040_defense_queue.sql` | Bauaufträge pro Planet |
 
-- Empire-Anteil Defense: `sum(amount × score_value)` über alle `planet_defense`-Zeilen
-- Exponent aus `score_cost_exponent` (wie Fleet/Buildings)
+### `planet_defense`
 
-Spalte `player_scores.score_defense` existiert seit Migration 014.
+- `UNIQUE(planet_id, defense_key)`
+- Nur Zeilen mit `amount > 0` in Client/API-Maps (via `get_planet_defense`)
+- CRUD: `get_planet_defense`, `set_planet_defense`, `add_planet_defense` in `game/models.py`
+- Empire-Aggregat: `get_player_defense_counts(player_id)` für Ranking
+
+### `defense_queue`
+
+- Felder: `player_id`, `planet_id`, `defense_key`, `amount`, `status`, `started_at`, `finish_at`, `queue_position`, `cost_metal`, `cost_crystal`
+- Status: `queued` (aktiv in Queue-Engine), `completed`, `cancelled`
+- Kosten werden beim Einreihen gespeichert (für 60 %-Erstattung bei Cancel)
+
+Ranking-Spalte `player_scores.score_defense` existiert seit Migration `014_ranking_hardening.sql`.
 
 ---
 
-## Verboten / Nicht in dieser Phase
+## Defense Units
 
-- Combat-Auflösung, Schaden, Fleet-Tick-Integration
-- OGame-Namen oder parallele Fleet-/Building-Systeme
+Definiert in `game/defense_defs.py` — Reihenfolge `DEFENSE_ORDER` / `ACTIVE_DEFENSE_KEYS` (6 Einheiten).
+
+| Key | Rolle | Fabrik-Stufe | Gebäude / Forschung (Auszug) |
+|-----|-------|--------------|------------------------------|
+| `sentinel_turret` | turret | 1 | `defense_factory` 1, `weapon_tech` 2 |
+| `plasma_arc` | turret | 2 | `defense_factory` 2, `weapon_tech` 4 |
+| `ion_bastion` | turret | 4 | `defense_factory` 4, `weapon_tech` 6, `armor_tech` 3 |
+| `flak_array` | turret | 5 | `defense_factory` 5, `radar_array` 1, `weapon_tech` 8, `armor_tech` 4 |
+| `pulse_barrier` | shield | 6 | `defense_factory` 6, `shield_generator` 1, `shield_tech` 6, `armor_tech` 3 |
+| `orbital_shield` | shield | 8 | `defense_factory` 8, `shield_generator` 3, `shield_tech` 8, `energy_tech` 5 |
+
+Jede Definition enthält:
+
+- `name_key` / `description_key` / `role` (i18n + UI-Badge)
+- `build_cost`: `{ metal, crystal }` — Quelle für Kosten und Fallback-Score
+- `build_seconds` — Basis-Bauzeit (skaliert mit Fabrik-Stufe)
+- `requirements`: `{ buildings, research }` — geprüft via `defense_unlocked()`
+- **Combat prep:** `attack`, `shield`, `hull`, `score_value`, `rapid_fire_targets`
+
+Bau-Gebäude: `defense_factory` — siehe [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md).
+
+Icons: `/static/img/defense/<key>.svg`
+
+Detail-Modal: `GET /api/defense-units/<defense_key>` → `game/defense_detail.py` + `defense_requirements.py`.
 
 ---
 
-## Verwandte Docs
+## Build Queue
 
+Implementierung: `game/defense.py` (Queue-Logik), Auslieferung über [Queue Engine](#queue-engine-integration).
+
+| Regel | Wert |
+|-------|------|
+| Max. Aufträge | 3 (Default `MAX_DEFENSE_QUEUE`; Override `defense_queue_limit` / Fallback `shipyard_queue_limit` in Game Settings) |
+| Kosten | Sofort beim Einreihen von Planet-Ressourcen abgebucht |
+| Lieferung | **Progressiv** — Einheiten erscheinen nacheinander im Bestand (`progressive_units_to_deliver`) |
+| Bauzeit | `build_seconds` × Fabrik-Level-Faktor (`BUILD_TIME_LEVEL_FACTOR` 0.90) × globale `shipyard_speed` |
+| Cancel | Nur Jobs mit `status = queued`; **60 %** Rückerstattung (`defense_api.CANCEL_REFUND_RATIO`) |
+
+Ablauf `build_defense()`:
+
+1. Validierung (Unlock, Ressourcen, Queue-Limit, `amount > 0`)
+2. Ressourcen abbuchen, Queue-Zeile anlegen
+3. `recalculate_queue_finish_times()`
+4. Nach Lieferung: `add_planet_defense()` + optional `apply_score_updates_for_players()` (Poll-Pfad)
+
+Abbruch: `cancel_defense_job()` in `defense_api.py` — löscht Job, erstattet 60 %, renummeriert Queue.
+
+---
+
+## Queue Engine Integration
+
+`queue_engine.finish_due_work()` ruft `finish_planet_defense_jobs()` auf:
+
+- Liefert fällige Einheiten pro Planet
+- Zählt in `result["finished"]["defense"]`
+- Triggert `apply_score_updates_for_players()` für betroffene Spieler
+
+Zusätzlich: `defense_queue_for_client()` und Legacy-Poll `GET /api/defense` rufen `finish_due_defense_jobs_for_planet()` vor der Queue-Anzeige auf (gleiche Liefer-Logik).
+
+---
+
+## APIs
+
+### Canonical envelope (GC-413)
+
+Mutations und `GET /api/defense/state` liefern:
+
+```json
+{ "ok": true, "state": { ...game-state... }, "queue": { ... }, "defenses": { ... } }
+```
+
+Fehler: `{ "ok": false, "error": "...", "state", "queue", "defenses" }` via `_defense_json_response()` in `app.py`.
+
+Idempotenz: `request_id` / Header `X-Request-Id` auf `POST /api/defense/build` und `/cancel`.
+
+### Routen
+
+| Route | Methode | Zweck |
+|-------|---------|-------|
+| `/defense` | GET | SSR-Seite (`defense.html`, embedded JSON state) |
+| `/api/defense` | GET | Legacy Poll — `fleet_ok({ data: page_context })` |
+| `/api/defense/state` | GET | Kanonischer Live-State (`queue` + `defenses` slices) |
+| `/api/defense/overview` | GET | Wie state + `overview`-Slice (Stock-Summary) |
+| `/api/defense/build` | POST | `{ defense_key, amount, planet_id?, request_id? }` |
+| `/api/defense/cancel` | POST | `{ job_id, planet_id?, request_id? }` |
+| `/api/defense-units/<defense_key>` | GET | HTML-Partial für Detail-Modal (Login) |
+
+Planet-Auflösung: Query/Body `planet_id` oder Session-Kontext-Planet.
+
+---
+
+## Frontend
+
+Template: `templates/defense.html` — Layout wie Orbitalwerft (Fabrik-Stufe → Queue → Bestand → Baubar → Gesperrt).
+
+JavaScript (`static/main.js`):
+
+- Modul: `GC.modules.defense` → `initDefense()`
+- Initial state: `#defense-page-state` JSON
+- Poll: `GET /api/defense?planet_id=` — `normalizeDefenseApiPayload()` für Build/Cancel-Responses
+- Queue: Fortschrittsbalken, Cancel-Button, `DEFENSEQ` Timer + `GC.startProgressTicker()`
+- Inventar + Baubare Karten: `data-defense-detail` → gemeinsames Schiff/Defense-Detail-Modal
+- **Keine Success-Toasts** bei Bau/Cancel (Queue-UI reicht); Fehler-Toasts bleiben
+- PJAX: Cleanup via `GC.registerCleanup(stopDefenseTimers)`; Seite neu initialisiert nach Navigation
+
+Live-State: `GET /api/game-state` kann optional `defense`-Panel enthalten (`defense_panel_for_game_state()` in `game/live_state.py`).
+
+---
+
+## Ranking Integration
+
+| Metrik | Berechnung |
+|--------|------------|
+| **Defense Score** | `sum(amount × score_value)` über alle Planeten → Exponent `score_cost_exponent` in `compute_player_scores()` |
+| **Military Score** | `fleet_score + defense_score` (abgeleitet, **nicht** doppelt in `total_score`) |
+| **PlayerCard** | `score_defense` in `read_player_scores_for_playercard()` |
+| **Ranking-Tab** | `defense_score` — Tab „Verteidigung“ in `/ranking` |
+| **Kategorie-Rang** | `get_player_category_ranks()` → `ranks.defense` |
+
+Module: `game/scoring.py` (`compute_defense_empire_sum`, `compute_military_score`), `game/ranking.py`.
+
+Score-Refresh nach Lieferung: `score_events.apply_score_updates_for_players()` (Queue Engine + Defense-Poll-Pfad).
+
+---
+
+## Intelligence / Spy
+
+**Aktiv** — integriert in GC-401 Spy-Pipeline (`game/spy.py`).
+
+| Aspekt | Verhalten |
+|--------|-----------|
+| Snapshot | `build_spy_snapshot()` inkl. `get_planet_defense_intel(planet_id)` |
+| Tier | **≥5 Probes** (`SPY_INTEL_TIER_DEFENSE`) — gleiche Schwelle wie Gebäude-Tier |
+| Sichtbarkeit | Begrenzte Anzahl Einheitentypen (Priorität über `defense_combat_priority`) |
+| Genauigkeit | `espionage_tech` via `spy_accuracy()` — gerundete Werte im Bericht |
+| Aggregat | `total_units`, `defense_power`, `shield_power` (aus `summarize_defense_stock`) |
+| Inbox | `append_spy_defense_report_lines()` in `game/messages.py`; UI `renderSpyReport()` in `static/js/messages.js` |
+
+Eigene Kolonie: Defense-Intel im Spy-Bericht unterdrückt (wie Flotte).
+
+---
+
+## Combat Preparation (Prepared)
+
+**Nicht aktiv im Gameplay** — keine Schadensberechnung, keine Integration in `process_fleet_tick()` / `attack`-Mission.
+
+| Modul | Rolle |
+|-------|-------|
+| `game/combat_models.py` | `CombatUnitStats`, `CombatStack`, `combat_stats_for_defense()`, `stacks_from_counts()` |
+| `game/defense_defs.py` | Rohdaten + `defense_combat_stats()` |
+| `game/fleet_defs.py` | Schiffs-Pendant (`ship_combat_stats()`) für spätere Resolver |
+
+Felder pro Einheit (Defs + `CombatUnitStats`):
+
+- `attack`, `shield`, `hull`, `score_value`
+- `rapid_fire_targets`: Map Ziel-`unit_key` → Faktor (≥2); Semantik erst im Combat-Resolver
+
+```python
+from game.combat_models import combat_stats_for_defense, stacks_from_counts, COMBAT_UNIT_DEFENSE
+
+stats = combat_stats_for_defense("flak_array")
+stacks = stacks_from_counts(planet_stock, unit_type=COMBAT_UNIT_DEFENSE)
+```
+
+---
+
+## Abhängigkeiten
+
+| System | Nutzung |
+|--------|---------|
+| Buildings | `defense_factory`, `radar_array`, `shield_generator` |
+| Research | `weapon_tech`, `shield_tech`, `armor_tech`, `energy_tech`, `espionage_tech` (Spy) |
+| Planet Scope | Kontext-Planet, Ressourcen |
+| Queue Engine | Zentrale Fertigstellung + Score-Updates |
+| Ranking / PlayerCard | `score_defense`, `military_score` |
+| Fleet / Spy | Snapshot + Tier-5-Intel |
+| Shipyard | Shared Patterns (Queue-UI, `resolve_owned_planet_id`, Speed-Settings) |
+
+---
+
+## Dateien
+
+| Datei | Rolle |
+|-------|-------|
+| `game/defense.py` | Queue, Build, Cancel, Lieferung, API-Payload |
+| `game/defense_defs.py` | Einheiten-Registry, Icons, Combat-Rohdaten |
+| `game/defense_api.py` | JSON-Envelope, Slices, Cancel mit Erstattung |
+| `game/defense_page.py` | SSR + Page-Context (`build_defense_page_context`) |
+| `game/defense_detail.py` | Detail-Modal-Payload |
+| `game/defense_requirements.py` | Requirements-Summary für UI |
+| `game/scoring.py` | Empire-Summe, Military-Score |
+| `game/combat_models.py` | Combat-Vorbereitung (Prepared) |
+| `game/spy.py` | Defense-Intel im Spy-Snapshot |
+| `game/models.py` | `planet_defense` CRUD, Schema-Gates |
+| `game/live_state.py` | Game-State-Panel, `defense_finish_source` |
+| `game/ranking.py` | Defense Score in `compute_player_scores()` |
+| `game/queue_engine.py` | `finish_planet_defense_jobs()` |
+| `game/score_events.py` | Score-Recompute nach Lieferung |
+| `app.py` | Routen `/defense`, `/api/defense*` |
+| `templates/defense.html` | SSR-UI |
+| `templates/partials/defense_detail_view.html` | Detail-Partial |
+| `static/main.js` | `initDefense`, Poll, Build/Cancel |
+| `migrations/039_defense_foundations.sql` | `planet_defense` |
+| `migrations/040_defense_queue.sql` | `defense_queue` |
+
+---
+
+## Placeholder / Phase 2
+
+| Item | Status |
+|------|--------|
+| Combat-Resolver (Defense vs. Fleet) | 📋 Prepared data only |
+| Defense in `attack`-Mission | 📋 Fleet stub — kein Schaden |
+| `weapon_tech` / `shield_tech` als Combat-Modifier | 📋 Prepared in [EFFECTS.md](EFFECTS.md), kein Consumer |
+
+---
+
+## Tests
+
+```bash
+python -m pytest tests/test_defense_detail_modal.py tests/test_ranking.py tests/test_playercard.py tests/test_queue_engine.py tests/test_fleet.py -v -k "defense or spy_report or score_defense"
+```
+
+| Bereich | Tests |
+|---------|-------|
+| Detail-Modal | `tests/test_defense_detail_modal.py` |
+| Ranking / Score | `tests/test_ranking.py` (`defense_score`, `_fleet_defense_select`) |
+| PlayerCard | `tests/test_playercard.py` (`score_defense`) |
+| Queue Engine | `tests/test_queue_engine.py` (`finished.defense`) |
+| Spy (Snapshot) | `tests/test_fleet.py` (Tier-Reports; Defense in Snapshot ab Tier 5) |
+| DB Read Paths | `tests/test_db_read_paths.py` (Score-Feld-Mapping) |
+
+---
+
+## Verwandte Dokumente
+
+- [FLEET_SYSTEM.md](FLEET_SYSTEM.md) — Flotten, Schiffe, Spy-Mission
+- [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) — Koordinaten
 - [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) — `defense_factory`
-- [FLEET_SYSTEM.md](FLEET_SYSTEM.md) — `planet_ships`, Schiffs-Combat-Prep
-- [PLANET_SCOPE.md](PLANET_SCOPE.md) — aktiver Planet
-- [EFFECTS.md](EFFECTS.md) — `weapon_tech` / `shield_tech` (prepared, kein Consumer)
+- [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) — Unlock-Requirements
+- [PLANET_SCOPE.md](PLANET_SCOPE.md) — Aktiver Planet
+- [EFFECTS.md](EFFECTS.md) — Tech-Effekte (Prepared)
+- [ROADMAP.md](ROADMAP.md) — Phase 4 / EPIC-08
+- [ARCHITECTURE.md](ARCHITECTURE.md) — Modul-Übersicht

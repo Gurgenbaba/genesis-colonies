@@ -96,8 +96,8 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | **Werft** — Schiffsbau, Queue, fuel_cells | ✅ | `orbital_shipyard` |
 | **Flotte** — Send, Tick, Missionen | ✅ | Combat placeholder |
 | **Trader Hub** — Unified Exchange, Scrapyard | ✅ | GC-402 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
-| **Verteidigung** — Türme, Schilder | 📋 | UI only `/defense` |
-| Kampf-Auflösung | 📋 | Attack mission → stub report |
+| **Verteidigung** — Türme, Schilder, Queue, Ranking | ✅ | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) |
+| Kampf-Auflösung | 📋 | Attack mission → stub report; combat prep in defs |
 | Fleet Logistics (collect/distribute) | 📋 | API returns not_implemented |
 | Recycler-Mission | 💡 | Ship def exists |
 | Espionage (beyond probe report) | ✅ | GC-401 tiered intel + inbox UI |
@@ -105,12 +105,12 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | Expedition fleet mission feedback | ✅ | GC-402B preview hints, status, auto-position 16 |
 | Expedition report visual upgrade | ✅ | GC-402C sci-fi event-card inbox UI |
 
-Docs: [FLEET_SYSTEM.md](FLEET_SYSTEM.md)
+Docs: [FLEET_SYSTEM.md](FLEET_SYSTEM.md), [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md)
 
 Empfohlene Reihenfolge (verbleibend):
 
 ```
-Combat Resolver → Defense buildings → Logistics → Recycler
+Combat Resolver → Fleet Logistics → Recycler
 ```
 
 ---
@@ -176,7 +176,7 @@ Details: [SECURITY.md](SECURITY.md)
 ```
 2025 Q1–Q2   Phase 0–2 ✅   Foundation, Economy, Admin
 2025 Q3–Q4   Phase 3–4 🔄   Multi-Kolonie, Galaxy, Fleet
-2026 Q1      Phase 4b 📋     Combat, Defense, Logistics
+2026 Q1      Phase 4b 🔄     Defense ✅; Combat Resolver 📋
 2026 Q2      Phase 5–6       Alliance polish, Security, Scale
 ```
 
@@ -191,7 +191,7 @@ Details: [SECURITY.md](SECURITY.md)
 | SHA-256 Passwörter | Security | Phase 6 |
 | Kein Rate-Limiting (Login) | Abuse | Phase 6 |
 | Chat rate limit in-process | Multi-worker | Redis |
-| Combat / Defense placeholder | Gameplay | Phase 4b |
+| Combat resolver (attack mission) | Gameplay | Phase 4b |
 | Legacy Admin Forms doppelt | Wartung | Cleanup |
 | SQLite Single-Writer | Scale | Phase 7 |
 | README vs VERSION drift | Docs | README auf 1.5.3 |

@@ -194,7 +194,7 @@ Worker: `scripts/run_queue_tick.py`, Admin: `POST /api/admin/queue-tick`.
 | Shipyard | `/shipyard`, `/api/shipyard/*` | `shipyard.py`, `shipyard_queue.py` | ✅ |
 | Galaxy | `/galaxy`, `/api/galaxy/system` | `galaxy.py` | ✅ |
 | Fleet | `/fleet`, `/api/fleet/*` | `fleet.py`, `fleet_calc.py`, `fleet_defs.py` | ✅ (Combat placeholder) |
-| Defense | `/defense` | — | 📋 UI only |
+| Defense | `/defense`, `/api/defense/*` | `defense.py`, `defense_api.py`, `defense_page.py` | ✅ (Combat prep only) |
 | Planet Evolution | `/planet-evolution`, `/api/planets/*` | `planet_evolution/` | ✅ |
 | Ranking | `/ranking`, `/api/ranking` | `ranking.py` | ✅ |
 | PlayerCard | `/player/<id>`, `/api/player-card/*` | `playercard.py` | ✅ |
