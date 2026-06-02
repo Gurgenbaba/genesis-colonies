@@ -1013,6 +1013,8 @@ def test_dispatch_combat_reports_persists_for_both_players(temp_db):
     assert meta["target_planet_name"] == "Beta"
     assert len(meta["rounds"]) == 2
     assert meta["result"] == "attacker"
+    assert "attacker_combat_research" in meta
+    assert "weapon_tech" in meta["attacker_combat_research"]
     assert "═══" in body or "Combat report" in body
 
     sent = dispatch_combat_reports(

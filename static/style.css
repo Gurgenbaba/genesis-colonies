@@ -9550,6 +9550,83 @@ body.gc-combat-report-open { overflow: hidden; }
   color: var(--gc-text-soft);
 }
 
+.gc-combat-report-panel--research .gc-combat-report-research-hint {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  color: var(--gc-text-soft);
+  line-height: 1.45;
+}
+
+.gc-combat-research-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-width: 0;
+}
+
+.gc-combat-research-col {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(70, 229, 255, 0.14);
+  background: rgba(5, 12, 24, 0.55);
+  border-radius: var(--gc-radius-sm);
+}
+
+.gc-combat-research-col-title {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-family: var(--gc-font-display, Orbitron, sans-serif);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-text-soft);
+}
+
+.gc-combat-research-side--attacker .gc-combat-research-bonus {
+  color: rgba(134, 239, 172, 0.95);
+}
+
+.gc-combat-research-side--defender .gc-combat-research-bonus {
+  color: rgba(253, 164, 175, 0.95);
+}
+
+.gc-combat-research-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px 10px;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(70, 229, 255, 0.08);
+  font-size: 0.78rem;
+}
+
+.gc-combat-research-row:last-child {
+  border-bottom: none;
+}
+
+.gc-combat-research-tech {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gc-text);
+}
+
+.gc-combat-research-level {
+  color: var(--gc-neon-cyan);
+  font-size: 0.76rem;
+}
+
+.gc-combat-research-bonus {
+  font-weight: 700;
+  font-size: 0.76rem;
+}
+
+@media (max-width: 640px) {
+  .gc-combat-research-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
 .gc-combat-report-panel--forces-wrap > .gc-combat-report-panel-body {
   padding: 0;
   border: none;

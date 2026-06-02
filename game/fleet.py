@@ -1728,6 +1728,8 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> Non
             origin_coords=origin_coords,
             origin_planet_name=origin_planet_name,
             target_planet_name=str(snapshot.get("planet_name") or ""),
+            attacker_planet_id=int(movement.get("origin_planet_id") or 0) or None,
+            defender_planet_id=int(target_id) if target_id else None,
             conn=conn,
             attacker_locale=sender_locale,
             defender_locale=defender_locale,

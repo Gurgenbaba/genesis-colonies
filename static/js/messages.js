@@ -245,8 +245,60 @@
 
   function combatResultSubtitle(meta) {
     const winner = String(meta?.result || meta?.winner || "undecided");
+    const perspective = String(meta?.perspective || "attacker");
     if (winner === "draw" || winner === "undecided") return "";
+    if (winner === perspective) return "";
     return t(`combat_report_winner_${winner}`, winner);
+  }
+
+  const COMBAT_RESEARCH_KEYS = ["weapon_tech", "armor_tech", "shield_tech"];
+  const COMBAT_RESEARCH_LABEL_KEYS = {
+    weapon_tech: "tech_weapon_tech",
+    armor_tech: "tech_armor_tech",
+    shield_tech: "tech_shield_tech",
+  };
+
+  function renderCombatResearchSide(research, roleClass) {
+    const snap = research && typeof research === "object" ? research : {};
+    const rows = COMBAT_RESEARCH_KEYS.map((key) => {
+      const entry = snap[key] || {};
+      const level = formatInt(entry.level || 0);
+      const pct = formatInt(entry.bonus_pct || 0);
+      const label = t(COMBAT_RESEARCH_LABEL_KEYS[key] || key, key);
+      return (
+        `<div class="gc-combat-research-row">` +
+          `<span class="gc-combat-research-tech">${esc(label)}</span>` +
+          `<span class="gc-combat-research-level gc-mono" title="${esc(t("combat_report_research_level", "Level"))}">L${esc(level)}</span>` +
+          `<span class="gc-combat-research-bonus gc-mono" title="${esc(t("combat_report_research_bonus", "Battle bonus"))}">+${esc(pct)}%</span>` +
+        `</div>`
+      );
+    }).join("");
+    return `<div class="gc-combat-research-side gc-combat-research-side--${esc(roleClass)}">${rows}</div>`;
+  }
+
+  function renderCombatResearchPanel(meta) {
+    const atk = meta.attacker_combat_research;
+    const def = meta.defender_combat_research;
+    if (!atk && !def) return "";
+    const hint = t(
+      "combat_report_research_hint",
+      "Account research bonuses applied to attack, hull, and shields in this battle."
+    );
+    return renderCombatPanel(
+      t("combat_report_section_research", "Combat technology"),
+      `<p class="gc-combat-report-research-hint">${esc(hint)}</p>` +
+        `<div class="gc-combat-research-columns">` +
+          `<div class="gc-combat-research-col">` +
+            `<h5 class="gc-combat-research-col-title">${esc(meta.attacker_name || t("combat_report_section_attacker", "Attacker"))}</h5>` +
+            renderCombatResearchSide(atk, "attacker") +
+          `</div>` +
+          `<div class="gc-combat-research-col">` +
+            `<h5 class="gc-combat-research-col-title">${esc(meta.defender_name || t("combat_report_section_defender", "Defender"))}</h5>` +
+            renderCombatResearchSide(def, "defender") +
+          `</div>` +
+        `</div>`,
+      "gc-combat-report-panel--research"
+    );
   }
 
   function combatCoordsPlain(meta) {
@@ -561,6 +613,9 @@
     );
 
     sections.push(renderCombatBattleOverview(meta));
+
+    const researchPanel = renderCombatResearchPanel(meta);
+    if (researchPanel) sections.push(researchPanel);
 
     sections.push(
       renderCombatPanel(

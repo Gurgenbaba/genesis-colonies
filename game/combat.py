@@ -94,6 +94,68 @@ def _resolve_side_modifiers(
     return _merge_combat_modifiers(base, override)
 
 
+def combat_research_snapshot_for_player(
+    player_id: int,
+    *,
+    planet_id: int | None = None,
+    conn=None,
+) -> Dict[str, Any]:
+    """
+    Account combat tech levels + effective bonuses used by ``simulate_battle``.
+    Stored on combat report metadata for inbox UI.
+    """
+    from .models import get_research_levels
+
+    pid = int(player_id)
+    if pid <= 0:
+        return {}
+    levels = get_research_levels(pid, conn=conn)
+    mods = combat_modifiers_for_player(pid, planet_id=planet_id, conn=conn)
+
+    def _entry(tech_key: str, bonus: float) -> Dict[str, int]:
+        return {
+            "level": max(0, int(levels.get(tech_key) or 0)),
+            "bonus_pct": max(0, int(round(float(bonus) * 100))),
+        }
+
+    return {
+        "weapon_tech": _entry("weapon_tech", mods.weapon_bonus),
+        "armor_tech": _entry("armor_tech", mods.armor_bonus),
+        "shield_tech": _entry("shield_tech", mods.shield_bonus),
+    }
+
+
+def _format_combat_research_lines(
+    research: Mapping[str, Any] | None,
+    *,
+    tr_fn,
+) -> list[str]:
+    """Plain-text lines for weapon/armor/shield tech in combat reports."""
+    snap = dict(research or {})
+    if not snap:
+        return [tr_fn("combat_report_research_none", "No combat research bonuses")]
+    lines: list[str] = []
+    for tech_key, label_key in (
+        ("weapon_tech", "tech_weapon_tech"),
+        ("armor_tech", "tech_armor_tech"),
+        ("shield_tech", "tech_shield_tech"),
+    ):
+        entry = snap.get(tech_key) if isinstance(snap.get(tech_key), Mapping) else {}
+        level = max(0, int(entry.get("level") or 0))
+        bonus_pct = max(0, int(entry.get("bonus_pct") or 0))
+        label = tr_fn(label_key, tech_key)
+        lines.append(
+            tr_fn(
+                "combat_report_research_line",
+                "%(tech)s: L%(level)s → +%(bonus)s%%",
+                tech=label,
+                level=str(level),
+                bonus=str(bonus_pct),
+            )
+        )
+    return lines
+
+
 @dataclass
 class _UnitState:
     unit_key: str
@@ -765,6 +827,9 @@ def build_combat_report(
     origin_coords: str | None = None,
     origin_planet_name: str | None = None,
     target_planet_name: str | None = None,
+    attacker_planet_id: int | None = None,
+    defender_planet_id: int | None = None,
+    conn=None,
     locale: str | None = None,
 ) -> Tuple[str, Dict[str, Any]]:
     """Genesis-style combat report body + structured metadata for ``player_messages``."""
@@ -794,6 +859,25 @@ def build_combat_report(
     target_coord_txt = str(coords or "—")
     target_planet_txt = str(target_planet_name or "").strip()
     origin_planet_txt = str(origin_planet_name or "").strip()
+
+    atk_research = (
+        combat_research_snapshot_for_player(
+            int(attacker_id),
+            planet_id=int(attacker_planet_id) if attacker_planet_id else None,
+            conn=conn,
+        )
+        if int(attacker_id) > 0
+        else {}
+    )
+    def_research = (
+        combat_research_snapshot_for_player(
+            int(defender_id),
+            planet_id=int(defender_planet_id) if defender_planet_id else None,
+            conn=conn,
+        )
+        if int(defender_id) > 0
+        else {}
+    )
 
     body_lines: list[str] = [
         _t("combat_report_title", "═══ Combat report ═══"),
@@ -867,6 +951,17 @@ def build_combat_report(
                     empty_key="combat_report_defense_structures_empty",
                     empty_default="No defensive structures",
                 ),
+            ],
+        ),
+        "",
+        _format_kv_section(
+            _t("combat_report_section_research", "Combat technology"),
+            [
+                _t("combat_report_section_attacker", "Attacker"),
+                *_format_combat_research_lines(atk_research, tr_fn=_t),
+                "",
+                _t("combat_report_section_defender", "Defender"),
+                *_format_combat_research_lines(def_research, tr_fn=_t),
             ],
         ),
         "",
@@ -982,6 +1077,8 @@ def build_combat_report(
         "loot": dict(loot_map),
         "rounds_fought": len(rounds_meta),
         "rounds": rounds_meta,
+        "attacker_combat_research": atk_research,
+        "defender_combat_research": def_research,
     }
     return "\n".join(line for line in body_lines if line is not None).strip(), metadata
 
@@ -1003,6 +1100,8 @@ def publish_attack_combat_report(
     origin_coords: str | None = None,
     origin_planet_name: str | None = None,
     target_planet_name: str | None = None,
+    attacker_planet_id: int | None = None,
+    defender_planet_id: int | None = None,
     conn=None,
     attacker_locale: str | None = None,
     defender_locale: str | None = None,
@@ -1023,6 +1122,9 @@ def publish_attack_combat_report(
         origin_coords=origin_coords,
         origin_planet_name=origin_planet_name,
         target_planet_name=target_planet_name,
+        attacker_planet_id=attacker_planet_id,
+        defender_planet_id=defender_planet_id,
+        conn=conn,
         locale=attacker_locale,
     )
     if fleet_id is not None:
@@ -1216,6 +1318,9 @@ def simulate_combat_preview_from_spy(
             origin_coords=origin_coord_txt,
             origin_planet_name=str(planet.get("name") or ""),
             target_planet_name=str(spy_metadata.get("target_planet") or ""),
+            attacker_planet_id=origin_id,
+            defender_planet_id=target_planet_id if target_planet_id > 0 else None,
+            conn=conn,
             locale=locale,
         )
         metadata["perspective"] = "attacker"
