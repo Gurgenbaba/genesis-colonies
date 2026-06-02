@@ -283,3 +283,63 @@ def test_api_game_state_poll_is_lightweight(game_client):
     assert "scrapyard" not in body
     assert "planet_teaser" not in body
     assert body.get("overview", {}).get("status") is None
+
+
+def test_api_game_state_include_panel_has_buildings_panel(game_client):
+    client, _pid = game_client
+    r = client.get("/api/game-state?include_panel=1")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body.get("ok") is True
+    assert isinstance(body.get("buildings_panel"), dict)
+    assert body["buildings_panel"]
+
+
+def test_api_buildings_upgrade_state_includes_panel_and_resources(game_client):
+    client, pid = game_client
+    _set_buildings(pid, {"metal_mine": 1, "crystal_mine": 1, "solar_plant": 1})
+    planet = get_homeworld(player_id=pid)
+    metal_before = int(planet["metal"])
+
+    r = client.post(
+        "/api/buildings/upgrade",
+        json={"building_type": "metal_mine", "request_id": f"gc801-{uuid.uuid4().hex}"},
+        headers={"Content-Type": "application/json"},
+    )
+    assert r.status_code == 200
+    body = r.get_json()
+    assert "state" in body
+    state = body["state"]
+    assert isinstance(state.get("buildings_panel"), dict)
+    metal_after = int((state.get("player") or {}).get("metal") or state.get("resources", {}).get("metal") or 0)
+    if body.get("ok"):
+        assert metal_after < metal_before
+
+
+def test_api_game_state_include_panel_uses_full_live_refresh(game_client, monkeypatch):
+    import game.logic as logic
+
+    calls = {"poll": 0, "full": 0}
+    orig_poll = logic.read_player_live_state_for_poll
+    orig_full = logic.refresh_player_live_state
+
+    def track_poll(*args, **kwargs):
+        calls["poll"] += 1
+        return orig_poll(*args, **kwargs)
+
+    def track_full(*args, **kwargs):
+        calls["full"] += 1
+        return orig_full(*args, **kwargs)
+
+    monkeypatch.setattr(logic, "read_player_live_state_for_poll", track_poll)
+    monkeypatch.setattr(logic, "refresh_player_live_state", track_full)
+
+    client, _pid = game_client
+    client.get("/api/game-state")
+    assert calls["poll"] >= 1
+    poll_count = calls["poll"]
+    full_before = calls["full"]
+
+    client.get("/api/game-state?include_panel=1")
+    assert calls["full"] > full_before
+    assert calls["poll"] == poll_count

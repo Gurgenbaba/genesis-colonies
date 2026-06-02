@@ -21,8 +21,10 @@ Actions use `_player_context_for_action()` (read-only DB) then **one** `refresh_
 
 `GET /api/game-state` uses a **lightweight poll path** (`finish_source=game_state`):
 
+- `?include_panel=1` uses `finish_source=game_state_panel` (full `refresh_player_live_state`) so resources and `buildings_panel` stay aligned (GC-801).
+
 - Single SQLite connection per request
-- No `buildings_panel`, exchange/trader/scrapyard/teaser blocks
+- No `buildings_panel`, exchange/trader/scrapyard/teaser blocks (unless `include_panel=1`)
 - No `overview.status` (shipyard/fleet activity queries skipped)
 - Inbox unread count read-only (`prepare=False`)
 - Resource persist writes throttled (≥120 s since last planet update)

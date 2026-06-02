@@ -275,6 +275,7 @@
 
   // Bumped on every POST action state apply — stale in-flight polls must not overwrite.
   let _clientStateGen = 0;
+  let _lastAppliedServerTime = 0;
 
   function applyActionState(json, reason) {
     if (!json) return false;
@@ -293,7 +294,11 @@
       pol.abort = null;
     }
 
-    const anyActive = applyGameStateData(state, reason);
+    resetResourceDisplayCache();
+    const st = Number(state.server_time || 0);
+    if (st) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, st);
+
+    const anyActive = applyGameStateData(state, reason, { forceResourceBar: true });
     GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch);
     GC.startProgressTicker();
     return anyActive;
@@ -2752,6 +2757,21 @@
     activePlanetId: null,
   };
 
+  function resetResourceDisplayCache() {
+    _last.metal = null;
+    _last.crystal = null;
+    _last.fuelCells = null;
+    _last.energyUsed = null;
+    _last.energyTotal = null;
+    _last.storageMetal = null;
+    _last.storageCrystal = null;
+    _last.storageFuelCells = null;
+    _last.prodMetal = null;
+    _last.prodCrystal = null;
+    _last.prodFuelCells = null;
+    _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
+  }
+
   const BUILDING_ICON_FILE = {
     orbital_shipyard: "shipyard",
     fuel_cell_plant: "solar_plant",
@@ -2795,9 +2815,17 @@
   // =========================
   function applyGameStateData(data, _reason, opts) {
       if (!data || data.ok === false) return false;
+      const reason = String(_reason || "");
       const skipMessagesUnread = Boolean(opts && opts.skipMessagesUnread);
       const hudOnly = Boolean(opts && opts.hudOnly);
       const forceResourceBar = Boolean(opts && (opts.forceResourceBar || hudOnly));
+
+      if (reason === "poll") {
+        const st = Number(data.server_time || 0);
+        if (st && _lastAppliedServerTime && st < _lastAppliedServerTime) {
+          return false;
+        }
+      }
 
       if (data.server_time) setServerTime(data.server_time);
 
@@ -3151,6 +3179,9 @@
       lastResearchQueueCount = rqCountFinal;
       lastResearchQueueFull = rqCountFinal >= rqLimitFinal;
       lastHadActiveResearch = hasActiveResearchNow;
+
+      const stApplied = Number(data.server_time || 0);
+      if (stApplied) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stApplied);
 
       GC.lastState = data;
       GC.startProgressTicker();

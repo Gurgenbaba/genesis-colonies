@@ -234,6 +234,24 @@ def test_main_js_patches_resource_bar_energy_warning():
     assert "patchResourceBarEnergyWarning(used, total)" in apply_body
 
 
+def test_main_js_gc801_action_state_and_stale_poll_guards():
+    src = _read("static/main.js")
+    assert "_clientStateGen" in src
+    assert "_lastAppliedServerTime" in src
+    assert "resetResourceDisplayCache" in src
+    action_section = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
+    assert "forceResourceBar: true" in action_section
+    assert "resetResourceDisplayCache()" in action_section
+    assert "_clientStateGen += 1" in action_section
+    refresh_section = src.split("async function refreshGameState(reason)")[1].split("GC.refreshGameState = refreshGameState")[0]
+    assert "stateGenAtStart !== _clientStateGen" in refresh_section
+    apply_section = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    assert 'reason === "poll"' in apply_section
+    assert "syncResourceLiveBaseline" in apply_section
+    assert "patchBuildingPanel" in apply_section
+    assert "location.reload()" not in action_section
+
+
 def test_galaxy_template_pjax_nav_urls():
     tpl = _read("templates/galaxy.html")
     assert 'id="galaxy-page-root"' in tpl
