@@ -2251,7 +2251,7 @@
     const globalCooldown = urgent ? MOVEMENT_EXPIRY_REFRESH_MS_SHORT : MOVEMENT_EXPIRY_REFRESH_MS;
     if (nowMs - _lastGlobalMovementExpiryRefreshMs < globalCooldown) return false;
     const last = _movementCountdownExpiryState.get(key) || 0;
-    const cooldown = _movementExpiryCooldownMs(key, shortFlight);
+    const cooldown = _movementExpiryCooldownMs(key, urgent);
     if (nowMs - last < cooldown) return false;
     _movementCountdownExpiryState.set(key, nowMs);
     return true;
