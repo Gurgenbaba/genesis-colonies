@@ -252,6 +252,58 @@ def get_build_time(building_type: str, target_level: int, user_id: Optional[int]
     return resolver.get_build_time_seconds(building_type, int(target_level))
 
 
+def recalculate_build_queue_finish_times(
+    planet_id: int,
+    user_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> None:
+    """
+    Reschedule all build jobs on a planet after cancel or before enqueue.
+    In-progress first job (start <= now < finish) keeps its window; followers chain from its finish or now.
+    """
+    planet_id = int(planet_id)
+    uid = int(user_id)
+    ts = float(now if now is not None else time.time())
+    rows = get_build_queue_rows(planet_id, conn=conn)
+    if not rows:
+        return
+
+    buildings = get_planet_buildings(planet_id, conn=conn)
+    cur = conn.cursor()
+    schedule_at = ts
+    queued_counts: Dict[str, int] = {}
+
+    for idx, row in enumerate(rows):
+        btype = str(row["building_type"])
+        current = int(buildings.get(btype, 0) or 0)
+        queued_same = int(queued_counts.get(btype, 0))
+        target_level = current + queued_same + 1
+        duration = int(get_build_time(btype, target_level, user_id=uid))
+
+        if idx == 0:
+            start_existing = float(row["start_time"] or 0)
+            finish_existing = float(row["finish_time"] or 0)
+            if start_existing <= ts < finish_existing:
+                queued_counts[btype] = queued_same + 1
+                schedule_at = finish_existing
+                continue
+
+        start_time = schedule_at
+        finish_time = schedule_at + duration
+        cur.execute(
+            """
+            UPDATE build_queue
+            SET start_time = ?, finish_time = ?
+            WHERE id = ?;
+            """,
+            (float(start_time), float(finish_time), int(row["id"])),
+        )
+        queued_counts[btype] = queued_same + 1
+        schedule_at = finish_time
+
+
 # =============================================================================
 # Dynamic Max Level
 # =============================================================================
@@ -597,6 +649,10 @@ def queue_build_for_planet(
             + int(engine_result["finished"]["research"])
         ) > 0
 
+        recalculate_build_queue_finish_times(
+            planet_id, user_id, conn=conn, now=now
+        )
+
         cur = conn.cursor()
         cur.execute(
             "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
@@ -757,6 +813,9 @@ def cancel_build_job_for_planet(
             return False, "not_found", {"msg": "Build job not found", "job_id": job_id}
 
         delete_build_job(int(row["id"]), conn=conn)
+        recalculate_build_queue_finish_times(
+            planet_id, int(owner_id), conn=conn, now=now
+        )
         commit(conn)
 
         if finished_any:

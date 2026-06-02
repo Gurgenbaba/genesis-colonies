@@ -39,7 +39,11 @@ Nur diese Dateien bearbeiten:
 
 ## Referenz-Docs
 
-- [ ] …/docs/….md gelesen
+- [ ] [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) gelesen (Owner, keine Parallel-Systeme, keine Duplicate-Math)
+- [ ] [STATE_AJAX.md](STATE_AJAX.md) / [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md) (bei UI/API)
+- [ ] [PLANET_SCOPE.md](PLANET_SCOPE.md) (bei planetengebunden)
+- [ ] [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) (bei Queues)
+- [ ] Domänen-Doc: …
 
 ---
 

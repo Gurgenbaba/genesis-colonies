@@ -7,15 +7,26 @@ Run: python -m pytest tests/test_race_conditions.py -v
 from __future__ import annotations
 
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pytest
 
 import game.db as dbmod
 import game.models as models
-from game.buildings import queue_build_for_planet, get_build_queue_status_for_planet
-from game.research import queue_research, get_research_status
+from game.buildings import (
+    cancel_build_job_for_planet,
+    queue_build_for_planet,
+    recalculate_build_queue_finish_times,
+)
+from game.research import (
+    cancel_research_job,
+    queue_research,
+    recalculate_research_queue_finish_times,
+)
 from game.models import (
+    add_build_job,
+    add_research_job,
     get_homeworld,
     get_planet_buildings,
     get_build_queue_rows,
@@ -174,3 +185,152 @@ def test_idempotency_returns_cached_response(isolated_db):
     save_idempotent_action(user_id, "req-abc", cached)
     got = get_idempotent_action(user_id, "req-abc")
     assert got == cached
+
+
+def test_build_cancel_first_job_reschedules_follower_at_now(isolated_db):
+    user_id, planet = isolated_db
+    planet_id = int(planet["id"])
+    now = time.time()
+
+    j1 = add_build_job(planet_id, "metal_mine", now - 10, now + 50)
+    j2 = add_build_job(planet_id, "crystal_mine", now + 500, now + 600)
+
+    ok, reason, _ = cancel_build_job_for_planet(planet_id, j1, user_id=user_id)
+    assert ok and reason == "ok"
+
+    rows = get_build_queue_rows(planet_id)
+    assert len(rows) == 1
+    assert int(rows[0]["id"]) == j2
+    assert float(rows[0]["start_time"]) <= now + 2.0
+    assert float(rows[0]["finish_time"]) > float(rows[0]["start_time"])
+
+
+def test_build_cancel_middle_job_chains_follower_after_active(isolated_db):
+    user_id, planet = isolated_db
+    planet_id = int(planet["id"])
+    now = time.time()
+
+    j1 = add_build_job(planet_id, "metal_mine", now - 10, now + 50)
+    j2 = add_build_job(planet_id, "crystal_mine", now + 500, now + 600)
+    j3 = add_build_job(planet_id, "solar_plant", now + 600, now + 700)
+
+    ok, reason, _ = cancel_build_job_for_planet(planet_id, j2, user_id=user_id)
+    assert ok and reason == "ok"
+
+    rows = get_build_queue_rows(planet_id)
+    assert [int(r["id"]) for r in rows] == [j1, j3]
+    assert float(rows[0]["start_time"]) == pytest.approx(now - 10, abs=2.0)
+    assert float(rows[0]["finish_time"]) == pytest.approx(now + 50, abs=2.0)
+    assert float(rows[1]["start_time"]) == pytest.approx(float(rows[0]["finish_time"]), abs=2.0)
+
+
+def test_build_enqueue_recalculates_stale_follower_after_near_finish(isolated_db):
+    user_id, planet = isolated_db
+    planet_id = int(planet["id"])
+    buildings = get_planet_buildings(planet_id)
+    now = time.time()
+
+    add_build_job(planet_id, "metal_mine", now - 10, now + 5)
+    add_build_job(planet_id, "crystal_mine", now + 500, now + 600)
+
+    ok, reason, _ = queue_build_for_planet(planet, buildings, "solar_plant", user_id=user_id)
+    assert ok and reason == "ok"
+
+    rows = get_build_queue_rows(planet_id)
+    assert len(rows) == 3
+    assert float(rows[1]["start_time"]) == pytest.approx(float(rows[0]["finish_time"]), abs=2.0)
+    assert float(rows[2]["start_time"]) == pytest.approx(float(rows[1]["finish_time"]), abs=2.0)
+
+
+def test_build_recalculate_clears_expired_before_enqueue_basis(isolated_db):
+    user_id, planet = isolated_db
+    planet_id = int(planet["id"])
+    now = time.time()
+
+    add_build_job(planet_id, "metal_mine", now - 120, now - 1)
+
+    conn = models.db()
+    try:
+        recalculate_build_queue_finish_times(
+            planet_id, user_id, conn=conn, now=now
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    rows = get_build_queue_rows(planet_id)
+    assert len(rows) == 1
+    assert float(rows[0]["start_time"]) <= now + 2.0
+
+
+def test_research_cancel_first_job_reschedules_follower_at_now(isolated_db):
+    user_id, planet = isolated_db
+    now = time.time()
+
+    conn = models.db()
+    conn.execute(
+        "UPDATE planet_buildings SET research_lab = 3 WHERE planet_id = ?;",
+        (int(planet["id"]),),
+    )
+    conn.commit()
+    conn.close()
+
+    j1 = add_research_job(user_id, "energy_tech", now - 10, now + 50)
+    j2 = add_research_job(user_id, "mining_tech", now + 500, now + 600)
+
+    ok, reason, _ = cancel_research_job(user_id, j1)
+    assert ok and reason == "ok"
+
+    rows = get_research_queue_rows(user_id)
+    assert len(rows) == 1
+    assert int(rows[0]["id"]) == j2
+    assert float(rows[0]["start_at"]) <= now + 2.0
+
+
+def test_research_cancel_middle_job_chains_follower_after_active(isolated_db):
+    user_id, planet = isolated_db
+    now = time.time()
+
+    conn = models.db()
+    conn.execute(
+        "UPDATE planet_buildings SET research_lab = 3 WHERE planet_id = ?;",
+        (int(planet["id"]),),
+    )
+    conn.commit()
+    conn.close()
+
+    j1 = add_research_job(user_id, "energy_tech", now - 10, now + 50)
+    j2 = add_research_job(user_id, "mining_tech", now + 500, now + 600)
+    j3 = add_research_job(user_id, "storage_tech", now + 600, now + 700)
+
+    ok, reason, _ = cancel_research_job(user_id, j2)
+    assert ok and reason == "ok"
+
+    rows = get_research_queue_rows(user_id)
+    assert [int(r["id"]) for r in rows] == [j1, j3]
+    assert float(rows[1]["start_at"]) == pytest.approx(float(rows[0]["finish_at"]), abs=2.0)
+
+
+def test_research_enqueue_recalculates_stale_follower(isolated_db):
+    user_id, planet = isolated_db
+    player = _player_view(user_id)
+    now = time.time()
+
+    conn = models.db()
+    conn.execute(
+        "UPDATE planet_buildings SET research_lab = 4 WHERE planet_id = ?;",
+        (int(planet["id"]),),
+    )
+    conn.commit()
+    conn.close()
+
+    add_research_job(user_id, "energy_tech", now - 10, now + 5)
+    add_research_job(user_id, "mining_tech", now + 500, now + 600)
+
+    ok, reason, _ = queue_research(player, "weapon_tech", user_id=user_id)
+    assert ok and reason == "ok"
+
+    rows = get_research_queue_rows(user_id)
+    assert len(rows) == 3
+    assert float(rows[1]["start_at"]) == pytest.approx(float(rows[0]["finish_at"]), abs=2.0)
+    assert float(rows[2]["start_at"]) == pytest.approx(float(rows[1]["finish_at"]), abs=2.0)

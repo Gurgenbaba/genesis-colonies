@@ -3573,7 +3573,11 @@
             return;
           }
           closePlanetManageModal();
-          window.location.href = "/overview";
+          if (typeof GC.navigateTo === "function") {
+            await GC.navigateTo("/overview", { push: true, force: true });
+          } else if (typeof GC.reloadCurrentPage === "function") {
+            await GC.reloadCurrentPage({ force: true });
+          }
         } catch (err) {
           if (err && err.message === "auth") return;
           setHint(t("planet_error_delete_failed", "Löschen fehlgeschlagen."), true);
@@ -6693,6 +6697,13 @@
     if (!document.querySelector(".planet-evolution-page")) return;
     bindPlanetEvolutionOnce();
     syncPlanetEvolutionResearchTicker();
+    document.querySelectorAll("[data-pe-reload]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (typeof GC.reloadCurrentPage === "function") {
+          GC.reloadCurrentPage({ force: true });
+        }
+      });
+    });
   }
 
   // =========================

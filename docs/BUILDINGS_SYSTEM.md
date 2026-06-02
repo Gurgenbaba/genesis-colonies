@@ -59,10 +59,10 @@ Vollständige Map: `BUILDING_REQUIREMENTS` in `game/buildings.py`.
 |-------------|------|
 | Tabelle | `build_queue` |
 | Limit | `game_settings.queue_limit` (Default **3**, min 1) |
-| Scheduling | Sequenziell: Start = max(now, letztes finish_time) |
+| Scheduling | Sequenziell; nach Cancel/Enqueue: `recalculate_build_queue_finish_times()` |
 | Zahlung | Sofort metal/crystal via `try_spend_resources_conn` |
 | Finish | `queue_engine.finish_player_build_jobs` → Level++ |
-| Cancel | Kein Refund |
+| Cancel | Kein Refund; Restqueue wird neu terminiert (GC-510) |
 
 Due-Finisher läuft vor jeder Mutation und in `refresh_player_live_state()`.
 

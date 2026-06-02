@@ -29,6 +29,9 @@ Vor jeder Änderung die relevanten Docs lesen:
 | Dokument | Wann |
 |----------|------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Architektur, Module, APIs |
+| [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) | GC-000 — verbindliche Kernregeln |
+| [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md) | PJAX, Actions, No-Reload |
+| [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) | Queues: Finish, Cancel, Reschedule |
 | [ROADMAP.md](ROADMAP.md) | Status, Phasen, Schulden |
 | [PLANET_SCOPE.md](PLANET_SCOPE.md) | Aktiver Planet, Switch, Scope |
 | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | Ressourcen, Exchange, Fuel |
@@ -114,6 +117,8 @@ python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 | Domäne | Tests |
 |--------|-------|
 | Queues / Race | `test_race_conditions.py`, `test_queue_engine.py` |
+| Queue static contract (GC-512) | `test_queue_static_contract.py` |
+| Queue manual QA | [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) |
 | Live-State | `test_game_state_live.py`, `test_static_live_updates.py` |
 | Planet Scope | `test_planet_instancing.py`, `test_header_planet_switcher.py` |
 | Evolution | `test_planet_evolution*.py` |
@@ -124,9 +129,13 @@ python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 
 ## Architektur-Kern (Merken)
 
-- **PJAX** — Shell bleibt, `#main-content` wird getauscht
+Vor jedem Ticket: [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) (Golden Rule + **Konsistenz über Komfort**).
+
+- **Keine Parallel-Systeme** — ein kanonischer Owner pro Domäne (Regel 15/17)
+- **Keine Duplicate-Math** — nur `EffectResolver` / `fleet_calc` / Queue-Engine (Regel 16)
+- **PJAX** — Shell bleibt, `#main-content` wird getauscht ([AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md))
 - **Planet Scope** — `players.active_planet_id` → `get_context_planet()`
-- **Queue Engine** — `game/queue_engine.py`, single finish pass pro Request
+- **Queue Engine** — `game/queue_engine.py`, single finish pass pro Request ([QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md))
 - **EffectResolver** — autoritative Formeln, kein Frontend-Math
 - **Kanonische Keys** — `orbital_shipyard`, ein Fleet-State in `fleet_movements`
 

@@ -215,7 +215,17 @@ Details: [SECURITY.md](SECURITY.md)
 1. **Spieler-sichtbarer Wert** — Mechanik vor Refactor
 2. **Security vor Public Beta** — Phase 6 blockiert Launch
 3. **Kanonische Systeme** — kein Parallel-Build (siehe [ARCHITECTURE.md](ARCHITECTURE.md))
-4. **Tests mitliefern** — jede Queue/DB-Änderung braucht pytest
+4. **GC-000 Enforcement** — [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md); CI-Check `test_core_architecture_enforcement.py`
+5. **Tests mitliefern** — jede Queue/DB-Änderung braucht pytest
+
+### Architektur-Schulden (GC-000 Follow-ups)
+
+| Item | Status |
+|------|--------|
+| **GC-510** — Build/Research cancel → Restqueue `recalculate` | ✅ |
+| **GC-512** — Queue Manual QA + static contract (`test_queue_static_contract.py`) | ✅ |
+| Admin Control Center auf PJAX/State (statt `reload`) | 💡 |
+| GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
 
 ---
 

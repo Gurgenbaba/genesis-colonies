@@ -228,6 +228,63 @@ def get_research_time(
     return resolver.get_research_time_seconds(tech_key, max(1, int(level)))
 
 
+def recalculate_research_queue_finish_times(
+    user_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> None:
+    """
+    Reschedule account research queue after cancel or before enqueue.
+    In-progress first job keeps its window; followers chain from its finish or now.
+    """
+    uid = int(user_id)
+    ts = float(now if now is not None else time.time())
+    rows = get_research_queue_rows(uid, conn=conn)
+    if not rows:
+        return
+
+    resource_planet = _research_resource_planet(uid, conn)
+    planet_id = int(resource_planet["id"])
+    buildings = resolve_buildings_for_research(
+        get_planet_buildings(planet_id, conn=conn),
+        uid,
+        conn=conn,
+    )
+    levels = get_research_levels(uid, conn=conn)
+    cur = conn.cursor()
+    schedule_at = ts
+    queued_counts: Dict[str, int] = {}
+
+    for idx, row in enumerate(rows):
+        tech = str(row["tech_key"])
+        current = int(levels.get(tech, 0) or 0)
+        queued_same = int(queued_counts.get(tech, 0))
+        target = current + queued_same + 1
+        duration = float(get_research_time(tech, target, user_id=uid, buildings=buildings))
+
+        if idx == 0:
+            start_existing = float(row["start_at"] or 0)
+            finish_existing = float(row["finish_at"] or 0)
+            if start_existing <= ts < finish_existing:
+                queued_counts[tech] = queued_same + 1
+                schedule_at = finish_existing
+                continue
+
+        start_at = schedule_at
+        finish_at = schedule_at + duration
+        cur.execute(
+            """
+            UPDATE research_queue
+            SET start_at = ?, finish_at = ?
+            WHERE id = ?;
+            """,
+            (float(start_at), float(finish_at), int(row["id"])),
+        )
+        queued_counts[tech] = queued_same + 1
+        schedule_at = finish_at
+
+
 # ======================================================================
 # REQUIREMENTS
 # ======================================================================
@@ -492,6 +549,9 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
             int(engine_result["finished"]["buildings"])
             + int(engine_result["finished"]["research"])
         ) > 0
+
+        recalculate_research_queue_finish_times(uid, conn=conn, now=now)
+
         cur = conn.cursor()
         cur.execute(
             "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
@@ -641,6 +701,7 @@ def cancel_research_job(user_id: int, job_id: int):
             return False, "not_found", {"msg": "Research job not found", "job_id": jid}
 
         delete_research_job(int(row["id"]), conn=conn)
+        recalculate_research_queue_finish_times(uid, conn=conn, now=now)
         commit(conn)
 
         if finished_any:

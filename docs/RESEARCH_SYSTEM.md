@@ -46,9 +46,9 @@ Jede Tech: `base_cost_m/c`, `base_time`, `cost_factor`, verschachtelte Tech-Requ
 | Default limit | **2** (`RESEARCH_QUEUE_LIMIT`) |
 | Bonus limit | **3** wenn max empire `research_lab` ≥ 4 |
 | Override | `game_settings.research_queue_limit` |
-| Scheduling | Sequenziell nach `finish_at` |
+| Scheduling | Sequenziell; nach Cancel/Enqueue: `recalculate_research_queue_finish_times()` (GC-510) |
 | Finish | `queue_engine.finish_player_research_jobs` |
-| Cancel | Kein Refund |
+| Cancel | Kein Refund; Restqueue wird neu terminiert |
 
 Migration `008`: `research_queue.start_at` für präzise UI-Fortschritte.
 

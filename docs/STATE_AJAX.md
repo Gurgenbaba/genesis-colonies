@@ -2,7 +2,7 @@
 
 Single live pipeline for the player UI (no full reload on game actions).
 
-Siehe auch: [PLANET_SCOPE.md](PLANET_SCOPE.md) (Planetwechsel), [ARCHITECTURE.md](ARCHITECTURE.md) (Gesamtüberblick).
+Siehe auch: [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md), [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md), [PLANET_SCOPE.md](PLANET_SCOPE.md), [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Endpoints
 

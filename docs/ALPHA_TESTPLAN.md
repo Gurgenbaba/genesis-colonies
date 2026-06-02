@@ -34,6 +34,8 @@ Bestehende `game/game.db` **nicht löschen**, wenn du einen vorhandenen Spielsta
 | 3.2 | Upgrade starten (wenn Ressourcen reichen) | Queue zeigt aktiven Bau |
 | 3.3 | Countdown / Fortschrittsbalken | Läuft ohne Reload |
 
+**Queue-Regression (GC-512):** Vollständige Checkliste [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) (Cancel active/middle/last, near-finish, PJAX, Planetwechsel).
+
 ---
 
 ## 4. Forschung (`/research`)
@@ -43,6 +45,8 @@ Bestehende `game/game.db` **nicht löschen**, wenn du einen vorhandenen Spielsta
 | 4.1 | Tech-Liste | Einträge mit Kosten/Zeit |
 | 4.2 | Forschung starten | Active-Block erscheint |
 | 4.3 | Zweite Forschung parallel | Blockiert (eine Queue) |
+
+Siehe auch [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) § B.
 
 ---
 

@@ -16,6 +16,11 @@ Technische Architektur-Dokumentation (Stand: **v1.5.3**). Ergänzt die [README](
 | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) | Koordinaten, Systemansicht |
 | [EFFECTS.md](EFFECTS.md) | EffectResolver, Formeln |
 | [STATE_AJAX.md](STATE_AJAX.md) | Live-Polling, PJAX |
+| [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) | GC-000 — verbindliche Kernregeln |
+| [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md) | Navigation, Actions, Lifecycle |
+| [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) | Queue Finish / Cancel / Reschedule |
+
+**Golden Rule:** Genesis Colonies bevorzugt **Konsistenz über Komfort** — keine parallelen Systeme, keine Duplicate-Math, keine Reload-Navigation. Siehe [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) (Regeln 15–17).
 
 ---
 
@@ -23,6 +28,7 @@ Technische Architektur-Dokumentation (Stand: **v1.5.3**). Ergänzt die [README](
 
 | Prinzip | Umsetzung |
 |---------|----------|
+| **Consistency over comfort** | Bestehendes kanonisches System erweitern, nicht duplizieren ([CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) §15–17) |
 | **Server authority** | Spielzustand, Queues, Ressourcen und Flotten werden serverseitig berechnet |
 | **Planet scope** | UI und Ressourcen-Actions nutzen `get_context_planet()` — aktiver Planet in `players.active_planet_id` |
 | **Conn-safe reads** | `_load_page_live_context()` hält eine Connection für Tick + Finisher + Commit |

@@ -35,12 +35,12 @@ Siehe [LICENSE](../LICENSE) und [README](../README.md).
 
 Arbeit erfolgt als **Tickets** (GC-XXX), nicht als Epic-Direct-Implementierung.
 
-1. Vor der Arbeit: relevante Master-Docs lesen ([ARCHITECTURE.md](ARCHITECTURE.md) + System-Doc)
+1. Vor der Arbeit: [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) + relevante Master-Docs ([ARCHITECTURE.md](ARCHITECTURE.md) + System-Doc)
 2. Ticket definiert: Problem, betroffene Dateien (max. 3–5), Akzeptanzkriterien
 3. Nur Ticket-Scope bearbeiten — kein Projekt-Vollscan, kein ungefragtes Refactoring
 4. Architektur-Änderungen → Master-Doc mit aktualisieren
 
-**Master-Docs:** [WORKFLOW.md](WORKFLOW.md), `PLANET_SCOPE`, `PLANET_EVOLUTION`, `ECONOMY_SYSTEM`, `BUILDINGS_SYSTEM`, `RESEARCH_SYSTEM`, `FLEET_SYSTEM`, `GALAXY_SYSTEM`, `ROADMAP`.
+**Master-Docs:** [WORKFLOW.md](WORKFLOW.md), [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md), [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md), [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md), `PLANET_SCOPE`, `PLANET_EVOLUTION`, `ECONOMY_SYSTEM`, `BUILDINGS_SYSTEM`, `RESEARCH_SYSTEM`, `FLEET_SYSTEM`, `GALAXY_SYSTEM`, `ROADMAP`.
 
 ---
 

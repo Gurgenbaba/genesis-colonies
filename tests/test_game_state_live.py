@@ -202,6 +202,72 @@ def test_api_game_state_single_finish_via_coerce(game_client):
         assert len(calls) == 1
 
 
+def test_api_build_cancel_returns_fresh_queue_times(game_client):
+    client, pid = game_client
+    planet = get_homeworld(player_id=pid)
+    planet_id = int(planet["id"])
+    now = time.time()
+
+    j1 = add_build_job(planet_id, "metal_mine", now - 10, now + 40)
+    j2 = add_build_job(planet_id, "crystal_mine", now + 500, now + 600)
+
+    r_cancel = client.post(
+        "/api/buildings/cancel",
+        json={"job_id": int(j1)},
+        headers={"Content-Type": "application/json"},
+    )
+    assert r_cancel.status_code == 200
+    body = r_cancel.get_json()
+    assert body.get("ok") is True
+    assert "state" in body
+    bq = body["state"].get("build_queue") or {}
+    queue = bq.get("queue") or []
+    assert len(queue) == 1
+    assert int(queue[0].get("remaining") or 0) > 0
+    assert float(queue[0]["finish_time"]) > time.time()
+
+    r_poll = client.get("/api/game-state")
+    poll_queue = (r_poll.get_json().get("build_queue") or {}).get("queue") or []
+    assert len(poll_queue) == 1
+    assert int(poll_queue[0]["id"]) == int(queue[0]["id"])
+
+
+def test_api_research_cancel_returns_fresh_queue_times(game_client):
+    client, pid = game_client
+    _set_buildings(pid, {"research_lab": 3, "metal_mine": 1})
+    now = time.time()
+
+    conn = db()
+    conn.execute(
+        "INSERT INTO research_queue (user_id, tech_key, start_at, finish_at) VALUES (?, ?, ?, ?);",
+        (pid, "energy_tech", now - 10, now + 40),
+    )
+    conn.execute(
+        "INSERT INTO research_queue (user_id, tech_key, start_at, finish_at) VALUES (?, ?, ?, ?);",
+        (pid, "mining_tech", now + 500, now + 600),
+    )
+    conn.commit()
+    job_rows = conn.execute(
+        "SELECT id FROM research_queue WHERE user_id = ? ORDER BY finish_at ASC;",
+        (pid,),
+    ).fetchall()
+    conn.close()
+    j1 = int(job_rows[0]["id"])
+
+    r_cancel = client.post(
+        "/api/research/cancel",
+        json={"job_id": j1},
+        headers={"Content-Type": "application/json"},
+    )
+    assert r_cancel.status_code == 200
+    body = r_cancel.get_json()
+    assert body.get("ok") is True
+    rq = (body.get("state") or {}).get("research") or {}
+    queue = rq.get("queue") or []
+    assert len(queue) == 1
+    assert float(queue[0]["start_at"]) <= time.time() + 3.0
+
+
 def test_api_game_state_poll_is_lightweight(game_client):
     client, _pid = game_client
     r = client.get("/api/game-state")
