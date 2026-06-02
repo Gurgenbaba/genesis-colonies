@@ -308,6 +308,26 @@ def test_galaxy_page_loads(galaxy_db, monkeypatch):
     assert "galaxy_colonizable" in body or "Kolonisierbar" in body or "Colonizable" in body
 
 
+def test_list_system_slot_coordinates_match_position(galaxy_db):
+    uid = _create_player()
+    conn = db()
+    try:
+        data = list_system(1, 1, conn=conn, viewer_player_id=uid)
+    finally:
+        conn.close()
+    seen = set()
+    for slot in data["slots"]:
+        pos = int(slot["position"])
+        coords = slot["coordinates"]
+        key = (int(coords["galaxy"]), int(coords["system"]), int(coords["position"]))
+        assert key not in seen
+        seen.add(key)
+        assert int(coords["position"]) == pos
+        assert format_coordinates(*key) == format_coordinates(
+            int(coords["galaxy"]), int(coords["system"]), int(coords["position"])
+        )
+
+
 def test_api_galaxy_system(galaxy_db, monkeypatch):
     import app as app_module
 

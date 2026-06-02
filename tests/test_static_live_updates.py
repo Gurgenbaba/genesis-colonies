@@ -234,6 +234,41 @@ def test_main_js_patches_resource_bar_energy_warning():
     assert "patchResourceBarEnergyWarning(used, total)" in apply_body
 
 
+def test_main_js_gc802_planet_switch_state_sync():
+    src = _read("static/main.js")
+    assert "syncScopedPlanetIds" in src
+    assert "abortInFlightGameStateFetches" in src
+    switch_section = src.split('applyActionState(res, "planet_switch")')[1][:1200]
+    planet_switch_apply = src.split("const isPlanetSwitch = reason === \"planet_switch\"")[1][:600]
+    assert "GC.stopPolling()" in planet_switch_apply
+    assert "reloadCurrentPage({ force: true })" in switch_section
+    assert "planet_switch_reload" in switch_section
+    assert "refreshFleetState(fleetPage)" in switch_section
+    action_body = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
+    assert 'reason === "planet_switch"' in action_body
+    assert "planetSwitch: isPlanetSwitch" in action_body
+    apply_body = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    assert "syncScopedPlanetIds(activePlanetId)" in apply_body
+    assert "opts.planetSwitch" in apply_body
+
+
+def test_main_js_gc802_fleet_timer_and_url_prefill():
+    src = _read("static/main.js")
+    assert "function movementRemainingSeconds(countdownAt, serverNow, serverRemaining)" in src
+    timer_body = src.split("function movementRemainingSeconds(countdownAt, serverNow, serverRemaining)")[1].split("function bootstrapServerTimeFromDom")[0]
+    assert "Math.max(fromEndAt, fromServer)" not in timer_body
+    assert "Number.isFinite(srv)" in timer_body
+    prefill = src.split("function applyFleetUrlPrefill(page)")[1].split("let _shipyardRefreshTimer")[0]
+    assert "URLSearchParams(window.location.search)" in prefill
+    assert "dataset.fleetUrlMission" in prefill
+    assert "syncColonyChipsFromCoords" in prefill
+    assert "_fleetApplySeq" in src
+    assert "_fleetRefreshSeq" in src
+    galaxy_tpl = _read("templates/partials/galaxy_fleet_actions.html")
+    assert "slot.coordinates.galaxy" in galaxy_tpl
+    assert "target_position=" in galaxy_tpl
+
+
 def test_main_js_gc801_action_state_and_stale_poll_guards():
     src = _read("static/main.js")
     assert "_clientStateGen" in src

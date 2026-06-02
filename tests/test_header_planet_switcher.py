@@ -141,6 +141,46 @@ def test_api_set_active_updates_state_and_overview(switcher_db, monkeypatch):
     gs = client.get("/api/game-state").get_json()
     assert gs["active_planet_id"] == hw_id
     assert gs.get("active_planet", {}).get("name")
+    assert int(data["state"]["player"]["metal"]) == int(data["state"]["resources"]["metal"])
+    assert "buildings_panel" in data["state"]
+
+
+def test_api_planets_active_switch_returns_fresh_colony_resources(monkeypatch):
+    import importlib
+
+    import app as app_module
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+    player_id, uname = _create_player()
+    hw_id = int(get_homeworld(player_id=player_id)["id"])
+    colony_id = _second_planet(player_id)
+
+    from game.models import db
+
+    conn = db()
+    conn.execute("UPDATE planets SET metal = 100, crystal = 50 WHERE id = ?;", (hw_id,))
+    conn.execute("UPDATE planets SET metal = 9000, crystal = 8000 WHERE id = ?;", (colony_id,))
+    conn.commit()
+    conn.close()
+
+    ok, reason = set_active_planet(player_id, colony_id)
+    assert ok, reason
+
+    client = _app_client(monkeypatch)
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    r = client.post(
+        "/api/planets/active",
+        json={"planet_id": hw_id},
+        headers={"Content-Type": "application/json"},
+    )
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    st = body["state"]
+    assert st["active_planet_id"] == hw_id
+    assert int(st["resources"]["metal"]) == 100
+    assert int(st["player"]["metal"]) == 100
 
 
 def test_planet_evolution_template_no_switch_or_colonize_ui():

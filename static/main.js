@@ -129,14 +129,14 @@
   }
 
   function movementRemainingSeconds(countdownAt, serverNow, serverRemaining) {
+    const srv = Number(serverRemaining);
+    if (Number.isFinite(srv) && srv >= 0) {
+      return Math.max(0, Math.ceil(srv));
+    }
     const endAt = Number(countdownAt || 0);
     if (!endAt) return 0;
     const now = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
-    const fromEndAt = Math.max(0, Math.ceil(endAt - now));
-    const srv = Number(serverRemaining);
-    if (!Number.isFinite(srv) || srv < 0) return fromEndAt;
-    const fromServer = Math.max(0, Math.ceil(srv));
-    return Math.max(fromEndAt, fromServer);
+    return Math.max(0, Math.ceil(endAt - now));
   }
 
   function bootstrapServerTimeFromDom() {
@@ -258,6 +258,35 @@
     return 0;
   }
 
+  function syncScopedPlanetIds(planetId) {
+    const pid = Number(planetId || 0);
+    if (!pid) return;
+    [
+      "fleet-page",
+      "shipyard-page",
+      "defense-page",
+      "trader-hub-page",
+      "build-queue-root",
+    ].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.dataset.planetId = String(pid);
+    });
+    document.querySelectorAll(".planet-evolution-page[data-planet-id]").forEach((el) => {
+      el.dataset.planetId = String(pid);
+    });
+  }
+
+  function abortInFlightGameStateFetches() {
+    const pol = GC.polling;
+    if (pol.abort) {
+      try {
+        pol.abort.abort();
+      } catch (_) {}
+      pol.abort = null;
+    }
+    pol.inFlight = false;
+  }
+
   let _planetPageReloadPromise = null;
   function reloadPageForActivePlanet(activePlanetId, reason) {
     if (GC.pjaxInFlight) return null;
@@ -276,31 +305,39 @@
   // Bumped on every POST action state apply — stale in-flight polls must not overwrite.
   let _clientStateGen = 0;
   let _lastAppliedServerTime = 0;
+  let _fleetRefreshSeq = 0;
 
   function applyActionState(json, reason) {
     if (!json) return false;
     const state = json.state || (json.data && json.data.state);
     if (!state) return false;
 
+    const isPlanetSwitch = reason === "planet_switch";
+    if (isPlanetSwitch) {
+      GC.stopPolling();
+      GC.stopProgressTicker();
+      _clearMovementCountdownExpiryState();
+    }
+
     _clientStateGen += 1;
+    _fleetRefreshSeq += 1;
     _lastQueueSignature = "";
     _lastResearchQueueSignature = "";
-
-    const pol = GC.polling;
-    if (pol.abort) {
-      try {
-        pol.abort.abort();
-      } catch (_) {}
-      pol.abort = null;
-    }
+    abortInFlightGameStateFetches();
 
     resetResourceDisplayCache();
     const st = Number(state.server_time || 0);
     if (st) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, st);
 
-    const anyActive = applyGameStateData(state, reason, { forceResourceBar: true });
-    GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch);
-    GC.startProgressTicker();
+    const anyActive = applyGameStateData(state, reason, {
+      forceResourceBar: true,
+      planetSwitch: isPlanetSwitch,
+    });
+
+    if (!isPlanetSwitch) {
+      GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch);
+      GC.startProgressTicker();
+    }
     return anyActive;
   }
 
@@ -2455,7 +2492,12 @@
     document.querySelectorAll("[data-preview-arrival][data-countdown-at]").forEach((el) => {
       const countdownAt = Number(el.dataset.countdownAt || 0);
       if (!countdownAt) return;
-      const remaining = Math.max(0, Math.ceil(countdownAt - now));
+      const srvRem = el.dataset.serverRemaining;
+      const remaining = movementRemainingSeconds(
+        countdownAt,
+        now,
+        srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
+      );
       _setIfChanged(el, formatCountdownRemain(remaining));
     });
 
@@ -2818,7 +2860,8 @@
       const reason = String(_reason || "");
       const skipMessagesUnread = Boolean(opts && opts.skipMessagesUnread);
       const hudOnly = Boolean(opts && opts.hudOnly);
-      const forceResourceBar = Boolean(opts && (opts.forceResourceBar || hudOnly));
+      const forceResourceBar = Boolean(opts && (opts.forceResourceBar || hudOnly || opts.planetSwitch));
+      const planetSwitch = Boolean(opts && opts.planetSwitch);
 
       if (reason === "poll") {
         const st = Number(data.server_time || 0);
@@ -2845,7 +2888,22 @@
           _last.activePlanetId = activePlanetId;
         }
 
-        if (_reason !== "planet_switch") {
+        if (planetSwitch && activePlanetId > 0) {
+          syncScopedPlanetIds(activePlanetId);
+          const fleetPage = document.getElementById("fleet-page");
+          if (fleetPage) {
+            fleetPage._fleetApplySeq = 0;
+            fleetPage._fleetLiveServerTime = 0;
+            delete fleetPage.dataset.fleetUrlMission;
+            if (fleetPage._fleetRt) {
+              fleetPage._fleetRt.lastPreview = null;
+              if (fleetPage._fleetRt.previewTimer) {
+                clearTimeout(fleetPage._fleetRt.previewTimer);
+                fleetPage._fleetRt.previewTimer = null;
+              }
+            }
+          }
+        } else if (_reason !== "planet_switch") {
           reloadPageForActivePlanet(activePlanetId, _reason || "state");
         }
 
@@ -3740,10 +3798,17 @@
       if (sendPanel) sendPanel.classList.toggle("is-expedition-mode", mission === "expedition" || isExpoSlot);
       if (previewHud) previewHud.classList.toggle("is-expedition", mission === "expedition" && isExpoSlot);
 
-      if (isExpoSlot && missionSel && missionSel.value !== "expedition") {
+      const urlMission = page.dataset.fleetUrlMission || "";
+      if (
+        isExpoSlot &&
+        missionSel &&
+        missionSel.value !== "expedition" &&
+        !urlMission
+      ) {
         missionSel.value = "expedition";
         const colonizeRow = page.querySelector("[data-fleet-colonize-row]");
         if (colonizeRow) colonizeRow.hidden = true;
+        if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(missionSel);
       }
 
       page.querySelectorAll(".fleet-colony-chip").forEach((chip) => {
@@ -4079,9 +4144,39 @@
       ).join("");
     };
 
-    const applyLiveState = (page, state) => {
+    const syncColonyChipsFromCoords = (page) => {
+      const form = getForm(page);
+      if (!form) return;
+      const g = parseInt(form.querySelector('[name="target_galaxy"]')?.value || "0", 10);
+      const s = parseInt(form.querySelector('[name="target_system"]')?.value || "0", 10);
+      const p = parseInt(form.querySelector('[name="target_position"]')?.value || "0", 10);
+      const mission = form.querySelector("[data-fleet-mission]")?.value || "";
+      page.querySelectorAll(".fleet-colony-chip").forEach((chip) => {
+        const cg = parseInt(chip.getAttribute("data-galaxy") || chip.dataset.galaxy || "0", 10);
+        const cs = parseInt(chip.getAttribute("data-system") || chip.dataset.system || "0", 10);
+        const cp = parseInt(chip.getAttribute("data-position") || chip.dataset.position || "0", 10);
+        const chipMission = chip.getAttribute("data-mission") || chip.dataset.mission || "";
+        const coordMatch = cg === g && cs === s && cp === p;
+        const missionMatch = !chipMission || !mission || chipMission === mission;
+        chip.classList.toggle("is-selected", coordMatch && missionMatch);
+      });
+    };
+
+    const applyLiveState = (page, state, opts) => {
       const rt = getFleetRuntime(page);
       if (!state || typeof state !== "object") return;
+      const seq = Number(opts?.seq || 0);
+      if (seq > 0) {
+        const last = Number(page._fleetApplySeq || 0);
+        if (seq < last) return;
+        page._fleetApplySeq = seq;
+      }
+      const st = Number(state.server_time || 0);
+      if (st) {
+        const lastSt = Number(page._fleetLiveServerTime || 0);
+        if (lastSt && st < lastSt - 1) return;
+        page._fleetLiveServerTime = Math.max(lastSt, st);
+      }
       if (state.server_time) setServerTime(state.server_time);
       if (state.resources) {
         rt.data.resources = state.resources;
@@ -4137,6 +4232,7 @@
     };
 
     const refreshFleetState = async (page) => {
+      const seq = ++_fleetRefreshSeq;
       try {
         const rt = getFleetRuntime(page);
         let planetId = parseInt(page.dataset.planetId || rt.data?.planet_id || "0", 10);
@@ -4145,7 +4241,7 @@
         }
         const q = planetId ? `?planet_id=${planetId}` : "";
         const res = await GC.fetchJSON(`/api/fleet/state${q}`, { cache: "no-store" });
-        if (res?.ok) applyLiveState(page, fleetPayload(res));
+        if (res?.ok) applyLiveState(page, fleetPayload(res), { seq });
       } catch (_) {}
     };
     GC.refreshFleetState = refreshFleetState;
@@ -4342,6 +4438,7 @@
         GC.syncHudSelect(ms);
         setColonizeRowVisible(page, "transport");
       }
+      delete page.dataset.fleetUrlMission;
       page.querySelectorAll(".fleet-colony-chip").forEach((c) => c.classList.remove("is-selected"));
       chip.classList.add("is-selected");
       syncExpeditionMissionTarget(page);
@@ -4349,6 +4446,7 @@
     };
 
     GC.scheduleFleetPreview = schedulePreview;
+    GC.syncColonyChipsFromCoords = syncColonyChipsFromCoords;
     GC.syncExpeditionMissionTarget = syncExpeditionMissionTarget;
     GC.updateFleetFormMode = updateFleetFormMode;
     GC.refreshFleetState = refreshFleetState;
@@ -4472,6 +4570,7 @@
         return;
       }
       if (e.target.matches("[data-fleet-mission]")) {
+        delete page.dataset.fleetUrlMission;
         setColonizeRowVisible(page, e.target.value);
         if (e.target.value === "expedition") applyExpeditionTarget(page);
         syncExpeditionMissionTarget(page);
@@ -4479,6 +4578,7 @@
         schedulePreview(page);
       }
       if (e.target.matches('[name="target_galaxy"], [name="target_system"], [name="target_position"]')) {
+        delete page.dataset.fleetUrlMission;
         syncExpeditionMissionTarget(page);
       }
       if (e.target.closest("#fleet-send-form")) schedulePreview(page);
@@ -4488,6 +4588,7 @@
       const page = getPage();
       if (!page) return;
       if (e.target.matches('[name="target_galaxy"], [name="target_system"], [name="target_position"]')) {
+        delete page.dataset.fleetUrlMission;
         syncExpeditionMissionTarget(page);
       }
       if (e.target.closest("#fleet-send-form")) schedulePreview(page);
@@ -4637,16 +4738,23 @@
     const page = document.getElementById("fleet-page");
     if (!page || page.dataset.ready !== "1") return;
 
+    page._fleetApplySeq = 0;
+    page._fleetLiveServerTime = 0;
+    delete page.dataset.fleetUrlMission;
+
     const rt = getFleetRuntime(page);
     rt.data = parseFleetPageData(page);
+    rt.lastPreview = null;
     if (rt.data?.planet_id) page.dataset.planetId = String(rt.data.planet_id);
-    if (typeof GC.refreshFleetState === "function") GC.refreshFleetState(page);
 
     const fuelResource = rt.data.fuel_resource || page.dataset.fuelResource || "fuel_cells";
     const fuelLabelEl = page.querySelector("[data-fuel-resource-label]");
     if (fuelLabelEl) {
       fuelLabelEl.textContent = fleetFuelLabel((k, f) => t(k, f), fuelResource);
     }
+
+    if (typeof GC.initHudSelects === "function") GC.initHudSelects(page);
+    applyFleetUrlPrefill(page);
 
     const tickFleetCountdowns = () => {
       const p = document.getElementById("fleet-page");
@@ -4655,27 +4763,39 @@
     };
     tickFleetCountdowns();
     GC.startProgressTicker();
-    if (typeof GC.initHudSelects === "function") GC.initHudSelects(page);
-    applyFleetUrlPrefill(page);
+    if (typeof GC.refreshFleetState === "function") GC.refreshFleetState(page);
   }
 
   function applyFleetUrlPrefill(page) {
     const params = new URLSearchParams(window.location.search);
     const form = page.querySelector("#fleet-send-form");
     if (!form) return;
-    const mission = params.get("mission");
-    const g = params.get("target_galaxy");
-    const s = params.get("target_system");
-    const p = params.get("target_position");
+
+    const mission = (params.get("mission") || "").trim();
+    const gRaw = params.get("target_galaxy");
+    const sRaw = params.get("target_system");
+    const pRaw = params.get("target_position");
+    const hasCoords = gRaw != null && sRaw != null && pRaw != null;
+
+    if (hasCoords) {
+      const gInp = form.querySelector('[name="target_galaxy"]');
+      const sInp = form.querySelector('[name="target_system"]');
+      const pInp = form.querySelector('[name="target_position"]');
+      if (gInp) gInp.value = String(parseInt(gRaw, 10) || gRaw);
+      if (sInp) sInp.value = String(parseInt(sRaw, 10) || sRaw);
+      if (pInp) pInp.value = String(parseInt(pRaw, 10) || pRaw);
+    }
+
     if (mission) {
+      page.dataset.fleetUrlMission = mission;
       const ms = form.querySelector("[data-fleet-mission]");
       if (ms) {
         ms.value = mission;
         if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
       }
-      setColonizeRowVisible(page, mission || "transport");
+      setColonizeRowVisible(page, mission);
       updateFleetFormMode(page);
-      if (mission === "expedition" && p == null) {
+      if (mission === "expedition" && pRaw == null) {
         let expPos = 16;
         try {
           const st = JSON.parse(page.querySelector("#fleet-page-state")?.textContent || "{}");
@@ -4684,19 +4804,25 @@
         const posInp = form.querySelector('[name="target_position"]');
         if (posInp) posInp.value = String(expPos);
       }
+    } else {
+      delete page.dataset.fleetUrlMission;
     }
-    if (g != null) form.querySelector('[name="target_galaxy"]').value = g;
-    if (s != null) form.querySelector('[name="target_system"]').value = s;
-    if (p != null) form.querySelector('[name="target_position"]').value = p;
+
     const colonyName = params.get("colony_name");
     if (colonyName) {
       const inp = form.querySelector("[data-fleet-colony-name]");
       if (inp) inp.value = colonyName;
     }
+
+    if (typeof GC.syncColonyChipsFromCoords === "function") {
+      GC.syncColonyChipsFromCoords(page);
+    }
     if (typeof GC.syncExpeditionMissionTarget === "function") {
       GC.syncExpeditionMissionTarget(page);
     }
-    GC.runFleetPreview(page);
+    if (typeof GC.runFleetPreview === "function") {
+      GC.runFleetPreview(page);
+    }
   }
 
   let _shipyardRefreshTimer = null;
@@ -6474,7 +6600,7 @@
           body: JSON.stringify({ planet_id: planetId }),
         });
         if (res?.ok) {
-          applyActionState(res, "planet_switch");
+          const anyActive = applyActionState(res, "planet_switch");
           if (Array.isArray(res.planets)) {
             updateHeaderPlanetSwitcherFromPlanets(res.planets);
           } else if (res.state) {
@@ -6486,7 +6612,20 @@
             if (!el || !name) return;
             el.textContent = id === "build-queue-planet-label" ? `· ${name}` : name;
           });
-          await GC.reloadCurrentPage();
+          await GC.reloadCurrentPage({ force: true });
+          if (typeof GC.refreshGameState === "function") {
+            await GC.refreshGameState("planet_switch_reload");
+          }
+          const fleetPage = document.getElementById("fleet-page");
+          if (
+            fleetPage &&
+            fleetPage.dataset.ready === "1" &&
+            typeof GC.refreshFleetState === "function"
+          ) {
+            await GC.refreshFleetState(fleetPage);
+          }
+          GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch);
+          GC.startProgressTicker();
         } else {
           showNotify(planetSwitchReasonText(res?.reason), "error");
         }

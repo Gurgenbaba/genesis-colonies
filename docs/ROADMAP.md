@@ -232,6 +232,13 @@ Details: [SECURITY.md](SECURITY.md)
 | Admin Control Center auf PJAX/State (statt `reload`) | 💡 |
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
 
+### Tech debt (pytest, nicht blockierend)
+
+| Item | Notizen |
+|------|---------|
+| `test_messages_js_spy_report_and_category_label` | `renderSpyReport` nach Inbox-Refactor umbenannt/entfernt — Test anpassen |
+| `test_no_undocumented_location_reload_in_game_static` | `main.js:684` PJAX-Fallback — Allowlist oder `GC.reloadCurrentPage` only |
+
 ---
 
 ## Verwandte Dokumente
