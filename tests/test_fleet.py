@@ -1860,6 +1860,7 @@ def test_collect_validates_ownership(fleet_db):
         player_id=uid1,
         target_planet_id=p1,
         source_planet_ids=[p2],
+        ships={"mule_courier": 1},
         resources_mode="all",
     )
     assert not ok
@@ -1885,23 +1886,39 @@ def test_distribute_validates_ownership(fleet_db):
     assert reason == "planet_not_owned"
 
 
-def test_logistics_scaffold_response(fleet_db):
-    uid = _player()
+def test_logistics_collect_starts_batch(fleet_db):
     conn = db()
-    p1 = int(get_planets_by_player(uid, conn=conn)[0]["id"])
-    p2 = _second_colony(uid, conn=conn)
-    conn.close()
+    uid = _player(conn=conn)
+    hub = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    source = _second_colony(uid, conn=conn)
+    _fund_planet(conn.cursor(), source, metal=15000, crystal=2000)
+    _seed_ships(hub, uid, {"mule_courier": 4}, conn=conn)
+    conn.commit()
 
     ok, reason, payload = collect_resources(
         player_id=uid,
-        target_planet_id=p1,
-        source_planet_ids=[p2],
+        target_planet_id=hub,
+        source_planet_ids=[source],
+        ships={"mule_courier": 2},
         resources_mode="all",
         ships_selection_mode="manual",
+        conn=conn,
     )
-    assert not ok
-    assert reason == "logistics_not_implemented"
-    assert payload["validated"] is True
+    assert ok, reason
+    assert payload["batch"]["batch_type"] == "collect_resources"
+    assert len(payload["started"]) == 1
+    fleet_id = payload["started"][0]["fleet_id"]
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT mission_type, origin_planet_id, target_planet_id, parent_batch_id FROM fleet_movements WHERE id = ?;",
+        (fleet_id,),
+    )
+    mv = dict(cur.fetchone())
+    assert mv["mission_type"] == "collect"
+    assert int(mv["origin_planet_id"]) == hub
+    assert int(mv["target_planet_id"]) == source
+    assert int(mv["parent_batch_id"]) == payload["batch"]["id"]
+    conn.close()
 
 
 def test_normalize_ships_filters_unknown():

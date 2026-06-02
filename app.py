@@ -3681,30 +3681,67 @@ def api_shipyard_queue_move():
 @require_login
 def api_fleet_logistics_collect():
     from game.fleet import collect_resources, fleet_schema_ready
-    from game.fleet_api import fleet_err, fleet_ok
+    from game.fleet_calc import normalize_ships
 
     user_id = int(session.get("user_id") or 0)
     if not user_id:
-        return jsonify(fleet_err("not_logged_in")), 401
+        return jsonify({"ok": False, "reason": "not_logged_in", "state": {}}), 401
     if not fleet_schema_ready(db()):
-        return jsonify(fleet_err("fleet_unavailable")), 503
+        return _action_json_response(
+            False, "fleet_unavailable", finish_source="api_fleet_logistics_collect"
+        ), 503
 
     data = request.get_json(silent=True) or {}
-    ok, reason, payload = collect_resources(
-        player_id=user_id,
-        target_planet_id=int(data.get("target_planet_id") or 0),
-        source_planet_ids=[int(x) for x in (data.get("source_planet_ids") or [])],
-        resources_mode=str(data.get("resources_mode") or "all"),
-        resources=data.get("resources"),
-        ships_selection_mode=str(data.get("ships_selection_mode") or "manual"),
-        preset_id=int(data["preset_id"]) if data.get("preset_id") else None,
+    ships = normalize_ships(data.get("ships") or {})
+    if not ships and data.get("ships"):
+        return _action_json_response(
+            False, "unknown_ship", finish_source="api_fleet_logistics_collect"
+        ), 400
+    try:
+        speed_percent = int(data.get("speed_percent") or 100)
+    except (TypeError, ValueError):
+        speed_percent = 100
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    def _collect(conn):
+        return collect_resources(
+            player_id=user_id,
+            target_planet_id=int(data.get("target_planet_id") or 0),
+            source_planet_ids=[int(x) for x in (data.get("source_planet_ids") or [])],
+            ships=ships,
+            resources_mode=str(data.get("resources_mode") or "all"),
+            resources=data.get("resources"),
+            ships_selection_mode=str(data.get("ships_selection_mode") or "manual"),
+            preset_id=int(data["preset_id"]) if data.get("preset_id") else None,
+            speed_percent=speed_percent,
+            conn=conn,
+        )
+
+    ok, reason, result = _fleet_write_transaction(_collect)
+    resp = _action_json_response(
+        ok,
+        reason or ("fleet_logistics_collect_ok" if ok else "generic"),
+        payload=result if not ok else None,
+        job=result if ok else None,
+        finish_source="api_fleet_logistics_collect",
     )
-    if payload:
-        status = 200 if payload.get("validated") else 400
-        if payload.get("validated"):
-            return jsonify(fleet_ok(payload, message_key="fleet_logistics_not_implemented")), status
-        return jsonify(fleet_err(reason or "logistics_not_implemented", data=payload)), status
-    return jsonify(fleet_err(reason)), 400
+    body = resp.get_json()
+    if isinstance(body, dict):
+        if ok and result is not None:
+            body["data"] = result
+        elif not ok and result is not None:
+            body["data"] = result
+    out = jsonify(body)
+    if request_id and isinstance(body, dict):
+        save_idempotent_action(user_id, request_id, body)
+    if not ok:
+        return out, 400
+    return out
 
 
 @app.route("/api/fleet/logistics/distribute", methods=["POST"])

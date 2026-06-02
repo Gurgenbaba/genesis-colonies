@@ -2690,6 +2690,34 @@ def mass_expedition(
             conn.close()
 
 
+def _fleet_ships_are_cargo_only(ships: Mapping[str, int]) -> Tuple[bool, str]:
+    ships_n = normalize_ships(ships)
+    if not ships_n:
+        return False, "no_ships"
+    for key in ships_n:
+        spec = get_ship(str(key))
+        if not spec or str(spec.get("role") or "") != "cargo":
+            return False, "no_cargo_ships"
+    return True, ""
+
+
+def _split_ships_across_targets(ships: Mapping[str, int], target_count: int) -> List[Dict[str, int]]:
+    """Split fleet evenly; per-type remainder goes to the last target."""
+    if target_count < 1:
+        return []
+    ships_n = normalize_ships(ships)
+    parts: List[Dict[str, int]] = [{} for _ in range(target_count)]
+    for key, total in ships_n.items():
+        base, rem = divmod(int(total), target_count)
+        for i in range(target_count - 1):
+            if base > 0:
+                parts[i][key] = base
+        last_qty = base + rem
+        if last_qty > 0:
+            parts[target_count - 1][key] = last_qty
+    return [normalize_ships(p) for p in parts]
+
+
 def validate_logistics_planets(
     player_id: int,
     target_planet_ids: Sequence[int],
@@ -2720,44 +2748,179 @@ def collect_resources(
     player_id: int,
     target_planet_id: int,
     source_planet_ids: Sequence[int],
-    resources_mode: str,
+    ships: Mapping[str, int],
+    resources_mode: str = "all",
     resources: Mapping[str, Any] | None = None,
     ships_selection_mode: str = "manual",
     preset_id: int | None = None,
+    speed_percent: int = 100,
     conn=None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Multi-colony collect: hub origin, N× send_fleet(mission=collect) under one batch (GC-900B)."""
+    hub_id = int(target_planet_id or 0)
+    if hub_id <= 0:
+        return False, "origin_not_found", None
+
+    raw_sources = [int(x) for x in (source_planet_ids or []) if int(x) > 0]
+    sources = []
+    seen: Set[int] = set()
+    for sid in raw_sources:
+        if sid == hub_id or sid in seen:
+            continue
+        seen.add(sid)
+        sources.append(sid)
+    if not sources:
+        return False, "no_planets", None
+
     ok, reason = validate_logistics_planets(
-        player_id, [target_planet_id], source_planet_ids, conn=conn
+        player_id, [hub_id], sources, conn=conn
     )
     if not ok:
         return False, reason, None
 
     mode = str(ships_selection_mode or "").strip().lower()
-    if mode in ("auto_cargo", "preset") and not preset_id:
-        return False, "logistics_not_implemented", {
-            "ok": False,
-            "reason": "logistics_not_implemented",
-            "message_key": "fleet_logistics_not_implemented",
-            "validated": True,
-            "resources_mode": resources_mode,
-            "ships_selection_mode": mode,
-        }
+    if mode in ("auto_cargo", "preset"):
+        return False, "logistics_not_implemented", None
 
-    if mode == "auto_cargo":
-        return False, "logistics_not_implemented", {
-            "ok": False,
-            "reason": "logistics_not_implemented",
-            "message_key": "fleet_logistics_not_implemented",
-            "validated": True,
-        }
+    if str(resources_mode or "").strip().lower() != "all":
+        return False, "logistics_not_implemented", None
 
-    return False, "logistics_not_implemented", {
-        "ok": False,
-        "reason": "logistics_not_implemented",
-        "message_key": "fleet_logistics_not_implemented",
-        "validated": True,
-        "note": "Manual multi-collect transport chains planned for Phase 2.",
-    }
+    ships_n = normalize_ships(ships)
+    if not ships_n:
+        return False, "no_ships", None
+    ok_cargo, cargo_reason = _fleet_ships_are_cargo_only(ships_n)
+    if not ok_cargo:
+        return False, cargo_reason, None
+
+    pct = int(speed_percent)
+    if pct < 10 or pct > 100:
+        return False, "invalid_speed_percent", None
+
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not fleet_schema_ready(conn):
+            return False, "fleet_unavailable", None
+
+        if own:
+            begin_write_transaction(conn)
+
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+            (hub_id, int(player_id)),
+        )
+        hub_row = cur.fetchone()
+        if not hub_row:
+            if own:
+                rollback(conn)
+            return False, "origin_not_found", None
+
+        available = get_planet_ships(hub_id, conn=conn)
+        for sk, need in ships_n.items():
+            if int(available.get(sk, 0)) < int(need):
+                if own:
+                    rollback(conn)
+                return False, "not_enough_ships", None
+
+        allocations = _split_ships_across_targets(ships_n, len(sources))
+        for alloc in allocations:
+            if not alloc or calculate_total_cargo(alloc) <= 0:
+                if own:
+                    rollback(conn)
+                return False, "not_enough_ships", None
+
+        slots = get_fleet_slot_status(player_id, conn=conn)
+        if int(slots["free"]) < len(sources):
+            if own:
+                rollback(conn)
+            return False, "fleet_slots_full", None
+
+        now = _now()
+        cur.execute(
+            """
+            INSERT INTO fleet_batches (player_id, batch_type, label, status, total_fleets, created_at, updated_at)
+            VALUES (?, 'collect_resources', ?, 'running', ?, ?, ?);
+            """,
+            (
+                int(player_id),
+                f"Collect resources x{len(sources)}",
+                len(sources),
+                now,
+                now,
+            ),
+        )
+        batch_id = int(cur.lastrowid)
+
+        started: List[Dict[str, Any]] = []
+        for source_id, alloc in zip(sources, allocations):
+            cur.execute(
+                "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+                (int(source_id), int(player_id)),
+            )
+            source_row = cur.fetchone()
+            if not source_row:
+                if own:
+                    rollback(conn)
+                return False, "planet_not_owned", None
+            coords = get_planet_coordinates(dict(source_row))
+            ok_send, send_reason, payload = send_fleet(
+                player_id=player_id,
+                origin_planet_id=hub_id,
+                target_galaxy=int(coords["galaxy"]),
+                target_system=int(coords["system"]),
+                target_position=int(coords["position"]),
+                mission_type="collect",
+                ships=alloc,
+                resources={},
+                speed_percent=pct,
+                preset_id=preset_id,
+                batch_id=batch_id,
+                conn=conn,
+            )
+            if not ok_send or not payload:
+                if own:
+                    rollback(conn)
+                return False, send_reason or "send_failed", None
+            started.append(
+                {
+                    "source_planet_id": int(source_id),
+                    "fleet_id": int(payload["fleet"]["id"]),
+                }
+            )
+
+        batch_status = "completed" if started else "failed"
+        conn.execute(
+            "UPDATE fleet_batches SET status = ?, total_fleets = ?, updated_at = ? WHERE id = ?;",
+            (batch_status, len(started), now, batch_id),
+        )
+
+        if own:
+            commit(conn)
+
+        cur.execute("SELECT * FROM fleet_batches WHERE id = ?;", (batch_id,))
+        batch_row = dict(cur.fetchone())
+
+        return True, "", {
+            "batch": {
+                "id": batch_id,
+                "batch_type": batch_row["batch_type"],
+                "status": batch_row["status"],
+                "total_fleets": len(started),
+                "label": batch_row["label"],
+            },
+            "started": started,
+            "skipped": [],
+            "active_slots": get_fleet_slot_status(player_id, conn=conn),
+        }
+    except Exception:
+        if own:
+            rollback(conn)
+        raise
+    finally:
+        if own and conn is not None:
+            conn.close()
 
 
 def distribute_resources(
