@@ -125,11 +125,15 @@
     const v = Number(serverTimeSec);
     if (!Number.isFinite(v) || v <= 0) return;
     const hasSync = TIME.serverNow > 0 && TIME.clientPerfAt > 0;
-    const approx = hasSync ? getApproxServerNow() : null;
-    if (hasSync && Number.isFinite(approx)) {
-      const drift = Math.abs(v - approx);
-      // Reject only small backward jitter (<2s); accept larger corrections so fleet timers stay aligned.
-      if (v + 1.0 < approx && drift < 2) return;
+    if (hasSync) {
+      const approx = getApproxServerNow();
+      if (Number.isFinite(approx)) {
+        const drift = v - approx;
+        // Integer server_time polls often trail extrapolated clock — ignore small backward steps.
+        if (drift < 0 && drift > -2) return;
+        // Ignore duplicate second stamps that jump slightly forward.
+        if (drift > 0 && drift < 0.12) return;
+      }
     }
     TIME.serverNow = v;
     TIME.clientPerfAt = performance.now();
@@ -714,18 +718,21 @@
   function _minMovementCountdownRemaining(serverNow) {
     const now = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
     let min = Infinity;
-    document.querySelectorAll("[data-countdown-at]").forEach((el) => {
+    const scan = (el) => {
       const at = Number(el.dataset.countdownAt || 0);
       if (!at) return;
-      const rem = Math.max(0, at - now);
+      const rem = Math.max(0, Math.ceil(at - now));
       if (rem < min) min = rem;
-    });
+    };
+    document.querySelectorAll("[data-countdown-at]").forEach(scan);
+    document.querySelectorAll("[data-preview-arrival][data-countdown-at]").forEach(scan);
     return Number.isFinite(min) ? min : Infinity;
   }
 
   function _progressTickerDelayMs(serverNow) {
     const minRem = _minMovementCountdownRemaining(serverNow);
-    if (minRem <= 5) return 100;
+    if (minRem <= 3) return 50;
+    if (minRem <= 10) return 100;
     if (minRem <= 30) return 250;
     if (minRem <= 120) return 500;
     return 1000;
@@ -1755,6 +1762,17 @@
     return false;
   }
 
+  function _hasStaleMovementCountdown() {
+    const now = getApproxServerNow();
+    for (const el of document.querySelectorAll("[data-countdown-at]")) {
+      const scope = el.dataset.countdownScope || "";
+      if (scope !== "fleet" && scope !== "overview") continue;
+      const at = Number(el.dataset.countdownAt || 0);
+      if (at && Math.ceil(at - now) <= 0) return true;
+    }
+    return false;
+  }
+
   function _hasActiveProgressJobs() {
     const now = getApproxServerNow();
     const buildFinish = BUILDQ.active.finishTime > now;
@@ -1771,7 +1789,10 @@
       !!document.querySelector(".shipyard-job.shipyard-job-active") ||
       !!document.getElementById("overview-research-active") ||
       !!document.querySelector(".planet-evolution-page .pe-planet-research-active") ||
-      _hasLiveCountdownAt()
+      _hasLiveCountdownAt() ||
+      _hasStaleMovementCountdown() ||
+      _movementCountdownRefreshPending.fleet ||
+      _movementCountdownRefreshPending.overview
     );
   }
 
@@ -2227,7 +2248,7 @@
   let _queuedChainRefreshReason = null;
 
   const MOVEMENT_EXPIRY_REFRESH_MS = 900;
-  const MOVEMENT_EXPIRY_REFRESH_MS_SHORT = 350;
+  const MOVEMENT_EXPIRY_REFRESH_MS_SHORT = 200;
 
   function _movementCountdownKey(el) {
     return String(el.dataset.countdownKey || `${el.dataset.countdownScope || ""}:${el.dataset.countdownAt || ""}`);
@@ -2250,11 +2271,37 @@
     const nowMs = Date.now();
     const globalCooldown = urgent ? MOVEMENT_EXPIRY_REFRESH_MS_SHORT : MOVEMENT_EXPIRY_REFRESH_MS;
     if (nowMs - _lastGlobalMovementExpiryRefreshMs < globalCooldown) return false;
+    if (urgent) {
+      _movementCountdownExpiryState.set(key, nowMs);
+      return true;
+    }
     const last = _movementCountdownExpiryState.get(key) || 0;
-    const cooldown = _movementExpiryCooldownMs(key, urgent);
+    const cooldown = _movementExpiryCooldownMs(key, false);
     if (nowMs - last < cooldown) return false;
     _movementCountdownExpiryState.set(key, nowMs);
     return true;
+  }
+
+  function _movementExpiryRefreshDebounceMs() {
+    let maxStale = 0;
+    _movementCountdownExpiryState.forEach((val, k) => {
+      if (!String(k).endsWith(":stale")) return;
+      maxStale = Math.max(maxStale, Number(val) || 0);
+    });
+    if (maxStale >= 5) return 1800;
+    if (maxStale >= 2) return 600;
+    return 80;
+  }
+
+  function _anyStaleMovementCountdownDom() {
+    const now = getApproxServerNow();
+    for (const el of document.querySelectorAll("[data-countdown-at]")) {
+      const scope = el.dataset.countdownScope || "";
+      if (scope !== "fleet" && scope !== "overview") continue;
+      const at = Number(el.dataset.countdownAt || 0);
+      if (at && Math.ceil(at - now) <= 0) return true;
+    }
+    return false;
   }
 
   function _noteMovementCountdownStillStale(key) {
@@ -2276,6 +2323,7 @@
       _movementCountdownRefreshTimer = null;
     }
 
+    const debounceMs = _movementExpiryRefreshDebounceMs();
     _movementCountdownRefreshTimer = GC.setSafeTimeout(() => {
       _movementCountdownRefreshTimer = null;
       if (_movementCountdownRefreshPending[pendingKey]) return;
@@ -2325,8 +2373,13 @@
           if (stillStale) _noteMovementCountdownStillStale(key);
           else _clearMovementCountdownStale(key);
         });
+        if (_anyStaleMovementCountdownDom()) {
+          requestMovementCountdownRefresh(pendingKey);
+        } else {
+          GC.startProgressTicker();
+        }
       });
-    }, 120);
+    }, debounceMs);
   }
 
   function updateMovementCountdowns(serverNow) {
@@ -2344,9 +2397,12 @@
       const key = _movementCountdownKey(el);
       const urgent = scope === "fleet" || scope === "overview";
       if (remaining <= 0) {
-        if (!_shouldRefreshExpiredCountdown(key, urgent)) return;
-        if (scope === "fleet") fleetExpired = true;
-        else if (scope === "overview") overviewExpired = true;
+        if (urgent) {
+          if (scope === "fleet") fleetExpired = true;
+          else if (scope === "overview") overviewExpired = true;
+        } else if (_shouldRefreshExpiredCountdown(key, false)) {
+          /* non-scoped countdowns */
+        }
       } else {
         _movementCountdownExpiryState.delete(key);
         _clearMovementCountdownStale(key);
@@ -3881,12 +3937,9 @@
       if (state.fleet_slots && slotsEl) {
         slotsEl.textContent = `${state.fleet_slots.active} / ${state.fleet_slots.max}`;
       }
-      if (state.active_fleets) {
+      if (Array.isArray(state.active_fleets)) {
         rt.data.active_fleets = state.active_fleets;
         renderActiveFleets(page, state.active_fleets);
-      } else {
-        const activeListEl = page.querySelector("[data-fleet-active-list]");
-        if (activeListEl) delete activeListEl.dataset.fleetSig;
       }
       if (state.presets) {
         rt.data.presets = state.presets;

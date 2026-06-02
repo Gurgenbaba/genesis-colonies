@@ -120,13 +120,14 @@ def test_main_js_progress_ticker_uses_server_time_and_interval():
     time_section = src.split("function getApproxServerNow()")[1].split("bootstrapServerTimeFromDom();")[0]
     assert "Math.floor(Date.now() / 1000)" in time_section
     ticker_section = src.split("GC.startProgressTicker = function startProgressTicker()")[1].split("GC.stopPolling")[0]
-    assert "setInterval(tick, 1000)" in ticker_section
+    assert "_progressTickerDelayMs" in ticker_section
+    assert "setTimeout(tick, _progressTickerDelayMs(serverNow))" in ticker_section
     assert "requestAnimationFrame(tick)" not in ticker_section
     update_section = src.split("function updatePlanetEvolutionResearchProgress")[1].split("function updateAllProgressBars")[0]
     assert "querySelectorAll(\".planet-evolution-page .pe-planet-research-active\")" in update_section
     assert "formatEta(Math.ceil(remaining))" in update_section
-    update_all = src.split("function updateAllProgressBars()")[1].split("function updateBuildQueueLive")[0]
-    assert "updatePlanetEvolutionResearchProgress(serverNow)" in update_all
+    update_all = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
+    assert "updatePlanetEvolutionResearchProgress(serverNowTs)" in update_all
 
 
 def test_main_js_movement_countdown_expiry_debounced():
@@ -145,7 +146,8 @@ def test_main_js_movement_countdown_expiry_debounced():
     assert "queueMicrotask" in refresh_section
     progress_section = src.split("function _hasActiveProgressJobs()")[1].split("// progress ticker")[0]
     assert "_hasLiveCountdownAt()" in progress_section
-    assert '[data-countdown-at]' not in progress_section
+    assert "_hasStaleMovementCountdown()" in progress_section
+    assert "_movementCountdownRefreshPending.fleet" in progress_section
 
 
 def test_main_js_init_page_resumes_chat_after_pjax():
@@ -207,6 +209,9 @@ def test_main_js_fleet_countdown_uses_integer_seconds():
     countdown_body = src.split("function updateMovementCountdowns(serverNow)")[1].split("function updateAllProgressBars")[0]
     assert "Math.ceil(countdownAt - now)" in countdown_body
     assert "MOVEMENT_EXPIRY_REFRESH_MS_SHORT" in src
+    assert "_anyStaleMovementCountdownDom" in src
+    stale_section = src.split("function requestMovementCountdownRefresh(scope)")[1].split("function updateMovementCountdowns")[0]
+    assert "requestMovementCountdownRefresh(pendingKey)" in stale_section
 
 
 def test_style_uses_readable_level_font():
