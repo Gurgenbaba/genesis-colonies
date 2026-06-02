@@ -68,7 +68,7 @@ MVP-Constraints:
 | **Bewegungen** | Ausschließlich `fleet_movements`; optional `fleet_batches` zur UI-Gruppierung (wie `mass_expedition`) |
 | **Kein Parallel-System** | Kein `logistics_state`, kein zweites Polling |
 | **Planet Scope** | Origin = `get_context_planet()` oder explizit `origin_planet_id` / `target_planet_id` im Body; Schiffe von Origin `planet_ships` |
-| **Frontend** | Später: `GC.fetchGameAction` → `applyActionState()`; Preview nur Server (`/api/fleet/preview` oder dediziertes Logistics-Preview in 900C) |
+| **Frontend** | GC-900C: `GC.fetchGameAction` → `applyActionState()`; Preview nur Server |
 | **Keine Frontend-Math** | Keine Cargo-/Slot-/Fuel-Berechnung im Client |
 | **Idempotenz** | `request_id` / `X-Request-Id` auf POST (wie Build/Fleet send) |
 
@@ -89,9 +89,10 @@ Referenz-Muster: [GC-800_RECYCLER.md](GC-800_RECYCLER.md) (Mission + Tick), [STA
 | `resources_mode` | z. B. `all` (MVP: alles bis Cargo-Cap) |
 | `resources` | Optional explizite Mengen (Phase 2 / `manual` modes) |
 | `ships_selection_mode` | `manual` (MVP) — `auto_cargo` / `preset` → derzeit Stub |
-| `preset_id` | Optional; Preset-Flow Phase 2 |
+| `preset_id` | Optional; Preset-Flow Phase 2 (GC-900E) |
+| `ships` | **Fehlt in Route** — GC-900B: `{ "mule_courier": 50 }` Pflicht bei `manual` |
 
-**Distribute** — `POST /api/fleet/logistics/distribute`
+**Distribute** — `POST /api/fleet/logistics/distribute` (Implementierung **GC-900D**, nicht 900B)
 
 | Feld | Bedeutung |
 |------|-----------|
@@ -123,26 +124,45 @@ Routes antworten mit `fleet_ok` / `fleet_err` **ohne** kanonisches `state`-Envel
 
 ---
 
-## Empfehlung: Movements + optional Batch
+## Architekturentscheidung: Option A (Orchestrierung)
 
-| Option | Beschreibung | Empfehlung |
-|--------|--------------|------------|
-| A | **1 `fleet_movements` Row pro Quell/Ziel-Paar** (Outbound → Load → Return als Status-Übergänge) | ✅ MVP |
-| B | Nur Batch-Eintrag ohne Movements | ❌ widerspricht GC-000 |
-| C | Parallele `logistics_jobs` Tabelle | ❌ verboten |
+**GC-900B und Collect-MVP:** Keine neue `mission_type`, **keine Migration**, **kein neuer Tick-Zweig**.
 
-**Batch (optional, empfohlen):**
+```text
+fleet_batches.batch_type = collect_resources
+        ↓
+N × send_fleet(mission="collect", origin=Hub, target=Source)
+        ↓
+bestehende Collect-Tick-Logik + Return-Gutschrift am Hub
+```
 
-- `fleet_batches.batch_type` ∈ `collect_resources` | `distribute_resources` (bereits in `fleet_defs.BATCH_TYPES`)
-- `fleet_movements.parent_batch_id` verknüpft Einzelfahrten für Overview/UI
-- UI zeigt „Logistics Collect #123“ mit N aktiven Flotten
+| Was | Rolle |
+|-----|--------|
+| `batch_type` `collect_resources` | UI/Overview-Gruppierung (wie `mass_expedition`) |
+| `mission_type` `collect` | Beladung, Return, `_handle_return` — bereits live |
+| `collect_resources` als Mission-String | ❌ nicht für MVP — nur Batch-Label |
 
-**Mission-Typen (Migration in GC-900B):**
+**Warum Option A (GC-000):** Fleet-System bleibt eins; Logistics = Planung + Batch + N normale Movements. Referenz: `mass_expedition()` in `game/fleet.py`.
 
-- `collect_resources` — Ankunft: wie `collect`, Beladung bis Cargo-Cap, Return zum Hub
-- `distribute_resources` — Abflug: Fracht vom Hub; Ankunft: Gutschrift ans Ziel; Return leer
+**Distribute (GC-900D):** Gleiches Prinzip bevorzugt — `batch_type` `distribute_resources` + N× `send_fleet(mission="transport", …)` (Details im Distribute-Ticket; eigene Randfälle: Abbuchung, Caps, Split).
 
-Alternativ intern `transport`/`collect` nutzen und nur Batch labeln — **weniger klar in Reports**. Empfehlung: **explizite Mission-Strings** + Migration `043`-Stil CHECK-Erweiterung.
+| Verboten | Grund |
+|----------|--------|
+| Parallele `logistics_jobs` | GC-000 Regel 15 |
+| Nur Batch ohne Movements | Kein Tick |
+| Neuer Mission-Typ nur für Label | Migration + doppelte Tick-Logik ohne Nutzen |
+
+---
+
+## GC-900B — drei Baustellen (Collect Backend)
+
+| # | Baustelle | Heute | Ziel |
+|---|-----------|--------|------|
+| 1 | **Ships in API** | Route übergibt kein `ships` | Body `ships: { "mule_courier": N }` → Handler; Cargo-only-Validierung |
+| 2 | **Envelope** | `fleet_ok` ohne `state` | `_action_json_response` + `applyActionState`-fähiges `state` (GC-801) |
+| 3 | **Batch-Orchestrierung** | Stub | Wie `mass_expedition`: `fleet_batches` + Schleife `send_fleet(collect)` + Slot-Check; Schiffe gleichmäßig auf Sources |
+
+**Nicht in 900B:** `distribute_resources`, UI, Migration 044, Presets/`auto_cargo`.
 
 ---
 
@@ -160,10 +180,10 @@ Ships: 30× mule_courier (vom Hub)
 
 1. Validierung: Ownership, ≥1 Source, Hub ∉ Sources (oder erlaubt skip), nur Cargo-Ships, genug Schiffe am Hub, `free_slots >= Anzahl geplanter Movements`.
 2. **Schiffverteilung (MVP):** Gleichmäßig auf Sources aufteilen (ganzzahlig pro Source); Rest auf letzte Source oder Ablehnung wenn nicht teilbar — **im Ticket festnageln**.
-3. Pro Source: `send_fleet`-ähnlicher Aufruf mit Mission `collect_resources`, Ziel = Source-Koordinaten, Origin = Hub, `resources={}` am Abflug.
-4. Ankunft am Source: Beladung bis Cargo-Cap — Priorität MVP: **metal → crystal → fuel_cells** (analog Einzel-`collect`).
-5. Return zum Hub: bei Ankunft Ressourcen auf **Hub-Planet** gutschreiben (nicht auf Source).
-6. Messages/Reports: Transport-ähnliche Systemnachricht optional (GC-900D).
+3. Pro Source: `send_fleet(mission="collect", origin_planet_id=Hub, target_planet_id=Source, ships=Anteil, resources={}, batch_id=…)`.
+4. Ankunft am Source: bestehende `collect`-Tick-Logik — Beladung metal → crystal → fuel_cells bis Cargo-Cap.
+5. Return zum Hub: bestehendes `_handle_return` — Gutschrift auf **Hub** (`origin_planet_id`).
+6. Collect-Reports: bestehende `fleet_collect_report_*` (optional UX in GC-900E).
 
 ### Fehlerfälle
 
@@ -178,7 +198,9 @@ Ships: 30× mule_courier (vom Hub)
 
 ---
 
-## Distribute Resources (Spezifikation)
+## Distribute Resources (Spezifikation — GC-900D/E)
+
+> **Nicht GC-900B.** Größerer Brocken: Cargo-Split, Storage-Caps, Ressourcenreservierung, Zielverteilung.
 
 ### Spielerbeispiel
 
@@ -194,7 +216,7 @@ Ships: 10× mule_courier
 1. Validierung: Ownership, Ressourcen am Origin verfügbar, Cargo-Cap ≥ geplante Fracht, Slots, Cargo-Ships.
 2. **Fracht reservieren/abbuchen** am Origin beim Start (atomar mit Movement-Erstellung).
 3. **Verteilung (MVP `resources_mode=equal`):** Gesamtfracht gleichmäßig auf Targets; pro Target max. Ziel-Storage-Cap — Überschuss **bleibt am Origin** (nicht senden).
-4. Pro Target: Movement `distribute_resources` mit anteiliger `resources_json` am Abflug.
+4. Pro Target: Orchestrierung (Ziel: `transport` + `batch_type` `distribute_resources`; kein neuer Mission-Typ ohne zwingenden Grund).
 5. Ankunft: Gutschrift ans Ziel; Movement → `returning` leer.
 6. Return am Origin: keine Fracht an Bord.
 
@@ -228,7 +250,9 @@ Validierung: `get_ship(key)["role"] == "cargo"`; unbekannte Keys → `unknown_sh
 
 ---
 
-## APIs (Zielvertrag GC-900B/C)
+## APIs (Zielvertrag)
+
+### Collect — GC-900B
 
 ### Endpunkte (existieren, Verhalten ändern)
 
@@ -250,7 +274,7 @@ POST /api/fleet/logistics/distribute
 }
 ```
 
-`ships` im Body ist **neu zu spezifizieren** in 900B (heute fehlt in Route — nur `preset_id`). Ticket: Route + Handler erweitern.
+`ships` im Body: **GC-900B** Route + `collect_resources()` erweitern (Reality-Check: fehlte in `app.py`).
 
 ### Response (kanonisch nach Implementierung)
 
@@ -270,14 +294,18 @@ POST /api/fleet/logistics/distribute
 
 Fehler: `ok: false`, trotzdem **`state`** nach Mutation wo sinnvoll (GC-801).
 
+### Distribute — GC-900D (API-Stubs bleiben bis dahin)
+
+`POST /api/fleet/logistics/distribute` — unverändert Stub; Implementierung erst nach Collect-UI.
+
 ---
 
-## UI (GC-900C / GC-900D)
+## UI
 
-| Phase | Inhalt |
-|-------|--------|
-| **900C** | Minimale Logistics-Seite oder Fleet-Tab: Kolonie-Multi-Select (eigene Planeten), Cargo-Schiffe, Preview, Send |
-| **900D** | Presets (`fleet_presets`), bessere Overview-Batch-Anzeige, i18n, Reports |
+| Ticket | Inhalt |
+|--------|--------|
+| **GC-900C** | Collect UI: Multi-Select eigene Kolonien, Hub, Cargo-Schiffe, Send → `/api/fleet/logistics/collect` |
+| **GC-900E** | Distribute UI + Polish: Presets, Batch-Overview, `auto_cargo`, i18n (i18n-Keys existieren teils) |
 
 MVP-UI-Regeln:
 
@@ -286,7 +314,7 @@ MVP-UI-Regeln:
 - Planet-Liste aus Server (eigene Kolonien, nicht Homeworld-only)
 - Kein `location.reload`
 
-Ort: neues Template `templates/logistics.html` **oder** Erweiterung `templates/fleet.html` — Entscheidung 900C (eigene Seite bevorzugt bei ≥2 Flows).
+Ort: `templates/logistics.html` oder Fleet-Tab — Entscheidung **GC-900C** (Collect zuerst).
 
 ---
 
@@ -307,12 +335,13 @@ Recycler `recycle` bleibt **Debris am Feldkoordinaten** — kein Logistics.
 
 | Ticket | Scope | Dateien (max. 5) |
 |--------|--------|------------------|
-| **GC-900A** | Diese Spezifikation | `docs/GC-900_LOGISTICS.md`, ROADMAP, PROJECT_INVENTORY |
-| **GC-900B** | Collect Backend + Migration Mission + API `state` + Tests | `game/fleet.py`, `app.py`, `migrations/044_*.sql`, `tests/test_fleet_logistics.py` |
-| **GC-900C** | Distribute Backend + minimale UI + Tests | `game/fleet.py`, `app.py`, `templates/logistics.html`, `static/main.js` |
-| **GC-900D** | UX/Polish: Presets, Overview, Reports, `auto_cargo` | UI + i18n |
+| **GC-900A** | Spezifikation + Option A | Docs ✅ |
+| **GC-900B** | **Collect Backend only** — Option A, `ships`, `_action_json_response`, Batch+`send_fleet(collect)` | `game/fleet.py`, `app.py`, `tests/test_fleet_logistics.py` |
+| **GC-900C** | **Collect UI** | `templates/logistics.html` oder `fleet.html`, `static/main.js`, `app.py` (route) |
+| **GC-900D** | **Distribute Backend** — Split, Caps, Reservierung | `game/fleet.py`, `app.py`, Tests |
+| **GC-900E** | **Distribute UI** + Polish (Presets, Overview, Reports) | UI + i18n |
 
-Empfohlene Reihenfolge: **900B → 900C → 900D**.
+Reihenfolge: **900B → 900C → 900D → 900E → GC-700**.
 
 ---
 
@@ -330,24 +359,24 @@ Empfohlene Reihenfolge: **900B → 900C → 900D**.
 | `test_collect_logistics_active_planet_scope` | Hub = `target_planet_id`, Schiffe vom Hub |
 | `test_collect_logistics_api_returns_state` | POST → `state.resources` frisch |
 
-### GC-900C — Distribute
+### GC-900D — Distribute (Backend)
 
 | Test | Erwartung |
 |------|-----------|
 | `test_distribute_debits_origin` | Origin metal↓ beim Start |
 | `test_distribute_equal_split` | 3 Targets, gleiche Anteile |
 | `test_distribute_respects_storage_cap` | Ziel voll → Überschuss bleibt |
-| `test_distribute_empty_return` | Nach Return: Schiffe leer, Origin unverändert (abgesehen von Abzug) |
+| `test_distribute_empty_return` | Nach Return: Schiffe leer |
 | `test_distribute_fleet_slots` | Slot-Limit |
 
-Bestehende Tests dürfen nicht brechen: `tests/test_fleet.py` Stub-Tests anpassen auf grün sobald implementiert.
+Bestehende Tests: `test_logistics_scaffold_response` in `test_fleet.py` nach 900B auf Erfolgspfad anpassen.
 
 ```bash
 # Nach 900B
-python -m pytest tests/test_fleet_logistics.py tests/test_fleet.py -k "logistics or collect_resources" -v
+python -m pytest tests/test_fleet_logistics.py tests/test_fleet.py -k "logistics or collect" -v
 
-# Nach 900C
-python -m pytest tests/test_fleet_logistics.py -v
+# Nach 900D
+python -m pytest tests/test_fleet_logistics.py -k distribute -v
 ```
 
 ---
@@ -378,7 +407,8 @@ python -m pytest tests/test_fleet_logistics.py -v
 
 | Ticket | Status |
 |--------|--------|
-| **GC-900A** Spec | ✅ |
+| **GC-900A** Spec (+ Option A) | ✅ |
 | **GC-900B** Collect Backend | 📋 |
-| **GC-900C** Distribute Backend/UI | 📋 |
-| **GC-900D** Logistics UX/Polish | 📋 |
+| **GC-900C** Collect UI | 📋 |
+| **GC-900D** Distribute Backend | 📋 |
+| **GC-900E** Distribute UI / Polish | 📋 |

@@ -99,7 +99,7 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | **Verteidigung** — Türme, Schilder, Queue, Ranking | ✅ | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) |
 | **Kampf-Auflösung** — Resolver, Reports, Loot, Debris, Ranking | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md); `test_combat.py` |
 | **GC-700** — Combat polish / gaps (kein Resolver-Neubau) | 📋 | Siehe [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) § GC-700 Readiness |
-| Fleet Logistics (collect/distribute) | 🔄 | Spec ✅ [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md); Backend/UI → GC-900B/C/D |
+| Fleet Logistics (collect/distribute) | 🔄 | Spec ✅ [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md); Collect Option A → GC-900B/C, Distribute → GC-900D/E |
 | Recycler-Mission | ✅ | GC-800A Backend + GC-800B UI; GC-800C UX optional |
 | Espionage (beyond probe report) | ✅ | GC-401 tiered intel + inbox UI |
 | Expedition event engine | ✅ | GC-402 weighted events + structured metadata |
@@ -111,7 +111,7 @@ Docs: [FLEET_SYSTEM.md](FLEET_SYSTEM.md), [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md)
 Empfohlene Reihenfolge (verbleibend — nach [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md)):
 
 ```
-GC-803 ✅ → GC-900A Spec ✅ → GC-900B Collect → GC-900C Distribute → GC-900D UX → GC-700 Combat polish (nur Lücken)
+GC-803 ✅ → GC-900A Spec ✅ → GC-900B Collect Backend → GC-900C Collect UI → GC-900D Distribute Backend → GC-900E Distribute UI → GC-700 Combat polish
 ```
 
 ---
@@ -232,10 +232,11 @@ Details: [SECURITY.md](SECURITY.md)
 | **GC-801** — Resource bar + buildings panel action-state sync | ✅ |
 | **GC-802** — Fleet timer, galaxy prefill, planet-switch lifecycle | ✅ |
 | **GC-803** — Fleet preset & mass expedition test stabilization (`IntegrityError`) | ✅ |
-| **GC-900A** — Logistics spec ([GC-900_LOGISTICS.md](GC-900_LOGISTICS.md)) | ✅ |
-| **GC-900B** — Collect resources backend | 📋 |
-| **GC-900C** — Distribute resources backend/UI | 📋 |
-| **GC-900D** — Logistics UX / presets / polish | 📋 |
+| **GC-900A** — Logistics spec + Option A ([GC-900_LOGISTICS.md](GC-900_LOGISTICS.md)) | ✅ |
+| **GC-900B** — Collect backend (`collect` mission + batch orchestration) | 📋 |
+| **GC-900C** — Collect UI | 📋 |
+| **GC-900D** — Distribute backend | 📋 |
+| **GC-900E** — Distribute UI / polish | 📋 |
 | Admin Control Center auf PJAX/State (statt `reload`) | 💡 |
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
 
