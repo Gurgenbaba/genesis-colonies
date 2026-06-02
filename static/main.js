@@ -5499,10 +5499,10 @@
             body: JSON.stringify({ job_id: jobId, planet_id: planetId || undefined }),
           });
           if (res?.ok) {
+            if (res.state) applyActionState(res, "defense_cancel");
             const payload = normalizeDefenseApiPayload(res);
             if (payload) applyDefenseState(page, payload);
             else await refreshDefenseState(page);
-            if (typeof GC.refreshGameState === "function") await GC.refreshGameState("defense_cancel");
           } else {
             showNotify(reasonText(res?.error || apiError(res)), "error");
           }
@@ -5532,10 +5532,10 @@
           body: JSON.stringify({ defense_key: defenseKey, amount, planet_id: planetId || undefined }),
         });
         if (res?.ok) {
+          if (res.state) applyActionState(res, "defense_build");
           const payload = normalizeDefenseApiPayload(res);
           if (payload) applyDefenseState(page, payload);
           else await refreshDefenseState(page);
-          if (typeof GC.refreshGameState === "function") await GC.refreshGameState("defense_build");
         } else {
           showNotify(reasonText(res?.error || apiError(res)), "error");
         }

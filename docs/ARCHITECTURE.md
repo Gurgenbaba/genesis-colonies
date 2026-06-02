@@ -19,6 +19,9 @@ Technische Architektur-Dokumentation (Stand: **v1.5.3**). Ergänzt die [README](
 | [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) | GC-000 — verbindliche Kernregeln |
 | [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md) | Navigation, Actions, Lifecycle |
 | [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) | Queue Finish / Cancel / Reschedule |
+| [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) | Planet Defense, Queue, Ranking |
+| [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) | Battle resolver, loot, debris, reports |
+| [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) | Code-Reality-Status aller Module (GC-601) |
 
 **Golden Rule:** Genesis Colonies bevorzugt **Konsistenz über Komfort** — keine parallelen Systeme, keine Duplicate-Math, keine Reload-Navigation. Siehe [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) (Regeln 15–17).
 
@@ -68,7 +71,7 @@ Technische Architektur-Dokumentation (Stand: **v1.5.3**). Ergänzt die [README](
 │  resources, buildings, research, effects/                         │
 │  queue_engine          — Zentraler Due-Finisher (Build/Research/  │
 │                          Shipyard/Fleet/Planet-Evolution)         │
-│  fleet*, galaxy, shipyard*, exchange, scrapyard                   │
+│  fleet*, galaxy, shipyard*, defense*, combat*, exchange, scrapyard │
 │  planet_evolution/     — Multi-Kolonie, DNA, Planet-Forschung       │
 │  chat, messages, alliance, support, ranking, playercard            │
 │  auth, admin*, bootstrap, config, db, models                      │
