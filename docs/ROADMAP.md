@@ -223,7 +223,8 @@ Details: [SECURITY.md](SECURITY.md)
 | Item | Status |
 |------|--------|
 | **GC-510** — Build/Research cancel → Restqueue `recalculate` | ✅ |
-| **GC-512** — Queue Manual QA + static contract (`test_queue_static_contract.py`) | ✅ |
+| **GC-512** — Queue static contract + [Queue Manual QA](GC-512_QUEUE_MANUAL_QA.md) | ✅ |
+| **GC-512** — [Architecture Validation Pass](GC-512_ARCHITECTURE_VALIDATION.md) (alle Module) | 🔍 |
 | Admin Control Center auf PJAX/State (statt `reload`) | 💡 |
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
 

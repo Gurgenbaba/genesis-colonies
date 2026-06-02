@@ -1,5 +1,6 @@
 # GC-512 — Queue Regression Manual QA
 
+Teil des [Architecture Validation Pass](GC-512_ARCHITECTURE_VALIDATION.md).  
 Manuelle Browser-Checkliste nach **GC-510** (Build/Research Reschedule).  
 Automatische Verträge: `tests/test_queue_static_contract.py`
 

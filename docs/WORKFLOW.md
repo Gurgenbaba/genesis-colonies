@@ -118,7 +118,8 @@ python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 |--------|-------|
 | Queues / Race | `test_race_conditions.py`, `test_queue_engine.py` |
 | Queue static contract (GC-512) | `test_queue_static_contract.py` |
-| Queue manual QA | [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) |
+| GC-512 Architecture Validation | [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_ARCHITECTURE_VALIDATION.md) |
+| Queue manual QA (Teil von GC-512) | [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) |
 | Live-State | `test_game_state_live.py`, `test_static_live_updates.py` |
 | Planet Scope | `test_planet_instancing.py`, `test_header_planet_switcher.py` |
 | Evolution | `test_planet_evolution*.py` |
