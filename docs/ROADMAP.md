@@ -229,6 +229,9 @@ Details: [SECURITY.md](SECURITY.md)
 | **GC-513** — Windows parallel build race test (timeout + mutex recovery) | ✅ |
 | **GC-600** — Defense Phase 1 (Queue, Scope, `applyActionState`, pytest) | ✅ |
 | **GC-601** — [Project Inventory](PROJECT_INVENTORY.md) + Docs/Roadmap Reality Sync | ✅ |
+| **GC-801** — Resource bar + buildings panel action-state sync | ✅ |
+| **GC-802** — Fleet timer, galaxy prefill, planet-switch lifecycle | ✅ |
+| **GC-803** — Fleet preset & mass expedition test stabilization (`IntegrityError`) | 📋 |
 | Admin Control Center auf PJAX/State (statt `reload`) | 💡 |
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
 
