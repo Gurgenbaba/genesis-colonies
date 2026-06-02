@@ -129,18 +129,51 @@
     );
   }
 
-  function combatResultVisual(resultKey) {
-    const key = String(resultKey || "undecided");
-    if (key === "attacker") {
+  function combatViewerOutcome(meta) {
+    const winner = String(meta?.result || meta?.winner || "undecided");
+    const perspective = String(meta?.perspective || "attacker");
+    if (winner === "draw") return "draw";
+    if (winner === "undecided") return "open";
+    if (winner === perspective) return "victory";
+    return "defeat";
+  }
+
+  function combatResultVisual(meta) {
+    const outcome = combatViewerOutcome(meta && typeof meta === "object" ? meta : {});
+    if (outcome === "victory") {
       return { theme: "emerald", icon: "⚔", badge: "victory" };
     }
-    if (key === "defender") {
+    if (outcome === "defeat") {
       return { theme: "rose", icon: "🛡", badge: "defeat" };
     }
-    if (key === "draw") {
+    if (outcome === "draw") {
       return { theme: "amber", icon: "◇", badge: "draw" };
     }
     return { theme: "cyan", icon: "◈", badge: "open" };
+  }
+
+  function combatResultLabel(meta) {
+    const winner = String(meta?.result || meta?.winner || "undecided");
+    const perspective = String(meta?.perspective || "attacker");
+    const objective = t(`combat_report_winner_${winner}`, winner);
+    if (winner === "draw" || winner === "undecided") return objective;
+    if (winner === perspective) {
+      return t("combat_report_outcome_you_won", "Victory");
+    }
+    return t("combat_report_outcome_you_lost", "Defeat");
+  }
+
+  function combatResultSubtitle(meta) {
+    const winner = String(meta?.result || meta?.winner || "undecided");
+    if (winner === "draw" || winner === "undecided") return "";
+    return t(`combat_report_winner_${winner}`, winner);
+  }
+
+  function combatCoordsPlain(meta) {
+    const from = String(meta?.origin_coords || "").trim();
+    const to = String(meta?.target_coords || "").trim();
+    if (from && to) return `${from} → ${to}`;
+    return to || from || "—";
   }
 
   function unitCountTotal(stock) {
@@ -209,6 +242,80 @@
     );
   }
 
+  function renderCombatLossColumn(sideLabel, stock, defenseStock, roleKey) {
+    const total = unitCountTotal(stock);
+    return (
+      `<div class="gc-combat-loss-col gc-combat-loss-col--${esc(roleKey)}">` +
+        `<div class="gc-combat-loss-col-head">` +
+          `<span class="gc-combat-loss-col-role">${esc(sideLabel)}</span>` +
+          `<span class="gc-combat-loss-col-total gc-mono">${esc(formatInt(total))}</span>` +
+        `</div>` +
+        `<div class="gc-combat-loss-col-body">${renderCombatUnitGrid(stock, defenseStock)}</div>` +
+      `</div>`
+    );
+  }
+
+  function renderCombatLossesSplit(meta, defenseStock) {
+    return (
+      `<div class="gc-combat-losses-split">` +
+        renderCombatLossColumn(
+          t("combat_report_section_attacker", "Attacker"),
+          meta.attacker_losses,
+          null,
+          "attacker"
+        ) +
+        renderCombatLossColumn(
+          t("combat_report_section_defender", "Defender"),
+          meta.defender_losses,
+          defenseStock,
+          "defender"
+        ) +
+      `</div>`
+    );
+  }
+
+  function renderCombatRoundBody(rnd, defenseStock) {
+    return (
+      `<div class="gc-combat-round-split">` +
+        `<div class="gc-combat-round-half gc-combat-round-half--attacker">` +
+          `<span class="gc-combat-round-half-label">${esc(
+            t("combat_report_round_atk_losses", "Attacker losses this round")
+          )}</span>` +
+          renderCombatUnitGrid(rnd.attacker_losses, null) +
+        `</div>` +
+        `<div class="gc-combat-round-half gc-combat-round-half--defender">` +
+          `<span class="gc-combat-round-half-label">${esc(
+            t("combat_report_round_def_losses", "Defender losses this round")
+          )}</span>` +
+          renderCombatUnitGrid(rnd.defender_losses, defenseStock) +
+        `</div>` +
+      `</div>`
+    );
+  }
+
+  function renderCombatDefenderForces(meta, defenseStock) {
+    const fleetTotal = unitCountTotal(meta.defending_ships);
+    const defTotal = unitCountTotal(defenseStock);
+    return (
+      `<div class="gc-combat-defender-forces">` +
+        `<div class="gc-combat-force-block">` +
+          `<div class="gc-combat-force-head">` +
+            `<span class="gc-combat-force-label">${esc(t("combat_report_defender_fleet", "Fleet"))}</span>` +
+            `<span class="gc-combat-force-count gc-mono">${esc(formatInt(fleetTotal))}</span>` +
+          `</div>` +
+          renderCombatUnitGrid(meta.defending_ships, null) +
+        `</div>` +
+        `<div class="gc-combat-force-block">` +
+          `<div class="gc-combat-force-head">` +
+            `<span class="gc-combat-force-label">${esc(t("combat_report_defender_structures", "Defense"))}</span>` +
+            `<span class="gc-combat-force-count gc-mono">${esc(formatInt(defTotal))}</span>` +
+          `</div>` +
+          renderCombatUnitGrid(defenseStock, defenseStock) +
+        `</div>` +
+      `</div>`
+    );
+  }
+
   function combatCoordsRoute(meta) {
     const from = String(meta?.origin_coords || "").trim();
     const to = String(meta?.target_coords || "").trim();
@@ -272,8 +379,9 @@
     const compact = Boolean(opts.compact);
     const messageId = opts.messageId;
     const resultKey = meta.result || meta.winner || "undecided";
-    const visual = combatResultVisual(resultKey);
-    const resultLabel = t(`combat_report_winner_${resultKey}`, resultKey);
+    const visual = combatResultVisual(meta);
+    const resultLabel = combatResultLabel(meta);
+    const resultSub = combatResultSubtitle(meta);
     const rounds = formatInt(meta.rounds_fought || (meta.rounds || []).length || 0);
     const loot = meta.loot || {};
     const lootTotal = expeditionLootTotal(loot);
@@ -298,7 +406,9 @@
             `<span class="gc-combat-teaser-coords gc-mono">${combatCoordsRoute(meta)}</span>` +
             `<span class="gc-combat-teaser-vs">${esc(vsLine)}</span>` +
           `</div>` +
-          `<span class="gc-combat-teaser-badge">${esc(resultLabel)}</span>` +
+          `<span class="gc-combat-teaser-badge">${esc(resultLabel)}` +
+          (resultSub ? `<span class="gc-combat-teaser-badge-sub">${esc(resultSub)}</span>` : "") +
+          `</span>` +
         `</div>` +
         `<p class="gc-combat-teaser-meta gc-mono">${esc(
           t("combat_report_rounds_total", "%(count)s rounds").replace("%(count)s", rounds)
@@ -313,8 +423,9 @@
 
   function renderCombatReportFull(meta) {
     const resultKey = meta.result || meta.winner || "undecided";
-    const visual = combatResultVisual(resultKey);
-    const resultLabel = t(`combat_report_winner_${resultKey}`, resultKey);
+    const visual = combatResultVisual(meta);
+    const resultLabel = combatResultLabel(meta);
+    const resultSub = combatResultSubtitle(meta);
     const defenseStock = meta.defending_defense || {};
     const roundsCount = meta.rounds_fought || (meta.rounds || []).length || 0;
     const atkLossTotal = unitCountTotal(meta.attacker_losses);
@@ -336,7 +447,12 @@
                 .replace("%(defender)s", meta.defender_name || "—")
             )}</div>` +
           `</div>` +
-          `<span class="gc-combat-report-result-badge">${esc(resultLabel)}</span>` +
+          `<span class="gc-combat-report-result-badge">` +
+            `<span class="gc-combat-report-result-main">${esc(resultLabel)}</span>` +
+            (resultSub
+              ? `<span class="gc-combat-report-result-sub">${esc(resultSub)}</span>`
+              : "") +
+          `</span>` +
         `</div>` +
       `</header>`
     );
@@ -365,19 +481,33 @@
     sections.push(renderCombatBattleOverview(meta));
 
     sections.push(
-      `<div class="gc-combat-report-columns">` +
-        renderCombatPanel(
-          t("combat_report_section_attacker", "Attacker"),
-          renderCombatUnitGrid(meta.attacking_ships, null),
-          "gc-combat-report-panel--attacker"
-        ) +
-        renderCombatPanel(
-          t("combat_report_section_defender", "Defender"),
-          renderCombatUnitGrid(meta.defending_ships, null) +
-            renderCombatUnitGrid(defenseStock, defenseStock),
-          "gc-combat-report-panel--defender"
-        ) +
-      `</div>`
+      renderCombatPanel(
+        t("combat_report_section_forces", "Forces"),
+        `<div class="gc-combat-report-columns gc-combat-report-columns--forces">` +
+          `<div class="gc-combat-report-panel gc-combat-report-panel--attacker gc-combat-report-panel--inline">` +
+            `<h4 class="gc-combat-report-panel-title">${esc(t("combat_report_section_attacker", "Attacker"))}</h4>` +
+            `<div class="gc-combat-report-panel-body">` +
+              `<div class="gc-combat-force-head gc-combat-force-head--solo">` +
+                `<span class="gc-combat-force-count gc-mono">${esc(formatInt(unitCountTotal(meta.attacking_ships)))}</span>` +
+              `</div>` +
+              renderCombatUnitGrid(meta.attacking_ships, null) +
+            `</div>` +
+          `</div>` +
+          `<div class="gc-combat-report-panel gc-combat-report-panel--defender gc-combat-report-panel--inline">` +
+            `<h4 class="gc-combat-report-panel-title">${esc(t("combat_report_section_defender", "Defender"))}</h4>` +
+            `<div class="gc-combat-report-panel-body">${renderCombatDefenderForces(meta, defenseStock)}</div>` +
+          `</div>` +
+        `</div>`,
+        "gc-combat-report-panel--forces-wrap"
+      )
+    );
+
+    sections.push(
+      renderCombatPanel(
+        t("combat_report_section_losses", "Total losses"),
+        renderCombatLossesSplit(meta, defenseStock),
+        "gc-combat-report-panel--losses"
+      )
     );
 
     const roundList = Array.isArray(meta.rounds) ? meta.rounds : [];
@@ -385,15 +515,21 @@
       const roundHtml = roundList
         .map((rnd) => {
           const n = rnd.number || 0;
+          const atkRnd = unitCountTotal(rnd.attacker_losses);
+          const defRnd = unitCountTotal(rnd.defender_losses);
           return (
-            `<details class="gc-combat-round">` +
-            `<summary class="gc-combat-round-title">${esc(
-              t("combat_report_section_round", "Round %(n)s").replace("%(n)s", formatInt(n))
-            )}</summary>` +
-            `<div class="gc-combat-round-body">` +
-            renderCombatUnitGrid(rnd.attacker_losses, null) +
-            renderCombatUnitGrid(rnd.defender_losses, defenseStock) +
-            `</div>` +
+            `<details class="gc-combat-round" ${n === 1 ? "open" : ""}>` +
+            `<summary class="gc-combat-round-title">` +
+              `<span class="gc-combat-round-title-main">${esc(
+                t("combat_report_section_round", "Round %(n)s").replace("%(n)s", formatInt(n))
+              )}</span>` +
+              `<span class="gc-combat-round-title-stats gc-mono">` +
+                `<span class="gc-combat-round-stat gc-combat-round-stat--atk">${esc(formatInt(atkRnd))}</span>` +
+                `<span class="gc-combat-round-stat-sep" aria-hidden="true">/</span>` +
+                `<span class="gc-combat-round-stat gc-combat-round-stat--def">${esc(formatInt(defRnd))}</span>` +
+              `</span>` +
+            `</summary>` +
+            `<div class="gc-combat-round-body">${renderCombatRoundBody(rnd, defenseStock)}</div>` +
             `</details>`
           );
         })
@@ -402,13 +538,6 @@
         renderCombatPanel(t("combat_report_section_rounds", "Round log"), roundHtml, "gc-combat-report-panel--rounds")
       );
     }
-
-    sections.push(
-      renderCombatPanel(
-        t("combat_report_section_losses", "Total losses"),
-        renderCombatUnitGrid(meta.attacker_losses, null) + renderCombatUnitGrid(meta.defender_losses, defenseStock)
-      )
-    );
 
     const ret = meta.return_ships || {};
     if (unitCountTotal(ret) > 0) {
@@ -451,12 +580,12 @@
     const root = cacheCombatModalElements();
     if (!root || !COMBAT_MODAL.content) return;
     const meta = msg.metadata || {};
-    const visual = combatResultVisual(meta.result || meta.winner || "undecided");
+    const visual = combatResultVisual(meta);
     if (COMBAT_MODAL.dialog) {
       COMBAT_MODAL.dialog.setAttribute("data-theme", visual.theme);
     }
     if (COMBAT_MODAL.titleEl) {
-      COMBAT_MODAL.titleEl.textContent = `${t("combat_report_modal_title", "Combat report")} — ${combatCoordsRoute(meta)}`;
+      COMBAT_MODAL.titleEl.textContent = `${t("combat_report_modal_title", "Combat report")} — ${combatCoordsPlain(meta)}`;
     }
     COMBAT_MODAL.content.innerHTML = renderCombatReportFull(meta);
     root.hidden = false;
