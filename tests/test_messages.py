@@ -1003,9 +1003,14 @@ def test_dispatch_combat_reports_persists_for_both_players(temp_db):
         defending_defense={"sentinel_turret": 4},
         combat_result=combat_result,
         return_ships={"falcon_interceptor": 4},
+        origin_coords="1:2:3",
+        origin_planet_name="Alpha",
+        target_planet_name="Beta",
     )
     meta = normalize_combat_metadata(meta)
     assert meta["report_version"] == COMBAT_REPORT_VERSION
+    assert meta["origin_coords"] == "1:2:3"
+    assert meta["target_planet_name"] == "Beta"
     assert len(meta["rounds"]) == 2
     assert meta["result"] == "attacker"
     assert "═══" in body or "Combat report" in body

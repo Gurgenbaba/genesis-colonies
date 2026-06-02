@@ -175,6 +175,65 @@
     );
   }
 
+  function combatCoordsRoute(meta) {
+    const from = String(meta?.origin_coords || "").trim();
+    const to = String(meta?.target_coords || "").trim();
+    if (from && to) {
+      return t("combat_report_route", "%(from)s → %(to)s")
+        .replace("%(from)s", from)
+        .replace("%(to)s", to);
+    }
+    return to || from || "—";
+  }
+
+  function renderCombatBattleOverview(meta) {
+    const targetCoords = meta.target_coords || "—";
+    const originCoords = meta.origin_coords || "—";
+    const targetPlanet = String(meta.target_planet_name || "").trim();
+    const originPlanet = String(meta.origin_planet_name || "").trim();
+    const atkShips = unitCountTotal(meta.attacking_ships);
+    const defFleet = unitCountTotal(meta.defending_ships);
+    const defStruct = unitCountTotal(meta.defending_defense || {});
+    const defUnitsLine = t("combat_report_side_defense", "%(fleet)s fleet · %(def)s defense")
+      .replace("%(fleet)s", formatInt(defFleet))
+      .replace("%(def)s", formatInt(defStruct));
+    const originPlanetLine = originPlanet
+      ? `<span class="gc-combat-report-side-planet">${esc(originPlanet)}</span>`
+      : "";
+    const targetPlanetLine = targetPlanet
+      ? `<span class="gc-combat-report-side-planet">${esc(targetPlanet)}</span>`
+      : "";
+
+    return (
+      `<section class="gc-combat-report-overview">` +
+        `<h4 class="gc-combat-report-panel-title">${esc(t("combat_report_battlefield", "Battlefield"))}</h4>` +
+        `<div class="gc-combat-report-battlefield gc-mono">${esc(combatCoordsRoute(meta))}</div>` +
+        `<div class="gc-combat-report-sides">` +
+          `<div class="gc-combat-report-side gc-combat-report-side--attacker">` +
+            `<span class="gc-combat-report-side-role">${esc(t("combat_report_section_attacker", "Attacker"))}</span>` +
+            `<strong class="gc-combat-report-side-name">${esc(meta.attacker_name || "—")}</strong>` +
+            originPlanetLine +
+            `<span class="gc-combat-report-side-coords gc-mono">${esc(
+              t("combat_report_origin_coords", "Launched from: %(coords)s").replace("%(coords)s", originCoords)
+            )}</span>` +
+            `<span class="gc-combat-report-side-units">${esc(
+              t("combat_report_side_ships", "%(count)s ships").replace("%(count)s", formatInt(atkShips))
+            )}</span>` +
+          `</div>` +
+          `<div class="gc-combat-report-side gc-combat-report-side--defender">` +
+            `<span class="gc-combat-report-side-role">${esc(t("combat_report_section_defender", "Defender"))}</span>` +
+            `<strong class="gc-combat-report-side-name">${esc(meta.defender_name || "—")}</strong>` +
+            targetPlanetLine +
+            `<span class="gc-combat-report-side-coords gc-mono">${esc(
+              t("combat_report_target_coords", "Target planet: %(coords)s").replace("%(coords)s", targetCoords)
+            )}</span>` +
+            `<span class="gc-combat-report-side-units">${esc(defUnitsLine)}</span>` +
+          `</div>` +
+        `</div>` +
+      `</section>`
+    );
+  }
+
   function renderCombatReportTeaser(meta, opts = {}) {
     const compact = Boolean(opts.compact);
     const messageId = opts.messageId;
@@ -202,7 +261,7 @@
         `<div class="gc-combat-teaser-top">` +
           `<span class="gc-combat-teaser-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
           `<div class="gc-combat-teaser-headings">` +
-            `<span class="gc-combat-teaser-coords gc-mono">${esc(meta.target_coords || "—")}</span>` +
+            `<span class="gc-combat-teaser-coords gc-mono">${esc(combatCoordsRoute(meta))}</span>` +
             `<span class="gc-combat-teaser-vs">${esc(vsLine)}</span>` +
           `</div>` +
           `<span class="gc-combat-teaser-badge">${esc(resultLabel)}</span>` +
@@ -236,7 +295,7 @@
         `<div class="gc-combat-report-hero-top">` +
           `<span class="gc-combat-report-hero-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
           `<div class="gc-combat-report-hero-text">` +
-            `<div class="gc-combat-report-coords gc-mono">${esc(meta.target_coords || "—")}</div>` +
+            `<div class="gc-combat-report-coords gc-mono">${esc(combatCoordsRoute(meta))}</div>` +
             `<div class="gc-combat-report-vs">${esc(
               t("combat_report_vs", "%(attacker)s vs %(defender)s")
                 .replace("%(attacker)s", meta.attacker_name || "—")
@@ -268,6 +327,8 @@
         `</div>` +
       `</div>`
     );
+
+    sections.push(renderCombatBattleOverview(meta));
 
     sections.push(
       `<div class="gc-combat-report-columns">` +
@@ -361,8 +422,7 @@
       COMBAT_MODAL.dialog.setAttribute("data-theme", visual.theme);
     }
     if (COMBAT_MODAL.titleEl) {
-      const coords = meta.target_coords || "—";
-      COMBAT_MODAL.titleEl.textContent = `${t("combat_report_modal_title", "Combat report")} — ${coords}`;
+      COMBAT_MODAL.titleEl.textContent = `${t("combat_report_modal_title", "Combat report")} — ${combatCoordsRoute(meta)}`;
     }
     COMBAT_MODAL.content.innerHTML = renderCombatReportFull(meta);
     root.hidden = false;

@@ -843,6 +843,35 @@ def _planet_owned_by(player_id: int, planet_id: int, *, conn) -> bool:
     return cur.fetchone() is not None
 
 
+def _movement_origin_snapshot(movement: Mapping[str, Any], *, conn) -> Tuple[str, str]:
+    """Return ``(origin_coords, origin_planet_name)`` for combat report metadata."""
+    oid = movement.get("origin_planet_id")
+    if not oid:
+        return "", ""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT name, galaxy, system, position
+        FROM planets
+        WHERE id = ?
+        LIMIT 1;
+        """,
+        (int(oid),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return "", ""
+    try:
+        coords = format_coordinates(
+            _safe_int(row["galaxy"]),
+            _safe_int(row["system"]),
+            _safe_int(row["position"]),
+        )
+    except GalaxyCoordinateError:
+        coords = ""
+    return coords, str(row["name"] or "")
+
+
 def _origin_coords(origin_planet: Dict[str, Any]) -> Tuple[int, int, int]:
     coords = get_planet_coordinates(origin_planet)
     return (coords["galaxy"], coords["system"], coords["position"])
@@ -1682,6 +1711,7 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> Non
             if defender_id and defender_id != player_id
             else None
         )
+        origin_coords, origin_planet_name = _movement_origin_snapshot(movement, conn=conn)
         publish_attack_combat_report(
             attacker_id=player_id,
             defender_id=defender_id,
@@ -1695,6 +1725,9 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> Non
             return_ships=return_ships,
             loot=loot_taken,
             fleet_id=movement_id,
+            origin_coords=origin_coords,
+            origin_planet_name=origin_planet_name,
+            target_planet_name=str(snapshot.get("planet_name") or ""),
             conn=conn,
             attacker_locale=sender_locale,
             defender_locale=defender_locale,

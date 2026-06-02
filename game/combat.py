@@ -762,6 +762,9 @@ def build_combat_report(
     defender_losses: Mapping[str, int] | None = None,
     return_ships: Mapping[str, int] | None = None,
     loot: Mapping[str, int] | None = None,
+    origin_coords: str | None = None,
+    origin_planet_name: str | None = None,
+    target_planet_name: str | None = None,
     locale: str | None = None,
 ) -> Tuple[str, Dict[str, Any]]:
     """Genesis-style combat report body + structured metadata for ``player_messages``."""
@@ -787,18 +790,39 @@ def build_combat_report(
         "undecided": _t("combat_report_winner_undecided", "Outcome: undecided"),
     }.get(result_label, _t("combat_report_winner_undecided", "Outcome: undecided"))
 
+    origin_coord_txt = str(origin_coords or "—")
+    target_coord_txt = str(coords or "—")
+    target_planet_txt = str(target_planet_name or "").strip()
+    origin_planet_txt = str(origin_planet_name or "").strip()
+
     body_lines: list[str] = [
         _t("combat_report_title", "═══ Combat report ═══"),
         _t(
             "combat_report_coords",
-            "Coordinates: %(coords)s",
-            coords=str(coords or "—"),
+            "Battlefield: %(coords)s",
+            coords=target_coord_txt,
         ),
         "",
         _format_kv_section(
             _t("combat_report_section_attacker", "Attacker"),
             [
                 _t("combat_report_player", "Commander: %(name)s", name=str(attacker_name or "—")),
+                _t(
+                    "combat_report_origin_coords",
+                    "Launched from: %(coords)s",
+                    coords=origin_coord_txt,
+                ),
+                *(
+                    [
+                        _t(
+                            "combat_report_origin_planet",
+                            "Origin planet: %(name)s",
+                            name=origin_planet_txt,
+                        )
+                    ]
+                    if origin_planet_txt
+                    else []
+                ),
                 *_format_stock_lines(
                     attacking_ships,
                     tr_fn=_t,
@@ -813,6 +837,22 @@ def build_combat_report(
             _t("combat_report_section_defender", "Defender"),
             [
                 _t("combat_report_player", "Commander: %(name)s", name=str(defender_name or "—")),
+                _t(
+                    "combat_report_target_coords",
+                    "Target planet: %(coords)s",
+                    coords=target_coord_txt,
+                ),
+                *(
+                    [
+                        _t(
+                            "combat_report_target_planet",
+                            "Planet name: %(name)s",
+                            name=target_planet_txt,
+                        )
+                    ]
+                    if target_planet_txt
+                    else []
+                ),
                 *_format_stock_lines(
                     defending_ships,
                     tr_fn=_t,
@@ -923,7 +963,10 @@ def build_combat_report(
 
     metadata: Dict[str, Any] = {
         "report_version": COMBAT_REPORT_VERSION,
-        "target_coords": str(coords or ""),
+        "target_coords": target_coord_txt if target_coord_txt != "—" else "",
+        "origin_coords": origin_coord_txt if origin_coord_txt != "—" else "",
+        "origin_planet_name": origin_planet_txt,
+        "target_planet_name": target_planet_txt,
         "attacker_id": int(attacker_id),
         "attacker_name": str(attacker_name or ""),
         "defender_id": int(defender_id),
@@ -957,6 +1000,9 @@ def publish_attack_combat_report(
     return_ships: Mapping[str, int] | None = None,
     loot: Mapping[str, int] | None = None,
     fleet_id: int | None = None,
+    origin_coords: str | None = None,
+    origin_planet_name: str | None = None,
+    target_planet_name: str | None = None,
     conn=None,
     attacker_locale: str | None = None,
     defender_locale: str | None = None,
@@ -974,6 +1020,9 @@ def publish_attack_combat_report(
         combat_result=combat_result,
         return_ships=return_ships,
         loot=loot,
+        origin_coords=origin_coords,
+        origin_planet_name=origin_planet_name,
+        target_planet_name=target_planet_name,
         locale=attacker_locale,
     )
     if fleet_id is not None:
