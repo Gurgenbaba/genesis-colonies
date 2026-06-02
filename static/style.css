@@ -9010,6 +9010,25 @@ body.gc-combat-report-open { overflow: hidden; }
   padding-right: 14px;
 }
 
+.gc-messages-item .gc-galaxy-coord-link,
+.gc-messages-detail-subject .gc-galaxy-coord-link,
+.gc-messages-detail-body .gc-galaxy-coord-link,
+.gc-combat-teaser .gc-galaxy-coord-link {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+}
+
+.gc-messages-plain-line {
+  margin: 0 0 0.45rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.gc-messages-plain-line:last-child {
+  margin-bottom: 0;
+}
+
 .gc-messages-item-meta {
   font-size: 0.74rem;
   color: var(--gc-text-soft);

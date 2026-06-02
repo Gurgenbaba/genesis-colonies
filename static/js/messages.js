@@ -72,6 +72,15 @@
     return esc(text || "");
   }
 
+  function renderPlainMessageHtml(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return `<p class="gc-messages-plain-line">${esc("—")}</p>`;
+    return raw
+      .split(/\n/)
+      .map((line) => `<p class="gc-messages-plain-line">${linkifyCoordsText(line)}</p>`)
+      .join("");
+  }
+
   function formatInt(n) {
     const v = Number(n);
     if (!Number.isFinite(v)) return "0";
@@ -1248,9 +1257,18 @@
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape" || !COMBAT_MODAL.open) return;
+      if (e.key === "Escape" && COMBAT_MODAL.open) {
+        e.preventDefault();
+        closeCombatReportModal();
+        return;
+      }
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const item = e.target.closest(".gc-messages-item[data-id][role='button']");
+      if (!item || !document.getElementById("messages-page")) return;
+      if (e.target.closest("a.gc-galaxy-coord-link, [data-open-combat-report]")) return;
       e.preventDefault();
-      closeCombatReportModal();
+      const id = Number(item.dataset.id);
+      if (Number.isFinite(id)) ensureMessagesState()?.openMessage?.(id);
     });
 
     cacheCombatModalElements();
@@ -1311,6 +1329,10 @@
         return;
       }
 
+      if (e.target.closest("a.gc-galaxy-coord-link")) {
+        return;
+      }
+
       const openCombatBtn = e.target.closest("[data-open-combat-report]");
       if (openCombatBtn) {
         e.preventDefault();
@@ -1324,7 +1346,6 @@
 
       const item = e.target.closest(".gc-messages-item[data-id]");
       if (item) {
-        e.preventDefault();
         const id = Number(item.dataset.id);
         if (Number.isFinite(id)) state.openMessage?.(id);
         return;
@@ -1465,11 +1486,11 @@
               renderCombatReportTeaser(m.metadata || {}, { compact: true, messageId: m.id })
             : "";
           return (
-            `<button type="button" class="gc-messages-item${active}${unreadCls}${combatCls}" data-id="${m.id}">` +
+            `<div role="button" tabindex="0" class="gc-messages-item${active}${unreadCls}${combatCls}" data-id="${m.id}">` +
             `<span class="gc-messages-item-subject">${linkifyCoordsText(m.subject)}</span>` +
             (teaser ? `<span class="gc-messages-item-teaser">${teaser}</span>` : "") +
             `<span class="gc-messages-item-meta">${esc(categoryLabel(m.category))} · ${esc(formatTime(m.created_at))}</span>` +
-            `</button>`
+            `</div>`
           );
         })
         .join("");
@@ -1503,7 +1524,7 @@
           dom.detailBody.innerHTML = rendered.html;
         } else {
           dom.detailBody.classList.remove("gc-messages-detail-body--report");
-          dom.detailBody.textContent = rendered.plain;
+          dom.detailBody.innerHTML = renderPlainMessageHtml(rendered.plain);
         }
       }
       if (!dom.detailActions) return;

@@ -419,30 +419,60 @@
     return parts.length ? parts.join("") : gcEscHtml("—");
   };
 
-  GC.linkifyCoordsInText = function linkifyCoordsInText(text) {
-    const raw = String(text ?? "");
-    if (!raw) return gcEscHtml("—");
-    const re = /\[(\d+):(\d+):(\d+)\]/g;
+  GC.linkifyCoordsSegment = function linkifyCoordsSegment(segment) {
+    const raw = String(segment ?? "");
+    if (!raw) return "";
+    const bracketRe = /\[(\d+):(\d+):(\d+)\]/g;
     let out = "";
     let last = 0;
     let match;
-    while ((match = re.exec(raw)) !== null) {
+    while ((match = bracketRe.exec(raw)) !== null) {
       out += gcEscHtml(raw.slice(last, match.index));
       out += GC.coordLinkHtml(match[0], { label: match[0] });
       last = match.lastIndex;
     }
-    out += gcEscHtml(raw.slice(last));
+    let rest = raw.slice(last);
+    const plainRe = /(?<![\d:])(\d+):(\d+):(\d+)(?![\d:])/g;
+    let plainLast = 0;
+    let plainMatch;
+    while ((plainMatch = plainRe.exec(rest)) !== null) {
+      out += gcEscHtml(rest.slice(plainLast, plainMatch.index));
+      const token = plainMatch[0];
+      out += GC.coordLinkHtml(token, { label: token });
+      plainLast = plainRe.lastIndex;
+    }
+    out += gcEscHtml(rest.slice(plainLast));
+    return out;
+  };
+
+  GC.linkifyCoordsInText = function linkifyCoordsInText(text) {
+    const raw = String(text ?? "");
+    if (!raw) return gcEscHtml("—");
+    const routeRe = /(\[?\d+:\d+:\d+\]?)\s*(?:→|->)\s*(\[?\d+:\d+:\d+\]?)/g;
+    let out = "";
+    let last = 0;
+    let routeMatch;
+    while ((routeMatch = routeRe.exec(raw)) !== null) {
+      out += GC.linkifyCoordsSegment(raw.slice(last, routeMatch.index));
+      out += GC.coordLinkHtml(routeMatch[1], { label: routeMatch[1] });
+      out += gcEscHtml(" → ");
+      out += GC.coordLinkHtml(routeMatch[2], { label: routeMatch[2] });
+      last = routeRe.lastIndex;
+    }
+    out += GC.linkifyCoordsSegment(raw.slice(last));
     return out || gcEscHtml("—");
   };
 
   if (!GC._coordLinkBound) {
     GC._coordLinkBound = true;
+    // Bubble only: allow <a> navigation, stop parent row handlers (inbox item, switcher).
     document.addEventListener(
       "click",
       (e) => {
-        if (e.target.closest(".gc-galaxy-coord-link")) e.stopPropagation();
+        if (!e.target.closest("a.gc-galaxy-coord-link")) return;
+        e.stopPropagation();
       },
-      true
+      false
     );
   }
 
@@ -6119,6 +6149,7 @@
 
     if (trigger && multi) {
       trigger.addEventListener("click", (e) => {
+        if (e.target.closest("a.gc-galaxy-coord-link")) return;
         e.stopPropagation();
         if (menu && menu.hidden) openMenu();
         else closeMenu();
@@ -6133,6 +6164,7 @@
     });
 
     root.addEventListener("click", async (e) => {
+      if (e.target.closest("a.gc-galaxy-coord-link")) return;
       const item = e.target.closest(".gc-planet-switcher-item");
       if (!item || !root.contains(item)) return;
       if (item.classList.contains("is-active")) {

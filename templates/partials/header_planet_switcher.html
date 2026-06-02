@@ -6,14 +6,15 @@
      id="gc-planet-switcher"
      data-multi="{{ '1' if hp_multi else '0' }}"
      data-active-planet-id="{{ hp_active.planet_id }}">
-  <button type="button"
-          class="gc-hud-panel gc-planet-switcher-trigger"
-          id="gc-planet-switcher-trigger"
-          aria-haspopup="{{ 'listbox' if hp_multi else 'false' }}"
-          aria-expanded="false"
-          {% if hp_multi %}aria-controls="gc-planet-switcher-menu"{% endif %}
-          {% if not hp_multi %}aria-disabled="true"{% endif %}
-          title="{{ T('header_planet_switcher_title') }}">
+  <div role="button"
+       tabindex="0"
+       class="gc-hud-panel gc-planet-switcher-trigger"
+       id="gc-planet-switcher-trigger"
+       aria-haspopup="{{ 'listbox' if hp_multi else 'false' }}"
+       aria-expanded="false"
+       {% if hp_multi %}aria-controls="gc-planet-switcher-menu"{% endif %}
+       {% if not hp_multi %}aria-disabled="true"{% endif %}
+       title="{{ T('header_planet_switcher_title') }}">
     <span class="gc-hud-panel-tag">{{ T('header_planet_label') }}</span>
     <span class="gc-planet-switcher-body">
       <span class="gc-planet-switcher-name" data-planet-switcher-name>{{ hp_active.name }}</span>
@@ -24,7 +25,7 @@
     {% if hp_multi %}
     <span class="gc-planet-switcher-chevron" aria-hidden="true">▾</span>
     {% endif %}
-  </button>
+  </div>
 
   {% if hp_multi %}
   <div class="gc-planet-switcher-menu"
