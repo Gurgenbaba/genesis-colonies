@@ -1411,6 +1411,28 @@ def send_fleet(
             conn.close()
 
 
+def _fail_outbound_movement(conn, movement_id: int, now: float) -> bool:
+    """Mark a stuck outbound movement as failed (idempotent; safe to call twice)."""
+    return _claim_movement_status(
+        conn,
+        int(movement_id),
+        ("outbound",),
+        "failed",
+        now,
+    )
+
+
+def _fail_returning_movement(conn, movement_id: int, now: float) -> bool:
+    """Mark a stuck returning movement as failed (idempotent)."""
+    return _claim_movement_status(
+        conn,
+        int(movement_id),
+        ("returning",),
+        "failed",
+        now,
+    )
+
+
 def _claim_movement_status(
     conn,
     movement_id: int,
@@ -1496,28 +1518,9 @@ def _credit_planet_resources(planet_id: int, resources: Mapping[str, Any], *, co
 
 
 def _debit_planet_resources(planet_id: int, resources: Mapping[str, Any], *, conn) -> bool:
-    loaded = calculate_loaded_resources(resources)
-    if loaded["metal"] <= 0 and loaded["crystal"] <= 0 and loaded["fuel_cells"] <= 0:
-        return True
-    lock_planet_for_update(conn, int(planet_id))
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ? LIMIT 1;",
-        (int(planet_id),),
-    )
-    row = cur.fetchone()
-    if not row:
-        return False
-    new_metal = float(row["metal"]) - loaded["metal"]
-    new_crystal = float(row["crystal"]) - loaded["crystal"]
-    new_fuel_cells = float(row["fuel_cells"] or 0) - loaded["fuel_cells"]
-    if new_metal < 0 or new_crystal < 0 or new_fuel_cells < 0:
-        return False
-    cur.execute(
-        "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
-        (new_metal, new_crystal, new_fuel_cells, int(planet_id)),
-    )
-    return True
+    from .resources import debit_planet_resources
+
+    return debit_planet_resources(planet_id, resources, conn=conn)
 
 
 def _calculate_collect_load(
@@ -1525,22 +1528,9 @@ def _calculate_collect_load(
     remaining_cap: int,
 ) -> Dict[str, int]:
     """Load resources from a planet up to remaining cargo (metal → crystal → fuel_cells)."""
-    cap = max(0, int(remaining_cap))
-    if cap <= 0:
-        return {"metal": 0, "crystal": 0, "fuel_cells": 0}
-    avail = {
-        "metal": max(0, int(float(available.get("metal") or 0))),
-        "crystal": max(0, int(float(available.get("crystal") or 0))),
-        "fuel_cells": max(0, int(float(available.get("fuel_cells") or 0))),
-    }
-    loaded = {"metal": 0, "crystal": 0, "fuel_cells": 0}
-    for key in ("metal", "crystal", "fuel_cells"):
-        if cap <= 0:
-            break
-        take = min(avail[key], cap)
-        loaded[key] = take
-        cap -= take
-    return loaded
+    from .resources import load_resources_up_to_cargo
+
+    return load_resources_up_to_cargo(available, remaining_cap)
 
 
 def _planet_resources_for_collect_load(planet_id: int, *, conn) -> Dict[str, int]:
@@ -1553,7 +1543,11 @@ def _planet_resources_for_collect_load(planet_id: int, *, conn) -> Dict[str, int
         return {"metal": 0, "crystal": 0, "fuel_cells": 0}
     from .resources import update_planet_resources
 
-    planet, *_rest = update_planet_resources(dict(row), conn=conn)
+    planet, *_rest = update_planet_resources(
+        dict(row),
+        conn=conn,
+        skip_queue_finish=True,
+    )
     return {
         "metal": max(0, int(float(planet.get("metal") or 0))),
         "crystal": max(0, int(float(planet.get("crystal") or 0))),
@@ -1568,37 +1562,213 @@ def _player_name(player_id: int, *, conn) -> str:
     return str(row["name"] if row else f"Player {player_id}")
 
 
-def _build_combat_report_body(
+def _apply_attack_combat_to_planet(
     *,
-    attacker_id: int,
-    attacker_name: str,
+    planet_id: int,
+    owner_id: int,
+    ships_before: Mapping[str, int],
+    defense_before: Mapping[str, int],
+    defender_losses: Mapping[str, int],
+    conn,
+) -> Dict[str, int]:
+    """Persist defender ship/defense stock after combat; returns remaining ships on planet."""
+    from .combat import remaining_stock, split_defender_losses
+    from .models import defense_schema_ready, set_planet_defense
+
+    ship_losses, defense_losses = split_defender_losses(defender_losses)
+    remaining_ships = remaining_stock(ships_before, ship_losses, canonical_ship_keys=True)
+    remaining_defense = remaining_stock(defense_before, defense_losses)
+    if int(owner_id) > 0:
+        set_planet_ships(int(planet_id), int(owner_id), remaining_ships, conn=conn)
+        if defense_schema_ready(conn):
+            set_planet_defense(int(planet_id), remaining_defense, conn=conn)
+    return remaining_ships
+
+
+def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
+    """
+    Resolve attack combat, loot, debris, ranking, and return flight.
+
+    On failure after partial combat, marks the movement ``failed`` so the tick does not
+    retry (avoids duplicate debris, loot, scores, or reports).
+    """
+    movement_id = int(movement["id"])
+    player_id = int(movement["player_id"])
+    target_id = movement.get("target_planet_id")
+    ships = movement.get("ships") or {}
+    coords = movement.get("target_coords") or ""
+    from .i18n import get_player_locale
+
+    sender_locale = get_player_locale(player_id, conn=conn)
+    combat_applied = False
+
+    try:
+        snapshot = _target_planet_snapshot(int(target_id), conn=conn) if target_id else {}
+        defender_id = int(snapshot.get("owner_id") or 0)
+        defender_name = str(snapshot.get("owner_name") or "")
+        attacker_name = _player_name(player_id, conn=conn)
+        defending_ships = dict(snapshot.get("ships") or {})
+        defending_defense = dict((snapshot.get("defense") or {}).get("stock") or {})
+
+        return_ships = dict(ships)
+        combat_result = None
+        if target_id:
+            return_ships, combat_result = _resolve_attack_arrival(
+                movement=movement,
+                ships=ships,
+                target_id=int(target_id),
+                player_id=player_id,
+                defender_id=defender_id,
+                snapshot=snapshot,
+                conn=conn,
+            )
+            combat_applied = True
+
+        if combat_result is not None:
+            try:
+                from .scoring import record_combat_outcome
+
+                record_combat_outcome(
+                    attacker_id=int(player_id),
+                    defender_id=int(defender_id),
+                    attacker_losses=combat_result.attacker_losses,
+                    defender_losses=combat_result.defender_losses,
+                    conn=conn,
+                )
+            except Exception:
+                logger.exception("combat destruction score failed movement_id=%s", movement_id)
+
+        score_players = {int(player_id)}
+        if defender_id > 0:
+            score_players.add(int(defender_id))
+        try:
+            from .score_events import apply_score_updates_for_players
+
+            apply_score_updates_for_players(score_players, conn=conn)
+        except Exception:
+            logger.exception("attack score refresh failed movement_id=%s", movement_id)
+
+        resources = dict(movement.get("resources") or {})
+        loot_taken: Dict[str, int] = {}
+        if target_id and combat_result is not None:
+            from .combat import apply_combat_loot
+
+            loot_taken, resources = apply_combat_loot(
+                winner=str(combat_result.winner),
+                target_planet_id=int(target_id),
+                return_ships=return_ships,
+                existing_resources=resources,
+                conn=conn,
+            )
+
+        timing = _return_timing_from_now(movement, now=now)
+        return_at = timing["return_at"]
+        return_ships = {k: v for k, v in return_ships.items() if int(v or 0) > 0}
+        claimed = _claim_movement_status(
+            conn,
+            movement_id,
+            ("outbound",),
+            "returning",
+            now,
+            extra_sql=", return_at = ?, ships_json = ?, resources_json = ?",
+            extra_params=(return_at, _json_dumps(return_ships), _json_dumps(resources)),
+        )
+        if not claimed:
+            return
+        from .combat import publish_attack_combat_report
+
+        defender_locale = (
+            get_player_locale(defender_id, conn=conn)
+            if defender_id and defender_id != player_id
+            else None
+        )
+        publish_attack_combat_report(
+            attacker_id=player_id,
+            defender_id=defender_id,
+            coords=coords,
+            attacker_name=attacker_name,
+            defender_name=defender_name,
+            attacking_ships=ships,
+            defending_ships=defending_ships,
+            defending_defense=defending_defense,
+            combat_result=combat_result,
+            return_ships=return_ships,
+            loot=loot_taken,
+            fleet_id=movement_id,
+            conn=conn,
+            attacker_locale=sender_locale,
+            defender_locale=defender_locale,
+        )
+    except Exception:
+        logger.exception(
+            "attack arrival failed movement_id=%s combat_applied=%s",
+            movement_id,
+            combat_applied,
+        )
+        if _fail_outbound_movement(conn, movement_id, now):
+            return
+        raise
+
+
+def _resolve_attack_arrival(
+    *,
+    movement: Dict[str, Any],
+    ships: Mapping[str, int],
+    target_id: int,
+    player_id: int,
     defender_id: int,
-    defender_name: str,
-    coords: str,
-    attacking_ships: Mapping[str, int],
-    defending_ships: Mapping[str, int],
-) -> Tuple[str, Dict[str, Any]]:
-    atk_txt = ", ".join(f"{k} ×{v}" for k, v in sorted(attacking_ships.items())) or "—"
-    def_txt = ", ".join(f"{k} ×{v}" for k, v in sorted(defending_ships.items())) or "—"
-    body = (
-        f"Coordinates: {coords}\n"
-        f"Attacker: {attacker_name}\n"
-        f"Defender: {defender_name}\n"
-        f"Attacking fleet: {atk_txt}\n"
-        f"Defending fleet: {def_txt}\n"
-        f"Result: undecided — combat simulation not active (Phase 1)."
+    snapshot: Mapping[str, Any],
+    conn,
+) -> Tuple[Dict[str, int], Any]:
+    """Run combat for an attack arrival; return surviving outbound ships + CombatResult."""
+    from .combat import (
+        attacker_stacks_from_fleet,
+        battle_rng_for_movement,
+        defender_stacks_from_planet,
+        make_combat_side,
+        simulate_battle,
     )
-    metadata = {
-        "target_coords": coords,
-        "attacker_id": attacker_id,
-        "attacker_name": attacker_name,
-        "defender_id": defender_id,
-        "defender_name": defender_name,
-        "attacking_ships": dict(attacking_ships),
-        "defending_ships": dict(defending_ships),
-        "result": "undecided",
-    }
-    return body, metadata
+
+    movement_id = int(movement["id"])
+    origin_id = int(movement["origin_planet_id"])
+    defending_ships = dict(snapshot.get("ships") or {})
+    defending_defense = dict((snapshot.get("defense") or {}).get("stock") or {})
+
+    atk_stacks = attacker_stacks_from_fleet(ships)
+    def_stacks = defender_stacks_from_planet(defending_ships, defending_defense)
+    combat_result = simulate_battle(
+        make_combat_side("attacker", atk_stacks),
+        make_combat_side("defender", def_stacks),
+        rng=battle_rng_for_movement(movement_id),
+        attacker_player_id=int(player_id),
+        defender_player_id=int(defender_id) if defender_id > 0 else None,
+        attacker_planet_id=origin_id,
+        defender_planet_id=int(target_id),
+        conn=conn,
+    )
+
+    from .combat import remaining_stock
+
+    return_ships = remaining_stock(ships, combat_result.attacker_losses, canonical_ship_keys=True)
+    if int(target_id) > 0 and defender_id > 0:
+        _apply_attack_combat_to_planet(
+            planet_id=int(target_id),
+            owner_id=int(defender_id),
+            ships_before=defending_ships,
+            defense_before=defending_defense,
+            defender_losses=combat_result.defender_losses,
+            conn=conn,
+        )
+    if int(target_id) > 0:
+        from .combat import spawn_combat_debris_at_planet
+
+        spawn_combat_debris_at_planet(
+            int(target_id),
+            attacker_losses=combat_result.attacker_losses,
+            defender_losses=combat_result.defender_losses,
+            conn=conn,
+        )
+    return return_ships, combat_result
 
 
 def _format_transport_cargo(resources: Mapping[str, Any], *, locale: str | None = None) -> str:
@@ -1920,71 +2090,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> None:
         return
 
     if mission == "attack":
-        snapshot = _target_planet_snapshot(int(target_id), conn=conn) if target_id else {}
-        defender_id = int(snapshot.get("owner_id") or 0)
-        defender_name = str(snapshot.get("owner_name") or "")
-        attacker_name = _player_name(player_id, conn=conn)
-        defending_ships = snapshot.get("ships") or {}
-        attacker_body, meta = _build_combat_report_body(
-            attacker_id=player_id,
-            attacker_name=attacker_name,
-            defender_id=defender_id,
-            defender_name=defender_name,
-            coords=coords,
-            attacking_ships=ships,
-            defending_ships=defending_ships,
-        )
-        meta["fleet_id"] = movement_id
-        timing = _return_timing_from_now(movement, now=now)
-        return_at = timing["return_at"]
-        claimed = _claim_movement_status(
-            conn,
-            movement_id,
-            ("outbound",),
-            "returning",
-            now,
-            extra_sql=", return_at = ?",
-            extra_params=(return_at,),
-        )
-        if not claimed:
-            return
-        notify_combat(
-            player_id,
-            tr(
-                "fleet_report_combat_subject_coords",
-                "Combat report — %(coords)s",
-                locale=sender_locale,
-                coords=coords,
-            ),
-            attacker_body,
-            metadata=meta,
-            locale=sender_locale,
-            conn=conn,
-        )
-        if defender_id and defender_id != player_id:
-            defender_locale = get_player_locale(defender_id, conn=conn)
-            defender_body, _def_meta = _build_combat_report_body(
-                attacker_id=player_id,
-                attacker_name=attacker_name,
-                defender_id=defender_id,
-                defender_name=defender_name,
-                coords=coords,
-                attacking_ships=ships,
-                defending_ships=defending_ships,
-            )
-            notify_combat(
-                defender_id,
-                tr(
-                    "fleet_report_combat_subject_defender",
-                    "Attack report — %(coords)s",
-                    locale=defender_locale,
-                    coords=coords,
-                ),
-                defender_body,
-                metadata={**meta, "perspective": "defender"},
-                locale=defender_locale,
-                conn=conn,
-            )
+        _handle_attack_arrival(movement, conn=conn, now=now)
         return
 
     if mission == "hold":
@@ -2203,6 +2309,14 @@ def process_fleet_tick(
             except Exception as exc:
                 result["errors"].append(f"arrival fleet={mv['id']}: {exc}")
                 logger.exception("fleet arrival failed fleet=%s", mv["id"])
+                if mv.get("mission_type") == "attack":
+                    try:
+                        _fail_outbound_movement(conn, int(mv["id"]), now)
+                    except Exception:
+                        logger.exception(
+                            "failed to mark attack movement failed fleet=%s",
+                            mv["id"],
+                        )
 
         hold_params: List[Any] = [now]
         if player_id is not None:
@@ -2243,6 +2357,13 @@ def process_fleet_tick(
             except Exception as exc:
                 result["errors"].append(f"return fleet={mv['id']}: {exc}")
                 logger.exception("fleet return failed fleet=%s", mv["id"])
+                try:
+                    _fail_returning_movement(conn, int(mv["id"]), now)
+                except Exception:
+                    logger.exception(
+                        "failed to mark returning movement failed fleet=%s",
+                        mv["id"],
+                    )
 
         if own:
             commit(conn)

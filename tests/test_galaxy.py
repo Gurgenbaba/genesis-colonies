@@ -236,6 +236,33 @@ def test_empty_slots_are_marked_empty(galaxy_db):
         assert slot["coordinates_formatted"] == format_coordinates(1, 499, slot["position"])
 
 
+def test_list_system_shows_debris_field(galaxy_db):
+    from game.combat import add_debris_field
+
+    uid = _create_player()
+    planet = get_planets_by_player(uid)[0]
+    coords = get_planet_coordinates(planet)
+    conn = db()
+    try:
+        add_debris_field(
+            coords["galaxy"],
+            coords["system"],
+            coords["position"],
+            12_000,
+            3400,
+            conn=conn,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    data = list_system(coords["galaxy"], coords["system"])
+    slot = next(s for s in data["slots"] if s["position"] == coords["position"])
+    assert slot["has_debris"] is True
+    assert slot["debris"]["metal"] == 12_000
+    assert slot["debris"]["crystal"] == 3400
+
+
 def test_overview_uses_real_coordinates(galaxy_db):
     uid = _create_player()
     planet = get_planets_by_player(uid)[0]

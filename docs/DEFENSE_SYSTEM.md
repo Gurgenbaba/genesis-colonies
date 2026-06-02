@@ -1,10 +1,10 @@
 # Defense System
 
-Planet-scoped defensive structures — build queue, stock persistence, ranking, spy intel, and combat **data preparation** (v1.5.3).
+Planet-scoped defensive structures — build queue, stock persistence, ranking, spy intel, and **active combat** integration (v1.5.4).
 
 Kanonische Module: `game/defense.py`, `game/defense_defs.py`, `game/defense_api.py`, `game/defense_page.py`, `game/models.py` (planet_defense CRUD).
 
-**Kein Combat-Resolver** — Angriffe (`attack`-Mission) bleiben Placeholder ([FLEET_SYSTEM.md](FLEET_SYSTEM.md)). Defense-Werte (`attack`, `shield`, `hull`, `rapid_fire_targets`) sind für einen späteren Resolver vorbereitet ([Combat preparation](#combat-preparation-prepared)).
+Defense stock is resolved in `attack` missions via `simulate_battle()` — see [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md).
 
 ---
 
@@ -24,7 +24,7 @@ Das Defense-System verwaltet **stationäre Abwehreinheiten pro Kolonie**:
 |--------|---------|----------------|
 | **Fleet** | Stationär am Planeten, kein Flug | Bewegliche Schiffe, Missionen, Tick — [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
 | **Buildings** | `defense_factory` schaltet Einheiten frei | Allgemeine Gebäude-Queue — [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) |
-| **Combat** | Werte in `defense_defs` / `combat_models` (read-only) | Keine Schadensberechnung, kein Fleet-Tick-Eingriff |
+| **Combat** | Werte in `defense_defs` / `combat_models`; losses via `game/combat.py` | Applied on attack arrival ([COMBAT_SYSTEM.md](COMBAT_SYSTEM.md)) |
 | **Planet Evolution** | Unabhängig | DNA, Policies, Planet-Tech — [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
 | **Research** | Unlock-Requirements (`weapon_tech`, `shield_tech`, …) | Account-weite Levels — [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) |
 
@@ -228,20 +228,19 @@ Eigene Kolonie: Defense-Intel im Spy-Bericht unterdrückt (wie Flotte).
 
 ---
 
-## Combat Preparation (Prepared)
-
-**Nicht aktiv im Gameplay** — keine Schadensberechnung, keine Integration in `process_fleet_tick()` / `attack`-Mission.
+## Combat integration
 
 | Modul | Rolle |
 |-------|-------|
 | `game/combat_models.py` | `CombatUnitStats`, `CombatStack`, `combat_stats_for_defense()`, `stacks_from_counts()` |
+| `game/combat.py` | `simulate_battle()`, debris, defender loss helpers |
 | `game/defense_defs.py` | Rohdaten + `defense_combat_stats()` |
-| `game/fleet_defs.py` | Schiffs-Pendant (`ship_combat_stats()`) für spätere Resolver |
+| `game/fleet.py` | Attack arrival applies `planet_defense` losses |
 
 Felder pro Einheit (Defs + `CombatUnitStats`):
 
 - `attack`, `shield`, `hull`, `score_value`
-- `rapid_fire_targets`: Map Ziel-`unit_key` → Faktor (≥2); Semantik erst im Combat-Resolver
+- `rapid_fire_targets`: Map Ziel-`unit_key` → Faktor (≥2); bonus shot chance in resolver
 
 ```python
 from game.combat_models import combat_stats_for_defense, stacks_from_counts, COMBAT_UNIT_DEFENSE
@@ -249,6 +248,8 @@ from game.combat_models import combat_stats_for_defense, stacks_from_counts, COM
 stats = combat_stats_for_defense("flak_array")
 stacks = stacks_from_counts(planet_stock, unit_type=COMBAT_UNIT_DEFENSE)
 ```
+
+Full flow: [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md).
 
 ---
 
@@ -277,7 +278,8 @@ stacks = stacks_from_counts(planet_stock, unit_type=COMBAT_UNIT_DEFENSE)
 | `game/defense_detail.py` | Detail-Modal-Payload |
 | `game/defense_requirements.py` | Requirements-Summary für UI |
 | `game/scoring.py` | Empire-Summe, Military-Score |
-| `game/combat_models.py` | Combat-Vorbereitung (Prepared) |
+| `game/combat_models.py` | Combat stats / stack builder |
+| `game/combat.py` | Battle engine + debris |
 | `game/spy.py` | Defense-Intel im Spy-Snapshot |
 | `game/models.py` | `planet_defense` CRUD, Schema-Gates |
 | `game/live_state.py` | Game-State-Panel, `defense_finish_source` |
@@ -297,9 +299,7 @@ stacks = stacks_from_counts(planet_stock, unit_type=COMBAT_UNIT_DEFENSE)
 
 | Item | Status |
 |------|--------|
-| Combat-Resolver (Defense vs. Fleet) | 📋 Prepared data only |
-| Defense in `attack`-Mission | 📋 Fleet stub — kein Schaden |
-| `weapon_tech` / `shield_tech` als Combat-Modifier | 📋 Prepared in [EFFECTS.md](EFFECTS.md), kein Consumer |
+| Recycler mission (harvest debris fields) | 📋 Phase 2 |
 
 ---
 
@@ -327,6 +327,7 @@ python -m pytest tests/test_defense_detail_modal.py tests/test_ranking.py tests/
 - [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) — `defense_factory`
 - [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) — Unlock-Requirements
 - [PLANET_SCOPE.md](PLANET_SCOPE.md) — Aktiver Planet
-- [EFFECTS.md](EFFECTS.md) — Tech-Effekte (Prepared)
+- [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) — Battle engine, debris
+- [EFFECTS.md](EFFECTS.md) — Tech-Effekte (combat modifiers active)
 - [ROADMAP.md](ROADMAP.md) — Phase 4 / EPIC-08
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Modul-Übersicht

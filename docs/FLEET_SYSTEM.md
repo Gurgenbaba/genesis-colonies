@@ -72,7 +72,7 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 | **collect** | Eigene Kolonie: lädt Ressourcen bis Cargo-Cap (optional Abflug-Cargo); Ziel verliert Ressourcen; Rückflug; Origin erhält Fracht; Report |
 | **deploy** | Schiffe + Ressourcen bleiben; movement completed |
 | **spy** | Tiered probe intel (resources → fleet → buildings → activity); structured inbox report; Schiffe return |
-| **attack** | **Placeholder** — „combat not active“; Schiffe return |
+| **attack** | `simulate_battle()` vs hangar + `planet_defense`; losses, debris, loot (winner), combat reports, return flight — see [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | **hold** | `holding` für 3600s, dann return (ally only wenn Alliance-Schema) |
 | **expedition** | Event engine (`expedition_events.py`): weighted outcomes, loot cap = expedition-hull cargo × 50, optional delay; inbox event-card report (GC-402C) |
 
@@ -150,13 +150,13 @@ Inbox expedition reports: `static/js/messages.js` → `renderExpeditionReport()`
 | Alliance | `are_players_allied`, hold mission |
 | Research | slots, fuel_efficiency |
 | Messages | transport, spy, combat, expedition notifications |
+| Combat | attack resolution — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | Shipyard | `planet_ships` supply |
 
 ---
 
 ## Placeholder / Phase 2
 
-- Combat resolver (attack)
 - Logistics bulk collect/distribute API
 - Recycler mission (`harvest_reclaimer` def only)
 - `fleet_presets.mission_type` CHECK fehlt `colonize` (nur movements migriert in 032)
@@ -166,5 +166,5 @@ Inbox expedition reports: `static/js/messages.js` → `renderExpeditionReport()`
 ## Tests
 
 ```bash
-python -m pytest tests/test_fleet.py tests/test_shipyard.py tests/test_galaxy.py -v
+python -m pytest tests/test_fleet.py tests/test_shipyard.py tests/test_galaxy.py tests/test_combat.py -v
 ```

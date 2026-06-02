@@ -28,7 +28,13 @@ from game.ranking import (
     recalculate_all_rankings,
     recalculate_ranks,
     repair_player_score_totals,
+    refresh_player_score,
     upsert_player_scores,
+)
+from game.scoring import (
+    compute_destroyed_raw_from_losses,
+    get_destroyed_raw,
+    record_combat_outcome,
 )
 from game.alliance import create_alliance
 from game.playercard import ensure_player_card_tables
@@ -709,3 +715,41 @@ def test_ranking_avatar_cache_bust(temp_db):
     assert row["show_avatar"] is True
     assert "example.com/avatar.png" in row["avatar_url"]
     assert "?v=" in row["avatar_url"] or "&v=" in row["avatar_url"]
+
+
+def test_combat_destruction_increases_ranking_scores(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    attacker = _create_player("combat_atk")
+    defender = _create_player("combat_def")
+    conn = db()
+    try:
+        record_combat_outcome(
+            attacker_id=attacker,
+            defender_id=defender,
+            attacker_losses={},
+            defender_losses={"sentinel_turret": 4},
+            conn=conn,
+        )
+        conn.commit()
+        raw = get_destroyed_raw(attacker, conn=conn)
+        assert raw == compute_destroyed_raw_from_losses({"sentinel_turret": 4})
+
+        refresh_player_score(attacker, conn=conn)
+        conn.commit()
+        row = get_player_score_row(attacker, conn=conn)
+        assert row is not None
+        assert int(row["score_destroyed_raw"]) == raw
+        assert int(row["score_destroyed"]) > 0
+        assert int(row["score_total"]) >= int(row["score_destroyed"])
+    finally:
+        conn.close()
+    _close_db()
+
+    recalculate_ranks()
+    entries = get_sorted_ranking_entries(limit=50)
+    atk_row = next(r for r in entries if r["player_id"] == attacker)
+    assert atk_row["destroyed_score"] > 0
+    assert atk_row["military_score"] >= atk_row["destroyed_score"]

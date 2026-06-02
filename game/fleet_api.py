@@ -1,4 +1,7 @@
-"""Unified JSON helpers for fleet HTTP APIs."""
+"""Unified JSON helpers for fleet HTTP APIs.
+
+Attack mission combat is resolved in ``game.fleet`` on arrival (``simulate_battle``).
+"""
 
 from __future__ import annotations
 

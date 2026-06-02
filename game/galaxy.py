@@ -486,6 +486,45 @@ def resolve_view_coordinates(
     return galaxy, system, highlight_pos
 
 
+def get_debris_for_system(
+    galaxy: int,
+    system: int,
+    conn: sqlite3.Connection,
+) -> Dict[int, Dict[str, int]]:
+    """Map position → debris amounts for one system."""
+    from .combat import debris_schema_ready
+
+    out: Dict[int, Dict[str, int]] = {}
+    if not debris_schema_ready(conn):
+        return out
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT position, metal, crystal
+        FROM debris_fields
+        WHERE galaxy = ? AND system = ?
+          AND position BETWEEN ? AND ?;
+        """,
+        (int(galaxy), int(system), POSITION_MIN, POSITION_MAX),
+    )
+    for row in cur.fetchall():
+        pos = int(row["position"])
+        metal = max(0, int(float(row["metal"] or 0)))
+        crystal = max(0, int(float(row["crystal"] or 0)))
+        if metal <= 0 and crystal <= 0:
+            continue
+        out[pos] = {"metal": metal, "crystal": crystal}
+    return out
+
+
+def _attach_debris_to_slot(slot: Dict[str, Any], debris: Mapping[str, int] | None) -> None:
+    d = dict(debris or {})
+    metal = max(0, int(d.get("metal") or 0))
+    crystal = max(0, int(d.get("crystal") or 0))
+    slot["debris"] = {"metal": metal, "crystal": crystal}
+    slot["has_debris"] = metal > 0 or crystal > 0
+
+
 def list_system(
     galaxy: int,
     system: int,
@@ -579,39 +618,43 @@ def list_system(
                 "colony_target": False,
             }
 
+    debris_by_position = get_debris_for_system(int(galaxy), int(system), conn)
+
     slots: List[Dict[str, Any]] = []
     for pos in range(POSITION_MIN, POSITION_MAX + 1):
         if pos in by_position:
-            slots.append(by_position[pos])
+            slot = by_position[pos]
+            _attach_debris_to_slot(slot, debris_by_position.get(pos))
+            slots.append(slot)
         else:
             is_highlighted = (
                 highlight_position is not None and pos == int(highlight_position)
             )
-            slots.append(
-                {
+            slot = {
+                "position": pos,
+                "occupied": False,
+                "player_id": None,
+                "commander_name": None,
+                "planet_id": None,
+                "planet_name": None,
+                "coordinates": {
+                    "galaxy": int(galaxy),
+                    "system": int(system),
                     "position": pos,
-                    "occupied": False,
-                    "player_id": None,
-                    "commander_name": None,
-                    "planet_id": None,
-                    "planet_name": None,
-                    "coordinates": {
-                        "galaxy": int(galaxy),
-                        "system": int(system),
-                        "position": pos,
-                    },
-                    "coordinates_formatted": format_coordinates(galaxy, system, pos),
-                    "planet_class": None,
-                    "planet_class_label_key": None,
-                    "temperature_display": None,
-                    "planet_score": None,
-                    "is_own_planet": False,
-                    "is_ally_planet": False,
-                    "is_active_planet": False,
-                    "is_highlighted": is_highlighted,
-                    "colony_target": True,
-                }
-            )
+                },
+                "coordinates_formatted": format_coordinates(galaxy, system, pos),
+                "planet_class": None,
+                "planet_class_label_key": None,
+                "temperature_display": None,
+                "planet_score": None,
+                "is_own_planet": False,
+                "is_ally_planet": False,
+                "is_active_planet": False,
+                "is_highlighted": is_highlighted,
+                "colony_target": True,
+            }
+            _attach_debris_to_slot(slot, debris_by_position.get(pos))
+            slots.append(slot)
 
     result = {
         "galaxy": int(galaxy),

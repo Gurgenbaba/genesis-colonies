@@ -135,6 +135,29 @@ def get_defense(defense_key: str) -> Dict[str, Any] | None:
     return DEFENSES.get(str(defense_key or "").strip())
 
 
+def defense_rapid_fire_targets(defense_key: str) -> Dict[str, int]:
+    """``rapid_fire_targets`` from defense defs — target key → multiplier (values >= 2)."""
+    spec = get_defense(defense_key) or {}
+    raw = spec.get("rapid_fire_targets") or {}
+    out: Dict[str, int] = {}
+    if not isinstance(raw, dict):
+        return out
+    for target_key, value in raw.items():
+        key = str(target_key or "").strip()
+        mult = int(value or 0)
+        if mult >= 2:
+            out[key] = mult
+    return out
+
+
+def defense_rapid_fire_multiplier(defense_key: str, target_key: str) -> int:
+    """Rapid-fire multiplier vs a target unit key (1 = no bonus shots)."""
+    targets = defense_rapid_fire_targets(defense_key)
+    key = str(target_key or "").strip()
+    mult = int(targets.get(key, 0) or 0)
+    return mult if mult >= 2 else 1
+
+
 def unit_build_cost(defense_key: str) -> Dict[str, int]:
     spec = get_defense(defense_key) or {}
     raw = spec.get("build_cost") or {}
@@ -164,6 +187,13 @@ def defense_combat_stats(defense_key: str):
     from .combat_models import combat_stats_for_defense
 
     return combat_stats_for_defense(defense_key)
+
+
+def rapid_fire_bonus_shot_chance(rapid_fire_multiplier: int) -> float:
+    """Shared RF chance formula — see ``fleet_defs.rapid_fire_bonus_shot_chance``."""
+    from .fleet_defs import rapid_fire_bonus_shot_chance as _chance
+
+    return _chance(rapid_fire_multiplier)
 
 
 def defense_defs_for_client() -> List[Dict[str, Any]]:

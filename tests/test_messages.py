@@ -20,10 +20,12 @@ from game.messages import (
     archive_message,
     create_message,
     delete_message,
+    dispatch_combat_reports,
     get_message,
     list_messages,
     mark_all_messages_read,
     mark_message_read,
+    normalize_combat_metadata,
     notify_admin,
     notify_combat,
     notify_espionage,
@@ -969,3 +971,80 @@ def test_api_messages_empty_only_after_ok_list(app_client, temp_db):
     assert payload["ok"] is True
     assert payload["data"]["messages"] == []
     assert payload["data"]["unread_count"] == 0
+
+
+def test_dispatch_combat_reports_persists_for_both_players(temp_db):
+    from game.combat import COMBAT_REPORT_VERSION, build_combat_report
+    from game.combat_models import CombatResult, CombatRound
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    attacker_id = _create_player("combat_atk")
+    defender_id = _create_player("combat_def")
+    combat_result = CombatResult(
+        winner="attacker",
+        rounds=(
+            CombatRound(1, {}, {"sentinel_turret": 2}),
+            CombatRound(2, {"falcon_interceptor": 1}, {}),
+        ),
+        attacker_losses={"falcon_interceptor": 1},
+        defender_losses={"sentinel_turret": 2},
+    )
+    body, meta = build_combat_report(
+        attacker_id=attacker_id,
+        attacker_name="Attacker",
+        defender_id=defender_id,
+        defender_name="Defender",
+        coords="2:3:4",
+        attacking_ships={"falcon_interceptor": 5},
+        defending_ships={},
+        defending_defense={"sentinel_turret": 4},
+        combat_result=combat_result,
+        return_ships={"falcon_interceptor": 4},
+    )
+    meta = normalize_combat_metadata(meta)
+    assert meta["report_version"] == COMBAT_REPORT_VERSION
+    assert len(meta["rounds"]) == 2
+    assert meta["result"] == "attacker"
+    assert "═══" in body or "Combat report" in body
+
+    sent = dispatch_combat_reports(
+        attacker_id=attacker_id,
+        defender_id=defender_id,
+        coords="2:3:4",
+        body=body,
+        metadata=meta,
+    )
+    assert sent["attacker"]["ok"]
+    assert sent["defender"]["ok"]
+
+    _close_db()
+    atk_inbox = list_messages(attacker_id, category="combat")
+    def_inbox = list_messages(defender_id, category="combat")
+    assert len(atk_inbox["data"]["messages"]) == 1
+    assert len(def_inbox["data"]["messages"]) == 1
+
+    atk_detail = get_message(attacker_id, atk_inbox["data"]["messages"][0]["id"], mark_read=False)
+    def_detail = get_message(defender_id, def_inbox["data"]["messages"][0]["id"], mark_read=False)
+    atk_msg = atk_detail["data"]["message"]
+    def_msg = def_detail["data"]["message"]
+    assert atk_msg["category"] == "combat"
+    assert def_msg["category"] == "combat"
+    assert atk_msg["metadata"]["perspective"] == "attacker"
+    assert def_msg["metadata"]["perspective"] == "defender"
+    assert atk_msg["metadata"]["rounds_fought"] == 2
+    assert atk_msg["metadata"]["defender_losses"]["sentinel_turret"] == 2
+    assert atk_msg["body"] == body
+
+    conn = db()
+    try:
+        rows = conn.execute(
+            "SELECT recipient_player_id, category, metadata_json FROM player_messages WHERE category = 'combat';"
+        ).fetchall()
+        assert len(rows) == 2
+        recipients = {int(r["recipient_player_id"]) for r in rows}
+        assert recipients == {attacker_id, defender_id}
+    finally:
+        conn.close()

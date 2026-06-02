@@ -1,6 +1,6 @@
-"""Canonical combat unit stats — data layer for a future resolver (GC-416).
+"""Canonical combat unit stats — data layer for ``game.combat.simulate_battle`` (GC-416+).
 
-No battle simulation or fleet-tick integration. Read combat values only via this module.
+Registry lookups and stack builders only; battle logic lives in ``game/combat.py``.
 """
 
 from __future__ import annotations
@@ -28,12 +28,44 @@ class CombatUnitStats:
 
 @dataclass(frozen=True, slots=True)
 class CombatStack:
-    """Amount × stats — input shape for a future combat resolver."""
+    """Amount × stats — input stack for ``simulate_battle``."""
 
     unit_key: str
     unit_type: str
     amount: int
     stats: CombatUnitStats
+
+
+@dataclass(frozen=True, slots=True)
+class CombatSide:
+    """One battle participant — attacker or defender stack list."""
+
+    role: str
+    stacks: tuple[CombatStack, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CombatRound:
+    """Per-round loss snapshot (cumulative totals are on ``CombatResult``)."""
+
+    number: int
+    attacker_losses: Dict[str, int]
+    defender_losses: Dict[str, int]
+
+
+@dataclass(frozen=True, slots=True)
+class CombatResult:
+    """Outcome of ``simulate_battle`` — pure data, no persistence."""
+
+    winner: str
+    rounds: tuple[CombatRound, ...]
+    attacker_losses: Dict[str, int]
+    defender_losses: Dict[str, int]
+
+
+def make_combat_side(role: str, stacks: List[CombatStack] | tuple[CombatStack, ...]) -> CombatSide:
+    """Build a side from resolver stacks (empty list allowed)."""
+    return CombatSide(role=str(role or "").strip().lower(), stacks=tuple(stacks))
 
 
 def _safe_int(value: Any, *, default: int = 0) -> int:

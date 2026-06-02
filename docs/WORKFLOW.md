@@ -35,6 +35,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) | Gebäude, Bau-Queue |
 | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) | Account-Forschung |
 | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) | Flotten, Schiffe, Missionen |
+| [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) | Kampf-Resolver, Loot, Debris, Reports |
 | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) | Koordinaten, Systemansicht |
 | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) | DNA, Planet-Tech, Events |
 | [EFFECTS.md](EFFECTS.md) | EffectResolver, Formeln |

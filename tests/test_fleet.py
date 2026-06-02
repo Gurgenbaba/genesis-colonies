@@ -1292,14 +1292,18 @@ def test_spy_report_tier5_reveals_buildings_and_energy(fleet_db):
     conn.close()
 
 
-def test_attack_placeholder_report(fleet_db):
+def test_attack_resolves_combat_and_saves_losses(fleet_db):
+    from game.models import add_planet_defense, get_planet_defense
+
     foreign_uid, foreign_pid, (g, s, p) = _foreign_planet_standalone()
     conn = db()
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     cur = conn.cursor()
     _fund_planet(cur, pid)
-    _seed_ships(pid, uid, {"falcon_interceptor": 5}, conn=conn)
+    attack_sent = 12
+    _seed_ships(pid, uid, {"ironclad_frigate": attack_sent}, conn=conn)
+    add_planet_defense(foreign_pid, {"sentinel_turret": 8}, conn=conn)
     conn.commit()
 
     ok, _, result = send_fleet(
@@ -1309,7 +1313,7 @@ def test_attack_placeholder_report(fleet_db):
         target_system=s,
         target_position=p,
         mission_type="attack",
-        ships={"falcon_interceptor": 2},
+        ships={"ironclad_frigate": attack_sent},
         conn=conn,
     )
     assert ok
@@ -1324,12 +1328,234 @@ def test_attack_placeholder_report(fleet_db):
     assert len(messages) >= 1
     detail = get_message(uid, messages[0]["id"], mark_read=False)
     meta = detail["data"]["message"].get("metadata") or {}
-    assert meta.get("result") == "undecided"
+    assert meta.get("report_version") == 2
+    assert meta.get("result") in ("attacker", "defender", "draw")
+    assert meta.get("result") != "undecided"
+    assert int(meta.get("rounds_fought") or 0) >= 1
     assert "attacking_ships" in meta
+    assert "defending_defense" in meta
+    assert "return_ships" in meta
+    assert sum((meta.get("defender_losses") or {}).values()) > 0
+
     defender_msgs = list_messages(foreign_uid, category="combat")
     assert len(defender_msgs["data"]["messages"]) >= 1
+
+    cur.execute("SELECT status, ships_json FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    row = cur.fetchone()
+    assert row["status"] == "returning"
+    returning = json.loads(row["ships_json"])
+    assert sum(returning.values()) <= attack_sent
+    assert sum(returning.values()) > 0
+
+    def_def = get_planet_defense(foreign_pid, conn=conn)
+    assert sum(def_def.values()) < 8
+    conn.close()
+
+
+def test_attack_loot_loaded_on_return_and_credited_at_home(fleet_db):
+    from game.fleet_calc import calculate_total_cargo, loaded_resource_total
+    from game.messages import get_message, list_messages
+    from game.models import add_planet_defense
+
+    foreign_uid, foreign_pid, (g, s, p) = _foreign_planet_standalone()
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _fund_planet(cur, foreign_pid, metal=80_000, crystal=40_000, fuel_cells=20_000)
+    attack_ships = {"ironclad_frigate": 12, "mule_courier": 1}
+    _seed_ships(pid, uid, attack_ships, conn=conn)
+    add_planet_defense(foreign_pid, {"sentinel_turret": 8}, conn=conn)
+    conn.commit()
+
+    cargo_cap = calculate_total_cargo(attack_ships)
+    assert cargo_cap > 0
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="attack",
+        ships=attack_ships,
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    cur.execute("SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;", (foreign_pid,))
+    before = dict(cur.fetchone())
+    cur.execute("UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;", (time.time() - 1, fleet_id))
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute("SELECT status, resources_json FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    row = cur.fetchone()
+    assert row["status"] == "returning"
+    loaded = json.loads(row["resources_json"])
+    loot_total = loaded_resource_total(loaded)
+    assert loot_total > 0
+    assert loot_total <= cargo_cap
+
+    cur.execute("SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;", (foreign_pid,))
+    after = dict(cur.fetchone())
+    assert float(after["metal"]) < float(before["metal"])
+
+    detail = get_message(uid, list_messages(uid, category="combat")["data"]["messages"][0]["id"], mark_read=False)
+    assert sum((detail["data"]["message"].get("metadata") or {}).get("loot", {}).values()) == loot_total
+
+    cur.execute("SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;", (pid,))
+    home_before = dict(cur.fetchone())
+    cur.execute("UPDATE fleet_movements SET return_at = ? WHERE id = ?;", (time.time() - 1, fleet_id))
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute("SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;", (pid,))
+    home_after = dict(cur.fetchone())
+    assert float(home_after["metal"]) >= float(home_before["metal"]) + float(loaded.get("metal") or 0)
+    conn.close()
+
+
+def test_attack_spawns_debris_at_target_coords(fleet_db):
+    from game.models import add_planet_defense
+
+    foreign_uid, foreign_pid, (g, s, p) = _foreign_planet_standalone()
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"ironclad_frigate": 12}, conn=conn)
+    add_planet_defense(foreign_pid, {"sentinel_turret": 8}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="attack",
+        ships={"ironclad_frigate": 12},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    cur.execute("UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;", (time.time() - 1, fleet_id))
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute(
+        "SELECT metal, crystal FROM debris_fields WHERE galaxy = ? AND system = ? AND position = ?;",
+        (g, s, p),
+    )
+    row = cur.fetchone()
+    assert row is not None
+    assert float(row["metal"]) > 0 or float(row["crystal"]) > 0
+    conn.close()
+
+
+def test_attack_loot_with_conn_skips_nested_resources_queue_finish(fleet_db, monkeypatch):
+    """Regression GC-511: loot read must not call finish_due_work(source=resources) inside fleet tick."""
+    from game.models import add_planet_defense
+    from game import resources as resources_mod
+
+    resource_finish_calls: list[str] = []
+    real_finish = resources_mod.finish_due_work_once
+
+    def track_finish(*args, **kwargs):
+        resource_finish_calls.append(str(kwargs.get("source") or args[4] if len(args) > 4 else ""))
+        return real_finish(*args, **kwargs)
+
+    monkeypatch.setattr(resources_mod, "finish_due_work_once", track_finish)
+
+    foreign_uid, foreign_pid, (g, s, p) = _foreign_planet_standalone()
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _fund_planet(cur, foreign_pid, metal=50_000, crystal=20_000, fuel_cells=5_000)
+    attack_ships = {"ironclad_frigate": 12, "mule_courier": 1}
+    _seed_ships(pid, uid, attack_ships, conn=conn)
+    add_planet_defense(foreign_pid, {"sentinel_turret": 8}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="attack",
+        ships=attack_ships,
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    cur.execute("UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;", (time.time() - 1, fleet_id))
+    conn.commit()
+
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    assert "resources" not in resource_finish_calls
+
     cur.execute("SELECT status FROM fleet_movements WHERE id = ?;", (fleet_id,))
     assert cur.fetchone()["status"] == "returning"
+    conn.close()
+
+
+def test_attack_arrival_exception_marks_failed_not_stuck_outbound(fleet_db, monkeypatch):
+    from game.models import add_planet_defense
+
+    def boom(**_kwargs):
+        raise RuntimeError("loot failed for test")
+
+    monkeypatch.setattr("game.combat.apply_combat_loot", boom)
+
+    foreign_uid, foreign_pid, (g, s, p) = _foreign_planet_standalone()
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _fund_planet(cur, foreign_pid, metal=40_000, crystal=10_000)
+    _seed_ships(pid, uid, {"ironclad_frigate": 12}, conn=conn)
+    add_planet_defense(foreign_pid, {"sentinel_turret": 8}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="attack",
+        ships={"ironclad_frigate": 12},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    cur.execute("UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;", (time.time() - 1, fleet_id))
+    conn.commit()
+
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute("SELECT status FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    assert cur.fetchone()["status"] == "failed"
+
+    tick2 = process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    assert int(tick2.get("processed_arrivals") or 0) == 0
+
+    cur.execute("SELECT status FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    assert cur.fetchone()["status"] == "failed"
     conn.close()
 
 

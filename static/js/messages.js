@@ -52,6 +52,357 @@
     return t(`fleet_ship_${key}`, key);
   }
 
+  function defenseLabel(key) {
+    return t(`defense_${key}`, key);
+  }
+
+  function unitLabel(key, defenseStock) {
+    const k = String(key || "");
+    if (defenseStock && Object.prototype.hasOwnProperty.call(defenseStock, k)) {
+      return defenseLabel(k);
+    }
+    return shipLabel(k);
+  }
+
+  function renderUnitRows(stock, defenseStock) {
+    const entries = Object.entries(stock || {}).filter(([, qty]) => Number(qty) > 0);
+    if (!entries.length) {
+      return `<p class="gc-spy-report-empty">${esc(t("combat_report_fleet_empty", "—"))}</p>`;
+    }
+    return entries
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(
+        ([key, qty]) =>
+          `<div class="gc-spy-report-kv"><span>${esc(unitLabel(key, defenseStock))}</span><strong>×${esc(formatInt(qty))}</strong></div>`
+      )
+      .join("");
+  }
+
+  const COMBAT_MODAL = {
+    root: null,
+    dialog: null,
+    titleEl: null,
+    content: null,
+    open: false,
+  };
+
+  function isCombatReportMsg(msg) {
+    const meta = msg?.metadata || {};
+    return (
+      msg?.category === "combat" &&
+      Number(meta.report_version) >= 2 &&
+      Boolean(meta.target_coords)
+    );
+  }
+
+  function combatResultVisual(resultKey) {
+    const key = String(resultKey || "undecided");
+    if (key === "attacker") {
+      return { theme: "emerald", icon: "⚔", badge: "victory" };
+    }
+    if (key === "defender") {
+      return { theme: "rose", icon: "🛡", badge: "defeat" };
+    }
+    if (key === "draw") {
+      return { theme: "amber", icon: "◇", badge: "draw" };
+    }
+    return { theme: "cyan", icon: "◈", badge: "open" };
+  }
+
+  function unitCountTotal(stock) {
+    return Object.values(stock || {}).reduce((sum, qty) => sum + Math.max(0, Number(qty) || 0), 0);
+  }
+
+  function renderCombatUnitGrid(stock, defenseStock) {
+    const entries = Object.entries(stock || {}).filter(([, qty]) => Number(qty) > 0);
+    if (!entries.length) {
+      return `<p class="gc-combat-report-empty">${esc(t("combat_report_fleet_empty", "—"))}</p>`;
+    }
+    return (
+      `<div class="gc-combat-unit-grid">` +
+      entries
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(
+          ([key, qty]) =>
+            `<div class="gc-combat-unit-chip">` +
+            `<span class="gc-combat-unit-chip-name">${esc(unitLabel(key, defenseStock))}</span>` +
+            `<strong class="gc-combat-unit-chip-qty">×${esc(formatInt(qty))}</strong>` +
+            `</div>`
+        )
+        .join("") +
+      `</div>`
+    );
+  }
+
+  function renderCombatLootChips(loot) {
+    const rows = [];
+    if (Number(loot?.metal || 0) > 0) {
+      rows.push(
+        `<div class="gc-expedition-loot-chip gc-expedition-loot-chip--metal">` +
+          `<span class="gc-expedition-loot-label">${esc(t("resource_metal", "Ferronit"))}</span>` +
+          `<strong class="gc-expedition-loot-value">${esc(formatInt(loot.metal))}</strong>` +
+        `</div>`
+      );
+    }
+    if (Number(loot?.crystal || 0) > 0) {
+      rows.push(
+        `<div class="gc-expedition-loot-chip gc-expedition-loot-chip--crystal">` +
+          `<span class="gc-expedition-loot-label">${esc(t("resource_crystal", "Crytite"))}</span>` +
+          `<strong class="gc-expedition-loot-value">${esc(formatInt(loot.crystal))}</strong>` +
+        `</div>`
+      );
+    }
+    if (Number(loot?.fuel_cells || 0) > 0) {
+      rows.push(
+        `<div class="gc-expedition-loot-chip gc-expedition-loot-chip--fuel">` +
+          `<span class="gc-expedition-loot-label">${esc(t("resource_fuel_cells", "Fuel Cells"))}</span>` +
+          `<strong class="gc-expedition-loot-value">${esc(formatInt(loot.fuel_cells))}</strong>` +
+        `</div>`
+      );
+    }
+    if (!rows.length) {
+      return `<p class="gc-combat-report-empty">${esc(t("combat_report_loot_none", "No plunder"))}</p>`;
+    }
+    return `<div class="gc-expedition-loot-grid">${rows.join("")}</div>`;
+  }
+
+  function renderCombatPanel(title, bodyHtml, extraClass = "") {
+    return (
+      `<section class="gc-combat-report-panel${extraClass ? ` ${extraClass}` : ""}">` +
+      `<h4 class="gc-combat-report-panel-title">${esc(title)}</h4>` +
+      `<div class="gc-combat-report-panel-body">${bodyHtml}</div>` +
+      `</section>`
+    );
+  }
+
+  function renderCombatReportTeaser(meta, opts = {}) {
+    const compact = Boolean(opts.compact);
+    const messageId = opts.messageId;
+    const resultKey = meta.result || meta.winner || "undecided";
+    const visual = combatResultVisual(resultKey);
+    const resultLabel = t(`combat_report_winner_${resultKey}`, resultKey);
+    const rounds = formatInt(meta.rounds_fought || (meta.rounds || []).length || 0);
+    const loot = meta.loot || {};
+    const lootTotal = expeditionLootTotal(loot);
+    const vsLine = t("combat_report_vs", "%(attacker)s vs %(defender)s")
+      .replace("%(attacker)s", meta.attacker_name || "—")
+      .replace("%(defender)s", meta.defender_name || "—");
+    const openAttrs =
+      messageId != null && Number.isFinite(Number(messageId))
+        ? ` data-open-combat-report="${Number(messageId)}"`
+        : "";
+
+    const lootHint =
+      lootTotal > 0
+        ? `${formatInt(loot.metal || 0)} / ${formatInt(loot.crystal || 0)} / ${formatInt(loot.fuel_cells || 0)}`
+        : t("combat_report_loot_none", "No plunder");
+
+    return (
+      `<div class="gc-combat-teaser gc-combat-teaser--${esc(visual.badge)}${compact ? " gc-combat-teaser--compact" : ""}" data-result="${esc(resultKey)}">` +
+        `<div class="gc-combat-teaser-top">` +
+          `<span class="gc-combat-teaser-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
+          `<div class="gc-combat-teaser-headings">` +
+            `<span class="gc-combat-teaser-coords gc-mono">${esc(meta.target_coords || "—")}</span>` +
+            `<span class="gc-combat-teaser-vs">${esc(vsLine)}</span>` +
+          `</div>` +
+          `<span class="gc-combat-teaser-badge">${esc(resultLabel)}</span>` +
+        `</div>` +
+        `<p class="gc-combat-teaser-meta gc-mono">${esc(
+          t("combat_report_rounds_total", "%(count)s rounds").replace("%(count)s", rounds)
+        )} · ${esc(lootHint)}</p>` +
+        (!compact ? `<p class="gc-combat-teaser-hint">${esc(t("combat_report_teaser_hint", ""))}</p>` : "") +
+        `<span class="gc-btn gc-btn-primary gc-btn-sm gc-combat-teaser-open" role="button" tabindex="0"${openAttrs}>${esc(
+          t("combat_report_open_btn", "Open report")
+        )}</span>` +
+      `</div>`
+    );
+  }
+
+  function renderCombatReportFull(meta) {
+    const resultKey = meta.result || meta.winner || "undecided";
+    const visual = combatResultVisual(resultKey);
+    const resultLabel = t(`combat_report_winner_${resultKey}`, resultKey);
+    const defenseStock = meta.defending_defense || {};
+    const roundsCount = meta.rounds_fought || (meta.rounds || []).length || 0;
+    const atkLossTotal = unitCountTotal(meta.attacker_losses);
+    const defLossTotal = unitCountTotal(meta.defender_losses);
+    const loot = meta.loot || {};
+    const lootTotal = expeditionLootTotal(loot);
+
+    const sections = [];
+
+    sections.push(
+      `<header class="gc-combat-report-hero gc-combat-report-hero--${esc(visual.badge)}">` +
+        `<div class="gc-combat-report-hero-top">` +
+          `<span class="gc-combat-report-hero-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
+          `<div class="gc-combat-report-hero-text">` +
+            `<div class="gc-combat-report-coords gc-mono">${esc(meta.target_coords || "—")}</div>` +
+            `<div class="gc-combat-report-vs">${esc(
+              t("combat_report_vs", "%(attacker)s vs %(defender)s")
+                .replace("%(attacker)s", meta.attacker_name || "—")
+                .replace("%(defender)s", meta.defender_name || "—")
+            )}</div>` +
+          `</div>` +
+          `<span class="gc-combat-report-result-badge">${esc(resultLabel)}</span>` +
+        `</div>` +
+      `</header>`
+    );
+
+    sections.push(
+      `<div class="gc-player-card-stats gc-combat-report-stats">` +
+        `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(t("combat_report_stat_rounds", "Rounds"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(roundsCount))}</span>` +
+        `</div>` +
+        `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(t("combat_report_stat_atk_lost", "Attacker losses"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(atkLossTotal))}</span>` +
+        `</div>` +
+        `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(t("combat_report_stat_def_lost", "Defender losses"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(defLossTotal))}</span>` +
+        `</div>` +
+        `<div class="gc-player-card-stat">` +
+          `<span class="gc-player-card-stat-label">${esc(t("combat_report_stat_loot", "Plunder"))}</span>` +
+          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(lootTotal))}</span>` +
+        `</div>` +
+      `</div>`
+    );
+
+    sections.push(
+      `<div class="gc-combat-report-columns">` +
+        renderCombatPanel(
+          t("combat_report_section_attacker", "Attacker"),
+          renderCombatUnitGrid(meta.attacking_ships, null),
+          "gc-combat-report-panel--attacker"
+        ) +
+        renderCombatPanel(
+          t("combat_report_section_defender", "Defender"),
+          renderCombatUnitGrid(meta.defending_ships, null) +
+            renderCombatUnitGrid(defenseStock, defenseStock),
+          "gc-combat-report-panel--defender"
+        ) +
+      `</div>`
+    );
+
+    const roundList = Array.isArray(meta.rounds) ? meta.rounds : [];
+    if (roundList.length) {
+      const roundHtml = roundList
+        .map((rnd) => {
+          const n = rnd.number || 0;
+          return (
+            `<details class="gc-combat-round">` +
+            `<summary class="gc-combat-round-title">${esc(
+              t("combat_report_section_round", "Round %(n)s").replace("%(n)s", formatInt(n))
+            )}</summary>` +
+            `<div class="gc-combat-round-body">` +
+            renderCombatUnitGrid(rnd.attacker_losses, null) +
+            renderCombatUnitGrid(rnd.defender_losses, defenseStock) +
+            `</div>` +
+            `</details>`
+          );
+        })
+        .join("");
+      sections.push(
+        renderCombatPanel(t("combat_report_section_rounds", "Round log"), roundHtml, "gc-combat-report-panel--rounds")
+      );
+    }
+
+    sections.push(
+      renderCombatPanel(
+        t("combat_report_section_losses", "Total losses"),
+        renderCombatUnitGrid(meta.attacker_losses, null) + renderCombatUnitGrid(meta.defender_losses, defenseStock)
+      )
+    );
+
+    const ret = meta.return_ships || {};
+    if (unitCountTotal(ret) > 0) {
+      sections.push(
+        renderCombatPanel(
+          t("combat_report_section_return", "Returning fleet"),
+          renderCombatUnitGrid(ret, null),
+          "gc-combat-report-panel--return"
+        )
+      );
+    }
+
+    sections.push(
+      renderCombatPanel(
+        t("combat_report_section_loot", "Plundered cargo"),
+        renderCombatLootChips(loot),
+        `gc-combat-report-panel--loot${lootTotal > 0 ? " gc-combat-report-panel--loot-found" : ""}`
+      )
+    );
+
+    return (
+      `<div class="gc-player-card-shell gc-combat-report-shell" data-theme="${esc(visual.theme)}">` +
+      sections.join("") +
+      `</div>`
+    );
+  }
+
+  function cacheCombatModalElements() {
+    if (COMBAT_MODAL.root && COMBAT_MODAL.content) return COMBAT_MODAL.root;
+    COMBAT_MODAL.root = document.getElementById("gc-combat-report-root");
+    if (!COMBAT_MODAL.root) return null;
+    COMBAT_MODAL.dialog = COMBAT_MODAL.root.querySelector(".gc-combat-report-dialog");
+    COMBAT_MODAL.titleEl = document.getElementById("gc-combat-report-title");
+    COMBAT_MODAL.content = COMBAT_MODAL.root.querySelector("[data-cr-content]");
+    return COMBAT_MODAL.root;
+  }
+
+  function openCombatReportModal(msg) {
+    if (!msg || !isCombatReportMsg(msg)) return;
+    const root = cacheCombatModalElements();
+    if (!root || !COMBAT_MODAL.content) return;
+    const meta = msg.metadata || {};
+    const visual = combatResultVisual(meta.result || meta.winner || "undecided");
+    if (COMBAT_MODAL.dialog) {
+      COMBAT_MODAL.dialog.setAttribute("data-theme", visual.theme);
+    }
+    if (COMBAT_MODAL.titleEl) {
+      const coords = meta.target_coords || "—";
+      COMBAT_MODAL.titleEl.textContent = `${t("combat_report_modal_title", "Combat report")} — ${coords}`;
+    }
+    COMBAT_MODAL.content.innerHTML = renderCombatReportFull(meta);
+    root.hidden = false;
+    root.setAttribute("aria-hidden", "false");
+    document.body.classList.add("gc-combat-report-open");
+    COMBAT_MODAL.open = true;
+    const closeBtn = root.querySelector("[data-cr-close].gc-player-card-close");
+    if (closeBtn) closeBtn.focus({ preventScroll: true });
+  }
+
+  function closeCombatReportModal() {
+    const root = cacheCombatModalElements();
+    if (!root) return;
+    if (COMBAT_MODAL.content) COMBAT_MODAL.content.innerHTML = "";
+    root.hidden = true;
+    root.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("gc-combat-report-open");
+    COMBAT_MODAL.open = false;
+  }
+
+  function resolveCombatMessage(messageId) {
+    const id = Number(messageId);
+    if (!Number.isFinite(id)) return null;
+    const state = GC.messagesPageState;
+    const cached = state?.messages?.find((m) => m.id === id);
+    if (cached && isCombatReportMsg(cached)) return cached;
+    return null;
+  }
+
+  async function openCombatReportById(messageId) {
+    let msg = resolveCombatMessage(messageId);
+    if (!msg) {
+      const data = await messagesApi(`/api/messages/${messageId}`);
+      if (data?.ok && data.data?.message && isCombatReportMsg(data.data.message)) {
+        msg = data.data.message;
+      }
+    }
+    if (msg) openCombatReportModal(msg);
+  }
+
   function buildingLabel(key) {
     return t(`building_${key}`, key);
   }
@@ -455,6 +806,9 @@
 
   function renderMessageBody(msg) {
     const meta = msg.metadata || {};
+    if (isCombatReportMsg(msg)) {
+      return { html: null, plain: msg.body || "", combatReport: true };
+    }
     if (msg.category === "espionage" && meta.report_version >= 2 && meta.intel_tiers) {
       return { html: renderSpyReport(meta), plain: msg.body || "" };
     }
@@ -612,7 +966,7 @@
     return GC.messagesPageState || null;
   }
 
-  function resetMessagesPageState() {
+    function resetMessagesPageState() {
     const prev = GC.messagesPageState;
     if (prev) {
       prev.requestSeq += 1;
@@ -624,6 +978,7 @@
     }
     GC.messagesPageState = null;
     closeCompose();
+    closeCombatReportModal();
   }
 
   function bindMessagesUiOnce() {
@@ -667,6 +1022,20 @@
       if (composeStatus) {
         composeStatus.textContent = t(`messages.error_${err}`, t("messages.error_validation"));
       }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !COMBAT_MODAL.open) return;
+      e.preventDefault();
+      closeCombatReportModal();
+    });
+
+    cacheCombatModalElements();
+    COMBAT_MODAL.root?.querySelectorAll("[data-cr-close]").forEach((el) => {
+      el.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        closeCombatReportModal();
+      });
     });
 
     document.addEventListener("click", (e) => {
@@ -716,6 +1085,17 @@
         state.selectedId = null;
         state.setDetailVisible?.(false);
         state.loadList?.(true, { force: true });
+        return;
+      }
+
+      const openCombatBtn = e.target.closest("[data-open-combat-report]");
+      if (openCombatBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = Number(openCombatBtn.dataset.openCombatReport);
+        if (Number.isFinite(id)) {
+          openCombatReportById(id);
+        }
         return;
       }
 
@@ -856,9 +1236,15 @@
           const unread = !m.is_read;
           const active = state.selectedId === m.id ? " is-active" : "";
           const unreadCls = unread ? " is-unread" : "";
+          const combatCls = isCombatReportMsg(m) ? " gc-messages-item--combat" : "";
+          const teaser =
+            isCombatReportMsg(m) ?
+              renderCombatReportTeaser(m.metadata || {}, { compact: true, messageId: m.id })
+            : "";
           return (
-            `<button type="button" class="gc-messages-item${active}${unreadCls}" data-id="${m.id}">` +
+            `<button type="button" class="gc-messages-item${active}${unreadCls}${combatCls}" data-id="${m.id}">` +
             `<span class="gc-messages-item-subject">${esc(m.subject)}</span>` +
+            (teaser ? `<span class="gc-messages-item-teaser">${teaser}</span>` : "") +
             `<span class="gc-messages-item-meta">${esc(categoryLabel(m.category))} · ${esc(formatTime(m.created_at))}</span>` +
             `</button>`
           );
@@ -881,7 +1267,13 @@
       }
       const rendered = renderMessageBody(msg);
       if (dom.detailBody) {
-        if (rendered.html) {
+        if (rendered.combatReport) {
+          dom.detailBody.classList.add("gc-messages-detail-body--report");
+          dom.detailBody.innerHTML = renderCombatReportTeaser(msg.metadata || {}, {
+            compact: false,
+            messageId: msg.id,
+          });
+        } else if (rendered.html) {
           dom.detailBody.classList.add("gc-messages-detail-body--report");
           dom.detailBody.innerHTML = rendered.html;
         } else {
@@ -907,6 +1299,11 @@
         return b;
       };
 
+      if (rendered.combatReport) {
+        dom.detailActions.appendChild(
+          mkBtn(t("combat_report_open_full", "Open full report"), "open_combat_report", "primary")
+        );
+      }
       if (!msg.is_read) dom.detailActions.appendChild(mkBtn(t("messages.read"), "read", "outline"));
       if (msg.reply_to_player_id || msg.sender_player_id) {
         dom.detailActions.appendChild(mkBtn(t("messages.reply"), "reply", "primary"));
@@ -1094,6 +1491,9 @@
       } else if (action === "reply") {
         openCompose(msg.reply_to_name || msg.sender_name || "", msg.subject ? `Re: ${msg.subject}` : "");
         return;
+      } else if (action === "open_combat_report") {
+        openCombatReportModal(msg);
+        return;
       }
       await loadList();
       if (state.selectedId && action !== "delete") await openMessage(state.selectedId);
@@ -1136,6 +1536,8 @@
   GC.initMessagesPage = initMessagesPage;
   GC.openMessagesCompose = openCompose;
   GC.ensureMessagesState = ensureMessagesState;
+  GC.openCombatReportModal = openCombatReportModal;
+  GC.closeCombatReportModal = closeCombatReportModal;
 
   bindMessagesUiOnce();
 })();

@@ -353,10 +353,16 @@ def init_db() -> None:
     for col, ddl in (
         ("score_fleet", "INTEGER NOT NULL DEFAULT 0"),
         ("score_defense", "INTEGER NOT NULL DEFAULT 0"),
+        ("score_destroyed_raw", "INTEGER NOT NULL DEFAULT 0"),
+        ("score_combat", "INTEGER NOT NULL DEFAULT 0"),
+        ("score_destroyed", "INTEGER NOT NULL DEFAULT 0"),
         ("rank_total", "INTEGER"),
         ("rank_building", "INTEGER"),
         ("rank_research", "INTEGER"),
         ("rank_fleet", "INTEGER"),
+        ("rank_combat", "INTEGER"),
+        ("rank_destroyed", "INTEGER"),
+        ("rank_military", "INTEGER"),
     ):
         if not column_exists(conn, "player_scores", col):
             cur.execute(f"ALTER TABLE player_scores ADD COLUMN {col} {ddl};")

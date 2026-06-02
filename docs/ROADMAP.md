@@ -94,10 +94,10 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 |------|--------|---------|
 | **Galaxie** — Karte, Slots, Koordinaten | ✅ | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) |
 | **Werft** — Schiffsbau, Queue, fuel_cells | ✅ | `orbital_shipyard` |
-| **Flotte** — Send, Tick, Missionen | ✅ | Combat placeholder |
+| **Flotte** — Send, Tick, Missionen | ✅ | Attack combat active |
 | **Trader Hub** — Unified Exchange, Scrapyard | ✅ | GC-402 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
 | **Verteidigung** — Türme, Schilder, Queue, Ranking | ✅ | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) |
-| Kampf-Auflösung | 📋 | Attack mission → stub report; combat prep in defs |
+| **Kampf-Auflösung** — Resolver, Reports, Loot, Debris, Ranking | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | Fleet Logistics (collect/distribute) | 📋 | API returns not_implemented |
 | Recycler-Mission | 💡 | Ship def exists |
 | Espionage (beyond probe report) | ✅ | GC-401 tiered intel + inbox UI |
@@ -110,7 +110,7 @@ Docs: [FLEET_SYSTEM.md](FLEET_SYSTEM.md), [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md)
 Empfohlene Reihenfolge (verbleibend):
 
 ```
-Combat Resolver → Fleet Logistics → Recycler
+Fleet Logistics → Recycler (debris harvest)
 ```
 
 ---
@@ -176,7 +176,7 @@ Details: [SECURITY.md](SECURITY.md)
 ```
 2025 Q1–Q2   Phase 0–2 ✅   Foundation, Economy, Admin
 2025 Q3–Q4   Phase 3–4 🔄   Multi-Kolonie, Galaxy, Fleet
-2026 Q1      Phase 4b 🔄     Defense ✅; Combat Resolver 📋
+2026 Q1      Phase 4b 🔄     Defense ✅; Combat ✅
 2026 Q2      Phase 5–6       Alliance polish, Security, Scale
 ```
 
@@ -191,7 +191,7 @@ Details: [SECURITY.md](SECURITY.md)
 | SHA-256 Passwörter | Security | Phase 6 |
 | Kein Rate-Limiting (Login) | Abuse | Phase 6 |
 | Chat rate limit in-process | Multi-worker | Redis |
-| Combat resolver (attack mission) | Gameplay | Phase 4b |
+| Recycler mission (debris harvest) | Gameplay | Phase 4b |
 | Legacy Admin Forms doppelt | Wartung | Cleanup |
 | SQLite Single-Writer | Scale | Phase 7 |
 | README vs VERSION drift | Docs | README auf 1.5.3 |

@@ -2588,7 +2588,13 @@ def api_game_state():
         conn = db()
         try:
             if fleet_schema_ready(conn):
-                process_fleet_tick(player_id=user_id, conn=conn)
+                begin_write_transaction(conn)
+                try:
+                    process_fleet_tick(player_id=user_id, conn=conn)
+                    commit(conn)
+                except Exception:
+                    rollback(conn)
+                    raise
         finally:
             conn.close()
 

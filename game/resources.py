@@ -16,7 +16,7 @@ WICHTIG:
 from __future__ import annotations
 
 import time
-from typing import Dict, Tuple, Optional
+from typing import Any, Dict, Mapping, Tuple, Optional
 
 from .models import (
     get_planet_buildings,
@@ -408,3 +408,123 @@ def sync_derived_state_after_queue_finish(
             conn.close()
 
     return count
+
+
+# ==========================================================================
+#   COMBAT LOOT / FLEET CARGO LOADING (GC-507)
+# ==========================================================================
+
+LOOT_RESOURCE_KEYS: Tuple[str, ...] = ("metal", "crystal", "fuel_cells")
+
+
+def normalize_resource_stock(raw: Mapping[str, Any] | None) -> Dict[str, int]:
+    """Normalize planet or pool amounts to non-negative integer resource dict."""
+    src = raw or {}
+    return {
+        "metal": max(0, int(float(src.get("metal") or 0))),
+        "crystal": max(0, int(float(src.get("crystal") or 0))),
+        "fuel_cells": max(0, int(float(src.get("fuel_cells") or 0))),
+    }
+
+
+def calculate_plunder_pool(
+    available: Mapping[str, Any],
+    *,
+    plunder_fraction: float = 0.5,
+) -> Dict[str, int]:
+    """Maximum stealable resources from a planet stock (before cargo cap)."""
+    frac = max(0.0, min(1.0, float(plunder_fraction)))
+    stock = normalize_resource_stock(available)
+    if frac <= 0:
+        return {key: 0 for key in LOOT_RESOURCE_KEYS}
+    return {key: int(stock[key] * frac) for key in LOOT_RESOURCE_KEYS}
+
+
+def load_resources_up_to_cargo(
+    pool: Mapping[str, Any],
+    remaining_cap: int,
+) -> Dict[str, int]:
+    """Fill cargo in Genesis order: Ferronit → Crytite → Brennzellen."""
+    cap = max(0, int(remaining_cap))
+    if cap <= 0:
+        return {key: 0 for key in LOOT_RESOURCE_KEYS}
+    avail = normalize_resource_stock(pool)
+    loaded = {key: 0 for key in LOOT_RESOURCE_KEYS}
+    for key in LOOT_RESOURCE_KEYS:
+        if cap <= 0:
+            break
+        take = min(avail[key], cap)
+        loaded[key] = take
+        cap -= take
+    return loaded
+
+
+def merge_loaded_resources(
+    current: Mapping[str, Any],
+    added: Mapping[str, Any],
+) -> Dict[str, int]:
+    """Sum two resource maps (fleet cargo semantics)."""
+    base = normalize_resource_stock(current)
+    extra = normalize_resource_stock(added)
+    return {
+        key: base[key] + extra[key]
+        for key in LOOT_RESOURCE_KEYS
+    }
+
+
+def get_planet_resource_stock(planet_id: int, *, conn) -> Dict[str, int]:
+    """
+    Tick production on target, then return collectable resource amounts.
+
+    Always uses ``skip_queue_finish=True`` — safe inside fleet tick / combat loot
+    where the caller already holds a write transaction (nested ``finish_due_work``
+    would recurse ``process_fleet_tick`` and can SQLITE_BUSY).
+    """
+    from .db import lock_planet_for_update
+
+    lock_planet_for_update(conn, int(planet_id))
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM planets WHERE id = ? LIMIT 1;", (int(planet_id),))
+    row = cur.fetchone()
+    if not row:
+        return {key: 0 for key in LOOT_RESOURCE_KEYS}
+    planet, *_rest = update_planet_resources(
+        dict(row),
+        conn=conn,
+        skip_queue_finish=True,
+    )
+    return normalize_resource_stock(planet)
+
+
+def debit_planet_resources(
+    planet_id: int,
+    resources: Mapping[str, Any],
+    *,
+    conn,
+) -> bool:
+    """Debit metal/crystal/fuel_cells from a planet if balances allow (fleet-safe)."""
+    from .fleet_calc import calculate_loaded_resources
+    from .db import lock_planet_for_update
+
+    loaded = calculate_loaded_resources(resources)
+    if loaded["metal"] <= 0 and loaded["crystal"] <= 0 and loaded["fuel_cells"] <= 0:
+        return True
+    lock_planet_for_update(conn, int(planet_id))
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ? LIMIT 1;",
+        (int(planet_id),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return False
+    new_metal = float(row["metal"]) - loaded["metal"]
+    new_crystal = float(row["crystal"]) - loaded["crystal"]
+    new_fuel_cells = float(row["fuel_cells"] or 0) - loaded["fuel_cells"]
+    if new_metal < 0 or new_crystal < 0 or new_fuel_cells < 0:
+        return False
+    cur.execute(
+        "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+        (new_metal, new_crystal, new_fuel_cells, int(planet_id)),
+    )
+    return True

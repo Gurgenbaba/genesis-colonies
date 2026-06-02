@@ -193,8 +193,9 @@ Worker: `scripts/run_queue_tick.py`, Admin: `POST /api/admin/queue-tick`.
 | Trader Hub | `/trader-hub`, `/api/exchange`, `/api/trader/*` | `exchange.py`, `fuel_exchange.py`, `scrapyard.py` | ✅ |
 | Shipyard | `/shipyard`, `/api/shipyard/*` | `shipyard.py`, `shipyard_queue.py` | ✅ |
 | Galaxy | `/galaxy`, `/api/galaxy/system` | `galaxy.py` | ✅ |
-| Fleet | `/fleet`, `/api/fleet/*` | `fleet.py`, `fleet_calc.py`, `fleet_defs.py` | ✅ (Combat placeholder) |
-| Defense | `/defense`, `/api/defense/*` | `defense.py`, `defense_api.py`, `defense_page.py` | ✅ (Combat prep only) |
+| Fleet | `/fleet`, `/api/fleet/*` | `fleet.py`, `fleet_calc.py`, `fleet_defs.py` | ✅ |
+| Defense | `/defense`, `/api/defense/*` | `defense.py`, `defense_api.py`, `defense_page.py` | ✅ |
+| Combat | — | `combat.py`, `combat_models.py` | ✅ ([COMBAT_SYSTEM.md](COMBAT_SYSTEM.md)) |
 | Planet Evolution | `/planet-evolution`, `/api/planets/*` | `planet_evolution/` | ✅ |
 | Ranking | `/ranking`, `/api/ranking` | `ranking.py` | ✅ |
 | PlayerCard | `/player/<id>`, `/api/player-card/*` | `playercard.py` | ✅ |
@@ -305,7 +306,7 @@ python -m pytest -q
 | Neues Gebäude | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md), Migration, `EffectResolver` |
 | Neue Tech | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md), `techtree.py` |
 | Neues Schiff / Mission | [FLEET_SYSTEM.md](FLEET_SYSTEM.md), `fleet_defs.py` |
-| Combat | EffectResolver prepared modifiers → neuer Resolver, **kein** paralleles Fleet-System |
+| Combat | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) — `simulate_battle()`; **kein** paralleles Fleet-System |
 | Neues Ticket | Max. 3–5 Dateien, Master-Doc aktualisieren wenn Architektur betroffen |
 
 ---

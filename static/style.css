@@ -3483,6 +3483,26 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   background: rgba(0, 22, 16, 0.55);
   color: rgba(180, 255, 220, 0.95);
 }
+.gs-pill-debris{
+  border-color: rgba(255, 186, 72, 0.55);
+  background: rgba(42, 28, 8, 0.65);
+  color: rgba(255, 220, 150, 0.95);
+}
+.galaxy-slot-card.has-debris .galaxy-orbit-body--empty,
+.galaxy-slot-card.has-debris .galaxy-orbit-body:not(.galaxy-orbit-body--expedition){
+  box-shadow: 0 0 12px rgba(255, 170, 60, 0.35);
+}
+.galaxy-slot-debris{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 8px;
+  align-items: center;
+}
+.galaxy-stat-debris{
+  font-size: 0.78rem;
+  color: rgba(255, 200, 120, 0.9);
+}
 .galaxy-colonize-btn{
   margin-top: 8px;
   opacity: 0.65;
@@ -6664,7 +6684,8 @@ body.gc-body-ingame {
 
 body.gc-player-card-open,
 body.gc-ship-detail-open,
-body.gc-planet-manage-open { overflow: hidden; }
+body.gc-planet-manage-open,
+body.gc-combat-report-open { overflow: hidden; }
 
 .gc-ship-detail-trigger {
   margin: 0;
@@ -8995,6 +9016,17 @@ body.gc-planet-manage-open { overflow: hidden; }
   font-family: var(--gc-mono);
 }
 
+.gc-messages-item-teaser {
+  display: block;
+  margin-top: 2px;
+}
+
+.gc-messages-item--combat .gc-messages-item-subject {
+  font-family: var(--gc-font-display, Orbitron, sans-serif);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+}
+
 .gc-messages-detail-wrap {
   min-height: 320px;
   display: flex;
@@ -9124,6 +9156,292 @@ body.gc-planet-manage-open { overflow: hidden; }
   font-size: 0.82rem;
   color: var(--gc-text-soft);
   font-style: italic;
+}
+
+/* --- Combat report modal (playercard shell, wider) --- */
+.gc-combat-report-modal .gc-combat-report-dialog {
+  width: min(820px, 100%);
+  max-height: min(92vh, 880px);
+}
+
+.gc-combat-report-modal .gc-player-card-body {
+  overflow: auto;
+}
+
+.gc-combat-report-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px 8px;
+}
+
+.gc-combat-report-hero {
+  padding: 14px 16px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  background: linear-gradient(135deg, rgba(8, 16, 32, 0.9), rgba(4, 8, 18, 0.85));
+}
+
+.gc-combat-report-hero--victory {
+  border-color: rgba(80, 220, 140, 0.35);
+  box-shadow: inset 0 0 24px rgba(80, 220, 140, 0.06);
+}
+
+.gc-combat-report-hero--defeat {
+  border-color: rgba(255, 120, 160, 0.35);
+  box-shadow: inset 0 0 24px rgba(255, 120, 160, 0.06);
+}
+
+.gc-combat-report-hero--draw {
+  border-color: rgba(255, 190, 80, 0.35);
+}
+
+.gc-combat-report-hero-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.gc-combat-report-hero-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  font-size: 1.35rem;
+  border-radius: 10px;
+  border: 1px solid rgba(70, 229, 255, 0.25);
+  background: rgba(70, 229, 255, 0.08);
+}
+
+.gc-combat-report-hero-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.gc-combat-report-coords {
+  font-size: 1.05rem;
+  color: var(--gc-neon-cyan);
+  letter-spacing: 0.05em;
+}
+
+.gc-combat-report-vs {
+  margin-top: 4px;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.gc-combat-report-result-badge {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-family: var(--gc-font-display, Orbitron, sans-serif);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  color: var(--gc-neon-cyan);
+  background: rgba(70, 229, 255, 0.1);
+}
+
+.gc-combat-report-hero--victory .gc-combat-report-result-badge {
+  border-color: rgba(80, 220, 140, 0.45);
+  color: #86efac;
+  background: rgba(80, 220, 140, 0.12);
+}
+
+.gc-combat-report-hero--defeat .gc-combat-report-result-badge {
+  border-color: rgba(255, 120, 160, 0.45);
+  color: #fda4af;
+  background: rgba(255, 120, 160, 0.1);
+}
+
+.gc-combat-report-stats {
+  margin: 0;
+}
+
+.gc-combat-report-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .gc-combat-report-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gc-combat-report-panel {
+  padding: 12px 14px;
+  border: 1px solid var(--gc-panel-border);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(5, 10, 22, 0.5);
+}
+
+.gc-combat-report-panel-title {
+  margin: 0 0 10px;
+  font-size: 0.72rem;
+  font-family: var(--gc-font-display, Orbitron, sans-serif);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gc-text-soft);
+}
+
+.gc-combat-unit-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gc-combat-unit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 190, 255, 0.18);
+  background: rgba(8, 14, 28, 0.65);
+  font-size: 0.8rem;
+}
+
+.gc-combat-unit-chip-qty {
+  font-family: var(--gc-mono);
+  color: var(--gc-neon-cyan);
+}
+
+.gc-combat-report-empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--gc-text-soft);
+  font-style: italic;
+}
+
+.gc-combat-round {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.gc-combat-round-title {
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-family: var(--gc-mono);
+  list-style: none;
+}
+
+.gc-combat-round-title::-webkit-details-marker {
+  display: none;
+}
+
+.gc-combat-round-body {
+  padding: 8px 10px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Inbox combat teaser card */
+.gc-combat-teaser {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.2);
+  background: linear-gradient(160deg, rgba(10, 18, 34, 0.85), rgba(6, 10, 20, 0.9));
+  text-align: left;
+}
+
+.gc-combat-teaser--compact {
+  padding: 8px 10px;
+  gap: 6px;
+}
+
+.gc-combat-teaser-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.gc-combat-teaser-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  background: rgba(70, 229, 255, 0.08);
+}
+
+.gc-combat-teaser-headings {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gc-combat-teaser-coords {
+  font-size: 0.82rem;
+  color: var(--gc-neon-cyan);
+}
+
+.gc-combat-teaser-vs {
+  font-size: 0.76rem;
+  color: var(--gc-text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gc-combat-teaser-badge {
+  flex-shrink: 0;
+  max-width: 42%;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-family: var(--gc-font-display, Orbitron, sans-serif);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid rgba(70, 229, 255, 0.3);
+  color: var(--gc-neon-cyan);
+}
+
+.gc-combat-teaser--victory .gc-combat-teaser-badge {
+  border-color: rgba(80, 220, 140, 0.4);
+  color: #86efac;
+}
+
+.gc-combat-teaser--defeat .gc-combat-teaser-badge {
+  border-color: rgba(255, 120, 160, 0.4);
+  color: #fda4af;
+}
+
+.gc-combat-teaser-meta {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--gc-text-soft);
+}
+
+.gc-combat-teaser-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--gc-text-soft);
+}
+
+.gc-combat-teaser-open {
+  align-self: flex-start;
+}
+
+.gc-messages-item--combat .gc-combat-teaser-open {
+  pointer-events: auto;
+}
+
+.gc-messages-detail-body .gc-combat-teaser {
+  margin-top: 4px;
 }
 
 .gc-messages-detail-actions {

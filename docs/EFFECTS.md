@@ -10,7 +10,7 @@ Consumers (`resources`, `buildings`, `research`) delegate to `EffectResolver`; t
 | Economy (production, energy, storage) | **Fixed** | Applied on every resource tick / derived sync |
 | Time (build, research, lab, academy, nanofactory) | **Fixed** | `get_build_time_seconds`, `get_research_time_seconds` |
 | Building caps (core nexus, geothermal, terraform) | **Fixed** | Max levels, storage, solar bonus |
-| Combat (`weapon_tech`, `armor_tech`, `shield_tech`) | **Prepared only** | Modifiers computed; **no combat engine** |
+| Combat (`weapon_tech`, `armor_tech`, `shield_tech`) | **Fixed** | Applied in `simulate_battle()` via `EffectResolver.get_combat_modifiers()` — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | Fleet (`navigation_tech`, `engine_tech`) | **Prepared only** | Modifiers computed; **no fleet engine** |
 | Radar (`radar_array` → `scan_range`) | **Prepared only** | **No scan/galaxy engine** |
 | Multi-universe | **Not supported** | Single SQLite DB; `universe_name` is display config only — **no `universe_id` in schema** |
@@ -22,7 +22,7 @@ Prepared modifiers may appear in:
 - Admin debug: `GET /api/admin/player/<id>/effects` (`modifiers_prepared`, `sources_prepared`)
 - Future UI tooltips / tech tree “planned” hints
 
-They must **not** be described to players or admins as active gameplay fixes (e.g. “+10% firepower applied in combat”) until a consumer module exists.
+Combat and fleet modifiers are **active** where documented in [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) and [FLEET_SYSTEM.md](FLEET_SYSTEM.md). Radar (`scan_range`) remains prepared until a scan engine consumes it.
 
 Use labels like **“prepared / not active”** in admin copy when showing `weapon_bonus`, `scan_range`, etc.
 

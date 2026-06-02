@@ -263,21 +263,24 @@ def create_message(
     return _ok({"message_id": message_id})
 
 
-def _valid_player_id(player_id: int) -> int | None:
+def _valid_player_id(player_id: int, *, conn=None) -> int | None:
     try:
         pid = int(player_id)
     except (TypeError, ValueError):
         return None
     if pid <= 0:
         return None
-    conn = db()
+    own_conn = conn is None
+    if own_conn:
+        conn = db()
     try:
         cur = conn.cursor()
         cur.execute("SELECT id FROM players WHERE id = ? LIMIT 1;", (pid,))
         row = cur.fetchone()
         return int(row["id"]) if row else None
     finally:
-        conn.close()
+        if own_conn and conn is not None:
+            conn.close()
 
 
 def notify_player(
@@ -291,7 +294,7 @@ def notify_player(
     conn=None,
 ) -> dict[str, Any]:
     """Helper for other systems to deliver inbox messages (plain text subject/body)."""
-    pid = _valid_player_id(player_id)
+    pid = _valid_player_id(player_id, conn=conn)
     if pid is None:
         return _err("recipient_not_found")
     return create_message(
@@ -333,6 +336,35 @@ def notify_admin(
     )
 
 
+def normalize_combat_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    """Ensure structured combat report blocks for inbox renderers and archival reads."""
+    from .combat import COMBAT_REPORT_VERSION
+
+    meta = dict(metadata or {})
+    meta.setdefault("report_version", COMBAT_REPORT_VERSION)
+    meta.setdefault("target_coords", str(meta.get("target_coords") or ""))
+    meta.setdefault("attacker_id", int(meta.get("attacker_id") or 0))
+    meta.setdefault("defender_id", int(meta.get("defender_id") or 0))
+    meta.setdefault("attacker_name", str(meta.get("attacker_name") or ""))
+    meta.setdefault("defender_name", str(meta.get("defender_name") or ""))
+    meta.setdefault("result", str(meta.get("result") or meta.get("winner") or "undecided"))
+    meta.setdefault("winner", meta["result"])
+    meta.setdefault("attacking_ships", dict(meta.get("attacking_ships") or {}))
+    meta.setdefault("defending_ships", dict(meta.get("defending_ships") or {}))
+    meta.setdefault("defending_defense", dict(meta.get("defending_defense") or {}))
+    meta.setdefault("attacker_losses", dict(meta.get("attacker_losses") or {}))
+    meta.setdefault("defender_losses", dict(meta.get("defender_losses") or {}))
+    meta.setdefault("return_ships", dict(meta.get("return_ships") or {}))
+    meta.setdefault("loot", dict(meta.get("loot") or {}))
+    rounds = meta.get("rounds")
+    if not isinstance(rounds, list):
+        rounds = []
+    meta["rounds"] = rounds
+    if "rounds_fought" not in meta:
+        meta["rounds_fought"] = len(rounds)
+    return meta
+
+
 def notify_combat(
     player_id: int,
     subject: str,
@@ -344,15 +376,67 @@ def notify_combat(
 ) -> dict[str, Any]:
     from .i18n import tr
 
+    meta = normalize_combat_metadata(metadata)
     return notify_player(
         player_id,
         subject,
         body,
         category="combat",
-        metadata=metadata,
+        metadata=meta,
         sender_name=tr("messages_sender_combat", "Kampfbericht", locale=locale),
         conn=conn,
     )
+
+
+def dispatch_combat_reports(
+    *,
+    attacker_id: int,
+    defender_id: int,
+    coords: str,
+    body: str,
+    metadata: dict[str, Any] | None = None,
+    conn=None,
+    attacker_locale: str | None = None,
+    defender_locale: str | None = None,
+) -> dict[str, Any]:
+    """Persist combat inbox messages for attacker and defender (``player_messages``)."""
+    from .i18n import tr
+
+    meta = normalize_combat_metadata(metadata)
+    out: dict[str, Any] = {"attacker": None, "defender": None}
+    atk_subject = tr(
+        "fleet_report_combat_subject_coords",
+        "Combat report — %(coords)s",
+        locale=attacker_locale,
+        coords=coords,
+    )
+    atk_meta = {**meta, "perspective": "attacker"}
+    out["attacker"] = notify_combat(
+        int(attacker_id),
+        atk_subject,
+        body,
+        metadata=atk_meta,
+        locale=attacker_locale,
+        conn=conn,
+    )
+    def_id = int(defender_id)
+    if def_id > 0 and def_id != int(attacker_id):
+        def_subject = tr(
+            "fleet_report_combat_subject_defender",
+            "Attack report — %(coords)s",
+            locale=defender_locale,
+            coords=coords,
+        )
+        def_meta = {**meta, "perspective": "defender"}
+        out["defender"] = notify_combat(
+            def_id,
+            def_subject,
+            body,
+            metadata=def_meta,
+            locale=defender_locale,
+            conn=conn,
+        )
+    return out
 
 
 def notify_espionage(

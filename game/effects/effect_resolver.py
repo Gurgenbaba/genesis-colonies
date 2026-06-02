@@ -6,8 +6,8 @@ Consumers must not duplicate formulas in resources.py, buildings.py, or the fron
 
 Status (see docs/EFFECTS.md):
   - Economy / time effects: active (fixed).
-  - Combat / fleet / radar scan: PREPARED ONLY — visible in debug/API, not gameplay-effective
-    until a consumer engine exists. Do not market prepared values as live bonuses in UI/admin copy.
+  - Combat (weapon_tech / armor_tech / shield_tech): active — consumed by ``game.combat``.
+  - Fleet / radar scan: PREPARED ONLY until those engines consume modifiers.
   - Multi-universe: not supported (no universe_id in DB schema).
 """
 
@@ -24,11 +24,15 @@ logger = logging.getLogger(__name__)
 
 EFFECT_DEBUG = os.environ.get("GC_EFFECT_DEBUG", "").strip().lower() in ("1", "true", "yes")
 
-# Modifier keys computed but not consumed by any live gameplay engine yet.
-PREPARED_MODIFIER_KEYS = frozenset({
+# Combat modifiers — consumed by game.combat (GC-504).
+COMBAT_MODIFIER_KEYS = frozenset({
     "weapon_bonus",
     "armor_bonus",
     "shield_bonus",
+})
+
+# Modifier keys computed but not consumed by any live gameplay engine yet.
+PREPARED_MODIFIER_KEYS = frozenset({
     "scan_range",
     "fleet_speed_multiplier",
     "cargo_multiplier",
@@ -42,7 +46,7 @@ ACTIVE_MODIFIER_KEYS = frozenset({
     "build_time_speed",
     "research_time_speed",
     "solar_output_factor",
-})
+}) | COMBAT_MODIFIER_KEYS
 
 
 def _lvl(levels: Dict[str, Any], key: str) -> int:
@@ -189,21 +193,21 @@ class EffectResolver:
             research_time_speed *= speed_boost
             sources.append(self._source_entry("build_time_speed", "buildtime_tech", speed_boost, lb))
 
-        # --- Prepared: combat / fleet (no consumer module yet) ---
+        # --- Research: combat (weapon_tech / armor_tech / shield_tech → game.combat) ---
         lw = _lvl(r, "weapon_tech")
         if lw > 0:
             weapon_bonus += 0.05 * lw
-            sources.append(self._source_entry("weapon_bonus", "weapon_tech", weapon_bonus, lw, prepared=True))
+            sources.append(self._source_entry("weapon_bonus", "weapon_tech", weapon_bonus, lw))
 
         la = _lvl(r, "armor_tech")
         if la > 0:
             armor_bonus += 0.05 * la
-            sources.append(self._source_entry("armor_bonus", "armor_tech", armor_bonus, la, prepared=True))
+            sources.append(self._source_entry("armor_bonus", "armor_tech", armor_bonus, la))
 
         lsh = _lvl(r, "shield_tech")
         if lsh > 0:
             shield_bonus += 0.05 * lsh
-            sources.append(self._source_entry("shield_bonus", "shield_tech", shield_bonus, lsh, prepared=True))
+            sources.append(self._source_entry("shield_bonus", "shield_tech", shield_bonus, lsh))
 
         lhn = _lvl(r, "navigation_tech")
         if lhn > 0:
@@ -282,6 +286,21 @@ class EffectResolver:
     def get_prepared_modifiers(self) -> Dict[str, float]:
         mods = self.get_modifiers()
         return {k: v for k, v in mods.items() if k in PREPARED_MODIFIER_KEYS}
+
+    def get_combat_modifiers(self) -> Dict[str, float]:
+        """
+        Account research combat bonuses for ``game.combat.CombatModifiers``.
+
+        weapon_tech → weapon_bonus (+5% attack per level)
+        armor_tech → armor_bonus (+5% hull per level)
+        shield_tech → shield_bonus (+5% shield per level)
+        """
+        mods = self.get_modifiers()
+        return {
+            "weapon_bonus": float(mods.get("weapon_bonus", 0.0) or 0.0),
+            "armor_bonus": float(mods.get("armor_bonus", 0.0) or 0.0),
+            "shield_bonus": float(mods.get("shield_bonus", 0.0) or 0.0),
+        }
 
     def debug_snapshot(self) -> Dict[str, Any]:
         mods = self.get_modifiers()

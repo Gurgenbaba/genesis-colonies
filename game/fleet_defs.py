@@ -317,6 +317,36 @@ def get_ship(ship_key: str) -> Dict[str, Any] | None:
     return SHIPS.get(canonical_ship_key(ship_key))
 
 
+def ship_rapid_fire_targets(ship_key: str) -> Dict[str, int]:
+    """``rapid_fire_targets`` from ship defs — target key → multiplier (values >= 2)."""
+    spec = get_ship(ship_key) or {}
+    raw = spec.get("rapid_fire_targets") or {}
+    out: Dict[str, int] = {}
+    if not isinstance(raw, dict):
+        return out
+    for target_key, value in raw.items():
+        key = canonical_ship_key(str(target_key))
+        mult = int(value or 0)
+        if mult >= 2:
+            out[key] = mult
+    return out
+
+
+def ship_rapid_fire_multiplier(ship_key: str, target_key: str) -> int:
+    """Rapid-fire multiplier vs a target hull key (1 = no bonus shots)."""
+    targets = ship_rapid_fire_targets(ship_key)
+    mult = int(targets.get(canonical_ship_key(target_key), 0) or 0)
+    return mult if mult >= 2 else 1
+
+
+def rapid_fire_bonus_shot_chance(rapid_fire_multiplier: int) -> float:
+    """Probability of firing again after a hit when multiplier >= 2: (mult - 1) / mult."""
+    mult = max(1, int(rapid_fire_multiplier))
+    if mult < 2:
+        return 0.0
+    return (mult - 1) / mult
+
+
 def ship_score_value(ship_key: str) -> int:
     """Ranking / combat empire value per hull (falls back to build cost)."""
     from .combat_models import combat_stats_for_ship

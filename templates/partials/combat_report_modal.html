@@ -1,0 +1,25 @@
+{# Global combat report modal (persists across PJAX) #}
+<div id="gc-combat-report-root"
+     class="gc-player-card-modal gc-combat-report-modal"
+     hidden
+     aria-hidden="true">
+  <div class="gc-player-card-overlay" data-cr-close tabindex="-1"></div>
+  <div class="gc-player-card-dialog gc-combat-report-dialog"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="gc-combat-report-title"
+       data-theme="cyan">
+    <header class="gc-player-card-head">
+      <h2 id="gc-combat-report-title" class="gc-player-card-head-title">
+        {{ T("combat_report_modal_title") }}
+      </h2>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              data-cr-close
+              aria-label="{{ T('combat_report_close') }}">✕</button>
+    </header>
+    <div id="gc-combat-report-body" class="gc-player-card-body" aria-live="polite">
+      <div class="gc-player-card-content" data-cr-content></div>
+    </div>
+  </div>
+</div>

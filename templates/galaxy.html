@@ -134,7 +134,8 @@
           {% if slot.occupied %}is-occupied{% else %}is-empty{% endif %}
           {% if slot.is_own_planet %}is-own{% endif %}
           {% if slot.is_active_planet %}is-active-planet{% endif %}
-          {% if slot.is_highlighted %}is-highlighted{% endif %}"
+          {% if slot.is_highlighted %}is-highlighted{% endif %}
+          {% if slot.has_debris %}has-debris{% endif %}"
           role="listitem"
           {% if slot.colony_target %}data-galaxy-colony-target="1" data-coordinates="{{ slot.coordinates_formatted }}"{% endif %}
           id="galaxy-slot-{{ slot.position }}">
@@ -170,6 +171,13 @@
               <span class="galaxy-stat galaxy-stat-score gc-mono">{{ T('galaxy_score_short') }} {{ (slot.planet_score or 0)|fmt_int }}</span>
               <span class="galaxy-stat galaxy-stat-temp gc-mono">{{ slot.temperature_display }}</span>
             </div>
+            {% if slot.has_debris %}
+            <div class="galaxy-slot-debris" role="status">
+              <span class="gs-pill gs-pill-debris">{{ T("galaxy_debris_field", "Debris field") }}</span>
+              <span class="galaxy-stat galaxy-stat-debris gc-mono">{{ T("resource_metal", "Ferronit") }} {{ (slot.debris.metal or 0)|fmt_int }}</span>
+              <span class="galaxy-stat galaxy-stat-debris gc-mono">{{ T("resource_crystal", "Crytite") }} {{ (slot.debris.crystal or 0)|fmt_int }}</span>
+            </div>
+            {% endif %}
             {% if not slot.is_own_planet %}
             {% include "partials/galaxy_fleet_actions.html" %}
             {% endif %}
@@ -179,6 +187,13 @@
               <span class="galaxy-slot-coord gc-mono">{{ slot.coordinates_formatted }}</span>
             </header>
             <p class="galaxy-slot-empty-hint">{{ T("galaxy_colony_target_hint") }}</p>
+            {% if slot.has_debris %}
+            <div class="galaxy-slot-debris" role="status">
+              <span class="gs-pill gs-pill-debris">{{ T("galaxy_debris_field", "Debris field") }}</span>
+              <span class="galaxy-stat galaxy-stat-debris gc-mono">{{ T("resource_metal", "Ferronit") }} {{ (slot.debris.metal or 0)|fmt_int }}</span>
+              <span class="galaxy-stat galaxy-stat-debris gc-mono">{{ T("resource_crystal", "Crytite") }} {{ (slot.debris.crystal or 0)|fmt_int }}</span>
+            </div>
+            {% endif %}
             {% include "partials/galaxy_fleet_actions.html" %}
           {% endif %}
         </div>
@@ -232,6 +247,7 @@
         <span class="gl-item"><span class="gs-pill gs-pill-you"></span>{{ T("galaxy_legend_your_planet") }}</span>
         <span class="gl-item"><span class="gs-pill gs-pill-occupied"></span>{{ T("galaxy_legend_occupied") }}</span>
         <span class="gl-item"><span class="gs-pill gs-pill-colonizable"></span>{{ T("galaxy_legend_colonizable") }}</span>
+        <span class="gl-item"><span class="gs-pill gs-pill-debris"></span>{{ T("galaxy_legend_debris", "Debris field") }}</span>
       </div>
     </div>
 

@@ -2155,6 +2155,15 @@
 
       Promise.resolve(refreshPromise).finally(() => {
         _movementCountdownRefreshPending[pendingKey] = false;
+        const fleetPage = document.getElementById("fleet-page");
+        if (
+          fleetPage &&
+          fleetPage.dataset.ready === "1" &&
+          typeof GC.refreshFleetState === "function" &&
+          pendingKey === "overview"
+        ) {
+          GC.refreshFleetState(fleetPage);
+        }
         staleKeys.forEach((key) => {
           let stillStale = false;
           document.querySelectorAll("[data-countdown-at]").forEach((el) => {
@@ -3597,7 +3606,9 @@
         return;
       }
 
-      const signature = list.map((mv) => `${mv.id}:${mv.phase || mv.leg_phase || mv.status}:${mv.countdown_at || 0}`).join("|");
+      const signature = list.map((mv) => (
+        `${mv.id}:${mv.status}:${mv.phase || mv.leg_phase || ""}:${mv.countdown_at || 0}`
+      )).join("|");
       const sigChanged = activeListEl.dataset.fleetSig !== signature;
       if (sigChanged) {
         activeListEl.dataset.fleetSig = signature;

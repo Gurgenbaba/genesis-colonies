@@ -198,8 +198,11 @@ class TestResearchModifiers:
         boosted_m, _ = production_rates_per_sec(b, {}, mods=mods)
         assert boosted_m == pytest.approx(base_m)
         snap = EffectResolver(b, get_research_levels(pid), player_id=pid).debug_snapshot()
-        assert snap["modifiers_prepared"]["weapon_bonus"] == pytest.approx(0.10)
-        assert "weapon_bonus" in PREPARED_MODIFIER_KEYS
+        assert snap["modifiers"]["weapon_bonus"] == pytest.approx(0.10)
+        from game.effects.effect_resolver import COMBAT_MODIFIER_KEYS
+
+        assert "weapon_bonus" in COMBAT_MODIFIER_KEYS
+        assert snap["modifiers_prepared"].get("weapon_bonus") is None
 
 
 class TestBuildingEffects:
