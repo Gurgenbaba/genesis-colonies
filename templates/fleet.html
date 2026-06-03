@@ -219,7 +219,7 @@
               <div class="fleet-ship-row-main">
                 <button type="button" class="gc-ship-detail-trigger fleet-ship-name"
                         data-ship-detail="{{ ship.key }}"
-                        title="{{ T('ship_detail_open') }}">{{ T(ship.name_key) }}</button>
+                        aria-label="{{ T('ship_detail_open') }}">{{ T(ship.name_key) }}</button>
                 <span class="gc-panel-tag fleet-ship-role-pill fleet-ship-role-pill--{{ ship.role }}">{{ T("shipyard_role_" ~ ship.role) }}</span>
                 <span class="fleet-ship-stock gc-mono">×{{ have|fmt_int }}</span>
               </div>

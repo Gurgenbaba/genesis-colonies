@@ -231,6 +231,8 @@
   "buildings_prod_delta": "Gewinn",
   "buildings_prod_delta_cost": "Mehrverbrauch",
 
+  "ui_info_show_details": "Details anzeigen",
+
   "open_research": "→ Forschung öffnen",
   "label_buildings": "Gebäude",
   "label_research": "Forschung",

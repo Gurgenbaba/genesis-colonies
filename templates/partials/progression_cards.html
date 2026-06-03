@@ -1,3 +1,5 @@
+{% from "partials/info_popover.html" import render_info_popover_trigger with context %}
+
 {# Shared compact progression row helpers (Buildings + Research) #}
 
 {# Canonical Ferronit / Crytite / Brennzellen icons (same PNGs as HUD resource bar) #}
@@ -92,14 +94,7 @@
       {% endif %}
       <div class="gc-prog-title-row">
         <span class="gc-prog-title">{{ title }}</span>
-        {% if desc_text and desc_text[:5] != 'desc_' %}
-          <button type="button"
-                  class="gc-prog-info gc-popover-trigger"
-                  title="{{ desc_text }}"
-                  aria-label="{{ desc_text }}"
-                  aria-expanded="false"
-                  data-popover="{{ desc_text }}">?</button>
-        {% endif %}
+        {{ render_info_popover_trigger(desc_text) }}
       </div>
     </div>
   </div>

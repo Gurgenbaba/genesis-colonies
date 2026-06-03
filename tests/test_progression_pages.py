@@ -97,7 +97,7 @@ def test_templates_import_progression_macros_with_context():
     buildings = (ROOT / "templates" / "buildings.html").read_text(encoding="utf-8")
     research = (ROOT / "templates" / "research.html").read_text(encoding="utf-8")
     assert "with context" in buildings
-    assert "render_prog_identity" in buildings
+    assert "render_info_popover_trigger" in buildings
     assert "with context" in research
     assert "render_prog_identity" in research
     assert "render_prog_effect" not in buildings
@@ -112,14 +112,16 @@ def test_buildings_page_renders(temp_db, monkeypatch):
 
     assert "UndefinedError" not in html
     assert "buildings-prog-list" in html
-    assert "gc-prog-main" in html
-    assert "gc-prog-col gc-prog-action" in html
+    assert "gc-building-grid" in html
+    assert "gc-bld-card-action" in html
     assert "gc-prog-effect" not in html
     assert "gc-prog-desc" not in html
 
     info_count = html.count('class="gc-prog-info')
     assert info_count >= len(BUILDING_ORDER), f"expected >={len(BUILDING_ORDER)} info tooltips, got {info_count}"
     assert "gc-popover-trigger" in html
+    assert 'class="gc-prog-info gc-popover-trigger"' in html
+    assert 'class="gc-prog-info gc-popover-trigger" title=' not in html
 
     assert "status-pill-icon-btn" in html or "🔒" in html
 
@@ -139,6 +141,7 @@ def test_research_page_renders(temp_db, monkeypatch):
     info_count = html.count('class="gc-prog-info')
     assert info_count >= len(RESEARCH_TECHS), f"expected >={len(RESEARCH_TECHS)} info tooltips, got {info_count}"
     assert "gc-popover-trigger" in html
+    assert 'class="gc-prog-info gc-popover-trigger" title=' not in html
 
     assert "status-pill-locked status-pill-icon" in html
     assert "🔒" in html

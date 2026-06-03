@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip with context %}
+{% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/building_effect_strip.html" import render_building_effect_bundle with context %}
 
 {# ===================================================================
@@ -50,14 +51,7 @@
                    loading="lazy">
               <div class="gc-bld-card-title-wrap">
                 <h3 class="gc-bld-card-title">{{ T("building_" ~ building_type) }}</h3>
-                {% if desc and desc[:5] != 'desc_' %}
-                  <button type="button"
-                          class="gc-prog-info gc-popover-trigger"
-                          title="{{ desc }}"
-                          aria-label="{{ desc }}"
-                          aria-expanded="false"
-                          data-popover="{{ desc }}">?</button>
-                {% endif %}
+                {{ render_info_popover_trigger(desc) }}
               </div>
             </div>
             <span id="level-{{ building_type }}" class="gc-level-badge gc-bld-card-level">{{ b.level|fmt_int }}</span>

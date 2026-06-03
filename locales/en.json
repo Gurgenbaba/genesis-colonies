@@ -549,6 +549,8 @@
   "buildings_prod_delta": "Gain",
   "buildings_prod_delta_cost": "Extra draw",
 
+  "ui_info_show_details": "Show details",
+
   "overview_label_storage": "Storage Levels",
   "overview_label_storage_metal": "Ferronit Storage",
   "overview_label_storage_crystal": "Crytite Storage",

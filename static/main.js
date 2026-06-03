@@ -954,6 +954,10 @@
     GC.pageLifecycle.initialized = true;
     console.debug("[GC] initPage", page);
 
+    if (typeof normalizePopoverTriggers === "function") {
+      normalizePopoverTriggers(document.getElementById("main-content") || document);
+    }
+
     const mod = GC.modules[page];
     if (typeof mod === "function") {
       try {
@@ -5562,7 +5566,7 @@
       nameBtn.type = "button";
       nameBtn.className = "gc-ship-detail-trigger shipyard-ship-name";
       nameBtn.dataset.shipDetail = sk;
-      nameBtn.title = tt("ship_detail_open", "View ship properties");
+      nameBtn.setAttribute("aria-label", tt("ship_detail_open", "View ship properties"));
       nameBtn.textContent = tt(`fleet_ship_${sk}`, sk);
       const qtyEl = document.createElement("span");
       qtyEl.className = "shipyard-ship-qty gc-mono";
@@ -6019,7 +6023,7 @@
       nameBtn.type = "button";
       nameBtn.className = "gc-ship-detail-trigger shipyard-ship-name";
       nameBtn.dataset.defenseDetail = dk;
-      nameBtn.title = tt("defense_detail_open", "View defense properties");
+      nameBtn.setAttribute("aria-label", tt("defense_detail_open", "View defense properties"));
       nameBtn.textContent = defenseLabel(dk);
       const qtyEl = document.createElement("span");
       qtyEl.className = "shipyard-ship-qty gc-mono";
@@ -7474,6 +7478,13 @@
     });
   }
 
+  function normalizePopoverTriggers(root = document) {
+    const scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll(".gc-popover-trigger[title]").forEach((el) => {
+      el.removeAttribute("title");
+    });
+  }
+
   function initGcPopoversOnce() {
     if (GC._popoverBound) return;
     GC._popoverBound = true;
@@ -7510,7 +7521,7 @@
     };
 
     const openPopover = (trigger) => {
-      const text = (trigger.dataset.popover || trigger.getAttribute("title") || "").trim();
+      const text = (trigger.dataset.popover || "").trim();
       if (!text) return;
       closePopover();
 
@@ -7539,11 +7550,22 @@
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closePopover();
+      if (e.key === "Escape") {
+        closePopover();
+        return;
+      }
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const trigger = e.target.closest(".gc-popover-trigger");
+      if (!trigger) return;
+      e.preventDefault();
+      if (activeTrigger === trigger) closePopover();
+      else openPopover(trigger);
     });
 
     window.addEventListener("resize", closePopover);
     window.addEventListener("scroll", closePopover, true);
+
+    normalizePopoverTriggers();
   }
 
   function initPlanetEvolution() {

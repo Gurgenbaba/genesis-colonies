@@ -1,0 +1,12 @@
+{# Canonical ? info control — click (or Enter/Space) opens popover; no native title tooltip. #}
+
+{% macro render_info_popover_trigger(desc_text) %}
+  {% set txt = (desc_text or '')|trim %}
+  {% if txt and txt[:5] != 'desc_' %}
+    <button type="button"
+            class="gc-prog-info gc-popover-trigger"
+            aria-label="{{ T('ui_info_show_details', 'Details anzeigen') }}"
+            aria-expanded="false"
+            data-popover="{{ txt }}">?</button>
+  {% endif %}
+{% endmacro %}

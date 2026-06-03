@@ -115,6 +115,9 @@ def test_shipyard_and_fleet_have_detail_triggers():
     js = (root / "static" / "main.js").read_text(encoding="utf-8")
     assert 'data-ship-detail="' in shipyard
     assert "gc-ship-detail-trigger" in shipyard
+    assert "render_info_popover_trigger" in shipyard
+    assert "gc-ship-card-desc" not in shipyard
+    assert 'class="gc-prog-info gc-popover-trigger" title=' not in shipyard
     assert 'data-ship-detail="{{ ship.key }}"' in fleet
     assert "initShipDetailOnce" in js
     assert "GC.openShipDetail" in js
