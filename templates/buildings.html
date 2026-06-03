@@ -25,15 +25,17 @@
 
 {% macro render_building_effect_value(kind, res_key, amount, unit) %}
   {% set val = amount|int %}
+  {% set full_val = val|fmt_int %}
+  {% set compact_val = val|fmt_int_compact %}
   {% if kind == 'bonus_percent' %}
-    <span class="gc-mono">+{{ val|fmt_int }}{{ unit }}</span>
+    <span class="gc-mono gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>+{{ compact_val }}{{ unit }}</span>
   {% elif kind == 'level' %}
-    <span class="gc-mono">{{ val|fmt_int }}</span>
+    <span class="gc-mono gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>{{ compact_val }}</span>
   {% elif kind == 'max_level' or kind == 'scan' %}
-    <span class="gc-mono">{{ val|fmt_int }}{% if unit %}{{ unit }}{% endif %}</span>
+    <span class="gc-mono gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>{{ compact_val }}{% if unit %}{{ unit }}{% endif %}</span>
   {% else %}
     {{ render_building_effect_icon(res_key) }}
-    <span class="gc-mono">{{ val|fmt_int }}</span>{% if unit %}<span class="gc-bld-prod-unit">{{ unit }}</span>{% endif %}
+    <span class="gc-mono gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>{{ compact_val }}</span>{% if unit %}<span class="gc-bld-prod-unit">{{ unit }}</span>{% endif %}
   {% endif %}
 {% endmacro %}
 
@@ -95,8 +97,8 @@
     {% if delta > 0 %}
       <div class="gc-bld-prod-delta bcell-prod-delta" id="prod-delta-{{ b.key }}">
         <span class="gc-bld-prod-delta-label">{{ T("buildings_prod_delta", "Gewinn") }}</span>
-        <span class="gc-bld-prod-delta-val gc-mono">
-          {% if kind == 'bonus_percent' %}+{{ delta|fmt_int }}%{% elif kind == 'level' %}+{{ delta|fmt_int }}{% else %}+{{ delta|fmt_int }}{{ delta_suffix }}{% endif %}
+        <span class="gc-bld-prod-delta-val gc-mono gc-num-compact"{% if (delta|fmt_int_compact) != (delta|fmt_int) %} title="+{{ delta|fmt_int }}{{ delta_suffix }}"{% endif %}>
+          {% if kind == 'bonus_percent' %}+{{ delta|fmt_int_compact }}%{% elif kind == 'level' %}+{{ delta|fmt_int_compact }}{% else %}+{{ delta|fmt_int_compact }}{{ delta_suffix }}{% endif %}
         </span>
       </div>
     {% endif %}

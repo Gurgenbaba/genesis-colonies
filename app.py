@@ -159,6 +159,44 @@ def fmt_int_filter(value):
     return f"{n:,}".replace(",", ".")
 
 
+def _fmt_int_compact_value(n: int) -> str:
+    """Compact German display for large integers (building cards, costs)."""
+    abs_n = abs(n)
+    if abs_n < 10_000_000:
+        return fmt_int_filter(n)
+    if abs_n >= 10**18:
+        return "∞"
+    sign = "-" if n < 0 else ""
+
+    if abs_n >= 10**12:
+        suffix, div = "Bio.", 10**12
+    elif abs_n >= 10**9:
+        suffix, div = "Mrd.", 10**9
+    elif abs_n >= 10**6:
+        suffix, div = "Mio.", 10**6
+    else:
+        suffix, div = "Tsd.", 10**3
+
+    val = abs_n / div
+    if val >= 100:
+        body = f"{val:.0f}"
+    elif val >= 10:
+        body = f"{val:.1f}"
+    else:
+        body = f"{val:.2f}"
+    body = body.rstrip("0").rstrip(".")
+    return f"{sign}{body.replace('.', ',')} {suffix}"
+
+
+@app.template_filter("fmt_int_compact")
+def fmt_int_compact_filter(value):
+    try:
+        n = int(round(float(value)))
+    except (TypeError, ValueError):
+        return "0"
+    return _fmt_int_compact_value(n)
+
+
 @app.template_global()
 def player_name_link(
     player_id,

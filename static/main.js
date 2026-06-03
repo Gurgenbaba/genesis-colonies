@@ -69,10 +69,60 @@
   // =========================
   // Format helpers
   // =========================
+  function fmtIntParts(n) {
+    const num = Math.floor(Number(n) || 0);
+    if (!Number.isFinite(num)) return { display: "0", full: "0" };
+    const full = num.toLocaleString("de-DE", { maximumFractionDigits: 0 });
+    const abs = Math.abs(num);
+    if (abs < 10000000) return { display: full, full };
+    if (abs >= 1e18) return { display: "∞", full };
+
+    const sign = num < 0 ? "-" : "";
+    let suffix;
+    let div;
+    if (abs >= 1e12) {
+      suffix = "Bio.";
+      div = 1e12;
+    } else if (abs >= 1e9) {
+      suffix = "Mrd.";
+      div = 1e9;
+    } else if (abs >= 1e6) {
+      suffix = "Mio.";
+      div = 1e6;
+    } else {
+      suffix = "Tsd.";
+      div = 1e3;
+    }
+
+    const val = abs / div;
+    let body;
+    if (val >= 100) body = val.toFixed(0);
+    else if (val >= 10) body = val.toFixed(1);
+    else body = val.toFixed(2);
+    body = body.replace(/\.?0+$/, "").replace(".", ",");
+    return { display: `${sign}${body} ${suffix}`, full };
+  }
+
   function fmtNumber(n) {
-    const num = Number(n || 0);
-    if (!Number.isFinite(num)) return "0";
-    return num.toLocaleString("de-DE");
+    return fmtIntParts(n).display;
+  }
+
+  function renderMonoCompact(n, prefix = "", suffix = "") {
+    const p = fmtIntParts(n);
+    const text = `${prefix}${p.display}${suffix}`;
+    if (p.display === p.full && !prefix && !suffix) {
+      return `<span class="gc-mono gc-num-compact">${text}</span>`;
+    }
+    const title = `${prefix}${p.full}${suffix}`.replace(/"/g, "&quot;");
+    return `<span class="gc-mono gc-num-compact" title="${title}">${text}</span>`;
+  }
+
+  function renderCostVal(n) {
+    const p = fmtIntParts(n);
+    if (p.display === p.full) {
+      return `<span class="gc-cost-val gc-num-compact">${p.display}</span>`;
+    }
+    return `<span class="gc-cost-val gc-num-compact" title="${p.full}">${p.display}</span>`;
   }
 
   // UI-style ETA: "3m 12s" etc
@@ -1081,28 +1131,28 @@
   }
 
   function renderBuildingEffectValue(kind, resKey, amount, unit) {
-    const val = fmtNumber(Math.floor(Number(amount) || 0));
+    const val = Math.floor(Number(amount) || 0);
     if (kind === "bonus_percent") {
-      return `<span class="gc-mono">+${val}${unit || "%"}</span>`;
+      return renderMonoCompact(val, "+", unit || "%");
     }
     if (kind === "level") {
-      return `<span class="gc-mono">${val}</span>`;
+      return renderMonoCompact(val);
     }
     if (kind === "max_level" || kind === "scan") {
-      return `<span class="gc-mono">${val}</span>`;
+      return renderMonoCompact(val, "", unit || "");
     }
     const icon = renderBuildingEffectIcon(resKey);
     const unitHtml = unit ? `<span class="gc-bld-prod-unit">${unit}</span>` : "";
-    return `${icon}<span class="gc-mono">${val}</span>${unitHtml}`;
+    return `${icon}${renderMonoCompact(val)}${unitHtml}`;
   }
 
   function renderBuildingEffectDelta(kind, delta, unit) {
     const d = Math.floor(Number(delta) || 0);
     if (d <= 0) return "";
-    if (kind === "bonus_percent") return `+${fmtNumber(d)}%`;
-    if (kind === "level") return `+${fmtNumber(d)}`;
-    if (kind === "production") return `+${fmtNumber(d)}/h`;
-    return `+${fmtNumber(d)}${unit || ""}`;
+    if (kind === "bonus_percent") return renderMonoCompact(d, "+", "%");
+    if (kind === "level") return renderMonoCompact(d, "+", "");
+    if (kind === "production") return renderMonoCompact(d, "+", "/h");
+    return renderMonoCompact(d, "+", unit || "");
   }
 
   function patchBuildingProduction(row, b) {
@@ -1141,7 +1191,7 @@
     const deltaHtml = deltaText
       ? `<div class="gc-bld-prod-delta bcell-prod-delta" id="prod-delta-${b.key}">` +
         `<span class="gc-bld-prod-delta-label">${deltaLabel}</span>` +
-        `<span class="gc-bld-prod-delta-val gc-mono">${deltaText}</span></div>`
+        `<span class="gc-bld-prod-delta-val">${deltaText}</span></div>`
       : "";
 
     const html =
@@ -1170,9 +1220,9 @@
     return (
       `<div class="gc-costs-compact">` +
       `<span class="gc-cost-chip gc-cost-metal"><span class="gc-res-icon gc-res-metal" aria-hidden="true"></span>` +
-      `<span class="gc-cost-val">${fmtNumber(metal)}</span></span>` +
+      `${renderCostVal(metal)}</span>` +
       `<span class="gc-cost-chip gc-cost-crystal"><span class="gc-res-icon gc-res-crystal" aria-hidden="true"></span>` +
-      `<span class="gc-cost-val">${fmtNumber(crystal)}</span></span>` +
+      `${renderCostVal(crystal)}</span>` +
       targetHtml +
       `</div>`
     );
@@ -5481,6 +5531,198 @@
     });
   }
 
+  function shipyardResourceIconHtml(resKey) {
+    const icons = {
+      metal: { file: "ferronit", mod: "gc-res-metal" },
+      crystal: { file: "crytite", mod: "gc-res-crystal" },
+      fuel_cells: { file: "fuel_cells", mod: "gc-res-fuel-cells" },
+    };
+    const cfg = icons[resKey];
+    if (!cfg) return "";
+    return (
+      `<img src="/static/icons/${cfg.file}.png" alt="" ` +
+      `class="gc-res-icon gc-res-icon--sm ${cfg.mod}" loading="lazy" aria-hidden="true">`
+    );
+  }
+
+  function shipyardResourceLabel(resKey, tt) {
+    const map = {
+      metal: tt("resource_metal", "Metal"),
+      crystal: tt("resource_crystal", "Crystal"),
+      fuel_cells: tt("resource_fuel_cells", "Fuel cells"),
+    };
+    return map[resKey] || resKey;
+  }
+
+  function renderShipyardCostChips(ship, resources, tt) {
+    const specs = [
+      ["metal", "cost_metal"],
+      ["crystal", "cost_crystal"],
+      ["fuel_cells", "cost_fuel_cells"],
+    ];
+    return specs
+      .map(([resKey, costKey]) => {
+        const need = Number(ship[costKey]) || 0;
+        if (need <= 0) return "";
+        const have = Number(resources[resKey]) || 0;
+        const unmet = have < need;
+        return (
+          `<span class="gc-cost-chip gc-cost-${resKey}${unmet ? " is-unmet" : ""}">` +
+          `${shipyardResourceIconHtml(resKey)}` +
+          `<span class="gc-cost-val">${fmtNumber(need)}</span></span>`
+        );
+      })
+      .filter(Boolean)
+      .join("");
+  }
+
+  function shipyardReqItemVisible(item) {
+    if (!item || item.met) return false;
+    if (item.type === "building" && (item.key === "orbital_shipyard" || item.key === "shipyard")) {
+      return false;
+    }
+    return true;
+  }
+
+  function renderShipyardReqBlocker(item, tt) {
+    const label =
+      item.type === "building"
+        ? tt("building_" + item.key, item.key)
+        : tt(item.key, item.key);
+    const met = Boolean(item.met);
+    const cls = met ? " is-met" : " is-unmet";
+    const typeCls = item.type === "research" ? " shipyard-blocker-research" : " shipyard-blocker-building";
+    const icon = met ? "✓" : "🔒";
+    const cur = fmtNumber(Number(item.current) || 0);
+    const req = fmtNumber(Number(item.required) || 0);
+    return (
+      `<span class="shipyard-blocker shipyard-blocker-req${typeCls}${cls}"` +
+      ` title="${gcEscHtml(label)} L${req} (${cur}/${req})">` +
+      `<span class="shipyard-blocker-icon" aria-hidden="true">${icon}</span>` +
+      `<span class="shipyard-blocker-text">${gcEscHtml(label)}</span>` +
+      `<span class="shipyard-blocker-progress gc-mono">L${cur}/${req}</span></span>`
+    );
+  }
+
+  function renderShipyardLevelBlocker(required, current, tt) {
+    const req = Number(required) || 0;
+    const cur = Number(current) || 0;
+    const met = cur >= req;
+    const cls = met ? " is-met" : " is-unmet";
+    const icon = met ? "✓" : "🔒";
+    const label = tt("building_orbital_shipyard", "Orbital Shipyard");
+    const title = tt("shipyard_locked_level", "Requires Orbital Shipyard level %(level)s")
+      .replace("%(level)s", fmtNumber(req))
+      .replace("{{level}}", fmtNumber(req));
+    return (
+      `<span class="shipyard-blocker shipyard-blocker-shipyard${cls}"` +
+      ` title="${gcEscHtml(title)} (${fmtNumber(cur)}/${fmtNumber(req)})">` +
+      `<span class="shipyard-blocker-icon" aria-hidden="true">${icon}</span>` +
+      `<span class="shipyard-blocker-text">${gcEscHtml(label)}</span>` +
+      `<span class="shipyard-blocker-progress gc-mono">L${fmtNumber(cur)}/${fmtNumber(req)}</span></span>`
+    );
+  }
+
+  function renderShipyardResourceBlocker(resKey, need, have, tt) {
+    const req = Number(need) || 0;
+    const cur = Number(have) || 0;
+    const met = cur >= req;
+    const cls = met ? " is-met" : " is-unmet";
+    const label = shipyardResourceLabel(resKey, tt);
+    return (
+      `<span class="shipyard-blocker shipyard-blocker-resource${cls}"` +
+      ` title="${gcEscHtml(label)}: ${fmtNumber(cur)} / ${fmtNumber(req)}">` +
+      `${shipyardResourceIconHtml(resKey)}` +
+      `<span class="shipyard-blocker-text">${gcEscHtml(label)}</span>` +
+      `<span class="shipyard-blocker-progress gc-mono">${fmtNumber(cur)}/${fmtNumber(req)}</span></span>`
+    );
+  }
+
+  function renderShipyardBlockersHtml(ship, resources, syLevel, unlocked, tt) {
+    const parts = [];
+    if (!unlocked) {
+      const reqSy = Number(ship.required_shipyard_level) || 0;
+      const curSy = Number(syLevel) || 0;
+      if (curSy < reqSy) {
+        parts.push(renderShipyardLevelBlocker(reqSy, curSy, tt));
+      }
+      (ship.requirements?.items || [])
+        .filter((item) => shipyardReqItemVisible(item))
+        .forEach((item) => parts.push(renderShipyardReqBlocker(item, tt)));
+      return parts.join("");
+    }
+    if (ship.can_build) return "";
+    if (ship.block_reason === "queue_full") {
+      const queueText = tt(
+        "shipyard_block_queue_full",
+        "Build queue full — wait for a job to finish."
+      );
+      parts.push(
+        `<span class="shipyard-blocker shipyard-blocker-warn is-unmet" data-shipyard-block-reason="queue_full">` +
+          `<span class="shipyard-blocker-icon" aria-hidden="true">⏳</span>` +
+          `<span class="shipyard-blocker-text">${gcEscHtml(queueText)}</span></span>`
+      );
+    }
+    [
+      ["metal", "cost_metal"],
+      ["crystal", "cost_crystal"],
+      ["fuel_cells", "cost_fuel_cells"],
+    ].forEach(([resKey, costKey]) => {
+      const need = Number(ship[costKey]) || 0;
+      const have = Number(resources[resKey]) || 0;
+      if (need > 0 && have < need) {
+        parts.push(renderShipyardResourceBlocker(resKey, need, have, tt));
+      }
+    });
+    return parts.join("");
+  }
+
+  function applyShipyardShipCard(card, ship, resources, syLevel, tt) {
+    if (!card || !ship) return;
+    const unlocked = card.dataset.unlocked === "1";
+    card.classList.toggle("shipyard-ship-card--blocked", unlocked && !ship.can_build);
+    card.classList.toggle("gc-prog-unaffordable", unlocked && !ship.can_build && ship.block_reason !== "queue_full");
+    card.classList.toggle("gc-prog-affordable", unlocked && ship.can_build);
+
+    const costEl = card.querySelector("[data-shipyard-cost]");
+    if (costEl) {
+      const html = renderShipyardCostChips(ship, resources, tt);
+      if (html && costEl.innerHTML !== html) costEl.innerHTML = html;
+    }
+
+    let blockersEl = card.querySelector("[data-shipyard-blockers]");
+    const blockersHtml = renderShipyardBlockersHtml(ship, resources, syLevel, unlocked, tt);
+    if (blockersHtml) {
+      if (!blockersEl) {
+        blockersEl = document.createElement("div");
+        blockersEl.className = "shipyard-blockers";
+        blockersEl.dataset.shipyardBlockers = "1";
+        blockersEl.setAttribute("aria-live", "polite");
+        card.appendChild(blockersEl);
+      }
+      if (blockersEl.innerHTML !== blockersHtml) blockersEl.innerHTML = blockersHtml;
+      blockersEl.hidden = false;
+    } else if (blockersEl) {
+      blockersEl.replaceChildren();
+      blockersEl.hidden = true;
+    }
+
+    if (!unlocked) return;
+    const btn = card.querySelector("[data-shipyard-build]");
+    const maxBtn = card.querySelector("[data-shipyard-max]");
+    if (btn) {
+      btn.disabled = !ship.can_build;
+      btn.dataset.canBuild = ship.can_build ? "1" : "0";
+      if (btn.dataset.building !== "1") btn.classList.remove("is-loading");
+    }
+    if (maxBtn) maxBtn.dataset.maxQty = String(ship.max_build || 0);
+    const buildTimeEl = card.querySelector(".shipyard-ship-build-time");
+    if (buildTimeEl && ship.build_seconds != null) {
+      const tpl = tt("shipyard_build_time_per_unit", "Build time: %(seconds)s s per ship");
+      buildTimeEl.textContent = tpl.replace("%(seconds)s", fmtNumber(Number(ship.build_seconds) || 0));
+    }
+  }
+
   function applyShipyardState(page, data) {
     if (!page || !data) return;
     const tt = (key, fb) => t(key, fb);
@@ -5520,45 +5762,25 @@
       }
     }
 
-    const res = data.resources || {};
+    const resources = data.resources || {};
     page.querySelectorAll("[data-sy-res]").forEach((node) => {
       const key = node.getAttribute("data-sy-res");
-      if (key && res[key] != null) node.textContent = fmtNumber(Number(res[key]) || 0);
+      if (key && resources[key] != null) node.textContent = fmtNumber(Number(resources[key]) || 0);
     });
 
     if (data.current_ships) renderShipyardInventory(page, data.current_ships);
     if (data.shipyard_queue) renderShipyardQueue(page, data.shipyard_queue);
 
+    const syLevel = data.orbital_shipyard_level != null ? data.orbital_shipyard_level : page.dataset.shipyardLevel;
+
     (data.buildable_ships || []).forEach((ship) => {
-      const card = page.querySelector(`[data-ship-card="${ship.ship_key}"]`);
-      if (!card || card.dataset.unlocked !== "1") return;
-      const btn = card.querySelector("[data-shipyard-build]");
-      const maxBtn = card.querySelector("[data-shipyard-max]");
-      if (btn) {
-        btn.disabled = !ship.can_build;
-        btn.dataset.canBuild = ship.can_build ? "1" : "0";
-        if (btn.dataset.building !== "1") btn.classList.remove("is-loading");
-      }
-      if (maxBtn) maxBtn.dataset.maxQty = String(ship.max_build || 0);
-      const buildTimeEl = card.querySelector(".shipyard-ship-build-time");
-      if (buildTimeEl && ship.build_seconds != null) {
-        const tpl = tt("shipyard_build_time_per_unit", "Build time: %(seconds)s s per ship");
-        buildTimeEl.textContent = tpl.replace("%(seconds)s", fmtNumber(Number(ship.build_seconds) || 0));
-      }
-      const warn = card.querySelector(".shipyard-hint-warn");
-      if (warn) {
-        if (ship.can_build) {
-          warn.hidden = true;
-        } else {
-          warn.hidden = false;
-          const br = ship.block_reason || "not_enough_resources";
-          warn.dataset.shipyardBlockReason = br;
-          warn.textContent = tt(
-            `shipyard_block_${br}`,
-            tt("shipyard_not_enough_resources", "Not enough resources for this build.")
-          );
-        }
-      }
+      const card = page.querySelector(`[data-ship-card="${ship.ship_key}"][data-unlocked="1"]`);
+      applyShipyardShipCard(card, ship, resources, syLevel, tt);
+    });
+
+    (data.locked_ships || []).forEach((ship) => {
+      const card = page.querySelector(`[data-ship-card="${ship.ship_key}"][data-unlocked="0"]`);
+      applyShipyardShipCard(card, ship, resources, syLevel, tt);
     });
   }
 

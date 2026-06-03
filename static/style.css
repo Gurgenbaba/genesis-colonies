@@ -2483,6 +2483,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 6px;
   padding: 8px 9px 9px;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
   border-radius: var(--gc-radius-sm);
 }
 
@@ -2546,6 +2548,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.10);
   background: rgba(0, 0, 0, 0.18);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .gc-bld-prod-metric{
@@ -2608,6 +2612,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 6px;
   font-size: 0.68rem;
   line-height: 1.2;
+  min-width: 0;
 }
 
 .gc-bld-prod-label{
@@ -2616,6 +2621,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   letter-spacing: 0.05em;
   font-size: 0.62rem;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .gc-bld-prod-val{
@@ -2624,6 +2630,32 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   gap: 3px;
   font-weight: 800;
   color: rgba(180, 245, 255, 0.95);
+  min-width: 0;
+  max-width: 62%;
+  justify-content: flex-end;
+}
+
+.gc-num-compact{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.gc-bld-prod-delta-val .gc-mono,
+.gc-bld-prod-delta-val.gc-num-compact{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.gc-bld-card-costs .gc-cost-val{
+  max-width: 5.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gc-bld-prod-next .gc-mono{
@@ -11027,6 +11059,112 @@ a.gc-galaxy-coord-link:focus-visible {
   margin-top: 0.75rem;
 }
 
+.shipyard-ship-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+.gc-ship-card.gc-prog-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 9px 9px;
+  min-height: 0;
+}
+
+.gc-ship-card.gc-prog-card:hover {
+  transform: translateY(-2px);
+}
+
+.gc-ship-card-title-btn {
+  all: unset;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+
+.gc-ship-card-title-btn:hover,
+.gc-ship-card-title-btn:focus-visible {
+  color: var(--gc-primary-2);
+  text-decoration: underline;
+}
+
+.gc-ship-card-desc {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  color: var(--gc-text-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.gc-ship-role-badge {
+  flex-shrink: 0;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(255, 154, 26, 0.28);
+  background: rgba(255, 154, 26, 0.08);
+  color: rgba(255, 190, 110, 0.95);
+  white-space: nowrap;
+}
+
+.gc-ship-card .gc-bld-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gc-ship-card .shipyard-ship-cost {
+  margin: 0;
+}
+
+.gc-ship-card .shipyard-ship-build-time {
+  margin: 0;
+  font-size: 0.72rem;
+}
+
+.gc-ship-card-action {
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.gc-ship-card-action.shipyard-ship-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.gc-ship-card .shipyard-qty-input {
+  width: 4.5rem;
+}
+
+.gc-ship-card .shipyard-blockers {
+  margin-top: 0;
+}
+
+.shipyard-blocker-research.is-unmet {
+  border-color: rgba(147, 112, 255, 0.42);
+  background: rgba(147, 112, 255, 0.12);
+  color: rgba(210, 190, 255, 0.96);
+}
+
+.shipyard-blocker-building.is-unmet {
+  border-color: rgba(255, 120, 90, 0.38);
+  background: rgba(255, 120, 90, 0.1);
+  color: rgba(255, 185, 165, 0.96);
+}
+
 .shipyard-ship-list {
   display: flex;
   flex-direction: column;
@@ -11057,6 +11195,7 @@ a.gc-galaxy-coord-link:focus-visible {
 .shipyard-ship-card .shipyard-ship-build-time,
 .shipyard-ship-card .shipyard-ship-actions,
 .shipyard-ship-card .shipyard-hint-warn,
+.shipyard-ship-card .shipyard-blockers,
 .shipyard-ship-card .shipyard-locked-reason {
   grid-column: 2;
 }
@@ -11133,6 +11272,82 @@ a.gc-galaxy-coord-link:focus-visible {
   margin: 0.5rem 0 0;
   font-size: 0.85rem;
   color: #e8a040;
+}
+
+.shipyard-ship-card--blocked {
+  border-color: rgba(255, 75, 106, 0.18);
+}
+
+.shipyard-blockers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.shipyard-blocker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  padding: 0.18rem 0.5rem;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.76rem;
+  line-height: 1.25;
+  color: var(--gc-text-soft);
+}
+
+.shipyard-blocker.is-unmet {
+  border-color: rgba(255, 75, 106, 0.38);
+  background: rgba(255, 75, 106, 0.1);
+  color: rgba(255, 170, 185, 0.96);
+}
+
+.shipyard-blocker.is-met {
+  border-color: rgba(35, 242, 166, 0.28);
+  background: rgba(35, 242, 166, 0.08);
+  color: rgba(160, 255, 220, 0.95);
+}
+
+.shipyard-blocker-warn.is-unmet {
+  border-color: rgba(232, 160, 64, 0.42);
+  background: rgba(232, 160, 64, 0.1);
+  color: rgba(255, 210, 140, 0.96);
+}
+
+.shipyard-blocker-icon {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  line-height: 1;
+}
+
+.shipyard-blocker-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shipyard-blocker-progress {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  opacity: 0.92;
+}
+
+.shipyard-blocker-resource .gc-res-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.gc-cost-chip.is-unmet {
+  border-color: rgba(255, 75, 106, 0.38);
+  background: rgba(255, 75, 106, 0.1);
+}
+
+.gc-cost-chip.is-unmet .gc-cost-val {
+  color: rgba(255, 140, 160, 0.96);
 }
 
 .fleet-no-ships-panel,

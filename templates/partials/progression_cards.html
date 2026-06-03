@@ -24,11 +24,62 @@
   {% endif %}
 {% endmacro %}
 
-{% macro render_resource_cost_chip(res_key, amount) %}
-  <span class="gc-cost-chip gc-cost-{{ res_key }}">
+{% macro render_resource_cost_chip(res_key, amount, unmet=false) %}
+  {% set full_val = amount|fmt_int %}
+  {% set compact_val = amount|fmt_int_compact %}
+  <span class="gc-cost-chip gc-cost-{{ res_key }}{% if unmet %} is-unmet{% endif %}">
     {{ render_resource_icon(res_key) }}
-    <span class="gc-cost-val">{{ amount|fmt_int }}</span>
+    <span class="gc-cost-val gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>{{ compact_val }}</span>
   </span>
+{% endmacro %}
+
+{% macro render_shipyard_req_blocker(item) %}
+  {% if item.type == 'building' %}
+    {% set req_label = T('building_' ~ item.key, item.key) %}
+  {% else %}
+    {% set req_label = T(item.key, item.key) %}
+  {% endif %}
+  <span class="shipyard-blocker shipyard-blocker-req shipyard-blocker-{{ item.type }}{% if item.met %} is-met{% else %} is-unmet{% endif %}"
+        title="{{ req_label }} L{{ item.required|fmt_int }} ({{ item.current|fmt_int }}/{{ item.required|fmt_int }})">
+    <span class="shipyard-blocker-icon" aria-hidden="true">{% if item.met %}✓{% else %}🔒{% endif %}</span>
+    <span class="shipyard-blocker-text">{{ req_label }}</span>
+    <span class="shipyard-blocker-progress gc-mono">L{{ item.current|fmt_int }}/{{ item.required|fmt_int }}</span>
+  </span>
+{% endmacro %}
+
+{% macro render_shipyard_level_blocker(required, current) %}
+  <span class="shipyard-blocker shipyard-blocker-shipyard{% if current >= required %} is-met{% else %} is-unmet{% endif %}"
+        title="{{ T('shipyard_locked_level', level=required) }} ({{ current|fmt_int }}/{{ required|fmt_int }})">
+    <span class="shipyard-blocker-icon" aria-hidden="true">{% if current >= required %}✓{% else %}🔒{% endif %}</span>
+    <span class="shipyard-blocker-text">{{ T('building_orbital_shipyard', 'Orbital Shipyard') }}</span>
+    <span class="shipyard-blocker-progress gc-mono">L{{ current|fmt_int }}/{{ required|fmt_int }}</span>
+  </span>
+{% endmacro %}
+
+{% macro render_shipyard_resource_blocker(res_key, need, have) %}
+  {% if res_key == 'metal' %}
+    {% set res_label = T('resource_metal') %}
+  {% elif res_key == 'crystal' %}
+    {% set res_label = T('resource_crystal') %}
+  {% else %}
+    {% set res_label = T('resource_fuel_cells') %}
+  {% endif %}
+  <span class="shipyard-blocker shipyard-blocker-resource{% if have >= need %} is-met{% else %} is-unmet{% endif %}"
+        title="{{ res_label }}: {{ have|fmt_int }} / {{ need|fmt_int }}">
+    {{ render_resource_icon(res_key, 'sm') }}
+    <span class="shipyard-blocker-text">{{ res_label }}</span>
+    <span class="shipyard-blocker-progress gc-mono">{{ have|fmt_int }}/{{ need|fmt_int }}</span>
+  </span>
+{% endmacro %}
+
+{% macro render_shipyard_unlock_blockers(ship, sy_lvl) %}
+  {% set req_items = ship.requirements.get('items', []) if ship.requirements is defined else [] %}
+  {% if sy_lvl < ship.required_shipyard_level %}
+  {{ render_shipyard_level_blocker(ship.required_shipyard_level, sy_lvl) }}
+  {% endif %}
+  {% for item in req_items if not item.met %}
+  {{ render_shipyard_req_blocker(item) }}
+  {% endfor %}
 {% endmacro %}
 
 {% macro render_prog_identity(title, icon_src='', fallback='', desc_text='') %}
