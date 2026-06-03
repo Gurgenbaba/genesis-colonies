@@ -114,6 +114,7 @@ def test_buildings_page_renders(temp_db, monkeypatch):
     assert "buildings-prog-list" in html
     assert "gc-building-grid" in html
     assert "gc-bld-card-action" in html
+    assert "gc-bld-effect-bundle" in html
     assert "gc-prog-effect" not in html
     assert "gc-prog-desc" not in html
 

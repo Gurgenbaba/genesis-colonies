@@ -116,17 +116,19 @@
 {% endmacro %}
 
 {% macro render_building_effect_bundle(b, compact=false) %}
-  {{ render_building_effect_strip(b, compact=compact) }}
-  {% if b.secondary_effect is defined and b.secondary_effect %}
-    {% set sec = b.secondary_effect %}
-    {{ render_building_effect_strip({
-      'key': b.key,
-      'effect_kind': sec.effect_kind,
-      'effect_resource': sec.effect_resource,
-      'effect_unit': sec.effect_unit,
-      'effect_current': sec.effect_current,
-      'effect_next': sec.effect_next,
-      'effect_delta': sec.effect_delta,
-    }, compact=compact, strip_class='gc-bld-effect-secondary') }}
-  {% endif %}
+  <div class="gc-bld-effect-bundle">
+    {{ render_building_effect_strip(b, compact=compact) }}
+    {% if b.secondary_effect is defined and b.secondary_effect %}
+      {% set sec = b.secondary_effect %}
+      {{ render_building_effect_strip({
+        'key': b.key,
+        'effect_kind': sec.effect_kind,
+        'effect_resource': sec.effect_resource,
+        'effect_unit': sec.effect_unit,
+        'effect_current': sec.effect_current,
+        'effect_next': sec.effect_next,
+        'effect_delta': sec.effect_delta,
+      }, compact=compact, strip_class='gc-bld-effect-secondary') }}
+    {% endif %}
+  </div>
 {% endmacro %}

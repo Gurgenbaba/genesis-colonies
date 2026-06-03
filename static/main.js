@@ -1236,18 +1236,29 @@
 
   function patchBuildingProduction(row, b) {
     if (!row || !b) return;
+    const html = renderBuildingEffectBundleHtml(b);
     const head = row.querySelector(".gc-bld-card-head");
     const meta = row.querySelector(".gc-bld-card-meta");
-    const anchor = meta || head || row;
+
+    const bundles = [...row.querySelectorAll(".gc-bld-effect-bundle")];
+    let bundle = bundles[0] || null;
+    for (let i = 1; i < bundles.length; i += 1) bundles[i].remove();
+
+    if (bundle) {
+      if (bundle.innerHTML.trim() !== html.trim()) bundle.innerHTML = html;
+      row.querySelectorAll(":scope > .gc-bld-prod.bcell-prod").forEach((el) => el.remove());
+      return;
+    }
 
     row.querySelectorAll(".bcell-prod").forEach((el) => el.remove());
 
-    const bundle = document.createElement("div");
+    bundle = document.createElement("div");
     bundle.className = "gc-bld-effect-bundle";
-    bundle.innerHTML = renderBuildingEffectBundleHtml(b);
+    bundle.innerHTML = html;
 
     if (head && meta) head.insertAdjacentElement("afterend", bundle);
-    else anchor.prepend(bundle);
+    else if (head) head.insertAdjacentElement("afterend", bundle);
+    else row.prepend(bundle);
   }
 
   function renderCompactCosts(metal, crystal, targetLevel, showTarget = true) {
