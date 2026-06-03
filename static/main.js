@@ -1147,6 +1147,13 @@
     return `${icon}${renderMonoCompact(val)}${unitHtml}`;
   }
 
+  function buildingEffectDeltaLabel(kind) {
+    if (kind === "energy_use") {
+      return t("buildings_prod_delta_cost", "Mehrverbrauch");
+    }
+    return t("buildings_prod_delta", "Gewinn");
+  }
+
   function renderBuildingEffectDelta(kind, delta, unit) {
     const d = Math.floor(Number(delta) || 0);
     if (d <= 0) return "";
@@ -1181,10 +1188,11 @@
     const metricLabel = buildingEffectMetricLabel(kind, resKey, buildingKey);
     const curLabel = t("buildings_prod_current", "Aktuell");
     const nextLabel = t("buildings_prod_after", "Nach Upgrade");
-    const deltaLabel = t("buildings_prod_delta", "Gewinn");
+    const deltaLabel = buildingEffectDeltaLabel(kind);
     const deltaText = renderBuildingEffectDelta(kind, delta, unit);
+    const deltaCostCls = kind === "energy_use" ? " gc-bld-prod-delta-cost" : "";
     const deltaHtml = deltaText
-      ? `<div class="gc-bld-prod-delta bcell-prod-delta">` +
+      ? `<div class="gc-bld-prod-delta bcell-prod-delta${deltaCostCls}">` +
         `<span class="gc-bld-prod-delta-label">${deltaLabel}</span>` +
         `<span class="gc-bld-prod-delta-val">${deltaText}</span></div>`
       : "";

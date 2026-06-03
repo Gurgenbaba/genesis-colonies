@@ -2746,6 +2746,17 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   text-shadow: 0 0 12px rgba(35, 242, 166, 0.22);
 }
 
+.gc-bld-prod-delta-cost{
+  border-top-color: rgba(251, 191, 36, 0.18);
+}
+.gc-bld-prod-delta-cost .gc-bld-prod-delta-val{
+  color: rgba(251, 191, 36, 0.96);
+  text-shadow: 0 0 12px rgba(251, 191, 36, 0.18);
+}
+.gc-prog-affordable .gc-bld-prod-delta-cost .gc-bld-prod-delta-val{
+  animation: none;
+}
+
 .gc-bld-card-meta{
   display: flex;
   flex-wrap: wrap;

@@ -547,6 +547,7 @@
   "buildings_prod_current": "Current",
   "buildings_prod_after": "After upgrade",
   "buildings_prod_delta": "Gain",
+  "buildings_prod_delta_cost": "Extra draw",
 
   "overview_label_storage": "Storage Levels",
   "overview_label_storage_metal": "Ferronit Storage",

@@ -98,8 +98,15 @@
       </span>
     </div>
     {% if delta > 0 %}
-      <div class="gc-bld-prod-delta bcell-prod-delta" id="prod-delta-{{ building_key }}">
-        <span class="gc-bld-prod-delta-label">{{ T("buildings_prod_delta", "Gewinn") }}</span>
+      {% if kind == 'energy_use' %}
+        {% set delta_label = T("buildings_prod_delta_cost", "Mehrverbrauch") %}
+        {% set delta_class = 'gc-bld-prod-delta-cost' %}
+      {% else %}
+        {% set delta_label = T("buildings_prod_delta", "Gewinn") %}
+        {% set delta_class = '' %}
+      {% endif %}
+      <div class="gc-bld-prod-delta bcell-prod-delta {{ delta_class }}" id="prod-delta-{{ building_key }}-{{ kind }}">
+        <span class="gc-bld-prod-delta-label">{{ delta_label }}</span>
         <span class="gc-bld-prod-delta-val gc-mono gc-num-compact"{% if (delta|fmt_int_compact) != (delta|fmt_int) %} title="+{{ delta|fmt_int }}{{ delta_suffix }}"{% endif %}>
           {% if kind == 'bonus_percent' %}+{{ delta|fmt_int_compact }}%{% elif kind == 'level' %}+{{ delta|fmt_int_compact }}{% else %}+{{ delta|fmt_int_compact }}{{ delta_suffix }}{% endif %}
         </span>
