@@ -174,8 +174,25 @@
   function setServerTime(serverTimeSec) {
     const v = Number(serverTimeSec);
     if (!Number.isFinite(v) || v <= 0) return;
+    if (TIME.serverNow && TIME.clientPerfAt) {
+      const approx = TIME.serverNow + (performance.now() - TIME.clientPerfAt) / 1000;
+      if (v < approx - 2) return;
+    }
     TIME.serverNow = v;
     TIME.clientPerfAt = performance.now();
+  }
+
+  /** finish_at countdown with optional server snapshot cap (prevents inflation on clock regression). */
+  function queueJobRemainingSeconds(finishAt, serverNow, serverRemaining) {
+    const endAt = Number(finishAt || 0);
+    if (!endAt) return 0;
+    const now = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
+    const fromFinish = Math.max(0, Math.ceil(endAt - now));
+    const srv = Number(serverRemaining);
+    if (Number.isFinite(srv) && srv >= 0) {
+      return Math.min(fromFinish, Math.max(0, Math.ceil(srv)));
+    }
+    return fromFinish;
   }
 
   function movementRemainingSeconds(countdownAt, serverNow, serverRemaining) {
@@ -191,7 +208,9 @@
 
   function bootstrapServerTimeFromDom() {
     const raw = document.body?.dataset?.serverTime;
-    if (raw) setServerTime(raw);
+    if (!raw) return;
+    if (TIME.serverNow && TIME.clientPerfAt) return;
+    setServerTime(raw);
   }
 
   function getApproxServerNow() {
@@ -2396,6 +2415,36 @@
     if (subEl.innerHTML !== html) subEl.innerHTML = html;
   }
 
+  function _syncResearchQueueLiveFromServer(first, summary) {
+    if (!first) return;
+    const finishTime = Number(first.finish_at || first.finish_time || 0);
+    const serverRemaining = Number(first.remaining ?? summary?.first_finish_in ?? 0);
+    const totalRaw = Number(first.total || first.total_seconds || 0);
+    const total = totalRaw > 0 ? Math.max(1, Math.floor(totalRaw)) : Math.max(1, serverRemaining + 1);
+    const activeJob = document.querySelector(".research-job.research-job-active");
+    if (activeJob) {
+      if (finishTime) activeJob.setAttribute("data-finish-time", String(finishTime));
+      activeJob.setAttribute("data-total", String(total));
+      if (Number.isFinite(serverRemaining) && serverRemaining >= 0) {
+        activeJob.dataset.serverRemaining = String(Math.ceil(serverRemaining));
+      } else {
+        delete activeJob.dataset.serverRemaining;
+      }
+    }
+    const now = getApproxServerNow();
+    const remaining = finishTime
+      ? queueJobRemainingSeconds(finishTime, now, serverRemaining)
+      : Math.max(0, Math.ceil(serverRemaining));
+    const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
+    const etaText = formatEta(remaining);
+    const etaEl = document.getElementById("research-eta-live");
+    const fillEl = document.getElementById("research-bar-fill-live");
+    const subEta = document.getElementById("research-queue-subtitle-eta");
+    if (etaEl) _setIfChanged(etaEl, etaText);
+    _applyProgressFill(fillEl, pct);
+    if (subEta) _setIfChanged(subEta, etaText);
+  }
+
   function renderResearchQueue(researchRaw) {
     const root = document.getElementById("research-queue-root");
     if (!root) return;
@@ -2441,6 +2490,7 @@
       const overdue = finishTime > 0 && finishTime <= getApproxServerNow();
       if (!overdue) {
         _updateResearchQueueSubtitle(count, limit, firstEta);
+        _syncResearchQueueLiveFromServer(first, summary);
         GC.startProgressTicker();
         return;
       }
@@ -2478,10 +2528,14 @@
       const finishTime = Number(job.finish_at || job.finish_time || 0);
       const currLvl = job.current_level ?? 0;
       const targLvl = job.target_level ?? currLvl + 1;
+      const srvRemAttr =
+        isActive && Number.isFinite(remaining) && remaining >= 0
+          ? ` data-server-remaining="${Math.ceil(remaining)}"`
+          : "";
 
       html += `
         <div class="research-job${isActive ? " research-job-active" : " research-job-queued"}"
-             ${isActive ? `data-finish-time="${finishTime}" data-total="${total}"` : ""}>
+             ${isActive ? `data-finish-time="${finishTime}" data-total="${total}"${srvRemAttr}` : ""}>
           <div class="research-job-icon">
             <img src="${iconSrc}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
           </div>
@@ -2781,14 +2835,19 @@
       const finishTime = Number(researchActive.getAttribute("data-finish-time") || 0);
       const total = Math.max(1, Number(researchActive.getAttribute("data-total") || 1));
       if (finishTime) {
-        const remaining = Math.max(0, finishTime - serverNowTs);
+        const srvRemRaw = researchActive.dataset.serverRemaining;
+        const remaining = queueJobRemainingSeconds(
+          finishTime,
+          serverNowTs,
+          srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
+        );
         const pct = 100 * (1 - remaining / total);
         const etaEl = document.getElementById("research-eta-live");
         const fillEl = document.getElementById("research-bar-fill-live");
-        if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
+        if (etaEl) _setIfChanged(etaEl, formatEta(remaining));
         _applyProgressFill(fillEl, pct);
         const subEta = document.getElementById("research-queue-subtitle-eta");
-        if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(remaining)));
+        if (subEta) _setIfChanged(subEta, formatEta(remaining));
         if (remaining <= 0) {
           _applyProgressFill(fillEl, 100);
           requestFinishRefresh("research");
@@ -2853,11 +2912,16 @@
       const finishAt = Number(ovBox.dataset.finishAt || 0);
       const total = Math.max(1, Number(ovBox.dataset.total || 1));
       if (finishAt) {
-        const remaining = Math.max(0, finishAt - serverNowTs);
+        const srvRemRaw = ovBox.dataset.serverRemaining;
+        const remaining = queueJobRemainingSeconds(
+          finishAt,
+          serverNowTs,
+          srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
+        );
         const pct = 100 * (1 - remaining / total);
         const cdEl = document.getElementById("research-remaining");
         const barEl = document.getElementById("research-bar-fill");
-        if (cdEl) _setIfChanged(cdEl, formatEta(Math.ceil(remaining)));
+        if (cdEl) _setIfChanged(cdEl, formatEta(remaining));
         _applyProgressFill(barEl, pct);
         if (remaining <= 0) {
           _applyProgressFill(barEl, 100);
@@ -3105,7 +3169,7 @@
       const forceResourceBar = Boolean(opts && (opts.forceResourceBar || hudOnly || opts.planetSwitch));
       const planetSwitch = Boolean(opts && opts.planetSwitch);
 
-      if (reason === "poll") {
+      if (reason === "poll" || reason === "page_hydrate") {
         const st = Number(data.server_time || 0);
         if (st && _lastAppliedServerTime && st < _lastAppliedServerTime) {
           return false;
@@ -3438,6 +3502,12 @@
         if (ovBox) {
           ovBox.dataset.total = String(totalSec);
           if (finishAt > 0) ovBox.dataset.finishAt = String(finishAt);
+          const rem = parseInt(activeResearch.remaining, 10);
+          if (Number.isFinite(rem) && rem >= 0) {
+            ovBox.dataset.serverRemaining = String(rem);
+          } else {
+            delete ovBox.dataset.serverRemaining;
+          }
         }
 
         const totalLabel = document.getElementById("research-total");

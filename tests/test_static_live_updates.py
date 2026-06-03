@@ -117,6 +117,8 @@ def test_main_js_progress_ticker_uses_server_time_and_interval():
     assert "bootstrapServerTimeFromDom" in src
     assert "data-server-time" in _read("templates/base.html")
     assert "SERVER_TIME=int(time.time())" in _read("app.py")
+    bootstrap = src.split("function bootstrapServerTimeFromDom()")[1].split("function getApproxServerNow()")[0]
+    assert "TIME.serverNow && TIME.clientPerfAt" in bootstrap
     time_section = src.split("function getApproxServerNow()")[1].split("bootstrapServerTimeFromDom();")[0]
     assert "Math.floor(Date.now() / 1000)" in time_section
     ticker_section = src.split("GC.startProgressTicker = function startProgressTicker()")[1].split("GC.stopPolling")[0]
@@ -284,9 +286,24 @@ def test_main_js_gc801_action_state_and_stale_poll_guards():
     assert "stateGenAtStart !== _clientStateGen" in refresh_section
     apply_section = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
     assert 'reason === "poll"' in apply_section
+    assert 'reason === "page_hydrate"' in apply_section
     assert "syncResourceLiveBaseline" in apply_section
     assert "patchBuildingPanel" in apply_section
     assert "location.reload()" not in action_section
+
+
+def test_main_js_gc804_research_timer_pjax_safe():
+    src = _read("static/main.js")
+    bootstrap = src.split("function bootstrapServerTimeFromDom()")[1].split("function getApproxServerNow()")[0]
+    assert "TIME.serverNow && TIME.clientPerfAt" in bootstrap
+    assert "function queueJobRemainingSeconds(" in src
+    assert "data-server-remaining" in src.split("function renderResearchQueue")[1].split("function _applyProgressFill")[0]
+    assert "_syncResearchQueueLiveFromServer" in src
+    set_time = src.split("function setServerTime(serverTimeSec)")[1].split("function queueJobRemainingSeconds")[0]
+    assert "v < approx - 2" in set_time
+    research_tick = src.split("const researchActive = document.querySelector(\".research-job.research-job-active\")")[1].split("const shipyardActive")[0]
+    assert "queueJobRemainingSeconds" in research_tick
+    assert "finishTime - serverNowTs" not in research_tick
 
 
 def test_galaxy_template_pjax_nav_urls():
