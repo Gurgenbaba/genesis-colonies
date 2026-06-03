@@ -346,6 +346,30 @@
 
   "btn_research": "Forschung starten",
   "research_empty_list": "Keine Forschungen verfügbar (Konfiguration/DB prüfen).",
+  "research_empty_category": "Keine Technologien in dieser Kategorie.",
+
+  "research_queue_loop_title": "Forschungsschleife",
+  "research_queue_manage_hint": "Verwalte laufende Forschungsaufträge und starte neue Technologien.",
+  "research_queue_none_active": "Keine Forschungsaufträge aktiv.",
+
+  "research_tabs": "Forschungs-Kategorien",
+  "research_tab_energy": "Energie",
+  "research_tab_production": "Produktion",
+  "research_tab_construction": "Bau & Lager",
+  "research_tab_fleet": "Flotte",
+  "research_tab_military": "Militär",
+
+  "research_effect_mine_energy": "Minenverbrauch",
+  "research_effect_metal_prod": "Ferronit-Produktion",
+  "research_effect_prod": "Ressourcen-Produktion",
+  "research_effect_build_time": "Bau- & Forschungszeit",
+  "research_effect_storage": "Lagerkapazität",
+  "research_effect_weapon": "Waffenbonus",
+  "research_effect_armor": "Panzerungsbonus",
+  "research_effect_shield": "Schildbonus",
+  "research_effect_fleet_speed": "Flottengeschwindigkeit",
+  "research_effect_cargo": "Frachtraum",
+  "research_effect_fuel_use": "Treibstoffverbrauch",
 
   "techtree_title": "Tech-Tree",
   "techtree_hint": "Gebäude- und Forschungsbaum deiner Kolonie. Sieh sofort, was offen ist – und was noch fehlt.",

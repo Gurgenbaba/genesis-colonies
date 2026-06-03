@@ -187,6 +187,193 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
 }
 
 
+# Tab groups for research UI (category keys from RESEARCH_TECHS)
+RESEARCH_TAB_GROUPS: Dict[str, List[str]] = {
+    "energy": ["energy"],
+    "production": ["metal", "drones"],
+    "construction": ["construction", "storage"],
+    "fleet": ["navigation", "engine", "propulsion"],
+    "military": ["weapon", "armor", "shield"],
+}
+
+
+def _research_effect_snapshot(
+    *,
+    effect_kind: str,
+    effect_current: int,
+    effect_next: int,
+    effect_resource: str = "",
+    effect_unit: str = "",
+    effect_metric_key: str = "",
+) -> Dict[str, Any]:
+    cur = int(effect_current or 0)
+    nxt = int(effect_next or 0)
+    delta = max(0, nxt - cur)
+    return {
+        "effect_kind": effect_kind,
+        "effect_current": cur,
+        "effect_next": nxt,
+        "effect_delta": delta,
+        "effect_resource": effect_resource,
+        "effect_unit": effect_unit,
+        "effect_metric_key": effect_metric_key,
+    }
+
+
+def _mine_energy_reduction_pct(level: int) -> int:
+    lvl = max(0, int(level or 0))
+    if lvl <= 0:
+        return 0
+    factor = max(0.4, 1.0 - 0.05 * lvl)
+    return int(round((1.0 - factor) * 100))
+
+
+def _buildtime_reduction_pct(level: int) -> int:
+    lvl = max(0, int(level or 0))
+    if lvl <= 0:
+        return 0
+    factor = max(0.40, 1.0 - 0.03 * lvl)
+    return int(round((1.0 - factor) * 100))
+
+
+def _metal_prod_bonus_pct(level: int) -> int:
+    return int(round(10.0 * max(0, int(level or 0))))
+
+
+def _crystal_prod_bonus_pct(level: int) -> int:
+    return int(round(4.0 * max(0, int(level or 0))))
+
+
+def _drone_prod_bonus_pct(level: int) -> int:
+    return int(round(3.0 * max(0, int(level or 0))))
+
+
+def _storage_bonus_pct(level: int) -> int:
+    return int(round(25.0 * max(0, int(level or 0))))
+
+
+def _combat_bonus_pct(level: int) -> int:
+    return int(round(5.0 * max(0, int(level or 0))))
+
+
+def _fleet_speed_bonus_pct(level: int, per_level: float) -> int:
+    lvl = max(0, int(level or 0))
+    return int(round(per_level * lvl * 100))
+
+
+def _fuel_reduction_pct(level: int) -> int:
+    from .fleet_calc import FUEL_EFFICIENCY_MIN_FACTOR, FUEL_EFFICIENCY_PER_LEVEL
+
+    lvl = max(0, int(level or 0))
+    factor = max(FUEL_EFFICIENCY_MIN_FACTOR, 1.0 - lvl * FUEL_EFFICIENCY_PER_LEVEL)
+    return int(round((1.0 - factor) * 100))
+
+
+def get_research_effect_preview(tech_key: str, current_level: int, next_level: int) -> Dict[str, Any]:
+    """
+    UI-only effect snapshot — formulas mirror EffectResolver / fleet_calc (server authority).
+    """
+    cur = max(0, int(current_level or 0))
+    nxt = max(cur + 1, int(next_level or 0))
+
+    if tech_key == "energy_tech":
+        return _research_effect_snapshot(
+            effect_kind="reduction_percent",
+            effect_current=_mine_energy_reduction_pct(cur),
+            effect_next=_mine_energy_reduction_pct(nxt),
+            effect_metric_key="research_effect_mine_energy",
+        )
+    if tech_key == "mining_tech":
+        return _research_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=_metal_prod_bonus_pct(cur),
+            effect_next=_metal_prod_bonus_pct(nxt),
+            effect_resource="metal",
+            effect_metric_key="research_effect_metal_prod",
+        )
+    if tech_key == "buildtime_tech":
+        return _research_effect_snapshot(
+            effect_kind="reduction_percent",
+            effect_current=_buildtime_reduction_pct(cur),
+            effect_next=_buildtime_reduction_pct(nxt),
+            effect_resource="build",
+            effect_metric_key="research_effect_build_time",
+        )
+    if tech_key == "storage_tech":
+        return _research_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=_storage_bonus_pct(cur),
+            effect_next=_storage_bonus_pct(nxt),
+            effect_resource="storage",
+            effect_metric_key="research_effect_storage",
+        )
+    if tech_key == "drone_tech":
+        return _research_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=_drone_prod_bonus_pct(cur),
+            effect_next=_drone_prod_bonus_pct(nxt),
+            effect_metric_key="research_effect_prod",
+        )
+    if tech_key == "weapon_tech":
+        return _research_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=_combat_bonus_pct(cur),
+            effect_next=_combat_bonus_pct(nxt),
+            effect_metric_key="research_effect_weapon",
+        )
+    if tech_key == "armor_tech":
+        return _research_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=_combat_bonus_pct(cur),
+            effect_next=_combat_bonus_pct(nxt),
+            effect_metric_key="research_effect_armor",
+        )
+    if tech_key == "shield_tech":
+        return _research_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=_combat_bonus_pct(cur),
+            effect_next=_combat_bonus_pct(nxt),
+            effect_metric_key="research_effect_shield",
+        )
+    if tech_key == "navigation_tech":
+        return _research_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=_fleet_speed_bonus_pct(cur, 0.03),
+            effect_next=_fleet_speed_bonus_pct(nxt, 0.03),
+            effect_metric_key="research_effect_fleet_speed",
+        )
+    if tech_key == "engine_tech":
+        primary = _research_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=_fleet_speed_bonus_pct(cur, 0.02),
+            effect_next=_fleet_speed_bonus_pct(nxt, 0.02),
+            effect_metric_key="research_effect_fleet_speed",
+        )
+        secondary = _research_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=_fleet_speed_bonus_pct(cur, 0.02),
+            effect_next=_fleet_speed_bonus_pct(nxt, 0.02),
+            effect_resource="cargo",
+            effect_metric_key="research_effect_cargo",
+        )
+        primary["secondary_effect"] = secondary
+        return primary
+    if tech_key == "fuel_efficiency":
+        return _research_effect_snapshot(
+            effect_kind="reduction_percent",
+            effect_current=_fuel_reduction_pct(cur),
+            effect_next=_fuel_reduction_pct(nxt),
+            effect_metric_key="research_effect_fuel_use",
+        )
+
+    return _research_effect_snapshot(
+        effect_kind="level",
+        effect_current=cur,
+        effect_next=nxt,
+        effect_metric_key="buildings_effect_level",
+    )
+
+
 # ======================================================================
 # COSTS & TIME
 # ======================================================================
@@ -853,12 +1040,15 @@ def get_research_status(
         is_active = bool(active and str(active.get("tech_key")) == tech)
         in_queue = q_count > 0
 
+        effect_preview = get_research_effect_preview(tech, curr, targ)
+
         techs.append({
             "key": tech,
             "label": cfg.get("label", tech),
             "label_key": cfg.get("label_key"),
             "description": cfg.get("description", ""),
             "description_key": cfg.get("description_key"),
+            "category": cfg.get("category", ""),
             "level": curr,
             "target_level": targ,
             "cost_metal": int(cost_m),
@@ -867,10 +1057,27 @@ def get_research_status(
             "requirements_met": bool(req_met),
             "can_afford": bool(can_afford),
             "requirements_items": get_research_requirements_items(tech, buildings, levels),
+            "resource_items": [
+                {
+                    "kind": "resource",
+                    "key": "metal",
+                    "need": int(cost_m),
+                    "have": int(planet_metal),
+                    "met": planet_metal >= float(cost_m),
+                },
+                {
+                    "kind": "resource",
+                    "key": "crystal",
+                    "need": int(cost_c),
+                    "have": int(planet_crystal),
+                    "met": planet_crystal >= float(cost_c),
+                },
+            ],
             "icon": cfg.get("icon"),
             "queue_count": q_count,
             "is_active": is_active,
             "in_queue": in_queue,
+            **effect_preview,
         })
 
     research_queue_limit = _resolve_research_queue_limit(player_id=uid, conn=conn)

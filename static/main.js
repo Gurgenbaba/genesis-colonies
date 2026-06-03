@@ -1111,7 +1111,11 @@
     fuel_cell_plant: "fuel_cells",
   };
 
-  function buildingEffectMetricLabel(kind, resKey, buildingKey) {
+  function buildingEffectMetricLabel(kind, resKey, buildingKey, effectMetricKey) {
+    if (effectMetricKey) {
+      const localized = t(effectMetricKey, "");
+      if (localized) return localized;
+    }
     if (kind === "production") return t("buildings_effect_production", "Produktion");
     if (kind === "energy") return t("buildings_effect_energy", "Energie");
     if (kind === "energy_use") return t("buildings_effect_energy_use", "Energieverbrauch");
@@ -1156,6 +1160,9 @@
 
   function renderBuildingEffectValue(kind, resKey, amount, unit) {
     const val = Math.floor(Number(amount) || 0);
+    if (kind === "reduction_percent") {
+      return renderMonoCompact(val, "-", unit || "%");
+    }
     if (kind === "bonus_percent") {
       return renderMonoCompact(val, "+", unit || "%");
     }
@@ -1180,6 +1187,7 @@
   function renderBuildingEffectDelta(kind, delta, unit) {
     const d = Math.floor(Number(delta) || 0);
     if (d <= 0) return "";
+    if (kind === "reduction_percent") return renderMonoCompact(d, "-", "%");
     if (kind === "bonus_percent") return renderMonoCompact(d, "+", "%");
     if (kind === "level") return renderMonoCompact(d, "+", "");
     if (kind === "production") return renderMonoCompact(d, "+", "/h");
@@ -1208,7 +1216,12 @@
         0
     );
     const delta = Math.floor(Number(effectRow.effect_delta ?? effectRow.production_delta) || 0);
-    const metricLabel = buildingEffectMetricLabel(kind, resKey, buildingKey);
+    const metricLabel = buildingEffectMetricLabel(
+      kind,
+      resKey,
+      buildingKey,
+      effectRow.effect_metric_key || ""
+    );
     const curLabel = t("buildings_prod_current", "Aktuell");
     const nextLabel = t("buildings_prod_after", "Nach Upgrade");
     const deltaLabel = buildingEffectDeltaLabel(kind);
@@ -1360,8 +1373,8 @@
       const reqHint = formatResearchReqTooltip(tech.requirements_items);
       if (reqHint) lockTitle += " · " + reqHint;
       return (
-        `<span class="status-pill status-pill-locked status-pill-icon"` +
-        ` title="${lockTitle}" aria-label="${lockTitle}">🔒</span>`
+        `<button class="gc-btn gc-btn-danger gc-btn-xs btn-research status-pill-icon-btn" type="button" disabled` +
+        ` title="${lockTitle}" aria-label="${lockTitle}">🔒</button>`
       );
     }
     if (queueFull) {
@@ -1447,6 +1460,11 @@
     });
   }
 
+  function patchResearchEffects(row, tech) {
+    if (!row || !tech) return;
+    patchBuildingProduction(row, tech);
+  }
+
   function patchResearchPanel(techs, researchRaw) {
     const list = document.querySelector(".research-prog-list");
     if (!list || !Array.isArray(techs)) return;
@@ -1458,13 +1476,17 @@
       if (!row) return;
 
       applyResearchRowState(row, tech);
+      patchResearchEffects(row, tech);
 
       const levelEl = row.querySelector(".tech-level-current");
-      if (levelEl) _setIfChanged(levelEl, fmtNumber(tech.level));
+      if (levelEl) {
+        const target = tech.target_level ?? tech.level + 1;
+        _setIfChanged(levelEl, `${fmtNumber(tech.level)}→${fmtNumber(target)}`);
+      }
 
-      const costCell = row.querySelector(".tech-cost-cell");
+      const costCell = row.querySelector(".tech-cost-cell, .bcell-cost");
       if (costCell) {
-        const html = renderCompactCosts(tech.cost_metal, tech.cost_crystal, tech.target_level);
+        const html = renderCompactCosts(tech.cost_metal, tech.cost_crystal, tech.target_level, false);
         if (costCell.innerHTML.trim() !== html.trim()) costCell.innerHTML = html;
       }
 
@@ -1474,7 +1496,7 @@
         _setIfChanged(inner, formatDuration(tech.time_seconds));
       }
 
-      const actionCell = row.querySelector(".tech-status-cell");
+      const actionCell = row.querySelector(".tech-status-cell, .gc-bld-card-action[data-tech-key]");
       if (actionCell) {
         const html = renderResearchActionCell(tech, summary);
         if (actionCell.innerHTML.trim() !== html.trim()) actionCell.innerHTML = html;
@@ -2175,7 +2197,8 @@
     const btnStart = t("research_btn_start", "Forschung starten");
     const btnQueue = t("research_btn_queue", "Anreihen");
 
-    list.querySelectorAll(".tech-status-cell[data-tech-key]").forEach((cell) => {
+    list.querySelectorAll(".gc-bld-card-action[data-tech-key], .tech-status-cell[data-tech-key]").forEach((cell) => {
+      if (cell.querySelector("button.btn-research.status-pill-icon-btn[disabled]")) return;
       const pillLocked = cell.querySelector(".status-pill-locked:not(.status-pill-queue-full)");
       if (pillLocked) return;
 
@@ -2403,7 +2426,10 @@
     if (!count) {
       _setIfChanged(
         subEl,
-        t("research_queue_hint_fallback", "Starte Forschungen — bis zu 3 können angereiht werden.")
+        t(
+          "research_queue_manage_hint",
+          "Verwalte laufende Forschungsaufträge und starte neue Technologien."
+        )
       );
       return;
     }
@@ -2500,9 +2526,10 @@
     if (!queueList.length) {
       _updateResearchQueueSubtitle(0, limit, firstEta);
       const none =
+        t("research_queue_none_active", null) ||
         t("research_queue_none", null) ||
         t("research_active_none", null) ||
-        "Keine Forschungsaufträge in der Warteschlange.";
+        "Keine Forschungsaufträge aktiv.";
       root.innerHTML = `<div class="research-queue-empty">${none}</div>`;
       if (!_hasActiveProgressJobs()) GC.stopProgressTicker();
       return;
@@ -6942,7 +6969,14 @@
     }
   }
 
-  function initResearch() {}
+  function initResearch() {
+    const tablist = document.querySelector(".research-shell .building-tabs");
+    if (!tablist) return;
+    const tabBtns = Array.from(tablist.querySelectorAll(".tab-btn"));
+    if (!tabBtns.length) return;
+    const activeBtn = tabBtns.find((b) => b.classList.contains("active")) || tabBtns[0];
+    activateBuildingTab(activeBtn, false);
+  }
 
   function syncPlanetEvolutionResearchTicker() {
     if (!document.querySelector(".planet-evolution-page .pe-planet-research-active")) return;
