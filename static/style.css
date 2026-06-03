@@ -2271,6 +2271,59 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   margin-bottom: 14px;
 }
+.overview-upgrade-widgets{
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.overview-upgrade-card{
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.12);
+  background: rgba(3, 8, 18, 0.45);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.overview-upgrade-card:hover{
+  border-color: rgba(70, 229, 255, 0.28);
+  background: rgba(8, 16, 32, 0.62);
+}
+.overview-upgrade-card-head{
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.overview-upgrade-name{
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--gc-text-soft);
+}
+.overview-upgrade-level{
+  font-size: 0.78rem;
+  color: rgba(127, 255, 217, 0.85);
+}
+.overview-economy-panel .gc-bld-effect-compact{
+  padding: 4px 5px;
+  gap: 2px;
+}
+.overview-economy-panel .gc-bld-prod-line{
+  font-size: 0.64rem;
+}
+.gc-bld-effect-bundle{
+  display: grid;
+  gap: 4px;
+}
+.gc-bld-effect-secondary{
+  border-color: rgba(251, 191, 36, 0.14);
+  background: rgba(20, 12, 0, 0.22);
+}
+.gc-bld-effect-secondary .gc-bld-prod-metric{
+  color: rgba(251, 191, 36, 0.78);
+}
 .overview-energy-strip{
   display: grid;
   gap: 8px;

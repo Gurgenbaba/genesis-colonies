@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/building_effect_strip.html" import render_building_effect_bundle with context %}
 
 {% block content %}
 
@@ -10,6 +11,7 @@
 {% set activities = (os.activities if os.activities is defined and os.activities else []) %}
 {% set warnings = (os.warnings if os.warnings is defined and os.warnings else []) %}
 {% set recent_log = (os.recent_log if os.recent_log is defined and os.recent_log else []) %}
+{% set building_upgrades = (os.building_upgrades if os.building_upgrades is defined and os.building_upgrades else []) %}
 
 {% set player_obj = (player if player is defined and player else None) %}
 {% set cmd_id = commander.id if commander.id is defined else (player_obj.id if player_obj and player_obj.id is defined else None) %}
@@ -112,6 +114,22 @@
           {% endif %}
         </div>
       </div>
+
+      {% if building_upgrades %}
+      <div class="overview-upgrade-widgets" id="overview-upgrade-widgets" aria-label="{{ T('overview_label_upgrade_preview', 'Upgrade-Vorschau') }}">
+        {% for b in building_upgrades %}
+        <a class="overview-upgrade-card" href="{{ url_for('buildings_view') }}" data-overview-building="{{ b.key }}">
+          <div class="overview-upgrade-card-head">
+            <span class="overview-upgrade-name">{{ T('overview_building_' ~ b.key, T('building_' ~ b.key)) }}</span>
+            <span class="overview-upgrade-level gc-mono">L{{ b.level|fmt_int }}</span>
+          </div>
+          {{ render_building_effect_bundle(b, compact=true) }}
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="overview-upgrade-widgets overview-upgrade-widgets-empty" id="overview-upgrade-widgets" hidden aria-hidden="true"></div>
+      {% endif %}
     </section>
 
     <section class="gc-panel overview-activities-panel" aria-label="{{ T('overview_label_activities', 'Aktivitäten') }}">

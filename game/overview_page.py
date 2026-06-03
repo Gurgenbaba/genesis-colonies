@@ -479,8 +479,10 @@ def build_overview_page_context(
     conn=None,
 ) -> Dict[str, Any]:
     """Full template context for overview.html."""
+    from .buildings import get_overview_building_rows
+
     player_view = ctx["player_view"]
-    return build_overview_status(
+    status = build_overview_status(
         user_id=int(user_id),
         player_view=player_view,
         ratio=float(ctx.get("ratio") or 1.0),
@@ -494,3 +496,9 @@ def build_overview_page_context(
         include_log=True,
         conn=conn,
     )
+    status["building_upgrades"] = get_overview_building_rows(
+        planet,
+        ctx.get("buildings") or {},
+        build_queue=ctx.get("build_queue"),
+    )
+    return status

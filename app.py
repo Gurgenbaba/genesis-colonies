@@ -2349,6 +2349,14 @@ def _payload_from_live_context(
     energy_efficiency_pct = int(round(float(ratio) * 100))
     mods = get_research_modifiers(user_id)
 
+    from game.buildings import get_overview_building_rows
+    from game.planet_evolution.repository import get_active_planet_id, get_context_planet
+
+    planet = get_context_planet(user_id, conn=conn)
+    overview_building_rows = get_overview_building_rows(
+        planet, buildings, build_queue=build_queue
+    )
+
     payload: Dict[str, Any] = {
         "ok": True,
         "server_time": time.time(),
@@ -2389,14 +2397,7 @@ def _payload_from_live_context(
             "mine_energy_factor": float(mods.get("mine_energy_factor", 1.0) or 1.0),
         },
         "overview": {
-            "rows": [
-                {
-                    "key": key,
-                    "level": int(buildings.get(key, 0) or 0),
-                    "production_per_hour": int(prod_per_hour.get(key, 0) or 0),
-                }
-                for key in ("metal_mine", "crystal_mine", "solar_plant")
-            ],
+            "rows": overview_building_rows,
             "energy_hint": (
                 "zero"
                 if int(energy_total) <= 0
@@ -2410,9 +2411,7 @@ def _payload_from_live_context(
     }
 
     from game.overview_page import build_overview_status
-    from game.planet_evolution.repository import get_active_planet_id, get_context_planet
 
-    planet = get_context_planet(user_id, conn=conn)
     if not lightweight:
         payload["overview"]["status"] = build_overview_status(
             user_id=user_id,

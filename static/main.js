@@ -1091,6 +1091,7 @@
   function buildingEffectMetricLabel(kind, resKey, buildingKey) {
     if (kind === "production") return t("buildings_effect_production", "Produktion");
     if (kind === "energy") return t("buildings_effect_energy", "Energie");
+    if (kind === "energy_use") return t("buildings_effect_energy_use", "Energieverbrauch");
     if (kind === "storage") return t("buildings_effect_storage", "Lager");
     if (kind === "max_level") return t("buildings_effect_max_mine", "Max. Minenstufe");
     if (kind === "scan") return t("buildings_effect_scan", "Scan-Reichweite");
@@ -1155,60 +1156,86 @@
     return renderMonoCompact(d, "+", unit || "");
   }
 
-  function patchBuildingProduction(row, b) {
-    if (!row || !b) return;
+  function renderBuildingEffectStripHtml(effectRow, buildingKey, opts = {}) {
+    const compact = !!opts.compact;
+    const stripClass = opts.stripClass || "";
     const kind =
-      b.effect_kind ||
-      (b.production_resource || BUILDING_PROD_RESOURCE[b.key] ? "production" : "level");
+      effectRow.effect_kind ||
+      (effectRow.production_resource || BUILDING_PROD_RESOURCE[buildingKey] ? "production" : "level");
     const resKey =
-      b.effect_resource || b.production_resource || BUILDING_PROD_RESOURCE[b.key] || "";
-    const unit = b.effect_unit || (kind === "production" ? "/h" : kind === "bonus_percent" ? "%" : "");
+      effectRow.effect_resource ||
+      effectRow.production_resource ||
+      BUILDING_PROD_RESOURCE[buildingKey] ||
+      "";
+    const unit =
+      effectRow.effect_unit ||
+      (kind === "production" ? "/h" : kind === "bonus_percent" ? "%" : "");
     const cur = Math.floor(
-      Number(b.effect_current ?? b.production_per_hour ?? b.level) || 0
+      Number(effectRow.effect_current ?? effectRow.production_per_hour ?? effectRow.level) || 0
     );
     const nxt = Math.floor(
-      Number(b.effect_next ?? b.production_next_per_hour ?? b.target_level) || 0
+      Number(effectRow.effect_next ?? effectRow.production_next_per_hour ?? effectRow.target_level) ||
+        0
     );
-    const delta = Math.floor(Number(b.effect_delta ?? b.production_delta) || 0);
-
-    let prodBlock = row.querySelector(".bcell-prod");
-    if (!prodBlock) {
-      prodBlock = document.createElement("div");
-      prodBlock.className = "gc-bld-prod bcell-prod gc-bld-effect";
-      prodBlock.dataset.buildingProd = b.key;
-      const head = row.querySelector(".gc-bld-card-head");
-      const meta = row.querySelector(".gc-bld-card-meta");
-      if (head && meta) head.insertAdjacentElement("afterend", prodBlock);
-      else row.prepend(prodBlock);
-    }
-    prodBlock.dataset.effectKind = kind;
-
-    const metricLabel = buildingEffectMetricLabel(kind, resKey, b.key);
+    const delta = Math.floor(Number(effectRow.effect_delta ?? effectRow.production_delta) || 0);
+    const metricLabel = buildingEffectMetricLabel(kind, resKey, buildingKey);
     const curLabel = t("buildings_prod_current", "Aktuell");
-    const nextLabel = t("buildings_prod_after", "Nach Ausbau");
+    const nextLabel = t("buildings_prod_after", "Nach Upgrade");
     const deltaLabel = t("buildings_prod_delta", "Gewinn");
     const deltaText = renderBuildingEffectDelta(kind, delta, unit);
     const deltaHtml = deltaText
-      ? `<div class="gc-bld-prod-delta bcell-prod-delta" id="prod-delta-${b.key}">` +
+      ? `<div class="gc-bld-prod-delta bcell-prod-delta">` +
         `<span class="gc-bld-prod-delta-label">${deltaLabel}</span>` +
         `<span class="gc-bld-prod-delta-val">${deltaText}</span></div>`
       : "";
-
-    const html =
+    const compactCls = compact ? " gc-bld-effect-compact" : "";
+    const extraCls = stripClass ? ` ${stripClass}` : "";
+    return (
+      `<div class="gc-bld-prod bcell-prod gc-bld-effect${compactCls}${extraCls}"` +
+      ` data-building-prod="${buildingKey}" data-effect-kind="${kind}">` +
       `<div class="gc-bld-prod-metric" title="${metricLabel}">${metricLabel}</div>` +
       `<div class="gc-bld-prod-line">` +
       `<span class="gc-bld-prod-label">${curLabel}</span>` +
-      `<span class="gc-bld-prod-val gc-bld-prod-cur bcell-prod-current" id="prod-cur-${b.key}">` +
+      `<span class="gc-bld-prod-val gc-bld-prod-cur bcell-prod-current">` +
       renderBuildingEffectValue(kind, resKey, cur, unit) +
       `</span></div>` +
       `<div class="gc-bld-prod-line">` +
       `<span class="gc-bld-prod-label">${nextLabel}</span>` +
-      `<span class="gc-bld-prod-val gc-bld-prod-next bcell-prod-next" id="prod-next-${b.key}">` +
+      `<span class="gc-bld-prod-val gc-bld-prod-next bcell-prod-next">` +
       renderBuildingEffectValue(kind, resKey, nxt, unit) +
       `</span></div>` +
-      deltaHtml;
+      deltaHtml +
+      `</div>`
+    );
+  }
 
-    if (prodBlock.innerHTML.trim() !== html.trim()) prodBlock.innerHTML = html;
+  function renderBuildingEffectBundleHtml(b, opts = {}) {
+    let html = renderBuildingEffectStripHtml(b, b.key, opts);
+    const sec = b.secondary_effect;
+    if (sec && typeof sec === "object") {
+      html += renderBuildingEffectStripHtml(
+        { ...sec, key: b.key },
+        b.key,
+        { ...opts, stripClass: "gc-bld-effect-secondary" }
+      );
+    }
+    return html;
+  }
+
+  function patchBuildingProduction(row, b) {
+    if (!row || !b) return;
+    const head = row.querySelector(".gc-bld-card-head");
+    const meta = row.querySelector(".gc-bld-card-meta");
+    const anchor = meta || head || row;
+
+    row.querySelectorAll(".bcell-prod").forEach((el) => el.remove());
+
+    const bundle = document.createElement("div");
+    bundle.className = "gc-bld-effect-bundle";
+    bundle.innerHTML = renderBuildingEffectBundleHtml(b);
+
+    if (head && meta) head.insertAdjacentElement("afterend", bundle);
+    else anchor.prepend(bundle);
   }
 
   function renderCompactCosts(metal, crystal, targetLevel, showTarget = true) {
@@ -1488,39 +1515,45 @@
     }, 300);
   }
 
-  function patchOverviewTable(overview, buildings, prod) {
-    const table = document.querySelector(".overview-table tbody");
-    if (!table) return;
-
+  function patchOverviewUpgradeWidgets(overview) {
+    const root = document.getElementById("overview-upgrade-widgets");
     const rows = overview?.rows;
-    if (Array.isArray(rows) && rows.length > 0) {
-      const trs = table.querySelectorAll("tr");
-      rows.forEach((row, idx) => {
-        const tr = trs[idx];
-        if (!tr) return;
-        const cells = tr.querySelectorAll("td");
-        if (cells[1]) _setIfChanged(cells[1], fmtNumber(row.level || 0));
-        if (cells[2]) {
-          const ph = Math.floor(Number(row.production_per_hour || 0));
-          _setIfChanged(cells[2], ph > 0 ? `+${fmtNumber(ph)} / h` : "–");
-        }
-      });
-      return;
-    }
+    if (!root || !Array.isArray(rows) || rows.length === 0) return;
 
-    const keys = ["metal_mine", "crystal_mine", "solar_plant"];
-    const trs = table.querySelectorAll("tr");
-    keys.forEach((key, idx) => {
-      const tr = trs[idx];
-      if (!tr) return;
-      const cells = tr.querySelectorAll("td");
-      const lvl = buildings?.[key];
-      if (cells[1] && typeof lvl !== "undefined") _setIfChanged(cells[1], fmtNumber(lvl));
-      if (cells[2]) {
-        const ph = Math.floor(Number(prod?.[key] || 0));
-        _setIfChanged(cells[2], ph > 0 ? `+${fmtNumber(ph)} / h` : "–");
+    rows.forEach((b) => {
+      if (!b || !b.key) return;
+      let card = root.querySelector(`[data-overview-building="${b.key}"]`);
+      if (!card) {
+        card = document.createElement("a");
+        card.className = "overview-upgrade-card";
+        card.href = "/buildings";
+        card.dataset.overviewBuilding = b.key;
+        card.innerHTML =
+          `<div class="overview-upgrade-card-head">` +
+          `<span class="overview-upgrade-name"></span>` +
+          `<span class="overview-upgrade-level gc-mono"></span>` +
+          `</div>` +
+          `<div class="gc-bld-effect-bundle"></div>`;
+        root.appendChild(card);
+        root.hidden = false;
+        root.removeAttribute("aria-hidden");
+      }
+      const nameEl = card.querySelector(".overview-upgrade-name");
+      const lvlEl = card.querySelector(".overview-upgrade-level");
+      if (nameEl) {
+        _setIfChanged(nameEl, t(`overview_building_${b.key}`, t(`building_${b.key}`, b.key)));
+      }
+      if (lvlEl) _setIfChanged(lvlEl, `L${fmtNumber(b.level || 0)}`);
+      const bundle = card.querySelector(".gc-bld-effect-bundle");
+      if (bundle) {
+        const html = renderBuildingEffectBundleHtml(b, { compact: true });
+        if (bundle.innerHTML.trim() !== html.trim()) bundle.innerHTML = html;
       }
     });
+  }
+
+  function patchOverviewTable(overview, buildings, prod) {
+    patchOverviewUpgradeWidgets(overview);
   }
 
   function patchResourceBarEnergyWarning(used, total) {

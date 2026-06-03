@@ -385,6 +385,22 @@ class EffectResolver:
 
         return energy_total, energy_used
 
+    def building_energy_draw(self, building_type: str, *, level: Optional[int] = None) -> int:
+        """Per-building energy draw (mines + fuel cell plant), incl. mine_energy_factor."""
+        lvl = int(level if level is not None else _bld(self.buildings, building_type))
+        if lvl <= 0:
+            return 0
+        if building_type == "metal_mine":
+            raw = int(10 * (lvl ** 1.25))
+        elif building_type == "crystal_mine":
+            raw = int(6 * (lvl ** 1.25))
+        elif building_type == "fuel_cell_plant":
+            raw = int(8 * (lvl ** 1.25))
+        else:
+            return 0
+        factor = float(self.get_modifiers().get("mine_energy_factor", 1.0) or 1.0)
+        return int(raw * factor)
+
     @staticmethod
     def energy_ratio(energy_total: int, energy_used: int) -> float:
         if energy_total >= energy_used:

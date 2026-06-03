@@ -410,6 +410,10 @@ BUILDING_PRODUCTION_RESOURCE: Dict[str, str] = {
     "fuel_cell_plant": "fuel_cells",
 }
 
+BUILDING_ENERGY_CONSUMERS = frozenset({"metal_mine", "crystal_mine", "fuel_cell_plant"})
+
+OVERVIEW_BUILDING_KEYS = ("metal_mine", "crystal_mine", "solar_plant")
+
 
 def _panel_energy_ratio(buildings: Dict[str, int], research_levels: Dict[str, int]) -> float:
     resolver = EffectResolver(buildings, research_levels or {})
@@ -448,6 +452,31 @@ def _panel_effect_snapshot(
     return out
 
 
+def _panel_secondary_energy_effect(
+    *,
+    r_now: EffectResolver,
+    r_next: EffectResolver,
+    building_type: str,
+    buildings: Dict[str, int],
+    target_level: int,
+) -> Optional[Dict[str, Any]]:
+    if building_type not in BUILDING_ENERGY_CONSUMERS:
+        return None
+    cur_lvl = int(buildings.get(building_type, 0) or 0)
+    nxt_lvl = int(target_level)
+    cur_e = r_now.building_energy_draw(building_type, level=cur_lvl)
+    nxt_e = r_next.building_energy_draw(building_type, level=nxt_lvl)
+    if cur_e <= 0 and nxt_e <= 0:
+        return None
+    return _panel_effect_snapshot(
+        effect_kind="energy_use",
+        effect_current=cur_e,
+        effect_next=nxt_e,
+        effect_resource="energy",
+        effect_unit="",
+    )
+
+
 def _panel_upgrade_effect_fields(
     building_type: str,
     buildings: Dict[str, int],
@@ -470,13 +499,23 @@ def _panel_upgrade_effect_fields(
         prod_next = get_building_production_per_hour(
             bumped, ratio, research=research_levels
         )
-        return _panel_effect_snapshot(
+        out = _panel_effect_snapshot(
             effect_kind="production",
             effect_current=int(prod_now.get(building_type, 0) or 0),
             effect_next=int(prod_next.get(building_type, 0) or 0),
             effect_resource=BUILDING_PRODUCTION_RESOURCE[building_type],
             effect_unit="/h",
         )
+        sec = _panel_secondary_energy_effect(
+            r_now=r_now,
+            r_next=r_next,
+            building_type=building_type,
+            buildings=buildings,
+            target_level=target_level,
+        )
+        if sec:
+            out["secondary_effect"] = sec
+        return out
 
     if building_type == "solar_plant":
         cur_et, _ = r_now.compute_energy()
@@ -693,6 +732,40 @@ def get_buildings_panel_rows(
         rows_by_tab.setdefault(row["tab"], []).append(row)
 
     return rows_by_tab
+
+
+def get_overview_building_rows(
+    planet: dict,
+    buildings: Dict[str, int],
+    build_queue: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """Compact upgrade-preview rows for overview widgets (key resource buildings)."""
+    user_id = planet.get("player_id")
+    if user_id is None:
+        return []
+
+    research_levels = get_research_levels(user_id=int(user_id))
+    ratio = _panel_energy_ratio(buildings, research_levels)
+
+    queue_counts: Dict[str, int] = {}
+    if build_queue and isinstance(build_queue.get("queue"), list):
+        for job in build_queue["queue"]:
+            bt = str(job.get("building_type") or "")
+            if bt:
+                queue_counts[bt] = queue_counts.get(bt, 0) + 1
+
+    rows: List[Dict[str, Any]] = []
+    for key in OVERVIEW_BUILDING_KEYS:
+        row = _make_panel_row(
+            planet,
+            buildings,
+            research_levels,
+            key,
+            queue_count=queue_counts.get(key, 0),
+            ratio=ratio,
+        )
+        rows.append(row)
+    return rows
 
 
 # =============================================================================
