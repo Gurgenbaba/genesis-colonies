@@ -247,6 +247,7 @@
       document.getElementById("shipyard-page"),
       document.getElementById("defense-page"),
       document.getElementById("fleet-page"),
+      document.getElementById("logistics-page"),
       document.getElementById("trader-hub-page"),
       document.getElementById("build-queue-root"),
     ];
@@ -263,6 +264,7 @@
     if (!pid) return;
     [
       "fleet-page",
+      "logistics-page",
       "shipyard-page",
       "defense-page",
       "trader-hub-page",

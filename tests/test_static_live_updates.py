@@ -237,6 +237,8 @@ def test_main_js_patches_resource_bar_energy_warning():
 def test_main_js_gc802_planet_switch_state_sync():
     src = _read("static/main.js")
     assert "syncScopedPlanetIds" in src
+    assert 'document.getElementById("logistics-page")' in src
+    assert '"logistics-page"' in src.split("function syncScopedPlanetIds")[1].split("function abortInFlight")[0]
     assert "abortInFlightGameStateFetches" in src
     switch_section = src.split('applyActionState(res, "planet_switch")')[1][:1200]
     planet_switch_apply = src.split("const isPlanetSwitch = reason === \"planet_switch\"")[1][:600]
