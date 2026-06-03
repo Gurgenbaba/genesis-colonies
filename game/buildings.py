@@ -404,12 +404,220 @@ def get_building_requirements_items(
 # Panel Rows
 # =============================================================================
 
+BUILDING_PRODUCTION_RESOURCE: Dict[str, str] = {
+    "metal_mine": "metal",
+    "crystal_mine": "crystal",
+    "fuel_cell_plant": "fuel_cells",
+}
+
+
+def _panel_energy_ratio(buildings: Dict[str, int], research_levels: Dict[str, int]) -> float:
+    resolver = EffectResolver(buildings, research_levels or {})
+    energy_total, energy_used = resolver.compute_energy()
+    return float(EffectResolver.energy_ratio(energy_total, energy_used))
+
+
+def _panel_effect_snapshot(
+    *,
+    effect_kind: str,
+    effect_current: int,
+    effect_next: int,
+    effect_resource: str = "",
+    effect_unit: str = "",
+) -> Dict[str, Any]:
+    cur = int(effect_current or 0)
+    nxt = int(effect_next or 0)
+    delta = max(0, nxt - cur)
+    out: Dict[str, Any] = {
+        "effect_kind": effect_kind,
+        "effect_current": cur,
+        "effect_next": nxt,
+        "effect_delta": delta,
+        "effect_resource": effect_resource,
+        "effect_unit": effect_unit,
+    }
+    if effect_kind == "production":
+        out.update(
+            {
+                "production_per_hour": cur,
+                "production_next_per_hour": nxt,
+                "production_delta": delta,
+                "production_resource": effect_resource,
+            }
+        )
+    return out
+
+
+def _panel_upgrade_effect_fields(
+    building_type: str,
+    buildings: Dict[str, int],
+    target_level: int,
+    ratio: float,
+    research_levels: Dict[str, int],
+) -> Dict[str, Any]:
+    """Authoritative upgrade preview per building (EffectResolver / production helpers)."""
+    from .logic import get_building_production_per_hour
+
+    bumped = dict(buildings)
+    bumped[building_type] = int(target_level)
+    r_now = EffectResolver(buildings, research_levels or {})
+    r_next = EffectResolver(bumped, research_levels or {})
+
+    if building_type in BUILDING_PRODUCTION_RESOURCE:
+        prod_now = get_building_production_per_hour(
+            buildings, ratio, research=research_levels
+        )
+        prod_next = get_building_production_per_hour(
+            bumped, ratio, research=research_levels
+        )
+        return _panel_effect_snapshot(
+            effect_kind="production",
+            effect_current=int(prod_now.get(building_type, 0) or 0),
+            effect_next=int(prod_next.get(building_type, 0) or 0),
+            effect_resource=BUILDING_PRODUCTION_RESOURCE[building_type],
+            effect_unit="/h",
+        )
+
+    if building_type == "solar_plant":
+        cur_et, _ = r_now.compute_energy()
+        nxt_et, _ = r_next.compute_energy()
+        return _panel_effect_snapshot(
+            effect_kind="energy",
+            effect_current=cur_et,
+            effect_next=nxt_et,
+            effect_resource="energy",
+            effect_unit="",
+        )
+
+    if building_type == "metal_storage":
+        caps_now = r_now.get_storage_capacity()
+        caps_next = r_next.get_storage_capacity()
+        return _panel_effect_snapshot(
+            effect_kind="storage",
+            effect_current=int(caps_now.get("metal", 0) or 0),
+            effect_next=int(caps_next.get("metal", 0) or 0),
+            effect_resource="metal",
+            effect_unit="",
+        )
+
+    if building_type == "crystal_storage":
+        caps_now = r_now.get_storage_capacity()
+        caps_next = r_next.get_storage_capacity()
+        return _panel_effect_snapshot(
+            effect_kind="storage",
+            effect_current=int(caps_now.get("crystal", 0) or 0),
+            effect_next=int(caps_next.get("crystal", 0) or 0),
+            effect_resource="crystal",
+            effect_unit="",
+        )
+
+    if building_type == "research_lab":
+        cur_pct = int(round((r_now.research_lab_bonus() - 1.0) * 100))
+        nxt_pct = int(round((r_next.research_lab_bonus() - 1.0) * 100))
+        return _panel_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=cur_pct,
+            effect_next=nxt_pct,
+            effect_resource="research",
+            effect_unit="%",
+        )
+
+    if building_type == "academy":
+        lvl = int(buildings.get("academy", 0) or 0)
+        cur_pct = int(round(max(0, lvl) * 5))
+        nxt_pct = int(round(max(0, int(target_level)) * 5))
+        return _panel_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=cur_pct,
+            effect_next=nxt_pct,
+            effect_resource="research",
+            effect_unit="%",
+        )
+
+    if building_type == "nanofactory":
+        cur_pct = int(round((float(r_now.get_modifiers().get("build_time_speed", 1.0) or 1.0) - 1.0) * 100))
+        nxt_pct = int(round((float(r_next.get_modifiers().get("build_time_speed", 1.0) or 1.0) - 1.0) * 100))
+        return _panel_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=cur_pct,
+            effect_next=nxt_pct,
+            effect_resource="build",
+            effect_unit="%",
+        )
+
+    if building_type == "command_center":
+        cc_cur = int(buildings.get("command_center", 0) or 0)
+        cc_nxt = int(target_level)
+        return _panel_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=int(25 * cc_cur),
+            effect_next=int(25 * cc_nxt),
+            effect_resource="build",
+            effect_unit="%",
+        )
+
+    if building_type == "terraformer":
+        terra_cur = int(buildings.get("terraformer", 0) or 0)
+        terra_nxt = int(target_level)
+        return _panel_effect_snapshot(
+            effect_kind="bonus_percent",
+            effect_current=int(5 * terra_cur),
+            effect_next=int(5 * terra_nxt),
+            effect_resource="storage",
+            effect_unit="%",
+        )
+
+    if building_type == "geothermal_nexus":
+        cur_max = r_now.get_max_building_level("metal_mine")
+        nxt_max = r_next.get_max_building_level("metal_mine")
+        return _panel_effect_snapshot(
+            effect_kind="max_level",
+            effect_current=cur_max,
+            effect_next=nxt_max,
+            effect_resource="",
+            effect_unit="",
+        )
+
+    if building_type == "planet_core_nexus":
+        cur_max = r_now.get_max_building_level("metal_mine")
+        nxt_max = r_next.get_max_building_level("metal_mine")
+        return _panel_effect_snapshot(
+            effect_kind="max_level",
+            effect_current=cur_max,
+            effect_next=nxt_max,
+            effect_resource="",
+            effect_unit="",
+        )
+
+    if building_type == "radar_array":
+        radar_cur = int(buildings.get("radar_array", 0) or 0)
+        radar_nxt = int(target_level)
+        return _panel_effect_snapshot(
+            effect_kind="scan",
+            effect_current=2 * radar_cur,
+            effect_next=2 * radar_nxt,
+            effect_resource="",
+            effect_unit="",
+        )
+
+    lvl_cur = int(buildings.get(building_type, 0) or 0)
+    lvl_nxt = int(target_level)
+    return _panel_effect_snapshot(
+        effect_kind="level",
+        effect_current=lvl_cur,
+        effect_next=lvl_nxt,
+        effect_resource="",
+        effect_unit="",
+    )
+
+
 def _make_panel_row(
     planet: dict,
     buildings: Dict[str, int],
     research_levels: Dict[str, int],
     building_type: str,
     queue_count: int = 0,
+    ratio: float = 1.0,
 ) -> Dict[str, Any]:
     level = int(buildings.get(building_type, 0) or 0)
     max_level = get_max_level_for_building(building_type, buildings)
@@ -423,7 +631,7 @@ def _make_panel_row(
     req_met = has_building_requirements(buildings, research_levels, building_type)
     can_afford = (float(planet.get("metal", 0) or 0) >= cost_metal and float(planet.get("crystal", 0) or 0) >= cost_crystal)
 
-    return {
+    row: Dict[str, Any] = {
         "key": building_type,
         "tab": get_building_tab(building_type),
         "icon": get_building_icon(building_type),
@@ -439,6 +647,12 @@ def _make_panel_row(
         "requirements_items": get_building_requirements_items(building_type, buildings, research_levels),
         "can_afford": bool(can_afford),
     }
+    row.update(
+        _panel_upgrade_effect_fields(
+            building_type, buildings, target_level, ratio, research_levels
+        )
+    )
+    return row
 
 
 def get_buildings_panel_rows(
@@ -451,6 +665,7 @@ def get_buildings_panel_rows(
         raise RuntimeError("get_buildings_panel_rows: planet hat kein 'player_id'-Feld")
 
     research_levels = get_research_levels(user_id=int(user_id))
+    ratio = _panel_energy_ratio(buildings, research_levels)
 
     queue_counts: Dict[str, int] = {}
     if build_queue and isinstance(build_queue.get("queue"), list):
@@ -473,6 +688,7 @@ def get_buildings_panel_rows(
             research_levels,
             key,
             queue_count=queue_counts.get(key, 0),
+            ratio=ratio,
         )
         rows_by_tab.setdefault(row["tab"], []).append(row)
 

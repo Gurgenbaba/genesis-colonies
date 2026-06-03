@@ -1,9 +1,108 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_prog_identity with context %}
+{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_resource_icon with context %}
 
 {# ===================================================================
-   Compact building cards (Resources / Research / Military / Infrastructure)
+   Genesis building cards (Resources / Research / Military / Infrastructure)
    =================================================================== #}
+
+{% macro render_building_effect_icon(res_key) %}
+  {% if res_key == 'energy' %}
+    <img src="{{ url_for('static', filename='icons/energy.png') }}"
+         alt=""
+         class="gc-bld-effect-icon gc-bld-effect-icon-energy"
+         loading="lazy"
+         aria-hidden="true">
+  {% elif res_key == 'research' %}
+    <span class="gc-bld-effect-icon gc-bld-effect-icon-fallback" aria-hidden="true">🔬</span>
+  {% elif res_key == 'build' %}
+    <span class="gc-bld-effect-icon gc-bld-effect-icon-fallback" aria-hidden="true">⚙</span>
+  {% elif res_key == 'storage' %}
+    <span class="gc-bld-effect-icon gc-bld-effect-icon-fallback" aria-hidden="true">📦</span>
+  {% elif res_key in ('metal', 'crystal', 'fuel_cells') %}
+    {{ render_resource_icon(res_key, 'sm') }}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_building_effect_value(kind, res_key, amount, unit) %}
+  {% set val = amount|int %}
+  {% if kind == 'bonus_percent' %}
+    <span class="gc-mono">+{{ val|fmt_int }}{{ unit }}</span>
+  {% elif kind == 'level' %}
+    <span class="gc-mono">{{ val|fmt_int }}</span>
+  {% elif kind == 'max_level' or kind == 'scan' %}
+    <span class="gc-mono">{{ val|fmt_int }}{% if unit %}{{ unit }}{% endif %}</span>
+  {% else %}
+    {{ render_building_effect_icon(res_key) }}
+    <span class="gc-mono">{{ val|fmt_int }}</span>{% if unit %}<span class="gc-bld-prod-unit">{{ unit }}</span>{% endif %}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_building_effect_strip(b) %}
+  {% set kind = b.effect_kind if b.effect_kind is defined else 'level' %}
+  {% set res_key = b.effect_resource if b.effect_resource is defined else '' %}
+  {% set unit = b.effect_unit if b.effect_unit is defined else '' %}
+  {% set cur = (b.effect_current if b.effect_current is defined else b.level)|int %}
+  {% set nxt = (b.effect_next if b.effect_next is defined else b.target_level)|int %}
+  {% set delta = (b.effect_delta if b.effect_delta is defined else 0)|int %}
+  {% if kind == 'production' %}
+    {% set metric_label = T("buildings_effect_production", "Produktion") %}
+    {% set delta_suffix = "/h" %}
+  {% elif kind == 'energy' %}
+    {% set metric_label = T("buildings_effect_energy", "Energie") %}
+    {% set delta_suffix = "" %}
+  {% elif kind == 'storage' %}
+    {% set metric_label = T("buildings_effect_storage", "Lager") %}
+    {% set delta_suffix = "" %}
+  {% elif kind == 'bonus_percent' %}
+    {% if res_key == 'research' %}
+      {% set metric_label = T("buildings_effect_research_speed", "Forschungstempo") %}
+    {% elif res_key == 'build' and b.key == 'command_center' %}
+      {% set metric_label = T("buildings_effect_nanofactory_build", "Nanofabrik-Bau") %}
+    {% elif res_key == 'build' %}
+      {% set metric_label = T("buildings_effect_build_speed", "Baugeschwindigkeit") %}
+    {% elif res_key == 'storage' %}
+      {% set metric_label = T("buildings_effect_storage_bonus", "Lagerbonus") %}
+    {% else %}
+      {% set metric_label = T("buildings_effect_bonus", "Bonus") %}
+    {% endif %}
+    {% set delta_suffix = "%" %}
+  {% elif kind == 'max_level' %}
+    {% set metric_label = T("buildings_effect_max_mine", "Max. Minenstufe") %}
+    {% set delta_suffix = "" %}
+  {% elif kind == 'scan' %}
+    {% set metric_label = T("buildings_effect_scan", "Scan-Reichweite") %}
+    {% set delta_suffix = "" %}
+  {% else %}
+    {% set metric_label = T("buildings_effect_level", "Stufe") %}
+    {% set delta_suffix = "" %}
+  {% endif %}
+  <div class="gc-bld-prod bcell-prod gc-bld-effect"
+       data-building-prod="{{ b.key }}"
+       data-effect-kind="{{ kind }}">
+    <div class="gc-bld-prod-metric" title="{{ metric_label }}">{{ metric_label }}</div>
+    <div class="gc-bld-prod-line">
+      <span class="gc-bld-prod-label">{{ T("buildings_prod_current", "Aktuell") }}</span>
+      <span class="gc-bld-prod-val gc-bld-prod-cur bcell-prod-current" id="prod-cur-{{ b.key }}">
+        {{ render_building_effect_value(kind, res_key, cur, unit) }}
+      </span>
+    </div>
+    <div class="gc-bld-prod-line">
+      <span class="gc-bld-prod-label">{{ T("buildings_prod_after", "Nach Ausbau") }}</span>
+      <span class="gc-bld-prod-val gc-bld-prod-next bcell-prod-next" id="prod-next-{{ b.key }}">
+        {{ render_building_effect_value(kind, res_key, nxt, unit) }}
+      </span>
+    </div>
+    {% if delta > 0 %}
+      <div class="gc-bld-prod-delta bcell-prod-delta" id="prod-delta-{{ b.key }}">
+        <span class="gc-bld-prod-delta-label">{{ T("buildings_prod_delta", "Gewinn") }}</span>
+        <span class="gc-bld-prod-delta-val gc-mono">
+          {% if kind == 'bonus_percent' %}+{{ delta|fmt_int }}%{% elif kind == 'level' %}+{{ delta|fmt_int }}{% else %}+{{ delta|fmt_int }}{{ delta_suffix }}{% endif %}
+        </span>
+      </div>
+    {% endif %}
+  </div>
+{% endmacro %}
+
 {% macro render_building_table(rows, tab_name, bq_summary, bq_queue_full) %}
 
   {% set rows = rows if rows else [] %}
@@ -15,14 +114,7 @@
       <div class="gc-empty-hint">{{ T("buildings_hint") }}</div>
     </div>
   {% else %}
-    <div class="gc-prog-list buildings-prog-list" role="list">
-      <div class="gc-prog-head" aria-hidden="true">
-        <span class="gc-prog-col gc-prog-name">{{ T("buildings_col_name") }}</span>
-        <span class="gc-prog-col gc-prog-level">{{ T("buildings_col_level") }}</span>
-        <span class="gc-prog-col gc-prog-costs">{{ T("buildings_col_costs") }}</span>
-        <span class="gc-prog-col gc-prog-time">{{ T("buildings_col_time") }}</span>
-        <span class="gc-prog-col gc-prog-action">{{ T("buildings_col_actions") }}</span>
-      </div>
+    <div class="gc-building-grid buildings-prog-list" role="list">
 
       {% for b in rows %}
         {% set building_type = b.key %}
@@ -43,26 +135,47 @@
           {% set row_class = 'gc-prog-affordable' %}
         {% endif %}
 
-        <div class="gc-prog-card {{ row_class }}"
-             data-building-row="{{ building_type }}"
-             role="listitem">
+        <article class="gc-building-card gc-prog-card {{ row_class }}"
+                 data-building-row="{{ building_type }}"
+                 role="listitem">
 
-          <div class="gc-prog-main">
-            {{ render_prog_identity(T("building_" ~ building_type), url_for('static', filename=b.icon), desc_text=desc) }}
-
-            <div class="gc-prog-col gc-prog-level">
-              <span id="level-{{ building_type }}" class="gc-level-badge">{{ b.level|fmt_int }}</span>
+          <header class="gc-bld-card-head">
+            <div class="gc-bld-card-identity">
+              <img src="{{ url_for('static', filename=b.icon) }}"
+                   alt=""
+                   class="gc-bld-card-icon"
+                   loading="lazy">
+              <div class="gc-bld-card-title-wrap">
+                <h3 class="gc-bld-card-title">{{ T("building_" ~ building_type) }}</h3>
+                {% if desc and desc[:5] != 'desc_' %}
+                  <button type="button"
+                          class="gc-prog-info gc-popover-trigger"
+                          title="{{ desc }}"
+                          aria-label="{{ desc }}"
+                          aria-expanded="false"
+                          data-popover="{{ desc }}">?</button>
+                {% endif %}
+              </div>
             </div>
+            <span id="level-{{ building_type }}" class="gc-level-badge gc-bld-card-level">{{ b.level|fmt_int }}</span>
+          </header>
 
-            <div class="gc-prog-col gc-prog-costs bcell-cost">
-              {{ render_prog_costs(b.cost_metal, b.cost_crystal, b.target_level) }}
+          {{ render_building_effect_strip(b) }}
+
+          <div class="gc-bld-card-meta">
+            <div class="gc-bld-card-costs bcell-cost">
+              {{ render_prog_costs(b.cost_metal, b.cost_crystal, b.target_level, false) }}
             </div>
-
-            <div class="gc-prog-col gc-prog-time bcell-duration">
+            <span class="gc-bld-card-time bcell-duration gc-mono" title="{{ T('buildings_col_time') }}">
               {{ render_prog_duration(b.time_seconds) }}
-            </div>
+            </span>
+          </div>
 
-            <div class="gc-prog-col gc-prog-action bcell-action" data-building="{{ building_type }}">
+          {% if not b.requirements_met and req_tooltip %}
+            <p class="gc-bld-card-req gc-mono" title="{{ T('msg_build_requirements') }}">{{ req_tooltip }}</p>
+          {% endif %}
+
+          <footer class="gc-bld-card-action bcell-action" data-building="{{ building_type }}">
             {% if is_max %}
               <button class="gc-btn gc-btn-ghost gc-btn-xs btn-upgrade"
                       type="button"
@@ -108,9 +221,8 @@
                 {% endif %}
               </a>
             {% endif %}
-            </div>
-          </div>
-        </div>
+          </footer>
+        </article>
       {% endfor %}
     </div>
   {% endif %}

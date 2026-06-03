@@ -66,13 +66,15 @@
   {% endif %}
 {% endmacro %}
 
-{% macro render_prog_costs(metal, crystal, target_level) %}
+{% macro render_prog_costs(metal, crystal, target_level, show_target=true) %}
   <div class="gc-costs-compact">
     {{ render_resource_cost_chip('metal', metal) }}
     {{ render_resource_cost_chip('crystal', crystal) }}
+    {% if show_target %}
     <span class="gc-cost-target" title="{{ T('buildings_col_level') }} {{ target_level|fmt_int }}">
       → L{{ target_level|fmt_int }}
     </span>
+    {% endif %}
   </div>
 {% endmacro %}
 

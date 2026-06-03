@@ -1032,16 +1032,148 @@
     return map[reason] || t("msg_generic_error", "Aktion fehlgeschlagen.");
   }
 
-  function renderCompactCosts(metal, crystal, targetLevel) {
+  const BUILDING_PROD_RESOURCE = {
+    metal_mine: "metal",
+    crystal_mine: "crystal",
+    fuel_cell_plant: "fuel_cells",
+  };
+
+  function buildingEffectMetricLabel(kind, resKey, buildingKey) {
+    if (kind === "production") return t("buildings_effect_production", "Produktion");
+    if (kind === "energy") return t("buildings_effect_energy", "Energie");
+    if (kind === "storage") return t("buildings_effect_storage", "Lager");
+    if (kind === "max_level") return t("buildings_effect_max_mine", "Max. Minenstufe");
+    if (kind === "scan") return t("buildings_effect_scan", "Scan-Reichweite");
+    if (kind === "level") return t("buildings_effect_level", "Stufe");
+    if (kind === "bonus_percent") {
+      if (resKey === "research") return t("buildings_effect_research_speed", "Forschungstempo");
+      if (resKey === "build" && buildingKey === "command_center") {
+        return t("buildings_effect_nanofactory_build", "Nanofabrik-Bau");
+      }
+      if (resKey === "build") return t("buildings_effect_build_speed", "Baugeschwindigkeit");
+      if (resKey === "storage") return t("buildings_effect_storage_bonus", "Lagerbonus");
+      return t("buildings_effect_bonus", "Bonus");
+    }
+    return t("buildings_effect_level", "Stufe");
+  }
+
+  function renderBuildingEffectIcon(resKey) {
+    if (resKey === "energy") {
+      return (
+        '<img src="/static/icons/energy.png" alt="" class="gc-bld-effect-icon gc-bld-effect-icon-energy" ' +
+        'loading="lazy" aria-hidden="true">'
+      );
+    }
+    if (resKey === "research") {
+      return '<span class="gc-bld-effect-icon gc-bld-effect-icon-fallback" aria-hidden="true">🔬</span>';
+    }
+    if (resKey === "build") {
+      return '<span class="gc-bld-effect-icon gc-bld-effect-icon-fallback" aria-hidden="true">⚙</span>';
+    }
+    if (resKey === "storage") {
+      return '<span class="gc-bld-effect-icon gc-bld-effect-icon-fallback" aria-hidden="true">📦</span>';
+    }
+    if (resKey === "metal" || resKey === "crystal" || resKey === "fuel_cells") {
+      const mod = ` gc-res-${resKey.replace(/_/g, "-")}`;
+      return `<span class="gc-res-icon gc-res-icon--sm${mod}" aria-hidden="true"></span>`;
+    }
+    return "";
+  }
+
+  function renderBuildingEffectValue(kind, resKey, amount, unit) {
+    const val = fmtNumber(Math.floor(Number(amount) || 0));
+    if (kind === "bonus_percent") {
+      return `<span class="gc-mono">+${val}${unit || "%"}</span>`;
+    }
+    if (kind === "level") {
+      return `<span class="gc-mono">${val}</span>`;
+    }
+    if (kind === "max_level" || kind === "scan") {
+      return `<span class="gc-mono">${val}</span>`;
+    }
+    const icon = renderBuildingEffectIcon(resKey);
+    const unitHtml = unit ? `<span class="gc-bld-prod-unit">${unit}</span>` : "";
+    return `${icon}<span class="gc-mono">${val}</span>${unitHtml}`;
+  }
+
+  function renderBuildingEffectDelta(kind, delta, unit) {
+    const d = Math.floor(Number(delta) || 0);
+    if (d <= 0) return "";
+    if (kind === "bonus_percent") return `+${fmtNumber(d)}%`;
+    if (kind === "level") return `+${fmtNumber(d)}`;
+    if (kind === "production") return `+${fmtNumber(d)}/h`;
+    return `+${fmtNumber(d)}${unit || ""}`;
+  }
+
+  function patchBuildingProduction(row, b) {
+    if (!row || !b) return;
+    const kind =
+      b.effect_kind ||
+      (b.production_resource || BUILDING_PROD_RESOURCE[b.key] ? "production" : "level");
+    const resKey =
+      b.effect_resource || b.production_resource || BUILDING_PROD_RESOURCE[b.key] || "";
+    const unit = b.effect_unit || (kind === "production" ? "/h" : kind === "bonus_percent" ? "%" : "");
+    const cur = Math.floor(
+      Number(b.effect_current ?? b.production_per_hour ?? b.level) || 0
+    );
+    const nxt = Math.floor(
+      Number(b.effect_next ?? b.production_next_per_hour ?? b.target_level) || 0
+    );
+    const delta = Math.floor(Number(b.effect_delta ?? b.production_delta) || 0);
+
+    let prodBlock = row.querySelector(".bcell-prod");
+    if (!prodBlock) {
+      prodBlock = document.createElement("div");
+      prodBlock.className = "gc-bld-prod bcell-prod gc-bld-effect";
+      prodBlock.dataset.buildingProd = b.key;
+      const head = row.querySelector(".gc-bld-card-head");
+      const meta = row.querySelector(".gc-bld-card-meta");
+      if (head && meta) head.insertAdjacentElement("afterend", prodBlock);
+      else row.prepend(prodBlock);
+    }
+    prodBlock.dataset.effectKind = kind;
+
+    const metricLabel = buildingEffectMetricLabel(kind, resKey, b.key);
+    const curLabel = t("buildings_prod_current", "Aktuell");
+    const nextLabel = t("buildings_prod_after", "Nach Ausbau");
+    const deltaLabel = t("buildings_prod_delta", "Gewinn");
+    const deltaText = renderBuildingEffectDelta(kind, delta, unit);
+    const deltaHtml = deltaText
+      ? `<div class="gc-bld-prod-delta bcell-prod-delta" id="prod-delta-${b.key}">` +
+        `<span class="gc-bld-prod-delta-label">${deltaLabel}</span>` +
+        `<span class="gc-bld-prod-delta-val gc-mono">${deltaText}</span></div>`
+      : "";
+
+    const html =
+      `<div class="gc-bld-prod-metric" title="${metricLabel}">${metricLabel}</div>` +
+      `<div class="gc-bld-prod-line">` +
+      `<span class="gc-bld-prod-label">${curLabel}</span>` +
+      `<span class="gc-bld-prod-val gc-bld-prod-cur bcell-prod-current" id="prod-cur-${b.key}">` +
+      renderBuildingEffectValue(kind, resKey, cur, unit) +
+      `</span></div>` +
+      `<div class="gc-bld-prod-line">` +
+      `<span class="gc-bld-prod-label">${nextLabel}</span>` +
+      `<span class="gc-bld-prod-val gc-bld-prod-next bcell-prod-next" id="prod-next-${b.key}">` +
+      renderBuildingEffectValue(kind, resKey, nxt, unit) +
+      `</span></div>` +
+      deltaHtml;
+
+    if (prodBlock.innerHTML.trim() !== html.trim()) prodBlock.innerHTML = html;
+  }
+
+  function renderCompactCosts(metal, crystal, targetLevel, showTarget = true) {
     const levelLabel = t("buildings_col_level", "Level");
-    const targetNote = `→ L${fmtNumber(targetLevel)}`;
+    const targetNote = showTarget ? `→ L${fmtNumber(targetLevel)}` : "";
+    const targetHtml = showTarget
+      ? `<span class="gc-cost-target" title="${levelLabel} ${fmtNumber(targetLevel)}">${targetNote}</span>`
+      : "";
     return (
       `<div class="gc-costs-compact">` +
       `<span class="gc-cost-chip gc-cost-metal"><span class="gc-res-icon gc-res-metal" aria-hidden="true"></span>` +
       `<span class="gc-cost-val">${fmtNumber(metal)}</span></span>` +
       `<span class="gc-cost-chip gc-cost-crystal"><span class="gc-res-icon gc-res-crystal" aria-hidden="true"></span>` +
       `<span class="gc-cost-val">${fmtNumber(crystal)}</span></span>` +
-      `<span class="gc-cost-target" title="${levelLabel} ${fmtNumber(targetLevel)}">${targetNote}</span>` +
+      targetHtml +
       `</div>`
     );
   }
@@ -1176,10 +1308,11 @@
         if (!row) return;
 
         applyBuildingRowState(row, b);
+        patchBuildingProduction(row, b);
 
         const costCell = row.querySelector(".bcell-cost");
         if (costCell) {
-          const html = renderCompactCosts(b.cost_metal, b.cost_crystal, b.target_level);
+          const html = renderCompactCosts(b.cost_metal, b.cost_crystal, b.target_level, false);
           if (costCell.innerHTML.trim() !== html.trim()) costCell.innerHTML = html;
         }
 
@@ -1963,7 +2096,7 @@
       : t("buildings_btn_upgrade", "Ausbau starten");
     const tab = _getActiveBuildingTab();
 
-    document.querySelectorAll(".buildings-prog-list .bcell-action[data-building]").forEach((cell) => {
+    document.querySelectorAll(".buildings-prog-list .gc-bld-card-action[data-building], .buildings-prog-list .bcell-action[data-building]").forEach((cell) => {
       if (cell.querySelector("button.btn-upgrade[disabled]")) return;
 
       const bType = cell.dataset.building;
