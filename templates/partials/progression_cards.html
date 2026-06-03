@@ -1,5 +1,36 @@
 {# Shared compact progression row helpers (Buildings + Research) #}
 
+{# Canonical Ferronit / Crytite / Brennzellen icons (same PNGs as HUD resource bar) #}
+{% macro render_resource_icon(res_key, size='') %}
+  {% if res_key == 'metal' %}
+    {% set icon_file = 'icons/ferronit.png' %}
+    {% set mod = 'gc-res-metal' %}
+  {% elif res_key == 'crystal' %}
+    {% set icon_file = 'icons/crytite.png' %}
+    {% set mod = 'gc-res-crystal' %}
+  {% elif res_key == 'fuel_cells' %}
+    {% set icon_file = 'icons/fuel_cells.png' %}
+    {% set mod = 'gc-res-fuel-cells' %}
+  {% else %}
+    {% set icon_file = '' %}
+    {% set mod = '' %}
+  {% endif %}
+  {% if icon_file %}
+    <img src="{{ url_for('static', filename=icon_file) }}"
+         alt=""
+         class="gc-res-icon {{ mod }}{% if size %} gc-res-icon--{{ size }}{% endif %}"
+         loading="lazy"
+         aria-hidden="true">
+  {% endif %}
+{% endmacro %}
+
+{% macro render_resource_cost_chip(res_key, amount) %}
+  <span class="gc-cost-chip gc-cost-{{ res_key }}">
+    {{ render_resource_icon(res_key) }}
+    <span class="gc-cost-val">{{ amount|fmt_int }}</span>
+  </span>
+{% endmacro %}
+
 {% macro render_prog_identity(title, icon_src='', fallback='', desc_text='') %}
   <div class="gc-prog-col gc-prog-name">
     <div class="gc-prog-name-wrap">
@@ -37,14 +68,8 @@
 
 {% macro render_prog_costs(metal, crystal, target_level) %}
   <div class="gc-costs-compact">
-    <span class="gc-cost-chip gc-cost-metal">
-      <span class="gc-res-icon gc-res-metal" aria-hidden="true"></span>
-      <span class="gc-cost-val">{{ metal|fmt_int }}</span>
-    </span>
-    <span class="gc-cost-chip gc-cost-crystal">
-      <span class="gc-res-icon gc-res-crystal" aria-hidden="true"></span>
-      <span class="gc-cost-val">{{ crystal|fmt_int }}</span>
-    </span>
+    {{ render_resource_cost_chip('metal', metal) }}
+    {{ render_resource_cost_chip('crystal', crystal) }}
     <span class="gc-cost-target" title="{{ T('buildings_col_level') }} {{ target_level|fmt_int }}">
       → L{{ target_level|fmt_int }}
     </span>

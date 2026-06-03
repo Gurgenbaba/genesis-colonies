@@ -33,15 +33,15 @@
       <span class="gc-trader-pick-label">{{ T('exchange_give_label', 'I give')|upper }}</span>
       <div class="gc-trader-resource-tiles" data-exchange-give-tiles role="group" aria-label="{{ T('exchange_give_label', 'I give') }}">
         <button type="button" class="gc-trader-resource-tile is-active" data-exchange-give="metal" aria-pressed="true">
-          <img src="{{ url_for('static', filename='icons/ferronit.png') }}" alt="" width="28" height="28" loading="lazy">
+          <img src="{{ url_for('static', filename='icons/ferronit.png') }}" alt="" class="gc-res-icon gc-res-metal gc-res-icon--lg" loading="lazy">
           <span>{{ T('resource_metal') }}</span>
         </button>
         <button type="button" class="gc-trader-resource-tile" data-exchange-give="crystal" aria-pressed="false">
-          <img src="{{ url_for('static', filename='icons/crytite.png') }}" alt="" width="28" height="28" loading="lazy">
+          <img src="{{ url_for('static', filename='icons/crytite.png') }}" alt="" class="gc-res-icon gc-res-crystal gc-res-icon--lg" loading="lazy">
           <span>{{ T('resource_crystal') }}</span>
         </button>
         <button type="button" class="gc-trader-resource-tile" data-exchange-give="fuel_cells" aria-pressed="false">
-          <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" alt="" width="28" height="28" loading="lazy">
+          <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" alt="" class="gc-res-icon gc-res-fuel-cells gc-res-icon--lg" loading="lazy">
           <span>{{ T('resource_fuel_cells') }}</span>
         </button>
       </div>
@@ -51,15 +51,15 @@
       <span class="gc-trader-pick-label">{{ T('exchange_receive_label', 'I receive')|upper }}</span>
       <div class="gc-trader-resource-tiles" data-exchange-receive-tiles role="group" aria-label="{{ T('exchange_receive_label', 'I receive') }}">
         <button type="button" class="gc-trader-resource-tile" data-exchange-receive="metal" aria-pressed="false">
-          <img src="{{ url_for('static', filename='icons/ferronit.png') }}" alt="" width="28" height="28" loading="lazy">
+          <img src="{{ url_for('static', filename='icons/ferronit.png') }}" alt="" class="gc-res-icon gc-res-metal gc-res-icon--lg" loading="lazy">
           <span>{{ T('resource_metal') }}</span>
         </button>
         <button type="button" class="gc-trader-resource-tile is-active" data-exchange-receive="crystal" aria-pressed="true">
-          <img src="{{ url_for('static', filename='icons/crytite.png') }}" alt="" width="28" height="28" loading="lazy">
+          <img src="{{ url_for('static', filename='icons/crytite.png') }}" alt="" class="gc-res-icon gc-res-crystal gc-res-icon--lg" loading="lazy">
           <span>{{ T('resource_crystal') }}</span>
         </button>
         <button type="button" class="gc-trader-resource-tile" data-exchange-receive="fuel_cells" aria-pressed="false">
-          <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" alt="" width="28" height="28" loading="lazy">
+          <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" alt="" class="gc-res-icon gc-res-fuel-cells gc-res-icon--lg" loading="lazy">
           <span>{{ T('resource_fuel_cells') }}</span>
         </button>
       </div>

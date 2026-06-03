@@ -1,4 +1,5 @@
 {# Ship detail partial (AJAX) #}
+{% from "partials/progression_cards.html" import render_resource_cost_chip with context %}
 {% set card = card if card is defined and card else {} %}
 
 <div class="gc-player-card-shell gc-ship-detail-shell"
@@ -61,10 +62,10 @@
   <div class="gc-ship-detail-build">
     <span class="gc-player-card-stat-label">{{ T("ship_detail_build_section") }}</span>
     <div class="gc-ship-detail-cost gc-mono">
-      <span>{{ T("resource_metal") }} {{ (card.get('build_cost_metal') or 0)|fmt_int }}</span>
-      <span>{{ T("resource_crystal") }} {{ (card.get('build_cost_crystal') or 0)|fmt_int }}</span>
+      {{ render_resource_cost_chip('metal', card.get('build_cost_metal') or 0) }}
+      {{ render_resource_cost_chip('crystal', card.get('build_cost_crystal') or 0) }}
       {% if card.get('build_cost_fuel_cells') %}
-      <span>{{ T("resource_fuel_cells") }} {{ card.get('build_cost_fuel_cells')|fmt_int }}</span>
+      {{ render_resource_cost_chip('fuel_cells', card.get('build_cost_fuel_cells')) }}
       {% endif %}
     </div>
     <p class="gc-ship-detail-meta">

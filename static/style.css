@@ -1629,7 +1629,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .gc-fuel-exchange-rate-card--fuel{
   border-color: rgba(255, 196, 0, 0.35);
 }
-.gc-fuel-exchange-icon{
+.gc-fuel-exchange-icon,
+.gc-fuel-exchange-rate-card .gc-res-icon{
   width: 28px;
   height: 28px;
   object-fit: contain;
@@ -2714,6 +2715,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .gc-cost-metal .gc-cost-val{ color: rgba(127,255,217,0.95); }
 .gc-cost-crystal .gc-cost-val{ color: rgba(70,229,255,0.95); }
+.gc-cost-fuel_cells .gc-cost-val{ color: rgba(251,191,36,0.95); }
 
 .gc-cost-target{
   flex: 1 1 100%;
@@ -2861,17 +2863,62 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   color: rgba(215,246,255,0.72);
 }
 
+/* Canonical resource icons (Ferronit, Crytite, Brennzellen) — PNGs match HUD resource bar */
+:root{
+  --gc-icon-ferronit: url("/static/icons/ferronit.png");
+  --gc-icon-crytite: url("/static/icons/crytite.png");
+  --gc-icon-fuel-cells: url("/static/icons/fuel_cells.png");
+}
+
 .gc-res-icon{
-  width: 10px;
-  height: 10px;
-  border-radius: var(--gc-radius-sm);
+  width: 16px;
+  height: 16px;
   display: inline-block;
   flex-shrink: 0;
-  box-shadow: 0 0 12px rgba(255,255,255,0.22);
+  object-fit: contain;
+  vertical-align: middle;
+  opacity: 0.95;
+  filter: drop-shadow(0 0 10px rgba(120,255,220,0.18));
 }
-.gc-res-metal{ background: var(--gc-color-metal); box-shadow: 0 0 12px rgba(127,255,217,0.22); }
-.gc-res-crystal{ background: var(--gc-color-crystal); box-shadow: 0 0 12px rgba(70,229,255,0.22); }
-.gc-res-energy{ background: var(--gc-color-energy); box-shadow: 0 0 12px rgba(255,196,0,0.18); }
+span.gc-res-icon{
+  border-radius: 0;
+  box-shadow: none;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+span.gc-res-icon.gc-res-metal{ background-image: var(--gc-icon-ferronit); }
+span.gc-res-icon.gc-res-crystal{ background-image: var(--gc-icon-crytite); }
+span.gc-res-icon.gc-res-fuel-cells{ background-image: var(--gc-icon-fuel-cells); }
+.gc-res-icon--sm{ width: 14px; height: 14px; }
+.gc-res-icon--lg{ width: 28px; height: 28px; }
+.gc-res-energy{
+  width: 16px;
+  height: 16px;
+  border-radius: var(--gc-radius-sm);
+  background: var(--gc-color-energy);
+  box-shadow: 0 0 12px rgba(255,196,0,0.18);
+}
+
+.gc-resource-summary-item,
+.gc-resource-inline{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.gc-resource-summary-label,
+.fleet-resource-label{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.shipyard-ship-cost,
+.gc-ship-detail-cost{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
 
 /* =========================
    17) Research Page

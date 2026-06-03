@@ -1,6 +1,5 @@
 {% extends "base.html" %}
-
-
+{% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip with context %}
 
 {% block content %}
 
@@ -85,11 +84,16 @@
     </div>
 
     <div class="shipyard-resource-summary gc-mono" aria-live="polite">
-
-      <span>{{ T("resource_metal") }}: <strong data-df-res="metal">{{ p_metal|fmt_int }}</strong></span>
-
-      <span>{{ T("resource_crystal") }}: <strong data-df-res="crystal">{{ p_crystal|fmt_int }}</strong></span>
-
+      <span class="gc-resource-summary-item">
+        {{ render_resource_icon('metal') }}
+        <span>{{ T("resource_metal") }}:</span>
+        <strong data-df-res="metal">{{ p_metal|fmt_int }}</strong>
+      </span>
+      <span class="gc-resource-summary-item">
+        {{ render_resource_icon('crystal') }}
+        <span>{{ T("resource_crystal") }}:</span>
+        <strong data-df-res="crystal">{{ p_crystal|fmt_int }}</strong>
+      </span>
     </div>
 
   </section>
@@ -315,11 +319,8 @@
         <p class="shipyard-ship-desc hint">{{ T(unit.description_key|default("defense_" ~ unit.defense_key ~ "_desc")) }}</p>
 
         <div class="shipyard-ship-cost gc-mono">
-
-          <span>{{ T("resource_metal") }} {{ unit.cost_metal|fmt_int }}</span>
-
-          <span>{{ T("resource_crystal") }} {{ unit.cost_crystal|fmt_int }}</span>
-
+          {{ render_resource_cost_chip('metal', unit.cost_metal) }}
+          {{ render_resource_cost_chip('crystal', unit.cost_crystal) }}
         </div>
 
         <p class="shipyard-ship-build-time gc-mono hint">{{ T("defense_build_time_per_unit", seconds=unit.build_seconds|fmt_int) }}</p>

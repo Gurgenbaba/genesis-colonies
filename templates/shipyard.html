@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip with context %}
 
 {% block content %}
 {% set sy = shipyard if shipyard is defined and shipyard else {'ready': false, 'orbital_shipyard_level': 0} %}
@@ -41,9 +42,21 @@
       <span class="gc-panel-subtitle gc-mono" data-shipyard-level-label>{{ T("shipyard_level_value", level=sy.orbital_shipyard_level) }}</span>
     </div>
     <div class="shipyard-resource-summary gc-mono" aria-live="polite">
-      <span>{{ T("resource_metal") }}: <strong data-sy-res="metal">{{ p_metal|fmt_int }}</strong></span>
-      <span>{{ T("resource_crystal") }}: <strong data-sy-res="crystal">{{ p_crystal|fmt_int }}</strong></span>
-      <span>{{ T("resource_fuel_cells") }}: <strong data-sy-res="fuel_cells">{{ p_fuel|fmt_int }}</strong></span>
+      <span class="gc-resource-summary-item">
+        {{ render_resource_icon('metal') }}
+        <span>{{ T("resource_metal") }}:</span>
+        <strong data-sy-res="metal">{{ p_metal|fmt_int }}</strong>
+      </span>
+      <span class="gc-resource-summary-item">
+        {{ render_resource_icon('crystal') }}
+        <span>{{ T("resource_crystal") }}:</span>
+        <strong data-sy-res="crystal">{{ p_crystal|fmt_int }}</strong>
+      </span>
+      <span class="gc-resource-summary-item">
+        {{ render_resource_icon('fuel_cells') }}
+        <span>{{ T("resource_fuel_cells") }}:</span>
+        <strong data-sy-res="fuel_cells">{{ p_fuel|fmt_int }}</strong>
+      </span>
     </div>
   </section>
 
@@ -158,10 +171,10 @@
         </div>
         <p class="shipyard-ship-desc hint">{{ T("fleet_ship_" ~ ship.ship_key ~ "_desc") }}</p>
         <div class="shipyard-ship-cost gc-mono">
-          <span>{{ T("resource_metal") }} {{ ship.cost_metal|fmt_int }}</span>
-          <span>{{ T("resource_crystal") }} {{ ship.cost_crystal|fmt_int }}</span>
+          {{ render_resource_cost_chip('metal', ship.cost_metal) }}
+          {{ render_resource_cost_chip('crystal', ship.cost_crystal) }}
           {% if ship.cost_fuel_cells %}
-          <span>{{ T("resource_fuel_cells") }} {{ ship.cost_fuel_cells|fmt_int }}</span>
+          {{ render_resource_cost_chip('fuel_cells', ship.cost_fuel_cells) }}
           {% endif %}
         </div>
         <p class="shipyard-ship-build-time gc-mono hint">{{ T("shipyard_build_time_per_unit", seconds=ship.build_seconds|fmt_int) }}</p>

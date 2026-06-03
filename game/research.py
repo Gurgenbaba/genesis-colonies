@@ -175,7 +175,7 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
         "label": "Brennzellen-Optimierung",
         "label_key": "research_fuel_efficiency",
         "description": "Reduziert Flotten-Treibstoffverbrauch um 3 % pro Stufe (min. 50 %).",
-        "description_key": "desc_research_fuel_efficiency",
+        "description_key": "desc_fuel_efficiency",
         "category": "propulsion",
         "icon": "kryo-antriebstechnik.png",
         "base_cost_m": 2400,

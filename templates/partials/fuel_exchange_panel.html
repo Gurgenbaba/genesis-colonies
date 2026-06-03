@@ -17,19 +17,19 @@
   {% if fx.ready and fx.enabled %}
   <div class="gc-fuel-exchange-rates">
     <div class="gc-fuel-exchange-rate-card">
-      <img src="{{ url_for('static', filename='icons/ferronit.png') }}" alt="" class="gc-fuel-exchange-icon" loading="lazy">
+      <img src="{{ url_for('static', filename='icons/ferronit.png') }}" alt="" class="gc-res-icon gc-res-metal gc-res-icon--lg" loading="lazy">
       <span class="gc-fuel-exchange-rate-val gc-mono">{{ fx.metal_per_unit|fmt_int }}</span>
       <span class="gc-fuel-exchange-rate-label">{{ T('resource_metal') }}</span>
     </div>
     <span class="gc-fuel-exchange-plus" aria-hidden="true">+</span>
     <div class="gc-fuel-exchange-rate-card">
-      <img src="{{ url_for('static', filename='icons/crytite.png') }}" alt="" class="gc-fuel-exchange-icon" loading="lazy">
+      <img src="{{ url_for('static', filename='icons/crytite.png') }}" alt="" class="gc-res-icon gc-res-crystal gc-res-icon--lg" loading="lazy">
       <span class="gc-fuel-exchange-rate-val gc-mono">{{ fx.crystal_per_unit|fmt_int }}</span>
       <span class="gc-fuel-exchange-rate-label">{{ T('resource_crystal') }}</span>
     </div>
     <span class="gc-fuel-exchange-equals" aria-hidden="true">=</span>
     <div class="gc-fuel-exchange-rate-card gc-fuel-exchange-rate-card--fuel">
-      <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" alt="" class="gc-fuel-exchange-icon" loading="lazy">
+      <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" alt="" class="gc-res-icon gc-res-fuel-cells gc-res-icon--lg" loading="lazy">
       <span class="gc-fuel-exchange-rate-val gc-mono">1</span>
       <span class="gc-fuel-exchange-rate-label">{{ T('resource_fuel_cells') }}</span>
     </div>

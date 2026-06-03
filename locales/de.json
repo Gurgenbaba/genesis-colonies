@@ -458,6 +458,7 @@
   "shield_tech": "Schildtechnologie",
   "desc_shield_tech": "Vorbereitet: +5 % Schildbonus pro Stufe. Noch ohne planetare oder Flotten-Schildwirkung.",
   "desc_research_shield_tech": "Vorbereitet: +5 % Schildbonus pro Stufe. Noch ohne planetare oder Flotten-Schildwirkung.",
+  "desc_fuel_efficiency": "Senkt Flotten-Treibstoffverbrauch um 3 % pro Stufe (mindestens 50 %).",
 
   "msg_building_unlocked_by_research": "Neue Gebäude freigeschaltet.",
   "msg_research_unlocked_by_building": "Neue Forschung freigeschaltet.",
