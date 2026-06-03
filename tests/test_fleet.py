@@ -1880,7 +1880,9 @@ def test_distribute_validates_ownership(fleet_db):
         player_id=uid1,
         origin_planet_id=p1,
         target_planet_ids=[p2],
+        ships={"mule_courier": 1},
         resources_mode="equal",
+        resources={"metal": 100},
     )
     assert not ok
     assert reason == "planet_not_owned"

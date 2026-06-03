@@ -294,9 +294,9 @@ POST /api/fleet/logistics/distribute
 
 Fehler: `ok: false`, trotzdem **`state`** nach Mutation wo sinnvoll (GC-801).
 
-### Distribute — GC-900D (API-Stubs bleiben bis dahin)
+### Distribute — GC-900D ✅
 
-`POST /api/fleet/logistics/distribute` — unverändert Stub; Implementierung erst nach Collect-UI.
+`POST /api/fleet/logistics/distribute` — `distribute_resources()` + `_action_json_response` (Option A: `transport` + `batch_type=distribute_resources`).
 
 ---
 
@@ -338,7 +338,7 @@ Recycler `recycle` bleibt **Debris am Feldkoordinaten** — kein Logistics.
 | **GC-900A** | Spezifikation + Option A | Docs ✅ |
 | **GC-900B** | **Collect Backend only** — Option A, `ships`, `_action_json_response`, Batch+`send_fleet(collect)` | `game/fleet.py`, `app.py`, `tests/test_fleet_logistics.py` |
 | **GC-900C** | **Collect UI** | `templates/logistics.html` oder `fleet.html`, `static/main.js`, `app.py` (route) |
-| **GC-900D** | **Distribute Backend** — Split, Caps, Reservierung | `game/fleet.py`, `app.py`, Tests |
+| **GC-900D** | **Distribute Backend** — Split, Caps, `transport` orchestration | ✅ `game/fleet.py`, `app.py`, Tests |
 | **GC-900E** | **Distribute UI** + Polish (Presets, Overview, Reports) | UI + i18n |
 
 Reihenfolge: **900B → 900C → 900D → 900E → GC-700**.
@@ -410,5 +410,5 @@ python -m pytest tests/test_fleet_logistics.py -k distribute -v
 | **GC-900A** Spec (+ Option A) | ✅ |
 | **GC-900B** Collect Backend | 📋 |
 | **GC-900C** Collect UI | 📋 |
-| **GC-900D** Distribute Backend | 📋 |
+| **GC-900D** Distribute Backend | ✅ |
 | **GC-900E** Distribute UI / Polish | 📋 |

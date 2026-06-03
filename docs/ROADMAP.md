@@ -235,7 +235,7 @@ Details: [SECURITY.md](SECURITY.md)
 | **GC-900A** — Logistics spec + Option A ([GC-900_LOGISTICS.md](GC-900_LOGISTICS.md)) | ✅ |
 | **GC-900B** — Collect backend (`collect` mission + batch orchestration) | ✅ |
 | **GC-900C** — Collect UI | ✅ |
-| **GC-900D** — Distribute backend | 📋 |
+| **GC-900D** — Distribute backend (`transport` + batch orchestration) | ✅ |
 | **GC-900E** — Distribute UI / polish | 📋 |
 | Admin Control Center auf PJAX/State (statt `reload`) | 💡 |
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |

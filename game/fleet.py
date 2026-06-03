@@ -2718,6 +2718,72 @@ def _split_ships_across_targets(ships: Mapping[str, int], target_count: int) -> 
     return [normalize_ships(p) for p in parts]
 
 
+def _split_resources_evenly(resources: Mapping[str, Any], target_count: int) -> List[Dict[str, int]]:
+    """Split resource totals evenly; per-type remainder goes to the last target."""
+    if target_count < 1:
+        return []
+    loaded = calculate_loaded_resources(resources)
+    parts: List[Dict[str, int]] = [
+        {"metal": 0, "crystal": 0, "fuel_cells": 0} for _ in range(target_count)
+    ]
+    for key in ("metal", "crystal", "fuel_cells"):
+        total = int(loaded.get(key, 0))
+        base, rem = divmod(total, target_count)
+        for i in range(target_count - 1):
+            parts[i][key] = base
+        parts[target_count - 1][key] = base + rem
+    return [calculate_loaded_resources(p) for p in parts]
+
+
+def _planet_storage_headroom(planet_id: int, player_id: int, *, conn) -> Dict[str, int]:
+    from .models import get_planet_buildings
+    from .resources import get_storage_capacity
+
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ? LIMIT 1;",
+        (int(planet_id),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"metal": 0, "crystal": 0, "fuel_cells": 0}
+    buildings = get_planet_buildings(int(planet_id), conn=conn)
+    research = get_research_levels(user_id=int(player_id), conn=conn)
+    caps = get_storage_capacity(buildings, research=research, conn=conn)
+    return {
+        "metal": max(0, int(caps.get("metal", 0) or 0) - int(float(row["metal"] or 0))),
+        "crystal": max(0, int(caps.get("crystal", 0) or 0) - int(float(row["crystal"] or 0))),
+        "fuel_cells": max(
+            0,
+            int(caps.get("fuel_cells", 0) or 0) - int(float(row["fuel_cells"] or 0)),
+        ),
+    }
+
+
+def _clamp_resources_to_headroom(
+    resources: Mapping[str, Any],
+    headroom: Mapping[str, int],
+) -> Dict[str, int]:
+    loaded = calculate_loaded_resources(resources)
+    return calculate_loaded_resources(
+        {
+            "metal": min(loaded["metal"], max(0, int(headroom.get("metal", 0)))),
+            "crystal": min(loaded["crystal"], max(0, int(headroom.get("crystal", 0)))),
+            "fuel_cells": min(loaded["fuel_cells"], max(0, int(headroom.get("fuel_cells", 0)))),
+        }
+    )
+
+
+def _sum_loaded_resources(items: Sequence[Mapping[str, Any]]) -> Dict[str, int]:
+    total = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+    for item in items:
+        loaded = calculate_loaded_resources(item)
+        total["metal"] += loaded["metal"]
+        total["crystal"] += loaded["crystal"]
+        total["fuel_cells"] += loaded["fuel_cells"]
+    return calculate_loaded_resources(total)
+
+
 def validate_logistics_planets(
     player_id: int,
     target_planet_ids: Sequence[int],
@@ -2928,34 +2994,222 @@ def distribute_resources(
     player_id: int,
     origin_planet_id: int,
     target_planet_ids: Sequence[int],
-    resources_mode: str,
+    ships: Mapping[str, int],
+    resources_mode: str = "equal",
     resources: Mapping[str, Any] | None = None,
     ships_selection_mode: str = "manual",
     preset_id: int | None = None,
+    speed_percent: int = 100,
     conn=None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Multi-colony distribute: hub origin, N× send_fleet(mission=transport) under one batch (GC-900D)."""
+    hub_id = int(origin_planet_id or 0)
+    if hub_id <= 0:
+        return False, "origin_not_found", None
+
+    raw_targets = [int(x) for x in (target_planet_ids or []) if int(x) > 0]
+    targets: List[int] = []
+    seen: Set[int] = set()
+    for tid in raw_targets:
+        if tid == hub_id or tid in seen:
+            continue
+        seen.add(tid)
+        targets.append(tid)
+    if not targets:
+        return False, "no_planets", None
+
     ok, reason = validate_logistics_planets(
-        player_id, list(target_planet_ids), [origin_planet_id], conn=conn
+        player_id, targets, [hub_id], conn=conn
     )
     if not ok:
         return False, reason, None
 
     mode = str(ships_selection_mode or "").strip().lower()
-    if mode in ("auto_cargo", "preset") and mode == "auto_cargo":
-        return False, "logistics_not_implemented", {
-            "ok": False,
-            "reason": "logistics_not_implemented",
-            "message_key": "fleet_logistics_not_implemented",
-            "validated": True,
-        }
+    if mode in ("auto_cargo", "preset"):
+        return False, "logistics_not_implemented", None
 
-    return False, "logistics_not_implemented", {
-        "ok": False,
-        "reason": "logistics_not_implemented",
-        "message_key": "fleet_logistics_not_implemented",
-        "validated": True,
-        "note": "Manual distribute transport chains planned for Phase 2.",
-    }
+    if str(resources_mode or "").strip().lower() != "equal":
+        return False, "logistics_not_implemented", None
+
+    ships_n = normalize_ships(ships)
+    if not ships_n:
+        return False, "no_ships", None
+    ok_cargo, cargo_reason = _fleet_ships_are_cargo_only(ships_n)
+    if not ok_cargo:
+        return False, cargo_reason, None
+
+    requested = calculate_loaded_resources(resources)
+    if loaded_resource_total(requested) <= 0:
+        return False, "no_resources", None
+
+    pct = int(speed_percent)
+    if pct < 10 or pct > 100:
+        return False, "invalid_speed_percent", None
+
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not fleet_schema_ready(conn):
+            return False, "fleet_unavailable", None
+
+        equal_parts = _split_resources_evenly(requested, len(targets))
+        deliveries: List[Tuple[int, Dict[str, int]]] = []
+        for target_id, share in zip(targets, equal_parts):
+            headroom = _planet_storage_headroom(int(target_id), player_id, conn=conn)
+            deliverable = _clamp_resources_to_headroom(share, headroom)
+            if loaded_resource_total(deliverable) > 0:
+                deliveries.append((int(target_id), deliverable))
+
+        if not deliveries:
+            return False, "no_deliverable_resources", None
+
+        if own:
+            begin_write_transaction(conn)
+
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+            (hub_id, int(player_id)),
+        )
+        hub_row = cur.fetchone()
+        if not hub_row:
+            if own:
+                rollback(conn)
+            return False, "origin_not_found", None
+
+        total_debit = _sum_loaded_resources([d[1] for d in deliveries])
+        lock_planet_for_update(conn, hub_id)
+        cur.execute(
+            "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ? LIMIT 1;",
+            (hub_id,),
+        )
+        hub_res = cur.fetchone()
+        if not hub_res:
+            if own:
+                rollback(conn)
+            return False, "origin_not_found", None
+        if (
+            float(hub_res["metal"]) < total_debit["metal"]
+            or float(hub_res["crystal"]) < total_debit["crystal"]
+            or float(hub_res["fuel_cells"] or 0) < total_debit["fuel_cells"]
+        ):
+            if own:
+                rollback(conn)
+            return False, "not_enough_resources", None
+
+        available = get_planet_ships(hub_id, conn=conn)
+        for sk, need in ships_n.items():
+            if int(available.get(sk, 0)) < int(need):
+                if own:
+                    rollback(conn)
+                return False, "not_enough_ships", None
+
+        ship_allocs = _split_ships_across_targets(ships_n, len(deliveries))
+        for alloc in ship_allocs:
+            if not alloc or calculate_total_cargo(alloc) <= 0:
+                if own:
+                    rollback(conn)
+                return False, "not_enough_ships", None
+
+        for (_tid, cargo), alloc in zip(deliveries, ship_allocs):
+            if loaded_resource_total(cargo) > calculate_total_cargo(alloc):
+                if own:
+                    rollback(conn)
+                return False, "not_enough_cargo", None
+
+        slots = get_fleet_slot_status(player_id, conn=conn)
+        if int(slots["free"]) < len(deliveries):
+            if own:
+                rollback(conn)
+            return False, "fleet_slots_full", None
+
+        now = _now()
+        cur.execute(
+            """
+            INSERT INTO fleet_batches (player_id, batch_type, label, status, total_fleets, created_at, updated_at)
+            VALUES (?, 'distribute_resources', ?, 'running', ?, ?, ?);
+            """,
+            (
+                int(player_id),
+                f"Distribute resources x{len(deliveries)}",
+                len(deliveries),
+                now,
+                now,
+            ),
+        )
+        batch_id = int(cur.lastrowid)
+
+        started: List[Dict[str, Any]] = []
+        for (target_id, cargo), alloc in zip(deliveries, ship_allocs):
+            cur.execute(
+                "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+                (int(target_id), int(player_id)),
+            )
+            target_row = cur.fetchone()
+            if not target_row:
+                if own:
+                    rollback(conn)
+                return False, "planet_not_owned", None
+            coords = get_planet_coordinates(dict(target_row))
+            ok_send, send_reason, payload = send_fleet(
+                player_id=player_id,
+                origin_planet_id=hub_id,
+                target_galaxy=int(coords["galaxy"]),
+                target_system=int(coords["system"]),
+                target_position=int(coords["position"]),
+                mission_type="transport",
+                ships=alloc,
+                resources=cargo,
+                speed_percent=pct,
+                preset_id=preset_id,
+                batch_id=batch_id,
+                conn=conn,
+            )
+            if not ok_send or not payload:
+                if own:
+                    rollback(conn)
+                return False, send_reason or "send_failed", None
+            started.append(
+                {
+                    "target_planet_id": int(target_id),
+                    "fleet_id": int(payload["fleet"]["id"]),
+                    "resources": calculate_loaded_resources(cargo),
+                }
+            )
+
+        batch_status = "completed" if started else "failed"
+        conn.execute(
+            "UPDATE fleet_batches SET status = ?, total_fleets = ?, updated_at = ? WHERE id = ?;",
+            (batch_status, len(started), now, batch_id),
+        )
+
+        if own:
+            commit(conn)
+
+        cur.execute("SELECT * FROM fleet_batches WHERE id = ?;", (batch_id,))
+        batch_row = dict(cur.fetchone())
+
+        return True, "", {
+            "batch": {
+                "id": batch_id,
+                "batch_type": batch_row["batch_type"],
+                "status": batch_row["status"],
+                "total_fleets": len(started),
+                "label": batch_row["label"],
+            },
+            "started": started,
+            "skipped": [],
+            "delivered_total": total_debit,
+            "active_slots": get_fleet_slot_status(player_id, conn=conn),
+        }
+    except Exception:
+        if own:
+            rollback(conn)
+        raise
+    finally:
+        if own and conn is not None:
+            conn.close()
 
 
 def build_logistics_page_context(
