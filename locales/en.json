@@ -782,6 +782,8 @@
   "shipyard_level_value": "Level %(level)s",
   "shipyard_inventory_title": "Ships on planet",
   "shipyard_inventory_subtitle": "Ready for fleet operations",
+  "shipyard_stock_label": "On planet",
+  "shipyard_stock_short": "Owned",
   "shipyard_buildable_title": "Buildable ships",
   "shipyard_buildable_subtitle": "Instant build (Phase 1)",
   "shipyard_locked_title": "Locked ships",

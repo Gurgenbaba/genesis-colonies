@@ -130,6 +130,7 @@ def _ship_catalog_entry(
         "can_build": False,
         "block_reason": "",
         "icon": ship_icon_static_path(ship_key),
+        "owned_count": 0,
     }
     if player_id is not None and planet_id is not None:
         from .models import get_planet_buildings, get_research_levels
@@ -151,6 +152,7 @@ def list_buildable_ships(player_id: int, planet_id: int, *, conn=None) -> List[D
     queue_full = False
     if shipyard_queue_table_ready(conn):
         queue_full = queue_count(planet_id, conn=conn) >= get_shipyard_queue_limit(conn=conn)
+    ships_inv = get_ship_inventory(player_id, planet_id, conn=conn)
     out: List[Dict[str, Any]] = []
     for key in sorted(ACTIVE_SHIP_KEYS):
         if not ship_unlocked(key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn):
@@ -170,6 +172,7 @@ def list_buildable_ships(player_id: int, planet_id: int, *, conn=None) -> List[D
         else:
             entry["block_reason"] = ""
             entry["can_build"] = True
+        entry["owned_count"] = int(ships_inv.get(key, 0) or 0)
         out.append(entry)
     return out
 
@@ -262,12 +265,15 @@ def move_shipyard_job(
 
 def list_locked_ships(player_id: int, planet_id: int, *, conn=None) -> List[Dict[str, Any]]:
     sy_level = get_shipyard_level(player_id, planet_id, conn=conn)
+    ships_inv = get_ship_inventory(player_id, planet_id, conn=conn)
     out: List[Dict[str, Any]] = []
     keys = sorted(set(ACTIVE_SHIP_KEYS) | {"eclipse_runner"})
     for key in keys:
         if ship_unlocked(key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn):
             continue
-        out.append(_ship_catalog_entry(key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn))
+        entry = _ship_catalog_entry(key, sy_level, player_id=player_id, planet_id=planet_id, conn=conn)
+        entry["owned_count"] = int(ships_inv.get(key, 0) or 0)
+        out.append(entry)
     return out
 
 

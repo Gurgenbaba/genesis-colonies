@@ -39,6 +39,9 @@ def _locked_defense_catalog(
     *,
     conn,
 ) -> list[Dict[str, Any]]:
+    from .models import get_planet_defense
+
+    stock = get_planet_defense(int(planet_id), conn=conn)
     out: list[Dict[str, Any]] = []
     for key in sorted(ACTIVE_DEFENSE_KEYS):
         if defense_unlocked(key, factory_level, player_id=player_id, planet_id=planet_id, conn=conn):
@@ -56,6 +59,7 @@ def _locked_defense_catalog(
                 "cost_metal": int(cost.get("metal") or 0),
                 "cost_crystal": int(cost.get("crystal") or 0),
                 "build_seconds": 0,
+                "stock": int(stock.get(key, 0) or 0),
                 "unlocked": False,
             }
         )
@@ -86,6 +90,10 @@ def build_defense_page_context(
 
     stock = payload.get("current_defense") or {}
     for entry in payload.get("buildable_defense") or []:
+        dk = str(entry.get("defense_key") or "")
+        entry["stock"] = int(stock.get(dk, 0) or 0)
+
+    for entry in locked:
         dk = str(entry.get("defense_key") or "")
         entry["stock"] = int(stock.get(dk, 0) or 0)
 

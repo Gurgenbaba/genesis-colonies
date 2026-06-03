@@ -884,6 +884,8 @@
   "shipyard_level_value": "Stufe %(level)s",
   "shipyard_inventory_title": "Schiffe am Planeten",
   "shipyard_inventory_subtitle": "Bereit für Flotteneinsätze",
+  "shipyard_stock_label": "Am Planeten",
+  "shipyard_stock_short": "Vorhanden",
   "shipyard_buildable_title": "Baubare Schiffe",
   "shipyard_buildable_subtitle": "Sofortbau (Phase 1)",
   "shipyard_locked_title": "Gesperrte Schiffe",

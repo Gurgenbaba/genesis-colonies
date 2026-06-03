@@ -281,16 +281,6 @@
 {% set rq_limit = (rq_summary.limit if rq_summary.limit is defined else 3) %}
 {% set queue_full = (rq_summary.count or 0)|int >= rq_limit|int %}
 
-{% set research_tabs = [
-  ('energy', T('research_tab_energy', 'Energie'), ['energy']),
-  ('production', T('research_tab_production', 'Produktion'), ['metal', 'drones']),
-  ('construction', T('research_tab_construction', 'Bau & Lager'), ['construction', 'storage']),
-  ('fleet', T('research_tab_fleet', 'Flotte'), ['navigation', 'engine', 'propulsion']),
-  ('military', T('research_tab_military', 'Militär'), ['weapon', 'armor', 'shield']),
-] %}
-
-{% set active_tab = 'energy' %}
-
 <div class="gc-page research-page">
 
   <header class="gc-page-header section-header research-page-header">
@@ -338,36 +328,7 @@
     <hr class="research-divider gc-prog-divider">
 
     {% if techs and techs|length > 0 %}
-
-      <div class="building-tabs research-tabs" role="tablist" aria-label="{{ T('research_tabs', 'Forschungs-Kategorien') }}">
-        {% for tab_id, tab_label, cats in research_tabs %}
-          <button class="gc-btn gc-btn-ghost gc-btn-sm tab-btn {{ 'active' if active_tab == tab_id else '' }}"
-                  type="button"
-                  role="tab"
-                  id="research-tab-{{ tab_id }}"
-                  aria-controls="research-panel-{{ tab_id }}"
-                  aria-selected="{{ 'true' if active_tab == tab_id else 'false' }}"
-                  tabindex="{{ '0' if active_tab == tab_id else '-1' }}"
-                  data-tab="{{ tab_id }}">
-            {{ tab_label }}
-          </button>
-        {% endfor %}
-      </div>
-
-      {% for tab_id, tab_label, cats in research_tabs %}
-        {% set tab_rows = [] %}
-        {% for tech in techs if tech.category in cats %}
-          {% if tab_rows.append(tech) %}{% endif %}
-        {% endfor %}
-        <div class="tab-content {{ 'active' if active_tab == tab_id else '' }}"
-             data-tab="{{ tab_id }}"
-             role="tabpanel"
-             id="research-panel-{{ tab_id }}"
-             aria-labelledby="research-tab-{{ tab_id }}">
-          {{ render_research_grid(tab_rows, rq_summary, queue_full) }}
-        </div>
-      {% endfor %}
-
+      {{ render_research_grid(techs, rq_summary, queue_full) }}
     {% else %}
       <div class="gc-empty-state">
         <div class="gc-empty-title">

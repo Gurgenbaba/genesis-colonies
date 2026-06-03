@@ -2,6 +2,21 @@
 {% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip, render_shipyard_resource_blocker, render_shipyard_unlock_blockers with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 
+{% macro render_ship_card_stock(ship_key, owned) %}
+  <span class="gc-ship-stock-chip"
+        title="{{ T('shipyard_stock_label', 'Am Planeten') }}">
+    <span class="gc-ship-stock-label">{{ T('shipyard_stock_short', 'Vorhanden') }}</span>
+    <span class="gc-ship-stock-val gc-mono"
+          data-shipyard-stock="{{ ship_key }}">{{ owned|fmt_int }}</span>
+  </span>
+{% endmacro %}
+
+{% macro render_ship_card_subhead(role) %}
+  <div class="gc-ship-card-subhead">
+    <span class="gc-ship-role-badge">{{ T("shipyard_role_" ~ role) }}</span>
+  </div>
+{% endmacro %}
+
 {% block content %}
 {% set sy = shipyard if shipyard is defined and shipyard else {'ready': false, 'orbital_shipyard_level': 0} %}
 {% set player_obj = player if player is defined and player else None %}
@@ -37,6 +52,8 @@
     <p class="shipyard-empty">{{ T("fleet_unavailable") }}</p>
   </section>
   {% else %}
+
+  {% set planet_ships = sy.current_ships if sy.current_ships is defined else {} %}
 
   <section class="gc-panel shipyard-panel shipyard-status-panel">
     <div class="gc-panel-header">
@@ -131,28 +148,6 @@
     </div>
   </section>
 
-  <section class="gc-panel shipyard-panel" aria-labelledby="shipyard-inventory-title">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title" id="shipyard-inventory-title">{{ T("shipyard_inventory_title") }}</span>
-      <span class="gc-panel-subtitle">{{ T("shipyard_inventory_subtitle") }}</span>
-    </div>
-    <div class="shipyard-inventory-list" data-shipyard-inventory>
-      {% set inv = sy.current_ships if sy.current_ships is defined else {} %}
-      {% if inv %}
-        {% for sk, qty in inv.items() %}
-        <div class="shipyard-inventory-row" data-inv-ship="{{ sk }}">
-          <button type="button" class="gc-ship-detail-trigger shipyard-ship-name"
-                  data-ship-detail="{{ sk }}"
-                  aria-label="{{ T('ship_detail_open') }}">{{ T("fleet_ship_" ~ sk) }}</button>
-          <span class="shipyard-ship-qty gc-mono">{{ qty|fmt_int }}</span>
-        </div>
-        {% endfor %}
-      {% else %}
-        <p class="shipyard-empty" data-shipyard-no-ships>{{ T("shipyard_no_ships") }}</p>
-      {% endif %}
-    </div>
-  </section>
-
   <section class="gc-panel shipyard-panel" aria-labelledby="shipyard-buildable-title">
     <div class="gc-panel-header">
       <span class="gc-panel-title" id="shipyard-buildable-title">{{ T("shipyard_buildable_title") }}</span>
@@ -165,6 +160,7 @@
       {% set ship_desc_key = "fleet_ship_" ~ ship.ship_key ~ "_desc" %}
       {% set ship_desc = T(ship_desc_key) %}
       {% if ship_desc == ship_desc_key %}{% set ship_desc = '' %}{% endif %}
+      {% set owned = (ship.owned_count if ship.owned_count is defined else planet_ships.get(ship.ship_key, 0))|int %}
       <article class="gc-ship-card gc-prog-card {{ row_class }}"
                data-ship-card="{{ ship.ship_key }}" data-unlocked="1" role="listitem">
         <header class="gc-bld-card-head">
@@ -179,8 +175,9 @@
               {{ render_info_popover_trigger(ship_desc) }}
             </div>
           </div>
-          <span class="gc-ship-role-badge">{{ T("shipyard_role_" ~ ship.role) }}</span>
+          {{ render_ship_card_stock(ship.ship_key, owned) }}
         </header>
+        {{ render_ship_card_subhead(ship.role) }}
         <div class="gc-bld-card-meta">
           <div class="gc-bld-card-costs shipyard-ship-cost gc-mono" data-shipyard-cost>
             {{ render_resource_cost_chip('metal', ship.cost_metal, unmet=(p_metal < ship.cost_metal)) }}
@@ -242,6 +239,7 @@
     </div>
     <div class="gc-building-grid shipyard-ship-grid shipyard-ship-list-locked" data-shipyard-locked-list role="list">
       {% for ship in sy.locked_ships %}
+      {% set owned = (ship.owned_count if ship.owned_count is defined else planet_ships.get(ship.ship_key, 0))|int %}
       {% set ship_desc_key = "fleet_ship_" ~ ship.ship_key ~ "_desc" %}
       {% set ship_desc = T(ship_desc_key) %}
       {% if ship_desc == ship_desc_key %}{% set ship_desc = '' %}{% endif %}
@@ -259,8 +257,9 @@
               {{ render_info_popover_trigger(ship_desc) }}
             </div>
           </div>
-          <span class="gc-ship-role-badge">{{ T("shipyard_role_" ~ ship.role) }}</span>
+          {{ render_ship_card_stock(ship.ship_key, owned) }}
         </header>
+        {{ render_ship_card_subhead(ship.role) }}
         <div class="gc-bld-card-meta">
           <div class="gc-bld-card-costs shipyard-ship-cost gc-mono" data-shipyard-cost>
             {{ render_resource_cost_chip('metal', ship.cost_metal) }}
