@@ -2958,6 +2958,58 @@ def distribute_resources(
     }
 
 
+def build_logistics_page_context(
+    *,
+    player_id: int,
+    planet_id: int,
+    planet: Dict[str, Any],
+    conn=None,
+) -> Dict[str, Any]:
+    """Logistics Collect UI (GC-900C) — colonies + cargo hulls; no parallel state."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not fleet_schema_ready(conn):
+            return {"ready": False}
+
+        _finish_due_shipyard_on_planet(conn, int(planet_id), int(player_id))
+        process_fleet_tick(player_id=int(player_id), conn=conn)
+
+        colonies: List[Dict[str, Any]] = []
+        for p in get_planets_by_player(player_id, conn=conn):
+            pid = int(p["id"])
+            try:
+                pc = get_planet_coordinates(p)
+            except GalaxyCoordinateError:
+                continue
+            ships = get_planet_ships(pid, conn=conn)
+            colonies.append(
+                {
+                    "planet_id": pid,
+                    "name": str(p.get("name") or ""),
+                    "coordinates": pc["formatted"],
+                    "is_active": pid == int(planet_id),
+                    "ships": ships,
+                }
+            )
+
+        cargo_defs = [s for s in ships_for_fleet_ui() if str(s.get("role") or "") == "cargo"]
+
+        return {
+            "ready": True,
+            "planet_id": int(planet_id),
+            "colonies": colonies,
+            "cargo_ship_defs": cargo_defs,
+            "ships": get_planet_ships(planet_id, conn=conn),
+            "fleet_slots": get_fleet_slot_status(player_id, conn=conn),
+            "server_time": time.time(),
+        }
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def seed_planet_ships_stack(
     planet_id: int,
     player_id: int,

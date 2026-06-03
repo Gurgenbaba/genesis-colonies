@@ -230,6 +230,11 @@
           {{ T("nav_fleet") }}
         </a>
 
+        <a href="{{ url_for('logistics_view') }}"
+           class="gc-nav-link {% if request.endpoint == 'logistics_view' %}active{% endif %}">
+          {{ T("nav_logistics", "Logistics") }}
+        </a>
+
         <a href="{{ url_for('galaxy_view') }}"
            class="gc-nav-link {% if request.endpoint == 'galaxy_view' %}active{% endif %}">
           {{ T("nav_galaxy") }}
@@ -374,6 +379,9 @@
         </a>
         <a href="{{ url_for('fleet_view') }}" class="gc-nav-drawer-link {% if request.endpoint == 'fleet_view' %}active{% endif %}">
           {{ T("nav_fleet") }}
+        </a>
+        <a href="{{ url_for('logistics_view') }}" class="gc-nav-drawer-link {% if request.endpoint == 'logistics_view' %}active{% endif %}">
+          {{ T("nav_logistics", "Logistics") }}
         </a>
         <a href="{{ url_for('alliance_view') }}" class="gc-nav-drawer-link gc-nav-wip {% if request.endpoint == 'alliance_view' %}active{% endif %}">
           {{ T("nav_alliance") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>

@@ -1164,6 +1164,40 @@ def defense_view():
     )
 
 
+@app.route("/logistics")
+@require_login
+def logistics_view():
+    player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    if player_view is None:
+        return redirect(url_for("login"))
+
+    from game.fleet import build_logistics_page_context, fleet_schema_ready
+    from game.planet_evolution.repository import get_context_planet
+
+    logistics_ctx: Dict[str, Any] = {"ready": False}
+    conn = db()
+    try:
+        planet = get_context_planet(int(player_view["id"]), conn=conn)
+        if fleet_schema_ready(conn):
+            logistics_ctx = build_logistics_page_context(
+                player_id=int(player_view["id"]),
+                planet_id=int(planet["id"]),
+                planet=dict(planet),
+                conn=conn,
+            )
+    finally:
+        conn.close()
+
+    return render_template(
+        "logistics.html",
+        player=player_view,
+        energy_total=energy_total,
+        energy_used=energy_used,
+        storage_caps=storage_caps,
+        logistics=logistics_ctx,
+    )
+
+
 @app.route("/fleet")
 @require_login
 def fleet_view():

@@ -99,7 +99,7 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | **Verteidigung** — Türme, Schilder, Queue, Ranking | ✅ | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) |
 | **Kampf-Auflösung** — Resolver, Reports, Loot, Debris, Ranking | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md); `test_combat.py` |
 | **GC-700** — Combat polish / gaps (kein Resolver-Neubau) | 📋 | Siehe [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) § GC-700 Readiness |
-| Fleet Logistics (collect/distribute) | 🔄 | Spec ✅ [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md); Collect Option A → GC-900B/C, Distribute → GC-900D/E |
+| Fleet Logistics (collect/distribute) | 🔄 | Collect ✅ `/logistics` + API; Distribute → GC-900D/E |
 | Recycler-Mission | ✅ | GC-800A Backend + GC-800B UI; GC-800C UX optional |
 | Espionage (beyond probe report) | ✅ | GC-401 tiered intel + inbox UI |
 | Expedition event engine | ✅ | GC-402 weighted events + structured metadata |
@@ -234,7 +234,7 @@ Details: [SECURITY.md](SECURITY.md)
 | **GC-803** — Fleet preset & mass expedition test stabilization (`IntegrityError`) | ✅ |
 | **GC-900A** — Logistics spec + Option A ([GC-900_LOGISTICS.md](GC-900_LOGISTICS.md)) | ✅ |
 | **GC-900B** — Collect backend (`collect` mission + batch orchestration) | ✅ |
-| **GC-900C** — Collect UI | 📋 |
+| **GC-900C** — Collect UI | ✅ |
 | **GC-900D** — Distribute backend | 📋 |
 | **GC-900E** — Distribute UI / polish | 📋 |
 | Admin Control Center auf PJAX/State (statt `reload`) | 💡 |

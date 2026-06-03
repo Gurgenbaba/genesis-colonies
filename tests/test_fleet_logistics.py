@@ -174,6 +174,29 @@ def test_collect_logistics_pickup_and_return(logistics_db):
     conn.close()
 
 
+def test_logistics_page_renders_collect_form(logistics_db, monkeypatch):
+    import app as app_mod
+
+    conn = db()
+    uid = _player(conn=conn)
+    _second_colony(uid, conn=conn)
+    conn.commit()
+    conn.close()
+
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    res = client.get("/logistics")
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+    assert "logistics-page" in html
+    assert "logistics-collect-form" in html
+    assert "logistics-tab-distribute" in html
+    assert "logistics-collect-form" in html
+    assert 'data-logistics-hub' in html
+
+
 def test_collect_logistics_api_returns_state(logistics_db):
     import app as app_mod
 

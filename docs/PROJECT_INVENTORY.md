@@ -1,6 +1,6 @@
 # Genesis Colonies — Project Inventory
 
-**Stand:** GC-900B (2026-06-02) — Collect Backend ✅; UI GC-900C; Distribute GC-900D/E.
+**Stand:** GC-900C (2026-06-02) — Collect UI ✅; Distribute GC-900D/E.
 
 Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `static/main.js`, pytest-Dateien, Master-Docs.
 
@@ -18,7 +18,7 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Galaxy** | `galaxy.py` | `/galaxy`, PJAX | `GET /api/galaxy/system` | `test_galaxy.py` | ✅ | — |
 | **Combat** | `combat.py`, `combat_models.py` | Reports in Messages | Kein eigener Spieler-POST; Tick in `fleet.py` | `test_combat.py` (36 Tests) | ✅ | GC-700 = Lücken/Polish, kein Greenfield |
 | **Recycler** | `combat.py` debris + `fleet.py` mission `recycle` | `/fleet` + Galaxy debris actions | `send_fleet` / preview | `test_recycler.py` | ✅ | GC-800C UX optional |
-| **Logistics** | `collect_resources` ✅ Option A / `distribute_resources` stub | — (900C Collect UI) | `POST /api/fleet/logistics/collect` + `state` · distribute stub | `test_fleet_logistics.py` | 🔄 | **GC-900C** Collect UI; dann 900D/E Distribute |
+| **Logistics** | `collect_resources` ✅ / `distribute_resources` stub | `/logistics` Collect tab | `POST /api/fleet/logistics/collect` + `state` | `test_fleet_logistics.py` | 🔄 | **GC-900D** Distribute Backend |
 | **Messages** | `messages.py` | `/messages`, `messages.js` | `/api/messages/*` | `test_messages.py` | ✅ | ⚠️ `href`-Fallback (GC-512C) |
 | **Chat** | `chat.py` | Shell + `chat.js` | `/api/chat/*` (eigenes Poll) | `test_chat.py`, `test_chat_init` | ✅ | Ausnahme GC-000 dokumentiert |
 | **Alliance** | `alliance.py` (minimal) | `/alliance` Platzhalter | — | — | 🔄 | Gründung, Rechte, Diplomatie |
@@ -112,7 +112,7 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 | GC-800 Recycler | ✅ — [GC-800_RECYCLER.md](GC-800_RECYCLER.md); GC-800C UX optional |
 | GC-900A Logistics spec | ✅ — [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md) |
 | GC-900B Collect backend (Option A, no migration) | ✅ |
-| GC-900C Collect UI | 📋 |
+| GC-900C Collect UI (`/logistics`) | ✅ |
 | GC-900D Distribute backend | 📋 |
 | GC-900E Distribute UI / polish | 📋 |
 

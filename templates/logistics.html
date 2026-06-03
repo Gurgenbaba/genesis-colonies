@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set log_ctx = logistics if logistics is defined and logistics else {'ready': false} %}
+
+<div class="gc-page logistics-page" id="logistics-page"
+     data-ready="{{ '1' if log_ctx.ready else '0' }}"
+     data-planet-id="{{ log_ctx.planet_id if log_ctx.planet_id is defined else '' }}">
+
+  {% if log_ctx.ready %}
+  <script type="application/json" id="logistics-page-state">{{ log_ctx | tojson }}</script>
+  {% endif %}
+
+  <header class="section-header logistics-headline">
+    <div class="fleet-headline-row">
+      <div>
+        <h2 class="section-title">{{ T("fleet_logistics_title") }}</h2>
+        <p class="section-hint hint">{{ T("fleet_logistics_subtitle") }}</p>
+      </div>
+      <div class="fleet-slots-badge" aria-live="polite">
+        <span class="fleet-slots-label">{{ T("fleet_slots_label") }}</span>
+        <span class="fleet-slots-value gc-mono" data-logistics-fleet-slots>
+          {{ log_ctx.fleet_slots.active if log_ctx.fleet_slots is defined else 0 }}
+          /
+          {{ log_ctx.fleet_slots.max if log_ctx.fleet_slots is defined else 0 }}
+        </span>
+      </div>
+    </div>
+  </header>
+
+  {% if not log_ctx.ready %}
+  <section class="gc-panel">
+    <p class="fleet-unavailable">{{ T("fleet_unavailable") }}</p>
+  </section>
+  {% else %}
+
+  <nav class="logistics-tabs" role="tablist" aria-label="{{ T('fleet_logistics_title') }}">
+    <button type="button" class="logistics-tab is-active" role="tab" aria-selected="true"
+            data-logistics-tab="collect" id="logistics-tab-collect">
+      {{ T("fleet_logistics_collect") }}
+    </button>
+    <button type="button" class="logistics-tab is-disabled" role="tab" aria-selected="false" disabled
+            data-logistics-tab="distribute" id="logistics-tab-distribute"
+            title="{{ T('logistics_tab_distribute_soon') }}">
+      {{ T("fleet_logistics_distribute") }}
+      <span class="gc-panel-tag logistics-tab-badge">{{ T("logistics_coming_soon") }}</span>
+    </button>
+  </nav>
+
+  <section class="gc-panel logistics-panel logistics-panel--collect" role="tabpanel"
+           aria-labelledby="logistics-tab-collect" data-logistics-panel="collect">
+
+    <form id="logistics-collect-form" class="logistics-collect-form" data-no-pjax>
+      <div class="logistics-form-row">
+        <label class="fleet-form-label" for="logistics-hub">{{ T("logistics_hub_label") }}</label>
+        <select id="logistics-hub" name="target_planet_id" class="fleet-control" data-logistics-hub data-gc-hud-select>
+          {% for col in log_ctx.colonies %}
+          <option value="{{ col.planet_id }}" {% if col.is_active %}selected{% endif %}>
+            {{ col.name }} ({{ col.coordinates }})
+          </option>
+          {% endfor %}
+        </select>
+        <p class="hint logistics-hint">{{ T("logistics_hub_hint") }}</p>
+      </div>
+
+      <fieldset class="gc-fieldset logistics-sources-fieldset">
+        <legend class="gc-fieldset-legend">{{ T("logistics_sources_label") }}</legend>
+        <p class="hint logistics-hint">{{ T("logistics_sources_hint") }}</p>
+        <ul class="logistics-sources-list" data-logistics-sources>
+          {% for col in log_ctx.colonies %}
+          <li class="logistics-source-item" data-source-planet-id="{{ col.planet_id }}">
+            <label class="logistics-source-label">
+              <input type="checkbox" name="source_planet_ids" value="{{ col.planet_id }}"
+                     data-logistics-source-cb>
+              <span class="logistics-source-name">{{ col.name }}</span>
+              <span class="logistics-source-coords gc-mono">{{ col.coordinates }}</span>
+            </label>
+          </li>
+          {% endfor %}
+        </ul>
+      </fieldset>
+
+      <fieldset class="fleet-ships-fieldset gc-fieldset">
+        <legend class="gc-fieldset-legend">{{ T("logistics_cargo_ships_title") }}</legend>
+        <div class="fleet-ships-grid" data-logistics-ships-grid>
+          {% for ship in log_ctx.cargo_ship_defs %}
+          {% set have = log_ctx.ships.get(ship.key, 0) if log_ctx.ships else 0 %}
+          <div class="fleet-ship-row{% if have <= 0 %} is-empty{% endif %}"
+               data-ship-key="{{ ship.key }}" data-ship-have="{{ have }}" data-ship-role="cargo">
+            <div class="fleet-ship-row-main">
+              <span class="fleet-ship-name">{{ T(ship.name_key) }}</span>
+              <span class="fleet-ship-stock gc-mono" data-logistics-ship-stock>×{{ have|fmt_int }}</span>
+            </div>
+            <div class="fleet-ship-row-controls">
+              <input type="number" min="0" max="{{ have }}" value="0"
+                     class="fleet-ship-input gc-mono" data-logistics-ship-input="{{ ship.key }}"
+                     aria-label="{{ T(ship.name_key) }}">
+              <button type="button" class="gc-btn gc-btn-ghost fleet-ship-max" data-logistics-ship-max="{{ ship.key }}">
+                {{ T("fleet_btn_max") }}
+              </button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <p class="logistics-summary gc-mono" data-logistics-summary hidden aria-live="polite"></p>
+      <p class="logistics-error fleet-form-error" data-logistics-error hidden role="alert"></p>
+
+      <div class="fleet-logistics-actions">
+        <button type="submit" class="gc-btn gc-btn-primary" data-logistics-submit>
+          {{ T("logistics_collect_submit") }}
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <section class="gc-panel logistics-panel logistics-panel--distribute" role="tabpanel"
+           aria-labelledby="logistics-tab-distribute" data-logistics-panel="distribute" hidden>
+    <p class="hint">{{ T("fleet_logistics_not_implemented") }}</p>
+  </section>
+
+  {% endif %}
+</div>
+{% endblock %}
