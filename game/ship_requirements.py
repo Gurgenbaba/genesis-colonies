@@ -6,6 +6,9 @@ from typing import Any, Dict, List, Mapping, Tuple
 
 from .fleet_defs import get_ship
 
+# Orbital shipyard level is exposed via required_shipyard_level on catalog rows.
+_SHIPYARD_BUILDING_KEYS = frozenset({"orbital_shipyard", "shipyard"})
+
 
 def _building_level(buildings: Mapping[str, Any], key: str) -> int:
     return int(buildings.get(key, 0) or 0)
@@ -51,7 +54,10 @@ def requirements_summary_for_client(
     req = spec.get("requirements") or {}
     items: List[Dict[str, Any]] = []
     for bkey, need in sorted((req.get("buildings") or {}).items()):
-        have = _building_level(buildings, str(bkey))
+        bkey_s = str(bkey)
+        if bkey_s in _SHIPYARD_BUILDING_KEYS:
+            continue
+        have = _building_level(buildings, bkey_s)
         items.append(
             {
                 "type": "building",

@@ -59,6 +59,11 @@ def test_ship_detail_view_avoids_requirements_items_dot_access():
     assert "requirements_items" in tpl
 
 
+def test_shipyard_template_avoids_requirements_items_dot_access():
+    tpl = (ROOT / "templates" / "shipyard.html").read_text(encoding="utf-8")
+    assert "requirements.items" not in tpl
+
+
 def test_build_ship_detail_card_exposes_requirements_items(ship_assets_db):
     uid = _player()
     conn = db()

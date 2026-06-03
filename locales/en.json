@@ -741,7 +741,7 @@
   "shipyard_buildable_title": "Buildable ships",
   "shipyard_buildable_subtitle": "Instant build (Phase 1)",
   "shipyard_locked_title": "Locked ships",
-  "shipyard_locked_subtitle": "Require a higher Orbital Shipyard level",
+  "shipyard_locked_subtitle": "Missing shipyard level, buildings, or research",
   "shipyard_locked_level": "Requires Orbital Shipyard level %(level)s",
   "shipyard_build_btn": "Build",
   "shipyard_btn_max": "Max",

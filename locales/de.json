@@ -839,7 +839,7 @@
   "shipyard_buildable_title": "Baubare Schiffe",
   "shipyard_buildable_subtitle": "Sofortbau (Phase 1)",
   "shipyard_locked_title": "Gesperrte Schiffe",
-  "shipyard_locked_subtitle": "Benötigen eine höhere Orbitalwerft-Stufe",
+  "shipyard_locked_subtitle": "Fehlende Werft-Stufe, Gebäude oder Forschung",
   "shipyard_locked_level": "Benötigt Orbitalwerft Stufe %(level)s",
   "shipyard_build_btn": "Bauen",
   "shipyard_btn_max": "Max",

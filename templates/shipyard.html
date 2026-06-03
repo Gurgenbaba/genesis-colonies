@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip with context %}
+{% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip, render_shipyard_resource_blocker, render_shipyard_unlock_blockers with context %}
 
 {% block content %}
 {% set sy = shipyard if shipyard is defined and shipyard else {'ready': false, 'orbital_shipyard_level': 0} %}
@@ -7,6 +7,7 @@
 {% set p_metal = (sy.resources.metal if sy.resources is defined else (player_obj.metal if player_obj else 0)) | int %}
 {% set p_crystal = (sy.resources.crystal if sy.resources is defined else (player_obj.crystal if player_obj else 0)) | int %}
 {% set p_fuel = (sy.fuel_cells if sy.fuel_cells is defined else 0) | int %}
+{% set sy_lvl = (sy.orbital_shipyard_level if sy.orbital_shipyard_level is defined else 0) | int %}
 
 <div class="gc-page shipyard-page" id="shipyard-page"
      data-ready="{{ '1' if sy.ready is not defined or sy.ready != false else '0' }}"
@@ -156,47 +157,72 @@
       <span class="gc-panel-title" id="shipyard-buildable-title">{{ T("shipyard_buildable_title") }}</span>
       <span class="gc-panel-subtitle">{{ T("shipyard_buildable_subtitle") }}</span>
     </div>
-    <div class="shipyard-ship-list" data-shipyard-buildable-list>
+    <div class="gc-building-grid shipyard-ship-grid" data-shipyard-buildable-list role="list">
       {% set buildable_ships = sy.buildable_ships if sy.buildable_ships is defined else [] %}
       {% for ship in buildable_ships %}
-      <article class="shipyard-ship-card" data-ship-card="{{ ship.ship_key }}" data-unlocked="1">
-        <img src="{{ ship.icon }}" alt="" class="shipyard-ship-thumb" width="48" height="48" loading="lazy">
-        <div class="shipyard-ship-card-head">
-          <h3 class="shipyard-ship-card-title">
-            <button type="button" class="gc-ship-detail-trigger"
-                    data-ship-detail="{{ ship.ship_key }}"
-                    title="{{ T('ship_detail_open') }}">{{ T("fleet_ship_" ~ ship.ship_key) }}</button>
-          </h3>
-          <span class="shipyard-ship-role">{{ T("shipyard_role_" ~ ship.role) }}</span>
+      {% set row_class = 'gc-prog-unaffordable' if not ship.can_build and ship.block_reason != 'queue_full' else ('shipyard-ship-card--blocked' if not ship.can_build else 'gc-prog-affordable') %}
+      <article class="gc-ship-card gc-prog-card {{ row_class }}"
+               data-ship-card="{{ ship.ship_key }}" data-unlocked="1" role="listitem">
+        <header class="gc-bld-card-head">
+          <div class="gc-bld-card-identity">
+            <img src="{{ ship.icon }}" alt="" class="gc-bld-card-icon" width="34" height="34" loading="lazy">
+            <div class="gc-bld-card-title-wrap">
+              <h3 class="gc-bld-card-title">
+                <button type="button" class="gc-ship-detail-trigger gc-ship-card-title-btn"
+                        data-ship-detail="{{ ship.ship_key }}"
+                        title="{{ T('ship_detail_open') }}">{{ T("fleet_ship_" ~ ship.ship_key) }}</button>
+              </h3>
+            </div>
+          </div>
+          <span class="gc-ship-role-badge">{{ T("shipyard_role_" ~ ship.role) }}</span>
+        </header>
+        <p class="gc-ship-card-desc hint">{{ T("fleet_ship_" ~ ship.ship_key ~ "_desc") }}</p>
+        <div class="gc-bld-card-meta">
+          <div class="gc-bld-card-costs shipyard-ship-cost gc-mono" data-shipyard-cost>
+            {{ render_resource_cost_chip('metal', ship.cost_metal, unmet=(p_metal < ship.cost_metal)) }}
+            {{ render_resource_cost_chip('crystal', ship.cost_crystal, unmet=(p_crystal < ship.cost_crystal)) }}
+            {% if ship.cost_fuel_cells %}
+            {{ render_resource_cost_chip('fuel_cells', ship.cost_fuel_cells, unmet=(p_fuel < ship.cost_fuel_cells)) }}
+            {% endif %}
+          </div>
+          <span class="gc-bld-card-time gc-mono shipyard-ship-build-time hint"
+                title="{{ T('shipyard_build_time_per_unit', seconds=ship.build_seconds) }}">
+            {{ T("shipyard_build_time_per_unit", seconds=ship.build_seconds|fmt_int) }}
+          </span>
         </div>
-        <p class="shipyard-ship-desc hint">{{ T("fleet_ship_" ~ ship.ship_key ~ "_desc") }}</p>
-        <div class="shipyard-ship-cost gc-mono">
-          {{ render_resource_cost_chip('metal', ship.cost_metal) }}
-          {{ render_resource_cost_chip('crystal', ship.cost_crystal) }}
-          {% if ship.cost_fuel_cells %}
-          {{ render_resource_cost_chip('fuel_cells', ship.cost_fuel_cells) }}
+        {% if not ship.can_build %}
+        <div class="shipyard-blockers" data-shipyard-blockers aria-live="polite">
+          {% if ship.block_reason == 'queue_full' %}
+          <span class="shipyard-blocker shipyard-blocker-warn is-unmet" data-shipyard-block-reason="queue_full">
+            <span class="shipyard-blocker-icon" aria-hidden="true">⏳</span>
+            <span class="shipyard-blocker-text">{{ T("shipyard_block_queue_full") }}</span>
+          </span>
+          {% endif %}
+          {% if ship.cost_metal and p_metal < ship.cost_metal %}
+          {{ render_shipyard_resource_blocker('metal', ship.cost_metal, p_metal) }}
+          {% endif %}
+          {% if ship.cost_crystal and p_crystal < ship.cost_crystal %}
+          {{ render_shipyard_resource_blocker('crystal', ship.cost_crystal, p_crystal) }}
+          {% endif %}
+          {% if ship.cost_fuel_cells and p_fuel < ship.cost_fuel_cells %}
+          {{ render_shipyard_resource_blocker('fuel_cells', ship.cost_fuel_cells, p_fuel) }}
           {% endif %}
         </div>
-        <p class="shipyard-ship-build-time gc-mono hint">{{ T("shipyard_build_time_per_unit", seconds=ship.build_seconds|fmt_int) }}</p>
-        <div class="shipyard-ship-actions">
+        {% endif %}
+        <footer class="gc-ship-card-action shipyard-ship-actions">
           <input type="number" min="1" max="999" value="1"
                  class="gc-input shipyard-qty-input" data-shipyard-qty="{{ ship.ship_key }}"
                  aria-label="{{ T('shipyard_amount_label') }}">
-          <button type="button" class="gc-btn gc-btn-ghost" data-shipyard-max="{{ ship.ship_key }}">
+          <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shipyard-max="{{ ship.ship_key }}">
             {{ T("shipyard_btn_max") }}
           </button>
-          <button type="button" class="gc-btn gc-btn-primary"
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-xs"
                   data-shipyard-build="{{ ship.ship_key }}"
                   data-can-build="{{ '1' if ship.can_build else '0' }}"
                   {% if not ship.can_build %}disabled aria-disabled="true"{% endif %}>
             {{ T("shipyard_build_btn") }}
           </button>
-        </div>
-        {% if not ship.can_build and ship.block_reason == 'queue_full' %}
-        <p class="shipyard-hint-warn" data-shipyard-block-reason="queue_full">{{ T("shipyard_block_queue_full") }}</p>
-        {% elif not ship.can_build %}
-        <p class="shipyard-hint-warn" data-shipyard-block-reason="not_enough_resources">{{ T("shipyard_not_enough_resources") }}</p>
-        {% endif %}
+        </footer>
       </article>
       {% else %}
       <p class="shipyard-empty">{{ T("shipyard_no_buildable") }}</p>
@@ -210,24 +236,44 @@
       <span class="gc-panel-title" id="shipyard-locked-title">{{ T("shipyard_locked_title") }}</span>
       <span class="gc-panel-subtitle">{{ T("shipyard_locked_subtitle") }}</span>
     </div>
-    <div class="shipyard-ship-list shipyard-ship-list-locked" data-shipyard-locked-list>
+    <div class="gc-building-grid shipyard-ship-grid shipyard-ship-list-locked" data-shipyard-locked-list role="list">
       {% for ship in sy.locked_ships %}
-      <article class="shipyard-ship-card is-locked" data-ship-card="{{ ship.ship_key }}" data-unlocked="0">
-        <img src="{{ ship.icon }}" alt="" class="shipyard-ship-thumb" width="48" height="48" loading="lazy">
-        <div class="shipyard-ship-card-head">
-          <h3 class="shipyard-ship-card-title">
-            <button type="button" class="gc-ship-detail-trigger"
-                    data-ship-detail="{{ ship.ship_key }}"
-                    title="{{ T('ship_detail_open') }}">{{ T("fleet_ship_" ~ ship.ship_key) }}</button>
-          </h3>
-          <span class="shipyard-ship-role">{{ T("shipyard_role_" ~ ship.role) }}</span>
+      <article class="gc-ship-card gc-prog-card gc-prog-locked is-locked"
+               data-ship-card="{{ ship.ship_key }}" data-unlocked="0" role="listitem">
+        <header class="gc-bld-card-head">
+          <div class="gc-bld-card-identity">
+            <img src="{{ ship.icon }}" alt="" class="gc-bld-card-icon" width="34" height="34" loading="lazy">
+            <div class="gc-bld-card-title-wrap">
+              <h3 class="gc-bld-card-title">
+                <button type="button" class="gc-ship-detail-trigger gc-ship-card-title-btn"
+                        data-ship-detail="{{ ship.ship_key }}"
+                        title="{{ T('ship_detail_open') }}">{{ T("fleet_ship_" ~ ship.ship_key) }}</button>
+              </h3>
+            </div>
+          </div>
+          <span class="gc-ship-role-badge">{{ T("shipyard_role_" ~ ship.role) }}</span>
+        </header>
+        <p class="gc-ship-card-desc hint">{{ T("fleet_ship_" ~ ship.ship_key ~ "_desc") }}</p>
+        <div class="gc-bld-card-meta">
+          <div class="gc-bld-card-costs shipyard-ship-cost gc-mono" data-shipyard-cost>
+            {{ render_resource_cost_chip('metal', ship.cost_metal) }}
+            {{ render_resource_cost_chip('crystal', ship.cost_crystal) }}
+            {% if ship.cost_fuel_cells %}
+            {{ render_resource_cost_chip('fuel_cells', ship.cost_fuel_cells) }}
+            {% endif %}
+          </div>
+          <span class="gc-bld-card-time gc-mono shipyard-ship-build-time hint"
+                title="{{ T('shipyard_build_time_per_unit', seconds=ship.build_seconds) }}">
+            {{ T("shipyard_build_time_per_unit", seconds=ship.build_seconds|fmt_int) }}
+          </span>
         </div>
-        <p class="shipyard-ship-desc hint">{{ T("fleet_ship_" ~ ship.ship_key ~ "_desc") }}</p>
-        <p class="shipyard-locked-reason">{{ T("shipyard_locked_level", level=ship.required_shipyard_level) }}</p>
-        <div class="shipyard-ship-actions">
-          <input type="number" min="1" max="999" value="1" class="gc-input shipyard-qty-input" disabled>
-          <button type="button" class="gc-btn gc-btn-secondary" disabled>{{ T("shipyard_build_btn") }}</button>
+        <div class="shipyard-blockers" data-shipyard-blockers aria-live="polite">
+          {{ render_shipyard_unlock_blockers(ship, sy_lvl) }}
         </div>
+        <footer class="gc-ship-card-action shipyard-ship-actions">
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-xs status-pill-icon-btn" disabled
+                  title="{{ T('msg_build_requirements') }}" aria-label="{{ T('msg_build_requirements') }}">🔒</button>
+        </footer>
       </article>
       {% endfor %}
     </div>
