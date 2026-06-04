@@ -95,44 +95,86 @@
   margin: 3px auto 0;
   border-radius: 1px;
 }
-.logistics-page--compact .fleet-ships-grid { gap: 4px; }
+.logistics-page--compact .fleet-ships-grid { gap: 6px; }
 .logistics-page--compact .fleet-ship-row {
-  padding: 3px 6px;
-  gap: 4px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
+  padding: 6px 8px;
+  gap: 8px;
 }
 .logistics-page--compact .fleet-ship-row-main {
   flex: 1 1 auto;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
-.logistics-page--compact .fleet-ship-name { font-size: 0.82rem; }
+.logistics-page--compact .fleet-ship-name { font-size: 0.84rem; }
 .logistics-page--compact .fleet-ship-role-pill {
   font-size: 0.58rem;
   padding: 1px 4px;
 }
-.logistics-page--compact .fleet-ship-stock { font-size: 0.75rem; }
-.logistics-page--compact .fleet-ship-row-controls { gap: 4px; }
-.logistics-page--compact .fleet-ship-input {
-  width: 52px;
-  min-height: 26px;
-  padding: 2px 4px;
+.logistics-page--compact .fleet-ship-stock {
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+.logistics-page--compact .fleet-ship-row-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.logistics-page--compact input[type="number"].fleet-ship-input,
+.logistics-page--compact input[type="number"].fleet-resource-input {
+  width: 64px;
+  min-width: 64px;
+  min-height: 28px;
+  padding: 5px 6px;
+  font-family: var(--gc-mono);
   font-size: 0.82rem;
-  border-radius: 2px;
+  font-weight: 600;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.28);
+  background: rgba(3, 8, 18, 0.88);
+  color: var(--gc-neon-cyan);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), inset 0 0 12px rgba(0, 0, 0, 0.32);
 }
-.logistics-page--compact .fleet-ship-max {
-  min-height: 26px;
-  padding: 2px 8px;
+.logistics-page--compact input[type="number"].fleet-resource-input {
+  width: 88px;
+  min-width: 88px;
+}
+.logistics-page--compact input[type="number"].fleet-ship-input:hover,
+.logistics-page--compact input[type="number"].fleet-resource-input:hover {
+  border-color: rgba(70, 229, 255, 0.42);
+}
+.logistics-page--compact input[type="number"].fleet-ship-input:focus,
+.logistics-page--compact input[type="number"].fleet-resource-input:focus {
+  outline: none;
+  border-color: rgba(70, 229, 255, 0.62);
+  box-shadow: 0 0 0 2px rgba(70, 229, 255, 0.14), inset 0 0 12px rgba(70, 229, 255, 0.06);
+}
+.logistics-page--compact input[type="number"]::-webkit-outer-spin-button,
+.logistics-page--compact input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.logistics-page--compact .fleet-ship-max,
+.logistics-page--compact .fleet-resource-row .gc-btn {
+  min-height: 28px;
+  padding: 4px 10px;
   font-size: 0.72rem;
-  border-radius: 2px;
+  letter-spacing: 0.04em;
+  border-radius: var(--gc-radius-sm);
 }
-.logistics-page--compact .fleet-resource-input {
-  width: 72px;
-  min-height: 26px;
-  border-radius: 2px;
+.logistics-page--compact .fleet-resource-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.logistics-page--compact .fleet-resource-label {
+  flex: 1 1 120px;
+  min-width: 0;
+  font-size: 0.78rem;
 }
 .logistics-page--compact .logistics-actions { margin-top: 8px; }
 .logistics-page--compact [data-logistics-submit] {
