@@ -5125,7 +5125,7 @@
     (res && res.data && typeof res.data === "object" ? res.data : res) || {};
 
   const logisticsReasonText = (reason) =>
-    tt(`fleet_error_${reason}`, tt("fleet_error_generic", "Logistics action failed."));
+    tt(`fleet_error_${reason}`, tt("fleet_error_generic"));
 
   function parseLogisticsPageData(page) {
     const el = page.querySelector("#logistics-page-state");
@@ -5252,7 +5252,7 @@
     }
     const freeEl = page.querySelector(".logistics-slots-free");
     if (freeEl && slots.free !== undefined) {
-      const freeLabel = tt("logistics_slots_free", "Free");
+      const freeLabel = tt("logistics_slots_free");
       freeEl.textContent = `${freeLabel}: ${fmtNumber(parseInt(slots.free, 10) || 0)}`;
     }
     const data = parseLogisticsPageData(page);
@@ -5323,12 +5323,12 @@
     if (statusEl) {
       statusEl.classList.remove("is-ok", "is-blocked");
       if (canLaunch) {
-        statusEl.textContent = tt("logistics_preview_ready", "Ready to launch");
+        statusEl.textContent = tt("logistics_preview_ready");
         statusEl.classList.add("is-ok");
       } else {
         statusEl.textContent = blockReason
           ? logisticsReasonText(blockReason)
-          : tt("logistics_preview_incomplete", "Complete the plan to preview.");
+          : tt("logistics_preview_incomplete");
         statusEl.classList.add("is-blocked");
       }
     }
@@ -5340,7 +5340,7 @@
     }
     if (slotsEl) {
       const fs = preview.fleet_slots || {};
-      slotsEl.textContent = `${preview.slots_needed || 0} ${tt("logistics_preview_slots_of", "of")} ${fs.free ?? 0} ${tt("logistics_slots_free", "free")}`;
+      slotsEl.textContent = `${preview.slots_needed || 0} ${tt("logistics_preview_slots_of")} ${fs.free ?? 0} ${tt("logistics_slots_free")}`;
     }
     if (fuelEl) {
       fuelEl.textContent = String(preview.total_fuel_cost || 0);
@@ -5545,8 +5545,8 @@
           page,
           mode,
           mode === "collect"
-            ? tt("logistics_collect_incomplete", "Select hub, at least one source, and cargo ships.")
-            : tt("logistics_distribute_incomplete", "Select hub, at least one target, cargo, and ships.")
+            ? tt("logistics_collect_incomplete")
+            : tt("logistics_distribute_incomplete")
         );
         return;
       }
@@ -5574,7 +5574,7 @@
             showLogisticsError(
               page,
               mode,
-              tt("logistics_distribute_no_resources", "Enter resources to distribute.")
+              tt("logistics_distribute_no_resources")
             );
             return;
           }
@@ -5595,7 +5595,7 @@
           const okKey =
             mode === "collect" ? "logistics_collect_success" : "logistics_distribute_success";
           showNotify(
-            tt(okKey, mode === "collect" ? "Collect fleets launched." : "Distribute fleets launched."),
+            tt(okKey),
             "success"
           );
           applyLogisticsActionState(page, res);
