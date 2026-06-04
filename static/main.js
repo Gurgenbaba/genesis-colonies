@@ -3622,8 +3622,12 @@
         scheduleShipyardRefreshFromState(true);
         scheduleDefenseRefreshFromState(true);
       } else {
-        scheduleShipyardRefreshFromState();
-        scheduleDefenseRefreshFromState();
+      scheduleShipyardRefreshFromState();
+      scheduleDefenseRefreshFromState();
+      }
+
+      if (typeof GC.scheduleLogisticsRefreshFromState === "function") {
+        GC.scheduleLogisticsRefreshFromState();
       }
 
       return hasActiveBuild || hasActiveResearchNow;
@@ -5194,7 +5198,59 @@
     return !!preview.can_launch;
   }
 
-  function parseLogisticsPageData(page) {
+  function syncLogisticsColonyLaunchHints(page, preview) {
+    const launchIds = new Set(
+      (preview?.legs || []).map((leg) => parseInt(leg.planet_id, 10)).filter(Boolean)
+    );
+    page.querySelectorAll(".logistics-colony-card").forEach((card) => {
+      if (card.hidden) {
+        card.classList.remove("is-slots-skipped");
+        return;
+      }
+      const cb = card.querySelector("[data-logistics-colony-cb]");
+      const pid = parseInt(card.getAttribute("data-colony-planet-id"), 10);
+      const checked = !!(cb && cb.checked);
+      card.classList.toggle("is-slots-skipped", checked && launchIds.size > 0 && !launchIds.has(pid));
+    });
+  }
+
+  async function refreshLogisticsLiveState(page) {
+    if (!page || page.dataset.ready !== "1") return;
+    try {
+      const originId = getLogisticsOriginId(page);
+      const q = originId ? `?planet_id=${originId}` : "";
+      const res = await GC.fetchJSON(`/api/fleet/state${q}`, { cache: "no-store" });
+      if (!res?.ok) return;
+      const payload = logisticsPayload(res);
+      const slots = payload.active_slots || payload.fleet_slots;
+      if (slots) updateLogisticsFleetSlotsBadge(page, slots);
+      const data = parseLogisticsPageData(page);
+      if (data && payload.planet_id && payload.ships) {
+        const hubId = parseInt(payload.planet_id, 10);
+        const hub = getLogisticsColonyById(data, hubId);
+        if (hub) hub.ships = payload.ships;
+        data.ships = payload.ships;
+        const stateEl = page.querySelector("#logistics-page-state");
+        if (stateEl) stateEl.textContent = JSON.stringify(data);
+        updateLogisticsOriginShips(page, data);
+      } else {
+        scheduleLogisticsPreview(page);
+      }
+    } catch (_) {}
+  }
+
+  function scheduleLogisticsRefreshFromState() {
+    const page = document.getElementById("logistics-page");
+    if (!page || page.dataset.ready !== "1") return;
+    if (page._logisticsLivePending) return;
+    page._logisticsLivePending = true;
+    queueMicrotask(async () => {
+      page._logisticsLivePending = false;
+      await refreshLogisticsLiveState(page);
+    });
+  }
+
+  GC.scheduleLogisticsRefreshFromState = scheduleLogisticsRefreshFromState;
     const el = page.querySelector("#logistics-page-state");
     if (!el) return null;
     try {
@@ -5365,7 +5421,7 @@
     });
   }
 
-  function resetLogisticsPreview(page) {
+  function resetLogisticsPreview(page, hintKey) {
     page._logisticsLastPreview = null;
     const hud = page.querySelector("[data-logistics-preview]");
     if (hud) {
@@ -5373,8 +5429,9 @@
     }
     const statusEl = page.querySelector("[data-logistics-preview-status]");
     if (statusEl) {
-      statusEl.textContent = "–";
+      statusEl.textContent = hintKey ? tt(hintKey) : "–";
       statusEl.classList.remove("is-ok", "is-blocked");
+      if (hintKey) statusEl.classList.add("is-blocked");
     }
     ["flight", "cargo", "slots", "fuel"].forEach((key) => {
       const el = page.querySelector(`[data-logistics-preview-${key}]`);
@@ -5384,6 +5441,7 @@
     const targetsList = page.querySelector("[data-logistics-preview-targets-list]");
     if (targetsWrap) targetsWrap.hidden = true;
     if (targetsList) targetsList.innerHTML = "";
+    syncLogisticsColonyLaunchHints(page, null);
     updateLogisticsSubmitButtons(page);
   }
 
@@ -5413,8 +5471,16 @@
     }
     if (statusEl) {
       statusEl.classList.remove("is-ok", "is-blocked");
+      const skipped = parseInt(preview.targets_skipped || "0", 10) || 0;
       if (canLaunch) {
-        statusEl.textContent = tt("logistics_preview_ready");
+        if (skipped > 0) {
+          statusEl.textContent = tt("logistics_preview_slots_capped", "")
+            .replace("%(launching)s", String(preview.targets_launching || (preview.legs || []).length))
+            .replace("%(selected)s", String(preview.targets_selected || 0))
+            .replace("%(skipped)s", String(skipped));
+        } else {
+          statusEl.textContent = tt("logistics_preview_ready");
+        }
         statusEl.classList.add("is-ok");
       } else {
         statusEl.textContent = blockReason
@@ -5454,6 +5520,7 @@
         targetsList.innerHTML = "";
       }
     }
+    syncLogisticsColonyLaunchHints(page, preview);
     updateLogisticsSubmitButtons(page);
   }
 
@@ -5496,13 +5563,19 @@
     const shipTotal = Object.values(ships).reduce((a, b) => a + b, 0);
 
     if (!originId || !colonyIds.length || !shipTotal) {
-      resetLogisticsPreview(page);
+      if (!colonyIds.length && originId && shipTotal) {
+        resetLogisticsPreview(page, "logistics_preview_select_colonies");
+      } else if (!shipTotal && originId && colonyIds.length) {
+        resetLogisticsPreview(page, "logistics_preview_select_ships");
+      } else {
+        resetLogisticsPreview(page);
+      }
       return;
     }
     if (mode === "distribute") {
       const res = getLogisticsResourcesSelection(page);
       if ((res.metal || 0) + (res.crystal || 0) + (res.fuel_cells || 0) <= 0) {
-        resetLogisticsPreview(page);
+        resetLogisticsPreview(page, "logistics_distribute_no_resources");
         return;
       }
     }
@@ -5710,6 +5783,7 @@
             "success"
           );
           applyLogisticsActionState(page, res);
+          await refreshLogisticsLiveState(page);
           if (typeof GC.reloadCurrentPage === "function") {
             await GC.reloadCurrentPage({ force: true });
           }
@@ -5741,6 +5815,10 @@
     setLogisticsMode(page, getLogisticsMode(page));
     updateLogisticsOriginShips(page, data);
     resetLogisticsPreview(page);
+    refreshLogisticsLiveState(page);
+    GC.registerCleanup(() => {
+      page._logisticsLivePending = false;
+    });
   }
 
   function initFleet() {

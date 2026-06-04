@@ -422,6 +422,12 @@ def build_collect_route(
         )
     )
 
+    slots_free = int(free_fleet_slots)
+    if slots_free <= 0:
+        return False, "fleet_slots_full", None
+    if len(entries) > slots_free:
+        entries = entries[:slots_free]
+
     allocations = split_ships_across_targets(ships_n, len(entries))
     legs: List[CollectRouteLeg] = []
     for entry, alloc in zip(entries, allocations):
@@ -437,8 +443,8 @@ def build_collect_route(
             }
         )
 
-    if int(free_fleet_slots) < len(legs):
-        return False, "fleet_slots_full", None
+    if not legs:
+        return False, "no_deliverable_resources", None, None
 
     return True, "", legs
 

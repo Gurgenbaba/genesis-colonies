@@ -142,6 +142,16 @@
   border-radius: 2px;
 }
 .logistics-page--compact .logistics-preview-targets-list { font-size: 0.78rem; }
+.logistics-page--compact .logistics-colony-card.is-slots-skipped .logistics-source-label {
+  opacity: 0.55;
+  border-style: dashed;
+}
+.logistics-page--compact .logistics-colony-card.is-slots-skipped .logistics-source-name::after {
+  content: " · Slot-Limit";
+  font-size: 0.68rem;
+  color: var(--gc-text-dim);
+  font-weight: 400;
+}
 @media (max-width: 640px) {
   .logistics-page--compact .fleet-preview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

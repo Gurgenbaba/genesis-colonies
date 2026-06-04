@@ -190,6 +190,39 @@ def test_qa_fleet_slots_full_no_partial_batch(logistics_db):
     conn.close()
 
 
+def test_logistics_collect_caps_to_free_slots(logistics_db):
+    """More selected colonies than free slots → launch only up to free (deterministic order)."""
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=4)
+    cur = conn.cursor()
+    for sid in sources:
+        _fund_planet(cur, sid, metal=5000, crystal=500)
+    _seed_ships(hub, uid, {"mule_courier": 20}, conn=conn)
+    conn.commit()
+
+    free = int(get_fleet_slot_status(uid, conn=conn)["free"])
+    assert free >= 1
+
+    ok, reason, payload = collect_resources(
+        player_id=uid,
+        target_planet_id=hub,
+        source_planet_ids=sources,
+        ships={"mule_courier": 8},
+        conn=conn,
+    )
+    assert ok, reason
+    assert payload is not None
+    assert len(payload["started"]) == min(len(sources), free)
+
+    cur.execute(
+        "SELECT COUNT(*) AS c FROM fleet_movements WHERE player_id = ? AND mission_type = 'collect';",
+        (uid,),
+    )
+    assert int(cur.fetchone()["c"]) == min(len(sources), free)
+    conn.close()
+
+
 def test_qa_no_cargo_ships_no_batch(logistics_db):
     """Manual QA Fall 3 — combat-only selection leaves DB unchanged."""
     conn = db()

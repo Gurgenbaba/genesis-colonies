@@ -3939,19 +3939,27 @@ def _build_logistics_preview(
         base["block_reason"] = route_reason or "no_deliverable_resources"
         return base
 
+    targets_selected = 0
+    if mode == "collect":
+        targets_selected = len([int(x) for x in (data.get("source_planet_ids") or [])])
+    elif mode == "distribute":
+        targets_selected = len([int(x) for x in (data.get("target_planet_ids") or [])])
+    targets_launching = len(legs)
+    targets_skipped = max(0, int(targets_selected) - int(targets_launching))
+
     max_flight = max(int(x.get("flight_seconds") or 0) for x in legs)
     total_fuel = sum(int(x.get("fuel_cost") or 0) for x in legs)
     cargo_total = sum(int(x.get("cargo_total") or 0) for x in legs)
     cargo_used = sum(int(x.get("cargo_used") or 0) for x in legs)
     slots_needed = len(legs)
     block_reason = route_reason or ""
-    can_launch = int(slots.get("free") or 0) >= slots_needed
+    can_launch = int(slots.get("free") or 0) > 0 and slots_needed > 0
     for leg in legs:
         if not leg.get("can_send"):
             can_launch = False
             if not block_reason:
                 block_reason = str(leg.get("block_reason") or "generic")
-    if int(slots.get("free") or 0) < slots_needed:
+    if int(slots.get("free") or 0) <= 0:
         can_launch = False
         if not block_reason:
             block_reason = "fleet_slots_full"
@@ -3961,6 +3969,10 @@ def _build_logistics_preview(
             "can_launch": can_launch,
             "block_reason": block_reason,
             "slots_needed": slots_needed,
+            "targets_selected": targets_selected,
+            "targets_launching": targets_launching,
+            "targets_skipped": targets_skipped,
+            "slots_capped": targets_skipped > 0,
             "max_flight_seconds": max_flight,
             "total_fuel_cost": total_fuel,
             "cargo_total": cargo_total,

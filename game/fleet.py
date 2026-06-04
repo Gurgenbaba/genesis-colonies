@@ -3334,8 +3334,10 @@ def build_distribute_route(
             }
         )
 
-    if not legs:
-        return False, "no_deliverable_resources", None, None
+    if int(free_fleet_slots) <= 0:
+        return False, "fleet_slots_full", None, None
+    if len(legs) > int(free_fleet_slots):
+        legs = legs[: int(free_fleet_slots)]
 
     ship_allocs = split_ships_across_targets(ships_n, len(legs))
     for leg, alloc in zip(legs, ship_allocs):
@@ -3345,9 +3347,6 @@ def build_distribute_route(
         if loaded_resource_total(cargo) > calculate_total_cargo(alloc):
             return False, "not_enough_cargo", None, None
         leg["ships"] = dict(alloc)
-
-    if int(free_fleet_slots) < len(legs):
-        return False, "fleet_slots_full", None, None
 
     delivered_total = _sum_loaded_resources([leg["resources"] for leg in legs])
     return True, "", legs, delivered_total

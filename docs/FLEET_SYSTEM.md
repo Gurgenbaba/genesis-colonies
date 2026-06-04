@@ -122,7 +122,7 @@ Multi-Kolonie-Ressourcenbewegung über **`/logistics`** und `collect_resources` 
 
 ### Slot-Regeln
 
-- `get_fleet_slot_status(player_id)` → `free` muss **≥ Anzahl Legs** sein, sonst `fleet_slots_full`.
+- `get_fleet_slot_status(player_id)` → `free` muss **> 0** sein; pro Leg ein Slot. Mehr gewählte Kolonien als freie Slots → Route wird auf **`free`** gekappt (deterministische Sortierung); übersprungene Ziele in Preview (`targets_skipped`). Bei **0** freien Slots: `fleet_slots_full`.
 - Basis-Slots: `computer_tech` + 1 (Fallback 3 ohne Research) — identisch zu Einzel-`send_fleet`.
 - Bulk-Job blockiert atomisch: zu wenig Schiffe auf dem Hub → Rollback des gesamten Collect/Distribute-POST.
 
