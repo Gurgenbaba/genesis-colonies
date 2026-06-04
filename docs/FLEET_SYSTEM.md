@@ -19,7 +19,7 @@ Kanonische Module: `game/fleet.py`, `game/fleet_calc.py`, `game/fleet_defs.py`, 
 
 **Movement statuses:** `outbound`, `holding`, `returning`, `completed` (+ `cancelled`, `failed` im CHECK)
 
-**Missions:** `transport`, `collect`, `deploy`, `spy`, `attack`, `hold`, `expedition`, `colonize`
+**Missions:** `transport`, `collect`, `deploy`, `spy`, `attack`, `hold`, `expedition`, `colonize`, `recycle`
 
 Gate: `fleet_schema_ready()` — Features degradieren gracefully ohne Migration.
 
@@ -86,6 +86,9 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 
 Event keys: `void_scan`, `mineral_deposit`, `fuel_cache`, `debris_salvage`, `nav_interference`, `distress_beacon`, `sensor_glitch`, `ancient_stash`. Roll ist deterministisch pro `movement_id`.
 | **colonize** | `colonize_planet()`; verbraucht `seed_ark` |
+| **recycle** | Trümmer abbauen (`harvest_debris_at_field`); Fracht auf Rückflug; Report bei Ankunft |
+
+**Berichte:** Transport/Collect/Recycle/Deploy/Hold/Spy/Attack/Expedition/Kolonize → Inbox bei **Ziel-Ankunft** (nicht bei Rückkehr); idempotent pro `fleet_id` (GC-521).
 
 Logistics bulk API (`collect_resources` / `distribute_resources`): weiterhin `logistics_not_implemented` (Phase 2). Einzel-Collect über Fleet-Send-Mission `collect`.
 
@@ -104,6 +107,10 @@ Aufgerufen von:
 - `GET /api/fleet/state`
 - `queue_engine.finish_due_work()` (fleet_arrivals / fleet_returns counts)
 - Client countdown expiry → refresh
+
+**Idempotenz:** Statuswechsel nur über `_claim_movement_status()`; wiederholter Tick = No-Op (keine doppelten Nachrichten/Ressourcen/Kolonien/Loot). Siehe GC-524.
+
+**Manuelle Browser-QA:** Missions-Matrix, Galaxy-Shortcuts, Ankunft-vs-Rückkehr — [ALPHA_TESTPLAN.md § 11](ALPHA_TESTPLAN.md#11-fleet-missions-gc-525--manuelle-browser-qa) (GC-525).
 
 ---
 

@@ -263,6 +263,61 @@ def create_message(
     return _ok({"message_id": message_id})
 
 
+def _fleet_report_exists(
+    conn,
+    recipient_player_id: int,
+    fleet_id: int,
+    category: str,
+) -> bool:
+    """True if an inbox row already exists for this fleet arrival report."""
+    if not _table_ready(conn):
+        return False
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT 1 FROM player_messages
+        WHERE recipient_player_id = ?
+          AND category = ?
+          AND {_not_deleted_sql()}
+          AND json_extract(metadata_json, '$.fleet_id') = ?
+        LIMIT 1;
+        """,
+        (int(recipient_player_id), str(category), int(fleet_id)),
+    )
+    return cur.fetchone() is not None
+
+
+def _notify_player_idempotent_fleet(
+    player_id: int,
+    subject: str,
+    body: str,
+    *,
+    category: str = "system",
+    metadata: dict[str, Any] | None = None,
+    sender_name: str | None = None,
+    conn=None,
+) -> dict[str, Any]:
+    """Deliver a fleet arrival report once per (recipient, category, fleet_id)."""
+    pid = _valid_player_id(player_id, conn=conn)
+    if pid is None:
+        return _err("recipient_not_found")
+    meta = dict(metadata or {})
+    fleet_id = meta.get("fleet_id")
+    if fleet_id is not None and conn is not None:
+        if _fleet_report_exists(conn, pid, int(fleet_id), category):
+            return _ok({"message_id": None, "deduplicated": True})
+    return create_message(
+        pid,
+        subject,
+        body,
+        category=category,
+        sender_player_id=None,
+        sender_name=sender_name or "System",
+        metadata=meta or None,
+        conn=conn,
+    )
+
+
 def _valid_player_id(player_id: int, *, conn=None) -> int | None:
     try:
         pid = int(player_id)
@@ -380,7 +435,7 @@ def notify_combat(
     from .i18n import tr
 
     meta = normalize_combat_metadata(metadata)
-    return notify_player(
+    return _notify_player_idempotent_fleet(
         player_id,
         subject,
         body,
@@ -454,7 +509,7 @@ def notify_espionage(
     from .i18n import tr
 
     meta = normalize_espionage_metadata(metadata)
-    return notify_player(
+    return _notify_player_idempotent_fleet(
         player_id,
         subject,
         body,
@@ -555,7 +610,7 @@ def notify_expedition(
 ) -> dict[str, Any]:
     from .i18n import tr
 
-    return notify_player(
+    return _notify_player_idempotent_fleet(
         player_id,
         subject,
         body,
@@ -577,7 +632,7 @@ def notify_transport(
 ) -> dict[str, Any]:
     from .i18n import tr
 
-    return notify_player(
+    return _notify_player_idempotent_fleet(
         player_id,
         subject,
         body,

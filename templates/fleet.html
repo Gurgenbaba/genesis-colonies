@@ -11,7 +11,8 @@
 <div class="gc-page fleet-page" id="fleet-page"
      data-ready="{{ '1' if fleet_ctx.ready else '0' }}"
      data-planet-id="{{ fleet_ctx.planet_id if fleet_ctx.planet_id is defined else '' }}"
-     data-fuel-resource="{{ fleet_ctx.fuel_resource if fleet_ctx.fuel_resource is defined else 'fuel_cells' }}">
+     data-fuel-resource="{{ fleet_ctx.fuel_resource if fleet_ctx.fuel_resource is defined else 'fuel_cells' }}"
+     data-expedition-position="{{ fleet_ctx.expedition_position if fleet_ctx.expedition_position is defined else 16 }}">
 
   {% if fleet_ctx.ready %}
   <script type="application/json" id="fleet-page-state">{{ fleet_ctx | tojson }}</script>

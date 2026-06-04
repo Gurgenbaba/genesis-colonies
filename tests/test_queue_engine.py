@@ -115,6 +115,80 @@ def test_finish_building_job_once_idempotent(temp_db):
     assert int(get_planet_buildings(planet_id).get("metal_mine", 0)) == lvl_before + 1
 
 
+def test_finish_due_work_fleet_arrival_idempotent(temp_db):
+    from game.fleet import add_planet_ships, send_fleet
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    uid = _create_player("fleet_idem")
+    hw = get_homeworld(uid)
+    planet_id = int(hw["id"])
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE planets SET metal = 50000, crystal = 50000, fuel_cells = 50000 WHERE id = ?;",
+        (planet_id,),
+    )
+    add_planet_ships(planet_id, uid, {"mule_courier": 3}, conn=conn)
+    from game.planet_evolution.service import colonize_planet
+
+    ok_col, reason_col, extra = colonize_planet(
+        uid, name="Queue Target", galaxy=1, system=299, position=4, conn=conn
+    )
+    assert ok_col, reason_col
+    target_id = int(extra["planet_id"])
+    cur.execute("SELECT galaxy, system, position FROM planets WHERE id = ?;", (target_id,))
+    tgt = cur.fetchone()
+    g, s, p = int(tgt["galaxy"]), int(tgt["system"]), int(tgt["position"])
+    ok, reason, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=planet_id,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 1500},
+        conn=conn,
+    )
+    assert ok, reason
+    fleet_id = int(result["fleet"]["id"])
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+        (time.time() - 1, fleet_id),
+    )
+    cur.execute("SELECT metal FROM planets WHERE id = ?;", (target_id,))
+    metal_before = float(cur.fetchone()["metal"])
+    conn.commit()
+    conn.close()
+
+    r1 = finish_due_work(player_id=uid, planet_id=planet_id, source="test")
+    _close_db()
+    assert int(r1["finished"].get("fleet_arrivals") or 0) == 1
+
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("SELECT metal FROM planets WHERE id = ?;", (target_id,))
+    metal_after_first = float(cur.fetchone()["metal"])
+    conn.close()
+
+    r2 = finish_due_work(player_id=uid, planet_id=planet_id, source="test")
+    _close_db()
+    assert int(r2["finished"].get("fleet_arrivals") or 0) == 0
+
+    conn = db()
+    cur = conn.cursor()
+    cur.execute("SELECT metal FROM planets WHERE id = ?;", (target_id,))
+    metal_after_second = float(cur.fetchone()["metal"])
+    conn.close()
+
+    assert metal_after_first == metal_before + 1500
+    assert metal_after_second == metal_after_first
+
+
 def test_finish_research_job_once(temp_db):
     _run_migrate(temp_db)
     init_db()

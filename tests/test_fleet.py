@@ -27,8 +27,10 @@ from game.fleet import (
     mission_allowed_for_target,
     preview_fleet_flight,
     process_fleet_tick,
+    evaluate_fleet_mission_target,
     resolve_fleet_target,
     send_fleet,
+    validate_fleet_send,
     update_preset,
     _build_spy_report_body,
     _target_planet_snapshot,
@@ -200,6 +202,31 @@ def _allied_players_standalone():
     commit(conn)
     conn.close()
     return uid1, uid2, colony2, (g, s, p)
+
+
+def _count_fleet_messages(
+    uid: int,
+    fleet_id: int,
+    *,
+    category: str | None = None,
+) -> int:
+    msgs = list_messages(uid, category=category or "all")
+    count = 0
+    for item in msgs["data"]["messages"]:
+        detail = get_message(uid, item["id"], mark_read=False)
+        meta = detail["data"]["message"].get("metadata") or {}
+        if int(meta.get("fleet_id") or 0) == int(fleet_id):
+            count += 1
+    return count
+
+
+def _force_outbound_arrival(conn, fleet_id: int) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+        (time.time() - 1, int(fleet_id)),
+    )
+    conn.commit()
 
 
 # --- Calculation tests ---
@@ -1031,8 +1058,7 @@ def test_collect_creates_report(fleet_db):
     )
     assert ok
     fleet_id = result["fleet"]["id"]
-    cur.execute("UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;", (time.time() - 1, fleet_id))
-    conn.commit()
+    _force_outbound_arrival(conn, fleet_id)
     process_fleet_tick(player_id=uid, conn=conn)
     conn.commit()
 
@@ -1043,6 +1069,288 @@ def test_collect_creates_report(fleet_db):
     meta = detail["data"]["message"].get("metadata") or {}
     assert meta.get("mission_type") == "collect"
     assert meta.get("collected", {}).get("metal") == 4000
+    conn.close()
+
+
+def test_transport_creates_report_on_arrival(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000 WHERE id = ?;", (pid,))
+    _seed_ships(pid, uid, {"mule_courier": 3}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 1500, "crystal": 0},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    _force_outbound_arrival(conn, fleet_id)
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    assert _count_fleet_messages(uid, fleet_id, category="system") == 1
+    detail = get_message(uid, list_messages(uid, category="system")["data"]["messages"][0]["id"], mark_read=False)
+    meta = detail["data"]["message"].get("metadata") or {}
+    assert meta.get("direction") == "outbound"
+    assert meta.get("resources", {}).get("metal") == 1500
+    conn.close()
+
+
+def test_deploy_creates_report_on_arrival(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"falcon_interceptor": 8}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="deploy",
+        ships={"falcon_interceptor": 3},
+        resources={"metal": 100},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    _force_outbound_arrival(conn, fleet_id)
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    assert _count_fleet_messages(uid, fleet_id, category="system") == 1
+    detail = get_message(uid, list_messages(uid, category="system")["data"]["messages"][0]["id"], mark_read=False)
+    meta = detail["data"]["message"].get("metadata") or {}
+    assert meta.get("mission_type") == "deploy"
+    assert meta.get("ships", {}).get("falcon_interceptor") == 3
+    conn.close()
+
+
+def test_hold_creates_report_on_arrival(fleet_db):
+    conn = db()
+    uid1, _uid2, _ally_pid, (g, s, p) = _allied_players_standalone()
+    pid = int(get_planets_by_player(uid1, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid1, {"falcon_interceptor": 5}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid1,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="hold",
+        ships={"falcon_interceptor": 2},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    _force_outbound_arrival(conn, fleet_id)
+    process_fleet_tick(player_id=uid1, conn=conn)
+    conn.commit()
+
+    assert _count_fleet_messages(uid1, fleet_id, category="system") == 1
+    detail = get_message(uid1, list_messages(uid1, category="system")["data"]["messages"][0]["id"], mark_read=False)
+    meta = detail["data"]["message"].get("metadata") or {}
+    assert meta.get("mission_type") == "hold"
+    assert int(meta.get("holding_until") or 0) > int(time.time())
+    conn.close()
+
+
+def test_colonize_creates_success_report_on_arrival(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, fuel_cells=50000)
+    _seed_ships(pid, uid, {"seed_ark": 1}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=1,
+        target_system=496,
+        target_position=9,
+        mission_type="colonize",
+        ships={"seed_ark": 1},
+        colony_name="Report Colony",
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    _force_outbound_arrival(conn, fleet_id)
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    assert _count_fleet_messages(uid, fleet_id, category="combat") == 1
+    detail = get_message(uid, list_messages(uid, category="combat")["data"]["messages"][0]["id"], mark_read=False)
+    meta = detail["data"]["message"].get("metadata") or {}
+    assert meta.get("mission_type") == "colonize"
+    assert meta.get("colony_name") == "Report Colony"
+    conn.close()
+
+
+def test_colonize_creates_failure_report_on_arrival(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, fuel_cells=50000)
+    _seed_ships(pid, uid, {"seed_ark": 2}, conn=conn)
+    conn.commit()
+
+    target = (1, 495, 8)
+    ok1, _, result1 = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=target[0],
+        target_system=target[1],
+        target_position=target[2],
+        mission_type="colonize",
+        ships={"seed_ark": 1},
+        colony_name="First Colony",
+        conn=conn,
+    )
+    assert ok1
+    ok2, _, result2 = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=target[0],
+        target_system=target[1],
+        target_position=target[2],
+        mission_type="colonize",
+        ships={"seed_ark": 1},
+        colony_name="Second Colony",
+        conn=conn,
+    )
+    assert ok2
+    fleet_id = result2["fleet"]["id"]
+    _force_outbound_arrival(conn, result1["fleet"]["id"])
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    _force_outbound_arrival(conn, fleet_id)
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    assert _count_fleet_messages(uid, fleet_id, category="combat") == 1
+    failure_detail = None
+    for item in list_messages(uid, category="combat")["data"]["messages"]:
+        detail = get_message(uid, item["id"], mark_read=False)
+        meta = detail["data"]["message"].get("metadata") or {}
+        if int(meta.get("fleet_id") or 0) == fleet_id:
+            failure_detail = detail
+            break
+    assert failure_detail is not None
+    meta = failure_detail["data"]["message"].get("metadata") or {}
+    assert meta.get("reason") == "coordinate_occupied"
+    conn.close()
+
+
+def test_fleet_arrival_messages_idempotent_on_double_tick(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"mule_courier": 3, "falcon_interceptor": 6}, conn=conn)
+    conn.commit()
+
+    ok_t, _, transport = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 50},
+        conn=conn,
+    )
+    ok_d, _, deploy = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="deploy",
+        ships={"falcon_interceptor": 1},
+        conn=conn,
+    )
+    assert ok_t and ok_d
+    transport_id = transport["fleet"]["id"]
+    deploy_id = deploy["fleet"]["id"]
+    _force_outbound_arrival(conn, transport_id)
+    _force_outbound_arrival(conn, deploy_id)
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    transport_once = _count_fleet_messages(uid, transport_id, category="system")
+    deploy_once = _count_fleet_messages(uid, deploy_id, category="system")
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    assert _count_fleet_messages(uid, transport_id, category="system") == transport_once
+    assert _count_fleet_messages(uid, deploy_id, category="system") == deploy_once
+    assert transport_once == 1
+    assert deploy_once == 1
+    conn.close()
+
+
+def test_return_tick_does_not_create_arrival_report(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"mule_courier": 3}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 100},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    now = time.time()
+    cur.execute(
+        "UPDATE fleet_movements SET arrival_at = ?, status = 'returning', return_at = ? WHERE id = ?;",
+        (now - 200, now - 1, fleet_id),
+    )
+    conn.commit()
+    assert _count_fleet_messages(uid, fleet_id, category="system") == 0
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    assert _count_fleet_messages(uid, fleet_id, category="system") == 0
     conn.close()
 
 
@@ -1089,6 +1397,162 @@ def test_transport_arrival_credits_target(fleet_db):
     after = dict(cur.fetchone())
     assert int(after["metal"]) == int(before["metal"]) + 2000
     assert int(after["crystal"]) == int(before["crystal"]) + 500
+    conn.close()
+
+
+def test_transport_arrival_double_tick_idempotent_resources(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 10000, crystal = 1000 WHERE id = ?;", (colony2,))
+    _seed_ships(pid, uid, {"mule_courier": 3}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 3000, "crystal": 200},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    _force_outbound_arrival(conn, fleet_id)
+
+    tick1 = process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (colony2,))
+    after_once = dict(cur.fetchone())
+
+    tick2 = process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (colony2,))
+    after_twice = dict(cur.fetchone())
+
+    assert int(tick1.get("processed_arrivals") or 0) == 1
+    assert int(tick2.get("processed_arrivals") or 0) == 0
+    assert after_once == after_twice
+    assert int(after_twice["metal"]) == 13000
+    assert int(after_twice["crystal"]) == 1200
+    conn.close()
+
+
+def test_colonize_arrival_double_tick_single_colony(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, fuel_cells=50000)
+    _seed_ships(pid, uid, {"seed_ark": 1}, conn=conn)
+    cur.execute("SELECT COUNT(*) AS n FROM planets WHERE player_id = ?;", (uid,))
+    planets_before = int(cur.fetchone()["n"])
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=1,
+        target_system=498,
+        target_position=11,
+        mission_type="colonize",
+        ships={"seed_ark": 1},
+        colony_name="Idempotent Colony",
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    _force_outbound_arrival(conn, fleet_id)
+
+    tick1 = process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute("SELECT COUNT(*) AS n FROM planets WHERE player_id = ?;", (uid,))
+    planets_once = int(cur.fetchone()["n"])
+
+    tick2 = process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute("SELECT COUNT(*) AS n FROM planets WHERE player_id = ?;", (uid,))
+    planets_twice = int(cur.fetchone()["n"])
+
+    assert int(tick1.get("processed_arrivals") or 0) == 1
+    assert int(tick2.get("processed_arrivals") or 0) == 0
+    assert planets_once == planets_before + 1
+    assert planets_twice == planets_once
+    conn.close()
+
+
+def test_expedition_arrival_and_return_double_tick_idempotent_loot(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    g, s, _ = _planet_coords(pid, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"solar_skiff": 2}, conn=conn)
+    cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (pid,))
+    origin_before = dict(cur.fetchone())
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=EXPEDITION_POSITION,
+        mission_type="expedition",
+        ships={"solar_skiff": 1},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    _force_outbound_arrival(conn, fleet_id)
+
+    tick_arr1 = process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute("SELECT status, resources_json FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    row_once = dict(cur.fetchone())
+    rewards_once = json.loads(row_once["resources_json"] or "{}")
+
+    tick_arr2 = process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute("SELECT resources_json FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    rewards_twice = json.loads(dict(cur.fetchone())["resources_json"] or "{}")
+
+    assert int(tick_arr1.get("processed_arrivals") or 0) == 1
+    assert int(tick_arr2.get("processed_arrivals") or 0) == 0
+    assert row_once["status"] == "returning"
+    assert rewards_twice == rewards_once
+
+    now = time.time()
+    cur.execute(
+        "UPDATE fleet_movements SET return_at = ? WHERE id = ?;",
+        (now - 1, fleet_id),
+    )
+    conn.commit()
+
+    tick_ret1 = process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (pid,))
+    origin_after_once = dict(cur.fetchone())
+
+    tick_ret2 = process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (pid,))
+    origin_after_twice = dict(cur.fetchone())
+
+    assert int(tick_ret1.get("processed_returns") or 0) == 1
+    assert int(tick_ret2.get("processed_returns") or 0) == 0
+    assert origin_after_once == origin_after_twice
+    loot_metal = int(rewards_once.get("metal") or 0)
+    loot_crystal = int(rewards_once.get("crystal") or 0)
+    assert int(origin_after_twice["metal"]) == int(origin_before["metal"]) + loot_metal
+    assert int(origin_after_twice["crystal"]) == int(origin_before["crystal"]) + loot_crystal
     conn.close()
 
 
@@ -2095,6 +2559,7 @@ def test_resolve_fleet_target_own_planet(fleet_db):
     assert "transport" in target["allowed_missions"]
     assert "collect" in target["allowed_missions"]
     assert "deploy" in target["allowed_missions"]
+    assert "spy" in target["allowed_missions"]
     assert mission_allowed_for_target("attack", target)[0] is False
     conn.close()
 
@@ -2117,7 +2582,9 @@ def test_resolve_fleet_target_ally_planet(fleet_db):
     target = resolve_fleet_target(uid1, g, s, p, conn=conn)
     assert target["target_type"] == "ally_planet"
     assert "transport" in target["allowed_missions"]
+    assert "spy" in target["allowed_missions"]
     assert mission_allowed_for_target("deploy", target)[0] is False
+    assert mission_allowed_for_target("attack", target)[0] is False
     conn.close()
 
 
@@ -2318,12 +2785,14 @@ def test_deploy_foreign_blocked(fleet_db):
     conn.close()
 
 
-def test_spy_own_planet_blocked(fleet_db):
+def test_spy_own_planet_allowed(fleet_db):
     conn = db()
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     colony2 = _second_colony(uid, conn=conn)
     g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
     _seed_ships(pid, uid, {"veil_probe": 2}, conn=conn)
     conn.commit()
     ok, reason, _ = send_fleet(
@@ -2336,8 +2805,102 @@ def test_spy_own_planet_blocked(fleet_db):
         ships={"veil_probe": 1},
         conn=conn,
     )
+    assert ok, reason
+    conn.close()
+
+
+def test_colonize_occupied_slot_blocked(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    g, s, p = _planet_coords(pid, conn=conn)
+    _seed_ships(pid, uid, {"seed_ark": 1}, conn=conn)
+    conn.commit()
+    ok, reason, _ = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="colonize",
+        ships={"seed_ark": 1},
+        conn=conn,
+    )
     assert not ok
-    assert reason == "mission_blocked_own_planet"
+    assert reason == "coordinate_occupied"
+    conn.close()
+
+
+def test_mission_target_matrix_blocks(fleet_db):
+    from game.fleet_api import fleet_mission_target_payload, fleet_resolve_target_payload
+
+    _foreign_uid, _foreign_pid, (fg, fs, fp) = _foreign_planet_standalone()
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    g, s, p = _planet_coords(pid, conn=conn)
+
+    resolve_own = fleet_resolve_target_payload(uid, g, s, p, conn=conn)
+    assert resolve_own["ok"]
+    assert "deploy" in resolve_own["data"]["target"]["allowed_missions"]
+
+    blocked_deploy = fleet_mission_target_payload(uid, "deploy", fg, fs, fp, conn=conn)
+    assert not blocked_deploy["ok"]
+    assert blocked_deploy["error"] == "mission_blocked_foreign_planet"
+
+    blocked_expo = fleet_mission_target_payload(uid, "expedition", g, s, p, conn=conn)
+    assert not blocked_expo["ok"]
+    assert blocked_expo["error"] == "mission_blocked_not_expedition_slot"
+
+    ok_eval, reason, target = evaluate_fleet_mission_target(
+        uid, "spy", fg, fs, fp, conn=conn
+    )
+    assert ok_eval, reason
+    assert target["target_type"] == "foreign_planet"
+    conn.close()
+
+
+def test_preview_and_send_mission_block_parity(fleet_db):
+    _foreign_uid, _foreign_pid, (g, s, p) = _foreign_planet_standalone()
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"falcon_interceptor": 5}, conn=conn)
+    cur.execute("SELECT * FROM planets WHERE id = ?;", (pid,))
+    origin = dict(cur.fetchone())
+    conn.commit()
+
+    ships = {"falcon_interceptor": 2}
+    preview = build_fleet_send_preview(
+        player_id=uid,
+        origin_planet=origin,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="deploy",
+        ships=ships,
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    ok_send, send_reason, _ = validate_fleet_send(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="deploy",
+        ships=ships,
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert preview["can_send"] is False
+    assert ok_send is False
+    assert preview["block_reason"] == send_reason == "mission_blocked_foreign_planet"
+    assert preview["mission_allowed"] is False
     conn.close()
 
 
@@ -2685,6 +3248,7 @@ def test_fleet_ui_active_buttons_have_handlers():
         "data-fleet-mission-feedback",
         "updateMissionFeedback",
         "applyExpeditionTarget",
+        "applyFleetUrlPrefill",
         "syncExpeditionMissionTarget",
         "updateFleetFormMode",
         "data-preview-mission-badge",
@@ -2716,6 +3280,7 @@ def test_quick_target_template_sets_coord_inputs():
     assert "data-galaxy" in tpl and "fleet-colony-chip" in tpl
     assert "data-preview-target-type" in tpl
     assert "data-fleet-mission-feedback" in tpl
+    assert "data-expedition-position" in tpl
     assert "fleet-colony-chip--expedition" in tpl
     assert "fleet-coords-strip" in tpl
     assert "fleet-preview-hud" in tpl

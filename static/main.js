@@ -4187,6 +4187,7 @@
       const sel = page.querySelector("[data-fleet-mission]");
       if (!sel || !target) return;
       const allowed = new Set(target.allowed_missions || []);
+      const urlMission = String(page.dataset.fleetUrlMission || "").trim().toLowerCase();
       let currentOk = true;
       Array.from(sel.options).forEach((opt) => {
         const ok = allowed.size === 0 || allowed.has(opt.value);
@@ -4194,6 +4195,14 @@
         if (opt.value === sel.value) currentOk = ok;
       });
       if (!currentOk) {
+        if (urlMission && allowed.has(urlMission)) {
+          sel.value = urlMission;
+          if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(sel);
+          return;
+        }
+        if (urlMission && !allowed.has(urlMission)) {
+          delete page.dataset.fleetUrlMission;
+        }
         const first = Array.from(sel.options).find((o) => !o.disabled);
         if (first) {
           sel.value = first.value;
@@ -4790,6 +4799,7 @@
     GC.updateFleetFormMode = updateFleetFormMode;
     GC.refreshFleetState = refreshFleetState;
     GC.runFleetPreview = runPreview;
+    GC.applyFleetUrlPrefill = applyFleetUrlPrefill;
 
     document.addEventListener("click", async (e) => {
       const page = getPage();
@@ -5119,6 +5129,7 @@
       }
     });
     syncLogisticsSourceVisibility(page, hubId);
+    syncLogisticsSourceSelected(page);
     updateLogisticsSummary(page, data);
   }
 
@@ -5131,12 +5142,34 @@
       if (isHub) {
         const cb = li.querySelector("[data-logistics-source-cb]");
         if (cb) cb.checked = false;
+        li.classList.remove("is-selected");
       }
     });
   }
 
+  function syncLogisticsSourceSelected(page) {
+    page.querySelectorAll(".logistics-source-card").forEach((card) => {
+      const cb = card.querySelector("[data-logistics-source-cb]");
+      card.classList.toggle("is-selected", !!(cb && cb.checked && !card.hidden));
+    });
+  }
+
+  function updateLogisticsFleetSlotsBadge(page, slots) {
+    if (!slots) return;
+    const el = page.querySelector("[data-logistics-fleet-slots]");
+    if (el) {
+      el.textContent = `${parseInt(slots.active, 10) || 0} / ${parseInt(slots.max, 10) || 0}`;
+    }
+    const freeEl = page.querySelector(".logistics-slots-free");
+    if (freeEl && slots.free !== undefined) {
+      const freeLabel = tt("logistics_slots_free", "Free");
+      freeEl.textContent = `${freeLabel}: ${fmtNumber(parseInt(slots.free, 10) || 0)}`;
+    }
+  }
+
   function updateLogisticsSummary(page, data) {
     const summary = page.querySelector("[data-logistics-summary]");
+    const planHud = page.querySelector("[data-logistics-plan-hud]");
     if (!summary) return;
     const hubSel = page.querySelector("[data-logistics-hub]");
     const hubId = hubSel ? parseInt(hubSel.value, 10) : 0;
@@ -5148,21 +5181,29 @@
     const ships = getLogisticsShipsSelection(page);
     const shipTotal = Object.values(ships).reduce((a, b) => a + b, 0);
     if (!sources.length || !shipTotal) {
-      summary.hidden = true;
       summary.textContent = "";
+      if (planHud) {
+        planHud.hidden = true;
+        planHud.classList.remove("is-warning");
+      }
       return;
     }
     const slots = data?.fleet_slots || {};
     const free = parseInt(slots.free, 10) || 0;
+    const slotsNeeded = sources.length;
     const msg = tt(
       "logistics_summary_plan",
       "%(sources)s source colony/colonies, %(ships)s cargo ships, %(slots)s fleet slots needed."
     )
       .replace("%(sources)s", String(sources.length))
       .replace("%(ships)s", String(shipTotal))
-      .replace("%(slots)s", String(sources.length));
-    summary.textContent = free >= sources.length ? msg : `${msg} ${tt("logistics_slots_warning", "(Not enough free fleet slots)")}`;
-    summary.hidden = false;
+      .replace("%(slots)s", String(slotsNeeded));
+    const warn = free < slotsNeeded;
+    summary.textContent = warn ? `${msg} ${tt("logistics_slots_warning", "(Not enough free fleet slots)")}` : msg;
+    if (planHud) {
+      planHud.hidden = false;
+      planHud.classList.toggle("is-warning", warn);
+    }
   }
 
   function bindLogisticsOnce() {
@@ -5200,6 +5241,7 @@
         if (e.target.matches("[data-logistics-hub]")) {
           updateLogisticsHubShips(page, data);
         } else {
+          syncLogisticsSourceSelected(page);
           updateLogisticsSummary(page, data);
         }
       }
@@ -5252,6 +5294,8 @@
         if (res?.ok) {
           showNotify(tt("logistics_collect_success", "Collect fleets launched."), "success");
           applyActionState(res, "logistics_collect_success");
+          const slots = res?.state?.fleet_slots || res?.data?.fleet_slots;
+          if (slots) updateLogisticsFleetSlotsBadge(page, slots);
           if (typeof GC.reloadCurrentPage === "function") {
             await GC.reloadCurrentPage({ force: true });
           }
@@ -5293,7 +5337,10 @@
 
     page._fleetApplySeq = 0;
     page._fleetLiveServerTime = 0;
-    delete page.dataset.fleetUrlMission;
+    const initParams = new URLSearchParams(window.location.search);
+    if (!(initParams.get("mission") || "").trim()) {
+      delete page.dataset.fleetUrlMission;
+    }
 
     const rt = getFleetRuntime(page);
     rt.data = parseFleetPageData(page);
@@ -5324,39 +5371,45 @@
     const form = page.querySelector("#fleet-send-form");
     if (!form) return;
 
-    const mission = (params.get("mission") || "").trim();
+    const readExpeditionPosition = () => {
+      const fromPage = parseInt(page.dataset.expeditionPosition || "", 10);
+      if (fromPage > 0) return fromPage;
+      try {
+        const st = JSON.parse(page.querySelector("#fleet-page-state")?.textContent || "{}");
+        return parseInt(st.expedition_position || "16", 10) || 16;
+      } catch (_) {
+        return 16;
+      }
+    };
+
+    const missionRaw = (params.get("mission") || "").trim().toLowerCase();
     const gRaw = params.get("target_galaxy");
     const sRaw = params.get("target_system");
     const pRaw = params.get("target_position");
     const hasCoords = gRaw != null && sRaw != null && pRaw != null;
+    const gInp = form.querySelector('[name="target_galaxy"]');
+    const sInp = form.querySelector('[name="target_system"]');
+    const pInp = form.querySelector('[name="target_position"]');
+    const ms = form.querySelector("[data-fleet-mission]");
+    const missionKnown =
+      missionRaw && ms && Array.from(ms.options).some((opt) => opt.value === missionRaw);
 
     if (hasCoords) {
-      const gInp = form.querySelector('[name="target_galaxy"]');
-      const sInp = form.querySelector('[name="target_system"]');
-      const pInp = form.querySelector('[name="target_position"]');
       if (gInp) gInp.value = String(parseInt(gRaw, 10) || gRaw);
       if (sInp) sInp.value = String(parseInt(sRaw, 10) || sRaw);
       if (pInp) pInp.value = String(parseInt(pRaw, 10) || pRaw);
     }
 
-    if (mission) {
-      page.dataset.fleetUrlMission = mission;
-      const ms = form.querySelector("[data-fleet-mission]");
-      if (ms) {
-        ms.value = mission;
-        if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
+    if (missionKnown) {
+      if (missionRaw === "expedition") {
+        const expPos = readExpeditionPosition();
+        if (pInp) pInp.value = String(expPos);
       }
-      setColonizeRowVisible(page, mission);
+      page.dataset.fleetUrlMission = missionRaw;
+      ms.value = missionRaw;
+      if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
+      setColonizeRowVisible(page, missionRaw);
       updateFleetFormMode(page);
-      if (mission === "expedition" && pRaw == null) {
-        let expPos = 16;
-        try {
-          const st = JSON.parse(page.querySelector("#fleet-page-state")?.textContent || "{}");
-          expPos = parseInt(st.expedition_position || "16", 10) || 16;
-        } catch (_) {}
-        const posInp = form.querySelector('[name="target_position"]');
-        if (posInp) posInp.value = String(expPos);
-      }
     } else {
       delete page.dataset.fleetUrlMission;
     }
@@ -5372,6 +5425,13 @@
     }
     if (typeof GC.syncExpeditionMissionTarget === "function") {
       GC.syncExpeditionMissionTarget(page);
+    }
+    const urlMission = page.dataset.fleetUrlMission || "";
+    if (urlMission && ms && ms.value !== urlMission) {
+      ms.value = urlMission;
+      if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
+      setColonizeRowVisible(page, urlMission);
+      updateFleetFormMode(page);
     }
     if (typeof GC.runFleetPreview === "function") {
       GC.runFleetPreview(page);

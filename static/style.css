@@ -5044,54 +5044,209 @@ span.gc-res-icon.gc-res-fuel-cells{ background-image: var(--gc-icon-fuel-cells);
 }
 .fleet-logistics-actions{ display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* Logistics page (Genesis HUD — aligned with fleet / buildings) */
 .logistics-page .logistics-tabs{
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
   margin: 0 0 12px;
 }
-.logistics-tab{
+.logistics-page .logistics-tab{
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border: 1px solid var(--gc-border, rgba(255,255,255,.12));
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
+  gap: 6px;
 }
-.logistics-tab.is-active{
-  border-color: var(--gc-accent, #5eb3ff);
-  background: rgba(94, 179, 255, .08);
-}
-.logistics-tab.is-disabled,
-.logistics-tab:disabled{
-  opacity: .55;
+.logistics-page .logistics-tab.is-disabled,
+.logistics-page .logistics-tab:disabled{
+  opacity: 0.55;
   cursor: not-allowed;
+  box-shadow: none;
 }
-.logistics-tab-badge{ font-size: .75rem; }
+.logistics-page .logistics-tab-badge{
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+.logistics-slots-badge{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.logistics-slots-free{
+  font-size: 0.72rem;
+  color: var(--gc-text-dim);
+}
+.logistics-layout{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 960px){
+  .logistics-layout{ grid-template-columns: 1fr; }
+}
+.logistics-layout-col{ min-width: 0; }
+.logistics-hub-row{ margin-bottom: 12px; }
+.logistics-hub-select{ width: 100%; max-width: 100%; }
+.logistics-sources-fieldset{ margin-top: 4px; }
 .logistics-sources-list{
   list-style: none;
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
+.logistics-source-card[hidden]{ display: none; }
 .logistics-source-label{
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  cursor: pointer;
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.14);
+  background: rgba(5, 10, 22, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.logistics-source-label:hover{
+  border-color: rgba(70, 229, 255, 0.28);
+  background: rgba(7, 14, 32, 0.62);
+}
+.logistics-source-card.is-selected .logistics-source-label{
+  border-color: rgba(70, 229, 255, 0.55);
+  box-shadow: var(--gc-border-glow-soft), inset 0 0 0 1px rgba(70, 229, 255, 0.12);
+  background: rgba(7, 18, 40, 0.72);
+}
+.logistics-source-cb{
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.logistics-source-check{
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  border-radius: 4px;
+  border: 1px solid rgba(120, 190, 255, 0.35);
+  background: rgba(3, 8, 18, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+.logistics-source-card.is-selected .logistics-source-check{
+  border-color: rgba(70, 229, 255, 0.75);
+  background: rgba(70, 229, 255, 0.2);
+  box-shadow: var(--gc-border-glow-soft);
+}
+.logistics-source-card.is-selected .logistics-source-check::after{
+  content: "";
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: 4px auto 0;
+  border-radius: 2px;
+  background: var(--gc-accent);
+}
+.logistics-source-card-body{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.logistics-source-head{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  cursor: pointer;
+  gap: 6px;
 }
-.logistics-source-item[hidden]{ display: none; }
+.logistics-source-name{
+  font-weight: 700;
+  color: var(--gc-text);
+  letter-spacing: 0.02em;
+}
+.logistics-source-active-tag{
+  font-size: 0.62rem;
+}
+.logistics-source-coords{
+  font-size: 0.82rem;
+  color: var(--gc-text-dim);
+}
+.logistics-source-resources{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 0.8rem;
+  color: var(--gc-text-soft);
+}
+.logistics-empty-colonies,
+.logistics-phase-hint{
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px dashed rgba(120, 190, 255, 0.2);
+  background: rgba(5, 10, 22, 0.35);
+}
 .logistics-form-row{ margin-bottom: 14px; }
 .logistics-hint{ margin: 4px 0 0; }
-.logistics-summary{ margin: 8px 0 0; font-size: .9rem; }
-.logistics-error{ margin: 8px 0 0; }
+.logistics-plan-hud{
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.18);
+  background: rgba(5, 12, 28, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.logistics-plan-hud::before{
+  content: "";
+  display: block;
+  height: 2px;
+  margin: -10px -12px 10px;
+  border-radius: var(--gc-radius-sm) var(--gc-radius-sm) 0 0;
+  background: linear-gradient(90deg, transparent, rgba(70, 229, 255, 0.45), transparent);
+}
+.logistics-plan-hud.is-warning{
+  border-color: rgba(255, 176, 32, 0.35);
+  background: rgba(40, 28, 8, 0.45);
+}
+.logistics-plan-hud.is-warning::before{
+  background: linear-gradient(90deg, transparent, rgba(255, 176, 32, 0.5), transparent);
+}
+.logistics-plan-hud-head{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.logistics-plan-badge{
+  letter-spacing: 0.08em;
+}
+.logistics-summary{
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--gc-text-soft);
+}
+.logistics-error{ margin: 10px 0 0; }
+.logistics-actions{
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(120, 190, 255, 0.1);
+}
+.logistics-page .gc-fieldset,
+.logistics-page .fleet-ships-fieldset{
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+.logistics-page .gc-fieldset-legend{
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: var(--gc-primary);
+  font-weight: 800;
+  padding: 0 0 6px;
+}
 .fleet-empty, .fleet-unavailable, .fleet-preset-empty{ color: var(--gc-text-dim); }
 
 /* Alliance */

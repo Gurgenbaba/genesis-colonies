@@ -328,6 +328,142 @@ def test_list_system_slot_coordinates_match_position(galaxy_db):
         )
 
 
+def _galaxy_client(monkeypatch):
+    import app as app_module
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+    uname = f"gal_{uuid.uuid4().hex[:8]}"
+    ok, _, user = create_user(uname, "test-pass-123")
+    assert ok, err
+    client = app_module.app.test_client()
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    return client, int(user["id"])
+
+
+def _foreign_planet_in_system(galaxy: int, system: int, *, avoid_position: int | None = None):
+    """Second player homeworld in the same galaxy/system as viewer tests."""
+    ok, err, user = create_user(f"foreign_{uuid.uuid4().hex[:8]}", "test-pass-123")
+    assert ok, err
+    uid = int(user["id"])
+    ensure_player_and_homeworld(uid, player_name="Foreign")
+    planet = get_planets_by_player(uid)[0]
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT position FROM planets
+        WHERE galaxy = ? AND system = ? AND position BETWEEN 1 AND 15;
+        """,
+        (int(galaxy), int(system)),
+    )
+    taken = {int(row["position"]) for row in cur.fetchall()}
+    if avoid_position is not None:
+        taken.add(int(avoid_position))
+    free_pos = next(p for p in range(1, 16) if p not in taken)
+    cur.execute(
+        "UPDATE planets SET galaxy = ?, system = ?, position = ? WHERE id = ?;",
+        (int(galaxy), int(system), int(free_pos), int(planet["id"])),
+    )
+    conn.commit()
+    conn.close()
+    coords = get_planet_coordinates(planet)
+    return uid, int(planet["id"]), coords
+
+
+def test_galaxy_own_planet_fleet_shortcuts(galaxy_db, monkeypatch):
+    client, uid = _galaxy_client(monkeypatch)
+    planet = get_planets_by_player(uid)[0]
+    coords = get_planet_coordinates(planet)
+    resp = client.get(f"/galaxy?galaxy={coords['galaxy']}&system={coords['system']}")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    pos = int(coords["position"])
+    assert f"target_position={pos}" in body
+    assert "mission=transport" in body
+    assert "mission=deploy" in body
+    assert "galaxy-fleet-action--transport" in body
+    assert "galaxy-fleet-action--deploy" in body
+
+
+def test_galaxy_foreign_planet_fleet_shortcuts(galaxy_db, monkeypatch):
+    from game.fleet_defs import EXPEDITION_POSITION
+
+    client, uid = _galaxy_client(monkeypatch)
+    planet = get_planets_by_player(uid)[0]
+    viewer_coords = get_planet_coordinates(planet)
+    g, s = int(viewer_coords["galaxy"]), int(viewer_coords["system"])
+    _foreign_uid, foreign_pid, foreign_coords = _foreign_planet_in_system(
+        g, s, avoid_position=int(viewer_coords["position"])
+    )
+    assert int(foreign_coords["position"]) != EXPEDITION_POSITION
+    resp = client.get(f"/galaxy?galaxy={g}&system={s}")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    fp = int(foreign_coords["position"])
+    assert f"target_position={fp}" in body
+    assert "mission=spy" in body
+    assert "mission=attack" in body
+    assert "galaxy-fleet-action--spy" in body
+    assert "galaxy-fleet-action--attack" in body
+
+
+def test_galaxy_empty_slot_colonize_shortcut(galaxy_db, monkeypatch):
+    client, _uid = _galaxy_client(monkeypatch)
+    resp = client.get("/galaxy?galaxy=1&system=499")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "mission=colonize" in body
+    assert "galaxy-fleet-action--colonize" in body
+    assert "target_galaxy=1" in body
+    assert "target_system=499" in body
+
+
+def test_galaxy_expedition_slot_shortcut(galaxy_db, monkeypatch):
+    from game.fleet_defs import EXPEDITION_POSITION
+
+    client, uid = _galaxy_client(monkeypatch)
+    planet = get_planets_by_player(uid)[0]
+    coords = get_planet_coordinates(planet)
+    resp = client.get(f"/galaxy?galaxy={coords['galaxy']}&system={coords['system']}")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "galaxy-slot-expedition" in body or "is-expedition" in body
+    assert f"target_position={EXPEDITION_POSITION}" in body
+    assert "mission=expedition" in body
+    assert "galaxy-fleet-action--expedition" in body
+
+
+def test_fleet_page_exposes_expedition_position_dataset(galaxy_db, monkeypatch):
+    import app as app_module
+    from game.fleet_defs import EXPEDITION_POSITION
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+    client, _uid = _galaxy_client(monkeypatch)
+    resp = client.get(
+        f"/fleet?target_galaxy=1&target_system=42&target_position={EXPEDITION_POSITION}&mission=expedition"
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'id="fleet-page"' in body
+    assert f'data-expedition-position="{EXPEDITION_POSITION}"' in body
+    assert 'name="target_galaxy"' in body
+    assert 'data-fleet-mission' in body
+
+
+def test_fleet_url_prefill_contract_in_main_js(galaxy_db):
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parent.parent / "static" / "main.js").read_text(encoding="utf-8")
+    assert "function applyFleetUrlPrefill(page)" in js
+    assert "page.dataset.fleetUrlMission" in js
+    assert "data-expedition-position" in js or "dataset.expeditionPosition" in js
+    assert "syncMissionAllowlistFromTarget" in js
+    assert "urlMission && allowed.has(urlMission)" in js
+    assert "GC.applyFleetUrlPrefill = applyFleetUrlPrefill" in js
+
+
 def test_api_galaxy_system(galaxy_db, monkeypatch):
     import app as app_module
 

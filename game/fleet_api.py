@@ -29,3 +29,55 @@ def fleet_err(error: str, *, message_key: str | None = None, message: str = "", 
     if data is not None:
         out["data"] = data
     return out
+
+
+def fleet_resolve_target_payload(
+    player_id: int,
+    galaxy: int,
+    system: int,
+    position: int,
+    *,
+    conn=None,
+) -> Dict[str, Any]:
+    """Canonical /api/fleet/resolve-target body (same target matrix as send/preview)."""
+    from .fleet import resolve_fleet_target
+
+    target = resolve_fleet_target(
+        int(player_id),
+        int(galaxy),
+        int(system),
+        int(position),
+        conn=conn,
+    )
+    return fleet_ok({"target": target}, message_key="fleet_target_ok")
+
+
+def fleet_mission_target_payload(
+    player_id: int,
+    mission: str,
+    galaxy: int,
+    system: int,
+    position: int,
+    *,
+    conn=None,
+) -> Dict[str, Any]:
+    """Probe mission eligibility for coordinates (preview/send use the same evaluator)."""
+    from .fleet import evaluate_fleet_mission_target
+
+    ok, reason, target = evaluate_fleet_mission_target(
+        int(player_id),
+        mission,
+        int(galaxy),
+        int(system),
+        int(position),
+        conn=conn,
+    )
+    data: Dict[str, Any] = {
+        "target": target,
+        "mission": str(mission or "").strip().lower(),
+        "mission_allowed": bool(ok),
+        "mission_block_reason": reason if not ok else "",
+    }
+    if ok:
+        return fleet_ok(data, message_key="fleet_mission_target_ok")
+    return fleet_err(reason, message_key=reason, data=data)

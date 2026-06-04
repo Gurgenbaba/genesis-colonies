@@ -2,6 +2,9 @@
 {% set g = slot.coordinates.galaxy if slot.coordinates is defined else (nav.galaxy or 1) %}
 {% set s = slot.coordinates.system if slot.coordinates is defined else (nav.system or 1) %}
 {% set p = slot.coordinates.position if slot.coordinates is defined else slot.position %}
+{% if slot.is_expedition_slot is defined and slot.is_expedition_slot %}
+{% set p = slot.coordinates.position if slot.coordinates is defined else (slot.position if slot.position is defined else 16) %}
+{% endif %}
 {% set base = url_for('fleet_view') ~ '?target_galaxy=' ~ g ~ '&target_system=' ~ s ~ '&target_position=' ~ p %}
 {% set hold_ok = hold_mission_enabled if hold_mission_enabled is defined else false %}
 
