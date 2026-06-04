@@ -154,7 +154,7 @@ Planet-Scope: Hub = aktiver Kontext-Planet (`get_context_planet`) bzw. explizit 
 
 **GC-533 UI/Client:** Kompakte Genesis-Oberfläche (`logistics-page--compact` in `templates/fleet_logistics.html`). Quell-Kolonien, Cargo-Mengen und MAX werden clientseitig validiert; Start erst nach erfolgreichem Preview (`can_launch`). Fehler als Inline-Hinweis + `showNotify`. Cargo-Gate serverseitig: `validate_logistics_manual_ships()` in `game/fleet.py` / `fleet_logistics_validate_ships()` in `game/fleet_api.py`.
 
-**Manuelle QA:** [ALPHA_TESTPLAN.md § 12](ALPHA_TESTPLAN.md#12-fleet-logistics-gc-531--manuelle-browser-qa).
+**Manuelle QA (GC-533):** [GC-533_MANUAL_QA_LOGISTICS.md](GC-533_MANUAL_QA_LOGISTICS.md), Checkliste [ALPHA_TESTPLAN.md § 12](ALPHA_TESTPLAN.md#12-fleet-logistics-gc-533--manuelle-browser-qa).
 
 ---
 
@@ -174,7 +174,7 @@ Aufgerufen von:
 
 **Idempotenz:** Statuswechsel nur über `_claim_movement_status()`; wiederholter Tick = No-Op (keine doppelten Nachrichten/Ressourcen/Kolonien/Loot). Siehe GC-524.
 
-**Manuelle Browser-QA:** Missions § 11, Logistics § 12 — [ALPHA_TESTPLAN.md](ALPHA_TESTPLAN.md) (GC-525, GC-531).
+**Manuelle Browser-QA:** Missions § 11 (GC-525), Logistics § 12 (GC-533) — [ALPHA_TESTPLAN.md](ALPHA_TESTPLAN.md).
 
 ---
 

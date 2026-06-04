@@ -3652,6 +3652,10 @@ def distribute_resources(
     if not target_ids:
         return False, "no_planets", None
 
+    ok_ships, ship_reason, ships_n = validate_logistics_manual_ships(ships)
+    if not ok_ships:
+        return False, ship_reason, None
+
     own = conn is None
     if own:
         conn = db()
@@ -3669,7 +3673,7 @@ def distribute_resources(
             origin_planet_id=hub_id,
             target_planet_ids=target_ids,
             planet_rows_by_id=planet_rows,
-            ships=ships,
+            ships=ships_n,
             resources=resources,
             resources_mode=res_mode,
             target_resources=target_resources,
@@ -3680,7 +3684,6 @@ def distribute_resources(
         if not ok_route or not legs or not delivered_total:
             return False, route_reason or "no_deliverable_resources", None
 
-        ships_n = normalize_ships(ships)
         if own:
             begin_write_transaction(conn)
 
