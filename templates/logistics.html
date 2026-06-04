@@ -6,7 +6,8 @@
 
 <div class="gc-page logistics-page" id="logistics-page"
      data-ready="{{ '1' if log_ctx.ready else '0' }}"
-     data-planet-id="{{ log_ctx.planet_id if log_ctx.planet_id is defined else '' }}">
+     data-planet-id="{{ log_ctx.planet_id if log_ctx.planet_id is defined else '' }}"
+     data-logistics-mode="collect">
 
   {% if log_ctx.ready %}
   <script type="application/json" id="logistics-page-state">{{ log_ctx | tojson }}</script>
@@ -51,17 +52,56 @@
       📦 {{ T("fleet_logistics_collect") }}
     </button>
     <button type="button"
-            class="gc-btn gc-btn-ghost gc-btn-sm tab-btn logistics-tab is-disabled"
+            class="gc-btn gc-btn-ghost gc-btn-sm tab-btn logistics-tab"
             role="tab"
             id="logistics-tab-distribute"
             aria-selected="false"
             aria-controls="logistics-panel-distribute"
-            disabled
-            title="{{ T('logistics_tab_distribute_soon') }}"
             data-logistics-tab="distribute">
       🔀 {{ T("fleet_logistics_distribute") }}
-      <span class="gc-panel-tag logistics-tab-badge">{{ T("logistics_coming_soon") }}</span>
     </button>
+  </div>
+
+  <div class="logistics-form-row logistics-hub-row">
+    <label class="fleet-form-label" for="logistics-origin">{{ T("logistics_hub_label") }}</label>
+    <select id="logistics-origin" class="fleet-control logistics-hub-select"
+            data-logistics-origin data-logistics-hub data-gc-hud-select>
+      {% for col in log_ctx.colonies %}
+      <option value="{{ col.planet_id }}" {% if col.is_active %}selected{% endif %}>
+        {{ col.name }} — {{ col.coordinates }}
+      </option>
+      {% endfor %}
+    </select>
+    <p class="hint logistics-hint">{{ T("logistics_hub_hint") }}</p>
+  </div>
+
+  <div class="fleet-preview-hud logistics-preview-hud" data-logistics-preview aria-live="polite">
+    <div class="fleet-preview-hud-head">
+      <span class="gc-panel-tag logistics-plan-badge">{{ T("logistics_plan_badge", "Plan") }}</span>
+      <span class="fleet-preview-mission-status" data-logistics-preview-status>–</span>
+    </div>
+    <div class="fleet-preview-grid">
+      <div class="fleet-preview-stat">
+        <span class="fleet-preview-stat-label">{{ T("logistics_preview_flight", "Longest leg") }}</span>
+        <span class="fleet-preview-stat-value gc-mono" data-logistics-preview-flight>–</span>
+      </div>
+      <div class="fleet-preview-stat">
+        <span class="fleet-preview-stat-label">{{ T("logistics_preview_cargo", "Cargo load") }}</span>
+        <span class="fleet-preview-stat-value gc-mono" data-logistics-preview-cargo>–</span>
+      </div>
+      <div class="fleet-preview-stat">
+        <span class="fleet-preview-stat-label">{{ T("logistics_preview_slots", "Fleet slots") }}</span>
+        <span class="fleet-preview-stat-value gc-mono" data-logistics-preview-slots>–</span>
+      </div>
+      <div class="fleet-preview-stat">
+        <span class="fleet-preview-stat-label">{{ T("logistics_preview_fuel", "Fuel cost") }}</span>
+        <span class="fleet-preview-stat-value gc-mono" data-logistics-preview-fuel>–</span>
+      </div>
+    </div>
+    <div class="logistics-preview-targets" data-logistics-preview-targets hidden>
+      <span class="fleet-preview-stat-label">{{ T("logistics_preview_targets", "Target colonies") }}</span>
+      <ul class="logistics-preview-targets-list" data-logistics-preview-targets-list></ul>
+    </div>
   </div>
 
   <section class="gc-panel logistics-panel logistics-panel--collect fleet-panel" role="tabpanel"
@@ -81,34 +121,20 @@
 
     <form id="logistics-collect-form" class="logistics-collect-form" data-no-pjax>
       <div class="logistics-layout">
-
         <div class="logistics-layout-col logistics-layout-col--targets">
-          <div class="logistics-form-row logistics-hub-row">
-            <label class="fleet-form-label" for="logistics-hub">{{ T("logistics_hub_label") }}</label>
-            <select id="logistics-hub" name="target_planet_id" class="fleet-control logistics-hub-select"
-                    data-logistics-hub data-gc-hud-select>
-              {% for col in log_ctx.colonies %}
-              <option value="{{ col.planet_id }}" {% if col.is_active %}selected{% endif %}>
-                {{ col.name }} — {{ col.coordinates }}
-              </option>
-              {% endfor %}
-            </select>
-            <p class="hint logistics-hint">{{ T("logistics_hub_hint") }}</p>
-          </div>
-
           <fieldset class="gc-fieldset logistics-sources-fieldset">
             <legend class="gc-fieldset-legend">{{ T("logistics_sources_label") }}</legend>
             <p class="hint logistics-hint">{{ T("logistics_sources_hint") }}</p>
             {% if log_ctx.colonies|length <= 1 %}
             <p class="logistics-empty-colonies hint">{{ T("logistics_need_second_colony", "You need at least two colonies to use collect logistics.") }}</p>
             {% else %}
-            <ul class="logistics-sources-list" data-logistics-sources>
+            <ul class="logistics-sources-list" data-logistics-colony-list="collect">
               {% for col in log_ctx.colonies %}
               {% set res = col.resources if col.resources is defined else {} %}
-              <li class="logistics-source-card" data-source-planet-id="{{ col.planet_id }}">
+              <li class="logistics-source-card logistics-colony-card" data-colony-planet-id="{{ col.planet_id }}">
                 <label class="logistics-source-label">
                   <input type="checkbox" class="logistics-source-cb" name="source_planet_ids"
-                         value="{{ col.planet_id }}" data-logistics-source-cb>
+                         value="{{ col.planet_id }}" data-logistics-colony-cb="collect">
                   <span class="logistics-source-check" aria-hidden="true"></span>
                   <span class="logistics-source-card-body">
                     <span class="logistics-source-head">
@@ -136,7 +162,7 @@
           <fieldset class="fleet-ships-fieldset gc-fieldset">
             <legend class="gc-fieldset-legend">{{ T("logistics_cargo_ships_title") }}</legend>
             <p class="hint logistics-hint">{{ T("logistics_cargo_ships_hint", "Ships are taken from the selected hub colony.") }}</p>
-            <div class="fleet-ships-grid" data-logistics-ships-grid>
+            <div class="fleet-ships-grid" data-logistics-ships-grid="collect">
               {% for ship in log_ctx.cargo_ship_defs %}
               {% set have = log_ctx.ships.get(ship.key, 0) if log_ctx.ships else 0 %}
               <div class="fleet-ship-row{% if have <= 0 %} is-empty{% endif %}"
@@ -159,17 +185,10 @@
             </div>
           </fieldset>
 
-          <div class="logistics-plan-hud" data-logistics-plan-hud hidden aria-live="polite">
-            <div class="logistics-plan-hud-head">
-              <span class="gc-panel-tag logistics-plan-badge">{{ T("logistics_plan_badge", "Plan") }}</span>
-            </div>
-            <p class="logistics-summary gc-mono" data-logistics-summary></p>
-          </div>
-
-          <p class="logistics-error fleet-form-error" data-logistics-error hidden role="alert"></p>
+          <p class="logistics-error fleet-form-error" data-logistics-error="collect" hidden role="alert"></p>
 
           <div class="fleet-logistics-actions logistics-actions">
-            <button type="submit" class="gc-btn gc-btn-primary" data-logistics-submit>
+            <button type="submit" class="gc-btn gc-btn-primary" data-logistics-submit="collect">
               {{ T("logistics_collect_submit") }}
             </button>
           </div>
@@ -182,13 +201,109 @@
            id="logistics-panel-distribute"
            aria-labelledby="logistics-tab-distribute"
            data-logistics-panel="distribute" hidden>
+
     <div class="gc-panel-header">
       <div class="gc-panel-head-left">
         <span class="gc-panel-title">{{ T("fleet_logistics_distribute") }}</span>
-        <span class="gc-panel-subtitle">{{ T("logistics_tab_distribute_soon") }}</span>
+        <span class="gc-panel-subtitle">{{ T("logistics_distribute_panel_subtitle", "Deliver cargo from the hub to selected colonies.") }}</span>
+      </div>
+      <div class="gc-panel-head-right">
+        <a href="{{ url_for('fleet_view') }}" class="gc-btn gc-btn-outline gc-btn-sm">{{ T("nav_fleet", "Fleet") }}</a>
       </div>
     </div>
-    <p class="hint logistics-phase-hint">{{ T("fleet_logistics_not_implemented") }}</p>
+
+    <form id="logistics-distribute-form" class="logistics-distribute-form" data-no-pjax>
+      <div class="logistics-layout">
+        <div class="logistics-layout-col logistics-layout-col--targets">
+          <fieldset class="gc-fieldset logistics-sources-fieldset">
+            <legend class="gc-fieldset-legend">{{ T("logistics_targets_label", "Target colonies") }}</legend>
+            <p class="hint logistics-hint">{{ T("logistics_targets_hint", "Select colonies to receive resources.") }}</p>
+            {% if log_ctx.colonies|length <= 1 %}
+            <p class="logistics-empty-colonies hint">{{ T("logistics_need_second_colony", "You need at least two colonies to use distribute logistics.") }}</p>
+            {% else %}
+            <ul class="logistics-sources-list" data-logistics-colony-list="distribute">
+              {% for col in log_ctx.colonies %}
+              <li class="logistics-source-card logistics-colony-card" data-colony-planet-id="{{ col.planet_id }}">
+                <label class="logistics-source-label">
+                  <input type="checkbox" class="logistics-source-cb" name="target_planet_ids"
+                         value="{{ col.planet_id }}" data-logistics-colony-cb="distribute">
+                  <span class="logistics-source-check" aria-hidden="true"></span>
+                  <span class="logistics-source-card-body">
+                    <span class="logistics-source-head">
+                      <span class="logistics-source-name">{{ col.name }}</span>
+                      {% if col.is_active %}
+                      <span class="gc-panel-tag logistics-source-active-tag">{{ T("logistics_active_colony", "Active") }}</span>
+                      {% endif %}
+                    </span>
+                    <span class="logistics-source-coords gc-mono">{{ col.coordinates }}</span>
+                  </span>
+                </label>
+              </li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </fieldset>
+
+          <fieldset class="fleet-resources-fieldset gc-fieldset">
+            <legend class="gc-fieldset-legend">{{ T("logistics_cargo_label", "Cargo to distribute") }}</legend>
+            <p class="hint logistics-hint">{{ T("logistics_distribute_equal_hint", "Total cargo is split evenly across selected targets (storage caps apply).") }}</p>
+            <div class="fleet-resource-grid">
+              <div class="fleet-resource-row">
+                <label for="logistics-res-metal" class="fleet-resource-label">{{ render_resource_icon('metal') }}{{ T("resource_metal") }}</label>
+                <input type="number" id="logistics-res-metal" min="0" value="0"
+                       class="fleet-resource-input gc-mono" data-logistics-resource="metal">
+              </div>
+              <div class="fleet-resource-row">
+                <label for="logistics-res-crystal" class="fleet-resource-label">{{ render_resource_icon('crystal') }}{{ T("resource_crystal") }}</label>
+                <input type="number" id="logistics-res-crystal" min="0" value="0"
+                       class="fleet-resource-input gc-mono" data-logistics-resource="crystal">
+              </div>
+              <div class="fleet-resource-row">
+                <label for="logistics-res-fuel" class="fleet-resource-label">{{ render_resource_icon('fuel_cells') }}{{ T("resource_fuel_cells") }}</label>
+                <input type="number" id="logistics-res-fuel" min="0" value="0"
+                       class="fleet-resource-input gc-mono" data-logistics-resource="fuel_cells">
+              </div>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="logistics-layout-col logistics-layout-col--ships">
+          <fieldset class="fleet-ships-fieldset gc-fieldset">
+            <legend class="gc-fieldset-legend">{{ T("logistics_cargo_ships_title") }}</legend>
+            <p class="hint logistics-hint">{{ T("logistics_cargo_ships_hint", "Ships are taken from the selected hub colony.") }}</p>
+            <div class="fleet-ships-grid" data-logistics-ships-grid="distribute">
+              {% for ship in log_ctx.cargo_ship_defs %}
+              {% set have = log_ctx.ships.get(ship.key, 0) if log_ctx.ships else 0 %}
+              <div class="fleet-ship-row{% if have <= 0 %} is-empty{% endif %}"
+                   data-ship-key="{{ ship.key }}" data-ship-have="{{ have }}" data-ship-role="cargo">
+                <div class="fleet-ship-row-main">
+                  <span class="fleet-ship-name">{{ T(ship.name_key) }}</span>
+                  <span class="gc-panel-tag fleet-ship-role-pill fleet-ship-role-pill--cargo">{{ T("shipyard_role_cargo") }}</span>
+                  <span class="fleet-ship-stock gc-mono" data-logistics-ship-stock>×{{ have|fmt_int }}</span>
+                </div>
+                <div class="fleet-ship-row-controls">
+                  <input type="number" min="0" max="{{ have }}" value="0"
+                         class="fleet-ship-input gc-mono" data-logistics-ship-input="{{ ship.key }}"
+                         aria-label="{{ T(ship.name_key) }}">
+                  <button type="button" class="gc-btn gc-btn-ghost fleet-ship-max" data-logistics-ship-max="{{ ship.key }}">
+                    {{ T("fleet_btn_max") }}
+                  </button>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </fieldset>
+
+          <p class="logistics-error fleet-form-error" data-logistics-error="distribute" hidden role="alert"></p>
+
+          <div class="fleet-logistics-actions logistics-actions">
+            <button type="submit" class="gc-btn gc-btn-primary" data-logistics-submit="distribute">
+              {{ T("logistics_distribute_submit", "Start distribute") }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
   </section>
 
   {% endif %}

@@ -99,7 +99,7 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | **Verteidigung** — Türme, Schilder, Queue, Ranking | ✅ | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) |
 | **Kampf-Auflösung** — Resolver, Reports, Loot, Debris, Ranking | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md); `test_combat.py` |
 | **GC-700** — Combat polish / gaps (kein Resolver-Neubau) | 📋 | Siehe [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) § GC-700 Readiness |
-| Fleet Logistics (collect/distribute) | 🔄 | Collect ✅ `/logistics` + API; Distribute → GC-900D/E |
+| Fleet Logistics (collect/distribute) | ✅ | GC-526–531: Bulk API, `/logistics` UI, Reports (`report_phase`) — [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
 | Recycler-Mission | ✅ | GC-800A Backend + GC-800B UI; GC-800C UX optional |
 | Espionage (beyond probe report) | ✅ | GC-401 tiered intel + inbox UI |
 | Expedition event engine | ✅ | GC-402 weighted events + structured metadata |
@@ -111,7 +111,7 @@ Docs: [FLEET_SYSTEM.md](FLEET_SYSTEM.md), [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md)
 Empfohlene Reihenfolge (verbleibend — nach [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md)):
 
 ```
-GC-803 ✅ → GC-900A Spec ✅ → GC-900B Collect Backend → GC-900C Collect UI → GC-900D Distribute Backend → GC-900E Distribute UI → GC-700 Combat polish
+GC-803 ✅ → GC-900A–900E / GC-526–531 Logistics ✅ → GC-700 Combat polish
 ```
 
 ---
@@ -236,7 +236,8 @@ Details: [SECURITY.md](SECURITY.md)
 | **GC-900B** — Collect backend (`collect` mission + batch orchestration) | ✅ |
 | **GC-900C** — Collect UI | ✅ |
 | **GC-900D** — Distribute backend (`transport` + batch orchestration) | ✅ |
-| **GC-900E** — Distribute UI / polish | 📋 |
+| **GC-900E** — Distribute UI / polish | ✅ |
+| **GC-526–531** — Logistics bulk, routes, UI, inbox reports, QA docs | ✅ |
 | Admin Control Center auf PJAX/State (statt `reload`) | 💡 |
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
 

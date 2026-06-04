@@ -239,6 +239,39 @@ def test_overview_injects_planet_landscape_css_var(switcher_db, monkeypatch):
     assert f"img/landscapes/{expected_fn}" in body
 
 
+def test_game_state_includes_planet_limit(switcher_db, monkeypatch):
+    player_id, uname = _create_player()
+
+    client = _app_client(monkeypatch)
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    gs = client.get("/api/game-state").get_json()
+    assert gs.get("ok") is True
+    pl = gs.get("planet_limit") or {}
+    assert pl.get("current") == 1
+    assert pl.get("max") == 9
+
+    colony_id = _second_planet(player_id)
+    gs2 = client.get("/api/game-state").get_json()
+    pl2 = gs2.get("planet_limit") or {}
+    assert pl2.get("current") == 2
+    assert pl2.get("max") == 9
+    assert colony_id > 0
+
+
+def test_base_template_shows_planet_limit_panel():
+    tpl = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "hud-res-planet-limit" in tpl
+    assert "data-planet-limit-value" in tpl
+    assert "resource-bar-with-planet-limit" in tpl
+
+
+def test_main_js_patches_planet_limit_from_state():
+    src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    assert "patchHeaderPlanetLimitFromState" in src
+    assert "data-planet-limit-value" in src
+    assert "planet_limit" in src
+
+
 def test_game_state_includes_planets_list(switcher_db, monkeypatch):
     player_id, uname = _create_player()
     colony_id = _second_planet(player_id)

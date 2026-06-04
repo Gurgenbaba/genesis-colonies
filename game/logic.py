@@ -579,3 +579,42 @@ def get_building_tree_status(
         research=research,
         user_id=int(user_id) if user_id is not None else None,
     )
+
+
+# ============================================================================ #
+# PLANET LIMIT (game-state / header HUD)
+# ============================================================================ #
+
+DEFAULT_MAX_COLONIES_PER_PLAYER = 9
+
+
+def get_planet_limit_block(
+    player_id: int,
+    *,
+    conn=None,
+) -> Dict[str, int]:
+    """
+    Kolonie-/Planetenlimit für /api/game-state (current = owned planets, max = game_settings).
+    """
+    from .models import db as _db, get_game_settings, get_planets_by_player
+
+    uid = int(player_id)
+    own_conn = conn is None
+    if own_conn:
+        conn = _db()
+
+    try:
+        current = len(get_planets_by_player(uid, conn=conn))
+        settings = get_game_settings(conn=conn) if conn is not None else get_game_settings()
+        settings = settings or {}
+        raw_max = settings.get("max_colonies_per_player")
+        try:
+            max_val = int(raw_max) if raw_max is not None else DEFAULT_MAX_COLONIES_PER_PLAYER
+        except (TypeError, ValueError):
+            max_val = DEFAULT_MAX_COLONIES_PER_PLAYER
+        if max_val < 1:
+            max_val = DEFAULT_MAX_COLONIES_PER_PLAYER
+        return {"current": int(current), "max": int(max_val)}
+    finally:
+        if own_conn and conn is not None:
+            conn.close()

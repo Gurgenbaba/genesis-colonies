@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import time
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, TypedDict
 
 from .fleet_defs import FLEET_FUEL_RESOURCE, canonical_ship_key, get_ship, is_known_ship_key
 
@@ -314,6 +314,179 @@ def build_flight_preview_payload(
         "cargo_used": loaded_total,
         "resources": loaded,
     }
+
+
+class CollectRouteLeg(TypedDict):
+    planet_id: int
+    galaxy: int
+    system: int
+    position: int
+    ships: Dict[str, int]
+
+
+def normalize_collect_source_planet_ids(
+    origin_planet_id: int,
+    source_planet_ids: Sequence[int],
+) -> List[int]:
+    """Dedupe collect sources, exclude origin, preserve first-seen order before galaxy sort."""
+    origin = int(origin_planet_id or 0)
+    out: List[int] = []
+    seen: set[int] = set()
+    for raw in source_planet_ids or []:
+        pid = int(raw or 0)
+        if pid <= 0 or pid == origin or pid in seen:
+            continue
+        seen.add(pid)
+        out.append(pid)
+    return out
+
+
+def collect_route_sort_key(
+    *,
+    galaxy: int,
+    system: int,
+    position: int,
+    planet_id: int,
+) -> Tuple[int, int, int, int]:
+    """Deterministic galaxy order for multi-colony collect legs."""
+    return (int(galaxy), int(system), int(position), int(planet_id))
+
+
+def validate_collect_source_planet(
+    planet_row: Mapping[str, Any] | None,
+    *,
+    player_id: int,
+) -> Tuple[bool, str, Optional[Dict[str, int]]]:
+    """Planet must exist, belong to player, and have valid galaxy coordinates."""
+    if planet_row is None:
+        return False, "planet_not_found", None
+    if int(planet_row.get("player_id") or 0) != int(player_id):
+        return False, "planet_not_owned", None
+    from .galaxy import GalaxyCoordinateError, get_planet_coordinates
+
+    try:
+        coords = get_planet_coordinates(dict(planet_row))
+    except GalaxyCoordinateError:
+        return False, "invalid_planet_coordinates", None
+    return True, "", {
+        "galaxy": int(coords["galaxy"]),
+        "system": int(coords["system"]),
+        "position": int(coords["position"]),
+    }
+
+
+def build_collect_route(
+    *,
+    origin_planet_id: int,
+    source_planet_ids: Sequence[int],
+    planet_rows_by_id: Mapping[int, Mapping[str, Any]],
+    ships: Mapping[str, int],
+    free_fleet_slots: int,
+    player_id: int,
+) -> Tuple[bool, str, Optional[List[CollectRouteLeg]]]:
+    """Validate collect targets, sort deterministically, split cargo ships, enforce slots."""
+    sources = normalize_collect_source_planet_ids(origin_planet_id, source_planet_ids)
+    if not sources:
+        return False, "no_planets", None
+
+    ships_n = normalize_ships(ships)
+    if not ships_n:
+        return False, "no_ships", None
+    ok_cargo, cargo_reason = fleet_ships_are_cargo_only(ships_n)
+    if not ok_cargo:
+        return False, cargo_reason, None
+
+    entries: List[Dict[str, Any]] = []
+    for pid in sources:
+        ok, reason, coords = validate_collect_source_planet(
+            planet_rows_by_id.get(int(pid)),
+            player_id=int(player_id),
+        )
+        if not ok or not coords:
+            return False, reason or "planet_not_found", None
+        entries.append(
+            {
+                "planet_id": int(pid),
+                "galaxy": coords["galaxy"],
+                "system": coords["system"],
+                "position": coords["position"],
+            }
+        )
+
+    entries.sort(
+        key=lambda e: collect_route_sort_key(
+            galaxy=int(e["galaxy"]),
+            system=int(e["system"]),
+            position=int(e["position"]),
+            planet_id=int(e["planet_id"]),
+        )
+    )
+
+    allocations = split_ships_across_targets(ships_n, len(entries))
+    legs: List[CollectRouteLeg] = []
+    for entry, alloc in zip(entries, allocations):
+        if not alloc or calculate_total_cargo(alloc) <= 0:
+            return False, "not_enough_ships", None
+        legs.append(
+            {
+                "planet_id": int(entry["planet_id"]),
+                "galaxy": int(entry["galaxy"]),
+                "system": int(entry["system"]),
+                "position": int(entry["position"]),
+                "ships": dict(alloc),
+            }
+        )
+
+    if int(free_fleet_slots) < len(legs):
+        return False, "fleet_slots_full", None
+
+    return True, "", legs
+
+
+def fleet_ships_are_cargo_only(ships: Mapping[str, int]) -> tuple[bool, str]:
+    """Logistics bulk jobs require cargo-role hulls only."""
+    ships_n = normalize_ships(ships)
+    if not ships_n:
+        return False, "no_ships"
+    for key in ships_n:
+        spec = get_ship(str(key))
+        if not spec or str(spec.get("role") or "") != "cargo":
+            return False, "no_cargo_ships"
+    return True, ""
+
+
+def split_ships_across_targets(ships: Mapping[str, int], target_count: int) -> list[Dict[str, int]]:
+    """Split fleet evenly; per-type remainder goes to the last target."""
+    if target_count < 1:
+        return []
+    ships_n = normalize_ships(ships)
+    parts: list[Dict[str, int]] = [{} for _ in range(target_count)]
+    for key, total in ships_n.items():
+        base, rem = divmod(int(total), target_count)
+        for i in range(target_count - 1):
+            if base > 0:
+                parts[i][key] = base
+        last_qty = base + rem
+        if last_qty > 0:
+            parts[target_count - 1][key] = last_qty
+    return [normalize_ships(p) for p in parts]
+
+
+def split_resources_evenly(resources: Mapping[str, Any], target_count: int) -> list[Dict[str, int]]:
+    """Split resource totals evenly; per-type remainder goes to the last target."""
+    if target_count < 1:
+        return []
+    loaded = calculate_loaded_resources(resources)
+    parts: list[Dict[str, int]] = [
+        {"metal": 0, "crystal": 0, "fuel_cells": 0} for _ in range(target_count)
+    ]
+    for key in ("metal", "crystal", "fuel_cells"):
+        total = int(loaded.get(key, 0))
+        base, rem = divmod(total, target_count)
+        for i in range(target_count - 1):
+            parts[i][key] = base
+        parts[target_count - 1][key] = base + rem
+    return [calculate_loaded_resources(p) for p in parts]
 
 
 def normalize_ships(raw: Mapping[str, Any] | None) -> Dict[str, int]:

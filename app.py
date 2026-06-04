@@ -6,7 +6,7 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from flask import (
     Flask,
@@ -2504,6 +2504,16 @@ def _payload_from_live_context(
     except Exception:
         payload["planets"] = []
 
+    try:
+        from game.logic import get_planet_limit_block
+
+        payload["planet_limit"] = get_planet_limit_block(user_id, conn=conn)
+    except Exception:
+        payload["planet_limit"] = {
+            "current": len(payload.get("planets") or []) or 1,
+            "max": 9,
+        }
+
     if include_panel:
         try:
             from game.exchange import exchange_schema_ready, get_exchange_status
@@ -3748,6 +3758,243 @@ def api_shipyard_queue_move():
     return jsonify(fleet_err(reason)), 400
 
 
+def _logistics_planet_rows(conn, planet_ids: Sequence[int]) -> Dict[int, Dict[str, Any]]:
+    ids = sorted({int(x) for x in planet_ids if int(x) > 0})
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT * FROM planets WHERE id IN ({placeholders});",
+        ids,
+    )
+    return {int(row["id"]): dict(row) for row in cur.fetchall()}
+
+
+def _build_logistics_preview(
+    *,
+    user_id: int,
+    data: Mapping[str, Any],
+    conn,
+) -> Dict[str, Any]:
+    """Server-side logistics plan preview (collect / distribute legs)."""
+    from game.fleet import (
+        build_collect_route,
+        build_distribute_route,
+        build_fleet_send_preview,
+        get_fleet_slot_status,
+    )
+    from game.fleet_calc import (
+        calculate_loaded_resources,
+        calculate_total_cargo,
+        loaded_resource_total,
+        normalize_ships,
+    )
+    from game.galaxy import format_coordinates
+    from game.planet_evolution.repository import get_context_planet
+
+    mode = str(data.get("mode") or "collect").strip().lower()
+    try:
+        speed_percent = int(data.get("speed_percent") or 100)
+    except (TypeError, ValueError):
+        speed_percent = 100
+
+    ships = normalize_ships(data.get("ships") or {})
+    slots = get_fleet_slot_status(int(user_id), conn=conn)
+    base: Dict[str, Any] = {
+        "mode": mode,
+        "can_launch": False,
+        "block_reason": "",
+        "fleet_slots": slots,
+        "slots_needed": 0,
+        "max_flight_seconds": 0,
+        "total_fuel_cost": 0,
+        "cargo_total": 0,
+        "cargo_used": 0,
+        "cargo_free": 0,
+        "legs": [],
+        "delivered_total": None,
+    }
+
+    if not ships:
+        base["block_reason"] = "no_ships"
+        return base
+
+    planet = get_context_planet(int(user_id), conn=conn)
+    origin_id = int(
+        data.get("origin_planet_id")
+        or data.get("target_planet_id")
+        or planet["id"]
+    )
+
+    legs: List[Dict[str, Any]] = []
+    delivered_total: Optional[Dict[str, int]] = None
+    route_ok = False
+    route_reason = ""
+
+    if mode == "collect":
+        hub_id = int(data.get("target_planet_id") or origin_id)
+        source_ids = [int(x) for x in (data.get("source_planet_ids") or [])]
+        planet_rows = _logistics_planet_rows(conn, [hub_id, *source_ids])
+        route_ok, route_reason, route_legs = build_collect_route(
+            origin_planet_id=hub_id,
+            source_planet_ids=source_ids,
+            planet_rows_by_id=planet_rows,
+            ships=ships,
+            free_fleet_slots=int(slots["free"]),
+            player_id=int(user_id),
+            conn=conn,
+        )
+        if route_ok and route_legs:
+            origin_row = planet_rows.get(hub_id) or dict(planet)
+            for leg in route_legs:
+                leg_previews = build_fleet_send_preview(
+                    player_id=int(user_id),
+                    origin_planet=origin_row,
+                    target_galaxy=int(leg["galaxy"]),
+                    target_system=int(leg["system"]),
+                    target_position=int(leg["position"]),
+                    mission_type="collect",
+                    ships=leg["ships"],
+                    resources={},
+                    speed_percent=speed_percent,
+                    conn=conn,
+                )
+                prow = planet_rows.get(int(leg["planet_id"])) or {}
+                legs.append(
+                    {
+                        "planet_id": int(leg["planet_id"]),
+                        "name": str(prow.get("name") or ""),
+                        "coordinates": format_coordinates(
+                            int(leg["galaxy"]),
+                            int(leg["system"]),
+                            int(leg["position"]),
+                        ),
+                        "flight_seconds": int(leg_previews.get("flight_seconds") or 0),
+                        "cargo_total": int(leg_previews.get("cargo_total") or 0),
+                        "cargo_used": int(leg_previews.get("cargo_used") or 0),
+                        "cargo_free": int(leg_previews.get("cargo_free") or 0),
+                        "fuel_cost": int(leg_previews.get("fuel_cost") or 0),
+                        "can_send": bool(leg_previews.get("can_send")),
+                        "block_reason": str(leg_previews.get("block_reason") or ""),
+                        "resources": None,
+                    }
+                )
+    elif mode == "distribute":
+        target_ids = [int(x) for x in (data.get("target_planet_ids") or [])]
+        resources_mode = str(data.get("resources_mode") or "equal").strip().lower()
+        planet_rows = _logistics_planet_rows(conn, [origin_id, *target_ids])
+        route_ok, route_reason, route_legs, delivered_total = build_distribute_route(
+            origin_planet_id=origin_id,
+            target_planet_ids=target_ids,
+            planet_rows_by_id=planet_rows,
+            ships=ships,
+            resources=data.get("resources"),
+            resources_mode=resources_mode,
+            target_resources=data.get("target_resources"),
+            free_fleet_slots=int(slots["free"]),
+            player_id=int(user_id),
+            conn=conn,
+        )
+        if route_ok and route_legs:
+            origin_row = planet_rows.get(origin_id) or dict(planet)
+            for leg in route_legs:
+                cargo = calculate_loaded_resources(leg.get("resources"))
+                leg_previews = build_fleet_send_preview(
+                    player_id=int(user_id),
+                    origin_planet=origin_row,
+                    target_galaxy=int(leg["galaxy"]),
+                    target_system=int(leg["system"]),
+                    target_position=int(leg["position"]),
+                    mission_type="transport",
+                    ships=leg["ships"],
+                    resources=cargo,
+                    speed_percent=speed_percent,
+                    conn=conn,
+                )
+                prow = planet_rows.get(int(leg["planet_id"])) or {}
+                legs.append(
+                    {
+                        "planet_id": int(leg["planet_id"]),
+                        "name": str(prow.get("name") or ""),
+                        "coordinates": format_coordinates(
+                            int(leg["galaxy"]),
+                            int(leg["system"]),
+                            int(leg["position"]),
+                        ),
+                        "flight_seconds": int(leg_previews.get("flight_seconds") or 0),
+                        "cargo_total": int(leg_previews.get("cargo_total") or 0),
+                        "cargo_used": int(leg_previews.get("cargo_used") or 0),
+                        "cargo_free": int(leg_previews.get("cargo_free") or 0),
+                        "fuel_cost": int(leg_previews.get("fuel_cost") or 0),
+                        "can_send": bool(leg_previews.get("can_send")),
+                        "block_reason": str(leg_previews.get("block_reason") or ""),
+                        "resources": cargo,
+                    }
+                )
+    else:
+        base["block_reason"] = "invalid_logistics_mode"
+        return base
+
+    if not route_ok or not legs:
+        base["block_reason"] = route_reason or "no_deliverable_resources"
+        return base
+
+    max_flight = max(int(x.get("flight_seconds") or 0) for x in legs)
+    total_fuel = sum(int(x.get("fuel_cost") or 0) for x in legs)
+    cargo_total = sum(int(x.get("cargo_total") or 0) for x in legs)
+    cargo_used = sum(int(x.get("cargo_used") or 0) for x in legs)
+    slots_needed = len(legs)
+    block_reason = route_reason or ""
+    can_launch = int(slots.get("free") or 0) >= slots_needed
+    for leg in legs:
+        if not leg.get("can_send"):
+            can_launch = False
+            if not block_reason:
+                block_reason = str(leg.get("block_reason") or "generic")
+    if int(slots.get("free") or 0) < slots_needed:
+        can_launch = False
+        if not block_reason:
+            block_reason = "fleet_slots_full"
+
+    base.update(
+        {
+            "can_launch": can_launch,
+            "block_reason": block_reason,
+            "slots_needed": slots_needed,
+            "max_flight_seconds": max_flight,
+            "total_fuel_cost": total_fuel,
+            "cargo_total": cargo_total,
+            "cargo_used": cargo_used,
+            "cargo_free": max(0, cargo_total - cargo_used),
+            "legs": legs,
+            "delivered_total": delivered_total,
+        }
+    )
+    return base
+
+
+@app.route("/api/fleet/logistics/preview", methods=["POST"])
+@require_login
+def api_fleet_logistics_preview():
+    from game.fleet import fleet_schema_ready
+    from game.fleet_api import fleet_err, fleet_ok
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        return jsonify(fleet_err("fleet_unavailable")), 503
+
+    data = request.get_json(silent=True) or {}
+    conn = db()
+    try:
+        preview = _build_logistics_preview(user_id=user_id, data=data, conn=conn)
+        return jsonify(fleet_ok({"preview": preview}, message_key="fleet_logistics_preview_ok"))
+    finally:
+        conn.close()
+
+
 @app.route("/api/fleet/logistics/collect", methods=["POST"])
 @require_login
 def api_fleet_logistics_collect():
@@ -3858,6 +4105,7 @@ def api_fleet_logistics_distribute():
             ships=ships,
             resources_mode=str(data.get("resources_mode") or "equal"),
             resources=data.get("resources"),
+            target_resources=data.get("target_resources"),
             ships_selection_mode=str(data.get("ships_selection_mode") or "manual"),
             preset_id=int(data["preset_id"]) if data.get("preset_id") else None,
             speed_percent=speed_percent,

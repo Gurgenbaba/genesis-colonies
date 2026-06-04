@@ -3130,7 +3130,41 @@
     prodCrystal: null,
     prodFuelCells: null,
     activePlanetId: null,
+    planetLimitCurrent: null,
+    planetLimitMax: null,
   };
+
+  function patchHeaderPlanetLimitFromState(data, force) {
+    const block = data && data.planet_limit;
+    const planets = data && data.planets;
+    let current = Number(block && block.current);
+    if (!Number.isFinite(current) && Array.isArray(planets)) {
+      current = planets.length;
+    }
+    if (!Number.isFinite(current) || current < 0) {
+      current = 0;
+    }
+    let max = Number(block && block.max);
+    if (!Number.isFinite(max) || max < 1) {
+      max = 9;
+    }
+    current = Math.floor(current);
+    max = Math.floor(max);
+    if (
+      !force
+      && _last.planetLimitCurrent === current
+      && _last.planetLimitMax === max
+    ) {
+      return;
+    }
+    _last.planetLimitCurrent = current;
+    _last.planetLimitMax = max;
+    const text = `${fmtNumber(current)} / ${fmtNumber(max)}`;
+    document.querySelectorAll("[data-planet-limit-value]").forEach((el) => {
+      _setIfChanged(el, text);
+    });
+  }
+  GC.patchHeaderPlanetLimitFromState = patchHeaderPlanetLimitFromState;
 
   function resetResourceDisplayCache() {
     _last.metal = null;
@@ -3335,6 +3369,8 @@
         rateLabel("fuel_cells", prodFuelCells);
         _last.prodFuelCells = prodFuelCells;
       }
+
+      patchHeaderPlanetLimitFromState(data, forceResourceBar);
 
       const energyText = `${fmtNumber(used)}/${fmtNumber(total)}`;
       if (forceResourceBar || _last.energyUsed !== used || _last.energyTotal !== total) {
@@ -5083,6 +5119,13 @@
   }
 
   let _logisticsBound = false;
+  const _logisticsPreviewTimers = new WeakMap();
+
+  const logisticsPayload = (res) =>
+    (res && res.data && typeof res.data === "object" ? res.data : res) || {};
+
+  const logisticsReasonText = (reason) =>
+    tt(`fleet_error_${reason}`, tt("fleet_error_generic", "Logistics action failed."));
 
   function parseLogisticsPageData(page) {
     const el = page.querySelector("#logistics-page-state");
@@ -5100,9 +5143,36 @@
     return data.colonies.find((c) => parseInt(c.planet_id, 10) === id) || null;
   }
 
-  function getLogisticsShipsSelection(page) {
+  function getLogisticsMode(page) {
+    return String(page?.dataset?.logisticsMode || "collect").toLowerCase();
+  }
+
+  function setLogisticsMode(page, mode) {
+    const m = mode === "distribute" ? "distribute" : "collect";
+    page.dataset.logisticsMode = m;
+    page.querySelectorAll("[data-logistics-tab]").forEach((btn) => {
+      const active = btn.getAttribute("data-logistics-tab") === m;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    page.querySelectorAll("[data-logistics-panel]").forEach((panel) => {
+      const show = panel.getAttribute("data-logistics-panel") === m;
+      panel.hidden = !show;
+    });
+    clearLogisticsError(page);
+    scheduleLogisticsPreview(page);
+  }
+
+  function getLogisticsOriginId(page) {
+    const sel = page.querySelector("[data-logistics-origin]");
+    return sel ? parseInt(sel.value, 10) : 0;
+  }
+
+  function getLogisticsShipsSelection(page, mode) {
     const ships = {};
-    page.querySelectorAll("[data-logistics-ship-input]").forEach((inp) => {
+    const grid = page.querySelector(`[data-logistics-ships-grid="${mode}"]`);
+    if (!grid) return ships;
+    grid.querySelectorAll("[data-logistics-ship-input]").forEach((inp) => {
       const key = inp.getAttribute("data-logistics-ship-input");
       const qty = parseInt(inp.value || "0", 10);
       if (key && qty > 0) ships[key] = qty;
@@ -5110,46 +5180,66 @@
     return ships;
   }
 
-  function updateLogisticsHubShips(page, data) {
-    const hubSel = page.querySelector("[data-logistics-hub]");
-    const hubId = hubSel ? parseInt(hubSel.value, 10) : parseInt(data?.planet_id, 10);
-    const colony = getLogisticsColonyById(data, hubId);
-    const stock = colony?.ships || {};
-    page.querySelectorAll("[data-ship-key]").forEach((row) => {
-      const key = row.getAttribute("data-ship-key");
-      const have = parseInt(stock[key] || "0", 10) || 0;
-      row.dataset.shipHave = String(have);
-      row.classList.toggle("is-empty", have <= 0);
-      const stockEl = row.querySelector("[data-logistics-ship-stock]");
-      if (stockEl) stockEl.textContent = `×${fmtNumber(have)}`;
-      const inp = row.querySelector("[data-logistics-ship-input]");
-      if (inp) {
-        inp.max = String(have);
-        if (parseInt(inp.value || "0", 10) > have) inp.value = String(have);
-      }
+  function getLogisticsResourcesSelection(page) {
+    const resources = { metal: 0, crystal: 0, fuel_cells: 0 };
+    page.querySelectorAll("[data-logistics-resource]").forEach((inp) => {
+      const key = inp.getAttribute("data-logistics-resource");
+      if (!key) return;
+      resources[key] = Math.max(0, parseInt(inp.value || "0", 10) || 0);
     });
-    syncLogisticsSourceVisibility(page, hubId);
-    syncLogisticsSourceSelected(page);
-    updateLogisticsSummary(page, data);
+    return resources;
   }
 
-  function syncLogisticsSourceVisibility(page, hubId) {
-    const hub = parseInt(hubId, 10);
-    page.querySelectorAll("[data-source-planet-id]").forEach((li) => {
-      const pid = parseInt(li.getAttribute("data-source-planet-id"), 10);
+  function getLogisticsSelectedColonyIds(page, mode) {
+    const ids = [];
+    page.querySelectorAll(`[data-logistics-colony-cb="${mode}"]:checked`).forEach((cb) => {
+      const card = cb.closest("[data-colony-planet-id]");
+      if (card && !card.hidden) ids.push(parseInt(cb.value, 10));
+    });
+    return ids;
+  }
+
+  function updateLogisticsOriginShips(page, data) {
+    const originId = getLogisticsOriginId(page);
+    const colony = getLogisticsColonyById(data, originId);
+    const stock = colony?.ships || {};
+    page.querySelectorAll("[data-logistics-ships-grid]").forEach((grid) => {
+      grid.querySelectorAll("[data-ship-key]").forEach((row) => {
+        const key = row.getAttribute("data-ship-key");
+        const have = parseInt(stock[key] || "0", 10) || 0;
+        row.dataset.shipHave = String(have);
+        row.classList.toggle("is-empty", have <= 0);
+        const stockEl = row.querySelector("[data-logistics-ship-stock]");
+        if (stockEl) stockEl.textContent = `×${fmtNumber(have)}`;
+        const inp = row.querySelector("[data-logistics-ship-input]");
+        if (inp) {
+          inp.max = String(have);
+          if (parseInt(inp.value || "0", 10) > have) inp.value = String(have);
+        }
+      });
+    });
+    syncLogisticsColonyVisibility(page, originId);
+    syncLogisticsColonySelected(page);
+    scheduleLogisticsPreview(page);
+  }
+
+  function syncLogisticsColonyVisibility(page, originId) {
+    const hub = parseInt(originId, 10);
+    page.querySelectorAll("[data-colony-planet-id]").forEach((li) => {
+      const pid = parseInt(li.getAttribute("data-colony-planet-id"), 10);
       const isHub = pid === hub;
       li.hidden = isHub;
       if (isHub) {
-        const cb = li.querySelector("[data-logistics-source-cb]");
+        const cb = li.querySelector("[data-logistics-colony-cb]");
         if (cb) cb.checked = false;
         li.classList.remove("is-selected");
       }
     });
   }
 
-  function syncLogisticsSourceSelected(page) {
-    page.querySelectorAll(".logistics-source-card").forEach((card) => {
-      const cb = card.querySelector("[data-logistics-source-cb]");
+  function syncLogisticsColonySelected(page) {
+    page.querySelectorAll(".logistics-colony-card").forEach((card) => {
+      const cb = card.querySelector("[data-logistics-colony-cb]");
       card.classList.toggle("is-selected", !!(cb && cb.checked && !card.hidden));
     });
   }
@@ -5165,44 +5255,208 @@
       const freeLabel = tt("logistics_slots_free", "Free");
       freeEl.textContent = `${freeLabel}: ${fmtNumber(parseInt(slots.free, 10) || 0)}`;
     }
+    const data = parseLogisticsPageData(page);
+    if (data) data.fleet_slots = slots;
   }
 
-  function updateLogisticsSummary(page, data) {
-    const summary = page.querySelector("[data-logistics-summary]");
-    const planHud = page.querySelector("[data-logistics-plan-hud]");
-    if (!summary) return;
-    const hubSel = page.querySelector("[data-logistics-hub]");
-    const hubId = hubSel ? parseInt(hubSel.value, 10) : 0;
-    const sources = [];
-    page.querySelectorAll("[data-logistics-source-cb]:checked").forEach((cb) => {
-      const li = cb.closest("[data-source-planet-id]");
-      if (li && !li.hidden) sources.push(parseInt(cb.value, 10));
+  function clearLogisticsError(page, mode) {
+    const m = mode || getLogisticsMode(page);
+    const errorEl = page.querySelector(`[data-logistics-error="${m}"]`);
+    if (errorEl) {
+      errorEl.hidden = true;
+      errorEl.textContent = "";
+    }
+  }
+
+  function showLogisticsError(page, mode, message) {
+    const errorEl = page.querySelector(`[data-logistics-error="${mode}"]`);
+    if (errorEl) {
+      errorEl.textContent = message;
+      errorEl.hidden = false;
+    }
+  }
+
+  function resetLogisticsPreview(page) {
+    const hud = page.querySelector("[data-logistics-preview]");
+    if (hud) {
+      hud.classList.remove("is-ready", "is-blocked");
+    }
+    const statusEl = page.querySelector("[data-logistics-preview-status]");
+    if (statusEl) {
+      statusEl.textContent = "–";
+      statusEl.classList.remove("is-ok", "is-blocked");
+    }
+    ["flight", "cargo", "slots", "fuel"].forEach((key) => {
+      const el = page.querySelector(`[data-logistics-preview-${key}]`);
+      if (el) el.textContent = "–";
     });
-    const ships = getLogisticsShipsSelection(page);
-    const shipTotal = Object.values(ships).reduce((a, b) => a + b, 0);
-    if (!sources.length || !shipTotal) {
-      summary.textContent = "";
-      if (planHud) {
-        planHud.hidden = true;
-        planHud.classList.remove("is-warning");
-      }
+    const targetsWrap = page.querySelector("[data-logistics-preview-targets]");
+    const targetsList = page.querySelector("[data-logistics-preview-targets-list]");
+    if (targetsWrap) targetsWrap.hidden = true;
+    if (targetsList) targetsList.innerHTML = "";
+    page.querySelectorAll("[data-logistics-submit]").forEach((btn) => {
+      btn.disabled = true;
+    });
+  }
+
+  function renderLogisticsPreview(page, preview) {
+    const hud = page.querySelector("[data-logistics-preview]");
+    const statusEl = page.querySelector("[data-logistics-preview-status]");
+    const flightEl = page.querySelector("[data-logistics-preview-flight]");
+    const cargoEl = page.querySelector("[data-logistics-preview-cargo]");
+    const slotsEl = page.querySelector("[data-logistics-preview-slots]");
+    const fuelEl = page.querySelector("[data-logistics-preview-fuel]");
+    const targetsWrap = page.querySelector("[data-logistics-preview-targets]");
+    const targetsList = page.querySelector("[data-logistics-preview-targets-list]");
+
+    if (!preview || !Object.keys(preview).length) {
+      resetLogisticsPreview(page);
       return;
     }
-    const slots = data?.fleet_slots || {};
-    const free = parseInt(slots.free, 10) || 0;
-    const slotsNeeded = sources.length;
-    const msg = tt(
-      "logistics_summary_plan",
-      "%(sources)s source colony/colonies, %(ships)s cargo ships, %(slots)s fleet slots needed."
-    )
-      .replace("%(sources)s", String(sources.length))
-      .replace("%(ships)s", String(shipTotal))
-      .replace("%(slots)s", String(slotsNeeded));
-    const warn = free < slotsNeeded;
-    summary.textContent = warn ? `${msg} ${tt("logistics_slots_warning", "(Not enough free fleet slots)")}` : msg;
-    if (planHud) {
-      planHud.hidden = false;
-      planHud.classList.toggle("is-warning", warn);
+
+    const canLaunch = !!preview.can_launch;
+    const blockReason = preview.block_reason || "";
+    if (hud) {
+      hud.classList.toggle("is-ready", canLaunch);
+      hud.classList.toggle("is-blocked", !canLaunch);
+    }
+    if (statusEl) {
+      statusEl.classList.remove("is-ok", "is-blocked");
+      if (canLaunch) {
+        statusEl.textContent = tt("logistics_preview_ready", "Ready to launch");
+        statusEl.classList.add("is-ok");
+      } else {
+        statusEl.textContent = blockReason
+          ? logisticsReasonText(blockReason)
+          : tt("logistics_preview_incomplete", "Complete the plan to preview.");
+        statusEl.classList.add("is-blocked");
+      }
+    }
+    if (flightEl) {
+      flightEl.textContent = formatCountdownRemain(preview.max_flight_seconds || 0);
+    }
+    if (cargoEl) {
+      cargoEl.textContent = `${preview.cargo_used || 0} / ${preview.cargo_total || 0}`;
+    }
+    if (slotsEl) {
+      const fs = preview.fleet_slots || {};
+      slotsEl.textContent = `${preview.slots_needed || 0} ${tt("logistics_preview_slots_of", "of")} ${fs.free ?? 0} ${tt("logistics_slots_free", "free")}`;
+    }
+    if (fuelEl) {
+      fuelEl.textContent = String(preview.total_fuel_cost || 0);
+    }
+    if (targetsWrap && targetsList) {
+      const legs = preview.legs || [];
+      if (legs.length) {
+        targetsWrap.hidden = false;
+        targetsList.innerHTML = legs
+          .map((leg) => {
+            const res = leg.resources;
+            const cargoTxt = res
+              ? ` — ${(res.metal || 0)}/${(res.crystal || 0)}/${(res.fuel_cells || 0)}`
+              : "";
+            return `<li class="logistics-preview-target-item"><span class="logistics-preview-target-name">${escapeHtml(leg.name || "")}</span> <span class="gc-mono logistics-preview-target-coords">${escapeHtml(leg.coordinates || "")}</span><span class="logistics-preview-target-meta gc-mono">${formatCountdownRemain(leg.flight_seconds || 0)}${cargoTxt}</span></li>`;
+          })
+          .join("");
+      } else {
+        targetsWrap.hidden = true;
+        targetsList.innerHTML = "";
+      }
+    }
+    page.querySelectorAll("[data-logistics-submit]").forEach((btn) => {
+      const mode = btn.getAttribute("data-logistics-submit");
+      btn.disabled = mode !== getLogisticsMode(page) || !canLaunch;
+    });
+  }
+
+  function escapeHtml(text) {
+    return String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function buildLogisticsPreviewBody(page) {
+    const mode = getLogisticsMode(page);
+    const originId = getLogisticsOriginId(page);
+    const ships = getLogisticsShipsSelection(page, mode);
+    const body = {
+      mode,
+      origin_planet_id: originId,
+      target_planet_id: originId,
+      ships,
+      speed_percent: 100,
+      ships_selection_mode: "manual",
+    };
+    if (mode === "collect") {
+      body.source_planet_ids = getLogisticsSelectedColonyIds(page, "collect");
+      body.resources_mode = "all";
+    } else {
+      body.target_planet_ids = getLogisticsSelectedColonyIds(page, "distribute");
+      body.resources = getLogisticsResourcesSelection(page);
+      body.resources_mode = "equal";
+    }
+    return body;
+  }
+
+  async function refreshLogisticsPreview(page) {
+    const mode = getLogisticsMode(page);
+    const originId = getLogisticsOriginId(page);
+    const ships = getLogisticsShipsSelection(page, mode);
+    const colonyIds = getLogisticsSelectedColonyIds(page, mode);
+    const shipTotal = Object.values(ships).reduce((a, b) => a + b, 0);
+
+    if (!originId || !colonyIds.length || !shipTotal) {
+      resetLogisticsPreview(page);
+      return;
+    }
+    if (mode === "distribute") {
+      const res = getLogisticsResourcesSelection(page);
+      if ((res.metal || 0) + (res.crystal || 0) + (res.fuel_cells || 0) <= 0) {
+        resetLogisticsPreview(page);
+        return;
+      }
+    }
+
+    try {
+      const res = await GC.fetchJSON("/api/fleet/logistics/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+        body: JSON.stringify(buildLogisticsPreviewBody(page)),
+      });
+      const preview = logisticsPayload(res).preview || res?.preview;
+      if (res?.ok && preview) {
+        renderLogisticsPreview(page, preview);
+      } else {
+        resetLogisticsPreview(page);
+      }
+    } catch (_) {
+      resetLogisticsPreview(page);
+    }
+  }
+
+  function scheduleLogisticsPreview(page) {
+    if (!page) return;
+    const prev = _logisticsPreviewTimers.get(page);
+    if (prev) clearTimeout(prev);
+    _logisticsPreviewTimers.set(
+      page,
+      setTimeout(() => {
+        refreshLogisticsPreview(page);
+      }, 320)
+    );
+  }
+
+  function applyLogisticsActionState(page, res) {
+    applyActionState(res, "logistics_action");
+    const slots =
+      res?.state?.fleet_slots ||
+      res?.data?.active_slots ||
+      logisticsPayload(res).active_slots;
+    if (slots) updateLogisticsFleetSlotsBadge(page, slots);
+    if (res?.state?.active_planet_id) {
+      syncScopedPlanetIds(res.state.active_planet_id);
     }
   }
 
@@ -5215,17 +5469,27 @@
     });
 
     document.addEventListener("click", (e) => {
+      const tabBtn = e.target.closest("[data-logistics-tab]");
+      if (tabBtn && !tabBtn.disabled) {
+        const page = document.getElementById("logistics-page");
+        if (page && page.contains(tabBtn)) {
+          setLogisticsMode(page, tabBtn.getAttribute("data-logistics-tab"));
+        }
+        return;
+      }
+
       const maxBtn = e.target.closest("[data-logistics-ship-max]");
       if (!maxBtn) return;
       const page = document.getElementById("logistics-page");
       if (!page || !page.contains(maxBtn)) return;
+      const mode = getLogisticsMode(page);
+      const grid = page.querySelector(`[data-logistics-ships-grid="${mode}"]`);
       const key = maxBtn.getAttribute("data-logistics-ship-max");
-      const row = page.querySelector(`[data-ship-key="${key}"]`);
+      const row = grid?.querySelector(`[data-ship-key="${key}"]`);
       const inp = row?.querySelector("[data-logistics-ship-input]");
       if (inp) {
         inp.value = String(parseInt(row.dataset.shipHave || inp.max || "0", 10) || 0);
-        const data = parseLogisticsPageData(page);
-        updateLogisticsSummary(page, data);
+        scheduleLogisticsPreview(page);
       }
     });
 
@@ -5233,88 +5497,121 @@
       const page = document.getElementById("logistics-page");
       if (!page || page.dataset.ready !== "1") return;
       if (
-        e.target.matches("[data-logistics-hub]") ||
-        e.target.matches("[data-logistics-source-cb]") ||
-        e.target.matches("[data-logistics-ship-input]")
+        e.target.matches("[data-logistics-origin]") ||
+        e.target.matches("[data-logistics-colony-cb]") ||
+        e.target.matches("[data-logistics-ship-input]") ||
+        e.target.matches("[data-logistics-resource]")
       ) {
         const data = parseLogisticsPageData(page);
-        if (e.target.matches("[data-logistics-hub]")) {
-          updateLogisticsHubShips(page, data);
+        if (e.target.matches("[data-logistics-origin]")) {
+          updateLogisticsOriginShips(page, data);
         } else {
-          syncLogisticsSourceSelected(page);
-          updateLogisticsSummary(page, data);
+          syncLogisticsColonySelected(page);
+          scheduleLogisticsPreview(page);
         }
       }
     });
 
+    document.addEventListener("input", (e) => {
+      const page = document.getElementById("logistics-page");
+      if (!page || page.dataset.ready !== "1") return;
+      if (
+        e.target.matches("[data-logistics-ship-input]") ||
+        e.target.matches("[data-logistics-resource]")
+      ) {
+        scheduleLogisticsPreview(page);
+      }
+    });
+
     document.addEventListener("submit", async (e) => {
-      const form = e.target.closest("#logistics-collect-form");
+      const collectForm = e.target.closest("#logistics-collect-form");
+      const distributeForm = e.target.closest("#logistics-distribute-form");
+      const form = collectForm || distributeForm;
       if (!form) return;
       const page = document.getElementById("logistics-page");
       if (!page || !page.contains(form)) return;
       e.preventDefault();
       if (form.dataset.submitting === "1") return;
 
-      const errorEl = page.querySelector("[data-logistics-error]");
-      if (errorEl) {
-        errorEl.hidden = true;
-        errorEl.textContent = "";
-      }
+      const mode = collectForm ? "collect" : "distribute";
+      clearLogisticsError(page, mode);
 
-      const hubId = parseInt(form.querySelector("[data-logistics-hub]")?.value || "0", 10);
-      const sourceIds = [];
-      form.querySelectorAll("[data-logistics-source-cb]:checked").forEach((cb) => {
-        const li = cb.closest("[data-source-planet-id]");
-        if (li && !li.hidden) sourceIds.push(parseInt(cb.value, 10));
-      });
-      const ships = getLogisticsShipsSelection(page);
-      if (!hubId || !sourceIds.length || !Object.keys(ships).length) {
-        if (errorEl) {
-          errorEl.textContent = tt("logistics_collect_incomplete", "Select hub, at least one source, and cargo ships.");
-          errorEl.hidden = false;
-        }
+      const originId = getLogisticsOriginId(page);
+      const colonyIds = getLogisticsSelectedColonyIds(page, mode);
+      const ships = getLogisticsShipsSelection(page, mode);
+
+      if (!originId || !colonyIds.length || !Object.keys(ships).length) {
+        showLogisticsError(
+          page,
+          mode,
+          mode === "collect"
+            ? tt("logistics_collect_incomplete", "Select hub, at least one source, and cargo ships.")
+            : tt("logistics_distribute_incomplete", "Select hub, at least one target, cargo, and ships.")
+        );
         return;
       }
 
-      const submitBtn = form.querySelector("[data-logistics-submit]");
+      const submitBtn = form.querySelector(`[data-logistics-submit="${mode}"]`);
       form.dataset.submitting = "1";
       if (submitBtn) submitBtn.disabled = true;
       try {
-        const res = await GC.fetchGameAction("/api/fleet/logistics/collect", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            target_planet_id: hubId,
-            source_planet_ids: sourceIds,
-            ships,
-            resources_mode: "all",
-            ships_selection_mode: "manual",
-          }),
-        });
+        let res;
+        if (mode === "collect") {
+          res = await GC.fetchGameAction("/api/fleet/logistics/collect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              target_planet_id: originId,
+              source_planet_ids: colonyIds,
+              ships,
+              resources_mode: "all",
+              ships_selection_mode: "manual",
+            }),
+          });
+        } else {
+          const resources = getLogisticsResourcesSelection(page);
+          if ((resources.metal || 0) + (resources.crystal || 0) + (resources.fuel_cells || 0) <= 0) {
+            showLogisticsError(
+              page,
+              mode,
+              tt("logistics_distribute_no_resources", "Enter resources to distribute.")
+            );
+            return;
+          }
+          res = await GC.fetchGameAction("/api/fleet/logistics/distribute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              origin_planet_id: originId,
+              target_planet_ids: colonyIds,
+              ships,
+              resources,
+              resources_mode: "equal",
+              ships_selection_mode: "manual",
+            }),
+          });
+        }
         if (res?.ok) {
-          showNotify(tt("logistics_collect_success", "Collect fleets launched."), "success");
-          applyActionState(res, "logistics_collect_success");
-          const slots = res?.state?.fleet_slots || res?.data?.fleet_slots;
-          if (slots) updateLogisticsFleetSlotsBadge(page, slots);
+          const okKey =
+            mode === "collect" ? "logistics_collect_success" : "logistics_distribute_success";
+          showNotify(
+            tt(okKey, mode === "collect" ? "Collect fleets launched." : "Distribute fleets launched."),
+            "success"
+          );
+          applyLogisticsActionState(page, res);
           if (typeof GC.reloadCurrentPage === "function") {
             await GC.reloadCurrentPage({ force: true });
           }
         } else {
-          const errMsg = reasonText(apiError(res));
-          if (errorEl) {
-            errorEl.textContent = errMsg;
-            errorEl.hidden = false;
-          }
-          applyActionState(res, "logistics_collect_error");
+          showLogisticsError(page, mode, logisticsReasonText(apiError(res)));
+          applyLogisticsActionState(page, res);
         }
       } catch (_) {
-        if (errorEl) {
-          errorEl.textContent = reasonText("generic");
-          errorEl.hidden = false;
-        }
+        showLogisticsError(page, mode, logisticsReasonText("generic"));
       } finally {
         form.dataset.submitting = "0";
         if (submitBtn) submitBtn.disabled = false;
+        scheduleLogisticsPreview(page);
       }
     });
   }
@@ -5325,9 +5622,13 @@
     if (!page || page.dataset.ready !== "1") return;
 
     const data = parseLogisticsPageData(page);
-    if (data?.planet_id) page.dataset.planetId = String(data.planet_id);
+    if (data?.planet_id) {
+      page.dataset.planetId = String(data.planet_id);
+      syncScopedPlanetIds(data.planet_id);
+    }
     if (typeof GC.initHudSelects === "function") GC.initHudSelects(page);
-    updateLogisticsHubShips(page, data);
+    setLogisticsMode(page, getLogisticsMode(page));
+    updateLogisticsOriginShips(page, data);
   }
 
   function initFleet() {

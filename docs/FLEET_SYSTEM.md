@@ -1,6 +1,6 @@
 # Fleet System
 
-Flotten, Schiffe, Missionen und Tick (v1.5.3).
+Flotten, Schiffe, Missionen und Tick (v1.5.4).
 
 Kanonische Module: `game/fleet.py`, `game/fleet_calc.py`, `game/fleet_defs.py`, `game/fleet_api.py`, `game/expedition_events.py`.
 
@@ -69,7 +69,7 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 | Mission | Verhalten |
 |---------|-----------|
 | **transport** | Cargo an Ziel; Schiffe kehren leer zurück; Messages |
-| **collect** | Eigene Kolonie: lädt Ressourcen bis Cargo-Cap (optional Abflug-Cargo); Ziel verliert Ressourcen; Rückflug; Origin erhält Fracht; Report |
+| **collect** | Eigene Kolonie: lädt Ressourcen bis Cargo-Cap; Ziel verliert Ressourcen; Rückflug; Hub/Origin erhält Fracht bei Rückkehr; Reports siehe [Logistics-Nachrichten](#fleet-logistics-gc-526531) |
 | **deploy** | Schiffe + Ressourcen bleiben; movement completed |
 | **spy** | Tiered probe intel (resources → fleet → buildings → activity); structured inbox report; Schiffe return |
 | **attack** | `simulate_battle()` vs hangar + `planet_defense`; losses, debris, loot (winner), combat reports, return flight — see [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
@@ -85,12 +85,74 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 | **GC-402C** | Inbox debrief: event card, risk/find meta, loot chips, theme colors per event type | `static/js/messages.js`, `static/style.css` |
 
 Event keys: `void_scan`, `mineral_deposit`, `fuel_cache`, `debris_salvage`, `nav_interference`, `distress_beacon`, `sensor_glitch`, `ancient_stash`. Roll ist deterministisch pro `movement_id`.
+
 | **colonize** | `colonize_planet()`; verbraucht `seed_ark` |
 | **recycle** | Trümmer abbauen (`harvest_debris_at_field`); Fracht auf Rückflug; Report bei Ankunft |
 
-**Berichte:** Transport/Collect/Recycle/Deploy/Hold/Spy/Attack/Expedition/Kolonize → Inbox bei **Ziel-Ankunft** (nicht bei Rückkehr); idempotent pro `fleet_id` (GC-521).
+**Berichte (Einzelmissionen):** Transport/Recycle/Deploy/Hold/Spy/Attack/Expedition/Kolonize → Inbox bei **Ziel-Ankunft**; idempotent pro `fleet_id` ohne `report_phase` (GC-521).
 
-Logistics bulk API (`collect_resources` / `distribute_resources`): weiterhin `logistics_not_implemented` (Phase 2). Einzel-Collect über Fleet-Send-Mission `collect`.
+**Einzel-`collect`** (Fleet-Send): gleiche Tick-Logik wie Bulk-Collect; ein Ankunftsbericht (`logistics_collect_arrival`); Rückkehrbericht (`logistics_collect_return`) wenn Fracht > 0.
+
+---
+
+## Fleet Logistics (GC-526–531)
+
+Multi-Kolonie-Ressourcenbewegung über **`/logistics`** und `collect_resources` / `distribute_resources` in `game/fleet.py`. Route-Math in `game/fleet_calc.py` (`build_collect_route`, `build_distribute_route`). Spec: [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md).
+
+| Flow | Batch-Typ | Mission pro Leg | Origin (Hub) | Ziele |
+|------|-----------|-----------------|--------------|-------|
+| **Collect** | `collect_resources` | `collect` | `target_planet_id` (Hub, Rückkehrziel) | `source_planet_ids` — eigene Kolonien ≠ Hub |
+| **Distribute** | `distribute_resources` | `transport` | `origin_planet_id` (Hub, Abgang) | `target_planet_ids` — eigene Kolonien ≠ Hub |
+
+- Nur **eigene** Planeten (`validate_logistics_planets` / `validate_collect_source_planet`).
+- Deterministische Reihenfolge: Sortierung `galaxy → system → position → planet_id` (`collect_route_sort_key`).
+- Jede Leg = **eine** `fleet_movements`-Zeile + **ein** Fleet-Slot (kein Batch-Slot-Rabatt).
+- Schiffe werden vom **Hub**-`planet_ships` abgezogen; Fracht bei Distribute beim Send vom Hub debitiert.
+
+### Cargo-Regeln
+
+| Regel | Collect | Distribute |
+|-------|---------|------------|
+| Schiffstypen | Nur `role == cargo` (`fleet_ships_are_cargo_only`) | gleich |
+| Schiffs-Split | `split_ships_across_targets` — Rest je Typ auf **letztes** Ziel | gleich |
+| Ressourcen-Modus | `resources_mode`: nur **`all`** (alles Verfügbares am Quell-Planet bis Cargo-Cap) | **`equal`** (Gesamtmenge gleichmäßig) oder **`custom`** (`target_resources` pro Planet) |
+| Kapazität | Laden am Ziel bis `calculate_total_cargo(ships)` | `not_enough_cargo`, wenn Leg-Fracht > Leg-Schiff-Cargo |
+| Storage-Caps | — (Quelle wird bei Ankunft debited) | **metal/crystal** auf Ziel-Lager begrenzt (`_clamp_distribute_delivery`); **fuel_cells** ohne Storage-Clamp |
+| Leere Legs | — | Ziele ohne lieferbare Menge werden übersprungen; `no_deliverable_resources`, wenn nichts übrig |
+
+### Slot-Regeln
+
+- `get_fleet_slot_status(player_id)` → `free` muss **≥ Anzahl Legs** sein, sonst `fleet_slots_full`.
+- Basis-Slots: `computer_tech` + 1 (Fallback 3 ohne Research) — identisch zu Einzel-`send_fleet`.
+- Bulk-Job blockiert atomisch: zu wenig Schiffe auf dem Hub → Rollback des gesamten Collect/Distribute-POST.
+
+### Nachrichten-Zeitpunkt (GC-530)
+
+Idempotenz: pro `(recipient, category, fleet_id, report_phase)` — kein Doppelreport bei erneutem Tick.
+
+| Flow | Phase | `report_phase` | Wann | Inhalt |
+|------|-------|----------------|------|--------|
+| Collect | Ziel-Ankunft (Quell-Kolonie) | `logistics_collect_arrival` | `outbound` → `returning` | Abholung abgeschlossen (geladene Menge) |
+| Collect | Rückkehr (Hub) | `logistics_collect_return` | `returning` → `completed` | Ressourcen auf Ursprung angekommen (nur wenn Fracht > 0) |
+| Distribute | Ziel-Ankunft | `logistics_distribute_arrival` | Ankunft `transport` | Liefermenge an Ziel |
+| Distribute | Rückkehr (Hub) | `logistics_distribute_return` | Rückkehr | Nur Schiffs-Rückkehr-Info; **keine** zweite Liefermeldung (`resources` leer in Metadata) |
+
+Metadata (alle Logistics-Reports): `origin_planet_id`, `origin_name`, `target_planet_id`, `target_name`, `target_coords`, `mission_type` (`collect` / `distribute`), `ships`, `resources` / `collected`, `timestamp`, `parent_batch_id` (Bulk), `fleet_id`.
+
+API: `notify_logistics_fleet_report()` in `game/messages.py`. Normale **`transport`**-Einzelmissionen: weiterhin ein Bericht nur bei Ankunft (`notify_transport`, ohne `report_phase`).
+
+### APIs & UI
+
+| Route | Methode | Zweck |
+|-------|---------|-------|
+| `/logistics` | GET | SSR Collect/Distribute (`templates/logistics.html`) |
+| `/api/fleet/logistics/preview` | POST | Server-Plan (Legs, Cargo, Slots, Block-Reason) |
+| `/api/fleet/logistics/collect` | POST | `collect_resources` → `{ ok, state }` |
+| `/api/fleet/logistics/distribute` | POST | `distribute_resources` → `{ ok, state }` |
+
+Planet-Scope: Hub = aktiver Kontext-Planet (`get_context_planet`) bzw. explizit im Body; Client: `GC.fetchGameAction` + `applyActionState()` (`static/main.js` → `initLogistics()`).
+
+**Manuelle QA:** [ALPHA_TESTPLAN.md § 12](ALPHA_TESTPLAN.md#12-fleet-logistics-gc-531--manuelle-browser-qa).
 
 ---
 
@@ -110,7 +172,7 @@ Aufgerufen von:
 
 **Idempotenz:** Statuswechsel nur über `_claim_movement_status()`; wiederholter Tick = No-Op (keine doppelten Nachrichten/Ressourcen/Kolonien/Loot). Siehe GC-524.
 
-**Manuelle Browser-QA:** Missions-Matrix, Galaxy-Shortcuts, Ankunft-vs-Rückkehr — [ALPHA_TESTPLAN.md § 11](ALPHA_TESTPLAN.md#11-fleet-missions-gc-525--manuelle-browser-qa) (GC-525).
+**Manuelle Browser-QA:** Missions § 11, Logistics § 12 — [ALPHA_TESTPLAN.md](ALPHA_TESTPLAN.md) (GC-525, GC-531).
 
 ---
 
@@ -126,7 +188,9 @@ Aufgerufen von:
 | `/api/fleet/presets` | GET/POST | List/create presets |
 | `/api/fleet/presets/<id>` | PUT/PATCH/DELETE | CRUD |
 | `/api/fleet/mass-expedition` | POST | Wave expeditions |
-| `/api/fleet/logistics/*` | POST | Not implemented |
+| `/api/fleet/logistics/preview` | POST | Collect/Distribute plan preview |
+| `/api/fleet/logistics/collect` | POST | Multi-colony collect batch |
+| `/api/fleet/logistics/distribute` | POST | Multi-colony distribute batch |
 | `/api/fleet/dev/seed-ships` | POST | Debug seed |
 
 Response envelope: `{ ok, error, message_key, data }` via `fleet_api.py`.
@@ -141,8 +205,9 @@ Response envelope: `{ ok, error, message_key, data }` via `fleet_api.py`.
 - Realigns `planet_id` from `GC.lastState.active_planet_id`
 - Galaxy prefill: `applyFleetUrlPrefill()` from query params
 - **GC-402B:** Mission feedback panel (`data-fleet-mission-feedback`), preview status `is-ok` / `is-blocked`, expedition → position 16
+- **Logistics:** `initLogistics()` auf `/logistics` — Tabs Collect/Distribute, debounced Preview, Hub = `data-logistics-origin` / `data-logistics-hub`
 
-Template: `templates/fleet.html` — embedded JSON state, `#fleet-page[data-planet-id]`.
+Templates: `templates/fleet.html` (Link zu Logistics), `templates/logistics.html`.
 
 Inbox expedition reports: `static/js/messages.js` → `renderExpeditionReport()` (GC-402C event cards).
 
@@ -156,7 +221,7 @@ Inbox expedition reports: `static/js/messages.js` → `renderExpeditionReport()`
 | Planet Evolution | `colonize_planet` |
 | Alliance | `are_players_allied`, hold mission |
 | Research | slots, fuel_efficiency |
-| Messages | transport, spy, combat, expedition notifications |
+| Messages | transport, logistics reports (`report_phase`), spy, combat, expedition |
 | Combat | attack resolution — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | Shipyard | `planet_ships` supply |
 
@@ -164,7 +229,7 @@ Inbox expedition reports: `static/js/messages.js` → `renderExpeditionReport()`
 
 ## Placeholder / Phase 2
 
-- Logistics bulk collect/distribute API
+- Logistics: `auto_cargo` / Preset-only ship selection (`invalid_ships_selection_mode`)
 - Recycler UI/PJAX polish (GC-800B) — Backend mission `recycle` ✅ GC-800A
 - `fleet_presets.mission_type` CHECK fehlt `colonize` (nur movements migriert in 032)
 

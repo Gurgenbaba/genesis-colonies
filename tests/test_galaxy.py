@@ -481,6 +481,18 @@ def test_api_galaxy_system(galaxy_db, monkeypatch):
     assert len(payload["data"]["slots"]) == 15
 
 
+def test_galaxy_coordinate_distance_near_vs_far():
+    """Fleet flight math must use real galaxy coordinates (GC-532)."""
+    from game.fleet_calc import calculate_distance, calculate_flight_seconds
+
+    near = calculate_distance((1, 1, 1), (1, 1, 2))
+    far = calculate_distance((1, 1, 1), (1, 450, 12))
+    assert near < far
+    near_sec = calculate_flight_seconds(near, 5000, 100)
+    far_sec = calculate_flight_seconds(far, 5000, 100)
+    assert far_sec > near_sec
+
+
 def test_assign_free_coordinates_never_duplicates(galaxy_db):
     uid = _create_player()
     conn = db()

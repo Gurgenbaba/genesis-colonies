@@ -98,7 +98,7 @@ Siehe auch [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) § B.
 | `/defense` | Platzhalter-UI, kein Backend-Crash |
 | `/alliance` | Platzhalter-UI (sofern nicht freigeschaltet) |
 
-**Live-Module (manuelle Fleet-QA):** `/fleet`, `/galaxy` — siehe § 11.
+**Live-Module (manuelle Fleet-QA):** `/fleet`, `/galaxy`, `/logistics` — siehe § 11–12.
 
 ---
 
@@ -142,14 +142,16 @@ python -m pytest tests/test_fleet.py tests/test_galaxy.py tests/test_queue_engin
 | Phase | Server-Status | Nachricht Posteingang | Ressourcen / Welt |
 |-------|---------------|------------------------|-------------------|
 | **Ziel-Ankunft** | `outbound` → `returning`, `holding` oder `completed` | **Ja** — Bericht entsteht **hier** (einmal pro `fleet_id`) | Missionseffekt (Cargo liefern, Spionage, Kampf, Kolonie, Expedition-Loot in `resources_json`, …) |
-| **Rückkehr** | `returning` → `completed` | **Nein** — kein zweiter Ankunfts-/Missionsbericht für dieselbe `fleet_id` | Schiffe (+ ggf. Fracht) zurück auf **Origin**; bei `deploy`/`colonize` (ohne Rückflug) bereits bei Ankunft abgeschlossen |
+| **Rückkehr** | `returning` → `completed` | **Nein** für Transport/Recycle/Deploy/… — **Ausnahme Logistics Collect/Distribute** (siehe § 12) | Schiffe (+ ggf. Fracht) zurück auf **Origin**; bei `deploy`/`colonize` (ohne Rückflug) bereits bei Ankunft abgeschlossen |
 
 **Kategorien (Filter `/messages`):**
 
 | Mission | Kategorie (typ.) | Ankunft? | Rückkehr? |
 |---------|------------------|----------|-----------|
 | transport | `system` | Sender (+ ggf. Empfänger „eingehend“) | — |
-| collect, recycle | `system` | Sender | — |
+| collect (Einzel + Bulk) | `system` | `logistics_collect_arrival` an Quelle; `logistics_collect_return` am Hub (wenn Fracht) | Rückkehrbericht nur Collect |
+| recycle | `system` | Sender | — |
+| distribute (Bulk) | `system` | `logistics_distribute_arrival` je Ziel; optional `logistics_distribute_return` (Schiffe, keine Lieferung) | Rückkehr ≠ zweite Lieferung |
 | deploy | `system` | Sender | — (Status `completed`) |
 | spy | `espionage` | Spion | — |
 | attack | `combat` | Angreifer (+ Verteidiger) | — |
@@ -232,7 +234,7 @@ Nach **erfolgreicher Ankunft** (Schritt .5 erfüllt):
 | R2 | `/fleet` — **PJAX** zu anderer Seite und zurück **oder** Hard-Reload (F5) | Nachrichtenzahl unverändert; Fleet-State konsistent |
 | R3 | DevTools → Network: `GET /api/fleet/state` **5×** hintereinander (Refresh-Button / Countdown-Expiry simulieren) | Keine zweite Ankunftsmeldung; Ressourcen/Kolonie/Loot **nicht** verdoppelt |
 | R4 | Optional: Queue-Tick abwarten (`finish_due_work` / Overview-Poll) + erneut R3 | wie R3 |
-| R5 | Rückflug abwarten (Countdown „Rückkehr“) | Schiffe zurück; **kein** neuer Ankunfts-/Expeditions-/Transport-Bericht für dieselbe `fleet_id` |
+| R5 | Rückflug abwarten (Countdown „Rückkehr“) | Schiffe zurück; **kein** neuer Ankunfts-/Expeditions-/Transport-Bericht für dieselbe `fleet_id` (Logistics: siehe § 12.5) |
 
 **Fail-Kriterium:** Zweiter identischer Bericht, doppelte Cargo am Ziel/Origin, zweite Kolonie am gleichen Slot, doppeltes Expeditions-Loot.
 
@@ -247,6 +249,113 @@ Nach **erfolgreicher Ankunft** (Schritt .5 erfüllt):
 | Galaxy-Shortcuts | ok / fehlgeschlagen (welcher Slot) |
 | Ankunft vs. Rückkehr | ok / Bug (Beschreibung) |
 | Regression R1–R5 | ok / fehlgeschlagen |
+| Console-Fehler | |
+
+---
+
+## 12. Fleet Logistics (GC-531) — Manuelle Browser-QA
+
+**Epic:** EPIC-02 Fleet System · **Nach:** GC-526–530 (Bulk Collect/Distribute, Route-Builder, UI, Logistics-Reports).
+
+**Referenz:** [FLEET_SYSTEM.md § Fleet Logistics](FLEET_SYSTEM.md#fleet-logistics-gc-526531), [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md).
+
+**Voraussetzung:** wie § 11, zusätzlich:
+
+| Vorbereitung | Zweck |
+|--------------|-------|
+| **≥ 3 eigene Kolonien** (idealerweise **2+ Galaxien/Systeme**) | Collect/Distribute mit 2–3 Zielen, Galaxy-Kompatibilität |
+| Hub-Planet mit **`mule_courier`** (oder anderem `role: cargo`) | Cargo-only-Regel |
+| Quell-/Ziel-Kolonien mit **Metal/Crystal** (Collect) bzw. Hub mit Fracht (Distribute) | Sichtbarer Ressourcenfluss |
+| Freie **Fleet-Slots** ≥ Anzahl gewählter Ziele | `fleet_slots_full` vermeiden |
+
+**Automatisiert (vor manueller QA):**
+
+```bash
+python -m pytest tests/test_fleet.py -k "logistics or collect_creates_report or distribute" -v
+```
+
+---
+
+### 12.1 Logistics-Matrix (Übersicht)
+
+| Flow | UI-Tab | Hub-Feld | Ziele | Schiffe | Ressourcen | Slot-Verbrauch | Bericht Ankunft | Bericht Rückkehr |
+|------|--------|----------|-------|---------|------------|----------------|-----------------|------------------|
+| **Collect** | Collect | Hub (`data-logistics-hub`) | 2–3 **Quell**-Kolonien (≠ Hub) | Cargo-only, Split auf Quellen | Modus **all** | 1 Slot × Quelle | `logistics_collect_arrival` je Leg | `logistics_collect_return` am Hub (Fracht > 0) |
+| **Distribute** | Distribute | Hub (`data-logistics-origin`) | 2–3 **Ziel**-Kolonien (≠ Hub) | Cargo-only, Split auf Ziele | **equal** oder **custom** | 1 Slot × Ziel | `logistics_distribute_arrival` je Leg | `logistics_distribute_return` (nur Schiffe, keine Liefermenge) |
+
+**Negative Checks:**
+
+| Schritt | Erwartung |
+|---------|-----------|
+| Nur Kampfschiffe (`falcon_interceptor`) | Preview/Send blockiert (`no_cargo_ships`) |
+| Mehr Legs als freie Slots | `fleet_slots_full` |
+| Distribute: Fracht > Cargo der Leg | `not_enough_cargo` |
+| Hub in Quell-/Zielliste | Planet aus Liste ausgeschlossen / Validierung `no_planets` |
+
+---
+
+### 12.2 Collect — 2–3 Kolonien
+
+| ID | Schritt | Erwartung |
+|----|---------|-----------|
+| C1 | `/logistics` → Tab **Collect**; Hub = aktiver Planet | Kolonienliste ohne Hub; Preview zeigt **N Legs** (N = Anzahl Quellen) |
+| C2 | **2 Quellen** wählen, `mule_courier` ×2, Submit | `POST /api/fleet/logistics/collect` → `{ ok: true, state }`; **2** Bewegungen `mission=collect`, Batch `collect_resources`; kein Full-Reload |
+| C3 | Ankunft Leg 1 (Countdown → 0) | Ressourcen an **Quelle 1** sinken; Posteingang: **1×** `logistics_collect_arrival` für diese `fleet_id` |
+| C4 | Ankunft Leg 2 | wie C3 für Quelle 2; **getrennte** `fleet_id` pro Leg |
+| C5 | Rückkehr beider Legs | Hub erhält Fracht **einmal**; je Leg **1×** `logistics_collect_return` (Metadata `origin_planet_id` = Hub) |
+| C6 | **3 Quellen** wiederholen (wenn Slots reichen) | 3 Bewegungen; Schiffs-Split: Rest auf letzte Quelle (z. B. 5 Courier → 2+2+1) |
+
+---
+
+### 12.3 Distribute — 2–3 Kolonien
+
+| ID | Schritt | Erwartung |
+|----|---------|-----------|
+| D1 | Tab **Distribute**; Hub mit Metal/Crystal; **equal**-Modus | Preview: Summe / Leg-Aufteilung serverseitig; Cargo-Cap ok |
+| D2 | **2 Ziele**, Submit | Hub-Ressourcen debitiert; **2×** `transport`-Legs, Batch `distribute_resources` |
+| D3 | Ankunft Ziel 1 | Ziel-Planet Metal/Crystal steigt; **1×** `logistics_distribute_arrival` mit gelieferter Menge in Metadata |
+| D4 | Ankunft Ziel 2 | wie D3; **kein** gemeinsamer Bericht für beide Legs |
+| D5 | Rückkehr | `logistics_distribute_return`: Schiffe im Text/Metadata; **keine** erneute Liefermenge (`resources` leer) |
+| D6 | **custom** (`target_resources` unterschiedlich) auf 2–3 Ziele | Preview/Send ok; Ziele erhalten unterschiedliche Mengen (≤ Storage-Cap metal/crystal) |
+| D7 | Ziel fast voll (metal cap) | Ankunft liefert nur bis Headroom; Bericht zeigt **tatsächlich** gelieferte Menge |
+
+---
+
+### 12.4 Planetwechsel
+
+| ID | Schritt | Erwartung |
+|----|---------|-----------|
+| P1 | Hub-Kolonie A aktiv → Collect planen | Preview-Origin = A |
+| P2 | Header: aktiven Planet auf **B** wechseln (`GC` planet switch / Overview) | `/logistics` neu laden oder PJAX: Hub-Select = **B**; Quellliste nur eigene Planeten ≠ B |
+| P3 | Distribute von **B** starten | Schiffe von B `planet_ships`; Bewegungen `origin_planet_id = B` |
+| P4 | Laufende Collect-Legs von A | Timer/Bewegungen unverändert; **kein** Scope-Bug (Fracht landet weiter auf A-Hub) |
+
+---
+
+### 12.5 Galaxy-Kompatibilität & Idempotenz
+
+| ID | Schritt | Erwartung |
+|----|---------|-----------|
+| G1 | Quellen/Ziele in **verschiedenen Systemen/Galaxien** (falls Save das hat) | Preview zeigt Flugzeiten/Distanz; Send ok; keine Client-Fehler |
+| G2 | `/galaxy` — eigene entfernte Kolonie identifizieren | Koordinaten konsistent mit Logistics-Planetliste (gleiche `planet_id`) |
+| G3 | Nach **erfolgreicher Ankunft** Leg: `/messages` filtern | Pro `fleet_id` + `report_phase`: **genau 1** Ankunftsbericht |
+| G4 | `GET /api/fleet/state` **5×** oder Countdown-Expiry + erneuter Tick | Kein zweiter `logistics_*_arrival` für dieselbe Leg |
+| G5 | Nach Rückkehr: R1–R4 aus § 11.5 auf Collect-Return / Distribute-Return | Return-Phase dedupliziert; **kein** doppeltes Crediting am Hub/Ziel |
+
+**Fail-Kriterium:** Doppelter Bericht gleicher `report_phase`, doppelte Lieferung/Abholung, Hub-Fracht nach einem Rückkehr-Tick verdoppelt.
+
+---
+
+### 12.6 Ergebnis Logistics-QA
+
+| Feld | Eintrag |
+|------|---------|
+| Datum / Browser / Viewport | |
+| Collect C1–C6 | ok / fehlgeschlagen |
+| Distribute D1–D7 | ok / fehlgeschlagen |
+| Planetwechsel P1–P4 | ok / fehlgeschlagen |
+| Galaxy G1–G2 | ok / n/a |
+| Idempotenz G3–G5 | ok / fehlgeschlagen |
 | Console-Fehler | |
 
 ---

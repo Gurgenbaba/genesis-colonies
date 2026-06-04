@@ -24,6 +24,7 @@
         <h2 class="section-title">{{ T("fleet_title") }}</h2>
         <p class="section-hint hint">{{ T("fleet_hint") }}</p>
       </div>
+      <a href="{{ url_for('logistics_view') }}" class="gc-btn gc-btn-outline gc-btn-sm">{{ T("nav_logistics", "Logistics") }}</a>
       <div class="fleet-slots-badge" aria-live="polite">
         <span class="fleet-slots-label">{{ T("fleet_slots_label") }}</span>
         <span class="fleet-slots-value gc-mono" data-fleet-slots>

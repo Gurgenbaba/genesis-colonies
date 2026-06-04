@@ -67,6 +67,13 @@ Antwort enthält vollständigen `state` (game-state payload) + `planets[]`.
 - `data-multi="0"` bei einer Kolonie (disabled)
 - `data-multi="1"` bei 2+ — Dropdown mit allen Kolonien
 
+### Header Planet Limit (GC-532)
+
+- Anzeige in der Ressourcenzeile (`templates/base.html`), Panel `hud-res-planet-limit` direkt nach Brennzellen
+- Format: `Planeten X / Y` (`X` = besessene Planeten, `Y` = `game_settings.max_colonies_per_player`, Fallback `9`)
+- Live-State: `/api/game-state` liefert `planet_limit: { current, max }` (Owner: `game/logic.py` → `get_planet_limit_block`)
+- Frontend: `patchHeaderPlanetLimitFromState` in `static/main.js` (Polling, Planetwechsel, Kolonisierung via `applyActionState`)
+
 ### Switch-Flow (`static/main.js`)
 
 ```

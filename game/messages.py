@@ -268,21 +268,28 @@ def _fleet_report_exists(
     recipient_player_id: int,
     fleet_id: int,
     category: str,
+    *,
+    report_phase: str | None = None,
 ) -> bool:
-    """True if an inbox row already exists for this fleet arrival report."""
+    """True if an inbox row already exists for this fleet report."""
     if not _table_ready(conn):
         return False
     cur = conn.cursor()
+    phase_sql = ""
+    params: list[Any] = [int(recipient_player_id), str(category), int(fleet_id)]
+    if report_phase:
+        phase_sql = " AND json_extract(metadata_json, '$.report_phase') = ?"
+        params.append(str(report_phase))
     cur.execute(
         f"""
         SELECT 1 FROM player_messages
         WHERE recipient_player_id = ?
           AND category = ?
           AND {_not_deleted_sql()}
-          AND json_extract(metadata_json, '$.fleet_id') = ?
+          AND json_extract(metadata_json, '$.fleet_id') = ?{phase_sql}
         LIMIT 1;
         """,
-        (int(recipient_player_id), str(category), int(fleet_id)),
+        params,
     )
     return cur.fetchone() is not None
 
@@ -297,14 +304,21 @@ def _notify_player_idempotent_fleet(
     sender_name: str | None = None,
     conn=None,
 ) -> dict[str, Any]:
-    """Deliver a fleet arrival report once per (recipient, category, fleet_id)."""
+    """Deliver a fleet report once per (recipient, category, fleet_id[, report_phase])."""
     pid = _valid_player_id(player_id, conn=conn)
     if pid is None:
         return _err("recipient_not_found")
     meta = dict(metadata or {})
     fleet_id = meta.get("fleet_id")
+    report_phase = meta.get("report_phase")
     if fleet_id is not None and conn is not None:
-        if _fleet_report_exists(conn, pid, int(fleet_id), category):
+        if _fleet_report_exists(
+            conn,
+            pid,
+            int(fleet_id),
+            category,
+            report_phase=str(report_phase) if report_phase else None,
+        ):
             return _ok({"message_id": None, "deduplicated": True})
     return create_message(
         pid,
@@ -639,6 +653,31 @@ def notify_transport(
         category="system",
         metadata=metadata,
         sender_name=tr("messages_sender_transport", "Transportbericht", locale=locale),
+        conn=conn,
+    )
+
+
+def notify_logistics_fleet_report(
+    player_id: int,
+    subject: str,
+    body: str,
+    metadata: dict[str, Any] | None = None,
+    *,
+    locale: str | None = None,
+    conn=None,
+) -> dict[str, Any]:
+    from .i18n import tr
+
+    meta = dict(metadata or {})
+    if meta.get("fleet_id") is not None and not meta.get("report_phase"):
+        return _err("logistics_report_phase_required")
+    return _notify_player_idempotent_fleet(
+        player_id,
+        subject,
+        body,
+        category="system",
+        metadata=meta,
+        sender_name=tr("messages_sender_logistics", "Logistikbericht", locale=locale),
         conn=conn,
     )
 
