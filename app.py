@@ -3843,7 +3843,6 @@ def _build_logistics_preview(
             ships=ships,
             free_fleet_slots=int(slots["free"]),
             player_id=int(user_id),
-            conn=conn,
         )
         if route_ok and route_legs:
             origin_row = planet_rows.get(hub_id) or dict(planet)

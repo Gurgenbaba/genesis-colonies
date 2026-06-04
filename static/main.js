@@ -5315,6 +5315,29 @@
     }
   }
 
+  function logisticsFormReady(page, mode) {
+    const m = mode || getLogisticsMode(page);
+    const originId = getLogisticsOriginId(page);
+    const colonyIds = getLogisticsSelectedColonyIds(page, m);
+    const ships = getLogisticsShipsSelection(page, m);
+    const shipTotal = Object.values(ships).reduce((a, b) => a + b, 0);
+    if (!originId || !colonyIds.length || !shipTotal) return false;
+    if (m === "distribute") {
+      const res = getLogisticsResourcesSelection(page);
+      if ((res.metal || 0) + (res.crystal || 0) + (res.fuel_cells || 0) <= 0) return false;
+    }
+    return true;
+  }
+
+  function updateLogisticsSubmitButtons(page) {
+    const mode = getLogisticsMode(page);
+    const ready = logisticsFormReady(page, mode);
+    page.querySelectorAll("[data-logistics-submit]").forEach((btn) => {
+      const btnMode = btn.getAttribute("data-logistics-submit");
+      btn.disabled = btnMode !== mode || !ready;
+    });
+  }
+
   function resetLogisticsPreview(page) {
     const hud = page.querySelector("[data-logistics-preview]");
     if (hud) {
@@ -5333,9 +5356,7 @@
     const targetsList = page.querySelector("[data-logistics-preview-targets-list]");
     if (targetsWrap) targetsWrap.hidden = true;
     if (targetsList) targetsList.innerHTML = "";
-    page.querySelectorAll("[data-logistics-submit]").forEach((btn) => {
-      btn.disabled = true;
-    });
+    updateLogisticsSubmitButtons(page);
   }
 
   function renderLogisticsPreview(page, preview) {
@@ -5355,6 +5376,7 @@
 
     const canLaunch = !!preview.can_launch;
     const blockReason = preview.block_reason || "";
+    clearLogisticsError(page, getLogisticsMode(page));
     if (hud) {
       hud.classList.toggle("is-ready", canLaunch);
       hud.classList.toggle("is-blocked", !canLaunch);
@@ -5404,7 +5426,7 @@
     }
     page.querySelectorAll("[data-logistics-submit]").forEach((btn) => {
       const mode = btn.getAttribute("data-logistics-submit");
-      btn.disabled = mode !== getLogisticsMode(page) || !canLaunch;
+      btn.disabled = mode !== getLogisticsMode(page) || !logisticsFormReady(page, mode);
     });
   }
 
@@ -5469,9 +5491,13 @@
         renderLogisticsPreview(page, preview);
       } else {
         resetLogisticsPreview(page);
+        if (!res?.ok) {
+          showLogisticsError(page, mode, logisticsReasonText(apiError(res)));
+        }
       }
     } catch (_) {
       resetLogisticsPreview(page);
+      showLogisticsError(page, mode, logisticsReasonText("generic"));
     }
   }
 
@@ -5594,6 +5620,7 @@
       form.dataset.submitting = "1";
       if (submitBtn) submitBtn.disabled = true;
       try {
+        await refreshLogisticsPreview(page);
         let res;
         if (mode === "collect") {
           res = await GC.fetchGameAction("/api/fleet/logistics/collect", {
@@ -5667,6 +5694,7 @@
     if (typeof GC.initHudSelects === "function") GC.initHudSelects(page);
     setLogisticsMode(page, getLogisticsMode(page));
     updateLogisticsOriginShips(page, data);
+    resetLogisticsPreview(page);
   }
 
   function initFleet() {

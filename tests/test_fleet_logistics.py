@@ -435,6 +435,40 @@ def test_collect_logistics_api_returns_state(logistics_db):
     assert body.get("data", {}).get("batch", {}).get("batch_type") == "collect_resources"
 
 
+def test_logistics_preview_api_collect(logistics_db):
+    import app as app_mod
+
+    conn = db()
+    uid = _player(conn=conn)
+    hub, sources = _hub_and_sources(uid, conn, sources=2)
+    _seed_ships(hub, uid, {"mule_courier": 4}, conn=conn)
+    conn.commit()
+    conn.close()
+
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    res = client.post(
+        "/api/fleet/logistics/preview",
+        json={
+            "mode": "collect",
+            "target_planet_id": hub,
+            "source_planet_ids": sources,
+            "ships": {"mule_courier": 4},
+            "resources_mode": "all",
+            "ships_selection_mode": "manual",
+        },
+    )
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["ok"] is True
+    preview = body.get("data", {}).get("preview") or {}
+    assert preview.get("mode") == "collect"
+    assert len(preview.get("legs") or []) == 2
+    assert preview.get("can_launch") is True
+
+
 def test_distribute_happy_path_three_targets(logistics_db):
     conn = db()
     uid = _player(conn=conn)
