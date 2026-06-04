@@ -42,10 +42,7 @@ def get_destroyed_raw(player_id: int, *, conn) -> int:
 
 
 def increment_destroyed_raw(player_id: int, delta: int, *, conn) -> None:
-    """
-    Add combat destruction credit (combat-only cumulative raw; idempotent per battle via caller).
-    Ranking refresh recomputes score_destroyed from this raw via compute_player_scores (SET).
-    """
+    """Add combat destruction credit (idempotent per battle via caller)."""
     from .db import column_exists
     from .ranking import backfill_player_score_rows
 
