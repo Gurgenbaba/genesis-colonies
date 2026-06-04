@@ -5164,6 +5164,9 @@
   let _logisticsBound = false;
   const _logisticsPreviewTimers = new WeakMap();
 
+  const tt = (key, fallback) => t(key, fallback);
+  const apiError = (res) => (res && (res.error || res.reason)) || "generic";
+
   const logisticsPayload = (res) =>
     (res && res.data && typeof res.data === "object" ? res.data : res) || {};
 
@@ -5251,6 +5254,8 @@
   }
 
   GC.scheduleLogisticsRefreshFromState = scheduleLogisticsRefreshFromState;
+
+  function parseLogisticsPageData(page) {
     const el = page.querySelector("#logistics-page-state");
     if (!el) return null;
     try {
