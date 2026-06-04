@@ -95,7 +95,7 @@ Event keys: `void_scan`, `mineral_deposit`, `fuel_cache`, `debris_salvage`, `nav
 
 ---
 
-## Fleet Logistics (GC-526–531)
+## Fleet Logistics (GC-526–533)
 
 Multi-Kolonie-Ressourcenbewegung über **`/logistics`** und `collect_resources` / `distribute_resources` in `game/fleet.py`. Route-Math in `game/fleet_calc.py` (`build_collect_route`, `build_distribute_route`). Spec: [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md).
 
@@ -145,12 +145,14 @@ API: `notify_logistics_fleet_report()` in `game/messages.py`. Normale **`transpo
 
 | Route | Methode | Zweck |
 |-------|---------|-------|
-| `/logistics` | GET | SSR Collect/Distribute (`templates/logistics.html`) |
+| `/logistics` | GET | SSR Collect/Distribute (`templates/logistics.html` → `fleet_logistics.html`) |
 | `/api/fleet/logistics/preview` | POST | Server-Plan (Legs, Cargo, Slots, Block-Reason) |
 | `/api/fleet/logistics/collect` | POST | `collect_resources` → `{ ok, state }` |
 | `/api/fleet/logistics/distribute` | POST | `distribute_resources` → `{ ok, state }` |
 
 Planet-Scope: Hub = aktiver Kontext-Planet (`get_context_planet`) bzw. explizit im Body; Client: `GC.fetchGameAction` + `applyActionState()` (`static/main.js` → `initLogistics()`).
+
+**GC-533 UI/Client:** Kompakte Genesis-Oberfläche (`logistics-page--compact` in `templates/fleet_logistics.html`). Quell-Kolonien, Cargo-Mengen und MAX werden clientseitig validiert; Start erst nach erfolgreichem Preview (`can_launch`). Fehler als Inline-Hinweis + `showNotify`. Cargo-Gate serverseitig: `validate_logistics_manual_ships()` in `game/fleet.py` / `fleet_logistics_validate_ships()` in `game/fleet_api.py`.
 
 **Manuelle QA:** [ALPHA_TESTPLAN.md § 12](ALPHA_TESTPLAN.md#12-fleet-logistics-gc-531--manuelle-browser-qa).
 
@@ -207,7 +209,7 @@ Response envelope: `{ ok, error, message_key, data }` via `fleet_api.py`.
 - **GC-402B:** Mission feedback panel (`data-fleet-mission-feedback`), preview status `is-ok` / `is-blocked`, expedition → position 16
 - **Logistics:** `initLogistics()` auf `/logistics` — Tabs Collect/Distribute, debounced Preview, Hub = `data-logistics-origin` / `data-logistics-hub`
 
-Templates: `templates/fleet.html` (Link zu Logistics), `templates/logistics.html`.
+Templates: `templates/fleet.html` (Link zu Logistics), `templates/logistics.html` (Wrapper), `templates/fleet_logistics.html` (Markup).
 
 Inbox expedition reports: `static/js/messages.js` → `renderExpeditionReport()` (GC-402C event cards).
 

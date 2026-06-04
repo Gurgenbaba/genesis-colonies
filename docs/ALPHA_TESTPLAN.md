@@ -233,6 +233,7 @@ Nach **erfolgreicher Ankunft** (Schritt .5 erfüllt):
 | R1 | `/messages` — Anzahl Berichte mit gleicher `fleet_id` (Metadata) | **1** Ankunftsbericht pro Mission |
 | R2 | `/fleet` — **PJAX** zu anderer Seite und zurück **oder** Hard-Reload (F5) | Nachrichtenzahl unverändert; Fleet-State konsistent |
 | R3 | DevTools → Network: `GET /api/fleet/state` **5×** hintereinander (Refresh-Button / Countdown-Expiry simulieren) | Keine zweite Ankunftsmeldung; Ressourcen/Kolonie/Loot **nicht** verdoppelt |
+| R3a | (Automatisiert GC-532) `test_api_fleet_state_five_calls_outbound_arrival_idempotent` | wie R3 |
 | R4 | Optional: Queue-Tick abwarten (`finish_due_work` / Overview-Poll) + erneut R3 | wie R3 |
 | R5 | Rückflug abwarten (Countdown „Rückkehr“) | Schiffe zurück; **kein** neuer Ankunfts-/Expeditions-/Transport-Bericht für dieselbe `fleet_id` (Logistics: siehe § 12.5) |
 
@@ -340,6 +341,7 @@ python -m pytest tests/test_fleet.py -k "logistics or collect_creates_report or 
 | G2 | `/galaxy` — eigene entfernte Kolonie identifizieren | Koordinaten konsistent mit Logistics-Planetliste (gleiche `planet_id`) |
 | G3 | Nach **erfolgreicher Ankunft** Leg: `/messages` filtern | Pro `fleet_id` + `report_phase`: **genau 1** Ankunftsbericht |
 | G4 | `GET /api/fleet/state` **5×** oder Countdown-Expiry + erneuter Tick | Kein zweiter `logistics_*_arrival` für dieselbe Leg |
+| G4a | (Automatisiert GC-532) `test_api_fleet_state_five_calls_outbound_arrival_idempotent`, `test_logistics_*_double_tick_*` | wie G4 |
 | G5 | Nach Rückkehr: R1–R4 aus § 11.5 auf Collect-Return / Distribute-Return | Return-Phase dedupliziert; **kein** doppeltes Crediting am Hub/Ziel |
 
 **Fail-Kriterium:** Doppelter Bericht gleicher `report_phase`, doppelte Lieferung/Abholung, Hub-Fracht nach einem Rückkehr-Tick verdoppelt.

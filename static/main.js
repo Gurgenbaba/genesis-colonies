@@ -5163,8 +5163,36 @@
   const logisticsPayload = (res) =>
     (res && res.data && typeof res.data === "object" ? res.data : res) || {};
 
-  const logisticsReasonText = (reason) =>
-    tt(`fleet_error_${reason}`, tt("fleet_error_generic"));
+  const logisticsReasonText = (reason) => {
+    if (!reason) return tt("fleet_error_generic");
+    const key = String(reason);
+    const prefixed = tt(`fleet_error_${key}`, "");
+    if (prefixed && prefixed !== `fleet_error_${key}`) return prefixed;
+    const direct = tt(key, "");
+    if (direct && direct !== key) return direct;
+    return tt("fleet_error_generic");
+  };
+
+  function notifyLogisticsFailure(page, mode, message) {
+    showLogisticsError(page, mode, message);
+    showNotify(message, "error");
+  }
+
+  function clampLogisticsShipInput(inp) {
+    if (!inp) return;
+    const max = parseInt(inp.max || "0", 10);
+    let v = parseInt(inp.value || "0", 10);
+    if (!Number.isFinite(v) || v < 0) v = 0;
+    if (Number.isFinite(max) && max >= 0 && v > max) v = max;
+    inp.value = String(v);
+  }
+
+  function logisticsSubmitEnabled(page, mode) {
+    if (!logisticsFormReady(page, mode)) return false;
+    const preview = page._logisticsLastPreview;
+    if (!preview || preview.mode !== mode) return false;
+    return !!preview.can_launch;
+  }
 
   function parseLogisticsPageData(page) {
     const el = page.querySelector("#logistics-page-state");
@@ -5331,14 +5359,14 @@
 
   function updateLogisticsSubmitButtons(page) {
     const mode = getLogisticsMode(page);
-    const ready = logisticsFormReady(page, mode);
     page.querySelectorAll("[data-logistics-submit]").forEach((btn) => {
       const btnMode = btn.getAttribute("data-logistics-submit");
-      btn.disabled = btnMode !== mode || !ready;
+      btn.disabled = btnMode !== mode || !logisticsSubmitEnabled(page, btnMode);
     });
   }
 
   function resetLogisticsPreview(page) {
+    page._logisticsLastPreview = null;
     const hud = page.querySelector("[data-logistics-preview]");
     if (hud) {
       hud.classList.remove("is-ready", "is-blocked");
@@ -5373,6 +5401,8 @@
       resetLogisticsPreview(page);
       return;
     }
+
+    page._logisticsLastPreview = { ...preview, mode: getLogisticsMode(page) };
 
     const canLaunch = !!preview.can_launch;
     const blockReason = preview.block_reason || "";
@@ -5424,10 +5454,7 @@
         targetsList.innerHTML = "";
       }
     }
-    page.querySelectorAll("[data-logistics-submit]").forEach((btn) => {
-      const mode = btn.getAttribute("data-logistics-submit");
-      btn.disabled = mode !== getLogisticsMode(page) || !logisticsFormReady(page, mode);
-    });
+    updateLogisticsSubmitButtons(page);
   }
 
   function escapeHtml(text) {
@@ -5492,12 +5519,12 @@
       } else {
         resetLogisticsPreview(page);
         if (!res?.ok) {
-          showLogisticsError(page, mode, logisticsReasonText(apiError(res)));
+          notifyLogisticsFailure(page, mode, logisticsReasonText(apiError(res)));
         }
       }
     } catch (_) {
       resetLogisticsPreview(page);
-      showLogisticsError(page, mode, logisticsReasonText("generic"));
+      notifyLogisticsFailure(page, mode, logisticsReasonText("generic"));
     }
   }
 
@@ -5554,6 +5581,9 @@
       const inp = row?.querySelector("[data-logistics-ship-input]");
       if (inp) {
         inp.value = String(parseInt(row.dataset.shipHave || inp.max || "0", 10) || 0);
+        clampLogisticsShipInput(inp);
+        syncLogisticsColonySelected(page);
+        updateLogisticsSubmitButtons(page);
         scheduleLogisticsPreview(page);
       }
     });
@@ -5571,7 +5601,11 @@
         if (e.target.matches("[data-logistics-origin]")) {
           updateLogisticsOriginShips(page, data);
         } else {
+          if (e.target.matches("[data-logistics-ship-input]")) {
+            clampLogisticsShipInput(e.target);
+          }
           syncLogisticsColonySelected(page);
+          updateLogisticsSubmitButtons(page);
           scheduleLogisticsPreview(page);
         }
       }
@@ -5580,10 +5614,12 @@
     document.addEventListener("input", (e) => {
       const page = document.getElementById("logistics-page");
       if (!page || page.dataset.ready !== "1") return;
-      if (
-        e.target.matches("[data-logistics-ship-input]") ||
-        e.target.matches("[data-logistics-resource]")
-      ) {
+      if (e.target.matches("[data-logistics-ship-input]")) {
+        clampLogisticsShipInput(e.target);
+        updateLogisticsSubmitButtons(page);
+        scheduleLogisticsPreview(page);
+      } else if (e.target.matches("[data-logistics-resource]")) {
+        updateLogisticsSubmitButtons(page);
         scheduleLogisticsPreview(page);
       }
     });
@@ -5606,7 +5642,7 @@
       const ships = getLogisticsShipsSelection(page, mode);
 
       if (!originId || !colonyIds.length || !Object.keys(ships).length) {
-        showLogisticsError(
+        notifyLogisticsFailure(
           page,
           mode,
           mode === "collect"
@@ -5621,6 +5657,19 @@
       if (submitBtn) submitBtn.disabled = true;
       try {
         await refreshLogisticsPreview(page);
+        if (!logisticsSubmitEnabled(page, mode)) {
+          const blockReason = page._logisticsLastPreview?.block_reason || "";
+          notifyLogisticsFailure(
+            page,
+            mode,
+            blockReason
+              ? logisticsReasonText(blockReason)
+              : mode === "collect"
+                ? tt("logistics_collect_incomplete")
+                : tt("logistics_distribute_incomplete")
+          );
+          return;
+        }
         let res;
         if (mode === "collect") {
           res = await GC.fetchGameAction("/api/fleet/logistics/collect", {
@@ -5637,11 +5686,7 @@
         } else {
           const resources = getLogisticsResourcesSelection(page);
           if ((resources.metal || 0) + (resources.crystal || 0) + (resources.fuel_cells || 0) <= 0) {
-            showLogisticsError(
-              page,
-              mode,
-              tt("logistics_distribute_no_resources")
-            );
+            notifyLogisticsFailure(page, mode, tt("logistics_distribute_no_resources"));
             return;
           }
           res = await GC.fetchGameAction("/api/fleet/logistics/distribute", {
@@ -5669,13 +5714,14 @@
             await GC.reloadCurrentPage({ force: true });
           }
         } else {
-          showLogisticsError(page, mode, logisticsReasonText(apiError(res)));
+          notifyLogisticsFailure(page, mode, logisticsReasonText(apiError(res)));
           applyLogisticsActionState(page, res);
         }
       } catch (_) {
-        showLogisticsError(page, mode, logisticsReasonText("generic"));
+        notifyLogisticsFailure(page, mode, logisticsReasonText("generic"));
       } finally {
         form.dataset.submitting = "0";
+        updateLogisticsSubmitButtons(page);
         scheduleLogisticsPreview(page);
       }
     });

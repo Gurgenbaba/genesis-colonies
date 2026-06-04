@@ -3444,6 +3444,19 @@ def _load_planet_rows_for_collect(
     return {int(row["id"]): dict(row) for row in cur.fetchall()}
 
 
+def validate_logistics_manual_ships(
+    ships: Mapping[str, int],
+) -> Tuple[bool, str, Dict[str, int]]:
+    """Cargo-only ship selection for logistics collect/distribute (GC-533)."""
+    ships_n = normalize_ships(ships)
+    if not ships_n:
+        return False, "no_ships", {}
+    ok_cargo, cargo_reason = fleet_ships_are_cargo_only(ships_n)
+    if not ok_cargo:
+        return False, cargo_reason or "non_cargo_ships", {}
+    return True, "", ships_n
+
+
 def collect_resources(
     *,
     player_id: int,
@@ -3477,6 +3490,10 @@ def collect_resources(
     if not source_ids:
         return False, "no_planets", None
 
+    ok_ships, ship_reason, ships_n = validate_logistics_manual_ships(ships)
+    if not ok_ships:
+        return False, ship_reason, None
+
     own = conn is None
     if own:
         conn = db()
@@ -3494,14 +3511,13 @@ def collect_resources(
             origin_planet_id=hub_id,
             source_planet_ids=source_ids,
             planet_rows_by_id=planet_rows,
-            ships=ships,
+            ships=ships_n,
             free_fleet_slots=int(slots["free"]),
             player_id=int(player_id),
         )
         if not ok_route or not legs:
             return False, route_reason or "no_planets", None
 
-        ships_n = normalize_ships(ships)
         if own:
             begin_write_transaction(conn)
 

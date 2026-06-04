@@ -84,6 +84,13 @@ def fleet_mission_target_payload(
     return fleet_err(reason, message_key=reason, data=data)
 
 
+def fleet_logistics_validate_ships(ships: Mapping[str, int]) -> Tuple[bool, str, Dict[str, int]]:
+    """Shared cargo-ship gate for logistics POST bodies."""
+    from .fleet import validate_logistics_manual_ships
+
+    return validate_logistics_manual_ships(ships)
+
+
 def fleet_logistics_collect(
     player_id: int,
     *,
@@ -100,11 +107,15 @@ def fleet_logistics_collect(
     """Run bulk collect logistics (N× ``collect`` movements under one batch)."""
     from .fleet import collect_resources
 
+    ok_ships, ship_reason, ships_n = fleet_logistics_validate_ships(ships)
+    if not ok_ships:
+        return False, ship_reason, None
+
     return collect_resources(
         player_id=int(player_id),
         target_planet_id=int(target_planet_id),
         source_planet_ids=source_planet_ids,
-        ships=ships,
+        ships=ships_n,
         resources_mode=resources_mode,
         resources=resources,
         ships_selection_mode=ships_selection_mode,
@@ -131,11 +142,15 @@ def fleet_logistics_distribute(
     """Run bulk distribute logistics (N× ``transport`` movements under one batch)."""
     from .fleet import distribute_resources
 
+    ok_ships, ship_reason, ships_n = fleet_logistics_validate_ships(ships)
+    if not ok_ships:
+        return False, ship_reason, None
+
     return distribute_resources(
         player_id=int(player_id),
         origin_planet_id=int(origin_planet_id),
         target_planet_ids=target_planet_ids,
-        ships=ships,
+        ships=ships_n,
         resources_mode=resources_mode,
         resources=resources,
         target_resources=target_resources,
