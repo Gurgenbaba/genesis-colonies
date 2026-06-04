@@ -19,12 +19,15 @@ import game.db as dbmod
 import game.models as models
 from game.db import db
 from game.models import create_user, init_db
+from game.logic import refresh_player_live_state
 from game.ranking import (
     build_ranking_api_payload,
     compute_player_scores,
     enrich_ranking_social_fields,
     get_player_score_row,
     get_sorted_ranking_entries,
+    read_player_scores,
+    rebuild_player_score,
     recalculate_all_rankings,
     recalculate_ranks,
     repair_player_score_totals,
@@ -251,41 +254,142 @@ def test_current_player_not_in_top_n(temp_db):
     assert payload["current_player"]["total_score"] == 200
 
 
-def test_legacy_weighted_total_repaired(temp_db):
+def test_stale_score_total_ignored_on_read(temp_db):
     _run_migrate(temp_db)
     init_db()
     _close_db()
 
-    pid = _create_player("legacy")
+    pid = _create_player("legacy_read")
+    _seed_scores(pid, building=4_000_000, research=3_474_715)
+    expected = 4_000_000 + 3_474_715
+
     conn = db()
     conn.execute(
-        """
-        INSERT INTO player_scores (player_id, score_total, score_buildings, score_research, updated_at)
-        VALUES (?, ?, ?, ?, CAST(strftime('%s','now') AS INTEGER))
-        ON CONFLICT(player_id) DO UPDATE SET
-            score_total = excluded.score_total,
-            score_buildings = excluded.score_buildings,
-            score_research = excluded.score_research,
-            updated_at = excluded.updated_at
-        """,
-        (pid, 1_414_715, 4_000_000, 3_474_715),
+        "UPDATE player_scores SET score_total = ? WHERE player_id = ?;",
+        (1_414_715, pid),
     )
     conn.commit()
     conn.close()
+    _close_db()
 
-    row_before = get_player_score_row(pid)
-    assert int(row_before["score_total"]) == 1_414_715
+    assert read_player_scores(pid)["total_score"] == expected
+
+
+def test_repair_resyncs_scores_from_game_state(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("legacy_repair")
+    _seed_scores(pid, building=4_000_000, research=3_474_715)
+
+    conn = db()
+    conn.execute(
+        "UPDATE player_scores SET score_total = ? WHERE player_id = ?;",
+        (1_414_715, pid),
+    )
+    conn.commit()
+    conn.close()
 
     repaired = repair_player_score_totals(pid)
     _close_db()
     assert repaired is True
 
     row_after = get_player_score_row(pid)
-    expected = 4_000_000 + 3_474_715
-    assert int(row_after["score_total"]) == expected
+    expected = compute_player_scores(pid)
+    assert int(row_after["score_total"]) == int(expected["total_score"])
+    assert int(row_after["score_buildings"]) == int(expected["building_score"])
 
-    payload = build_ranking_api_payload(pid, limit=10, refresh=False)
-    assert payload["current_player"]["total_score"] == expected
+
+def _seed_fleet_for_score_player(player_id: int) -> None:
+    conn = db()
+    planet = conn.execute(
+        "SELECT id FROM planets WHERE player_id = ? AND is_homeworld = 1 LIMIT 1;",
+        (int(player_id),),
+    ).fetchone()
+    assert planet
+    conn.execute(
+        """
+        INSERT INTO planet_ships (player_id, planet_id, ship_key, amount, created_at, updated_at)
+        VALUES (?, ?, 'spark_drone', 10, CAST(strftime('%s','now') AS INTEGER), CAST(strftime('%s','now') AS INTEGER))
+        ON CONFLICT DO NOTHING;
+        """,
+        (int(player_id), int(planet["id"])),
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_rebuild_player_score_idempotent(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("idempotent_rebuild")
+    _seed_fleet_for_score_player(pid)
+    rebuild_player_score(pid)
+    _close_db()
+
+    score_before = rebuild_player_score(pid)
+    score_after = rebuild_player_score(pid)
+    assert score_before == score_after
+    assert score_before == 7000
+
+
+def test_rebuild_player_score_many_passes_stable(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("multi_rebuild")
+    _seed_fleet_for_score_player(pid)
+    first = rebuild_player_score(pid)
+    for _ in range(50):
+        rebuild_player_score(pid)
+    last = rebuild_player_score(pid)
+    assert first == last
+    assert first == 7000
+
+
+def test_ranking_rebuild_never_accumulates_scores(temp_db):
+    """GC-536: repeated rebuild must not add to stored totals."""
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("no_accumulate")
+    _seed_fleet_for_score_player(pid)
+    first_row = get_player_score_row(pid)
+    rebuild_player_score(pid)
+    mid_row = get_player_score_row(pid)
+    for _ in range(20):
+        rebuild_player_score(pid)
+    last_row = get_player_score_row(pid)
+    _close_db()
+
+    assert int(mid_row["score_total"]) == int(last_row["score_total"])
+    if first_row:
+        assert int(first_row.get("score_fleet") or 0) <= int(last_row.get("score_fleet") or 0)
+
+
+def test_live_refresh_does_not_change_scores(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("live_refresh")
+    _seed_fleet_for_score_player(pid)
+    rebuild_player_score(pid)
+    _close_db()
+
+    baseline = read_player_scores(pid)
+    for _ in range(100):
+        refresh_player_live_state(pid, finish_source="test_gc535")
+    _close_db()
+
+    after = read_player_scores(pid)
+    assert after["total_score"] == baseline["total_score"]
+    assert after["fleet_score"] == baseline["fleet_score"]
 
 
 def test_api_read_path_skips_full_recalc(temp_db):

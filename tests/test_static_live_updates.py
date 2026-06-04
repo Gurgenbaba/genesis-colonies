@@ -70,10 +70,10 @@ def test_messages_js_tab_and_initial_share_load_list():
 def test_messages_js_spy_report_and_category_label():
     src = _read("static/js/messages.js")
     assert "function categoryLabel(cat)" in src
-    assert "function renderSpyReport(meta)" in src
-    assert "function renderExpeditionReport(meta)" in src
+    assert "function renderSpyReportFull(meta" in src
+    assert "function renderExpeditionReportFull(meta)" in src
     assert "expeditionEventVisual" in src
-    assert "gc-expedition-card" in src
+    assert "gc-expedition-loot-grid" in src
     assert "renderMessageBody(msg)" in src
 
 
@@ -209,7 +209,7 @@ def test_main_js_fleet_countdown_uses_integer_seconds():
     tick_body = src.split("const tickFleetCountdowns = () =>")[1].split("tickFleetCountdowns();")[0]
     assert "updateMovementCountdowns(getApproxServerNow())" in tick_body
     countdown_body = src.split("function updateMovementCountdowns(serverNow)")[1].split("function updateAllProgressBars")[0]
-    assert "Math.ceil(countdownAt - now)" in countdown_body
+    assert "movementRemainingSeconds(" in countdown_body
     assert "MOVEMENT_EXPIRY_REFRESH_MS_SHORT" in src
     assert "movementRemainingSeconds" in src
     assert "data-server-remaining" in src
@@ -311,3 +311,49 @@ def test_galaxy_template_pjax_nav_urls():
     assert 'id="galaxy-page-root"' in tpl
     assert "data-prev-url" in tpl
     assert "data-next-url" in tpl
+
+
+def test_resource_bar_partial_extracted():
+    tpl = _read("templates/partials/resource_bar.html")
+    assert 'id="resource-bar"' in tpl
+    assert "data-planet-limit-value" in tpl
+    base = _read("templates/base.html")
+    assert 'include "partials/resource_bar.html"' in base
+
+
+def test_main_js_score_delta_idempotent_on_poll_and_hydrate():
+    src = _read("static/main.js")
+    assert "SCORE_DELTA_SUPPRESS" in src
+    suppress_block = src.split("SCORE_DELTA_SUPPRESS")[1][:500]
+    assert '"poll"' in suppress_block
+    assert "page_hydrate" in suppress_block
+    assert "function scoreDeltaAllowed" in src
+    assert "function bootstrapScoreStateFromDom" in src
+    assert "function resolveServerScoreTotal" in src
+    assert "knownGoodTotal" in src
+
+
+def test_main_js_apply_game_state_score_guards():
+    src = _read("static/main.js")
+    score_section = src.split("// === SCORE / RANK ===")[1].split("// --- Overview")[0]
+    assert "bootstrapScoreStateFromDom()" in score_section
+    assert "resolveServerScoreTotal(s)" in score_section
+    assert "canShowDelta" in score_section
+    assert "clearScoreDeltaNodes" in score_section
+    assert "applyHudScoreDisplay" in score_section
+    assert "setScoreTextInstant" in score_section
+    assert "lastShownDeltaAtTotal" in src
+    assert 'if (delta !== 0) showScoreDelta(hudScoreEl' not in score_section
+
+
+def test_main_js_score_never_drops_to_zero_when_known():
+    src = _read("static/main.js")
+    resolve_body = src.split("function resolveServerScoreTotal")[1].split("function setScoreTextInstant")[0]
+    assert "knownGoodTotal" in resolve_body
+    assert "if (known > 0) return known" in resolve_body
+
+
+def test_base_hud_score_initial_attribute():
+    base = _read("templates/base.html")
+    assert 'id="hud-score-total"' in base
+    assert "data-initial-score" in base

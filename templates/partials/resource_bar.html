@@ -1,0 +1,65 @@
+{# Resource HUD (header row 2). Score pill lives in base header meta; JS sync via applyGameStateData. #}
+<div class="resource-bar resource-bar-cmd resource-bar-with-planet-limit" id="resource-bar" data-live-status role="status" aria-live="polite" aria-label="{{ T('resources', 'Ressourcen') }}">
+
+  <div class="hud-res-panel hud-res-metal" title="{{ T('resource_metal') }}">
+    <span class="hud-res-label">{{ T('resource_metal') }}</span>
+    <div class="hud-res-body res-block res-block-metal">
+      <img src="{{ url_for('static', filename='icons/ferronit.png') }}" class="res-icon" alt="{{ T('resource_metal') }}">
+      <span class="res-value metal">{{ (player.metal if player is defined else 0)|fmt_int }}</span>
+      <span class="res-sep" aria-hidden="true">/</span>
+      <span class="res-cap metal">{{ (storage_caps.metal if storage_caps is defined else 0)|fmt_int }}</span>
+    </div>
+    <span class="res-rate metal" data-res-rate="metal" aria-hidden="true" style="visibility:hidden"></span>
+  </div>
+
+  <div class="hud-res-panel hud-res-crystal" title="{{ T('resource_crystal') }}">
+    <span class="hud-res-label">{{ T('resource_crystal') }}</span>
+    <div class="hud-res-body res-block res-block-crystal">
+      <img src="{{ url_for('static', filename='icons/crytite.png') }}" class="res-icon" alt="{{ T('resource_crystal') }}">
+      <span class="res-value crystal">{{ (player.crystal if player is defined else 0)|fmt_int }}</span>
+      <span class="res-sep" aria-hidden="true">/</span>
+      <span class="res-cap crystal">{{ (storage_caps.crystal if storage_caps is defined else 0)|fmt_int }}</span>
+    </div>
+    <span class="res-rate crystal" data-res-rate="crystal" aria-hidden="true" style="visibility:hidden"></span>
+  </div>
+
+  {% set fc_have = (player.fuel_cells if player is defined and player.fuel_cells is defined else 0) | int %}
+  {% set fc_cap = (storage_caps.fuel_cells if storage_caps is defined and storage_caps.fuel_cells is defined else 0) | int %}
+  <div class="hud-res-panel hud-res-fuel-cells" title="{{ T('resource_fuel_cells') }}">
+    <span class="hud-res-label">{{ T('resource_fuel_cells') }}</span>
+    <div class="hud-res-body res-block res-block-fuel-cells">
+      <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" class="res-icon" alt="{{ T('resource_fuel_cells') }}"
+           onerror="this.onerror=null;this.src='{{ url_for('static', filename='icons/energy.png') }}';">
+      <span class="res-value fuel_cells">{{ fc_have|fmt_int }}</span>
+      <span class="res-sep" aria-hidden="true">/</span>
+      <span class="res-cap fuel_cells">{{ fc_cap|fmt_int }}</span>
+    </div>
+    <span class="res-rate fuel_cells" data-res-rate="fuel_cells" aria-hidden="true" style="visibility:hidden"></span>
+  </div>
+
+  {% set pl_current = (HEADER_PLANETS|length) if HEADER_PLANETS is defined and HEADER_PLANETS else 1 %}
+  {% set gs_pl = (GAME_SETTINGS if GAME_SETTINGS is defined and GAME_SETTINGS else {}) %}
+  {% set pl_max = (gs_pl.max_colonies_per_player|default(9))|int %}
+  <div class="hud-res-panel hud-res-planet-limit" title="{{ T('header_planet_limit', 'Planeten') }}"
+       aria-label="{{ T('header_planet_limit', 'Planeten') }}">
+    <span class="hud-res-label">{{ T('header_planet_limit', 'Planeten') }}</span>
+    <div class="hud-res-body res-block res-block-planet-limit">
+      <span class="res-value planet-limit" data-planet-limit-value>{{ pl_current|fmt_int }} / {{ pl_max|fmt_int }}</span>
+    </div>
+  </div>
+
+  {% set eu = (energy_used if energy_used is defined else 0) | int %}
+  {% set et = (energy_total if energy_total is defined else 0) | int %}
+  <div id="energy-container"
+       class="hud-res-panel hud-res-energy {% if et > 0 and eu > et %}energy-warning{% endif %}"
+       aria-label="{{ T('energy', 'Energie') }}"
+       title="{{ T('energy', 'Energie') }}">
+    <span class="hud-res-label">{{ T('energy', 'Energie') }}</span>
+    <div class="hud-res-body res-block res-block-energy">
+      <img src="{{ url_for('static', filename='icons/energy.png') }}" class="res-icon" alt="{{ T('energy', 'Energie') }}">
+      <span id="res-energy">{{ eu|fmt_int }}/{{ et|fmt_int }}</span>
+    </div>
+    <span class="res-rate energy" data-res-rate="energy" aria-hidden="true" style="visibility:hidden"></span>
+  </div>
+
+</div>

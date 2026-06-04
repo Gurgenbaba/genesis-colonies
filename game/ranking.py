@@ -275,7 +275,8 @@ def _normalize_db_row(row: Optional[dict]) -> Dict[str, int]:
     destroyed_raw = (
         _safe_int(row.get("score_destroyed_raw", 0)) if "score_destroyed_raw" in keys else 0
     )
-    result = _sanitize_scores(
+    # Always derive total_score from components — never trust a stale score_total column.
+    return _sanitize_scores(
         {
             "building_score": building,
             "research_score": research,
@@ -287,9 +288,6 @@ def _normalize_db_row(row: Optional[dict]) -> Dict[str, int]:
             "evolution_score": evolution,
         }
     )
-    if "score_total" in keys:
-        result["total_score"] = _safe_int(row.get("score_total", result["total_score"]))
-    return result
 
 
 def format_scores_for_playercard(normalized: Dict[str, int]) -> Dict[str, int]:
@@ -478,6 +476,31 @@ def upsert_player_scores(
         conn.close()
 
 
+def _scores_row_changed(stored: Dict[str, int], computed: Dict[str, int]) -> bool:
+    """True when persisted columns differ from a fresh state recompute."""
+    fields = (
+        "total_score",
+        "building_score",
+        "research_score",
+        "fleet_score",
+        "defense_score",
+        "combat_score",
+        "destroyed_score",
+        "destroyed_raw",
+        "evolution_score",
+    )
+    return any(int(stored.get(key, 0) or 0) != int(computed.get(key, 0) or 0) for key in fields)
+
+
+def rebuild_player_score(player_id: int, conn=None) -> int:
+    """
+    Idempotent full score rebuild from current game state (SET, never +=).
+    Returns total_score after upsert.
+    """
+    scores = refresh_player_score(int(player_id), conn=conn)
+    return int(scores.get("total_score", 0) or 0)
+
+
 def refresh_player_score(player_id: int, conn=None) -> Dict[str, int]:
     owns_conn = False
     if conn is None:
@@ -496,8 +519,8 @@ def refresh_player_score(player_id: int, conn=None) -> Dict[str, int]:
 
 def repair_player_score_totals(player_id: int, conn=None) -> bool:
     """
-    Fix legacy score_total (e.g. old weighted formula) without recomputing components.
-    Returns True if a row was repaired.
+    Recompute all score components from current game state and upsert when drifted.
+    Returns True if the row was updated.
     """
     owns_conn = False
     if conn is None:
@@ -510,46 +533,12 @@ def repair_player_score_totals(player_id: int, conn=None) -> bool:
         row = cur.fetchone()
         if not row:
             return False
-        row_dict = dict(row)
-        keys = row_dict.keys() if hasattr(row_dict, "keys") else ()
-        building = _safe_int(row_dict.get("score_buildings", 0))
-        research = _safe_int(row_dict.get("score_research", 0))
-        fleet = _safe_int(row_dict.get("score_fleet", 0)) if "score_fleet" in keys else 0
-        defense = _safe_int(row_dict.get("score_defense", 0)) if "score_defense" in keys else 0
-        evolution = (
-            _safe_int(row_dict.get("score_planet_evolution", 0))
-            if "score_planet_evolution" in keys
-            else 0
-        )
-        destroyed_raw = (
-            _safe_int(row_dict.get("score_destroyed_raw", 0))
-            if "score_destroyed_raw" in keys
-            else 0
-        )
-        from .scoring import compute_combat_score
-
-        combat = compute_combat_score(fleet, defense)
-        w_destroyed = _destroyed_score_weight(conn)
-        exp = _score_exponent(conn)
-        destroyed_score = _safe_int(
-            ((destroyed_raw**exp) * w_destroyed) if destroyed_raw > 0 else 0
-        )
-        computed = _sanitize_scores(
-            {
-                "building_score": building,
-                "research_score": research,
-                "fleet_score": fleet,
-                "defense_score": defense,
-                "combat_score": combat,
-                "destroyed_score": destroyed_score,
-                "destroyed_raw": destroyed_raw,
-                "evolution_score": evolution,
-            }
-        )
-        stored_total = _safe_int(row["score_total"])
-        if stored_total == computed["total_score"]:
+        stored = _normalize_db_row(dict(row))
+        computed = compute_player_scores(int(player_id), conn=conn)
+        if not _scores_row_changed(stored, computed):
             return False
         upsert_player_scores(int(player_id), computed, conn=conn)
+        invalidate_player_score_cache(int(player_id))
         if owns_conn:
             conn.commit()
         return True
@@ -560,7 +549,7 @@ def repair_player_score_totals(player_id: int, conn=None) -> bool:
 
 def on_player_score_changed(player_id: int, conn=None) -> Dict[str, int]:
     """
-    Incremental hook: refresh one player + rebuild rank snapshot.
+    Recompute one player from current game state and refresh rank snapshot.
     Call after building/research/fleet/defense changes.
     """
     return recompute_and_upsert_score(int(player_id), conn=conn)

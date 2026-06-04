@@ -222,6 +222,7 @@
   }
 
   bootstrapServerTimeFromDom();
+  bootstrapScoreStateFromDom();
 
   let _statusPollErrorLogged = false;
   let _authLoopAborted = false;
@@ -1958,15 +1959,86 @@
   }
 
   // =========================
-  // Score delta pop + pulse
+  // Score delta pop + pulse (idempotent — no duplicate badges on poll/PJAX)
   // =========================
+  const SCORE_DELTA_SUPPRESS = new Set([
+    "poll",
+    "page_hydrate",
+    "page_init",
+    "pjax_nav",
+    "admin_hud",
+    "planet_switch",
+    "planet_switch_reload",
+    "tab_visible",
+    "fleet_countdown_expired",
+    "status",
+  ]);
+
   const _scoreState = {
     lastServerTotal: null,
     lastAnimatedTotal: null,
+    knownGoodTotal: 0,
+    seenServerScore: false,
+    lastShownDeltaAmount: 0,
+    lastShownDeltaAtTotal: null,
   };
 
   let _deltaTimerHud = 0;
   let _deltaTimerOv = 0;
+
+  function scoreDeltaAllowed(reason) {
+    const r = String(reason || "").trim();
+    if (!r || SCORE_DELTA_SUPPRESS.has(r)) return false;
+    if (r.includes("reload")) return false;
+    return true;
+  }
+
+  function parseDisplayedScoreInt(el) {
+    if (!el) return null;
+    const rawAttr = el.getAttribute("data-initial-score");
+    if (rawAttr !== null && rawAttr !== "") {
+      const fromAttr = Math.floor(Number(rawAttr));
+      if (Number.isFinite(fromAttr) && fromAttr >= 0) return fromAttr;
+    }
+    const t = String(el.textContent || "").replace(/\./g, "").replace(/,/g, "").trim();
+    if (!t) return null;
+    const n = Math.floor(Number(t));
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  }
+
+  function bootstrapScoreStateFromDom() {
+    const hud = document.getElementById("hud-score-total");
+    const domTotal = parseDisplayedScoreInt(hud);
+    if (domTotal === null) return;
+    if (domTotal > 0) _scoreState.knownGoodTotal = Math.max(_scoreState.knownGoodTotal, domTotal);
+    if (_scoreState.lastServerTotal === null) _scoreState.lastServerTotal = domTotal;
+    if (_scoreState.lastAnimatedTotal === null) _scoreState.lastAnimatedTotal = domTotal;
+    if (domTotal > 0) _scoreState.seenServerScore = true;
+  }
+
+  function resolveServerScoreTotal(scorePayload) {
+    const total = Math.max(0, Math.floor(Number(scorePayload?.total || 0)));
+    if (total > 0) {
+      _scoreState.knownGoodTotal = total;
+      return total;
+    }
+    const known = Math.max(0, Math.floor(Number(_scoreState.knownGoodTotal || 0)));
+    if (known > 0) return known;
+    return total;
+  }
+
+  function setScoreTextInstant(el, value) {
+    if (!el) return;
+    const v = Math.max(0, Math.floor(Number(value) || 0));
+    el.textContent = fmtNumber(v);
+    _lastNum.set(el, v);
+    _numAnim.delete(el);
+  }
+
+  function clearScoreDeltaNodes(anchorEl) {
+    if (!anchorEl) return;
+    anchorEl.querySelectorAll(".gc-score-delta").forEach((node) => node.remove());
+  }
 
   function pulseScore(anchorEl) {
     if (!anchorEl) return;
@@ -1980,6 +2052,9 @@
 
     const style = getComputedStyle(anchorEl);
     if (style.position === "static") anchorEl.style.position = "relative";
+
+    const existing = anchorEl.querySelectorAll(".gc-score-delta");
+    for (let i = 1; i < existing.length; i += 1) existing[i].remove();
 
     let delta = anchorEl.querySelector(".gc-score-delta");
     if (!delta) {
@@ -1995,17 +2070,28 @@
   function showScoreDelta(anchorEl, deltaValue, which = "hud") {
     if (!anchorEl) return;
     const d = Math.floor(Number(deltaValue || 0));
-    if (!Number.isFinite(d) || d === 0) return;
+    if (!Number.isFinite(d) || d <= 0) return;
+
+    const atTotal = _scoreState.lastServerTotal;
+    if (
+      _scoreState.lastShownDeltaAmount === d &&
+      _scoreState.lastShownDeltaAtTotal === atTotal
+    ) {
+      return;
+    }
 
     const deltaEl = ensureDeltaEl(anchorEl);
     if (!deltaEl) return;
 
-    const sign = d > 0 ? "+" : "";
+    const sign = "+";
     deltaEl.textContent = `${sign}${fmtNumber(d)}`;
 
     deltaEl.classList.remove("show");
     void deltaEl.offsetWidth;
     deltaEl.classList.add("show");
+
+    _scoreState.lastShownDeltaAmount = d;
+    _scoreState.lastShownDeltaAtTotal = atTotal;
 
     pulseScore(anchorEl);
 
@@ -2015,6 +2101,28 @@
     } else {
       if (_deltaTimerHud) clearTimeout(_deltaTimerHud);
       _deltaTimerHud = GC.setSafeTimeout(() => deltaEl.classList.remove("show"), 1200);
+    }
+  }
+
+  function applyHudScoreDisplay(hudScoreEl, serverTotal, delta, canShowDelta) {
+    if (!hudScoreEl) return;
+    const pill = hudScoreEl.closest(".gc-score-pill") || hudScoreEl;
+    const firstSync = !_scoreState.seenServerScore || _scoreState.lastAnimatedTotal === null;
+
+    if (_scoreState.lastAnimatedTotal !== serverTotal) {
+      if (firstSync) {
+        setScoreTextInstant(hudScoreEl, serverTotal);
+      } else {
+        animateNumber(hudScoreEl, serverTotal, { duration: 700 });
+      }
+      if (canShowDelta) {
+        showScoreDelta(pill, delta, "hud");
+      } else {
+        clearScoreDeltaNodes(pill);
+      }
+      _scoreState.lastAnimatedTotal = serverTotal;
+    } else if (!canShowDelta) {
+      clearScoreDeltaNodes(pill);
     }
   }
 
@@ -3404,43 +3512,57 @@
 
       // === SCORE / RANK ===
       if (data.score) {
+        bootstrapScoreStateFromDom();
         const s = data.score;
 
-        const serverTotal = Number(s.total || 0);
+        const serverTotal = resolveServerScoreTotal(s);
         const rank = typeof s.rank === "number" ? s.rank : Number(s.rank || 0);
         const totalPlayers = Number(s.total_players || 0);
 
         const scoreBuildings = Number(s.buildings || 0);
         const scoreResearch = Number(s.research || 0);
 
+        const prevTotal = _scoreState.lastServerTotal;
+        const wasSeen = _scoreState.seenServerScore;
         let delta = 0;
-        if (_scoreState.lastServerTotal !== null && serverTotal > _scoreState.lastServerTotal) {
-          delta = serverTotal - _scoreState.lastServerTotal;
+        if (wasSeen && prevTotal !== null && serverTotal > prevTotal) {
+          delta = serverTotal - prevTotal;
         }
-        _scoreState.lastServerTotal = serverTotal;
+        const canShowDelta = delta > 0 && scoreDeltaAllowed(reason);
 
-        // HUD
+        _scoreState.lastServerTotal = serverTotal;
+        if (serverTotal > 0 || wasSeen) _scoreState.seenServerScore = true;
+
         const hudScoreEl = document.getElementById("hud-score-total");
         const hudRankEl = document.getElementById("hud-score-rank");
 
-        if (hudScoreEl && _scoreState.lastAnimatedTotal !== serverTotal) {
-          animateNumber(hudScoreEl, serverTotal, { duration: 700 });
-          if (delta !== 0) showScoreDelta(hudScoreEl.closest(".gc-score-pill") || hudScoreEl, delta, "hud");
-          _scoreState.lastAnimatedTotal = serverTotal;
-        }
+        applyHudScoreDisplay(hudScoreEl, serverTotal, delta, canShowDelta);
 
         const rankText = (rank >= 1 && totalPlayers > 0) ? `#${rank}/${totalPlayers}` : "#–";
         if (hudRankEl) hudRankEl.textContent = rankText;
 
-        // Overview
         const ovScoreVal = document.getElementById("overview-score-value");
         const ovScoreRank = document.getElementById("overview-score-rank");
         const ovScoreBuild = document.getElementById("overview-score-buildings");
         const ovScoreRes = document.getElementById("overview-score-research");
 
         if (ovScoreVal) {
-          animateNumber(ovScoreVal, serverTotal, { duration: 750 });
-          if (delta !== 0) showScoreDelta(ovScoreVal.parentElement || ovScoreVal, delta, "overview");
+          const ovAnchor = ovScoreVal.parentElement || ovScoreVal;
+          const ovFirst = !_scoreState.seenServerScore || _scoreState.lastAnimatedTotal === null;
+          if (_scoreState.lastAnimatedTotal !== serverTotal) {
+            if (ovFirst) {
+              setScoreTextInstant(ovScoreVal, serverTotal);
+            } else {
+              animateNumber(ovScoreVal, serverTotal, { duration: 750 });
+            }
+            if (canShowDelta) {
+              showScoreDelta(ovAnchor, delta, "overview");
+            } else {
+              clearScoreDeltaNodes(ovAnchor);
+            }
+          } else if (!canShowDelta) {
+            clearScoreDeltaNodes(ovAnchor);
+          }
         }
 
         if (ovScoreRank) {
@@ -10657,6 +10779,7 @@
     initSpecialPanel();
     initSupportModule();
     initStickyResourceBar();
+    bootstrapScoreStateFromDom();
     initPjax();
     initShipDetailOnce();
     initPlayerCardOnce();
