@@ -4224,6 +4224,7 @@
       if (!sel || !target) return;
       const allowed = new Set(target.allowed_missions || []);
       const urlMission = String(page.dataset.fleetUrlMission || "").trim().toLowerCase();
+      const prevValue = sel.value;
       let currentOk = true;
       Array.from(sel.options).forEach((opt) => {
         const ok = allowed.size === 0 || allowed.has(opt.value);
@@ -4233,17 +4234,18 @@
       if (!currentOk) {
         if (urlMission && allowed.has(urlMission)) {
           sel.value = urlMission;
-          if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(sel);
-          return;
+        } else {
+          if (urlMission && !allowed.has(urlMission)) {
+            delete page.dataset.fleetUrlMission;
+          }
+          const first = Array.from(sel.options).find((o) => !o.disabled);
+          if (first) sel.value = first.value;
         }
-        if (urlMission && !allowed.has(urlMission)) {
-          delete page.dataset.fleetUrlMission;
-        }
-        const first = Array.from(sel.options).find((o) => !o.disabled);
-        if (first) {
-          sel.value = first.value;
-          if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(sel);
-        }
+      }
+      if (typeof GC.rebuildHudSelect === "function") GC.rebuildHudSelect(sel);
+      else if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(sel);
+      if (sel.value !== prevValue) {
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
       }
     };
 
@@ -4802,6 +4804,39 @@
       schedulePreview(page);
     };
 
+    const pickDefaultFleetTargetIfNeeded = (page) => {
+      const params = new URLSearchParams(window.location.search);
+      if (
+        params.has("target_galaxy")
+        && params.has("target_system")
+        && params.has("target_position")
+      ) {
+        return;
+      }
+      const rt = getFleetRuntime(page);
+      const origin = rt.data?.coordinates || {};
+      const target = getTargetCoords(page);
+      const og = parseInt(origin.galaxy, 10);
+      const os = parseInt(origin.system, 10);
+      const op = parseInt(origin.position, 10);
+      if (
+        og !== target.target_galaxy
+        || os !== target.target_system
+        || op !== target.target_position
+      ) {
+        return;
+      }
+      const altColony = page.querySelector(
+        ".fleet-colony-chip:not(.fleet-colony-chip--expedition):not(.is-active)"
+      );
+      if (altColony) {
+        applyQuickTarget(page, altColony);
+        return;
+      }
+      const expo = page.querySelector(".fleet-colony-chip--expedition");
+      if (expo) applyQuickTarget(page, expo);
+    };
+
     const applyQuickTarget = (page, chip) => {
       const form = getForm(page);
       if (!form || !chip) return;
@@ -4836,6 +4871,7 @@
     GC.refreshFleetState = refreshFleetState;
     GC.runFleetPreview = runPreview;
     GC.applyFleetUrlPrefill = applyFleetUrlPrefill;
+    GC.pickDefaultFleetTargetIfNeeded = pickDefaultFleetTargetIfNeeded;
 
     document.addEventListener("click", async (e) => {
       const page = getPage();
@@ -4993,6 +5029,9 @@
         const submitBtn = form.querySelector(".fleet-send-submit") || form.querySelector("[data-fleet-send-btn]");
         rt.sending = true;
         if (submitBtn) submitBtn.disabled = true;
+        if (!rt.lastPreview?.can_send) {
+          await runPreview(page);
+        }
         if (!rt.lastPreview?.can_send) {
           if (errorEl) {
             errorEl.textContent = reasonText(rt.lastPreview?.block_reason || "generic");
@@ -5610,7 +5649,6 @@
         showLogisticsError(page, mode, logisticsReasonText("generic"));
       } finally {
         form.dataset.submitting = "0";
-        if (submitBtn) submitBtn.disabled = false;
         scheduleLogisticsPreview(page);
       }
     });
@@ -5656,6 +5694,9 @@
 
     if (typeof GC.initHudSelects === "function") GC.initHudSelects(page);
     applyFleetUrlPrefill(page);
+    if (typeof GC.pickDefaultFleetTargetIfNeeded === "function") {
+      GC.pickDefaultFleetTargetIfNeeded(page);
+    }
 
     const tickFleetCountdowns = () => {
       const p = document.getElementById("fleet-page");
