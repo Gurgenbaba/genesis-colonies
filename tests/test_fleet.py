@@ -4311,10 +4311,10 @@ def test_logistics_distribute_return_double_tick_no_second_delivery(fleet_db):
 
 
 def test_spy_arrival_double_tick_one_report(fleet_db):
+    _foreign_uid, _foreign_pid, (g, s, p) = _foreign_planet_standalone()
     conn = db()
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
-    foreign_uid, foreign_pid, (g, s, p) = _foreign_planet_standalone()
     cur = conn.cursor()
     _fund_planet(cur, pid)
     _seed_ships(pid, uid, {"veil_probe": 3}, conn=conn)
