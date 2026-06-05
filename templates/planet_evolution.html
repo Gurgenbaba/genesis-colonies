@@ -65,43 +65,6 @@
   {% endif %}
 {% endmacro %}
 
-{% macro pe_research_job(job, is_first=false) %}
-<article class="research-job pe-planet-research-job{% if is_first %} research-job-active pe-planet-research-active{% else %} research-job-queued{% endif %}"
-         {% if is_first and job.finish_at %}data-finish-time="{{ job.finish_at|int }}" data-total="{{ job.total_seconds or 1 }}"{% endif %}>
-  <div class="research-job-icon">
-    <img src="{{ url_for('static', filename='img/research/' ~ (job.icon or 'metallveredelung.png')) }}"
-         alt="" loading="lazy" onerror="this.style.visibility='hidden'">
-  </div>
-  <div class="research-job-body">
-    <div class="job-header">
-      <span class="job-name">{{ T(job.label_key, job.tech_key) }}</span>
-      <span class="job-time{% if not is_first %} job-time-muted{% endif %}"{% if is_first %} data-pe-research-eta{% endif %}>
-        {% if is_first %}
-          {% set rem = job.seconds_remaining|int %}
-          {% if rem >= 3600 %}{{ rem // 3600 }}h {{ (rem % 3600) // 60 }}m {{ rem % 60 }}s
-          {% elif rem >= 60 %}{{ rem // 60 }}m {{ rem % 60 }}s
-          {% else %}{{ rem }}s{% endif %}
-        {% else %}{{ T("status_in_queue", "In Warteschlange") }}{% endif %}
-      </span>
-    </div>
-    <div class="research-bar research-bar-large" aria-label="{{ T('progress', 'Fortschritt') }}">
-      <div class="research-bar-fill gc-progress-smooth pe-planet-research-fill"
-           style="width: {{ job.progress_pct if is_first else 0 }}%;"
-           role="progressbar"
-           aria-valuenow="{{ job.progress_pct if is_first else 0 }}"
-           aria-valuemin="0"
-           aria-valuemax="100"></div>
-    </div>
-    {% if is_first %}
-    <div class="research-active-meta">
-      <span data-pe-research-pct>{{ job.progress_pct }}%</span>
-      <span>{{ T("pe_research_remaining", "Verbleibend") }}</span>
-    </div>
-    {% endif %}
-  </div>
-</article>
-{% endmacro %}
-
 {% macro pe_research_card_meta(tech) %}
 <div class="pe-research-meta">
   <p class="pe-research-cost hint">
@@ -143,7 +106,7 @@
   {% if tech.unavailable_reason_key == "not_enough_resources" %}
     <button type="button" class="gc-btn gc-btn-primary" disabled aria-disabled="true">{{ T("pe_research_cannot_afford", "Ressourcen fehlen") }}</button>
   {% elif tech.unavailable_reason_key == "queue_full" %}
-    <button type="button" class="gc-btn gc-btn-primary" disabled aria-disabled="true">{{ T("pe_reason_queue_full", "Warteschlange voll") }}</button>
+    <button type="button" class="gc-btn gc-btn-primary" disabled aria-disabled="true">{{ T("pe_research_start", "Starten") }}</button>
   {% elif tech.unavailable_reason_key %}
     <button type="button" class="gc-btn gc-btn-primary" disabled aria-disabled="true">{{ T("pe_reason_" ~ tech.unavailable_reason_key, tech.unavailable_reason_key) }}</button>
   {% endif %}
@@ -504,7 +467,7 @@
 
   {# ── Planet-Forschung (gc-prog shell) ── #}
   <section class="pe-dev-research gc-panel" id="pe-section-research">
-    <div id="pe-planet-tech-queue-compact" class="pe-queue-compact gc-panel-header" aria-live="polite">
+    <div id="pe-planet-tech-queue-compact" class="gc-queue-compact pe-queue-compact gc-panel-header" aria-live="polite">
       <span class="pe-queue-compact-icon" aria-hidden="true">🧬</span>
       <span class="gc-panel-title" id="pe-planet-tech-queue-compact-label">
         {% if rdx.queue_count %}
@@ -518,40 +481,13 @@
       </span>
     </div>
 
-    {% if rdx.queue_cards %}
-    <div class="gc-prog-list pe-research-queue-cards" role="list">
-      {% for tech in rdx.queue_cards %}
-      <div class="gc-prog-card gc-prog-affordable gc-planet-tech-card{% if tech.queue_job is defined and tech.queue_job %} gc-planet-tech-card--in-queue{% if tech.queue_job.status == 'active' %} gc-planet-tech-card--queue-active{% else %} gc-planet-tech-card--queue-pending{% endif %}{% endif %}"
-           id="pe-research-card-{{ tech.tech_key }}"
-           data-planet-tech-card
-           data-tech-key="{{ tech.tech_key }}"
-           role="listitem">
-        {{ pe_card_queue_block(tech.queue_job if tech.queue_job is defined else none) }}
-        <div class="gc-prog-main pe-research-prog-main">
-          {{ render_prog_identity(
-               T(tech.label_key, tech.tech_key),
-               url_for('static', filename='img/research/' ~ (tech.icon or 'metallveredelung.png')),
-               fallback=tech.icon_fallback or '🧬',
-               desc_text=T(tech.unlock_key, '') if tech.unlock_key else '') }}
-          <div class="gc-prog-col gc-prog-costs">
-            {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, tech.target_level) }}
-          </div>
-          <div class="gc-prog-col gc-prog-time">
-            <span class="tech-time">{{ render_prog_duration(tech.duration_seconds) }}</span>
-          </div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    <hr class="gc-prog-divider">
-    {% endif %}
-
     <div class="gc-panel-header">
       <span class="gc-panel-title">{{ T("pe_planet_research", "Planet-Forschung") }}</span>
       <span class="gc-panel-subtitle">{{ T("pe_research_recommended", "Empfohlen für diesen Planeten") }}</span>
     </div>
 
-    {% if rdx.recommended %}
+    {% set pe_visible_tech_cards = (rdx.queue_cards or []) + (rdx.recommended or []) %}
+    {% if pe_visible_tech_cards %}
     <div class="gc-prog-list pe-research-prog-list" role="list">
       <div class="gc-prog-head" aria-hidden="true">
         <span class="gc-prog-col gc-prog-name">{{ T("research_col_tech", "Technologie") }}</span>
@@ -560,7 +496,7 @@
         <span class="gc-prog-col gc-prog-action">{{ T("research_col_actions", "Aktion") }}</span>
       </div>
 
-      {% for tech in rdx.recommended %}
+      {% for tech in pe_visible_tech_cards %}
       {% set row_class = 'gc-prog-unaffordable' if not tech.can_afford else 'gc-prog-affordable' %}
       {% if tech.choice_group and not tech.choice_made %}
         {% set row_class = 'gc-prog-affordable pe-research-choice-row' %}
@@ -622,7 +558,7 @@
 
   {% if ps.level >= 25 or asc.queue_count or asc.completed_key %}
   <section class="pe-dev-ascension gc-panel" id="pe-section-ascension">
-    <div id="pe-ascension-queue-compact" class="pe-queue-compact gc-panel-header" aria-live="polite">
+    <div id="pe-ascension-queue-compact" class="gc-queue-compact pe-queue-compact gc-panel-header" aria-live="polite">
       <span class="pe-queue-compact-icon" aria-hidden="true">🌌</span>
       <span class="gc-panel-title" id="pe-ascension-queue-compact-label">
         {% if asc.summary and asc.summary.count %}

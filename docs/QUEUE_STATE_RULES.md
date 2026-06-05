@@ -81,8 +81,8 @@ Frontend zeigt Queue-Fortschritt aus `state.build_queue`, `state.research`, etc.
 Queue-**Logik** bleibt in `game/queue_engine.py` und den Domänen-Ownern. Queue-**UX** wandert in Item-Cards — siehe [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md).
 
 - Kanonisches Card-Job-Format: `game/queue_card.py` (Presentation-Adapter, **keine zweite Queue**)
-- GC-536A: Adapter + Tests + JS-Stub; bestehende Queue-Panels bleiben
-- GC-536B–E: Cards produktiv umstellen, Panels entfernen
+- GC-536A: Adapter + Tests + JS-Stub
+- GC-536B–F: Cards produktiv; Kompaktstatus oben, Legacy-Panels entfernt (✅)
 
 ---
 

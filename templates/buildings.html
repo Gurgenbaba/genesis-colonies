@@ -168,10 +168,17 @@
               </button>
 
             {% elif _bq_queue_full %}
-              <span class="status-pill status-pill-locked status-pill-queue-full status-pill-compact"
-                    title="{{ T('research_status_queue_full', 'Warteschlange voll') }}">
-                {{ T("research_status_queue_full_short", "Voll") }}
-              </span>
+              <button class="gc-btn gc-btn-primary gc-btn-xs btn-upgrade"
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      title="{{ T('research_status_queue_full', 'Warteschlange voll') }}">
+                {% if _bq_summary.count %}
+                  {{ T("research_btn_queue", "Anreihen") }}
+                {% else %}
+                  {{ T("buildings_btn_upgrade") }}
+                {% endif %}
+              </button>
 
             {% else %}
               <a id="btn-{{ building_type }}"
@@ -218,7 +225,7 @@
 
   <div class="buildings-shell gc-panel">
 
-    <div class="build-queue-compact gc-panel-header build-queue-head"
+    <div class="gc-queue-compact build-queue-compact gc-panel-header build-queue-head"
          id="build-queue-compact"
          aria-live="polite"
          {% if active_planet_id is defined %}data-planet-id="{{ active_planet_id|int }}"{% endif %}>

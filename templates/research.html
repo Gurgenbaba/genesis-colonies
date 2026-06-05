@@ -125,15 +125,8 @@
   {% set req_items = tech.requirements_items if tech.requirements_items is defined else [] %}
   {% set res_items = tech.resource_items if tech.resource_items is defined else [] %}
   {% set show_resources = tech.requirements_met and not tech.can_afford %}
-  {% if (not tech.requirements_met and req_items) or (show_resources and res_items) or queue_full %}
+  {% if (not tech.requirements_met and req_items) or (show_resources and res_items) %}
     <div class="research-card-blockers shipyard-blockers">
-      {% if queue_full and tech.requirements_met and tech.can_afford %}
-        <span class="shipyard-blocker shipyard-blocker-warn is-unmet"
-              title="{{ T('research_status_queue_full', 'Warteschlange voll') }}">
-          <span class="shipyard-blocker-icon" aria-hidden="true">⏳</span>
-          <span class="shipyard-blocker-text">{{ T("research_status_queue_full", "Warteschlange voll") }}</span>
-        </span>
-      {% endif %}
       {% for item in req_items %}
         {{ render_research_req_blocker(item) }}
       {% endfor %}
@@ -298,10 +291,16 @@
                 title="{{ lock_title }}"
                 aria-label="{{ lock_title }}">🔒</button>
       {% elif queue_full %}
-        <span class="status-pill status-pill-locked status-pill-queue-full status-pill-compact"
-              title="{{ T('research_status_queue_full', 'Warteschlange voll') }}">
-          {{ T("research_status_queue_full_short", "Voll") }}
-        </span>
+        <button type="button"
+                class="gc-btn gc-btn-primary gc-btn-xs btn-research"
+                disabled
+                aria-disabled="true">
+          {% if rq_summary.count %}
+            {{ T("research_btn_queue", "Anreihen") }}
+          {% else %}
+            {{ T("research_btn_start") }}
+          {% endif %}
+        </button>
       {% elif not can_afford %}
         <button type="button"
                 class="gc-btn gc-btn-danger gc-btn-xs btn-research"
@@ -369,7 +368,7 @@
 
   <section class="gc-panel research-shell">
 
-    <div class="research-queue-compact gc-panel-header research-queue-head"
+    <div class="gc-queue-compact research-queue-compact gc-panel-header research-queue-head"
          id="research-queue-compact"
          aria-live="polite"
          {% if active_planet_id is defined %}data-planet-id="{{ active_planet_id|int }}"{% endif %}>

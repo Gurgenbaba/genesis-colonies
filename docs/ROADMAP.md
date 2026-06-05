@@ -259,7 +259,7 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 | **GC-526–531** — Logistics bulk, routes, UI, inbox reports, QA docs | ✅ |
 | Admin Control Center auf PJAX/State (statt `reload`) | 💡 |
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
-| **GC-536** — [Queue Card UX](GC-536_QUEUE_CARD_UX.md) (536A–E ✅) | ✅ |
+| **GC-536** — [Queue Card UX](GC-536_QUEUE_CARD_UX.md) (536A–F ✅) | ✅ |
 
 ### Tech debt (pytest, nicht blockierend)
 

@@ -241,6 +241,65 @@ def map_research_queue_to_card_jobs(
     return out
 
 
+def map_defense_queue_to_card_jobs(
+    defense_queue: Optional[Mapping[str, Any]],
+    *,
+    now: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """Adapt defense_queue_for_client payload → card jobs."""
+    if not defense_queue or not isinstance(defense_queue, Mapping):
+        return []
+    raw_jobs = defense_queue.get("queue")
+    if not isinstance(raw_jobs, list) or not raw_jobs:
+        return []
+
+    ts = float(now if now is not None else time.time())
+    out: List[Dict[str, Any]] = []
+    for idx, raw in enumerate(raw_jobs):
+        if not isinstance(raw, Mapping):
+            continue
+        owner_key = str(raw.get("defense_key") or "")
+        if not owner_key:
+            continue
+        label = str(raw.get("label") or raw.get("label_key") or owner_key)
+        amount = _safe_int(raw.get("amount_total") or raw.get("amount"), 0) or None
+        finish = _safe_float(raw.get("finish_at") or raw.get("finish_time"))
+        order_total = _safe_int(
+            raw.get("order_total_seconds") or raw.get("total_seconds") or raw.get("total"),
+            0,
+        )
+        start = _safe_float(raw.get("started_at") or raw.get("start_at"))
+        if start <= 0 and finish > 0 and order_total > 0:
+            start = finish - order_total
+        job = normalize_card_queue_job(
+            owner_type=OWNER_DEFENSE,
+            owner_key=owner_key,
+            job_id=_safe_int(raw.get("id"), 0),
+            queue_position=idx + 1,
+            start_at=start,
+            finish_at=finish,
+            now=ts,
+            label=label,
+            target_amount=amount,
+            remaining_seconds=_safe_int(
+                raw.get("order_remaining") or raw.get("remaining") or raw.get("remaining_seconds")
+            ),
+            duration_seconds=order_total or None,
+        )
+        job["defense_label_key"] = f"defense_{owner_key}"
+        if amount is not None:
+            job["target_amount"] = int(amount)
+        if "units_delivered" in raw:
+            job["units_delivered"] = _safe_int(raw.get("units_delivered"))
+        if "amount_remaining" in raw:
+            job["amount_remaining"] = _safe_int(raw.get("amount_remaining"))
+        if job["status"] == STATUS_QUEUED and start > ts:
+            job["remaining_seconds"] = max(0, int(start - ts))
+            job["progress_pct"] = 0
+        out.append(job)
+    return out
+
+
 def map_shipyard_queue_to_card_jobs(
     shipyard_queue: Optional[Mapping[str, Any]],
     *,

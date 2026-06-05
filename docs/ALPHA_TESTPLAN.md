@@ -31,8 +31,8 @@ Bestehende `game/game.db` **nicht löschen**, wenn du einen vorhandenen Spielsta
 | # | Schritt | Erwartung |
 |---|---------|-----------|
 | 3.1 | Tab „Ressourcen“ | Gebäudeliste lädt |
-| 3.2 | Upgrade starten (wenn Ressourcen reichen) | Queue zeigt aktiven Bau |
-| 3.3 | Countdown / Fortschrittsbalken | Läuft ohne Reload |
+| 3.2 | Upgrade starten (wenn Ressourcen reichen) | Kompaktstatus oben (`🏗 N Bauaufträge`); aktiver Job in der Gebäude-Card |
+| 3.3 | Countdown / Fortschrittsbalken | Nur in der Card — läuft ohne Reload |
 
 **Queue-Regression (GC-512):** Vollständige Checkliste [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) (Cancel active/middle/last, near-finish, PJAX, Planetwechsel).
 
@@ -43,10 +43,30 @@ Bestehende `game/game.db` **nicht löschen**, wenn du einen vorhandenen Spielsta
 | # | Schritt | Erwartung |
 |---|---------|-----------|
 | 4.1 | Tech-Liste | Einträge mit Kosten/Zeit |
-| 4.2 | Forschung starten | Active-Block erscheint |
-| 4.3 | Zweite Forschung parallel | Blockiert (eine Queue) |
+| 4.2 | Forschung starten | Kompaktstatus oben; aktiver Job in der Tech-Card |
+| 4.3 | Zweite Forschung anreihen | QUEUE #2 in passender Card, kein oberes Queue-Panel |
 
 Siehe auch [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) § B.
+
+---
+
+## 4b. Queue Card UX — global (GC-536F)
+
+Manuelle QA über alle Queue-Seiten. Kein großes Queue-Panel mehr; Timer nur in Cards.
+
+| # | Seite | Schritt | Erwartung |
+|---|-------|---------|-----------|
+| Q1 | `/buildings` | Bau starten | Kompaktheader nur Zähler; Card zeigt AKTIV + Timer + Progress |
+| Q2 | `/research` | 2. Tech anreihen | Wartender Job: QUEUE #n + „Startet in …“ in Tech-Card |
+| Q3 | `/shipyard` | Schiff bauen | Werft-Card zeigt Menge×Typ + Timer; Kompaktstatus `🚀 N Werftaufträge` |
+| Q3b | `/defense` | Verteidigung bauen | Defense-Card zeigt Menge×Typ + Timer; Kompaktstatus `🛡 N Verteidigungsaufträge` |
+| Q4 | `/planet_evolution` | Planet-Tech starten | Card-Queue mit DNA-Akzent; kein separater Job-Listenblock |
+| Q5 | `/planet_evolution` | Ascension (Stufe ≥25) | Ascension-Card mit Orbit-Pulse; Kompaktstatus `🌌 N Ascension-Aufträge` |
+| Q6 | PJAX | Buildings → Research → zurück | Card-Timer konsistent, kein Full-Reload |
+| Q7 | Mobile 390px | Alle vier Seiten | Kein horizontaler Overflow; Kompaktheader bricht um |
+| Q8 | Cancel | Aktiven Job in Card abbrechen | Nächster Job erscheint in derselben Card ohne Reload |
+
+Referenz: [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) · [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) F1–F5
 
 ---
 

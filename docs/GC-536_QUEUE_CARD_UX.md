@@ -3,7 +3,7 @@
 > **Keine große Queue-Liste mehr als Haupt-UX.**  
 > Jede Queue lebt dort, wo der Auftrag gestartet wurde.
 
-Stand: v1.5.3 · Epic (nicht direkt implementieren)
+Stand: v1.5.4 · Epic abgeschlossen (536A–F ✅)
 
 Verwandt: [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) (Server-Logik), [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) (Regression), [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md)
 
@@ -38,9 +38,7 @@ Overview **Aktivitäten** bleibt: ein aktiver Job pro Kategorie + Link zur Seite
 | Werft | Schiff-Card | Planet | `game/shipyard_queue.py` |
 | Planet-Tech | Planet-Forschungs-Card | Planet | `game/planet_evolution/planet_research.py` |
 | Ascension | Ascension-Card | Planet | `game/planet_evolution/` (Ascension) |
-| Verteidigung (später) | Defense-Card | Planet | `game/defense.py` |
-
-Defense hat heute noch eine **Seiten-Queue-Liste** (`templates/defense.html`) — Angleichung optional nach GC-536E.
+| Verteidigung | Defense-Card | Planet | `game/defense.py` |
 
 ---
 
@@ -85,8 +83,9 @@ Referenz-Pattern (Defense Job-Zeile, noch nicht pro Item-Card): `templates/defen
 | **GC-536C** | Research Cards | Account-Forschung analog |
 | **GC-536D** | Shipyard Cards | Schiffsbau in Schiff-Cards |
 | **GC-536E** | Planet Evolution Cards | Planet-Tech + Ascension |
+| **GC-536F** | Global QA & Cleanup | Legacy-Panels raus, Kompaktstatus vereinheitlicht, globale Tests |
 
-**Reihenfolge:** strikt A → B → C → D → E. Kein Ticket überspringen.
+**Reihenfolge:** strikt A → B → C → D → E → F. Kein Ticket überspringen.
 
 ---
 
@@ -169,6 +168,7 @@ Adapter mappen vorhandene Client-Payloads — **keine DB-Mutation**, kein Schedu
 | Build | `map_build_queue_to_card_jobs` | `building_type` |
 | Research | `map_research_queue_to_card_jobs` | `tech_key` |
 | Shipyard | `map_shipyard_queue_to_card_jobs` | `ship_key` |
+| Defense | `map_defense_queue_to_card_jobs` | `defense_key` |
 | Planet research | `map_planet_research_queue_to_card_jobs` | `tech_key` |
 | Ascension | `map_ascension_queue_to_card_jobs` | `ascension_key` |
 
@@ -281,6 +281,43 @@ Dateien: `game/queue_card.py`, `game/planet_evolution/planet_research.py`, `game
 - [x] Queue-Engine unverändert
 
 **GC-536 Epic:** A–E abgeschlossen (Build, Research, Shipyard, Planet-Evo/Ascension).
+
+---
+
+## GC-536F — Global QA & Cleanup ✅
+
+### Problem
+
+Nach A–E blieben Legacy-Hooks (`build-queue-root`, `research-queue-root`, Planet-Evo Job-Rows), verteilte Kompakt-CSS und doppelte Planet-Tech-Listen (`queue_cards` + `recommended`).
+
+### Umsetzung
+
+1. **Einheitlicher Kompakt-Header:** `.gc-queue-compact` auf allen Queue-Seiten (nur Zähler, keine Timer)
+2. **Legacy entfernt:** JS-Referenzen auf alte Panel-Roots; Planet-Evo `pe_research_job`-Macro und separate `queue_cards`-Liste
+3. **Planet-Tech:** `queue_cards` in `pe_visible_tech_cards` mit `recommended` zusammengeführt — Queue-Status nur in Cards
+4. **CSS:** globales `prefers-reduced-motion` für alle Card-Queue-Animationen; Mobile `min-width:0` / `max-width:100%`
+5. **Tests:** `tests/test_queue_card_global_ux.py`
+
+### Akzeptanzkriterien (536F)
+
+- [x] Keine große Queue-Liste auf Buildings/Research/Shipyard/Planet-Evo
+- [x] Kompaktstatus oben, Timer nur in Cards
+- [x] Alle Domänen nutzen `GC.renderCardQueueBlock`
+- [x] `pytest tests/test_queue_card_global_ux.py tests/test_queue_card_contract.py tests/test_queue_static_contract.py` grün
+- [x] Queue-Engine unverändert
+
+**GC-536 Epic:** global abgeschlossen (A–F).
+
+---
+
+## GC-536 — Defense Cards ✅
+
+- Verteidigungs-Queue aus Seitenliste in Defense-Cards (`queue_job` via `map_defense_queue_to_card_jobs` + `_attach_queue_jobs_to_defense_rows`)
+- Kompaktstatus: `🛡 N Verteidigungsaufträge aktiv` (`#defense-queue-compact`)
+- Batch-Jobs: `target_amount` + `defense_label_key` in der Card
+- Live: `renderDefenseQueue` / `patchDefenseCardQueues` + Card-Ticker (`refreshOnZero: defense`)
+
+Dateien: `game/queue_card.py`, `game/defense.py`, `templates/defense.html`, `static/main.js`, `static/style.css`, `tests/test_defense_card_queue.py`.
 
 ---
 

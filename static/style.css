@@ -2864,14 +2864,21 @@ body:not(.gc-perf-idle) .research-bar-fill{
   display: none;
 }
 
-/* GC-536B — building card queue block */
-.build-queue-compact{
+/* GC-536F — unified compact queue headers (count only, no timers) */
+.gc-queue-compact{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
   padding: 8px 12px 6px;
   border-bottom: none;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* GC-536B — building card queue block */
+.build-queue-compact{
+  /* extends .gc-queue-compact */
 }
 
 .build-queue-compact-icon{
@@ -2909,6 +2916,9 @@ body:not(.gc-perf-idle) .research-bar-fill{
   background:
     linear-gradient(135deg, rgba(8, 16, 36, 0.92), rgba(6, 12, 28, 0.88));
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .gc-card-queue-block--queued{
@@ -2959,6 +2969,8 @@ body:not(.gc-perf-idle) .research-bar-fill{
   font-size: 0.88rem;
   font-weight: 700;
   color: var(--gc-text);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .gc-card-queue-bar{
@@ -3000,21 +3012,9 @@ body:not(.gc-perf-idle) .research-bar-fill{
   margin-top: 2px;
 }
 
-@media (prefers-reduced-motion: reduce){
-  .gc-card-queue-glyph,
-  .gc-card-queue-scanline{
-    animation: none !important;
-  }
-}
-
 /* GC-536C — research card queue accents */
 .research-queue-compact{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  padding: 8px 12px 6px;
-  border-bottom: none;
+  /* extends .gc-queue-compact */
 }
 
 .research-queue-compact-icon{
@@ -3076,11 +3076,64 @@ body:not(.gc-perf-idle) .research-bar-fill{
   to{ transform: translateY(6px); }
 }
 
-@media (prefers-reduced-motion: reduce){
-  .gc-card-queue-glyph--research,
-  .gc-card-queue-scanline--research{
-    animation: none !important;
-  }
+/* GC-536 — defense card queue (shipyard-page family — cyan base, amber glyph) */
+.defense-queue-compact{
+  padding: 8px 12px;
+  margin: 0 0 4px;
+  border: 1px solid rgba(90, 200, 255, 0.12);
+  border-radius: 0;
+  background: rgba(6, 14, 24, 0.55);
+}
+
+.defense-queue-compact-icon{
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.defense-queue-compact-label{
+  font-weight: 800;
+}
+
+.defense-queue-compact-hint{
+  opacity: 0.72;
+  font-size: 0.78rem;
+}
+
+.defense-page .gc-card-queue-block{
+  margin: 4px 0 2px;
+}
+
+.gc-card-queue-block--defense{
+  border-color: rgba(90, 200, 255, 0.22);
+  background:
+    linear-gradient(135deg, rgba(8, 16, 28, 0.94), rgba(6, 12, 22, 0.9));
+}
+
+.gc-card-queue-glyph--defense{
+  border-color: rgba(255, 154, 26, 0.48);
+  background: rgba(255, 154, 26, 0.1);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  border-radius: 0;
+  animation: gc-card-queue-spin 6s linear infinite;
+}
+
+.gc-card-queue-block--defense .gc-card-queue-cancel{
+  align-self: flex-start;
+  margin-top: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  opacity: 0.88;
+}
+
+.gc-card-queue-scanline--defense{
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 3px,
+    rgba(90, 200, 255, 0.06) 3px,
+    rgba(90, 200, 255, 0.06) 4px
+  );
+  animation: gc-card-queue-scan 2.8s linear infinite;
 }
 
 /* GC-536D — shipyard card queue accents */
@@ -3127,10 +3180,6 @@ body:not(.gc-perf-idle) .research-bar-fill{
 }
 
 .shipyard-queue-compact{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
   padding: 8px 12px;
   margin: 0 0 4px;
   border: 1px solid rgba(90, 200, 255, 0.12);
@@ -3152,21 +3201,9 @@ body:not(.gc-perf-idle) .research-bar-fill{
   font-size: 0.78rem;
 }
 
-@media (prefers-reduced-motion: reduce){
-  .gc-card-queue-glyph--shipyard,
-  .gc-card-queue-scanline--shipyard{
-    animation: none !important;
-  }
-}
-
 /* GC-536E — planet-tech + ascension card queue accents */
 .pe-queue-compact{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  padding: 8px 12px 6px;
-  border-bottom: none;
+  /* extends .gc-queue-compact */
 }
 
 .pe-queue-compact-icon{
@@ -3292,12 +3329,29 @@ body:not(.gc-perf-idle) .research-bar-fill{
 }
 
 @media (prefers-reduced-motion: reduce){
+  .gc-card-queue-glyph,
+  .gc-card-queue-scanline,
+  .gc-card-queue-glyph--research,
+  .gc-card-queue-scanline--research,
+  .gc-card-queue-glyph--shipyard,
+  .gc-card-queue-scanline--shipyard,
   .gc-card-queue-glyph--planet-research,
   .gc-card-queue-scanline--planet-research,
   .gc-card-queue-glyph--ascension,
-  .gc-card-queue-scanline--ascension{
+  .gc-card-queue-scanline--ascension,
+  .gc-card-queue-glyph--defense,
+  .gc-card-queue-scanline--defense{
     animation: none !important;
   }
+}
+
+.gc-building-card,
+.gc-research-card,
+.gc-ship-card,
+.gc-planet-tech-card,
+.gc-ascension-card{
+  min-width: 0;
+  max-width: 100%;
 }
 
 .buildings-techtree-link,

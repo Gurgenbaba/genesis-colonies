@@ -140,7 +140,11 @@ def test_planet_evolution_template_card_queue_markers():
     assert "pe-planet-tech-queue-compact-count" in html
     assert "pe-ascension-queue-compact" in html
     assert "gc-card-queue-block" in html
+    assert "gc-queue-compact" in html
     assert 'id="pe-research-queue"' not in html
+    assert "pe-research-queue-cards" not in html
+    assert "pe_research_job(" not in html
+    assert "pe_visible_tech_cards" in html
 
 
 def test_queued_planet_tech_starts_in_uses_start_at():

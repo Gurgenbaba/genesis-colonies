@@ -31,7 +31,7 @@
         {% endif %}
       </span>
     </div>
-    {% if qj.target_amount is defined and qj.owner_key is defined %}
+    {% if qj.target_amount is defined and qj.owner_key is defined and (qj.target_amount|int) > 1 %}
     <div class="gc-card-queue-quantity gc-mono">
       {{ qj.target_amount|int }}× {{ T('fleet_ship_' ~ qj.owner_key) }}
     </div>
@@ -135,7 +135,7 @@
     </div>
   </section>
 
-  <div class="shipyard-queue-compact gc-panel-header"
+  <div class="gc-queue-compact shipyard-queue-compact gc-panel-header"
        id="shipyard-queue-compact"
        aria-live="polite">
     <span class="shipyard-queue-compact-icon" aria-hidden="true">🚀</span>
@@ -200,14 +200,9 @@
             {{ T("shipyard_build_time_per_unit", seconds=ship.build_seconds|fmt_int) }}
           </span>
         </div>
-        {% if not ship.can_build %}
+        {% set ship_res_blocked = (ship.cost_metal and p_metal < ship.cost_metal) or (ship.cost_crystal and p_crystal < ship.cost_crystal) or (ship.cost_fuel_cells and p_fuel < ship.cost_fuel_cells) %}
+        {% if ship_res_blocked %}
         <div class="shipyard-blockers" data-shipyard-blockers aria-live="polite">
-          {% if ship.block_reason == 'queue_full' %}
-          <span class="shipyard-blocker shipyard-blocker-warn is-unmet" data-shipyard-block-reason="queue_full">
-            <span class="shipyard-blocker-icon" aria-hidden="true">⏳</span>
-            <span class="shipyard-blocker-text">{{ T("shipyard_block_queue_full") }}</span>
-          </span>
-          {% endif %}
           {% if ship.cost_metal and p_metal < ship.cost_metal %}
           {{ render_shipyard_resource_blocker('metal', ship.cost_metal, p_metal) }}
           {% endif %}

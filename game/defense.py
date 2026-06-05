@@ -627,10 +627,14 @@ def _defense_job_row_for_client(
     is_active = idx == 0
     order_remaining = max(0, int(finish_at - now))
     next_finish_at = _next_unit_finish_at(row, factory_level, conn=conn) if is_active else finish_at
+    started_at = float(row.get("started_at") or 0)
+    start_at = started_at if is_active and started_at > 0 else max(0.0, finish_at - order_total_seconds)
 
     return {
         "id": int(row["id"]),
         "defense_key": dk,
+        "start_at": start_at,
+        "started_at": started_at,
         "icon": defense_icon_static_path(dk),
         "amount": total_units,
         "amount_total": total_units,
@@ -744,6 +748,15 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
         queue = defense_queue_for_client(
             player_id, planet_id, factory_level, conn=conn
         )
+        from .queue_card import (
+            group_card_jobs_by_owner_key,
+            map_defense_queue_to_card_jobs,
+        )
+
+        card_jobs = map_defense_queue_to_card_jobs(queue)
+        by_owner = group_card_jobs_by_owner_key(card_jobs)
+        queue["card_jobs_by_owner"] = by_owner
+        _attach_queue_jobs_to_defense_rows(buildable, by_owner)
         return {
             "defense_factory_level": factory_level,
             "buildable_defense": buildable,
@@ -754,6 +767,22 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
     finally:
         if own and conn is not None:
             conn.close()
+
+
+def _attach_queue_jobs_to_defense_rows(
+    rows: List[Dict[str, Any]],
+    jobs_by_key: Mapping[str, Any],
+) -> None:
+    """GC-536 — optional queue_job on each defense catalog row (presentation only)."""
+    from .queue_card import card_queue_job_for_item
+
+    for row in rows:
+        owner_key = str(row.get("defense_key") or "")
+        qj = card_queue_job_for_item(jobs_by_key, owner_key) if owner_key else None
+        if qj:
+            row["queue_job"] = dict(qj)
+        elif "queue_job" in row:
+            del row["queue_job"]
 
 
 def defense_combat_priority(defense_key: str) -> int:

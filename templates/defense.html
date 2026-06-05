@@ -17,6 +17,67 @@
   </div>
 {% endmacro %}
 
+{% macro render_defense_card_queue(qj) %}
+  {% if qj is defined and qj %}
+  <div class="gc-card-queue-block gc-card-queue-block--defense gc-card-queue-block--{{ qj.status }}"
+       data-gc-card-queue="1"
+       data-queue-active="{{ '1' if qj.status == 'active' else '0' }}"
+       data-timer-domain="defense"
+       data-job-id="{{ qj.job_id|int }}"
+       {% if qj.start_at %}data-start-at="{{ qj.start_at|int }}"{% endif %}
+       {% if qj.finish_at %}data-finish-at="{{ qj.finish_at|int }}"{% endif %}
+       {% if qj.duration_seconds %}data-total-seconds="{{ qj.duration_seconds|int }}"{% endif %}
+       {% if qj.status == 'active' and qj.remaining_seconds is defined %}data-server-remaining="{{ qj.remaining_seconds|int }}"{% endif %}>
+    <div class="gc-card-queue-head">
+      <span class="gc-card-queue-glyph gc-card-queue-glyph--defense" aria-hidden="true"></span>
+      <span class="gc-card-queue-status">
+        {% if qj.status == 'active' %}
+          {{ T('queue_card_status_active', 'AKTIV') }}
+        {% else %}
+          {{ T('queue_card_status_queued', 'QUEUE #%(n)s', n=qj.queue_position|int) }}
+        {% endif %}
+      </span>
+    </div>
+    {% if qj.target_amount is defined and qj.owner_key is defined and (qj.target_amount|int) > 1 %}
+    <div class="gc-card-queue-quantity gc-mono">
+      {{ qj.target_amount|int }}× {{ T('defense_' ~ qj.owner_key) }}
+    </div>
+    {% endif %}
+    <div class="gc-card-queue-timer gc-mono"
+         {% if qj.status == 'active' and qj.finish_at %}
+         data-timer-target="{{ qj.finish_at|int }}"
+         data-timer-kind="defense"
+         data-refresh-on-zero="defense"
+         data-countdown-at="{{ qj.finish_at|int }}"
+         {% elif qj.status != 'active' and qj.start_at %}
+         data-timer-target="{{ qj.start_at|int }}"
+         data-timer-kind="defense"
+         data-countdown-at="{{ qj.start_at|int }}"
+         {% endif %}>
+      {% if qj.status == 'active' %}
+        {{ qj.remaining_seconds|int }}s
+      {% else %}
+        {{ T('queue_card_starts_in', 'Startet in %(time)s', time=(qj.remaining_seconds|int ~ 's')) }}
+      {% endif %}
+    </div>
+    {% if qj.status == 'active' %}
+    <div class="gc-card-queue-bar" role="progressbar"
+         aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="{{ qj.progress_pct|default(0)|int }}">
+      <div class="gc-card-queue-bar-fill gc-progress-smooth"
+           style="width: {{ qj.progress_pct|default(0)|int }}%;"></div>
+      <div class="gc-card-queue-scanline gc-card-queue-scanline--defense" aria-hidden="true"></div>
+    </div>
+    {% endif %}
+    <button type="button"
+            class="gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel"
+            data-defense-queue-cancel="{{ qj.job_id|int }}">
+      {{ T('shipyard_queue_cancel_btn', 'Abbrechen') }}
+    </button>
+  </div>
+  {% endif %}
+{% endmacro %}
+
 {% block content %}
 
 {% set df = defense if defense is defined and defense else {'ready': false, 'defense_factory_level': 0} %}
@@ -75,69 +136,24 @@
     </div>
   </section>
 
-  <section class="gc-panel shipyard-panel" aria-labelledby="defense-queue-title">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title" id="defense-queue-title">{{ T("defense_queue_title") }}</span>
-      <span class="gc-panel-subtitle gc-mono" data-defense-queue-subtitle>
-        {% set qsum = df.defense_queue.summary if df.defense_queue is defined and df.defense_queue.summary is defined else {} %}
-        {{ T("defense_queue_slots", count=qsum.count|default(0), limit=qsum.limit|default(3)) }}
-      </span>
-    </div>
-    <p class="shipyard-queue-hint hint">{{ T("defense_queue_hint", refund=qsum.refund_percent|default(60)) }}</p>
-    <div class="shipyard-queue-list" data-defense-queue-list aria-live="polite">
-      {% set qjobs = df.defense_queue.queue if df.defense_queue is defined and df.defense_queue.queue is defined else [] %}
-      {% if qjobs %}
-      <div class="shipyard-queue-list-inner">
-        {% for job in qjobs %}
-        {% set total_units = job.amount_total|default(job.amount)|int %}
-        {% set delivered = job.units_delivered|default(0)|int %}
-        {% set is_active = job.is_active|default(loop.first) %}
-        {% set order_total = job.order_total_seconds|default(job.total_seconds)|default(1)|int %}
-        {% set order_rem = job.order_remaining|default(job.remaining)|default(0)|int %}
-        {% set pct = (100 * (1 - order_rem / order_total)) if is_active and order_total > 0 else 0 %}
-        <article class="shipyard-job{% if is_active %} shipyard-job-active{% else %} shipyard-job-queued{% endif %}"
-                 data-queue-job-id="{{ job.id }}"
-                 {% if is_active %}data-finish-time="{{ job.finish_at|int }}" data-next-finish-time="{{ job.next_finish_at|default(job.finish_at)|int }}" data-total="{{ order_total }}"{% endif %}>
-          <div class="shipyard-job-icon">
-            <img src="{{ job.icon|default('/static/img/defense/' ~ job.defense_key ~ '.svg') }}" alt="" loading="lazy">
-          </div>
-          <div class="shipyard-job-body">
-            <div class="job-header">
-              <span class="job-name">
-                {% if total_units > 1 %}
-                  {{ T("defense_" ~ job.defense_key) }} · {{ T("shipyard_queue_progress", done=delivered, total=total_units) }}
-                {% else %}
-                  {{ T("defense_" ~ job.defense_key) }}
-                {% endif %}
-              </span>
-              <span class="job-time{% if not is_active %} job-time-muted{% endif %}"{% if is_active %} id="defense-eta-live"{% endif %}>
-                {% if is_active %}{{ T("shipyard_queue_remaining", seconds=order_rem|fmt_int) }}{% else %}{{ T("status_in_queue") }}{% endif %}
-              </span>
-            </div>
-            <div class="build-bar build-bar-large">
-              <div class="build-bar-fill gc-progress-smooth"{% if is_active %} id="defense-bar-fill-live"{% endif %}
-                   style="width:{{ pct|round(0, 'floor') }}%"
-                   role="progressbar" aria-valuenow="{{ pct|round(0, 'floor') }}" aria-valuemin="0" aria-valuemax="100"></div>
-            </div>
-            <div class="shipyard-queue-job-actions job-actions">
-              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-btn-danger" data-defense-queue-cancel="{{ job.id }}">
-                {{ T("shipyard_queue_cancel_btn") }}
-              </button>
-            </div>
-            {% if is_active %}
-            <span class="job-badge-active">{{ T("buildings_btn_active") }}</span>
-            {% else %}
-            <span class="job-badge-queued">#{{ loop.index }}</span>
-            {% endif %}
-          </div>
-        </article>
-        {% endfor %}
-      </div>
+  <div class="gc-queue-compact defense-queue-compact gc-panel-header"
+       id="defense-queue-compact"
+       aria-live="polite">
+    <span class="defense-queue-compact-icon" aria-hidden="true">🛡</span>
+    <span class="gc-panel-title defense-queue-compact-label" id="defense-queue-compact-label">
+      {% set qsum = df.defense_queue.summary if df.defense_queue is defined and df.defense_queue.summary is defined else {} %}
+      {% if qsum and qsum.count %}
+        {{ T('defense_queue_compact_active', '%(count)s Verteidigungsaufträge aktiv', count=(qsum.count|default(0)|int)) }}
       {% else %}
-      <p class="shipyard-empty" data-defense-queue-empty>{{ T("defense_queue_empty") }}</p>
+        {{ T('defense_queue_compact_idle', 'Keine Verteidigungsaufträge') }}
       {% endif %}
-    </div>
-  </section>
+    </span>
+    <span class="gc-panel-subtitle gc-mono defense-queue-compact-hint">
+      {{ T('defense_queue_hint', refund=qsum.refund_percent|default(60)) }}
+    </span>
+  </div>
+
+  <hr class="defense-divider gc-prog-divider">
 
   <section class="gc-panel shipyard-panel" aria-labelledby="defense-buildable-title">
     <div class="gc-panel-header">
@@ -152,7 +168,7 @@
       {% set unit_desc = T(unit_desc_key) %}
       {% if unit_desc == unit_desc_key %}{% set unit_desc = '' %}{% endif %}
       {% set owned = (unit.stock if unit.stock is defined else planet_defense.get(unit.defense_key, 0))|int %}
-      <article class="gc-ship-card gc-prog-card {{ row_class }}"
+      <article class="gc-ship-card gc-prog-card {{ row_class }}{% if unit.queue_job is defined and unit.queue_job %} gc-ship-card--in-queue{% if unit.queue_job.status == 'active' %} gc-ship-card--queue-active{% else %} gc-ship-card--queue-pending{% endif %}{% endif %}"
                data-defense-card="{{ unit.defense_key }}" data-unlocked="1" role="listitem">
         <header class="gc-bld-card-head">
           <div class="gc-bld-card-identity">
@@ -170,6 +186,7 @@
           {{ render_defense_stock_chip(unit.defense_key, owned) }}
         </header>
         {{ render_defense_subhead(unit.role|default('turret')) }}
+        {{ render_defense_card_queue(unit.queue_job if unit.queue_job is defined else none) }}
         <div class="gc-bld-card-meta">
           <div class="gc-bld-card-costs shipyard-ship-cost gc-mono" data-defense-cost>
             {{ render_resource_cost_chip('metal', unit.cost_metal, unmet=(p_metal < unit.cost_metal)) }}
@@ -180,14 +197,9 @@
             {{ T("defense_build_time_per_unit", seconds=unit.build_seconds|fmt_int) }}
           </span>
         </div>
-        {% if not unit.can_build %}
+        {% set unit_res_blocked = (unit.cost_metal and p_metal < unit.cost_metal) or (unit.cost_crystal and p_crystal < unit.cost_crystal) %}
+        {% if unit_res_blocked %}
         <div class="shipyard-blockers" data-defense-blockers aria-live="polite">
-          {% if unit.block_reason == 'queue_full' %}
-          <span class="shipyard-blocker shipyard-blocker-warn is-unmet">
-            <span class="shipyard-blocker-icon" aria-hidden="true">⏳</span>
-            <span class="shipyard-blocker-text">{{ T("shipyard_block_queue_full") }}</span>
-          </span>
-          {% endif %}
           {% if unit.cost_metal and p_metal < unit.cost_metal %}
           {{ render_shipyard_resource_blocker('metal', unit.cost_metal, p_metal) }}
           {% endif %}

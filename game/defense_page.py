@@ -97,6 +97,11 @@ def build_defense_page_context(
         dk = str(entry.get("defense_key") or "")
         entry["stock"] = int(stock.get(dk, 0) or 0)
 
+    from .defense import _attach_queue_jobs_to_defense_rows
+
+    by_owner = (payload.get("defense_queue") or {}).get("card_jobs_by_owner") or {}
+    _attach_queue_jobs_to_defense_rows(locked, by_owner)
+
     return {
         "ready": True,
         **payload,
