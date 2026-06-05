@@ -26,7 +26,7 @@ pytest (41 passed) bestätigt Backend/Queue — Browser zeigt **Render-/Poll-Lif
 | Prio | Ticket | Begründung |
 |------|--------|------------|
 | **1** | [GC-546D](#gc-546d--shipyarddefense-completion-poll-storm) | HTTP 499 / 56s+ Requests — mögliche Root Cause für C, A |
-| **2** | [GC-546C](#gc-546c--production-completion-state-refresh-shipyard--defense) | Completion-Blocker Werft + Defense (gemeinsame Architektur) |
+| **2** | [GC-546C](#gc-546c--production-completion-state-refresh-shipyard--defense) | ✅ Browser-QA bestanden (546D-Fix) |
 | **3** | [GC-546E](#gc-546e--message-read-state-synchronization) | Badge nach Lesen (GC-539 Regression) |
 | **4** | [GC-546B](#gc-546b--building-requirement-live-refresh) | Gebäude-Voraussetzungen stale |
 | **5** | [GC-546A](#gc-546a--score-delta-render-deduplication) | Mehrfach-Rendering +16.347 (evtl. Folge von D) |
@@ -103,7 +103,7 @@ Gebäude A fertig → Gebäude B backend-seitig baubar — UI zeigt weiter „Vo
 
 | | |
 |---|---|
-| **Status** | 📋 |
+| **Status** | ✅ Verifiziert (Browser QA 2026-06-05, via GC-546D) |
 | **Schwere** | 🔴 Hoch |
 | **Findings** | F3, F4 |
 
@@ -128,9 +128,21 @@ Gebäude A fertig → Gebäude B backend-seitig baubar — UI zeigt weiter „Vo
 
 ### Akzeptanz
 
-- [ ] Schiff/Defense-Einheit fertig → Bestand + Queue ohne F5 aktualisiert
-- [ ] Overview-Teaser konsistent
-- [ ] Nach GC-546D: keine erneute Poll-Storm bei Completion
+- [x] Schiff/Defense-Einheit fertig → Bestand + Queue ohne F5 aktualisiert (Browser: Werft + Verteidigung)
+- [ ] Overview-Teaser während Bau auf Overview-Seite (nicht getestet)
+- [x] Nach GC-546D: keine Poll-Storm bei Completion
+
+### Browser-QA (2026-06-05, nach GC-546D)
+
+| Check | Ergebnis |
+|-------|----------|
+| Werft öffnen | ✅ |
+| 1 Schiff bauen | ✅ |
+| Network: kein Hagel / keine 499 | ✅ |
+| Bestand nach Fertigstellung live | ✅ |
+| Verteidigung gleiches Verhalten | ✅ |
+
+**Fazit:** F3/F4 waren Folge des Poll-Storms (546D). Kein separater Code-Fix nötig.
 
 ---
 
@@ -172,7 +184,7 @@ Latenz teilweise **56 s**, **1 min 25 s** — nach Shipyard/Defense-Aktionen.
 - [x] Nach Werft/Defense-Completion: kein Request-Sturm (Network ≤ erwartete Poll-Rate)
 - [x] Keine parallelen `/api/shipyard` + `/api/defense` auf jedem game-state Poll
 - [x] Single canonical poll ([STATE_AJAX.md](STATE_AJAX.md))
-- [ ] Manueller Browser-Repro (GC-545 F5) — DevTools Network bestätigen
+- [x] Manueller Browser-Repro (GC-545 F5) — DevTools Network bestätigen
 
 ### Umsetzung (`static/main.js`)
 
