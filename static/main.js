@@ -3529,6 +3529,21 @@
   // Messages unread badges (game-state polling)
   // =========================
   let _lastMessagesUnreadPoll = null;
+  let _messagesUnreadLocalAt = 0;
+  const MESSAGES_UNREAD_LOCAL_GUARD_MS = 30000;
+
+  function coercePollUnreadForHud(data, reason) {
+    if (!data || typeof data.unread_messages_count !== "number") return data;
+    if (String(reason || "") !== "poll") return data;
+    const localUnread = GC.lastState?.unread_messages_count;
+    if (typeof localUnread !== "number") return data;
+    const pollUnread = data.unread_messages_count;
+    if (pollUnread <= localUnread) return data;
+    if (_messagesUnreadLocalAt && Date.now() - _messagesUnreadLocalAt < MESSAGES_UNREAD_LOCAL_GUARD_MS) {
+      return { ...data, unread_messages_count: localUnread };
+    }
+    return data;
+  }
 
   function updateMessagesUnreadBadges(count) {
     const n = Math.max(0, Number(count) || 0);
@@ -3719,6 +3734,9 @@
     if (!partial || typeof partial !== "object") return GC.lastState;
     const base = GC.lastState && GC.lastState.ok === true ? GC.lastState : { ok: true };
     GC.lastState = { ...base, ...partial };
+    if (typeof partial.unread_messages_count === "number" && String(reason || "").includes("messages")) {
+      _messagesUnreadLocalAt = Date.now();
+    }
     patchShellHudFromState(GC.lastState, { forceResourceBar: true, reason: reason || "merge" });
     return GC.lastState;
   };
@@ -3899,7 +3917,7 @@
       const prodCrystal = Math.floor(Number(prod.crystal_mine ?? prod.crystal ?? 0));
       const prodFuelCells = Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0));
 
-      patchShellHudFromState(data, { forceResourceBar, skipMessagesUnread });
+      patchShellHudFromState(coercePollUnreadForHud(data, reason), { forceResourceBar, skipMessagesUnread });
 
       const livePlanetId = activePlanetId > 0
         ? activePlanetId
@@ -3926,11 +3944,12 @@
 
       if (typeof data.unread_messages_count === "number") {
         const onMessagesPage = GC.detectPage() === "messages";
+        const hudUnread = coercePollUnreadForHud(data, reason).unread_messages_count;
         const prevUnread = _lastMessagesUnreadPoll;
         const unreadIncreased =
-          prevUnread !== null && data.unread_messages_count > prevUnread;
+          prevUnread !== null && hudUnread > prevUnread;
         if (!skipMessagesUnread) {
-          _lastMessagesUnreadPoll = data.unread_messages_count;
+          _lastMessagesUnreadPoll = hudUnread;
 
           // Inbox list load is owned by messages.js (init/tab). Only refresh when unread
           // count rises after the inbox has already loaded — never on empty filtered tabs.
@@ -4086,7 +4105,7 @@
       const stApplied = Number(data.server_time || 0);
       if (stApplied) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stApplied);
 
-      GC.lastState = data;
+      GC.lastState = coercePollUnreadForHud(data, reason);
       GC.startProgressTicker();
       syncProductionPanelsAfterGameState(data, reason, activePlanetId);
 

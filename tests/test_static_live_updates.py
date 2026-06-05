@@ -391,7 +391,7 @@ def test_main_js_gc541_queue_timer_hotfix():
     assert 'getElementById("resource-bar")' in hud_section
     assert 'document.querySelectorAll(".res-value.metal, [data-res=\\"metal\\"]")' not in hud_section
     apply_section = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
-    assert "patchShellHudFromState(data, { forceResourceBar, skipMessagesUnread })" in apply_section
+    assert "patchShellHudFromState(coercePollUnreadForHud(data, reason), { forceResourceBar, skipMessagesUnread })" in apply_section
     assert "scoreStale" in hud_section
     assert "data-hud-online-value" in hud_section or "data-hud-online-value" in _read("templates/base.html")
     messages_js = _read("static/js/messages.js")
@@ -483,3 +483,19 @@ def test_main_js_gc546d_production_completion_poll_storm_guards():
     assert "_productionZeroHandled.shipyard" in render_sy
     render_def = src.split("function renderDefenseQueue(page, queuePayload)")[1].split("function bindDefenseOnce")[0]
     assert "_productionZeroHandled.defense" in render_def
+
+
+def test_main_js_gc546e_stale_poll_unread_guard():
+    """GC-546E: game-state poll must not restore stale unread after messages.js sync."""
+    src = _read("static/main.js")
+    assert "function coercePollUnreadForHud(data, reason)" in src
+    assert "_messagesUnreadLocalAt" in src
+    assert "MESSAGES_UNREAD_LOCAL_GUARD_MS" in src
+    merge = src.split("GC.mergeLastState = function mergeLastState")[1].split("function patchOverviewScoreFromState")[0]
+    assert '_messagesUnreadLocalAt = Date.now()' in merge
+    assert 'String(reason || "").includes("messages")' in merge
+    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    assert "coercePollUnreadForHud(data, reason)" in apply
+    messages_js = _read("static/js/messages.js")
+    open_report = messages_js.split("async function openInboxReportById(messageId, kind)")[1].split("async function openCombatReportById")[0]
+    assert "syncUnreadFromResponse(data)" in open_report

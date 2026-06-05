@@ -209,7 +209,7 @@ Latenz teilweise **56 s**, **1 min 25 s** — nach Shipyard/Defense-Aktionen.
 
 | | |
 |---|---|
-| **Status** | 📋 |
+| **Status** | ✅ Implementiert (2026-06-05) |
 | **Schwere** | 🟠 Mittel |
 | **Finding** | F6 |
 
@@ -231,8 +231,18 @@ Regression gegen GC-539 Intent.
 
 ### Akzeptanz
 
-- [ ] Nach Lesen einer Nachricht: Badge sofort 0 / reduziert ohne Navigation
-- [ ] GC-545 Flow „Messages“ bestanden
+- [x] Nach Lesen einer Nachricht: Badge sofort 0 / reduziert ohne Navigation
+- [ ] GC-545 Flow „Messages“ manuell erneut bestätigen
+
+### Root Cause
+
+Stale in-flight `GET /api/game-state` (poll) konnte nach `messages.js` → `mergeLastState` einen **höheren** `unread_messages_count` zurückschreiben und das HUD-Badge wieder anzeigen.
+
+### Umsetzung
+
+- `coercePollUnreadForHud()` — Poll darf lokalen Unread-Stand 30 s nicht nach oben korrigieren
+- `_messagesUnreadLocalAt` — gesetzt bei `mergeLastState(..., "messages_*")`
+- `openInboxReportById()` — `syncUnreadFromResponse` auch beim Report-Öffnen
 
 ---
 

@@ -809,8 +809,14 @@
     let msg = resolveInboxReportMessage(messageId, kind);
     if (!msg) {
       const data = await messagesApi(`/api/messages/${messageId}`);
+      syncUnreadFromResponse(data);
       const loaded = data?.ok ? data.data?.message : null;
       if (loaded && getInboxReportKind(loaded) === kind) msg = loaded;
+    } else if (!msg.is_read) {
+      const data = await messagesApi(`/api/messages/${messageId}`);
+      syncUnreadFromResponse(data);
+      const loaded = data?.ok ? data.data?.message : null;
+      if (loaded) msg = loaded;
     }
     if (msg) openInboxReportModal(msg);
   }
