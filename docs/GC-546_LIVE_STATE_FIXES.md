@@ -1,6 +1,6 @@
 # GC-546 — Live-State Fixes (Follow-up GC-545)
 
-**Stand:** 2026-06-05 · **Quelle:** [GC-545 Browser Audit](GC-545_LIVE_STATE_BROWSER_AUDIT.md)  
+**Stand:** 2026-06-05 · **Epic-Status:** ✅ abgeschlossen (546A–546E) · **Quelle:** [GC-545 Browser Audit](GC-545_LIVE_STATE_BROWSER_AUDIT.md)  
 **Epic:** STATE / PJAX / Production Completion Layer
 
 GC-545 lieferte **Browser-Beweise** — kein Einzel-Fix. GC-546 ist die **Epic-Zerlegung** in fokussierte Tickets (je max. 3–5 Dateien).
@@ -25,11 +25,11 @@ pytest (41 passed) bestätigt Backend/Queue — Browser zeigt **Render-/Poll-Lif
 
 | Prio | Ticket | Begründung |
 |------|--------|------------|
-| **1** | [GC-546D](#gc-546d--shipyarddefense-completion-poll-storm) | HTTP 499 / 56s+ Requests — mögliche Root Cause für C, A |
-| **2** | [GC-546C](#gc-546c--production-completion-state-refresh-shipyard--defense) | ✅ Browser-QA bestanden (546D-Fix) |
-| **3** | [GC-546E](#gc-546e--message-read-state-synchronization) | Badge nach Lesen (GC-539 Regression) |
+| **1** | [GC-546D](#gc-546d--shipyarddefense-completion-poll-storm) | ✅ Poll-Storm behoben |
+| **2** | [GC-546C](#gc-546c--production-completion-state-refresh-shipyard--defense) | ✅ Browser-QA |
+| **3** | [GC-546E](#gc-546e--message-read-state-synchronization) | ✅ Badge stale poll |
 | **4** | [GC-546B](#gc-546b--building-requirement-live-refresh) | ✅ Req-Box Live-Patch |
-| **5** | [GC-546A](#gc-546a--score-delta-render-deduplication) | Mehrfach-Rendering +16.347 (evtl. Folge von D) |
+| **5** | [GC-546A](#gc-546a--score-delta-render-deduplication) | ✅ Delta dedupliziert |
 
 ---
 
@@ -37,7 +37,7 @@ pytest (41 passed) bestätigt Backend/Queue — Browser zeigt **Render-/Poll-Lif
 
 | | |
 |---|---|
-| **Status** | 📋 |
+| **Status** | ✅ Implementiert (2026-06-05) |
 | **Schwere** | 🔴 Hoch |
 | **Finding** | F1 |
 
@@ -64,9 +64,17 @@ Punkte-Delta erscheint mehrfach (Ranking, Header Score, Delta-Animation).
 
 ### Akzeptanz
 
-- [ ] Pro Score-Event maximal **eine** sichtbare Delta-Animation
-- [ ] PJAX-Navigation + Poll erzeugen keine Duplikate
-- [ ] pytest unverändert grün; manueller Repro aus GC-545 F1
+- [x] Pro Score-Event maximal **eine** sichtbare Delta-Animation (`lastDeltaEventTotal`)
+- [x] Identischer Score-Payload / wiederholte Polls erzeugen kein neues Delta
+- [x] Stale `.gc-score-delta`-Nodes werden vor neuer Animation entfernt
+- [ ] Browser-Repro GC-545 F1 bestätigen
+
+### Umsetzung
+
+- `lastDeltaEventTotal` — globale Dedup pro Ziel-Score
+- `showScoreDelta(..., landingTotal)` — früh abbrechen wenn Event schon gezeigt
+- `_purgeScoreDeltaNodes()` — alte Delta-Nodes am Anchor entfernen
+- HUD + Overview teilen sich ein Event (Header zuerst)
 
 ---
 

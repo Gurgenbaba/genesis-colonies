@@ -2064,11 +2064,17 @@
   const _scoreState = {
     lastServerTotal: null,
     lastAnimatedTotal: null,
+    lastDeltaEventTotal: null,
     pendingOverviewDelta: 0,
   };
 
   let _deltaTimerHud = 0;
   let _deltaTimerOv = 0;
+
+  function _purgeScoreDeltaNodes(anchorEl) {
+    if (!anchorEl) return;
+    anchorEl.querySelectorAll(".gc-score-delta").forEach((el) => el.remove());
+  }
 
   function pulseScore(anchorEl) {
     if (!anchorEl) return;
@@ -2094,13 +2100,26 @@
     return delta;
   }
 
-  function showScoreDelta(anchorEl, deltaValue, which = "hud") {
-    if (!anchorEl) return;
+  function showScoreDelta(anchorEl, deltaValue, which = "hud", landingTotal = null) {
+    if (!anchorEl) return false;
     const d = Math.floor(Number(deltaValue || 0));
-    if (!Number.isFinite(d) || d === 0) return;
+    if (!Number.isFinite(d) || d === 0) return false;
+
+    const landing = Number.isFinite(Number(landingTotal))
+      ? Number(landingTotal)
+      : Number(_scoreState.lastServerTotal);
+    if (Number.isFinite(landing) && _scoreState.lastDeltaEventTotal === landing) {
+      return false;
+    }
+
+    _purgeScoreDeltaNodes(anchorEl);
 
     const deltaEl = ensureDeltaEl(anchorEl);
-    if (!deltaEl) return;
+    if (!deltaEl) return false;
+
+    if (Number.isFinite(landing)) {
+      _scoreState.lastDeltaEventTotal = landing;
+    }
 
     const sign = d > 0 ? "+" : "";
     deltaEl.textContent = `${sign}${fmtNumber(d)}`;
@@ -2118,6 +2137,7 @@
       if (_deltaTimerHud) clearTimeout(_deltaTimerHud);
       _deltaTimerHud = GC.setSafeTimeout(() => deltaEl.classList.remove("show"), 1200);
     }
+    return true;
   }
 
   // =========================
@@ -3734,7 +3754,14 @@
 
         if (hudScoreEl && _scoreState.lastAnimatedTotal !== serverTotal) {
           animateNumber(hudScoreEl, serverTotal, { duration: 700 });
-          if (delta !== 0) showScoreDelta(hudScoreEl.closest(".gc-score-pill") || hudScoreEl, delta, "hud");
+          if (delta !== 0) {
+            showScoreDelta(
+              hudScoreEl.closest(".gc-score-pill") || hudScoreEl,
+              delta,
+              "hud",
+              serverTotal
+            );
+          }
           _scoreState.lastAnimatedTotal = serverTotal;
         }
 
@@ -3796,7 +3823,9 @@
 
     if (ovScoreVal) {
       animateNumber(ovScoreVal, serverTotal, { duration: 750 });
-      if (delta !== 0) showScoreDelta(ovScoreVal.parentElement || ovScoreVal, delta, "overview");
+      if (delta !== 0) {
+        showScoreDelta(ovScoreVal.parentElement || ovScoreVal, delta, "overview", serverTotal);
+      }
     }
     if (ovScoreRank) {
       ovScoreRank.textContent = (rank >= 1 && totalPlayers > 0) ? `#${rank}/${totalPlayers}` : "#–/–";

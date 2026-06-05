@@ -513,3 +513,21 @@ def test_main_js_gc546b_building_requirements_live_patch():
     assert "_buildZeroHandled" in progress
     buildings_html = _read("templates/buildings.html")
     assert "data-building-req" in buildings_html
+
+
+def test_main_js_gc546a_score_delta_deduplication():
+    """GC-546A: one delta animation per score landing; purge stale nodes."""
+    src = _read("static/main.js")
+    score_state = src.split("const _scoreState = {")[1].split("// Mapping: Buildings")[0]
+    assert "lastDeltaEventTotal" in score_state
+    show = src.split("function showScoreDelta(anchorEl, deltaValue, which = \"hud\", landingTotal = null)")[1].split("// Mapping: Buildings")[0]
+    assert "lastDeltaEventTotal === landing" in show
+    assert "function _purgeScoreDeltaNodes(anchorEl)" in src
+    purge = src.split("function _purgeScoreDeltaNodes(anchorEl)")[1].split("function pulseScore")[0]
+    assert 'querySelectorAll(".gc-score-delta")' in purge
+    assert "return false" in show
+    hud = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
+    assert "showScoreDelta(" in hud
+    assert "serverTotal" in hud.split("showScoreDelta(")[1].split(");")[0]
+    overview = src.split("function patchOverviewScoreFromState(data)")[1].split("function patchResearchPanelFromState")[0]
+    assert 'showScoreDelta(ovScoreVal.parentElement || ovScoreVal, delta, "overview", serverTotal)' in overview

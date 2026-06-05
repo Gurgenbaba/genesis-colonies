@@ -254,6 +254,6 @@ pytest 41 passed; Browser-Findings manuell.
 
 
 
-**GC-546D + GC-546C** — Poll Storm behoben (Commit `49f3a3f`); Browser-QA: Bestand Werft + Defense live ohne F5. **Nächster Schritt: GC-546E** (Message Badge).
+**GC-546 abgeschlossen** — F1–F6 adressiert (546A–546E). Browser F1 kurz bestätigen.
 
 
