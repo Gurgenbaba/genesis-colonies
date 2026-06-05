@@ -86,7 +86,7 @@ python -m pytest tests/test_static_live_updates.py -v
 - [x] Landscape ohne backdrop-filter
 - [x] Regression-Tests grün
 
-**Follow-up:** [GC-547C](GC-547C_FPS_COMPOSITOR_AUDIT.md) — Idle ~41 FPS trotz `runningAnims: 0`: `isPerfIdle()` für Simple-Pages, `.gc-bg` bei perf-idle ausblenden.
+**Follow-up:** [GC-547C](GC-547C_FPS_COMPOSITOR_AUDIT.md) — Idle ~41 FPS: `isPerfIdle()` für Simple-Pages, dekoratives `.gc-bg` bei perf-idle ausblenden. **[GC-548](GC-548_LANDSCAPE_VISIBILITY.md)** — statisches Planet-Landscape bei `gc-perf-idle` sichtbar lassen (`:not(.gc-has-planet-landscape)`).
 
 **Simple-Pages:** [GC-547B](GC-547B_LANDING_LOGIN_GPU_AUDIT.md) (CSS/Compositor).
 

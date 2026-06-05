@@ -425,9 +425,27 @@
 
   function applyPlanetLandscapeFromState(data) {
     const url = String(data?.active_planet?.landscape_url || "").trim();
-    if (!url) return;
+    if (!url) {
+      document.body.classList.remove("gc-has-planet-landscape");
+      document.body.style.removeProperty("--planet-landscape");
+      return;
+    }
     document.body.classList.add("gc-has-planet-landscape");
     document.body.style.setProperty("--planet-landscape", `url("${url}")`);
+  }
+
+  /** GC-548 — SSR/PJAX landscape before first game-state poll (perf-idle must not hide it). */
+  function bootstrapPlanetLandscapeFromBoot() {
+    const body = document.body;
+    if (!body || !body.classList.contains("gc-body-ingame")) return;
+    if (GC.lastState?.ok === true) {
+      applyPlanetLandscapeFromState(GC.lastState);
+      return;
+    }
+    const landscape = body.style.getPropertyValue("--planet-landscape");
+    if (landscape?.trim()) {
+      body.classList.add("gc-has-planet-landscape");
+    }
   }
 
   function getDomPlanetId() {
@@ -11392,6 +11410,7 @@
     initGcPopoversOnce();
     initVisibilityPolling();
     initMotionPreferenceListener();
+    bootstrapPlanetLandscapeFromBoot();
     syncPerfBodyClasses();
     initMobileNav();
     initSpecialPanel();

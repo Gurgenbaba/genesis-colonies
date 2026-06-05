@@ -606,9 +606,28 @@ def test_main_js_gc547c_perf_idle_fps_compositor():
     assert "isPerfIdle()" in src.split("function tickLiveResourceBar()")[1][:200]
 
     assert "GC-547C" in css
-    block = css.split("GC-547C")[1][:700]
-    assert "body.gc-perf-idle .gc-bg" in block
+    block = css.split("GC-547C")[1][:900]
+    assert "body.gc-perf-idle:not(.gc-has-planet-landscape) .gc-bg" in block
+    assert "body.gc-perf-idle.gc-has-planet-landscape .gc-bg" in block
     assert "display: none" in block
+    assert "display: block" in block
     assert "body.gc-perf-idle .gc-panel::before" in block
     assert "body.gc-perf-idle .gc-header" in block
     assert "backdrop-filter: none" in block
+
+
+def test_main_js_gc548_landscape_visible_on_perf_idle_boot():
+    """GC-548: landscape from SSR/lastState before game-state; perf-idle must not hide it."""
+    src = _read("static/main.js")
+    css = _read("static/style.css")
+
+    assert "function bootstrapPlanetLandscapeFromBoot()" in src
+    assert "bootstrapPlanetLandscapeFromBoot()" in src.split("function initShellOnce()")[1][:600]
+    assert "applyPlanetLandscapeFromState(GC.lastState)" in src
+
+    clear = src.split("function applyPlanetLandscapeFromState(data)")[1].split("function bootstrapPlanetLandscapeFromBoot")[0]
+    assert 'classList.remove("gc-has-planet-landscape")' in clear
+
+    block = css.split("GC-547C")[1][:900]
+    assert "gc-has-planet-landscape" in block
+    assert "body.gc-perf-idle.gc-has-planet-landscape .gc-bg" in block

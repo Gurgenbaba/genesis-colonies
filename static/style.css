@@ -7417,14 +7417,23 @@ body.gc-perf-idle .research-bar-fill {
   will-change: auto;
 }
 
-/* GC-547C — idle: hide fullscreen compositor layers (~0–1 FPS target) */
-body.gc-perf-idle .gc-bg {
+/* GC-547C — idle: hide decorative bg stack; GC-548 keep static planet landscape */
+body.gc-perf-idle:not(.gc-has-planet-landscape) .gc-bg {
   display: none;
 }
 
-body.gc-perf-idle.gc-body-ingame {
+body.gc-perf-idle.gc-body-ingame:not(.gc-has-planet-landscape) {
   background-color: var(--gc-bg);
   background-image: none;
+}
+
+body.gc-perf-idle.gc-has-planet-landscape.gc-body-ingame {
+  background-color: transparent;
+  background-image: none;
+}
+
+body.gc-perf-idle.gc-has-planet-landscape .gc-bg {
+  display: block;
 }
 
 body.gc-perf-idle .gc-bg::after {
