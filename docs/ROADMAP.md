@@ -192,7 +192,7 @@ Details: [SECURITY.md](SECURITY.md)
 | SHA-256 Passwörter | Security | Phase 6 |
 | Kein Rate-Limiting (Login) | Abuse | Phase 6 |
 | Chat rate limit in-process | Multi-worker | Redis |
-| Recycler mission (debris harvest) | Gameplay | Phase 4b |
+| Recycler UX polish (GC-800C) | Optional UX | GC-800A/B ✅ — [GC-800_RECYCLER.md](GC-800_RECYCLER.md) |
 | Legacy Admin Forms doppelt | Wartung | Cleanup |
 | SQLite Single-Writer | Scale | Phase 7 |
 | README vs VERSION drift | Docs | README auf 1.5.3 |
@@ -213,11 +213,22 @@ Details: [SECURITY.md](SECURITY.md)
 
 ## Priorisierung
 
-1. **Spieler-sichtbarer Wert** — Mechanik vor Refactor
-2. **Security vor Public Beta** — Phase 6 blockiert Launch
-3. **Kanonische Systeme** — kein Parallel-Build (siehe [ARCHITECTURE.md](ARCHITECTURE.md))
-4. **GC-000 Enforcement** — [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md); CI-Check `test_core_architecture_enforcement.py`
-5. **Tests mitliefern** — jede Queue/DB-Änderung braucht pytest
+### Completion-First (Alpha — ab GC-600)
+
+Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-610](GC-610_COMPLETE_DEFINITION_AUDIT.md) (DoC + Reifegrade). Strategie: [GC-600](GC-600_PROJECT_GAP_ANALYSIS.md) § Completion-First.
+
+**Nächste Tickets (Reihenfolge — siehe [GC-610](GC-610_COMPLETE_DEFINITION_AUDIT.md)):**
+
+1. GC-610 Definition of Complete ✅ → 2. GC-545 Browser Audit → 3. GC-546 Fix → 4–8. Fleet/Logistics/Evolution/Defense/Galaxy Close-Out → 9. Alliance MVP → 10. Security Phase 6 → Tutorial
+
+### Allgemeine Regeln
+
+1. **Vollenden vor Erweitern** — Tier 1 QA vor Tier 3 Greenfield (Marketplace, Radar, Seasons)
+2. **Spieler-sichtbarer Wert** — Mechanik vor Refactor
+3. **Security vor Public Beta** — Phase 6 blockiert Launch (nach Completion-Pass)
+4. **Kanonische Systeme** — kein Parallel-Build (siehe [ARCHITECTURE.md](ARCHITECTURE.md))
+5. **GC-000 Enforcement** — [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md); CI-Check `test_core_architecture_enforcement.py`
+6. **Tests mitliefern** — jede Queue/DB-Änderung braucht pytest
 
 ### Architektur-Schulden (GC-000 Follow-ups)
 
@@ -229,6 +240,10 @@ Details: [SECURITY.md](SECURITY.md)
 | **GC-513** — Windows parallel build race test (timeout + mutex recovery) | ✅ |
 | **GC-600** — Defense Phase 1 (Queue, Scope, `applyActionState`, pytest) | ✅ |
 | **GC-601** — [Project Inventory](PROJECT_INVENTORY.md) + Docs/Roadmap Reality Sync | ✅ |
+| **GC-601B** — [Documentation Consistency Sync](GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md) (Defense, Recycler, GC-600) | ✅ |
+| **GC-610** — [Complete Definition Audit](GC-610_COMPLETE_DEFINITION_AUDIT.md) (DoC, Reifegrade) | ✅ |
+| **GC-545** — [Live-State Browser Audit](GC-545_LIVE_STATE_BROWSER_AUDIT.md) | 📋 |
+| **GC-546** — Live-State Fix (Follow-up GC-545, 1–2 Dateien) | 📋 |
 | **GC-801** — Resource bar + buildings panel action-state sync | ✅ |
 | **GC-802** — Fleet timer, galaxy prefill, planet-switch lifecycle | ✅ |
 | **GC-803** — Fleet preset & mass expedition test stabilization (`IntegrityError`) | ✅ |
@@ -252,6 +267,8 @@ Details: [SECURITY.md](SECURITY.md)
 
 ## Verwandte Dokumente
 
+- [GC-610_COMPLETE_DEFINITION_AUDIT.md](GC-610_COMPLETE_DEFINITION_AUDIT.md) — Definition of Complete / Reifegrade
+- [GC-600_PROJECT_GAP_ANALYSIS.md](GC-600_PROJECT_GAP_ANALYSIS.md) — Strategisches Gap-Audit
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Systemübersicht
 - [ALPHA_TESTPLAN.md](ALPHA_TESTPLAN.md) — Manuelle Tests
 - [SECURITY.md](SECURITY.md) — Phase 6 Details

@@ -14,7 +14,7 @@ Status: v1.5.3
 | EPIC-06 | Buildings System | ✅ | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) |
 | EPIC-07 | Account Research | ✅ | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) |
 | EPIC-08 | Defense & Combat | ✅ | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md), [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
-| EPIC-09 | Alliance Hub | 🔄 | — (minimal backend) |
+| EPIC-09 | Alliance Hub | 🔄 | `/alliance` Platzhalter-UI; Backend minimal — [ROADMAP.md](ROADMAP.md) Phase 5 |
 | EPIC-10 | Social (Chat, Messages) | ✅ | ARCHITECTURE |
 | EPIC-11 | Security Hardening | 📋 | [SECURITY.md](SECURITY.md) |
 | EPIC-12 | Platform Scale (Postgres) | 📋 | ARCHITECTURE |

@@ -95,10 +95,28 @@ Siehe auch [GC-512_QUEUE_MANUAL_QA.md](GC-512_QUEUE_MANUAL_QA.md) § B.
 
 | Route | Erwartung |
 |-------|-----------|
-| `/defense` | Platzhalter-UI, kein Backend-Crash |
 | `/alliance` | Platzhalter-UI (sofern nicht freigeschaltet) |
 
-**Live-Module (manuelle Fleet-QA):** `/fleet`, `/galaxy`, `/logistics` — siehe § 11–12.
+---
+
+## 9b. Defense (`/defense`) — Live
+
+**Referenz:** [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) · GC-600 ✅
+
+| # | Schritt | Erwartung |
+|---|---------|-----------|
+| 9b.1 | Seite laden | Fabrik-Stufe, Queue, Bestand, baubare/gesperrte Karten sichtbar |
+| 9b.2 | Einheit bauen (wenn Ressourcen reichen) | Queue + Countdown ohne Full-Page-Reload |
+| 9b.3 | Cancel aktiver Job | 60 % Erstattung; Restqueue neu terminiert (GC-510) |
+| 9b.4 | Planetwechsel (Header) | `/defense` PJAX-Reload; `data-planet-id` = aktiver Planet |
+
+**Automatisiert (optional vor manueller QA):**
+
+```bash
+python -m pytest tests/test_defense_detail_modal.py tests/test_queue_engine.py -v -k "defense"
+```
+
+**Live-Module (manuelle QA):** `/defense`, `/fleet`, `/galaxy`, `/logistics` — Fleet siehe § 11–12.
 
 ---
 

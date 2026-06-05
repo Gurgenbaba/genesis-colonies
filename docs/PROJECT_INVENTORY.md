@@ -1,6 +1,6 @@
 # Genesis Colonies — Project Inventory
 
-**Stand:** GC-900C (2026-06-02) — Collect UI ✅; Distribute GC-900D/E.
+**Stand:** GC-601B (2026-06-05) — Doc-Reality-Sync; Logistics GC-900E ✅.
 
 Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `static/main.js`, pytest-Dateien, Master-Docs.
 
@@ -18,7 +18,7 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Galaxy** | `galaxy.py` | `/galaxy`, PJAX | `GET /api/galaxy/system` | `test_galaxy.py` | ✅ | — |
 | **Combat** | `combat.py`, `combat_models.py` | Reports in Messages | Kein eigener Spieler-POST; Tick in `fleet.py` | `test_combat.py` (36 Tests) | ✅ | GC-700 = Lücken/Polish, kein Greenfield |
 | **Recycler** | `combat.py` debris + `fleet.py` mission `recycle` | `/fleet` + Galaxy debris actions | `send_fleet` / preview | `test_recycler.py` | ✅ | GC-800C UX optional |
-| **Logistics** | Collect ✅ / Distribute ✅ | `/logistics` (Distribute tab UI → 900E) | `…/collect`, `…/distribute` + `state` | `test_fleet_logistics.py` | 🔄 | **GC-900E** Distribute UI |
+| **Logistics** | Collect ✅ / Distribute ✅ | `/logistics` (Collect + Distribute) | `…/collect`, `…/distribute` + `state` | `test_fleet_logistics.py` | ✅ | `auto_cargo` optional (Phase 2) |
 | **Messages** | `messages.py` | `/messages`, `messages.js` | `/api/messages/*` | `test_messages.py` | ✅ | ⚠️ `href`-Fallback (GC-512C) |
 | **Chat** | `chat.py` | Shell + `chat.js` | `/api/chat/*` (eigenes Poll) | `test_chat.py`, `test_chat_init` | ✅ | Ausnahme GC-000 dokumentiert |
 | **Alliance** | `alliance.py` (minimal) | `/alliance` Platzhalter | — | — | 🔄 | Gründung, Rechte, Diplomatie |
@@ -53,7 +53,9 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 | `ROADMAP.md` Phase 4 | Combat/Defense ✅ — korrekt; GC-700 war als „neu bauen“ missverständlich | GC-700 = Readiness/Polish |
 | `DEFENSE_SYSTEM.md` | Beschreibt teils Combat — korrekt verlinkt | Kein Widerspruch |
 | `COMBAT_SYSTEM.md` | Status ✅ — entspricht `test_combat.py` + `fleet.py` attack path | — |
-| Ticket GC-600 | System existierte; Lücke war `applyActionState` + Tests | GC-600 ✅ |
+| Ticket GC-600 (Defense Phase 1) | Lücke war `applyActionState` + Tests | GC-600 ✅ |
+| ALPHA_TESTPLAN §9 Defense Platzhalter | Veraltet | GC-601B → §9b Live-QA |
+| ROADMAP Tech Debt Recycler fehlt | Veraltet (GC-800 ✅) | GC-601B entfernt / GC-800C optional |
 
 ---
 
@@ -76,7 +78,7 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 |------|-----------|---------|
 | Recycler / Debris-Harvest-Mission | — | ✅ GC-800A/B (`recycle` mission) |
 | Fleet Logistics Collect | — | ✅ GC-900B: `batch_type` + N× `mission=collect` |
-| Fleet Logistics Distribute | P1 (GC-900D) | Stub bis 900D (Caps, Split, Reservierung) |
+| Fleet Logistics Distribute | — | ✅ GC-900D/E |
 | Combat-Balancing / neue Missionen | P2 | Kein Resolver-Neubau nötig |
 | PvP-Randfälle / Report-UX | P2 | Messages UI vorhanden |
 | Dedizierte Combat-Admin-Tools | P3 | Admin hat Queue-Tools |
@@ -114,7 +116,8 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 | GC-900B Collect backend (Option A, no migration) | ✅ |
 | GC-900C Collect UI (`/logistics`) | ✅ |
 | GC-900D Distribute backend | ✅ |
-| GC-900E Distribute UI / polish | 📋 |
+| GC-900E Distribute UI / polish | ✅ |
+| GC-601B Documentation Consistency Sync | ✅ — [GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md](GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md) |
 
 ---
 

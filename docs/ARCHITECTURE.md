@@ -22,6 +22,9 @@ Technische Architektur-Dokumentation (Stand: **v1.5.3**). Ergänzt die [README](
 | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) | Planet Defense, Queue, Ranking |
 | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) | Battle resolver, loot, debris, reports |
 | [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) | Code-Reality-Status aller Module (GC-601) |
+| [GC-600_PROJECT_GAP_ANALYSIS.md](GC-600_PROJECT_GAP_ANALYSIS.md) | Strategisches Gap-Audit |
+| [GC-610_COMPLETE_DEFINITION_AUDIT.md](GC-610_COMPLETE_DEFINITION_AUDIT.md) | Definition of Complete / Reifegrade |
+| [GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md](GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md) | Doc-Reality-Sync (Defense, Recycler) |
 
 **Golden Rule:** Genesis Colonies bevorzugt **Konsistenz über Komfort** — keine parallelen Systeme, keine Duplicate-Math, keine Reload-Navigation. Siehe [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) (Regeln 15–17).
 

@@ -1,12 +1,12 @@
 # GC-545 – Live-State Browser Audit
 
 **Epic:** STATE / PJAX / Live-Updates  
-**Status:** Offen (manuell — Browser-Beweis)  
+**Status:** In Arbeit — pytest ✅ (2026-06-05); Browser-Matrix 📋 ausstehend  
 **Voraussetzung:** GC-539–544 abgeschlossen (HUD Single Source, einheitliche Timer, Messages)
 
 Automatische Tests (`test_static_live_updates`, Queue-Timer-Regression) sind grün. Dieses Ticket ist **kein Blind-Fix** — es sammelt Browser-Beweise für die eine Live-Komponente, die im echten UI noch nicht synchron läuft.
 
-**Follow-up:** Findings → **GC-546** als gezielter 1–2-Datei-Fix (DOM-Attribut, PJAX-Replacement oder State-Patch), kein weiteres großes Timer-Ticket.
+**Follow-up:** Findings → **GC-546** als gezielter 1–2-Datei-Fix. **Voraussetzung:** [GC-610](GC-610_COMPLETE_DEFINITION_AUDIT.md) DoC — Fleet E-Kriterien (Live-State) explizit offen.
 
 ---
 
@@ -105,6 +105,8 @@ python -m pytest tests/test_static_live_updates.py -v
 python -m pytest tests/test_game_state_live.py -v
 ```
 
+**Ergebnis 2026-06-05:** `41 passed` in ~220s — automatisierte Live-State-Regression grün. Browser-Flows (§1) weiterhin manuell erforderlich.
+
 ---
 
 ## Findings (ausfüllen nach Audit)
@@ -134,6 +136,7 @@ _(leer bis Audit abgeschlossen)_
 - [STATE_AJAX.md](STATE_AJAX.md)
 - [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md)
 - [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md)
+- [GC-610_COMPLETE_DEFINITION_AUDIT.md](GC-610_COMPLETE_DEFINITION_AUDIT.md)
 - [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) § Timer / Single Poll
 
 ---
