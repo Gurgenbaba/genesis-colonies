@@ -29,6 +29,7 @@ instance/
 htmlcov/
 .tox/
 .nox/
+.tmp_gc547_audit/
 
 # SQLite — lokale Spielstände nicht committen
 game/game.db
