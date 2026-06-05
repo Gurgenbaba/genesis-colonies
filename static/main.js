@@ -315,6 +315,62 @@
     return hasLiveStatusRoot();
   }
 
+  /** GC-547 — visual loops (rAF/ticker/CSS-driven updates) only when tab is visible. */
+  function isTabVisible() {
+    return typeof document === "undefined" || !document.hidden;
+  }
+
+  function shouldRunVisualLoops() {
+    return shouldRunGameLoop() && isTabVisible();
+  }
+
+  /** GC-547C — perf-idle: simple/auth always; ingame when no active progress jobs. */
+  function isPerfIdle() {
+    if (!shouldRunGameLoop()) return true;
+    return !_hasActiveProgressJobs();
+  }
+
+  let _prefersReducedMotion = false;
+
+  function syncPerfBodyClasses() {
+    const body = document.body;
+    if (!body) return;
+    body.classList.toggle("gc-tab-hidden", !isTabVisible());
+    body.classList.toggle("gc-reduced-motion", _prefersReducedMotion);
+    const perfIdle = isPerfIdle();
+    body.classList.toggle("gc-perf-idle", perfIdle);
+    if (perfIdle) {
+      pauseResourceTicker();
+    } else if (shouldRunVisualLoops() && _resourceLive.planetId) {
+      startResourceTicker();
+    }
+  }
+
+  function initMotionPreferenceListener() {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => {
+      _prefersReducedMotion = !!mq.matches;
+      syncPerfBodyClasses();
+    };
+    apply();
+    if (typeof mq.addEventListener === "function") mq.addEventListener("change", apply);
+    else if (typeof mq.addListener === "function") mq.addListener(apply);
+  }
+
+  function pauseVisualLoops() {
+    GC.stopProgressTicker();
+    pauseResourceTicker();
+    syncPerfBodyClasses();
+  }
+
+  function resumeVisualLoops() {
+    syncPerfBodyClasses();
+    if (!shouldRunVisualLoops() || _authLoopAborted) return;
+    startResourceTicker();
+    if (_hasActiveProgressJobs()) GC.startProgressTicker();
+  }
+
   /** @deprecated use shouldRunGameLoop */
   function shouldRunStatusPolling() {
     return shouldRunGameLoop();
@@ -918,24 +974,31 @@
   }
 
   GC.startProgressTicker = function startProgressTicker() {
-    if (!shouldRunGameLoop()) return;
+    if (!shouldRunVisualLoops()) return;
+    if (!_hasActiveProgressJobs()) {
+      syncPerfBodyClasses();
+      return;
+    }
     _progressTickerActive = true;
     _pageTimerLoopRunning = true;
     if (_progressTickerTimerId != null) return;
     const tick = () => {
       _progressTickerTimerId = null;
-      if (!_progressTickerActive || !shouldRunGameLoop() || _authLoopAborted) {
+      if (!_progressTickerActive || !shouldRunVisualLoops() || _authLoopAborted) {
         _pageTimerLoopRunning = false;
         GC.stopProgressTicker();
+        syncPerfBodyClasses();
         return;
       }
       if (!_hasActiveProgressJobs()) {
         _pageTimerLoopRunning = false;
         GC.stopProgressTicker();
+        syncPerfBodyClasses();
         return;
       }
       const serverNow = getTimerServerNow();
       updateAllProgressBars(serverNow);
+      syncPerfBodyClasses();
       _progressTickerTimerId = setTimeout(tick, _progressTickerDelayMs(serverNow));
     };
     tick();
@@ -985,6 +1048,7 @@
 
   GC.stopStatusPoller = GC.stopPolling;
   GC.shouldRunGameLoop = shouldRunGameLoop;
+  GC.shouldRunVisualLoops = shouldRunVisualLoops;
   GC.shouldRunStatusPolling = shouldRunStatusPolling;
   GC.abortGameLoop = handleAuthFailure;
 
@@ -2004,11 +2068,17 @@
     if (!el) return;
 
     const tgt = Math.max(0, Math.floor(Number(target || 0)));
+    const fmt = opts.fmt || fmtNumber;
+    if (_prefersReducedMotion || !shouldRunVisualLoops()) {
+      el.textContent = fmt(tgt);
+      _lastNum.set(el, tgt);
+      return;
+    }
     const last = _lastNum.get(el);
     if (last === tgt) return;
     _lastNum.set(el, tgt);
 
-    const { duration = 650, minStep = 1, fmt = fmtNumber } = opts;
+    const { duration = 650, minStep = 1 } = opts;
     const now = performance.now();
 
     const currentText = (el.textContent || "").replace(/\./g, "").replace(/,/g, "");
@@ -2263,6 +2333,19 @@
     return false;
   }
 
+  function _hasVisibleOverviewResearchTimer() {
+    const box = document.getElementById("overview-research-active");
+    if (!box || box.hidden || box.style.display === "none") return false;
+    const finishAt = parseTimerTarget(box.dataset.finishAt || 0);
+    if (!finishAt) return false;
+    const srvRem = box.dataset.serverRemaining;
+    return queueJobRemainingSeconds(
+      finishAt,
+      getTimerServerNow(),
+      srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
+    ) > 0;
+  }
+
   function _hasActiveProgressJobs() {
     const now = getTimerServerNow();
     const buildFinish = BUILDQ.active.finishTime > now;
@@ -2277,13 +2360,17 @@
       !!document.querySelector(".build-job.build-job-active") ||
       !!document.querySelector(".research-job.research-job-active") ||
       !!document.querySelector(".shipyard-job.shipyard-job-active") ||
-      !!document.getElementById("overview-research-active") ||
+      _hasVisibleOverviewResearchTimer() ||
       !!document.querySelector(".planet-evolution-page .pe-planet-research-active") ||
-      _hasLiveCountdownAt() ||
-      _hasStaleMovementCountdown() ||
-      _movementCountdownRefreshPending.fleet ||
-      _movementCountdownRefreshPending.overview
+      _hasLiveCountdownAt()
     );
+  }
+
+  function _maybeRefreshStaleMovementCountdowns() {
+    if (!shouldRunGameLoop() || _authLoopAborted) return;
+    if (!_anyStaleMovementCountdownDom()) return;
+    if (_movementCountdownRefreshPending.fleet) requestMovementCountdownRefresh("fleet");
+    else requestMovementCountdownRefresh("overview");
   }
 
   // progress ticker: GC.startProgressTicker / GC.stopProgressTicker
@@ -3419,6 +3506,9 @@
     capFuelCells: 0,
   };
   let _resourceTickerId = null;
+  let _resourceTickerPaused = false;
+  const RESOURCE_TICKER_MS_ACTIVE = 1000;
+  const RESOURCE_TICKER_MS_IDLE = 5000;
   let _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
 
   /** Shell HUD resource values only (#resource-bar) — never fleet/page [data-res] nodes. */
@@ -3497,24 +3587,36 @@
   }
 
   function tickLiveResourceBar() {
-    if (!shouldRunGameLoop() || _authLoopAborted || !_resourceLive.planetId) return;
+    if (!shouldRunVisualLoops() || _authLoopAborted || !_resourceLive.planetId || isPerfIdle()) return;
     const projected = projectLiveResourceAmounts(getApproxServerNow());
     if (!projected) return;
     patchShellHudLiveResources(projected.metal, projected.crystal, projected.fuelCells);
   }
 
-  function startResourceTicker() {
-    if (!shouldRunGameLoop() || _authLoopAborted || !_resourceLive.planetId) return;
-    if (_resourceTickerId != null) return;
-    tickLiveResourceBar();
-    _resourceTickerId = setInterval(tickLiveResourceBar, 1000);
+  function _resourceTickerIntervalMs() {
+    if (_hasActiveProgressJobs()) return RESOURCE_TICKER_MS_ACTIVE;
+    return RESOURCE_TICKER_MS_IDLE;
   }
 
-  function stopResourceTicker() {
+  function pauseResourceTicker() {
+    _resourceTickerPaused = true;
     if (_resourceTickerId != null) {
       clearInterval(_resourceTickerId);
       _resourceTickerId = null;
     }
+  }
+
+  function startResourceTicker() {
+    if (!shouldRunVisualLoops() || _authLoopAborted || !_resourceLive.planetId || isPerfIdle()) return;
+    _resourceTickerPaused = false;
+    if (_resourceTickerId != null) return;
+    tickLiveResourceBar();
+    _resourceTickerId = setInterval(tickLiveResourceBar, _resourceTickerIntervalMs());
+  }
+
+  function stopResourceTicker() {
+    pauseResourceTicker();
+    _resourceTickerPaused = false;
     _resourceLive.planetId = 0;
     _resourceLive.syncedAt = 0;
     _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
@@ -4176,7 +4278,9 @@
 
       GC.lastState = coercePollUnreadForHud(data, reason);
       GC.startProgressTicker();
+      _maybeRefreshStaleMovementCountdowns();
       syncProductionPanelsAfterGameState(data, reason, activePlanetId);
+      syncPerfBodyClasses();
 
       if (typeof GC.scheduleLogisticsRefreshFromState === "function") {
         GC.scheduleLogisticsRefreshFromState();
@@ -10113,14 +10217,16 @@
     GC._visibilityBound = true;
 
     document.addEventListener("visibilitychange", () => {
+      syncPerfBodyClasses();
       if (document.hidden) {
         GC.stopPolling();
+        pauseVisualLoops();
         return;
       }
       if (!shouldRunGameLoop() || _authLoopAborted) return;
       _authLoopAborted = false;
+      resumeVisualLoops();
       GC.refreshGameState("tab_visible");
-      GC.startProgressTicker();
       if (typeof GC.initChat === "function") GC.initChat();
     });
   }
@@ -11285,6 +11391,8 @@
     initHeaderPlanetSwitcher();
     initGcPopoversOnce();
     initVisibilityPolling();
+    initMotionPreferenceListener();
+    syncPerfBodyClasses();
     initMobileNav();
     initSpecialPanel();
     initSupportModule();

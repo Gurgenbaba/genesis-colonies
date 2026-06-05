@@ -150,8 +150,10 @@ def test_main_js_movement_countdown_expiry_debounced():
     assert "queueMicrotask" in refresh_section
     progress_section = src.split("function _hasActiveProgressJobs()")[1].split("// progress ticker")[0]
     assert "_hasLiveCountdownAt()" in progress_section
-    assert "_hasStaleMovementCountdown()" in progress_section
-    assert "_movementCountdownRefreshPending.fleet" in progress_section
+    assert "_hasVisibleOverviewResearchTimer()" in progress_section
+    assert 'getElementById("overview-research-active")' not in progress_section
+    assert "_hasStaleMovementCountdown()" not in progress_section
+    assert "_maybeRefreshStaleMovementCountdowns" in src
 
 
 def test_main_js_init_page_resumes_chat_after_pjax():
@@ -536,3 +538,77 @@ def test_main_js_gc546a_score_delta_deduplication():
     assert "showScoreDelta" not in overview
     css = _read("static/style.css")
     assert "animation-fill-mode: none" in css.split(".gc-score-pill .gc-score-delta.show")[1][:220]
+
+
+def test_main_js_gc547_gpu_idle_visual_loop_guards():
+    """GC-547: idle/tab-hidden must not run permanent visual loops."""
+    src = _read("static/main.js")
+    css = _read("static/style.css")
+
+    assert "function shouldRunVisualLoops()" in src
+    assert "function pauseVisualLoops()" in src
+    assert "function resumeVisualLoops()" in src
+    assert "function syncPerfBodyClasses()" in src
+    assert "GC.shouldRunVisualLoops = shouldRunVisualLoops" in src
+    assert "initMotionPreferenceListener()" in src
+    assert "pauseVisualLoops()" in src.split("visibilitychange")[1][:500]
+    assert "resumeVisualLoops()" in src.split("visibilitychange")[1][:700]
+    assert "RESOURCE_TICKER_MS_IDLE" in src
+    assert "function pauseResourceTicker()" in src
+
+    ticker = src.split("GC.startProgressTicker = function startProgressTicker()")[1].split("GC.stopPolling")[0]
+    assert "shouldRunVisualLoops()" in ticker
+    assert "requestAnimationFrame(tick)" not in ticker
+
+    progress = src.split("function _hasActiveProgressJobs()")[1].split("// progress ticker")[0]
+    assert "_hasVisibleOverviewResearchTimer()" in progress
+    assert 'getElementById("overview-research-active")' not in progress
+
+    assert "gc-perf-idle" in css
+    assert "gc-tab-hidden" in css
+    assert "gc-bld-delta-pulse" not in css
+    assert "ease-in-out infinite" not in css.split("gc-prog-affordable")[1][:200]
+    landscape = css.split("gc-has-planet-landscape .gc-sidebar")[1][:350]
+    assert "backdrop-filter" not in landscape
+
+
+def test_style_gc547b_landing_login_gpu_compositor():
+    """GC-547B: Landing/Login idle must not stack fullscreen GPU compositor layers."""
+    css = _read("static/style.css")
+    base = _read("templates/base.html")
+
+    assert "GC-547B" in css
+    block = css.split("GC-547B")[1].split("Everything above bg")[0]
+    assert "body.gc-body-simple .gc-bg::after" in block
+    assert "body.gc-body-simple .gc-bg-simple" in block
+    assert "display: none" in block
+    assert "body.gc-body-simple .gc-header" in block
+    assert "backdrop-filter: none" in block
+    assert "body.gc-body-simple .landing-title" in block
+    assert "text-shadow: none" in block.split("body.gc-body-simple .landing-title")[1][:120]
+
+    assert "gc-perf-idle" in base
+    assert "gc-bg-simple" in base
+    assert "{% if SIMPLE_LAYOUT %}gc-body-simple" in base
+
+
+def test_main_js_gc547c_perf_idle_fps_compositor():
+    """GC-547C: simple pages stay perf-idle; idle hides compositor repaint layers."""
+    src = _read("static/main.js")
+    css = _read("static/style.css")
+
+    assert "function isPerfIdle()" in src
+    sync = src.split("function syncPerfBodyClasses()")[1].split("function pauseVisualLoops()")[0]
+    assert "isPerfIdle()" in sync
+    assert "!shouldRunGameLoop()" in src.split("function isPerfIdle()")[1].split("function syncPerfBodyClasses()")[0]
+
+    assert "isPerfIdle()" in src.split("function startResourceTicker()")[1][:200]
+    assert "isPerfIdle()" in src.split("function tickLiveResourceBar()")[1][:200]
+
+    assert "GC-547C" in css
+    block = css.split("GC-547C")[1][:700]
+    assert "body.gc-perf-idle .gc-bg" in block
+    assert "display: none" in block
+    assert "body.gc-perf-idle .gc-panel::before" in block
+    assert "body.gc-perf-idle .gc-header" in block
+    assert "backdrop-filter: none" in block

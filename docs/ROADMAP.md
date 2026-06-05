@@ -219,7 +219,9 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 
 **Nächste Tickets (Reihenfolge — siehe [GC-610](GC-610_COMPLETE_DEFINITION_AUDIT.md)):**
 
-1. GC-610 Definition of Complete ✅ → 2. GC-545 Browser Audit ✅ → 3. **GC-546D** Poll Storm → 4. GC-546C/E/B/A → 5–9. Close-Outs 611–615 → Alliance → Security → Tutorial
+1. GC-610 Definition of Complete ✅ → 2. GC-545 Browser Audit ✅ → 3. GC-546D–A Poll/Live-State ✅ → 4. **GC-547/547B** GPU Idle ✅ (Abnahme: FPS-Messung) → 5. **GC-611** Fleet Close-Out → … → 615
+
+**Performance-Gate:** FPS idle ≈ 0–1 → GC-547/547B schließen, weiter GC-611. FPS 144+ idle → [GC-547C](GC-547C_FPS_COMPOSITOR_AUDIT.md) vor Fleet Close-Out.
 
 ### Allgemeine Regeln
 
@@ -243,7 +245,9 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 | **GC-601B** — [Documentation Consistency Sync](GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md) (Defense, Recycler, GC-600) | ✅ |
 | **GC-610** — [Complete Definition Audit](GC-610_COMPLETE_DEFINITION_AUDIT.md) (DoC, Reifegrade) | ✅ |
 | **GC-545** — [Live-State Browser Audit](GC-545_LIVE_STATE_BROWSER_AUDIT.md) | ✅ |
-| **GC-546** — [Live-State Fixes](GC-546_LIVE_STATE_FIXES.md) (546D→A) | 📋 |
+| **GC-546** — [Live-State Fixes](GC-546_LIVE_STATE_FIXES.md) (546D→A) | ✅ |
+| **GC-547** — [GPU Performance Audit](GC-547_GPU_PERFORMANCE_AUDIT.md) + [547B](GC-547B_LANDING_LOGIN_GPU_AUDIT.md) | ✅ (FPS-Abnahme) |
+| **GC-547C** — [FPS / Compositor Audit](GC-547C_FPS_COMPOSITOR_AUDIT.md) | ✅ (FPS remessen) |
 | **GC-801** — Resource bar + buildings panel action-state sync | ✅ |
 | **GC-802** — Fleet timer, galaxy prefill, planet-switch lifecycle | ✅ |
 | **GC-803** — Fleet preset & mass expedition test stabilization (`IntegrityError`) | ✅ |

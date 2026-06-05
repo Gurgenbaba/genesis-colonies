@@ -195,7 +195,6 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-bg {
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
-  filter: saturate(1.08) brightness(0.92) contrast(1.04);
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-bg::after {
@@ -213,9 +212,7 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-bg::after {
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-sidebar {
-  background: rgba(2, 8, 18, 0.95);
-  backdrop-filter: blur(16px) saturate(1.08);
-  -webkit-backdrop-filter: blur(16px) saturate(1.08);
+  background: rgba(2, 8, 18, 0.97);
   border-color: rgba(70, 229, 255, 0.24);
   box-shadow:
     var(--gc-border-glow),
@@ -238,8 +235,6 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-nav-link.active {
 body.gc-body-ingame.gc-has-planet-landscape .gc-panel,
 body.gc-body-ingame.gc-has-planet-landscape .section-header {
   background: var(--gc-panel-bg);
-  backdrop-filter: blur(14px) saturate(1.06);
-  -webkit-backdrop-filter: blur(14px) saturate(1.06);
   box-shadow:
     var(--gc-border-glow),
     inset 0 0 0 1px rgba(0, 0, 0, 0.52),
@@ -261,8 +256,6 @@ body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-history-i
 body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-policy-item,
 body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-research-job {
   background: var(--gc-panel-bg-2);
-  backdrop-filter: blur(10px) saturate(1.04);
-  -webkit-backdrop-filter: blur(10px) saturate(1.04);
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .planet-evolution-page .pe-trait-positive {
@@ -281,8 +274,6 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd {
   background:
     radial-gradient(900px 70px at 30% 0%, rgba(120, 255, 220, 0.07), transparent 60%),
     linear-gradient(180deg, var(--gc-hdr-bg-1), var(--gc-hdr-bg-2));
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd .gc-header-inner {
@@ -318,10 +309,9 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd .resource-bar.resourc
   background-repeat: no-repeat;
 
   opacity: 0.88;
-  filter: saturate(1.03) contrast(1.02);
 }
 
-/* Subtle moving “nebula noise” layer (cheap but effective) */
+/* Subtle static nebula layer (no animation — GC-547 GPU) */
 .gc-bg::after{
   content:"";
   position:absolute;
@@ -331,7 +321,55 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-header-cmd .resource-bar.resourc
     radial-gradient(650px 420px at 80% 30%, rgba(127,255,217,0.045), transparent 60%),
     radial-gradient(720px 520px at 60% 85%, rgba(255,196,0,0.04), transparent 65%);
   opacity: 0.75;
-  transform: translateZ(0);
+}
+
+/* GC-547B — Landing/Login/Register: flat compositor, no shell GPU cost */
+body.gc-body-simple {
+  background: #060b16;
+}
+
+body.gc-body-simple .gc-bg,
+body.gc-body-simple .gc-bg-simple {
+  display: none;
+}
+
+body.gc-body-simple .gc-bg::after {
+  content: none;
+  display: none;
+}
+
+body.gc-body-simple .gc-panel::before,
+body.gc-body-simple .gc-panel::after {
+  display: none;
+}
+
+body.gc-body-simple .gc-panel {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+body.gc-body-simple .gc-header,
+body.gc-body-simple .gc-header-cmd {
+  background: linear-gradient(180deg, var(--gc-hdr-bg-1), var(--gc-hdr-bg-2));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+body.gc-body-simple .gc-header::after {
+  display: none;
+}
+
+body.gc-body-simple .landing-hero-left {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+body.gc-body-simple .landing-title,
+body.gc-body-simple .auth-title {
+  text-shadow: none;
+}
+
+body.gc-body-simple .auth-error {
+  box-shadow: inset 0 0 0 1px rgba(255, 75, 106, 0.16);
 }
 
 /* Everything above bg */
@@ -2482,13 +2520,20 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   box-shadow: 0 0 20px rgba(70,229,255,0.18);
 }
 
-/* Smooth progress fills project-wide */
+/* Smooth progress fills — will-change only while timers active (GC-547) */
 .gc-progress-smooth,
 .build-bar-fill,
 .build-progress-fill,
 .research-progress-fill,
 .research-bar-fill{
   transition: width 0.12s linear;
+}
+
+body:not(.gc-perf-idle) .gc-progress-smooth,
+body:not(.gc-perf-idle) .build-bar-fill,
+body:not(.gc-perf-idle) .build-progress-fill,
+body:not(.gc-perf-idle) .research-progress-fill,
+body:not(.gc-perf-idle) .research-bar-fill{
   will-change: width;
 }
 
@@ -2812,12 +2857,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 
 .gc-prog-affordable .gc-bld-prod-delta-val{
-  animation: gc-bld-delta-pulse 2.4s ease-in-out infinite;
-}
-
-@keyframes gc-bld-delta-pulse{
-  0%, 100%{ opacity: 1; }
-  50%{ opacity: 0.78; }
+  opacity: 0.92;
 }
 
 .buildings-prog-list .gc-prog-head{
@@ -7342,6 +7382,74 @@ body.gc-body-ingame {
 @media (prefers-reduced-motion: reduce) {
   .admin-panel.is-active,
   .admin-tab-panel.is-active { animation: none; }
+  .gc-prog-affordable .gc-bld-prod-delta-val { animation: none; }
+  .gc-player-card-spinner { animation: none; }
+  .gc-player-card-shell { animation: none; }
+  .gc-score-pill.gc-score-pulse { animation: none; }
+  .gc-score-pill .gc-score-delta.show { animation: none; }
+  .planet-evolution-page .pe-highlight-pulse { animation: none; }
+  .gc-progress-smooth,
+  .build-bar-fill,
+  .build-progress-fill,
+  .research-progress-fill,
+  .research-bar-fill {
+    transition: none !important;
+    will-change: auto !important;
+  }
+}
+
+/* GC-547 — idle / hidden tab: stop compositor-heavy effects */
+body.gc-tab-hidden .gc-bg::after {
+  opacity: 0;
+}
+
+body.gc-tab-hidden .gc-panel::before,
+body.gc-tab-hidden .resource-bar::before {
+  opacity: 0;
+}
+
+body.gc-perf-idle .gc-progress-smooth,
+body.gc-perf-idle .build-bar-fill,
+body.gc-perf-idle .build-progress-fill,
+body.gc-perf-idle .research-progress-fill,
+body.gc-perf-idle .research-bar-fill {
+  transition: none;
+  will-change: auto;
+}
+
+/* GC-547C — idle: hide fullscreen compositor layers (~0–1 FPS target) */
+body.gc-perf-idle .gc-bg {
+  display: none;
+}
+
+body.gc-perf-idle.gc-body-ingame {
+  background-color: var(--gc-bg);
+  background-image: none;
+}
+
+body.gc-perf-idle .gc-bg::after {
+  content: none;
+  display: none;
+}
+
+body.gc-perf-idle .gc-panel::before,
+body.gc-perf-idle .gc-panel::after {
+  display: none;
+}
+
+body.gc-perf-idle .resource-bar::before {
+  display: none;
+}
+
+body.gc-perf-idle .gc-header,
+body.gc-perf-idle .gc-header-cmd {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+body.gc-perf-idle .gc-header::after {
+  display: none;
 }
 
 /* ==========================================================================
