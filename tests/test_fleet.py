@@ -491,9 +491,74 @@ def test_fleet_schema_ready(fleet_db):
     conn.close()
 
 
+def _set_research_level(cur, user_id: int, tech_key: str, level: int) -> None:
+    cur.execute(
+        """
+        INSERT INTO research_levels (user_id, tech_key, level)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+        """,
+        (int(user_id), str(tech_key), int(level)),
+    )
+
+
 def test_max_fleet_slots_fallback(fleet_db):
     uid = _player()
     assert get_max_fleet_slots(uid) == 3
+
+
+def test_max_fleet_slots_navigation_tiers(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    cur = conn.cursor()
+    cases = [(0, 3), (2, 3), (3, 4), (4, 4), (5, 5), (7, 5), (8, 6), (9, 6), (10, 7), (12, 7), (13, 8), (16, 9), (25, 12)]
+    for level, expected in cases:
+        _set_research_level(cur, uid, "navigation_tech", level)
+        conn.commit()
+        assert get_max_fleet_slots(uid, conn=conn) == expected, f"nav {level}"
+    conn.close()
+
+
+def test_navigation_unlocks_fourth_fleet_slot(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid, metal=500000, crystal=500000, fuel_cells=500000)
+    _set_research_level(cur, uid, "navigation_tech", 3)
+    _seed_ships(pid, uid, {"mule_courier": 100}, conn=conn)
+    conn.commit()
+
+    for wave in range(4):
+        ok, reason, _ = send_fleet(
+            player_id=uid,
+            origin_planet_id=pid,
+            target_galaxy=g,
+            target_system=s,
+            target_position=p,
+            mission_type="transport",
+            ships={"mule_courier": 1},
+            resources={"metal": 1},
+            conn=conn,
+        )
+        assert ok, f"wave {wave + 1}: {reason}"
+
+    ok, reason, _ = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 1},
+        conn=conn,
+    )
+    assert not ok
+    assert reason == "fleet_slots_full"
+    conn.close()
 
 
 # --- Send fleet ---

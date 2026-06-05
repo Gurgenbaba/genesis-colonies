@@ -86,10 +86,6 @@ from .spy import (
 
 logger = logging.getLogger(__name__)
 
-FALLBACK_FLEET_SLOTS = 3
-BASE_FLEET_SLOTS = 1
-COMPUTER_TECH_KEY = "computer_tech"
-
 TARGET_TYPES = frozenset(
     {"own_planet", "ally_planet", "foreign_planet", "empty_slot", "expedition_slot"}
 )
@@ -272,12 +268,11 @@ def get_max_fleet_slots(player_id: int, *, conn=None) -> int:
     if own:
         conn = db()
     try:
-        from .research import RESEARCH_TECHS
+        from .research import NAVIGATION_TECH_KEY, fleet_slots_for_navigation_level
 
-        if COMPUTER_TECH_KEY in RESEARCH_TECHS:
-            levels = get_research_levels(user_id=int(player_id), conn=conn)
-            return BASE_FLEET_SLOTS + max(0, int(levels.get(COMPUTER_TECH_KEY, 0)))
-        return FALLBACK_FLEET_SLOTS
+        levels = get_research_levels(user_id=int(player_id), conn=conn)
+        nav_level = int(levels.get(NAVIGATION_TECH_KEY, 0) or 0)
+        return fleet_slots_for_navigation_level(nav_level)
     finally:
         if own and conn is not None:
             conn.close()
@@ -305,14 +300,27 @@ def count_active_fleet_slots(player_id: int, *, conn=None) -> int:
             conn.close()
 
 
-def get_fleet_slot_status(player_id: int, *, conn=None) -> Dict[str, int]:
+def get_fleet_slot_status(player_id: int, *, conn=None) -> Dict[str, Any]:
     own = conn is None
     if own:
         conn = db()
     try:
+        from .research import NAVIGATION_TECH_KEY, fleet_slots_for_navigation_level, next_navigation_fleet_slot_unlock
+
         active = count_active_fleet_slots(player_id, conn=conn)
-        maximum = get_max_fleet_slots(player_id, conn=conn)
-        return {"active": active, "max": maximum, "free": max(0, maximum - active)}
+        levels = get_research_levels(user_id=int(player_id), conn=conn)
+        nav_level = int(levels.get(NAVIGATION_TECH_KEY, 0) or 0)
+        maximum = fleet_slots_for_navigation_level(nav_level)
+        status: Dict[str, Any] = {
+            "active": active,
+            "max": maximum,
+            "free": max(0, maximum - active),
+            "navigation_level": nav_level,
+        }
+        next_unlock = next_navigation_fleet_slot_unlock(nav_level)
+        if next_unlock:
+            status["next_unlock"] = next_unlock
+        return status
     finally:
         if own and conn is not None:
             conn.close()

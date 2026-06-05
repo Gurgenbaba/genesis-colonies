@@ -186,6 +186,64 @@ RESEARCH_TECHS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# Account-wide parallel fleet movements (GC-537) — tiers by navigation_tech level.
+NAVIGATION_TECH_KEY = "navigation_tech"
+BASE_FLEET_SLOTS = 3
+NAVIGATION_FLEET_SLOT_TIERS: Tuple[int, int, ...] = (
+    (0, 3),
+    (3, 4),
+    (5, 5),
+    (8, 6),
+    (10, 7),
+)
+# After the last fixed tier: +1 slot every N navigation levels (13→8, 16→9, …).
+NAVIGATION_FLEET_SLOT_POST_TIER_LEVEL = 10
+NAVIGATION_FLEET_SLOT_POST_TIER_INTERVAL = 3
+
+
+def fleet_slots_for_navigation_level(level: int) -> int:
+    """Return max parallel fleet slots for a navigation_tech level (no hard cap)."""
+    lvl = max(0, int(level or 0))
+    slots = BASE_FLEET_SLOTS
+    for min_level, tier_slots in NAVIGATION_FLEET_SLOT_TIERS:
+        if lvl >= min_level:
+            slots = tier_slots
+    post = NAVIGATION_FLEET_SLOT_POST_TIER_LEVEL
+    if lvl > post:
+        slots += (lvl - post) // NAVIGATION_FLEET_SLOT_POST_TIER_INTERVAL
+    return slots
+
+
+def next_navigation_fleet_slot_unlock(level: int) -> Optional[Dict[str, Any]]:
+    """Next navigation level that raises the fleet slot cap."""
+    lvl = max(0, int(level or 0))
+    current = fleet_slots_for_navigation_level(lvl)
+
+    for min_level, tier_slots in NAVIGATION_FLEET_SLOT_TIERS:
+        if min_level > lvl and tier_slots > current:
+            return {
+                "research_key": NAVIGATION_TECH_KEY,
+                "level": min_level,
+                "slots": tier_slots,
+            }
+
+    post = NAVIGATION_FLEET_SLOT_POST_TIER_LEVEL
+    interval = NAVIGATION_FLEET_SLOT_POST_TIER_INTERVAL
+    if lvl >= post - 1:
+        if lvl < post:
+            next_level = post
+        else:
+            steps = max(0, (lvl - post) // interval)
+            next_level = post + (steps + 1) * interval
+        next_slots = fleet_slots_for_navigation_level(next_level)
+        if next_slots > current:
+            return {
+                "research_key": NAVIGATION_TECH_KEY,
+                "level": next_level,
+                "slots": next_slots,
+            }
+    return None
+
 
 # Tab groups for research UI (category keys from RESEARCH_TECHS)
 RESEARCH_TAB_GROUPS: Dict[str, List[str]] = {
@@ -336,12 +394,20 @@ def get_research_effect_preview(tech_key: str, current_level: int, next_level: i
             effect_metric_key="research_effect_shield",
         )
     if tech_key == "navigation_tech":
-        return _research_effect_snapshot(
+        primary = _research_effect_snapshot(
+            effect_kind="level",
+            effect_current=fleet_slots_for_navigation_level(cur),
+            effect_next=fleet_slots_for_navigation_level(nxt),
+            effect_metric_key="research_effect_fleet_slots",
+        )
+        secondary = _research_effect_snapshot(
             effect_kind="bonus_percent",
             effect_current=_fleet_speed_bonus_pct(cur, 0.03),
             effect_next=_fleet_speed_bonus_pct(nxt, 0.03),
             effect_metric_key="research_effect_fleet_speed",
         )
+        primary["secondary_effect"] = secondary
+        return primary
     if tech_key == "engine_tech":
         primary = _research_effect_snapshot(
             effect_kind="bonus_percent",

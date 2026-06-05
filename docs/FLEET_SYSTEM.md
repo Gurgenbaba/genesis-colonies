@@ -49,7 +49,7 @@ Schiffsbau: [Shipyard](BUILDINGS_SYSTEM.md) → `orbital_shipyard` → `shipyard
 | `GET /api/fleet/state` | `?planet_id=` oder context |
 | Ship deduction | Origin planet `planet_ships` |
 
-Flotten-Slots: `computer_tech` + Basis 1 (Fallback 3 wenn kein Research).
+Flotten-Slots: accountweit über **`navigation_tech`** (Basis 3; Stufe 3→4, 5→5, 8→6, 10→7; danach alle 3 Stufen +1 Slot, ohne Obergrenze). Zählt alle aktiven `fleet_movements`.
 
 Overview zeigt **alle** Bewegungen des Spielers (nicht nur active planet).
 
@@ -125,7 +125,7 @@ Multi-Kolonie-Ressourcenbewegung über **`/logistics`** und `collect_resources` 
 ### Slot-Regeln
 
 - `get_fleet_slot_status(player_id)` → `free` muss **> 0** sein; pro Leg ein Slot. Mehr gewählte Kolonien als freie Slots → Route wird auf **`free`** gekappt (deterministische Sortierung); übersprungene Ziele in Preview (`targets_skipped`). Bei **0** freien Slots: `fleet_slots_full`.
-- Basis-Slots: `computer_tech` + 1 (Fallback 3 ohne Research) — identisch zu Einzel-`send_fleet`.
+- Basis-Slots: **`navigation_tech`**-Tiers (Fallback 3) — identisch zu Einzel-`send_fleet`; siehe `fleet_slots_for_navigation_level()` in `game/research.py`.
 - Bulk-Job blockiert atomisch: zu wenig Schiffe auf dem Hub → Rollback des gesamten Collect/Distribute-POST.
 
 ### Nachrichten-Zeitpunkt (GC-530)

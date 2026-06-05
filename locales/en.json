@@ -194,6 +194,7 @@
   "fleet_hint": "Manage fleet movements, missions, and presets for your colonies.",
   "fleet_unavailable": "Fleet system is not available yet. Please run migrations.",
   "fleet_slots_label": "Fleet slots",
+  "fleet_slots_unlock_hint": "%(research)s level %(level)s → %(slots)s slots",
   "fleet_active_title": "Active fleets",
   "fleet_active_subtitle": "Outbound, holding, or returning.",
   "fleet_no_active": "No active fleets.",
@@ -386,7 +387,7 @@
   "fleet_error_not_enough_cargo": "Load exceeds cargo capacity.",
   "fleet_error_not_enough_resources": "Not enough resources on planet.",
   "fleet_error_not_enough_fuel": "Not enough Fuel Cells for fuel.",
-  "fleet_error_fleet_slots_full": "All fleet slots in use.",
+  "fleet_error_fleet_slots_full": "All fleet slots in use. Upgrade Hyperspace Navigation for more parallel fleets.",
   "fleet_error_invalid_speed_percent": "Speed must be between 10 and 100%.",
   "fleet_error_spy_requires_probe": "Espionage requires at least one ship with spy role.",
   "fleet_error_cargo_required_for_resources": "Transporters required to load resources.",
@@ -681,6 +682,7 @@
   "research_effect_weapon": "Weapon bonus",
   "research_effect_armor": "Armor bonus",
   "research_effect_shield": "Shield bonus",
+  "research_effect_fleet_slots": "Fleet slots",
   "research_effect_fleet_speed": "Fleet speed",
   "research_effect_cargo": "Cargo capacity",
   "research_effect_fuel_use": "Fuel consumption",
@@ -969,7 +971,7 @@
   "desc_research_drones_tech": "Improved mining and service drones maximize uptime and precision. Adds an extra production bonus per level.",
 
   "research_navigation_tech": "Hyperspace Navigation",
-  "desc_research_navigation_tech": "Refined jump vectors and pathing through hyperspace shorten flight times and make operations more predictable.",
+  "desc_research_navigation_tech": "Expands parallel fleets and shortens jumps. Levels 3/5/8/10 unlock slots; every 3 levels after 10 adds another slot. Requires Research Lab 3 and Drone Optimization 2.",
 
   "research_engine_tech": "Cryo Drive Engineering",
   "desc_research_engine_tech": "High-performance drives with cryogenic cooling increase thrust for large fleets and reduce energy losses.",
@@ -987,7 +989,7 @@
   "desc_drone_tech": "+3% Ferronit and Crytite production per level. Stacks with Metal Refinement.",
 
   "navigation_tech": "Hyperspace Navigation",
-  "desc_navigation_tech": "Planned: +3% fleet speed per level (not yet live). Requires Research Lab 3 and Drone Optimization 2.",
+  "desc_navigation_tech": "Expands parallel fleets and shortens jumps. Levels 3/5/8/10 unlock slots; every 3 levels after 10 adds another slot. Requires Research Lab 3 and Drone Optimization 2.",
 
   "engine_tech": "Cryo Drive Engineering",
   "desc_engine_tech": "Planned: +2% fleet speed and +2% cargo per level. Unlocks Nano-Assembly Complex among others.",

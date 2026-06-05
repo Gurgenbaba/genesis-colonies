@@ -219,6 +219,13 @@ def fleet_logistics_distribute_from_body(
     )
 
 
+def fleet_slot_status_payload(player_id: int, *, conn=None) -> Dict[str, Any]:
+    """Account fleet slot counters plus navigation unlock hint (GC-537)."""
+    from .fleet import get_fleet_slot_status
+
+    return get_fleet_slot_status(int(player_id), conn=conn)
+
+
 def fleet_live_state_response(state: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize fleet live-state payload with server clock for client timers (GC-540)."""
     import time

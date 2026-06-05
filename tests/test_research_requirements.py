@@ -24,8 +24,10 @@ from game.models import create_user, get_homeworld, init_db, save_planet_buildin
 from game.planet_evolution.repository import set_active_planet_id
 from game.planet_evolution.service import colonize_planet, set_active_planet
 from game.research import (
+    fleet_slots_for_navigation_level,
     get_player_research_lab_level,
     get_research_status,
+    next_navigation_fleet_slot_unlock,
     queue_research,
 )
 
@@ -84,6 +86,33 @@ def _tech(status: dict, key: str) -> dict:
         if tech.get("key") == key:
             return tech
     raise AssertionError(f"tech {key} not found")
+
+
+def test_navigation_fleet_slot_tiers(research_db):
+    assert fleet_slots_for_navigation_level(0) == 3
+    assert fleet_slots_for_navigation_level(2) == 3
+    assert fleet_slots_for_navigation_level(3) == 4
+    assert fleet_slots_for_navigation_level(5) == 5
+    assert fleet_slots_for_navigation_level(8) == 6
+    assert fleet_slots_for_navigation_level(10) == 7
+    assert fleet_slots_for_navigation_level(13) == 8
+    assert fleet_slots_for_navigation_level(16) == 9
+    assert fleet_slots_for_navigation_level(100) == 37
+    assert next_navigation_fleet_slot_unlock(2) == {
+        "research_key": "navigation_tech",
+        "level": 3,
+        "slots": 4,
+    }
+    assert next_navigation_fleet_slot_unlock(10) == {
+        "research_key": "navigation_tech",
+        "level": 13,
+        "slots": 8,
+    }
+    assert next_navigation_fleet_slot_unlock(13) == {
+        "research_key": "navigation_tech",
+        "level": 16,
+        "slots": 9,
+    }
 
 
 def test_player_with_lab_on_homeworld_unlocks_tech_on_active_colony(research_db):

@@ -32,6 +32,11 @@
           /
           {{ fleet_ctx.fleet_slots.max if fleet_ctx.fleet_slots is defined else 0 }}
         </span>
+        {% if fleet_ctx.fleet_slots is defined and fleet_ctx.fleet_slots.next_unlock is defined %}
+        <span class="fleet-slots-hint hint">
+          {{ T("fleet_slots_unlock_hint", research=T("research_navigation_tech"), level=fleet_ctx.fleet_slots.next_unlock.level, slots=fleet_ctx.fleet_slots.next_unlock.slots) }}
+        </span>
+        {% endif %}
       </div>
     </div>
   </header>
