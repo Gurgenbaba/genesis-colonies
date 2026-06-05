@@ -348,6 +348,24 @@ def test_api_game_state_include_panel_uses_full_live_refresh(game_client, monkey
     assert calls["poll"] == poll_count
 
 
+def test_api_game_state_buildings_panel_requirements_fields(game_client):
+    """GC-546B: include_panel rows expose requirements for live client patch."""
+    client, _pid = game_client
+    r = client.get("/api/game-state?include_panel=1")
+    assert r.status_code == 200
+    panel = r.get_json().get("buildings_panel") or {}
+    assert isinstance(panel, dict) and panel
+    seen = 0
+    for rows in panel.values():
+        for row in rows or []:
+            seen += 1
+            assert "requirements_met" in row
+            assert isinstance(row.get("requirements_items"), list)
+            assert "can_afford" in row
+            assert "key" in row
+    assert seen > 0
+
+
 def test_logic_live_timer_helpers():
     from game import logic
 

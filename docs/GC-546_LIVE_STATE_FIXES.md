@@ -28,7 +28,7 @@ pytest (41 passed) bestätigt Backend/Queue — Browser zeigt **Render-/Poll-Lif
 | **1** | [GC-546D](#gc-546d--shipyarddefense-completion-poll-storm) | HTTP 499 / 56s+ Requests — mögliche Root Cause für C, A |
 | **2** | [GC-546C](#gc-546c--production-completion-state-refresh-shipyard--defense) | ✅ Browser-QA bestanden (546D-Fix) |
 | **3** | [GC-546E](#gc-546e--message-read-state-synchronization) | Badge nach Lesen (GC-539 Regression) |
-| **4** | [GC-546B](#gc-546b--building-requirement-live-refresh) | Gebäude-Voraussetzungen stale |
+| **4** | [GC-546B](#gc-546b--building-requirement-live-refresh) | ✅ Req-Box Live-Patch |
 | **5** | [GC-546A](#gc-546a--score-delta-render-deduplication) | Mehrfach-Rendering +16.347 (evtl. Folge von D) |
 
 ---
@@ -74,7 +74,7 @@ Punkte-Delta erscheint mehrfach (Ranking, Header Score, Delta-Animation).
 
 | | |
 |---|---|
-| **Status** | 📋 |
+| **Status** | ✅ Implementiert (2026-06-05) |
 | **Schwere** | 🟠 Mittel |
 | **Finding** | F2 |
 
@@ -94,8 +94,19 @@ Gebäude A fertig → Gebäude B backend-seitig baubar — UI zeigt weiter „Vo
 
 ### Akzeptanz
 
-- [ ] Nach Bau-Finish ohne F5: gesperrte Karten werden baubar wenn Requirements erfüllt
-- [ ] Planetwechsel konsistent
+- [x] Nach Bau-Finish ohne F5: gesperrte Karten werden baubar wenn Requirements erfüllt (Req-Box entfernt, Button aktiv)
+- [ ] Planetwechsel konsistent (manuell)
+- [ ] Browser-Repro GC-545 F2
+
+### Root Cause
+
+`patchBuildingPanel()` aktualisierte Level, Kosten, Action und Row-Klassen — **nicht** die `.gc-bld-card-req`-Box. Nach Unlock blieb die stale Requirement-Anzeige sichtbar.
+
+### Umsetzung
+
+- `patchBuildingRequirements()` — Req-Box live patchen/entfernen
+- `_buildZeroHandled` — ein Completion-Refresh pro Build-Timer-Zero
+- `data-building-req` auf Template-Req-Zeile
 
 ---
 

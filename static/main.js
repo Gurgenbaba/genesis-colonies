@@ -1423,6 +1423,31 @@
       .join(" · ");
   }
 
+  function patchBuildingRequirements(row, b) {
+    if (!row || !b) return;
+    const lockTitle = t("msg_build_requirements", "Voraussetzungen nicht erfüllt.");
+    let reqEl = row.querySelector(".gc-bld-card-req");
+    if (b.requirements_met) {
+      if (reqEl) reqEl.remove();
+      return;
+    }
+    const tooltip = formatResearchReqTooltip(b.requirements_items);
+    if (!tooltip) {
+      if (reqEl) reqEl.remove();
+      return;
+    }
+    if (!reqEl) {
+      reqEl = document.createElement("p");
+      reqEl.className = "gc-bld-card-req gc-mono";
+      reqEl.dataset.buildingReq = String(b.key || "");
+      reqEl.title = lockTitle;
+      const actionCell = row.querySelector(".bcell-action");
+      if (actionCell) row.insertBefore(reqEl, actionCell);
+      else row.appendChild(reqEl);
+    }
+    _setIfChanged(reqEl, tooltip);
+  }
+
   function renderResearchActionCell(tech, summary) {
     const key = tech.key;
     const count = summary?.count ?? 0;
@@ -1505,6 +1530,7 @@
         if (!row) return;
 
         applyBuildingRowState(row, b);
+        patchBuildingRequirements(row, b);
         patchBuildingProduction(row, b);
 
         const costCell = row.querySelector(".bcell-cost");
@@ -2418,6 +2444,7 @@
       }
     }
     _lastQueueSignature = sig;
+    _buildZeroHandled = "";
 
     if (!queueList || queueList.length === 0) {
       _updateBuildQueueSubtitle(0, limit, firstEta);
@@ -3124,6 +3151,8 @@
     updatePageTimers(serverNow);
   }
 
+  let _buildZeroHandled = "";
+
   function updateAllProgressBars(serverNow) {
     const serverNowTs = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
 
@@ -3154,7 +3183,11 @@
       if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(remaining)));
       if (remaining <= 0) {
         _applyProgressFill(fillEl, 100);
-        requestFinishRefresh("buildings");
+        const zeroKey = `build:${buildFinish}`;
+        if (_buildZeroHandled !== zeroKey) {
+          _buildZeroHandled = zeroKey;
+          requestFinishRefresh("buildings");
+        }
       }
     }
 

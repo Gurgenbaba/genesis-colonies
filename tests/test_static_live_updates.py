@@ -499,3 +499,17 @@ def test_main_js_gc546e_stale_poll_unread_guard():
     messages_js = _read("static/js/messages.js")
     open_report = messages_js.split("async function openInboxReportById(messageId, kind)")[1].split("async function openCombatReportById")[0]
     assert "syncUnreadFromResponse(data)" in open_report
+
+
+def test_main_js_gc546b_building_requirements_live_patch():
+    """GC-546B: patchBuildingPanel must refresh requirement box + action on queue finish."""
+    src = _read("static/main.js")
+    assert "function patchBuildingRequirements(row, b)" in src
+    patch = src.split("function patchBuildingPanel(rowsByTab, buildQueueRaw)")[1].split("function patchResearchEffects")[0]
+    assert "patchBuildingRequirements(row, b)" in patch
+    assert "applyBuildingRowState(row, b)" in patch
+    assert "renderBuildingActionCell(b, summary, bqQueueFull)" in patch
+    progress = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
+    assert "_buildZeroHandled" in progress
+    buildings_html = _read("templates/buildings.html")
+    assert "data-building-req" in buildings_html

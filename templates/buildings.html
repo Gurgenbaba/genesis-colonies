@@ -69,7 +69,7 @@
           </div>
 
           {% if not b.requirements_met and req_tooltip %}
-            <p class="gc-bld-card-req gc-mono" title="{{ T('msg_build_requirements') }}">{{ req_tooltip }}</p>
+            <p class="gc-bld-card-req gc-mono" data-building-req="{{ building_type }}" title="{{ T('msg_build_requirements') }}">{{ req_tooltip }}</p>
           {% endif %}
 
           <footer class="gc-bld-card-action bcell-action" data-building="{{ building_type }}">
