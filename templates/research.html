@@ -146,6 +146,69 @@
   {% endif %}
 {% endmacro %}
 
+{% macro render_research_card_queue(qj) %}
+  {% if qj is defined and qj %}
+  <div class="gc-card-queue-block gc-card-queue-block--research gc-card-queue-block--{{ qj.status }}"
+       data-gc-card-queue="1"
+       data-queue-active="{{ '1' if qj.status == 'active' else '0' }}"
+       data-timer-domain="research"
+       data-job-id="{{ qj.job_id|int }}"
+       {% if qj.start_at %}data-start-at="{{ qj.start_at|int }}"{% endif %}
+       {% if qj.finish_at %}data-finish-at="{{ qj.finish_at|int }}"{% endif %}
+       {% if qj.duration_seconds %}data-total-seconds="{{ qj.duration_seconds|int }}"{% endif %}
+       {% if qj.status == 'active' and qj.remaining_seconds is defined %}data-server-remaining="{{ qj.remaining_seconds|int }}"{% endif %}>
+    <div class="gc-card-queue-head">
+      <span class="gc-card-queue-glyph gc-card-queue-glyph--research" aria-hidden="true"></span>
+      <span class="gc-card-queue-status">
+        {% if qj.status == 'active' %}
+          {{ T('queue_card_status_active', 'AKTIV') }}
+        {% else %}
+          {{ T('queue_card_status_queued', 'QUEUE #%(n)s', n=qj.queue_position|int) }}
+        {% endif %}
+      </span>
+    </div>
+    {% if qj.target_level is defined %}
+    <div class="gc-card-queue-level gc-mono">
+      {{ T('label_level_short', 'L') }}{{ (qj.current_level if qj.current_level is defined else (qj.target_level|int - 1))|int }}
+      →
+      {{ T('label_level_short', 'L') }}{{ qj.target_level|int }}
+    </div>
+    {% endif %}
+    <div class="gc-card-queue-timer gc-mono"
+         {% if qj.status == 'active' and qj.finish_at %}
+         data-timer-target="{{ qj.finish_at|int }}"
+         data-timer-kind="research"
+         data-refresh-on-zero="game-state"
+         data-countdown-at="{{ qj.finish_at|int }}"
+         {% elif qj.status != 'active' and qj.start_at %}
+         data-timer-target="{{ qj.start_at|int }}"
+         data-timer-kind="research"
+         data-countdown-at="{{ qj.start_at|int }}"
+         {% endif %}>
+      {% if qj.status == 'active' %}
+        {{ qj.remaining_seconds|int }}s
+      {% else %}
+        {{ T('queue_card_starts_in', 'Startet in %(time)s', time=(qj.remaining_seconds|int ~ 's')) }}
+      {% endif %}
+    </div>
+    {% if qj.status == 'active' %}
+    <div class="gc-card-queue-bar" role="progressbar"
+         aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="{{ qj.progress_pct|default(0)|int }}">
+      <div class="gc-card-queue-bar-fill gc-progress-smooth"
+           style="width: {{ qj.progress_pct|default(0)|int }}%;"></div>
+      <div class="gc-card-queue-scanline gc-card-queue-scanline--research" aria-hidden="true"></div>
+    </div>
+    {% endif %}
+    <button type="button"
+            class="gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel"
+            data-research-cancel-id="{{ qj.job_id|int }}">
+      {{ T('action_cancel', 'Abbrechen') }}
+    </button>
+  </div>
+  {% endif %}
+{% endmacro %}
+
 {% macro render_research_card(tech, rq_summary, queue_full) %}
   {% set locked = not tech.requirements_met %}
   {% set curr_lvl = (tech.level or 0)|int %}
@@ -174,7 +237,8 @@
     {% set row_class = 'gc-prog-affordable' %}
   {% endif %}
 
-  <article class="gc-building-card gc-research-card gc-prog-card {{ row_class }}{% if locked %} tech-row-locked{% endif %}"
+  <article class="gc-building-card gc-research-card gc-prog-card {{ row_class }}{% if locked %} tech-row-locked{% endif %}{% if tech.queue_job is defined and tech.queue_job %} gc-research-card--in-queue{% if tech.queue_job.status == 'active' %} gc-research-card--queue-active{% else %} gc-research-card--queue-pending{% endif %}{% endif %}"
+           data-research-card
            data-tech-key="{{ tech.key }}"
            role="listitem">
 
@@ -199,6 +263,8 @@
     </header>
 
     {{ render_research_effect_bundle(tech) }}
+
+    {{ render_research_card_queue(tech.queue_job if tech.queue_job is defined else none) }}
 
     <div class="gc-bld-card-meta">
       <div class="gc-bld-card-costs bcell-cost tech-cost-cell">
@@ -303,27 +369,24 @@
 
   <section class="gc-panel research-shell">
 
-    <div class="gc-panel-header research-queue-head gc-prog-queue-head">
-      <span class="gc-panel-title">
-        {{ T("research_queue_loop_title", "FORSCHUNGSSCHLEIFE") }}
-        {% if active_planet_name is defined and active_planet_name %}
-          <span class="build-queue-planet-chip" id="research-planet-label" title="{{ T('pe_planet_switcher', 'Kolonie wählen') }}">
-            · {{ active_planet_name }}
-          </span>
-        {% endif %}
-      </span>
-      <span class="gc-panel-subtitle research-queue-subtitle-hint" id="research-queue-subtitle">
+    <div class="research-queue-compact gc-panel-header research-queue-head"
+         id="research-queue-compact"
+         aria-live="polite"
+         {% if active_planet_id is defined %}data-planet-id="{{ active_planet_id|int }}"{% endif %}>
+      <span class="research-queue-compact-icon" aria-hidden="true">🔬</span>
+      <span class="gc-panel-title research-queue-compact-label" id="research-queue-compact-label">
         {% if rq_summary and rq_summary.count %}
-          {{ (rq_summary.count or 0)|int }}/{{ rq_limit|int }} {{ T("research_queue_jobs", "Aufträge") }}
-          · {{ T("build_queue_next", "Nächste Fertigstellung in") }}:
-          <span id="research-queue-subtitle-eta">{{ (rq_summary.first_finish_in or 0)|int }}s</span>
+          {{ T('research_queue_compact_active', '%(count)s Forschungen aktiv', count=(rq_summary.count or 0)|int) }}
         {% else %}
-          {{ T("research_queue_manage_hint", "Verwalte laufende Forschungsaufträge und starte neue Technologien.") }}
+          {{ T('research_queue_compact_idle', 'Keine Forschungen aktiv') }}
         {% endif %}
       </span>
+      {% if active_planet_name is defined and active_planet_name %}
+      <span class="build-queue-planet-chip" id="research-planet-label" title="{{ T('pe_planet_switcher', 'Kolonie wählen') }}">
+        · {{ active_planet_name }}
+      </span>
+      {% endif %}
     </div>
-
-    <div id="research-queue-root" class="research-queue-root gc-prog-queue-panel" aria-live="polite"></div>
 
     <hr class="research-divider gc-prog-divider">
 

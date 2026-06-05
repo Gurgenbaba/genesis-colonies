@@ -76,6 +76,14 @@ Queue-Mutationen liefern immer frischen **`state`** (game-state payload) — sie
 
 Frontend zeigt Queue-Fortschritt aus `state.build_queue`, `state.research`, etc. — keine eigene Queue-Berechnung.
 
+### Presentation (GC-536A ✅)
+
+Queue-**Logik** bleibt in `game/queue_engine.py` und den Domänen-Ownern. Queue-**UX** wandert in Item-Cards — siehe [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md).
+
+- Kanonisches Card-Job-Format: `game/queue_card.py` (Presentation-Adapter, **keine zweite Queue**)
+- GC-536A: Adapter + Tests + JS-Stub; bestehende Queue-Panels bleiben
+- GC-536B–E: Cards produktiv umstellen, Panels entfernen
+
 ---
 
 ## Tests

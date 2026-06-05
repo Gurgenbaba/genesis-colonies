@@ -219,7 +219,7 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 
 **Nächste Tickets (Reihenfolge — siehe [GC-610](GC-610_COMPLETE_DEFINITION_AUDIT.md)):**
 
-1. GC-610 Definition of Complete ✅ → 2. GC-545 Browser Audit ✅ → 3. GC-546D–A Poll/Live-State ✅ → 4. **GC-547/547B** GPU Idle ✅ (Abnahme: FPS-Messung) → 5. **GC-611** Fleet Close-Out → … → 615
+1. GC-610 Definition of Complete ✅ → 2. GC-545 Browser Audit ✅ → 3. GC-546D–A Poll/Live-State ✅ → 4. **GC-547/547B** GPU Idle ✅ (Abnahme: FPS-Messung) → 5. **GC-611** Fleet Close-Out → … → 615 → **GC-536A–E** Queue Card UX
 
 **Performance-Gate:** FPS idle ≈ 0–1 → GC-547/547B schließen, weiter GC-611. FPS 144+ idle → [GC-547C](GC-547C_FPS_COMPOSITOR_AUDIT.md) vor Fleet Close-Out.
 
@@ -259,6 +259,7 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 | **GC-526–531** — Logistics bulk, routes, UI, inbox reports, QA docs | ✅ |
 | Admin Control Center auf PJAX/State (statt `reload`) | 💡 |
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
+| **GC-536** — [Queue Card UX](GC-536_QUEUE_CARD_UX.md) (536A–E ✅) | ✅ |
 
 ### Tech debt (pytest, nicht blockierend)
 

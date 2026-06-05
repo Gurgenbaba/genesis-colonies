@@ -32,6 +32,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) | GC-000 — verbindliche Kernregeln |
 | [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md) | PJAX, Actions, No-Reload |
 | [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) | Queues: Finish, Cancel, Reschedule |
+| [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) | Queue-in-Card UX (Epic 536A–E) |
 | [ROADMAP.md](ROADMAP.md) | Status, Phasen, Schulden |
 | [PLANET_SCOPE.md](PLANET_SCOPE.md) | Aktiver Planet, Switch, Scope |
 | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | Ressourcen, Exchange, Fuel |

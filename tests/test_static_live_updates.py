@@ -127,11 +127,10 @@ def test_main_js_progress_ticker_uses_server_time_and_interval():
     assert "_progressTickerDelayMs" in ticker_section
     assert "setTimeout(tick, _progressTickerDelayMs(serverNow))" in ticker_section
     assert "requestAnimationFrame(tick)" not in ticker_section
-    update_section = src.split("function updatePlanetEvolutionResearchProgress")[1].split("function updateAllProgressBars")[0]
-    assert "querySelectorAll(\".planet-evolution-page .pe-planet-research-active\")" in update_section
-    assert "formatEta(Math.ceil(remaining))" in update_section
     update_all = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
-    assert "updatePlanetEvolutionResearchProgress(serverNowTs)" in update_all
+    assert ".gc-card-queue-block[data-queue-active='1']" in update_all
+    assert "planet_research" in update_all
+    assert "updatePlanetEvolutionResearchProgress" not in update_all
 
 
 def test_main_js_movement_countdown_expiry_debounced():
@@ -408,7 +407,7 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     assert "function applyQueueJobTimerAttrs(el, finishTime, kind, refreshOnZero, remaining)" in src
     assert "function patchResearchPanelFromState(data)" in src
     assert "function patchShipyardPanelFromState(data, activePlanetId)" in src
-    assert "function _syncShipyardQueueLiveFromServer(first, summary)" in src
+    assert "function patchShipyardCardQueues(page, queueData)" in src
     parse_section = src.split("function parseTimerTarget(raw)")[1].split("function resolveQueueJobFinishTime")[0]
     assert r"/^\d+(\.\d+)?$/" in parse_section
     research_partial = _read("templates/partials/research_queue.html")
@@ -419,11 +418,12 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     assert 'data-timer-target' in shipyard_partial
     assert 'data-countdown-at' in shipyard_partial
     assert 'data-timer-kind="shipyard"' in shipyard_partial
-    render_research = src.split("function renderResearchQueue(researchRaw)")[1].split("function _applyProgressFill")[0]
-    assert "data-countdown-at" in render_research
+    render_card_queue = src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("GC.clearBuildingCardQueue")[0]
+    assert "applyQueueJobTimerAttrs" in render_card_queue
+    assert "data-countdown-at" in _read("templates/shipyard.html") or "countdown-at" in render_card_queue
     render_shipyard = src.split("function renderShipyardQueue(page, queueData)")[1].split("function parseShipyardPageData")[0]
-    assert "applyQueueJobTimerAttrs" in render_shipyard
-    assert "_syncShipyardQueueLiveFromServer" in render_shipyard
+    assert "patchShipyardCardQueues" in render_shipyard
+    assert "_updateShipyardQueueCompact" in render_shipyard
     apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
     assert "patchResearchPanelFromState(data)" in apply
     assert "patchShipyardPanelFromState(data, activePlanetId)" in apply

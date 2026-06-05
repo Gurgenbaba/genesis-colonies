@@ -18,6 +18,7 @@ Status: v1.5.3
 | EPIC-10 | Social (Chat, Messages) | ✅ | ARCHITECTURE |
 | EPIC-11 | Security Hardening | 📋 | [SECURITY.md](SECURITY.md) |
 | EPIC-12 | Platform Scale (Postgres) | 📋 | ARCHITECTURE |
+| EPIC-13 | Queue Card UX | 📋 | [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) |
 
 ---
 
@@ -32,4 +33,14 @@ Status: v1.5.3
 | GC-301B | Preview nutzt active planet |
 | GC-301C | Forms senden korrekte origin_planet_id |
 
-Details: [WORKFLOW.md](WORKFLOW.md)
+**EPIC-13 Queue Card UX** → nicht als Ganzes implementieren:
+
+| Ticket | Fokus |
+|--------|-------|
+| GC-536A | Queue Card Contract (`game/queue_card.py`) |
+| GC-536B | Building Cards — Queue aus Seitenkopf |
+| GC-536C | Research Cards |
+| GC-536D | Shipyard Cards |
+| GC-536E | Planet Evolution / Ascension Cards |
+
+Details: [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) · [WORKFLOW.md](WORKFLOW.md)

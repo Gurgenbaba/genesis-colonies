@@ -7,6 +7,69 @@
    Genesis building cards (Resources / Research / Military / Infrastructure)
    =================================================================== #}
 
+{% macro render_building_card_queue(qj) %}
+  {% if qj is defined and qj %}
+  <div class="gc-card-queue-block gc-card-queue-block--{{ qj.status }}"
+       data-gc-card-queue="1"
+       data-queue-active="{{ '1' if qj.status == 'active' else '0' }}"
+       data-timer-domain="building"
+       data-job-id="{{ qj.job_id|int }}"
+       {% if qj.start_at %}data-start-at="{{ qj.start_at|int }}"{% endif %}
+       {% if qj.finish_at %}data-finish-at="{{ qj.finish_at|int }}"{% endif %}
+       {% if qj.duration_seconds %}data-total-seconds="{{ qj.duration_seconds|int }}"{% endif %}
+       {% if qj.status == 'active' and qj.remaining_seconds is defined %}data-server-remaining="{{ qj.remaining_seconds|int }}"{% endif %}>
+    <div class="gc-card-queue-head">
+      <span class="gc-card-queue-glyph" aria-hidden="true"></span>
+      <span class="gc-card-queue-status">
+        {% if qj.status == 'active' %}
+          {{ T('queue_card_status_active', 'AKTIV') }}
+        {% else %}
+          {{ T('queue_card_status_queued', 'QUEUE #%(n)s', n=qj.queue_position|int) }}
+        {% endif %}
+      </span>
+    </div>
+    {% if qj.target_level is defined %}
+    <div class="gc-card-queue-level gc-mono">
+      {{ T('label_level_short', 'L') }}{{ (qj.current_level if qj.current_level is defined else (qj.target_level|int - 1))|int }}
+      →
+      {{ T('label_level_short', 'L') }}{{ qj.target_level|int }}
+    </div>
+    {% endif %}
+    <div class="gc-card-queue-timer gc-mono"
+         {% if qj.status == 'active' and qj.finish_at %}
+         data-timer-target="{{ qj.finish_at|int }}"
+         data-timer-kind="build"
+         data-refresh-on-zero="game-state"
+         data-countdown-at="{{ qj.finish_at|int }}"
+         {% elif qj.status != 'active' and qj.start_at %}
+         data-timer-target="{{ qj.start_at|int }}"
+         data-timer-kind="build"
+         data-countdown-at="{{ qj.start_at|int }}"
+         {% endif %}>
+      {% if qj.status == 'active' %}
+        {{ qj.remaining_seconds|int }}s
+      {% else %}
+        {{ T('queue_card_starts_in', 'Startet in %(time)s', time=(qj.remaining_seconds|int ~ 's')) }}
+      {% endif %}
+    </div>
+    {% if qj.status == 'active' %}
+    <div class="gc-card-queue-bar" role="progressbar"
+         aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="{{ qj.progress_pct|default(0)|int }}">
+      <div class="gc-card-queue-bar-fill gc-progress-smooth"
+           style="width: {{ qj.progress_pct|default(0)|int }}%;"></div>
+      <div class="gc-card-queue-scanline" aria-hidden="true"></div>
+    </div>
+    {% endif %}
+    <button type="button"
+            class="gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel"
+            data-build-cancel-id="{{ qj.job_id|int }}">
+      {{ T('action_cancel', 'Abbrechen') }}
+    </button>
+  </div>
+  {% endif %}
+{% endmacro %}
+
 {% macro render_building_table(rows, tab_name, bq_summary, bq_queue_full) %}
 
   {% set rows = rows if rows else [] %}
@@ -39,7 +102,9 @@
           {% set row_class = 'gc-prog-affordable' %}
         {% endif %}
 
-        <article class="gc-building-card gc-prog-card {{ row_class }}"
+        <article class="gc-building-card gc-prog-card {{ row_class }}{% if b.queue_job is defined and b.queue_job %} gc-building-card--in-queue{% if b.queue_job.status == 'active' %} gc-building-card--queue-active{% else %} gc-building-card--queue-pending{% endif %}{% endif %}"
+                 data-building-card
+                 data-building-type="{{ building_type }}"
                  data-building-row="{{ building_type }}"
                  role="listitem">
 
@@ -58,6 +123,8 @@
           </header>
 
           {{ render_building_effect_bundle(b) }}
+
+          {{ render_building_card_queue(b.queue_job if b.queue_job is defined else none) }}
 
           <div class="gc-bld-card-meta">
             <div class="gc-bld-card-costs bcell-cost">
@@ -151,30 +218,24 @@
 
   <div class="buildings-shell gc-panel">
 
-    <div class="gc-panel-header build-queue-head gc-prog-queue-head">
-      <span class="gc-panel-title">
-        {{ T("build_queue_title", "Bauschleife") }}
-        {% if active_planet_name is defined and active_planet_name %}
-          <span class="build-queue-planet-chip" id="build-queue-planet-label" title="{{ T('pe_planet_switcher', 'Kolonie wählen') }}">
-            · {{ active_planet_name }}
-          </span>
-        {% endif %}
-      </span>
-      <span class="gc-panel-subtitle" id="build-queue-subtitle">
-        {% if bq_summary and bq_summary.count %}
-          {{ (bq_summary.count or 0)|int }}/{{ bq_limit|int }} {{ T("build_queue_jobs") }}
-          · {{ T("build_queue_next") }}:
-          <span id="build-queue-subtitle-eta">{{ (bq_summary.first_finish_in or 0)|int }}s</span>
-        {% else %}
-          {{ T("build_queue_hint_fallback") }}
-        {% endif %}
-      </span>
-    </div>
-
-    <div id="build-queue-root"
-         class="build-queue-root gc-prog-queue-panel"
+    <div class="build-queue-compact gc-panel-header build-queue-head"
+         id="build-queue-compact"
          aria-live="polite"
-         {% if active_planet_id is defined %}data-planet-id="{{ active_planet_id|int }}"{% endif %}></div>
+         {% if active_planet_id is defined %}data-planet-id="{{ active_planet_id|int }}"{% endif %}>
+      <span class="build-queue-compact-icon" aria-hidden="true">🏗</span>
+      <span class="gc-panel-title build-queue-compact-label" id="build-queue-compact-label">
+        {% if bq_summary and bq_summary.count %}
+          {{ T('build_queue_compact_active', '%(count)s Bauaufträge aktiv', count=(bq_summary.count or 0)|int) }}
+        {% else %}
+          {{ T('build_queue_compact_idle', 'Keine Bauaufträge') }}
+        {% endif %}
+      </span>
+      {% if active_planet_name is defined and active_planet_name %}
+      <span class="build-queue-planet-chip" id="build-queue-planet-label" title="{{ T('pe_planet_switcher', 'Kolonie wählen') }}">
+        · {{ active_planet_name }}
+      </span>
+      {% endif %}
+    </div>
 
     <hr class="build-divider gc-prog-divider">
 

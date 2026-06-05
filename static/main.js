@@ -25,20 +25,20 @@
     return fallback || key;
   }
 
-  // supports "%(var)s" and "{var}"
+  // supports "%(var)s" and "{var}" — single pass, unknown placeholders left intact
   function tf(key, vars = {}, fallback = "") {
     let s = t(key, fallback || key);
     if (typeof s !== "string") return fallback || "";
     s = String(s);
 
-    // %(name)s
     s = s.replace(/%\(([^)]+)\)s/g, (_, k) => {
+      if (!Object.prototype.hasOwnProperty.call(vars, k)) return `%(${k})s`;
       const v = vars[k];
       return v === undefined || v === null ? "" : String(v);
     });
 
-    // {name}
     s = s.replace(/\{([^}]+)\}/g, (_, k) => {
+      if (!Object.prototype.hasOwnProperty.call(vars, k)) return `{${k}}`;
       const v = vars[k];
       return v === undefined || v === null ? "" : String(v);
     });
@@ -260,6 +260,7 @@
     const fromFinish = Math.max(0, Math.ceil(endAt - now));
     const srv = Number(serverRemaining);
     if (Number.isFinite(srv) && srv >= 0) {
+      if (srv <= 0 && fromFinish > 1) return fromFinish;
       return Math.min(fromFinish, Math.max(0, Math.ceil(srv)));
     }
     return fromFinish;
@@ -455,7 +456,10 @@
       document.getElementById("fleet-page"),
       document.getElementById("logistics-page"),
       document.getElementById("trader-hub-page"),
+      document.getElementById("build-queue-compact"),
       document.getElementById("build-queue-root"),
+      document.getElementById("research-queue-compact"),
+      document.querySelector(".planet-evolution-page[data-planet-id]"),
     ];
     for (const el of roots) {
       if (!el) continue;
@@ -474,7 +478,9 @@
       "shipyard-page",
       "defense-page",
       "trader-hub-page",
+      "build-queue-compact",
       "build-queue-root",
+      "research-queue-compact",
     ].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.dataset.planetId = String(pid);
@@ -533,6 +539,7 @@
     _fleetRefreshSeq += 1;
     _lastQueueSignature = "";
     _lastResearchQueueSignature = "";
+    _lastShipyardQueueSignature = "";
     abortInFlightGameStateFetches();
 
     resetResourceDisplayCache();
@@ -935,7 +942,7 @@
 
   function hydratePageFromLastState(opts) {
     if (!GC.lastState || GC.lastState.ok !== true) return false;
-    const queueRoot = document.getElementById("build-queue-root");
+    const queueRoot = document.getElementById("build-queue-compact") || document.getElementById("build-queue-root");
     const traderRoot = document.getElementById("trader-hub-page");
     const domPlanetEl = queueRoot || traderRoot;
     if (domPlanetEl && domPlanetEl.dataset.planetId) {
@@ -1464,12 +1471,22 @@
       "gc-prog-affordable",
       "gc-prog-locked",
       "gc-prog-unaffordable",
-      "gc-prog-max"
+      "gc-prog-max",
+      "gc-building-card--in-queue",
+      "gc-building-card--queue-active",
+      "gc-building-card--queue-pending"
     );
     if (isMax) row.classList.add("gc-prog-max");
     else if (!b.requirements_met) row.classList.add("gc-prog-locked");
     else if (!b.can_afford) row.classList.add("gc-prog-unaffordable");
     else row.classList.add("gc-prog-affordable");
+
+    const qj = b.queue_job;
+    if (qj && typeof qj === "object") {
+      row.classList.add("gc-building-card--in-queue");
+      if (String(qj.status) === "active") row.classList.add("gc-building-card--queue-active");
+      else row.classList.add("gc-building-card--queue-pending");
+    }
   }
 
   function applyResearchRowState(row, tech) {
@@ -1480,7 +1497,10 @@
       "gc-prog-affordable",
       "gc-prog-locked",
       "gc-prog-unaffordable",
-      "tech-row-locked"
+      "tech-row-locked",
+      "gc-research-card--in-queue",
+      "gc-research-card--queue-active",
+      "gc-research-card--queue-pending"
     );
     if (locked) {
       row.classList.add("gc-prog-locked", "tech-row-locked");
@@ -1488,6 +1508,13 @@
       row.classList.add("gc-prog-unaffordable");
     } else {
       row.classList.add("gc-prog-affordable");
+    }
+
+    const qj = tech.queue_job;
+    if (qj && typeof qj === "object") {
+      row.classList.add("gc-research-card--in-queue");
+      if (String(qj.status) === "active") row.classList.add("gc-research-card--queue-active");
+      else row.classList.add("gc-research-card--queue-pending");
     }
   }
 
@@ -1629,6 +1656,9 @@
           const html = renderBuildingActionCell(b, summary, bqQueueFull);
           if (actionCell.innerHTML.trim() !== html.trim()) actionCell.innerHTML = html;
         }
+
+        if (b.queue_job) GC.renderCardQueueBlock(row, b.queue_job);
+        else GC.clearCardQueueBlock(row);
       });
     });
   }
@@ -1674,6 +1704,9 @@
         const html = renderResearchActionCell(tech, summary);
         if (actionCell.innerHTML.trim() !== html.trim()) actionCell.innerHTML = html;
       }
+
+      if (tech.queue_job) GC.renderCardQueueBlock(row, tech.queue_job);
+      else GC.clearCardQueueBlock(row);
     });
 
     const labEl = document.querySelector(".lab-level-highlight");
@@ -1727,10 +1760,19 @@
         const refresh = () => {
           if (
             key === "planet_evolution" &&
-            document.querySelector(".planet-evolution-page") &&
-            typeof GC.reloadCurrentPage === "function"
+            document.querySelector(".planet-evolution-page")
           ) {
-            return Promise.resolve(GC.reloadCurrentPage()).finally(() => {
+            const page = document.querySelector(".planet-evolution-page");
+            const pid = parseInt(page?.dataset.planetId || "0", 10);
+            const refreshPe = pid
+              ? refreshPlanetEvolutionState(pid)
+              : Promise.resolve(null);
+            return Promise.resolve(refreshPe).finally(() => {
+              if (typeof GC.refreshGameState === "function") {
+                return Promise.resolve(GC.refreshGameState("planet_evolution_finished")).finally(() => {
+                  releaseFinishRefreshLock(key);
+                });
+              }
               releaseFinishRefreshLock(key);
             });
           }
@@ -2383,6 +2425,7 @@
       !!document.querySelector(".research-job.research-job-active") ||
       !!document.querySelector(".shipyard-job.shipyard-job-active") ||
       _hasVisibleOverviewResearchTimer() ||
+      !!document.querySelector(".planet-evolution-page .gc-card-queue-block[data-gc-card-queue='1']") ||
       !!document.querySelector(".planet-evolution-page .pe-planet-research-active") ||
       _hasLiveCountdownAt()
     );
@@ -2417,20 +2460,23 @@
     }
   }
 
-  function _updateBuildQueueSubtitle(count, limit, firstEta) {
-    const subEl = document.getElementById("build-queue-subtitle");
-    if (!subEl) return;
+  function _updateBuildQueueCompact(count) {
+    const labelEl = document.getElementById("build-queue-compact-label");
+    if (!labelEl) return;
 
-    if (!count) {
-      _setIfChanged(subEl, t("build_queue_hint_fallback", "Verwalte laufende Bauaufträge und starte Upgrades."));
+    const n = Math.max(0, Math.floor(Number(count || 0)));
+    if (!n) {
+      _setIfChanged(labelEl, t("build_queue_compact_idle", "Keine Bauaufträge"));
       return;
     }
+    _setIfChanged(
+      labelEl,
+      tf("build_queue_compact_active", { count: n }, `${n} Bauaufträge aktiv`)
+    );
+  }
 
-    const jobsLabel = t("build_queue_jobs", "Aufträge");
-    const nextLabel = t("build_queue_next", "Nächste Fertigstellung in");
-    const lim = limit || 3;
-    const html = `${count}/${lim} ${jobsLabel} · ${nextLabel}: <span id="build-queue-subtitle-eta">${firstEta}</span>`;
-    if (subEl.innerHTML !== html) subEl.innerHTML = html;
+  function _updateBuildQueueSubtitle(count, limit, firstEta) {
+    _updateBuildQueueCompact(count);
   }
 
   function _getActiveBuildingTab() {
@@ -2531,13 +2577,271 @@
     });
   }
 
+  GC.clearCardQueueBlock = function clearCardQueueBlock(cardEl) {
+    if (!cardEl) return;
+    const block = cardEl.querySelector("[data-gc-card-queue]");
+    if (block) block.remove();
+    cardEl.classList.remove(
+      "gc-building-card--in-queue",
+      "gc-building-card--queue-active",
+      "gc-building-card--queue-pending",
+      "gc-research-card--in-queue",
+      "gc-research-card--queue-active",
+      "gc-research-card--queue-pending",
+      "gc-ship-card--in-queue",
+      "gc-ship-card--queue-active",
+      "gc-ship-card--queue-pending",
+      "gc-planet-tech-card--in-queue",
+      "gc-planet-tech-card--queue-active",
+      "gc-planet-tech-card--queue-pending",
+      "gc-ascension-card--in-queue",
+      "gc-ascension-card--queue-active",
+      "gc-ascension-card--queue-pending"
+    );
+  };
+
+  GC.clearBuildingCardQueue = GC.clearCardQueueBlock;
+
+  function _cardQueueDomain(queueJob, opts) {
+    const fromOpts = opts && opts.domain ? String(opts.domain) : "";
+    if (fromOpts) return fromOpts;
+    const ownerType = String(queueJob.owner_type || "");
+    if (ownerType === "research") return "research";
+    if (ownerType === "shipyard") return "shipyard";
+    if (ownerType === "planet_research") return "planet_research";
+    if (ownerType === "ascension") return "ascension";
+    return "building";
+  }
+
+  function _cardQueueClassPrefix(domain) {
+    if (domain === "research") return "gc-research-card";
+    if (domain === "shipyard") return "gc-ship-card";
+    if (domain === "planet_research") return "gc-planet-tech-card";
+    if (domain === "ascension") return "gc-ascension-card";
+    return "gc-building-card";
+  }
+
+  /**
+   * GC-536B/C — queue status inside building/research cards.
+   * Safe DOM: createElement + textContent (+ progress width style only).
+   */
+  GC.renderCardQueueBlock = function renderCardQueueBlock(cardEl, queueJob, opts) {
+    if (!cardEl || !queueJob || typeof queueJob !== "object") return null;
+
+    const options = opts && typeof opts === "object" ? opts : {};
+    const domain = _cardQueueDomain(queueJob, options);
+    const timerKind = String(
+      options.timerKind ||
+        (domain === "research"
+          ? "research"
+          : domain === "shipyard"
+            ? "shipyard"
+            : domain === "planet_research"
+              ? "planet_research"
+              : domain === "ascension"
+                ? "ascension"
+                : "build")
+    );
+    const refreshOnZero = String(
+      options.refreshOnZero ||
+        (domain === "shipyard"
+          ? "shipyard"
+          : domain === "planet_research" || domain === "ascension"
+            ? "planet_evolution"
+            : "game-state")
+    );
+    const cardPrefix = _cardQueueClassPrefix(domain);
+
+    GC.clearCardQueueBlock(cardEl);
+
+    const status = String(queueJob.status || "");
+    const position = Math.max(1, Math.floor(Number(queueJob.queue_position || 1)));
+    const remaining = Math.max(0, Math.floor(Number(queueJob.remaining_seconds || 0)));
+    const progressPct = Math.max(0, Math.min(100, Math.floor(Number(queueJob.progress_pct || 0))));
+    const finishAt = Math.floor(Number(queueJob.finish_at || 0));
+    const startAt = Math.floor(Number(queueJob.start_at || 0));
+    const totalSeconds = Math.max(1, Math.floor(Number(queueJob.duration_seconds || 1)));
+    const jobId = Math.floor(Number(queueJob.job_id || 0));
+    const isActive = status === "active";
+    const targetLevel = Math.floor(Number(queueJob.target_level || 0));
+    const currentLevel = Math.max(
+      0,
+      Math.floor(Number(queueJob.current_level ?? (targetLevel > 0 ? targetLevel - 1 : 0)))
+    );
+
+    cardEl.classList.add(`${cardPrefix}--in-queue`);
+    cardEl.classList.add(isActive ? `${cardPrefix}--queue-active` : `${cardPrefix}--queue-pending`);
+
+    const block = document.createElement("div");
+    block.className = `gc-card-queue-block gc-card-queue-block--${domain} gc-card-queue-block--${isActive ? "active" : "queued"}`;
+    block.dataset.gcCardQueue = "1";
+    block.dataset.queueActive = isActive ? "1" : "0";
+    block.dataset.timerDomain = domain;
+    if (jobId > 0) block.dataset.jobId = String(jobId);
+    if (startAt > 0) block.dataset.startAt = String(startAt);
+    if (finishAt > 0) block.dataset.finishAt = String(finishAt);
+    block.dataset.totalSeconds = String(totalSeconds);
+    if (isActive && Number.isFinite(remaining)) {
+      block.dataset.serverRemaining = String(remaining);
+    }
+
+    const head = document.createElement("div");
+    head.className = "gc-card-queue-head";
+
+    const glyph = document.createElement("span");
+    glyph.className = "gc-card-queue-glyph";
+    if (domain === "research") glyph.classList.add("gc-card-queue-glyph--research");
+    else if (domain === "shipyard") glyph.classList.add("gc-card-queue-glyph--shipyard");
+    else if (domain === "planet_research") glyph.classList.add("gc-card-queue-glyph--planet-research");
+    else if (domain === "ascension") glyph.classList.add("gc-card-queue-glyph--ascension");
+    glyph.setAttribute("aria-hidden", "true");
+    head.appendChild(glyph);
+
+    const statusEl = document.createElement("span");
+    statusEl.className = "gc-card-queue-status";
+    if (isActive) {
+      statusEl.textContent = t("queue_card_status_active", "AKTIV");
+    } else {
+      statusEl.textContent = tf("queue_card_status_queued", { n: position }, `QUEUE #${position}`);
+    }
+    head.appendChild(statusEl);
+    block.appendChild(head);
+
+    const labelKey = String(queueJob.label_key || queueJob.label || "");
+    if (labelKey && (domain === "planet_research" || domain === "ascension")) {
+      const titleEl = document.createElement("div");
+      titleEl.className = "gc-card-queue-target gc-mono";
+      titleEl.textContent = t(labelKey, String(queueJob.owner_key || ""));
+      block.appendChild(titleEl);
+    }
+
+    const targetAmount = Math.floor(Number(queueJob.target_amount || 0));
+    const shipKey = String(queueJob.owner_key || "");
+    if (domain === "shipyard" && targetAmount > 0 && shipKey) {
+      const qtyEl = document.createElement("div");
+      qtyEl.className = "gc-card-queue-quantity gc-mono";
+      const shipLabel = t(queueJob.ship_label_key || `fleet_ship_${shipKey}`, shipKey);
+      qtyEl.textContent = `${fmtNumber(targetAmount)}× ${shipLabel}`;
+      block.appendChild(qtyEl);
+    } else if (targetLevel > 0) {
+      const levelEl = document.createElement("div");
+      levelEl.className = "gc-card-queue-level gc-mono";
+      const lvlShort = t("label_level_short", "L");
+      levelEl.textContent = `${lvlShort}${currentLevel} → ${lvlShort}${targetLevel}`;
+      block.appendChild(levelEl);
+    } else if (domain === "ascension") {
+      const targetPhase = Math.floor(Number(queueJob.target_phase || 0));
+      if (targetPhase > 0) {
+        const phaseEl = document.createElement("div");
+        phaseEl.className = "gc-card-queue-phase gc-mono";
+        phaseEl.textContent = tf("pe_ascension_phase", { n: targetPhase }, `Phase ${targetPhase}`);
+        block.appendChild(phaseEl);
+      } else if (queueJob.label_key || queueJob.label) {
+        const labelEl = document.createElement("div");
+        labelEl.className = "gc-card-queue-target gc-mono";
+        labelEl.textContent = t(queueJob.label_key || queueJob.label, String(queueJob.owner_key || ""));
+        block.appendChild(labelEl);
+      }
+    }
+
+    const timerEl = document.createElement("div");
+    timerEl.className = "gc-card-queue-timer gc-mono";
+    if (isActive && finishAt > 0) {
+      applyQueueJobTimerAttrs(timerEl, finishAt, timerKind, refreshOnZero, remaining);
+      timerEl.textContent = formatEta(remaining);
+    } else if (!isActive && startAt > 0) {
+      applyQueueJobTimerAttrs(timerEl, startAt, timerKind, refreshOnZero, remaining);
+      timerEl.textContent = tf(
+        "queue_card_starts_in",
+        { time: formatEta(remaining) },
+        `Startet in ${formatEta(remaining)}`
+      );
+    } else if (!isActive) {
+      timerEl.textContent = tf(
+        "queue_card_starts_in",
+        { time: formatEta(remaining) },
+        `Startet in ${formatEta(remaining)}`
+      );
+    }
+    block.appendChild(timerEl);
+
+    if (isActive) {
+      const bar = document.createElement("div");
+      bar.className = "gc-card-queue-bar";
+      bar.setAttribute("role", "progressbar");
+      bar.setAttribute("aria-valuemin", "0");
+      bar.setAttribute("aria-valuemax", "100");
+      bar.setAttribute("aria-valuenow", String(progressPct));
+
+      const fill = document.createElement("div");
+      fill.className = "gc-card-queue-bar-fill gc-progress-smooth";
+      fill.style.width = `${progressPct}%`;
+      bar.appendChild(fill);
+
+      const scanline = document.createElement("div");
+      scanline.className = "gc-card-queue-scanline";
+      if (domain === "research") scanline.classList.add("gc-card-queue-scanline--research");
+      else if (domain === "shipyard") scanline.classList.add("gc-card-queue-scanline--shipyard");
+      else if (domain === "planet_research") scanline.classList.add("gc-card-queue-scanline--planet-research");
+      else if (domain === "ascension") scanline.classList.add("gc-card-queue-scanline--ascension");
+      scanline.setAttribute("aria-hidden", "true");
+      bar.appendChild(scanline);
+
+      block.appendChild(bar);
+    }
+
+    if (jobId > 0 && domain !== "planet_research" && domain !== "ascension") {
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel";
+      if (domain === "research") cancelBtn.dataset.researchCancelId = String(jobId);
+      else if (domain === "shipyard") cancelBtn.dataset.shipyardQueueCancel = String(jobId);
+      else cancelBtn.dataset.buildCancelId = String(jobId);
+      cancelBtn.textContent =
+        domain === "shipyard"
+          ? t("shipyard_queue_cancel_btn", "Abbrechen")
+          : t("action_cancel", "Abbrechen");
+      block.appendChild(cancelBtn);
+    }
+
+    const anchor = cardEl.querySelector(".gc-bld-card-meta, .gc-prog-main");
+    if (anchor) cardEl.insertBefore(block, anchor);
+    else cardEl.appendChild(block);
+
+    return block;
+  };
+
+  function _syncBuildQueueLiveState(queueList) {
+    const first = queueList && queueList.length ? queueList[0] : null;
+    if (first) {
+      const finishTime = resolveQueueJobFinishTime(first);
+      if (finishTime) {
+        const now = getTimerServerNow();
+        const remaining = queueJobRemainingSeconds(finishTime, now, resolveQueueJobRemaining(first));
+        const totalRaw = Number(first.total || first.total_seconds || 0);
+        const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
+        BUILDQ.active.finishTime = finishTime;
+        BUILDQ.active.totalSeconds = total;
+      } else {
+        BUILDQ.active.finishTime = 0;
+        BUILDQ.active.totalSeconds = 0;
+      }
+    } else {
+      BUILDQ.active.finishTime = 0;
+      BUILDQ.active.totalSeconds = 0;
+    }
+  }
+
   function renderBuildQueue(buildQueueRaw) {
-    const root = document.getElementById("build-queue-root");
-    if (!root) return;
+    const compact = document.getElementById("build-queue-compact");
+    const legacyRoot = document.getElementById("build-queue-root");
+    if (!compact && !legacyRoot) return;
 
     let queueList = [];
     let summary = null;
-    let queuePlanetId = Number(buildQueueRaw?.planet_id || root.dataset.planetId || 0);
+    let queuePlanetId = Number(
+      buildQueueRaw?.planet_id || compact?.dataset.planetId || legacyRoot?.dataset.planetId || 0
+    );
 
     if (!buildQueueRaw) {
       queueList = [];
@@ -2550,45 +2854,23 @@
     }
 
     if (queuePlanetId > 0) {
-      root.dataset.planetId = String(queuePlanetId);
+      if (compact) compact.dataset.planetId = String(queuePlanetId);
+      if (legacyRoot) legacyRoot.dataset.planetId = String(queuePlanetId);
     }
 
-    // update live state regardless of DOM churn
-    const first = queueList && queueList.length ? queueList[0] : null;
-    if (first) {
-      const finishTime = resolveQueueJobFinishTime(first);
-      if (finishTime) {
-        const now = getTimerServerNow();
-        const remaining = queueJobRemainingSeconds(finishTime, now, resolveQueueJobRemaining(first));
-        const totalRaw = Number(first.total || first.total_seconds || 0);
-        const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
-
-        BUILDQ.active.finishTime = finishTime;
-        BUILDQ.active.totalSeconds = total;
-      } else {
-        BUILDQ.active.finishTime = 0;
-        BUILDQ.active.totalSeconds = 0;
-      }
-    } else {
-      BUILDQ.active.finishTime = 0;
-      BUILDQ.active.totalSeconds = 0;
-    }
+    _syncBuildQueueLiveState(queueList);
 
     const sig = _queueSignature(queueList, summary, queuePlanetId);
     const count = summary?.count ?? queueList.length;
-    const limit = summary?.limit ?? 3;
-    const firstEta =
-      typeof summary?.first_finish_in !== "undefined"
-        ? formatEta(summary.first_finish_in)
-        : formatEta(first?.remaining ?? 0);
 
     if (sig === _lastQueueSignature) {
+      const first = queueList[0];
       const overdue =
         first &&
         resolveQueueJobFinishTime(first) &&
         resolveQueueJobFinishTime(first) <= getTimerServerNow();
       if (!overdue) {
-        _updateBuildQueueSubtitle(count, limit, firstEta);
+        _updateBuildQueueCompact(count);
         GC.startProgressTicker();
         return;
       }
@@ -2596,74 +2878,14 @@
     _lastQueueSignature = sig;
     _buildZeroHandled = "";
 
-    if (!queueList || queueList.length === 0) {
-      _updateBuildQueueSubtitle(0, limit, firstEta);
-      _finishRefreshArmed.buildings = false;
-      const none =
-        t("build_queue_none", null) ||
-        t("build_queue_empty", null) ||
-        t("build_queue_no_active", null) ||
-        "Keine Bauaufträge aktiv.";
-      root.innerHTML = `<div class="build-queue-empty">${none}</div>`;
-      return;
+    _updateBuildQueueCompact(count);
+    if (!queueList.length) _finishRefreshArmed.buildings = false;
+    else clearFinishRefreshArmed("buildings", queueList);
+
+    if (legacyRoot) {
+      legacyRoot.textContent = "";
     }
 
-    _updateBuildQueueSubtitle(count, limit, firstEta);
-
-    let html = `<div class="build-queue-list">`;
-
-    queueList.forEach((job, index) => {
-      const bType = job.building_type;
-      const i18nKey = "building_" + bType;
-      const fallbackName = bType || i18nKey;
-
-      const name =
-        BUILDING_LABELS[bType] ||
-        (job.label_key ? t(job.label_key, fallbackName) : t(i18nKey, fallbackName));
-
-      const remaining = resolveQueueJobRemaining(job);
-      const totalRaw = job.total || job.total_seconds || 0;
-      const total = Math.max(1, parseInt(totalRaw, 10) || (remaining + 1));
-      const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
-      const iconSrc = buildingIconUrl(bType);
-      const isActive = index === 0;
-      const finishTime = resolveQueueJobFinishTime(job);
-      const srvRemAttr =
-        isActive && Number.isFinite(remaining) && remaining >= 0
-          ? ` data-server-remaining="${Math.ceil(remaining)}"`
-          : "";
-
-      html += `
-        <div class="build-job${isActive ? " build-job-active" : " build-job-queued"}"
-             ${isActive ? `data-finish-time="${finishTime}" data-total="${total}"${srvRemAttr}` : ""}>
-          <div class="build-job-icon">
-            <img src="${iconSrc}" alt="" loading="lazy" onerror="this.src='/static/img/buildings/default.png'">
-          </div>
-          <div class="build-job-body">
-            <div class="job-header">
-              <span class="job-name">${name} → ${t("label_level_short", "L")} ${job.target_level}</span>
-              <span class="job-time${isActive ? "" : " job-time-muted"}"${isActive ? ` id="build-eta-live" data-timer-target="${finishTime}" data-timer-kind="build" data-refresh-on-zero="game-state" data-countdown-at="${finishTime}"${srvRemAttr}` : ""}>
-                ${isActive ? formatEta(remaining) : t("status_in_queue", "In Warteschlange")}
-              </span>
-            </div>
-            <div class="build-bar build-bar-large">
-              <div class="build-bar-fill gc-progress-smooth"${isActive ? ' id="build-bar-fill-live"' : ""}
-                   style="width:${isActive ? pct : 0}%"
-                   role="progressbar" aria-valuenow="${isActive ? pct : 0}" aria-valuemin="0" aria-valuemax="100"></div>
-            </div>
-            <div class="job-actions">
-              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-build-cancel-id="${job.id}">
-                ${t("action_cancel", "Abbrechen")}
-              </button>
-            </div>
-            ${isActive ? `<span class="job-badge-active">${t("buildings_btn_active", "Aktiv")}</span>` : `<span class="job-badge-queued">#${index + 1}</span>`}
-          </div>
-        </div>`;
-    });
-
-    html += `</div>`;
-    root.innerHTML = html;
-    clearFinishRefreshArmed("buildings", queueList);
     GC.startProgressTicker();
   }
 
@@ -2684,64 +2906,50 @@
     }
   }
 
-  function _updateResearchQueueSubtitle(count, limit, firstEta) {
-    const subEl = document.getElementById("research-queue-subtitle");
-    if (!subEl) return;
+  function _updateResearchQueueCompact(count) {
+    const labelEl = document.getElementById("research-queue-compact-label");
+    if (!labelEl) return;
 
-    if (!count) {
-      _setIfChanged(
-        subEl,
-        t(
-          "research_queue_manage_hint",
-          "Verwalte laufende Forschungsaufträge und starte neue Technologien."
-        )
-      );
+    const n = Math.max(0, Math.floor(Number(count || 0)));
+    if (!n) {
+      _setIfChanged(labelEl, t("research_queue_compact_idle", "Keine Forschungen aktiv"));
       return;
     }
-
-    const jobsLabel = t("research_queue_jobs", "Aufträge");
-    const nextLabel = t("build_queue_next", "Nächste Fertigstellung in");
-    const lim = limit || 3;
-    const html = `${count}/${lim} ${jobsLabel} · ${nextLabel}: <span id="research-queue-subtitle-eta">${firstEta}</span>`;
-    if (subEl.innerHTML !== html) subEl.innerHTML = html;
+    _setIfChanged(
+      labelEl,
+      tf("research_queue_compact_active", { count: n }, `${n} Forschungen aktiv`)
+    );
   }
 
-  function _syncResearchQueueLiveFromServer(first, summary) {
-    if (!first) return;
-    const finishTime = resolveQueueJobFinishTime(first);
-    const serverRemaining = resolveQueueJobRemaining(first) || Number(summary?.first_finish_in ?? 0);
-    const totalRaw = Number(first.total || first.total_seconds || 0);
-    const total = totalRaw > 0 ? Math.max(1, Math.floor(totalRaw)) : Math.max(1, serverRemaining + 1);
-    const activeJob = document.querySelector(".research-job.research-job-active");
-    if (activeJob) {
-      if (finishTime) activeJob.setAttribute("data-finish-time", String(finishTime));
-      activeJob.setAttribute("data-total", String(total));
-      if (Number.isFinite(serverRemaining) && serverRemaining >= 0) {
-        activeJob.dataset.serverRemaining = String(Math.ceil(serverRemaining));
+  function _updateResearchQueueSubtitle(count, limit, firstEta) {
+    _updateResearchQueueCompact(count);
+  }
+
+  function _syncResearchQueueLiveState(queueList) {
+    const first = queueList && queueList.length ? queueList[0] : null;
+    if (first) {
+      const finishTime = resolveQueueJobFinishTime(first);
+      if (finishTime) {
+        const now = getTimerServerNow();
+        const remaining = queueJobRemainingSeconds(finishTime, now, resolveQueueJobRemaining(first));
+        const totalRaw = Number(first.total || first.total_seconds || 0);
+        const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
+        RESEARCHQ.active.finishTime = finishTime;
+        RESEARCHQ.active.totalSeconds = total;
       } else {
-        delete activeJob.dataset.serverRemaining;
+        RESEARCHQ.active.finishTime = 0;
+        RESEARCHQ.active.totalSeconds = 0;
       }
+    } else {
+      RESEARCHQ.active.finishTime = 0;
+      RESEARCHQ.active.totalSeconds = 0;
     }
-    const now = getTimerServerNow();
-    const remaining = finishTime
-      ? queueJobRemainingSeconds(finishTime, now, serverRemaining)
-      : Math.max(0, Math.ceil(serverRemaining));
-    const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
-    const etaText = formatEta(remaining);
-    const etaEl = document.getElementById("research-eta-live");
-    const fillEl = document.getElementById("research-bar-fill-live");
-    const subEta = document.getElementById("research-queue-subtitle-eta");
-    if (etaEl) {
-      applyQueueJobTimerAttrs(etaEl, finishTime, "research", "game-state", serverRemaining);
-      _setIfChanged(etaEl, etaText);
-    }
-    _applyProgressFill(fillEl, pct);
-    if (subEta) _setIfChanged(subEta, etaText);
   }
 
   function renderResearchQueue(researchRaw) {
-    const root = document.getElementById("research-queue-root");
-    if (!root) return;
+    const compact = document.getElementById("research-queue-compact");
+    const legacyRoot = document.getElementById("research-queue-root");
+    if (!compact && !legacyRoot) return;
 
     let queueList = [];
     let summary = null;
@@ -2756,114 +2964,29 @@
       summary = { count: 1, limit: 3, first_finish_in: researchRaw.active.remaining || 0 };
     }
 
-    const first = queueList.length ? queueList[0] : null;
-    if (first) {
-      const finishTime = resolveQueueJobFinishTime(first);
-      if (finishTime) {
-        const totalRaw = Number(first.total || first.total_seconds || 0);
-        const now = getTimerServerNow();
-        const remaining = queueJobRemainingSeconds(finishTime, now, resolveQueueJobRemaining(first));
-        const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
-
-        RESEARCHQ.active.finishTime = finishTime;
-        RESEARCHQ.active.totalSeconds = total;
-      } else {
-        RESEARCHQ.active.finishTime = 0;
-        RESEARCHQ.active.totalSeconds = 0;
-      }
-    } else {
-      RESEARCHQ.active.finishTime = 0;
-      RESEARCHQ.active.totalSeconds = 0;
-    }
+    _syncResearchQueueLiveState(queueList);
 
     const sig = _researchQueueSignature(queueList, summary);
     const count = summary?.count ?? queueList.length;
-    const limit = summary?.limit ?? 3;
-    const firstEta =
-      typeof summary?.first_finish_in !== "undefined"
-        ? formatEta(summary.first_finish_in)
-        : formatEta(first?.remaining ?? 0);
 
     if (sig === _lastResearchQueueSignature) {
+      const first = queueList[0];
       const finishTime = first ? resolveQueueJobFinishTime(first) : 0;
       const overdue = finishTime > 0 && finishTime <= getTimerServerNow();
       if (!overdue) {
-        _updateResearchQueueSubtitle(count, limit, firstEta);
-        _syncResearchQueueLiveFromServer(first, summary);
+        _updateResearchQueueCompact(count);
         GC.startProgressTicker();
         return;
       }
     }
     _lastResearchQueueSignature = sig;
 
-    if (!queueList.length) {
-      _updateResearchQueueSubtitle(0, limit, firstEta);
-      const none =
-        t("research_queue_none_active", null) ||
-        t("research_queue_none", null) ||
-        t("research_active_none", null) ||
-        "Keine Forschungsaufträge aktiv.";
-      root.innerHTML = `<div class="research-queue-empty">${none}</div>`;
-      if (!_hasActiveProgressJobs()) GC.stopProgressTicker();
-      return;
-    }
+    _updateResearchQueueCompact(count);
+    if (!queueList.length) _finishRefreshArmed.research = false;
+    else clearFinishRefreshArmed("research", queueList);
 
-    _updateResearchQueueSubtitle(count, limit, firstEta);
+    if (legacyRoot) legacyRoot.textContent = "";
 
-    let html = `<div class="research-queue-list">`;
-
-    queueList.forEach((job, index) => {
-      const techKey = job.tech_key || job.key;
-      const i18nKey = job.label_key || techKey;
-      const fallbackName = job.label || techKey || i18nKey;
-      const name = t(i18nKey, fallbackName);
-
-      const remaining = resolveQueueJobRemaining(job);
-      const totalRaw = job.total || job.total_seconds || 0;
-      const total = Math.max(1, parseInt(totalRaw, 10) || remaining + 1);
-      const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
-      const iconFile = job.icon || `${techKey}.png`;
-      const iconSrc = `/static/img/research/${iconFile}`;
-      const isActive = index === 0;
-      const finishTime = resolveQueueJobFinishTime(job);
-      const currLvl = job.current_level ?? 0;
-      const targLvl = job.target_level ?? currLvl + 1;
-      const srvRemAttr =
-        isActive && Number.isFinite(remaining) && remaining >= 0
-          ? ` data-server-remaining="${Math.ceil(remaining)}"`
-          : "";
-
-      html += `
-        <div class="research-job${isActive ? " research-job-active" : " research-job-queued"}"
-             ${isActive ? `data-finish-time="${finishTime}" data-total="${total}"${srvRemAttr}` : ""}>
-          <div class="research-job-icon">
-            <img src="${iconSrc}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
-          </div>
-          <div class="research-job-body">
-            <div class="job-header">
-              <span class="job-name">${name} → ${t("label_level_short", "L")}${currLvl} → ${t("label_level_short", "L")}${targLvl}</span>
-              <span class="job-time${isActive ? "" : " job-time-muted"}"${isActive ? ` id="research-eta-live" data-timer-target="${finishTime}" data-timer-kind="research" data-refresh-on-zero="game-state" data-countdown-at="${finishTime}"${srvRemAttr}` : ""}>
-                ${isActive ? formatEta(remaining) : t("status_in_queue", "In Warteschlange")}
-              </span>
-            </div>
-            <div class="research-bar research-bar-large">
-              <div class="research-bar-fill gc-progress-smooth"${isActive ? ' id="research-bar-fill-live"' : ""}
-                   style="width:${isActive ? pct : 0}%"
-                   role="progressbar" aria-valuenow="${isActive ? pct : 0}" aria-valuemin="0" aria-valuemax="100"></div>
-            </div>
-            <div class="job-actions">
-              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-research-cancel-id="${job.id}">
-                ${t("action_cancel", "Abbrechen")}
-              </button>
-            </div>
-            ${isActive ? `<span class="job-badge-active">${t("research_btn_active", "Aktiv")}</span>` : `<span class="job-badge-queued">#${index + 1}</span>`}
-          </div>
-        </div>`;
-    });
-
-    html += `</div>`;
-    root.innerHTML = html;
-    clearFinishRefreshArmed("research", queueList);
     GC.startProgressTicker();
   }
 
@@ -2874,29 +2997,174 @@
     fillEl.setAttribute("aria-valuenow", String(Math.round(clamped)));
   }
 
-  function updatePlanetEvolutionResearchProgress(serverNow) {
-    const now = serverNow ?? getApproxServerNow();
-    let overdue = false;
-    document.querySelectorAll(".planet-evolution-page .pe-planet-research-active").forEach((peActive) => {
-      const finishTime = Number(peActive.dataset.finishTime || 0);
-      const total = Math.max(1, Number(peActive.dataset.total || 1));
-      if (!finishTime) return;
-      const remaining = Math.max(0, finishTime - now);
-      const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
-      const fill = peActive.querySelector(".pe-planet-research-fill");
-      const etaEl = peActive.querySelector("[data-pe-research-eta]");
-      const pctEl = peActive.querySelector("[data-pe-research-pct]");
-      if (fill) _applyProgressFill(fill, pct);
-      if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
-      if (pctEl) _setIfChanged(pctEl, `${Math.round(pct)}%`);
-      if (remaining <= 0) overdue = true;
-    });
-    if (overdue) {
-      document.querySelectorAll(".planet-evolution-page .pe-planet-research-fill").forEach((fill) => {
-        _applyProgressFill(fill, 100);
-      });
-      requestFinishRefresh("planet_evolution");
+  let _lastPePlanetTechQueueSignature = "";
+  let _lastPeAscensionQueueSignature = "";
+
+  function _pePlanetTechQueueSignature(rdx) {
+    try {
+      const count = rdx?.queue_count ?? 0;
+      const byOwner = rdx?.card_jobs_by_owner || {};
+      const items = Object.entries(byOwner)
+        .map(([k, jobs]) => `${k}:${(jobs[0] || {}).job_id}:${(jobs[0] || {}).finish_at || 0}`)
+        .join("|");
+      return `${count}|${items}`;
+    } catch (_) {
+      return "";
     }
+  }
+
+  function _peAscensionQueueSignature(asc) {
+    try {
+      const count = asc?.summary?.count ?? asc?.queue?.length ?? 0;
+      const byOwner = asc?.card_jobs_by_owner || {};
+      const items = Object.entries(byOwner)
+        .map(([k, jobs]) => `${k}:${(jobs[0] || {}).job_id}:${(jobs[0] || {}).finish_at || 0}`)
+        .join("|");
+      return `${count}|${items}`;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function _updatePePlanetTechQueueCompact(count, limit) {
+    const labelEl = document.getElementById("pe-planet-tech-queue-compact-label");
+    const countEl = document.getElementById("pe-planet-tech-queue-compact-count");
+    const n = Math.max(0, Math.floor(Number(count || 0)));
+    const lim = Math.max(1, Math.floor(Number(limit || 2)));
+    if (countEl) {
+      _setIfChanged(
+        countEl,
+        `${n}/${lim} ${t("research_queue_jobs", "Aufträge")}`
+      );
+    }
+    if (!labelEl) return;
+    if (!n) {
+      _setIfChanged(labelEl, t("pe_planet_tech_queue_compact_idle", "Keine Planet-Tech-Aufträge"));
+      return;
+    }
+    _setIfChanged(
+      labelEl,
+      tf("pe_planet_tech_queue_compact_active", { count: n }, `${n} Planet-Tech-Aufträge`)
+    );
+  }
+
+  function _updatePeAscensionQueueCompact(count) {
+    const labelEl = document.getElementById("pe-ascension-queue-compact-label");
+    if (!labelEl) return;
+    const n = Math.max(0, Math.floor(Number(count || 0)));
+    if (!n) {
+      _setIfChanged(labelEl, t("pe_ascension_queue_compact_idle", "Keine Ascension-Aufträge"));
+      return;
+    }
+    _setIfChanged(
+      labelEl,
+      tf("pe_ascension_queue_compact_active", { count: n }, `${n} Ascension-Aufträge`)
+    );
+  }
+
+  function patchPePlanetTechCardQueues(rdx) {
+    const page = document.querySelector(".planet-evolution-page");
+    if (!page) return;
+    const byOwner = rdx?.card_jobs_by_owner;
+    if (!byOwner || typeof byOwner !== "object") return;
+    page.querySelectorAll("[data-planet-tech-card]").forEach((card) => {
+      GC.clearCardQueueBlock(card);
+    });
+    Object.entries(byOwner).forEach(([techKey, jobs]) => {
+      const card = page.querySelector(`[data-tech-key="${techKey}"][data-planet-tech-card]`);
+      const job = Array.isArray(jobs) && jobs.length ? jobs[0] : null;
+      if (card && job) GC.renderCardQueueBlock(card, job);
+    });
+  }
+
+  function patchPeAscensionCardQueues(asc) {
+    const page = document.querySelector(".planet-evolution-page");
+    if (!page) return;
+    const byOwner = asc?.card_jobs_by_owner;
+    if (!byOwner || typeof byOwner !== "object") return;
+    page.querySelectorAll("[data-ascension-card]").forEach((card) => {
+      GC.clearCardQueueBlock(card);
+    });
+    Object.entries(byOwner).forEach(([ascKey, jobs]) => {
+      const card = page.querySelector(`[data-ascension-key="${ascKey}"][data-ascension-card]`);
+      const job = Array.isArray(jobs) && jobs.length ? jobs[0] : null;
+      if (card && job) GC.renderCardQueueBlock(card, job);
+    });
+  }
+
+  function applyPeResearchCardQueueJobs(cards) {
+    if (!Array.isArray(cards)) return;
+    const page = document.querySelector(".planet-evolution-page");
+    if (!page) return;
+    cards.forEach((tech) => {
+      const card = page.querySelector(`[data-tech-key="${tech.tech_key}"][data-planet-tech-card]`);
+      if (!card) return;
+      if (tech.queue_job) GC.renderCardQueueBlock(card, tech.queue_job);
+      else GC.clearCardQueueBlock(card);
+    });
+  }
+
+  function applyPeAscensionCardQueueJobs(cards) {
+    if (!Array.isArray(cards)) return;
+    const page = document.querySelector(".planet-evolution-page");
+    if (!page) return;
+    cards.forEach((row) => {
+      const card = page.querySelector(`[data-ascension-key="${row.ascension_key}"][data-ascension-card]`);
+      if (!card) return;
+      if (row.queue_job) GC.renderCardQueueBlock(card, row.queue_job);
+      else GC.clearCardQueueBlock(card);
+    });
+  }
+
+  function renderPePlanetTechQueue(rdx) {
+    if (!document.getElementById("pe-planet-tech-queue-compact")) return;
+    const data = rdx || { queue_count: 0, card_jobs_by_owner: {}, queue_limit: 2 };
+    const count = data.queue_count ?? 0;
+    const limit = data.queue_limit ?? 2;
+    const sig = _pePlanetTechQueueSignature(data);
+    if (sig === _lastPePlanetTechQueueSignature) {
+      _updatePePlanetTechQueueCompact(count, limit);
+      return;
+    }
+    _lastPePlanetTechQueueSignature = sig;
+    _updatePePlanetTechQueueCompact(count, limit);
+    patchPePlanetTechCardQueues(data);
+    applyPeResearchCardQueueJobs([...(data.queue_cards || []), ...(data.recommended || [])]);
+  }
+
+  function renderPeAscensionQueue(asc) {
+    if (!document.getElementById("pe-ascension-queue-compact")) return;
+    const data = asc || { summary: { count: 0 }, card_jobs_by_owner: {}, ascensions: [] };
+    const count = data.summary?.count ?? data.queue?.length ?? 0;
+    const sig = _peAscensionQueueSignature(data);
+    if (sig === _lastPeAscensionQueueSignature) {
+      _updatePeAscensionQueueCompact(count);
+      return;
+    }
+    _lastPeAscensionQueueSignature = sig;
+    _updatePeAscensionQueueCompact(count);
+    patchPeAscensionCardQueues(data);
+    applyPeAscensionCardQueueJobs(data.ascensions || []);
+  }
+
+  function applyPlanetEvolutionState(res) {
+    const payload = res?.planet || res;
+    if (!payload || payload.ok === false) return;
+    const dash = payload.dashboard || {};
+    if (dash.research_ux) renderPePlanetTechQueue(dash.research_ux);
+    if (dash.ascension_ux) renderPeAscensionQueue(dash.ascension_ux);
+    GC.startProgressTicker();
+  }
+
+  async function refreshPlanetEvolutionState(planetId) {
+    const pid = Math.floor(Number(planetId || 0));
+    if (!pid) return null;
+    const res = await GC.fetchGameAction(`/api/planets/${pid}/state`);
+    if (res?.ok && res.planet) {
+      applyPlanetEvolutionState(res);
+      return res.planet;
+    }
+    return null;
   }
 
   // =========================
@@ -3329,8 +3597,6 @@
       const fillEl = document.getElementById("build-bar-fill-live");
       if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
       _applyProgressFill(fillEl, pct);
-      const subEta = document.getElementById("build-queue-subtitle-eta");
-      if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(remaining)));
       if (remaining <= 0) {
         _applyProgressFill(fillEl, 100);
         const zeroKey = `build:${buildFinish}`;
@@ -3340,6 +3606,103 @@
         }
       }
     }
+
+    document.querySelectorAll(".gc-card-queue-block[data-queue-active='1']").forEach((block) => {
+      const finish = parseTimerTarget(block.dataset.finishAt || 0);
+      if (!finish) return;
+      const total = Math.max(1, Number(block.dataset.totalSeconds || 1));
+      const domain = String(block.dataset.timerDomain || "building");
+      const timerKind =
+        domain === "research"
+          ? "research"
+          : domain === "shipyard"
+            ? "shipyard"
+            : domain === "planet_research"
+              ? "planet_research"
+              : domain === "ascension"
+                ? "ascension"
+                : "build";
+      const refreshOnZero =
+        domain === "shipyard"
+          ? "shipyard"
+          : domain === "planet_research" || domain === "ascension"
+            ? "planet_evolution"
+            : "game-state";
+      const srvRemRaw = block.dataset.serverRemaining;
+      const remaining = queueJobRemainingSeconds(
+        finish,
+        serverNowTs,
+        srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
+      );
+      block.dataset.serverRemaining = String(Math.ceil(remaining));
+      const pct = 100 * (1 - remaining / total);
+      const timerEl = block.querySelector(".gc-card-queue-timer");
+      const fillEl = block.querySelector(".gc-card-queue-bar-fill");
+      const barEl = block.querySelector(".gc-card-queue-bar");
+      if (timerEl) {
+        applyQueueJobTimerAttrs(timerEl, finish, timerKind, refreshOnZero, remaining);
+        _setIfChanged(timerEl, formatEta(Math.ceil(remaining)));
+      }
+      _applyProgressFill(fillEl, pct);
+      if (barEl) barEl.setAttribute("aria-valuenow", String(Math.max(0, Math.min(100, Math.round(pct)))));
+      if (remaining <= 0) {
+        const zeroKey = `${domain}-card:${finish}:${block.dataset.jobId || ""}`;
+        if (domain === "research") {
+          if (_buildZeroHandled !== zeroKey) {
+            _buildZeroHandled = zeroKey;
+            requestFinishRefresh("research");
+          }
+        } else if (domain === "shipyard") {
+          if (_productionZeroHandled.shipyard !== zeroKey) {
+            _productionZeroHandled.shipyard = zeroKey;
+            requestProductionCompletionSync({ gameState: true, shipyard: true });
+          }
+        } else if (domain === "planet_research" || domain === "ascension") {
+          if (_buildZeroHandled !== zeroKey) {
+            _buildZeroHandled = zeroKey;
+            requestFinishRefresh("planet_evolution");
+          }
+        } else if (_buildZeroHandled !== zeroKey) {
+          _buildZeroHandled = zeroKey;
+          requestFinishRefresh("buildings");
+        }
+      }
+    });
+
+    document.querySelectorAll(".gc-card-queue-block[data-queue-active='0'][data-start-at]").forEach((block) => {
+      const startAt = parseTimerTarget(block.dataset.startAt || 0);
+      if (!startAt) return;
+      const timerEl = block.querySelector(".gc-card-queue-timer");
+      if (!timerEl) return;
+      const domain = String(block.dataset.timerDomain || "building");
+      const timerKind =
+        domain === "research"
+          ? "research"
+          : domain === "shipyard"
+            ? "shipyard"
+            : domain === "planet_research"
+              ? "planet_research"
+              : domain === "ascension"
+                ? "ascension"
+                : "build";
+      const refreshOnZero =
+        domain === "shipyard"
+          ? "shipyard"
+          : domain === "planet_research" || domain === "ascension"
+            ? "planet_evolution"
+            : "game-state";
+      const remaining = queueJobRemainingSeconds(startAt, serverNowTs, NaN);
+      block.dataset.serverRemaining = String(Math.ceil(remaining));
+      applyQueueJobTimerAttrs(timerEl, startAt, timerKind, refreshOnZero, remaining);
+      _setIfChanged(
+        timerEl,
+        tf(
+          "queue_card_starts_in",
+          { time: formatEta(Math.ceil(remaining)) },
+          `Startet in ${formatEta(Math.ceil(remaining))}`
+        )
+      );
+    });
 
     const researchActive = document.querySelector(".research-job.research-job-active");
     if (researchActive) {
@@ -3493,8 +3856,6 @@
         }
       });
     }
-
-    updatePlanetEvolutionResearchProgress(serverNowTs);
   }
 
   function updateBuildQueueLive() {
@@ -4058,10 +4419,10 @@
         }
         if (activePlanetId > 0) {
           _last.activePlanetId = activePlanetId;
+          syncScopedPlanetIds(activePlanetId);
         }
 
         if (planetSwitch && activePlanetId > 0) {
-          syncScopedPlanetIds(activePlanetId);
           const fleetPage = document.getElementById("fleet-page");
           if (fleetPage) {
             fleetPage._fleetApplySeq = 0;
@@ -4582,6 +4943,7 @@
     if (!tabBtns.length) return;
     const activeBtn = tabBtns.find((b) => b.classList.contains("active")) || tabBtns[0];
     activateBuildingTab(activeBtn, false);
+    GC.startProgressTicker();
   }
 
   function patchPlanetTeaser(teaser) {
@@ -6704,24 +7066,37 @@
     }
   }
 
-  function _updateShipyardQueueSubtitle(count, limit, firstEta) {
-    const subEl = document.querySelector("[data-shipyard-queue-subtitle]");
-    if (!subEl) return;
+  function _updateShipyardQueueCompact(count) {
+    const labelEl = document.getElementById("shipyard-queue-compact-label");
+    if (!labelEl) return;
 
-    if (!count) {
-      const fb = t("shipyard_queue_slots", "%(count)s / %(limit)s orders");
-      _setIfChanged(
-        subEl,
-        fb.replace("%(count)s", "0").replace("%(limit)s", String(limit || 3))
-      );
+    const n = Math.max(0, Math.floor(Number(count || 0)));
+    if (!n) {
+      _setIfChanged(labelEl, t("shipyard_queue_compact_idle", "Keine Werftaufträge"));
       return;
     }
+    _setIfChanged(
+      labelEl,
+      tf("shipyard_queue_compact_active", { count: n }, `${n} Werftaufträge aktiv`)
+    );
+  }
 
-    const jobsLabel = t("shipyard_queue_jobs", "Aufträge");
-    const nextLabel = t("build_queue_next", "Nächste Fertigstellung in");
-    const lim = limit || 3;
-    const html = `${count}/${lim} ${jobsLabel} · ${nextLabel}: <span id="shipyard-queue-subtitle-eta">${firstEta}</span>`;
-    if (subEl.innerHTML !== html) subEl.innerHTML = html;
+  function _updateShipyardQueueSubtitle(count, limit, firstEta) {
+    _updateShipyardQueueCompact(count);
+  }
+
+  function patchShipyardCardQueues(page, queueData) {
+    if (!page) return;
+    const byOwner = queueData?.card_jobs_by_owner;
+    if (!byOwner || typeof byOwner !== "object") return;
+    page.querySelectorAll("[data-ship-card][data-unlocked='1']").forEach((card) => {
+      GC.clearCardQueueBlock(card);
+    });
+    Object.entries(byOwner).forEach(([shipKey, jobs]) => {
+      const card = page.querySelector(`[data-ship-key="${shipKey}"][data-unlocked="1"]`);
+      const job = Array.isArray(jobs) && jobs.length ? jobs[0] : null;
+      if (card && job) GC.renderCardQueueBlock(card, job);
+    });
   }
 
   function shipyardIconUrl(shipKey) {
@@ -6729,59 +7104,15 @@
     return `/static/img/ships/${sk}.svg`;
   }
 
-  function _syncShipyardQueueLiveFromServer(first, summary) {
-    if (!first) return;
-    const finishTime = resolveQueueJobFinishTime(first);
-    const nextFinish = parseTimerTarget(first.next_countdown_at ?? first.next_finish_at ?? finishTime);
-    const serverRemaining = resolveQueueJobRemaining(first) || Number(summary?.first_finish_in ?? 0);
-    const totalRaw = Number(first.order_total_seconds || first.total_seconds || 0);
-    const total = totalRaw > 0 ? Math.max(1, Math.floor(totalRaw)) : Math.max(1, serverRemaining + 1);
-    const activeJob = document.getElementById("shipyard-page")?.querySelector(".shipyard-job.shipyard-job-active");
-    if (activeJob) {
-      if (finishTime) activeJob.setAttribute("data-finish-time", String(finishTime));
-      if (nextFinish) activeJob.setAttribute("data-next-finish-time", String(nextFinish));
-      activeJob.setAttribute("data-total", String(total));
-      if (Number.isFinite(serverRemaining) && serverRemaining >= 0) {
-        activeJob.dataset.serverRemaining = String(Math.ceil(serverRemaining));
-      } else {
-        delete activeJob.dataset.serverRemaining;
-      }
-    }
-    const now = getTimerServerNow();
-    const orderRemaining = finishTime
-      ? queueJobRemainingSeconds(finishTime, now, serverRemaining)
-      : Math.max(0, Math.ceil(serverRemaining));
-    const pct = Math.max(0, Math.min(100, 100 * (1 - orderRemaining / total)));
-    const etaText = formatEta(Math.ceil(orderRemaining));
-    const etaEl = document.getElementById("shipyard-eta-live");
-    const fillEl = document.getElementById("shipyard-bar-fill-live");
-    const subEta = document.getElementById("shipyard-queue-subtitle-eta");
-    if (etaEl) {
-      applyQueueJobTimerAttrs(etaEl, finishTime, "shipyard", "shipyard", serverRemaining);
-      _setIfChanged(etaEl, etaText);
-    }
-    _applyProgressFill(fillEl, pct);
-    if (subEta) _setIfChanged(subEta, etaText);
-  }
-
-  function renderShipyardQueue(page, queueData) {
-    const list = page.querySelector("[data-shipyard-queue-list]");
-    if (!list) return;
-    const tt = (key, fb) => t(key, fb);
-    const qd = queueData || { queue: [], summary: { count: 0, limit: 3, refund_percent: 60 } };
-    const jobs = qd.queue || [];
-    const summary = qd.summary || {};
-    const count = summary.count ?? jobs.length;
-    const limit = summary.limit ?? 3;
-    const first = jobs.length ? jobs[0] : null;
-
+  function _syncShipyardQueueLiveState(queueList) {
+    const first = queueList && queueList.length ? queueList[0] : null;
     if (first) {
       const finishTime = resolveQueueJobFinishTime(first);
       const isActiveHead = Boolean(first.is_active !== false);
       if (isActiveHead && finishTime) {
-        const totalRaw = Number(first.order_total_seconds || first.total_seconds || 0);
         const now = getTimerServerNow();
         const remaining = queueJobRemainingSeconds(finishTime, now, resolveQueueJobRemaining(first));
+        const totalRaw = Number(first.order_total_seconds || first.total_seconds || 0);
         const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
         SHIPYARDQ.active.finishTime = finishTime;
         SHIPYARDQ.active.totalSeconds = total;
@@ -6793,12 +7124,22 @@
       SHIPYARDQ.active.finishTime = 0;
       SHIPYARDQ.active.totalSeconds = 0;
     }
+  }
+
+  function renderShipyardQueue(page, queueData) {
+    const compact = document.getElementById("shipyard-queue-compact");
+    const legacyList = page?.querySelector("[data-shipyard-queue-list]");
+    if (!compact && !legacyList) return;
+
+    const qd = queueData || { queue: [], summary: { count: 0, limit: 3, refund_percent: 60 } };
+    const jobs = qd.queue || [];
+    const summary = qd.summary || {};
+    const count = summary.count ?? jobs.length;
+    const first = jobs.length ? jobs[0] : null;
+
+    _syncShipyardQueueLiveState(jobs);
 
     const sig = _shipyardQueueSignature(jobs, summary);
-    const firstEta =
-      typeof summary?.first_finish_in !== "undefined"
-        ? formatEta(summary.first_finish_in)
-        : formatEta(first?.order_remaining ?? first?.remaining ?? 0);
 
     if (sig === _lastShipyardQueueSignature) {
       const finishTime = first ? resolveQueueJobFinishTime(first) : 0;
@@ -6810,8 +7151,7 @@
         (finishTime > 0 && finishTime <= now) ||
         (nextUnitFinish > 0 && nextUnitFinish <= now);
       if (!overdue) {
-        _updateShipyardQueueSubtitle(count, limit, firstEta);
-        _syncShipyardQueueLiveFromServer(first, summary);
+        _updateShipyardQueueCompact(count);
         GC.startProgressTicker();
         return;
       }
@@ -6819,132 +7159,13 @@
     _lastShipyardQueueSignature = sig;
     _productionZeroHandled.shipyard = "";
 
-    _updateShipyardQueueSubtitle(count, limit, firstEta);
-    list.replaceChildren();
+    _updateShipyardQueueCompact(count);
+    if (!jobs.length) _finishRefreshArmed.shipyard = false;
+    else clearFinishRefreshArmed("shipyard", jobs);
 
-    if (!jobs.length) {
-      const empty = document.createElement("p");
-      empty.className = "shipyard-empty";
-      empty.dataset.shipyardQueueEmpty = "1";
-      empty.textContent = tt("shipyard_queue_empty", "No ships in production.");
-      list.appendChild(empty);
-      if (!_hasActiveProgressJobs()) GC.stopProgressTicker();
-      return;
-    }
+    if (legacyList) legacyList.replaceChildren();
+    patchShipyardCardQueues(page, qd);
 
-    const wrap = document.createElement("div");
-    wrap.className = "shipyard-queue-list-inner";
-
-    jobs.forEach((job, index) => {
-      const isActive = Boolean(job.is_active || index === 0);
-      const shipName = tt(`fleet_ship_${job.ship_key}`, job.ship_key);
-      const totalUnits = Math.max(1, Number(job.amount_total || job.amount || 1));
-      const delivered = Math.max(0, Number(job.units_delivered || 0));
-      const remainingUnits = Math.max(0, Number(job.amount_remaining ?? totalUnits - delivered));
-      const progressLabel = tt("shipyard_queue_progress", "%(done)s / %(total)s")
-        .replace("%(done)s", fmtNumber(delivered))
-        .replace("%(total)s", fmtNumber(totalUnits));
-      const orderRemaining = resolveQueueJobRemaining(job);
-      const orderTotal = Math.max(
-        1,
-        parseInt(job.order_total_seconds || job.total_seconds, 10) || orderRemaining + 1
-      );
-      const pct = isActive ? Math.max(0, Math.min(100, 100 * (1 - orderRemaining / orderTotal))) : 0;
-      const iconSrc = job.icon || shipyardIconUrl(job.ship_key);
-      const finishTime = resolveQueueJobFinishTime(job);
-      const nextFinish = parseTimerTarget(job.next_countdown_at ?? job.next_finish_at ?? finishTime);
-
-      const art = document.createElement("article");
-      art.className = `shipyard-job${isActive ? " shipyard-job-active" : " shipyard-job-queued"}`;
-      art.dataset.queueJobId = String(job.id);
-      if (isActive) {
-        art.dataset.finishTime = String(finishTime || 0);
-        art.dataset.nextFinishTime = String(nextFinish || 0);
-        art.dataset.total = String(orderTotal);
-        if (Number.isFinite(orderRemaining) && orderRemaining >= 0) {
-          art.dataset.serverRemaining = String(Math.ceil(orderRemaining));
-        }
-      }
-
-      const icon = document.createElement("div");
-      icon.className = "shipyard-job-icon";
-      const img = document.createElement("img");
-      img.src = iconSrc;
-      img.alt = "";
-      img.loading = "lazy";
-      img.onerror = function onShipyardIconError() {
-        this.onerror = null;
-        this.src = shipyardIconUrl(job.ship_key).replace(".svg", ".png");
-      };
-      icon.appendChild(img);
-
-      const body = document.createElement("div");
-      body.className = "shipyard-job-body";
-
-      const header = document.createElement("div");
-      header.className = "job-header";
-      const nameEl = document.createElement("span");
-      nameEl.className = "job-name";
-      nameEl.textContent =
-        totalUnits > 1 ? `${shipName} · ${progressLabel}` : shipName;
-      const timeEl = document.createElement("span");
-      timeEl.className = `job-time${isActive ? "" : " job-time-muted"}`;
-      if (isActive) timeEl.id = "shipyard-eta-live";
-      if (isActive && finishTime) {
-        applyQueueJobTimerAttrs(timeEl, finishTime, "shipyard", "shipyard", orderRemaining);
-      }
-      timeEl.textContent = isActive
-        ? formatEta(orderRemaining)
-        : tt("status_in_queue", "In Warteschlange");
-      header.append(nameEl, timeEl);
-
-      const bar = document.createElement("div");
-      bar.className = "build-bar build-bar-large";
-      const fill = document.createElement("div");
-      fill.className = "build-bar-fill gc-progress-smooth";
-      if (isActive) fill.id = "shipyard-bar-fill-live";
-      fill.style.width = `${isActive ? pct : 0}%`;
-      fill.setAttribute("role", "progressbar");
-      fill.setAttribute("aria-valuenow", String(isActive ? pct : 0));
-      fill.setAttribute("aria-valuemin", "0");
-      fill.setAttribute("aria-valuemax", "100");
-      bar.appendChild(fill);
-
-      const actions = document.createElement("div");
-      actions.className = "shipyard-queue-job-actions job-actions";
-      const upBtn = document.createElement("button");
-      upBtn.type = "button";
-      upBtn.className = "gc-btn gc-btn-ghost gc-btn-xs";
-      upBtn.dataset.shipyardQueueUp = String(job.id);
-      upBtn.setAttribute("aria-label", tt("shipyard_queue_move_up", "Raise priority"));
-      upBtn.textContent = "▲";
-      if (index === 0) upBtn.disabled = true;
-      const downBtn = document.createElement("button");
-      downBtn.type = "button";
-      downBtn.className = "gc-btn gc-btn-ghost gc-btn-xs";
-      downBtn.dataset.shipyardQueueDown = String(job.id);
-      downBtn.setAttribute("aria-label", tt("shipyard_queue_move_down", "Lower priority"));
-      downBtn.textContent = "▼";
-      if (index === jobs.length - 1) downBtn.disabled = true;
-      const cancelBtn = document.createElement("button");
-      cancelBtn.type = "button";
-      cancelBtn.className = "gc-btn gc-btn-ghost gc-btn-xs gc-btn-danger";
-      cancelBtn.dataset.shipyardQueueCancel = String(job.id);
-      cancelBtn.textContent = tt("shipyard_queue_cancel_btn", "Cancel");
-      actions.append(upBtn, downBtn, cancelBtn);
-
-      const badge = document.createElement("span");
-      badge.className = isActive ? "job-badge-active" : "job-badge-queued";
-      badge.textContent = isActive
-        ? tt("buildings_btn_active", "Aktiv")
-        : `#${index + 1}`;
-
-      body.append(header, bar, actions, badge);
-      art.append(icon, body);
-      wrap.appendChild(art);
-    });
-
-    list.appendChild(wrap);
     GC.startProgressTicker();
   }
 
@@ -7170,6 +7391,9 @@
       const text = fmtNumber(Number(ship.owned_count) || 0);
       if (stockEl.textContent !== text) stockEl.textContent = text;
     }
+
+    if (ship.queue_job) GC.renderCardQueueBlock(card, ship.queue_job);
+    else GC.clearCardQueueBlock(card);
   }
 
   function applyShipyardState(page, data) {
@@ -7228,12 +7452,12 @@
     const syLevel = data.orbital_shipyard_level != null ? data.orbital_shipyard_level : page.dataset.shipyardLevel;
 
     (data.buildable_ships || []).forEach((ship) => {
-      const card = page.querySelector(`[data-ship-card="${ship.ship_key}"][data-unlocked="1"]`);
+      const card = page.querySelector(`[data-ship-key="${ship.ship_key}"][data-unlocked="1"]`);
       applyShipyardShipCard(card, ship, resources, syLevel, tt);
     });
 
     (data.locked_ships || []).forEach((ship) => {
-      const card = page.querySelector(`[data-ship-card="${ship.ship_key}"][data-unlocked="0"]`);
+      const card = page.querySelector(`[data-ship-key="${ship.ship_key}"][data-unlocked="0"]`);
       applyShipyardShipCard(card, ship, resources, syLevel, tt);
     });
   }
@@ -7299,6 +7523,7 @@
             body: JSON.stringify({ job_id: jobId, planet_id: planetId || undefined }),
           });
           if (res?.ok) {
+            _lastShipyardQueueSignature = "";
             if (res.data) applyShipyardState(page, res.data);
             else await refreshShipyardState(page);
             if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_cancel");
@@ -7337,6 +7562,7 @@
             }),
           });
           if (res?.ok) {
+            _lastShipyardQueueSignature = "";
             if (res.data) applyShipyardState(page, res.data);
             else await refreshShipyardState(page);
           } else {
@@ -7368,6 +7594,7 @@
           body: JSON.stringify({ ship_key: shipKey, amount, planet_id: planetId || undefined }),
         });
         if (res?.ok) {
+          _lastShipyardQueueSignature = "";
           if (res.data) applyShipyardState(page, res.data);
           else await refreshShipyardState(page);
           if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_build");
@@ -8301,11 +8528,16 @@
     }
   }
 
-  function initResearch() {}
+  function initResearch() {
+    GC.startProgressTicker();
+  }
 
   function syncPlanetEvolutionResearchTicker() {
-    if (!document.querySelector(".planet-evolution-page .pe-planet-research-active")) return;
-    updatePlanetEvolutionResearchProgress();
+    const page = document.querySelector(".planet-evolution-page");
+    if (!page) return;
+    const hasCardQueues = page.querySelector(".gc-card-queue-block[data-gc-card-queue='1']");
+    const hasLegacyActive = page.querySelector(".pe-planet-research-active");
+    if (!hasCardQueues && !hasLegacyActive) return;
     GC.startProgressTicker();
   }
 
@@ -8825,8 +9057,15 @@
         let res;
         try {
           res = await postAction(`/api/planets/${planetId}/research/start`, { tech_key: techKey, request_id: requestId });
-          if (res?.ok) await GC.reloadCurrentPage();
-          else showNotify(reasonText(res?.reason), "error");
+          if (res?.ok) {
+            _lastPePlanetTechQueueSignature = "";
+            if (typeof GC.reloadCurrentPage === "function") {
+              await GC.reloadCurrentPage({ force: true });
+            }
+            if (typeof GC.refreshGameState === "function") {
+              await GC.refreshGameState("planet_research_start");
+            }
+          } else showNotify(reasonText(res?.reason), "error");
         } finally {
           if (!res?.ok) researchBtn.disabled = false;
         }

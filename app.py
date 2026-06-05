@@ -909,6 +909,7 @@ def research_view():
         energy_total=ctx["energy_total"],
         energy_used=ctx["energy_used"],
         storage_caps=ctx["storage_caps"],
+        active_planet_id=int(planet["id"]),
         active_planet_name=str(planet.get("name") or ""),
     )
 

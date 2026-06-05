@@ -11,6 +11,62 @@
   </span>
 {% endmacro %}
 
+{% macro render_ship_card_queue(qj) %}
+  {% if qj is defined and qj %}
+  <div class="gc-card-queue-block gc-card-queue-block--shipyard gc-card-queue-block--{{ qj.status }}"
+       data-gc-card-queue="1"
+       data-queue-active="{{ '1' if qj.status == 'active' else '0' }}"
+       data-timer-domain="shipyard"
+       data-job-id="{{ qj.job_id|int }}"
+       {% if qj.finish_at %}data-finish-at="{{ qj.finish_at|int }}"{% endif %}
+       {% if qj.duration_seconds %}data-total-seconds="{{ qj.duration_seconds|int }}"{% endif %}
+       {% if qj.status == 'active' and qj.remaining_seconds is defined %}data-server-remaining="{{ qj.remaining_seconds|int }}"{% endif %}>
+    <div class="gc-card-queue-head">
+      <span class="gc-card-queue-glyph gc-card-queue-glyph--shipyard" aria-hidden="true"></span>
+      <span class="gc-card-queue-status">
+        {% if qj.status == 'active' %}
+          {{ T('queue_card_status_active', 'AKTIV') }}
+        {% else %}
+          {{ T('queue_card_status_queued', 'QUEUE #%(n)s', n=qj.queue_position|int) }}
+        {% endif %}
+      </span>
+    </div>
+    {% if qj.target_amount is defined and qj.owner_key is defined %}
+    <div class="gc-card-queue-quantity gc-mono">
+      {{ qj.target_amount|int }}× {{ T('fleet_ship_' ~ qj.owner_key) }}
+    </div>
+    {% endif %}
+    <div class="gc-card-queue-timer gc-mono"
+         {% if qj.status == 'active' and qj.finish_at %}
+         data-timer-target="{{ qj.finish_at|int }}"
+         data-timer-kind="shipyard"
+         data-refresh-on-zero="shipyard"
+         data-countdown-at="{{ qj.finish_at|int }}"
+         {% endif %}>
+      {% if qj.status == 'active' %}
+        {{ qj.remaining_seconds|int }}s
+      {% else %}
+        {{ T('queue_card_starts_in', 'Startet in %(time)s', time=(qj.remaining_seconds|int ~ 's')) }}
+      {% endif %}
+    </div>
+    {% if qj.status == 'active' %}
+    <div class="gc-card-queue-bar" role="progressbar"
+         aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="{{ qj.progress_pct|default(0)|int }}">
+      <div class="gc-card-queue-bar-fill gc-progress-smooth"
+           style="width: {{ qj.progress_pct|default(0)|int }}%;"></div>
+      <div class="gc-card-queue-scanline gc-card-queue-scanline--shipyard" aria-hidden="true"></div>
+    </div>
+    {% endif %}
+    <button type="button"
+            class="gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel"
+            data-shipyard-queue-cancel="{{ qj.job_id|int }}">
+      {{ T('shipyard_queue_cancel_btn', 'Abbrechen') }}
+    </button>
+  </div>
+  {% endif %}
+{% endmacro %}
+
 {% macro render_ship_card_subhead(role) %}
   <div class="gc-ship-card-subhead">
     <span class="gc-ship-role-badge">{{ T("shipyard_role_" ~ role) }}</span>
@@ -79,74 +135,24 @@
     </div>
   </section>
 
-  <section class="gc-panel shipyard-panel" aria-labelledby="shipyard-queue-title">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title" id="shipyard-queue-title">{{ T("shipyard_queue_title") }}</span>
-      <span class="gc-panel-subtitle gc-mono" data-shipyard-queue-subtitle>
-        {% set qsum = sy.shipyard_queue.summary if sy.shipyard_queue is defined and sy.shipyard_queue.summary is defined else {} %}
-        {{ T("shipyard_queue_slots", count=qsum.count|default(0), limit=qsum.limit|default(3)) }}
-      </span>
-    </div>
-    <p class="shipyard-queue-hint hint">{{ T("shipyard_queue_hint", refund=qsum.refund_percent|default(60)) }}</p>
-    <div class="shipyard-queue-list" data-shipyard-queue-list aria-live="polite">
-      {% set qjobs = sy.shipyard_queue.queue if sy.shipyard_queue is defined and sy.shipyard_queue.queue is defined else [] %}
-      {% if qjobs %}
-      <div class="shipyard-queue-list-inner">
-        {% for job in qjobs %}
-        {% set total_units = job.amount_total|default(job.amount)|int %}
-        {% set delivered = job.units_delivered|default(0)|int %}
-        {% set is_active = job.is_active|default(loop.first) %}
-        {% set order_total = job.order_total_seconds|default(job.total_seconds)|default(1)|int %}
-        {% set order_rem = job.order_remaining|default(job.remaining)|default(0)|int %}
-        {% set pct = (100 * (1 - order_rem / order_total)) if is_active and order_total > 0 else 0 %}
-        <article class="shipyard-job{% if is_active %} shipyard-job-active{% else %} shipyard-job-queued{% endif %}"
-                 data-queue-job-id="{{ job.id }}"
-                 {% if is_active %}data-finish-time="{{ job.finish_at|int }}" data-next-finish-time="{{ job.next_finish_at|default(job.finish_at)|int }}" data-total="{{ order_total }}"{% endif %}>
-          <div class="shipyard-job-icon">
-            <img src="{{ job.icon|default('/static/img/ships/' ~ job.ship_key ~ '.svg') }}" alt="" loading="lazy"
-                 onerror="this.onerror=null;this.src='/static/img/ships/{{ job.ship_key }}.png'">
-          </div>
-          <div class="shipyard-job-body">
-            <div class="job-header">
-              <span class="job-name">
-                {% if total_units > 1 %}
-                  {{ T("fleet_ship_" ~ job.ship_key) }} · {{ T("shipyard_queue_progress", done=delivered, total=total_units) }}
-                {% else %}
-                  {{ T("fleet_ship_" ~ job.ship_key) }}
-                {% endif %}
-              </span>
-              <span class="job-time{% if not is_active %} job-time-muted{% endif %}"{% if is_active %} id="shipyard-eta-live" data-timer-target="{{ job.countdown_at|default(job.finish_at)|int }}" data-timer-kind="shipyard" data-refresh-on-zero="shipyard" data-countdown-at="{{ job.countdown_at|default(job.finish_at)|int }}"{% endif %}>
-                {% if is_active %}{{ T("shipyard_queue_remaining", seconds=order_rem|fmt_int) }}{% else %}{{ T("status_in_queue") }}{% endif %}
-              </span>
-            </div>
-            <div class="build-bar build-bar-large">
-              <div class="build-bar-fill gc-progress-smooth"{% if is_active %} id="shipyard-bar-fill-live"{% endif %}
-                   style="width:{{ pct|round(0, 'floor') }}%"
-                   role="progressbar" aria-valuenow="{{ pct|round(0, 'floor') }}" aria-valuemin="0" aria-valuemax="100"></div>
-            </div>
-            <div class="shipyard-queue-job-actions job-actions">
-              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shipyard-queue-up="{{ job.id }}"
-                      {% if loop.first %}disabled{% endif %} aria-label="{{ T('shipyard_queue_move_up') }}">▲</button>
-              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shipyard-queue-down="{{ job.id }}"
-                      {% if loop.last %}disabled{% endif %} aria-label="{{ T('shipyard_queue_move_down') }}">▼</button>
-              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-btn-danger" data-shipyard-queue-cancel="{{ job.id }}">
-                {{ T("shipyard_queue_cancel_btn") }}
-              </button>
-            </div>
-            {% if is_active %}
-            <span class="job-badge-active">{{ T("buildings_btn_active") }}</span>
-            {% else %}
-            <span class="job-badge-queued">#{{ loop.index }}</span>
-            {% endif %}
-          </div>
-        </article>
-        {% endfor %}
-      </div>
+  <div class="shipyard-queue-compact gc-panel-header"
+       id="shipyard-queue-compact"
+       aria-live="polite">
+    <span class="shipyard-queue-compact-icon" aria-hidden="true">🚀</span>
+    <span class="gc-panel-title shipyard-queue-compact-label" id="shipyard-queue-compact-label">
+      {% set qsum = sy.shipyard_queue.summary if sy.shipyard_queue is defined and sy.shipyard_queue.summary is defined else {} %}
+      {% if qsum and qsum.count %}
+        {{ T('shipyard_queue_compact_active', '%(count)s Werftaufträge aktiv', count=(qsum.count|default(0)|int)) }}
       {% else %}
-        <p class="shipyard-empty" data-shipyard-queue-empty>{{ T("shipyard_queue_empty") }}</p>
+        {{ T('shipyard_queue_compact_idle', 'Keine Werftaufträge') }}
       {% endif %}
-    </div>
-  </section>
+    </span>
+    <span class="gc-panel-subtitle gc-mono shipyard-queue-compact-hint">
+      {{ T('shipyard_queue_hint', refund=qsum.refund_percent|default(60)) }}
+    </span>
+  </div>
+
+  <hr class="shipyard-divider gc-prog-divider">
 
   <section class="gc-panel shipyard-panel" aria-labelledby="shipyard-buildable-title">
     <div class="gc-panel-header">
@@ -161,8 +167,10 @@
       {% set ship_desc = T(ship_desc_key) %}
       {% if ship_desc == ship_desc_key %}{% set ship_desc = '' %}{% endif %}
       {% set owned = (ship.owned_count if ship.owned_count is defined else planet_ships.get(ship.ship_key, 0))|int %}
-      <article class="gc-ship-card gc-prog-card {{ row_class }}"
-               data-ship-card="{{ ship.ship_key }}" data-unlocked="1" role="listitem">
+      <article class="gc-ship-card gc-prog-card {{ row_class }}{% if ship.queue_job is defined and ship.queue_job %} gc-ship-card--in-queue{% if ship.queue_job.status == 'active' %} gc-ship-card--queue-active{% else %} gc-ship-card--queue-pending{% endif %}{% endif %}"
+               data-ship-card
+               data-ship-key="{{ ship.ship_key }}"
+               data-unlocked="1" role="listitem">
         <header class="gc-bld-card-head">
           <div class="gc-bld-card-identity">
             <img src="{{ ship.icon }}" alt="" class="gc-bld-card-icon" width="34" height="34" loading="lazy">
@@ -178,6 +186,7 @@
           {{ render_ship_card_stock(ship.ship_key, owned) }}
         </header>
         {{ render_ship_card_subhead(ship.role) }}
+        {{ render_ship_card_queue(ship.queue_job if ship.queue_job is defined else none) }}
         <div class="gc-bld-card-meta">
           <div class="gc-bld-card-costs shipyard-ship-cost gc-mono" data-shipyard-cost>
             {{ render_resource_cost_chip('metal', ship.cost_metal, unmet=(p_metal < ship.cost_metal)) }}
@@ -244,7 +253,9 @@
       {% set ship_desc = T(ship_desc_key) %}
       {% if ship_desc == ship_desc_key %}{% set ship_desc = '' %}{% endif %}
       <article class="gc-ship-card gc-prog-card gc-prog-locked is-locked"
-               data-ship-card="{{ ship.ship_key }}" data-unlocked="0" role="listitem">
+               data-ship-card
+               data-ship-key="{{ ship.ship_key }}"
+               data-unlocked="0" role="listitem">
         <header class="gc-bld-card-head">
           <div class="gc-bld-card-identity">
             <img src="{{ ship.icon }}" alt="" class="gc-bld-card-icon" width="34" height="34" loading="lazy">

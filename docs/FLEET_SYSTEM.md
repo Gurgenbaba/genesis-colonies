@@ -36,6 +36,8 @@ Definiert in `game/fleet_defs.py`:
 
 Schiffsbau: [Shipyard](BUILDINGS_SYSTEM.md) → `orbital_shipyard` → `shipyard_queue` → Credit auf `planet_ships`.
 
+**Queue-UX (GC-536D):** Werftaufträge erscheinen in der jeweiligen Schiff-Card (`queue_job` via `game/queue_card.py` + `_attach_queue_jobs_to_ship_rows` in `game/shipyard.py`). Seitenkopf nur noch Kompaktstatus (`#shipyard-queue-compact`), kein großes Queue-Panel.
+
 ---
 
 ## Planet Scope

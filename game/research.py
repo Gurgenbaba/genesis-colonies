@@ -1095,6 +1095,8 @@ def get_research_status(
         "first_finish_in": int(queue_list[0]["remaining"]) if queue_list else 0,
     }
 
+    _attach_queue_jobs_to_research_techs(techs, queue_list)
+
     return {
         "active": active,
         "queue": queue_list,
@@ -1102,6 +1104,31 @@ def get_research_status(
         "techs": techs,
         "lab_level": lab_level,
     }
+
+
+def _attach_queue_jobs_to_research_techs(
+    techs: List[Dict[str, Any]],
+    queue_list: List[Dict[str, Any]],
+    *,
+    now: Optional[float] = None,
+) -> None:
+    """GC-536C: optional queue_job on each research tech row (presentation only)."""
+    from .queue_card import (
+        card_queue_job_for_item,
+        group_card_jobs_by_owner_key,
+        map_research_queue_to_card_jobs,
+    )
+
+    card_jobs = map_research_queue_to_card_jobs({"queue": queue_list}, now=now)
+    by_key = group_card_jobs_by_owner_key(card_jobs)
+
+    for tech in techs:
+        owner_key = str(tech.get("key") or "")
+        qj = card_queue_job_for_item(by_key, owner_key) if owner_key else None
+        if qj:
+            tech["queue_job"] = dict(qj)
+        elif "queue_job" in tech:
+            del tech["queue_job"]
 
 
 # ======================================================================

@@ -91,6 +91,17 @@ update_planet_resources(planet_row)
 
 Läuft für die **jeweilige Planet-Row** (nicht nur active). Queue-Finish: Planet Research + Ascension in `queue_engine`.
 
+### Queue-UX (GC-536E)
+
+Planet-Tech- und Ascension-Queues werden **in den jeweiligen Cards** angezeigt (nicht mehr als großes Seiten-Panel):
+
+| Queue | Owner | Card-Marker | Kompaktstatus |
+|-------|-------|-------------|---------------|
+| Planet-Tech | `planet_research` / `tech_key` | `data-planet-tech-card`, `data-tech-key` | `#pe-planet-tech-queue-compact` |
+| Ascension | `ascension` / `ascension_key` | `data-ascension-card`, `data-ascension-key` | `#pe-ascension-queue-compact` |
+
+Payload: optional `queue_job` pro Card via `game/queue_card.py` (Presentation only). Live-Updates: `/api/planets/<id>/state` → `applyPlanetEvolutionState` + Card-Ticker — siehe [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md).
+
 ---
 
 ## Kolonisierung

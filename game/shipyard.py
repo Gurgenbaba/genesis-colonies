@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from .db import begin_write_transaction, commit, in_transaction, rollback
 from .fleet_calc import normalize_ships
@@ -659,6 +659,20 @@ def build_shipyard_api_payload(player_id: int, planet_id: int, *, conn=None) -> 
         queue = shipyard_queue_for_client(
             player_id, planet_id, sy_level, conn=conn
         )
+        from .queue_card import (
+            card_queue_job_for_item,
+            group_card_jobs_by_owner_key,
+            map_shipyard_queue_to_card_jobs,
+        )
+
+        card_jobs = map_shipyard_queue_to_card_jobs(queue)
+        by_owner = group_card_jobs_by_owner_key(card_jobs)
+        queue_payload = dict(queue)
+        queue_payload["card_jobs_by_owner"] = by_owner
+
+        _attach_queue_jobs_to_ship_rows(buildable, by_owner)
+        _attach_queue_jobs_to_ship_rows(locked, by_owner)
+
         return {
             "orbital_shipyard_level": sy_level,
             "buildable_ships": buildable,
@@ -666,7 +680,7 @@ def build_shipyard_api_payload(player_id: int, planet_id: int, *, conn=None) -> 
             "current_ships": ships,
             "resources": resources,
             "fuel_cells": resources.get("fuel_cells", 0),
-            "shipyard_queue": queue,
+            "shipyard_queue": queue_payload,
             **meta,
         }
     finally:
@@ -685,3 +699,19 @@ def build_shipyard_page_context(player_id: int, planet: Mapping[str, Any], *, co
         "planet_id": planet_id,
         "ship_defs": {row["key"]: row for row in ship_defs_for_client(include_phase2=True)},
     }
+
+
+def _attach_queue_jobs_to_ship_rows(
+    ships: List[Dict[str, Any]],
+    jobs_by_key: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> None:
+    """GC-536D: optional queue_job on each ship catalog row (presentation only)."""
+    from .queue_card import card_queue_job_for_item
+
+    for ship in ships:
+        owner_key = str(ship.get("ship_key") or "")
+        qj = card_queue_job_for_item(jobs_by_key, owner_key) if owner_key else None
+        if qj:
+            ship["queue_job"] = dict(qj)
+        elif "queue_job" in ship:
+            del ship["queue_job"]

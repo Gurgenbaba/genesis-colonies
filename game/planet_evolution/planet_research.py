@@ -311,6 +311,21 @@ def get_planet_research_status(
                 }
             )
 
+        from ..queue_card import (
+            card_queue_job_for_item,
+            group_card_jobs_by_owner_key,
+            map_planet_research_queue_to_card_jobs,
+        )
+
+        card_jobs = map_planet_research_queue_to_card_jobs(
+            {
+                "queue": queue,
+            },
+            now=now,
+        )
+        by_owner = group_card_jobs_by_owner_key(card_jobs)
+        _attach_queue_jobs_to_planet_tech_rows(techs, by_owner)
+
         return {
             "planet_id": int(planet_id),
             "levels": levels,
@@ -321,8 +336,25 @@ def get_planet_research_status(
                 "count": len(queue),
                 "limit": _resolve_queue_limit(planet_id, conn),
             },
+            "card_jobs_by_owner": by_owner,
             "techs": techs,
         }
     finally:
         if own and conn is not None:
             conn.close()
+
+
+def _attach_queue_jobs_to_planet_tech_rows(
+    tech_rows: List[Dict[str, Any]],
+    jobs_by_key: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> None:
+    """GC-536E: optional queue_job on each planet-tech row (presentation only)."""
+    from ..queue_card import card_queue_job_for_item
+
+    for row in tech_rows:
+        owner_key = str(row.get("tech_key") or "")
+        qj = card_queue_job_for_item(jobs_by_key, owner_key) if owner_key else None
+        if qj:
+            row["queue_job"] = dict(qj)
+        elif "queue_job" in row:
+            del row["queue_job"]

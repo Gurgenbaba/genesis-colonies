@@ -102,9 +102,11 @@ Tech-Tree Visualisierung: `/techtree` (`game/techtree.py`).
 ## UI
 
 - Template: `templates/research.html`
-- Queue: `#research-queue-root`
+- **Queue-UX (GC-536C):** Status in jeder Tech-Card (`queue_job` via `game/queue_card.py` + `_attach_queue_jobs_to_research_techs`)
+- Kompakt-Header: `#research-queue-compact` — nur Zähler (`🔬 N Forschungen aktiv`)
 - Chip: empire lab level
-- Poll: `research` block in game-state
+- Poll: `research.techs` + `research.queue` in game-state
+- Card-Queue: `GC.renderCardQueueBlock` (domain `research`) / `.gc-card-queue-block--research`
 
 ---
 

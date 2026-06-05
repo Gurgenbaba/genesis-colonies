@@ -750,7 +750,39 @@ def get_buildings_panel_rows(
         )
         rows_by_tab.setdefault(row["tab"], []).append(row)
 
+    _attach_queue_jobs_to_panel_rows(rows_by_tab, build_queue)
+
     return rows_by_tab
+
+
+def _attach_queue_jobs_to_panel_rows(
+    rows_by_tab: Dict[str, List[Dict[str, Any]]],
+    build_queue: Optional[Dict[str, Any]],
+    *,
+    now: Optional[float] = None,
+) -> None:
+    """GC-536B: optional queue_job on each panel row (presentation only)."""
+    from .queue_card import (
+        card_queue_job_for_item,
+        group_card_jobs_by_owner_key,
+        map_build_queue_to_card_jobs,
+    )
+
+    card_jobs = map_build_queue_to_card_jobs(build_queue, now=now)
+    by_key = group_card_jobs_by_owner_key(card_jobs)
+
+    for rows in rows_by_tab.values():
+        for row in rows:
+            owner_key = str(row.get("key") or "")
+            qj = card_queue_job_for_item(by_key, owner_key) if owner_key else None
+            if qj:
+                enriched = dict(qj)
+                target_level = enriched.get("target_level")
+                if target_level is not None:
+                    enriched["current_level"] = max(0, int(target_level) - 1)
+                row["queue_job"] = enriched
+            elif "queue_job" in row:
+                del row["queue_job"]
 
 
 def get_overview_building_rows(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from ..models import get_planet_buildings
 from .constants import LEVEL_UNLOCKS, MAX_PLANET_LEVEL, SPECIALIZATION_UNLOCK_LEVEL, IDENTITY_TEASER_MIN_LEVEL
@@ -13,6 +13,7 @@ from .specialization import list_specialization_options
 from .dna import all_trait_keys
 from .history import get_history
 from .planet_level import xp_threshold_for_level
+from .ascension import get_ascension_status
 from .planet_research import compute_planet_research_cost, compute_planet_research_time
 from .repository import (
     get_discoveries,
@@ -261,6 +262,17 @@ def _enrich_research_card(
     }
 
 
+def _attach_queue_job_to_pe_card(card: Dict[str, Any], jobs_by_key: Mapping[str, Any]) -> None:
+    from ..queue_card import card_queue_job_for_item
+
+    tech_key = str(card.get("tech_key") or "")
+    qj = card_queue_job_for_item(jobs_by_key, tech_key) if tech_key else None
+    if qj:
+        card["queue_job"] = dict(qj)
+    elif "queue_job" in card:
+        del card["queue_job"]
+
+
 def _research_ux(
     research_status: Dict[str, Any],
     planet_level: int,
@@ -274,6 +286,13 @@ def _research_ux(
     techs = research_status.get("techs") or []
     queue_limit = int(research_status.get("queue_limit") or 2)
     queue_count = len(queue)
+
+    from ..queue_card import group_card_jobs_by_owner_key, map_planet_research_queue_to_card_jobs
+
+    card_jobs_by_owner = research_status.get("card_jobs_by_owner")
+    if not isinstance(card_jobs_by_owner, dict):
+        card_jobs = map_planet_research_queue_to_card_jobs(research_status, now=now)
+        card_jobs_by_owner = group_card_jobs_by_owner_key(card_jobs)
 
     active: List[Dict[str, Any]] = []
     for job in queue:
@@ -299,17 +318,18 @@ def _research_ux(
             }
         )
 
+    queue_cards: List[Dict[str, Any]] = []
     recommended: List[Dict[str, Any]] = []
     locked: List[Dict[str, Any]] = []
     queue_has_room = queue_count < queue_limit
+    seen_queue_keys: set[str] = set()
 
     for tech in techs:
         tech_key = str(tech.get("tech_key") or "")
         cfg = get_research_def(tech_key) or {}
         level = int(tech.get("level") or 0)
         max_level = int(tech.get("max_level") or 1)
-        if level >= max_level or tech.get("is_active"):
-            continue
+        q_count = int(tech.get("queue_count") or 0)
 
         card = _enrich_research_card(
             tech=tech,
@@ -320,6 +340,15 @@ def _research_ux(
             queue_has_room=queue_has_room,
             conn=conn,
         )
+        _attach_queue_job_to_pe_card(card, card_jobs_by_owner)
+
+        if (tech.get("is_active") or q_count > 0) and tech_key not in seen_queue_keys:
+            queue_cards.append(card)
+            seen_queue_keys.add(tech_key)
+            continue
+
+        if level >= max_level or tech.get("is_active"):
+            continue
 
         if tech.get("requirements_met") and len(recommended) < 3:
             recommended.append(card)
@@ -328,12 +357,18 @@ def _research_ux(
 
     return {
         "active": active,
+        "queue_cards": queue_cards,
         "recommended": recommended,
         "locked": locked,
         "queue_count": queue_count,
         "queue_limit": queue_limit,
         "queue_has_room": queue_has_room,
+        "card_jobs_by_owner": card_jobs_by_owner,
     }
+
+
+def _ascension_ux(planet_id: int, *, conn: sqlite3.Connection) -> Dict[str, Any]:
+    return get_ascension_status(planet_id, conn=conn)
 
 
 def _spec_recommendations(
@@ -813,6 +848,7 @@ def build_dashboard_extras(
         },
         "economy": economy,
         "research_ux": research_ux,
+        "ascension_ux": _ascension_ux(planet_id, conn=conn),
         "spec_recommendations": _spec_recommendations(eligible, dna, reveal, conn, planet_id),
         "next_action": _next_action(
             planet=planet,

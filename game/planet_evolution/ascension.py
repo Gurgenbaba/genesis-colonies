@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from ..db import begin_write_transaction, commit, lock_planet_for_update, rollback
 from ..models import db, try_spend_resources_conn
 from ..ranking import invalidate_player_score_cache
-from .definitions import get_ascension
+from .definitions import get_ascension, get_ascensions
 from .history import append_history
 from .mechanics import compile_planet_mechanics
 from .planet_level import add_planet_xp
@@ -61,6 +61,106 @@ def check_ascension_requirements(
                 missing.append(f"cost:{res_key}")
 
     return len(missing) == 0, missing
+
+
+def _get_planet_ascension_queue_row(
+    planet_id: int,
+    conn: sqlite3.Connection,
+) -> Optional[Dict[str, Any]]:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT * FROM planet_ascension_queue
+        WHERE planet_id = ? AND state = 'active'
+        ORDER BY start_at ASC
+        LIMIT 1;
+        """,
+        (int(planet_id),),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def _attach_queue_jobs_to_ascension_cards(
+    cards: List[Dict[str, Any]],
+    jobs_by_key: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> None:
+    from ..queue_card import card_queue_job_for_item
+
+    for card in cards:
+        owner_key = str(card.get("ascension_key") or "")
+        qj = card_queue_job_for_item(jobs_by_key, owner_key) if owner_key else None
+        if qj:
+            card["queue_job"] = dict(qj)
+        elif "queue_job" in card:
+            del card["queue_job"]
+
+
+def get_ascension_status(
+    planet_id: int,
+    *,
+    conn: Optional[sqlite3.Connection] = None,
+) -> Dict[str, Any]:
+    """Client payload for ascension cards + optional queue_job (GC-536E)."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        now = time.time()
+        planet = get_planet_row(planet_id, conn=conn) or {}
+        active_row = _get_planet_ascension_queue_row(planet_id, conn)
+        queue: List[Dict[str, Any]] = []
+        if active_row:
+            adef = get_ascension(str(active_row.get("ascension_key") or "")) or {}
+            finish = float(active_row.get("finish_at") or 0)
+            start = float(active_row.get("start_at") or 0)
+            queue.append(
+                {
+                    **active_row,
+                    "label_key": adef.get("label_key") or active_row.get("ascension_key"),
+                    "remaining_seconds": max(0, int(finish - now)) if finish else 0,
+                    "total_seconds": max(1, int(finish - start)) if finish > start else 1,
+                }
+            )
+
+        ascensions: List[Dict[str, Any]] = []
+        completed_key = planet.get("ascension_key")
+        has_active = bool(active_row)
+        for ascension_key, adef in sorted(get_ascensions().items()):
+            ok, _missing = check_ascension_requirements(planet_id, ascension_key, conn)
+            ascensions.append(
+                {
+                    "ascension_key": ascension_key,
+                    "label_key": adef.get("label_key") or ascension_key,
+                    "description_key": adef.get("description_key"),
+                    "duration_days": float(adef.get("duration_days") or 7),
+                    "eligible": ok and not completed_key and not has_active,
+                    "completed": str(completed_key) == str(ascension_key),
+                    "is_active": bool(
+                        active_row and str(active_row.get("ascension_key")) == str(ascension_key)
+                    ),
+                }
+            )
+
+        from ..queue_card import group_card_jobs_by_owner_key, map_ascension_queue_to_card_jobs
+
+        status_payload = {
+            "queue": queue,
+            "summary": {"count": len(queue), "limit": 1},
+        }
+        card_jobs = map_ascension_queue_to_card_jobs(status_payload, now=now)
+        by_owner = group_card_jobs_by_owner_key(card_jobs)
+        status_payload["card_jobs_by_owner"] = by_owner
+        _attach_queue_jobs_to_ascension_cards(ascensions, by_owner)
+
+        return {
+            **status_payload,
+            "ascensions": ascensions,
+            "completed_key": completed_key,
+        }
+    finally:
+        if own and conn is not None:
+            conn.close()
 
 
 def start_ascension(

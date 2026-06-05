@@ -2864,6 +2864,442 @@ body:not(.gc-perf-idle) .research-bar-fill{
   display: none;
 }
 
+/* GC-536B — building card queue block */
+.build-queue-compact{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 12px 6px;
+  border-bottom: none;
+}
+
+.build-queue-compact-icon{
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0.92;
+}
+
+.build-queue-compact-label{
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+}
+
+.gc-building-card--in-queue{
+  border-color: rgba(70, 229, 255, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.22) inset,
+    0 0 18px rgba(70, 229, 255, 0.06);
+}
+
+.gc-building-card--queue-active{
+  border-color: rgba(127, 255, 217, 0.32);
+}
+
+.gc-card-queue-block{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 4px;
+  padding: 8px 10px;
+  border: 1px solid rgba(70, 229, 255, 0.18);
+  border-radius: 0;
+  background:
+    linear-gradient(135deg, rgba(8, 16, 36, 0.92), rgba(6, 12, 28, 0.88));
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+
+.gc-card-queue-block--queued{
+  opacity: 0.92;
+  border-style: dashed;
+}
+
+.gc-card-queue-head{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gc-card-queue-glyph{
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border: 1px solid rgba(127, 255, 217, 0.45);
+  background: rgba(70, 229, 255, 0.08);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  animation: gc-card-queue-spin 6s linear infinite;
+}
+
+.gc-card-queue-block--queued .gc-card-queue-glyph{
+  animation: none;
+  opacity: 0.55;
+}
+
+@keyframes gc-card-queue-spin{
+  from{ transform: rotate(0deg); }
+  to{ transform: rotate(360deg); }
+}
+
+.gc-card-queue-status{
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gc-primary-2);
+}
+
+.gc-card-queue-level{
+  font-size: 0.76rem;
+  color: var(--gc-text-dim);
+}
+
+.gc-card-queue-timer{
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--gc-text);
+}
+
+.gc-card-queue-bar{
+  position: relative;
+  height: 6px;
+  margin-top: 2px;
+  border: 1px solid rgba(120, 190, 255, 0.16);
+  background: rgba(4, 10, 22, 0.85);
+  overflow: hidden;
+}
+
+.gc-card-queue-bar-fill{
+  height: 100%;
+  background: linear-gradient(90deg, rgba(70, 229, 255, 0.55), rgba(127, 255, 217, 0.85));
+  border-radius: 0;
+}
+
+.gc-card-queue-scanline{
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 3px,
+    rgba(127, 255, 217, 0.08) 3px,
+    rgba(127, 255, 217, 0.08) 4px
+  );
+  pointer-events: none;
+  animation: gc-card-queue-scan 3.2s linear infinite;
+}
+
+@keyframes gc-card-queue-scan{
+  from{ transform: translateX(-8px); }
+  to{ transform: translateX(8px); }
+}
+
+.gc-card-queue-cancel{
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .gc-card-queue-glyph,
+  .gc-card-queue-scanline{
+    animation: none !important;
+  }
+}
+
+/* GC-536C — research card queue accents */
+.research-queue-compact{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 12px 6px;
+  border-bottom: none;
+}
+
+.research-queue-compact-icon{
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0.92;
+}
+
+.research-queue-compact-label{
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+}
+
+.gc-research-card--in-queue{
+  border-color: rgba(168, 120, 255, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.22) inset,
+    0 0 18px rgba(168, 120, 255, 0.07);
+}
+
+.gc-research-card--queue-active{
+  border-color: rgba(190, 150, 255, 0.34);
+}
+
+.gc-card-queue-block--research{
+  border-color: rgba(168, 120, 255, 0.22);
+  background:
+    linear-gradient(135deg, rgba(12, 10, 32, 0.94), rgba(8, 12, 28, 0.9));
+}
+
+.gc-card-queue-glyph--research{
+  border-color: rgba(190, 150, 255, 0.5);
+  background: rgba(168, 120, 255, 0.1);
+  clip-path: none;
+  border-radius: 0;
+  animation: gc-card-queue-pulse 2.8s ease-in-out infinite;
+}
+
+@keyframes gc-card-queue-pulse{
+  0%, 100%{ opacity: 0.55; box-shadow: 0 0 0 rgba(190, 150, 255, 0); }
+  50%{ opacity: 1; box-shadow: 0 0 8px rgba(190, 150, 255, 0.25); }
+}
+
+.gc-card-queue-scanline--research{
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 2px,
+    rgba(190, 150, 255, 0.07) 2px,
+    rgba(190, 150, 255, 0.07) 3px
+  );
+  animation: gc-card-queue-scan-vertical 3.6s linear infinite;
+}
+
+@keyframes gc-card-queue-scan-vertical{
+  from{ transform: translateY(-6px); }
+  to{ transform: translateY(6px); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .gc-card-queue-glyph--research,
+  .gc-card-queue-scanline--research{
+    animation: none !important;
+  }
+}
+
+/* GC-536D — shipyard card queue accents */
+.gc-ship-card--in-queue{
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.22) inset,
+    0 0 18px rgba(90, 200, 255, 0.08);
+}
+
+.gc-ship-card--queue-active{
+  border-color: rgba(90, 200, 255, 0.34);
+}
+
+.gc-card-queue-block--shipyard{
+  border-color: rgba(90, 200, 255, 0.22);
+  background:
+    linear-gradient(135deg, rgba(8, 16, 28, 0.94), rgba(6, 12, 22, 0.9));
+}
+
+.gc-card-queue-quantity{
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--gc-text);
+  margin: 2px 0 4px;
+  letter-spacing: 0.02em;
+}
+
+.gc-card-queue-glyph--shipyard{
+  border-color: rgba(90, 200, 255, 0.55);
+  background: rgba(70, 180, 255, 0.08);
+  border-radius: 50%;
+  animation: gc-card-queue-spin 5s linear infinite;
+}
+
+.gc-card-queue-scanline--shipyard{
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 3px,
+    rgba(90, 200, 255, 0.06) 3px,
+    rgba(90, 200, 255, 0.06) 4px
+  );
+  animation: gc-card-queue-scan 2.8s linear infinite;
+}
+
+.shipyard-queue-compact{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 12px;
+  margin: 0 0 4px;
+  border: 1px solid rgba(90, 200, 255, 0.12);
+  border-radius: 0;
+  background: rgba(6, 14, 24, 0.55);
+}
+
+.shipyard-queue-compact-icon{
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.shipyard-queue-compact-label{
+  font-weight: 800;
+}
+
+.shipyard-queue-compact-hint{
+  opacity: 0.72;
+  font-size: 0.78rem;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .gc-card-queue-glyph--shipyard,
+  .gc-card-queue-scanline--shipyard{
+    animation: none !important;
+  }
+}
+
+/* GC-536E — planet-tech + ascension card queue accents */
+.pe-queue-compact{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 12px 6px;
+  border-bottom: none;
+}
+
+.pe-queue-compact-icon{
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0.92;
+}
+
+.pe-queue-compact-label{
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+}
+
+.gc-planet-tech-card--in-queue{
+  border-color: rgba(95, 214, 122, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.22) inset,
+    0 0 18px rgba(95, 214, 122, 0.07);
+}
+
+.gc-planet-tech-card--queue-active{
+  border-color: rgba(127, 255, 180, 0.34);
+}
+
+.gc-ascension-card--in-queue{
+  border-color: rgba(140, 120, 255, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.22) inset,
+    0 0 20px rgba(140, 120, 255, 0.08);
+}
+
+.gc-ascension-card--queue-active{
+  border-color: rgba(170, 150, 255, 0.36);
+}
+
+.gc-card-queue-block--planet_research{
+  border-color: rgba(95, 214, 122, 0.22);
+  background:
+    linear-gradient(135deg, rgba(8, 20, 16, 0.94), rgba(6, 14, 22, 0.9));
+}
+
+.gc-card-queue-block--ascension{
+  border-color: rgba(140, 120, 255, 0.22);
+  background:
+    linear-gradient(135deg, rgba(14, 10, 32, 0.94), rgba(8, 12, 28, 0.9));
+}
+
+.gc-card-queue-glyph--planet-research{
+  border-color: rgba(127, 255, 180, 0.5);
+  background:
+    linear-gradient(180deg, rgba(95, 214, 122, 0.14), rgba(70, 229, 255, 0.08));
+  clip-path: none;
+  border-radius: 0;
+  animation: gc-card-queue-dna-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes gc-card-queue-dna-pulse{
+  0%, 100%{ opacity: 0.6; transform: scale(1); }
+  50%{ opacity: 1; transform: scale(1.06); box-shadow: 0 0 8px rgba(127, 255, 180, 0.22); }
+}
+
+.gc-card-queue-scanline--planet-research{
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 2px,
+    rgba(127, 255, 180, 0.09) 2px,
+    rgba(127, 255, 180, 0.09) 3px,
+    transparent 3px,
+    transparent 5px,
+    rgba(70, 229, 255, 0.06) 5px,
+    rgba(70, 229, 255, 0.06) 6px
+  );
+  animation: gc-card-queue-dna-scan 2.6s linear infinite;
+}
+
+@keyframes gc-card-queue-dna-scan{
+  from{ transform: translateX(-10px); }
+  to{ transform: translateX(10px); }
+}
+
+.gc-card-queue-glyph--ascension{
+  border-color: rgba(170, 150, 255, 0.55);
+  background: rgba(140, 120, 255, 0.1);
+  border-radius: 50%;
+  animation: gc-card-queue-orbit-pulse 3.2s ease-in-out infinite;
+}
+
+@keyframes gc-card-queue-orbit-pulse{
+  0%, 100%{
+    opacity: 0.55;
+    box-shadow: 0 0 0 rgba(170, 150, 255, 0);
+    transform: rotate(0deg);
+  }
+  50%{
+    opacity: 1;
+    box-shadow: 0 0 12px rgba(170, 150, 255, 0.28);
+    transform: rotate(180deg);
+  }
+}
+
+.gc-card-queue-scanline--ascension{
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(170, 150, 255, 0.12) 0,
+    rgba(170, 150, 255, 0.04) 40%,
+    transparent 70%
+  );
+  animation: gc-card-queue-core-ripple 2.8s ease-out infinite;
+}
+
+@keyframes gc-card-queue-core-ripple{
+  0%{ transform: scale(0.85); opacity: 0.35; }
+  70%{ transform: scale(1.15); opacity: 0.75; }
+  100%{ transform: scale(1.2); opacity: 0; }
+}
+
+.gc-card-queue-phase{
+  font-size: 0.76rem;
+  color: var(--gc-text-dim);
+}
+
+@media (prefers-reduced-motion: reduce){
+  .gc-card-queue-glyph--planet-research,
+  .gc-card-queue-scanline--planet-research,
+  .gc-card-queue-glyph--ascension,
+  .gc-card-queue-scanline--ascension{
+    animation: none !important;
+  }
+}
+
 .buildings-techtree-link,
 .research-techtree-link{
   margin-left: 10px;

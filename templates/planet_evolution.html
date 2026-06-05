@@ -1,6 +1,70 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_prog_identity with context %}
 
+{% macro pe_card_queue_block(qj) %}
+  {% if qj is defined and qj %}
+  <div class="gc-card-queue-block gc-card-queue-block--{{ qj.owner_type|default('planet_research') }} gc-card-queue-block--{{ qj.status }}"
+       data-gc-card-queue="1"
+       data-queue-active="{{ '1' if qj.status == 'active' else '0' }}"
+       data-timer-domain="{{ qj.owner_type|default('planet_research') }}"
+       data-job-id="{{ qj.job_id|int }}"
+       {% if qj.start_at %}data-start-at="{{ qj.start_at|int }}"{% endif %}
+       {% if qj.finish_at %}data-finish-at="{{ qj.finish_at|int }}"{% endif %}
+       {% if qj.duration_seconds %}data-total-seconds="{{ qj.duration_seconds|int }}"{% endif %}
+       {% if qj.status == 'active' and qj.remaining_seconds is defined %}data-server-remaining="{{ qj.remaining_seconds|int }}"{% endif %}>
+    <div class="gc-card-queue-head">
+      <span class="gc-card-queue-glyph gc-card-queue-glyph--{{ qj.owner_type|default('planet_research') }}" aria-hidden="true"></span>
+      <span class="gc-card-queue-status">
+        {% if qj.status == 'active' %}
+          {{ T('queue_card_status_active', 'AKTIV') }}
+        {% else %}
+          {{ T('queue_card_status_queued', 'QUEUE #%(n)s', n=qj.queue_position|int) }}
+        {% endif %}
+      </span>
+    </div>
+    {% if qj.label_key is defined and qj.label_key %}
+    <div class="gc-card-queue-target gc-mono">{{ T(qj.label_key, qj.owner_key|default('')) }}</div>
+    {% endif %}
+    {% if qj.target_level is defined and qj.target_level %}
+    <div class="gc-card-queue-level gc-mono">
+      {% set cur = qj.current_level|default(qj.target_level|int - 1)|int %}
+      {{ T('label_level_short', 'L') }}{{ cur }} → {{ T('label_level_short', 'L') }}{{ qj.target_level|int }}
+    </div>
+    {% elif qj.target_phase is defined and qj.target_phase %}
+    <div class="gc-card-queue-phase gc-mono">
+      {{ T('pe_ascension_phase', 'Phase %(n)s', n=qj.target_phase|int) }}
+    </div>
+    {% endif %}
+    <div class="gc-card-queue-timer gc-mono"
+         {% if qj.status == 'active' and qj.finish_at %}
+         data-timer-target="{{ qj.finish_at|int }}"
+         data-timer-kind="{{ qj.owner_type|default('planet_research') }}"
+         data-refresh-on-zero="planet_evolution"
+         data-countdown-at="{{ qj.finish_at|int }}"
+         {% elif qj.status != 'active' and qj.start_at %}
+         data-timer-target="{{ qj.start_at|int }}"
+         data-timer-kind="{{ qj.owner_type|default('planet_research') }}"
+         data-countdown-at="{{ qj.start_at|int }}"
+         {% endif %}>
+      {% if qj.status == 'active' %}
+        {{ qj.remaining_seconds|int }}s
+      {% else %}
+        {{ T('queue_card_starts_in', 'Startet in %(time)s', time=(qj.remaining_seconds|int ~ 's')) }}
+      {% endif %}
+    </div>
+    {% if qj.status == 'active' %}
+    <div class="gc-card-queue-bar" role="progressbar"
+         aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="{{ qj.progress_pct|default(0)|int }}">
+      <div class="gc-card-queue-bar-fill gc-progress-smooth"
+           style="width: {{ qj.progress_pct|default(0)|int }}%;"></div>
+      <div class="gc-card-queue-scanline gc-card-queue-scanline--{{ qj.owner_type|default('planet_research') }}" aria-hidden="true"></div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+{% endmacro %}
+
 {% macro pe_research_job(job, is_first=false) %}
 <article class="research-job pe-planet-research-job{% if is_first %} research-job-active pe-planet-research-active{% else %} research-job-queued{% endif %}"
          {% if is_first and job.finish_at %}data-finish-time="{{ job.finish_at|int }}" data-total="{{ job.total_seconds or 1 }}"{% endif %}>
@@ -118,11 +182,12 @@
 {% endmacro %}
 
 {% block content %}
-<div class="gc-page planet-evolution-page">
+{% set ps = planet_state if planet_state is defined and planet_state else {} %}
+<div class="gc-page planet-evolution-page" data-planet-id="{{ ps.planet_id if ps.planet_id is defined else '' }}">
 
-  {% set ps = planet_state if planet_state is defined and planet_state else {} %}
   {% set research = ps.research if ps.research is defined else {} %}
   {% set dash = ps.dashboard if ps.dashboard is defined else {} %}
+  {% set traits = dash.traits if dash.traits is defined else [] %}
   {% set hdr = dash.header if dash.header is defined else {} %}
   {% set prog = dash.progression if dash.progression is defined else {} %}
   {% set econ = dash.economy if dash.economy is defined else {} %}
@@ -134,7 +199,7 @@
   {% set spec_options = ps.specialization_options if ps.specialization_options is defined else [] %}
   {% set policy_ux = dash.policy_ux if dash.policy_ux is defined else {} %}
   {% set id_teaser = dash.identity_teaser if dash.identity_teaser is defined else {} %}
-  {% set traits = dash.traits if dash.traits is defined else [] %}
+  {% set asc = dash.ascension_ux if dash.ascension_ux is defined else {} %}
   {% set strengths = traits | selectattr('polarity', 'in', ['positive', 'rare', 'neutral']) | list %}
   {% set weaknesses = traits | selectattr('polarity', 'equalto', 'negative') | list %}
 
@@ -266,10 +331,9 @@
           {% endfor %}
         </div>
       </aside>
-      {% elif rdx.active %}
-      <aside class="pe-next-running">
-        <span class="pe-next-running-label">{{ T("pe_research_running", "Läuft gerade") }}</span>
-        {{ pe_research_job(rdx.active[0], true) }}
+      {% elif rdx.queue_count %}
+      <aside class="pe-next-running pe-next-running-compact">
+        <span class="pe-next-running-label">🧬 {{ T('pe_planet_tech_queue_compact_active', '%(count)s Planet-Tech-Aufträge', count=(rdx.queue_count|int)) }}</span>
       </aside>
       {% elif id_teaser.visible and id_teaser.status == 'countdown' %}
       <aside class="pe-next-identity pe-identity-teaser pe-identity-teaser-{{ id_teaser.status }}">
@@ -440,25 +504,52 @@
 
   {# ── Planet-Forschung (gc-prog shell) ── #}
   <section class="pe-dev-research gc-panel" id="pe-section-research">
-    <div class="gc-panel-header gc-prog-queue-head">
-      <span class="gc-panel-title">{{ T("pe_planet_research", "Planet-Forschung") }}</span>
-      <span class="gc-panel-subtitle">
-        {% if rdx.active %}
-          {{ rdx.queue_count or 0 }}/{{ rdx.queue_limit or 2 }} {{ T("research_queue_jobs", "Aufträge") }}
+    <div id="pe-planet-tech-queue-compact" class="pe-queue-compact gc-panel-header" aria-live="polite">
+      <span class="pe-queue-compact-icon" aria-hidden="true">🧬</span>
+      <span class="gc-panel-title" id="pe-planet-tech-queue-compact-label">
+        {% if rdx.queue_count %}
+          {{ T('pe_planet_tech_queue_compact_active', '%(count)s Planet-Tech-Aufträge', count=(rdx.queue_count|int)) }}
         {% else %}
-          {{ T("pe_research_recommended", "Empfohlen für diesen Planeten") }}
+          {{ T('pe_planet_tech_queue_compact_idle', 'Keine Planet-Tech-Aufträge') }}
         {% endif %}
+      </span>
+      <span class="gc-panel-subtitle gc-mono" id="pe-planet-tech-queue-compact-count">
+        {{ rdx.queue_count or 0 }}/{{ rdx.queue_limit or 2 }} {{ T('research_queue_jobs', 'Aufträge') }}
       </span>
     </div>
 
-    {% if rdx.active %}
-    <div class="research-queue-list pe-research-queue">
-      {% for job in rdx.active %}
-        {{ pe_research_job(job, loop.first) }}
+    {% if rdx.queue_cards %}
+    <div class="gc-prog-list pe-research-queue-cards" role="list">
+      {% for tech in rdx.queue_cards %}
+      <div class="gc-prog-card gc-prog-affordable gc-planet-tech-card{% if tech.queue_job is defined and tech.queue_job %} gc-planet-tech-card--in-queue{% if tech.queue_job.status == 'active' %} gc-planet-tech-card--queue-active{% else %} gc-planet-tech-card--queue-pending{% endif %}{% endif %}"
+           id="pe-research-card-{{ tech.tech_key }}"
+           data-planet-tech-card
+           data-tech-key="{{ tech.tech_key }}"
+           role="listitem">
+        {{ pe_card_queue_block(tech.queue_job if tech.queue_job is defined else none) }}
+        <div class="gc-prog-main pe-research-prog-main">
+          {{ render_prog_identity(
+               T(tech.label_key, tech.tech_key),
+               url_for('static', filename='img/research/' ~ (tech.icon or 'metallveredelung.png')),
+               fallback=tech.icon_fallback or '🧬',
+               desc_text=T(tech.unlock_key, '') if tech.unlock_key else '') }}
+          <div class="gc-prog-col gc-prog-costs">
+            {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, tech.target_level) }}
+          </div>
+          <div class="gc-prog-col gc-prog-time">
+            <span class="tech-time">{{ render_prog_duration(tech.duration_seconds) }}</span>
+          </div>
+        </div>
+      </div>
       {% endfor %}
     </div>
     <hr class="gc-prog-divider">
     {% endif %}
+
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("pe_planet_research", "Planet-Forschung") }}</span>
+      <span class="gc-panel-subtitle">{{ T("pe_research_recommended", "Empfohlen für diesen Planeten") }}</span>
+    </div>
 
     {% if rdx.recommended %}
     <div class="gc-prog-list pe-research-prog-list" role="list">
@@ -474,10 +565,12 @@
       {% if tech.choice_group and not tech.choice_made %}
         {% set row_class = 'gc-prog-affordable pe-research-choice-row' %}
       {% endif %}
-      <div class="gc-prog-card {{ row_class }}"
+      <div class="gc-prog-card {{ row_class }} gc-planet-tech-card{% if tech.queue_job is defined and tech.queue_job %} gc-planet-tech-card--in-queue{% if tech.queue_job.status == 'active' %} gc-planet-tech-card--queue-active{% else %} gc-planet-tech-card--queue-pending{% endif %}{% endif %}"
            id="pe-research-card-{{ tech.tech_key }}"
+           data-planet-tech-card
            data-tech-key="{{ tech.tech_key }}"
            role="listitem">
+        {{ pe_card_queue_block(tech.queue_job if tech.queue_job is defined else none) }}
         <div class="gc-prog-main pe-research-prog-main">
           {{ render_prog_identity(
                T(tech.label_key, tech.tech_key),
@@ -526,6 +619,47 @@
     </details>
     {% endif %}
   </section>
+
+  {% if ps.level >= 25 or asc.queue_count or asc.completed_key %}
+  <section class="pe-dev-ascension gc-panel" id="pe-section-ascension">
+    <div id="pe-ascension-queue-compact" class="pe-queue-compact gc-panel-header" aria-live="polite">
+      <span class="pe-queue-compact-icon" aria-hidden="true">🌌</span>
+      <span class="gc-panel-title" id="pe-ascension-queue-compact-label">
+        {% if asc.summary and asc.summary.count %}
+          {{ T('pe_ascension_queue_compact_active', '%(count)s Ascension-Aufträge', count=(asc.summary.count|int)) }}
+        {% else %}
+          {{ T('pe_ascension_queue_compact_idle', 'Keine Ascension-Aufträge') }}
+        {% endif %}
+      </span>
+    </div>
+
+    {% if asc.ascensions %}
+    <div class="pe-ascension-grid" role="list">
+      {% for card in asc.ascensions %}
+      <article class="gc-ascension-card gc-prog-card{% if card.queue_job is defined and card.queue_job %} gc-ascension-card--in-queue{% if card.queue_job.status == 'active' %} gc-ascension-card--queue-active{% else %} gc-ascension-card--queue-pending{% endif %}{% endif %}{% if card.completed %} is-completed{% endif %}"
+               data-ascension-card
+               data-ascension-key="{{ card.ascension_key }}"
+               role="listitem">
+        {{ pe_card_queue_block(card.queue_job if card.queue_job is defined else none) }}
+        <header class="gc-ascension-card-head">
+          <h4 class="gc-ascension-card-title">{{ T(card.label_key, card.ascension_key) }}</h4>
+          {% if card.completed %}
+            <span class="pe-tag">{{ T('pe_ascension_completed', 'Vollendet') }}</span>
+          {% elif card.is_active %}
+            <span class="pe-tag pe-tag-active">{{ T('queue_card_status_active', 'AKTIV') }}</span>
+          {% elif card.eligible %}
+            <span class="pe-tag pe-tag-ready">{{ T('pe_ascension_ready', 'Bereit') }}</span>
+          {% endif %}
+        </header>
+        <p class="hint gc-mono">
+          {{ T('pe_ascension_duration', 'Dauer: %(days)s Tage', days=(card.duration_days|int)) }}
+        </p>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
 
   {# ── Sekundär: Economy, Events, Politik, Chronik ── #}
   {% if econ.deficits or econ.exports or econ.chains %}
