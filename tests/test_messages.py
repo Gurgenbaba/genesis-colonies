@@ -973,6 +973,21 @@ def test_api_messages_empty_only_after_ok_list(app_client, temp_db):
     assert payload["data"]["unread_count"] == 0
 
 
+def test_fleet_ship_summary_no_raw_ship_keys():
+    """Logistics/fleet report bodies must show display names, not internal ship keys."""
+    from game.fleet import _format_fleet_ship_summary
+
+    de_txt = _format_fleet_ship_summary({"atlas_hauler": 2, "mule_courier": 1}, locale="de")
+    assert "atlas_hauler" not in de_txt
+    assert "mule_courier" not in de_txt
+    assert "Atlas-Frachter" in de_txt
+    assert "Nomad" in de_txt
+
+    unknown_txt = _format_fleet_ship_summary({"custom_hauler": 1}, locale="de")
+    assert "custom_hauler" not in unknown_txt
+    assert "Custom Hauler" in unknown_txt
+
+
 def test_dispatch_combat_reports_persists_for_both_players(temp_db):
     from game.combat import COMBAT_REPORT_VERSION, build_combat_report
     from game.combat_models import CombatResult, CombatRound

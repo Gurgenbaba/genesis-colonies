@@ -7,8 +7,9 @@ from typing import Any, Mapping, Optional
 
 logger = logging.getLogger(__name__)
 
-from .player_display import resolve_player_by_name
 from .db import begin_write_transaction, commit, db, in_transaction, rollback, table_exists
+
+_MESSAGE_COMMANDER_PREFIX = "Commander "
 
 VALID_CATEGORIES = frozenset(
     {"system", "player", "combat", "espionage", "expedition", "admin"}
@@ -21,6 +22,67 @@ BODY_MIN = 3
 BODY_MAX = 5000
 SEND_COOLDOWN_SEC = 30
 DEFAULT_LIST_LIMIT = 50
+
+
+def _message_recipient_name_candidates(name: str) -> list[str]:
+    """Distinct stored-name variants tried for player-mail recipient lookup."""
+    q = str(name or "").strip()
+    if not q:
+        return []
+    seen: set[str] = set()
+    ordered: list[str] = []
+
+    def add(value: str) -> None:
+        v = str(value or "").strip()
+        key = v.lower()
+        if len(v) < 2 or key in seen:
+            return
+        seen.add(key)
+        ordered.append(v)
+
+    add(q)
+    lower = q.lower()
+    prefix_lower = _MESSAGE_COMMANDER_PREFIX.lower()
+    if lower.startswith(prefix_lower):
+        add(q[len(_MESSAGE_COMMANDER_PREFIX) :].strip())
+    else:
+        add(f"{_MESSAGE_COMMANDER_PREFIX}{q}")
+    return ordered
+
+
+def resolve_message_recipient(name: str | None, conn) -> tuple[dict[str, Any] | None, str | None]:
+    """
+    Resolve a player-mail recipient by stored player name.
+
+    Accepts the exact stored name or the suffix without the Commander prefix.
+    Returns ambiguous when multiple distinct players match (e.g. "Alpha" vs
+    "Commander Alpha"). Never filters by score or ranking.
+    """
+    q = str(name or "").strip()
+    if len(q) < 2:
+        return None, "validation"
+
+    cur = conn.cursor()
+    matches: dict[int, dict[str, Any]] = {}
+
+    for candidate in _message_recipient_name_candidates(q):
+        cur.execute(
+            """
+            SELECT id, name FROM players
+            WHERE LOWER(name) = LOWER(?)
+            ORDER BY id ASC;
+            """,
+            (candidate,),
+        )
+        for row in cur.fetchall():
+            pid = int(row["id"])
+            matches[pid] = {"id": pid, "name": str(row["name"] or "")}
+
+    if not matches:
+        return None, "not_found"
+    if len(matches) > 1:
+        return None, "ambiguous"
+    return next(iter(matches.values())), None
 
 
 def _now() -> int:
@@ -980,7 +1042,7 @@ def send_player_message(
             return _err("messages_not_ready")
 
         lookup_input = str(recipient_name or "").strip()
-        recipient, lookup_err = resolve_player_by_name(lookup_input, conn)
+        recipient, lookup_err = resolve_message_recipient(lookup_input, conn)
         if lookup_err == "ambiguous":
             return _err("recipient_ambiguous")
         if lookup_err or not recipient:
@@ -1160,7 +1222,7 @@ def admin_send_message(
             if not row:
                 return _err("recipient_not_found")
         else:
-            hit, lookup_err = resolve_player_by_name(str(recipient), conn)
+            hit, lookup_err = resolve_message_recipient(str(recipient), conn)
             if lookup_err == "ambiguous":
                 return _err("recipient_ambiguous")
             if lookup_err or not hit:

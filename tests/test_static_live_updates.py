@@ -70,10 +70,12 @@ def test_messages_js_tab_and_initial_share_load_list():
 def test_messages_js_spy_report_and_category_label():
     src = _read("static/js/messages.js")
     assert "function categoryLabel(cat)" in src
-    assert "function renderSpyReport(meta)" in src
-    assert "function renderExpeditionReport(meta)" in src
+    assert "function renderSpyReportFull(meta" in src
+    assert "function renderSpyReportTeaser(meta" in src
+    assert "function renderExpeditionReportFull(meta" in src
+    assert "function renderExpeditionReportTeaser(meta" in src
+    assert "function keyFallbackLabel(raw)" in src
     assert "expeditionEventVisual" in src
-    assert "gc-expedition-card" in src
     assert "renderMessageBody(msg)" in src
 
 

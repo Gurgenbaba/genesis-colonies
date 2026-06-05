@@ -2242,6 +2242,16 @@ def _emit_logistics_fleet_report(
     )
 
 
+def _ship_display_name(ship_key: str, *, locale: str | None = None) -> str:
+    from .i18n import tr
+    from .mail import humanize_identifier_key
+
+    key = str(ship_key or "").strip()
+    if not key:
+        return ""
+    return tr(f"fleet_ship_{key}", humanize_identifier_key(key), locale=locale)
+
+
 def _format_fleet_ship_summary(ships: Mapping[str, Any], *, locale: str | None = None) -> str:
     from .i18n import fmt_int, tr
 
@@ -2249,7 +2259,7 @@ def _format_fleet_ship_summary(ships: Mapping[str, Any], *, locale: str | None =
     for key, qty in sorted((ships or {}).items()):
         amount = int(qty or 0)
         if amount > 0:
-            parts.append(f"{key} ×{fmt_int(amount)}")
+            parts.append(f"{_ship_display_name(key, locale=locale)} ×{fmt_int(amount)}")
     if not parts:
         return tr("fleet_deploy_report_ships_empty", "no ships", locale=locale)
     return ", ".join(parts)

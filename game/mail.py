@@ -13,6 +13,11 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def humanize_identifier_key(key: str) -> str:
+    """Title-case fallback for internal keys in player-facing notification text."""
+    return " ".join(part.capitalize() for part in str(key or "").split("_") if part)
+
+
 def _env(name: str, default: str = "") -> str:
     return (os.environ.get(name) or default).strip()
 

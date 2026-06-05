@@ -91,12 +91,22 @@
     }
   }
 
+  function keyFallbackLabel(raw) {
+    return String(raw || "")
+      .split("_")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
   function shipLabel(key) {
-    return t(`fleet_ship_${key}`, key);
+    const k = String(key || "");
+    return t(`fleet_ship_${k}`, keyFallbackLabel(k));
   }
 
   function defenseLabel(key) {
-    return t(`defense_${key}`, key);
+    const k = String(key || "");
+    return t(`defense_${k}`, keyFallbackLabel(k));
   }
 
   function unitLabel(key, defenseStock) {
@@ -1393,7 +1403,8 @@
   }
 
   function categoryLabel(cat) {
-    return t(`messages.category.${cat}`, cat);
+    const c = String(cat || "");
+    return t(`messages.category.${c}`, keyFallbackLabel(c));
   }
 
   function formatTime(ts) {
