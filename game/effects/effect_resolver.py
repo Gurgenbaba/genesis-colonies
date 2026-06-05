@@ -339,6 +339,7 @@ class EffectResolver:
                     "solar_plant",
                     "metal_storage",
                     "crystal_storage",
+                    "fuel_storage",
                 )
             },
         }
@@ -434,19 +435,24 @@ class EffectResolver:
         base_ph = float(self._settings_dict().get("fuel_production_per_hour", 4) or 4)
         return base_ph * lvl * (1.35 ** max(0, lvl - 1))
 
+    def fuel_storage_capacity(self) -> int:
+        """Planet fuel cell depot capacity (fuel_storage building + tech/terraformer)."""
+        mods = self.get_modifiers()
+        b = self.buildings
+
+        terra_lvl = _bld(b, "terraformer")
+        terra_factor = 1.0 + 0.05 * terra_lvl
+        storage_factor = float(mods.get("storage_factor", 1.0) or 1.0) * terra_factor
+
+        f_lvl = _bld(b, "fuel_storage")
+        if f_lvl <= 0:
+            return 0
+        f_cap = self.BASE_STORAGE * (self.STORAGE_GROW ** max(0, f_lvl - 1))
+        return int(f_cap * storage_factor)
+
     def fuel_cells_storage_capacity(self) -> int:
-        """
-        Internal storage at the fuel cell plant — same level scaling as production.
-        Capacity ~= 25 h of full production output (tunable constant).
-        """
-        lvl = _bld(self.buildings, "fuel_cell_plant")
-        if lvl <= 0:
-            return 2_147_483_647
-        per_hour = self.fuel_cells_production_per_hour()
-        storage_factor = float(self.get_modifiers().get("storage_factor", 1.0) or 1.0)
-        terra_lvl = _bld(self.buildings, "terraformer")
-        storage_factor *= 1.0 + 0.05 * terra_lvl
-        return max(0, int(per_hour * 25.0 * storage_factor))
+        """Authoritative fuel_cells cap — depot only (plant no longer stores)."""
+        return self.fuel_storage_capacity()
 
     def get_storage_capacity(self) -> Dict[str, int]:
         mods = self.get_modifiers()
@@ -484,6 +490,7 @@ class EffectResolver:
             "academy": 0,
             "metal_storage": 0,
             "crystal_storage": 0,
+            "fuel_storage": 0,
             "command_center": 0,
             "shipyard": 0,
             "defense_factory": 0,
@@ -504,7 +511,7 @@ class EffectResolver:
 
         if building_type in ("metal_mine", "crystal_mine", "solar_plant"):
             return base_max + core + geo * 2
-        if building_type in ("metal_storage", "crystal_storage"):
+        if building_type in ("metal_storage", "crystal_storage", "fuel_storage"):
             return base_max + geo * 2
         return base_max
 

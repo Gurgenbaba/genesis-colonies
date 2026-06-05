@@ -12,7 +12,7 @@ Kanonischer Gebäude-Key für Werft: **`orbital_shipyard`** (Legacy-Alias `shipy
 
 | Tab | Keys |
 |-----|------|
-| **resources** | `metal_mine`, `crystal_mine`, `solar_plant`, `fuel_cell_plant`, `metal_storage`, `crystal_storage` |
+| **resources** | `metal_mine`, `crystal_mine`, `solar_plant`, `fuel_cell_plant`, `metal_storage`, `crystal_storage`, `fuel_storage` |
 | **research** | `research_lab`, `academy` |
 | **military** | `orbital_shipyard`, `defense_factory`, `barracks`, `radar_array` |
 | **infrastructure** | `command_center`, `shield_generator`, `terraformer`, `nanofactory`, `geothermal_nexus`, `planet_core_nexus` |
@@ -43,7 +43,8 @@ Modifier: `buildtime_tech`, `nanofactory`, `build_speed` (Settings).
 
 | Gebäude | Voraussetzung |
 |---------|---------------|
-| `fuel_cell_plant` | solar_plant ≥1, crystal_mine ≥2 — produziert Brennzellen **und** integriertes Lager (skaliert mit Stufe) |
+| `fuel_cell_plant` | solar_plant ≥1, crystal_mine ≥2 — produziert Brennzellen (reine Produktion) |
+| `fuel_storage` | fuel_cell_plant ≥4 — Brennzellen-Lagerkapazität (wie Metal/Crystal Storage) |
 | `research_lab` | metal_mine ≥3, crystal_mine ≥2 |
 | `orbital_shipyard` | command_center ≥2 |
 | `terraformer` | command_center ≥4, storages ≥3, storage_tech ≥1 |

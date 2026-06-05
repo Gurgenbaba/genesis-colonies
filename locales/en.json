@@ -130,6 +130,7 @@
   "overview_label_warnings": "Notices",
   "overview_warning_storage_metal": "Ferronit storage almost full.",
   "overview_warning_storage_crystal": "Crytite storage almost full.",
+  "overview_warning_storage_fuel_cells": "Fuel cell storage almost full.",
   "overview_warning_queue_full_build": "Build queue is full.",
   "overview_warning_queue_full_research": "Research queue is full.",
   "overview_label_recent_log": "Recent events",
@@ -456,7 +457,7 @@
   "fleet_shipyard_none": "No ships unlocked at this shipyard level.",
   "shipyard_build_ok": "Ships built.",
   "building_fuel_cell_plant": "Fuel Cell Plant",
-  "desc_fuel_cell_plant": "Produces Fuel Cells for fleet operations.",
+  "desc_fuel_cell_plant": "Produces Fuel Cells for fleet operations. Consumes energy — storage is handled by the Fuel Cell Depot.",
   "research_fuel_efficiency": "Fuel Cell Optimization",
   "desc_research_fuel_efficiency": "Reduces fleet fuel consumption by 3% per level (minimum 50%).",
   "desc_fuel_efficiency": "Reduces fleet fuel consumption by 3% per level (minimum 50%).",
@@ -788,6 +789,9 @@
 
   "crystal_storage": "Crytite Silo",
   "desc_crystal_storage": "Specialized silos for Crytite. Crucial for financing large high-tech projects.",
+
+  "building_fuel_storage": "Fuel Cell Depot",
+  "desc_fuel_storage": "Stores produced Fuel Cells. Expands capacity by factor 1.8 per level (base 100,000). Scales with storage tech and Terraformer.",
 
   "command_center": "Command Center",
   "desc_command_center": "Unlocks military and late-game buildings. Reduces Nano-Assembly build time by 25% per level.",
@@ -1138,7 +1142,7 @@
   "admin_balance_fuel_crystal_per_unit": "Crystal per fuel cell (buy)",
   "admin_balance_fuel_min_units": "Min. fuel cell amount",
   "admin_balance_fuel_production_per_hour": "Fuel production /h (level 1 base)",
-  "admin_balance_fuel_production_hint": "Each plant level increases production and integrated storage (~25 h buffer).",
+  "admin_balance_fuel_production_hint": "Each plant level increases production. Fuel storage capacity comes from the Fuel Cell Depot building.",
   "admin_label_fleet_speeds": "Fleet speed",
   "admin_migrations_prod_note": "In production run migrations via deploy/CLI (migrate.py). No browser run button.",
   "admin_error_title": "Error",

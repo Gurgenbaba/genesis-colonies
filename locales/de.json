@@ -119,6 +119,7 @@
   "overview_label_warnings": "Hinweise",
   "overview_warning_storage_metal": "Ferronit-Lager fast voll.",
   "overview_warning_storage_crystal": "Crytite-Lager fast voll.",
+  "overview_warning_storage_fuel_cells": "Brennzellen-Lager fast voll.",
   "overview_warning_queue_full_build": "Bauschleife ist voll.",
   "overview_warning_queue_full_research": "Forschungs-Warteschlange ist voll.",
   "overview_label_recent_log": "Letzte Ereignisse",
@@ -407,6 +408,9 @@
 
   "building_crystal_storage": "Crytite-Silo",
   "desc_crystal_storage": "Erhöht das Crytite-Lager um Faktor 1,8 pro Stufe (Basis 100.000). Skaliert mit Lagertechnik und Terraformer.",
+
+  "building_fuel_storage": "Brennzellen-Depot",
+  "desc_fuel_storage": "Speichert produzierte Brennzellen. Erhöht die Kapazität um Faktor 1,8 pro Stufe (Basis 100.000). Skaliert mit Lagertechnik und Terraformer.",
 
   "building_command_center": "Kommandozentrale",
   "desc_command_center": "Schaltet Militär- und Spätgame-Gebäude frei. Verkürzt die Bauzeit der Nanofabrik um 25 % pro Stufe.",
@@ -1285,7 +1289,7 @@
   "fleet_shipyard_none": "Auf dieser Werftstufe keine Schiffe freigeschaltet.",
   "shipyard_build_ok": "Schiffe gebaut.",
   "building_fuel_cell_plant": "Brennzellenfabrik",
-  "desc_fuel_cell_plant": "Produziert Brennzellen für Flottenbetrieb.",
+  "desc_fuel_cell_plant": "Produziert Brennzellen für Flottenbetrieb. Verbraucht Energie — Lagerung erfolgt im Brennzellen-Depot.",
   "research_fuel_efficiency": "Brennzellen-Optimierung",
   "desc_research_fuel_efficiency": "Senkt Flotten-Treibstoffverbrauch um 3 % pro Stufe (mindestens 50 %).",
   "fleet_dev_seed_ok": "Testschiffe hinzugefügt.",
@@ -1540,7 +1544,7 @@
   "admin_balance_fuel_crystal_per_unit": "Crytite pro Brennzelle (Kauf)",
   "admin_balance_fuel_min_units": "Min. Brennzellen-Menge",
   "admin_balance_fuel_production_per_hour": "Brennzellen-Produktion /h (Basis Stufe 1)",
-  "admin_balance_fuel_production_hint": "Pro Werksstufe steigen Produktion und integriertes Lager (~25 h Puffer).",
+  "admin_balance_fuel_production_hint": "Pro Werksstufe steigt die Produktion. Lagerkapazität kommt vom Brennzellen-Depot.",
   "admin_label_fleet_speeds": "Flotten-Geschwindigkeit",
   "admin_migrations_prod_note": "Migrationen in Production nur per Deploy/CLI (migrate.py). Kein Run-Button im Browser.",
   "admin_error_title": "Fehler",

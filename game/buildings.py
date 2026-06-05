@@ -37,6 +37,7 @@ BUILDING_ORDER: List[str] = [
     "academy",
     "metal_storage",
     "crystal_storage",
+    "fuel_storage",
     "command_center",
     "orbital_shipyard",
     "defense_factory",
@@ -60,6 +61,7 @@ BUILDING_TAB: Dict[str, str] = {
     "academy": "research",
     "metal_storage": "resources",
     "crystal_storage": "resources",
+    "fuel_storage": "resources",
     "command_center": "infrastructure",
     "orbital_shipyard": "military",
     "defense_factory": "military",
@@ -75,6 +77,7 @@ BUILDING_TAB: Dict[str, str] = {
 _BUILDING_ICON_OVERRIDES: Dict[str, str] = {
     "orbital_shipyard": "img/buildings/shipyard.png",
     "fuel_cell_plant": "img/buildings/solar_plant.png",
+    "fuel_storage": "img/buildings/crystal_storage.png",
 }
 
 BUILDING_ICON: Dict[str, str] = {
@@ -95,6 +98,7 @@ BASE_COST: Dict[str, Tuple[int, int]] = {
     "academy": (400, 600),
     "metal_storage": (1000, 0),
     "crystal_storage": (0, 1000),
+    "fuel_storage": (600, 400),
     "command_center": (500, 200),
     "orbital_shipyard": (400, 300),
     "defense_factory": (600, 400),
@@ -116,6 +120,7 @@ COST_FACTOR: Dict[str, float] = {
     "academy": 1.8,
     "metal_storage": 1.7,
     "crystal_storage": 1.7,
+    "fuel_storage": 1.7,
     "command_center": 2.0,
     "orbital_shipyard": 1.9,
     "defense_factory": 1.9,
@@ -137,6 +142,7 @@ BUILD_TIME_BASE: Dict[str, int] = {
     "academy": 180,
     "metal_storage": 120,
     "crystal_storage": 120,
+    "fuel_storage": 120,
     "command_center": 240,
     "orbital_shipyard": 200,
     "defense_factory": 220,
@@ -158,6 +164,7 @@ BUILD_TIME_FACTOR: Dict[str, float] = {
     "academy": 1.6,
     "metal_storage": 1.6,
     "crystal_storage": 1.6,
+    "fuel_storage": 1.6,
     "command_center": 1.7,
     "orbital_shipyard": 1.7,
     "defense_factory": 1.7,
@@ -185,6 +192,7 @@ BUILDING_REQUIREMENTS: Dict[str, Dict[str, Dict[str, int]]] = {
 
     "metal_storage": {"buildings": {"metal_mine": 4}},
     "crystal_storage": {"buildings": {"crystal_mine": 4}},
+    "fuel_storage": {"buildings": {"fuel_cell_plant": 4}},
 
     "command_center": {},
     "orbital_shipyard": {"buildings": {"command_center": 2}},
@@ -547,6 +555,17 @@ def _panel_upgrade_effect_fields(
             effect_current=int(caps_now.get("crystal", 0) or 0),
             effect_next=int(caps_next.get("crystal", 0) or 0),
             effect_resource="crystal",
+            effect_unit="",
+        )
+
+    if building_type == "fuel_storage":
+        caps_now = r_now.get_storage_capacity()
+        caps_next = r_next.get_storage_capacity()
+        return _panel_effect_snapshot(
+            effect_kind="storage",
+            effect_current=int(caps_now.get("fuel_cells", 0) or 0),
+            effect_next=int(caps_next.get("fuel_cells", 0) or 0),
+            effect_resource="fuel_cells",
             effect_unit="",
         )
 

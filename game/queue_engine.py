@@ -30,7 +30,7 @@ _MAX_FINISH_PASSES = 8
 _BUILDING_KEYS = [
     "metal_mine", "crystal_mine", "solar_plant",
     "research_lab", "academy",
-    "metal_storage", "crystal_storage",
+    "metal_storage", "crystal_storage", "fuel_storage",
     "command_center", "orbital_shipyard", "fuel_cell_plant", "defense_factory",
     "barracks", "radar_array", "shield_generator",
     "terraformer", "nanofactory", "geothermal_nexus",

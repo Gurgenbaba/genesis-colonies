@@ -2260,6 +2260,8 @@
     academy: { levelId: "level-academy", statusId: "status-academy", btnId: "btn-academy" },
     metal_storage: { levelId: "level-metal_storage", statusId: "status-metal_storage", btnId: "btn-metal_storage" },
     crystal_storage: { levelId: "level-crystal_storage", statusId: "status-crystal_storage", btnId: "btn-crystal_storage" },
+    fuel_storage: { levelId: "level-fuel_storage", statusId: "status-fuel_storage", btnId: "btn-fuel_storage" },
+    fuel_cell_plant: { levelId: "level-fuel_cell_plant", statusId: "status-fuel_cell_plant", btnId: "btn-fuel_cell_plant" },
     command_center: { levelId: "level-command_center", statusId: "status-command_center", btnId: "btn-command_center" },
     orbital_shipyard: { levelId: "level-orbital_shipyard", statusId: "status-orbital_shipyard", btnId: "btn-orbital_shipyard" },
     defense_factory: { levelId: "level-defense_factory", statusId: "status-defense_factory", btnId: "btn-defense_factory" },
@@ -2280,6 +2282,8 @@
     academy: "Genesis-Akademie",
     metal_storage: "Ferronit-Depot",
     crystal_storage: "Crytite-Silo",
+    fuel_storage: "Brennzellen-Depot",
+    fuel_cell_plant: "Brennzellenfabrik",
     command_center: "Kommandozentrale",
     orbital_shipyard: "Orbitalwerft",
     defense_factory: "Verteidigungsfabrik",
@@ -4166,6 +4170,16 @@
       if (ovCryVal) _setIfChanged(ovCryVal, fmtNumber(crystal));
       if (ovCryCap) _setIfChanged(ovCryCap, `/ ${fmtNumber(storageCrystal)}`);
 
+      const ovFuelVal = document.querySelector('#overview-fuel-val .gc-val[data-res="fuel_cells"]');
+      const ovFuelCap = document.querySelector('#overview-fuel-val .gc-cap');
+      if (ovFuelVal) _setIfChanged(ovFuelVal, fmtNumber(fuelCells));
+      if (ovFuelCap) _setIfChanged(ovFuelCap, `/ ${fmtNumber(storageFuelCells)}`);
+      const ovFuelRate = document.querySelector('#overview-fuel-val .overview-res-inline-rate');
+      if (ovFuelRate) {
+        const prodFuelCells = Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0));
+        _setIfChanged(ovFuelRate, prodFuelCells > 0 ? `+${fmtNumber(prodFuelCells)}/h` : "");
+      }
+
       const ovEnergyUsed = document.querySelector('#overview-energy-val .gc-val[data-energy-used]');
       const ovEnergyTotal = document.querySelector('#overview-energy-val [data-energy-total]');
       if (ovEnergyUsed) _setIfChanged(ovEnergyUsed, fmtNumber(used));
@@ -4199,6 +4213,8 @@
             _setIfChanged(prodCell, `${fmtNumber(metal)} / ${fmtNumber(storageMetal)}`);
           } else if (key === "crystal_storage" && storageCrystal > 0) {
             _setIfChanged(prodCell, `${fmtNumber(crystal)} / ${fmtNumber(storageCrystal)}`);
+          } else if (key === "fuel_storage" && storageFuelCells > 0) {
+            _setIfChanged(prodCell, `${fmtNumber(fuelCells)} / ${fmtNumber(storageFuelCells)}`);
           } else {
             const val = Math.floor(prod[key] || 0);
             _setIfChanged(prodCell, val > 0 ? `+${fmtNumber(val)} / h` : "-");

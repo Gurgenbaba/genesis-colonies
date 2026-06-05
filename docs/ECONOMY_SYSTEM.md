@@ -12,7 +12,7 @@ Formeln: autoritativ in `game/effects/effect_resolver.py` — siehe [EFFECTS.md]
 |-----|---------|-------------|-------|
 | `metal` | Ferronit | Ja (`metal_storage` + Tech) | Planet |
 | `crystal` | Crytite | Ja (`crystal_storage` + Tech) | Planet |
-| `fuel_cells` | Brennzellen | Ja (integriert in `fuel_cell_plant`, skaliert mit Stufe) | Planet |
+| `fuel_cells` | Brennzellen | Ja (`fuel_storage` + Tech) | Planet |
 | `energy_total` / `energy_used` | Energie | Derived, persisted | Planet |
 
 **Kein Deuterium** — Fuel für Schiffe = `fuel_cells`.
@@ -30,7 +30,7 @@ finish_due_work_once()          # optional, wenn nicht skip_queue_finish
 elapsed = now - last_update
 EffectResolver → rates, energy
 apply_production_delta(metal, crystal)  # capped by storage
-fuel_cells += delta                     # capped by fuel_cell_plant storage
+fuel_cells += delta                     # capped by fuel_storage capacity
 save last_update, energy_*
 evolution_tick_planet()         # wenn Schema ready
 ```

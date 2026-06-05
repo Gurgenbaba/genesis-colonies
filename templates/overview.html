@@ -115,6 +115,20 @@
         </div>
       </div>
 
+      <div class="overview-resources-strip" id="overview-resources-strip" aria-label="{{ T('overview_label_resources', 'Ressourcen') }}">
+        <div class="overview-res-inline" id="overview-fuel-val">
+          <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" alt="" class="overview-res-icon-sm" loading="lazy">
+          <span class="overview-res-inline-label">{{ T('resource_fuel_cells') }}</span>
+          <span class="overview-res-inline-main gc-mono">
+            <span class="gc-val" data-res="fuel_cells">{{ (res.fuel_cells or 0)|fmt_int }}</span>
+            <span class="gc-cap">/ {{ (res.fuel_cells_cap or 0)|fmt_int }}</span>
+          </span>
+          {% if res.fuel_cells_per_hour %}
+          <span class="overview-res-inline-rate gc-mono">+{{ res.fuel_cells_per_hour|fmt_int }}/h</span>
+          {% endif %}
+        </div>
+      </div>
+
       {% if building_upgrades %}
       <div class="overview-upgrade-widgets" id="overview-upgrade-widgets" aria-label="{{ T('overview_label_upgrade_preview', 'Upgrade-Vorschau') }}">
         {% for b in building_upgrades %}

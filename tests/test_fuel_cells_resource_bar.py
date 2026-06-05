@@ -127,7 +127,7 @@ def test_fuel_cell_plant_production_increases_balance(fuel_db):
     pid = int(planet["id"])
     cur = conn.cursor()
     cur.execute(
-        "UPDATE planet_buildings SET fuel_cell_plant = 2, metal_mine = 0, crystal_mine = 0, solar_plant = 5 WHERE planet_id = ?;",
+        "UPDATE planet_buildings SET fuel_cell_plant = 2, fuel_storage = 1, metal_mine = 0, crystal_mine = 0, solar_plant = 5 WHERE planet_id = ?;",
         (pid,),
     )
     cur.execute("UPDATE planets SET fuel_cells = 100, last_update = ? WHERE id = ?;", (time.time() - 3600, pid))

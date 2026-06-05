@@ -142,7 +142,11 @@ def test_fuel_production_respects_storage_cap(exchange_db):
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     cur = conn.cursor()
     cur.execute(
-        "UPDATE planet_buildings SET fuel_cell_plant = 5 WHERE planet_id = ?;",
+        """
+        UPDATE planet_buildings
+        SET fuel_cell_plant = 5, fuel_storage = 1, solar_plant = 5
+        WHERE planet_id = ?;
+        """,
         (pid,),
     )
     status = get_exchange_status(

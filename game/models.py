@@ -257,6 +257,7 @@ def init_db() -> None:
         ("geothermal_nexus",  "INTEGER DEFAULT 0 CHECK(geothermal_nexus >= 0)"),
         ("planet_core_nexus", "INTEGER DEFAULT 0 CHECK(planet_core_nexus >= 0)"),
         ("fuel_cell_plant",   "INTEGER DEFAULT 0 CHECK(fuel_cell_plant >= 0)"),
+        ("fuel_storage",      "INTEGER DEFAULT 0 CHECK(fuel_storage >= 0)"),
         ("orbital_shipyard",  "INTEGER DEFAULT 0 CHECK(orbital_shipyard >= 0)"),
     ]
     for col, ddl in new_building_cols:
@@ -1118,7 +1119,7 @@ def adjust_homeworld_resources(
 BUILDING_KEYS = [
     "metal_mine", "crystal_mine", "solar_plant",
     "research_lab", "academy",
-    "metal_storage", "crystal_storage",
+    "metal_storage", "crystal_storage", "fuel_storage",
     "command_center", "shipyard", "orbital_shipyard", "fuel_cell_plant", "defense_factory",
     "barracks", "radar_array", "shield_generator",
     "terraformer", "nanofactory", "geothermal_nexus",

@@ -152,7 +152,7 @@ def apply_fuel_production_delta(
 ) -> None:
     """
     Brennzellen-Produktion:
-    - Zuwachs stoppt am Werks-Lager (wie Minen-Produktion).
+    - Zuwachs stoppt am Brennzellen-Depot (fuel_storage).
     - Bestehendes Overflow (Tausch/Schrott/Rewards) wird nie abgeschnitten.
     """
     if delta_fuel_cells <= 0:
