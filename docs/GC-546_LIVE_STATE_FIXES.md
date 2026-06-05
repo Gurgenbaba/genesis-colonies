@@ -71,10 +71,15 @@ Punkte-Delta erscheint mehrfach (Ranking, Header Score, Delta-Animation).
 
 ### Umsetzung
 
-- `lastDeltaEventTotal` — globale Dedup pro Ziel-Score
-- `showScoreDelta(..., landingTotal)` — früh abbrechen wenn Event schon gezeigt
-- `_purgeScoreDeltaNodes()` — alte Delta-Nodes am Anchor entfernen
-- HUD + Overview teilen sich ein Event (Header zuerst)
+- `lastDeltaEventTotal` — globale Dedup pro Ziel-Score (546A)
+- **546A2:** `_purgeAllScoreDeltaNodes()` — global max. 1 Node; `_scheduleScoreDeltaRemoval()` via `animationend` + Timeout
+- `showScoreDelta(delta, landingTotal)` — nur Header-HUD (`_resolveHudScoreDeltaAnchor`)
+- Overview patcht Score-Zahl, **kein** Delta
+- CSS: `animation-fill-mode: none`, absolute + `pointer-events: none`
+
+### GC-546A2 — Score-Delta Rendering (2026-06-05)
+
+Follow-up nach Browser-Retest F1: logische Dedup reichte nicht — alte Nodes blieben sichtbar.
 
 ---
 

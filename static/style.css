@@ -5756,7 +5756,7 @@ span.gc-res-icon.gc-res-fuel-cells{ background-image: var(--gc-icon-fuel-cells);
   100% { transform: translateZ(0) scale(1); filter: brightness(1); }
 }
 
-/* delta chip */
+/* delta chip — single global node (GC-546A2); removed from DOM after animation */
 .gc-score-pill .gc-score-delta{
   position: absolute;
   top: -10px;
@@ -5778,6 +5778,8 @@ span.gc-res-icon.gc-res-fuel-cells{ background-image: var(--gc-icon-fuel-cells);
   opacity: 0;
   transform: translateY(8px) scale(0.98);
   pointer-events: none;
+  user-select: none;
+  animation-fill-mode: none;
 
   background: rgba(6, 255, 244, 0.10);
   border: 1px solid rgba(6, 255, 244, 0.35);
@@ -5796,6 +5798,7 @@ span.gc-res-icon.gc-res-fuel-cells{ background-image: var(--gc-icon-fuel-cells);
   opacity: 1;
   transform: translateY(-6px) scale(1);
   animation: gcDeltaFloat 980ms ease-out 1;
+  animation-fill-mode: none;
 }
 @keyframes gcDeltaFloat{
   0% { opacity: 0; transform: translateY(8px) scale(0.98); filter: blur(0.2px); }

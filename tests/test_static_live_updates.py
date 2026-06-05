@@ -516,18 +516,23 @@ def test_main_js_gc546b_building_requirements_live_patch():
 
 
 def test_main_js_gc546a_score_delta_deduplication():
-    """GC-546A: one delta animation per score landing; purge stale nodes."""
+    """GC-546A/A2: one delta event per score landing; HUD-only render."""
     src = _read("static/main.js")
     score_state = src.split("const _scoreState = {")[1].split("// Mapping: Buildings")[0]
     assert "lastDeltaEventTotal" in score_state
-    show = src.split("function showScoreDelta(anchorEl, deltaValue, which = \"hud\", landingTotal = null)")[1].split("// Mapping: Buildings")[0]
-    assert "lastDeltaEventTotal === landing" in show
-    assert "function _purgeScoreDeltaNodes(anchorEl)" in src
-    purge = src.split("function _purgeScoreDeltaNodes(anchorEl)")[1].split("function pulseScore")[0]
-    assert 'querySelectorAll(".gc-score-delta")' in purge
-    assert "return false" in show
+    assert "pendingOverviewDelta" not in score_state
+    assert "function _purgeAllScoreDeltaNodes()" in src
+    assert "function _resolveHudScoreDeltaAnchor()" in src
+    assert "function _scheduleScoreDeltaRemoval(deltaEl)" in src
+    purge = src.split("function _purgeAllScoreDeltaNodes()")[1].split("function _resolveHudScoreDeltaAnchor")[0]
+    assert 'document.querySelectorAll(".gc-score-delta")' in purge
+    show = src.split("function showScoreDelta(deltaValue, landingTotal = null)")[1].split("// Mapping: Buildings")[0]
+    assert "_purgeAllScoreDeltaNodes()" in show
+    assert "document.createElement(\"span\")" in show
+    assert "animationend" in src.split("function _scheduleScoreDeltaRemoval")[1].split("function pulseScore")[0]
     hud = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
-    assert "showScoreDelta(" in hud
-    assert "serverTotal" in hud.split("showScoreDelta(")[1].split(");")[0]
+    assert "showScoreDelta(delta, serverTotal)" in hud
     overview = src.split("function patchOverviewScoreFromState(data)")[1].split("function patchResearchPanelFromState")[0]
-    assert 'showScoreDelta(ovScoreVal.parentElement || ovScoreVal, delta, "overview", serverTotal)' in overview
+    assert "showScoreDelta" not in overview
+    css = _read("static/style.css")
+    assert "animation-fill-mode: none" in css.split(".gc-score-pill .gc-score-delta.show")[1][:220]

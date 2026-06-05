@@ -2065,15 +2065,49 @@
     lastServerTotal: null,
     lastAnimatedTotal: null,
     lastDeltaEventTotal: null,
-    pendingOverviewDelta: 0,
   };
 
-  let _deltaTimerHud = 0;
-  let _deltaTimerOv = 0;
+  const SCORE_DELTA_ANIM_MS = 980;
+  const SCORE_DELTA_REMOVE_FALLBACK_MS = 1400;
+  let _scoreDeltaRemoveTimer = null;
+  let _scoreDeltaEl = null;
 
-  function _purgeScoreDeltaNodes(anchorEl) {
-    if (!anchorEl) return;
-    anchorEl.querySelectorAll(".gc-score-delta").forEach((el) => el.remove());
+  function _purgeAllScoreDeltaNodes() {
+    document.querySelectorAll(".gc-score-delta").forEach((el) => el.remove());
+    _scoreDeltaEl = null;
+    if (_scoreDeltaRemoveTimer != null) {
+      clearTimeout(_scoreDeltaRemoveTimer);
+      _scoreDeltaRemoveTimer = null;
+    }
+  }
+
+  function _resolveHudScoreDeltaAnchor() {
+    const hudScoreEl = document.getElementById("hud-score-total");
+    if (!hudScoreEl) return null;
+    return (
+      hudScoreEl.closest(".gc-score-pill")
+      || hudScoreEl.closest(".gc-hud-panel-score")
+      || hudScoreEl.parentElement
+    );
+  }
+
+  function _scheduleScoreDeltaRemoval(deltaEl) {
+    if (!deltaEl) return;
+    if (_scoreDeltaRemoveTimer != null) clearTimeout(_scoreDeltaRemoveTimer);
+
+    const remove = () => {
+      deltaEl.removeEventListener("animationend", onAnimEnd);
+      if (deltaEl.isConnected) deltaEl.remove();
+      if (_scoreDeltaEl === deltaEl) _scoreDeltaEl = null;
+      _scoreDeltaRemoveTimer = null;
+    };
+    const onAnimEnd = (ev) => {
+      if (ev.target !== deltaEl) return;
+      remove();
+    };
+
+    deltaEl.addEventListener("animationend", onAnimEnd);
+    _scoreDeltaRemoveTimer = GC.setSafeTimeout(remove, SCORE_DELTA_REMOVE_FALLBACK_MS);
   }
 
   function pulseScore(anchorEl) {
@@ -2083,25 +2117,10 @@
     anchorEl.classList.add("gc-score-pulse");
   }
 
-  function ensureDeltaEl(anchorEl) {
-    if (!anchorEl) return null;
-
-    const style = getComputedStyle(anchorEl);
-    if (style.position === "static") anchorEl.style.position = "relative";
-
-    let delta = anchorEl.querySelector(".gc-score-delta");
-    if (!delta) {
-      delta = document.createElement("span");
-      delta.className = "gc-score-delta";
-      delta.setAttribute("aria-hidden", "true");
-      delta.textContent = "";
-      anchorEl.appendChild(delta);
-    }
-    return delta;
-  }
-
-  function showScoreDelta(anchorEl, deltaValue, which = "hud", landingTotal = null) {
+  function showScoreDelta(deltaValue, landingTotal = null) {
+    const anchorEl = _resolveHudScoreDeltaAnchor();
     if (!anchorEl) return false;
+
     const d = Math.floor(Number(deltaValue || 0));
     if (!Number.isFinite(d) || d === 0) return false;
 
@@ -2112,32 +2131,34 @@
       return false;
     }
 
-    _purgeScoreDeltaNodes(anchorEl);
-
-    const deltaEl = ensureDeltaEl(anchorEl);
-    if (!deltaEl) return false;
+    _purgeAllScoreDeltaNodes();
 
     if (Number.isFinite(landing)) {
       _scoreState.lastDeltaEventTotal = landing;
     }
 
+    const style = getComputedStyle(anchorEl);
+    if (style.position === "static") anchorEl.style.position = "relative";
+
+    const deltaEl = document.createElement("span");
+    deltaEl.className = "gc-score-delta";
+    deltaEl.setAttribute("aria-hidden", "true");
     const sign = d > 0 ? "+" : "";
     deltaEl.textContent = `${sign}${fmtNumber(d)}`;
+    anchorEl.appendChild(deltaEl);
+    _scoreDeltaEl = deltaEl;
 
-    deltaEl.classList.remove("show");
     void deltaEl.offsetWidth;
     deltaEl.classList.add("show");
 
     pulseScore(anchorEl);
-
-    if (which === "overview") {
-      if (_deltaTimerOv) clearTimeout(_deltaTimerOv);
-      _deltaTimerOv = GC.setSafeTimeout(() => deltaEl.classList.remove("show"), 1200);
-    } else {
-      if (_deltaTimerHud) clearTimeout(_deltaTimerHud);
-      _deltaTimerHud = GC.setSafeTimeout(() => deltaEl.classList.remove("show"), 1200);
-    }
+    _scheduleScoreDeltaRemoval(deltaEl);
     return true;
+  }
+
+  if (!GC._scoreDeltaCleanupRegistered) {
+    GC._scoreDeltaCleanupRegistered = true;
+    GC.registerCleanup(_purgeAllScoreDeltaNodes);
   }
 
   // =========================
@@ -3747,21 +3768,13 @@
           delta = serverTotal - _scoreState.lastServerTotal;
         }
         _scoreState.lastServerTotal = serverTotal;
-        _scoreState.pendingOverviewDelta = delta;
 
         const hudScoreEl = document.getElementById("hud-score-total");
         const hudRankEl = document.getElementById("hud-score-rank");
 
         if (hudScoreEl && _scoreState.lastAnimatedTotal !== serverTotal) {
           animateNumber(hudScoreEl, serverTotal, { duration: 700 });
-          if (delta !== 0) {
-            showScoreDelta(
-              hudScoreEl.closest(".gc-score-pill") || hudScoreEl,
-              delta,
-              "hud",
-              serverTotal
-            );
-          }
+          if (delta !== 0) showScoreDelta(delta, serverTotal);
           _scoreState.lastAnimatedTotal = serverTotal;
         }
 
@@ -3813,9 +3826,6 @@
     const scoreStale = _scoreState.lastServerTotal !== null && serverTotal < _scoreState.lastServerTotal;
     if (scoreStale) return;
 
-    const delta = Number(_scoreState.pendingOverviewDelta) || 0;
-    _scoreState.pendingOverviewDelta = 0;
-
     const ovScoreVal = document.getElementById("overview-score-value");
     const ovScoreRank = document.getElementById("overview-score-rank");
     const ovScoreBuild = document.getElementById("overview-score-buildings");
@@ -3823,9 +3833,6 @@
 
     if (ovScoreVal) {
       animateNumber(ovScoreVal, serverTotal, { duration: 750 });
-      if (delta !== 0) {
-        showScoreDelta(ovScoreVal.parentElement || ovScoreVal, delta, "overview", serverTotal);
-      }
     }
     if (ovScoreRank) {
       ovScoreRank.textContent = (rank >= 1 && totalPlayers > 0) ? `#${rank}/${totalPlayers}` : "#–/–";
