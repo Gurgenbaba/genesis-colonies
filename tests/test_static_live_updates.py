@@ -429,3 +429,57 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     progress = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
     assert "RESEARCHQ.active.finishTime" in progress
     assert "SHIPYARDQ.active.finishTime" in progress
+
+
+def test_main_js_gc546d_production_completion_poll_storm_guards():
+    """GC-546D: debounced completion sync, no per-poll shipyard/defense API storm."""
+    src = _read("static/main.js")
+
+    assert "function requestProductionCompletionSync(opts)" in src
+    assert "PRODUCTION_COMPLETION_DEBOUNCE_MS = 1100" in src
+    assert "function _timerZeroAlreadyFired(el, target)" in src
+    assert "el.dataset.refreshFiredAt" in src
+    assert "function refreshShipyardStateCoalesced(page)" in src
+    assert "function refreshDefenseStateCoalesced(page)" in src
+    assert "_shipyardApiInFlight" in src
+    assert "_defenseApiInFlight" in src
+
+    prod_sync = src.split("function requestProductionCompletionSync(opts)")[1].split("function requestTimerZeroRefresh")[0]
+    assert "pending.gameState" in prod_sync
+    assert "refreshShipyardStateCoalesced(syPage)" in prod_sync
+    assert "pending.defense && !pending.gameState" in prod_sync
+
+    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    assert "syncProductionPanelsAfterGameState(data, reason, activePlanetId)" in apply
+    assert "function patchDefensePanelFromGameState(data, activePlanetId)" in src
+    assert "scheduleShipyardRefreshFromState(true)" not in apply
+    assert "scheduleDefenseRefreshFromState(true)" not in apply
+
+    sync_prod = src.split("function syncProductionPanelsAfterGameState(data, reason, activePlanetId)")[1].split("function applyGameStateData")[0]
+    assert "patchDefensePanelFromGameState(data, activePlanetId)" in sync_prod
+    assert "completionReason" in sync_prod
+
+    progress = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
+    assert 'document.getElementById("shipyard-page")?.querySelector(".shipyard-job.shipyard-job-active")' in progress
+    assert 'document.getElementById("defense-page")?.querySelector(".shipyard-job.shipyard-job-active")' in progress
+    assert "requestProductionCompletionSync" in progress
+    assert "_productionZeroHandled" in progress
+    assert "scheduleShipyardRefreshFromState(true)" not in progress
+    assert "scheduleDefenseRefreshFromState(true)" not in progress
+
+    finish = src.split("function requestFinishRefresh(type)")[1].split("function releaseFinishRefreshLock")[0]
+    assert 'type === "shipyard"' in finish
+    assert "requestProductionCompletionSync({ gameState: true, shipyard: true })" in finish
+
+    defense_timers = src.split("function startDefenseTimers()")[1].split("function bindDefenseOnce")[0]
+    assert "setInterval" not in defense_timers
+    assert "GC.startProgressTicker()" in defense_timers
+
+    refresh_gs = src.split("async function refreshGameState(reason)")[1].split("GC.refreshGameState = refreshGameState")[0]
+    assert "_queuedChainRefreshReason" in refresh_gs
+    assert "if (!_queuedChainRefreshReason) _queuedChainRefreshReason = reasonStr" in refresh_gs
+
+    render_sy = src.split("function renderShipyardQueue(page, queueData)")[1].split("function parseShipyardPageData")[0]
+    assert "_productionZeroHandled.shipyard" in render_sy
+    render_def = src.split("function renderDefenseQueue(page, queuePayload)")[1].split("function bindDefenseOnce")[0]
+    assert "_productionZeroHandled.defense" in render_def

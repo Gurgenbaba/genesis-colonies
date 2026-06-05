@@ -55,6 +55,25 @@ Ein Kernsystem gilt als **100 % Alpha-complete**, wenn **alle** Kriterien der 
 
 **Aggregat Tier 1 (Fleet + Logistics + Evolution + Defense + Galaxy):** ~**74 %** — nicht 95 %.
 
+### Nach GC-545 Browser-QA (2026-06-05)
+
+Quelle: [GC-545](GC-545_LIVE_STATE_BROWSER_AUDIT.md) — echte Browser-Findings, nicht Schätzung.
+
+| System | Vor GC-545 | Nach Browser-QA | Δ | Hauptgrund |
+|--------|----------:|----------------:|---|------------|
+| Buildings | 95 % | **90 %** | −5 | F2 Requirements stale |
+| Research | 90 % | **90 %** | — | stabil |
+| Shipyard | 80 % | **70 %** | −10 | F3 Inventory, F5 Poll |
+| Defense | 75 % | **65 %** | −10 | F4 wie Shipyard, F5 |
+| Fleet | 80 % | **85 %** | +5 | Missionen + Reports ok |
+| Galaxy | 70 % | **90 %** | +20 | voll funktional |
+| Planet Evolution | 70 % | **85 %** | +15 | Technik ok, Balance offen |
+| Messages | 85 % | **75 %** | −10 | F6 Badge |
+| Ranking | 85 % | **70 %** | −15 | F1 Delta × n |
+| Logistics | 75 % | 75 % | — | nicht in Session |
+
+**Epic-Fokus nach GC-545:** Production Completion Layer → [GC-546D zuerst](GC-546_LIVE_STATE_FIXES.md).
+
 ---
 
 ## Detail — Definition of Complete pro System

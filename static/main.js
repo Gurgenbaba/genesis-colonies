@@ -243,6 +243,9 @@
     el.dataset.countdownAt = String(target);
     if (kind) el.dataset.timerKind = kind;
     if (refreshOnZero) el.dataset.refreshOnZero = refreshOnZero;
+    if (el.dataset.refreshFiredAt && el.dataset.refreshFiredAt !== String(target)) {
+      delete el.dataset.refreshFiredAt;
+    }
     if (Number.isFinite(remaining) && remaining >= 0) {
       el.dataset.serverRemaining = String(Math.ceil(remaining));
     } else {
@@ -1599,10 +1602,7 @@
   function requestFinishRefresh(type) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
     if (type === "shipyard") {
-      scheduleShipyardRefreshFromState(true);
-      if (typeof GC.refreshGameState === "function") {
-        GC.refreshGameState("timer_done");
-      }
+      requestProductionCompletionSync({ gameState: true, shipyard: true });
       return;
     }
     const key = type === "buildings" || type === "research" || type === "planet_evolution" ? type : "buildings";
@@ -2802,6 +2802,9 @@
     if (target > 0) {
       if (!el.dataset.timerTarget) el.dataset.timerTarget = String(target);
       if (!el.dataset.countdownAt) el.dataset.countdownAt = String(target);
+      if (el.dataset.refreshFiredAt && el.dataset.refreshFiredAt !== String(target)) {
+        delete el.dataset.refreshFiredAt;
+      }
     }
     const kind = inferTimerKind(el);
     if (!el.dataset.timerKind) el.dataset.timerKind = kind;
@@ -2839,6 +2842,47 @@
     return formatEta(Math.max(0, Math.ceil(remaining)));
   }
 
+  // GC-546D — production completion refresh (shipyard/defense): one debounced sync per timer zero.
+  const PRODUCTION_COMPLETION_DEBOUNCE_MS = 1100;
+  let _productionCompletionTimer = null;
+  let _productionCompletionPending = { gameState: false, shipyard: false, defense: false };
+  let _shipyardApiInFlight = null;
+  let _defenseApiInFlight = null;
+  const _productionZeroHandled = { shipyard: "", defense: "" };
+
+  function _timerZeroAlreadyFired(el, target) {
+    return !!(el && target > 0 && el.dataset.refreshFiredAt === String(target));
+  }
+
+  function _markTimerZeroFired(el, target) {
+    if (el && target > 0) el.dataset.refreshFiredAt = String(target);
+  }
+
+  function requestProductionCompletionSync(opts) {
+    if (!shouldRunGameLoop() || _authLoopAborted) return;
+    const o = opts && typeof opts === "object" ? opts : {};
+    if (o.gameState !== false) _productionCompletionPending.gameState = true;
+    if (o.shipyard) _productionCompletionPending.shipyard = true;
+    if (o.defense) _productionCompletionPending.defense = true;
+    if (_productionCompletionTimer != null) return;
+    _productionCompletionTimer = GC.setSafeTimeout(() => {
+      _productionCompletionTimer = null;
+      const pending = { ..._productionCompletionPending };
+      _productionCompletionPending = { gameState: false, shipyard: false, defense: false };
+      if (pending.gameState && typeof GC.refreshGameState === "function") {
+        GC.refreshGameState("timer_done");
+      }
+      if (pending.shipyard) {
+        const syPage = document.getElementById("shipyard-page");
+        if (syPage?.dataset.ready === "1") refreshShipyardStateCoalesced(syPage);
+      }
+      if (pending.defense && !pending.gameState) {
+        const defPage = document.getElementById("defense-page");
+        if (defPage?.dataset.ready === "1") refreshDefenseStateCoalesced(defPage);
+      }
+    }, PRODUCTION_COMPLETION_DEBOUNCE_MS);
+  }
+
   function requestTimerZeroRefresh(refreshKind, timerKind) {
     const kind = String(refreshKind || "game-state");
     if (kind === "fleet") {
@@ -2846,10 +2890,11 @@
       return;
     }
     if (kind === "shipyard") {
-      scheduleShipyardRefreshFromState(true);
-      if (typeof GC.refreshGameState === "function") {
-        GC.refreshGameState("timer_done");
-      }
+      requestProductionCompletionSync({ gameState: true, shipyard: true });
+      return;
+    }
+    if (kind === "defense") {
+      requestProductionCompletionSync({ gameState: true });
       return;
     }
     const actKey = timerKind === "research" ? "research" : "buildings";
@@ -3049,11 +3094,12 @@
           }
         } else {
           const refreshKind = el.dataset.refreshOnZero || inferRefreshOnZero(el, kind);
-          if (refreshKind) {
+          if (refreshKind && !_timerZeroAlreadyFired(el, target)) {
             const zeroKey = `${refreshKind}:${key}`;
             const lastAt = _timerZeroRefreshLastAt.get(zeroKey) || 0;
             if (Date.now() - lastAt >= TIMER_ZERO_REFRESH_MIN_MS) {
               _timerZeroRefreshLastAt.set(zeroKey, Date.now());
+              _markTimerZeroFired(el, target);
               requestTimerZeroRefresh(refreshKind, kind);
             }
           }
@@ -3144,7 +3190,7 @@
       }
     }
 
-    const shipyardActive = document.querySelector(".shipyard-job.shipyard-job-active");
+    const shipyardActive = document.getElementById("shipyard-page")?.querySelector(".shipyard-job.shipyard-job-active");
     if (shipyardActive) {
       const orderFinishFromDom = parseTimerTarget(shipyardActive.getAttribute("data-finish-time"));
       const orderFinishFromState = parseTimerTarget(SHIPYARDQ.active.finishTime || 0);
@@ -3174,10 +3220,14 @@
           const unitKey = `${shipyardActive.dataset.queueJobId || ""}:${nextUnitFinish}`;
           if (_shipyardUnitFinishKey !== unitKey) {
             _shipyardUnitFinishKey = unitKey;
-            scheduleShipyardRefreshFromState(true);
+            requestProductionCompletionSync({ gameState: true, shipyard: true });
           }
         } else if (orderRemaining <= 0) {
-          scheduleShipyardRefreshFromState(true);
+          const zeroKey = `shipyard:${orderFinish}`;
+          if (_productionZeroHandled.shipyard !== zeroKey) {
+            _productionZeroHandled.shipyard = zeroKey;
+            requestProductionCompletionSync({ gameState: true, shipyard: true });
+          }
         }
       }
     }
@@ -3200,10 +3250,14 @@
           const unitKey = `${defenseActive.dataset.queueJobId || ""}:${nextUnitFinish}`;
           if (_defenseUnitFinishKey !== unitKey) {
             _defenseUnitFinishKey = unitKey;
-            scheduleDefenseRefreshFromState(true);
+            requestProductionCompletionSync({ gameState: true });
           }
         } else if (orderRemaining <= 0) {
-          scheduleDefenseRefreshFromState(true);
+          const zeroKey = `defense:${orderFinish}`;
+          if (_productionZeroHandled.defense !== zeroKey) {
+            _productionZeroHandled.defense = zeroKey;
+            requestProductionCompletionSync({ gameState: true });
+          }
         }
       }
     }
@@ -3716,11 +3770,46 @@
       _lastShipyardQueueSignature = "";
       SHIPYARDQ.active.finishTime = 0;
       SHIPYARDQ.active.totalSeconds = 0;
-      scheduleShipyardRefreshFromState(true);
+      refreshShipyardStateCoalesced(page);
       return;
     }
     if (data?.shipyard_queue) {
       renderShipyardQueue(page, data.shipyard_queue);
+    }
+  }
+
+  function patchDefensePanelFromGameState(data, activePlanetId) {
+    const page = document.getElementById("defense-page");
+    if (!page || page.dataset.ready !== "1" || !data?.defense) return;
+    const statePid = Number(
+      activePlanetId || data?.active_planet_id || GC.lastState?.active_planet_id || 0
+    );
+    const pagePid = Number(page.dataset.planetId || 0);
+    if (statePid > 0 && pagePid > 0 && pagePid !== statePid) return;
+    const slice = data.defense;
+    const inner = slice.defenses && typeof slice.defenses === "object" ? slice.defenses : slice;
+    if (!inner || inner.ready === false) return;
+    const payload = {
+      ...inner,
+      defense_queue: slice.queue || inner.defense_queue,
+    };
+    applyDefenseState(page, payload);
+  }
+
+  function syncProductionPanelsAfterGameState(data, reason, activePlanetId) {
+    patchDefensePanelFromGameState(data, activePlanetId);
+    const reasonStr = String(reason || "");
+    const onShipyard = document.getElementById("shipyard-page")?.dataset.ready === "1";
+    const completionReason =
+      reasonStr === "timer_done"
+      || reasonStr.endsWith("_finished")
+      || reasonStr === "shipyard_build"
+      || reasonStr === "shipyard_cancel"
+      || reasonStr === "defense_build"
+      || reasonStr === "defense_cancel";
+    if (onShipyard && completionReason && !data?.shipyard_queue) {
+      const syPage = document.getElementById("shipyard-page");
+      if (syPage) refreshShipyardStateCoalesced(syPage);
     }
   }
 
@@ -3999,13 +4088,7 @@
 
       GC.lastState = data;
       GC.startProgressTicker();
-      if (gameStateIncludePanel()) {
-        scheduleShipyardRefreshFromState(true);
-        scheduleDefenseRefreshFromState(true);
-      } else {
-      scheduleShipyardRefreshFromState();
-      scheduleDefenseRefreshFromState();
-      }
+      syncProductionPanelsAfterGameState(data, reason, activePlanetId);
 
       if (typeof GC.scheduleLogisticsRefreshFromState === "function") {
         GC.scheduleLogisticsRefreshFromState();
@@ -4081,8 +4164,7 @@
 
     if (GC.refreshInFlight) {
       if (isChainReason) {
-        _queuedChainRefreshReason = reasonStr;
-        return GC.refreshInFlight;
+        if (!_queuedChainRefreshReason) _queuedChainRefreshReason = reasonStr;
       }
       return GC.refreshInFlight;
     }
@@ -6353,14 +6435,10 @@
       _shipyardRefreshTimer = null;
       if (page.dataset.queueRefreshBusy === "1") return;
       page.dataset.queueRefreshBusy = "1";
-      refreshShipyardState(page)
+      refreshShipyardStateCoalesced(page)
         .then((data) => {
           if (data?.current_ships) updateShipyardStockBadges(page, data.current_ships);
           _shipyardUnitFinishKey = "";
-          if (typeof GC.refreshFleetState === "function") {
-            const fleetPage = document.getElementById("fleet-page");
-            if (fleetPage && fleetPage.dataset.ready === "1") GC.refreshFleetState(fleetPage);
-          }
         })
         .finally(() => {
           delete page.dataset.queueRefreshBusy;
@@ -6432,7 +6510,7 @@
     const serverRemaining = resolveQueueJobRemaining(first) || Number(summary?.first_finish_in ?? 0);
     const totalRaw = Number(first.order_total_seconds || first.total_seconds || 0);
     const total = totalRaw > 0 ? Math.max(1, Math.floor(totalRaw)) : Math.max(1, serverRemaining + 1);
-    const activeJob = document.querySelector(".shipyard-job.shipyard-job-active");
+    const activeJob = document.getElementById("shipyard-page")?.querySelector(".shipyard-job.shipyard-job-active");
     if (activeJob) {
       if (finishTime) activeJob.setAttribute("data-finish-time", String(finishTime));
       if (nextFinish) activeJob.setAttribute("data-next-finish-time", String(nextFinish));
@@ -6513,6 +6591,7 @@
       }
     }
     _lastShipyardQueueSignature = sig;
+    _productionZeroHandled.shipyard = "";
 
     _updateShipyardQueueSubtitle(count, limit, firstEta);
     list.replaceChildren();
@@ -6950,6 +7029,15 @@
     return null;
   }
 
+  function refreshShipyardStateCoalesced(page) {
+    if (!page) return Promise.resolve(null);
+    if (_shipyardApiInFlight) return _shipyardApiInFlight;
+    _shipyardApiInFlight = Promise.resolve(refreshShipyardState(page)).finally(() => {
+      _shipyardApiInFlight = null;
+    });
+    return _shipyardApiInFlight;
+  }
+
   function bindShipyardOnce() {
     if (_shipyardBound) return;
     _shipyardBound = true;
@@ -7170,6 +7258,7 @@
     const sig = _defenseQueueSignature(jobs, summary);
     if (sig && sig === _lastDefenseQueueSignature) return;
     _lastDefenseQueueSignature = sig;
+    _productionZeroHandled.defense = "";
 
     const activeJob = jobs.find((j) => j.is_active) || jobs[0];
     if (activeJob && activeJob.finish_at) {
@@ -7388,6 +7477,15 @@
     return null;
   }
 
+  function refreshDefenseStateCoalesced(page) {
+    if (!page) return Promise.resolve(null);
+    if (_defenseApiInFlight) return _defenseApiInFlight;
+    _defenseApiInFlight = Promise.resolve(refreshDefenseState(page)).finally(() => {
+      _defenseApiInFlight = null;
+    });
+    return _defenseApiInFlight;
+  }
+
   function scheduleDefenseRefreshFromState(immediate) {
     const page = document.getElementById("defense-page");
     if (!page || page.dataset.ready !== "1") return;
@@ -7401,7 +7499,7 @@
       _defenseRefreshTimer = null;
       if (page.dataset.queueRefreshBusy === "1") return;
       page.dataset.queueRefreshBusy = "1";
-      refreshDefenseState(page)
+      refreshDefenseStateCoalesced(page)
         .finally(() => {
           delete page.dataset.queueRefreshBusy;
           _defenseUnitFinishKey = "";
@@ -7421,14 +7519,6 @@
     const page = document.getElementById("defense-page");
     if (!page || page.dataset.ready !== "1") return;
     GC.startProgressTicker();
-    _defensePollIntervalId = GC.setSafeInterval(() => {
-      const p = document.getElementById("defense-page");
-      if (!p || p.dataset.ready !== "1" || !document.body.contains(p)) {
-        stopDefenseTimers();
-        return;
-      }
-      if (!p.dataset.queueRefreshBusy) refreshDefenseState(p).catch(() => {});
-    }, Math.max(3000, Number(GC.shipyardPollMs) || 5000));
   }
 
   function bindDefenseOnce() {

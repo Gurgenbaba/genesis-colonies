@@ -1,160 +1,130 @@
-# GC-545 – Live-State Browser Audit
-
-**Epic:** STATE / PJAX / Live-Updates  
-**Status:** In Arbeit — pytest ✅ (2026-06-05); Browser-Matrix 📋 ausstehend  
-**Voraussetzung:** GC-539–544 abgeschlossen (HUD Single Source, einheitliche Timer, Messages)
-
-Automatische Tests (`test_static_live_updates`, Queue-Timer-Regression) sind grün. Dieses Ticket ist **kein Blind-Fix** — es sammelt Browser-Beweise für die eine Live-Komponente, die im echten UI noch nicht synchron läuft.
-
-**Follow-up:** Findings → **GC-546** als gezielter 1–2-Datei-Fix. **Voraussetzung:** [GC-610](GC-610_COMPLETE_DEFINITION_AUDIT.md) DoC — Fleet E-Kriterien (Live-State) explizit offen.
-
----
-
-## Problem
-
-Forschung und Werft können laut pytest korrekt sein, im Browser aber hängen (Countdown steht, Balken friert, Fertigstellung braucht F5). Typische Ursache nach GC-540–542: **Render-Lifecycle** (PJAX, fehlende Timer-Attribute, Panel-Patch greift nicht), nicht Queue-Business-Logik.
-
----
-
-## Betroffene Dateien
-
-- `docs/GC-545_LIVE_STATE_BROWSER_AUDIT.md` (dieses Dokument — Findings eintragen)
-- ggf. `docs/ALPHA_TESTPLAN.md` (Kurzverweis + Ergebnis)
-
-**Nicht implementieren:** Kein Code-Fix in diesem Ticket. Kein Refactor, kein neues Timer-System.
-
----
-
-## Anforderungen
-
-### 1. Flows manuell prüfen
-
-| Flow | Prüfen |
-|------|--------|
-| **Gebäude starten** | Countdown läuft? Fortschrittsbalken läuft? Fertig ohne F5? |
-| **Forschung starten** | Countdown auf Research-Seite; Overview-Aktivitäten; **nach Planetwechsel** |
-| **Werft starten** | Countdown auf Shipyard; Overview; **nach Planetwechsel** |
-| **Fleet senden** | Fleet Page; Overview; Rückflug-Countdown |
-| **Nachrichten** | Badge verschwindet sofort nach Lesen? Kein Reload nötig? |
-
-Pro Flow: **bestanden / fehlgeschlagen** + kurze Notiz (Seite, Planet, Aktion).
-
-### 2. DevTools — State-Snapshot
-
-In der Browser-Console (F12), während der Bug sichtbar ist:
-
-```js
-GC.lastState?.research
-GC.lastState?.shipyard
-GC.lastState?.build_queue
-GC._pageTimerLoopRunning
-document.querySelectorAll("[data-timer-target]").length
-document.querySelectorAll("[data-countdown-at]").length
-```
-
-### 3. DevTools — Timer-DOM-Audit
-
-Zeigt sofort, ob der Timer im DOM fehlt, falsch formatiert ist, oder nur der Ticker nicht läuft:
-
-```js
-[...document.querySelectorAll("[data-timer-target], [data-countdown-at]")].map(el => ({
-  text: el.textContent.trim(),
-  target: el.dataset.timerTarget,
-  countdownAt: el.dataset.countdownAt,
-  kind: el.dataset.timerKind,
-  refresh: el.dataset.refreshOnZero,
-  remaining: el.dataset.serverRemaining
-}))
-```
-
-### 4. Minimaler Repro (Forschung / Werft hängt)
-
-1. Forschung oder Werft-Job starten  
-2. F12 → **Elements** + **Console**  
-3. Screenshots sichern:
-   - aktives Queue-Element im DOM (`data-timer-target`, `data-countdown-at`, `data-finish-time`, `data-server-remaining`)
-   - Console (Fehler/Warnungen)
-   - Ausgabe von `GC.lastState.research` bzw. `GC.lastState.shipyard`
-
-### 5. Typische Restfehler (Hypothesen — mit Beweis bestätigen)
-
-| Symptom | Verdacht |
-|---------|----------|
-| `lastState` korrekt, DOM ohne Timer-Attrs | PJAX-Partial ersetzt ohne `data-timer-target` |
-| DOM-Attrs da, Text steht | Ticker läuft nicht (`_pageTimerLoopRunning === false`) |
-| Nur Overview kaputt, Detail-Seite ok | `patchResearchPanelFromState` / Overview-Teaser nicht gepatcht |
-| Nach Planetwechsel falsch | Scope-Sync ok, Panel noch alter Planet |
-| Countdown 0, UI stale | `data-refresh-on-zero` / Chain-Refresh (`timer_done`) |
-
----
-
-## Akzeptanzkriterien
-
-- [ ] Alle fünf Flow-Blöcke (Build, Research, Shipyard, Fleet, Messages) dokumentiert.
-- [ ] Pro **Fehler**: Console-Snapshot + Timer-DOM-Audit + `GC.lastState`-Ausschnitt.
-- [ ] Root Cause als **eine** konkrete Hypothese formuliert (Datei/Funktion wenn erkennbar).
-- [ ] GC-546-Ticket-Skizze (1–2 Dateien, kein Epic).
-- [ ] Kein Code-Change außer Doc-Update in diesem Ticket.
-
----
-
-## Tests (Regression vor Audit — erwartet grün)
-
-```bash
-python -m pytest tests/test_static_live_updates.py -v
-python -m pytest tests/test_game_state_live.py -v
-```
-
-**Ergebnis 2026-06-05:** `41 passed` in ~220s — automatisierte Live-State-Regression grün. Browser-Flows (§1) weiterhin manuell erforderlich.
-
----
-
-## Findings (ausfüllen nach Audit)
-
-| Flow | Status | Seite / Planet | Notiz |
-|------|--------|----------------|-------|
-| Build | | | |
-| Research | | | |
-| Shipyard | | | |
-| Fleet | | | |
-| Messages | | | |
-
-### Root Cause (Kandidat für GC-546)
-
-_(leer bis Audit abgeschlossen)_
-
-### GC-546 Skizze
-
-- **Problem:** …
-- **Dateien:** …
-- **Fix:** …
-
----
-
-## Referenz-Docs
-
-- [STATE_AJAX.md](STATE_AJAX.md)
-- [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md)
-- [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md)
-- [GC-610_COMPLETE_DEFINITION_AUDIT.md](GC-610_COMPLETE_DEFINITION_AUDIT.md)
-- [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) § Timer / Single Poll
-
----
-
-## Ausgabe (nach Abschluss)
-
-### Root Cause
-
-_(Browser-Beweis, nicht Vermutung)_
-
-### Changed Files
-
-_(typisch nur dieses Doc + ggf. ALPHA_TESTPLAN)_
-
-### Tests
-
-_(pytest weiterhin grün; manuelle Matrix oben ausgefüllt)_
-
-### Ergebnis
-
-_(GC-546 bereit zum Start ja/nein)_
+# GC-545 – Live-State Browser Audit
+
+**Epic:** STATE / PJAX / Live-Updates  
+**Status:** ✅ Abgeschlossen (2026-06-05) — pytest + Browser-Matrix  
+**Follow-up:** [GC-546 Live-State Fixes](GC-546_LIVE_STATE_FIXES.md) (546A–546E)
+
+Automatische Tests (`test_static_live_updates`, Queue-Timer-Regression): **41 passed**. Browser-Audit lieferte **echte Findings** — Production Completion Layer, nicht Queue-Backend.
+
+---
+
+## Tests (Regression)
+
+```bash
+python -m pytest tests/test_static_live_updates.py tests/test_game_state_live.py -v
+```
+
+**Ergebnis 2026-06-05:** `41 passed` in ~220s.
+
+---
+
+## Flow-Matrix (Browser)
+
+| Flow | Status | Notiz |
+|------|--------|-------|
+| **Build** | 🟠 | Queue ok; **Voraussetzungen** nach Finish stale bis Reload → F2 |
+| **Research** | ✅ | Countdown/Finish ohne Blocker |
+| **Shipyard** | 🔴 | Fertig, **Stückzahl stale**; Latenz/499 nach Completion → F3, F5 |
+| **Defense** | 🔴 | Wie Shipyard (gleiche Completion-Architektur) → F4, F5 |
+| **Fleet** | ✅ | Senden, Nachrichten — funktioniert |
+| **Messages** | 🟠 | Lesen: **Badge bleibt** bis erneutes Öffnen → F6 |
+| **Galaxy** | ✅ | Voll funktional |
+| **Planet Evolution** | ✅ | Soweit ok — Balance/QA offen (GC-613) |
+| **Ranking / Score HUD** | 🔴 | Delta **mehrfach** gerendert (+16.347×3) → F1 |
+
+---
+
+## Reifegrad — vor / nach Browser-QA
+
+| System | Vor GC-545 (GC-610 Schätzung) | Nach Browser-QA |
+|--------|-------------------------------:|----------------:|
+| Buildings | 95 % | **90 %** (F2 Requirements) |
+| Research | 90 % | **90 %** |
+| Shipyard | 80 % | **70 %** (F3, F5) |
+| Defense | 75 % | **65 %** (F4, F5) |
+| Fleet | 80 % | **85 %** (positiv) |
+| Galaxy | 70 % | **90 %** (positiv) |
+| Planet Evolution | 70 % | **85 %** (positiv) |
+| Messages | 85 % | **75 %** (F6) |
+| Ranking | 85 % | **70 %** (F1) |
+
+**Tier-1-Aggregat:** ~74 % (Schätzung) → **~78 %** nach positiven Galaxy/Fleet/Evolution, aber **Production Layer zieht Shipyard/Defense runter**.
+
+---
+
+## Findings (Browser-Beweis)
+
+| ID | Schwere | Titel | Systeme |
+|----|---------|-------|---------|
+| **F1** | 🔴 Hoch | Punkte mehrfach gerendert (`+16.347` × n) | Ranking, Header, Delta |
+| **F2** | 🟠 Mittel | Gebäude-Voraussetzungen nicht live nach Finish | Buildings |
+| **F3** | 🔴 Hoch | Werft: Stückzahl nach Fertigstellung stale | Shipyard |
+| **F4** | 🔴 Hoch | Defense: identisch Shipyard | Defense |
+| **F5** | 🔴 Sehr hoch | Poll Storm / HTTP 499, 56s–85s Latenz nach Werft/Defense | Shipyard, Defense, game-state |
+| **F6** | 🟠 Mittel | Nachricht gelesen, Badge bleibt | Messages, Shell HUD |
+
+Details + Ticket-Zuordnung: [GC-546_LIVE_STATE_FIXES.md](GC-546_LIVE_STATE_FIXES.md)
+
+---
+
+## Root Cause (Epic-Ebene)
+
+**Production Completion Layer** — nach Queue-Finish:
+
+1. Client patcht Inventory/Requirements/Badge nicht zuverlässig
+2. Möglicher **Request-Sturm** (F5) verschlimmert oder verursacht stale UI (F3/F4)
+3. Score-Delta und Messages sind **Nebenpfade** desselben State-Sync-Problems
+
+Nicht: Fleet-Missions, Galaxy, Evolution-Backend.
+
+---
+
+## GC-546 Zerlegung
+
+| Ticket | Prio | Inhalt |
+|--------|------|--------|
+| **GC-546D** | 1 | Poll Storm Analyse/Fix |
+| **GC-546C** | 2 | Shipyard + Defense Completion Refresh |
+| **GC-546E** | 3 | Message Read / Badge |
+| **GC-546B** | 4 | Building Requirements Live |
+| **GC-546A** | 5 | Score Delta Dedup |
+
+---
+
+## Akzeptanzkriterien GC-545
+
+- [x] Flow-Blöcke dokumentiert (Build, Research, Shipyard, Defense, Fleet, Messages + Galaxy/Evolution/Ranking)
+- [x] Findings F1–F6 mit Schweregrad
+- [x] Reifegrad-Tabelle vor/nach Browser
+- [x] GC-546 Epic-Zerlegung (546A–E), **546D zuerst**
+- [x] Kein Code-Fix in GC-545 (Doc only)
+
+---
+
+## Referenz-Docs
+
+- [GC-546_LIVE_STATE_FIXES.md](GC-546_LIVE_STATE_FIXES.md)
+- [GC-610_COMPLETE_DEFINITION_AUDIT.md](GC-610_COMPLETE_DEFINITION_AUDIT.md)
+- [STATE_AJAX.md](STATE_AJAX.md)
+- [AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md)
+
+---
+
+## Ausgabe
+
+### Root Cause
+
+Production Completion Layer: Shipyard/Defense Completion + Poll-Lifecycle; sekundär Buildings Requirements, Messages Badge, Score Delta.
+
+### Changed Files
+
+`docs/GC-545_LIVE_STATE_BROWSER_AUDIT.md`, `docs/GC-546_LIVE_STATE_FIXES.md`, GC-610 Reifegrad-Update
+
+### Tests
+
+pytest 41 passed; Browser-Findings manuell.
+
+### Ergebnis
+
+**GC-546 bereit** — Start mit **GC-546D** (Poll Storm).
+

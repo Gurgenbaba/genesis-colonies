@@ -166,13 +166,17 @@ Tutorial · Marketplace · Radar-Engine · Seasons · Postgres · i18n voll · S
 | # | Ticket | Typ | Ziel |
 |---|--------|-----|------|
 | 1 | **GC-610** | DoC | [Complete Definition Audit](GC-610_COMPLETE_DEFINITION_AUDIT.md) — Reifegrade ✅ |
-| 2 | **GC-545** | Audit | Live-State Browser — blockiert E-Kriterien |
-| 3 | **GC-546** | Fix | 1–2 Dateien aus GC-545 |
-| 4 | **GC-611** | Close-Out | Fleet 80 → 100 % (§11 QA, Presets, Mobile) |
+| 2 | **GC-545** | Audit | [Browser Audit](GC-545_LIVE_STATE_BROWSER_AUDIT.md) ✅ — Findings F1–F6 |
+| 3 | **GC-546D** | Fix | Poll Storm — **zuerst** ([GC-546](GC-546_LIVE_STATE_FIXES.md)) |
+| 4 | **GC-546C** | Fix | Shipyard + Defense Completion Refresh |
+| 5 | **GC-546E** | Fix | Message Badge Sync |
+| 6 | **GC-546B** | Fix | Building Requirements Live |
+| 7 | **GC-546A** | Fix | Score Delta Dedup |
+| 8 | **GC-611** | Close-Out | Fleet 85 → 100 % (§11 QA) |
 | 5 | **GC-612** | Close-Out | Logistics 75 → 100 % (§12) |
-| 6 | **GC-613** | Close-Out | Evolution 70 → 90 %+ (QA-Matrix, Balance) |
-| 7 | **GC-614** | Close-Out | Defense 75 → 100 % (§9b, Balance) |
-| 8 | **GC-615** | Close-Out | Galaxy 70 → 90 %+ |
+| 6 | **GC-613** | Close-Out | Evolution 85 → 90 %+ (Balance, QA-Matrix) |
+| 7 | **GC-614** | Close-Out | Defense 65 → 100 % (nach 546C/D) |
+| 8 | **GC-615** | Close-Out | Galaxy 90 → 95 %+ |
 | 9 | **GC-620** | Feature | Alliance MVP (Tier 2) |
 | 10 | **GC-621+** | Infra | Security Phase 6 — vor Public Beta |
 | 11 | Tutorial | Feature | Nach Tier 1 Close-Out |
@@ -184,7 +188,7 @@ Tutorial · Marketplace · Radar-Engine · Seasons · Postgres · i18n voll · S
 | Gap | Ticket-Skizze | Scope |
 |-----|---------------|-------|
 | Definition of Complete | **GC-610** ✅ | [GC-610_COMPLETE_DEFINITION_AUDIT.md](GC-610_COMPLETE_DEFINITION_AUDIT.md) |
-| Live-State hängt | GC-545 → GC-546 | Browser Audit + 1–2 Dateien Fix |
+| Live-State hängt | GC-545 ✅ → **GC-546D–A** | [GC-546_LIVE_STATE_FIXES.md](GC-546_LIVE_STATE_FIXES.md); **546D zuerst** |
 | Fleet 80 → 100 % | GC-611 | §11, Preset CHECK, Mobile |
 | Logistics 75 → 100 % | GC-612 | §12 |
 | Evolution 70 → 90 %+ | GC-613 | ALPHA §13 + Balance |

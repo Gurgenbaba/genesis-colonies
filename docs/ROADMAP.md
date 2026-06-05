@@ -219,7 +219,7 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 
 **Nächste Tickets (Reihenfolge — siehe [GC-610](GC-610_COMPLETE_DEFINITION_AUDIT.md)):**
 
-1. GC-610 Definition of Complete ✅ → 2. GC-545 Browser Audit → 3. GC-546 Fix → 4–8. Fleet/Logistics/Evolution/Defense/Galaxy Close-Out → 9. Alliance MVP → 10. Security Phase 6 → Tutorial
+1. GC-610 Definition of Complete ✅ → 2. GC-545 Browser Audit ✅ → 3. **GC-546D** Poll Storm → 4. GC-546C/E/B/A → 5–9. Close-Outs 611–615 → Alliance → Security → Tutorial
 
 ### Allgemeine Regeln
 
@@ -242,8 +242,8 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 | **GC-601** — [Project Inventory](PROJECT_INVENTORY.md) + Docs/Roadmap Reality Sync | ✅ |
 | **GC-601B** — [Documentation Consistency Sync](GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md) (Defense, Recycler, GC-600) | ✅ |
 | **GC-610** — [Complete Definition Audit](GC-610_COMPLETE_DEFINITION_AUDIT.md) (DoC, Reifegrade) | ✅ |
-| **GC-545** — [Live-State Browser Audit](GC-545_LIVE_STATE_BROWSER_AUDIT.md) | 📋 |
-| **GC-546** — Live-State Fix (Follow-up GC-545, 1–2 Dateien) | 📋 |
+| **GC-545** — [Live-State Browser Audit](GC-545_LIVE_STATE_BROWSER_AUDIT.md) | ✅ |
+| **GC-546** — [Live-State Fixes](GC-546_LIVE_STATE_FIXES.md) (546D→A) | 📋 |
 | **GC-801** — Resource bar + buildings panel action-state sync | ✅ |
 | **GC-802** — Fleet timer, galaxy prefill, planet-switch lifecycle | ✅ |
 | **GC-803** — Fleet preset & mass expedition test stabilization (`IntegrityError`) | ✅ |
