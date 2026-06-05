@@ -277,6 +277,9 @@ def test_api_game_state_poll_is_lightweight(game_client):
     assert "player" in body
     assert "build_queue" in body
     assert "unread_messages_count" in body
+    assert "player_stats" in body
+    assert "online_now" in body["player_stats"]
+    assert "total_players" in body["player_stats"]
     assert "buildings_panel" not in body
     assert "exchange" not in body
     assert "fuel_exchange" not in body
@@ -343,3 +346,64 @@ def test_api_game_state_include_panel_uses_full_live_refresh(game_client, monkey
     client.get("/api/game-state?include_panel=1")
     assert calls["full"] > full_before
     assert calls["poll"] == poll_count
+
+
+def test_logic_live_timer_helpers():
+    from game import logic
+
+    ts = logic.live_server_timestamp()
+    assert isinstance(ts, int) and ts > 0
+    assert logic.game_state_panel_finish_source() == "game_state_panel"
+
+
+def test_logic_normalize_queue_job_timer_fields():
+    from game import logic
+
+    ts = logic.live_server_timestamp()
+    fields = logic.normalize_queue_job_timer_fields(
+        finish_at=float(ts) + 120.9,
+        remaining=120,
+        is_active=True,
+        next_finish_at=float(ts) + 30.4,
+    )
+    assert fields["finish_at"] == int(ts) + 120
+    assert fields["finish_time"] == fields["finish_at"]
+    assert fields["countdown_at"] == fields["finish_at"]
+    assert fields["remaining_seconds"] == 120
+    assert fields["next_countdown_at"] == int(ts) + 30
+
+
+def test_api_game_state_research_queue_timer_fields(game_client):
+    client, pid = game_client
+    from game.models import save_planet_buildings, get_homeworld
+
+    save_planet_buildings(int(get_homeworld(player_id=pid)["id"]), {"research_lab": 3, "metal_mine": 1})
+    now = time.time()
+    conn = db()
+    conn.execute(
+        "INSERT INTO research_queue (user_id, tech_key, start_at, finish_at) VALUES (?, ?, ?, ?);",
+        (pid, "energy_tech", now - 10, now + 45.7),
+    )
+    conn.commit()
+    conn.close()
+
+    r = client.get("/api/game-state")
+    assert r.status_code == 200
+    research = r.get_json().get("research") or {}
+    queue = research.get("queue") or []
+    assert queue
+    head = queue[0]
+    assert int(head.get("finish_at") or 0) > int(now)
+    assert head.get("finish_time") == head.get("finish_at")
+    assert head.get("countdown_at") == head.get("finish_at")
+    assert int(head.get("remaining_seconds") or 0) > 0
+
+
+def test_main_js_gc541_server_time_fallback_chain():
+    src = open("static/main.js", encoding="utf-8").read()
+    timer_now = src.split("function getTimerServerNow()")[1].split("function queryTimerElements")[0]
+    assert "GC.lastState?.server_time" in timer_now
+    assert "GC.lastState?.server_now" in timer_now
+    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    assert "data.server_now" in apply
+

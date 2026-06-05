@@ -1,0 +1,34 @@
+{# GC-541 — canonical shipyard queue active job row (timer attrs for central tick) #}
+{% macro shipyard_queue_active_job(job, ship_label) %}
+{% set finish_time = (job.countdown_at or job.finish_at or job.finish_time or 0)|int %}
+{% set next_finish = (job.next_countdown_at or job.next_finish_at or finish_time or 0)|int %}
+{% set remaining = (job.remaining_seconds or job.order_remaining or job.remaining or 0)|int %}
+{% set total = (job.order_total_seconds or job.total_seconds or remaining + 1)|int %}
+{% set pct = [0, [100, (100 * (1 - remaining / (total if total > 0 else 1)))|int]|min]|max %}
+<article class="shipyard-job shipyard-job-active"
+         data-finish-time="{{ finish_time }}"
+         data-next-finish-time="{{ next_finish }}"
+         data-total="{{ total }}"
+         data-queue-job-id="{{ job.id }}">
+  <div class="shipyard-job-body">
+    <div class="job-header">
+      <span class="job-name">{{ ship_label }}</span>
+      <span class="job-time"
+            id="shipyard-eta-live"
+            data-timer-target="{{ finish_time }}"
+            data-timer-kind="shipyard"
+            data-refresh-on-zero="shipyard"
+            data-countdown-at="{{ finish_time }}">{{ remaining }}s</span>
+    </div>
+    <div class="build-bar build-bar-large">
+      <div class="build-bar-fill gc-progress-smooth"
+           id="shipyard-bar-fill-live"
+           style="width:{{ pct }}%"
+           role="progressbar"
+           aria-valuenow="{{ pct }}"
+           aria-valuemin="0"
+           aria-valuemax="100"></div>
+    </div>
+  </div>
+</article>
+{% endmacro %}

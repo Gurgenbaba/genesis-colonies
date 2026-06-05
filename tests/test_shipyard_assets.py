@@ -114,7 +114,9 @@ def test_main_js_shipyard_polling_idempotent_and_cleanup():
     assert "stopShipyardTimers" in src
     assert "startShipyardTimers" in src
     assert "GC.registerCleanup(stopShipyardTimers)" in src
-    assert "_shipyardPollIntervalId" in src
+    assert "function updatePageTimers(serverNow)" in src
+    assert "_pageTimerLoopRunning" in src
+    assert "data-timer-target" in (ROOT / "templates" / "shipyard.html").read_text(encoding="utf-8")
     assert "queuePollBound" not in src
 
 

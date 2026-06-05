@@ -217,3 +217,14 @@ def fleet_logistics_distribute_from_body(
         speed_percent=speed_percent,
         conn=conn,
     )
+
+
+def fleet_live_state_response(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize fleet live-state payload with server clock for client timers (GC-540)."""
+    import time
+
+    payload = dict(state or {})
+    ts = int(time.time())
+    payload.setdefault("server_time", float(ts))
+    payload.setdefault("server_now", ts)
+    return fleet_ok(payload, message_key="fleet_state_ok")

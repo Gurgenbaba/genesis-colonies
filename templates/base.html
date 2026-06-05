@@ -83,7 +83,7 @@
               <div class="gc-hud-panel gc-hud-panel-online" role="status" aria-live="polite">
                 <span class="gc-hud-panel-tag">{{ T("header_online", "Online") }}</span>
                 <span class="gc-hud-panel-dot" aria-hidden="true"></span>
-                <span class="gc-hud-panel-value gc-mono">
+                <span class="gc-hud-panel-value gc-mono" data-hud-online-value>
                   {{ (_player_stats.online_now or 0)|fmt_int }}/{{ (_player_stats.total_players or 0)|fmt_int }}
                 </span>
               </div>

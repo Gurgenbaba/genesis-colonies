@@ -205,11 +205,11 @@ def test_chat_bootstrap_not_in_message_poll_tick():
 def test_main_js_fleet_countdown_uses_integer_seconds():
     src = _read("static/main.js")
     assert "function formatCountdownRemain" in src
+    assert "function updatePageTimers(serverNow)" in src
     assert "_progressTickerDelayMs" in src
-    tick_body = src.split("const tickFleetCountdowns = () =>")[1].split("tickFleetCountdowns();")[0]
-    assert "updateMovementCountdowns(getApproxServerNow())" in tick_body
-    countdown_body = src.split("function updateMovementCountdowns(serverNow)")[1].split("function updateAllProgressBars")[0]
-    assert "Math.ceil(countdownAt - now)" in countdown_body
+    timer_body = src.split("function updatePageTimers(serverNow)")[1].split("function updateMovementCountdowns")[0]
+    assert "timerRemainingSeconds" in timer_body
+    assert "movementRemainingSeconds" in src
     assert "MOVEMENT_EXPIRY_REFRESH_MS_SHORT" in src
     assert "movementRemainingSeconds" in src
     assert "data-server-remaining" in src
@@ -232,8 +232,8 @@ def test_main_js_patches_resource_bar_energy_warning():
     src = _read("static/main.js")
     assert "function patchResourceBarEnergyWarning" in src
     assert 'classList.toggle("energy-warning"' in src
-    apply_body = src.split("function applyGameStateData")[1].split("function ")[0]
-    assert "patchResourceBarEnergyWarning(used, total)" in apply_body
+    hud_section = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
+    assert "patchResourceBarEnergyWarning(used, total)" in hud_section
 
 
 def test_main_js_gc802_planet_switch_state_sync():
@@ -261,7 +261,7 @@ def test_main_js_gc802_fleet_timer_and_url_prefill():
     assert "function movementRemainingSeconds(countdownAt, serverNow, serverRemaining)" in src
     timer_body = src.split("function movementRemainingSeconds(countdownAt, serverNow, serverRemaining)")[1].split("function bootstrapServerTimeFromDom")[0]
     assert "Math.max(fromEndAt, fromServer)" not in timer_body
-    assert "Number.isFinite(srv)" in timer_body
+    assert "queueJobRemainingSeconds" in timer_body
     prefill = src.split("function applyFleetUrlPrefill(page)")[1].split("let _shipyardRefreshTimer")[0]
     assert "URLSearchParams(window.location.search)" in prefill
     assert "dataset.fleetUrlMission" in prefill
@@ -311,3 +311,119 @@ def test_galaxy_template_pjax_nav_urls():
     assert 'id="galaxy-page-root"' in tpl
     assert "data-prev-url" in tpl
     assert "data-next-url" in tpl
+
+
+def test_main_js_gc540_unified_page_timers():
+    src = _read("static/main.js")
+    assert "function updatePageTimers(serverNow)" in src
+    assert "function syncTimerElement(el)" in src
+    assert "data-timer-target" in src
+    assert "data-refresh-on-zero" in src
+    assert "gameStateWantPanelPoll" in src
+    assert "timer_done" in src
+    assert "_pageTimerLoopRunning" in src
+    overview = _read("templates/overview.html")
+    assert "data-timer-target" in overview
+    assert "data-refresh-on-zero" in overview
+    fleet = _read("templates/fleet.html")
+    assert "data-timer-target" in fleet
+    shipyard = _read("templates/shipyard.html")
+    assert 'data-timer-kind="shipyard"' in shipyard
+    logic = _read("game/logic.py")
+    assert "live_server_timestamp" in logic
+    assert "game_state_panel_finish_source" in logic
+    sy = _read("game/shipyard_queue.py")
+    assert "normalize_queue_job_timer_fields" in sy or '"countdown_at"' in sy
+    logic = _read("game/logic.py")
+    assert "normalize_queue_job_timer_fields" in logic
+    assert "countdown_at" in logic
+
+
+def test_main_js_gc541_queue_timer_hotfix():
+    src = _read("static/main.js")
+    assert "function parseTimerTarget(raw)" in src
+    set_time = src.split("function setServerTime(serverTimeSec)")[1].split("function queueJobRemainingSeconds")[0]
+    assert "Math.abs(v - approx) < 0.5" in set_time
+    timer_now = src.split("function getTimerServerNow()")[1].split("function queryTimerElements")[0]
+    assert "server_now" in timer_now
+    query = src.split("function queryTimerElements(root)")[1].split("function inferTimerKind")[0]
+    assert "#build-eta-live" in query
+    assert "#research-eta-live" in query
+    assert "#shipyard-eta-live" in query
+    assert ".build-job-active[data-finish-time]" in query
+    ticker = src.split("GC.startProgressTicker = function startProgressTicker()")[1].split("GC.stopPolling")[0]
+    assert "_pageTimerLoopRunning && _progressTickerActive && _progressTickerTimerId" not in ticker
+    assert "if (_progressTickerTimerId != null) return;" in ticker
+    movement = src.split("function movementRemainingSeconds(countdownAt, serverNow, serverRemaining)")[1].split("function bootstrapServerTimeFromDom")[0]
+    assert "queueJobRemainingSeconds" in movement
+    remain = src.split("function timerRemainingSeconds(el, serverNow)")[1].split("function formatTimerDisplay")[0]
+    assert 'scope === "overview" && kind === "fleet"' in remain
+    assert "syncTimerElement(el)" in remain.split("function timerRemainingSeconds")[0] or "syncTimerElement(el);" in remain
+    sync = src.split("function syncTimerElement(el)")[1].split("function timerRemainingSeconds")[0]
+    assert "parseTimerTarget" in sync
+    assert "data-finish-time" in sync
+    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    assert "GC.startProgressTicker();" in apply
+    assert "else if (data.server_now) setServerTime(data.server_now)" in apply
+    build_partial = _read("templates/partials/build_queue.html")
+    assert 'data-timer-target' in build_partial
+    assert 'id="build-eta-live"' in build_partial
+    research_partial = _read("templates/partials/research_queue.html")
+    assert 'data-timer-target' in research_partial
+    shipyard_partial = _read("templates/partials/shipyard_queue.html")
+    assert 'data-timer-target' in shipyard_partial
+    render_build = src.split("function renderBuildQueue(buildQueueRaw)")[1].split("function _researchQueueSignature")[0]
+    assert "data-timer-target" in render_build
+    render_research = src.split("function renderResearchQueue(researchRaw)")[1].split("function _applyProgressFill")[0]
+    assert "data-timer-target" in render_research
+    update_all = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
+    assert "parseTimerTarget" in update_all
+    assert "queueJobRemainingSeconds" in update_all.split("const buildActive")[1].split("const researchActive")[0]
+
+    src = _read("static/main.js")
+    assert "function patchShellHudFromState(data, opts)" in src
+    assert "GC.patchShellHudFromState = patchShellHudFromState" in src
+    assert "GC.mergeLastState = function mergeLastState" in src
+    assert "function patchShellHudLiveResources(metal, crystal, fuelCells)" in src
+    hud_section = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
+    assert 'getElementById("resource-bar")' in hud_section
+    assert 'document.querySelectorAll(".res-value.metal, [data-res=\\"metal\\"]")' not in hud_section
+    apply_section = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    assert "patchShellHudFromState(data, { forceResourceBar, skipMessagesUnread })" in apply_section
+    assert "scoreStale" in hud_section
+    assert "data-hud-online-value" in hud_section or "data-hud-online-value" in _read("templates/base.html")
+    messages_js = _read("static/js/messages.js")
+    assert "GC.mergeLastState({ unread_messages_count: n }" in messages_js
+    assert "GC.updateMessagesUnreadBadges(n)" not in messages_js.split("function updateLocalUnread")[1].split("function refreshBadgesFromServer")[0]
+
+
+def test_main_js_gc542_research_shipyard_queue_timer_parity():
+    src = _read("static/main.js")
+    assert "function resolveQueueJobFinishTime(job)" in src
+    assert "function resolveQueueJobCountdownAt(job)" in src
+    assert "function applyQueueJobTimerAttrs(el, finishTime, kind, refreshOnZero, remaining)" in src
+    assert "function patchResearchPanelFromState(data)" in src
+    assert "function patchShipyardPanelFromState(data, activePlanetId)" in src
+    assert "function _syncShipyardQueueLiveFromServer(first, summary)" in src
+    parse_section = src.split("function parseTimerTarget(raw)")[1].split("function resolveQueueJobFinishTime")[0]
+    assert r"/^\d+(\.\d+)?$/" in parse_section
+    research_partial = _read("templates/partials/research_queue.html")
+    shipyard_partial = _read("templates/partials/shipyard_queue.html")
+    assert 'data-timer-target' in research_partial
+    assert 'data-countdown-at' in research_partial
+    assert 'data-timer-kind="research"' in research_partial
+    assert 'data-timer-target' in shipyard_partial
+    assert 'data-countdown-at' in shipyard_partial
+    assert 'data-timer-kind="shipyard"' in shipyard_partial
+    render_research = src.split("function renderResearchQueue(researchRaw)")[1].split("function _applyProgressFill")[0]
+    assert "data-countdown-at" in render_research
+    render_shipyard = src.split("function renderShipyardQueue(page, queueData)")[1].split("function parseShipyardPageData")[0]
+    assert "applyQueueJobTimerAttrs" in render_shipyard
+    assert "_syncShipyardQueueLiveFromServer" in render_shipyard
+    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    assert "patchResearchPanelFromState(data)" in apply
+    assert "patchShipyardPanelFromState(data, activePlanetId)" in apply
+    assert "lastHadActiveShipyard" in apply
+    progress = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
+    assert "RESEARCHQ.active.finishTime" in progress
+    assert "SHIPYARDQ.active.finishTime" in progress

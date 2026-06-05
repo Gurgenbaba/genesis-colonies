@@ -529,3 +529,33 @@ def test_progressive_ships_available_for_fleet_preview(shipyard_db, monkeypatch)
     assert data["ok"] is True
     assert data["data"]["ships"].get("mule_courier", 0) == 1
     assert data["data"]["has_ships"] is True
+
+
+def test_shipyard_queue_client_includes_countdown_at(shipyard_db):
+    from game.shipyard import build_ship
+    from game.shipyard_queue import shipyard_queue_for_client
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, metal=500000, crystal=500000)
+    cur.execute(
+        "UPDATE planet_buildings SET orbital_shipyard = 1 WHERE planet_id = ?;",
+        (pid,),
+    )
+    _grant_ship_test_prereqs(cur, pid, uid)
+    conn.commit()
+
+    ok, reason, _ = build_ship(
+        player_id=uid, planet_id=pid, ship_key="mule_courier", amount=1, conn=conn
+    )
+    assert ok, reason
+    q = shipyard_queue_for_client(uid, pid, 1, conn=conn)
+    assert q["queue"]
+    head = q["queue"][0]
+    assert head.get("countdown_at") == int(head["finish_at"])
+    assert head.get("finish_time") == int(head["finish_at"])
+    assert int(head.get("remaining_seconds") or 0) > 0
+    assert head.get("next_countdown_at") >= 0
+    conn.close()

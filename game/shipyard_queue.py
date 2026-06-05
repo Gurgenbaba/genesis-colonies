@@ -160,6 +160,15 @@ def _job_row_for_client(
         remaining = order_remaining
         progress_total = order_total_seconds
 
+    from .logic import normalize_queue_job_timer_fields
+
+    timer_fields = normalize_queue_job_timer_fields(
+        finish_at=finish_at,
+        remaining=order_remaining,
+        is_active=is_active,
+        next_finish_at=next_finish_at,
+    )
+
     return {
         "id": int(row["id"]),
         "ship_key": sk,
@@ -169,19 +178,17 @@ def _job_row_for_client(
         "amount_remaining": amount_remaining,
         "units_delivered": units_delivered,
         "unit_seconds": unit_sec,
-        "next_finish_at": next_finish_at,
         "unit_remaining": unit_remaining,
         "order_remaining": order_remaining,
         "queue_position": int(row.get("queue_position") or idx),
         "started_at": started_at,
-        "finish_at": finish_at,
-        "remaining": remaining,
         "total_seconds": max(1, progress_total),
         "order_total_seconds": order_total_seconds,
         "is_active": is_active,
         "cost_metal": int(row.get("cost_metal") or 0),
         "cost_crystal": int(row.get("cost_crystal") or 0),
         "cost_fuel_cells": int(float(row.get("cost_fuel_cells") or 0)),
+        **timer_fields,
     }
 
 

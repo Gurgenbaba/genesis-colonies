@@ -2498,6 +2498,17 @@ def _payload_from_live_context(
         payload["unread_messages_count"] = 0
 
     try:
+        from game.models import get_player_stats
+
+        ps = get_player_stats() or {}
+        payload["player_stats"] = {
+            "online_now": int(ps.get("online_now") or 0),
+            "total_players": int(ps.get("total_players") or 0),
+        }
+    except Exception:
+        payload["player_stats"] = {"online_now": 0, "total_players": 0}
+
+    try:
         from game.planet_evolution.service import list_player_planets_for_switcher
 
         payload["planets"] = list_player_planets_for_switcher(user_id, conn=conn)

@@ -49,7 +49,8 @@ _load_page_live_context(finish_source=…)
 
 - Poll: `GET /api/game-state` only (not `/api/status`)
 - `applyGameStateData()` patches shell resource bar, overview, buildings/research panels
-- `applyActionState()` applies `json.state` and restarts polling
+- `patchShellHudFromState()` is the **only** DOM writer for the shell HUD (header score/rank/online, messages badge, `#resource-bar`). Resource ticker updates use `patchShellHudLiveResources()` scoped to `#resource-bar` only.
+- `applyActionState()` applies `json.state` and restarts polling; `GC.mergeLastState()` merges partial updates (e.g. messages read) then re-renders shell HUD from `GC.lastState`
 - PJAX: `cleanupPage()` → swap `#main-content` → `initPage({ force: true })` → `refreshGameState("page_init")`
 - Chat: `GC.resumeChatPolling()` after PJAX (`static/js/chat.js`)
 

@@ -618,3 +618,45 @@ def get_planet_limit_block(
     finally:
         if own_conn and conn is not None:
             conn.close()
+
+
+# ============================================================================ #
+# LIVE STATE TIMERS (GC-540)
+# ============================================================================ #
+
+
+def live_server_timestamp() -> int:
+    """Canonical unix seconds for client timer sync."""
+    return int(time.time())
+
+
+def game_state_panel_finish_source() -> str:
+    """Finish source for timer-driven full panel refresh (overview activities, queues)."""
+    return "game_state_panel"
+
+
+def normalize_queue_job_timer_fields(
+    *,
+    finish_at: float,
+    remaining: int,
+    is_active: bool = True,
+    next_finish_at: float | None = None,
+) -> dict[str, int]:
+    """
+    Canonical timer payload for queue jobs (build/research/shipyard client tick).
+    Emits int unix seconds — compatible with central GC timer attrs.
+    """
+    finish_int = int(finish_at or 0)
+    next_int = int(next_finish_at or 0) if next_finish_at else (finish_int if is_active else 0)
+    rem = max(0, int(remaining))
+    countdown = finish_int if is_active and finish_int else 0
+    next_countdown = next_int if is_active and next_int else 0
+    return {
+        "finish_at": finish_int,
+        "finish_time": finish_int,
+        "countdown_at": countdown,
+        "next_countdown_at": next_countdown,
+        "next_finish_at": next_int,
+        "remaining": rem,
+        "remaining_seconds": rem,
+    }

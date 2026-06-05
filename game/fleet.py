@@ -3942,6 +3942,7 @@ def get_fleet_live_state(
             "ready": True,
             "planet_id": int(planet_id),
             "server_time": time.time(),
+            "server_now": int(time.time()),
             "ships": ships,
             "has_ships": sum(int(v) for v in ships.values()) > 0,
             "resources": {

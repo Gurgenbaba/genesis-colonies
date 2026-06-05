@@ -177,14 +177,81 @@
     if (TIME.serverNow && TIME.clientPerfAt) {
       const approx = TIME.serverNow + (performance.now() - TIME.clientPerfAt) / 1000;
       if (v < approx - 2) return;
+      // GC-541: same poll snapshot must not reset perf anchor every tick
+      if (Math.abs(v - approx) < 0.5) return;
     }
     TIME.serverNow = v;
     TIME.clientPerfAt = performance.now();
   }
 
-  /** finish_at countdown with optional server snapshot cap (prevents inflation on clock regression). */
+  /** Normalize unix seconds, unix ms, or ISO finish timestamps. */
+  function parseTimerTarget(raw) {
+    if (raw == null || raw === "") return 0;
+    if (typeof raw === "number") {
+      if (!Number.isFinite(raw) || raw <= 0) return 0;
+      return raw > 1e12 ? Math.floor(raw / 1000) : Math.floor(raw);
+    }
+    const s = String(raw).trim();
+    if (!s) return 0;
+    if (/^\d+(\.\d+)?$/.test(s)) {
+      const n = Number(s);
+      if (!Number.isFinite(n) || n <= 0) return 0;
+      return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
+    }
+    const parsed = Date.parse(s);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed / 1000);
+    return 0;
+  }
+
+  /** Read canonical finish unix seconds from queue job payloads (build/research/shipyard). */
+  function resolveQueueJobFinishTime(job) {
+    if (!job || typeof job !== "object") return 0;
+    return parseTimerTarget(
+      job.countdown_at
+      ?? job.finish_at
+      ?? job.finish_time
+      ?? job.next_countdown_at
+      ?? job.next_finish_at
+      ?? 0
+    );
+  }
+
+  function resolveQueueJobCountdownAt(job) {
+    if (!job || typeof job !== "object") return 0;
+    return parseTimerTarget(
+      job.countdown_at
+      ?? job.next_countdown_at
+      ?? job.finish_at
+      ?? job.finish_time
+      ?? job.next_finish_at
+      ?? 0
+    );
+  }
+
+  function resolveQueueJobRemaining(job) {
+    if (!job || typeof job !== "object") return 0;
+    const raw = job.remaining_seconds ?? job.order_remaining ?? job.remaining;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? Math.ceil(n) : 0;
+  }
+
+  function applyQueueJobTimerAttrs(el, finishTime, kind, refreshOnZero, remaining) {
+    if (!el || !finishTime) return;
+    const target = parseTimerTarget(finishTime);
+    if (!target) return;
+    el.dataset.timerTarget = String(target);
+    el.dataset.countdownAt = String(target);
+    if (kind) el.dataset.timerKind = kind;
+    if (refreshOnZero) el.dataset.refreshOnZero = refreshOnZero;
+    if (Number.isFinite(remaining) && remaining >= 0) {
+      el.dataset.serverRemaining = String(Math.ceil(remaining));
+    } else {
+      delete el.dataset.serverRemaining;
+    }
+  }
+
   function queueJobRemainingSeconds(finishAt, serverNow, serverRemaining) {
-    const endAt = Number(finishAt || 0);
+    const endAt = parseTimerTarget(finishAt);
     if (!endAt) return 0;
     const now = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
     const fromFinish = Math.max(0, Math.ceil(endAt - now));
@@ -196,14 +263,7 @@
   }
 
   function movementRemainingSeconds(countdownAt, serverNow, serverRemaining) {
-    const srv = Number(serverRemaining);
-    if (Number.isFinite(srv) && srv >= 0) {
-      return Math.max(0, Math.ceil(srv));
-    }
-    const endAt = Number(countdownAt || 0);
-    if (!endAt) return 0;
-    const now = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
-    return Math.max(0, Math.ceil(endAt - now));
+    return queueJobRemainingSeconds(countdownAt, serverNow, serverRemaining);
   }
 
   function bootstrapServerTimeFromDom() {
@@ -388,6 +448,8 @@
       GC.stopPolling();
       GC.stopProgressTicker();
       _clearMovementCountdownExpiryState();
+      _timerZeroRefreshLastAt.clear();
+      _lastShipyardQueueSignature = "";
     }
 
     _clientStateGen += 1;
@@ -406,7 +468,7 @@
     });
 
     if (!isPlanetSwitch) {
-      GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch);
+      GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
       GC.startProgressTicker();
     }
     return anyActive;
@@ -823,6 +885,7 @@
 
   GC.stopProgressTicker = function stopProgressTicker() {
     _progressTickerActive = false;
+    _pageTimerLoopRunning = false;
     if (_progressTickerTimerId != null) {
       clearTimeout(_progressTickerTimerId);
       _progressTickerTimerId = null;
@@ -830,15 +893,14 @@
   };
 
   function _minMovementCountdownRemaining(serverNow) {
-    const now = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
+    const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
     let min = Infinity;
     const scan = (el) => {
-      const at = Number(el.dataset.countdownAt || 0);
-      if (!at) return;
-      const rem = Math.max(0, Math.ceil(at - now));
-      if (rem < min) min = rem;
+      syncTimerElement(el);
+      const rem = timerRemainingSeconds(el, now);
+      if (rem > 0 && rem < min) min = rem;
     };
-    document.querySelectorAll("[data-countdown-at]").forEach(scan);
+    queryTimerElements().forEach(scan);
     document.querySelectorAll("[data-preview-arrival][data-countdown-at]").forEach(scan);
     return Number.isFinite(min) ? min : Infinity;
   }
@@ -855,21 +917,21 @@
   GC.startProgressTicker = function startProgressTicker() {
     if (!shouldRunGameLoop()) return;
     _progressTickerActive = true;
-    if (_progressTickerTimerId != null) {
-      clearTimeout(_progressTickerTimerId);
-      _progressTickerTimerId = null;
-    }
+    _pageTimerLoopRunning = true;
+    if (_progressTickerTimerId != null) return;
     const tick = () => {
       _progressTickerTimerId = null;
       if (!_progressTickerActive || !shouldRunGameLoop() || _authLoopAborted) {
+        _pageTimerLoopRunning = false;
         GC.stopProgressTicker();
         return;
       }
       if (!_hasActiveProgressJobs()) {
+        _pageTimerLoopRunning = false;
         GC.stopProgressTicker();
         return;
       }
-      const serverNow = getApproxServerNow();
+      const serverNow = getTimerServerNow();
       updateAllProgressBars(serverNow);
       _progressTickerTimerId = setTimeout(tick, _progressTickerDelayMs(serverNow));
     };
@@ -909,7 +971,7 @@
         return;
       }
       GC.startProgressTicker();
-      const active = lastHadActiveJob || lastHadActiveResearch;
+      const active = lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard;
       let interval = pol.intervalIdle;
       if (active) interval = pol.intervalActive;
       if (document.hidden) interval = pol.intervalHidden;
@@ -1012,7 +1074,7 @@
       if (!skipGameState && typeof GC.refreshGameState === "function") {
         await GC.refreshGameState("page_init");
       } else if (skipGameState) {
-        GC.startPolling(lastHadActiveJob || lastHadActiveResearch);
+        GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
       }
       GC.startProgressTicker();
       if (typeof GC.initChat === "function") GC.initChat();
@@ -1536,6 +1598,13 @@
 
   function requestFinishRefresh(type) {
     if (!shouldRunGameLoop() || _authLoopAborted) return;
+    if (type === "shipyard") {
+      scheduleShipyardRefreshFromState(true);
+      if (typeof GC.refreshGameState === "function") {
+        GC.refreshGameState("timer_done");
+      }
+      return;
+    }
     const key = type === "buildings" || type === "research" || type === "planet_evolution" ? type : "buildings";
     const nowMs = Date.now();
     if (nowMs - (_finishRefreshLastAt[key] || 0) < FINISH_REFRESH_MIN_MS) return;
@@ -1767,6 +1836,9 @@
           if (endAt) {
             const phase = act.phase || act.state || "";
             const mvId = act.movement_id || String(act.key || "").replace(/^fleet_/, "");
+            etaEl.dataset.timerTarget = String(endAt);
+            etaEl.dataset.timerKind = act.key.startsWith("fleet_") ? "fleet" : "queue";
+            etaEl.dataset.refreshOnZero = act.key.startsWith("fleet_") ? "fleet" : "game-state";
             etaEl.dataset.countdownAt = String(endAt);
             etaEl.dataset.countdownScope = "overview";
             etaEl.dataset.countdownFormat = act.key.startsWith("fleet_") ? "fleet" : "eta";
@@ -1832,6 +1904,9 @@
           if (endAt) {
             const phase = act.phase || act.state || "";
             const mvId = act.movement_id || String(act.key || "").replace(/^fleet_/, "");
+            etaEl.dataset.timerTarget = String(endAt);
+            etaEl.dataset.timerKind = act.key.startsWith("fleet_") ? "fleet" : "queue";
+            etaEl.dataset.refreshOnZero = act.key.startsWith("fleet_") ? "fleet" : "game-state";
             etaEl.dataset.countdownAt = String(endAt);
             etaEl.dataset.countdownScope = "overview";
             etaEl.dataset.countdownFormat = act.key.startsWith("fleet_") ? "fleet" : "eta";
@@ -1963,6 +2038,7 @@
   const _scoreState = {
     lastServerTotal: null,
     lastAnimatedTotal: null,
+    pendingOverviewDelta: 0,
   };
 
   let _deltaTimerHud = 0;
@@ -2093,33 +2169,35 @@
   };
 
   function _hasLiveCountdownAt() {
-    const now = getApproxServerNow();
-    for (const el of document.querySelectorAll("[data-countdown-at]")) {
-      const at = Number(el.dataset.countdownAt || 0);
-      if (!at) continue;
-      if (Math.ceil(at - now) > 0) return true;
+    const now = getTimerServerNow();
+    for (const el of queryTimerElements()) {
+      syncTimerElement(el);
+      if (timerRemainingSeconds(el, now) > 0) return true;
     }
     const previewArrival = document.querySelector("[data-preview-arrival][data-countdown-at]");
     if (previewArrival) {
-      const at = Number(previewArrival.dataset.countdownAt || 0);
-      if (at && Math.ceil(at - now) > 0) return true;
+      syncTimerElement(previewArrival);
+      if (timerRemainingSeconds(previewArrival, now) > 0) return true;
     }
     return false;
   }
 
   function _hasStaleMovementCountdown() {
-    const now = getApproxServerNow();
-    for (const el of document.querySelectorAll("[data-countdown-at]")) {
+    const now = getTimerServerNow();
+    for (const el of queryTimerElements()) {
+      syncTimerElement(el);
       const scope = el.dataset.countdownScope || "";
-      if (scope !== "fleet" && scope !== "overview") continue;
-      const at = Number(el.dataset.countdownAt || 0);
-      if (at && Math.ceil(at - now) <= 0) return true;
+      const kind = el.dataset.timerKind || inferTimerKind(el);
+      if (scope !== "fleet" && scope !== "overview" && kind !== "fleet") continue;
+      if (Number(el.dataset.timerTarget || el.dataset.countdownAt || 0) && timerRemainingSeconds(el, now) <= 0) {
+        return true;
+      }
     }
     return false;
   }
 
   function _hasActiveProgressJobs() {
-    const now = getApproxServerNow();
+    const now = getTimerServerNow();
     const buildFinish = BUILDQ.active.finishTime > now;
     const researchFinish = RESEARCHQ.active.finishTime > now;
     const shipyardFinish = SHIPYARDQ.active.finishTime > now;
@@ -2301,14 +2379,20 @@
 
     // update live state regardless of DOM churn
     const first = queueList && queueList.length ? queueList[0] : null;
-    if (first && first.finish_time) {
-      const now = getApproxServerNow();
-      const remaining = Math.max(0, Math.floor((Number(first.finish_time) - (now || 0))));
-      const totalRaw = Number(first.total || first.total_seconds || 0);
-      const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
+    if (first) {
+      const finishTime = resolveQueueJobFinishTime(first);
+      if (finishTime) {
+        const now = getTimerServerNow();
+        const remaining = queueJobRemainingSeconds(finishTime, now, resolveQueueJobRemaining(first));
+        const totalRaw = Number(first.total || first.total_seconds || 0);
+        const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
 
-      BUILDQ.active.finishTime = Number(first.finish_time) || 0;
-      BUILDQ.active.totalSeconds = total;
+        BUILDQ.active.finishTime = finishTime;
+        BUILDQ.active.totalSeconds = total;
+      } else {
+        BUILDQ.active.finishTime = 0;
+        BUILDQ.active.totalSeconds = 0;
+      }
     } else {
       BUILDQ.active.finishTime = 0;
       BUILDQ.active.totalSeconds = 0;
@@ -2325,8 +2409,8 @@
     if (sig === _lastQueueSignature) {
       const overdue =
         first &&
-        first.finish_time &&
-        Number(first.finish_time) <= getApproxServerNow();
+        resolveQueueJobFinishTime(first) &&
+        resolveQueueJobFinishTime(first) <= getTimerServerNow();
       if (!overdue) {
         _updateBuildQueueSubtitle(count, limit, firstEta);
         GC.startProgressTicker();
@@ -2360,24 +2444,28 @@
         BUILDING_LABELS[bType] ||
         (job.label_key ? t(job.label_key, fallbackName) : t(i18nKey, fallbackName));
 
-      const remaining = parseInt(job.remaining, 10) || 0;
+      const remaining = resolveQueueJobRemaining(job);
       const totalRaw = job.total || job.total_seconds || 0;
       const total = Math.max(1, parseInt(totalRaw, 10) || (remaining + 1));
       const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
       const iconSrc = buildingIconUrl(bType);
       const isActive = index === 0;
-      const finishTime = Number(job.finish_time || 0);
+      const finishTime = resolveQueueJobFinishTime(job);
+      const srvRemAttr =
+        isActive && Number.isFinite(remaining) && remaining >= 0
+          ? ` data-server-remaining="${Math.ceil(remaining)}"`
+          : "";
 
       html += `
         <div class="build-job${isActive ? " build-job-active" : " build-job-queued"}"
-             ${isActive ? `data-finish-time="${finishTime}" data-total="${total}"` : ""}>
+             ${isActive ? `data-finish-time="${finishTime}" data-total="${total}"${srvRemAttr}` : ""}>
           <div class="build-job-icon">
             <img src="${iconSrc}" alt="" loading="lazy" onerror="this.src='/static/img/buildings/default.png'">
           </div>
           <div class="build-job-body">
             <div class="job-header">
               <span class="job-name">${name} → ${t("label_level_short", "L")} ${job.target_level}</span>
-              <span class="job-time${isActive ? "" : " job-time-muted"}"${isActive ? ' id="build-eta-live"' : ""}>
+              <span class="job-time${isActive ? "" : " job-time-muted"}"${isActive ? ` id="build-eta-live" data-timer-target="${finishTime}" data-timer-kind="build" data-refresh-on-zero="game-state" data-countdown-at="${finishTime}"${srvRemAttr}` : ""}>
                 ${isActive ? formatEta(remaining) : t("status_in_queue", "In Warteschlange")}
               </span>
             </div>
@@ -2443,8 +2531,8 @@
 
   function _syncResearchQueueLiveFromServer(first, summary) {
     if (!first) return;
-    const finishTime = Number(first.finish_at || first.finish_time || 0);
-    const serverRemaining = Number(first.remaining ?? summary?.first_finish_in ?? 0);
+    const finishTime = resolveQueueJobFinishTime(first);
+    const serverRemaining = resolveQueueJobRemaining(first) || Number(summary?.first_finish_in ?? 0);
     const totalRaw = Number(first.total || first.total_seconds || 0);
     const total = totalRaw > 0 ? Math.max(1, Math.floor(totalRaw)) : Math.max(1, serverRemaining + 1);
     const activeJob = document.querySelector(".research-job.research-job-active");
@@ -2457,7 +2545,7 @@
         delete activeJob.dataset.serverRemaining;
       }
     }
-    const now = getApproxServerNow();
+    const now = getTimerServerNow();
     const remaining = finishTime
       ? queueJobRemainingSeconds(finishTime, now, serverRemaining)
       : Math.max(0, Math.ceil(serverRemaining));
@@ -2466,7 +2554,10 @@
     const etaEl = document.getElementById("research-eta-live");
     const fillEl = document.getElementById("research-bar-fill-live");
     const subEta = document.getElementById("research-queue-subtitle-eta");
-    if (etaEl) _setIfChanged(etaEl, etaText);
+    if (etaEl) {
+      applyQueueJobTimerAttrs(etaEl, finishTime, "research", "game-state", serverRemaining);
+      _setIfChanged(etaEl, etaText);
+    }
     _applyProgressFill(fillEl, pct);
     if (subEta) _setIfChanged(subEta, etaText);
   }
@@ -2489,15 +2580,20 @@
     }
 
     const first = queueList.length ? queueList[0] : null;
-    if (first && (first.finish_at || first.finish_time)) {
-      const finishTime = Number(first.finish_at || first.finish_time || 0);
-      const totalRaw = Number(first.total || first.total_seconds || 0);
-      const now = getApproxServerNow();
-      const remaining = Math.max(0, Math.floor(finishTime - (now || 0)));
-      const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
+    if (first) {
+      const finishTime = resolveQueueJobFinishTime(first);
+      if (finishTime) {
+        const totalRaw = Number(first.total || first.total_seconds || 0);
+        const now = getTimerServerNow();
+        const remaining = queueJobRemainingSeconds(finishTime, now, resolveQueueJobRemaining(first));
+        const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
 
-      RESEARCHQ.active.finishTime = finishTime;
-      RESEARCHQ.active.totalSeconds = total;
+        RESEARCHQ.active.finishTime = finishTime;
+        RESEARCHQ.active.totalSeconds = total;
+      } else {
+        RESEARCHQ.active.finishTime = 0;
+        RESEARCHQ.active.totalSeconds = 0;
+      }
     } else {
       RESEARCHQ.active.finishTime = 0;
       RESEARCHQ.active.totalSeconds = 0;
@@ -2512,8 +2608,8 @@
         : formatEta(first?.remaining ?? 0);
 
     if (sig === _lastResearchQueueSignature) {
-      const finishTime = first ? Number(first.finish_at || first.finish_time || 0) : 0;
-      const overdue = finishTime > 0 && finishTime <= getApproxServerNow();
+      const finishTime = first ? resolveQueueJobFinishTime(first) : 0;
+      const overdue = finishTime > 0 && finishTime <= getTimerServerNow();
       if (!overdue) {
         _updateResearchQueueSubtitle(count, limit, firstEta);
         _syncResearchQueueLiveFromServer(first, summary);
@@ -2545,14 +2641,14 @@
       const fallbackName = job.label || techKey || i18nKey;
       const name = t(i18nKey, fallbackName);
 
-      const remaining = parseInt(job.remaining, 10) || 0;
+      const remaining = resolveQueueJobRemaining(job);
       const totalRaw = job.total || job.total_seconds || 0;
       const total = Math.max(1, parseInt(totalRaw, 10) || remaining + 1);
       const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
       const iconFile = job.icon || `${techKey}.png`;
       const iconSrc = `/static/img/research/${iconFile}`;
       const isActive = index === 0;
-      const finishTime = Number(job.finish_at || job.finish_time || 0);
+      const finishTime = resolveQueueJobFinishTime(job);
       const currLvl = job.current_level ?? 0;
       const targLvl = job.target_level ?? currLvl + 1;
       const srvRemAttr =
@@ -2569,7 +2665,7 @@
           <div class="research-job-body">
             <div class="job-header">
               <span class="job-name">${name} → ${t("label_level_short", "L")}${currLvl} → ${t("label_level_short", "L")}${targLvl}</span>
-              <span class="job-time${isActive ? "" : " job-time-muted"}"${isActive ? ' id="research-eta-live"' : ""}>
+              <span class="job-time${isActive ? "" : " job-time-muted"}"${isActive ? ` id="research-eta-live" data-timer-target="${finishTime}" data-timer-kind="research" data-refresh-on-zero="game-state" data-countdown-at="${finishTime}"${srvRemAttr}` : ""}>
                 ${isActive ? formatEta(remaining) : t("status_in_queue", "In Warteschlange")}
               </span>
             </div>
@@ -2626,11 +2722,147 @@
     }
   }
 
+  // =========================
+  // GC-540 — unified page timers (single tick via startProgressTicker)
+  // =========================
+  let _pageTimerLoopRunning = false;
+
+  function getTimerServerNow() {
+    const st = Number(GC.lastState?.server_time || GC.lastState?.server_now || 0);
+    if (st) {
+      const approx = getApproxServerNow();
+      if (!TIME.serverNow || st > approx - 0.5) setServerTime(st);
+    }
+    return getApproxServerNow();
+  }
+
+  function queryTimerElements(root) {
+    const base = root || document;
+    const seen = new Set();
+    const out = [];
+    const add = (el) => {
+      if (el && el.nodeType === 1 && !seen.has(el)) {
+        seen.add(el);
+        out.push(el);
+      }
+    };
+    base.querySelectorAll("[data-timer-target], [data-countdown-at]").forEach(add);
+    [
+      "#build-eta-live",
+      "#research-eta-live",
+      "#shipyard-eta-live",
+      "#build-queue-subtitle-eta",
+      "#research-queue-subtitle-eta",
+      "#shipyard-queue-subtitle-eta",
+    ].forEach((sel) => {
+      const el = base.querySelector(sel);
+      if (el) add(el);
+    });
+    base.querySelectorAll(
+      ".build-job-active[data-finish-time], .research-job-active[data-finish-time], .shipyard-job-active[data-finish-time]"
+    ).forEach((job) => {
+      const eta = job.querySelector("[data-timer-target], [data-countdown-at], .job-time, [data-activity-eta]");
+      add(eta || job);
+    });
+    return out;
+  }
+
+  function inferTimerKind(el) {
+    if (el.dataset.timerKind) return el.dataset.timerKind;
+    if (el.dataset.countdownFormat === "fleet" || el.classList.contains("fleet-active-countdown")) return "fleet";
+    if (el.dataset.activityEta) {
+      return el.dataset.countdownFormat === "fleet" ? "fleet" : "queue";
+    }
+    if (el.closest(".shipyard-job-active")) return "shipyard";
+    if (el.closest(".build-job-active")) return "build";
+    if (el.closest(".research-job-active")) return "research";
+    return el.dataset.countdownFormat || "eta";
+  }
+
+  function inferRefreshOnZero(el, kind) {
+    if (el.dataset.refreshOnZero) return el.dataset.refreshOnZero;
+    const scope = el.dataset.countdownScope || "";
+    if (scope === "fleet" || kind === "fleet") return "fleet";
+    if (kind === "shipyard") return "shipyard";
+    if (scope === "overview" || kind === "build" || kind === "research" || kind === "queue") return "game-state";
+    return "";
+  }
+
+  function syncTimerElement(el) {
+    if (!el) return;
+    let target = parseTimerTarget(el.dataset.timerTarget);
+    if (!target) target = parseTimerTarget(el.dataset.countdownAt);
+    if (!target) {
+      const parent = el.closest("[data-finish-time], [data-finish-at]");
+      if (parent) {
+        target = parseTimerTarget(parent.dataset.finishTime || parent.dataset.finishAt || parent.getAttribute("data-finish-time"));
+      }
+    }
+    if (!target) target = parseTimerTarget(el.getAttribute("data-finish-time"));
+    if (target > 0) {
+      if (!el.dataset.timerTarget) el.dataset.timerTarget = String(target);
+      if (!el.dataset.countdownAt) el.dataset.countdownAt = String(target);
+    }
+    const kind = inferTimerKind(el);
+    if (!el.dataset.timerKind) el.dataset.timerKind = kind;
+    const refresh = inferRefreshOnZero(el, kind);
+    if (refresh && !el.dataset.refreshOnZero) el.dataset.refreshOnZero = refresh;
+  }
+
+  function timerRemainingSeconds(el, serverNow) {
+    syncTimerElement(el);
+    const target = parseTimerTarget(el.dataset.timerTarget || el.dataset.countdownAt || 0);
+    if (!target) return 0;
+    const srvRem = el.dataset.serverRemaining;
+    const kind = el.dataset.timerKind || inferTimerKind(el);
+    const scope = el.dataset.countdownScope || "";
+    const useMovement =
+      kind === "fleet"
+      || scope === "fleet"
+      || (scope === "overview" && kind === "fleet");
+    if (useMovement) {
+      return movementRemainingSeconds(
+        target,
+        serverNow,
+        srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
+      );
+    }
+    return queueJobRemainingSeconds(
+      target,
+      serverNow,
+      srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
+    );
+  }
+
+  function formatTimerDisplay(remaining, kind) {
+    if (kind === "fleet") return formatCountdownRemain(remaining);
+    return formatEta(Math.max(0, Math.ceil(remaining)));
+  }
+
+  function requestTimerZeroRefresh(refreshKind, timerKind) {
+    const kind = String(refreshKind || "game-state");
+    if (kind === "fleet") {
+      requestMovementCountdownRefresh("fleet");
+      return;
+    }
+    if (kind === "shipyard") {
+      scheduleShipyardRefreshFromState(true);
+      if (typeof GC.refreshGameState === "function") {
+        GC.refreshGameState("timer_done");
+      }
+      return;
+    }
+    const actKey = timerKind === "research" ? "research" : "buildings";
+    requestFinishRefresh(actKey);
+  }
+
   const _movementCountdownRefreshPending = { fleet: false, overview: false };
   const _movementCountdownExpiryState = new Map();
   let _movementCountdownRefreshTimer = null;
   let _lastGlobalMovementExpiryRefreshMs = 0;
   let _queuedChainRefreshReason = null;
+  const _timerZeroRefreshLastAt = new Map();
+  const TIMER_ZERO_REFRESH_MIN_MS = 900;
 
   const MOVEMENT_EXPIRY_REFRESH_MS = 900;
   const MOVEMENT_EXPIRY_REFRESH_MS_SHORT = 200;
@@ -2781,30 +3013,50 @@
     }, debounceMs);
   }
 
-  function updateMovementCountdowns(serverNow) {
-    const now = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
+  function updatePageTimers(serverNow) {
+    const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
     let fleetExpired = false;
     let overviewExpired = false;
 
-    document.querySelectorAll("[data-countdown-at]").forEach((el) => {
-      const countdownAt = Number(el.dataset.countdownAt || 0);
-      if (!countdownAt) return;
-      const srvRem = el.dataset.serverRemaining;
-      const remaining = movementRemainingSeconds(
-        countdownAt,
-        now,
-        srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
-      );
-      _setIfChanged(el, formatMovementCountdown(remaining, el.dataset.countdownFormat || "fleet"));
+    queryTimerElements().forEach((el) => {
+      syncTimerElement(el);
+      const target = parseTimerTarget(el.dataset.timerTarget || el.dataset.countdownAt || 0);
+      if (!target) return;
+      const kind = el.dataset.timerKind || inferTimerKind(el);
+      const remaining = timerRemainingSeconds(el, now);
+      _setIfChanged(el, formatTimerDisplay(remaining, kind));
       const scope = el.dataset.countdownScope || "";
       const key = _movementCountdownKey(el);
-      const urgent = scope === "fleet" || scope === "overview";
+      const isFleetTimer = scope === "fleet" || kind === "fleet";
+      const isOverviewFleet = scope === "overview" && kind === "fleet";
       if (remaining <= 0) {
-        if (urgent) {
-          if (scope === "fleet") fleetExpired = true;
-          else if (scope === "overview") overviewExpired = true;
-        } else if (_shouldRefreshExpiredCountdown(key, false)) {
-          /* non-scoped countdowns */
+        if (isFleetTimer) {
+          fleetExpired = true;
+        } else if (isOverviewFleet) {
+          overviewExpired = true;
+        } else if (scope === "overview" && kind === "queue") {
+          const refreshKind = el.dataset.refreshOnZero || "game-state";
+          const actRow = el.closest("[data-activity-key]");
+          const actKey = actRow?.dataset?.activityKey || "";
+          const zeroKey = `${refreshKind}:${actKey}:${key}`;
+          const lastAt = _timerZeroRefreshLastAt.get(zeroKey) || 0;
+          if (Date.now() - lastAt >= TIMER_ZERO_REFRESH_MIN_MS) {
+            _timerZeroRefreshLastAt.set(zeroKey, Date.now());
+            if (actKey === "shipyard") requestFinishRefresh("shipyard");
+            else if (actKey === "research") requestFinishRefresh("research");
+            else if (actKey === "build") requestFinishRefresh("buildings");
+            else if (typeof GC.refreshGameState === "function") GC.refreshGameState("timer_done");
+          }
+        } else {
+          const refreshKind = el.dataset.refreshOnZero || inferRefreshOnZero(el, kind);
+          if (refreshKind) {
+            const zeroKey = `${refreshKind}:${key}`;
+            const lastAt = _timerZeroRefreshLastAt.get(zeroKey) || 0;
+            if (Date.now() - lastAt >= TIMER_ZERO_REFRESH_MIN_MS) {
+              _timerZeroRefreshLastAt.set(zeroKey, Date.now());
+              requestTimerZeroRefresh(refreshKind, kind);
+            }
+          }
         }
       } else {
         _movementCountdownExpiryState.delete(key);
@@ -2813,19 +3065,17 @@
     });
 
     document.querySelectorAll("[data-preview-arrival][data-countdown-at]").forEach((el) => {
-      const countdownAt = Number(el.dataset.countdownAt || 0);
-      if (!countdownAt) return;
-      const srvRem = el.dataset.serverRemaining;
-      const remaining = movementRemainingSeconds(
-        countdownAt,
-        now,
-        srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
-      );
+      syncTimerElement(el);
+      const remaining = timerRemainingSeconds(el, now);
       _setIfChanged(el, formatCountdownRemain(remaining));
     });
 
     if (fleetExpired) requestMovementCountdownRefresh("fleet");
     if (overviewExpired) requestMovementCountdownRefresh("overview");
+  }
+
+  function updateMovementCountdowns(serverNow) {
+    updatePageTimers(serverNow);
   }
 
   function updateAllProgressBars(serverNow) {
@@ -2836,14 +3086,19 @@
     const isOverviewPage = path.endsWith("/overview") || path === "/" || path === "";
 
     const buildActive = document.querySelector(".build-job.build-job-active");
-    const buildFinishFromDom = buildActive ? Number(buildActive.getAttribute("data-finish-time") || 0) : 0;
+    const buildFinishFromDom = buildActive ? parseTimerTarget(buildActive.getAttribute("data-finish-time")) : 0;
     const buildTotalFromDom = buildActive ? Math.max(1, Number(buildActive.getAttribute("data-total") || 1)) : 1;
-    const buildFinishFromState = Number(BUILDQ.active.finishTime || 0);
+    const buildFinishFromState = parseTimerTarget(BUILDQ.active.finishTime || 0);
     const buildTotalFromState = Math.max(1, Number(BUILDQ.active.totalSeconds || 1));
     const buildFinish = buildFinishFromDom || buildFinishFromState;
     const buildTotal = buildFinishFromDom ? buildTotalFromDom : buildTotalFromState;
     if (buildFinish) {
-      const remaining = Math.max(0, buildFinish - serverNowTs);
+      const srvRemRaw = buildActive?.dataset?.serverRemaining;
+      const remaining = queueJobRemainingSeconds(
+        buildFinish,
+        serverNowTs,
+        srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
+      );
       const pct = 100 * (1 - remaining / buildTotal);
       const etaEl = document.getElementById("build-eta-live");
       const fillEl = document.getElementById("build-bar-fill-live");
@@ -2859,8 +3114,12 @@
 
     const researchActive = document.querySelector(".research-job.research-job-active");
     if (researchActive) {
-      const finishTime = Number(researchActive.getAttribute("data-finish-time") || 0);
-      const total = Math.max(1, Number(researchActive.getAttribute("data-total") || 1));
+      const finishTimeFromDom = parseTimerTarget(researchActive.getAttribute("data-finish-time"));
+      const finishTimeFromState = parseTimerTarget(RESEARCHQ.active.finishTime || 0);
+      const finishTime = finishTimeFromDom || finishTimeFromState;
+      const totalFromDom = Math.max(1, Number(researchActive.getAttribute("data-total") || 1));
+      const totalFromState = Math.max(1, Number(RESEARCHQ.active.totalSeconds || 1));
+      const total = finishTimeFromDom ? totalFromDom : totalFromState;
       if (finishTime) {
         const srvRemRaw = researchActive.dataset.serverRemaining;
         const remaining = queueJobRemainingSeconds(
@@ -2871,7 +3130,10 @@
         const pct = 100 * (1 - remaining / total);
         const etaEl = document.getElementById("research-eta-live");
         const fillEl = document.getElementById("research-bar-fill-live");
-        if (etaEl) _setIfChanged(etaEl, formatEta(remaining));
+        if (etaEl) {
+          applyQueueJobTimerAttrs(etaEl, finishTime, "research", "game-state", remaining);
+          _setIfChanged(etaEl, formatEta(remaining));
+        }
         _applyProgressFill(fillEl, pct);
         const subEta = document.getElementById("research-queue-subtitle-eta");
         if (subEta) _setIfChanged(subEta, formatEta(remaining));
@@ -2884,15 +3146,27 @@
 
     const shipyardActive = document.querySelector(".shipyard-job.shipyard-job-active");
     if (shipyardActive) {
-      const orderFinish = Number(shipyardActive.getAttribute("data-finish-time") || 0);
-      const nextUnitFinish = Number(shipyardActive.getAttribute("data-next-finish-time") || 0);
-      const total = Math.max(1, Number(shipyardActive.getAttribute("data-total") || 1));
+      const orderFinishFromDom = parseTimerTarget(shipyardActive.getAttribute("data-finish-time"));
+      const orderFinishFromState = parseTimerTarget(SHIPYARDQ.active.finishTime || 0);
+      const orderFinish = orderFinishFromDom || orderFinishFromState;
+      const nextUnitFinish = parseTimerTarget(shipyardActive.getAttribute("data-next-finish-time"));
+      const totalFromDom = Math.max(1, Number(shipyardActive.getAttribute("data-total") || 1));
+      const totalFromState = Math.max(1, Number(SHIPYARDQ.active.totalSeconds || 1));
+      const total = orderFinishFromDom ? totalFromDom : totalFromState;
       if (orderFinish) {
-        const orderRemaining = Math.max(0, orderFinish - serverNowTs);
+        const srvRemRaw = shipyardActive.dataset.serverRemaining;
+        const orderRemaining = queueJobRemainingSeconds(
+          orderFinish,
+          serverNowTs,
+          srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
+        );
         const pct = 100 * (1 - orderRemaining / total);
         const etaEl = document.getElementById("shipyard-eta-live");
         const fillEl = document.getElementById("shipyard-bar-fill-live");
-        if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(orderRemaining)));
+        if (etaEl) {
+          applyQueueJobTimerAttrs(etaEl, orderFinish, "shipyard", "shipyard", orderRemaining);
+          _setIfChanged(etaEl, formatEta(Math.ceil(orderRemaining)));
+        }
         _applyProgressFill(fillEl, pct);
         const subEta = document.getElementById("shipyard-queue-subtitle-eta");
         if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(orderRemaining)));
@@ -2914,7 +3188,7 @@
       const nextUnitFinish = Number(defenseActive.getAttribute("data-next-finish-time") || 0);
       const total = Math.max(1, Number(defenseActive.getAttribute("data-total") || 1));
       if (orderFinish) {
-        const orderRemaining = Math.max(0, orderFinish - serverNowTs);
+        const orderRemaining = queueJobRemainingSeconds(orderFinish, serverNowTs, NaN);
         const pct = 100 * (1 - orderRemaining / total);
         const etaEl = document.getElementById("defense-eta-live");
         const fillEl = document.getElementById("defense-bar-fill-live");
@@ -2962,11 +3236,17 @@
     if (isOverviewPage) {
       document.querySelectorAll("#overview-activities .overview-activity-row[data-finish-at]").forEach((row) => {
         const etaEl = row.querySelector("[data-activity-eta]");
-        if (!etaEl || etaEl.dataset.countdownAt) return;
-        const finishAt = Number(row.dataset.finishAt || 0);
+        if (!etaEl) return;
+        syncTimerElement(etaEl);
+        const finishAt = parseTimerTarget(row.dataset.finishAt || etaEl.dataset.timerTarget || etaEl.dataset.countdownAt);
         if (!finishAt) return;
-        const remaining = Math.max(0, finishAt - serverNowTs);
-        _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
+        const srvRemRaw = etaEl.dataset.serverRemaining;
+        const remaining = queueJobRemainingSeconds(
+          finishAt,
+          serverNowTs,
+          srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
+        );
+        _setIfChanged(etaEl, formatTimerDisplay(remaining, etaEl.dataset.timerKind || inferTimerKind(etaEl)));
         if (remaining <= 0) {
           const actKey = String(row.dataset.activityKey || "");
           if (actKey === "build") requestFinishRefresh("buildings");
@@ -2990,6 +3270,7 @@
 
   let lastHadActiveJob = false;
   let lastHadActiveResearch = false;
+  let lastHadActiveShipyard = false;
   let lastBuildQueueCount = null;
   let lastBuildQueueFull = null;
   let lastResearchQueueCount = null;
@@ -3012,32 +3293,31 @@
   let _resourceTickerId = null;
   let _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
 
-  function patchLiveResourceAmounts(metal, crystal, fuelCells) {
+  /** Shell HUD resource values only (#resource-bar) — never fleet/page [data-res] nodes. */
+  function patchShellHudLiveResources(metal, crystal, fuelCells) {
+    const bar = document.getElementById("resource-bar");
+    if (!bar) return;
     const m = Math.max(0, Math.floor(Number(metal) || 0));
     const c = Math.max(0, Math.floor(Number(crystal) || 0));
     const f = Math.max(0, Math.floor(Number(fuelCells) || 0));
     if (_resourceDisplay.metal !== m) {
-      document.querySelectorAll(".res-value.metal, [data-res=\"metal\"]").forEach((el) => {
+      bar.querySelectorAll(".res-value.metal").forEach((el) => {
         _setIfChanged(el, fmtNumber(m));
       });
       _resourceDisplay.metal = m;
     }
     if (_resourceDisplay.crystal !== c) {
-      document.querySelectorAll(".res-value.crystal, [data-res=\"crystal\"]").forEach((el) => {
+      bar.querySelectorAll(".res-value.crystal").forEach((el) => {
         _setIfChanged(el, fmtNumber(c));
       });
       _resourceDisplay.crystal = c;
     }
     if (_resourceDisplay.fuelCells !== f) {
-      document.querySelectorAll(".res-value.fuel_cells, [data-res=\"fuel_cells\"]").forEach((el) => {
+      bar.querySelectorAll(".res-value.fuel_cells").forEach((el) => {
         _setIfChanged(el, fmtNumber(f));
       });
       _resourceDisplay.fuelCells = f;
     }
-    const ovMetalVal = document.querySelector('#overview-metal-val .gc-val[data-res="metal"]');
-    const ovCryVal = document.querySelector('#overview-crystal-val .gc-val[data-res="crystal"]');
-    if (ovMetalVal) _setIfChanged(ovMetalVal, fmtNumber(m));
-    if (ovCryVal) _setIfChanged(ovCryVal, fmtNumber(c));
   }
 
   function syncResourceLiveBaseline(snapshot) {
@@ -3056,7 +3336,6 @@
     _resourceLive.capCrystal = Math.max(0, Math.floor(Number(snapshot.storageCrystal) || 0));
     _resourceLive.capFuelCells = Math.max(0, Math.floor(Number(snapshot.storageFuelCells) || 0));
     _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
-    patchLiveResourceAmounts(_resourceLive.metal, _resourceLive.crystal, _resourceLive.fuelCells);
     startResourceTicker();
   }
 
@@ -3093,7 +3372,7 @@
     if (!shouldRunGameLoop() || _authLoopAborted || !_resourceLive.planetId) return;
     const projected = projectLiveResourceAmounts(getApproxServerNow());
     if (!projected) return;
-    patchLiveResourceAmounts(projected.metal, projected.crystal, projected.fuelCells);
+    patchShellHudLiveResources(projected.metal, projected.crystal, projected.fuelCells);
   }
 
   function startResourceTicker() {
@@ -3219,7 +3498,232 @@
     _lastMessagesUnreadPoll = Math.max(0, Number(count) || 0);
   };
 
+  let _lastHudOnline = null;
+
+  /** Single write path for shell HUD (header score/rank/online/messages + resource bar). */
+  function patchShellHudFromState(data, opts) {
+    if (!data || data.ok === false) return;
+    const forceResourceBar = Boolean(opts && opts.forceResourceBar);
+    const resourceOverrides = opts && opts.resourceOverrides;
+
+    const p = data.player || {};
+    const energy = data.energy || {};
+    const resources = data.resources || {};
+    const storage = data.storage || {};
+    const prod = data.production_per_hour || {};
+
+    const storageMetal = Math.floor(Number(storage.metal || 0));
+    const storageCrystal = Math.floor(Number(storage.crystal || 0));
+    const storageFuelCells = Math.floor(Number(storage.fuel_cells || 0));
+
+    const metal = resourceOverrides && resourceOverrides.metal != null
+      ? Math.floor(Number(resourceOverrides.metal))
+      : Math.floor(Number(p.metal ?? resources.metal ?? 0));
+    const crystal = resourceOverrides && resourceOverrides.crystal != null
+      ? Math.floor(Number(resourceOverrides.crystal))
+      : Math.floor(Number(p.crystal ?? resources.crystal ?? 0));
+    const fuelCells = resourceOverrides && resourceOverrides.fuelCells != null
+      ? Math.floor(Number(resourceOverrides.fuelCells))
+      : Math.floor(Number(p.fuel_cells ?? resources.fuel_cells ?? 0));
+    const used = Math.floor(Number(p.energy_used ?? energy.used ?? resources.energy_used ?? 0));
+    const total = Math.floor(Number(p.energy_total ?? energy.total ?? resources.energy_total ?? 0));
+
+    const prodMetal = Math.floor(Number(prod.metal_mine ?? prod.metal ?? 0));
+    const prodCrystal = Math.floor(Number(prod.crystal_mine ?? prod.crystal ?? 0));
+    const prodFuelCells = Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0));
+
+    const bar = document.getElementById("resource-bar");
+    if (bar) {
+      if (forceResourceBar || _last.metal !== metal) {
+        bar.querySelectorAll(".res-value.metal").forEach((el) => { _setIfChanged(el, fmtNumber(metal)); });
+        _last.metal = metal;
+        _resourceDisplay.metal = metal;
+      }
+      if (forceResourceBar || _last.crystal !== crystal) {
+        bar.querySelectorAll(".res-value.crystal").forEach((el) => { _setIfChanged(el, fmtNumber(crystal)); });
+        _last.crystal = crystal;
+        _resourceDisplay.crystal = crystal;
+      }
+      if (forceResourceBar || (_last.storageMetal !== storageMetal && storageMetal > 0)) {
+        bar.querySelectorAll(".res-cap.metal").forEach((el) => { _setIfChanged(el, fmtNumber(storageMetal)); });
+        _last.storageMetal = storageMetal;
+      }
+      if (forceResourceBar || (_last.storageCrystal !== storageCrystal && storageCrystal > 0)) {
+        bar.querySelectorAll(".res-cap.crystal").forEach((el) => { _setIfChanged(el, fmtNumber(storageCrystal)); });
+        _last.storageCrystal = storageCrystal;
+      }
+      if (forceResourceBar || _last.fuelCells !== fuelCells) {
+        bar.querySelectorAll(".res-value.fuel_cells").forEach((el) => { _setIfChanged(el, fmtNumber(fuelCells)); });
+        _last.fuelCells = fuelCells;
+        _resourceDisplay.fuelCells = fuelCells;
+      }
+      if (forceResourceBar || (_last.storageFuelCells !== storageFuelCells && storageFuelCells > 0)) {
+        bar.querySelectorAll(".res-cap.fuel_cells").forEach((el) => { _setIfChanged(el, fmtNumber(storageFuelCells)); });
+        _last.storageFuelCells = storageFuelCells;
+      }
+
+      const rateLabel = (key, perHour) => {
+        const ph = Math.floor(Number(perHour) || 0);
+        bar.querySelectorAll(`[data-res-rate="${key}"]`).forEach((el) => {
+          if (ph > 0) {
+            const sign = ph >= 0 ? "+" : "";
+            _setIfChanged(el, `${sign}${fmtNumber(ph)}/h`);
+            el.style.visibility = "visible";
+            el.removeAttribute("hidden");
+            el.removeAttribute("aria-hidden");
+          } else {
+            _setIfChanged(el, "");
+            el.style.visibility = "hidden";
+            el.setAttribute("aria-hidden", "true");
+          }
+        });
+      };
+
+      if (forceResourceBar || _last.prodMetal !== prodMetal) {
+        rateLabel("metal", prodMetal);
+        _last.prodMetal = prodMetal;
+      }
+      if (forceResourceBar || _last.prodCrystal !== prodCrystal) {
+        rateLabel("crystal", prodCrystal);
+        _last.prodCrystal = prodCrystal;
+      }
+      if (forceResourceBar || _last.prodFuelCells !== prodFuelCells) {
+        rateLabel("fuel_cells", prodFuelCells);
+        _last.prodFuelCells = prodFuelCells;
+      }
+
+      const energyText = `${fmtNumber(used)}/${fmtNumber(total)}`;
+      if (forceResourceBar || _last.energyUsed !== used || _last.energyTotal !== total) {
+        const energyEl = bar.querySelector("#res-energy") || document.getElementById("res-energy");
+        if (energyEl) _setIfChanged(energyEl, energyText);
+        bar.querySelectorAll("[data-energy-used]").forEach((el) => {
+          _setIfChanged(el, fmtNumber(used));
+        });
+        bar.querySelectorAll("[data-energy-total]").forEach((el) => {
+          _setIfChanged(el, fmtNumber(total));
+        });
+        _last.energyUsed = used;
+        _last.energyTotal = total;
+      }
+      patchResourceBarEnergyWarning(used, total);
+    }
+
+    patchHeaderPlanetLimitFromState(data, forceResourceBar);
+
+    if (data.score) {
+      const s = data.score;
+      const serverTotal = Number(s.total || 0);
+      const rank = typeof s.rank === "number" ? s.rank : Number(s.rank || 0);
+      const totalPlayers = Number(s.total_players || 0);
+      const scoreStale = _scoreState.lastServerTotal !== null
+        && serverTotal < _scoreState.lastServerTotal
+        && !forceResourceBar;
+
+      if (!scoreStale) {
+        let delta = 0;
+        if (_scoreState.lastServerTotal !== null && serverTotal > _scoreState.lastServerTotal) {
+          delta = serverTotal - _scoreState.lastServerTotal;
+        }
+        _scoreState.lastServerTotal = serverTotal;
+        _scoreState.pendingOverviewDelta = delta;
+
+        const hudScoreEl = document.getElementById("hud-score-total");
+        const hudRankEl = document.getElementById("hud-score-rank");
+
+        if (hudScoreEl && _scoreState.lastAnimatedTotal !== serverTotal) {
+          animateNumber(hudScoreEl, serverTotal, { duration: 700 });
+          if (delta !== 0) showScoreDelta(hudScoreEl.closest(".gc-score-pill") || hudScoreEl, delta, "hud");
+          _scoreState.lastAnimatedTotal = serverTotal;
+        }
+
+        const rankText = (rank >= 1 && totalPlayers > 0) ? `#${rank}/${totalPlayers}` : "#–";
+        if (hudRankEl) _setIfChanged(hudRankEl, rankText);
+      }
+    }
+
+    const stats = data.player_stats || {};
+    const onlineNow = Number(stats.online_now);
+    const onlineTotal = Number(stats.total_players);
+    if (Number.isFinite(onlineNow) && Number.isFinite(onlineTotal)) {
+      const onlineText = `${fmtNumber(onlineNow)}/${fmtNumber(onlineTotal)}`;
+      if (_lastHudOnline !== onlineText) {
+        document.querySelectorAll("[data-hud-online-value]").forEach((el) => {
+          _setIfChanged(el, onlineText);
+        });
+        _lastHudOnline = onlineText;
+      }
+    }
+
+    if (typeof data.unread_messages_count === "number" && !(opts && opts.skipMessagesUnread)) {
+      updateMessagesUnreadBadges(data.unread_messages_count);
+    }
+  }
+
+  GC.patchShellHudFromState = patchShellHudFromState;
+
+  GC.mergeLastState = function mergeLastState(partial, reason) {
+    if (!partial || typeof partial !== "object") return GC.lastState;
+    const base = GC.lastState && GC.lastState.ok === true ? GC.lastState : { ok: true };
+    GC.lastState = { ...base, ...partial };
+    patchShellHudFromState(GC.lastState, { forceResourceBar: true, reason: reason || "merge" });
+    return GC.lastState;
+  };
+
+  function patchOverviewScoreFromState(data) {
+    if (!data || !data.score) return;
+    const s = data.score;
+    const serverTotal = Number(s.total || 0);
+    const rank = typeof s.rank === "number" ? s.rank : Number(s.rank || 0);
+    const totalPlayers = Number(s.total_players || 0);
+    const scoreBuildings = Number(s.buildings || 0);
+    const scoreResearch = Number(s.research || 0);
+
+    const scoreStale = _scoreState.lastServerTotal !== null && serverTotal < _scoreState.lastServerTotal;
+    if (scoreStale) return;
+
+    const delta = Number(_scoreState.pendingOverviewDelta) || 0;
+    _scoreState.pendingOverviewDelta = 0;
+
+    const ovScoreVal = document.getElementById("overview-score-value");
+    const ovScoreRank = document.getElementById("overview-score-rank");
+    const ovScoreBuild = document.getElementById("overview-score-buildings");
+    const ovScoreRes = document.getElementById("overview-score-research");
+
+    if (ovScoreVal) {
+      animateNumber(ovScoreVal, serverTotal, { duration: 750 });
+      if (delta !== 0) showScoreDelta(ovScoreVal.parentElement || ovScoreVal, delta, "overview");
+    }
+    if (ovScoreRank) {
+      ovScoreRank.textContent = (rank >= 1 && totalPlayers > 0) ? `#${rank}/${totalPlayers}` : "#–/–";
+    }
+    if (ovScoreBuild) animateNumber(ovScoreBuild, scoreBuildings, { duration: 650 });
+    if (ovScoreRes) animateNumber(ovScoreRes, scoreResearch, { duration: 650 });
+  }
+
   // =========================
+  function patchResearchPanelFromState(data) {
+    renderResearchQueue((data && data.research) || null);
+  }
+
+  function patchShipyardPanelFromState(data, activePlanetId) {
+    const page = document.getElementById("shipyard-page");
+    if (!page || page.dataset.ready !== "1") return;
+    const statePid = Number(
+      activePlanetId || data?.active_planet_id || GC.lastState?.active_planet_id || 0
+    );
+    const pagePid = Number(page.dataset.planetId || 0);
+    if (statePid > 0 && pagePid > 0 && pagePid !== statePid) {
+      _lastShipyardQueueSignature = "";
+      SHIPYARDQ.active.finishTime = 0;
+      SHIPYARDQ.active.totalSeconds = 0;
+      scheduleShipyardRefreshFromState(true);
+      return;
+    }
+    if (data?.shipyard_queue) {
+      renderShipyardQueue(page, data.shipyard_queue);
+    }
+  }
+
   // Status polling / GC.refreshGameState
   // =========================
   function applyGameStateData(data, _reason, opts) {
@@ -3238,6 +3742,7 @@
       }
 
       if (data.server_time) setServerTime(data.server_time);
+      else if (data.server_now) setServerTime(data.server_now);
 
       const activePlanetId = Number(data.active_planet_id || data.build_queue?.planet_id || 0);
       if (!hudOnly) {
@@ -3305,86 +3810,7 @@
       const prodCrystal = Math.floor(Number(prod.crystal_mine ?? prod.crystal ?? 0));
       const prodFuelCells = Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0));
 
-      // --- Top-Bar Ressourcen (alle sichtbaren Instanzen aktualisieren) ---
-      const metalValEls = document.querySelectorAll(".res-value.metal");
-      const metalCapEls = document.querySelectorAll(".res-cap.metal");
-      const cryValEls = document.querySelectorAll(".res-value.crystal");
-      const cryCapEls = document.querySelectorAll(".res-cap.crystal");
-      const fuelValEls = document.querySelectorAll(".res-value.fuel_cells");
-      const fuelCapEls = document.querySelectorAll(".res-cap.fuel_cells");
-
-      if (forceResourceBar || _last.metal !== metal) {
-        metalValEls.forEach((el) => { el.textContent = fmtNumber(metal); });
-        _last.metal = metal;
-      }
-      if (forceResourceBar || _last.crystal !== crystal) {
-        cryValEls.forEach((el) => { el.textContent = fmtNumber(crystal); });
-        _last.crystal = crystal;
-      }
-
-      if (forceResourceBar || (_last.storageMetal !== storageMetal && storageMetal > 0)) {
-        metalCapEls.forEach((el) => { el.textContent = fmtNumber(storageMetal); });
-        _last.storageMetal = storageMetal;
-      }
-      if (forceResourceBar || (_last.storageCrystal !== storageCrystal && storageCrystal > 0)) {
-        cryCapEls.forEach((el) => { el.textContent = fmtNumber(storageCrystal); });
-        _last.storageCrystal = storageCrystal;
-      }
-
-      if (forceResourceBar || _last.fuelCells !== fuelCells) {
-        fuelValEls.forEach((el) => { el.textContent = fmtNumber(fuelCells); });
-        _last.fuelCells = fuelCells;
-      }
-      if (forceResourceBar || (_last.storageFuelCells !== storageFuelCells && storageFuelCells > 0)) {
-        fuelCapEls.forEach((el) => { el.textContent = fmtNumber(storageFuelCells); });
-        _last.storageFuelCells = storageFuelCells;
-      }
-
-      const rateLabel = (key, perHour) => {
-        const ph = Math.floor(Number(perHour) || 0);
-        document.querySelectorAll(`[data-res-rate="${key}"]`).forEach((el) => {
-          if (ph > 0) {
-            const sign = ph >= 0 ? "+" : "";
-            el.textContent = `${sign}${fmtNumber(ph)}/h`;
-            el.style.visibility = "visible";
-            el.removeAttribute("hidden");
-            el.removeAttribute("aria-hidden");
-          } else {
-            el.textContent = "";
-            el.style.visibility = "hidden";
-            el.setAttribute("aria-hidden", "true");
-          }
-        });
-      };
-
-      if (forceResourceBar || _last.prodMetal !== prodMetal) {
-        rateLabel("metal", prodMetal);
-        _last.prodMetal = prodMetal;
-      }
-      if (forceResourceBar || _last.prodCrystal !== prodCrystal) {
-        rateLabel("crystal", prodCrystal);
-        _last.prodCrystal = prodCrystal;
-      }
-      if (forceResourceBar || _last.prodFuelCells !== prodFuelCells) {
-        rateLabel("fuel_cells", prodFuelCells);
-        _last.prodFuelCells = prodFuelCells;
-      }
-
-      patchHeaderPlanetLimitFromState(data, forceResourceBar);
-
-      const energyText = `${fmtNumber(used)}/${fmtNumber(total)}`;
-      if (forceResourceBar || _last.energyUsed !== used || _last.energyTotal !== total) {
-        setText("res-energy", energyText);
-        document.querySelectorAll("[data-energy-used]").forEach((el) => {
-          _setIfChanged(el, fmtNumber(used));
-        });
-        document.querySelectorAll("[data-energy-total]").forEach((el) => {
-          _setIfChanged(el, fmtNumber(total));
-        });
-        _last.energyUsed = used;
-        _last.energyTotal = total;
-      }
-      patchResourceBarEnergyWarning(used, total);
+      patchShellHudFromState(data, { forceResourceBar, skipMessagesUnread });
 
       const livePlanetId = activePlanetId > 0
         ? activePlanetId
@@ -3402,59 +3828,12 @@
         storageFuelCells,
       });
 
-      // === SCORE / RANK ===
-      if (data.score) {
-        const s = data.score;
-
-        const serverTotal = Number(s.total || 0);
-        const rank = typeof s.rank === "number" ? s.rank : Number(s.rank || 0);
-        const totalPlayers = Number(s.total_players || 0);
-
-        const scoreBuildings = Number(s.buildings || 0);
-        const scoreResearch = Number(s.research || 0);
-
-        let delta = 0;
-        if (_scoreState.lastServerTotal !== null && serverTotal > _scoreState.lastServerTotal) {
-          delta = serverTotal - _scoreState.lastServerTotal;
-        }
-        _scoreState.lastServerTotal = serverTotal;
-
-        // HUD
-        const hudScoreEl = document.getElementById("hud-score-total");
-        const hudRankEl = document.getElementById("hud-score-rank");
-
-        if (hudScoreEl && _scoreState.lastAnimatedTotal !== serverTotal) {
-          animateNumber(hudScoreEl, serverTotal, { duration: 700 });
-          if (delta !== 0) showScoreDelta(hudScoreEl.closest(".gc-score-pill") || hudScoreEl, delta, "hud");
-          _scoreState.lastAnimatedTotal = serverTotal;
-        }
-
-        const rankText = (rank >= 1 && totalPlayers > 0) ? `#${rank}/${totalPlayers}` : "#–";
-        if (hudRankEl) hudRankEl.textContent = rankText;
-
-        // Overview
-        const ovScoreVal = document.getElementById("overview-score-value");
-        const ovScoreRank = document.getElementById("overview-score-rank");
-        const ovScoreBuild = document.getElementById("overview-score-buildings");
-        const ovScoreRes = document.getElementById("overview-score-research");
-
-        if (ovScoreVal) {
-          animateNumber(ovScoreVal, serverTotal, { duration: 750 });
-          if (delta !== 0) showScoreDelta(ovScoreVal.parentElement || ovScoreVal, delta, "overview");
-        }
-
-        if (ovScoreRank) {
-          ovScoreRank.textContent = (rank >= 1 && totalPlayers > 0) ? `#${rank}/${totalPlayers}` : "#–/–";
-        }
-
-        if (ovScoreBuild) animateNumber(ovScoreBuild, scoreBuildings, { duration: 650 });
-        if (ovScoreRes) animateNumber(ovScoreRes, scoreResearch, { duration: 650 });
-      }
-
       if (hudOnly) {
-        GC.lastState = data;
+        GC.lastState = GC.lastState && GC.lastState.ok === true ? { ...GC.lastState, ...data } : data;
         return false;
       }
+
+      patchOverviewScoreFromState(data);
 
       if (typeof data.unread_messages_count === "number") {
         const onMessagesPage = GC.detectPage() === "messages";
@@ -3463,7 +3842,6 @@
           prevUnread !== null && data.unread_messages_count > prevUnread;
         if (!skipMessagesUnread) {
           _lastMessagesUnreadPoll = data.unread_messages_count;
-          updateMessagesUnreadBadges(data.unread_messages_count);
 
           // Inbox list load is owned by messages.js (init/tab). Only refresh when unread
           // count rises after the inbox has already loaded — never on empty filtered tabs.
@@ -3549,7 +3927,7 @@
 
       renderBuildQueue(buildQueueRaw);
       updateBuildQueueActions(buildQueueRaw);
-      renderResearchQueue(research);
+      patchResearchPanelFromState(data);
       updateResearchQueueActions(research);
 
       if (activeResearch) {
@@ -3557,15 +3935,15 @@
           1,
           parseInt(activeResearch.total_seconds, 10) ||
             parseInt(activeResearch.total, 10) ||
-            (parseInt(activeResearch.remaining, 10) || 0) + 1
+            (resolveQueueJobRemaining(activeResearch) || 0) + 1
         );
-        const finishAt = parseInt(activeResearch.finish_at, 10) || 0;
+        const finishAt = resolveQueueJobFinishTime(activeResearch);
 
         const ovBox = document.getElementById("overview-research-active");
         if (ovBox) {
           ovBox.dataset.total = String(totalSec);
           if (finishAt > 0) ovBox.dataset.finishAt = String(finishAt);
-          const rem = parseInt(activeResearch.remaining, 10);
+          const rem = resolveQueueJobRemaining(activeResearch);
           if (Number.isFinite(rem) && rem >= 0) {
             ovBox.dataset.serverRemaining = String(rem);
           } else {
@@ -3598,6 +3976,8 @@
         patchResearchPanel(research.techs, research);
       }
 
+      patchShipyardPanelFromState(data, activePlanetId);
+
       const hasActiveBuild = !!activeJob;
       const bqLimitFinal = buildQueueRaw?.summary?.limit ?? 3;
       const bqCountFinal = buildQueueRaw?.summary?.count ?? queueList.length;
@@ -3612,6 +3992,7 @@
       lastResearchQueueCount = rqCountFinal;
       lastResearchQueueFull = rqCountFinal >= rqLimitFinal;
       lastHadActiveResearch = hasActiveResearchNow;
+      lastHadActiveShipyard = SHIPYARDQ.active.finishTime > getTimerServerNow();
 
       const stApplied = Number(data.server_time || 0);
       if (stApplied) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stApplied);
@@ -3630,12 +4011,31 @@
         GC.scheduleLogisticsRefreshFromState();
       }
 
-      return hasActiveBuild || hasActiveResearchNow;
+      return hasActiveBuild || hasActiveResearchNow || lastHadActiveShipyard;
   }
 
   function gameStateIncludePanel() {
     const page = typeof GC.detectPage === "function" ? GC.detectPage() : "";
-    return page === "buildings" || page === "research" || page === "shipyard" || page === "defense" || page === "trader_hub";
+    return (
+      page === "buildings"
+      || page === "research"
+      || page === "shipyard"
+      || page === "defense"
+      || page === "trader_hub"
+      || page === "overview"
+      || page === "fleet"
+      || page === "logistics"
+    );
+  }
+
+  function gameStateWantPanelPoll(reason) {
+    const reasonStr = String(reason || "");
+    if (gameStateIncludePanel()) return true;
+    return (
+      reasonStr.endsWith("_finished")
+      || reasonStr === "fleet_countdown_expired"
+      || reasonStr === "timer_done"
+    );
   }
 
   /** Lightweight HUD refresh — standalone fetch, no pageLifecycle abort. */
@@ -3677,7 +4077,7 @@
 
     const reasonStr = String(reason || "");
     const isFinishReason = reasonStr.endsWith("_finished");
-    const isChainReason = isFinishReason || reasonStr === "fleet_countdown_expired";
+    const isChainReason = isFinishReason || reasonStr === "fleet_countdown_expired" || reasonStr === "timer_done";
 
     if (GC.refreshInFlight) {
       if (isChainReason) {
@@ -3709,7 +4109,7 @@
 
     (async () => {
       try {
-        const panelQ = gameStateIncludePanel() ? "?include_panel=1" : "";
+        const panelQ = gameStateWantPanelPoll(reason) ? "?include_panel=1" : "";
         const data = await GC.fetchJSON(`/api/game-state${panelQ}`, { cache: "no-store", signal: ctrl.signal });
         if (!data || data.ok === false) {
           if (isAuthStatusFailure(null, data)) handleAuthFailure("game-state-payload");
@@ -3762,7 +4162,7 @@
         markStatusWidgetOffline();
         p.backoff = Math.min(60000, (p.backoff || 2000) * 1.6);
         if (reason !== "poll" && shouldRunGameLoop() && !_authLoopAborted && !GC.polling.running) {
-          GC.startPolling(lastHadActiveJob || lastHadActiveResearch, true);
+          GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard, true);
         }
         resolveFlight(null);
         return null;
@@ -4407,7 +4807,7 @@
       const srvRem = Number(mv.remaining_seconds);
       const srvAttr = Number.isFinite(srvRem) && srvRem >= 0 ? ` data-server-remaining="${Math.ceil(srvRem)}"` : "";
       if (!countdownAt) return "";
-      return `<span class="fleet-active-leg">${legLabel}: <time class="fleet-active-countdown gc-mono" data-countdown-at="${countdownAt}" data-countdown-scope="fleet" data-countdown-key="${countdownKey}"${srvAttr}>–</time></span>`;
+      return `<span class="fleet-active-leg">${legLabel}: <time class="fleet-active-countdown gc-mono" data-timer-target="${countdownAt}" data-timer-kind="fleet" data-refresh-on-zero="fleet" data-countdown-at="${countdownAt}" data-countdown-scope="fleet" data-countdown-key="${countdownKey}"${srvAttr}>–</time></span>`;
     };
 
     const patchActiveFleetCards = (page, list) => {
@@ -5980,18 +6380,9 @@
   }
 
   function startShipyardTimers() {
-    stopShipyardTimers();
     const page = document.getElementById("shipyard-page");
     if (!page || page.dataset.ready !== "1") return;
     GC.startProgressTicker();
-    _shipyardPollIntervalId = GC.setSafeInterval(() => {
-      const p = document.getElementById("shipyard-page");
-      if (!p || p.dataset.ready !== "1" || !document.body.contains(p)) {
-        stopShipyardTimers();
-        return;
-      }
-      if (!p.dataset.queueRefreshBusy) refreshShipyardState(p).catch(() => {});
-    }, Math.max(3000, Number(GC.shipyardPollMs) || 5000));
   }
 
   function _shipyardQueueSignature(queueList, summary) {
@@ -6034,6 +6425,41 @@
     return `/static/img/ships/${sk}.svg`;
   }
 
+  function _syncShipyardQueueLiveFromServer(first, summary) {
+    if (!first) return;
+    const finishTime = resolveQueueJobFinishTime(first);
+    const nextFinish = parseTimerTarget(first.next_countdown_at ?? first.next_finish_at ?? finishTime);
+    const serverRemaining = resolveQueueJobRemaining(first) || Number(summary?.first_finish_in ?? 0);
+    const totalRaw = Number(first.order_total_seconds || first.total_seconds || 0);
+    const total = totalRaw > 0 ? Math.max(1, Math.floor(totalRaw)) : Math.max(1, serverRemaining + 1);
+    const activeJob = document.querySelector(".shipyard-job.shipyard-job-active");
+    if (activeJob) {
+      if (finishTime) activeJob.setAttribute("data-finish-time", String(finishTime));
+      if (nextFinish) activeJob.setAttribute("data-next-finish-time", String(nextFinish));
+      activeJob.setAttribute("data-total", String(total));
+      if (Number.isFinite(serverRemaining) && serverRemaining >= 0) {
+        activeJob.dataset.serverRemaining = String(Math.ceil(serverRemaining));
+      } else {
+        delete activeJob.dataset.serverRemaining;
+      }
+    }
+    const now = getTimerServerNow();
+    const orderRemaining = finishTime
+      ? queueJobRemainingSeconds(finishTime, now, serverRemaining)
+      : Math.max(0, Math.ceil(serverRemaining));
+    const pct = Math.max(0, Math.min(100, 100 * (1 - orderRemaining / total)));
+    const etaText = formatEta(Math.ceil(orderRemaining));
+    const etaEl = document.getElementById("shipyard-eta-live");
+    const fillEl = document.getElementById("shipyard-bar-fill-live");
+    const subEta = document.getElementById("shipyard-queue-subtitle-eta");
+    if (etaEl) {
+      applyQueueJobTimerAttrs(etaEl, finishTime, "shipyard", "shipyard", serverRemaining);
+      _setIfChanged(etaEl, etaText);
+    }
+    _applyProgressFill(fillEl, pct);
+    if (subEta) _setIfChanged(subEta, etaText);
+  }
+
   function renderShipyardQueue(page, queueData) {
     const list = page.querySelector("[data-shipyard-queue-list]");
     if (!list) return;
@@ -6045,14 +6471,20 @@
     const limit = summary.limit ?? 3;
     const first = jobs.length ? jobs[0] : null;
 
-    if (first && first.is_active && first.finish_at) {
-      const finishTime = Number(first.finish_at || 0);
-      const totalRaw = Number(first.order_total_seconds || first.total_seconds || 0);
-      const now = getApproxServerNow();
-      const remaining = Math.max(0, Math.floor(finishTime - (now || 0)));
-      const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
-      SHIPYARDQ.active.finishTime = finishTime;
-      SHIPYARDQ.active.totalSeconds = total;
+    if (first) {
+      const finishTime = resolveQueueJobFinishTime(first);
+      const isActiveHead = Boolean(first.is_active !== false);
+      if (isActiveHead && finishTime) {
+        const totalRaw = Number(first.order_total_seconds || first.total_seconds || 0);
+        const now = getTimerServerNow();
+        const remaining = queueJobRemainingSeconds(finishTime, now, resolveQueueJobRemaining(first));
+        const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
+        SHIPYARDQ.active.finishTime = finishTime;
+        SHIPYARDQ.active.totalSeconds = total;
+      } else {
+        SHIPYARDQ.active.finishTime = 0;
+        SHIPYARDQ.active.totalSeconds = 0;
+      }
     } else {
       SHIPYARDQ.active.finishTime = 0;
       SHIPYARDQ.active.totalSeconds = 0;
@@ -6065,14 +6497,17 @@
         : formatEta(first?.order_remaining ?? first?.remaining ?? 0);
 
     if (sig === _lastShipyardQueueSignature) {
-      const finishTime = first ? Number(first.finish_at || 0) : 0;
-      const nextUnitFinish = first ? Number(first.next_finish_at || 0) : 0;
-      const now = getApproxServerNow();
+      const finishTime = first ? resolveQueueJobFinishTime(first) : 0;
+      const nextUnitFinish = first
+        ? parseTimerTarget(first.next_countdown_at ?? first.next_finish_at ?? 0)
+        : 0;
+      const now = getTimerServerNow();
       const overdue =
         (finishTime > 0 && finishTime <= now) ||
         (nextUnitFinish > 0 && nextUnitFinish <= now);
       if (!overdue) {
         _updateShipyardQueueSubtitle(count, limit, firstEta);
+        _syncShipyardQueueLiveFromServer(first, summary);
         GC.startProgressTicker();
         return;
       }
@@ -6104,21 +6539,26 @@
       const progressLabel = tt("shipyard_queue_progress", "%(done)s / %(total)s")
         .replace("%(done)s", fmtNumber(delivered))
         .replace("%(total)s", fmtNumber(totalUnits));
-      const orderRemaining = parseInt(job.order_remaining ?? job.remaining, 10) || 0;
+      const orderRemaining = resolveQueueJobRemaining(job);
       const orderTotal = Math.max(
         1,
         parseInt(job.order_total_seconds || job.total_seconds, 10) || orderRemaining + 1
       );
       const pct = isActive ? Math.max(0, Math.min(100, 100 * (1 - orderRemaining / orderTotal))) : 0;
       const iconSrc = job.icon || shipyardIconUrl(job.ship_key);
+      const finishTime = resolveQueueJobFinishTime(job);
+      const nextFinish = parseTimerTarget(job.next_countdown_at ?? job.next_finish_at ?? finishTime);
 
       const art = document.createElement("article");
       art.className = `shipyard-job${isActive ? " shipyard-job-active" : " shipyard-job-queued"}`;
       art.dataset.queueJobId = String(job.id);
       if (isActive) {
-        art.dataset.finishTime = String(job.finish_at || 0);
-        art.dataset.nextFinishTime = String(job.next_finish_at || 0);
+        art.dataset.finishTime = String(finishTime || 0);
+        art.dataset.nextFinishTime = String(nextFinish || 0);
         art.dataset.total = String(orderTotal);
+        if (Number.isFinite(orderRemaining) && orderRemaining >= 0) {
+          art.dataset.serverRemaining = String(Math.ceil(orderRemaining));
+        }
       }
 
       const icon = document.createElement("div");
@@ -6145,6 +6585,9 @@
       const timeEl = document.createElement("span");
       timeEl.className = `job-time${isActive ? "" : " job-time-muted"}`;
       if (isActive) timeEl.id = "shipyard-eta-live";
+      if (isActive && finishTime) {
+        applyQueueJobTimerAttrs(timeEl, finishTime, "shipyard", "shipyard", orderRemaining);
+      }
       timeEl.textContent = isActive
         ? formatEta(orderRemaining)
         : tt("status_in_queue", "In Warteschlange");
@@ -6426,6 +6869,11 @@
 
   function applyShipyardState(page, data) {
     if (!page || !data) return;
+    const statePlanet = Number(data.planet_id || 0);
+    const activePlanet = Number(GC.lastState?.active_planet_id || page.dataset.planetId || 0);
+    if (activePlanet > 0 && statePlanet > 0 && activePlanet !== statePlanet) {
+      return;
+    }
     const tt = (key, fb) => t(key, fb);
 
     if (data.planet_id) page.dataset.planetId = String(data.planet_id);
@@ -6486,7 +6934,13 @@
   }
 
   async function refreshShipyardState(page) {
-    const planetId = parseInt(page.dataset.planetId || "0", 10);
+    let planetId = parseInt(page.dataset.planetId || "0", 10);
+    const activePlanet = Number(GC.lastState?.active_planet_id || 0);
+    if (activePlanet > 0) {
+      if (planetId > 0 && planetId !== activePlanet) return null;
+      planetId = activePlanet;
+      page.dataset.planetId = String(activePlanet);
+    }
     const q = planetId ? `?planet_id=${planetId}` : "";
     const res = await GC.fetchGameAction(`/api/shipyard${q}`, { method: "GET" });
     if (res?.ok && res.data) {
@@ -7911,7 +8365,7 @@
           ) {
             await GC.refreshFleetState(fleetPage);
           }
-          GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch);
+          GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
           GC.startProgressTicker();
         } else {
           showNotify(planetSwitchReasonText(res?.reason), "error");
@@ -9088,7 +9542,7 @@
         GC.pjaxInFlight = null;
         if (GC._pjaxAbort === ctrl) GC._pjaxAbort = null;
         if (shouldRunGameLoop() && !_authLoopAborted && !GC.polling.running) {
-          GC.startPolling(lastHadActiveJob || lastHadActiveResearch);
+          GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
         }
       }
     })();

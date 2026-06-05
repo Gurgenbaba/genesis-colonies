@@ -998,6 +998,14 @@ def get_research_status(
         total = max(1, int(finish_at - start_at))
         remain = max(0, int(finish_at - now))
 
+        from .logic import normalize_queue_job_timer_fields
+
+        timer_fields = normalize_queue_job_timer_fields(
+            finish_at=finish_at,
+            remaining=remain,
+            is_active=(i == 0),
+        )
+
         queue_list.append({
             "id": int(job["id"]),
             "tech_key": tech,
@@ -1008,13 +1016,12 @@ def get_research_status(
             "description_key": cfg.get("description_key"),
             "current_level": curr,
             "target_level": int(targ),
-            "remaining": int(remain),
             "total_seconds": int(total),
             "total": int(total),
-            "finish_at": finish_at,
             "start_at": start_at,
             "icon": cfg.get("icon"),
             "position": i + 1,
+            **timer_fields,
         })
 
     active = queue_list[0] if queue_list else None

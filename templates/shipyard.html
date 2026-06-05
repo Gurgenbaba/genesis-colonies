@@ -115,7 +115,7 @@
                   {{ T("fleet_ship_" ~ job.ship_key) }}
                 {% endif %}
               </span>
-              <span class="job-time{% if not is_active %} job-time-muted{% endif %}"{% if is_active %} id="shipyard-eta-live"{% endif %}>
+              <span class="job-time{% if not is_active %} job-time-muted{% endif %}"{% if is_active %} id="shipyard-eta-live" data-timer-target="{{ job.countdown_at|default(job.finish_at)|int }}" data-timer-kind="shipyard" data-refresh-on-zero="shipyard" data-countdown-at="{{ job.countdown_at|default(job.finish_at)|int }}"{% endif %}>
                 {% if is_active %}{{ T("shipyard_queue_remaining", seconds=order_rem|fmt_int) }}{% else %}{{ T("status_in_queue") }}{% endif %}
               </span>
             </div>
