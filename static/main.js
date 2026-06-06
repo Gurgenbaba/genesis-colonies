@@ -241,6 +241,14 @@
     return Number.isFinite(n) && n >= 0 ? Math.ceil(n) : 0;
   }
 
+  /** Kanonische Queue-Regel: aktiver Job → finish_at; wartender Job → finish_at (Vorgänger + eigene Dauer). */
+  function cardQueueTimerTarget(queueJob, isActive) {
+    const finishAt = Math.floor(Number(queueJob.finish_at || 0));
+    const startAt = Math.floor(Number(queueJob.start_at || 0));
+    if (finishAt > 0) return finishAt;
+    return isActive ? startAt : startAt;
+  }
+
   function assignMonotonicServerRemaining(el, remaining, target) {
     if (!el) return;
     if (!Number.isFinite(remaining) || remaining < 0) {
@@ -577,6 +585,9 @@
     _lastQueueSignature = "";
     _lastResearchQueueSignature = "";
     _lastShipyardQueueSignature = "";
+    _lastDefenseQueueSignature = "";
+    _lastPePlanetTechQueueSignature = "";
+    _lastPeAscensionQueueSignature = "";
     abortInFlightGameStateFetches();
 
     resetResourceDisplayCache();
@@ -2677,7 +2688,41 @@
       queueJob.queue_position || 0,
       Math.floor(Number(queueJob.finish_at || 0)),
       Math.floor(Number(queueJob.start_at || 0)),
+      Math.floor(Number(queueJob.target_amount || 0)),
+      Math.floor(Number(queueJob.target_level || 0)),
+      Math.floor(Number(queueJob.target_phase || 0)),
     ].join(":");
+  }
+
+  /** In-place timer patch only when the same live job is still active/queued with stable targets. */
+  function canPatchCardQueueInPlace(existing, queueJob) {
+    if (!existing || !queueJob || typeof queueJob !== "object") return false;
+    const jobId = Math.floor(Number(queueJob.job_id || 0));
+    const prevJobId = Math.floor(Number(existing.dataset.jobId || 0));
+    if (jobId <= 0 || jobId !== prevJobId) return false;
+
+    const status = String(queueJob.status || "");
+    const wasActive = existing.dataset.queueActive === "1";
+    const isActive = status === "active";
+    if (wasActive !== isActive) return false;
+
+    const now = getTimerServerNow();
+    const finishAt = Math.floor(Number(queueJob.finish_at || 0));
+    const prevFinish = parseTimerTarget(existing.dataset.finishAt || 0);
+
+    if (!finishAt || finishAt !== prevFinish) return false;
+    if (finishAt <= now) return false;
+
+    return true;
+  }
+
+  function syncCardQueueOwnerClasses(cardEl, queueJob, domain) {
+    if (!cardEl || !queueJob) return;
+    const cardPrefix = _cardQueueClassPrefix(domain);
+    const isActive = String(queueJob.status || "") === "active";
+    cardEl.classList.add(`${cardPrefix}--in-queue`);
+    cardEl.classList.toggle(`${cardPrefix}--queue-active`, isActive);
+    cardEl.classList.toggle(`${cardPrefix}--queue-pending`, !isActive);
   }
 
   function _cardQueueTimerMeta(queueJob, opts) {
@@ -2712,13 +2757,14 @@
 
   function patchCardQueueBlockInPlace(block, cardEl, queueJob, opts) {
     const { domain, timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, opts);
+    syncCardQueueOwnerClasses(cardEl, queueJob, domain);
     const status = String(queueJob.status || "");
     const isActive = status === "active";
     const finishAt = Math.floor(Number(queueJob.finish_at || 0));
     const startAt = Math.floor(Number(queueJob.start_at || 0));
     const totalSeconds = Math.max(1, Math.floor(Number(queueJob.duration_seconds || block.dataset.totalSeconds || 1)));
     const now = getTimerServerNow();
-    const timerTarget = isActive ? finishAt : startAt;
+    const timerTarget = cardQueueTimerTarget(queueJob, isActive);
     const remaining = timerTarget > 0
       ? queueJobRemainingSeconds(timerTarget, now, resolveQueueJobRemaining(queueJob))
       : Math.max(0, Math.floor(Number(queueJob.remaining_seconds || 0)));
@@ -2727,13 +2773,7 @@
     const timerEl = block.querySelector(".gc-card-queue-timer");
     if (timerEl && timerTarget > 0) {
       applyQueueJobTimerAttrs(timerEl, timerTarget, timerKind, refreshOnZero, remaining);
-      const label = isActive
-        ? formatEta(Math.ceil(remaining))
-        : tf(
-          "queue_card_starts_in",
-          { time: formatEta(Math.ceil(remaining)) },
-          `Startet in ${formatEta(Math.ceil(remaining))}`
-        );
+      const label = formatEta(Math.ceil(remaining));
       _setIfChanged(timerEl, label);
     }
 
@@ -2753,6 +2793,8 @@
       const barEl = block.querySelector(".gc-card-queue-bar");
       _applyProgressFill(fillEl, pct);
       if (barEl) barEl.setAttribute("aria-valuenow", String(Math.max(0, Math.min(100, Math.round(pct)))));
+    } else if (finishAt > 0) {
+      assignMonotonicServerRemaining(block, remaining, finishAt);
     }
 
     return block;
@@ -2777,14 +2819,16 @@
   GC.renderCardQueueBlock = function renderCardQueueBlock(cardEl, queueJob, opts) {
     if (!cardEl || !queueJob || typeof queueJob !== "object") return null;
 
+    const options = opts && typeof opts === "object" ? opts : {};
+    const domain = _cardQueueDomain(queueJob, options);
     const sig = cardQueueJobSignature(queueJob);
     const existing = cardEl.querySelector("[data-gc-card-queue]");
-    if (existing && existing.dataset.queueSig === sig) {
-      return patchCardQueueBlockInPlace(existing, cardEl, queueJob, opts);
+    if (existing && canPatchCardQueueInPlace(existing, queueJob)) {
+      existing.dataset.queueSig = sig;
+      return patchCardQueueBlockInPlace(existing, cardEl, queueJob, options);
     }
 
-    const options = opts && typeof opts === "object" ? opts : {};
-    const { domain, timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, options);
+    const { timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, options);
     const cardPrefix = _cardQueueClassPrefix(domain);
 
     GC.clearCardQueueBlock(cardEl);
@@ -2886,22 +2930,17 @@
 
     const timerEl = document.createElement("div");
     timerEl.className = "gc-card-queue-timer gc-mono";
-    if (isActive && finishAt > 0) {
-      applyQueueJobTimerAttrs(timerEl, finishAt, timerKind, refreshOnZero, remaining);
-      timerEl.textContent = formatEta(remaining);
-    } else if (!isActive && startAt > 0) {
-      applyQueueJobTimerAttrs(timerEl, startAt, timerKind, refreshOnZero, remaining);
-      timerEl.textContent = tf(
-        "queue_card_starts_in",
-        { time: formatEta(remaining) },
-        `Startet in ${formatEta(remaining)}`
+    const waitTarget = cardQueueTimerTarget(queueJob, isActive);
+    if (waitTarget > 0) {
+      const displayRemaining = queueJobRemainingSeconds(
+        waitTarget,
+        getTimerServerNow(),
+        resolveQueueJobRemaining(queueJob)
       );
+      applyQueueJobTimerAttrs(timerEl, waitTarget, timerKind, refreshOnZero, displayRemaining);
+      timerEl.textContent = formatEta(Math.ceil(displayRemaining));
     } else if (!isActive) {
-      timerEl.textContent = tf(
-        "queue_card_starts_in",
-        { time: formatEta(remaining) },
-        `Startet in ${formatEta(remaining)}`
-      );
+      timerEl.textContent = formatEta(Math.max(0, Math.floor(Number(queueJob.remaining_seconds || 0))));
     }
     block.appendChild(timerEl);
 
@@ -3249,6 +3288,7 @@
     const sig = _pePlanetTechQueueSignature(data);
     if (sig === _lastPePlanetTechQueueSignature) {
       _updatePePlanetTechQueueCompact(count, limit);
+      patchPePlanetTechCardQueues(data);
       return;
     }
     _lastPePlanetTechQueueSignature = sig;
@@ -3264,6 +3304,7 @@
     const sig = _peAscensionQueueSignature(data);
     if (sig === _lastPeAscensionQueueSignature) {
       _updatePeAscensionQueueCompact(count);
+      patchPeAscensionCardQueues(data);
       return;
     }
     _lastPeAscensionQueueSignature = sig;
@@ -3808,9 +3849,11 @@
       }
     });
 
-    document.querySelectorAll(".gc-card-queue-block[data-queue-active='0'][data-start-at]").forEach((block) => {
+    document.querySelectorAll(".gc-card-queue-block[data-queue-active='0']").forEach((block) => {
+      const finishAt = parseTimerTarget(block.dataset.finishAt || 0);
       const startAt = parseTimerTarget(block.dataset.startAt || 0);
-      if (!startAt) return;
+      const target = finishAt > 0 ? finishAt : startAt;
+      if (!target) return;
       const timerEl = block.querySelector(".gc-card-queue-timer");
       if (!timerEl) return;
       const domain = String(block.dataset.timerDomain || "building");
@@ -3834,17 +3877,15 @@
           : domain === "planet_research" || domain === "ascension"
             ? "planet_evolution"
             : "game-state";
-      const remaining = queueJobRemainingSeconds(startAt, serverNowTs, NaN);
-      assignMonotonicServerRemaining(block, remaining, startAt);
-      applyQueueJobTimerAttrs(timerEl, startAt, timerKind, refreshOnZero, remaining);
-      _setIfChanged(
-        timerEl,
-        tf(
-          "queue_card_starts_in",
-          { time: formatEta(Math.ceil(remaining)) },
-          `Startet in ${formatEta(Math.ceil(remaining))}`
-        )
+      const srvRemRaw = block.dataset.serverRemaining;
+      const remaining = queueJobRemainingSeconds(
+        target,
+        serverNowTs,
+        srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
       );
+      assignMonotonicServerRemaining(block, remaining, target);
+      applyQueueJobTimerAttrs(timerEl, target, timerKind, refreshOnZero, remaining);
+      _setIfChanged(timerEl, formatEta(Math.ceil(remaining)));
     });
 
     const researchActive = document.querySelector(".research-job.research-job-active");
@@ -7294,6 +7335,16 @@
 
     const sig = _shipyardQueueSignature(jobs, summary);
 
+    if (!jobs.length) {
+      _lastShipyardQueueSignature = sig;
+      _productionZeroHandled.shipyard = "";
+      _finishRefreshArmed.shipyard = false;
+      _updateShipyardQueueCompact(0);
+      patchShipyardCardQueues(page, qd);
+      GC.startProgressTicker();
+      return;
+    }
+
     if (sig === _lastShipyardQueueSignature) {
       const finishTime = first ? resolveQueueJobFinishTime(first) : 0;
       const nextUnitFinish = first
@@ -7305,6 +7356,7 @@
         (nextUnitFinish > 0 && nextUnitFinish <= now);
       if (!overdue) {
         _updateShipyardQueueCompact(count);
+        patchShipyardCardQueues(page, qd);
         GC.startProgressTicker();
         return;
       }
@@ -7896,6 +7948,16 @@
 
     const sig = _defenseQueueSignature(jobs, summary);
 
+    if (!jobs.length) {
+      _lastDefenseQueueSignature = sig;
+      _productionZeroHandled.defense = "";
+      _finishRefreshArmed.defense = false;
+      _updateDefenseQueueCompact(0);
+      patchDefenseCardQueues(page, qd);
+      GC.startProgressTicker();
+      return;
+    }
+
     if (sig === _lastDefenseQueueSignature) {
       const finishTime = first ? resolveQueueJobFinishTime(first) : 0;
       const nextUnitFinish = first
@@ -7907,6 +7969,7 @@
         (nextUnitFinish > 0 && nextUnitFinish <= now);
       if (!overdue) {
         _updateDefenseQueueCompact(count);
+        patchDefenseCardQueues(page, qd);
         GC.startProgressTicker();
         return;
       }
@@ -8149,10 +8212,11 @@
           body: JSON.stringify({ defense_key: defenseKey, amount, planet_id: planetId || undefined }),
         });
         if (res?.ok) {
+          _lastDefenseQueueSignature = "";
           if (res.state) applyActionState(res, "defense_build");
           const payload = normalizeDefenseApiPayload(res);
           if (payload) applyDefenseState(page, payload);
-          else await refreshDefenseState(page);
+          else if (!res.state) await refreshDefenseState(page);
         } else {
           showNotify(reasonText(res?.error || apiError(res)), "error");
         }

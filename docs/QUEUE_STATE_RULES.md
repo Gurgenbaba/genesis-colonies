@@ -62,6 +62,47 @@ Immer nach `finish_due_work` in derselben Transaktion, damit `now` und Queue-Row
 
 ---
 
+## Kanonische Bauschleifen-Regel (Timer-Anzeige)
+
+Verbindlich für **alle** Queue-Systeme (Gebäude, Forschung, Werft, Verteidigung, Planet Evolution, zukünftige Queues). Server berechnet Zeiten; UI zeigt nur Serverwerte ([STATE_AJAX.md](STATE_AJAX.md)).
+
+### Sofort sichtbar
+
+Jeder Auftrag erscheint **unmittelbar nach Start** in der jeweiligen Bauschleife (Card-Queue + Kompaktstatus) — ohne manuellen Reload. Actions liefern `{ ok, state }`; `applyActionState()` patcht alle betroffenen Panels.
+
+### Timer pro Position
+
+| Position | Anzeige |
+|----------|---------|
+| **Aktiver Job** (Queue-Position 1) | Echte verbleibende Restzeit bis `finish_at` |
+| **Wartende Jobs** (Position ≥ 2) | `finish_at − now` = Restzeit aller Vorgänger **plus** eigene Bauzeit |
+
+**Beispiel:** Job 1 noch 4 s · Job 2 dauert 12 s → Job 2 zeigt **16 s**. Nach Abschluss von Job 1: Job 1 verschwindet sofort, Job 2 wird aktiv und zeigt nur noch seine echte Restzeit; nachfolgende Jobs rücken nach.
+
+Kanonisches Card-Feld: `remaining_seconds` aus `game/queue_card.py` — wartende Jobs **nie** nur `start_at − now`.
+
+### Unit-Queues (serieller Auftrag)
+
+Schiffsbau, Verteidigungsbau und alle zukünftigen **Unit-Queues** bauen pro Auftrag **seriell**:
+
+```text
+Auftragsdauer = amount × Bauzeit_pro_Einheit
+```
+
+**Beispiel:** 1 Schiff = 5 s, Menge 100 → Auftrag = **500 s** in der Queue. Ein danach eingereihter Auftrag addiert dessen Anzeige: `Rest_vorherige_Aufträge + eigene_Auftragsdauer`.
+
+Verboten: UI zeigt nur die Einzel-Einheit-Zeit (z. B. 5 s), während der Auftrag 500 s blockiert.
+
+Referenz: `order_total_seconds` / `order_remaining` in `game/shipyard_queue.py`, `game/defense.py`; Card-Adapter `map_shipyard_queue_to_card_jobs`, `map_defense_queue_to_card_jobs`.
+
+### Live-State / DOM
+
+- Monotone Timer (`data-server-remaining`) **nur** für denselben aktiven Job (`job_id` + `finish_at` unverändert).
+- Wechsel von `job_id`, Status (queued→active), `finish_at`, `start_at`, Position oder Menge → Block **neu rendern**, keinen alten DOM-State übernehmen.
+- Countdown 0 → zentraler Refresh ([STATE_AJAX.md](STATE_AJAX.md)); leere Queue → Card-Block entfernen.
+
+---
+
 ## Single Finish Pass pro Request
 
 - Ein Aufruf von `finish_due_work_once` pro HTTP-Request (außer dokumentierte Admin/Cron-Pfade).

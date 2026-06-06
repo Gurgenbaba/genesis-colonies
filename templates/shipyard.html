@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip, render_shipyard_resource_blocker, render_shipyard_unlock_blockers with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
+{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 
 {% macro render_ship_card_stock(ship_key, owned) %}
   <span class="gc-ship-stock-chip"
@@ -17,10 +18,7 @@
        data-gc-card-queue="1"
        data-queue-active="{{ '1' if qj.status == 'active' else '0' }}"
        data-timer-domain="shipyard"
-       data-job-id="{{ qj.job_id|int }}"
-       {% if qj.finish_at %}data-finish-at="{{ qj.finish_at|int }}"{% endif %}
-       {% if qj.duration_seconds %}data-total-seconds="{{ qj.duration_seconds|int }}"{% endif %}
-       {% if qj.status == 'active' and qj.remaining_seconds is defined %}data-server-remaining="{{ qj.remaining_seconds|int }}"{% endif %}>
+       data-job-id="{{ qj.job_id|int }}"{{ render_card_queue_data_attrs(qj) }}>
     <div class="gc-card-queue-head">
       <span class="gc-card-queue-glyph gc-card-queue-glyph--shipyard" aria-hidden="true"></span>
       <span class="gc-card-queue-status">
@@ -36,19 +34,7 @@
       {{ qj.target_amount|int }}× {{ T('fleet_ship_' ~ qj.owner_key) }}
     </div>
     {% endif %}
-    <div class="gc-card-queue-timer gc-mono"
-         {% if qj.status == 'active' and qj.finish_at %}
-         data-timer-target="{{ qj.finish_at|int }}"
-         data-timer-kind="shipyard"
-         data-refresh-on-zero="shipyard"
-         data-countdown-at="{{ qj.finish_at|int }}"
-         {% endif %}>
-      {% if qj.status == 'active' %}
-        {{ qj.remaining_seconds|int }}s
-      {% else %}
-        {{ T('queue_card_starts_in', 'Startet in %(time)s', time=(qj.remaining_seconds|int ~ 's')) }}
-      {% endif %}
-    </div>
+    {{ render_card_queue_timer(qj, 'shipyard', 'shipyard') }}
     {% if qj.status == 'active' %}
     <div class="gc-card-queue-bar" role="progressbar"
          aria-valuemin="0" aria-valuemax="100"

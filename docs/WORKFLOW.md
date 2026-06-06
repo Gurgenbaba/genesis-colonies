@@ -138,6 +138,7 @@ Vor jedem Ticket: [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) (Golden Rule + **
 - **PJAX** — Shell bleibt, `#main-content` wird getauscht ([AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md))
 - **Planet Scope** — `players.active_planet_id` → `get_context_planet()`
 - **Queue Engine** — `game/queue_engine.py`, single finish pass pro Request ([QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md))
+- **Queue-Timer (kanonisch)** — aktiver Job: echte Restzeit; wartende Jobs: `finish_at − now` (Vorgänger + eigene Dauer); Unit-Queues seriell (`amount × unit_time`); siehe [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) § *Kanonische Bauschleifen-Regel*
 - **EffectResolver** — autoritative Formeln, kein Frontend-Math
 - **Kanonische Keys** — `orbital_shipyard`, ein Fleet-State in `fleet_movements`
 

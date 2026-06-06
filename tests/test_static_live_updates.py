@@ -331,7 +331,9 @@ def test_main_js_gc540_unified_page_timers():
     fleet = _read("templates/fleet.html")
     assert "data-timer-target" in fleet
     shipyard = _read("templates/shipyard.html")
-    assert 'data-timer-kind="shipyard"' in shipyard
+    card_queue_macros = _read("templates/partials/card_queue_macros.html")
+    assert "render_card_queue_timer(qj, 'shipyard', 'shipyard')" in shipyard
+    assert "data-timer-kind" in card_queue_macros
     logic = _read("game/logic.py")
     assert "live_server_timestamp" in logic
     assert "game_state_panel_finish_source" in logic
@@ -439,6 +441,18 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     patch_sy = src.split("function patchShipyardCardQueues(page, queueData)")[1].split("function shipyardIconUrl")[0]
     assert "patchCardQueuesFromOwnerMap" in patch_sy
     assert "GC.clearCardQueueBlock(card);" not in patch_sy.split("patchCardQueuesFromOwnerMap")[0]
+    card_queue = src.split("function cardQueueJobSignature(queueJob)")[1].split("function canPatchCardQueueInPlace")[0]
+    assert "target_amount" in card_queue
+    assert "function canPatchCardQueueInPlace(existing, queueJob)" in src
+    assert "function cardQueueTimerTarget(queueJob, isActive)" in src
+    render_card = src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("function _syncBuildQueueLiveState")[0]
+    assert "cardQueueTimerTarget(queueJob, isActive)" in render_card
+    render_sy = src.split("function renderShipyardQueue(page, queueData)")[1].split("function parseShipyardPageData")[0]
+    assert "if (!jobs.length)" in render_sy
+    assert "patchShipyardCardQueues(page, qd)" in render_sy.split("if (!overdue)")[0] or "patchShipyardCardQueues(page, qd)" in render_sy
+    action = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
+    assert "_lastDefenseQueueSignature = \"\"" in action
+    assert "_lastPePlanetTechQueueSignature = \"\"" in action
 
 
 def test_main_js_gc546d_production_completion_poll_storm_guards():

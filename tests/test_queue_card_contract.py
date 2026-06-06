@@ -63,6 +63,39 @@ def test_queued_job_mapping_with_queue_position():
     assert job["remaining_seconds"] == 500
 
 
+def test_queued_job_wait_includes_predecessor_plus_own_duration():
+    """Kanonische Queue-Regel: Job #2 zeigt finish−now, nicht start−now."""
+    from game.queue_card import map_build_queue_to_card_jobs
+
+    jobs = map_build_queue_to_card_jobs(
+        {
+            "queue": [
+                {
+                    "id": 1,
+                    "building_type": "metal_mine",
+                    "target_level": 2,
+                    "remaining": 4,
+                    "total": 10,
+                    "finish_time": NOW + 4,
+                },
+                {
+                    "id": 2,
+                    "building_type": "crystal_mine",
+                    "target_level": 2,
+                    "remaining": 16,
+                    "total": 12,
+                    "finish_time": NOW + 16,
+                },
+            ]
+        },
+        now=NOW,
+    )
+    assert jobs[0]["remaining_seconds"] == 4
+    assert jobs[1]["status"] == STATUS_QUEUED
+    assert jobs[1]["remaining_seconds"] == 16
+    assert jobs[1]["remaining_seconds"] != max(0, int(jobs[1]["start_at"] - NOW))
+
+
 def test_progress_clamp_active():
     assert compute_progress_pct(status=STATUS_ACTIVE, remaining_seconds=0, duration_seconds=100) == 100
     assert compute_progress_pct(status=STATUS_ACTIVE, remaining_seconds=100, duration_seconds=100) == 0

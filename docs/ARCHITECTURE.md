@@ -190,6 +190,8 @@ Zentraler Due-Finisher für:
 
 Request-Dedup via Flask `g` + `live_state.coerce_skip_finish()`.
 
+**Kanonische Timer-Anzeige:** Aktiver Job → Rest bis `finish_at`. Wartende Jobs → `finish_at − now` (Summe aller Vorgänger + eigene Dauer). Unit-Queues (Werft, Verteidigung): Auftrag = `amount × unit_build_time`, seriell — Details [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md).
+
 Worker: `scripts/run_queue_tick.py`, Admin: `POST /api/admin/queue-tick`.
 
 ---

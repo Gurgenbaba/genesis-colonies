@@ -54,7 +54,21 @@ _load_page_live_context(finish_source=…)
 - PJAX: `cleanupPage()` → swap `#main-content` → `initPage({ force: true })` → `refreshGameState("page_init")`
 - Chat: `GC.resumeChatPolling()` after PJAX (`static/js/chat.js`)
 
-## Legacy full-page routes
+## Kanonische Queue-Timer (Live-UI)
+
+Verbindliche Regeln: [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) § *Kanonische Bauschleifen-Regel*.
+
+| Rolle | Pflicht |
+|-------|---------|
+| **Server** | `finish_at`, `start_at`, `remaining_seconds` / `order_remaining` in game-state und Action-Responses; Unit-Aufträge als `amount × unit_time` |
+| **Client** | `applyActionState()` / `applyGameStateData()` patchen Cards sofort; kein Frontend-Scheduling |
+| **Aktiver Job** | Timer = Rest bis `finish_at` |
+| **Wartender Job** | Timer = `finish_at − now` (Vorgänger + eigene Dauer), **nicht** nur `start_at − now` |
+| **Monotonic DOM** | Nur bei gleichem `job_id` + gleichem `finish_at`; sonst Block ersetzen |
+
+Implementierung: `game/queue_card.py` (`_apply_queued_wait_remaining`), `static/main.js` (`cardQueueTimerTarget`, `canPatchCardQueueInPlace`, `renderCardQueueBlock`).
+
+---
 
 `GET /upgrade/<type>` and `GET /research_start/<key>` still exist for no-JS fallback. With JS, clicks on `.btn-upgrade` / `.btn-research` are intercepted and use the POST APIs above.
 

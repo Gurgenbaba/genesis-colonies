@@ -187,11 +187,19 @@ def map_build_queue_to_card_jobs(
             remaining_seconds=_safe_int(raw.get("remaining")),
             duration_seconds=total,
         )
-        if job["status"] == STATUS_QUEUED and start > ts:
-            job["remaining_seconds"] = max(0, int(start - ts))
-            job["progress_pct"] = 0
+        _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
         out.append(job)
     return out
+
+
+def _apply_queued_wait_remaining(job: Dict[str, Any], *, finish_at: Any, now: float) -> None:
+    """Kanonische Queue-Regel: wartende Jobs zeigen finish_at − now (Vorgänger + eigene Dauer)."""
+    if job.get("status") != STATUS_QUEUED:
+        return
+    finish_f = _safe_float(finish_at)
+    if finish_f > now:
+        job["remaining_seconds"] = max(0, int(finish_f - now))
+    job["progress_pct"] = 0
 
 
 def map_research_queue_to_card_jobs(
@@ -230,9 +238,7 @@ def map_research_queue_to_card_jobs(
                 remaining_seconds=_safe_int(raw.get("remaining") or raw.get("remaining_seconds")),
                 duration_seconds=_safe_int(raw.get("total_seconds") or raw.get("total"), 0) or None,
             )
-        if job["status"] == STATUS_QUEUED and start > ts:
-            job["remaining_seconds"] = max(0, int(start - ts))
-            job["progress_pct"] = 0
+        _apply_queued_wait_remaining(job, finish_at=raw.get("finish_at") or raw.get("finish_time"), now=ts)
         if "current_level" in raw:
             job["current_level"] = _safe_int(raw.get("current_level"))
         elif job.get("target_level") is not None:
@@ -293,9 +299,7 @@ def map_defense_queue_to_card_jobs(
             job["units_delivered"] = _safe_int(raw.get("units_delivered"))
         if "amount_remaining" in raw:
             job["amount_remaining"] = _safe_int(raw.get("amount_remaining"))
-        if job["status"] == STATUS_QUEUED and start > ts:
-            job["remaining_seconds"] = max(0, int(start - ts))
-            job["progress_pct"] = 0
+        _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
         out.append(job)
     return out
 
@@ -322,24 +326,28 @@ def map_shipyard_queue_to_card_jobs(
             continue
         label = str(raw.get("label") or raw.get("label_key") or owner_key)
         amount = _safe_int(raw.get("amount_total") or raw.get("amount"), 0) or None
+        finish = _safe_float(raw.get("finish_at") or raw.get("finish_time"))
+        order_total = _safe_int(
+            raw.get("order_total_seconds") or raw.get("total_seconds") or raw.get("total"),
+            0,
+        )
+        start = _safe_float(raw.get("started_at") or raw.get("start_at"))
+        if start <= 0 and finish > 0 and order_total > 0:
+            start = finish - order_total
         job = normalize_card_queue_job(
                 owner_type=OWNER_SHIPYARD,
                 owner_key=owner_key,
                 job_id=_safe_int(raw.get("id"), 0),
                 queue_position=idx + 1,
-                start_at=raw.get("started_at") or raw.get("start_at"),
-                finish_at=raw.get("finish_at") or raw.get("finish_time"),
+                start_at=start,
+                finish_at=finish,
                 now=ts,
                 label=label,
                 target_amount=amount,
                 remaining_seconds=_safe_int(
                     raw.get("order_remaining") or raw.get("remaining") or raw.get("remaining_seconds")
                 ),
-                duration_seconds=_safe_int(
-                    raw.get("order_total_seconds") or raw.get("total_seconds") or raw.get("total"),
-                    0,
-                )
-                or None,
+                duration_seconds=order_total or None,
             )
         job["ship_label_key"] = f"fleet_ship_{owner_key}"
         if amount is not None:
@@ -348,6 +356,7 @@ def map_shipyard_queue_to_card_jobs(
             job["units_delivered"] = _safe_int(raw.get("units_delivered"))
         if "amount_remaining" in raw:
             job["amount_remaining"] = _safe_int(raw.get("amount_remaining"))
+        _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
         out.append(job)
     return out
 
@@ -399,9 +408,7 @@ def map_planet_research_queue_to_card_jobs(
             duration_seconds=duration,
         )
         job["label_key"] = label_key
-        if job["status"] == STATUS_QUEUED and start > ts:
-            job["remaining_seconds"] = max(0, int(start - ts))
-            job["progress_pct"] = 0
+        _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
         if target_level is not None:
             job["current_level"] = max(0, int(target_level) - 1)
         out.append(job)
@@ -450,6 +457,7 @@ def map_ascension_queue_to_card_jobs(
         phase = _safe_int(raw.get("quest_stage"), -1)
         if phase >= 0:
             job["target_phase"] = int(phase) + 1
+        _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
         out.append(job)
     return out
 

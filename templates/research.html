@@ -2,6 +2,7 @@
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_shipyard_resource_blocker with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/building_effect_strip.html" import render_building_effect_value, building_effect_metric_label with context %}
+{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 
 {# ===================================================================
    Genesis research cards — mirrors buildings card layout
@@ -145,11 +146,7 @@
        data-gc-card-queue="1"
        data-queue-active="{{ '1' if qj.status == 'active' else '0' }}"
        data-timer-domain="research"
-       data-job-id="{{ qj.job_id|int }}"
-       {% if qj.start_at %}data-start-at="{{ qj.start_at|int }}"{% endif %}
-       {% if qj.finish_at %}data-finish-at="{{ qj.finish_at|int }}"{% endif %}
-       {% if qj.duration_seconds %}data-total-seconds="{{ qj.duration_seconds|int }}"{% endif %}
-       {% if qj.status == 'active' and qj.remaining_seconds is defined %}data-server-remaining="{{ qj.remaining_seconds|int }}"{% endif %}>
+       data-job-id="{{ qj.job_id|int }}"{{ render_card_queue_data_attrs(qj) }}>
     <div class="gc-card-queue-head">
       <span class="gc-card-queue-glyph gc-card-queue-glyph--research" aria-hidden="true"></span>
       <span class="gc-card-queue-status">
@@ -167,23 +164,7 @@
       {{ T('label_level_short', 'L') }}{{ qj.target_level|int }}
     </div>
     {% endif %}
-    <div class="gc-card-queue-timer gc-mono"
-         {% if qj.status == 'active' and qj.finish_at %}
-         data-timer-target="{{ qj.finish_at|int }}"
-         data-timer-kind="research"
-         data-refresh-on-zero="game-state"
-         data-countdown-at="{{ qj.finish_at|int }}"
-         {% elif qj.status != 'active' and qj.start_at %}
-         data-timer-target="{{ qj.start_at|int }}"
-         data-timer-kind="research"
-         data-countdown-at="{{ qj.start_at|int }}"
-         {% endif %}>
-      {% if qj.status == 'active' %}
-        {{ qj.remaining_seconds|int }}s
-      {% else %}
-        {{ T('queue_card_starts_in', 'Startet in %(time)s', time=(qj.remaining_seconds|int ~ 's')) }}
-      {% endif %}
-    </div>
+    {{ render_card_queue_timer(qj, 'research', 'game-state') }}
     {% if qj.status == 'active' %}
     <div class="gc-card-queue-bar" role="progressbar"
          aria-valuemin="0" aria-valuemax="100"

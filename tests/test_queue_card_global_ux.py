@@ -170,3 +170,23 @@ def test_planet_evolution_merges_queue_cards_into_visible_list():
     assert "pe_visible_tech_cards" in html
     assert "rdx.queue_cards" in html
     assert "pe-research-queue-cards" not in html
+
+
+def test_ssr_card_queue_uses_canonical_finish_timer():
+    """GC-538: SSR card queues must not use start_at-only queued timers or 'Startet in'."""
+    partial = _read("templates/partials/card_queue_macros.html")
+    assert "queue_card_starts_in" not in partial
+    assert "data-timer-target=\"{{ qj.finish_at|int }}\"" in partial
+    assert "data-server-remaining" in partial
+    for page, cfg in QUEUE_PAGES.items():
+        html = _read(cfg["template"])
+        macro_name = cfg["card_queue"]
+        start = html.find(f"macro {macro_name}")
+        assert start >= 0, f"{page}: missing macro {macro_name}"
+        end = html.find("{% endmacro %}", start)
+        section = html[start:end]
+        assert "queue_card_starts_in" not in section, f"{page}: legacy queued timer text"
+        assert "render_card_queue_timer" in section, f"{page}: must use shared card queue timer macro"
+        assert "qj.status != 'active' and qj.start_at" not in section, (
+            f"{page}: queued timer must not target start_at only"
+        )

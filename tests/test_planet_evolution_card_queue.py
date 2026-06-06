@@ -147,11 +147,12 @@ def test_planet_evolution_template_card_queue_markers():
     assert "pe_visible_tech_cards" in html
 
 
-def test_queued_planet_tech_starts_in_uses_start_at():
+def test_queued_planet_tech_wait_uses_finish_at():
+    """Kanonische Queue-Regel: wartender Job = finish_at − now."""
     payload = _sample_planet_research_queue(multi=True)
     card_jobs = map_planet_research_queue_to_card_jobs(payload, now=_NOW)
     queued = next(j for j in card_jobs if j["owner_key"] == "metallurgy_t2_refining")
-    expected_wait = max(0, int(payload["queue"][1]["start_at"] - _NOW))
+    expected_wait = max(0, int(payload["queue"][1]["finish_at"] - _NOW))
     assert queued["remaining_seconds"] == expected_wait
 
 

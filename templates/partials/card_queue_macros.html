@@ -1,0 +1,8 @@
+{# GC-538 — Kanonische Queue-Timer (SSR). Siehe docs/QUEUE_STATE_RULES.md #}
+{% macro render_card_queue_data_attrs(qj) -%}
+{% if qj.start_at %} data-start-at="{{ qj.start_at|int }}"{% endif %}{% if qj.finish_at %} data-finish-at="{{ qj.finish_at|int }}"{% endif %}{% if qj.duration_seconds %} data-total-seconds="{{ qj.duration_seconds|int }}"{% endif %}{% if qj.remaining_seconds is defined %} data-server-remaining="{{ qj.remaining_seconds|int }}"{% endif %}
+{%- endmacro %}
+
+{% macro render_card_queue_timer(qj, timer_kind, refresh_on_zero='game-state') -%}
+<div class="gc-card-queue-timer gc-mono"{% if qj.finish_at %} data-timer-target="{{ qj.finish_at|int }}" data-timer-kind="{{ timer_kind }}" data-refresh-on-zero="{{ refresh_on_zero }}" data-countdown-at="{{ qj.finish_at|int }}"{% elif qj.start_at %} data-timer-target="{{ qj.start_at|int }}" data-timer-kind="{{ timer_kind }}" data-refresh-on-zero="{{ refresh_on_zero }}" data-countdown-at="{{ qj.start_at|int }}"{% endif %}>{{ qj.remaining_seconds|default(0)|int }}s</div>
+{%- endmacro %}
