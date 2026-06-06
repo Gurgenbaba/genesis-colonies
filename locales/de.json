@@ -1,13 +1,10 @@
 {
   "title": "Genesis Colonies – Kommandozentrale",
   "skip_to_content": "Zum Inhalt springen",
-
   "commander": "Commander",
   "universe_name": "Genesis-Cluster",
-
   "metal": "Ferronit",
   "crystal": "Crytite",
-
   "energy": "Energie",
   "resource_metal": "Ferronit",
   "resource_crystal": "Crytite",
@@ -17,12 +14,10 @@
   "resource_fuel_cells_storage": "Brennzellen-Lager",
   "resource_fuel_cells_no_storage": "Kein Lager — verbrauchbare Ressource",
   "resource_energy": "Aetherion",
-
   "resources": "Ressourcen",
   "account": "Account",
   "logged_in_as": "Eingeloggt als",
   "logout": "Logout",
-
   "nav_overview": "Übersicht",
   "nav_buildings": "Gebäude",
   "nav_research": "Forschung",
@@ -43,7 +38,6 @@
   "close": "Schließen",
   "nav_logout": "Abmelden",
   "nav_options": "Optionen",
-
   "options_title": "Optionen",
   "options_subtitle": "Profil, Kolonie und Account-Einstellungen verwalten.",
   "options_profile_title": "Profil",
@@ -96,13 +90,10 @@
   "options_placeholder_password_current": "Aktuelles Zugangsprotokoll",
   "options_placeholder_password_new": "Neues Zugangsprotokoll",
   "options_placeholder_password_confirm": "Protokoll bestätigen",
-
   "header_online": "Online",
-
   "label_speed": "Geschwindigkeit",
   "msg_speed_updated": "Geschwindigkeit aktualisiert.",
   "msg_speed_invalid": "Ungültiger Wert.",
-
   "overview_colony_title": "Kolonie-Status",
   "overview_hint": "Planet, Ressourcen und laufende Aktionen auf einen Blick.",
   "overview_label_planet_class": "Planetentyp",
@@ -177,7 +168,6 @@
   "exchange_error_exchange_unavailable": "Tausch noch nicht verfügbar.",
   "exchange_error_amount_too_small": "Menge zu klein für einen Tausch.",
   "exchange_error_planet_not_found": "Kolonie nicht gefunden.",
-
   "overview_label_commander": "Commander",
   "overview_label_planet": "Kolonie",
   "overview_label_coordinates": "Koordinaten",
@@ -186,35 +176,28 @@
   "overview_label_energy": "Energie-Bilanz",
   "overview_label_capacity": "Kapazität",
   "overview_label_efficiency": "Effizienz",
-
   "overview_label_production_per_hour": "Produktion / h",
   "overview_label_storage": "Lagerstände",
   "overview_label_storage_metal": "Ferronit-Lager",
   "overview_label_storage_crystal": "Crytite-Lager",
-
   "overview_label_colony": "Kolonie",
   "overview_panel_colony_status": "Kernwerte deiner Homeworld – Ressourcen, Energie, Score.",
   "overview_panel_research_hint": "Aktive Projekte & Kerntechnologien auf einen Blick.",
   "overview_research_none": "Aktuell keine Forschung aktiv.",
-
   "overview_label_score": "Score",
   "overview_label_score_buildings": "Gebäude",
   "overview_label_score_research": "Forschung",
-
   "overview_metal": "Ferronit",
   "overview_crystal": "Crytite",
   "overview_energy_total": "Erzeugt",
   "overview_energy_used": "Verbraucht",
-
   "overview_hint_energy_good": "Energie stabil – du kannst weiter skalieren.",
   "overview_hint_energy_low": "Energieengpass: Produktion läuft gedrosselt.",
   "overview_hint_energy_zero": "Keine Energie – baue Solarkollektoren oder optimiere Effizienz.",
-
   "overview_building_metal_mine": "Ferronit-Mine",
   "overview_building_crystal_mine": "Crytite-Extraktor",
   "overview_building_solar_plant": "Solarkollektor-Feld",
   "overview_label_upgrade_preview": "Upgrade-Vorschau",
-
   "buildings_effect_production": "Produktion",
   "buildings_effect_energy": "Energie",
   "buildings_effect_energy_use": "Energieverbrauch",
@@ -231,17 +214,12 @@
   "buildings_prod_after": "Nach Upgrade",
   "buildings_prod_delta": "Gewinn",
   "buildings_prod_delta_cost": "Mehrverbrauch",
-
   "ui_info_show_details": "Details anzeigen",
-
   "open_research": "→ Forschung öffnen",
   "label_buildings": "Gebäude",
   "label_research": "Forschung",
-
   "btn_back_to_overview": "Zur Übersicht",
-
   "progress": "Fortschritt",
-
   "header_building": "Gebäude",
   "header_technology": "Technologie",
   "header_level": "Stufe",
@@ -253,113 +231,90 @@
   "header_status": "Status",
   "header_action": "Aktion",
   "header_requirements": "Voraussetzungen",
-
   "label_level": "Stufe",
-
   "status_requirements_missing": "Voraussetzungen fehlen",
   "status_not_enough_resources": "Zu wenig Ressourcen",
   "status_ready": "Bereit",
   "status_building": "Läuft",
   "status_locked": "Gesperrt",
-
   "status_time_seconds": "Sek.",
   "status_time_minutes": "Min.",
   "status_time_hours": "Std.",
-
   "action_upgrade": "Ausbau starten",
-
   "buildings_title": "Gebäude",
   "buildings_hint": "Erweitere deine Kolonie – von Minen bis zu Endgame-Strukturen.",
   "buildings_tabs": "Gebäude-Kategorien",
   "buildings_techtree_link": "Tech-Tree anzeigen",
-
   "buildings_tab_resources": "Ressourcen",
   "buildings_tab_research": "Forschung",
   "buildings_tab_infrastructure": "Infrastruktur",
   "buildings_tab_military": "Militär",
-
   "buildings_col_name": "Gebäude",
   "buildings_col_level": "Stufe",
   "buildings_col_costs": "Kosten",
   "buildings_col_time": "Bauzeit",
   "buildings_col_status": "Status",
   "buildings_col_actions": "Aktion",
-
   "buildings_cost_metal": "Ferronit",
   "buildings_cost_crystal": "Crytite",
-
   "buildings_btn_upgrade": "Ausbau starten",
   "buildings_btn_max_level": "Max. Stufe erreicht",
   "buildings_btn_queue_full": "Queue voll",
   "buildings_not_enough_resources": "Nicht genug Ressourcen.",
   "buildings_requirements_not_met": "Voraussetzungen nicht erfüllt.",
-
   "buildings_queue_title": "Aktive Bauaufträge",
   "buildings_queue_empty": "Keine Bauaufträge aktiv.",
   "buildings_queue_item": "{name} → Stufe {level}",
   "buildings_queue_finish_in": "Fertig in",
   "buildings_queue_total_time": "Gesamtzeit",
-
   "tooltip_requirements_title": "Benötigt",
   "tooltip_requirements_building": "Gebäude",
   "tooltip_requirements_research": "Forschung",
-
   "msg_build_started": "{name} Ausbau auf Stufe {level} gestartet.",
   "msg_build_queue_full": "Bauliste voll – warte, bis ein Auftrag fertig ist.",
   "msg_build_requirements": "Voraussetzungen fehlen.",
   "msg_build_invalid": "Dieser Ausbau ist aktuell nicht möglich.",
   "msg_build_not_enough_resources": "Nicht genug Ferronit oder Crytite.",
   "msg_build_not_enough_resources_short": "Nicht genug Ferronit oder Crytite.",
-
   "research_title": "Forschung",
   "research_hint": "Verbessere Produktion, Bauzeiten und die militärische Zukunft deiner Kolonie.",
   "research_hint_intro": "Forschung verstärkt deine Ökonomie – und öffnet den Weg zu Flotte & Verteidigung.",
   "research_techtree_link": "Tech-Tree anzeigen",
-
   "research_lab": "Forschungslabor",
   "research_lab_level": "Forschungslabor-Stufe",
   "research_lab_panel_hint": "Dein Labor bestimmt Reichweite und Tempo deiner Forschung.",
   "research_req_hint": "Fortschritt braucht Voraussetzungen: Labor, Gebäude oder Tech-Level.",
-
   "research_col_tech": "Technologie",
   "research_col_level": "Stufe",
   "research_col_costs": "Kosten",
   "research_col_time": "Forschungszeit",
   "research_col_actions": "Aktion",
-
   "research_panel_active_hint": "Überwache laufende Projekte und starte neue Technologien.",
   "research_panel_tech_hint": "Alle Kerntechnologien dieser Kolonie.",
-
   "research_active_header": "Aktive Forschung",
   "research_active_title": "Laufende Forschung",
   "research_active_none": "Keine Forschung aktiv.",
   "research_no_active": "Keine Forschung aktiv.",
   "research_active_item": "{name} – Stufe {level}",
   "research_active_remaining": "Verbleibend",
-
   "research_btn_start": "Forschung starten",
   "research_btn_active": "Aktiv",
-
   "research_requirements_not_met": "Voraussetzungen nicht erfüllt.",
   "research_no_lab": "Du brauchst zuerst ein Forschungslabor.",
   "research_not_enough_resources": "Nicht genug Ressourcen.",
   "research_already_active": "Es kann nur eine Forschung gleichzeitig laufen.",
-
   "btn_research": "Forschung starten",
   "research_empty_list": "Keine Forschungen verfügbar (Konfiguration/DB prüfen).",
   "research_empty_category": "Keine Technologien in dieser Kategorie.",
-
   "research_queue_loop_title": "Forschungsschleife",
   "research_queue_manage_hint": "Verwalte laufende Forschungsaufträge und starte neue Technologien.",
   "research_queue_none_active": "Keine Forschungsaufträge aktiv.",
-
   "research_tabs": "Forschungs-Kategorien",
   "research_tab_energy": "Energie",
   "research_tab_production": "Produktion",
   "research_tab_construction": "Bau & Lager",
   "research_tab_fleet": "Flotte",
   "research_tab_military": "Militär",
-
   "research_effect_mine_energy": "Minenverbrauch",
   "research_effect_metal_prod": "Ferronit-Produktion",
   "research_effect_prod": "Ressourcen-Produktion",
@@ -372,119 +327,87 @@
   "research_effect_fleet_speed": "Flottengeschwindigkeit",
   "research_effect_cargo": "Frachtraum",
   "research_effect_fuel_use": "Treibstoffverbrauch",
-
   "techtree_title": "Tech-Tree",
   "techtree_hint": "Gebäude- und Forschungsbaum deiner Kolonie. Sieh sofort, was offen ist – und was noch fehlt.",
   "techtree_tab_buildings": "Gebäude",
   "techtree_tab_research": "Forschung",
   "techtree_buildings_hint": "Jedes Gebäude schaltet neue Möglichkeiten frei – von Effizienz bis Verteidigung.",
   "techtree_research_hint": "Forschung formt deine Macht: schnellere Flotten, stärkere Schilde, bessere Produktion.",
-
   "techtree_cat_resources": "Ressourcen",
   "techtree_cat_research": "Forschung",
   "techtree_cat_military": "Militär",
   "techtree_cat_infrastructure": "Infrastruktur",
-
   "msg_generic_error": "Unerwarteter Fehler.",
   "msg_action_success": "Erledigt.",
   "msg_action_failed": "Aktion fehlgeschlagen.",
-
   "building_metal_mine": "Ferronit-Mine",
   "desc_metal_mine": "Ferronit-Förderung skaliert mit Stufe^1,4. Verbrauch: 10×Stufe^1,25 Aetherion — bei Energiemangel läuft die Produktion gedrosselt.",
-
   "building_crystal_mine": "Crytite-Extraktor",
   "desc_crystal_mine": "Crytite-Förderung skaliert mit Stufe^1,35. Verbrauch: 6×Stufe^1,25 Aetherion. Bergbau-Techs wirken getrennt auf Ferronit und Crytite.",
-
   "building_solar_plant": "Solarkollektor-Feld",
   "desc_solar_plant": "Erzeugt Aetherion (∝ Stufe^1,4). Versorgt Minen und andere Verbraucher — Unterdeckung drosselt die Ressourcenproduktion.",
-
   "building_research_lab": "Forschungslabor",
   "desc_research_lab": "Ermöglicht Forschung ab Stufe 1. Ab Stufe 2: +10 % Forschungsgeschwindigkeit pro zusätzliche Labor-Stufe.",
-
   "building_academy": "Genesis-Akademie",
   "desc_academy": "Beschleunigt alle Forschungszeiten um 5 % pro Akademie-Stufe. Benötigt Forschungslabor Stufe 2.",
-
   "building_metal_storage": "Ferronit-Depot",
   "desc_metal_storage": "Erhöht das Ferronit-Lager um Faktor 1,8 pro Stufe (Basis 100.000). Skaliert mit Lagertechnik und Terraformer.",
-
   "building_crystal_storage": "Crytite-Silo",
   "desc_crystal_storage": "Erhöht das Crytite-Lager um Faktor 1,8 pro Stufe (Basis 100.000). Skaliert mit Lagertechnik und Terraformer.",
-
   "building_fuel_storage": "Brennzellen-Depot",
   "desc_fuel_storage": "Speichert produzierte Brennzellen. Erhöht die Kapazität um Faktor 1,8 pro Stufe (Basis 100.000). Skaliert mit Lagertechnik und Terraformer.",
-
   "building_command_center": "Kommandozentrale",
   "desc_command_center": "Schaltet Militär- und Spätgame-Gebäude frei. Verkürzt die Bauzeit der Nanofabrik um 25 % pro Stufe.",
-
   "building_orbital_shipyard": "Orbitalwerft",
   "desc_orbital_shipyard": "Schaltet Schiffsbau frei. Höhere Stufen schalten bessere Schiffsklassen frei und verkürzen Schiffsbauzeiten um 10 % pro Stufe.",
   "building_shipyard": "Orbitalwerft",
   "desc_shipyard": "Schaltet Schiffsbau frei. Höhere Stufen schalten bessere Schiffsklassen frei.",
-
   "building_defense_factory": "Verteidigungsfabrik",
   "desc_defense_factory": "Voraussetzung für den Schildprojektor (ab CC Stufe 4). Kein direkter Kolonie-Bonus in der Engine.",
-
   "building_barracks": "Orbital-Kaserne",
   "desc_barracks": "Benötigt Kommandozentrale Stufe 1. Truppenmechanik ist derzeit nicht an Kaserne-Stufen gekoppelt.",
-
   "building_radar_array": "Deep-Space-Radar-Array",
   "desc_radar_array": "Berechnet +2 Scan-Reichweite pro Stufe (vorbereitet). Aufklärung im Spiel ist damit noch nicht live aktiv.",
-
   "building_shield_generator": "Aegis-Schildprojektor",
   "desc_shield_generator": "Spätgame-Verteidigung (CC Stufe 4, Verteidigungsfabrik Stufe 2). Planetare Schilde sind noch nicht implementiert.",
-
   "building_terraformer": "Terraformer",
   "desc_terraformer": "Der Terraformer schafft sichere Infrastrukturflächen — keine extra Gebäudeplätze, sondern nutzbare Industrie- und Lagerzonen. Erhöht Metall- und Crytite-Lagerkapazität um 5 % pro Stufe. Stapelt mit Lagern und Lagertechnik.",
-
   "building_nanofactory": "Nano-Assemblierungsanlage",
   "desc_nanofactory": "Verkürzt Bauzeiten aller Gebäude um 30 % pro Stufe. Stapelt mit Bauoptimierung und Labor.",
-
   "building_geothermal_nexus": "Geothermie-Nexus",
   "desc_geothermal_nexus": "+3 % Aetherion der Solarkollektoren pro Stufe. +2 Max-Stufe für Minen, Solar und Lager je Geothermie-Stufe.",
-
   "building_planet_core_nexus": "Planetenkern-Nexus",
   "desc_planet_core_nexus": "Endgame: +1 Max-Stufe für Ferronit-Mine, Crytite-Extraktor und Solarkollektoren pro Stufe (Basis-Max 50).",
-
   "tech_energy_efficiency": "Energieeffizienz",
   "tech_energy_efficiency_desc": "Optimiert Systeme und reduziert den Energieverbrauch deiner Minen um 5% pro Stufe.",
   "desc_tech_energy_efficiency": "Optimiert Systeme und reduziert den Energieverbrauch deiner Minen um 5% pro Stufe.",
-
   "tech_metal_refining": "Metallveredelung",
   "tech_metal_refining_desc": "Steigert Ferronitförderung um 10% pro Stufe durch bessere Prozesse.",
   "desc_tech_metal_refining": "Steigert Ferronitförderung um 10% pro Stufe durch bessere Prozesse.",
-
   "tech_construction_optimization": "Bauoptimierung",
   "tech_construction_optimization_desc": "Senkt Bau- & Forschungszeiten durch Standardmodule und Automatisierung.",
   "desc_tech_construction_optimization": "Senkt Bau- & Forschungszeiten durch Standardmodule und Automatisierung.",
-
   "tech_storage": "Lagertechnik",
   "tech_storage_desc": "Erhöht Lagerkapazitäten durch Verdichtung, Stabilisierung und Logistik.",
   "desc_tech_storage": "Erhöht Lagerkapazitäten durch Verdichtung, Stabilisierung und Logistik.",
-
   "tech_drone_optimization": "Drohnenoptimierung",
   "tech_drone_optimization_desc": "Verbessert Ausbeute durch effizientere Bergbau- und Servicedrohnen.",
   "desc_tech_drone_optimization": "Verbessert Ausbeute durch effizientere Bergbau- und Servicedrohnen.",
-
   "tech_hyperspace_navigation": "Hyperraum-Navigation",
   "tech_hyperspace_navigation_desc": "Verkürzt Flugzeiten durch bessere Sprungvektoren und Routenkalkulation.",
   "desc_tech_hyperspace_navigation": "Verkürzt Flugzeiten durch bessere Sprungvektoren und Routenkalkulation.",
-
   "tech_cryogenic_drive": "Kryo-Antriebstechnik",
   "tech_cryogenic_drive_desc": "Mehr Schub, weniger Verluste – besonders bei großen Verbänden.",
   "desc_tech_cryogenic_drive": "Mehr Schub, weniger Verluste – besonders bei großen Verbänden.",
-
   "tech_weapon_tech": "Waffenentwicklung",
   "tech_weapon_tech_desc": "Erhöht Feuerkraft deiner Flotten durch moderne Energie- und Projektilsysteme.",
   "desc_tech_weapon_tech": "Erhöht Feuerkraft deiner Flotten durch moderne Energie- und Projektilsysteme.",
-
   "tech_armor_tech": "Panzerungstechnik",
   "tech_armor_tech_desc": "Steigert Haltbarkeit durch Verbundpanzer und adaptive Materialien.",
   "desc_tech_armor_tech": "Steigert Haltbarkeit durch Verbundpanzer und adaptive Materialien.",
-
   "tech_shield_tech": "Schildtechnologie",
   "tech_shield_tech_desc": "Härtere Schilde durch stärkere Felder, Modulation und Verstärker.",
   "desc_tech_shield_tech": "Härtere Schilde durch stärkere Felder, Modulation und Verstärker.",
-
   "energy_tech": "Energieeffizienz",
   "desc_energy_tech": "Senkt den Aetherion-Verbrauch von Ferronit- und Crytite-Minen um 5 % pro Stufe (mindestens 40 % des Basisverbrauchs).",
   "mining_tech": "Metallveredelung",
@@ -512,131 +435,98 @@
   "desc_shield_tech": "Vorbereitet: +5 % Schildbonus pro Stufe. Noch ohne planetare oder Flotten-Schildwirkung.",
   "desc_research_shield_tech": "Vorbereitet: +5 % Schildbonus pro Stufe. Noch ohne planetare oder Flotten-Schildwirkung.",
   "desc_fuel_efficiency": "Senkt Flotten-Treibstoffverbrauch um 3 % pro Stufe (mindestens 50 %).",
-
   "msg_building_unlocked_by_research": "Neue Gebäude freigeschaltet.",
   "msg_research_unlocked_by_building": "Neue Forschung freigeschaltet.",
-
   "login_title": "Login",
   "login_badge": "✅ Verbindung zum Genesis-Cluster aktiv",
   "login_subtitle": "Melde dich mit deinem <strong>Commander-Account</strong> an und übernimm wieder das Ruder deiner Kolonie.",
   "login_error": "Benutzername oder Passwort falsch.",
-
   "login_label_username": "Benutzername",
   "login_placeholder_username": "Commander-Name",
   "login_help_username": "3–24 Zeichen (Buchstaben/Zahlen/Unterstrich empfohlen).",
-
   "login_label_password": "Passwort",
   "login_placeholder_password": "Zugangsprotokoll",
   "login_help_password": "Mindestens 6 Zeichen.",
-
   "login_hint_no_reset": "🛡 <strong>Hinweis:</strong> Bewahre deine Zugangsdaten gut auf – es gibt aktuell <u>kein Passwort-Reset-System</u>.",
-
   "login_btn_submit": "🚀 Einloggen &amp; Kolonie betreten",
   "login_btn_loading": "🔄 Prüfe Zugang…",
-
   "login_divider_or": "oder",
   "login_footer_no_account": "Noch kein Account?",
   "login_footer_create": "Commander erstellen",
   "login_footer_back": "Zurück zur Startseite",
-
   "register_aria": "Registrierung",
   "register_badge": "Neues Kommando · Genesis-Cluster",
   "register_subtitle": "Sichere dir deinen",
   "register_subtitle_strong": "Commander-Ruf",
   "register_subtitle_2": "bevor es jemand anders tut. Dein Name wird im Logbuch des Genesis-Clusters verewigt.",
-
   "register_feature_1": "Baue deine eigene Kolonie",
   "register_feature_2": "Optimiere Produktion & Forschung",
   "register_feature_3": "Bereite legendäre Flotten vor",
-
   "register_label_username": "Commander-Name",
   "register_placeholder_username": "z.B. \"Gurkenvater\", \"NovaFox\" …",
   "register_help_username": "3–24 Zeichen. Keine Leerzeichen. (Empfohlen: A–Z, 0–9, _)",
-
   "register_label_password": "Passwort",
   "register_placeholder_password": "Geheimes Zugangsprotokoll",
   "register_help_password": "Mindestens 8 Zeichen empfohlen.",
-
   "register_label_password2": "Passwort wiederholen",
   "register_placeholder_password2": "Noch einmal zur Bestätigung",
   "register_help_password2": "Muss identisch zum Passwort sein.",
-
   "register_security_title": "Sicherheitshinweis:",
   "register_security_text": "Nutze ein starkes Passwort – aktuell gibt es",
   "register_security_text_u": "kein Passwort-Reset-System",
-
   "register_loading": "Erstelle Commander…",
   "register_btn_submit": "Account erstellen & Kolonie starten",
-
   "auth_alt_action": "Alternative Aktion",
   "auth_or": "oder",
   "register_footer_have_account": "Bereits ein Commander?",
   "register_footer_to_login": "Zum Login",
   "auth_back_to": "Zurück zur",
   "auth_landing": "Startseite",
-
   "landing_title": "Genesis Colonies",
   "landing_subtitle": "Baue. Erforsche. Erobere.",
-
   "landing_pitch_line1": "Errichte eine Kolonie im Genesis-Cluster und optimiere deine Produktion.",
   "landing_pitch_line2": "Erforsche Technologien, die deine Wirtschaft beschleunigen und neue Systeme freischalten.",
   "landing_pitch_line3": "Messe dich mit anderen Commandern – fair, persistent und ohne Pay2Win.",
-
   "landing_badge_scifi": "⚙️ Sci-Fi Aufbaustrategie",
   "landing_badge_universe": "🌌 Persistentes Universum",
   "landing_badge_live": "🛰 Live-Produktion & Forschung",
   "landing_badge_nop2w": "🚫 Kein Pay2Win",
-
   "landing_cta_play": "Jetzt spielen",
   "landing_cta_login": "Login",
   "landing_cta_command_center": "🛰 Zum Command Center",
   "landing_cta_logout": "Abmelden",
-
   "landing_footnote": "Kostenlos spielbar · Browser-Game · Kolonie arbeitet weiter, während du offline bist",
-
   "landing_scanner_title": "Kolonie-Scanner",
   "landing_scanner_subtitle": "Live-Status des Genesis-Clusters",
-
   "landing_label_status": "Status",
   "landing_label_universe": "Universum",
   "landing_label_galaxies": "Galaxien",
   "landing_label_start_resources": "Startressourcen",
   "landing_label_production": "Produktion",
-
   "landing_status_online": "Eingeloggt",
   "landing_status_offline": "Offline",
-
   "landing_section_what_title": "Was erwartet dich?",
   "landing_section_what_subtitle": "Schlankes Core-Gameplay mit Wachstumspotential",
-
   "landing_feature_live_title": "Live-Produktion",
   "landing_feature_live_text": "Rohstoffe laufen weiter – auch wenn du offline bist.",
-
   "landing_feature_tech_title": "Tech-Progress",
   "landing_feature_tech_text": "Forschung schaltet neue Gebäude, Schiffe und Boni frei.",
-
   "landing_feature_multi_title": "Multi-User ready",
   "landing_feature_multi_text": "Ein Universum, viele Commander – echte Konkurrenz.",
-
   "landing_feature_nop2w_title": "Kein Pay2Win",
   "landing_feature_nop2w_text": "Skill & Strategie > Geld. Punkt.",
-
   "landing_section_start_title": "Dein Start als Commander",
   "landing_section_start_subtitle": "Drei Schritte bis zur laufenden Kolonie",
-
   "landing_step_1": "Baue Ferronit-Mine & Solarkollektoren",
   "landing_step_2": "Starte Forschung (Bauoptimierung / Scanner)",
   "landing_step_3": "Level deine Lager & plane den nächsten Ausbau",
-
   "landing_roadmap_fleet": "Flotten",
   "landing_roadmap_defense": "Verteidigung",
   "landing_roadmap_alliance": "Allianzen",
   "landing_roadmap_galaxy": "Galaxie-Karte",
-
   "admin_title": "Admin Control Center",
   "admin_hint": "Universumsweite Settings & Tools. Änderungen greifen sofort – jeder Klick zählt.",
   "admin_badge_label": "System Admin",
-
   "admin_metric_online_now": "Online jetzt",
   "admin_metric_active_24h": "Aktiv (24h)",
   "admin_metric_universe_label": "Universum",
@@ -644,12 +534,10 @@
   "admin_metric_speed_label": "Speed-Faktoren",
   "admin_metric_speed_hint": "Produktion / Bau / Forschung",
   "admin_metric_galaxy_hint": "Spielbare Galaxien im Cluster.",
-
   "admin_section_game_settings": "Allgemeine Einstellungen",
   "admin_label_galaxy_count": "Anzahl Galaxien",
   "admin_label_queue_limit": "Maximale Bau-Queue pro Planet",
   "admin_label_research_queue_limit": "Maximale Forschungs-Queue pro Spieler",
-
   "admin_label_speed": "Geschwindigkeiten",
   "admin_label_production_speed": "Produktionsspeed",
   "admin_label_build_speed": "Bauspeed",
@@ -657,18 +545,15 @@
   "admin_label_fleet_speed_war": "Flottenspeed (Krieg)",
   "admin_label_fleet_speed_holding": "Flottenspeed (Halten)",
   "admin_label_fleet_speed_peaceful": "Flottenspeed (Friedlich)",
-
   "admin_section_start_values": "Startwerte für neue Spieler",
   "admin_label_start_metal": "Start-Ferronit",
   "admin_label_start_crystal": "Start-Crytite",
   "admin_apply_start_to_existing": "Startressourcen auch auf bestehende Homeworlds anwenden (Mindestwert)",
-
   "admin_section_motd": "Universums-Meldung (MOTD)",
   "admin_motd_label": "Anzeige-Text",
   "admin_motd_hint": "Kurze Info: News, Wartung, Events …",
   "admin_motd_enabled_label": "MOTD aktiv anzeigen",
   "admin_btn_save_settings": "Einstellungen speichern",
-
   "admin_section_resources_tools": "Ressourcen-Tools (Overflow)",
   "admin_resources_hint": "Ressourcen direkt verteilen. Lager-Caps werden ignoriert (Overflow erlaubt). Spieler-ID leer = du · Spieler-ID gesetzt = dieser Spieler · „Alle“ ignoriert Spieler-ID.",
   "admin_label_metal_delta": "Ferronit-Delta",
@@ -676,7 +561,6 @@
   "admin_label_resource_player_id": "Spieler-ID (optional)",
   "admin_label_resource_apply_all": "Auf alle Homeworlds anwenden",
   "admin_btn_apply_resources": "Ressourcen anwenden (kein Cap)",
-
   "admin_section_wipe": "Universum zurücksetzen (Wipe)",
   "admin_wipe_hint": "Löscht Planeten, Queues & Flotten. Accounts bleiben. Homeworlds werden neu erzeugt.",
   "admin_wipe_research": "Forschungsstände zurücksetzen",
@@ -684,7 +568,6 @@
   "admin_wipe_messages": "Nachrichten/Logs leeren",
   "admin_wipe_confirm": "Ich verstehe: Dieser Wipe ist endgültig.",
   "admin_wipe_execute": "Wipe ausführen",
-
   "admin_section_players": "Spieler-Verwaltung (Banns)",
   "admin_ban_hint": "Schnelles Bann-Handling. Detailliertes Player-Management folgt separat.",
   "admin_label_ban_player_id": "Spieler-ID",
@@ -693,20 +576,15 @@
   "admin_btn_ban_player": "Spieler bannen",
   "admin_label_unban_player_id": "Spieler-ID (Bann aufheben)",
   "admin_btn_unban_player": "Bann aufheben",
-
-  "admin_section_bans": "Aktive Banns",
+  "admin_section_bans": "Account-Banns",
   "admin_no_bans": "Aktuell sind keine Spieler gebannt.",
-
   "admin_msg_settings_saved": "Einstellungen gespeichert.",
   "admin_msg_invalid_value": "Ungültiger Wert in den Einstellungen.",
-
   "msg_not_logged_in": "Du bist nicht eingeloggt.",
   "msg_no_permission": "Keine Berechtigung.",
-
   "msg_login_success": "Eingeloggt.",
   "msg_login_failed": "Benutzername oder Passwort falsch.",
   "msg_logout_success": "Abgemeldet.",
-
   "msg_register_need_user_pass": "Bitte Benutzername und Passwort angeben.",
   "msg_register_need_user_pass_email": "Bitte Benutzername, E-Mail und Passwort angeben.",
   "register_label_email": "E-Mail",
@@ -736,13 +614,11 @@
   "msg_register_username_taken": "Dieser Benutzername ist vergeben.",
   "msg_register_failed": "Account konnte nicht erstellt werden.",
   "msg_register_success": "Willkommen im Genesis-Cluster, Commander.",
-
   "msg_settings_saved": "Einstellungen gespeichert.",
   "msg_admin_resources_updated": "Ressourcen angepasst.",
   "msg_admin_wipe": "Universum zurückgesetzt.",
   "msg_admin_ban": "Spieler gebannt.",
   "msg_admin_unban": "Bann aufgehoben.",
-
   "research_msg_no_lab": "Du benötigst zuerst ein Forschungslabor.",
   "research_msg_active": "Es läuft bereits eine Forschung.",
   "research_msg_queue_full": "Forschungs-Warteschlange voll (max. 3 Slots).",
@@ -764,29 +640,23 @@
   "research_msg_error": "Beim Start der Forschung ist ein Fehler aufgetreten.",
   "research_msg_started": "Forschung Stufe %(level)s gestartet. Verbleibend: %(seconds)s Sekunden.",
   "research_msg_started_fmt": "Forschung Stufe {level} gestartet. Verbleibend: {seconds} Sekunden.",
-
   "msg_upgrade_fail_resources": "Nicht genug Ressourcen: Es fehlen %(metal)s Ferronit und %(crystal)s Crytite.",
   "msg_upgrade_fail_resources_fmt": "Nicht genug Ressourcen: Es fehlen {metal} Ferronit und {crystal} Crytite.",
   "msg_upgrade_unknown": "Dieser Ausbau konnte nicht gestartet werden.",
-
   "ranking_title": "Galaktische Rangliste",
   "ranking_subtitle": "Vergleiche deine Macht mit anderen Commandern im Genesis-Cluster.",
-
   "ranking_your_status": "Dein Status",
   "ranking_label_rank": "Rang",
   "ranking_label_score_total": "Gesamt-Score",
   "ranking_label_score_buildings": "Gebäude",
   "ranking_label_score_research": "Forschung",
   "ranking_hint": "Baue Infrastruktur und Forschung aus, um deinen Rang zu steigern.",
-
   "ranking_top_commander": "Top-Commander",
   "ranking_top_commander_sub": "Gesamtscore, Gebäude- und Forschungs-Punkte im Überblick.",
-
   "ranking_col_commander": "Commander",
   "ranking_col_total": "Gesamt-Score",
   "ranking_col_buildings": "Gebäude",
   "ranking_col_research": "Forschung",
-
   "ranking_you": "Du",
   "ranking_empty": "Noch keine Daten. Baue deine Kolonie auf, um gelistet zu werden.",
   "ranking_loading": "Rangliste wird geladen…",
@@ -812,7 +682,6 @@
   "ranking_tab_defense": "Verteidigung",
   "ranking_my_rank": "Dein Rang",
   "ranking_badges": "Auszeichnungen",
-
   "galaxy_title": "Galaxie",
   "galaxy_hint": "Systeme, Slots und Expansion – scanne den Cluster nach neuen Chancen.",
   "galaxy_sector_overview": "Sektor-Übersicht",
@@ -860,7 +729,6 @@
   "galaxy_legend_your_planet": "Dein Planet",
   "galaxy_legend_colonizable": "Kolonisierbar (bald)",
   "galaxy_legend_minimap_own": "Eigene Planeten im Bereich",
-
   "shipyard_title": "Orbitalwerft",
   "shipyard_hint": "Baue Schiffe für Aufklärung, Transport, Kampf und Expeditionen. Schiffe und Ressourcen gelten nur für den aktiven Planeten.",
   "shipyard_planet_scope": "Aktiver Planet: %(name)s",
@@ -918,7 +786,6 @@
   "shipyard_role_scout": "Aufklärung",
   "shipyard_role_utility": "Utility",
   "shipyard_role_colony": "Kolonie",
-
   "ship_detail_title": "Schiffsdaten",
   "ship_detail_close": "Schließen",
   "ship_detail_loading": "Lade Schiffsdaten…",
@@ -940,7 +807,6 @@
   "fleet_no_ships_hint": "Keine Schiffe vorhanden. Baue Schiffe in der Orbitalwerft.",
   "fleet_go_shipyard_btn": "Zur Orbitalwerft",
   "fleet_shipyard_link_hint": "Neue Schiffe baust du in der Orbitalwerft.",
-
   "defense_title": "Verteidigung",
   "defense_hint": "Baue stationäre Geschütze und Schilde zum Schutz deiner Kolonie. Gilt nur für den aktiven Planeten.",
   "defense_planet_scope": "Aktiver Planet: %(name)s",
@@ -988,26 +854,20 @@
   "defense_detail_factory_level": "Verteidigungsfabrik Stufe %(level)s",
   "defense_panel_planetary_title": "Planetare Verteidigung",
   "defense_panel_planetary_subtitle": "Dieser Bereich wird später zur Schaltzentrale für deine Def-Strukturen: von leichten Lasern bis hin zu schweren Orbit-Batterien.",
-
   "defense_planned_contents_title": "Geplante Inhalte dieses Panels:",
   "defense_planned_item_overview": "Übersicht über alle Defense-Strukturen pro Kolonie",
   "defense_planned_item_build_buttons": "Bau- und Upgrade-Buttons für Laser, Raketen, Schilde & Turrets",
   "defense_planned_item_power_score": "Kompakte Einschätzung der Gesamt-Defensivkraft (Score / Balken)",
-
   "defense_tag_shield_setup": "Shield-Setup",
   "defense_tag_turrets": "Geschütze",
   "defense_tag_defense_matrix": "Abwehrmatrix",
-
   "defense_panel_mechanics_title": "Zukünftige Mechaniken",
   "defense_panel_mechanics_subtitle": "Die Verteidigung greift später direkt mit Radar, Flotten und Kampfberichten ineinander.",
-
   "defense_roadmap_synergy": "Synergien mit Schildgenerator & Radar-Array (Frühwarnung & Bonuswerte)",
   "defense_roadmap_calc": "Kalkulation von Deff-Werten gegen typische Angreiferflotten",
   "defense_roadmap_reports": "Verknüpfung mit Kampfberichten und Log-Ansicht im Flotten-Modul",
   "defense_roadmap_repair": "Mögliche Auto-Reparatur nach Kämpfen (abhängig von Forschung)",
-
   "defense_placeholder_note": "Solange die Kampf-Engine noch in Entwicklung ist, dient diese Seite als stylischer Platzhalter und sorgt dafür, dass das Interface bereits vollständig wirkt.",
-
   "fleet_title": "Flotte",
   "fleet_hint": "Verwalte Flottenbewegungen, Missionen und Vorlagen für deine Kolonien.",
   "fleet_unavailable": "Flottensystem ist noch nicht verfügbar. Bitte Migration ausführen.",
@@ -1289,7 +1149,6 @@
   "fleet_shipyard_subtitle": "Schiffe bauen",
   "fleet_shipyard_build_btn": "Bauen",
   "fleet_shipyard_none": "Auf dieser Werftstufe keine Schiffe freigeschaltet.",
-  "shipyard_build_ok": "Schiffe gebaut.",
   "building_fuel_cell_plant": "Brennzellenfabrik",
   "desc_fuel_cell_plant": "Produziert Brennzellen für Flottenbetrieb. Verbraucht Energie — Lagerung erfolgt im Brennzellen-Depot.",
   "research_fuel_efficiency": "Brennzellen-Optimierung",
@@ -1370,51 +1229,36 @@
   "expedition_event_sensor_glitch_desc": "Anomale Messwerte blühten auf jedem Display auf und kollabierten bei Annäherung. Instrumentenrauschen — nichts weiter.",
   "expedition_event_ancient_stash": "Antiker Vorrat",
   "expedition_event_ancient_stash_desc": "Ein versiegelter Vorläufer-Cache widersetzte sich jedem Scan, bis die Flotte das Schloss brach. Unbekannte Technologie, unbekannter Ursprung — aber der Inhalt war real.",
-
   "alliance_title": "Allianz",
   "alliance_hint": "Bündnisse, Kommunikation und später Kriegsführung im Cluster.",
-
   "alliance_status_title": "Allianz-Status",
   "alliance_status_hint": "Hier wird später alles gebündelt, was deine eigene Allianz betrifft.",
-
   "alliance_placeholder_label": "Platzhalter-Modul:",
   "alliance_placeholder_intro": "Geplante Kernfunktionen für deine Allianz:",
-
   "alliance_feature_identity_title": "Allianz-Identität",
   "alliance_feature_identity_sub": "Name, Tag, Emblem, Lore & Beschreibung",
-
   "alliance_feature_members_title": "Mitgliederverwaltung",
   "alliance_feature_members_sub": "Ränge, Rechte, Join-Requests & Kicks",
-
   "alliance_feature_economy_title": "Allianz-Ökonomie",
   "alliance_feature_economy_sub": "Gemeinsame Rohstofftöpfe & Boni",
-
   "alliance_feature_goals_title": "Cluster-Ziele",
   "alliance_feature_goals_sub": "Gemeinsame Meilensteine & Season-Challenges",
-
   "alliance_note_own": "In einem späteren Update kannst du hier Allianzen gründen, verwalten und als Allianz-Commander agieren. Bis dahin dient die Seite als UI-Prototyp.",
-
   "alliance_diplomacy_title": "Diplomatie & Social",
   "alliance_diplomacy_hint": "Schnittstelle für Bündnisse, Kriege und interne Kommunikation zwischen Commandern.",
-
   "alliance_dip_apply_title": "Bewerbungssystem",
   "alliance_dip_apply_sub": "Bei bestehenden Allianzen anfragen & joinen",
-
   "alliance_dip_matrix_title": "Diplomatie-Panel",
   "alliance_dip_matrix_sub": "Bündnisse, NAPs und Kriegserklärungen verwalten",
-
   "alliance_dip_board_title": "Allianz-Board",
   "alliance_dip_board_sub": "Internes Forum / Message-Board für Strategien & Ansagen",
-
   "alliance_dip_broadcast_title": "Broadcasts",
   "alliance_dip_broadcast_sub": "Allianz-weit sichtbare Befehle & Ankündigungen",
-
   "alliance_planned_features": "Geplante Features",
   "alliance_pill_create": "Allianz-Gründung",
   "alliance_pill_diplomacy": "Diplomatie-Matrix",
   "alliance_pill_events": "Allianz-Events",
   "alliance_pill_intel": "Shared Intel / Scanner",
-
   "build_queue_title": "Bauschleife",
   "build_queue_next": "Nächste Fertigstellung in",
   "build_queue_remaining": "Verbleibend",
@@ -1429,9 +1273,7 @@
   "status_in_queue": "In Warteschlange",
   "label_level_short": "L",
   "header_meta": "Kommando-Status",
-
   "alliance_note_diplomacy": "Aktuell noch deaktiviert – die Allianz- & Diplomatiefunktionen werden in einem späteren Development-Step freigeschaltet, wenn Flotten und Kampf-Logik stehen.",
-
   "admin_tabs_label": "Admin-Bereiche",
   "admin_health_title": "System Health",
   "admin_migrations_title": "Migrationen",
@@ -1443,7 +1285,6 @@
   "admin_settings_title": "Einstellungen",
   "admin_server_title": "Server",
   "admin_server_hint": "Universum, MOTD, Ressourcen-Tools und Wipe. Pacing & Balance: Tab „Balance“.",
-  "admin_section_bans": "Account-Banns",
   "admin_ban_invalid_id": "Ungültige Spieler-ID.",
   "admin_ban_permanent": "permanent",
   "admin_col_id": "ID",
@@ -1558,7 +1399,6 @@
   "admin_queue_clear_hint": "Zur Bestätigung exakt CLEAR QUEUE eingeben.",
   "admin_btn_clear_queue": "Queue leeren",
   "admin_btn_set_building": "Gebäude setzen",
-
   "playercard_title": "Commander-Profil",
   "playercard_open": "Profil öffnen",
   "playercard_close": "Schließen",
@@ -1625,7 +1465,6 @@
   "alliance_members_preview": "Commander im Cluster (Vorschau)",
   "playercard_back_to_game": "Zurück zur Übersicht",
   "playercard_fallback_edit_hint": "Tipp: Im Spiel auf deinen Namen klicken, um das Profil zu bearbeiten (AJAX).",
-
   "chat_title": "TChat",
   "chat_online": "Online",
   "chat_global": "Global",
@@ -1685,7 +1524,6 @@
   "chat_restore": "Wiederherstellen",
   "chat_new_messages_count": "Neue Nachrichten (%(count)s)",
   "chat_error_cannot_whisper_self": "Du kannst dir nicht selbst schreiben.",
-
   "admin_chat_title": "TChat",
   "admin_chat_hint": "Moderation und System-Meldungen für den Genesis TChat.",
   "admin_chat_notice_title": "System-Meldung",
@@ -1719,9 +1557,7 @@
   "admin_chat_col_message": "Nachricht",
   "admin_chat_delete_btn": "Löschen",
   "admin_chat_deleted": "Nachricht wurde gelöscht.",
-
   "nav_planet_evolution": "Planet Evolution",
-
   "pe_title": "Planet-Entwicklung",
   "pe_hint": "Forme die Identität, Wirtschaft und Zukunft deiner Kolonie.",
   "pe_planet_switcher": "Kolonie wählen",
@@ -1749,13 +1585,11 @@
   "pe_confirm_spec": "Die Spezialisierung ist permanent.",
   "research_start": "Starten",
   "research_active": "Aktiv",
-
   "pe_rarity_common": "Gewöhnlich",
   "pe_rarity_uncommon": "Ungewöhnlich",
   "pe_rarity_rare": "Selten",
   "pe_rarity_epic": "Episch",
   "pe_rarity_legendary": "Legendär",
-
   "trait_ferronit_rich_crust": "Ferronit-reiche Kruste",
   "trait_crytite_veins": "Crytite-Adern",
   "trait_unstable_mantle": "Instabiler Mantel",
@@ -1770,7 +1604,6 @@
   "trait_dark_matter_residue": "Dunkle-Materie-Rückstände",
   "trait_quantum_echo_field": "Quanten-Echofeld",
   "trait_subsurface_vault_hint": "Hinweis auf unterirdischen Tresor",
-
   "spec_forge_world": "Schmiedewelt",
   "spec_science_nexus": "Wissenschafts-Nexus",
   "spec_fortress_planet": "Festungsplanet",
@@ -1780,7 +1613,6 @@
   "spec_quantum_observatory": "Quanten-Observatorium",
   "spec_industrial_megacity": "Industrielle Megacity",
   "spec_ai_controlled_world": "KI-regierte Welt",
-
   "pe_industry_t1_automation": "Industrie-Automatisierung",
   "desc_pe_industry_t1_automation": "Schaltet die Konversions-Warteschlange frei.",
   "pe_industry_t2_mining_path": "Abbau-Pfad wählen",
@@ -1817,10 +1649,8 @@
   "desc_pe_military_t2": "Produktionskette: Phase Crystal.",
   "pe_orbital_t2": "Zero-G-Gießerei",
   "desc_pe_orbital_t2": "Orbitaler Output-Bonus.",
-
   "pe_choice_orbital_mining": "Orbitalabbau",
   "pe_choice_deep_core": "Tiefkern-Extraktion",
-
   "resource_refined_ferronit": "Refined Ferronit",
   "resource_mantle_alloy": "Mantle Alloy",
   "resource_quantum_data": "Quantum Data",
@@ -1831,7 +1661,6 @@
   "resource_phase_crystal": "Phase Crystal",
   "resource_dark_plasma": "Dark Plasma",
   "resource_raw_ferronit_bulk": "Roh-Ferronit (Bulk)",
-
   "event_forge_reactor_overload": "Reaktor-Überlastung",
   "event_forge_rare_vein": "Seltene Metallader",
   "event_forge_worker_revolt": "Arbeiteraufstand",
@@ -1842,7 +1671,6 @@
   "event_smuggler_boom": "Schwarzmarkt-Boom",
   "event_fortress_siege": "Belagerungsalarm",
   "event_trade_disruption": "Handelsstörung",
-
   "pe_event_choice_shutdown": "Notabschaltung",
   "pe_event_choice_overload": "Überlasten",
   "pe_event_choice_invest": "Investieren",
@@ -1865,7 +1693,6 @@
   "pe_event_choice_escort": "Eskortieren",
   "pe_event_choice_publish": "Veröffentlichen",
   "pe_event_choice_classify": "Klassifizieren",
-
   "pe_legacy_survived_reactor_overload": "Reaktor-Überlastung überstanden",
   "pe_legacy_rare_metal_found": "Seltenes Metall gefunden",
   "pe_legacy_survived_rebellion": "Rebellion überstanden",
@@ -1876,7 +1703,6 @@
   "pe_legacy_black_market_expanded": "Schwarzmarkt expandiert",
   "pe_legacy_siege_survived": "Belagerung überstanden",
   "pe_legacy_trade_disruption_handled": "Handelsstörung gemeistert",
-
   "chain_refined_ferronit": "Refined Ferronit",
   "chain_mantle_alloy": "Mantle Alloy",
   "chain_quantum_data": "Quantum Data",
@@ -1887,7 +1713,6 @@
   "chain_dark_plasma": "Dark Plasma",
   "chain_raw_ferronit_bulk": "Roh-Ferronit (Bulk)",
   "chain_crytite_gas": "Crytite Gas",
-
   "pe_level": "Stufe",
   "pe_level_short": "Stufe",
   "pe_of": "von",
@@ -2102,7 +1927,6 @@
   "policy_black_market": "Schwarzmarkt toleriert",
   "policy_closed_borders": "Geschlossene Grenzen",
   "policy_automation": "Automatisierungs-Direktive",
-
   "pe_spec_roadmap": "Entwicklungspfad",
   "pe_spec_tier_active": "Aktiv",
   "pe_spec_tier_title_1": "Stufe 1 — Grundidentität",
@@ -2147,7 +1971,6 @@
   "pe_unlock_loyalty_bypass": "Loyalitäts-Mechanik umgangen",
   "pe_unlock_spec_risk": "Erhöhtes Risiko-Event",
   "pe_unlock_generic_mechanic": "Neue Planet-Mechanik",
-
   "pe_spec_tagline_forge_world": "Industriemacht — Massenproduktion und Raffinerien.",
   "pe_spec_tagline_science_nexus": "Forschungswelt — Wissen, Durchbrüche, Experimente.",
   "pe_spec_tagline_fortress_planet": "Festungswelt — Verteidigung und militärische Produktion.",
@@ -2157,7 +1980,6 @@
   "pe_spec_tagline_quantum_observatory": "Quanten-Observatorium — Entdeckungen und Anomalien.",
   "pe_spec_tagline_industrial_megacity": "Industrielle Megacity — Konversion und Massenoutput.",
   "pe_spec_tagline_ai_controlled_world": "KI-regierte Welt — Automatisierung und Kontrolle.",
-
   "pe_spec_identity_forge_world": "Dieser Planet wird zur Schmiede deines Imperiums — Ferronit, Legierungen und Industrie-Events dominieren.",
   "pe_spec_identity_science_nexus": "Dieser Planet wird zum Wissenszentrum — Forschung, Durchbrüche und experimentelle Risiken prägen alles.",
   "pe_spec_identity_fortress_planet": "Dieser Planet wird zur Bastion — Verteidigung und Kristall-Produktion stehen im Mittelpunkt.",
@@ -2167,7 +1989,6 @@
   "pe_spec_identity_quantum_observatory": "Dieser Planet beobachtet das Unbekannte — Entdeckungen und Quanten-Anomalien.",
   "pe_spec_identity_industrial_megacity": "Dieser Planet ist eine Industrie-Megacity — Konversion und Output über alles.",
   "pe_spec_identity_ai_controlled_world": "Dieser Planet wird von Automatisierung regiert — Effizienz gegen Loyalität.",
-
   "pe_spec_t1_forge_world": "Raffinerie-Export und Quantum-Import — industrielle Basis.",
   "pe_spec_t2_forge_world": "Mantel-Legierung — schwere Industrieproduktion.",
   "pe_spec_t3_forge_world": "Pflichtüberstunden-Politik — maximaler Output, höheres Risiko.",
@@ -2195,10 +2016,8 @@
   "pe_spec_t1_ai_controlled_world": "Auto-Konversion — Maschinen übernehmen Produktion.",
   "pe_spec_t2_ai_controlled_world": "Loyalitäts-Bypass — Effizienz ohne Zustimmung.",
   "pe_spec_t3_ai_controlled_world": "KI-Runaway-Risiko — mächtig und gefährlich.",
-
   "pe_spec_tier_up_2": "Spezialisierung auf Stufe 2 ausgebaut",
   "pe_spec_tier_up_3": "Spezialisierung auf Meisterstufe erreicht",
-
   "trait_effect_ferronit_rich_crust": "Schaltet Industrie-Automatisierung frei · +Industrie-Affinität",
   "trait_effect_crytite_veins": "Crytite-Export-Slot · +Crytite-Affinität",
   "trait_effect_unstable_mantle": "Erhöhtes Event-Risiko · Mantel-Ketten möglich",
@@ -2213,7 +2032,6 @@
   "trait_effect_dark_matter_residue": "Experimentelle Forschung · seltene Entdeckungen",
   "trait_effect_quantum_echo_field": "Quanten-Events · Wissenschafts-Bonus",
   "trait_effect_subsurface_vault_hint": "Hinweis auf Tresor-Entdeckung · seltene Events",
-
   "pe_load_error_title": "Planet-Daten nicht verfügbar",
   "pe_load_error_body": "Die Evolution-Daten konnten nicht geladen werden. Bitte Seite neu laden.",
   "pe_reload": "Seite neu laden",
@@ -2233,7 +2051,6 @@
   "pe_archetype_criminal_underworld": "Unterwelt",
   "pe_archetype_industrial_union_state": "Industrie-Union",
   "pe_archetype_isolationists": "Isolationisten",
-
   "pe_reason_ok": "Erfolgreich.",
   "pe_reason_not_owner": "Du besitzt diesen Planeten nicht.",
   "pe_reason_forbidden": "Keine Berechtigung.",
@@ -2264,14 +2081,8 @@
   "reason_research_locked": "Voraussetzungen nicht erfüllt.",
   "reason_already_running": "Diese Forschung läuft bereits.",
   "reason_queue_full": "Forschungs-Warteschlange ist voll.",
-
-  "policy_mandatory_overtime": "Pflichtüberstunden",
-  "policy_research_mandate": "Forschungsmandat",
-  "policy_martial_law": "Kriegsrecht",
   "policy_black_market_tolerated": "Schwarzmarkt toleriert",
-  "policy_closed_borders": "Geschlossene Grenzen",
   "policy_automation_directive": "Automatisierungs-Direktive",
-
   "nav_messages": "Nachrichten",
   "header_planet_label": "Planet",
   "header_planet_switcher_title": "Aktive Kolonie wechseln",
@@ -2318,7 +2129,6 @@
   "messages.error_recipient_not_found": "Empfänger nicht gefunden.",
   "messages.error_recipient_ambiguous": "Mehrere Spieler passen zu diesem Namen. Bitte genauer eingeben.",
   "messages.error_messages_not_ready": "Nachrichtensystem ist noch nicht bereit.",
-
   "combat_report_modal_title": "Kampfbericht",
   "combat_report_close": "Schließen",
   "combat_report_open_full": "Vollständigen Bericht öffnen",
@@ -2364,7 +2174,6 @@
   "combat_report_section_loot": "Geplünderte Fracht",
   "combat_report_fleet_empty": "—",
   "combat_report_loot_none": "Keine Beute",
-
   "spy_report_modal_title": "Spionagebericht",
   "spy_report_open_full": "Vollständigen Spionagebericht öffnen",
   "spy_report_open_btn": "Bericht öffnen",
@@ -2391,7 +2200,6 @@
   "fleet_spy_report_defense_power": "Verteidigungsstärke",
   "fleet_spy_report_shield_power": "Schildstärke",
   "fleet_spy_report_defense_accuracy": "Datenqualität: ~%(pct)s%%",
-
   "expedition_report_modal_title": "Expeditionsbericht",
   "expedition_report_open_full": "Vollständigen Expeditionsbericht öffnen",
   "expedition_report_open_btn": "Bericht öffnen",
@@ -2400,7 +2208,6 @@
   "expedition_report_stat_cargo": "Cargo",
   "expedition_report_stat_delay": "Verzögerung",
   "expedition_report_stat_fleet": "Flotte",
-
   "admin_messages_title": "Nachrichten",
   "admin_messages_hint": "Posteingänge aller Spieler einsehen und Admin-Nachrichten senden.",
   "admin_messages_select_hint": "Nachricht aus der Liste wählen.",
@@ -2414,5 +2221,108 @@
   "admin_messages_send_title": "Admin-Nachricht senden",
   "admin_messages_send_recipient": "Spieler-ID oder Name",
   "admin_messages_send_btn": "Nachricht senden",
-  "admin_messages_send_ok": "Admin-Nachricht gesendet."
+  "admin_messages_send_ok": "Admin-Nachricht gesendet.",
+  "action_cancel": "Abbrechen",
+  "action_queue_upgrade": "Upgrade (anreihen)",
+  "admin_balance_btn_preset_b": "Preset B anwenden",
+  "admin_balance_btn_recalc": "Ranking neu berechnen",
+  "admin_balance_btn_save": "Speichern",
+  "admin_balance_hint": "Pacing, Queues, Score-Gewichte und Tauschhub — nur whitelisted Keys.",
+  "admin_balance_players": "Spieler",
+  "admin_balance_preset_applied": "Preset angewendet.",
+  "admin_balance_queue_note": "3. Forschungs-Slot ab research_lab Level 4 (Code-Regel).",
+  "admin_balance_recalc_ok": "Ranking neu berechnet.",
+  "admin_balance_saved": "Balance-Einstellungen gespeichert.",
+  "admin_balance_saving": "Speichern…",
+  "admin_balance_score_buildings": "Gebäude",
+  "admin_balance_score_fleet": "Flotte",
+  "admin_balance_score_research": "Forschung",
+  "admin_balance_section_queues": "Warteschlangen",
+  "admin_balance_section_scores": "Score-Gewichte",
+  "admin_balance_section_speed": "Geschwindigkeiten",
+  "admin_balance_section_start": "Startressourcen",
+  "admin_balance_title": "Balance",
+  "admin_btn_refresh": "Aktualisieren",
+  "admin_no": "Nein",
+  "admin_request_timeout": "Zeitüberschreitung — Server antwortet nicht.",
+  "admin_support_col_player": "Spieler",
+  "admin_support_col_status": "Status",
+  "admin_support_col_subject": "Betreff",
+  "admin_support_col_updated": "Aktualisiert",
+  "admin_support_empty": "Keine Tickets.",
+  "admin_support_hint": "Alle Spieler-Tickets – antworten und Status setzen.",
+  "admin_support_no_messages": "Keine Nachrichten.",
+  "admin_support_reply_btn": "Antwort senden",
+  "admin_support_reply_empty": "Antwort eingeben.",
+  "admin_support_reply_label": "Antwort an Spieler",
+  "admin_support_reply_ok": "Antwort gesendet.",
+  "admin_support_select_hint": "Ticket aus der Liste wählen.",
+  "admin_support_status_btn": "Status setzen",
+  "admin_support_status_closed": "Geschlossen",
+  "admin_support_status_ok": "Status aktualisiert.",
+  "admin_support_status_open": "Offen",
+  "admin_support_status_progress": "In Bearbeitung",
+  "admin_support_title": "Support-Tickets",
+  "admin_tick_derived_sync": "Derived sync",
+  "admin_yes": "Ja",
+  "build_queue_compact_active": "%(count)s Bauaufträge aktiv",
+  "build_queue_compact_idle": "Keine Bauaufträge",
+  "defense_queue_compact_active": "%(count)s Verteidigungsaufträge aktiv",
+  "defense_queue_compact_idle": "Keine Verteidigungsaufträge",
+  "err_password2_short": "Bitte Passwort wiederholen (min. 8 Zeichen).",
+  "err_password_mismatch": "Passwörter stimmen nicht überein.",
+  "err_password_short": "Passwort ist zu kurz.",
+  "err_username_long": "Benutzername ist zu lang (max. 24 Zeichen).",
+  "err_username_short": "Benutzername ist zu kurz (min. 3 Zeichen).",
+  "err_username_spaces": "Commander-Name darf keine Leerzeichen enthalten.",
+  "fleet_deploy_report": "Stationierung bei %(coords)s (%(target)s) abgeschlossen. Stationiert: %(ships)s. Ressourcen: %(cargo)s.",
+  "fleet_deploy_report_ships_empty": "keine Schiffe",
+  "fleet_deploy_report_subject": "Stationierungsbericht %(coords)s",
+  "fleet_hold_report_body": "Deine Flotte hält Position bei %(coords)s (%(target)s) bis %(until)s.",
+  "fleet_hold_report_subject": "Flotte hält %(coords)s",
+  "fleet_recycle_report": "Recycler bei %(coords)s: %(cargo)s geladen. Flotte kehrt nach %(origin)s zurück.",
+  "fleet_recycle_report_empty": "Recycler bei %(coords)s — kein Trümmerfeld gesammelt. Flotte kehrt nach %(origin)s zurück.",
+  "fleet_recycle_report_subject": "Recycler-Bericht %(coords)s",
+  "fleet_spy_report_defense_empty": "Keine Verteidigungsanlagen erkannt",
+  "fleet_spy_report_defense_total": "Verteidigungseinheiten: %(count)s",
+  "fuel_efficiency": "Brennzellen-Optimierung",
+  "galaxy_debris_field": "Trümmerfeld",
+  "galaxy_legend_debris": "Trümmerfeld",
+  "header_planet_limit": "Planeten",
+  "imprint": "Impressum",
+  "loading": "Lädt…",
+  "login_btn": "Zum Login",
+  "messages_no_subject": "Ohne Betreff",
+  "messages_sender_logistics": "Logistikbericht",
+  "motd": "Nachricht des Tages",
+  "msg_action_forbidden": "Aktion nicht erlaubt.",
+  "msg_job_not_found": "Auftrag nicht gefunden.",
+  "msg_status_refresh_failed": "Seite konnte nicht geladen werden. Bitte erneut versuchen.",
+  "pe_ascension_completed": "Vollendet",
+  "pe_ascension_duration": "Dauer: %(days)s Tage",
+  "pe_ascension_phase": "Phase %(n)s",
+  "pe_ascension_queue_compact_active": "%(count)s Ascension-Aufträge",
+  "pe_ascension_queue_compact_idle": "Keine Ascension-Aufträge",
+  "pe_ascension_ready": "Bereit",
+  "pe_planet_tech_queue_compact_active": "%(count)s Planet-Tech-Aufträge",
+  "pe_planet_tech_queue_compact_idle": "Keine Planet-Tech-Aufträge",
+  "queue_card_status_active": "AKTIV",
+  "queue_card_status_queued": "QUEUE #%(n)s",
+  "research_armor_tech": "Panzerungstechnik",
+  "research_drones_tech": "Drohnenoptimierung",
+  "research_engine_tech": "Kryo-Antriebstechnik",
+  "research_navigation_tech": "Hyperraum-Navigation",
+  "research_queue_compact_active": "%(count)s Forschungen aktiv",
+  "research_queue_compact_idle": "Keine Forschungen aktiv",
+  "research_requirements_met": "Voraussetzungen erfüllt",
+  "research_shield_tech": "Schildtechnologie",
+  "research_weapon_tech": "Waffenentwicklung",
+  "rules": "Regeln",
+  "shipyard_queue_compact_active": "%(count)s Werftaufträge aktiv",
+  "shipyard_queue_compact_idle": "Keine Werftaufträge",
+  "special_nav": "Sondernavigation",
+  "support": "Support",
+  "techtree_empty_buildings": "Keine Gebäude-Daten vorhanden (Tech-Tree Nodes prüfen).",
+  "techtree_empty_research": "Keine Forschungs-Daten vorhanden (Tech-Tree Nodes prüfen).",
+  "wiki_title": "Wiki"
 }
