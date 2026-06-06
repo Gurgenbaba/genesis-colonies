@@ -487,7 +487,7 @@ def test_main_js_gc546d_production_completion_poll_storm_guards():
     assert 'document.getElementById("shipyard-page")?.querySelector(".shipyard-job.shipyard-job-active")' in progress
     assert 'document.getElementById("defense-page")?.querySelector(".shipyard-job.shipyard-job-active")' in progress
     assert "requestProductionCompletionSync" in progress
-    assert "_productionZeroHandled" in progress
+    assert "requestQueueTimerZeroRefresh" in progress
     assert "scheduleShipyardRefreshFromState(true)" not in progress
     assert "scheduleDefenseRefreshFromState(true)" not in progress
 
@@ -653,3 +653,47 @@ def test_main_js_gc548_landscape_visible_on_perf_idle_boot():
     block = css.split("GC-547C")[1][:900]
     assert "gc-has-planet-landscape" in block
     assert "body.gc-perf-idle.gc-has-planet-landscape .gc-bg" in block
+
+
+def test_main_js_gc539_same_type_queue_patch_and_timer_zero():
+    """GC-539: job_id keyed card queues; immediate refresh at 0s."""
+    src = _read("static/main.js")
+
+    assert "function findCardQueueBlockByJobId(cardEl, jobId)" in src
+    assert "function reorderCardQueueBlocks(cardEl)" in src
+    assert "function syncCardQueueOwnerClassesFromBlocks(cardEl, fallbackDomain)" in src
+    assert "function requestQueueTimerZeroRefresh(meta)" in src
+    assert 'GC.refreshGameState("queue_timer_zero")' in src
+    assert "refreshShipyardStateCoalesced(syPage)" in src.split("function requestQueueTimerZeroRefresh(meta)")[1].split("function requestTimerZeroRefresh")[0]
+    assert "QUEUE_TIMER_ZERO_DEBOUNCE_MS = 80" in src
+    assert "function markCardQueueZeroRefresh(block, jobId, finishAt)" in src
+    assert "function isQueueTimerComplete(remaining, finishAt, serverNow)" in src
+    assert "function queueTimerDisplaySeconds(remaining)" in src
+
+    patch_queues = src.split("function patchCardQueuesFromOwnerMap(page, byOwner, listCards, ownerKeyFromCard, findCard)")[1].split("GC.renderCardQueueBlock = function renderCardQueueBlock")[0]
+    assert "list.forEach((job) => GC.renderCardQueueBlock(card, job))" in patch_queues
+    assert "wantedIds.has(blockJobId)" in patch_queues
+    assert "reorderCardQueueBlocks(card)" in patch_queues
+
+    render_card = src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("function _syncBuildQueueLiveState")[0]
+    assert "findCardQueueBlockByJobId(cardEl, jobId)" in render_card
+    assert "dataset.queuePosition" in render_card
+    assert "GC.clearCardQueueBlock(cardEl)" not in render_card.split("if (existing) existing.remove();")[0]
+
+    apply_sy = src.split("function applyShipyardShipCard(card, ship, resources, syLevel, tt)")[1].split("function applyShipyardState(page, data)")[0]
+    assert "renderCardQueueBlock" not in apply_sy
+    assert "clearCardQueueBlock" not in apply_sy
+
+    apply_def = src.split("function applyDefenseUnitCard(page, unit, resources, tt, opts = {})")[1].split("async function refreshDefenseState(page)")[0]
+    assert "renderCardQueueBlock" not in apply_def
+    assert "clearCardQueueBlock" not in apply_def
+
+    clear_block = src.split("GC.clearCardQueueBlock = function clearCardQueueBlock(cardEl)")[1].split("function findCardQueueBlockByJobId")[0]
+    assert 'querySelectorAll("[data-gc-card-queue]")' in clear_block
+
+    can_patch = src.split("function canPatchCardQueueInPlace(existing, queueJob)")[1].split("function syncCardQueueOwnerClasses")[0]
+    assert "jobId !== prevJobId" in can_patch
+    assert "finishAt !== prevFinish" in can_patch
+
+    progress = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
+    assert "requestQueueTimerZeroRefresh" in progress

@@ -150,6 +150,33 @@ def card_queue_job_for_item(
     return dict(rows[0])
 
 
+def card_queue_jobs_for_item(
+    jobs_by_key: Mapping[str, Sequence[Mapping[str, Any]]],
+    owner_key: str,
+) -> List[Dict[str, Any]]:
+    """All card jobs for one owner key (e.g. multiple same-type unit orders)."""
+    rows = jobs_by_key.get(str(owner_key))
+    if not rows:
+        return []
+    return [dict(row) for row in rows]
+
+
+def card_queue_job_identity(job: Mapping[str, Any]) -> str:
+    """Stable patch identity — never type-only."""
+    return ":".join(
+        [
+            str(job.get("owner_type") or ""),
+            str(job.get("owner_key") or ""),
+            str(_safe_int(job.get("job_id"), 0)),
+            str(job.get("status") or ""),
+            str(_safe_int(job.get("queue_position"), 0)),
+            str(int(_safe_float(job.get("start_at")))),
+            str(int(_safe_float(job.get("finish_at")))),
+            str(_safe_int(job.get("target_amount"), 0)),
+        ]
+    )
+
+
 def map_build_queue_to_card_jobs(
     build_queue: Optional[Mapping[str, Any]],
     *,

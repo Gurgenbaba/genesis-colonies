@@ -12,10 +12,14 @@ from game.queue_card import (
     STATUS_ACTIVE,
     STATUS_QUEUED,
     card_queue_job_for_item,
+    card_queue_job_identity,
+    card_queue_jobs_for_item,
     compute_progress_pct,
     group_card_jobs_by_owner_key,
     map_build_queue_to_card_jobs,
+    map_defense_queue_to_card_jobs,
     map_research_queue_to_card_jobs,
+    map_shipyard_queue_to_card_jobs,
     normalize_card_queue_job,
 )
 
@@ -202,3 +206,103 @@ def test_group_and_lookup_by_owner_key():
     assert first is not None
     assert first["status"] == STATUS_ACTIVE
     assert card_queue_job_for_item(grouped, "missing") is None
+
+
+def test_card_queue_jobs_for_item_returns_all_same_owner_jobs():
+    payload = {
+        "queue": [
+            {
+                "id": 10,
+                "ship_key": "hauler",
+                "amount_total": 1,
+                "order_remaining": 60,
+                "order_total_seconds": 60,
+                "finish_at": NOW + 60,
+                "started_at": NOW,
+                "is_active": True,
+            },
+            {
+                "id": 11,
+                "ship_key": "hauler",
+                "amount_total": 1,
+                "order_remaining": 120,
+                "order_total_seconds": 60,
+                "finish_at": NOW + 120,
+                "started_at": NOW + 60,
+                "is_active": False,
+            },
+            {
+                "id": 12,
+                "ship_key": "hauler",
+                "amount_total": 1,
+                "order_remaining": 180,
+                "order_total_seconds": 60,
+                "finish_at": NOW + 180,
+                "started_at": NOW + 120,
+                "is_active": False,
+            },
+        ]
+    }
+    jobs = map_shipyard_queue_to_card_jobs(payload, now=NOW)
+    grouped = group_card_jobs_by_owner_key(jobs)
+    assert len(grouped["hauler"]) == 3
+    all_jobs = card_queue_jobs_for_item(grouped, "hauler")
+    assert len(all_jobs) == 3
+    assert [j["job_id"] for j in all_jobs] == [10, 11, 12]
+    assert all_jobs[0]["status"] == STATUS_ACTIVE
+    assert all_jobs[1]["status"] == STATUS_QUEUED
+    assert all_jobs[0]["remaining_seconds"] < all_jobs[1]["remaining_seconds"] < all_jobs[2]["remaining_seconds"]
+
+
+def test_card_queue_job_identity_is_job_based_not_type_only():
+    job_a = normalize_card_queue_job(
+        owner_type="defense",
+        owner_key="laser_turret",
+        job_id=5,
+        queue_position=1,
+        start_at=NOW,
+        finish_at=NOW + 30,
+        now=NOW,
+        target_amount=1,
+    )
+    job_b = normalize_card_queue_job(
+        owner_type="defense",
+        owner_key="laser_turret",
+        job_id=6,
+        queue_position=2,
+        start_at=NOW + 30,
+        finish_at=NOW + 60,
+        now=NOW,
+        target_amount=1,
+    )
+    assert card_queue_job_identity(job_a) != card_queue_job_identity(job_b)
+    assert ":5:" in card_queue_job_identity(job_a)
+    assert ":6:" in card_queue_job_identity(job_b)
+
+
+def test_defense_same_unit_multiple_jobs_grouped():
+    payload = {
+        "queue": [
+            {
+                "id": 21,
+                "defense_key": "laser_turret",
+                "amount_total": 1,
+                "order_remaining": 40,
+                "order_total_seconds": 40,
+                "finish_at": NOW + 40,
+                "started_at": NOW,
+            },
+            {
+                "id": 22,
+                "defense_key": "laser_turret",
+                "amount_total": 1,
+                "order_remaining": 80,
+                "order_total_seconds": 40,
+                "finish_at": NOW + 80,
+                "started_at": NOW + 40,
+            },
+        ]
+    }
+    jobs = map_defense_queue_to_card_jobs(payload, now=NOW)
+    grouped = group_card_jobs_by_owner_key(jobs)
+    assert len(card_queue_jobs_for_item(grouped, "laser_turret")) == 2

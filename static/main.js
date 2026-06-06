@@ -290,7 +290,8 @@
     const endAt = parseTimerTarget(finishAt);
     if (!endAt) return 0;
     const now = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
-    const fromFinish = Math.max(0, Math.ceil(endAt - now));
+    if (endAt <= now) return 0;
+    const fromFinish = Math.ceil(endAt - now);
     const srv = Number(serverRemaining);
     if (Number.isFinite(srv) && srv >= 0) {
       if (srv <= 0 && fromFinish > 1) return fromFinish;
@@ -299,6 +300,18 @@
       return Math.min(fromFinish, Math.max(0, Math.ceil(srv)));
     }
     return fromFinish;
+  }
+
+  /** Countdown label: floor so 0.9s shows 0s and completion can fire (avoids stuck at 1s). */
+  function queueTimerDisplaySeconds(remaining) {
+    return Math.max(0, Math.floor(Number(remaining) || 0));
+  }
+
+  function isQueueTimerComplete(remaining, finishAt, serverNow) {
+    const finish = parseTimerTarget(finishAt);
+    const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
+    if (finish > 0 && finish <= now) return true;
+    return queueTimerDisplaySeconds(remaining) <= 0;
   }
 
   function movementRemainingSeconds(countdownAt, serverNow, serverRemaining) {
@@ -2629,10 +2642,8 @@
     });
   }
 
-  GC.clearCardQueueBlock = function clearCardQueueBlock(cardEl) {
+  function _stripCardQueueOwnerClasses(cardEl) {
     if (!cardEl) return;
-    const block = cardEl.querySelector("[data-gc-card-queue]");
-    if (block) block.remove();
     cardEl.classList.remove(
       "gc-building-card--in-queue",
       "gc-building-card--queue-active",
@@ -2650,7 +2661,55 @@
       "gc-ascension-card--queue-active",
       "gc-ascension-card--queue-pending"
     );
+  }
+
+  GC.clearCardQueueBlock = function clearCardQueueBlock(cardEl) {
+    if (!cardEl) return;
+    cardEl.querySelectorAll("[data-gc-card-queue]").forEach((block) => block.remove());
+    _stripCardQueueOwnerClasses(cardEl);
   };
+
+  function findCardQueueBlockByJobId(cardEl, jobId) {
+    if (!cardEl) return null;
+    const id = Math.floor(Number(jobId || 0));
+    if (id <= 0) return null;
+    return cardEl.querySelector(`[data-gc-card-queue][data-job-id="${id}"]`);
+  }
+
+  function syncCardQueueOwnerClassesFromBlocks(cardEl, fallbackDomain) {
+    if (!cardEl) return;
+    const blocks = cardEl.querySelectorAll("[data-gc-card-queue]");
+    if (!blocks.length) {
+      _stripCardQueueOwnerClasses(cardEl);
+      return;
+    }
+    const domain =
+      fallbackDomain || String(blocks[0].dataset.timerDomain || "building");
+    const cardPrefix = _cardQueueClassPrefix(domain);
+    const hasActive = Array.from(blocks).some((b) => b.dataset.queueActive === "1");
+    cardEl.classList.add(`${cardPrefix}--in-queue`);
+    cardEl.classList.toggle(`${cardPrefix}--queue-active`, hasActive);
+    cardEl.classList.toggle(`${cardPrefix}--queue-pending`, !hasActive);
+  }
+
+  function reorderCardQueueBlocks(cardEl) {
+    if (!cardEl) return;
+    const blocks = Array.from(cardEl.querySelectorAll("[data-gc-card-queue]"));
+    if (blocks.length < 2) return;
+    blocks.sort((a, b) => {
+      const pa = Math.floor(Number(a.dataset.queuePosition || 0));
+      const pb = Math.floor(Number(b.dataset.queuePosition || 0));
+      if (pa !== pb) return pa - pb;
+      const ja = Math.floor(Number(a.dataset.jobId || 0));
+      const jb = Math.floor(Number(b.dataset.jobId || 0));
+      return ja - jb;
+    });
+    const anchor = cardEl.querySelector(".gc-bld-card-meta, .gc-prog-main");
+    blocks.forEach((block) => {
+      if (anchor) cardEl.insertBefore(block, anchor);
+      else cardEl.appendChild(block);
+    });
+  }
 
   GC.clearBuildingCardQueue = GC.clearCardQueueBlock;
 
@@ -2706,12 +2765,10 @@
     const isActive = status === "active";
     if (wasActive !== isActive) return false;
 
-    const now = getTimerServerNow();
     const finishAt = Math.floor(Number(queueJob.finish_at || 0));
     const prevFinish = parseTimerTarget(existing.dataset.finishAt || 0);
 
     if (!finishAt || finishAt !== prevFinish) return false;
-    if (finishAt <= now) return false;
 
     return true;
   }
@@ -2757,7 +2814,6 @@
 
   function patchCardQueueBlockInPlace(block, cardEl, queueJob, opts) {
     const { domain, timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, opts);
-    syncCardQueueOwnerClasses(cardEl, queueJob, domain);
     const status = String(queueJob.status || "");
     const isActive = status === "active";
     const finishAt = Math.floor(Number(queueJob.finish_at || 0));
@@ -2773,7 +2829,7 @@
     const timerEl = block.querySelector(".gc-card-queue-timer");
     if (timerEl && timerTarget > 0) {
       applyQueueJobTimerAttrs(timerEl, timerTarget, timerKind, refreshOnZero, remaining);
-      const label = formatEta(Math.ceil(remaining));
+      const label = formatEta(queueTimerDisplaySeconds(remaining));
       _setIfChanged(timerEl, label);
     }
 
@@ -2800,7 +2856,7 @@
     return block;
   }
 
-  /** Sync card queue blocks from owner map — clear only cards that lost jobs (preserves timer DOM). */
+  /** Sync card queue blocks from owner map — job_id keyed; supports multiple same-type orders. */
   function patchCardQueuesFromOwnerMap(page, byOwner, listCards, ownerKeyFromCard, findCard) {
     if (!page || !byOwner || typeof byOwner !== "object") return;
     const activeKeys = new Set(Object.keys(byOwner));
@@ -2810,9 +2866,33 @@
     });
     Object.entries(byOwner).forEach(([ownerKey, jobs]) => {
       const card = findCard(page, ownerKey);
-      const job = Array.isArray(jobs) && jobs.length ? jobs[0] : null;
-      if (card && job) GC.renderCardQueueBlock(card, job);
-      else if (card) GC.clearCardQueueBlock(card);
+      if (!card) return;
+      const list = (Array.isArray(jobs) ? jobs : [])
+        .filter((job) => job && typeof job === "object")
+        .slice()
+        .sort((a, b) => {
+          const pa = Math.floor(Number(a.queue_position || 0));
+          const pb = Math.floor(Number(b.queue_position || 0));
+          if (pa !== pb) return pa - pb;
+          return Math.floor(Number(a.job_id || 0)) - Math.floor(Number(b.job_id || 0));
+        });
+      if (!list.length) {
+        GC.clearCardQueueBlock(card);
+        return;
+      }
+      const wantedIds = new Set(
+        list
+          .map((job) => Math.floor(Number(job.job_id || 0)))
+          .filter((id) => id > 0)
+          .map((id) => String(id))
+      );
+      card.querySelectorAll("[data-gc-card-queue]").forEach((block) => {
+        const blockJobId = block.dataset.jobId || "";
+        if (blockJobId && !wantedIds.has(blockJobId)) block.remove();
+      });
+      list.forEach((job) => GC.renderCardQueueBlock(card, job));
+      reorderCardQueueBlocks(card);
+      syncCardQueueOwnerClassesFromBlocks(card, _cardQueueDomain(list[0]));
     });
   }
 
@@ -2822,16 +2902,22 @@
     const options = opts && typeof opts === "object" ? opts : {};
     const domain = _cardQueueDomain(queueJob, options);
     const sig = cardQueueJobSignature(queueJob);
-    const existing = cardEl.querySelector("[data-gc-card-queue]");
+    const jobId = Math.floor(Number(queueJob.job_id || 0));
+    const existing =
+      jobId > 0 ? findCardQueueBlockByJobId(cardEl, jobId) : cardEl.querySelector("[data-gc-card-queue]");
     if (existing && canPatchCardQueueInPlace(existing, queueJob)) {
       existing.dataset.queueSig = sig;
-      return patchCardQueueBlockInPlace(existing, cardEl, queueJob, options);
+      if (String(existing.dataset.queueZeroFiredFor || "").split(":")[0] !== String(jobId)) {
+        delete existing.dataset.queueZeroFiredFor;
+      }
+      patchCardQueueBlockInPlace(existing, cardEl, queueJob, options);
+      syncCardQueueOwnerClassesFromBlocks(cardEl, domain);
+      return existing;
     }
 
     const { timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, options);
-    const cardPrefix = _cardQueueClassPrefix(domain);
 
-    GC.clearCardQueueBlock(cardEl);
+    if (existing) existing.remove();
 
     const status = String(queueJob.status || "");
     const position = Math.max(1, Math.floor(Number(queueJob.queue_position || 1)));
@@ -2840,7 +2926,6 @@
     const finishAt = Math.floor(Number(queueJob.finish_at || 0));
     const startAt = Math.floor(Number(queueJob.start_at || 0));
     const totalSeconds = Math.max(1, Math.floor(Number(queueJob.duration_seconds || 1)));
-    const jobId = Math.floor(Number(queueJob.job_id || 0));
     const isActive = status === "active";
     const targetLevel = Math.floor(Number(queueJob.target_level || 0));
     const currentLevel = Math.max(
@@ -2848,16 +2933,16 @@
       Math.floor(Number(queueJob.current_level ?? (targetLevel > 0 ? targetLevel - 1 : 0)))
     );
 
-    cardEl.classList.add(`${cardPrefix}--in-queue`);
-    cardEl.classList.add(isActive ? `${cardPrefix}--queue-active` : `${cardPrefix}--queue-pending`);
-
     const block = document.createElement("div");
     block.className = `gc-card-queue-block gc-card-queue-block--${domain} gc-card-queue-block--${isActive ? "active" : "queued"}`;
     block.dataset.gcCardQueue = "1";
     block.dataset.queueSig = sig;
     block.dataset.queueActive = isActive ? "1" : "0";
     block.dataset.timerDomain = domain;
+    block.dataset.queuePosition = String(position);
     if (jobId > 0) block.dataset.jobId = String(jobId);
+    delete block.dataset.queueZeroFiredFor;
+    delete block.dataset.queueZeroFiredAt;
     if (startAt > 0) block.dataset.startAt = String(startAt);
     if (finishAt > 0) block.dataset.finishAt = String(finishAt);
     block.dataset.totalSeconds = String(totalSeconds);
@@ -2938,7 +3023,7 @@
         resolveQueueJobRemaining(queueJob)
       );
       applyQueueJobTimerAttrs(timerEl, waitTarget, timerKind, refreshOnZero, displayRemaining);
-      timerEl.textContent = formatEta(Math.ceil(displayRemaining));
+      timerEl.textContent = formatEta(queueTimerDisplaySeconds(displayRemaining));
     } else if (!isActive) {
       timerEl.textContent = formatEta(Math.max(0, Math.floor(Number(queueJob.remaining_seconds || 0))));
     }
@@ -2989,6 +3074,7 @@
     if (anchor) cardEl.insertBefore(block, anchor);
     else cardEl.appendChild(block);
 
+    syncCardQueueOwnerClassesFromBlocks(cardEl, domain);
     return block;
   };
 
@@ -3495,18 +3581,72 @@
     }, PRODUCTION_COMPLETION_DEBOUNCE_MS);
   }
 
-  function requestTimerZeroRefresh(refreshKind, timerKind) {
+  function requestQueueTimerZeroRefresh(meta) {
+    if (!shouldRunGameLoop() || _authLoopAborted) return;
+    const o = meta && typeof meta === "object" ? meta : {};
+    const domain = String(o.domain || "");
+    const jobId = Math.floor(Number(o.jobId || 0));
+    const finishAt = Math.floor(Number(o.finishAt || 0));
+    const key = jobId > 0 ? `${domain}:${jobId}:${finishAt}` : `${domain}:panel:${finishAt || 0}`;
+    if (_queueTimerZeroRefreshKeys.has(key)) return;
+    _queueTimerZeroRefreshKeys.add(key);
+    if (_queueTimerZeroPendingDomains && domain) _queueTimerZeroPendingDomains.add(domain);
+    if (_queueTimerZeroRefreshTimer != null) return;
+    _queueTimerZeroRefreshTimer = GC.setSafeTimeout(() => {
+      _queueTimerZeroRefreshTimer = null;
+      const domains = _queueTimerZeroPendingDomains
+        ? new Set(_queueTimerZeroPendingDomains)
+        : new Set();
+      _queueTimerZeroPendingDomains = new Set();
+      const keysSnapshot = Array.from(_queueTimerZeroRefreshKeys);
+      if (typeof GC.refreshGameState !== "function") {
+        keysSnapshot.forEach((k) => _queueTimerZeroRefreshKeys.delete(k));
+        return;
+      }
+      Promise.resolve(GC.refreshGameState("queue_timer_zero")).finally(() => {
+        if (domains.has("shipyard")) {
+          const syPage = document.getElementById("shipyard-page");
+          if (syPage?.dataset.ready === "1") refreshShipyardStateCoalesced(syPage);
+        }
+        if (domains.has("defense")) {
+          const defPage = document.getElementById("defense-page");
+          if (defPage?.dataset.ready === "1") refreshDefenseStateCoalesced(defPage);
+        }
+        GC.setSafeTimeout(() => {
+          keysSnapshot.forEach((k) => _queueTimerZeroRefreshKeys.delete(k));
+        }, 1500);
+      });
+    }, QUEUE_TIMER_ZERO_DEBOUNCE_MS);
+  }
+
+  function markCardQueueZeroRefresh(block, jobId, finishAt) {
+    if (!block) return false;
+    const fireKey = `${Math.floor(Number(jobId || 0))}:${Math.floor(Number(finishAt || 0))}`;
+    const prev = block.dataset.queueZeroFiredFor || "";
+    const prevAt = Number(block.dataset.queueZeroFiredAt || 0);
+    if (prev === fireKey && Date.now() - prevAt < 2500) return false;
+    block.dataset.queueZeroFiredFor = fireKey;
+    block.dataset.queueZeroFiredAt = String(Date.now());
+    return true;
+  }
+
+  function requestTimerZeroRefresh(refreshKind, timerKind, opts) {
     const kind = String(refreshKind || "game-state");
+    const o = opts && typeof opts === "object" ? opts : {};
     if (kind === "fleet") {
       requestMovementCountdownRefresh("fleet");
       return;
     }
-    if (kind === "shipyard") {
-      requestProductionCompletionSync({ gameState: true, shipyard: true });
-      return;
-    }
-    if (kind === "defense") {
-      requestProductionCompletionSync({ gameState: true });
+    if (kind === "shipyard" || kind === "defense") {
+      if (o.jobId != null || o.finishAt != null || o.domain) {
+        requestQueueTimerZeroRefresh({
+          domain: o.domain || kind,
+          jobId: o.jobId,
+          finishAt: o.finishAt,
+        });
+        return;
+      }
+      requestQueueTimerZeroRefresh({ domain: kind, jobId: 0, finishAt: 0 });
       return;
     }
     const actKey = timerKind === "research" ? "research" : "buildings";
@@ -3520,6 +3660,10 @@
   let _queuedChainRefreshReason = null;
   const _timerZeroRefreshLastAt = new Map();
   const TIMER_ZERO_REFRESH_MIN_MS = 900;
+  const _queueTimerZeroRefreshKeys = new Set();
+  let _queueTimerZeroRefreshTimer = null;
+  let _queueTimerZeroPendingDomains = new Set();
+  const QUEUE_TIMER_ZERO_DEBOUNCE_MS = 80;
 
   const MOVEMENT_EXPIRY_REFRESH_MS = 900;
   const MOVEMENT_EXPIRY_REFRESH_MS_SHORT = 200;
@@ -3681,18 +3825,29 @@
       if (!target) return;
       const kind = el.dataset.timerKind || inferTimerKind(el);
       const remaining = timerRemainingSeconds(el, now);
-      _setIfChanged(el, formatTimerDisplay(remaining, kind));
+      const cardBlock = el.closest("[data-gc-card-queue]");
+      const cardDomain = cardBlock ? String(cardBlock.dataset.timerDomain || "") : "";
+      const isProductionCardTimer =
+        cardBlock && (kind === "shipyard" || kind === "defense" || cardDomain === "shipyard" || cardDomain === "defense");
+      if (isProductionCardTimer) {
+        _setIfChanged(el, formatEta(queueTimerDisplaySeconds(remaining)));
+      } else {
+        _setIfChanged(el, formatTimerDisplay(remaining, kind));
+      }
       const scope = el.dataset.countdownScope || "";
       const key = _movementCountdownKey(el);
       const isFleetTimer = scope === "fleet" || kind === "fleet";
       const isOverviewFleet = scope === "overview" && kind === "fleet";
-      if (remaining <= 0) {
+      const cardFinish = cardBlock ? parseTimerTarget(cardBlock.dataset.finishAt || target) : 0;
+      const refreshKind = el.dataset.refreshOnZero || inferRefreshOnZero(el, kind);
+      const queueTimerDone =
+        isProductionCardTimer && isQueueTimerComplete(remaining, cardFinish, now);
+      if (remaining <= 0 || queueTimerDone) {
         if (isFleetTimer) {
           fleetExpired = true;
         } else if (isOverviewFleet) {
           overviewExpired = true;
         } else if (scope === "overview" && kind === "queue") {
-          const refreshKind = el.dataset.refreshOnZero || "game-state";
           const actRow = el.closest("[data-activity-key]");
           const actKey = actRow?.dataset?.activityKey || "";
           const zeroKey = `${refreshKind}:${actKey}:${key}`;
@@ -3704,16 +3859,23 @@
             else if (actKey === "build") requestFinishRefresh("buildings");
             else if (typeof GC.refreshGameState === "function") GC.refreshGameState("timer_done");
           }
-        } else {
-          const refreshKind = el.dataset.refreshOnZero || inferRefreshOnZero(el, kind);
-          if (refreshKind && !_timerZeroAlreadyFired(el, target)) {
-            const zeroKey = `${refreshKind}:${key}`;
-            const lastAt = _timerZeroRefreshLastAt.get(zeroKey) || 0;
-            if (Date.now() - lastAt >= TIMER_ZERO_REFRESH_MIN_MS) {
-              _timerZeroRefreshLastAt.set(zeroKey, Date.now());
-              _markTimerZeroFired(el, target);
-              requestTimerZeroRefresh(refreshKind, kind);
-            }
+        } else if (queueTimerDone && cardBlock) {
+          const jobId = Math.floor(Number(cardBlock.dataset.jobId || 0));
+          const finishAt = cardFinish || target;
+          if (markCardQueueZeroRefresh(cardBlock, jobId, finishAt)) {
+            requestQueueTimerZeroRefresh({
+              domain: cardDomain || refreshKind || kind,
+              jobId,
+              finishAt,
+            });
+          }
+        } else if (remaining <= 0 && refreshKind && !_timerZeroAlreadyFired(el, target)) {
+          const zeroKey = `${refreshKind}:${key}`;
+          const lastAt = _timerZeroRefreshLastAt.get(zeroKey) || 0;
+          if (Date.now() - lastAt >= TIMER_ZERO_REFRESH_MIN_MS) {
+            _timerZeroRefreshLastAt.set(zeroKey, Date.now());
+            _markTimerZeroFired(el, target);
+            requestTimerZeroRefresh(refreshKind, kind);
           }
         }
       } else {
@@ -3816,35 +3978,34 @@
       const barEl = block.querySelector(".gc-card-queue-bar");
       if (timerEl) {
         applyQueueJobTimerAttrs(timerEl, finish, timerKind, refreshOnZero, remaining);
-        _setIfChanged(timerEl, formatEta(Math.ceil(remaining)));
+        _setIfChanged(timerEl, formatEta(queueTimerDisplaySeconds(remaining)));
       }
       _applyProgressFill(fillEl, pct);
       if (barEl) barEl.setAttribute("aria-valuenow", String(Math.max(0, Math.min(100, Math.round(pct)))));
-      if (remaining <= 0) {
-        const zeroKey = `${domain}-card:${finish}:${block.dataset.jobId || ""}`;
+      if (isQueueTimerComplete(remaining, finish, serverNowTs)) {
+        const jobId = Math.floor(Number(block.dataset.jobId || 0));
         if (domain === "research") {
+          const zeroKey = `research-card:${finish}:${jobId}`;
           if (_buildZeroHandled !== zeroKey) {
             _buildZeroHandled = zeroKey;
             requestFinishRefresh("research");
           }
-        } else if (domain === "shipyard") {
-          if (_productionZeroHandled.shipyard !== zeroKey) {
-            _productionZeroHandled.shipyard = zeroKey;
-            requestProductionCompletionSync({ gameState: true, shipyard: true });
-          }
-        } else if (domain === "defense") {
-          if (_productionZeroHandled.defense !== zeroKey) {
-            _productionZeroHandled.defense = zeroKey;
-            requestProductionCompletionSync({ gameState: true, defense: true });
+        } else if (domain === "shipyard" || domain === "defense") {
+          if (markCardQueueZeroRefresh(block, jobId, finish)) {
+            requestQueueTimerZeroRefresh({ domain, jobId, finishAt: finish });
           }
         } else if (domain === "planet_research" || domain === "ascension") {
+          const zeroKey = `${domain}-card:${finish}:${jobId}`;
           if (_buildZeroHandled !== zeroKey) {
             _buildZeroHandled = zeroKey;
             requestFinishRefresh("planet_evolution");
           }
-        } else if (_buildZeroHandled !== zeroKey) {
-          _buildZeroHandled = zeroKey;
-          requestFinishRefresh("buildings");
+        } else {
+          const zeroKey = `build-card:${finish}:${jobId}`;
+          if (_buildZeroHandled !== zeroKey) {
+            _buildZeroHandled = zeroKey;
+            requestFinishRefresh("buildings");
+          }
         }
       }
     });
@@ -3885,7 +4046,7 @@
       );
       assignMonotonicServerRemaining(block, remaining, target);
       applyQueueJobTimerAttrs(timerEl, target, timerKind, refreshOnZero, remaining);
-      _setIfChanged(timerEl, formatEta(Math.ceil(remaining)));
+      _setIfChanged(timerEl, formatEta(queueTimerDisplaySeconds(remaining)));
     });
 
     const researchActive = document.querySelector(".research-job.research-job-active");
@@ -3942,22 +4103,25 @@
         const fillEl = document.getElementById("shipyard-bar-fill-live");
         if (etaEl) {
           applyQueueJobTimerAttrs(etaEl, orderFinish, "shipyard", "shipyard", orderRemaining);
-          _setIfChanged(etaEl, formatEta(Math.ceil(orderRemaining)));
+          _setIfChanged(etaEl, formatEta(queueTimerDisplaySeconds(orderRemaining)));
         }
         _applyProgressFill(fillEl, pct);
         const subEta = document.getElementById("shipyard-queue-subtitle-eta");
-        if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(orderRemaining)));
+        if (subEta) _setIfChanged(subEta, formatEta(queueTimerDisplaySeconds(orderRemaining)));
         if (nextUnitFinish > 0 && nextUnitFinish <= serverNowTs) {
           const unitKey = `${shipyardActive.dataset.queueJobId || ""}:${nextUnitFinish}`;
           if (_shipyardUnitFinishKey !== unitKey) {
             _shipyardUnitFinishKey = unitKey;
             requestProductionCompletionSync({ gameState: true, shipyard: true });
           }
-        } else if (orderRemaining <= 0) {
-          const zeroKey = `shipyard:${orderFinish}`;
-          if (_productionZeroHandled.shipyard !== zeroKey) {
-            _productionZeroHandled.shipyard = zeroKey;
-            requestProductionCompletionSync({ gameState: true, shipyard: true });
+        } else if (isQueueTimerComplete(orderRemaining, orderFinish, serverNowTs)) {
+          const jobId = Math.floor(Number(shipyardActive.dataset.queueJobId || 0));
+          if (markCardQueueZeroRefresh(shipyardActive, jobId, orderFinish)) {
+            requestQueueTimerZeroRefresh({
+              domain: "shipyard",
+              jobId,
+              finishAt: orderFinish,
+            });
           }
         }
       }
@@ -3985,22 +4149,25 @@
         const fillEl = document.getElementById("defense-bar-fill-live");
         if (etaEl) {
           applyQueueJobTimerAttrs(etaEl, orderFinish, "defense", "defense", orderRemaining);
-          _setIfChanged(etaEl, formatEta(Math.ceil(orderRemaining)));
+          _setIfChanged(etaEl, formatEta(queueTimerDisplaySeconds(orderRemaining)));
         }
         _applyProgressFill(fillEl, pct);
         const subEta = document.getElementById("defense-queue-subtitle-eta");
-        if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(orderRemaining)));
+        if (subEta) _setIfChanged(subEta, formatEta(queueTimerDisplaySeconds(orderRemaining)));
         if (nextUnitFinish > 0 && nextUnitFinish <= serverNowTs) {
           const unitKey = `${defenseActive.dataset.queueJobId || ""}:${nextUnitFinish}`;
           if (_defenseUnitFinishKey !== unitKey) {
             _defenseUnitFinishKey = unitKey;
             requestProductionCompletionSync({ gameState: true });
           }
-        } else if (orderRemaining <= 0) {
-          const zeroKey = `defense:${orderFinish}`;
-          if (_productionZeroHandled.defense !== zeroKey) {
-            _productionZeroHandled.defense = zeroKey;
-            requestProductionCompletionSync({ gameState: true });
+        } else if (isQueueTimerComplete(orderRemaining, orderFinish, serverNowTs)) {
+          const jobId = Math.floor(Number(defenseActive.dataset.queueJobId || 0));
+          if (markCardQueueZeroRefresh(defenseActive, jobId, orderFinish)) {
+            requestQueueTimerZeroRefresh({
+              domain: "defense",
+              jobId,
+              finishAt: orderFinish,
+            });
           }
         }
       }
@@ -4572,6 +4739,7 @@
     const onShipyard = document.getElementById("shipyard-page")?.dataset.ready === "1";
     const completionReason =
       reasonStr === "timer_done"
+      || reasonStr === "queue_timer_zero"
       || reasonStr.endsWith("_finished")
       || reasonStr === "shipyard_build"
       || reasonStr === "shipyard_cancel"
@@ -4907,6 +5075,7 @@
       reasonStr.endsWith("_finished")
       || reasonStr === "fleet_countdown_expired"
       || reasonStr === "timer_done"
+      || reasonStr === "queue_timer_zero"
     );
   }
 
@@ -7256,8 +7425,8 @@
       const count = summary?.count ?? (queueList?.length ?? 0);
       const items = (queueList || [])
         .map(
-          (j) =>
-            `${j.id}:${j.units_delivered ?? 0}:${j.amount_remaining ?? j.amount}:${j.next_finish_at || j.finish_at || 0}`
+          (j, idx) =>
+            `${j.id}:${j.queue_position ?? idx + 1}:${j.units_delivered ?? 0}:${j.amount_remaining ?? j.amount}:${j.next_finish_at || j.finish_at || 0}`
         )
         .join("|");
       return `${count}|${items}`;
@@ -7584,9 +7753,6 @@
       const text = fmtNumber(Number(ship.owned_count) || 0);
       if (stockEl.textContent !== text) stockEl.textContent = text;
     }
-
-    if (ship.queue_job) GC.renderCardQueueBlock(card, ship.queue_job);
-    else GC.clearCardQueueBlock(card);
   }
 
   function applyShipyardState(page, data) {
@@ -7875,8 +8041,8 @@
       const count = summary?.count ?? (queueList?.length ?? 0);
       const items = (queueList || [])
         .map(
-          (j) =>
-            `${j.id}:${j.units_delivered ?? 0}:${j.amount_remaining ?? j.amount}:${j.next_finish_at || j.finish_at || 0}`
+          (j, idx) =>
+            `${j.id}:${j.queue_position ?? idx + 1}:${j.units_delivered ?? 0}:${j.amount_remaining ?? j.amount}:${j.next_finish_at || j.finish_at || 0}`
         )
         .join("|");
       return `${count}|${items}`;
@@ -8083,9 +8249,6 @@
         fmtNumber(unit.build_seconds)
       );
     }
-
-    if (unit.queue_job) GC.renderCardQueueBlock(card, unit.queue_job);
-    else GC.clearCardQueueBlock(card);
   }
 
   async function refreshDefenseState(page) {
