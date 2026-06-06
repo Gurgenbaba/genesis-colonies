@@ -300,8 +300,8 @@ def test_main_js_gc804_research_timer_pjax_safe():
     bootstrap = src.split("function bootstrapServerTimeFromDom()")[1].split("function getApproxServerNow()")[0]
     assert "TIME.serverNow && TIME.clientPerfAt" in bootstrap
     assert "function queueJobRemainingSeconds(" in src
-    assert "data-server-remaining" in src.split("function renderResearchQueue")[1].split("function _applyProgressFill")[0]
-    assert "_syncResearchQueueLiveFromServer" in src
+    assert "assignMonotonicServerRemaining" in src.split("function patchCardQueueBlockInPlace")[1].split("GC.renderCardQueueBlock = function")[0]
+    assert "_syncResearchQueueLiveState" in src
     set_time = src.split("function setServerTime(serverTimeSec)")[1].split("function queueJobRemainingSeconds")[0]
     assert "v < approx - 2" in set_time
     research_tick = src.split("const researchActive = document.querySelector(\".research-job.research-job-active\")")[1].split("const shipyardActive")[0]
@@ -375,10 +375,11 @@ def test_main_js_gc541_queue_timer_hotfix():
     assert 'data-timer-target' in research_partial
     shipyard_partial = _read("templates/partials/shipyard_queue.html")
     assert 'data-timer-target' in shipyard_partial
-    render_build = src.split("function renderBuildQueue(buildQueueRaw)")[1].split("function _researchQueueSignature")[0]
-    assert "data-timer-target" in render_build
+    render_card_queue = src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("function _syncBuildQueueLiveState")[0]
+    assert "applyQueueJobTimerAttrs" in render_card_queue
+    assert "dataset.queueSig" in render_card_queue
     render_research = src.split("function renderResearchQueue(researchRaw)")[1].split("function _applyProgressFill")[0]
-    assert "data-timer-target" in render_research
+    assert "GC.startProgressTicker();" in render_research
     update_all = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
     assert "parseTimerTarget" in update_all
     assert "queueJobRemainingSeconds" in update_all.split("const buildActive")[1].split("const researchActive")[0]
@@ -431,6 +432,13 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     progress = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
     assert "RESEARCHQ.active.finishTime" in progress
     assert "SHIPYARDQ.active.finishTime" in progress
+    assert "DEFENSEQ.active.finishTime" in progress
+    assert "assignMonotonicServerRemaining(defenseActive" in progress
+    patch_queues = src.split("function patchCardQueuesFromOwnerMap(page, byOwner, listCards, ownerKeyFromCard, findCard)")[1].split("GC.renderCardQueueBlock = function renderCardQueueBlock")[0]
+    assert "if (key && !activeKeys.has(key)) GC.clearCardQueueBlock(card)" in patch_queues
+    patch_sy = src.split("function patchShipyardCardQueues(page, queueData)")[1].split("function shipyardIconUrl")[0]
+    assert "patchCardQueuesFromOwnerMap" in patch_sy
+    assert "GC.clearCardQueueBlock(card);" not in patch_sy.split("patchCardQueuesFromOwnerMap")[0]
 
 
 def test_main_js_gc546d_production_completion_poll_storm_guards():

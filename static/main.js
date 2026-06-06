@@ -171,6 +171,13 @@
     clientPerfAt: 0,     // performance.now() at sync
   };
 
+  function forceServerTimeSync(serverTimeSec) {
+    const v = Number(serverTimeSec);
+    if (!Number.isFinite(v) || v <= 0) return;
+    TIME.serverNow = v;
+    TIME.clientPerfAt = performance.now();
+  }
+
   function setServerTime(serverTimeSec) {
     const v = Number(serverTimeSec);
     if (!Number.isFinite(v) || v <= 0) return;
@@ -180,8 +187,7 @@
       // GC-541: same poll snapshot must not reset perf anchor every tick
       if (Math.abs(v - approx) < 0.5) return;
     }
-    TIME.serverNow = v;
-    TIME.clientPerfAt = performance.now();
+    forceServerTimeSync(v);
   }
 
   /** Normalize unix seconds, unix ms, or ISO finish timestamps. */
@@ -235,6 +241,25 @@
     return Number.isFinite(n) && n >= 0 ? Math.ceil(n) : 0;
   }
 
+  function assignMonotonicServerRemaining(el, remaining, target) {
+    if (!el) return;
+    if (!Number.isFinite(remaining) || remaining < 0) {
+      delete el.dataset.serverRemaining;
+      return;
+    }
+    const next = Math.ceil(remaining);
+    const prev = Number(el.dataset.serverRemaining);
+    const prevTarget = parseTimerTarget(el.dataset.timerTarget || el.dataset.countdownAt || 0);
+    const targetInt = parseTimerTarget(target || 0);
+    if (targetInt > 0 && prevTarget > 0 && targetInt !== prevTarget) {
+      el.dataset.serverRemaining = String(next);
+      return;
+    }
+    if (!Number.isFinite(prev) || next <= prev) {
+      el.dataset.serverRemaining = String(next);
+    }
+  }
+
   function applyQueueJobTimerAttrs(el, finishTime, kind, refreshOnZero, remaining) {
     if (!el || !finishTime) return;
     const target = parseTimerTarget(finishTime);
@@ -247,7 +272,7 @@
       delete el.dataset.refreshFiredAt;
     }
     if (Number.isFinite(remaining) && remaining >= 0) {
-      el.dataset.serverRemaining = String(Math.ceil(remaining));
+      assignMonotonicServerRemaining(el, remaining, target);
     } else {
       delete el.dataset.serverRemaining;
     }
@@ -261,6 +286,8 @@
     const srv = Number(serverRemaining);
     if (Number.isFinite(srv) && srv >= 0) {
       if (srv <= 0 && fromFinish > 1) return fromFinish;
+      // Ignore stale poll snapshots that still carry the full duration.
+      if (srv > fromFinish + 1) return fromFinish;
       return Math.min(fromFinish, Math.max(0, Math.ceil(srv)));
     }
     return fromFinish;
@@ -275,6 +302,18 @@
     if (!raw) return;
     if (TIME.serverNow && TIME.clientPerfAt) return;
     setServerTime(raw);
+  }
+
+  function resyncServerTimeFromDom(force) {
+    const raw = document.body?.dataset?.serverTime;
+    if (!raw) return;
+    const v = Number(raw);
+    if (!Number.isFinite(v) || v <= 0) return;
+    if (force) {
+      forceServerTimeSync(v);
+      return;
+    }
+    bootstrapServerTimeFromDom();
   }
 
   function getApproxServerNow() {
@@ -1160,7 +1199,7 @@
     _statusPollErrorLogged = false;
 
     const afterInit = async () => {
-      bootstrapServerTimeFromDom();
+      resyncServerTimeFromDom(true);
       if (!skipGameState && typeof GC.refreshGameState === "function") {
         await GC.refreshGameState("page_init");
       } else if (skipGameState) {
@@ -1949,7 +1988,7 @@
     };
 
     const activitySignature = (acts) => (acts || []).map((act) =>
-      `${act.key}:${act.state}:${act.countdown_at || act.finish_at || 0}:${act.phase || ""}:${act.status_label || ""}:${act.remaining ?? ""}:${act.label_key || ""}:${act.summary || ""}`
+      `${act.key}:${act.state}:${act.countdown_at || act.finish_at || 0}:${act.phase || ""}:${act.status_label || ""}:${act.label_key || ""}:${act.summary || ""}`
     ).join("|");
 
     const renderActivities = () => {
@@ -1995,13 +2034,17 @@
             etaEl.dataset.countdownFormat = act.key.startsWith("fleet_") ? "fleet" : "eta";
             etaEl.dataset.countdownKey = `${mvId}:${phase}:${endAt}`;
             if (act.key.startsWith("fleet_") && Number.isFinite(Number(act.remaining))) {
-              etaEl.dataset.serverRemaining = String(Math.max(0, Math.ceil(Number(act.remaining))));
+              assignMonotonicServerRemaining(
+                etaEl,
+                Math.max(0, Math.ceil(Number(act.remaining))),
+                endAt
+              );
             } else {
               delete etaEl.dataset.serverRemaining;
             }
             const rem = act.key.startsWith("fleet_")
-              ? movementRemainingSeconds(endAt, getApproxServerNow(), act.remaining)
-              : Math.max(0, Math.ceil(endAt - getApproxServerNow()));
+              ? movementRemainingSeconds(endAt, getTimerServerNow(), act.remaining)
+              : Math.max(0, Math.ceil(endAt - getTimerServerNow()));
             etaEl.textContent = act.key.startsWith("fleet_")
               ? formatCountdownRemain(rem)
               : formatEta(rem);
@@ -2063,13 +2106,17 @@
             etaEl.dataset.countdownFormat = act.key.startsWith("fleet_") ? "fleet" : "eta";
             etaEl.dataset.countdownKey = `${mvId}:${phase}:${endAt}`;
             if (act.key.startsWith("fleet_") && Number.isFinite(Number(act.remaining))) {
-              etaEl.dataset.serverRemaining = String(Math.max(0, Math.ceil(Number(act.remaining))));
+              assignMonotonicServerRemaining(
+                etaEl,
+                Math.max(0, Math.ceil(Number(act.remaining))),
+                endAt
+              );
             } else {
               delete etaEl.dataset.serverRemaining;
             }
             const rem = act.key.startsWith("fleet_")
-              ? movementRemainingSeconds(endAt, getApproxServerNow(), act.remaining)
-              : Math.max(0, Math.ceil(endAt - getApproxServerNow()));
+              ? movementRemainingSeconds(endAt, getTimerServerNow(), act.remaining)
+              : Math.max(0, Math.ceil(endAt - getTimerServerNow()));
             _setIfChanged(
               etaEl,
               act.key.startsWith("fleet_") ? formatCountdownRemain(rem) : formatEta(rem)
@@ -2620,9 +2667,20 @@
    * GC-536B/C — queue status inside building/research cards.
    * Safe DOM: createElement + textContent (+ progress width style only).
    */
-  GC.renderCardQueueBlock = function renderCardQueueBlock(cardEl, queueJob, opts) {
-    if (!cardEl || !queueJob || typeof queueJob !== "object") return null;
+  function cardQueueJobSignature(queueJob) {
+    if (!queueJob || typeof queueJob !== "object") return "";
+    return [
+      queueJob.owner_type || "",
+      queueJob.owner_key || "",
+      queueJob.job_id || 0,
+      queueJob.status || "",
+      queueJob.queue_position || 0,
+      Math.floor(Number(queueJob.finish_at || 0)),
+      Math.floor(Number(queueJob.start_at || 0)),
+    ].join(":");
+  }
 
+  function _cardQueueTimerMeta(queueJob, opts) {
     const options = opts && typeof opts === "object" ? opts : {};
     const domain = _cardQueueDomain(queueJob, options);
     const timerKind = String(
@@ -2649,6 +2707,84 @@
             ? "planet_evolution"
             : "game-state")
     );
+    return { domain, timerKind, refreshOnZero };
+  }
+
+  function patchCardQueueBlockInPlace(block, cardEl, queueJob, opts) {
+    const { domain, timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, opts);
+    const status = String(queueJob.status || "");
+    const isActive = status === "active";
+    const finishAt = Math.floor(Number(queueJob.finish_at || 0));
+    const startAt = Math.floor(Number(queueJob.start_at || 0));
+    const totalSeconds = Math.max(1, Math.floor(Number(queueJob.duration_seconds || block.dataset.totalSeconds || 1)));
+    const now = getTimerServerNow();
+    const timerTarget = isActive ? finishAt : startAt;
+    const remaining = timerTarget > 0
+      ? queueJobRemainingSeconds(timerTarget, now, resolveQueueJobRemaining(queueJob))
+      : Math.max(0, Math.floor(Number(queueJob.remaining_seconds || 0)));
+    const progressPct = Math.max(0, Math.min(100, Math.floor(Number(queueJob.progress_pct || 0))));
+
+    const timerEl = block.querySelector(".gc-card-queue-timer");
+    if (timerEl && timerTarget > 0) {
+      applyQueueJobTimerAttrs(timerEl, timerTarget, timerKind, refreshOnZero, remaining);
+      const label = isActive
+        ? formatEta(Math.ceil(remaining))
+        : tf(
+          "queue_card_starts_in",
+          { time: formatEta(Math.ceil(remaining)) },
+          `Startet in ${formatEta(Math.ceil(remaining))}`
+        );
+      _setIfChanged(timerEl, label);
+    }
+
+    const statusEl = block.querySelector(".gc-card-queue-status");
+    if (statusEl) {
+      const position = Math.max(1, Math.floor(Number(queueJob.queue_position || 1)));
+      const statusLabel = isActive
+        ? t("queue_card_status_active", "AKTIV")
+        : tf("queue_card_status_queued", { n: position }, `QUEUE #${position}`);
+      _setIfChanged(statusEl, statusLabel);
+    }
+
+    if (isActive) {
+      assignMonotonicServerRemaining(block, remaining, finishAt);
+      const pct = totalSeconds > 0 ? 100 * (1 - remaining / totalSeconds) : progressPct;
+      const fillEl = block.querySelector(".gc-card-queue-bar-fill");
+      const barEl = block.querySelector(".gc-card-queue-bar");
+      _applyProgressFill(fillEl, pct);
+      if (barEl) barEl.setAttribute("aria-valuenow", String(Math.max(0, Math.min(100, Math.round(pct)))));
+    }
+
+    return block;
+  }
+
+  /** Sync card queue blocks from owner map — clear only cards that lost jobs (preserves timer DOM). */
+  function patchCardQueuesFromOwnerMap(page, byOwner, listCards, ownerKeyFromCard, findCard) {
+    if (!page || !byOwner || typeof byOwner !== "object") return;
+    const activeKeys = new Set(Object.keys(byOwner));
+    listCards(page).forEach((card) => {
+      const key = ownerKeyFromCard(card);
+      if (key && !activeKeys.has(key)) GC.clearCardQueueBlock(card);
+    });
+    Object.entries(byOwner).forEach(([ownerKey, jobs]) => {
+      const card = findCard(page, ownerKey);
+      const job = Array.isArray(jobs) && jobs.length ? jobs[0] : null;
+      if (card && job) GC.renderCardQueueBlock(card, job);
+      else if (card) GC.clearCardQueueBlock(card);
+    });
+  }
+
+  GC.renderCardQueueBlock = function renderCardQueueBlock(cardEl, queueJob, opts) {
+    if (!cardEl || !queueJob || typeof queueJob !== "object") return null;
+
+    const sig = cardQueueJobSignature(queueJob);
+    const existing = cardEl.querySelector("[data-gc-card-queue]");
+    if (existing && existing.dataset.queueSig === sig) {
+      return patchCardQueueBlockInPlace(existing, cardEl, queueJob, opts);
+    }
+
+    const options = opts && typeof opts === "object" ? opts : {};
+    const { domain, timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, options);
     const cardPrefix = _cardQueueClassPrefix(domain);
 
     GC.clearCardQueueBlock(cardEl);
@@ -2674,6 +2810,7 @@
     const block = document.createElement("div");
     block.className = `gc-card-queue-block gc-card-queue-block--${domain} gc-card-queue-block--${isActive ? "active" : "queued"}`;
     block.dataset.gcCardQueue = "1";
+    block.dataset.queueSig = sig;
     block.dataset.queueActive = isActive ? "1" : "0";
     block.dataset.timerDomain = domain;
     if (jobId > 0) block.dataset.jobId = String(jobId);
@@ -2681,7 +2818,7 @@
     if (finishAt > 0) block.dataset.finishAt = String(finishAt);
     block.dataset.totalSeconds = String(totalSeconds);
     if (isActive && Number.isFinite(remaining)) {
-      block.dataset.serverRemaining = String(remaining);
+      assignMonotonicServerRemaining(block, remaining, finishAt);
     }
 
     const head = document.createElement("div");
@@ -3057,14 +3194,13 @@
     if (!page) return;
     const byOwner = rdx?.card_jobs_by_owner;
     if (!byOwner || typeof byOwner !== "object") return;
-    page.querySelectorAll("[data-planet-tech-card]").forEach((card) => {
-      GC.clearCardQueueBlock(card);
-    });
-    Object.entries(byOwner).forEach(([techKey, jobs]) => {
-      const card = page.querySelector(`[data-tech-key="${techKey}"][data-planet-tech-card]`);
-      const job = Array.isArray(jobs) && jobs.length ? jobs[0] : null;
-      if (card && job) GC.renderCardQueueBlock(card, job);
-    });
+    patchCardQueuesFromOwnerMap(
+      page,
+      byOwner,
+      (root) => root.querySelectorAll("[data-planet-tech-card]"),
+      (card) => card.getAttribute("data-tech-key") || "",
+      (root, techKey) => root.querySelector(`[data-tech-key="${techKey}"][data-planet-tech-card]`)
+    );
   }
 
   function patchPeAscensionCardQueues(asc) {
@@ -3072,14 +3208,13 @@
     if (!page) return;
     const byOwner = asc?.card_jobs_by_owner;
     if (!byOwner || typeof byOwner !== "object") return;
-    page.querySelectorAll("[data-ascension-card]").forEach((card) => {
-      GC.clearCardQueueBlock(card);
-    });
-    Object.entries(byOwner).forEach(([ascKey, jobs]) => {
-      const card = page.querySelector(`[data-ascension-key="${ascKey}"][data-ascension-card]`);
-      const job = Array.isArray(jobs) && jobs.length ? jobs[0] : null;
-      if (card && job) GC.renderCardQueueBlock(card, job);
-    });
+    patchCardQueuesFromOwnerMap(
+      page,
+      byOwner,
+      (root) => root.querySelectorAll("[data-ascension-card]"),
+      (card) => card.getAttribute("data-ascension-key") || "",
+      (root, ascKey) => root.querySelector(`[data-ascension-key="${ascKey}"][data-ascension-card]`)
+    );
   }
 
   function applyPeResearchCardQueueJobs(cards) {
@@ -3583,10 +3718,14 @@
         serverNowTs,
         srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
       );
+      if (buildActive) assignMonotonicServerRemaining(buildActive, remaining, buildFinish);
       const pct = 100 * (1 - remaining / buildTotal);
       const etaEl = document.getElementById("build-eta-live");
       const fillEl = document.getElementById("build-bar-fill-live");
-      if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
+      if (etaEl) {
+        applyQueueJobTimerAttrs(etaEl, buildFinish, "build", "game-state", remaining);
+        _setIfChanged(etaEl, formatEta(Math.ceil(remaining)));
+      }
       _applyProgressFill(fillEl, pct);
       if (remaining <= 0) {
         _applyProgressFill(fillEl, 100);
@@ -3629,7 +3768,7 @@
         serverNowTs,
         srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
       );
-      block.dataset.serverRemaining = String(Math.ceil(remaining));
+      assignMonotonicServerRemaining(block, remaining, finish);
       const pct = 100 * (1 - remaining / total);
       const timerEl = block.querySelector(".gc-card-queue-timer");
       const fillEl = block.querySelector(".gc-card-queue-bar-fill");
@@ -3696,7 +3835,7 @@
             ? "planet_evolution"
             : "game-state";
       const remaining = queueJobRemainingSeconds(startAt, serverNowTs, NaN);
-      block.dataset.serverRemaining = String(Math.ceil(remaining));
+      assignMonotonicServerRemaining(block, remaining, startAt);
       applyQueueJobTimerAttrs(timerEl, startAt, timerKind, refreshOnZero, remaining);
       _setIfChanged(
         timerEl,
@@ -3756,6 +3895,7 @@
           serverNowTs,
           srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
         );
+        assignMonotonicServerRemaining(shipyardActive, orderRemaining, orderFinish);
         const pct = 100 * (1 - orderRemaining / total);
         const etaEl = document.getElementById("shipyard-eta-live");
         const fillEl = document.getElementById("shipyard-bar-fill-live");
@@ -3784,15 +3924,28 @@
 
     const defenseActive = document.getElementById("defense-page")?.querySelector(".shipyard-job.shipyard-job-active");
     if (defenseActive) {
-      const orderFinish = Number(defenseActive.getAttribute("data-finish-time") || 0);
-      const nextUnitFinish = Number(defenseActive.getAttribute("data-next-finish-time") || 0);
-      const total = Math.max(1, Number(defenseActive.getAttribute("data-total") || 1));
+      const orderFinishFromDom = parseTimerTarget(defenseActive.getAttribute("data-finish-time"));
+      const orderFinishFromState = parseTimerTarget(DEFENSEQ.active.finishTime || 0);
+      const orderFinish = orderFinishFromDom || orderFinishFromState;
+      const nextUnitFinish = parseTimerTarget(defenseActive.getAttribute("data-next-finish-time"));
+      const totalFromDom = Math.max(1, Number(defenseActive.getAttribute("data-total") || 1));
+      const totalFromState = Math.max(1, Number(DEFENSEQ.active.totalSeconds || 1));
+      const total = orderFinishFromDom ? totalFromDom : totalFromState;
       if (orderFinish) {
-        const orderRemaining = queueJobRemainingSeconds(orderFinish, serverNowTs, NaN);
+        const srvRemRaw = defenseActive.dataset.serverRemaining;
+        const orderRemaining = queueJobRemainingSeconds(
+          orderFinish,
+          serverNowTs,
+          srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
+        );
+        assignMonotonicServerRemaining(defenseActive, orderRemaining, orderFinish);
         const pct = 100 * (1 - orderRemaining / total);
         const etaEl = document.getElementById("defense-eta-live");
         const fillEl = document.getElementById("defense-bar-fill-live");
-        if (etaEl) _setIfChanged(etaEl, formatEta(Math.ceil(orderRemaining)));
+        if (etaEl) {
+          applyQueueJobTimerAttrs(etaEl, orderFinish, "defense", "defense", orderRemaining);
+          _setIfChanged(etaEl, formatEta(Math.ceil(orderRemaining)));
+        }
         _applyProgressFill(fillEl, pct);
         const subEta = document.getElementById("defense-queue-subtitle-eta");
         if (subEta) _setIfChanged(subEta, formatEta(Math.ceil(orderRemaining)));
@@ -4594,7 +4747,11 @@
         let btnLabel = queueActive ? t("action_queue_upgrade", "Upgrade (anreihen)") : t("action_upgrade", "Upgrade");
 
         if (queueActive && activeJob && activeJob.building_type === key) {
-          statusText = `${t("status_building", "Im Bau")} (${formatEta(activeJob.remaining)})`;
+          const finishAt = resolveQueueJobFinishTime(activeJob);
+          const rem = finishAt
+            ? queueJobRemainingSeconds(finishAt, getTimerServerNow(), resolveQueueJobRemaining(activeJob))
+            : Math.max(0, Math.floor(Number(activeJob.remaining || activeJob.remaining_seconds || 0)));
+          statusText = `${t("status_building", "Im Bau")} (${formatEta(Math.ceil(rem))})`;
         }
 
         if (cfg.statusId) setText(cfg.statusId, statusText);
@@ -4623,7 +4780,7 @@
           if (finishAt > 0) ovBox.dataset.finishAt = String(finishAt);
           const rem = resolveQueueJobRemaining(activeResearch);
           if (Number.isFinite(rem) && rem >= 0) {
-            ovBox.dataset.serverRemaining = String(rem);
+            assignMonotonicServerRemaining(ovBox, rem, finishAt);
           } else {
             delete ovBox.dataset.serverRemaining;
           }
@@ -5485,7 +5642,6 @@
     };
 
     const patchActiveFleetCards = (page, list) => {
-      const now = getApproxServerNow();
       list.forEach((mv) => {
         const card = page.querySelector(`[data-fleet-id="${mv.id}"]`);
         if (!card) return;
@@ -5516,13 +5672,13 @@
         } else if (cdEl) {
           const srvRem = Number(mv.remaining_seconds);
           if (Number.isFinite(srvRem) && srvRem >= 0) {
-            cdEl.dataset.serverRemaining = String(Math.ceil(srvRem));
+            assignMonotonicServerRemaining(cdEl, Math.ceil(srvRem), countdownAt);
           } else {
             delete cdEl.dataset.serverRemaining;
           }
           _setIfChanged(
             cdEl,
-            formatCountdownRemain(movementRemainingSeconds(countdownAt, now, mv.remaining_seconds))
+            formatCountdownRemain(movementRemainingSeconds(countdownAt, getTimerServerNow(), mv.remaining_seconds))
           );
         }
       });
@@ -5540,7 +5696,7 @@
       }
 
       const signature = list.map((mv) => (
-        `${mv.id}:${mv.status}:${mv.phase || mv.leg_phase || ""}:${mv.countdown_at || 0}:${mv.remaining_seconds ?? ""}`
+        `${mv.id}:${mv.status}:${mv.phase || mv.leg_phase || ""}:${mv.countdown_at || 0}`
       )).join("|");
       const sigChanged = activeListEl.dataset.fleetSig !== signature;
       if (sigChanged) {
@@ -6932,7 +7088,7 @@
     const tickFleetCountdowns = () => {
       const p = document.getElementById("fleet-page");
       if (!p || p.dataset.ready !== "1") return;
-      updateMovementCountdowns(getApproxServerNow());
+      updateMovementCountdowns(getTimerServerNow());
     };
     tickFleetCountdowns();
     GC.startProgressTicker();
@@ -7021,7 +7177,6 @@
       clearTimeout(_shipyardRefreshTimer);
       _shipyardRefreshTimer = null;
     }
-    _lastShipyardQueueSignature = "";
     const delay = immediate ? 0 : 150;
     _shipyardRefreshTimer = GC.setSafeTimeout(() => {
       _shipyardRefreshTimer = null;
@@ -7089,14 +7244,13 @@
     if (!page) return;
     const byOwner = queueData?.card_jobs_by_owner;
     if (!byOwner || typeof byOwner !== "object") return;
-    page.querySelectorAll("[data-ship-card][data-unlocked='1']").forEach((card) => {
-      GC.clearCardQueueBlock(card);
-    });
-    Object.entries(byOwner).forEach(([shipKey, jobs]) => {
-      const card = page.querySelector(`[data-ship-key="${shipKey}"][data-unlocked="1"]`);
-      const job = Array.isArray(jobs) && jobs.length ? jobs[0] : null;
-      if (card && job) GC.renderCardQueueBlock(card, job);
-    });
+    patchCardQueuesFromOwnerMap(
+      page,
+      byOwner,
+      (root) => root.querySelectorAll("[data-ship-card][data-unlocked='1']"),
+      (card) => card.getAttribute("data-ship-key") || "",
+      (root, shipKey) => root.querySelector(`[data-ship-key="${shipKey}"][data-unlocked="1"]`)
+    );
   }
 
   function shipyardIconUrl(shipKey) {
@@ -7697,14 +7851,13 @@
     if (!page) return;
     const byOwner = queueData?.card_jobs_by_owner;
     if (!byOwner || typeof byOwner !== "object") return;
-    page.querySelectorAll("[data-defense-card][data-unlocked='1']").forEach((card) => {
-      GC.clearCardQueueBlock(card);
-    });
-    Object.entries(byOwner).forEach(([defenseKey, jobs]) => {
-      const card = page.querySelector(`[data-defense-card="${defenseKey}"][data-unlocked="1"]`);
-      const job = Array.isArray(jobs) && jobs.length ? jobs[0] : null;
-      if (card && job) GC.renderCardQueueBlock(card, job);
-    });
+    patchCardQueuesFromOwnerMap(
+      page,
+      byOwner,
+      (root) => root.querySelectorAll("[data-defense-card][data-unlocked='1']"),
+      (card) => card.getAttribute("data-defense-card") || "",
+      (root, defenseKey) => root.querySelector(`[data-defense-card="${defenseKey}"][data-unlocked="1"]`)
+    );
   }
 
   function _syncDefenseQueueLiveState(queueList) {
@@ -7900,7 +8053,6 @@
       clearTimeout(_defenseRefreshTimer);
       _defenseRefreshTimer = null;
     }
-    _lastDefenseQueueSignature = "";
     const delay = immediate ? 0 : 150;
     _defenseRefreshTimer = GC.setSafeTimeout(() => {
       _defenseRefreshTimer = null;
@@ -10022,6 +10174,10 @@
         if (doc.title) document.title = doc.title;
 
         const fetchedBody = doc.body;
+        if (fetchedBody?.dataset?.serverTime) {
+          document.body.dataset.serverTime = fetchedBody.dataset.serverTime;
+          resyncServerTimeFromDom(true);
+        }
         if (fetchedBody?.dataset && fetchedBody.dataset.endpoint !== undefined) {
           document.body.dataset.endpoint = fetchedBody.dataset.endpoint || "";
         }
