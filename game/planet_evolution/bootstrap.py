@@ -20,11 +20,37 @@ from .repository import (
 )
 
 
+def planet_evolution_needs_bootstrap(planet_id: int, conn: sqlite3.Connection) -> bool:
+    """True when DNA/culture/mechanics still need to be created or repaired."""
+    planet = get_planet_row(planet_id, conn=conn)
+    if not planet:
+        return False
+
+    expected_class = expected_planet_class(planet)
+    stored_class = str(planet.get("planet_class") or "").strip().lower()
+    existing_dna = get_planet_dna(planet_id, conn=conn)
+    if not existing_dna or stored_class != expected_class or int(planet.get("dna_seed") or 0) <= 0:
+        return True
+    if not planet.get("last_evolution_tick"):
+        return True
+
+    cur = conn.cursor()
+    cur.execute("SELECT 1 FROM planet_culture WHERE planet_id = ? LIMIT 1;", (int(planet_id),))
+    if not cur.fetchone():
+        return True
+    cur.execute("SELECT 1 FROM planet_mechanics WHERE planet_id = ? LIMIT 1;", (int(planet_id),))
+    return cur.fetchone() is None
+
+
 def ensure_planet_evolution(planet_id: int, conn: sqlite3.Connection) -> Dict[str, Any]:
     from ..db import begin_write_transaction, commit, in_transaction, rollback
 
     if not evolution_schema_ready(conn):
         return {"ready": False, "reason": "schema_missing"}
+
+    reload_definitions(conn)
+    if not planet_evolution_needs_bootstrap(planet_id, conn):
+        return {"ready": True, "planet_id": int(planet_id), "dna_created": False}
 
     began = False
     try:
@@ -32,7 +58,6 @@ def ensure_planet_evolution(planet_id: int, conn: sqlite3.Connection) -> Dict[st
             begin_write_transaction(conn)
             began = True
 
-        reload_definitions(conn)
         planet = get_planet_row(planet_id, conn=conn)
         if not planet:
             if began:

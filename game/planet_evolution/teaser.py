@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Any, Dict, Optional
 
-from .bootstrap import ensure_planet_evolution
+from .bootstrap import ensure_planet_evolution, planet_evolution_needs_bootstrap
 from .dashboard import build_identity_teaser
 from .repository import evolution_schema_ready, get_context_planet
 from .specialization import eligible_specialization_keys
@@ -29,7 +30,11 @@ def get_overview_planet_teaser(
 
         planet = get_context_planet(int(player_id), conn=conn)
         planet_id = int(planet["id"])
-        ensure_planet_evolution(planet_id, conn)
+        try:
+            ensure_planet_evolution(planet_id, conn)
+        except sqlite3.OperationalError:
+            if planet_evolution_needs_bootstrap(planet_id, conn):
+                raise
         eligible = eligible_specialization_keys(planet_id, conn=conn)
 
         from .planet_level import xp_threshold_for_level

@@ -145,6 +145,37 @@ def test_homeworld_has_dna(evo_db):
     conn.close()
 
 
+def test_ensure_planet_evolution_skips_writes_when_bootstrapped(evo_db):
+    import re
+
+    from game.planet_evolution.bootstrap import planet_evolution_needs_bootstrap
+
+    conn = db()
+    uid = _ensure_test_player(43, conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    ensure_planet_evolution(pid, conn)
+    conn.commit()
+    assert planet_evolution_needs_bootstrap(pid, conn) is False
+
+    root_write = re.compile(r"^\s*(INSERT|UPDATE|DELETE|REPLACE)\b", re.IGNORECASE)
+    writes: list[str] = []
+
+    def trace(stmt: str) -> None:
+        if root_write.match(stmt):
+            writes.append(stmt.strip().split()[0].upper())
+
+    conn.set_trace_callback(trace)
+    try:
+        result = ensure_planet_evolution(pid, conn)
+    finally:
+        conn.set_trace_callback(None)
+        conn.close()
+
+    assert result.get("ready") is True
+    assert result.get("dna_created") is False
+    assert writes == [], f"unexpected writes on bootstrapped planet: {writes}"
+
+
 def test_locked_choice_exclusive(evo_db):
     conn = db()
     uid = _ensure_test_player(7, conn=conn)

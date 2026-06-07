@@ -2567,7 +2567,15 @@ def _payload_from_live_context(
                 user_id,
                 metal=float(player_view["metal"]),
                 crystal=float(player_view["crystal"]),
+                conn=conn,
             )
+        except sqlite3.OperationalError:
+            logger.warning(
+                "game-state planet teaser skipped (database locked) user_id=%s",
+                user_id,
+                exc_info=True,
+            )
+            payload["planet_teaser"] = {"visible": False}
         except Exception:
             payload["planet_teaser"] = {"visible": False}
 
