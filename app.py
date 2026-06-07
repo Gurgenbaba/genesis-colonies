@@ -2699,23 +2699,6 @@ def api_status():
 @app.route("/api/game-state")
 @require_login
 def api_game_state():
-    user_id = int(session.get("user_id") or 0)
-    if user_id:
-        from game.fleet import fleet_schema_ready, process_fleet_tick
-
-        conn = db()
-        try:
-            if fleet_schema_ready(conn):
-                begin_write_transaction(conn)
-                try:
-                    process_fleet_tick(player_id=user_id, conn=conn)
-                    commit(conn)
-                except Exception:
-                    rollback(conn)
-                    raise
-        finally:
-            conn.close()
-
     want_panel = request.args.get("include_panel", "").lower() in ("1", "true", "yes")
     # Panel polls need full live refresh so resources + buildings_panel stay in sync (GC-801).
     finish_source = "game_state_panel" if want_panel else "game_state"

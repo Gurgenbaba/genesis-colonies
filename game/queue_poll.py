@@ -149,6 +149,34 @@ def player_has_due_queue_work(
         except Exception:
             pass
         try:
+            from .defense import defense_queue_table_ready
+
+            if defense_queue_table_ready(conn):
+                if pid_filter is not None:
+                    cur.execute(
+                        """
+                        SELECT 1 FROM defense_queue
+                        WHERE planet_id = ? AND status = 'queued' AND finish_at <= ?
+                        LIMIT 1;
+                        """,
+                        (pid_filter, ts),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM defense_queue dq
+                        INNER JOIN planets p ON p.id = dq.planet_id
+                        WHERE p.player_id = ? AND dq.status = 'queued' AND dq.finish_at <= ?
+                        LIMIT 1;
+                        """,
+                        (int(player_id), ts),
+                    )
+                if cur.fetchone():
+                    return True
+        except Exception:
+            pass
+        try:
             from .fleet import fleet_schema_ready
 
             if fleet_schema_ready(conn):

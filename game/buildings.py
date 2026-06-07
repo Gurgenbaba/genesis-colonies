@@ -1010,6 +1010,7 @@ def queue_build_for_planet(
             now=now,
             conn=conn,
             source="action",
+            recalc_ranks=False,
         )
         finished_any = (
             int(engine_result["finished"]["buildings"])
@@ -1165,6 +1166,7 @@ def cancel_build_job_for_planet(
             now=now,
             conn=conn,
             source="action",
+            recalc_ranks=False,
         )
         finished_any = (
             int(engine_result["finished"]["buildings"])

@@ -797,6 +797,7 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
             now=now,
             conn=conn,
             source="action",
+            recalc_ranks=False,
         )
         finished_any = (
             int(engine_result["finished"]["buildings"])
@@ -932,6 +933,7 @@ def cancel_research_job(user_id: int, job_id: int):
             now=now,
             conn=conn,
             source="action",
+            recalc_ranks=False,
         )
         finished_any = (
             int(engine_result["finished"]["buildings"])

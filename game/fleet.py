@@ -3001,12 +3001,13 @@ def process_fleet_tick(
             except Exception as exc:
                 result["errors"].append(f"arrival fleet={mv['id']}: {exc}")
                 logger.exception("fleet arrival failed fleet=%s", mv["id"])
-                if mv.get("mission_type") == "attack":
+                if mv.get("mission_type") in ("attack", "expedition"):
                     try:
                         _fail_outbound_movement(conn, int(mv["id"]), now)
                     except Exception:
                         logger.exception(
-                            "failed to mark attack movement failed fleet=%s",
+                            "failed to mark %s movement failed fleet=%s",
+                            mv.get("mission_type"),
                             mv["id"],
                         )
 

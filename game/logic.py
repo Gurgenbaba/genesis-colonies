@@ -213,6 +213,7 @@ def refresh_player_live_state(
     conn=None,
     *,
     finish_source: str = "live_state",
+    recalc_ranks: bool = False,
 ) -> Tuple[Any, Dict[str, int], float, int, int, Dict[str, int]]:
     """
     Single authoritative refresh for API/polling:
@@ -241,6 +242,7 @@ def refresh_player_live_state(
             uid,
             conn,
             source=str(finish_source or "live_state"),
+            recalc_ranks=bool(recalc_ranks),
         )
         from .live_state import mark_request_live_refreshed
 

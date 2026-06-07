@@ -626,14 +626,24 @@ def finish_due_work(
             result["rank_recalculated"] = bool(recalc_ranks and result["score_updates"] > 0)
 
         derived_synced = 0
-        if affected_planets or affected_players:
+        account_wide_sync = (
+            int(result["finished"]["research"]) > 0
+            or int(result["finished"]["planet_research"]) > 0
+            or int(result["finished"]["ascension"]) > 0
+        )
+        if affected_planets or (affected_players and account_wide_sync):
             from .resources import sync_derived_state_after_queue_finish
 
-            derived_synced = sync_derived_state_after_queue_finish(
-                planet_ids=affected_planets,
-                player_ids=affected_players,
-                conn=conn,
-            )
+            if account_wide_sync:
+                derived_synced = sync_derived_state_after_queue_finish(
+                    player_ids=affected_players,
+                    conn=conn,
+                )
+            else:
+                derived_synced = sync_derived_state_after_queue_finish(
+                    planet_ids=affected_planets,
+                    conn=conn,
+                )
         result["derived_sync_count"] = int(derived_synced)
 
         if owns_conn:
