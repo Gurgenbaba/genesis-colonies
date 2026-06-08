@@ -511,13 +511,14 @@
 
   function getDomPlanetId() {
     const roots = [
+      document.querySelector(".overview-wrapper[data-planet-id]"),
+      document.getElementById("build-queue-compact"),
+      document.getElementById("research-queue-compact"),
       document.getElementById("shipyard-page"),
       document.getElementById("defense-page"),
       document.getElementById("fleet-page"),
       document.getElementById("logistics-page"),
       document.getElementById("trader-hub-page"),
-      document.getElementById("build-queue-compact"),
-      document.getElementById("research-queue-compact"),
       document.querySelector(".planet-evolution-page[data-planet-id]"),
     ];
     for (const el of roots) {
@@ -544,6 +545,9 @@
       if (el) el.dataset.planetId = String(pid);
     });
     document.querySelectorAll(".planet-evolution-page[data-planet-id]").forEach((el) => {
+      el.dataset.planetId = String(pid);
+    });
+    document.querySelectorAll(".overview-wrapper[data-planet-id]").forEach((el) => {
       el.dataset.planetId = String(pid);
     });
   }
@@ -610,6 +614,7 @@
     const anyActive = applyGameStateData(state, reason, {
       forceResourceBar: true,
       planetSwitch: isPlanetSwitch,
+      skipScopedPanels: isPlanetSwitch,
     });
 
     if (!isPlanetSwitch) {
@@ -1003,17 +1008,12 @@
 
   function hydratePageFromLastState(opts) {
     if (!GC.lastState || GC.lastState.ok !== true) return false;
-    const queueRoot = document.getElementById("build-queue-compact");
-    const traderRoot = document.getElementById("trader-hub-page");
-    const domPlanetEl = queueRoot || traderRoot;
-    if (domPlanetEl && domPlanetEl.dataset.planetId) {
-      const domPlanetId = Number(domPlanetEl.dataset.planetId || 0);
-      const statePlanetId = Number(
-        GC.lastState.active_planet_id || GC.lastState.build_queue?.planet_id || 0
-      );
-      if (domPlanetId > 0 && statePlanetId > 0 && domPlanetId !== statePlanetId) {
-        return false;
-      }
+    const domPlanetId = getDomPlanetId();
+    const statePlanetId = Number(
+      GC.lastState.active_planet_id || GC.lastState.build_queue?.planet_id || 0
+    );
+    if (domPlanetId > 0 && statePlanetId > 0 && domPlanetId !== statePlanetId) {
+      return false;
     }
     try {
       applyGameStateData(GC.lastState, "page_hydrate", opts);
@@ -1178,6 +1178,7 @@
     const page = GC.detectPage();
     const force = opts && opts.force;
     const skipGameState = Boolean(opts && opts.skipGameState);
+    const skipHydrate = Boolean(opts && opts.skipHydrate);
 
     if (GC.pageLifecycle.initialized && GC.currentPage === page && !force) {
       console.debug("[GC] initPage skipped (same page)", page);
@@ -1213,7 +1214,7 @@
 
     initFlashAutohide();
 
-    if (shouldRunGameLoop()) {
+    if (shouldRunGameLoop() && !skipHydrate) {
       hydratePageFromLastState({ skipMessagesUnread: page === "messages" });
     }
 
@@ -1910,10 +1911,32 @@
     }, 300);
   }
 
-  function patchOverviewUpgradeWidgets(overview) {
+  let _overviewWidgetsPlanetId = 0;
+
+  function patchOverviewUpgradeWidgets(overview, activePlanetId) {
     const root = document.getElementById("overview-upgrade-widgets");
     const rows = overview?.rows;
-    if (!root || !Array.isArray(rows) || rows.length === 0) return;
+    if (!root || !Array.isArray(rows)) return;
+
+    const pid = Number(activePlanetId || 0);
+    if (pid > 0 && _overviewWidgetsPlanetId > 0 && pid !== _overviewWidgetsPlanetId) {
+      root.replaceChildren();
+      root.hidden = true;
+      root.setAttribute("aria-hidden", "true");
+    }
+    if (pid > 0) _overviewWidgetsPlanetId = pid;
+
+    if (rows.length === 0) {
+      if (root.childElementCount > 0) root.replaceChildren();
+      root.hidden = true;
+      root.setAttribute("aria-hidden", "true");
+      return;
+    }
+
+    const rowKeys = new Set(rows.map((b) => b && b.key).filter(Boolean));
+    root.querySelectorAll("[data-overview-building]").forEach((card) => {
+      if (!rowKeys.has(card.dataset.overviewBuilding || "")) card.remove();
+    });
 
     rows.forEach((b) => {
       if (!b || !b.key) return;
@@ -1947,8 +1970,8 @@
     });
   }
 
-  function patchOverviewTable(overview, buildings, prod) {
-    patchOverviewUpgradeWidgets(overview);
+  function patchOverviewTable(overview, buildings, prod, activePlanetId) {
+    patchOverviewUpgradeWidgets(overview, activePlanetId);
   }
 
   function patchResourceBarEnergyWarning(used, total) {
@@ -2021,7 +2044,7 @@
     }
 
     patchOverviewEnergyHint(overview, data);
-    patchOverviewTable(overview, buildings, prod);
+    patchOverviewTable(overview, buildings, prod, data?.active_planet_id || 0);
 
     if (status?.planet?.name && typeof GC.applyOverviewPlanetName === "function") {
       const planetModal = document.getElementById("gc-planet-manage-root");
@@ -5236,6 +5259,10 @@
       const hudOnly = Boolean(opts && opts.hudOnly);
       const forceResourceBar = Boolean(opts && (opts.forceResourceBar || hudOnly || opts.planetSwitch));
       const planetSwitch = Boolean(opts && opts.planetSwitch);
+      const planetSwitchReload = Boolean(opts && opts.planetSwitchReload);
+      const skipScopedPanels = Boolean(
+        (opts && opts.skipScopedPanels) || (planetSwitch && !planetSwitchReload)
+      );
 
       if (reason === "poll" || reason === "page_hydrate") {
         const st = Number(data.server_time || 0);
@@ -5261,7 +5288,7 @@
         }
         if (activePlanetId > 0) {
           _last.activePlanetId = activePlanetId;
-          syncScopedPlanetIds(activePlanetId);
+          if (!skipScopedPanels) syncScopedPlanetIds(activePlanetId);
         }
 
         if (planetSwitch && activePlanetId > 0) {
@@ -5333,6 +5360,13 @@
 
       if (hudOnly) {
         GC.lastState = GC.lastState && GC.lastState.ok === true ? { ...GC.lastState, ...data } : data;
+        return false;
+      }
+
+      if (skipScopedPanels) {
+        const stApplied = Number(data.server_time || 0);
+        if (stApplied) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stApplied);
+        GC.lastState = coercePollUnreadForHud(data, reason);
         return false;
       }
 
@@ -9650,9 +9684,10 @@
             if (!el || !name) return;
             el.textContent = id === "build-queue-planet-label" ? `· ${name}` : name;
           });
-          await GC.reloadCurrentPage({ force: true });
+          await GC.reloadCurrentPage({ force: true, skipHydrate: true, skipGameState: true });
+          syncScopedPlanetIds(planetId);
           if (typeof GC.refreshGameState === "function") {
-            await GC.refreshGameState("planet_switch_reload");
+            await GC.refreshGameState("planet_switch");
           }
           const fleetPage = document.getElementById("fleet-page");
           if (
@@ -10837,7 +10872,11 @@
         _syncNavActive(url);
         if (push) history.pushState({ gcPjax: true }, "", url);
 
-        await GC.initPage({ force: true });
+        await GC.initPage({
+          force: true,
+          skipHydrate: Boolean(opts.skipHydrate),
+          skipGameState: Boolean(opts.skipGameState),
+        });
         if (document.querySelector(".galaxy-page")) prefetchGalaxyAdjacent();
       } catch (err) {
         if (err?.name === "AbortError") return;

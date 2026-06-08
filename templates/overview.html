@@ -18,7 +18,7 @@
 {% set cmd_id = commander.id if commander.id is defined else (player_obj.id if player_obj and player_obj.id is defined else None) %}
 {% set cmd_name = commander.name if commander.name is defined and commander.name else "Commander" %}
 
-<div class="gc-page overview-wrapper">
+<div class="gc-page overview-wrapper" data-planet-id="{{ planet.planet_id or 0 }}">
 
   <header class="overview-header section-header">
     <div class="section-header-row">

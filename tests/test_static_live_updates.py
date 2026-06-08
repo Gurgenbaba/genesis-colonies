@@ -245,18 +245,24 @@ def test_main_js_gc802_planet_switch_state_sync():
     assert 'document.getElementById("logistics-page")' in src
     assert '"logistics-page"' in src.split("function syncScopedPlanetIds")[1].split("function abortInFlight")[0]
     assert "abortInFlightGameStateFetches" in src
-    switch_section = src.split('applyActionState(res, "planet_switch")')[1][:1200]
-    planet_switch_apply = src.split("const isPlanetSwitch = reason === \"planet_switch\"")[1][:600]
+    switch_section = src.split('applyActionState(res, "planet_switch")')[1][:1400]
+    planet_switch_apply = src.split("const isPlanetSwitch = reason === \"planet_switch\"")[1][:700]
     assert "GC.stopPolling()" in planet_switch_apply
-    assert "reloadCurrentPage({ force: true })" in switch_section
-    assert "planet_switch_reload" in switch_section
+    assert "skipHydrate: true" in switch_section
+    assert "skipGameState: true" in switch_section
+    assert 'refreshGameState("planet_switch")' in switch_section
     assert "refreshFleetState(fleetPage)" in switch_section
     action_body = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert 'reason === "planet_switch"' in action_body
-    assert "planetSwitch: isPlanetSwitch" in action_body
+    assert "skipScopedPanels: isPlanetSwitch" in action_body
     apply_body = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
     assert "syncScopedPlanetIds(activePlanetId)" in apply_body
-    assert "opts.planetSwitch" in apply_body
+    assert "skipScopedPanels" in apply_body
+    assert "overview-wrapper[data-planet-id]" in src
+    hydrate_body = src.split("function hydratePageFromLastState(opts)")[1].split("let _progressTickerActive")[0]
+    assert "getDomPlanetId()" in hydrate_body
+    overview = _read("templates/overview.html")
+    assert 'overview-wrapper" data-planet-id="{{ planet.planet_id or 0 }}"' in overview
 
 
 def test_main_js_gc802_fleet_timer_and_url_prefill():
