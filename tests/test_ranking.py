@@ -717,6 +717,43 @@ def test_ranking_avatar_cache_bust(temp_db):
     assert "?v=" in row["avatar_url"] or "&v=" in row["avatar_url"]
 
 
+def test_ranking_uses_component_sum_not_stale_score_total(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    high = _create_player("sum_high")
+    low = _create_player("sum_low")
+
+    conn = db()
+    conn.execute(
+        """
+        UPDATE player_scores
+        SET score_total = 50, score_buildings = 3000, score_research = 2000,
+            score_fleet = 0, score_defense = 0
+        WHERE player_id = ?
+        """,
+        (high,),
+    )
+    conn.execute(
+        """
+        UPDATE player_scores
+        SET score_total = 99999, score_buildings = 100, score_research = 50,
+            score_fleet = 0, score_defense = 0
+        WHERE player_id = ?
+        """,
+        (low,),
+    )
+    conn.commit()
+    conn.close()
+
+    payload = build_ranking_api_payload(high, limit=10, refresh=False)
+    assert payload["top_players"][0]["player_id"] == high
+    assert payload["top_players"][0]["total_score"] == 5000
+    assert payload["current_player"]["total_score"] == 5000
+    assert payload["current_player"]["rank"] == 1
+
+
 def test_combat_destruction_increases_ranking_scores(temp_db):
     _run_migrate(temp_db)
     init_db()

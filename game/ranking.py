@@ -287,8 +287,6 @@ def _normalize_db_row(row: Optional[dict]) -> Dict[str, int]:
             "evolution_score": evolution,
         }
     )
-    if "score_total" in keys:
-        result["total_score"] = _safe_int(row.get("score_total", result["total_score"]))
     return result
 
 
@@ -1251,6 +1249,10 @@ def get_sorted_ranking_entries(
 
 
 def get_player_rank_from_snapshot(player_id: int, conn=None) -> Tuple[Optional[int], int]:
+    """
+    Live rank lookup using the same ordering as get_sorted_ranking_entries.
+    Never trusts stale rank_total columns — rank is derived from effective totals.
+    """
     owns_conn = False
     if conn is None:
         conn = db()
@@ -1259,19 +1261,6 @@ def get_player_rank_from_snapshot(player_id: int, conn=None) -> Tuple[Optional[i
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) AS cnt FROM players")
     total_players = int(cur.fetchone()["cnt"])
-
-    if column_exists(conn, "player_scores", "rank_total"):
-        cur.execute(
-            "SELECT rank_total FROM player_scores WHERE player_id = ?",
-            (int(player_id),),
-        )
-        row = cur.fetchone()
-        if row and row["rank_total"] is not None:
-            snap_rank = int(row["rank_total"])
-            if snap_rank >= 1:
-                if owns_conn:
-                    conn.close()
-                return snap_rank, total_players
 
     total_expr = _total_score_sql(conn)
     cur.execute(
@@ -1325,6 +1314,34 @@ def get_player_rank_from_snapshot(player_id: int, conn=None) -> Tuple[Optional[i
     return better + 1, total_players
 
 
+def get_playercard_ranking_snapshot(
+    player_id: int,
+    conn=None,
+) -> Dict[str, Any]:
+    """
+    Single read-only snapshot for PlayerCard: scores + rank from canonical ranking logic.
+    """
+    owns_conn = False
+    if conn is None:
+        conn = db()
+        owns_conn = True
+    try:
+        scores = format_scores_for_playercard(read_player_scores(int(player_id), conn=conn))
+        rank, total_players = get_player_rank_from_snapshot(int(player_id), conn=conn)
+        category_ranks = get_player_category_ranks(int(player_id), conn=conn)
+        return {
+            "rank": rank,
+            "total_players": total_players,
+            **scores,
+            "rank_defense": category_ranks.get("defense"),
+            "rank_fleet": category_ranks.get("fleet"),
+            "rank_military": category_ranks.get("military"),
+        }
+    finally:
+        if owns_conn:
+            conn.close()
+
+
 def get_player_category_ranks(player_id: int, conn=None) -> Dict[str, Any]:
     """Return snapshot ranks per score category for the current player."""
     owns_conn = False
@@ -1375,7 +1392,7 @@ def get_player_category_ranks(player_id: int, conn=None) -> Dict[str, Any]:
     my_evo = _safe_int(score_row["score_planet_evolution"]) if "score_planet_evolution" in keys else 0
 
     if column_exists(conn, "player_scores", "rank_total"):
-        rank_cols = ["rank_total", "rank_building", "rank_research"]
+        rank_cols = ["rank_building", "rank_research"]
         if column_exists(conn, "player_scores", "rank_fleet"):
             rank_cols.append("rank_fleet")
         cur.execute(
@@ -1384,14 +1401,16 @@ def get_player_category_ranks(player_id: int, conn=None) -> Dict[str, Any]:
         )
         row = cur.fetchone()
         if row:
-            if row["rank_total"] is not None:
-                ranks["total"] = int(row["rank_total"])
             if row["rank_building"] is not None:
                 ranks["building"] = int(row["rank_building"])
             if row["rank_research"] is not None:
                 ranks["research"] = int(row["rank_research"])
             if "rank_fleet" in row.keys() and row["rank_fleet"] is not None:
                 ranks["fleet"] = int(row["rank_fleet"])
+
+    live_total_rank, _ = get_player_rank_from_snapshot(int(player_id), conn=conn)
+    if live_total_rank is not None:
+        ranks["total"] = int(live_total_rank)
 
     if "fleet" not in ranks and column_exists(conn, "player_scores", "score_fleet"):
         cur.execute(
@@ -1499,10 +1518,10 @@ def _current_player_payload(
     top_players: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     pid = int(current_player_id)
-    my_scores = get_player_score_cached(pid)
+    my_scores = get_player_score_cached(pid, read_only=True)
     category_ranks = get_player_category_ranks(pid)
-    my_rank = category_ranks.get("total")
-    total_players = int(category_ranks.get("total_players") or 0)
+    my_rank, total_players = get_player_rank_from_snapshot(pid)
+    total_players = int(total_players or category_ranks.get("total_players") or 0)
 
     current = {
         "rank": my_rank,

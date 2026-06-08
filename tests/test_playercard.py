@@ -134,19 +134,115 @@ def test_public_card_shows_real_scores_and_rank(temp_db):
     conn.commit()
     conn.close()
 
-    from game.ranking import recalculate_ranks
+    from game.ranking import build_ranking_api_payload, recalculate_ranks
 
     recalculate_ranks()
 
     card, err = build_public_card(pid, viewer_id=other)
     assert err is None and card is not None
-    assert card["score_total"] == 10000
+    expected_total = 6000 + 2500 + 120 + 80
+    assert card["score_total"] == expected_total
     assert card["score_buildings"] == 6000
     assert card["score_research"] == 2500
     assert card["score_fleet"] == 120
     assert card["score_defense"] == 80
     assert card.get("rank") is not None and int(card["rank"]) >= 1
     assert card.get("total_players") is not None and int(card["total_players"]) >= 1
+
+    ranking = build_ranking_api_payload(pid, limit=100, refresh=False)
+    assert int(card["rank"]) == int(ranking["current_player"]["rank"])
+    assert int(card["score_total"]) == int(ranking["current_player"]["total_score"])
+
+
+def test_playercard_rank_matches_ranking_with_stale_snapshot(temp_db):
+    init_db()
+    _close_db_conn()
+
+    leader, _ = _create_player("rank_leader")
+    runner, _ = _create_player("rank_runner")
+    viewer, _ = _create_player("rank_viewer")
+
+    conn = db()
+    for pid, building, research in (
+        (leader, 3000, 2000),
+        (runner, 900, 600),
+        (viewer, 50, 50),
+    ):
+        conn.execute(
+            """
+            UPDATE player_scores
+            SET score_total = ?, score_buildings = ?, score_research = ?,
+                score_fleet = 0, score_defense = 0
+            WHERE player_id = ?
+            """,
+            (building + research, building, research, pid),
+        )
+    conn.execute(
+        "UPDATE player_scores SET rank_total = 1 WHERE player_id = ?",
+        (runner,),
+    )
+    conn.commit()
+    conn.close()
+
+    from game.ranking import build_ranking_api_payload
+
+    ranking = build_ranking_api_payload(runner, limit=100, refresh=False)
+    card, err = build_public_card(runner, viewer_id=viewer)
+    assert err is None and card is not None
+
+    assert int(card["rank"]) == 2
+    assert int(ranking["current_player"]["rank"]) == 2
+    assert int(card["rank"]) == int(ranking["current_player"]["rank"])
+
+    card2, err2 = build_public_card(runner, viewer_id=viewer)
+    assert err2 is None and card2 is not None
+    assert int(card2["rank"]) == int(card["rank"])
+
+
+def test_playercard_rank_stable_with_wrong_score_total_column(temp_db):
+    init_db()
+    _close_db_conn()
+
+    high, _ = _create_player("rank_high")
+    low, _ = _create_player("rank_low")
+
+    conn = db()
+    conn.execute(
+        """
+        UPDATE player_scores
+        SET score_total = 100, score_buildings = 4000, score_research = 1000,
+            score_fleet = 0, score_defense = 0
+        WHERE player_id = ?
+        """,
+        (high,),
+    )
+    conn.execute(
+        """
+        UPDATE player_scores
+        SET score_total = 9000, score_buildings = 200, score_research = 100,
+            score_fleet = 0, score_defense = 0
+        WHERE player_id = ?
+        """,
+        (low,),
+    )
+    conn.commit()
+    conn.close()
+
+    from game.ranking import build_ranking_api_payload, get_sorted_ranking_entries
+
+    top = get_sorted_ranking_entries(limit=10)
+    assert top[0]["player_id"] == high
+    assert top[0]["total_score"] == 5000
+    assert top[1]["player_id"] == low
+    assert top[1]["total_score"] == 300
+
+    card, err = build_public_card(high, viewer_id=low)
+    assert err is None and card is not None
+    assert card["score_total"] == 5000
+    assert int(card["rank"]) == 1
+
+    ranking = build_ranking_api_payload(high, limit=10, refresh=False)
+    assert int(card["rank"]) == int(ranking["current_player"]["rank"])
 
 
 def test_public_card_without_score_row_shows_zero_with_rank(temp_db):
