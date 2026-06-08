@@ -761,14 +761,27 @@ body.gc-body-simple .auth-error {
   color: var(--gc-neon-cyan);
 }
 
-/* Buildings sidebar sub-nav (GC-550) */
-.gc-nav-buildings-group{
+/* Sidebar submenu groups (Gebäude, Handelsposten — GC-550 / GC-621) */
+.gc-nav-buildings-group,
+.gc-nav-trading-group,
+.gc-nav-submenu-group{
   display: flex;
   flex-direction: column;
 }
 
+button.gc-nav-link.gc-nav-submenu-toggle{
+  width: 100%;
+  border: none;
+  border-left: 2px solid transparent;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
 .gc-nav-sub--buildings[hidden],
-.gc-nav-sub--buildings.gc-nav-sub--collapsed{
+.gc-nav-sub--buildings.gc-nav-sub--collapsed,
+.gc-nav-sub--trading[hidden],
+.gc-nav-sub--trading.gc-nav-sub--collapsed{
   display: none !important;
 }
 
@@ -778,13 +791,18 @@ body.gc-body-simple .auth-error {
   cursor: default;
 }
 
-.gc-nav-sub--buildings{
+.gc-nav-sub--buildings,
+.gc-nav-sub--trading{
   display: flex;
   flex-direction: column;
   gap: 0;
   padding: 0 0 4px 10px;
   border-left: 2px solid rgba(70, 229, 255, 0.14);
   margin: 0 0 2px 12px;
+}
+
+.gc-nav-sub--trading .gc-nav-sub-link{
+  text-decoration: none;
 }
 
 .gc-nav-sub-link{
@@ -8133,6 +8151,30 @@ img.gc-res-icon.gc-res-energy{
     border-color: rgba(70, 229, 255, 0.55);
     color: var(--gc-primary-2);
     box-shadow: var(--gc-border-glow);
+  }
+
+  .gc-nav-drawer-group{
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .gc-nav-drawer-group-label{
+    padding: 4px 14px 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--gc-text-dim);
+  }
+
+  .gc-nav-drawer-sublink{
+    margin-left: 8px;
+    min-height: calc(var(--gc-touch-min) - 4px);
+    padding-top: 10px;
+    padding-bottom: 10px;
+    font-size: 0.86rem;
+    font-weight: 600;
   }
 
   body.gc-nav-drawer-open{ overflow: hidden; }

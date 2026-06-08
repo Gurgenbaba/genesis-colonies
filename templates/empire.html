@@ -168,7 +168,12 @@
               {% set tval = section_totals[row.key] if section_totals[row.key] is defined else 0 %}
               <td class="gc-mono empire-matrix-cell empire-matrix-cell--total empire-matrix-cell--{{ section.key }}">
                 {% if row.summable %}
-                  {% if row.format == 'rate' %}+{% endif %}{{ tval|fmt_int_compact }}{% if row.format == 'rate' %}<span class="empire-matrix-unit">/h</span>{% endif %}
+                  {% if row.format == 'rate' %}+{% endif %}
+                  {% if row.format == 'level' %}
+                    {% if tval|int > 0 %}L{{ tval|int }}{% else %}<span class="empire-matrix-zero">0</span>{% endif %}
+                  {% else %}
+                    {{ tval|fmt_int_compact }}{% if row.format == 'rate' %}<span class="empire-matrix-unit">/h</span>{% endif %}
+                  {% endif %}
                 {% else %}
                   —
                 {% endif %}

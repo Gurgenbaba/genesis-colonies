@@ -42,7 +42,7 @@ def _matrix_section_definitions() -> List[Dict[str, Any]]:
             "key": key,
             "label_key": f"building_{key}",
             "format": "level",
-            "summable": False,
+            "summable": True,
         }
         for key in BUILDING_ORDER
     )

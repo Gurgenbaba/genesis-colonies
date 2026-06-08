@@ -702,6 +702,7 @@ def test_main_js_gc550c_buildings_hero_queue_and_subnav():
     buildings_html = _read("templates/buildings.html")
     research_html = _read("templates/research.html")
     base_html = _read("templates/base.html")
+    sidebar_html = _read("templates/partials/sidebar.html")
     css = _read("static/style.css")
 
     assert "render_hero_img_stack" in buildings_html
@@ -723,7 +724,7 @@ def test_main_js_gc550c_buildings_hero_queue_and_subnav():
     assert "saturate(" in css
     assert "gc-nav-sub--collapsed" in src
     assert "GC.detectPage() !== \"buildings\"" in src
-    assert base_html.count('id="gc-nav-buildings-sub"') == 1
+    assert sidebar_html.count('id="gc-nav-buildings-sub"') == 1
     assert ".gc-bld-hero-queue{" in css
     assert ".gc-nav-sub--buildings[hidden]" in css
     assert "if (domain === \"building\" || domain === \"research\")" in src
@@ -749,6 +750,7 @@ def test_main_js_gc550_buildings_ux_contract():
     shipyard_html = _read("templates/shipyard.html")
     defense_html = _read("templates/defense.html")
     base_html = _read("templates/base.html")
+    sidebar_html = _read("templates/partials/sidebar.html")
     css = _read("static/style.css")
     de = _read("locales/de.json")
 
@@ -760,8 +762,10 @@ def test_main_js_gc550_buildings_ux_contract():
     assert "gc-bld-card-hero" in shipyard_html
     assert "gc-bld-card-action-wrap" in shipyard_html
     assert "gc-bld-card-hero" in defense_html
-    assert "gc-nav-buildings-sub" in base_html
-    assert "data-building-tab" in base_html
+    assert "gc-nav-buildings-sub" in sidebar_html
+    assert "data-building-tab" in sidebar_html
+    assert "gc-nav-trading-sub" in sidebar_html
+    assert "syncTradingSubnav" in src
     assert "activateBuildingTabByName" in src
     assert "hideBuildingsSubnav" in src
     assert 'querySelector(".gc-bld-card-queue-slot")' in src
@@ -825,6 +829,7 @@ def test_gc551a_fuel_cell_icon_and_hero_level_badge():
     """GC-551A: fuel_cells uses same resource chip family; hero level badge stays readable."""
     icons_py = _read("tools/generate_icons.py")
     base_html = _read("templates/base.html")
+    sidebar_html = _read("templates/partials/sidebar.html")
     progression = _read("templates/partials/progression_cards.html")
     css = _read("static/style.css")
     fuel_png = ROOT / "static" / "icons" / "fuel_cells.png"

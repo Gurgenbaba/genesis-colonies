@@ -294,6 +294,10 @@ def test_build_empire_context_matrix_totals_multiple_colonies(empire_db):
     row_sum = sum(v["production"]["metal"] for v in matrix["colony_values"])
     assert prod_total == row_sum
     assert matrix["colony_values"][1]["buildings"]["orbital_shipyard"] == 2
+    assert matrix["totals"]["buildings"]["metal_mine"] == (
+        matrix["colony_values"][0]["buildings"]["metal_mine"]
+        + matrix["colony_values"][1]["buildings"]["metal_mine"]
+    )
 
 
 def test_build_empire_context_matrix_building_and_ship_rows(empire_db):
