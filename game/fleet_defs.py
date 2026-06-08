@@ -296,7 +296,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
 
 
 def ship_icon_filename(ship_key: str) -> str:
-    return f"{canonical_ship_key(ship_key)}.svg"
+    return f"{canonical_ship_key(ship_key)}.png"
 
 
 def ship_icon_static_path(ship_key: str) -> str:

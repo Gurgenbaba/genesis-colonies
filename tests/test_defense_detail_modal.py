@@ -12,7 +12,7 @@ def test_build_defense_detail_card_known_unit():
     assert card["defense_key"] == "plasma_arc"
     assert card["attack"] >= 0
     assert card["score_value"] > 0
-    assert card["icon"].endswith("plasma_arc.svg")
+    assert card["icon"].endswith("plasma_arc.png")
 
 
 def test_build_defense_detail_card_with_requirements():

@@ -149,12 +149,26 @@
       {% set unit_desc = T(unit_desc_key) %}
       {% if unit_desc == unit_desc_key %}{% set unit_desc = '' %}{% endif %}
       {% set owned = (unit.stock if unit.stock is defined else planet_defense.get(unit.defense_key, 0))|int %}
+      {% set _def_img = unit.icon|default('/static/img/defense/' ~ unit.defense_key ~ '.png') %}
+      {% set _def_img_fallback = url_for('static', filename='img/defense/sentinel_turret.png') %}
       <article class="gc-ship-card gc-prog-card {{ row_class }}{% if unit.queue_job is defined and unit.queue_job %} gc-ship-card--in-queue{% if unit.queue_job.status == 'active' %} gc-ship-card--queue-active{% else %} gc-ship-card--queue-pending{% endif %}{% endif %}"
                data-defense-card="{{ unit.defense_key }}" data-unlocked="1" role="listitem">
-        <header class="gc-bld-card-head">
-          <div class="gc-bld-card-identity">
-            <img src="{{ unit.icon|default('/static/img/defense/' ~ unit.defense_key ~ '.svg') }}"
-                 alt="" class="gc-bld-card-icon" width="34" height="34" loading="lazy">
+        <div class="gc-bld-card-hero">
+          <img src="{{ _def_img }}"
+               alt=""
+               class="gc-bld-card-hero-img"
+               loading="lazy"
+               onerror="this.onerror=null;this.src='{{ _def_img_fallback }}';">
+          <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
+          <div class="gc-bld-card-hero-badge gc-bld-card-hero-badge--stock">
+            {{ render_defense_stock_chip(unit.defense_key, owned) }}
+          </div>
+          <div class="gc-bld-card-hero-title">
+            <img src="{{ _def_img }}"
+                 alt=""
+                 class="gc-bld-card-icon gc-bld-card-icon--title"
+                 loading="lazy"
+                 onerror="this.onerror=null;this.src='{{ _def_img_fallback }}';">
             <div class="gc-bld-card-title-wrap">
               <h3 class="gc-bld-card-title">
                 <button type="button" class="gc-ship-detail-trigger gc-ship-card-title-btn"
@@ -164,10 +178,8 @@
               {{ render_info_popover_trigger(unit_desc) }}
             </div>
           </div>
-          {{ render_defense_stock_chip(unit.defense_key, owned) }}
-        </header>
+        </div>
         {{ render_defense_subhead(unit.role|default('turret')) }}
-        {{ render_defense_card_queue(unit.queue_job if unit.queue_job is defined else none) }}
         <div class="gc-bld-card-meta">
           <div class="gc-bld-card-costs shipyard-ship-cost gc-mono" data-defense-cost>
             {{ render_resource_cost_chip('metal', unit.cost_metal, unmet=(p_metal < unit.cost_metal)) }}
@@ -189,22 +201,32 @@
           {% endif %}
         </div>
         {% endif %}
-        <footer class="gc-ship-card-action shipyard-ship-actions">
-          <input type="number" min="1" max="999" value="1"
-                 class="gc-input shipyard-qty-input" data-defense-qty="{{ unit.defense_key }}"
-                 aria-label="{{ T('defense_amount_label') }}">
-          <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs"
-                  data-defense-max="{{ unit.defense_key }}"
-                  data-max-qty="{{ unit.max_build|default(0) }}">
-            {{ T("shipyard_btn_max") }}
-          </button>
-          <button type="button" class="gc-btn gc-btn-primary gc-btn-xs"
-                  data-defense-build="{{ unit.defense_key }}"
-                  data-can-build="{{ '1' if unit.can_build else '0' }}"
-                  {% if not unit.can_build %}disabled aria-disabled="true"{% endif %}>
-            {{ T("defense_build_btn") }}
-          </button>
-        </footer>
+        <div class="gc-bld-card-action-wrap">
+          <footer class="gc-ship-card-action shipyard-ship-actions">
+            <input type="number" min="1" max="999" value="1"
+                   class="gc-input shipyard-qty-input" data-defense-qty="{{ unit.defense_key }}"
+                   aria-label="{{ T('defense_amount_label') }}">
+            <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs"
+                    data-defense-max="{{ unit.defense_key }}"
+                    data-max-qty="{{ unit.max_build|default(0) }}">
+              {{ T("shipyard_btn_max") }}
+            </button>
+            <button type="button" class="gc-btn gc-btn-primary gc-btn-xs"
+                    data-defense-build="{{ unit.defense_key }}"
+                    data-can-build="{{ '1' if unit.can_build else '0' }}"
+                    {% if not unit.can_build %}disabled aria-disabled="true"{% endif %}
+                    {% if unit.block_reason == 'queue_full' %}title="{{ T('defense_btn_queue_full', 'Warteschlange voll') }}"{% endif %}>
+              {% if unit.block_reason == 'queue_full' %}
+                {{ T("defense_btn_queue_full", "Warteschlange voll") }}
+              {% else %}
+                {{ T("defense_build_btn") }}
+              {% endif %}
+            </button>
+          </footer>
+          <div class="gc-bld-card-queue-slot" data-defense-queue-slot>
+            {{ render_defense_card_queue(unit.queue_job if unit.queue_job is defined else none) }}
+          </div>
+        </div>
       </article>
       {% else %}
       <p class="shipyard-empty">{{ T("defense_no_buildable") }}</p>
@@ -224,11 +246,26 @@
       {% set unit_desc = T(unit_desc_key) %}
       {% if unit_desc == unit_desc_key %}{% set unit_desc = '' %}{% endif %}
       {% set owned = (unit.stock if unit.stock is defined else planet_defense.get(unit.defense_key, 0))|int %}
+      {% set _def_img = unit.icon|default('/static/img/defense/' ~ unit.defense_key ~ '.png') %}
+      {% set _def_img_fallback = url_for('static', filename='img/defense/sentinel_turret.png') %}
       <article class="gc-ship-card gc-prog-card gc-prog-locked is-locked"
                data-defense-card="{{ unit.defense_key }}" data-unlocked="0" role="listitem">
-        <header class="gc-bld-card-head">
-          <div class="gc-bld-card-identity">
-            <img src="{{ unit.icon }}" alt="" class="gc-bld-card-icon" width="34" height="34" loading="lazy">
+        <div class="gc-bld-card-hero">
+          <img src="{{ _def_img }}"
+               alt=""
+               class="gc-bld-card-hero-img"
+               loading="lazy"
+               onerror="this.onerror=null;this.src='{{ _def_img_fallback }}';">
+          <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
+          <div class="gc-bld-card-hero-badge gc-bld-card-hero-badge--stock">
+            {{ render_defense_stock_chip(unit.defense_key, owned) }}
+          </div>
+          <div class="gc-bld-card-hero-title">
+            <img src="{{ _def_img }}"
+                 alt=""
+                 class="gc-bld-card-icon gc-bld-card-icon--title"
+                 loading="lazy"
+                 onerror="this.onerror=null;this.src='{{ _def_img_fallback }}';">
             <div class="gc-bld-card-title-wrap">
               <h3 class="gc-bld-card-title">
                 <button type="button" class="gc-ship-detail-trigger gc-ship-card-title-btn"
@@ -238,8 +275,7 @@
               {{ render_info_popover_trigger(unit_desc) }}
             </div>
           </div>
-          {{ render_defense_stock_chip(unit.defense_key, owned) }}
-        </header>
+        </div>
         {{ render_defense_subhead(unit.role|default('turret')) }}
         <div class="gc-bld-card-meta">
           <div class="gc-bld-card-costs shipyard-ship-cost gc-mono" data-defense-cost>

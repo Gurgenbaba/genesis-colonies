@@ -46,11 +46,11 @@ def test_all_known_ship_icons_exist_on_disk():
         path = SHIPS_IMG / fname
         if not path.is_file():
             missing.append(fname)
-    assert not missing, f"Missing ship SVGs: {missing}"
+    assert not missing, f"Missing ship PNGs: {missing}"
 
 
 def test_eclipse_runner_icon_file_exists():
-    assert (SHIPS_IMG / "eclipse_runner.svg").is_file()
+    assert (SHIPS_IMG / "eclipse_runner.png").is_file()
 
 
 def test_ship_detail_view_avoids_requirements_items_dot_access():
@@ -116,7 +116,10 @@ def test_main_js_shipyard_polling_idempotent_and_cleanup():
     assert "GC.registerCleanup(stopShipyardTimers)" in src
     assert "function updatePageTimers(serverNow)" in src
     assert "_pageTimerLoopRunning" in src
-    assert "data-timer-target" in (ROOT / "templates" / "shipyard.html").read_text(encoding="utf-8")
+    shipyard_tpl = (ROOT / "templates" / "shipyard.html").read_text(encoding="utf-8")
+    queue_macros = (ROOT / "templates" / "partials" / "card_queue_macros.html").read_text(encoding="utf-8")
+    assert "render_card_queue_timer" in shipyard_tpl
+    assert "data-timer-target" in queue_macros
     assert "queuePollBound" not in src
 
 

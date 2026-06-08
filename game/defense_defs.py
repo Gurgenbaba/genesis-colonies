@@ -201,7 +201,7 @@ def defense_defs_for_client() -> List[Dict[str, Any]]:
 
 
 def defense_icon_filename(defense_key: str) -> str:
-    return f"{str(defense_key or '').strip()}.svg"
+    return f"{str(defense_key or '').strip()}.png"
 
 
 def defense_icon_static_path(defense_key: str) -> str:
