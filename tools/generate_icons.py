@@ -274,6 +274,31 @@ def draw_bolt(c: Canvas, cx: float, cy: float, r: float, color: RGB) -> None:
     c.glow_disc(cx, cy, r * 0.35, color, 3)
 
 
+def draw_fuel_cell(c: Canvas, cx: float, cy: float, r: float, color: RGB) -> None:
+    w = r * 0.42
+    h = r * 0.98
+    y0 = cy - h * 0.5
+    y1 = cy + h * 0.5
+    c.fill_round_rect(cx - w, y0 + h * 0.14, w * 2, h * 0.72, w * 0.48, dim(color, 0.1), 0.82)
+    c.stroke_line(cx - w, y0 + h * 0.24, cx - w, y1 - h * 0.24, color, r * 0.15)
+    c.stroke_line(cx + w, y0 + h * 0.24, cx + w, y1 - h * 0.24, color, r * 0.15)
+    c.stroke_line(cx - w * 0.62, y0 + h * 0.1, cx + w * 0.62, y0 + h * 0.1, color, r * 0.12)
+    c.stroke_line(cx - w * 0.62, y1 - h * 0.1, cx + w * 0.62, y1 - h * 0.1, color, r * 0.12)
+    core = [
+        (cx, cy - r * 0.3),
+        (cx + r * 0.24, cy),
+        (cx, cy + r * 0.3),
+        (cx - r * 0.24, cy),
+    ]
+    c.fill_polygon(core, dim(color, 0.15), 0.9)
+    c.fill_polygon(
+        [(cx, cy - r * 0.18), (cx + r * 0.14, cy), (cx, cy + r * 0.18), (cx - r * 0.14, cy)],
+        brighten(color),
+        0.88,
+    )
+    c.stroke_line(cx, cy - r * 0.34, cx, cy + r * 0.34, color, r * 0.08)
+
+
 def resource_svg(name: str, accent: str, symbol_path: str) -> str:
     return f"""  <defs>
     <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -293,6 +318,17 @@ RESOURCES = {
     "ferronit": (METAL, draw_pickaxe, resource_svg("ferronit", "#7fffd9", '<path d="M18 38 L42 18 M24 20 L44 34" fill="none"/>')),
     "crytite": (CRYSTAL, draw_crystal, resource_svg("crytite", "#46e5ff", '<polygon points="32,14 44,28 38,46 26,46 20,28" fill-opacity="0.35"/>')),
     "energy": (ENERGY, draw_bolt, resource_svg("energy", "#ffc400", '<polygon points="34,14 26,32 32,32 28,50 40,30 34,30"/>')),
+    "fuel_cells": (
+        ENERGY,
+        draw_fuel_cell,
+        resource_svg(
+            "fuel_cells",
+            "#ffc400",
+            '<rect x="25" y="19" width="14" height="26" rx="6" fill-opacity="0.22" stroke-width="1.6"/>'
+            '<polygon points="32,24 36,32 32,40 28,32" fill-opacity="0.85"/>'
+            '<line x1="32" y1="21" x2="32" y2="43" stroke-width="1.4" opacity="0.7"/>',
+        ),
+    ),
 }
 
 
@@ -618,15 +654,19 @@ def render_research(fname: str, size: int = 96) -> Canvas:
     return c
 
 
-def main() -> None:
-    accent_hex_map = {"ferronit": "#7fffd9", "crytite": "#46e5ff", "energy": "#ffc400"}
+def generate_resource_icons() -> None:
+    accent_hex_map = {"ferronit": "#7fffd9", "crytite": "#46e5ff", "energy": "#ffc400", "fuel_cells": "#ffc400"}
     resource_inner = {
         "ferronit": '<path d="M18 38 L42 18 M24 20 L44 34" fill="none"/>',
         "crytite": '<polygon points="32,14 44,28 38,46 26,46 20,28" fill-opacity="0.35"/>',
         "energy": '<polygon points="34,14 26,32 32,32 28,50 40,30 34,30"/>',
+        "fuel_cells": (
+            '<rect x="25" y="19" width="14" height="26" rx="6" fill-opacity="0.22" stroke-width="1.6"/>'
+            '<polygon points="32,24 36,32 32,40 28,32" fill-opacity="0.85"/>'
+            '<line x1="32" y1="21" x2="32" y2="43" stroke-width="1.4" opacity="0.7"/>'
+        ),
     }
 
-    # --- Ressourcen (64px PNG + SVG) ---
     for name, (accent, draw_fn, _svg_tpl) in RESOURCES.items():
         c = Canvas(64)
         draw_resource_chip(c, accent, draw_fn)
@@ -637,25 +677,36 @@ def main() -> None:
             "0 0 64 64",
         )
 
-    # --- Gebäude ---
+
+def generate_card_artwork() -> None:
+    """Legacy placeholder PNGs only — never writes SVG; real card artwork lives in static/img."""
     for key in BUILDINGS:
         render_building(key).to_png(STATIC / "img" / "buildings" / f"{key}.png")
-        accent_hex = "#%02x%02x%02x" % BUILDING_DRAW.get(key, BUILDING_DRAW["default"])[0]
-        inner = BUILDING_SVG_INNER.get(key, BUILDING_SVG_INNER["default"])
-        write_svg(STATIC / "img" / "buildings" / f"{key}.svg", building_svg(accent_hex, inner))
 
     render_building("default").to_png(STATIC / "img" / "buildings" / "default.png")
-    write_svg(STATIC / "img" / "buildings" / "default.svg", building_svg("#78beff", BUILDING_SVG_INNER["default"]))
 
-    # --- Forschung ---
     for fname in RESEARCH_FILES:
         render_research(fname).to_png(STATIC / "img" / "research" / fname)
-        accent = RESEARCH_DRAW[fname][0]
-        accent_hex = "#%02x%02x%02x" % accent
-        inner = RESEARCH_SVG_INNER[fname]
-        write_svg(STATIC / "img" / "research" / fname.replace(".png", ".svg"), research_svg(accent_hex, inner))
 
-    print(f"[v1.6] Generated sci-fi icons under {STATIC}")
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate Genesis Colonies UI icons")
+    parser.add_argument(
+        "--card-artwork",
+        action="store_true",
+        help="Also regenerate legacy placeholder card PNGs under static/img (overwrites real artwork; no SVG output).",
+    )
+    args = parser.parse_args()
+
+    generate_resource_icons()
+
+    if args.card_artwork:
+        generate_card_artwork()
+        print(f"[v1.6] Generated resource + card placeholder icons under {STATIC}")
+    else:
+        print(f"[v1.6] Generated resource icons under {STATIC / 'icons'} (card artwork unchanged)")
 
 
 if __name__ == "__main__":

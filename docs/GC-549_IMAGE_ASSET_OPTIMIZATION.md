@@ -23,11 +23,11 @@ Landscape-Regression (nur nach Queue-Aktion sichtbar) ist **kein Komprimierungsp
 |--------|------------------------|-----------|-------------|
 | `static/img/buildings` | ~20 PNG | ~60 MB | `buildingIconUrl()` → `.png` ✓ |
 | `static/img/research` | ~10 PNG | ~28 MB | Templates → `.png` ✓ |
-| `static/img/ships` | 10 PNG + 10 SVG | ~27 MB PNG | `shipyardIconUrl()` → **`.svg`** ✗ |
-| `static/img/defense` | 6 PNG + 6 SVG | ~17 MB PNG | `defenseIconUrl()` / Template → **`.svg`** ✗ |
+| `static/img/ships` | 10 PNG | ~27 MB PNG | `shipyardIconUrl()` → `.png` ✓ |
+| `static/img/defense` | 6 PNG | ~17 MB PNG | `defenseIconUrl()` → `.png` ✓ |
 | `static/img/landscapes` | 15 JPG/PNG | ~3 MB | SSR `--planet-landscape` + `applyPlanetLandscapeFromState()` |
 
-**Nicht anfassen:** `static/img/buildings/*.svg`, `static/img/research/*.svg`, `static/icons/*` (eigener Generator), generierte Platzhalter-SVGs nur überspringen, nicht löschen ohne Ticket.
+**Nicht anfassen:** `static/icons/*` (HUD-Ressourcen-Icons via `tools/generate_icons.py`). Card-Artwork unter `static/img/{buildings,research,ships,defense}` ist **PNG-only** — keine SVG-Platzhalter mehr.
 
 ---
 

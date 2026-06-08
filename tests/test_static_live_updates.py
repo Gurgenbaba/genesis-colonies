@@ -813,3 +813,43 @@ def test_main_js_gc539_same_type_queue_patch_and_timer_zero():
 
     progress = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
     assert "requestQueueTimerZeroRefresh" in progress
+
+
+def test_gc551a_fuel_cell_icon_and_hero_level_badge():
+    """GC-551A: fuel_cells uses same resource chip family; hero level badge stays readable."""
+    icons_py = _read("tools/generate_icons.py")
+    base_html = _read("templates/base.html")
+    progression = _read("templates/partials/progression_cards.html")
+    css = _read("static/style.css")
+    fuel_png = ROOT / "static" / "icons" / "fuel_cells.png"
+    fuel_svg = ROOT / "static" / "icons" / "fuel_cells.svg"
+
+    assert '"fuel_cells"' in icons_py.split("RESOURCES = {")[1].split("}")[0]
+    assert "def draw_fuel_cell" in icons_py
+    assert "draw_resource_chip(c, accent, draw_fn)" in icons_py
+    assert "--card-artwork" in icons_py
+    assert "generate_card_artwork" in icons_py
+    assert fuel_png.is_file() and fuel_png.stat().st_size > 700
+    assert fuel_svg.is_file()
+    assert "icons/fuel_cells.png" in progression
+    fuel_block = base_html.split('class="hud-res-panel hud-res-fuel-cells"')[1].split("</div>", 1)[0]
+    assert "onerror" not in fuel_block
+    assert "icons/energy.png" not in fuel_block
+    assert ".gc-level-badge.gc-bld-card-level--hero" in css
+    assert "background: rgb(6, 12, 26)" in css
+    assert ".hud-res-fuel-cells .res-icon" in css
+    assert "gc-res-fuel-cells" in css
+    assert "render_resource_icon('fuel_cells')" in _read("templates/overview.html")
+    assert Path("static/img/buildings/academy.png").stat().st_size > 100_000
+
+
+def test_gc551_card_artwork_dirs_png_only_no_svg():
+    """Card domains use real PNG artwork only — no SVG placeholders under static/img."""
+    card_dirs = ("buildings", "research", "ships", "defense")
+    for sub in card_dirs:
+        folder = ROOT / "static" / "img" / sub
+        assert folder.is_dir(), sub
+        svgs = list(folder.glob("*.svg"))
+        assert svgs == [], f"unexpected SVG in static/img/{sub}: {svgs[:3]}"
+        pngs = list(folder.glob("*.png"))
+        assert pngs, f"missing PNG artwork in static/img/{sub}"

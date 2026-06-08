@@ -106,7 +106,7 @@ Jede Definition enthält:
 
 Bau-Gebäude: `defense_factory` — siehe [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md).
 
-Icons: `/static/img/defense/<key>.svg`
+Icons: `/static/img/defense/<key>.png`
 
 Detail-Modal: `GET /api/defense-units/<defense_key>` → `game/defense_detail.py` + `defense_requirements.py`.
 

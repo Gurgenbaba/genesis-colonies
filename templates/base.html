@@ -166,8 +166,7 @@
             <div class="hud-res-panel hud-res-fuel-cells" title="{{ T('resource_fuel_cells') }}">
               <span class="hud-res-label">{{ T('resource_fuel_cells') }}</span>
               <div class="hud-res-body res-block res-block-fuel-cells">
-                <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" class="res-icon" alt="{{ T('resource_fuel_cells') }}"
-                     onerror="this.onerror=null;this.src='{{ url_for('static', filename='icons/energy.png') }}';">
+                <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" class="res-icon" alt="{{ T('resource_fuel_cells') }}">
                 <span class="res-value fuel_cells">{{ fc_have|fmt_int }}</span>
                 <span class="res-sep" aria-hidden="true">/</span>
                 <span class="res-cap fuel_cells">{{ fc_cap|fmt_int }}</span>

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "partials/building_effect_strip.html" import render_building_effect_bundle with context %}
+{% from "partials/progression_cards.html" import render_resource_icon with context %}
 
 {% block content %}
 
@@ -117,7 +118,7 @@
 
       <div class="overview-resources-strip" id="overview-resources-strip" aria-label="{{ T('overview_label_resources', 'Ressourcen') }}">
         <div class="overview-res-inline" id="overview-fuel-val">
-          <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" alt="" class="overview-res-icon-sm" loading="lazy">
+          {{ render_resource_icon('fuel_cells') }}
           <span class="overview-res-inline-label">{{ T('resource_fuel_cells') }}</span>
           <span class="overview-res-inline-main gc-mono">
             <span class="gc-val" data-res="fuel_cells">{{ (res.fuel_cells or 0)|fmt_int }}</span>
@@ -135,7 +136,7 @@
         <a class="overview-upgrade-card" href="{{ url_for('buildings_view') }}" data-overview-building="{{ b.key }}">
           <div class="overview-upgrade-card-head">
             <span class="overview-upgrade-name">{{ T('overview_building_' ~ b.key, T('building_' ~ b.key)) }}</span>
-            <span class="overview-upgrade-level gc-mono">L{{ b.level|fmt_int }}</span>
+            <span class="overview-upgrade-level gc-level-badge gc-mono">L{{ b.level|fmt_int }}</span>
           </div>
           {{ render_building_effect_bundle(b, compact=true) }}
         </a>
