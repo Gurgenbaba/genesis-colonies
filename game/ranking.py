@@ -1327,8 +1327,11 @@ def get_playercard_ranking_snapshot(
         owns_conn = True
     try:
         scores = format_scores_for_playercard(read_player_scores(int(player_id), conn=conn))
-        rank, total_players = get_player_rank_from_snapshot(int(player_id), conn=conn)
         category_ranks = get_player_category_ranks(int(player_id), conn=conn)
+        rank = category_ranks.get("total")
+        total_players = int(category_ranks.get("total_players") or 0)
+        if rank is None:
+            rank, total_players = get_player_rank_from_snapshot(int(player_id), conn=conn)
         return {
             "rank": rank,
             "total_players": total_players,
@@ -1342,7 +1345,12 @@ def get_playercard_ranking_snapshot(
             conn.close()
 
 
-def get_player_category_ranks(player_id: int, conn=None) -> Dict[str, Any]:
+def get_player_category_ranks(
+    player_id: int,
+    conn=None,
+    *,
+    skip_live_total: bool = False,
+) -> Dict[str, Any]:
     """Return snapshot ranks per score category for the current player."""
     owns_conn = False
     if conn is None:
@@ -1408,9 +1416,13 @@ def get_player_category_ranks(player_id: int, conn=None) -> Dict[str, Any]:
             if "rank_fleet" in row.keys() and row["rank_fleet"] is not None:
                 ranks["fleet"] = int(row["rank_fleet"])
 
-    live_total_rank, _ = get_player_rank_from_snapshot(int(player_id), conn=conn)
-    if live_total_rank is not None:
-        ranks["total"] = int(live_total_rank)
+    if not skip_live_total:
+        live_total_rank, live_total_players = get_player_rank_from_snapshot(
+            int(player_id), conn=conn
+        )
+        if live_total_rank is not None:
+            ranks["total"] = int(live_total_rank)
+        ranks["total_players"] = int(live_total_players)
 
     if "fleet" not in ranks and column_exists(conn, "player_scores", "score_fleet"):
         cur.execute(
@@ -1519,39 +1531,65 @@ def _current_player_payload(
 ) -> Dict[str, Any]:
     pid = int(current_player_id)
     my_scores = get_player_score_cached(pid, read_only=True)
-    category_ranks = get_player_category_ranks(pid)
-    my_rank, total_players = get_player_rank_from_snapshot(pid)
-    total_players = int(total_players or category_ranks.get("total_players") or 0)
-
-    current = {
-        "rank": my_rank,
-        "total_players": total_players,
-        "total_score": int(my_scores.get("total", 0)),
-        "building_score": int(my_scores.get("buildings", 0)),
-        "research_score": int(my_scores.get("research", 0)),
-        "fleet_score": int(my_scores.get("fleet", 0)),
-        "defense_score": int(my_scores.get("defense", 0)),
-        "combat_score": int(my_scores.get("combat", 0)),
-        "destroyed_score": int(my_scores.get("destroyed", 0)),
-        "military_score": int(my_scores.get("military", 0)),
-        "evolution_score": int(my_scores.get("evolution", 0)),
-        "ranks": category_ranks,
-    }
-
     in_top = next((r for r in top_players if int(r["player_id"]) == pid), None)
-    if in_top is not None:
-        current["rank"] = in_top["rank"]
-        current["total_score"] = in_top["total_score"]
-        current["building_score"] = in_top["building_score"]
-        current["research_score"] = in_top["research_score"]
-        current["fleet_score"] = in_top["fleet_score"]
-        current["defense_score"] = in_top["defense_score"]
-        current["combat_score"] = in_top.get("combat_score", 0)
-        current["destroyed_score"] = in_top.get("destroyed_score", 0)
-        current["military_score"] = in_top.get("military_score", 0)
-        current["evolution_score"] = in_top.get("evolution_score", 0)
 
-    return current
+    conn = db()
+    try:
+        category_ranks = get_player_category_ranks(
+            pid, conn=conn, skip_live_total=in_top is not None
+        )
+        if in_top is not None:
+            my_rank = int(in_top["rank"])
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) AS cnt FROM players")
+            total_players = int(cur.fetchone()["cnt"])
+            category_ranks = {
+                **category_ranks,
+                "total": my_rank,
+                "total_players": total_players,
+            }
+            return {
+                "rank": my_rank,
+                "total_players": total_players,
+                "total_score": int(in_top["total_score"]),
+                "building_score": int(in_top["building_score"]),
+                "research_score": int(in_top["research_score"]),
+                "fleet_score": int(in_top["fleet_score"]),
+                "defense_score": int(in_top["defense_score"]),
+                "combat_score": int(in_top.get("combat_score", 0)),
+                "destroyed_score": int(in_top.get("destroyed_score", 0)),
+                "military_score": int(in_top.get("military_score", 0)),
+                "evolution_score": int(in_top.get("evolution_score", 0)),
+                "ranks": category_ranks,
+            }
+
+        my_rank = category_ranks.get("total")
+        total_players = int(category_ranks.get("total_players") or 0)
+        if my_rank is None:
+            my_rank, total_players = get_player_rank_from_snapshot(pid, conn=conn)
+            total_players = int(total_players or 0)
+            category_ranks = {
+                **category_ranks,
+                "total": my_rank,
+                "total_players": total_players,
+            }
+
+        return {
+            "rank": my_rank,
+            "total_players": total_players,
+            "total_score": int(my_scores.get("total", 0)),
+            "building_score": int(my_scores.get("buildings", 0)),
+            "research_score": int(my_scores.get("research", 0)),
+            "fleet_score": int(my_scores.get("fleet", 0)),
+            "defense_score": int(my_scores.get("defense", 0)),
+            "combat_score": int(my_scores.get("combat", 0)),
+            "destroyed_score": int(my_scores.get("destroyed", 0)),
+            "military_score": int(my_scores.get("military", 0)),
+            "evolution_score": int(my_scores.get("evolution", 0)),
+            "ranks": category_ranks,
+        }
+    finally:
+        conn.close()
 
 
 def build_ranking_api_payload(

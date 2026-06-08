@@ -137,11 +137,6 @@
     return parseIntNumber(n).toLocaleString("de-DE", { maximumFractionDigits: 0 });
   }
 
-  GC.parseIntNumber = parseIntNumber;
-  GC.fmtIntParts = fmtIntParts;
-  GC.fmtNumber = fmtNumber;
-  GC.fmtIntFull = fmtIntFull;
-
   function renderMonoCompact(n, prefix = "", suffix = "") {
     const p = fmtIntParts(n);
     const text = `${prefix}${p.display}${suffix}`;
@@ -721,6 +716,11 @@
     shipyardPollMs: 5000,
     modules: {},
   };
+
+  GC.parseIntNumber = parseIntNumber;
+  GC.fmtIntParts = fmtIntParts;
+  GC.fmtNumber = fmtNumber;
+  GC.fmtIntFull = fmtIntFull;
 
   (function applyClientRuntimeConfig() {
     const cfg = typeof window !== "undefined" ? window.GC_CLIENT_CONFIG : null;
@@ -10569,17 +10569,26 @@
   }
 
   function renderRankingPayload(payload) {
-    if (payload?.ok) GC._rankingLastPayload = payload;
-    _rankingLifecycle.payload = payload && payload.ok ? payload : null;
-    if (_rankingLifecycle.payload) {
-      const visible = rankingVisibleTabs(_rankingLifecycle.payload);
-      if (!visible.some((t) => t.id === _rankingLifecycle.tab)) {
-        _rankingLifecycle.tab = visible[0]?.id || "total";
+    try {
+      if (payload?.ok) GC._rankingLastPayload = payload;
+      _rankingLifecycle.payload = payload && payload.ok ? payload : null;
+      if (_rankingLifecycle.payload) {
+        const visible = rankingVisibleTabs(_rankingLifecycle.payload);
+        if (!visible.some((t) => t.id === _rankingLifecycle.tab)) {
+          _rankingLifecycle.tab = visible[0]?.id || "total";
+        }
+      }
+      rankingRenderMyStrip(_rankingLifecycle.payload, _rankingLifecycle.tab);
+      rankingRenderTabs(_rankingLifecycle.payload, _rankingLifecycle.tab);
+      rankingRenderList(_rankingLifecycle.payload, _rankingLifecycle.tab);
+    } catch (err) {
+      console.error("[GC] ranking render failed", err);
+      const tableEl = document.getElementById("ranking-table-content");
+      if (tableEl) {
+        const errMsg = rankingT("ranking_error", "Could not load ranking.");
+        tableEl.innerHTML = `<div class="ranking-state ranking-state-error">${rankingEscapeHtml(errMsg)}</div>`;
       }
     }
-    rankingRenderMyStrip(_rankingLifecycle.payload, _rankingLifecycle.tab);
-    rankingRenderTabs(_rankingLifecycle.payload, _rankingLifecycle.tab);
-    rankingRenderList(_rankingLifecycle.payload, _rankingLifecycle.tab);
   }
 
   function bindRankingTabsOnce() {
@@ -10619,7 +10628,8 @@
         initialEl.remove();
         if (loadId === _rankingLifecycle.loadId) renderRankingPayload(data);
         return;
-      } catch (_) {
+      } catch (err) {
+        console.warn("[GC] ranking initial JSON parse failed", err);
         initialEl.remove();
       }
     }
@@ -10633,8 +10643,8 @@
         renderRankingPayload(data);
       })
       .catch((err) => {
-        if (err && err.name === "AbortError") return;
         if (loadId !== _rankingLifecycle.loadId) return;
+        if (err && err.name === "AbortError") return;
         renderRankingPayload(null);
       });
   }
