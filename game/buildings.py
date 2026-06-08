@@ -76,8 +76,7 @@ BUILDING_TAB: Dict[str, str] = {
 
 _BUILDING_ICON_OVERRIDES: Dict[str, str] = {
     "orbital_shipyard": "img/buildings/shipyard.png",
-    "fuel_cell_plant": "img/buildings/solar_plant.png",
-    "fuel_storage": "img/buildings/crystal_storage.png",
+    "fuel_storage": "img/buildings/fuel_cell_storage.png",
 }
 
 BUILDING_ICON: Dict[str, str] = {

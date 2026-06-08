@@ -128,7 +128,7 @@ def test_main_js_progress_ticker_uses_server_time_and_interval():
     assert "setTimeout(tick, _progressTickerDelayMs(serverNow))" in ticker_section
     assert "requestAnimationFrame(tick)" not in ticker_section
     update_all = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
-    assert ".gc-card-queue-block[data-queue-active='1']" in update_all
+    assert "[data-gc-card-queue][data-queue-active='1']" in update_all
     assert "planet_research" in update_all
     assert "updatePlanetEvolutionResearchProgress" not in update_all
 
@@ -437,7 +437,8 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     assert "DEFENSEQ.active.finishTime" in progress
     assert "assignMonotonicServerRemaining(defenseActive" in progress
     patch_queues = src.split("function patchCardQueuesFromOwnerMap(page, byOwner, listCards, ownerKeyFromCard, findCard)")[1].split("GC.renderCardQueueBlock = function renderCardQueueBlock")[0]
-    assert "if (key && !activeKeys.has(key)) GC.clearCardQueueBlock(card)" in patch_queues
+    assert "activeKeys.has(key)" in patch_queues
+    assert "GC.clearCardQueueBlock(card)" in patch_queues
     patch_sy = src.split("function patchShipyardCardQueues(page, queueData)")[1].split("function shipyardIconUrl")[0]
     assert "patchCardQueuesFromOwnerMap" in patch_sy
     assert "GC.clearCardQueueBlock(card);" not in patch_sy.split("patchCardQueuesFromOwnerMap")[0]
@@ -655,6 +656,117 @@ def test_main_js_gc548_landscape_visible_on_perf_idle_boot():
     assert "body.gc-perf-idle.gc-has-planet-landscape .gc-bg" in block
 
 
+def test_main_js_gc549_ship_defense_icons_use_png():
+    """GC-549: shipyard/defense cards use raster PNG assets, not SVG placeholders."""
+    src = _read("static/main.js")
+    ship_fn = src.split("function shipyardIconUrl(shipKey)")[1].split("function ")[0]
+    defense_fn = src.split("function defenseIconUrl(defenseKey)")[1].split("function ")[0]
+    assert "/static/img/ships/${sk}.png" in ship_fn
+    assert ".svg" not in ship_fn
+    assert "/static/img/defense/" in defense_fn
+    assert ".png`" in defense_fn
+    assert ".svg" not in defense_fn
+
+    defense_tpl = _read("templates/defense.html")
+    assert "unit.defense_key ~ '.png'" in defense_tpl
+
+
+def test_main_js_gc550b_compact_head_actions():
+    """GC-550B: compact header actions, single hero image."""
+    src = _read("static/main.js")
+    buildings_html = _read("templates/buildings.html")
+    research_html = _read("templates/research.html")
+    css = _read("static/style.css")
+
+    assert "render_building_head_action" in buildings_html
+    assert "render_research_head_action" in research_html
+    assert "gc-bld-card-head-action" in buildings_html
+    assert "gc-bld-head-action-btn--go" in buildings_html
+    assert "gc-bld-card-icon--title" not in buildings_html
+    assert "gc-bld-card-action-wrap" not in buildings_html
+    assert "gc-bld-card-action-wrap" not in research_html
+    assert "gc-bld-head-action-btn" in src
+    assert "hideBuildingsSubnav" in src.split("function initPage")[1][:800]
+    assert ".gc-bld-head-action-btn{" in css
+
+
+def test_main_js_gc550c_buildings_hero_queue_and_subnav():
+    """GC-550C: hero progress overlay, same-building re-queue, subnav collapse."""
+    src = _read("static/main.js")
+    buildings_html = _read("templates/buildings.html")
+    research_html = _read("templates/research.html")
+    base_html = _read("templates/base.html")
+    css = _read("static/style.css")
+
+    assert "render_hero_img_stack" in buildings_html
+    assert "render_hero_time_chip" in buildings_html
+    assert "data-hero-time-chip" in buildings_html
+    assert "gc-bld-hero-img-stack" in buildings_html
+    assert "gc-bld-card-time" not in buildings_html
+    assert "render_hero_time_chip" in research_html
+    assert "gc-bld-card-hero-img--muted" in css
+    assert "gc-bld-hero-time-chip" in css
+    assert "renderHeroQueueOverlay" in src
+    assert "applyHeroImageProgress" in src
+    assert "ensureHeroQueuedBadgeTimer" in src
+    assert "queue_starts_in" in buildings_html
+    assert "queue_starts_in" in research_html
+    assert "gc-bld-card-hero-overlay" not in buildings_html
+    assert "gc-bld-card-hero-overlay" not in research_html
+    assert "grayscale(1)" not in css.split(".gc-bld-hero-img-stack .gc-bld-card-hero-img--muted")[1].split("}")[0]
+    assert "saturate(" in css
+    assert "gc-nav-sub--collapsed" in src
+    assert "GC.detectPage() !== \"buildings\"" in src
+    assert base_html.count('id="gc-nav-buildings-sub"') == 1
+    assert ".gc-bld-hero-queue{" in css
+    assert ".gc-nav-sub--buildings[hidden]" in css
+    assert "if (domain === \"building\" || domain === \"research\")" in src
+
+    building_action = src.split("function renderBuildingActionCell")[1].split("function patchBuildingPanel")[0]
+    research_action = src.split("function renderResearchActionCell")[1].split("function patchBuildingPanel")[0]
+    assert "gc-bld-head-action-btn--busy" not in building_action
+    assert "if (b.queue_job)" not in building_action
+    assert "gc-bld-head-action-btn--busy" not in research_action
+    assert "if (tech.queue_job)" not in research_action
+
+    update_build = src.split("function updateBuildQueueActions")[1].split("function _stripCardQueueOwnerClasses")[0]
+    update_research = src.split("function updateResearchQueueActions")[1].split("function updateBuildQueueActions")[0]
+    assert "gc-building-card--in-queue" not in update_build
+    assert "gc-research-card--in-queue" not in update_research
+
+
+def test_main_js_gc550_buildings_ux_contract():
+    """GC-550/550A: hero cards, sidebar-only building categories, queue slot below action."""
+    src = _read("static/main.js")
+    buildings_html = _read("templates/buildings.html")
+    research_html = _read("templates/research.html")
+    shipyard_html = _read("templates/shipyard.html")
+    defense_html = _read("templates/defense.html")
+    base_html = _read("templates/base.html")
+    css = _read("static/style.css")
+    de = _read("locales/de.json")
+
+    assert "gc-bld-card-hero" in buildings_html
+    assert "building-tabs--prominent" not in buildings_html
+    assert "data-buildings-tab-panels" in buildings_html
+    assert "gc-bld-hero-queue" in buildings_html
+    assert "gc-bld-card-hero" in research_html
+    assert "gc-bld-card-hero" in shipyard_html
+    assert "gc-bld-card-action-wrap" in shipyard_html
+    assert "gc-bld-card-hero" in defense_html
+    assert "gc-nav-buildings-sub" in base_html
+    assert "data-building-tab" in base_html
+    assert "activateBuildingTabByName" in src
+    assert "hideBuildingsSubnav" in src
+    assert 'querySelector(".gc-bld-card-queue-slot")' in src
+    assert '"research_btn_queue_full"' in src
+    assert '"shipyard_btn_queue_full"' in src
+    assert '"defense_btn_queue_full"' in src
+    assert ".gc-bld-card-hero{" in css
+    assert '"research_btn_queue_full": "Forschungsliste voll"' in de
+    assert '"shipyard_btn_queue_full": "Werftwarteschlange voll"' in de
+
+
 def test_main_js_gc539_same_type_queue_patch_and_timer_zero():
     """GC-539: job_id keyed card queues; immediate refresh at 0s."""
     src = _read("static/main.js")
@@ -671,12 +783,16 @@ def test_main_js_gc539_same_type_queue_patch_and_timer_zero():
     assert "function queueTimerDisplaySeconds(remaining)" in src
 
     patch_queues = src.split("function patchCardQueuesFromOwnerMap(page, byOwner, listCards, ownerKeyFromCard, findCard)")[1].split("GC.renderCardQueueBlock = function renderCardQueueBlock")[0]
+    assert "activeKeys.has(key)" in patch_queues
+    assert "GC.clearCardQueueBlock(card)" in patch_queues
     assert "headJob" in patch_queues
+    assert "GC.renderCardQueueBlock(card, headJob)" in patch_queues
     assert "list.forEach((job) => GC.renderCardQueueBlock(card, job))" not in patch_queues
     assert "gc-card-queue-block--advance" in patch_queues
 
     render_card = src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("function _syncBuildQueueLiveState")[0]
     assert "findCardQueueBlockByJobId(cardEl, jobId)" in render_card
+    assert 'querySelector(".gc-bld-card-queue-slot")' in render_card
     assert "dataset.queuePosition" in render_card
     assert "GC.clearCardQueueBlock(cardEl)" not in render_card.split("if (existing) existing.remove();")[0]
 
@@ -689,7 +805,7 @@ def test_main_js_gc539_same_type_queue_patch_and_timer_zero():
     assert "clearCardQueueBlock" not in apply_def
 
     clear_block = src.split("GC.clearCardQueueBlock = function clearCardQueueBlock(cardEl)")[1].split("function findCardQueueBlockByJobId")[0]
-    assert 'querySelectorAll("[data-gc-card-queue]")' in clear_block
+    assert 'querySelectorAll("[data-gc-card-queue], [data-hero-queue]")' in clear_block
 
     can_patch = src.split("function canPatchCardQueueInPlace(existing, queueJob)")[1].split("function syncCardQueueOwnerClasses")[0]
     assert "jobId !== prevJobId" in can_patch

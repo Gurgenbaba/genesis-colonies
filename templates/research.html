@@ -183,6 +183,119 @@
   {% endif %}
 {% endmacro %}
 
+{% macro render_hero_img_stack(src, fallback, qj) %}
+  {% set _active = qj is defined and qj and qj.status == 'active' %}
+  <div class="gc-bld-hero-img-stack{% if _active %} gc-bld-hero-img-stack--progress{% endif %}"
+       {% if _active %}style="--hero-progress-pct: {{ qj.progress_pct|default(0)|int }}%;"{% endif %}>
+    {% if _active %}
+      <img src="{{ src }}"
+           alt=""
+           class="gc-bld-card-hero-img gc-bld-card-hero-img--muted"
+           loading="lazy"
+           onerror="this.onerror=null;this.src='{{ fallback }}';">
+      <img src="{{ src }}"
+           alt=""
+           class="gc-bld-card-hero-img gc-bld-card-hero-img--color"
+           loading="lazy"
+           aria-hidden="true"
+           onerror="this.onerror=null;this.src='{{ fallback }}';"
+           style="clip-path: inset({{ (100 - (qj.progress_pct|default(0)|int))|int }}% 0 0 0);">
+    {% else %}
+      <img src="{{ src }}"
+           alt=""
+           class="gc-bld-card-hero-img"
+           loading="lazy"
+           onerror="this.onerror=null;this.src='{{ fallback }}';">
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{% macro render_hero_time_chip(qj, idle_seconds, timer_kind, idle_title) %}
+  <span class="gc-bld-hero-time-chip bcell-duration gc-mono" data-hero-time-chip title="{{ idle_title }}">
+    {% if qj and qj.status == 'active' %}
+      {{ render_card_queue_timer(qj, timer_kind, 'game-state') }}
+    {% else %}
+      <span class="gc-hero-time-text">{{ render_prog_duration(idle_seconds) }}</span>
+    {% endif %}
+  </span>
+{% endmacro %}
+
+{% macro render_hero_queue(qj, timer_kind, cancel_domain) %}
+  <div class="gc-bld-hero-queue gc-card-queue-block gc-card-queue-block--hero gc-card-queue-block--{{ qj.status }} gc-bld-hero-queue--{{ qj.status }}"
+       data-hero-queue="1"
+       data-gc-card-queue="1"
+       data-queue-active="{{ '1' if qj.status == 'active' else '0' }}"
+       data-timer-domain="{{ cancel_domain }}"
+       data-job-id="{{ qj.job_id|int }}"
+       data-queue-position="{{ qj.queue_position|int }}"{{ render_card_queue_data_attrs(qj) }}>
+    {% if qj.status == 'active' %}
+    <div class="gc-bld-hero-queue-center"
+         role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ qj.progress_pct|default(0)|int }}">
+      <span class="gc-bld-hero-queue-pct gc-mono">{{ qj.progress_pct|default(0)|int }}%</span>
+    </div>
+    {% else %}
+    <div class="gc-bld-hero-queue-badge gc-mono">
+      <span class="gc-bld-hero-queue-badge-line">{{ T('queue_card_status_queued', 'QUEUE #%(n)s', n=qj.queue_position|int) }}</span>
+      <span class="gc-bld-hero-queue-badge-sub">
+        <span class="gc-bld-hero-queue-starts-label">{{ T('queue_starts_in', 'Startet in') }}</span>
+        {{ render_card_queue_timer(qj, timer_kind, 'game-state') }}
+      </span>
+    </div>
+    {% endif %}
+    <button type="button"
+            class="gc-bld-hero-queue-cancel"
+            {% if cancel_domain == 'research' %}data-research-cancel-id{% else %}data-build-cancel-id{% endif %}="{{ qj.job_id|int }}"
+            title="{{ T('action_cancel', 'Abbrechen') }}"
+            aria-label="{{ T('action_cancel', 'Abbrechen') }}"><span aria-hidden="true">×</span></button>
+  </div>
+{% endmacro %}
+
+{% macro render_research_head_action(tech, rq_summary, queue_full) %}
+  {% set locked = not tech.requirements_met %}
+  {% set can_afford = tech.can_afford if tech.can_afford is defined else true %}
+  {% set _action_label = T("research_btn_queue", "Anreihen") if rq_summary.count else T("research_btn_start", "Forschung starten") %}
+  <div class="gc-bld-card-head-action gc-bld-card-action tech-status-cell bcell-action" data-tech-key="{{ tech.key }}">
+    {% if locked %}
+      {% set lock_title = T("research_requirements_not_met") %}
+      {% set req_tooltip = namespace(text='') %}
+      {% for req in tech.requirements_items if not req.met %}
+        {% if req.kind == 'building' %}
+          {% set req_label = T('building_' ~ req.key) %}
+        {% else %}
+          {% set req_label = T(req.key) %}
+        {% endif %}
+        {% set req_tooltip.text = req_tooltip.text ~ req_label ~ ' L' ~ (req.need|fmt_int) ~ (' · ' if not loop.last else '') %}
+      {% endfor %}
+      {% if req_tooltip.text %}
+        {% set lock_title = lock_title ~ " · " ~ req_tooltip.text %}
+      {% endif %}
+      <button type="button"
+              class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-research status-pill-icon-btn"
+              disabled
+              title="{{ lock_title }}"
+              aria-label="{{ lock_title }}"><span aria-hidden="true">⚠</span></button>
+    {% elif queue_full %}
+      <button type="button"
+              class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-research"
+              disabled
+              aria-disabled="true"
+              title="{{ T('research_btn_queue_full', 'Forschungsliste voll') }}"
+              aria-label="{{ T('research_btn_queue_full', 'Forschungsliste voll') }}"><span aria-hidden="true">🔒</span></button>
+    {% elif not can_afford %}
+      <button type="button"
+              class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-research"
+              disabled
+              title="{{ T('research_not_enough_resources') }}"
+              aria-label="{{ T('research_not_enough_resources') }}"><span aria-hidden="true">+</span></button>
+    {% else %}
+      <a href="{{ url_for('research_start', tech_key=tech.key) }}"
+         class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-research"
+         title="{{ _action_label }}"
+         aria-label="{{ _action_label }}"><span aria-hidden="true">+</span></a>
+    {% endif %}
+  </div>
+{% endmacro %}
+
 {% macro render_research_card(tech, rq_summary, queue_full) %}
   {% set locked = not tech.requirements_met %}
   {% set curr_lvl = (tech.level or 0)|int %}
@@ -210,96 +323,41 @@
   {% else %}
     {% set row_class = 'gc-prog-affordable' %}
   {% endif %}
+  {% set _research_img = url_for('static', filename='img/research/' ~ tech.icon) if tech.icon else url_for('static', filename='img/research/energieeffizienz.png') %}
+  {% set _research_img_fallback = url_for('static', filename='img/research/energieeffizienz.png') %}
 
   <article class="gc-building-card gc-research-card gc-prog-card {{ row_class }}{% if locked %} tech-row-locked{% endif %}{% if tech.queue_job is defined and tech.queue_job %} gc-research-card--in-queue{% if tech.queue_job.status == 'active' %} gc-research-card--queue-active{% else %} gc-research-card--queue-pending{% endif %}{% endif %}"
            data-research-card
            data-tech-key="{{ tech.key }}"
            role="listitem">
 
-    <header class="gc-bld-card-head">
-      <div class="gc-bld-card-identity">
-        {% if tech.icon %}
-          <img src="{{ url_for('static', filename='img/research/' ~ tech.icon) }}"
-               alt=""
-               class="gc-bld-card-icon"
-               loading="lazy">
-        {% else %}
-          <span class="gc-bld-card-icon gc-prog-icon-fallback" aria-hidden="true">🔬</span>
-        {% endif %}
+    <div class="gc-bld-card-hero">
+      {{ render_hero_img_stack(_research_img, _research_img_fallback, tech.queue_job if tech.queue_job is defined else none) }}
+      {% if tech.queue_job is defined and tech.queue_job %}
+      {{ render_hero_queue(tech.queue_job, 'research', 'research') }}
+      {% endif %}
+      <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero tech-level-current" title="{{ T('buildings_col_level') }}">
+        {{ curr_lvl|fmt_int }}→{{ target_lvl|fmt_int }}
+      </span>
+      {{ render_hero_time_chip(tech.queue_job if tech.queue_job is defined else none, tech.time_seconds, 'research', T('research_col_time')) }}
+      <div class="gc-bld-card-hero-title">
         <div class="gc-bld-card-title-wrap">
           <h3 class="gc-bld-card-title">{{ tech_label }}</h3>
           {{ render_info_popover_trigger(tech_desc) }}
         </div>
+        {{ render_research_head_action(tech, rq_summary, queue_full) }}
       </div>
-      <span class="gc-level-badge gc-bld-card-level tech-level-current" title="{{ T('buildings_col_level') }}">
-        {{ curr_lvl|fmt_int }}→{{ target_lvl|fmt_int }}
-      </span>
-    </header>
+    </div>
 
     {{ render_research_effect_bundle(tech) }}
 
-    {{ render_research_card_queue(tech.queue_job if tech.queue_job is defined else none) }}
-
-    <div class="gc-bld-card-meta">
+    <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
       <div class="gc-bld-card-costs bcell-cost tech-cost-cell">
         {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, target_lvl, false) }}
       </div>
-      <span class="gc-bld-card-time bcell-duration tech-time-cell gc-mono" title="{{ T('research_col_time') }}">
-        <span class="tech-time">{{ render_prog_duration(tech.time_seconds) }}</span>
-      </span>
     </div>
 
     {{ render_research_blockers(tech, queue_full) }}
-
-    <footer class="gc-bld-card-action tech-status-cell" data-tech-key="{{ tech.key }}">
-      {% if locked %}
-        {% set lock_title = T("research_requirements_not_met") %}
-        {% set req_tooltip = namespace(text='') %}
-        {% for req in tech.requirements_items if not req.met %}
-          {% if req.kind == 'building' %}
-            {% set req_label = T('building_' ~ req.key) %}
-          {% else %}
-            {% set req_label = T(req.key) %}
-          {% endif %}
-          {% set req_tooltip.text = req_tooltip.text ~ req_label ~ ' L' ~ (req.need|fmt_int) ~ (' · ' if not loop.last else '') %}
-        {% endfor %}
-        {% if req_tooltip.text %}
-          {% set lock_title = lock_title ~ " · " ~ req_tooltip.text %}
-        {% endif %}
-        <button type="button"
-                class="gc-btn gc-btn-danger gc-btn-xs btn-research status-pill-icon-btn"
-                disabled
-                title="{{ lock_title }}"
-                aria-label="{{ lock_title }}">🔒</button>
-      {% elif queue_full %}
-        <button type="button"
-                class="gc-btn gc-btn-primary gc-btn-xs btn-research"
-                disabled
-                aria-disabled="true">
-          {% if rq_summary.count %}
-            {{ T("research_btn_queue", "Anreihen") }}
-          {% else %}
-            {{ T("research_btn_start") }}
-          {% endif %}
-        </button>
-      {% elif not can_afford %}
-        <button type="button"
-                class="gc-btn gc-btn-danger gc-btn-xs btn-research"
-                disabled
-                title="{{ T('research_not_enough_resources') }}">
-          {{ T("research_btn_start") }}
-        </button>
-      {% else %}
-        <a href="{{ url_for('research_start', tech_key=tech.key) }}"
-           class="gc-btn gc-btn-primary gc-btn-xs btn-research">
-          {% if rq_summary.count %}
-            {{ T("research_btn_queue", "Anreihen") }}
-          {% else %}
-            {{ T("research_btn_start") }}
-          {% endif %}
-        </a>
-      {% endif %}
-    </footer>
   </article>
 {% endmacro %}
 

@@ -1188,6 +1188,10 @@
     GC.pageLifecycle.initialized = true;
     console.debug("[GC] initPage", page);
 
+    if (page !== "buildings") {
+      hideBuildingsSubnav();
+    }
+
     if (typeof normalizePopoverTriggers === "function") {
       normalizePopoverTriggers(document.getElementById("main-content") || document);
     }
@@ -1626,63 +1630,81 @@
     const queueActive = count > 0;
     const btnStart = t("research_btn_start", "Forschung starten");
     const btnQueue = t("research_btn_queue", "Anreihen");
-    const fullLabel = t("research_status_queue_full", "Warteschlange voll");
+    const fullLabel = t("research_btn_queue_full", "Forschungsliste voll");
+    const actionLabel = queueActive ? btnQueue : btnStart;
 
     if (!tech.requirements_met) {
       let lockTitle = t("research_requirements_not_met", "Voraussetzungen nicht erfüllt.");
       const reqHint = formatResearchReqTooltip(tech.requirements_items);
       if (reqHint) lockTitle += " · " + reqHint;
       return (
-        `<button class="gc-btn gc-btn-danger gc-btn-xs btn-research status-pill-icon-btn" type="button" disabled` +
-        ` title="${lockTitle}" aria-label="${lockTitle}">🔒</button>`
+        `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-research status-pill-icon-btn" type="button" disabled` +
+        ` title="${lockTitle}" aria-label="${lockTitle}"><span aria-hidden="true">⚠</span></button>`
       );
     }
     if (queueFull) {
-      const label = queueActive ? btnQueue : btnStart;
       return (
-        `<button class="gc-btn gc-btn-primary gc-btn-xs btn-research" type="button" disabled` +
-        ` aria-disabled="true" title="${fullLabel}">${label}</button>`
+        `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-research" type="button" disabled` +
+        ` aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span aria-hidden="true">🔒</span></button>`
       );
     }
     if (tech.can_afford === false) {
       const shortMsg = t("research_not_enough_resources", "Nicht genug Ressourcen.");
-      return `<button class="gc-btn gc-btn-danger gc-btn-xs btn-research" type="button" disabled title="${shortMsg}">${btnStart}</button>`;
+      return (
+        `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-research" type="button" disabled` +
+        ` title="${shortMsg}" aria-label="${shortMsg}"><span aria-hidden="true">+</span></button>`
+      );
     }
-    const label = queueActive ? btnQueue : btnStart;
     const href = `/research_start/${encodeURIComponent(key)}`;
-    return `<a href="${href}" class="gc-btn gc-btn-primary gc-btn-xs btn-research">${label}</a>`;
+    return (
+      `<a href="${href}" class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-research"` +
+      ` title="${actionLabel}" aria-label="${actionLabel}"><span aria-hidden="true">+</span></a>`
+    );
   }
 
   function renderBuildingActionCell(b, bqSummary, bqQueueFull) {
     const key = b.key;
     const btnUpgrade = t("buildings_btn_upgrade", "Ausbau starten");
     const btnMax = t("buildings_btn_max_level", "Max. Level");
-    const fullLabel = t("research_status_queue_full", "Warteschlange voll");
+    const fullLabel = t("buildings_btn_queue_full", "Warteschlange voll");
     const btnQueue = t("research_btn_queue", "Anreihen");
     const queueActive = (bqSummary?.count || 0) > 0;
+    const actionLabel = queueActive ? btnQueue : btnUpgrade;
     const isMax = (b.level >= b.max_level) || b.at_queue_max;
 
     if (isMax) {
-      return `<button class="gc-btn gc-btn-ghost gc-btn-xs btn-upgrade" type="button" disabled title="${btnMax}">${btnMax}</button>`;
+      return (
+        `<span class="gc-bld-head-action-btn gc-bld-head-action-btn--max" title="${btnMax}"` +
+        ` aria-label="${btnMax}"><span aria-hidden="true">✓</span></span>`
+      );
     }
     if (!b.requirements_met) {
       const lockTitle = t("msg_build_requirements", "Voraussetzungen nicht erfüllt.");
-      return `<button class="gc-btn gc-btn-danger gc-btn-xs btn-upgrade status-pill-icon-btn" type="button" disabled title="${lockTitle}" aria-label="${lockTitle}">🔒</button>`;
-    }
-    if (!b.can_afford) {
-      return `<button class="gc-btn gc-btn-danger gc-btn-xs btn-upgrade" type="button" disabled>${btnUpgrade}</button>`;
-    }
-    if (bqQueueFull) {
-      const label = queueActive ? btnQueue : btnUpgrade;
       return (
-        `<button class="gc-btn gc-btn-primary gc-btn-xs btn-upgrade" type="button" disabled` +
-        ` aria-disabled="true" title="${fullLabel}">${label}</button>`
+        `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-upgrade status-pill-icon-btn" type="button" disabled` +
+        ` title="${lockTitle}" aria-label="${lockTitle}"><span aria-hidden="true">⚠</span></button>`
       );
     }
-    const label = queueActive ? btnQueue : btnUpgrade;
+    if (bqQueueFull) {
+      return (
+        `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-upgrade" type="button" disabled` +
+        ` aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span aria-hidden="true">🔒</span></button>`
+      );
+    }
+    if (!b.can_afford) {
+      const shortMsg = t("msg_build_not_enough_resources", "Nicht genug Ressourcen.");
+      return (
+        `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-upgrade" type="button" disabled` +
+        ` title="${shortMsg}" aria-label="${shortMsg}"><span aria-hidden="true">+</span></button>`
+      );
+    }
     const tab = b.tab || _getActiveBuildingTab();
     const href = `/upgrade/${encodeURIComponent(key)}?src=buildings&tab=${encodeURIComponent(tab)}`;
-    return `<a id="btn-${key}" data-building="${key}" href="${href}" class="gc-btn gc-btn-primary gc-btn-xs btn-upgrade">${label}</a>`;
+    return (
+      `<a id="btn-${key}" data-building="${key}" href="${href}"` +
+      ` class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-upgrade"` +
+      ` title="${actionLabel}" aria-label="${actionLabel}"><span aria-hidden="true">+</span></a>`
+    );
   }
 
   function patchBuildingPanel(rowsByTab, buildQueueRaw) {
@@ -1724,7 +1746,9 @@
         }
 
         const durCell = row.querySelector(".bcell-duration");
-        if (durCell) _setIfChanged(durCell, formatDuration(b.time_seconds));
+        if (durCell) {
+          setHeroTimeChipIdle(row, b.time_seconds, t("buildings_col_time", "Bauzeit"));
+        }
 
         const actionCell = row.querySelector(".bcell-action");
         if (actionCell) {
@@ -1781,10 +1805,8 @@
         if (costCell.innerHTML.trim() !== html.trim()) costCell.innerHTML = html;
       }
 
-      const timeCell = row.querySelector(".tech-time-cell");
-      if (timeCell) {
-        const inner = timeCell.querySelector(".tech-time") || timeCell;
-        _setIfChanged(inner, formatDuration(tech.time_seconds));
+      if (!row.classList.contains("gc-research-card--in-queue")) {
+        setHeroTimeChipIdle(row, tech.time_seconds, t("research_col_time", "Forschungszeit"));
       }
 
       const actionCell = row.querySelector(".tech-status-cell, .gc-bld-card-action[data-tech-key]");
@@ -2573,8 +2595,89 @@
   }
 
   function _getActiveBuildingTab() {
-    const active = document.querySelector(".building-tabs .tab-btn.active");
-    return active?.dataset?.tab || "resources";
+    const pageRoot = document.querySelector("[data-buildings-page]");
+    if (pageRoot?.dataset?.activeBuildingTab) return pageRoot.dataset.activeBuildingTab;
+    const sub = document.getElementById("gc-nav-buildings-sub");
+    const active = sub?.querySelector("[data-building-tab].active");
+    return active?.dataset?.buildingTab || "resources";
+  }
+
+  function hideBuildingsSubnav() {
+    const sub = document.getElementById("gc-nav-buildings-sub");
+    if (!sub) return;
+    sub.hidden = true;
+    sub.classList.add("gc-nav-sub--collapsed");
+    sub.setAttribute("aria-hidden", "true");
+    sub.querySelectorAll("[data-building-tab]").forEach((btn) => {
+      btn.disabled = true;
+      btn.tabIndex = -1;
+    });
+  }
+
+  function showBuildingsSubnav() {
+    const sub = document.getElementById("gc-nav-buildings-sub");
+    if (!sub) return;
+    sub.hidden = false;
+    sub.classList.remove("gc-nav-sub--collapsed");
+    sub.setAttribute("aria-hidden", "false");
+    sub.querySelectorAll("[data-building-tab]").forEach((btn) => {
+      btn.disabled = false;
+      btn.tabIndex = 0;
+    });
+  }
+
+  function syncBuildingSidebarTab(tab) {
+    const sub = document.getElementById("gc-nav-buildings-sub");
+    if (!sub) return;
+    const target = String(tab || "resources");
+    sub.querySelectorAll("[data-building-tab]").forEach((el) => {
+      el.classList.toggle("active", el.dataset.buildingTab === target);
+    });
+  }
+
+  function activateBuildingTabByName(targetTab, focusEl) {
+    const pageRoot = document.querySelector("[data-buildings-page]");
+    if (!pageRoot) return;
+    const tab = String(targetTab || "resources");
+    pageRoot.querySelectorAll(".tab-content[data-tab]").forEach((c) => {
+      const isActive = c.dataset.tab === tab;
+      c.classList.toggle("active", isActive);
+      if (c.getAttribute("role") === "tabpanel") c.hidden = !isActive;
+    });
+    syncBuildingSidebarTab(tab);
+    pageRoot.dataset.activeBuildingTab = tab;
+    if (focusEl && typeof focusEl.focus === "function") focusEl.focus();
+  }
+
+  function bindBuildingTabsOnce() {
+    if (GC._tabsBound) return;
+    GC._tabsBound = true;
+
+    document.addEventListener("click", (e) => {
+      const subBtn = e.target.closest("#gc-nav-buildings-sub [data-building-tab]");
+      if (subBtn) {
+        if (GC.detectPage() !== "buildings") return;
+        if (subBtn.disabled || subBtn.closest("#gc-nav-buildings-sub")?.hidden) return;
+        activateBuildingTabByName(subBtn.dataset.buildingTab, subBtn);
+        return;
+      }
+
+      const btn = e.target.closest(".building-tabs .tab-btn");
+      if (!btn || btn.closest("#messages-tabs")) return;
+      if (btn.tagName === "A") e.preventDefault();
+      activateBuildingTabByName(btn.dataset.tab, btn);
+    });
+  }
+
+  function initBuildings() {
+    bindBuildingTabsOnce();
+    showBuildingsSubnav();
+    const pageRoot = document.querySelector("[data-buildings-page]");
+    if (!pageRoot) return;
+    const initialTab = pageRoot.dataset.activeBuildingTab || "resources";
+    activateBuildingTabByName(initialTab, null);
+    GC.startProgressTicker();
+    GC.registerCleanup(hideBuildingsSubnav);
   }
 
   function updateResearchQueueActions(researchRaw) {
@@ -2585,39 +2688,35 @@
     const count = summary?.count ?? (Array.isArray(researchRaw?.queue) ? researchRaw.queue.length : 0);
     const limit = summary?.limit ?? 3;
     const queueFull = count >= limit;
-    const fullLabel = t("research_status_queue_full", "Warteschlange voll");
-    const queueActive = count > 0;
-    const btnStart = t("research_btn_start", "Forschung starten");
-    const btnQueue = t("research_btn_queue", "Anreihen");
 
-    list.querySelectorAll(".gc-bld-card-action[data-tech-key], .tech-status-cell[data-tech-key]").forEach((cell) => {
-      if (cell.querySelector("button.btn-research.status-pill-icon-btn[disabled]")) return;
-      if (cell.querySelector("button.btn-research.gc-btn-danger[disabled]")) return;
+    list.querySelectorAll(".gc-bld-card-head-action[data-tech-key], .tech-status-cell[data-tech-key]").forEach((cell) => {
+      if (cell.querySelector(".gc-bld-head-action-btn--warn[disabled]")) return;
+      if (cell.querySelector(".gc-bld-head-action-btn--afford[disabled]")) return;
 
-      const label = queueActive ? btnQueue : btnStart;
+      const techKey = cell.dataset.techKey;
+      if (!techKey) return;
 
       if (queueFull) {
-        const queueBtn = cell.querySelector("button.btn-research.gc-btn-primary[disabled][aria-disabled='true']");
+        const fullLabel = t("research_btn_queue_full", "Forschungsliste voll");
+        const queueBtn = cell.querySelector(".gc-bld-head-action-btn--locked");
         if (!queueBtn) {
           cell.innerHTML =
-            `<button class="gc-btn gc-btn-primary gc-btn-xs btn-research" type="button" disabled` +
-            ` aria-disabled="true" title="${fullLabel}">${label}</button>`;
-        } else if (queueBtn.textContent !== label) {
-          queueBtn.textContent = label;
+            `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-research" type="button" disabled` +
+            ` aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span aria-hidden="true">🔒</span></button>`;
         }
         return;
       }
 
-      if (cell.querySelector("button.btn-research.gc-btn-primary[disabled][aria-disabled='true']")) {
-        const techKey = cell.dataset.techKey;
+      if (cell.querySelector(".gc-bld-head-action-btn--locked")) {
+        const queueActive = count > 0;
+        const actionLabel = queueActive
+          ? t("research_btn_queue", "Anreihen")
+          : t("research_btn_start", "Forschung starten");
         const href = `/research_start/${encodeURIComponent(techKey)}`;
         cell.innerHTML =
-          `<a href="${href}" class="gc-btn gc-btn-primary gc-btn-xs btn-research">${label}</a>`;
-        return;
+          `<a href="${href}" class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-research"` +
+          ` title="${actionLabel}" aria-label="${actionLabel}"><span aria-hidden="true">+</span></a>`;
       }
-
-      const link = cell.querySelector("a.btn-research");
-      if (link && link.textContent !== label) link.textContent = label;
     });
   }
 
@@ -2628,43 +2727,38 @@
     const count = summary?.count ?? (Array.isArray(buildQueueRaw?.queue) ? buildQueueRaw.queue.length : 0);
     const limit = summary?.limit ?? 3;
     const queueFull = count >= limit;
-    const fullLabel = t("research_status_queue_full", "Warteschlange voll");
+    const fullLabel = t("buildings_btn_queue_full", "Warteschlange voll");
     const queueActive = count > 0;
-    const btnLabel = queueActive
+    const actionLabel = queueActive
       ? t("research_btn_queue", "Anreihen")
       : t("buildings_btn_upgrade", "Ausbau starten");
     const tab = _getActiveBuildingTab();
 
-    document.querySelectorAll(".buildings-prog-list .gc-bld-card-action[data-building], .buildings-prog-list .bcell-action[data-building]").forEach((cell) => {
-      if (cell.querySelector("button.btn-upgrade.status-pill-icon-btn[disabled]")) return;
-      if (cell.querySelector("button.btn-upgrade.gc-btn-danger[disabled]")) return;
-      if (cell.querySelector("button.btn-upgrade.gc-btn-ghost[disabled]")) return;
+    document.querySelectorAll(".buildings-prog-list .gc-bld-card-head-action[data-building], .buildings-prog-list .bcell-action[data-building]").forEach((cell) => {
+      if (cell.querySelector(".gc-bld-head-action-btn--warn[disabled]")) return;
+      if (cell.querySelector(".gc-bld-head-action-btn--afford[disabled]")) return;
+      if (cell.querySelector(".gc-bld-head-action-btn--max")) return;
 
       const bType = cell.dataset.building;
       if (!bType) return;
 
       if (queueFull) {
-        const queueBtn = cell.querySelector("button.btn-upgrade.gc-btn-primary[disabled][aria-disabled='true']");
+        const queueBtn = cell.querySelector(".gc-bld-head-action-btn--locked");
         if (!queueBtn) {
           cell.innerHTML =
-            `<button class="gc-btn gc-btn-primary gc-btn-xs btn-upgrade" type="button" disabled` +
-            ` aria-disabled="true" title="${fullLabel}">${btnLabel}</button>`;
-        } else if (queueBtn.textContent !== btnLabel) {
-          queueBtn.textContent = btnLabel;
+            `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-upgrade" type="button" disabled` +
+            ` aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span aria-hidden="true">🔒</span></button>`;
         }
         return;
       }
 
-      if (cell.querySelector("button.btn-upgrade.gc-btn-primary[disabled][aria-disabled='true']")) {
+      if (cell.querySelector(".gc-bld-head-action-btn--locked")) {
         const href = `/upgrade/${encodeURIComponent(bType)}?src=buildings&tab=${encodeURIComponent(tab)}`;
         cell.innerHTML =
           `<a id="btn-${bType}" data-building="${bType}" href="${href}"` +
-          ` class="gc-btn gc-btn-primary gc-btn-xs btn-upgrade">${btnLabel}</a>`;
-        return;
+          ` class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-upgrade"` +
+          ` title="${actionLabel}" aria-label="${actionLabel}"><span aria-hidden="true">+</span></a>`;
       }
-
-      const link = cell.querySelector("a.btn-upgrade");
-      if (link && link.textContent !== btnLabel) link.textContent = btnLabel;
     });
   }
 
@@ -2691,7 +2785,8 @@
 
   GC.clearCardQueueBlock = function clearCardQueueBlock(cardEl) {
     if (!cardEl) return;
-    cardEl.querySelectorAll("[data-gc-card-queue]").forEach((block) => block.remove());
+    cardEl.querySelectorAll("[data-gc-card-queue], [data-hero-queue]").forEach((block) => block.remove());
+    resetHeroImageProgress(cardEl);
     _stripCardQueueOwnerClasses(cardEl);
   };
 
@@ -2704,7 +2799,9 @@
 
   function syncCardQueueOwnerClassesFromBlocks(cardEl, fallbackDomain) {
     if (!cardEl) return;
-    const blocks = cardEl.querySelectorAll("[data-gc-card-queue]");
+    const blocks = Array.from(cardEl.querySelectorAll("[data-gc-card-queue]")).filter(
+      (block) => block.dataset.heroQueue === "1" || block.classList.contains("gc-card-queue-block")
+    );
     if (!blocks.length) {
       _stripCardQueueOwnerClasses(cardEl);
       return;
@@ -2730,6 +2827,11 @@
       const jb = Math.floor(Number(b.dataset.jobId || 0));
       return ja - jb;
     });
+    const slot = cardEl.querySelector(".gc-bld-card-queue-slot");
+    if (slot) {
+      blocks.forEach((block) => slot.appendChild(block));
+      return;
+    }
     const anchor = cardEl.querySelector(".gc-bld-card-meta, .gc-prog-main");
     blocks.forEach((block) => {
       if (anchor) cardEl.insertBefore(block, anchor);
@@ -2808,6 +2910,303 @@
     cardEl.classList.toggle(`${cardPrefix}--queue-pending`, !isActive);
   }
 
+  function findHeroQueue(cardEl) {
+    return cardEl?.querySelector("[data-hero-queue]");
+  }
+
+  function findHeroImgStack(cardEl) {
+    return cardEl?.querySelector(".gc-bld-hero-img-stack");
+  }
+
+  function ensureHeroDualImageStack(stack) {
+    if (!stack || stack.querySelector(".gc-bld-card-hero-img--color")) return;
+    const single = stack.querySelector(":scope > .gc-bld-card-hero-img:not(.gc-bld-card-hero-img--muted):not(.gc-bld-card-hero-img--color)");
+    if (!single) return;
+    const muted = single.cloneNode(true);
+    muted.classList.add("gc-bld-card-hero-img--muted");
+    const color = single.cloneNode(true);
+    color.classList.add("gc-bld-card-hero-img--color");
+    color.setAttribute("aria-hidden", "true");
+    single.replaceWith(muted, color);
+  }
+
+  function resetHeroSingleImage(stack) {
+    if (!stack) return;
+    const muted = stack.querySelector(".gc-bld-card-hero-img--muted");
+    if (!muted) return;
+    const single = muted.cloneNode(true);
+    single.classList.remove("gc-bld-card-hero-img--muted", "gc-bld-card-hero-img--color");
+    single.removeAttribute("aria-hidden");
+    single.style.clipPath = "";
+    stack.querySelector(".gc-bld-card-hero-img--color")?.remove();
+    muted.replaceWith(single);
+  }
+
+  function applyHeroImageProgress(cardEl, pct) {
+    const stack = findHeroImgStack(cardEl);
+    if (!stack) return;
+    const progress = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    stack.classList.add("gc-bld-hero-img-stack--progress");
+    stack.style.setProperty("--hero-progress-pct", `${progress}%`);
+    ensureHeroDualImageStack(stack);
+    const color = stack.querySelector(".gc-bld-card-hero-img--color");
+    if (color) color.style.clipPath = `inset(${100 - progress}% 0 0 0)`;
+  }
+
+  function applyHeroQueuedMark(cardEl) {
+    resetHeroImageProgress(cardEl);
+  }
+
+  function resetHeroImageProgress(cardEl) {
+    const stack = findHeroImgStack(cardEl);
+    if (!stack) return;
+    stack.classList.remove("gc-bld-hero-img-stack--progress");
+    stack.style.removeProperty("--hero-progress-pct");
+    resetHeroSingleImage(stack);
+  }
+
+  function setHeroTimeChipIdle(cardEl, seconds, title) {
+    if (!cardEl || cardEl.classList.contains("gc-building-card--in-queue") || cardEl.classList.contains("gc-research-card--in-queue")) {
+      return;
+    }
+    const chip = cardEl.querySelector("[data-hero-time-chip]");
+    if (!chip) return;
+    const label = formatDuration(seconds);
+    chip.title = title || chip.title || "";
+    chip.innerHTML = `<span class="gc-hero-time-text">${label}</span>`;
+  }
+
+  function ensureHeroTimeChipTimer(cardEl, queueJob, timerKind, refreshOnZero) {
+    const chip = cardEl?.querySelector("[data-hero-time-chip]");
+    if (!chip || !queueJob) return null;
+    if (String(queueJob.status || "") !== "active") return null;
+    let timerEl = chip.querySelector(".gc-card-queue-timer");
+    const timerTarget = cardQueueTimerTarget(queueJob, true);
+    if (!timerEl) {
+      timerEl = document.createElement("div");
+      timerEl.className = "gc-card-queue-timer gc-mono";
+      chip.innerHTML = "";
+      chip.appendChild(timerEl);
+    }
+    if (timerTarget > 0) {
+      const remaining = queueJobRemainingSeconds(
+        timerTarget,
+        getTimerServerNow(),
+        resolveQueueJobRemaining(queueJob)
+      );
+      applyQueueJobTimerAttrs(timerEl, timerTarget, timerKind, refreshOnZero, remaining);
+      timerEl.textContent = formatEta(queueTimerDisplaySeconds(remaining));
+    }
+    return timerEl;
+  }
+
+  function ensureHeroQueuedBadgeTimer(block, queueJob, timerKind, refreshOnZero) {
+    if (!block || !queueJob) return null;
+    const position = Math.max(1, Math.floor(Number(queueJob.queue_position || block.dataset.queuePosition || 1)));
+    let badge = block.querySelector(".gc-bld-hero-queue-badge");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "gc-bld-hero-queue-badge gc-mono";
+      block.innerHTML = "";
+      block.appendChild(badge);
+    }
+    let lineEl = badge.querySelector(".gc-bld-hero-queue-badge-line");
+    let subEl = badge.querySelector(".gc-bld-hero-queue-badge-sub");
+    if (!lineEl || !subEl) {
+      badge.innerHTML =
+        '<span class="gc-bld-hero-queue-badge-line"></span>' +
+        '<span class="gc-bld-hero-queue-badge-sub">' +
+        `<span class="gc-bld-hero-queue-starts-label">${t("queue_starts_in", "Startet in")}</span> ` +
+        "</span>";
+      lineEl = badge.querySelector(".gc-bld-hero-queue-badge-line");
+      subEl = badge.querySelector(".gc-bld-hero-queue-badge-sub");
+    }
+    const queuedLabel = tf("queue_card_status_queued", { n: position }, `QUEUE #${position}`);
+    _setIfChanged(lineEl, queuedLabel);
+    let timerEl = subEl?.querySelector(".gc-card-queue-timer");
+    if (!timerEl && subEl) {
+      timerEl = document.createElement("div");
+      timerEl.className = "gc-card-queue-timer gc-mono";
+      subEl.appendChild(timerEl);
+    }
+    const timerTarget = cardQueueTimerTarget(queueJob, false);
+    if (timerEl && timerTarget > 0) {
+      const remaining = queueJobRemainingSeconds(
+        timerTarget,
+        getTimerServerNow(),
+        resolveQueueJobRemaining(queueJob)
+      );
+      applyQueueJobTimerAttrs(timerEl, timerTarget, timerKind, refreshOnZero, remaining);
+      timerEl.textContent = formatEta(queueTimerDisplaySeconds(remaining));
+    }
+    return timerEl;
+  }
+
+  function applyHeroQueueVisual(cardEl, block, queueJob, pct, remaining, timerKind, refreshOnZero) {
+    if (!cardEl || !block || !queueJob) return;
+    const isActive = String(queueJob.status || "") === "active";
+    const progress = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    const pctEl = block.querySelector(".gc-bld-hero-queue-pct");
+    const centerEl = block.querySelector(".gc-bld-hero-queue-center");
+    block.classList.toggle("gc-bld-hero-queue--active", isActive);
+    block.classList.toggle("gc-bld-hero-queue--queued", !isActive);
+    if (isActive) {
+      applyHeroImageProgress(cardEl, progress);
+      if (pctEl) _setIfChanged(pctEl, `${progress}%`);
+      if (centerEl) {
+        centerEl.setAttribute("role", "progressbar");
+        centerEl.setAttribute("aria-valuemin", "0");
+        centerEl.setAttribute("aria-valuemax", "100");
+        centerEl.setAttribute("aria-valuenow", String(progress));
+      }
+      const timerEl = cardEl.querySelector("[data-hero-time-chip] .gc-card-queue-timer");
+      if (timerEl && Number.isFinite(remaining)) {
+        const eta = formatEta(queueTimerDisplaySeconds(remaining));
+        _setIfChanged(timerEl, eta);
+        block.title = eta;
+      }
+    } else {
+      applyHeroQueuedMark(cardEl);
+      if (timerKind) ensureHeroQueuedBadgeTimer(block, queueJob, timerKind, refreshOnZero || "game-state");
+      centerEl?.removeAttribute("role");
+      centerEl?.removeAttribute("aria-valuemin");
+      centerEl?.removeAttribute("aria-valuemax");
+      centerEl?.removeAttribute("aria-valuenow");
+      const position = Math.max(1, Math.floor(Number(queueJob.queue_position || 1)));
+      const queuedLabel = tf("queue_card_status_queued", { n: position }, `QUEUE #${position}`);
+      block.title = queuedLabel;
+    }
+  }
+
+  function patchHeroQueueInPlace(block, queueJob, opts) {
+    const cardEl = block.closest("[data-building-row], [data-research-card], [data-building-card]");
+    const { timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, opts);
+    const isActive = String(queueJob.status || "") === "active";
+    const finishAt = Math.floor(Number(queueJob.finish_at || 0));
+    const totalSeconds = Math.max(1, Math.floor(Number(queueJob.duration_seconds || block.dataset.totalSeconds || 1)));
+    const now = getTimerServerNow();
+    const timerTarget = cardQueueTimerTarget(queueJob, isActive);
+    const remaining = timerTarget > 0
+      ? queueJobRemainingSeconds(timerTarget, now, resolveQueueJobRemaining(queueJob))
+      : Math.max(0, Math.floor(Number(queueJob.remaining_seconds || 0)));
+    const progressPct = Math.max(0, Math.min(100, Math.floor(Number(queueJob.progress_pct || 0))));
+    const pct = isActive
+      ? (totalSeconds > 0 ? 100 * (1 - remaining / totalSeconds) : progressPct)
+      : 0;
+
+    if (isActive) {
+      ensureHeroTimeChipTimer(cardEl, queueJob, timerKind, refreshOnZero);
+    } else {
+      ensureHeroQueuedBadgeTimer(block, queueJob, timerKind, refreshOnZero);
+    }
+
+    if (isActive && finishAt > 0) assignMonotonicServerRemaining(block, remaining, finishAt);
+    applyHeroQueueVisual(cardEl, block, queueJob, pct, remaining, timerKind, refreshOnZero);
+    return block;
+  }
+
+  function renderHeroQueueOverlay(cardEl, queueJob, opts) {
+    const hero = cardEl.querySelector(".gc-bld-card-hero");
+    if (!hero || !queueJob) return null;
+
+    const options = opts && typeof opts === "object" ? opts : {};
+    const domain = _cardQueueDomain(queueJob, options);
+    if (domain !== "building" && domain !== "research") return null;
+
+    const sig = cardQueueJobSignature(queueJob);
+    const jobId = Math.floor(Number(queueJob.job_id || 0));
+    let block = findHeroQueue(cardEl);
+    if (!block) {
+      block = document.createElement("div");
+      block.className = "gc-bld-hero-queue gc-card-queue-block gc-card-queue-block--hero";
+      block.dataset.heroQueue = "1";
+      const levelBadge = hero.querySelector(".gc-bld-card-level");
+      if (levelBadge) hero.insertBefore(block, levelBadge);
+      else hero.appendChild(block);
+    }
+
+    cardEl.querySelectorAll("[data-hero-queue]").forEach((existing) => {
+      if (existing !== block) existing.remove();
+    });
+
+    if (block && canPatchCardQueueInPlace(block, queueJob)) {
+      block.dataset.queueSig = sig;
+      patchHeroQueueInPlace(block, queueJob, options);
+      syncCardQueueOwnerClassesFromBlocks(cardEl, domain);
+      return block;
+    }
+
+    const { timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, options);
+    const status = String(queueJob.status || "");
+    const position = Math.max(1, Math.floor(Number(queueJob.queue_position || 1)));
+    const finishAt = Math.floor(Number(queueJob.finish_at || 0));
+    const startAt = Math.floor(Number(queueJob.start_at || 0));
+    const totalSeconds = Math.max(1, Math.floor(Number(queueJob.duration_seconds || 1)));
+    const isActive = status === "active";
+    const remaining = Math.max(0, Math.floor(Number(queueJob.remaining_seconds || 0)));
+    const progressPct = Math.max(0, Math.min(100, Math.floor(Number(queueJob.progress_pct || 0))));
+
+    block.className = `gc-bld-hero-queue gc-card-queue-block gc-card-queue-block--hero gc-card-queue-block--${isActive ? "active" : "queued"} gc-bld-hero-queue--${isActive ? "active" : "queued"}`;
+    block.dataset.heroQueue = "1";
+    block.dataset.gcCardQueue = "1";
+    block.dataset.queueSig = sig;
+    block.dataset.queueActive = isActive ? "1" : "0";
+    block.dataset.timerDomain = domain;
+    block.dataset.queuePosition = String(position);
+    if (jobId > 0) block.dataset.jobId = String(jobId);
+    if (startAt > 0) block.dataset.startAt = String(startAt);
+    if (finishAt > 0) block.dataset.finishAt = String(finishAt);
+    block.dataset.totalSeconds = String(totalSeconds);
+    if (isActive && Number.isFinite(remaining)) assignMonotonicServerRemaining(block, remaining, finishAt);
+
+    if (isActive) {
+      block.innerHTML =
+        '<div class="gc-bld-hero-queue-center"><span class="gc-bld-hero-queue-pct gc-mono"></span></div>';
+    } else {
+      block.innerHTML =
+        '<div class="gc-bld-hero-queue-badge gc-mono">' +
+        '<span class="gc-bld-hero-queue-badge-line"></span>' +
+        '<span class="gc-bld-hero-queue-badge-sub">' +
+        `<span class="gc-bld-hero-queue-starts-label">${t("queue_starts_in", "Startet in")}</span> ` +
+        "</span></div>";
+    }
+
+    if (isActive) {
+      ensureHeroTimeChipTimer(cardEl, queueJob, timerKind, refreshOnZero);
+    } else {
+      ensureHeroQueuedBadgeTimer(block, queueJob, timerKind, refreshOnZero);
+    }
+
+    let cancelBtn = block.querySelector(".gc-bld-hero-queue-cancel");
+    if (jobId > 0) {
+      if (!cancelBtn) {
+        cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "gc-bld-hero-queue-cancel";
+        cancelBtn.innerHTML = '<span aria-hidden="true">×</span>';
+        block.appendChild(cancelBtn);
+      }
+      if (domain === "research") {
+        cancelBtn.dataset.researchCancelId = String(jobId);
+        delete cancelBtn.dataset.buildCancelId;
+      } else {
+        cancelBtn.dataset.buildCancelId = String(jobId);
+        delete cancelBtn.dataset.researchCancelId;
+      }
+      cancelBtn.title = t("action_cancel", "Abbrechen");
+      cancelBtn.setAttribute("aria-label", t("action_cancel", "Abbrechen"));
+    } else if (cancelBtn) {
+      cancelBtn.remove();
+    }
+
+    const pct = isActive
+      ? (totalSeconds > 0 ? 100 * (1 - remaining / totalSeconds) : progressPct)
+      : 0;
+    applyHeroQueueVisual(cardEl, block, queueJob, pct, remaining, timerKind, refreshOnZero);
+    syncCardQueueOwnerClassesFromBlocks(cardEl, domain);
+    return block;
+  }
+
   function _cardQueueTimerMeta(queueJob, opts) {
     const options = opts && typeof opts === "object" ? opts : {};
     const domain = _cardQueueDomain(queueJob, options);
@@ -2839,6 +3238,9 @@
   }
 
   function patchCardQueueBlockInPlace(block, cardEl, queueJob, opts) {
+    if (block?.dataset?.heroQueue === "1" || block?.classList?.contains("gc-bld-hero-queue")) {
+      return patchHeroQueueInPlace(block, queueJob, opts);
+    }
     const { domain, timerKind, refreshOnZero } = _cardQueueTimerMeta(queueJob, opts);
     const status = String(queueJob.status || "");
     const isActive = status === "active";
@@ -2945,6 +3347,10 @@
 
     const options = opts && typeof opts === "object" ? opts : {};
     const domain = _cardQueueDomain(queueJob, options);
+    if (domain === "building" || domain === "research") {
+      return renderHeroQueueOverlay(cardEl, queueJob, options);
+    }
+
     const sig = cardQueueJobSignature(queueJob);
     const jobId = Math.floor(Number(queueJob.job_id || 0));
     const existing =
@@ -3114,9 +3520,14 @@
       block.appendChild(cancelBtn);
     }
 
-    const anchor = cardEl.querySelector(".gc-bld-card-meta, .gc-prog-main");
-    if (anchor) cardEl.insertBefore(block, anchor);
-    else cardEl.appendChild(block);
+    const slot = cardEl.querySelector(".gc-bld-card-queue-slot");
+    if (slot) {
+      slot.appendChild(block);
+    } else {
+      const anchor = cardEl.querySelector(".gc-bld-card-meta, .gc-prog-main");
+      if (anchor) cardEl.insertBefore(block, anchor);
+      else cardEl.appendChild(block);
+    }
 
     syncCardQueueOwnerClassesFromBlocks(cardEl, domain);
     return block;
@@ -3984,7 +4395,7 @@
       }
     }
 
-    document.querySelectorAll(".gc-card-queue-block[data-queue-active='1']").forEach((block) => {
+    document.querySelectorAll("[data-gc-card-queue][data-queue-active='1']").forEach((block) => {
       const finish = parseTimerTarget(block.dataset.finishAt || 0);
       if (!finish) return;
       const total = Math.max(1, Number(block.dataset.totalSeconds || 1));
@@ -4017,15 +4428,33 @@
       );
       assignMonotonicServerRemaining(block, remaining, finish);
       const pct = 100 * (1 - remaining / total);
-      const timerEl = block.querySelector(".gc-card-queue-timer");
+      const cardEl = block.closest("[data-building-row], [data-research-card], [data-building-card]");
+      const timerEl = block.dataset.heroQueue === "1"
+        ? cardEl?.querySelector("[data-hero-time-chip] .gc-card-queue-timer")
+        : block.querySelector(".gc-card-queue-timer");
       const fillEl = block.querySelector(".gc-card-queue-bar-fill");
       const barEl = block.querySelector(".gc-card-queue-bar");
-      if (timerEl) {
-        applyQueueJobTimerAttrs(timerEl, finish, timerKind, refreshOnZero, remaining);
-        _setIfChanged(timerEl, formatEta(queueTimerDisplaySeconds(remaining)));
+      if (block.dataset.heroQueue === "1" && cardEl) {
+        const rounded = Math.max(0, Math.min(100, Math.round(pct)));
+        applyHeroImageProgress(cardEl, rounded);
+        const heroPctEl = block.querySelector(".gc-bld-hero-queue-pct");
+        const centerEl = block.querySelector(".gc-bld-hero-queue-center");
+        if (heroPctEl) _setIfChanged(heroPctEl, `${rounded}%`);
+        if (centerEl) centerEl.setAttribute("aria-valuenow", String(rounded));
+        if (timerEl) {
+          applyQueueJobTimerAttrs(timerEl, finish, timerKind, refreshOnZero, remaining);
+          const eta = formatEta(queueTimerDisplaySeconds(remaining));
+          _setIfChanged(timerEl, eta);
+          block.title = eta;
+        }
+      } else {
+        if (timerEl) {
+          applyQueueJobTimerAttrs(timerEl, finish, timerKind, refreshOnZero, remaining);
+          _setIfChanged(timerEl, formatEta(queueTimerDisplaySeconds(remaining)));
+        }
+        _applyProgressFill(fillEl, pct);
+        if (barEl) barEl.setAttribute("aria-valuenow", String(Math.max(0, Math.min(100, Math.round(pct)))));
       }
-      _applyProgressFill(fillEl, pct);
-      if (barEl) barEl.setAttribute("aria-valuenow", String(Math.max(0, Math.min(100, Math.round(pct)))));
       if (isQueueTimerComplete(remaining, finish, serverNowTs)) {
         const jobId = Math.floor(Number(block.dataset.jobId || 0));
         if (domain === "research") {
@@ -4054,12 +4483,15 @@
       }
     });
 
-    document.querySelectorAll(".gc-card-queue-block[data-queue-active='0']").forEach((block) => {
+    document.querySelectorAll("[data-gc-card-queue][data-queue-active='0']").forEach((block) => {
       const finishAt = parseTimerTarget(block.dataset.finishAt || 0);
       const startAt = parseTimerTarget(block.dataset.startAt || 0);
       const target = finishAt > 0 ? finishAt : startAt;
       if (!target) return;
-      const timerEl = block.querySelector(".gc-card-queue-timer");
+      const cardEl = block.closest("[data-building-row], [data-research-card], [data-building-card]");
+      const timerEl = block.dataset.heroQueue === "1"
+        ? block.querySelector(".gc-bld-hero-queue-badge .gc-card-queue-timer")
+        : block.querySelector(".gc-card-queue-timer");
       if (!timerEl) return;
       const domain = String(block.dataset.timerDomain || "building");
       const timerKind =
@@ -4484,7 +4916,7 @@
 
   const BUILDING_ICON_FILE = {
     orbital_shipyard: "shipyard",
-    fuel_cell_plant: "solar_plant",
+    fuel_storage: "fuel_cell_storage",
   };
 
   function buildingIconUrl(buildingType) {
@@ -5279,87 +5711,8 @@
   };
 
   // =========================
-  // Building tabs (delegated – survives PJAX)
+  // Building category panels (sidebar-driven – survives PJAX)
   // =========================
-  function activateBuildingTab(btn, focus = true) {
-    const tablist = btn.closest(".building-tabs");
-    if (!tablist) return;
-
-    const targetTab = btn.dataset.tab;
-    const tabBtns = Array.from(tablist.querySelectorAll(".tab-btn"));
-    const tabContents = Array.from(document.querySelectorAll(".tab-content[data-tab]"));
-
-    tabBtns.forEach((b) => {
-      const isActive = b === btn;
-      b.classList.toggle("active", isActive);
-      if (b.getAttribute("role") === "tab") {
-        b.setAttribute("aria-selected", isActive ? "true" : "false");
-        b.setAttribute("tabindex", isActive ? "0" : "-1");
-      }
-    });
-
-    tabContents.forEach((c) => {
-      const isActive = c.dataset.tab === targetTab;
-      c.classList.toggle("active", isActive);
-      if (c.getAttribute("role") === "tabpanel") c.hidden = !isActive;
-    });
-
-    if (focus) btn.focus();
-  }
-
-  function bindBuildingTabsOnce() {
-    if (GC._tabsBound) return;
-    GC._tabsBound = true;
-
-    document.addEventListener("click", (e) => {
-      const btn = e.target.closest(".building-tabs .tab-btn");
-      if (!btn || btn.closest("#messages-tabs")) return;
-      if (btn.tagName === "A") e.preventDefault();
-      activateBuildingTab(btn, true);
-    });
-
-    document.addEventListener("keydown", (e) => {
-      const tablist = e.target.closest(".building-tabs[role='tablist']");
-      if (!tablist) return;
-      const current = document.activeElement;
-      if (!current || !current.classList.contains("tab-btn")) return;
-
-      const tabBtns = Array.from(tablist.querySelectorAll(".tab-btn"));
-      const idx = tabBtns.indexOf(current);
-      if (idx < 0) return;
-
-      let nextIdx = idx;
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-        nextIdx = (idx + 1) % tabBtns.length;
-        e.preventDefault();
-      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-        nextIdx = (idx - 1 + tabBtns.length) % tabBtns.length;
-        e.preventDefault();
-      } else if (e.key === "Home") {
-        nextIdx = 0;
-        e.preventDefault();
-      } else if (e.key === "End") {
-        nextIdx = tabBtns.length - 1;
-        e.preventDefault();
-      } else if (e.key === "Enter" || e.key === " ") {
-        activateBuildingTab(current, true);
-        e.preventDefault();
-        return;
-      } else return;
-
-      tabBtns[nextIdx].focus();
-    });
-  }
-
-  function initBuildings() {
-    const tablist = document.querySelector(".building-tabs");
-    if (!tablist) return;
-    const tabBtns = Array.from(tablist.querySelectorAll(".tab-btn"));
-    if (!tabBtns.length) return;
-    const activeBtn = tabBtns.find((b) => b.classList.contains("active")) || tabBtns[0];
-    activateBuildingTab(activeBtn, false);
-    GC.startProgressTicker();
-  }
 
   function patchPlanetTeaser(teaser) {
     const root = document.getElementById("gc-planet-teaser");
@@ -7509,7 +7862,7 @@
 
   function shipyardIconUrl(shipKey) {
     const sk = String(shipKey || "").trim();
-    return `/static/img/ships/${sk}.svg`;
+    return `/static/img/ships/${sk}.png`;
   }
 
   function _syncShipyardQueueLiveState(queueList) {
@@ -7784,6 +8137,16 @@
       btn.disabled = !ship.can_build;
       btn.dataset.canBuild = ship.can_build ? "1" : "0";
       if (btn.dataset.building !== "1") btn.classList.remove("is-loading");
+      const queueFull = ship.block_reason === "queue_full";
+      const buildLabel = tt("shipyard_build_btn", "Bauen");
+      const fullLabel = tt("shipyard_btn_queue_full", "Werftwarteschlange voll");
+      if (queueFull) {
+        btn.textContent = fullLabel;
+        btn.title = fullLabel;
+      } else {
+        btn.textContent = buildLabel;
+        btn.removeAttribute("title");
+      }
     }
     if (maxBtn) maxBtn.dataset.maxQty = String(ship.max_build || 0);
     const buildTimeEl = card.querySelector(".shipyard-ship-build-time");
@@ -8034,7 +8397,7 @@
   let _lastDefenseQueueSignature = "";
 
   function defenseIconUrl(defenseKey) {
-    return `/static/img/defense/${String(defenseKey || "").trim()}.svg`;
+    return `/static/img/defense/${String(defenseKey || "").trim()}.png`;
   }
 
   function defenseLabel(defenseKey) {
@@ -8285,6 +8648,16 @@
     if (btn) {
       btn.dataset.canBuild = unit.can_build ? "1" : "0";
       btn.disabled = !unit.can_build;
+      const queueFull = unit.block_reason === "queue_full";
+      const buildLabel = tt("defense_build_btn", "Bauen");
+      const fullLabel = tt("defense_btn_queue_full", "Warteschlange voll");
+      if (queueFull) {
+        btn.textContent = fullLabel;
+        btn.title = fullLabel;
+      } else {
+        btn.textContent = buildLabel;
+        btn.removeAttribute("title");
+      }
     }
     const buildTimeEl = card.querySelector(".shipyard-ship-build-time");
     if (buildTimeEl && unit.build_seconds != null) {

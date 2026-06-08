@@ -219,10 +219,38 @@
           {{ T("nav_overview") }}
         </a>
 
-        <a href="{{ url_for('buildings_view') }}"
-           class="gc-nav-link {% if request.endpoint == 'buildings_view' %}active{% endif %}">
-          {{ T("nav_buildings") }}
-        </a>
+        <div class="gc-nav-buildings-group">
+          <a href="{{ url_for('buildings_view') }}"
+             class="gc-nav-link {% if request.endpoint == 'buildings_view' %}active{% endif %}">
+            {{ T("nav_buildings") }}
+          </a>
+          {% set _bld_nav_tab = request.args.get('tab') or 'resources' %}
+          <div class="gc-nav-sub gc-nav-sub--buildings"
+               id="gc-nav-buildings-sub"
+               {% if request.endpoint != 'buildings_view' %}hidden{% endif %}
+               aria-label="{{ T('buildings_tabs', 'Gebäude-Kategorien') }}">
+            <button type="button"
+                    class="gc-nav-sub-link {{ 'active' if _bld_nav_tab == 'resources' else '' }}"
+                    data-building-tab="resources">
+              {{ T("buildings_tab_resources") }}
+            </button>
+            <button type="button"
+                    class="gc-nav-sub-link {{ 'active' if _bld_nav_tab == 'research' else '' }}"
+                    data-building-tab="research">
+              {{ T("buildings_tab_research") }}
+            </button>
+            <button type="button"
+                    class="gc-nav-sub-link {{ 'active' if _bld_nav_tab == 'military' else '' }}"
+                    data-building-tab="military">
+              {{ T("buildings_tab_military") }}
+            </button>
+            <button type="button"
+                    class="gc-nav-sub-link {{ 'active' if _bld_nav_tab == 'infrastructure' else '' }}"
+                    data-building-tab="infrastructure">
+              {{ T("buildings_tab_infrastructure") }}
+            </button>
+          </div>
+        </div>
 
         <a href="{{ url_for('research_view') }}"
            class="gc-nav-link {% if request.endpoint == 'research_view' %}active{% endif %}">

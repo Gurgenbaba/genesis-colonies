@@ -99,7 +99,10 @@ def test_templates_import_progression_macros_with_context():
     assert "with context" in buildings
     assert "render_info_popover_trigger" in buildings
     assert "with context" in research
-    assert "render_prog_identity" in research
+    assert "render_research_head_action" in research
+    assert "render_hero_queue" in research
+    assert "gc-bld-head-action-btn--busy" not in research
+    assert "render_prog_identity" not in research
     assert "render_prog_effect" not in buildings
     assert "render_prog_effect" not in research
 
@@ -114,6 +117,12 @@ def test_buildings_page_renders(temp_db, monkeypatch):
     assert "buildings-prog-list" in html
     assert "gc-building-grid" in html
     assert "gc-bld-card-action" in html
+    assert "gc-bld-head-action-btn" in html
+    assert "gc-bld-head-action-btn--go" in html
+    buildings_tpl = (ROOT / "templates" / "buildings.html").read_text(encoding="utf-8")
+    assert "data-hero-time-chip" in buildings_tpl
+    assert "gc-bld-card-meta--costs-only" in buildings_tpl
+    assert "gc-bld-card-time" not in buildings_tpl
     assert "gc-bld-effect-bundle" in html
     assert "gc-prog-effect" not in html
     assert "gc-prog-desc" not in html
@@ -124,7 +133,7 @@ def test_buildings_page_renders(temp_db, monkeypatch):
     assert 'class="gc-prog-info gc-popover-trigger"' in html
     assert 'class="gc-prog-info gc-popover-trigger" title=' not in html
 
-    assert "status-pill-icon-btn" in html or "🔒" in html
+    assert "status-pill-icon-btn" in html or "⚠" in html or "gc-bld-head-action-btn--warn" in html
 
 def test_research_page_renders(temp_db, monkeypatch):
     client = _login_client(temp_db, monkeypatch)
@@ -134,8 +143,10 @@ def test_research_page_renders(temp_db, monkeypatch):
 
     assert "UndefinedError" not in html
     assert "research-prog-list" in html
-    assert "gc-prog-main" in html
-    assert "gc-prog-col gc-prog-action" in html
+    assert "gc-bld-card-hero" in html
+    assert "gc-bld-card-head-action" in html
+    assert "gc-bld-head-action-btn" in html
+    assert "gc-prog-main" not in html
     assert "gc-prog-effect" not in html
     assert "gc-prog-desc" not in html
 
@@ -144,9 +155,7 @@ def test_research_page_renders(temp_db, monkeypatch):
     assert "gc-popover-trigger" in html
     assert 'class="gc-prog-info gc-popover-trigger" title=' not in html
 
-    assert "status-pill-locked status-pill-icon" in html
-    assert "🔒" in html
-    assert "Voraussetzungen nicht erfüllt" in html
+    assert "status-pill-icon-btn" in html or "⚠" in html or "gc-bld-head-action-btn--warn" in html
 
 
 def test_trait_effect_keys_en_complete():

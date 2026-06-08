@@ -1938,6 +1938,7 @@
   "pe_xp_to_level": "Entwicklung bis Stufe",
   "queue_card_status_active": "ACTIVE",
   "queue_card_status_queued": "QUEUE #%(n)s",
+  "queue_starts_in": "Starts in",
   "register_aria": "Registrierung",
   "register_badge": "Neues Kommando · Genesis-Cluster",
   "register_btn_submit": "Account erstellen & Kolonie starten",
