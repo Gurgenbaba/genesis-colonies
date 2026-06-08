@@ -21,6 +21,7 @@ from game.queue_card import (
     map_research_queue_to_card_jobs,
     map_shipyard_queue_to_card_jobs,
     normalize_card_queue_job,
+    reconcile_card_queue_jobs,
 )
 
 
@@ -306,3 +307,92 @@ def test_defense_same_unit_multiple_jobs_grouped():
     jobs = map_defense_queue_to_card_jobs(payload, now=NOW)
     grouped = group_card_jobs_by_owner_key(jobs)
     assert len(card_queue_jobs_for_item(grouped, "laser_turret")) == 2
+
+
+def test_gc537_reconcile_collapsed_positions_only_one_active():
+    """GC-537: duplicate queue_position must not yield multiple active cards."""
+    raw = [
+        normalize_card_queue_job(
+            owner_type="shipyard",
+            owner_key="hauler",
+            job_id=1,
+            queue_position=1,
+            start_at=NOW,
+            finish_at=NOW + 30,
+            now=NOW,
+        ),
+        normalize_card_queue_job(
+            owner_type="shipyard",
+            owner_key="hauler",
+            job_id=2,
+            queue_position=1,
+            start_at=NOW,
+            finish_at=NOW + 90,
+            now=NOW,
+            remaining_seconds=0,
+        ),
+        normalize_card_queue_job(
+            owner_type="shipyard",
+            owner_key="hauler",
+            job_id=3,
+            queue_position=1,
+            start_at=NOW,
+            finish_at=NOW + 150,
+            now=NOW,
+            remaining_seconds=0,
+        ),
+    ]
+    jobs = reconcile_card_queue_jobs(raw, now=NOW)
+    active = [j for j in jobs if j["status"] == STATUS_ACTIVE]
+    queued = [j for j in jobs if j["status"] == STATUS_QUEUED]
+    assert len(active) == 1
+    assert len(queued) == 2
+    assert active[0]["job_id"] == 1
+    assert queued[0]["remaining_seconds"] == 90
+    assert queued[1]["remaining_seconds"] == 150
+
+
+def test_gc537_three_same_shipyard_jobs_sequential_status():
+    payload = {
+        "queue": [
+            {
+                "id": 10,
+                "ship_key": "hauler",
+                "amount_total": 1,
+                "order_remaining": 25,
+                "order_total_seconds": 60,
+                "finish_at": NOW + 25,
+                "started_at": NOW,
+                "is_active": True,
+            },
+            {
+                "id": 11,
+                "ship_key": "hauler",
+                "amount_total": 1,
+                "order_remaining": 85,
+                "order_total_seconds": 60,
+                "finish_at": NOW + 85,
+                "started_at": NOW + 25,
+                "is_active": True,
+            },
+            {
+                "id": 12,
+                "ship_key": "hauler",
+                "amount_total": 1,
+                "order_remaining": 145,
+                "order_total_seconds": 60,
+                "finish_at": NOW + 145,
+                "started_at": NOW + 85,
+                "is_active": True,
+            },
+        ]
+    }
+    jobs = map_shipyard_queue_to_card_jobs(payload, now=NOW)
+    grouped = group_card_jobs_by_owner_key(jobs)
+    all_jobs = card_queue_jobs_for_item(grouped, "hauler")
+    assert len(all_jobs) == 3
+    assert sum(1 for j in all_jobs if j["status"] == STATUS_ACTIVE) == 1
+    assert all_jobs[0]["status"] == STATUS_ACTIVE
+    assert all_jobs[1]["status"] == STATUS_QUEUED
+    assert all_jobs[2]["status"] == STATUS_QUEUED
+    assert all_jobs[0]["remaining_seconds"] < all_jobs[1]["remaining_seconds"] < all_jobs[2]["remaining_seconds"]

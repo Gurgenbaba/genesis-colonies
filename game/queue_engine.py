@@ -332,32 +332,38 @@ def finish_planet_build_jobs(
     now: float,
 ) -> int:
     """
-    Finish all due build jobs for one planet. Returns count of jobs completed.
+    Finish due build jobs for one planet, one head job per loop iteration (sequential queue).
     Does not update scores (engine handles batch score/rank).
     """
     cur = conn.cursor()
-    rows = get_build_queue_rows(int(planet_id), conn=conn)
     due_cutoff = float(now) + _due_epsilon()
-    due = [r for r in rows if float(r["finish_time"]) <= due_cutoff]
-    if not due:
-        return 0
+    completed = 0
 
-    buildings = get_planet_buildings(int(planet_id), conn=conn)
-    for job in due:
-        btype = str(job["building_type"])
+    while True:
+        rows = get_build_queue_rows(int(planet_id), conn=conn)
+        if not rows:
+            break
+        head = rows[0]
+        if float(head["finish_time"]) > due_cutoff:
+            break
+
+        buildings = get_planet_buildings(int(planet_id), conn=conn)
+        btype = str(head["building_type"])
         if btype in buildings:
             buildings[btype] = int(buildings.get(btype, 0)) + 1
-        delete_build_job(int(job["id"]), conn=conn)
+        delete_build_job(int(head["id"]), conn=conn)
 
-    cur.execute(
-        f"""
-        UPDATE planet_buildings SET
-        {", ".join(f"{k}=?" for k in _BUILDING_KEYS)}
-        WHERE planet_id = ?;
-        """,
-        [int(buildings.get(k, 0)) for k in _BUILDING_KEYS] + [int(planet_id)],
-    )
-    return len(due)
+        cur.execute(
+            f"""
+            UPDATE planet_buildings SET
+            {", ".join(f"{k}=?" for k in _BUILDING_KEYS)}
+            WHERE planet_id = ?;
+            """,
+            [int(buildings.get(k, 0)) for k in _BUILDING_KEYS] + [int(planet_id)],
+        )
+        completed += 1
+
+    return completed
 
 
 def finish_planet_shipyard_jobs(
@@ -400,36 +406,42 @@ def finish_player_research_jobs(
     now: float,
 ) -> int:
     """
-    Finish all due research jobs for one player. Returns count of jobs completed.
+    Finish due research jobs for one player, one head job per loop iteration (sequential queue).
     Does not update scores.
     """
     cur = conn.cursor()
-    cur.execute(
-        "SELECT * FROM research_queue WHERE user_id = ? ORDER BY finish_at ASC;",
-        (int(user_id),),
-    )
-    rows = cur.fetchall()
     due_cutoff = float(now) + _due_epsilon()
-    due = [r for r in rows if float(r["finish_at"]) <= due_cutoff]
-    if not due:
-        return 0
+    completed = 0
 
-    levels = get_research_levels(int(user_id), conn=conn)
-    for job in due:
-        tech_key = str(job["tech_key"])
-        levels[tech_key] = int(levels.get(tech_key, 0)) + 1
-        cur.execute("DELETE FROM research_queue WHERE id = ?;", (int(job["id"]),))
-
-    for tech_key, lvl in levels.items():
+    while True:
         cur.execute(
-            """
-            INSERT INTO research_levels (user_id, tech_key, level)
-            VALUES (?, ?, ?)
-            ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
-            """,
-            (int(user_id), str(tech_key), int(lvl)),
+            "SELECT * FROM research_queue WHERE user_id = ? ORDER BY finish_at ASC, id ASC;",
+            (int(user_id),),
         )
-    return len(due)
+        rows = cur.fetchall()
+        if not rows:
+            break
+        head = rows[0]
+        if float(head["finish_at"]) > due_cutoff:
+            break
+
+        levels = get_research_levels(int(user_id), conn=conn)
+        tech_key = str(head["tech_key"])
+        levels[tech_key] = int(levels.get(tech_key, 0)) + 1
+        cur.execute("DELETE FROM research_queue WHERE id = ?;", (int(head["id"]),))
+
+        for tkey, lvl in levels.items():
+            cur.execute(
+                """
+                INSERT INTO research_levels (user_id, tech_key, level)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id, tech_key) DO UPDATE SET level = excluded.level;
+                """,
+                (int(user_id), str(tkey), int(lvl)),
+            )
+        completed += 1
+
+    return completed
 
 
 def _resolve_planet_targets(

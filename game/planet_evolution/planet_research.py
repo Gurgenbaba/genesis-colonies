@@ -75,23 +75,26 @@ def finish_planet_research_jobs(conn: sqlite3.Connection, planet_id: int, now: f
 
     due_cutoff = float(now) + float(DUE_TIME_EPSILON_SEC)
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT * FROM planet_research_queue
-        WHERE planet_id = ? AND finish_at <= ?
-        ORDER BY finish_at ASC, id ASC;
-        """,
-        (int(planet_id), due_cutoff),
-    )
-    due = cur.fetchall()
-    if not due:
-        return 0
-
-    levels = get_planet_research_levels(planet_id, conn=conn)
     finished = 0
-    for job in due:
+
+    while True:
+        cur.execute(
+            """
+            SELECT * FROM planet_research_queue
+            WHERE planet_id = ?
+            ORDER BY finish_at ASC, id ASC
+            LIMIT 1;
+            """,
+            (int(planet_id),),
+        )
+        row = cur.fetchone()
+        if not row or float(row["finish_at"]) > due_cutoff:
+            break
+
+        job = dict(row)
         tech_key = str(job["tech_key"])
         target = int(job["target_level"])
+        levels = get_planet_research_levels(planet_id, conn=conn)
         levels[tech_key] = max(int(levels.get(tech_key, 0)), target)
         cur.execute("DELETE FROM planet_research_queue WHERE id = ?;", (int(job["id"]),))
         finished += 1

@@ -216,7 +216,7 @@ def map_build_queue_to_card_jobs(
         )
         _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
         out.append(job)
-    return out
+    return reconcile_card_queue_jobs(out, now=ts)
 
 
 def _apply_queued_wait_remaining(job: Dict[str, Any], *, finish_at: Any, now: float) -> None:
@@ -224,9 +224,57 @@ def _apply_queued_wait_remaining(job: Dict[str, Any], *, finish_at: Any, now: fl
     if job.get("status") != STATUS_QUEUED:
         return
     finish_f = _safe_float(finish_at)
-    if finish_f > now:
+    if finish_f > 0:
         job["remaining_seconds"] = max(0, int(finish_f - now))
     job["progress_pct"] = 0
+
+
+def reconcile_card_queue_jobs(
+    jobs: Sequence[Mapping[str, Any]],
+    *,
+    now: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """
+    GC-537: exactly one active job per queue list (lowest queue_position).
+    Queued jobs always show finish_at − now; never inherit active status.
+    """
+    if not jobs:
+        return []
+
+    ts = float(now if now is not None else time.time())
+    ordered = sorted(
+        [dict(j) for j in jobs],
+        key=lambda j: (_safe_int(j.get("queue_position"), 9999), _safe_int(j.get("job_id"), 0)),
+    )
+    min_pos = min(_safe_int(j.get("queue_position"), 9999) for j in ordered)
+    active_job: Optional[Dict[str, Any]] = None
+    for job in ordered:
+        if _safe_int(job.get("queue_position"), 9999) == min_pos:
+            active_job = job
+            break
+    if active_job is None:
+        active_job = ordered[0]
+
+    out: List[Dict[str, Any]] = []
+    for job in ordered:
+        is_active = job is active_job
+        job["status"] = STATUS_ACTIVE if is_active else STATUS_QUEUED
+        finish = _safe_float(job.get("finish_at"))
+        if is_active:
+            if finish > 0:
+                rem = max(0, int(finish - ts))
+            else:
+                rem = max(0, _safe_int(job.get("remaining_seconds"), 0))
+            job["remaining_seconds"] = rem
+            job["progress_pct"] = compute_progress_pct(
+                status=STATUS_ACTIVE,
+                remaining_seconds=rem,
+                duration_seconds=max(1, _safe_int(job.get("duration_seconds"), 1)),
+            )
+        else:
+            _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
+        out.append(job)
+    return out
 
 
 def map_research_queue_to_card_jobs(
@@ -271,7 +319,7 @@ def map_research_queue_to_card_jobs(
         elif job.get("target_level") is not None:
             job["current_level"] = max(0, int(job["target_level"]) - 1)
         out.append(job)
-    return out
+    return reconcile_card_queue_jobs(out, now=ts)
 
 
 def map_defense_queue_to_card_jobs(
@@ -328,7 +376,7 @@ def map_defense_queue_to_card_jobs(
             job["amount_remaining"] = _safe_int(raw.get("amount_remaining"))
         _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
         out.append(job)
-    return out
+    return reconcile_card_queue_jobs(out, now=ts)
 
 
 def map_shipyard_queue_to_card_jobs(
@@ -385,7 +433,7 @@ def map_shipyard_queue_to_card_jobs(
             job["amount_remaining"] = _safe_int(raw.get("amount_remaining"))
         _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
         out.append(job)
-    return out
+    return reconcile_card_queue_jobs(out, now=ts)
 
 
 def map_planet_research_queue_to_card_jobs(
@@ -439,7 +487,7 @@ def map_planet_research_queue_to_card_jobs(
         if target_level is not None:
             job["current_level"] = max(0, int(target_level) - 1)
         out.append(job)
-    return out
+    return reconcile_card_queue_jobs(out, now=ts)
 
 
 def map_ascension_queue_to_card_jobs(
@@ -486,7 +534,7 @@ def map_ascension_queue_to_card_jobs(
             job["target_phase"] = int(phase) + 1
         _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
         out.append(job)
-    return out
+    return reconcile_card_queue_jobs(out, now=ts)
 
 
 def attach_card_jobs_by_owner(

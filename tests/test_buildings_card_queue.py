@@ -83,6 +83,35 @@ def test_queued_building_row_has_queue_position():
     assert qj["queue_position"] == 2
 
 
+def test_build_queue_status_includes_card_jobs_by_owner_for_same_type():
+    from game.queue_card import group_card_jobs_by_owner_key, map_build_queue_to_card_jobs
+
+    build_queue = {
+        "queue": [
+            {
+                "id": 10,
+                "building_type": "metal_mine",
+                "target_level": 4,
+                "remaining": 40,
+                "total": 100,
+                "finish_time": 1_700_000_040.0,
+            },
+            {
+                "id": 11,
+                "building_type": "metal_mine",
+                "target_level": 5,
+                "remaining": 140,
+                "total": 100,
+                "finish_time": 1_700_000_140.0,
+            },
+        ],
+    }
+    card_jobs = map_build_queue_to_card_jobs(build_queue, now=1_700_000_000.0)
+    by_owner = group_card_jobs_by_owner_key(card_jobs)
+    assert len(by_owner["metal_mine"]) == 2
+    assert sum(1 for j in by_owner["metal_mine"] if j["status"] == STATUS_ACTIVE) == 1
+
+
 def test_building_without_job_has_no_queue_job():
     planet = {"player_id": 1, "metal": 99999, "crystal": 99999}
     buildings = {"metal_mine": 3}

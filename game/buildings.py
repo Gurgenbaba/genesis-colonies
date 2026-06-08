@@ -924,11 +924,16 @@ def get_build_queue_status_for_planet(
             "first_finish_in": int(first_remaining or 0),
         }
 
-        return {
+        from .queue_card import group_card_jobs_by_owner_key, map_build_queue_to_card_jobs
+
+        payload = {
             "planet_id": int(planet_id),
             "queue": queue,
             "summary": summary,
         }
+        card_jobs = map_build_queue_to_card_jobs(payload, now=now)
+        payload["card_jobs_by_owner"] = group_card_jobs_by_owner_key(card_jobs)
+        return payload
 
     finally:
         if own:

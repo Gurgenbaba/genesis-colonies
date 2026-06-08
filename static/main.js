@@ -1692,6 +1692,17 @@
     const limit = summary?.limit ?? 3;
     const count = summary?.count ?? 0;
     const bqQueueFull = count >= limit;
+    const byOwner = buildQueueRaw?.card_jobs_by_owner;
+    const useOwnerMap = byOwner && typeof byOwner === "object";
+    if (useOwnerMap) {
+      patchCardQueuesFromOwnerMap(
+        document,
+        byOwner,
+        (root) => root.querySelectorAll("[data-building-row]"),
+        (row) => row.getAttribute("data-building-row") || "",
+        (root, key) => root.querySelector(`[data-building-row="${key}"]`)
+      );
+    }
 
     Object.values(rowsByTab).forEach((rows) => {
       (rows || []).forEach((b) => {
@@ -1721,7 +1732,9 @@
           if (actionCell.innerHTML.trim() !== html.trim()) actionCell.innerHTML = html;
         }
 
-        if (b.queue_job) GC.renderCardQueueBlock(row, b.queue_job);
+        if (useOwnerMap) {
+          /* queue blocks synced via card_jobs_by_owner */
+        } else if (b.queue_job) GC.renderCardQueueBlock(row, b.queue_job);
         else GC.clearCardQueueBlock(row);
       });
     });
@@ -1737,6 +1750,17 @@
     if (!list || !Array.isArray(techs)) return;
 
     const summary = researchRaw?.summary || {};
+    const byOwner = researchRaw?.card_jobs_by_owner;
+    const useOwnerMap = byOwner && typeof byOwner === "object";
+    if (useOwnerMap) {
+      patchCardQueuesFromOwnerMap(
+        document,
+        byOwner,
+        (root) => root.querySelectorAll("[data-tech-key]"),
+        (row) => row.getAttribute("data-tech-key") || "",
+        (root, key) => root.querySelector(`[data-tech-key="${key}"]`)
+      );
+    }
 
     techs.forEach((tech) => {
       const row = document.querySelector(`[data-tech-key="${tech.key}"]`);
@@ -1769,7 +1793,9 @@
         if (actionCell.innerHTML.trim() !== html.trim()) actionCell.innerHTML = html;
       }
 
-      if (tech.queue_job) GC.renderCardQueueBlock(row, tech.queue_job);
+      if (useOwnerMap) {
+        /* queue blocks synced via card_jobs_by_owner */
+      } else if (tech.queue_job) GC.renderCardQueueBlock(row, tech.queue_job);
       else GC.clearCardQueueBlock(row);
     });
 

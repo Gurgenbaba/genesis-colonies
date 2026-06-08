@@ -1165,12 +1165,18 @@ def get_research_status(
 
     _attach_queue_jobs_to_research_techs(techs, queue_list)
 
+    from .queue_card import group_card_jobs_by_owner_key, map_research_queue_to_card_jobs
+
+    card_jobs = map_research_queue_to_card_jobs({"queue": queue_list}, now=now)
+    card_jobs_by_owner = group_card_jobs_by_owner_key(card_jobs)
+
     return {
         "active": active,
         "queue": queue_list,
         "summary": summary,
         "techs": techs,
         "lab_level": lab_level,
+        "card_jobs_by_owner": card_jobs_by_owner,
     }
 
 
