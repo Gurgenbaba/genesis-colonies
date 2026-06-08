@@ -329,5 +329,6 @@ def test_empire_template_polished_structure(empire_db, monkeypatch):
     assert "empire-matrix--full" in html
     assert "empire-matrix-colony-header-row" in html
     assert "empire-matrix-section-row" in html
+    assert "data-empire-section-toggle" in html
     assert "empire-matrix-scroll" in html
     assert "building_metal_mine" in html or "Ferronit-Mine" in html

@@ -124,16 +124,25 @@
           </tr>
           {% else %}
           {% for section in matrix_sections %}
-          <tr class="empire-matrix-section-row">
+          <tr class="empire-matrix-section-row" data-empire-section="{{ section.key }}">
             <th class="empire-matrix-sticky-col empire-matrix-section-label" colspan="{{ matrix_col_count + 2 }}" scope="colgroup">
-              {{ T(section.label_key, section.key) }}
-              {% if section.scope == 'account' %}
-              <span class="empire-matrix-account-tag">{{ T("empire_matrix_account_scope", "Account") }}</span>
-              {% endif %}
+              <button type="button"
+                      class="empire-matrix-section-toggle"
+                      data-empire-section-toggle="{{ section.key }}"
+                      aria-expanded="true"
+                      aria-controls="empire-matrix-section-{{ section.key }}">
+                <span class="empire-matrix-section-chevron" aria-hidden="true"></span>
+                <span class="empire-matrix-section-title">{{ T(section.label_key, section.key) }}</span>
+                {% if section.scope == 'account' %}
+                <span class="empire-matrix-account-tag">{{ T("empire_matrix_account_scope", "Account") }}</span>
+                {% endif %}
+              </button>
             </th>
           </tr>
           {% for row in section.rows %}
-          <tr class="empire-matrix-data-row empire-matrix-data-row--{{ section.key }}">
+          <tr class="empire-matrix-data-row empire-matrix-data-row--{{ section.key }}"
+              data-empire-section="{{ section.key }}"
+              id="{% if loop.first %}empire-matrix-section-{{ section.key }}{% endif %}">
             <th class="empire-matrix-sticky-col empire-matrix-row-label" scope="row">
               {{ T(row.label_key, row.key) }}
             </th>

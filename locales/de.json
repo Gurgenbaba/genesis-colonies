@@ -1585,6 +1585,8 @@
   "empire_colony_empty": "Keine Kolonien vorhanden.",
   "empire_matrix_label": "Empire-Matrix",
   "empire_matrix_title": "Kolonie-Matrix",
+  "empire_matrix_section_collapse": "Abschnitt einklappen",
+  "empire_matrix_section_expand": "Abschnitt aufklappen",
   "empire_matrix_hint": "Vergleich aller Kolonien — horizontal scrollen für alle Spalten.",
   "empire_matrix_scroll_label": "Matrix horizontal scrollen",
   "empire_matrix_colony": "Kolonie",

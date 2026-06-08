@@ -1305,6 +1305,8 @@
   "empire_colony_empty": "No colonies available.",
   "empire_matrix_label": "Empire matrix",
   "empire_matrix_title": "Colony matrix",
+  "empire_matrix_section_collapse": "Collapse section",
+  "empire_matrix_section_expand": "Expand section",
   "empire_matrix_hint": "Compare all colonies — scroll horizontally for all columns.",
   "empire_matrix_scroll_label": "Scroll matrix horizontally",
   "empire_matrix_colony": "Colony",

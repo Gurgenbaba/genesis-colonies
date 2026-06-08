@@ -1020,6 +1020,7 @@
     if (path.endsWith("/logistics")) return "logistics";
     if (path.endsWith("/shipyard")) return "shipyard";
     if (path.endsWith("/defense")) return "defense";
+    if (path.endsWith("/empire")) return "empire";
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
     if (path.endsWith("/messages")) return "messages";
@@ -10721,6 +10722,94 @@
     loadRankingData();
   };
 
+  const EMPIRE_MATRIX_STORAGE_KEY = "gc_empire_matrix_collapsed";
+
+  function loadEmpireMatrixCollapsed() {
+    try {
+      const raw = localStorage.getItem(EMPIRE_MATRIX_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed?.collapsed) ? parsed.collapsed.filter(Boolean) : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveEmpireMatrixCollapsed(collapsedKeys) {
+    try {
+      localStorage.setItem(
+        EMPIRE_MATRIX_STORAGE_KEY,
+        JSON.stringify({ collapsed: collapsedKeys.filter(Boolean) })
+      );
+    } catch (_) {}
+  }
+
+  function applyEmpireSectionCollapse(matrix, sectionKey, collapsed) {
+    if (!matrix || !sectionKey) return;
+    const sectionRow = matrix.querySelector(
+      `.empire-matrix-section-row[data-empire-section="${sectionKey}"]`
+    );
+    const toggle = sectionRow?.querySelector("[data-empire-section-toggle]");
+    const dataRows = matrix.querySelectorAll(
+      `.empire-matrix-data-row[data-empire-section="${sectionKey}"]`
+    );
+    sectionRow?.classList.toggle("is-collapsed", collapsed);
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      toggle.setAttribute(
+        "aria-label",
+        collapsed
+          ? t("empire_matrix_section_expand", "Abschnitt aufklappen")
+          : t("empire_matrix_section_collapse", "Abschnitt einklappen")
+      );
+    }
+    dataRows.forEach((row) => row.classList.toggle("is-section-collapsed", collapsed));
+  }
+
+  function bindEmpireMatrixOnce() {
+    if (GC._empireMatrixBound) return;
+    GC._empireMatrixBound = true;
+
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-empire-section-toggle]");
+      if (!btn) return;
+      const matrix = document.querySelector("#empire-page .empire-matrix");
+      if (!matrix || !matrix.contains(btn)) return;
+      e.preventDefault();
+
+      const sectionKey = btn.dataset.empireSectionToggle;
+      if (!sectionKey) return;
+
+      const sectionRow = matrix.querySelector(
+        `.empire-matrix-section-row[data-empire-section="${sectionKey}"]`
+      );
+      const willCollapse = !sectionRow?.classList.contains("is-collapsed");
+      applyEmpireSectionCollapse(matrix, sectionKey, willCollapse);
+
+      const collapsed = [];
+      matrix.querySelectorAll(".empire-matrix-section-row.is-collapsed").forEach((row) => {
+        const key = row.dataset.empireSection;
+        if (key) collapsed.push(key);
+      });
+      saveEmpireMatrixCollapsed(collapsed);
+    });
+  }
+
+  function initEmpire() {
+    const root = document.getElementById("empire-page");
+    if (!root) return;
+    const matrix = root.querySelector(".empire-matrix");
+    if (!matrix) return;
+
+    bindEmpireMatrixOnce();
+
+    const collapsed = new Set(loadEmpireMatrixCollapsed());
+    matrix.querySelectorAll("[data-empire-section-toggle]").forEach((btn) => {
+      const key = btn.dataset.empireSectionToggle;
+      if (key) applyEmpireSectionCollapse(matrix, key, collapsed.has(key));
+    });
+  }
+
   GC.modules.overview = initOverview;
   GC.modules.trader_hub = initTraderHub;
   GC.modules.fleet = initFleet;
@@ -10730,6 +10819,7 @@
   GC.modules.buildings = initBuildings;
   GC.modules.research = initResearch;
   GC.modules.planet_evolution = initPlanetEvolution;
+  GC.modules.empire = initEmpire;
   GC.modules.galaxy = initGalaxy;
   GC.modules.ranking = function initRankingPage() {
     GC.initRanking();
@@ -10913,7 +11003,28 @@
   // PJAX navigation
   // =========================
   const PJAX_NAV_LINK =
-    "a.gc-nav-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages";
+    "a.gc-nav-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages, #gc-nav-trading-sub a.gc-nav-sub-link";
+
+  function _tradingPageFromPath(path) {
+    const p = String(path || "").replace(/\/$/, "") || "/";
+    if (p.endsWith("/trader-hub")) return "trader_hub";
+    if (p.endsWith("/logistics")) return "logistics";
+    return "";
+  }
+
+  function _syncTradingNavFromPath(path) {
+    const tradingPage = _tradingPageFromPath(path);
+    const toggle = document.getElementById("gc-nav-trading-toggle");
+    const sub = document.getElementById("gc-nav-trading-sub");
+    if (!toggle || !sub) return;
+
+    toggle.classList.toggle("active", !!tradingPage);
+    sub.querySelectorAll("[data-trading-nav]").forEach((el) => {
+      el.classList.toggle("active", el.dataset.tradingNav === tradingPage);
+    });
+    if (tradingPage) showTradingSubnav();
+    else hideTradingSubnav();
+  }
 
   function isPjaxEligibleLink(link) {
     if (!link || link.tagName !== "A") return false;
@@ -10976,6 +11087,7 @@
       }
       link.classList.toggle("active", linkPath === path);
     });
+    _syncTradingNavFromPath(path);
   }
 
   GC.navigateTo = async function navigateTo(url, opts = {}) {
