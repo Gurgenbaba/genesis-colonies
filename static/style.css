@@ -3340,12 +3340,6 @@ a.gc-bld-head-action-btn--go:focus-visible{
   z-index: 2;
 }
 
-.gc-bld-card-hero-badge--stock .gc-ship-stock-chip{
-  min-width: 42px;
-  padding: 3px 6px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
-}
-
 .gc-bld-card-head{
   display: flex;
   align-items: flex-start;
@@ -4499,6 +4493,21 @@ a.gc-bld-head-action-btn--go:focus-visible{
   opacity: 1;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+.gc-card-stock-badge.gc-bld-card-level--hero{
+  min-width: 38px;
+  padding: 3px 10px;
+  font-size: clamp(0.78rem, 2.4vw, 0.9rem);
+  white-space: nowrap;
+  max-width: calc(100% - 12px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gc-ship-card .gc-card-stock-badge.gc-bld-card-level--hero,
+.gc-ship-card.gc-prog-card .gc-card-stock-badge.gc-bld-card-level--hero{
+  z-index: 6;
 }
 
 .gc-costs-compact{
@@ -12957,42 +12966,6 @@ a.gc-galaxy-coord-link:focus-visible {
   display: flex;
   align-items: center;
   margin-top: -2px;
-}
-
-.gc-ship-stock-chip {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  min-width: 46px;
-  padding: 4px 8px;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(70, 229, 255, 0.38);
-  background: rgba(70, 229, 255, 0.12);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18) inset;
-  flex-shrink: 0;
-}
-
-.gc-ship-stock-label {
-  font-size: 0.54rem;
-  font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: rgba(127, 255, 217, 0.88);
-  line-height: 1.1;
-  white-space: nowrap;
-}
-
-.gc-ship-stock-val {
-  font-family: var(--gc-font-level);
-  font-variant-numeric: tabular-nums lining-nums;
-  font-feature-settings: "tnum" 1, "lnum" 1;
-  font-size: 0.95rem;
-  font-weight: 800;
-  color: var(--gc-text);
-  line-height: 1.1;
-  white-space: nowrap;
 }
 
 .gc-ship-card .gc-bld-card-meta {
