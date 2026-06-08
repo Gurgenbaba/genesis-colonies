@@ -2819,34 +2819,29 @@
 
   function hideTradingSubnav() {
     const sub = document.getElementById("gc-nav-trading-sub");
-    const toggle = document.getElementById("gc-nav-trading-toggle");
     if (!sub) return;
     sub.hidden = true;
     sub.classList.add("gc-nav-sub--collapsed");
     sub.setAttribute("aria-hidden", "true");
-    if (toggle) toggle.setAttribute("aria-expanded", "false");
   }
 
   function showTradingSubnav() {
     const sub = document.getElementById("gc-nav-trading-sub");
-    const toggle = document.getElementById("gc-nav-trading-toggle");
     if (!sub) return;
     sub.hidden = false;
     sub.classList.remove("gc-nav-sub--collapsed");
     sub.setAttribute("aria-hidden", "false");
-    if (toggle) toggle.setAttribute("aria-expanded", "true");
   }
 
   function syncTradingSubnav(page) {
-    bindTradingNavOnce();
     const sub = document.getElementById("gc-nav-trading-sub");
-    const toggle = document.getElementById("gc-nav-trading-toggle");
-    if (!sub || !toggle) return;
+    const parent = document.getElementById("gc-nav-trading-parent");
+    if (!sub || !parent) return;
 
     const activePage = page || GC.detectPage();
     const onTradingPage = isTradingNavPage(activePage);
 
-    toggle.classList.toggle("active", onTradingPage);
+    parent.classList.toggle("active", onTradingPage);
     sub.querySelectorAll("[data-trading-nav]").forEach((el) => {
       el.classList.toggle("active", el.dataset.tradingNav === activePage);
     });
@@ -2856,23 +2851,6 @@
       return;
     }
     hideTradingSubnav();
-  }
-
-  function bindTradingNavOnce() {
-    if (GC._tradingNavBound) return;
-    GC._tradingNavBound = true;
-
-    document.addEventListener("click", (e) => {
-      const toggle = e.target.closest("#gc-nav-trading-toggle");
-      if (!toggle) return;
-      e.preventDefault();
-
-      const sub = document.getElementById("gc-nav-trading-sub");
-      if (!sub) return;
-      const isClosed = sub.hidden || sub.classList.contains("gc-nav-sub--collapsed");
-      if (isClosed) showTradingSubnav();
-      else hideTradingSubnav();
-    });
   }
 
   function updateResearchQueueActions(researchRaw) {
@@ -11014,11 +10992,11 @@
 
   function _syncTradingNavFromPath(path) {
     const tradingPage = _tradingPageFromPath(path);
-    const toggle = document.getElementById("gc-nav-trading-toggle");
+    const parent = document.getElementById("gc-nav-trading-parent");
     const sub = document.getElementById("gc-nav-trading-sub");
-    if (!toggle || !sub) return;
+    if (!parent || !sub) return;
 
-    toggle.classList.toggle("active", !!tradingPage);
+    parent.classList.toggle("active", !!tradingPage);
     sub.querySelectorAll("[data-trading-nav]").forEach((el) => {
       el.classList.toggle("active", el.dataset.tradingNav === tradingPage);
     });
@@ -11085,6 +11063,8 @@
       } catch (_) {
         return;
       }
+      const isTradingParent = link.id === "gc-nav-trading-parent";
+      if (isTradingParent) return;
       link.classList.toggle("active", linkPath === path);
     });
     _syncTradingNavFromPath(path);

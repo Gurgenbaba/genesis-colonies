@@ -55,13 +55,11 @@
 
   {% set _trading_open = request.endpoint in ('trader_hub_view', 'logistics_view') %}
   <div class="gc-nav-trading-group gc-nav-submenu-group">
-    <button type="button"
-            class="gc-nav-link gc-nav-submenu-toggle {% if _trading_open %}active{% endif %}"
-            id="gc-nav-trading-toggle"
-            aria-expanded="{{ 'true' if _trading_open else 'false' }}"
-            aria-controls="gc-nav-trading-sub">
+    <a href="{{ url_for('trader_hub_view') }}"
+       class="gc-nav-link {% if _trading_open %}active{% endif %}"
+       id="gc-nav-trading-parent">
       {{ T("nav_trading_post", "Handelsposten") }}
-    </button>
+    </a>
     <div class="gc-nav-sub gc-nav-sub--trading"
          id="gc-nav-trading-sub"
          {% if not _trading_open %}hidden{% endif %}
