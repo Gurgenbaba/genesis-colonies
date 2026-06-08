@@ -116,8 +116,6 @@ def tr(key: str, default: str | None = None, *, locale: str | None = None, **fmt
 
 def fmt_int(value: object, *, locale: str | None = None) -> str:
     del locale  # number format stays de-DE style for now
-    try:
-        n = int(round(float(value)))
-    except (TypeError, ValueError):
-        return str(value)
-    return f"{n:,}".replace(",", ".")
+    from .number_format import fmt_int as _fmt
+
+    return _fmt(value)

@@ -67,14 +67,44 @@
   }
 
   // =========================
-  // Format helpers
+  // Format helpers (mirrors game/number_format.py)
   // =========================
+  function parseIntNumber(n) {
+    if (typeof n === "number" && Number.isFinite(n)) return Math.trunc(n);
+    const raw = String(n ?? "").trim();
+    if (!raw) return 0;
+    if (/^-?\d+$/.test(raw)) return parseInt(raw, 10);
+    let cleaned = raw.replace(/\s/g, "");
+    if (cleaned.includes(",") && cleaned.includes(".")) {
+      cleaned = cleaned.replace(/\./g, "").replace(",", ".");
+    } else if ((cleaned.match(/\./g) || []).length > 1) {
+      cleaned = cleaned.replace(/\./g, "");
+    } else if (cleaned.includes(",")) {
+      cleaned = cleaned.replace(",", ".");
+    }
+    const num = Number(cleaned);
+    return Number.isFinite(num) ? Math.trunc(num) : 0;
+  }
+
+  function formatCompactMantissa(val) {
+    const absVal = Math.abs(val);
+    let body;
+    if (absVal >= 1000) body = Math.round(val).toString();
+    else if (absVal >= 10) body = val.toFixed(1);
+    else if (absVal >= 1) body = val.toFixed(1);
+    else body = val.toFixed(2);
+    if (body.includes(".")) {
+      body = body.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+    }
+    return body.replace(".", ",");
+  }
+
   function fmtIntParts(n) {
-    const num = Math.floor(Number(n) || 0);
-    if (!Number.isFinite(num)) return { display: "0", full: "0" };
+    const num = parseIntNumber(n);
     const full = num.toLocaleString("de-DE", { maximumFractionDigits: 0 });
     const abs = Math.abs(num);
     if (abs < 10000000) return { display: full, full };
+
     if (abs >= 1e18) return { display: "∞", full };
 
     const sign = num < 0 ? "-" : "";
@@ -95,17 +125,22 @@
     }
 
     const val = abs / div;
-    let body;
-    if (val >= 100) body = val.toFixed(0);
-    else if (val >= 10) body = val.toFixed(1);
-    else body = val.toFixed(2);
-    body = body.replace(/\.?0+$/, "").replace(".", ",");
+    const body = formatCompactMantissa(val);
     return { display: `${sign}${body} ${suffix}`, full };
   }
 
   function fmtNumber(n) {
     return fmtIntParts(n).display;
   }
+
+  function fmtIntFull(n) {
+    return parseIntNumber(n).toLocaleString("de-DE", { maximumFractionDigits: 0 });
+  }
+
+  GC.parseIntNumber = parseIntNumber;
+  GC.fmtIntParts = fmtIntParts;
+  GC.fmtNumber = fmtNumber;
+  GC.fmtIntFull = fmtIntFull;
 
   function renderMonoCompact(n, prefix = "", suffix = "") {
     const p = fmtIntParts(n);
@@ -10240,7 +10275,7 @@
 
   function rankingScoreValue(row, tabId) {
     const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
-    return Number(row[tab.scoreKey]) || 0;
+    return parseIntNumber(row[tab.scoreKey]);
   }
 
   function rankingVisibleTabs(payload) {
@@ -10279,7 +10314,7 @@
   function rankingCurrentScore(payload, tabId) {
     const cur = payload?.current_player || {};
     const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
-    return Number(cur[tab.scoreKey]) || 0;
+    return parseIntNumber(cur[tab.scoreKey]);
   }
 
   function rankingAvatarInner(row) {
@@ -10441,7 +10476,7 @@
       `</div>` +
       `<div class="gc-ranking-my-score">` +
       `<span class="gc-ranking-my-label">${rankingEscapeHtml(rankingColLabel(tab))}</span>` +
-      `<span class="gc-ranking-my-value gc-mono">${fmtNumber(score)}</span>` +
+      `<span class="gc-ranking-my-value gc-mono">${renderMonoCompact(score)}</span>` +
       `</div>`;
   }
 
@@ -10494,7 +10529,7 @@
           `<td class="gc-ranking-place"><span class="gc-ranking-place-num">#${fmtNumber(row.display_rank)}</span></td>` +
           `<td class="gc-ranking-col-player">${rankingPlayerCell(row, isMe)}</td>` +
           `<td class="gc-ranking-col-alliance">${rankingAllianceHtml(row)}</td>` +
-          `<td class="gc-ranking-score gc-ranking-score--active">${fmtNumber(row.display_score)}</td>` +
+          `<td class="gc-ranking-score gc-ranking-score--active">${renderMonoCompact(row.display_score)}</td>` +
           `</tr>`
         );
       })
@@ -10508,7 +10543,7 @@
           `<div class="gc-ranking-mobile-head">` +
           `<span class="gc-ranking-place gc-ranking-place-num">#${fmtNumber(row.display_rank)}</span>` +
           rankingAllianceHtml(row) +
-          `<span class="gc-ranking-mobile-score-inline gc-mono">${fmtNumber(row.display_score)}</span>` +
+          `<span class="gc-ranking-mobile-score-inline gc-mono">${renderMonoCompact(row.display_score)}</span>` +
           `</div>` +
           `<div class="gc-ranking-mobile-player">${rankingPlayerCell(row, isMe)}</div>` +
           `</article>`
