@@ -2882,13 +2882,17 @@
     return block;
   }
 
-  /** Sync card queue blocks from owner map — job_id keyed; supports multiple same-type orders. */
+  /** Sync card queue blocks from owner map — one visible job per card (head only; rest hidden). */
   function patchCardQueuesFromOwnerMap(page, byOwner, listCards, ownerKeyFromCard, findCard) {
     if (!page || !byOwner || typeof byOwner !== "object") return;
     const activeKeys = new Set(Object.keys(byOwner));
     listCards(page).forEach((card) => {
       const key = ownerKeyFromCard(card);
-      if (key && !activeKeys.has(key)) GC.clearCardQueueBlock(card);
+      if (key && !activeKeys.has(key)) {
+        delete card.dataset.queueHeadJobId;
+        delete card.dataset.queuePending;
+        GC.clearCardQueueBlock(card);
+      }
     });
     Object.entries(byOwner).forEach(([ownerKey, jobs]) => {
       const card = findCard(page, ownerKey);
@@ -2903,22 +2907,36 @@
           return Math.floor(Number(a.job_id || 0)) - Math.floor(Number(b.job_id || 0));
         });
       if (!list.length) {
+        delete card.dataset.queueHeadJobId;
+        delete card.dataset.queuePending;
         GC.clearCardQueueBlock(card);
         return;
       }
-      const wantedIds = new Set(
-        list
-          .map((job) => Math.floor(Number(job.job_id || 0)))
-          .filter((id) => id > 0)
-          .map((id) => String(id))
-      );
+      const headJob = list.find((j) => String(j.status || "") === "active") || list[0];
+      const headId = Math.floor(Number(headJob.job_id || 0));
+      const prevHead = card.dataset.queueHeadJobId || "";
+      const advanced = prevHead && headId > 0 && prevHead !== String(headId);
+
       card.querySelectorAll("[data-gc-card-queue]").forEach((block) => {
-        const blockJobId = block.dataset.jobId || "";
-        if (blockJobId && !wantedIds.has(blockJobId)) block.remove();
+        const blockJobId = Math.floor(Number(block.dataset.jobId || 0));
+        if (blockJobId !== headId) block.remove();
       });
-      list.forEach((job) => GC.renderCardQueueBlock(card, job));
-      reorderCardQueueBlocks(card);
-      syncCardQueueOwnerClassesFromBlocks(card, _cardQueueDomain(list[0]));
+
+      if (headId > 0) card.dataset.queueHeadJobId = String(headId);
+      else delete card.dataset.queueHeadJobId;
+      if (list.length > 1) card.dataset.queuePending = String(list.length - 1);
+      else delete card.dataset.queuePending;
+
+      const block = GC.renderCardQueueBlock(card, headJob);
+      if (advanced && block) {
+        block.classList.add("gc-card-queue-block--advance");
+        block.addEventListener(
+          "animationend",
+          () => block.classList.remove("gc-card-queue-block--advance"),
+          { once: true }
+        );
+      }
+      syncCardQueueOwnerClassesFromBlocks(card, _cardQueueDomain(headJob));
     });
   }
 

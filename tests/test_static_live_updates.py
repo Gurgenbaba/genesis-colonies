@@ -671,9 +671,9 @@ def test_main_js_gc539_same_type_queue_patch_and_timer_zero():
     assert "function queueTimerDisplaySeconds(remaining)" in src
 
     patch_queues = src.split("function patchCardQueuesFromOwnerMap(page, byOwner, listCards, ownerKeyFromCard, findCard)")[1].split("GC.renderCardQueueBlock = function renderCardQueueBlock")[0]
-    assert "list.forEach((job) => GC.renderCardQueueBlock(card, job))" in patch_queues
-    assert "wantedIds.has(blockJobId)" in patch_queues
-    assert "reorderCardQueueBlocks(card)" in patch_queues
+    assert "headJob" in patch_queues
+    assert "list.forEach((job) => GC.renderCardQueueBlock(card, job))" not in patch_queues
+    assert "gc-card-queue-block--advance" in patch_queues
 
     render_card = src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("function _syncBuildQueueLiveState")[0]
     assert "findCardQueueBlockByJobId(cardEl, jobId)" in render_card

@@ -2926,6 +2926,21 @@ body:not(.gc-perf-idle) .research-bar-fill{
   border-style: dashed;
 }
 
+@keyframes gc-card-queue-advance{
+  from{
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to{
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.gc-card-queue-block--advance{
+  animation: gc-card-queue-advance 0.28s ease-out;
+}
+
 .gc-card-queue-head{
   display: flex;
   align-items: center;
@@ -3340,7 +3355,8 @@ body:not(.gc-perf-idle) .research-bar-fill{
   .gc-card-queue-glyph--ascension,
   .gc-card-queue-scanline--ascension,
   .gc-card-queue-glyph--defense,
-  .gc-card-queue-scanline--defense{
+  .gc-card-queue-scanline--defense,
+  .gc-card-queue-block--advance{
     animation: none !important;
   }
 }
