@@ -737,6 +737,19 @@ def overview():
     )
 
 
+@app.route("/empire")
+@require_login
+def empire_view():
+    user_id = session.get("user_id")
+    if user_id is None:
+        return redirect(url_for("login"))
+
+    from game.empire_page import build_empire_context
+
+    empire = build_empire_context(int(user_id))
+    return render_template("empire.html", empire=empire)
+
+
 @app.route("/trader-hub")
 @require_login
 def trader_hub_view():

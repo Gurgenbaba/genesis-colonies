@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% from "partials/progression_cards.html" import render_resource_icon with context %}
+
+{% block content %}
+
+{% set em = (empire if empire is defined and empire else {}) %}
+{% set cmd = (em.commander if em.commander is defined else {}) %}
+{% set prod = (em.production if em.production is defined else {}) %}
+{% set nrg = (em.energy if em.energy is defined else {}) %}
+{% set limit = (em.colony_limit if em.colony_limit is defined else {}) %}
+
+<div class="gc-page empire-page" id="empire-page">
+
+  <header class="section-header empire-header">
+    <div class="section-header-row">
+      <h1 class="section-title">{{ T("empire_title", "Empire") }}</h1>
+    </div>
+    <p class="section-hint hint">{{ T("empire_hint", "Gesamtübersicht deines Imperiums.") }}</p>
+  </header>
+
+  <section class="gc-panel empire-summary" aria-label="{{ T('empire_summary_label', 'Empire-Übersicht') }}">
+    <dl class="overview-meta-grid empire-meta-grid">
+      <div class="overview-meta-item">
+        <dt>{{ T("empire_label_commander", "Commander") }}</dt>
+        <dd class="empire-summary-value">{{ cmd.name or T("commander", "Commander") }}</dd>
+      </div>
+      <div class="overview-meta-item">
+        <dt>{{ T("empire_label_colonies", "Kolonien") }}</dt>
+        <dd class="gc-mono empire-summary-value">
+          {{ em.colony_count or 0 }} / {{ limit.max or 0 }}
+        </dd>
+      </div>
+      <div class="overview-meta-item">
+        <dt>{{ T("empire_label_total_score", "Gesamtpunkte") }}</dt>
+        <dd class="gc-mono empire-summary-value empire-summary-value--score">{{ (em.total_score or 0)|fmt_int }}</dd>
+      </div>
+      <div class="overview-meta-item">
+        <dt>{{ T("empire_label_energy_surplus", "Energie-Surplus") }}</dt>
+        <dd class="gc-mono empire-summary-value empire-summary-value--energy">+{{ (nrg.surplus or 0)|fmt_int }}</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="gc-panel empire-prod-panel" aria-label="{{ T('empire_label_production', 'Gesamtproduktion') }}">
+    <header class="empire-section-head">
+      <h2 class="empire-section-kicker">{{ T("empire_label_production", "Gesamtproduktion") }}</h2>
+      <p class="empire-section-sub hint">{{ T("empire_production_hint", "Aggregiert über alle Kolonien — keine Lagerbestände.") }}</p>
+    </header>
+    <div class="empire-prod-grid">
+      <article class="empire-prod-card empire-prod-card--metal" aria-label="{{ T('resource_metal') }}">
+        <div class="empire-prod-card-icon">{{ render_resource_icon('metal', 'lg') }}</div>
+        <div class="empire-prod-card-body">
+          <span class="empire-prod-card-label">{{ T("resource_metal") }}</span>
+          <span class="empire-prod-card-value gc-mono">+{{ (prod.metal or 0)|fmt_int_compact }}<span class="empire-prod-card-unit">/h</span></span>
+        </div>
+      </article>
+      <article class="empire-prod-card empire-prod-card--crystal" aria-label="{{ T('resource_crystal') }}">
+        <div class="empire-prod-card-icon">{{ render_resource_icon('crystal', 'lg') }}</div>
+        <div class="empire-prod-card-body">
+          <span class="empire-prod-card-label">{{ T("resource_crystal") }}</span>
+          <span class="empire-prod-card-value gc-mono">+{{ (prod.crystal or 0)|fmt_int_compact }}<span class="empire-prod-card-unit">/h</span></span>
+        </div>
+      </article>
+      <article class="empire-prod-card empire-prod-card--fuel" aria-label="{{ T('resource_fuel_cells') }}">
+        <div class="empire-prod-card-icon">{{ render_resource_icon('fuel_cells', 'lg') }}</div>
+        <div class="empire-prod-card-body">
+          <span class="empire-prod-card-label">{{ T("resource_fuel_cells") }}</span>
+          <span class="empire-prod-card-value gc-mono">+{{ (prod.fuel_cells or 0)|fmt_int_compact }}<span class="empire-prod-card-unit">/h</span></span>
+        </div>
+      </article>
+      <article class="empire-prod-card empire-prod-card--energy" aria-label="{{ T('empire_label_energy_surplus', 'Energie-Surplus') }}">
+        <div class="empire-prod-card-icon">{{ render_resource_icon('energy', 'lg') }}</div>
+        <div class="empire-prod-card-body">
+          <span class="empire-prod-card-label">{{ T("empire_label_energy_surplus", "Energie-Surplus") }}</span>
+          <span class="empire-prod-card-value gc-mono">+{{ (nrg.surplus or 0)|fmt_int }}</span>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  {% set matrix = (em.matrix if em.matrix is defined and em.matrix else {}) %}
+  {% set matrix_colonies = (matrix.colonies if matrix.colonies is defined and matrix.colonies else []) %}
+  {% set matrix_values = (matrix.colony_values if matrix.colony_values is defined and matrix.colony_values else []) %}
+  {% set matrix_sections = (matrix.sections if matrix.sections is defined and matrix.sections else []) %}
+  {% set matrix_totals = (matrix.totals if matrix.totals is defined and matrix.totals else {}) %}
+  {% set matrix_account = (matrix.account_values if matrix.account_values is defined and matrix.account_values else {}) %}
+  {% set matrix_col_count = matrix_colonies|length %}
+
+  <section class="gc-panel empire-matrix-panel" aria-label="{{ T('empire_matrix_label', 'Empire-Matrix') }}">
+    <header class="empire-section-head">
+      <h2 class="empire-section-kicker">{{ T("empire_matrix_title", "Kolonie-Matrix") }}</h2>
+      <p class="empire-section-sub hint">{{ T("empire_matrix_hint", "Vergleich aller Kolonien — horizontal scrollen für alle Spalten.") }}</p>
+    </header>
+
+    <div class="empire-matrix-scroll" tabindex="0" role="region" aria-label="{{ T('empire_matrix_scroll_label', 'Matrix horizontal scrollen') }}">
+      <table class="empire-matrix empire-matrix--full">
+        <thead>
+          <tr class="empire-matrix-colony-header-row">
+            <th class="empire-matrix-sticky-col empire-matrix-corner" scope="col">
+              {{ T("empire_matrix_metric", "Kennzahl") }}
+            </th>
+            {% for col in matrix_colonies %}
+            <th class="empire-matrix-colony-head" scope="col" data-planet-id="{{ col.planet_id or 0 }}">
+              <span class="empire-matrix-colony-name">
+                {{ col.name or T('overview_label_planet', 'Kolonie') }}
+                {% if col.is_homeworld %}
+                <span class="empire-matrix-homeworld-badge">{{ T("empire_colony_homeworld", "Hauptplanet") }}</span>
+                {% endif %}
+              </span>
+              <span class="empire-matrix-colony-coords gc-mono">{{ col.coordinates_display or '—' }}</span>
+              <span class="empire-matrix-colony-type gc-chip-angular">
+                {{ T(col.planet_class_label_key, col.planet_class or 'terrestrial') }}
+              </span>
+              <span class="empire-matrix-colony-temp hint">{{ col.temperature_display or '—' }}</span>
+            </th>
+            {% endfor %}
+            <th class="empire-matrix-total-head" scope="col">{{ T("empire_matrix_totals", "Σ Empire") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if matrix_col_count == 0 %}
+          <tr>
+            <td class="empire-matrix-empty" colspan="2">{{ T("empire_colony_empty", "Keine Kolonien vorhanden.") }}</td>
+          </tr>
+          {% else %}
+          {% for section in matrix_sections %}
+          <tr class="empire-matrix-section-row">
+            <th class="empire-matrix-sticky-col empire-matrix-section-label" colspan="{{ matrix_col_count + 2 }}" scope="colgroup">
+              {{ T(section.label_key, section.key) }}
+              {% if section.scope == 'account' %}
+              <span class="empire-matrix-account-tag">{{ T("empire_matrix_account_scope", "Account") }}</span>
+              {% endif %}
+            </th>
+          </tr>
+          {% for row in section.rows %}
+          <tr class="empire-matrix-data-row empire-matrix-data-row--{{ section.key }}">
+            <th class="empire-matrix-sticky-col empire-matrix-row-label" scope="row">
+              {{ T(row.label_key, row.key) }}
+            </th>
+            {% if section.scope == 'account' %}
+            {% set aval = matrix_account[row.key] if matrix_account[row.key] is defined else 0 %}
+            <td class="gc-mono empire-matrix-cell empire-matrix-cell--account" colspan="{{ matrix_col_count }}">
+              L{{ aval|int }}
+            </td>
+            <td class="gc-mono empire-matrix-cell empire-matrix-cell--total empire-matrix-cell--account">
+              L{{ aval|int }}
+            </td>
+            {% else %}
+              {% for idx in range(matrix_col_count) %}
+              {% set colony_data = matrix_values[idx] if matrix_values[idx] is defined else {} %}
+              {% set group_data = colony_data[section.key] if colony_data[section.key] is defined else {} %}
+              {% set val = group_data[row.key] if group_data[row.key] is defined else 0 %}
+              <td class="gc-mono empire-matrix-cell empire-matrix-cell--{{ section.key }}{% if val|int == 0 and row.format in ['count', 'level'] %} is-zero{% endif %}">
+                {% if row.format == 'storage_fuel' and val|int == -1 %}
+                  {{ T("empire_matrix_unlimited", "∞") }}
+                {% elif row.format == 'rate' %}
+                  +{{ val|fmt_int_compact }}<span class="empire-matrix-unit">/h</span>
+                {% elif row.format == 'level' %}
+                  {% if val|int > 0 %}L{{ val|int }}{% else %}<span class="empire-matrix-zero">0</span>{% endif %}
+                {% elif row.format == 'count' %}
+                  {% if val|int > 0 %}{{ val|fmt_int }}{% else %}<span class="empire-matrix-zero">0</span>{% endif %}
+                {% else %}
+                  {{ val|fmt_int_compact }}
+                {% endif %}
+              </td>
+              {% endfor %}
+              {% set section_totals = matrix_totals[section.key] if matrix_totals[section.key] is defined else {} %}
+              {% set tval = section_totals[row.key] if section_totals[row.key] is defined else 0 %}
+              <td class="gc-mono empire-matrix-cell empire-matrix-cell--total empire-matrix-cell--{{ section.key }}">
+                {% if row.summable %}
+                  {% if row.format == 'rate' %}+{% endif %}{{ tval|fmt_int_compact }}{% if row.format == 'rate' %}<span class="empire-matrix-unit">/h</span>{% endif %}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+          {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+
+{% endblock %}

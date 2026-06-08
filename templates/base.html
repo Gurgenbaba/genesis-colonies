@@ -261,6 +261,11 @@
           {{ T("nav_planet_evolution", "Planet Evolution") }}
         </a>
 
+        <a href="{{ url_for('empire_view') }}"
+           class="gc-nav-link {% if request.endpoint == 'empire_view' %}active{% endif %}">
+          {{ T("nav_empire", "Empire") }}
+        </a>
+
         <a href="{{ url_for('trader_hub_view') }}"
            class="gc-nav-link {% if request.endpoint == 'trader_hub_view' %}active{% endif %}">
           {{ T("nav_trader_hub", "Trader Hub") }}
