@@ -837,7 +837,7 @@ def test_gc551a_fuel_cell_icon_and_hero_level_badge():
     assert "generate_card_artwork" in icons_py
     assert fuel_png.is_file() and fuel_png.stat().st_size > 700
     assert fuel_svg.is_file()
-    assert "icons/fuel_cells.png" in progression
+    assert "img/res/Brennzellen.png" in progression
     fuel_block = base_html.split('class="hud-res-panel hud-res-fuel-cells"')[1].split("</div>", 1)[0]
     assert "onerror" not in fuel_block
     assert "icons/energy.png" not in fuel_block
@@ -845,7 +845,8 @@ def test_gc551a_fuel_cell_icon_and_hero_level_badge():
     assert "background: rgb(6, 12, 26)" in css
     assert ".hud-res-fuel-cells .res-icon" in css
     assert "gc-res-fuel-cells" in css
-    assert "render_resource_icon('fuel_cells')" in _read("templates/overview.html")
+    assert "render_resource_icon('fuel_cells', 'xl')" in _read("templates/overview.html")
+    assert "img/res/Ferronit.png" in _read("templates/base.html")
     assert Path("static/img/buildings/academy.png").stat().st_size > 100_000
 
 

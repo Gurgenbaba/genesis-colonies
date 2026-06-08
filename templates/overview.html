@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "partials/building_effect_strip.html" import render_building_effect_bundle with context %}
 {% from "partials/progression_cards.html" import render_resource_icon with context %}
 
 {% block content %}
@@ -10,13 +9,20 @@
 {% set res = (os.resources if os.resources is defined else {}) %}
 {% set nrg = (os.energy if os.energy is defined else {}) %}
 {% set activities = (os.activities if os.activities is defined and os.activities else []) %}
-{% set warnings = (os.warnings if os.warnings is defined and os.warnings else []) %}
-{% set recent_log = (os.recent_log if os.recent_log is defined and os.recent_log else []) %}
-{% set building_upgrades = (os.building_upgrades if os.building_upgrades is defined and os.building_upgrades else []) %}
-
 {% set player_obj = (player if player is defined and player else None) %}
 {% set cmd_id = commander.id if commander.id is defined else (player_obj.id if player_obj and player_obj.id is defined else None) %}
 {% set cmd_name = commander.name if commander.name is defined and commander.name else "Commander" %}
+
+{% set metal_cap = res.metal_cap or 0 %}
+{% set crystal_cap = res.crystal_cap or 0 %}
+{% set fuel_cap = res.fuel_cells_cap or 0 %}
+{% set metal_pct = ([(res.metal or 0) / metal_cap * 100, 100]|min|int) if metal_cap else 0 %}
+{% set crystal_pct = ([(res.crystal or 0) / crystal_cap * 100, 100]|min|int) if crystal_cap else 0 %}
+{% set fuel_pct = ([(res.fuel_cells or 0) / fuel_cap * 100, 100]|min|int) if fuel_cap else 0 %}
+{% set energy_used = nrg.used or 0 %}
+{% set energy_total = nrg.total or 0 %}
+{% set energy_surplus = energy_total - energy_used %}
+{% set energy_pct = ([energy_used / energy_total * 100, 100]|min|int) if energy_total else 0 %}
 
 <div class="gc-page overview-wrapper" data-planet-id="{{ planet.planet_id or 0 }}">
 
@@ -30,8 +36,6 @@
       {{ T("overview_hint", "Planet, Ressourcen und laufende Aktionen auf einen Blick.") }}
     </p>
   </header>
-
-  {% include "partials/planet_teaser_widget.html" %}
 
   <section class="gc-panel overview-hero" aria-label="{{ T('overview_label_planet', 'Kolonie') }}">
     <div class="overview-hero-top">
@@ -79,162 +83,176 @@
     </dl>
   </section>
 
-  <div class="gc-grid-2 overview-main-grid">
+  <section class="overview-res-dashboard" id="overview-res-dashboard" aria-label="{{ T('overview_label_resources', 'Ressourcen') }}">
 
-    <section class="gc-panel overview-economy-panel" aria-label="{{ T('overview_label_resources', 'Ressourcen') }}">
-      <div class="gc-panel-header">
-        <div class="gc-panel-head-left">
-          <span class="gc-panel-title">{{ T("overview_label_resources", "Ressourcen") }}</span>
-          <span class="gc-panel-subtitle">{{ T("overview_panel_resources_hint", "Bestand und stündliche Produktion.") }}</span>
+    <article class="overview-res-dash-card overview-res-dash-card--metal" id="overview-metal-val">
+      <div class="overview-res-dash-hero">
+        {{ render_resource_icon('metal', 'xl') }}
+        <div class="overview-res-dash-hero-overlay" aria-hidden="true"></div>
+        <div class="overview-res-dash-hero-title">
+          <span class="overview-res-dash-title">{{ T('resource_metal', 'Ferronit') }}</span>
         </div>
       </div>
-
-      <div class="overview-energy-strip{% if (nrg.total or 0) == 0 %} overview-energy-zero{% elif (nrg.ratio or 1) >= 1 %} overview-energy-ok{% elif (nrg.ratio or 1) >= 0.5 %} overview-energy-low{% else %} overview-energy-critical{% endif %}"
-           id="overview-energy-strip">
-        <div class="overview-energy-head">
-          <span class="overview-energy-label">{{ T("overview_label_energy", "Energie-Bilanz") }}</span>
-          <span class="overview-energy-values gc-mono" id="overview-energy-val">
-            <span class="gc-val" data-energy-used>{{ (nrg.used or 0)|fmt_int }}</span>
-            <span class="gc-cap">/ <span data-energy-total>{{ (nrg.total or 0)|fmt_int }}</span></span>
+      <div class="overview-res-dash-body">
+        <div class="overview-res-dash-prod-block">
+          <span class="overview-res-dash-prod-hero gc-mono" data-ph="metal">
+            {% if res.metal_per_hour %}+{{ res.metal_per_hour|fmt_int }}/h{% else %}–{% endif %}
           </span>
         </div>
-        <div class="overview-hint overview-energy-hint
-                    {% if (nrg.total or 0) == 0 %}overview-energy-zero
-                    {% elif (nrg.ratio or 1) >= 1 %}overview-energy-ok
-                    {% elif (nrg.ratio or 1) >= 0.5 %}overview-energy-low
-                    {% else %}overview-energy-critical{% endif %}"
-             id="overview-energy-hint">
-          {% if (nrg.total or 0) == 0 %}
-            {{ T("overview_hint_energy_zero", "Keine Energie – baue Solarkollektoren.") }}
-          {% elif (nrg.ratio or 1) >= 1 %}
-            {{ T("overview_hint_energy_good", "Energie stabil.") }}
-          {% elif (nrg.ratio or 1) >= 0.5 %}
-            {{ T("overview_hint_energy_low", "Energieengpass – Produktion gedrosselt.") }}
-          {% else %}
-            {{ T("overview_hint_energy_critical", "Kritischer Energiemangel – sofort Solarkollektoren ausbauen.") }}
-          {% endif %}
-        </div>
-      </div>
-
-      <div class="overview-resources-strip" id="overview-resources-strip" aria-label="{{ T('overview_label_resources', 'Ressourcen') }}">
-        <div class="overview-res-inline" id="overview-fuel-val">
-          {{ render_resource_icon('fuel_cells') }}
-          <span class="overview-res-inline-label">{{ T('resource_fuel_cells') }}</span>
-          <span class="overview-res-inline-main gc-mono">
-            <span class="gc-val" data-res="fuel_cells">{{ (res.fuel_cells or 0)|fmt_int }}</span>
-            <span class="gc-cap">/ {{ (res.fuel_cells_cap or 0)|fmt_int }}</span>
-          </span>
-          {% if res.fuel_cells_per_hour %}
-          <span class="overview-res-inline-rate gc-mono">+{{ res.fuel_cells_per_hour|fmt_int }}/h</span>
-          {% endif %}
-        </div>
-      </div>
-
-      {% if building_upgrades %}
-      <div class="overview-upgrade-widgets" id="overview-upgrade-widgets" aria-label="{{ T('overview_label_upgrade_preview', 'Upgrade-Vorschau') }}">
-        {% for b in building_upgrades %}
-        <a class="overview-upgrade-card" href="{{ url_for('buildings_view') }}" data-overview-building="{{ b.key }}">
-          <div class="overview-upgrade-card-head">
-            <span class="overview-upgrade-name">{{ T('overview_building_' ~ b.key, T('building_' ~ b.key)) }}</span>
-            <span class="overview-upgrade-level gc-level-badge gc-mono">L{{ b.level|fmt_int }}</span>
+        <div class="overview-res-dash-storage-block">
+          <div class="overview-res-bar-wrap">
+            <div class="overview-res-bar" aria-hidden="true">
+              <div class="overview-res-bar-fill" data-res-fill="metal" style="width: {{ metal_pct }}%;"></div>
+            </div>
+            <span class="overview-res-bar-pct gc-mono" data-res-pct="metal">{{ metal_pct }}%</span>
           </div>
-          {{ render_building_effect_bundle(b, compact=true) }}
-        </a>
-        {% endfor %}
-      </div>
-      {% else %}
-      <div class="overview-upgrade-widgets overview-upgrade-widgets-empty" id="overview-upgrade-widgets" hidden aria-hidden="true"></div>
-      {% endif %}
-    </section>
-
-    <section class="gc-panel overview-activities-panel" aria-label="{{ T('overview_label_activities', 'Aktivitäten') }}">
-      <div class="gc-panel-header">
-        <div class="gc-panel-head-left">
-          <span class="gc-panel-title">{{ T("overview_label_activities", "Aktivitäten") }}</span>
-          <span class="gc-panel-subtitle">{{ T("overview_panel_activities_hint", "Bau, Forschung und Flotte – kompakt.") }}</span>
+          <span class="overview-res-dash-stock gc-mono">
+            <span class="gc-val" data-res="metal">{{ (res.metal or 0)|fmt_int }}</span>
+          </span>
         </div>
       </div>
+    </article>
 
-      <ul class="overview-activities" id="overview-activities">
-        {% for act in activities %}
-        {% set act_type_key = 'fleet' if act.key.startswith('fleet_') else act.key %}
-        <li class="overview-activity-row overview-activity-{{ act.key }} overview-activity-{{ act.state }}"
-            data-activity-key="{{ act.key }}"
-            {% if act.finish_at %}data-finish-at="{{ act.finish_at|int }}"{% endif %}
-            {% if act.phase %}data-activity-phase="{{ act.phase }}"{% endif %}
-            {% if act.remaining is defined %}data-remaining="{{ act.remaining|int }}"{% endif %}>
-          <a class="overview-activity-link" href="{{ url_for(act.href_key) }}">
-            <span class="overview-activity-type">{{ T('overview_activity_' ~ act_type_key, act_type_key) }}</span>
-            <span class="overview-activity-body">
-              {% if act.state == 'active' %}
-                <span class="overview-activity-name">{{ T(act.label_key, act.label_key) }}</span>
-                <span class="overview-activity-detail gc-mono">{% if act.status_label %}{{ T(act.status_label, act.status_label) }} · {% endif %}{{ act.summary }}</span>
-                <span class="overview-activity-eta gc-mono" data-activity-eta
-                  {% if act.countdown_at or act.finish_at %}
-                  data-timer-target="{{ (act.countdown_at or act.finish_at)|int }}"
-                  data-timer-kind="{{ 'fleet' if act.key.startswith('fleet_') else 'queue' }}"
-                  data-refresh-on-zero="{{ 'fleet' if act.key.startswith('fleet_') else 'game-state' }}"
-                  data-countdown-at="{{ (act.countdown_at or act.finish_at)|int }}"
-                  data-countdown-scope="overview"
-                  data-countdown-format="{{ 'fleet' if act.key.startswith('fleet_') else 'eta' }}"
-                  data-countdown-key="{{ act.movement_id or act.key.replace('fleet_', '') }}:{{ act.phase or act.state }}:{{ (act.countdown_at or act.finish_at)|int }}"
-                  {% if act.key.startswith('fleet_') and act.remaining is defined %}data-server-remaining="{{ act.remaining|int }}"{% endif %}
-                  {% endif %}>{% if act.key.startswith('fleet_') %}–{% else %}{{ act.remaining_display }}{% endif %}</span>
-              {% else %}
-                <span class="overview-activity-idle">{{ T(act.label_key, 'Bereit') }}</span>
-              {% endif %}
-            </span>
-          </a>
-        </li>
-        {% endfor %}
-      </ul>
-    </section>
+    <article class="overview-res-dash-card overview-res-dash-card--crystal" id="overview-crystal-val">
+      <div class="overview-res-dash-hero">
+        {{ render_resource_icon('crystal', 'xl') }}
+        <div class="overview-res-dash-hero-overlay" aria-hidden="true"></div>
+        <div class="overview-res-dash-hero-title">
+          <span class="overview-res-dash-title">{{ T('resource_crystal', 'Crytite') }}</span>
+        </div>
+      </div>
+      <div class="overview-res-dash-body">
+        <div class="overview-res-dash-prod-block">
+          <span class="overview-res-dash-prod-hero gc-mono" data-ph="crystal">
+            {% if res.crystal_per_hour %}+{{ res.crystal_per_hour|fmt_int }}/h{% else %}–{% endif %}
+          </span>
+        </div>
+        <div class="overview-res-dash-storage-block">
+          <div class="overview-res-bar-wrap">
+            <div class="overview-res-bar" aria-hidden="true">
+              <div class="overview-res-bar-fill" data-res-fill="crystal" style="width: {{ crystal_pct }}%;"></div>
+            </div>
+            <span class="overview-res-bar-pct gc-mono" data-res-pct="crystal">{{ crystal_pct }}%</span>
+          </div>
+          <span class="overview-res-dash-stock gc-mono">
+            <span class="gc-val" data-res="crystal">{{ (res.crystal or 0)|fmt_int }}</span>
+          </span>
+        </div>
+      </div>
+    </article>
 
-  </div>
+    <article class="overview-res-dash-card overview-res-dash-card--energy{% if energy_total == 0 %} overview-energy-zero{% elif (nrg.ratio or 1) >= 1 %} overview-energy-ok{% elif (nrg.ratio or 1) >= 0.5 %} overview-energy-low{% else %} overview-energy-critical{% endif %}"
+             id="overview-energy-card">
+      <div class="overview-res-dash-hero">
+        {{ render_resource_icon('energy', 'xl') }}
+        <div class="overview-res-dash-hero-overlay" aria-hidden="true"></div>
+        <div class="overview-res-dash-hero-title">
+          <span class="overview-res-dash-title">{{ T('overview_card_energy', 'Energie') }}</span>
+        </div>
+      </div>
+      <div class="overview-res-dash-body">
+        <div class="overview-res-dash-prod-block overview-res-dash-prod-block--energy">
+          <span class="overview-res-dash-prod-hero gc-mono overview-res-dash-balance{% if energy_surplus >= 0 %} overview-res-dash-balance--pos{% else %} overview-res-dash-balance--neg{% endif %}"
+                id="overview-energy-balance">{{ '+' if energy_surplus >= 0 else '' }}{{ energy_surplus|fmt_int }}</span>
+          <span class="overview-res-dash-energy-status"
+                id="overview-energy-status"
+                data-label-none="{{ T('overview_energy_none', 'Keine Energie') }}"
+                data-label-surplus="{{ T('overview_energy_surplus', 'Überschuss') }}"
+                data-label-deficit="{{ T('overview_energy_deficit', 'Defizit') }}">
+            {% if energy_total == 0 %}
+              {{ T('overview_energy_none', 'Keine Energie') }}
+            {% elif energy_surplus >= 0 %}
+              {{ T('overview_energy_surplus', 'Überschuss') }}
+            {% else %}
+              {{ T('overview_energy_deficit', 'Defizit') }}
+            {% endif %}
+          </span>
+        </div>
+        <div class="overview-res-dash-storage-block">
+          <div class="overview-res-bar-wrap">
+            <div class="overview-res-bar overview-res-bar--energy" id="overview-energy-bar" aria-hidden="true">
+              <div class="overview-res-bar-fill" data-res-fill="energy" style="width: {{ energy_pct }}%;"></div>
+            </div>
+            <span class="overview-res-bar-pct gc-mono" data-res-pct="energy">{{ energy_pct }}%</span>
+          </div>
+          <span class="overview-res-dash-stock gc-mono overview-res-dash-stock--energy">
+            <span class="gc-val" data-energy-used id="overview-energy-current">{{ energy_used|fmt_int }}</span><span class="gc-cap"> / <span data-energy-total>{{ energy_total|fmt_int }}</span></span>
+          </span>
+        </div>
+      </div>
+    </article>
 
-  {% if warnings %}
-  <section class="gc-panel overview-warnings-panel" aria-label="{{ T('overview_label_warnings', 'Hinweise') }}">
-    <div class="gc-panel-header">
-      <span class="gc-panel-title">{{ T("overview_label_warnings", "Hinweise") }}</span>
-    </div>
-    <ul class="overview-warnings" id="overview-warnings">
-      {% for w in warnings %}
-      <li class="overview-warning overview-warning-{{ w.severity or 'info' }}" data-warning-key="{{ w.key }}">
-        {{ T(w.label_key, w.key) }}
-      </li>
-      {% endfor %}
-    </ul>
+    <article class="overview-res-dash-card overview-res-dash-card--fuel" id="overview-fuel-val">
+      <div class="overview-res-dash-hero">
+        {{ render_resource_icon('fuel_cells', 'xl') }}
+        <div class="overview-res-dash-hero-overlay" aria-hidden="true"></div>
+        <div class="overview-res-dash-hero-title">
+          <span class="overview-res-dash-title">{{ T('resource_fuel_cells', 'Brennzellen') }}</span>
+        </div>
+      </div>
+      <div class="overview-res-dash-body">
+        <div class="overview-res-dash-prod-block">
+          <span class="overview-res-dash-prod-hero gc-mono" data-ph="fuel_cells">
+            {% if res.fuel_cells_per_hour %}+{{ res.fuel_cells_per_hour|fmt_int }}/h{% else %}–{% endif %}
+          </span>
+        </div>
+        <div class="overview-res-dash-storage-block">
+          <div class="overview-res-bar-wrap">
+            <div class="overview-res-bar" aria-hidden="true">
+              <div class="overview-res-bar-fill" data-res-fill="fuel_cells" style="width: {{ fuel_pct }}%;"></div>
+            </div>
+            <span class="overview-res-bar-pct gc-mono" data-res-pct="fuel_cells">{{ fuel_pct }}%</span>
+          </div>
+          <span class="overview-res-dash-stock gc-mono">
+            <span class="gc-val" data-res="fuel_cells">{{ (res.fuel_cells or 0)|fmt_int }}</span>
+          </span>
+        </div>
+      </div>
+    </article>
+
   </section>
-  {% else %}
-  <ul class="overview-warnings overview-warnings-empty" id="overview-warnings" hidden aria-hidden="true"></ul>
-  {% endif %}
 
-  <section class="gc-panel overview-log-panel" aria-label="{{ T('overview_label_recent_log', 'Systemlog') }}">
+  <section class="gc-panel overview-activities-panel overview-activities-panel--secondary" aria-label="{{ T('overview_label_activities', 'Aktivitäten') }}">
     <div class="gc-panel-header">
       <div class="gc-panel-head-left">
-        <span class="gc-panel-title">{{ T("overview_label_recent_log", "Letzte Ereignisse") }}</span>
-      </div>
-      <div class="gc-panel-head-right">
-        <a class="gc-btn gc-btn-xs gc-btn-outline" href="{{ url_for('messages_view') }}">
-          {{ T("overview_log_open", "Posteingang") }}
-        </a>
+        <span class="gc-panel-title">{{ T("overview_label_activities", "Aktivitäten") }}</span>
+        <span class="gc-panel-subtitle">{{ T("overview_panel_activities_hint", "Bau, Forschung und Flotte – kompakt.") }}</span>
       </div>
     </div>
 
-    {% if recent_log %}
-    <ul class="overview-log" id="overview-log">
-      {% for entry in recent_log %}
-      <li class="overview-log-item{% if not entry.is_read %} overview-log-unread{% endif %}">
-        <span class="overview-log-time gc-mono">{{ entry.time_display or '–' }}</span>
-        <span class="overview-log-subject">{{ entry.subject or T('messages_no_subject', 'Ohne Betreff') }}</span>
+    <ul class="overview-activities" id="overview-activities">
+      {% for act in activities %}
+      {% set act_type_key = 'fleet' if act.key.startswith('fleet_') else act.key %}
+      <li class="overview-activity-row overview-activity-{{ act.key }} overview-activity-{{ act.state }}"
+          data-activity-key="{{ act.key }}"
+          {% if act.finish_at %}data-finish-at="{{ act.finish_at|int }}"{% endif %}
+          {% if act.phase %}data-activity-phase="{{ act.phase }}"{% endif %}
+          {% if act.remaining is defined %}data-remaining="{{ act.remaining|int }}"{% endif %}>
+        <a class="overview-activity-link" href="{{ url_for(act.href_key) }}">
+          <span class="overview-activity-type">{{ T('overview_activity_' ~ act_type_key, act_type_key) }}</span>
+          <span class="overview-activity-body">
+            {% if act.state == 'active' %}
+              <span class="overview-activity-name">{{ T(act.label_key, act.label_key) }}</span>
+              <span class="overview-activity-detail gc-mono">{% if act.status_label %}{{ T(act.status_label, act.status_label) }} · {% endif %}{{ act.summary }}</span>
+              <span class="overview-activity-eta gc-mono" data-activity-eta
+                {% if act.countdown_at or act.finish_at %}
+                data-timer-target="{{ (act.countdown_at or act.finish_at)|int }}"
+                data-timer-kind="{{ 'fleet' if act.key.startswith('fleet_') else 'queue' }}"
+                data-refresh-on-zero="{{ 'fleet' if act.key.startswith('fleet_') else 'game-state' }}"
+                data-countdown-at="{{ (act.countdown_at or act.finish_at)|int }}"
+                data-countdown-scope="overview"
+                data-countdown-format="{{ 'fleet' if act.key.startswith('fleet_') else 'eta' }}"
+                data-countdown-key="{{ act.movement_id or act.key.replace('fleet_', '') }}:{{ act.phase or act.state }}:{{ (act.countdown_at or act.finish_at)|int }}"
+                {% if act.key.startswith('fleet_') and act.remaining is defined %}data-server-remaining="{{ act.remaining|int }}"{% endif %}
+                {% endif %}>{% if act.key.startswith('fleet_') %}–{% else %}{{ act.remaining_display }}{% endif %}</span>
+            {% else %}
+              <span class="overview-activity-idle">{{ T(act.label_key, 'Bereit') }}</span>
+            {% endif %}
+          </span>
+        </a>
       </li>
       {% endfor %}
     </ul>
-    {% else %}
-    <p class="hint overview-log-empty" id="overview-log-empty">
-      {{ T("overview_log_empty", "Noch keine Systemmeldungen.") }}
-    </p>
-    {% endif %}
   </section>
 
 </div>

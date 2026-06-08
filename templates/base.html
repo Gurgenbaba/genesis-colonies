@@ -142,7 +142,7 @@
             <div class="hud-res-panel hud-res-metal" title="{{ T('resource_metal') }}">
               <span class="hud-res-label">{{ T('resource_metal') }}</span>
               <div class="hud-res-body res-block res-block-metal">
-                <img src="{{ url_for('static', filename='icons/ferronit.png') }}" class="res-icon" alt="{{ T('resource_metal') }}">
+                <img src="{{ url_for('static', filename='img/res/Ferronit.png') }}" class="res-icon" alt="{{ T('resource_metal') }}">
                 <span class="res-value metal">{{ (player.metal if player is defined else 0)|fmt_int }}</span>
                 <span class="res-sep" aria-hidden="true">/</span>
                 <span class="res-cap metal">{{ (storage_caps.metal if storage_caps is defined else 0)|fmt_int }}</span>
@@ -153,7 +153,7 @@
             <div class="hud-res-panel hud-res-crystal" title="{{ T('resource_crystal') }}">
               <span class="hud-res-label">{{ T('resource_crystal') }}</span>
               <div class="hud-res-body res-block res-block-crystal">
-                <img src="{{ url_for('static', filename='icons/crytite.png') }}" class="res-icon" alt="{{ T('resource_crystal') }}">
+                <img src="{{ url_for('static', filename='img/res/Crytite.png') }}" class="res-icon" alt="{{ T('resource_crystal') }}">
                 <span class="res-value crystal">{{ (player.crystal if player is defined else 0)|fmt_int }}</span>
                 <span class="res-sep" aria-hidden="true">/</span>
                 <span class="res-cap crystal">{{ (storage_caps.crystal if storage_caps is defined else 0)|fmt_int }}</span>
@@ -166,7 +166,7 @@
             <div class="hud-res-panel hud-res-fuel-cells" title="{{ T('resource_fuel_cells') }}">
               <span class="hud-res-label">{{ T('resource_fuel_cells') }}</span>
               <div class="hud-res-body res-block res-block-fuel-cells">
-                <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}" class="res-icon" alt="{{ T('resource_fuel_cells') }}">
+                <img src="{{ url_for('static', filename='img/res/Brennzellen.png') }}" class="res-icon" alt="{{ T('resource_fuel_cells') }}">
                 <span class="res-value fuel_cells">{{ fc_have|fmt_int }}</span>
                 <span class="res-sep" aria-hidden="true">/</span>
                 <span class="res-cap fuel_cells">{{ fc_cap|fmt_int }}</span>
@@ -193,7 +193,7 @@
                  title="{{ T('energy', 'Energie') }}">
               <span class="hud-res-label">{{ T('energy', 'Energie') }}</span>
               <div class="hud-res-body res-block res-block-energy">
-                <img src="{{ url_for('static', filename='icons/energy.png') }}" class="res-icon" alt="{{ T('energy', 'Energie') }}">
+                <img src="{{ url_for('static', filename='img/res/Energie.png') }}" class="res-icon" alt="{{ T('energy', 'Energie') }}">
                 <span id="res-energy">{{ eu|fmt_int }}/{{ et|fmt_int }}</span>
               </div>
               <span class="res-rate energy" data-res-rate="energy" aria-hidden="true" style="visibility:hidden"></span>

@@ -433,7 +433,7 @@ def test_overview_page_excludes_exchange_panel(exchange_db, tmp_path, monkeypatc
     assert "gc-exchange-form" not in html
 
 
-def test_overview_includes_planet_teaser_widget(exchange_db, tmp_path, monkeypatch):
+def test_overview_excludes_planet_teaser_widget(exchange_db, tmp_path, monkeypatch):
     import importlib
     import os
 
@@ -465,4 +465,9 @@ def test_overview_includes_planet_teaser_widget(exchange_db, tmp_path, monkeypat
     res = client.get("/overview")
     assert res.status_code == 200
     html = res.get_data(as_text=True)
-    assert "gc-planet-teaser" in html
+    assert "gc-planet-teaser" not in html
+    assert "overview-res-dashboard" in html
+    assert "overview-warnings-panel" not in html
+    assert "overview-upgrade-section" not in html
+    assert "overview-log-panel" not in html
+    assert "img/res/Ferronit.png" in html

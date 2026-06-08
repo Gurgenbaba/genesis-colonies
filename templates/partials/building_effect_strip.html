@@ -3,11 +3,7 @@
 
 {% macro render_building_effect_icon(res_key) %}
   {% if res_key == 'energy' %}
-    <img src="{{ url_for('static', filename='icons/energy.png') }}"
-         alt=""
-         class="gc-bld-effect-icon gc-bld-effect-icon-energy"
-         loading="lazy"
-         aria-hidden="true">
+    {{ render_resource_icon('energy', 'sm') }}
   {% elif res_key == 'research' %}
     <span class="gc-bld-effect-icon gc-bld-effect-icon-fallback" aria-hidden="true">🔬</span>
   {% elif res_key == 'build' %}

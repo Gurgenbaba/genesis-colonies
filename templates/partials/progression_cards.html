@@ -2,17 +2,20 @@
 
 {# Shared compact progression row helpers (Buildings + Research) #}
 
-{# Canonical Ferronit / Crytite / Brennzellen icons (same PNGs as HUD resource bar) #}
+{# Canonical resource artwork — static/img/res/ (HUD, overview, cards, trader) #}
 {% macro render_resource_icon(res_key, size='') %}
   {% if res_key == 'metal' %}
-    {% set icon_file = 'icons/ferronit.png' %}
+    {% set icon_file = 'img/res/Ferronit.png' %}
     {% set mod = 'gc-res-metal' %}
   {% elif res_key == 'crystal' %}
-    {% set icon_file = 'icons/crytite.png' %}
+    {% set icon_file = 'img/res/Crytite.png' %}
     {% set mod = 'gc-res-crystal' %}
   {% elif res_key == 'fuel_cells' %}
-    {% set icon_file = 'icons/fuel_cells.png' %}
+    {% set icon_file = 'img/res/Brennzellen.png' %}
     {% set mod = 'gc-res-fuel-cells' %}
+  {% elif res_key == 'energy' %}
+    {% set icon_file = 'img/res/Energie.png' %}
+    {% set mod = 'gc-res-energy' %}
   {% else %}
     {% set icon_file = '' %}
     {% set mod = '' %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/progression_cards.html" import render_resource_icon with context %}
 
 {% block content %}
 {% set player_obj = (player if player is defined and player else None) %}
@@ -36,8 +37,7 @@
 
   <div class="overview-resources trader-hub-resources" aria-label="{{ T('trader_hub_balance', 'Colony balance') }}">
     <article class="overview-res-card" aria-label="{{ T('resource_metal') }}">
-      <img src="{{ url_for('static', filename='icons/ferronit.png') }}"
-           alt="" class="overview-res-icon" loading="lazy">
+      {{ render_resource_icon('metal', 'lg') }}
       <div class="overview-res-meta">
         <span class="overview-res-label">{{ T("resource_metal") }}</span>
         <span class="overview-res-main">
@@ -50,8 +50,7 @@
       </div>
     </article>
     <article class="overview-res-card" aria-label="{{ T('resource_crystal') }}">
-      <img src="{{ url_for('static', filename='icons/crytite.png') }}"
-           alt="" class="overview-res-icon" loading="lazy">
+      {{ render_resource_icon('crystal', 'lg') }}
       <div class="overview-res-meta">
         <span class="overview-res-label">{{ T("resource_crystal") }}</span>
         <span class="overview-res-main">
@@ -64,8 +63,7 @@
       </div>
     </article>
     <article class="overview-res-card" aria-label="{{ T('resource_fuel_cells') }}">
-      <img src="{{ url_for('static', filename='icons/fuel_cells.png') }}"
-           alt="" class="overview-res-icon" loading="lazy">
+      {{ render_resource_icon('fuel_cells', 'lg') }}
       <div class="overview-res-meta">
         <span class="overview-res-label">{{ T("resource_fuel_cells") }}</span>
         <span class="overview-res-main">

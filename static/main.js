@@ -1983,9 +1983,8 @@
   }
 
   function patchOverviewEnergyHint(overview, data) {
-    const hint = document.getElementById("overview-energy-hint");
-    const strip = document.getElementById("overview-energy-strip");
-    if (!hint && !strip) return;
+    const card = document.getElementById("overview-energy-card");
+    if (!card) return;
 
     const hintKey = overview?.energy_hint ?? overview?.status?.energy?.hint;
     const total = Math.floor(
@@ -1994,6 +1993,15 @@
           overview?.status?.energy?.total ??
           data?.player?.energy_total ??
           data?.resources?.energy_total ??
+          0
+      )
+    );
+    const used = Math.floor(
+      Number(
+        data?.energy?.used ??
+          overview?.status?.energy?.used ??
+          data?.player?.energy_used ??
+          data?.resources?.energy_used ??
           0
       )
     );
@@ -2015,13 +2023,59 @@
       "overview-energy-low",
       "overview-energy-critical",
     ];
-    [hint, strip].forEach((el) => {
-      if (!el) return;
-      el.classList.remove(...stateClasses);
-      if (state === "zero") el.classList.add("overview-energy-zero");
-      else if (state === "ok") el.classList.add("overview-energy-ok");
-      else if (state === "low") el.classList.add("overview-energy-low");
-      else if (state === "critical") el.classList.add("overview-energy-critical");
+    card.classList.remove(...stateClasses);
+    if (state === "zero") card.classList.add("overview-energy-zero");
+    else if (state === "ok") card.classList.add("overview-energy-ok");
+    else if (state === "low") card.classList.add("overview-energy-low");
+    else if (state === "critical") card.classList.add("overview-energy-critical");
+
+    const surplus = total - used;
+    const balEl = document.getElementById("overview-energy-balance");
+    if (balEl) {
+      const sign = surplus >= 0 ? "+" : "";
+      _setIfChanged(balEl, `${sign}${fmtNumber(surplus)}`);
+      balEl.classList.toggle("overview-res-dash-balance--pos", surplus >= 0);
+      balEl.classList.toggle("overview-res-dash-balance--neg", surplus < 0);
+    }
+
+    const statusEl = document.getElementById("overview-energy-status");
+    if (statusEl) {
+      const labels = statusEl.dataset;
+      let label = labels.labelSurplus || "Überschuss";
+      if (total <= 0) label = labels.labelNone || "Keine Energie";
+      else if (surplus < 0) label = labels.labelDeficit || "Defizit";
+      _setIfChanged(statusEl, label);
+    }
+
+    const fillEl = card.querySelector('[data-res-fill="energy"]');
+    if (fillEl && total > 0) {
+      const pct = Math.min(100, Math.max(0, (used / total) * 100));
+      fillEl.style.width = `${pct}%`;
+    }
+
+    const pctEl = card.querySelector('[data-res-pct="energy"]');
+    if (pctEl && total > 0) {
+      const pct = Math.min(100, Math.max(0, Math.round((used / total) * 100)));
+      _setIfChanged(pctEl, `${pct}%`);
+    }
+  }
+
+  function patchOverviewResourceBars(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells) {
+    const pairs = [
+      ["metal", metal, storageMetal],
+      ["crystal", crystal, storageCrystal],
+      ["fuel_cells", fuelCells, storageFuelCells],
+    ];
+    pairs.forEach(([key, val, cap]) => {
+      const fillEl = document.querySelector(`[data-res-fill="${key}"]`);
+      const pctEl = document.querySelector(`[data-res-pct="${key}"]`);
+      if (fillEl && cap > 0) {
+        const pct = Math.min(100, Math.max(0, (Number(val) / Number(cap)) * 100));
+        fillEl.style.width = `${pct}%`;
+        if (pctEl) _setIfChanged(pctEl, `${Math.round(pct)}%`);
+      } else if (pctEl) {
+        _setIfChanged(pctEl, "0%");
+      }
     });
   }
 
@@ -2030,20 +2084,36 @@
     if (status?.resources) {
       const metalPhEl = document.querySelector('[data-ph="metal"]');
       const crystalPhEl = document.querySelector('[data-ph="crystal"]');
-      if (metalPhEl) {
-        _setIfChanged(metalPhEl, fmtNumber(Math.floor(Number(status.resources.metal_per_hour || 0))));
-      }
-      if (crystalPhEl) {
-        _setIfChanged(crystalPhEl, fmtNumber(Math.floor(Number(status.resources.crystal_per_hour || 0))));
-      }
+      const fuelPhEl = document.querySelector('[data-ph="fuel_cells"]');
+      const metalPh = Math.floor(Number(status.resources.metal_per_hour || 0));
+      const crystalPh = Math.floor(Number(status.resources.crystal_per_hour || 0));
+      const fuelPh = Math.floor(Number(status.resources.fuel_cells_per_hour || 0));
+      if (metalPhEl) _setIfChanged(metalPhEl, metalPh > 0 ? `+${fmtNumber(metalPh)}/h` : "–");
+      if (crystalPhEl) _setIfChanged(crystalPhEl, crystalPh > 0 ? `+${fmtNumber(crystalPh)}/h` : "–");
+      if (fuelPhEl) _setIfChanged(fuelPhEl, fuelPh > 0 ? `+${fmtNumber(fuelPh)}/h` : "–");
     } else if (prod) {
       const metalPhEl = document.querySelector('[data-ph="metal"]');
       const crystalPhEl = document.querySelector('[data-ph="crystal"]');
-      if (metalPhEl) _setIfChanged(metalPhEl, fmtNumber(Math.floor(Number(prod.metal_mine || 0))));
-      if (crystalPhEl) _setIfChanged(crystalPhEl, fmtNumber(Math.floor(Number(prod.crystal_mine || 0))));
+      const fuelPhEl = document.querySelector('[data-ph="fuel_cells"]');
+      const metalPh = Math.floor(Number(prod.metal_mine || 0));
+      const crystalPh = Math.floor(Number(prod.crystal_mine || 0));
+      const fuelPh = Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0));
+      if (metalPhEl) _setIfChanged(metalPhEl, metalPh > 0 ? `+${fmtNumber(metalPh)}/h` : "–");
+      if (crystalPhEl) _setIfChanged(crystalPhEl, crystalPh > 0 ? `+${fmtNumber(crystalPh)}/h` : "–");
+      if (fuelPhEl) _setIfChanged(fuelPhEl, fuelPh > 0 ? `+${fmtNumber(fuelPh)}/h` : "–");
     }
 
     patchOverviewEnergyHint(overview, data);
+    if (status?.resources) {
+      patchOverviewResourceBars(
+        Number(status.resources.metal || 0),
+        Number(status.resources.crystal || 0),
+        Number(status.resources.fuel_cells || 0),
+        Number(status.resources.metal_cap || 0),
+        Number(status.resources.crystal_cap || 0),
+        Number(status.resources.fuel_cells_cap || 0)
+      );
+    }
     patchOverviewTable(overview, buildings, prod, data?.active_planet_id || 0);
 
     if (status?.planet?.name && typeof GC.applyOverviewPlanetName === "function") {
@@ -5398,27 +5468,18 @@
 
       // --- Overview-Ressourcen-Karten ---
       const ovMetalVal = document.querySelector('#overview-metal-val .gc-val[data-res="metal"]');
-      const ovMetalCap = document.querySelector('#overview-metal-val .gc-cap');
       if (ovMetalVal) _setIfChanged(ovMetalVal, fmtNumber(metal));
-      if (ovMetalCap) _setIfChanged(ovMetalCap, `/ ${fmtNumber(storageMetal)}`);
 
       const ovCryVal = document.querySelector('#overview-crystal-val .gc-val[data-res="crystal"]');
-      const ovCryCap = document.querySelector('#overview-crystal-val .gc-cap');
       if (ovCryVal) _setIfChanged(ovCryVal, fmtNumber(crystal));
-      if (ovCryCap) _setIfChanged(ovCryCap, `/ ${fmtNumber(storageCrystal)}`);
 
       const ovFuelVal = document.querySelector('#overview-fuel-val .gc-val[data-res="fuel_cells"]');
-      const ovFuelCap = document.querySelector('#overview-fuel-val .gc-cap');
       if (ovFuelVal) _setIfChanged(ovFuelVal, fmtNumber(fuelCells));
-      if (ovFuelCap) _setIfChanged(ovFuelCap, `/ ${fmtNumber(storageFuelCells)}`);
-      const ovFuelRate = document.querySelector('#overview-fuel-val .overview-res-inline-rate');
-      if (ovFuelRate) {
-        const prodFuelCells = Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0));
-        _setIfChanged(ovFuelRate, prodFuelCells > 0 ? `+${fmtNumber(prodFuelCells)}/h` : "");
-      }
 
-      const ovEnergyUsed = document.querySelector('#overview-energy-val .gc-val[data-energy-used]');
-      const ovEnergyTotal = document.querySelector('#overview-energy-val [data-energy-total]');
+      patchOverviewResourceBars(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells);
+
+      const ovEnergyUsed = document.querySelector('#overview-energy-card .gc-val[data-energy-used]');
+      const ovEnergyTotal = document.querySelector('#overview-energy-card [data-energy-total]');
       if (ovEnergyUsed) _setIfChanged(ovEnergyUsed, fmtNumber(used));
       if (ovEnergyTotal) _setIfChanged(ovEnergyTotal, fmtNumber(total));
 
