@@ -114,6 +114,7 @@ def _attach_container_rules(
     cooldown_seconds = 0
     cooldown_active = False
     open_blocked = False
+    free_open_available = False
     if key == CONTAINER_BASIC_KEY:
         max_open = 1
         if user_id is not None and conn is not None:
@@ -121,9 +122,11 @@ def _attach_container_rules(
             cooldown_active = cooldown_seconds > 0
             # Cooldown limits the free daily open — owned stock can always be opened.
             open_blocked = cooldown_active and amount <= 0
+            free_open_available = amount <= 0 and not cooldown_active
     entry["max_open_amount"] = max_open
     entry["cooldown_seconds"] = cooldown_seconds
     entry["cooldown_active"] = cooldown_active
+    entry["free_open_available"] = free_open_available
     entry["open_blocked"] = open_blocked
     return entry
 
@@ -506,6 +509,7 @@ def open_containers(
         return False, "amount_too_high", None
 
     owned = _inventory_amount(user_id, key, conn=conn)
+    free_basic_open = False
 
     if key == CONTAINER_BASIC_KEY:
         if open_count > 1:
@@ -520,9 +524,9 @@ def open_containers(
                     "cooldown_seconds": cooldown_seconds,
                     "next_open_at": next_open_at,
                 }
-            return False, "insufficient_containers", None
+            free_basic_open = True
 
-    if owned < open_count:
+    if not free_basic_open and owned < open_count:
         return False, "insufficient_containers", None
 
     roll_rng = rng or random.Random()
@@ -531,7 +535,7 @@ def open_containers(
         rolled.append(_roll_single_reward(pool, roll_rng))
     rewards = _merge_rewards(rolled)
 
-    if not _debit_inventory_item(user_id, key, open_count, conn=conn):
+    if not free_basic_open and not _debit_inventory_item(user_id, key, open_count, conn=conn):
         return False, "insufficient_containers", None
 
     _apply_rewards(user_id, planet_id, rewards, conn=conn)

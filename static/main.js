@@ -6184,10 +6184,13 @@
       const row = containers.find((c) => c.item_key === key);
       const amount = row ? parseInt(row.amount, 10) || 0 : 0;
       const owned = amount > 0;
+      const isBasic = key === "container_basic";
+      const freeOpenReady = Boolean(isBasic && row && row.free_open_available);
       const amountEl = card.querySelector(`[data-inventory-amount="${key}"]`);
       if (amountEl) amountEl.textContent = String(amount);
       card.classList.toggle("inventory-loot-card--owned", owned);
-      card.classList.toggle("inventory-loot-card--empty", !owned);
+      card.classList.toggle("inventory-loot-card--free-ready", freeOpenReady);
+      card.classList.toggle("inventory-loot-card--empty", !owned && !freeOpenReady);
       card.hidden = false;
       const cooldownSeconds = row ? parseInt(row.cooldown_seconds, 10) || 0 : 0;
       const openBlocked = Boolean(row && row.open_blocked);
@@ -6197,6 +6200,8 @@
         hint.dataset.cooldownSeconds = String(cooldownSeconds);
         if (owned) {
           hint.textContent = t("inv_card_owned_hint", "Bereit zum Öffnen");
+        } else if (freeOpenReady) {
+          hint.textContent = t("inv_basic_free_ready", "Gratis-Öffnung verfügbar");
         } else if (openBlocked && cooldownSeconds > 0) {
           hint.textContent = t("inv_basic_cooldown_active", "Cooldown aktiv — 1× alle 24 Stunden");
         } else {
@@ -6206,17 +6211,19 @@
       const cooldownEl = card.querySelector("[data-inventory-cooldown]");
       if (cooldownEl) {
         cooldownEl.dataset.cooldownSeconds = String(cooldownSeconds);
-        if (cooldownSeconds > 0) {
-          cooldownEl.hidden = false;
-          cooldownEl.textContent = `${t("inv_basic_cooldown_timer", "Gratis-Öffnung in")} ${formatCountdownRemain(cooldownSeconds)}`;
-        } else {
-          cooldownEl.hidden = true;
-        }
+        cooldownEl.hidden = false;
+        cooldownEl.textContent = cooldownSeconds > 0
+          ? `${t("inv_basic_cooldown_timer", "Gratis-Öffnung in")} ${formatCountdownRemain(cooldownSeconds)}`
+          : t("inv_basic_cooldown_ready", "Jetzt verfügbar");
       }
       card.querySelectorAll("[data-inventory-open]").forEach((btn) => {
         const need = parseInt(btn.dataset.openAmount, 10) || 1;
         const overMax = need > maxOpen;
-        btn.disabled = !owned || openBlocked || amount < need || overMax;
+        if (isBasic && need === 1) {
+          btn.disabled = (openBlocked && !owned) || overMax;
+        } else {
+          btn.disabled = !owned || openBlocked || amount < need || overMax;
+        }
       });
     });
 
@@ -6306,13 +6313,25 @@
   function tickInventoryCooldowns() {
     document.querySelectorAll("[data-inventory-cooldown]").forEach((el) => {
       let sec = parseInt(el.dataset.cooldownSeconds, 10) || 0;
+      const card = el.closest("[data-inventory-container]");
       if (sec <= 0) {
-        el.hidden = true;
+        el.textContent = t("inv_basic_cooldown_ready", "Jetzt verfügbar");
+        if (card && card.dataset.inventoryContainer === "container_basic") {
+          const amountEl = card.querySelector('[data-inventory-amount="container_basic"]');
+          const amount = amountEl ? parseInt(amountEl.textContent, 10) || 0 : 0;
+          const hint = card.querySelector(".inventory-loot-card-hint");
+          const openBtn = card.querySelector('[data-inventory-open][data-open-amount="1"]');
+          if (amount <= 0) {
+            card.classList.add("inventory-loot-card--free-ready");
+            card.classList.remove("inventory-loot-card--empty");
+            if (hint) hint.textContent = t("inv_basic_free_ready", "Gratis-Öffnung verfügbar");
+            if (openBtn) openBtn.disabled = false;
+          }
+        }
         return;
       }
       sec = Math.max(0, sec - 1);
       el.dataset.cooldownSeconds = String(sec);
-      el.hidden = false;
       el.textContent = `${t("inv_basic_cooldown_timer", "Gratis-Öffnung in")} ${formatCountdownRemain(sec)}`;
     });
   }

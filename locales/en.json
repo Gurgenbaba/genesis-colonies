@@ -34,6 +34,8 @@
   "inv_basic_cooldown_active": "On cooldown — once every 24 hours",
   "inv_basic_cooldown_hint": "Next open in %(time)s",
   "inv_basic_cooldown_timer": "Free open in",
+  "inv_basic_cooldown_ready": "Available now",
+  "inv_basic_free_ready": "Free open available",
   "inv_no_items": "No items yet.",
   "inv_open_btn": "Open",
   "inv_open_10_btn": "Open 10×",

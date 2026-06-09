@@ -48,9 +48,11 @@
       {% set _cooldown = (c.cooldown_seconds|int) if c.cooldown_seconds is defined else 0 %}
       {% set _cooldown_active = c.cooldown_active is defined and c.cooldown_active %}
       {% set _blocked = c.open_blocked is defined and c.open_blocked %}
+      {% set _free_ready = c.item_key == 'container_basic' and c.free_open_available is defined and c.free_open_available %}
+      {% set _can_open = (_owned and not _blocked) or _free_ready %}
       {% set _max_open = (c.max_open_amount|int) if c.max_open_amount is defined else 10 %}
       {% set _img = url_for('static', filename=c.image) if c.image is defined else _loot_fallback %}
-      <article class="inventory-loot-card inventory-container-card {{ 'inventory-loot-card--owned' if _owned else 'inventory-loot-card--empty' }}"
+      <article class="inventory-loot-card inventory-container-card {{ 'inventory-loot-card--owned' if _owned else ('inventory-loot-card--free-ready' if _free_ready else 'inventory-loot-card--empty') }}"
                data-inventory-container="{{ c.item_key }}"
                data-rarity="{{ c.rarity }}">
         <div class="inventory-loot-card-hero">
@@ -77,6 +79,8 @@
           <p class="inventory-loot-card-hint" data-inventory-hint="{{ c.item_key }}" data-cooldown-seconds="{{ _cooldown }}">
             {% if _owned %}
               {{ T("inv_card_owned_hint", "Bereit zum Öffnen") }}
+            {% elif _free_ready %}
+              {{ T("inv_basic_free_ready", "Gratis-Öffnung verfügbar") }}
             {% elif _blocked %}
               {{ T("inv_basic_cooldown_active", "Cooldown aktiv — 1× alle 24 Stunden") }}
             {% else %}
@@ -86,10 +90,11 @@
           {% if c.item_key == 'container_basic' %}
           <p class="inventory-loot-card-cooldown gc-mono"
              data-inventory-cooldown="{{ c.item_key }}"
-             data-cooldown-seconds="{{ _cooldown }}"
-             {% if not _cooldown_active %}hidden{% endif %}>
+             data-cooldown-seconds="{{ _cooldown }}">
             {% if _cooldown_active %}
               {{ T("inv_basic_cooldown_timer", "Gratis-Öffnung in") }} …
+            {% else %}
+              {{ T("inv_basic_cooldown_ready", "Jetzt verfügbar") }}
             {% endif %}
           </p>
           {% endif %}
@@ -99,7 +104,7 @@
                   class="gc-btn gc-btn-primary gc-btn-sm inventory-open-btn"
                   data-inventory-open="{{ c.item_key }}"
                   data-open-amount="1"
-                  {% if not _owned or _blocked %}disabled{% endif %}>
+                  {% if not _can_open %}disabled{% endif %}>
             {{ T("inv_open_btn", "Öffnen") }}
           </button>
           {% if _max_open > 1 %}

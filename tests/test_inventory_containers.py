@@ -179,13 +179,38 @@ def test_invalid_container_rejected(inventory_db):
     conn.close()
 
 
-def test_open_without_container_rejected(inventory_db):
+def test_basic_free_daily_open_without_stock(inventory_db):
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
     pid = int(planet["id"])
     begin_write_transaction(conn)
-    ok, reason, _ = open_containers(uid, pid, "container_basic", 1, conn=conn)
+    ok, reason, result = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(5))
+    assert ok, reason
+    commit(conn)
+
+    assert result and result["rewards"]
+    owned = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, CONTAINER_BASIC_KEY),
+    ).fetchone()
+    assert owned is None
+
+    state = build_inventory_state(uid, conn=conn)
+    basic = next(c for c in state["containers"] if c["item_key"] == CONTAINER_BASIC_KEY)
+    assert basic["open_blocked"] is True
+    assert basic["cooldown_active"] is True
+    assert int(basic["cooldown_seconds"]) > 0
+    conn.close()
+
+
+def test_open_without_container_rejected_for_non_basic(inventory_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    begin_write_transaction(conn)
+    ok, reason, _ = open_containers(uid, pid, "container_rare", 1, conn=conn)
     rollback(conn)
     assert not ok
     assert reason == "insufficient_containers"
