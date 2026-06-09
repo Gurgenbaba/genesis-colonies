@@ -319,6 +319,39 @@ def test_api_admin_queue_tick_forbidden_for_user(app_client):
     assert r.get_json()["error"] == "forbidden"
 
 
+def test_admin_grant_inventory_all_players(app_client):
+    client, _, user_id = app_client
+    _login(client, "admin_cc", "adminpass123")
+
+    from game.db import db
+    from game.inventory import build_inventory_state
+
+    r = client.post(
+        "/api/admin/inventory/grant-all",
+        json={"item_key": "container_basic", "amount": 3},
+    )
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert data["granted"]["item_key"] == "container_basic"
+    assert data["granted"]["amount"] == 3
+    assert data["granted_count"] >= 1
+    assert data["player_count"] == data["granted_count"]
+
+    conn = db()
+    try:
+        state = build_inventory_state(user_id, conn=conn)
+        basic = next(c for c in state["containers"] if c["item_key"] == "container_basic")
+        assert basic["amount"] == 3
+    finally:
+        conn.close()
+
+    audit = client.get("/api/admin/audit-log?action=grant_inventory_all")
+    assert audit.status_code == 200
+    entries = audit.get_json()["entries"]
+    assert any(e["action"] == "grant_inventory_all" for e in entries)
+
+
 def test_admin_grant_inventory_container(app_client):
     client, _, user_id = app_client
     _login(client, "admin_cc", "adminpass123")

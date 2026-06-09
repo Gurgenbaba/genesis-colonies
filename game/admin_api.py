@@ -685,6 +685,64 @@ def grant_player_inventory(admin_id: int, player_id: int, body: Dict[str, Any]) 
     return detail
 
 
+def grant_inventory_all_players(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.inventory import grant_inventory_item, inventory_schema_ready, is_known_item_key
+
+    item_key = str(body.get("item_key") or "").strip()
+    try:
+        amount = int(body.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+
+    if not item_key or not is_known_item_key(item_key):
+        return _err("invalid_item", "Unknown inventory item key.")
+    if amount < 1 or amount > 999:
+        return _err("invalid_amount", "Amount must be between 1 and 999.")
+
+    conn = db()
+    try:
+        if not inventory_schema_ready(conn):
+            return _err("inventory_unavailable", "Inventory schema not ready.")
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM players ORDER BY id ASC;")
+        player_ids = [int(row["id"]) for row in cur.fetchall()]
+        if not player_ids:
+            return _err("no_players", "No players found.")
+
+        begin_write_transaction(conn)
+        granted_count = 0
+        for pid in player_ids:
+            if grant_inventory_item(pid, item_key, amount, conn=conn):
+                granted_count += 1
+        if granted_count <= 0:
+            rollback(conn)
+            return _err("grant_failed", "Could not grant inventory items.")
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    audit(
+        admin_id,
+        "grant_inventory_all",
+        target_type="global",
+        target_id=None,
+        payload={
+            "item_key": item_key,
+            "amount": amount,
+            "player_count": len(player_ids),
+            "granted_count": granted_count,
+        },
+    )
+    return _ok(
+        granted={"item_key": item_key, "amount": amount},
+        player_count=len(player_ids),
+        granted_count=granted_count,
+    )
+
+
 def reset_planet(admin_id: int, planet_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
     if not validate_confirm("planet_reset", body.get("confirm_text")):
         return _err("confirm_required", "Type RESET PLANET to confirm.")

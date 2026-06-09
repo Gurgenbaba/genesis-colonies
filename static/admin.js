@@ -482,7 +482,41 @@
       <tbody>${rows.join("")}</tbody></table></div>`;
   }
 
+  async function renderAdminInventoryGrantAll() {
+    const panel = qs("#admin-inventory-grant-all-panel");
+    if (!panel) return;
+    const cat = await adminGet("/api/admin/inventory/catalog");
+    if (!cat.ok) {
+      panel.hidden = true;
+      return;
+    }
+    const containers = cat.containers || [];
+    if (!containers.length) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    const invOpts = containers
+      .map(
+        (c) =>
+          `<option value="${esc(c.item_key)}">${esc(t(c.name_key || c.item_key, c.item_key))}</option>`
+      )
+      .join("");
+    const select = qs("#admin-all-inv-key");
+    if (select) select.innerHTML = invOpts;
+    const quick = qs("#admin-all-inv-quick");
+    if (quick) {
+      quick.innerHTML = containers
+        .map(
+          (c) =>
+            `<button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="inventory-grant-all-quick" data-item-key="${esc(c.item_key)}" data-amount="1">+1 ${esc(t(c.name_key || c.item_key, c.item_key))}</button>`
+        )
+        .join("");
+    }
+  }
+
   async function searchAdminPlayers() {
+    await renderAdminInventoryGrantAll();
     const q = (qs("#admin-players-search")?.value || "").trim();
     const list = qs("#admin-players-list");
     if (list) list.innerHTML = loadingHtml();
@@ -1357,6 +1391,42 @@
       if (res.ok) {
         notify(t("admin_inventory_grant_ok", "Lootbox vergeben"), "success");
         return loadAdminPlayer(playerId);
+      }
+      showAlert(res.message || res.error, "error");
+      return res;
+    }
+    if (act === "inventory-grant-all" || act === "inventory-grant-all-quick") {
+      const itemKey =
+        act === "inventory-grant-all-quick"
+          ? btn.dataset.itemKey
+          : qs("#admin-all-inv-key")?.value;
+      const amount =
+        act === "inventory-grant-all-quick"
+          ? parseInt(btn.dataset.amount || "1", 10)
+          : parseInt(qs("#admin-all-inv-amount")?.value || "1", 10);
+      const safeAmount = Number.isFinite(amount) ? amount : 1;
+      const itemLabel =
+        qs(`#admin-all-inv-key option[value="${CSS.escape(itemKey || "")}"]`)?.textContent ||
+        itemKey ||
+        "?";
+      const confirmMsg = t(
+        "admin_inventory_grant_all_confirm",
+        `Wirklich ${safeAmount}× ${itemLabel} an alle Spieler vergeben?`
+      )
+        .replace("%(amount)s", String(safeAmount))
+        .replace("%(item)s", itemLabel);
+      if (!window.confirm(confirmMsg)) return null;
+      const res = await adminPost("/api/admin/inventory/grant-all", {
+        item_key: itemKey,
+        amount: safeAmount,
+      });
+      if (res.ok) {
+        const okMsg = t("admin_inventory_grant_all_ok", "An %(count)s Spieler vergeben").replace(
+          "%(count)s",
+          String(res.granted_count || res.player_count || 0)
+        );
+        notify(okMsg, "success");
+        return res;
       }
       showAlert(res.message || res.error, "error");
       return res;

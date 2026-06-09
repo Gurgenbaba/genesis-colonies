@@ -144,6 +144,17 @@
           <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="search-players">{{ T("admin_btn_search") }}</button>
         </div>
       </div>
+
+      <div class="admin-panel-subsection" id="admin-inventory-grant-all-panel" hidden>
+        <h3 class="admin-subsection-title">{{ T("admin_inventory_grant_all_title", "Lootboxen an alle Spieler") }}</h3>
+        <p class="admin-small-hint">{{ T("admin_inventory_grant_all_hint", "Vergibt Container an jeden registrierten Spieler-Account.") }}</p>
+        <div class="admin-action-row">
+          <select class="admin-input admin-input-sm" id="admin-all-inv-key"></select>
+          <input type="number" min="1" max="999" value="1" class="admin-input admin-input-sm" id="admin-all-inv-amount" placeholder="{{ T('admin_inventory_amount', 'Anzahl') }}">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="inventory-grant-all">{{ T("admin_inventory_grant_all_btn", "An alle vergeben") }}</button>
+        </div>
+        <div class="admin-action-row admin-inventory-quick" id="admin-all-inv-quick"></div>
+      </div>
       
       <div id="admin-players-list" class="admin-table-wrap"></div>
       <div id="admin-player-detail" class="admin-card admin-detail"></div>

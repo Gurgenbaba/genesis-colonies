@@ -4973,6 +4973,14 @@ def api_admin_player_inventory_grant(player_id: int):
     )
 
 
+@app.route("/api/admin/inventory/grant-all", methods=["POST"])
+@require_admin_api
+def api_admin_inventory_grant_all():
+    return _admin_json(
+        admin_api_logic.grant_inventory_all_players(_admin_actor_id(), _admin_body())
+    )
+
+
 @app.route("/api/admin/planets", methods=["GET"])
 @require_admin_api
 def api_admin_planets_search():
