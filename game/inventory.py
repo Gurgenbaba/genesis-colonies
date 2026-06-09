@@ -16,6 +16,8 @@ from .inventory_catalog import (
     CONTAINER_DISPLAY_ORDER,
     CONTAINER_KEYS,
     GRANTABLE_ITEM_KEYS,
+    ROLL_PREVIEW_MAX,
+    ROLL_PREVIEW_MIN,
     admin_grant_catalog,
     container_image_path,
     is_known_item_key,
@@ -447,6 +449,97 @@ def _reward_display_meta(rtype: str, rkey: str) -> Dict[str, Any]:
     return {"name_key": rkey, "rarity": "common", "icon": "📦"}
 
 
+def _reward_to_roll_preview_entry(reward: Reward) -> Dict[str, Any]:
+    rtype = str(reward.get("reward_type") or "")
+    rkey = str(reward.get("reward_key") or "")
+    meta = _reward_display_meta(rtype, rkey)
+    preview_type = rtype
+    if rtype == "item":
+        preview_type = "item"
+    elif rtype == "booster":
+        preview_type = "booster"
+    return {
+        "key": f"{rtype}:{rkey}",
+        "name_key": str(reward.get("name_key") or meta["name_key"]),
+        "amount": int(reward.get("amount") or 0),
+        "rarity": str(reward.get("rarity") or meta.get("rarity") or "common"),
+        "type": preview_type,
+        "icon": str(reward.get("icon") or meta.get("icon") or "📦"),
+    }
+
+
+def _pool_entry_to_roll_preview(entry: LootEntry, rng: random.Random) -> Dict[str, Any]:
+    rtype = str(entry.get("reward_type") or "")
+    rkey = str(entry.get("reward_key") or "")
+    lo = int(entry.get("min_amount") or 1)
+    hi = int(entry.get("max_amount") or lo)
+    if hi < lo:
+        hi = lo
+    amount = rng.randint(lo, hi)
+    meta = _reward_display_meta(rtype, rkey)
+    preview_type = rtype
+    if rtype == "item":
+        preview_type = "item"
+    elif rtype == "booster":
+        preview_type = "booster"
+    return {
+        "key": f"{rtype}:{rkey}",
+        "name_key": meta["name_key"],
+        "amount": amount,
+        "rarity": str(meta.get("rarity") or "common"),
+        "type": preview_type,
+        "icon": str(meta.get("icon") or "📦"),
+    }
+
+
+def build_roll_preview(
+    rewards: List[Reward],
+    pool: Sequence[LootEntry],
+    rng: random.Random,
+) -> List[Dict[str, Any]]:
+    """UI-only roller strip: fake pool mix ending on the real main reward."""
+    real_entries = [
+        _reward_to_roll_preview_entry(r)
+        for r in rewards
+        if int(r.get("amount") or 0) > 0
+    ]
+    if not real_entries:
+        real_entries = [_pool_entry_to_roll_preview(pool[0], rng)] if pool else []
+
+    main_entry = real_entries[0]
+    other_reals = real_entries[1:]
+    pool_entries = [e for e in pool if int(e.get("weight") or 0) > 0]
+    if not pool_entries:
+        pool_entries = list(pool)
+
+    total = rng.randint(ROLL_PREVIEW_MIN, ROLL_PREVIEW_MAX)
+    preview: List[Dict[str, Any]] = []
+    weights = [int(e.get("weight") or 1) for e in pool_entries] if pool_entries else [1]
+
+    while len(preview) < max(1, total - 1):
+        if pool_entries:
+            pick = rng.choices(pool_entries, weights=weights, k=1)[0]
+            preview.append(_pool_entry_to_roll_preview(pick, rng))
+        else:
+            preview.append(dict(main_entry))
+
+    insert_slots = list(range(max(0, len(preview) - 1)))
+    rng.shuffle(insert_slots)
+    for idx, entry in zip(insert_slots, other_reals):
+        preview[idx] = entry
+
+    for entry in other_reals:
+        if not any(
+            p["key"] == entry["key"] and int(p["amount"]) == int(entry["amount"])
+            for p in preview
+        ):
+            pos = rng.randrange(max(1, len(preview)))
+            preview.insert(pos, entry)
+
+    preview.append(main_entry)
+    return preview
+
+
 def _merge_rewards(rewards: List[Reward]) -> List[Reward]:
     merged: Dict[Tuple[str, str], int] = {}
     order: List[Tuple[str, str]] = []
@@ -636,9 +729,15 @@ def open_containers(
     _log_container_open(user_id, planet_id, key, rewards, conn=conn)
 
     inventory = build_inventory_state(user_id, conn=conn)
+    container_meta = item_catalog_entry(key)
+    preview_rng = random.Random(roll_rng.randint(0, 2**31 - 1))
+    roll_preview = build_roll_preview(rewards, pool, preview_rng)
     return True, "container_open_ok", {
         "opened": open_count,
         "container_key": key,
+        "container_name_key": container_meta["name_key"],
+        "container_rarity": container_meta["rarity"],
         "rewards": rewards,
+        "roll_preview": roll_preview,
         "inventory": inventory,
     }

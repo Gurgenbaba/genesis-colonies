@@ -6176,29 +6176,122 @@
   }
 
   function inventoryEffectMessage(effect) {
-    if (!effect || !effect.message_key) return "";
-    const params = effect.message_params || {};
+    if (!effect) return "";
+    const params = { ...(effect.message_params || {}) };
+
     if (effect.kind === "time_boost") {
-      return t(effect.message_key, "Bauzeit um %(minutes)s Minuten reduziert", params);
+      const sec = parseInt(
+        effect.seconds_shifted ?? params.seconds ?? effect.seconds_reduced,
+        10
+      ) || 0;
+      const minutes = Math.max(1, Math.round(sec / 60));
+      const target = String(effect.target || "build");
+      const key = effect.message_key || `inv_effect_${target}_boost`;
+      const fallbacks = {
+        inv_effect_build_boost: "Bauzeit um %(minutes)s Minuten reduziert",
+        inv_effect_research_boost: "Forschungszeit um %(minutes)s Minuten reduziert",
+        inv_effect_shipyard_boost: "Schiffsbauzeit um %(minutes)s Minuten reduziert",
+      };
+      return tf(key, { ...params, minutes, seconds: sec }, fallbacks[key] || key);
     }
+
     if (effect.kind === "resource") {
       const label = inventoryResourceLabel(effect.resource_key || "metal");
-      return t("inv_effect_resource_fmt", "+%(amount)s %(resource)s erhalten", {
-        amount: (params.amount || 0).toLocaleString(),
-        resource: label,
-      });
+      return tf(
+        "inv_effect_resource_fmt",
+        {
+          amount: (params.amount || effect.amount || 0).toLocaleString(),
+          resource: label,
+        },
+        "+%(amount)s %(resource)s erhalten"
+      );
     }
+
     if (effect.kind === "planet_xp") {
-      return t(effect.message_key, "Planet erhielt +%(xp)s XP", params);
+      const key = effect.message_key || "inv_effect_planet_xp";
+      return tf(
+        key,
+        { ...params, xp: params.xp ?? effect.xp_gained ?? 0 },
+        "Planet erhielt +%(xp)s XP"
+      );
     }
+
     if (effect.kind === "craft") {
       const outName = t(`inv_${params.output_key}`, params.output_key || "");
-      return t(effect.message_key, "%(amount)s× %(item)s hergestellt", {
-        amount: params.amount || 1,
-        item: outName,
-      });
+      const key = effect.message_key || "inv_effect_craft";
+      return tf(
+        key,
+        { ...params, item: outName },
+        "%(amount)s× %(item)s hergestellt"
+      );
     }
-    return t(effect.message_key, effect.message_key, params);
+
+    if (effect.message_key) {
+      return tf(effect.message_key, params, effect.message_key);
+    }
+    return "";
+  }
+
+  function isInventoryPayload(inv) {
+    return Boolean(inv && typeof inv === "object" && Array.isArray(inv.other_items));
+  }
+
+  function syncInventoryPageStateScript(inv) {
+    const el = document.getElementById("inventory-page-state");
+    if (el && inv) {
+      try {
+        el.textContent = JSON.stringify(inv);
+      } catch (_) {}
+    }
+  }
+
+  function applyInventoryConsumption(base, itemKey, consumed) {
+    const inv = {
+      ...(base || {}),
+      other_items: [...((base && base.other_items) || [])],
+    };
+    const key = String(itemKey || "");
+    const useCount = Math.max(1, parseInt(consumed, 10) || 1);
+    if (!key) return inv;
+    inv.other_items = inv.other_items
+      .map((it) => {
+        if (String(it.item_key) !== key) return it;
+        const next = (parseInt(it.amount, 10) || 0) - useCount;
+        return next > 0 ? { ...it, amount: next } : null;
+      })
+      .filter(Boolean);
+    return inv;
+  }
+
+  function resolveInventoryFromAction(res) {
+    if (isInventoryPayload(res?.inventory)) return res.inventory;
+    const base = _inventoryLastState || parseInventoryPageState();
+    if (res?.ok && res.item_key) {
+      return applyInventoryConsumption(base, res.item_key, res.consumed);
+    }
+    return base;
+  }
+
+  async function refreshInventoryFromServer() {
+    try {
+      const res = await GC.fetchGameAction("/api/inventory/state");
+      if (res?.ok && isInventoryPayload(res.inventory)) {
+        _inventoryLastState = res.inventory;
+        syncInventoryPageStateScript(_inventoryLastState);
+        patchInventoryDom(_inventoryLastState);
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  function applyInventoryActionResult(res) {
+    _inventoryLastState = resolveInventoryFromAction(res);
+    syncInventoryPageStateScript(_inventoryLastState);
+    patchInventoryDom(_inventoryLastState);
+    if (res?.ok && res.item_key && !isInventoryPayload(res?.inventory)) {
+      refreshInventoryFromServer();
+    }
   }
 
   function inventoryUseReasonText(reason) {
@@ -6219,9 +6312,19 @@
     const list = document.querySelector("[data-inventory-rewards-list]");
     if (!panel) return;
     const text = inventoryEffectMessage(effect);
+    const icons = {
+      time_boost: effect?.target === "research" ? "📡" : effect?.target === "shipyard" ? "🛰️" : "🔧",
+      resource: "📦",
+      planet_xp: "🪐",
+      craft: "🧬",
+      production_grant: "⚡",
+      research_instant: "📜",
+    };
+    const icon = icons[effect?.kind] || "✨";
     if (msgEl) {
       if (text) {
-        msgEl.textContent = text;
+        msgEl.className = "inventory-effect-message inventory-effect-message--success";
+        msgEl.innerHTML = `<span class="inventory-effect-icon" aria-hidden="true">${icon}</span><span class="inventory-effect-text">${escapeHtml(text)}</span>`;
         msgEl.hidden = false;
       } else {
         msgEl.textContent = "";
@@ -6257,6 +6360,274 @@
       .join("");
     return `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span><div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${amount.toLocaleString()}</span>${useBtn}${craftBtns}`;
   }
+
+  let _lootModalState = null;
+
+  function lootTileAmountLabel(tile) {
+    const amt = parseInt(tile.amount, 10) || 0;
+    const type = String(tile.type || "");
+    if (type === "resource") return `+${amt.toLocaleString()}`;
+    if (type === "booster" && String(tile.key || "").includes("booster")) {
+      const sec = parseInt(tile.booster_seconds, 10) || 0;
+      if (sec >= 3600) return `${Math.round(sec / 3600)} h`;
+      if (sec >= 60) return `${Math.round(sec / 60)} Min`;
+    }
+    return `×${amt.toLocaleString()}`;
+  }
+
+  function lootTileName(tile) {
+    if (tile.name_key) return t(tile.name_key, tile.label || tile.key || "");
+    if (tile.label) return tile.label;
+    if (tile.type === "resource") return inventoryResourceLabel(tile.key?.split(":")[1] || tile.key);
+    return tile.key || "";
+  }
+
+  function buildLootRollTileHtml(tile, index) {
+    const rarity = tile.rarity || "common";
+    const name = lootTileName(tile);
+    const amount = lootTileAmountLabel(tile);
+    const icon = tile.icon || "📦";
+    const rarityLabel = t(`inv_rarity_${rarity}`, rarity);
+    return `<div class="gc-loot-tile rarity-${escapeHtml(rarity)}" data-loot-tile-index="${index}" data-rarity="${escapeHtml(rarity)}">
+      <span class="gc-loot-tile-icon" aria-hidden="true">${icon}</span>
+      <span class="gc-loot-tile-name">${escapeHtml(name)}</span>
+      <span class="gc-loot-tile-amount gc-mono">${escapeHtml(amount)}</span>
+      <span class="gc-loot-tile-rarity">${escapeHtml(rarityLabel)}</span>
+    </div>`;
+  }
+
+  function buildLootRollTiles(payload) {
+    const tiles = payload.roll_preview || [];
+    return tiles.map((tile, i) => buildLootRollTileHtml(tile, i)).join("");
+  }
+
+  function buildLootRewardResultHtml(reward) {
+    const amt = parseInt(reward.amount, 10) || 0;
+    if (reward.reward_type === "resource") {
+      const label = inventoryResourceLabel(reward.reward_key);
+      return `<div class="gc-loot-result-row rarity-${escapeHtml(reward.rarity || "common")}">
+        <span class="gc-loot-result-icon" aria-hidden="true">${reward.icon || "📦"}</span>
+        <span class="gc-loot-result-name">${escapeHtml(label)}</span>
+        <span class="gc-loot-result-amount gc-mono">+${amt.toLocaleString()}</span>
+      </div>`;
+    }
+    const name = t(reward.name_key || `inv_item_${reward.reward_key}`, reward.reward_key);
+    const icon = reward.icon || (reward.reward_type === "ship" ? "🛰️" : reward.reward_type === "defense" ? "🛡️" : "📦");
+    return `<div class="gc-loot-result-row rarity-${escapeHtml(reward.rarity || "common")}">
+      <span class="gc-loot-result-icon" aria-hidden="true">${icon}</span>
+      <span class="gc-loot-result-name">${escapeHtml(name)}</span>
+      <span class="gc-loot-result-amount gc-mono">×${amt.toLocaleString()}</span>
+    </div>`;
+  }
+
+  function canOpenContainerAgain(payload) {
+    const key = payload.container_key || payload.item_key;
+    const inv = payload.inventory || payload._deferredInventory || {};
+    const row = (inv.containers || []).find((c) => c.item_key === key);
+    if (!row) return false;
+    if (key === "container_basic") {
+      return (parseInt(row.amount, 10) || 0) > 0 || Boolean(row.free_open_available);
+    }
+    return (parseInt(row.amount, 10) || 0) > 0;
+  }
+
+  function closeLootModal() {
+    if (_lootModalState?.timerId) {
+      clearTimeout(_lootModalState.timerId);
+    }
+    if (_lootModalState?.onKeydown) {
+      document.removeEventListener("keydown", _lootModalState.onKeydown);
+    }
+    const modal = document.querySelector(".gc-loot-modal");
+    if (modal) modal.remove();
+    document.body.classList.remove("gc-loot-modal-open");
+    _lootModalState = null;
+  }
+
+  function revealLootRewards(modal, payload) {
+    if (!modal || !payload) return;
+    if (_lootModalState?.revealed) return;
+    if (_lootModalState) _lootModalState.revealed = true;
+    if (_lootModalState?.timerId) {
+      clearTimeout(_lootModalState.timerId);
+      _lootModalState.timerId = null;
+    }
+
+    const strip = modal.querySelector(".gc-loot-strip");
+    if (strip) strip.classList.add("gc-loot-strip--done");
+
+    const status = modal.querySelector(".gc-loot-status");
+    const results = modal.querySelector(".gc-loot-results");
+    const skipBtn = modal.querySelector(".gc-loot-skip");
+    const closeBtn = modal.querySelector(".gc-loot-close");
+    if (status) status.hidden = true;
+    if (skipBtn) skipBtn.hidden = true;
+    if (closeBtn) closeBtn.disabled = false;
+
+    if (results) {
+      const rewards = payload.rewards || [];
+      results.innerHTML = `
+        <div class="gc-loot-results-title">${escapeHtml(t("inv_loot_modal_your_reward", "Deine Belohnung"))}</div>
+        <div class="gc-loot-results-grid">${rewards.map(buildLootRewardResultHtml).join("")}</div>
+        <div class="gc-loot-results-actions">
+          <button type="button" class="gc-btn gc-btn-primary gc-loot-to-inventory">${escapeHtml(t("inv_loot_modal_to_inventory", "Zum Inventar"))}</button>
+          ${canOpenContainerAgain(payload) ? `<button type="button" class="gc-btn gc-btn-secondary gc-loot-open-again">${escapeHtml(t("inv_loot_modal_open_again", "Noch einmal öffnen"))}</button>` : ""}
+          <button type="button" class="gc-btn gc-btn-ghost gc-loot-close-action">${escapeHtml(t("inv_loot_modal_close", "Schließen"))}</button>
+        </div>`;
+      results.hidden = false;
+    }
+
+    if (payload._deferredState) {
+      applyActionState({ ok: true, state: payload._deferredState }, "inventory_open");
+    }
+    applyInventoryActionResult({
+      ok: true,
+      inventory: payload.inventory || payload._deferredInventory,
+      item_key: payload.item_key || payload.container_key,
+      consumed: payload.consumed || payload.opened || 1,
+    });
+
+    const page = document.getElementById("inventory-page");
+    if (page) {
+      page.querySelectorAll("[data-inventory-open]").forEach((btn) => {
+        btn.disabled = false;
+      });
+      patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+    }
+  }
+
+  function animateLootRoll(modal, payload) {
+    const strip = modal.querySelector(".gc-loot-strip");
+    const roller = modal.querySelector(".gc-loot-roller");
+    if (!strip || !roller) {
+      revealLootRewards(modal, payload);
+      return;
+    }
+
+    const tiles = strip.querySelectorAll(".gc-loot-tile");
+    const winnerIndex = Math.max(0, tiles.length - 1);
+    const firstTile = tiles[0];
+    const tileW = firstTile ? firstTile.offsetWidth + 8 : 148;
+    const rollerW = roller.clientWidth || 640;
+    const targetX = -(winnerIndex * tileW) + rollerW / 2 - tileW / 2;
+
+    const finish = () => {
+      strip.style.transition = "none";
+      strip.style.transform = `translateX(${targetX}px)`;
+      tiles[winnerIndex]?.classList.add("gc-loot-tile--winner");
+      revealLootRewards(modal, payload);
+    };
+
+    if (_prefersReducedMotion) {
+      finish();
+      return;
+    }
+
+    strip.style.transform = "translateX(0)";
+    strip.style.transition = "transform 2.4s cubic-bezier(0.12, 0.85, 0.18, 1)";
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        strip.style.transform = `translateX(${targetX}px)`;
+      });
+    });
+
+    if (_lootModalState) {
+      _lootModalState.timerId = window.setTimeout(finish, 2400);
+      _lootModalState.skip = finish;
+    }
+  }
+
+  function showLootOpeningModal(payload) {
+    closeLootModal();
+    const containerKey = payload.container_key || payload.item_key || "container_basic";
+    const containerName = t(
+      payload.container_name_key || `inv_${containerKey}`,
+      containerKey
+    );
+    const containerRarity = payload.container_rarity || "common";
+    const root = document.getElementById("gc-loot-modal-root") || document.body;
+
+    const modal = document.createElement("div");
+    modal.className = "gc-loot-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-label", t("inv_loot_modal_title", "Container geöffnet"));
+    modal.innerHTML = `
+      <div class="gc-loot-card rarity-${escapeHtml(containerRarity)}">
+        <button type="button" class="gc-loot-close" aria-label="${escapeHtml(t("inv_loot_modal_close", "Schließen"))}" disabled>×</button>
+        <div class="gc-loot-header">
+          <div class="gc-loot-title">${escapeHtml(t("inv_loot_modal_title", "Container geöffnet"))}</div>
+          <div class="gc-loot-subtitle">${escapeHtml(containerName)}</div>
+        </div>
+        <div class="gc-loot-crate" aria-hidden="true"></div>
+        <div class="gc-loot-roller">
+          <div class="gc-loot-marker" aria-hidden="true"></div>
+          <div class="gc-loot-strip">${buildLootRollTiles(payload)}</div>
+        </div>
+        <div class="gc-loot-status">${escapeHtml(t("inv_loot_modal_status", "Wird geöffnet…"))}</div>
+        <div class="gc-loot-results" hidden></div>
+        <button type="button" class="gc-btn-secondary gc-loot-skip">${escapeHtml(t("inv_loot_modal_skip", "Überspringen"))}</button>
+      </div>`;
+
+    root.appendChild(modal);
+    document.body.classList.add("gc-loot-modal-open");
+
+    const onKeydown = (ev) => {
+      if (ev.key !== "Escape") return;
+      if (_lootModalState?.revealed) {
+        closeLootModal();
+      } else if (typeof _lootModalState?.skip === "function") {
+        _lootModalState.skip();
+      }
+    };
+    document.addEventListener("keydown", onKeydown);
+
+    _lootModalState = {
+      payload,
+      revealed: false,
+      timerId: null,
+      skip: null,
+      onKeydown,
+    };
+
+    modal.addEventListener("click", (ev) => {
+      const skipBtn = ev.target.closest(".gc-loot-skip");
+      if (skipBtn && !skipBtn.hidden && typeof _lootModalState?.skip === "function") {
+        _lootModalState.skip();
+        return;
+      }
+      const closeBtn = ev.target.closest(".gc-loot-close");
+      if (closeBtn && !closeBtn.disabled) {
+        closeLootModal();
+        return;
+      }
+      const toInv = ev.target.closest(".gc-loot-to-inventory");
+      if (toInv) {
+        closeLootModal();
+        return;
+      }
+      const closeAction = ev.target.closest(".gc-loot-close-action");
+      if (closeAction) {
+        closeLootModal();
+        return;
+      }
+      const openAgain = ev.target.closest(".gc-loot-open-again");
+      if (openAgain) {
+        const openPayload = { ..._lootModalState.payload };
+        const itemKey = openPayload.container_key || openPayload.item_key;
+        closeLootModal();
+        const btn = document.querySelector(`[data-inventory-open="${CSS.escape(itemKey)}"][data-open-amount="1"]`)
+          || document.querySelector(`[data-inventory-open="${CSS.escape(itemKey)}"]`);
+        if (btn && !btn.disabled) btn.click();
+      }
+    });
+
+    requestAnimationFrame(() => animateLootRoll(modal, payload));
+  }
+
+  GC.showLootOpeningModal = showLootOpeningModal;
+  GC.revealLootRewards = revealLootRewards;
+  GC.closeLootModal = closeLootModal;
 
   function renderInventoryRewards(rewards) {
     const panel = document.getElementById("inventory-rewards-panel");
@@ -6366,8 +6737,16 @@
 
     itemList.querySelectorAll("[data-inventory-item]").forEach((row) => {
       const key = row.dataset.inventoryItem;
-      if (!items.some((i) => i.item_key === key)) row.hidden = true;
+      if (!items.some((i) => i.item_key === key)) row.remove();
     });
+
+    if (items.length === 0 && !itemList.querySelector("[data-inventory-empty-items]")) {
+      const empty = document.createElement("li");
+      empty.className = "inventory-empty";
+      empty.dataset.inventoryEmptyItems = "";
+      empty.textContent = t("inv_no_items", "Noch keine Items.");
+      itemList.appendChild(empty);
+    }
   }
 
   let _inventoryLastState = null;
@@ -6397,8 +6776,8 @@
           if (res?.ok) {
             applyActionState(res, "inventory_use");
             renderInventoryEffect(res.effect || {});
-            _inventoryLastState = res.inventory || _inventoryLastState;
-            patchInventoryDom(_inventoryLastState);
+            applyInventoryActionResult(res);
+            void refreshInventoryFromServer();
           } else {
             const reason = res?.reason || "generic";
             console.warn("[GC] inventory use failed:", reason);
@@ -6410,7 +6789,8 @@
           showNotify(inventoryUseReasonText("generic"), "error");
           patchInventoryDom(_inventoryLastState || parseInventoryPageState());
         } finally {
-          useBtn.disabled = false;
+          const liveBtn = document.querySelector(`[data-inventory-use="${CSS.escape(itemKey)}"]`);
+          if (liveBtn) liveBtn.disabled = false;
         }
         return;
       }
@@ -6435,8 +6815,8 @@
           if (res?.ok) {
             applyActionState(res, "inventory_craft");
             renderInventoryEffect(res.effect || {});
-            _inventoryLastState = res.inventory || _inventoryLastState;
-            patchInventoryDom(_inventoryLastState);
+            applyInventoryActionResult(res);
+            void refreshInventoryFromServer();
           } else {
             const reason = res?.reason || "generic";
             console.warn("[GC] inventory craft failed:", reason);
@@ -6448,7 +6828,8 @@
           showNotify(inventoryUseReasonText("generic"), "error");
           patchInventoryDom(_inventoryLastState || parseInventoryPageState());
         } finally {
-          craftBtn.disabled = false;
+          const liveBtn = document.querySelector(`[data-inventory-craft="${CSS.escape(recipeKey)}"]`);
+          if (liveBtn) liveBtn.disabled = false;
         }
         return;
       }
@@ -6477,18 +6858,29 @@
           }),
         });
         if (res?.ok) {
-          applyActionState(res, "inventory_open");
-          renderInventoryRewards(res.rewards || []);
-          _inventoryLastState = res.inventory || _inventoryLastState;
-          patchInventoryDom(_inventoryLastState);
+          showLootOpeningModal({
+            ...res,
+            item_key: itemKey,
+            consumed: res.opened || amount,
+            _deferredState: res.state,
+            _deferredInventory: res.inventory,
+          });
         } else {
           const reason = res?.reason || "generic";
           console.warn("[GC] inventory open failed:", reason);
+          showNotify(inventoryUseReasonText(reason), "error");
           patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+          page.querySelectorAll("[data-inventory-open]").forEach((btn) => {
+            btn.disabled = false;
+          });
         }
       } catch (err) {
         console.warn("[GC] inventory open error", err);
+        showNotify(inventoryUseReasonText("generic"), "error");
         patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+        page.querySelectorAll("[data-inventory-open]").forEach((btn) => {
+          btn.disabled = false;
+        });
       }
     });
 
@@ -6535,6 +6927,7 @@
     patchInventoryDom(_inventoryLastState);
     GC.setSafeInterval(tickInventoryCooldowns, 1000);
     GC.registerCleanup(() => {
+      closeLootModal();
       const panel = document.getElementById("inventory-rewards-panel");
       if (panel) panel.hidden = true;
     });

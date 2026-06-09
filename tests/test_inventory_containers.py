@@ -516,6 +516,106 @@ def test_open_grants_defense_to_context_planet(inventory_db, monkeypatch):
     conn.close()
 
 
+def test_open_container_returns_roll_preview(inventory_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "container_rare", 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    res = client.post(
+        "/api/inventory/open-container",
+        json={
+            "item_key": "container_rare",
+            "amount": 1,
+            "request_id": f"roll-preview-{uuid.uuid4().hex}",
+        },
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is True
+    assert "roll_preview" in data
+    assert len(data["roll_preview"]) >= 20
+
+
+def test_roll_preview_contains_real_reward(inventory_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "container_basic", 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    res = client.post(
+        "/api/inventory/open-container",
+        json={
+            "item_key": "container_basic",
+            "amount": 1,
+            "request_id": f"roll-real-{uuid.uuid4().hex}",
+        },
+    )
+    data = res.get_json()
+    assert data["ok"] is True
+    rewards = data.get("rewards") or []
+    assert rewards
+    main = rewards[0]
+    main_key = f"{main['reward_type']}:{main['reward_key']}"
+    preview_keys = {entry.get("key") for entry in (data.get("roll_preview") or [])}
+    assert main_key in preview_keys
+    assert (data["roll_preview"] or [])[-1]["key"] == main_key
+    assert int((data["roll_preview"] or [])[-1]["amount"]) == int(main.get("amount") or 0)
+
+
+def test_open_container_response_still_has_state_and_inventory(inventory_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "container_rare", 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    res = client.post(
+        "/api/inventory/open-container",
+        json={
+            "item_key": "container_rare",
+            "amount": 1,
+            "request_id": f"roll-state-{uuid.uuid4().hex}",
+        },
+    )
+    data = res.get_json()
+    assert data["ok"] is True
+    assert "state" in data
+    assert "inventory" in data
+    assert isinstance(data["inventory"], dict)
+    assert "containers" in data["inventory"]
+
+
+def test_roll_preview_does_not_change_reward_outcome(inventory_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "container_basic", 2, conn=conn)
+    conn.commit()
+
+    rng_a = random.Random(4242)
+    begin_write_transaction(conn)
+    ok_a, _, result_a = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=rng_a)
+    assert ok_a
+    commit(conn)
+
+    rng_b = random.Random(4242)
+    begin_write_transaction(conn)
+    ok_b, _, result_b = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=rng_b)
+    assert ok_b
+    commit(conn)
+
+    assert (result_a or {}).get("rewards") == (result_b or {}).get("rewards")
+    for result in (result_a, result_b):
+        preview = (result or {}).get("roll_preview") or []
+        assert len(preview) >= 20
+        assert preview[-1]["key"] == f"{result['rewards'][0]['reward_type']}:{result['rewards'][0]['reward_key']}"
+    conn.close()
+
+
 def test_save_idempotent_action_roundtrip(inventory_db):
     conn = db()
     uid = _player(conn=conn)

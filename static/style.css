@@ -14973,12 +14973,35 @@ a.gc-galaxy-coord-link:focus-visible {
 }
 
 .inventory-effect-message {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0 0 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
   background: rgba(143, 232, 168, 0.1);
+  border: 1px solid rgba(143, 232, 168, 0.22);
   color: #8fe8a8;
   font-weight: 600;
+  line-height: 1.35;
+}
+
+.inventory-effect-message--success {
+  box-shadow: 0 0 18px rgba(143, 232, 168, 0.08);
+}
+
+.inventory-effect-icon {
+  flex-shrink: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.inventory-effect-text {
+  flex: 1 1 auto;
+}
+
+.inventory-item-row[hidden] {
+  display: none !important;
 }
 
 .inventory-rewards-list {
@@ -15155,6 +15178,317 @@ a.gc-galaxy-coord-link:focus-visible {
 @media (max-width: 640px) {
   .inventory-drops-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* GC-543 — Lootbox opening modal */
+.gc-loot-modal-root {
+  position: relative;
+  z-index: 1200;
+}
+
+body.gc-loot-modal-open {
+  overflow: hidden;
+}
+
+.gc-loot-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(4, 10, 22, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.gc-loot-card {
+  position: relative;
+  width: min(920px, 100%);
+  max-height: min(92vh, 880px);
+  overflow: auto;
+  padding: 24px 22px 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(94, 176, 255, 0.45);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(94, 176, 255, 0.12), transparent 55%),
+    linear-gradient(165deg, rgba(12, 20, 36, 0.98), rgba(6, 12, 24, 0.98));
+  box-shadow:
+    0 0 0 1px rgba(94, 176, 255, 0.08),
+    0 24px 64px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.gc-loot-card.rarity-uncommon { border-color: rgba(110, 207, 143, 0.45); }
+.gc-loot-card.rarity-rare { border-color: rgba(94, 176, 255, 0.55); }
+.gc-loot-card.rarity-epic { border-color: rgba(199, 125, 255, 0.55); }
+.gc-loot-card.rarity-legendary { border-color: rgba(255, 184, 77, 0.55); }
+
+.gc-loot-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--gc-text-dim);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gc-loot-close:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.gc-loot-header {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.gc-loot-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #e8f4ff;
+}
+
+.gc-loot-subtitle {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  color: var(--gc-text-dim);
+  letter-spacing: 0.04em;
+}
+
+.gc-loot-crate {
+  height: 72px;
+  margin: 8px auto 16px;
+  max-width: 120px;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(94, 176, 255, 0.55), transparent 60%),
+    linear-gradient(180deg, rgba(30, 48, 78, 0.9), rgba(10, 18, 32, 0.95));
+  box-shadow: 0 0 28px rgba(94, 176, 255, 0.35);
+  animation: gc-loot-crate-glow 2.4s ease-in-out infinite alternate;
+}
+
+@keyframes gc-loot-crate-glow {
+  from { box-shadow: 0 0 18px rgba(94, 176, 255, 0.25); }
+  to { box-shadow: 0 0 36px rgba(94, 176, 255, 0.5); }
+}
+
+.gc-loot-roller {
+  position: relative;
+  overflow: hidden;
+  margin: 0 auto 14px;
+  max-width: 100%;
+  height: 132px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(94, 176, 255, 0.18);
+}
+
+.gc-loot-marker {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, transparent, #5eb0ff, transparent);
+  box-shadow: 0 0 12px rgba(94, 176, 255, 0.75);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.gc-loot-marker::before,
+.gc-loot-marker::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+}
+
+.gc-loot-marker::before {
+  top: -2px;
+  border-bottom: 8px solid #5eb0ff;
+}
+
+.gc-loot-marker::after {
+  bottom: -2px;
+  border-top: 8px solid #5eb0ff;
+}
+
+.gc-loot-strip {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  height: 100%;
+  padding: 10px 50%;
+  will-change: transform;
+}
+
+.gc-loot-tile {
+  flex: 0 0 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 14, 26, 0.82);
+  text-align: center;
+}
+
+.gc-loot-tile.rarity-uncommon { border-color: rgba(110, 207, 143, 0.35); }
+.gc-loot-tile.rarity-rare { border-color: rgba(94, 176, 255, 0.4); }
+.gc-loot-tile.rarity-epic { border-color: rgba(199, 125, 255, 0.45); }
+.gc-loot-tile.rarity-legendary { border-color: rgba(255, 184, 77, 0.5); }
+.gc-loot-tile.rarity-mythic { border-color: rgba(255, 120, 200, 0.5); }
+
+.gc-loot-tile--winner {
+  border-color: #5eb0ff;
+  box-shadow: 0 0 18px rgba(94, 176, 255, 0.55);
+  animation: gc-loot-winner-pulse 0.8s ease-out 2;
+}
+
+@keyframes gc-loot-winner-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+.gc-loot-tile-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.gc-loot-tile-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #d8e4f4;
+  line-height: 1.2;
+}
+
+.gc-loot-tile-amount {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #8fe8a8;
+}
+
+.gc-loot-tile-rarity {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gc-text-dim);
+}
+
+.gc-loot-status {
+  text-align: center;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #5eb0ff;
+  margin-bottom: 12px;
+}
+
+.gc-loot-skip {
+  display: block;
+  margin: 0 auto;
+}
+
+.gc-loot-results {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(94, 176, 255, 0.15);
+}
+
+.gc-loot-results-title {
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #c9e4ff;
+  margin-bottom: 12px;
+}
+
+.gc-loot-results-grid {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.gc-loot-result-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gc-loot-result-row.rarity-epic { border-color: rgba(199, 125, 255, 0.35); }
+.gc-loot-result-row.rarity-legendary { border-color: rgba(255, 184, 77, 0.4); }
+
+.gc-loot-result-icon {
+  font-size: 1.3rem;
+}
+
+.gc-loot-result-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.gc-loot-result-amount {
+  color: #8fe8a8;
+  font-weight: 700;
+}
+
+.gc-loot-results-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+body.gc-reduced-motion .gc-loot-crate {
+  animation: none;
+}
+
+body.gc-reduced-motion .gc-loot-strip {
+  transition: none !important;
+}
+
+body.gc-reduced-motion .gc-loot-tile--winner {
+  animation: none;
+}
+
+@media (max-width: 640px) {
+  .gc-loot-card {
+    padding: 18px 14px 16px;
+  }
+
+  .gc-loot-tile {
+    flex-basis: 116px;
+  }
+
+  .gc-loot-roller {
+    height: 118px;
+  }
+
+  .gc-loot-results-actions .gc-btn {
+    flex: 1 1 100%;
   }
 }
 

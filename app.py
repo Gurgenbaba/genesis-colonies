@@ -1422,9 +1422,12 @@ def api_inventory_open_container():
         "ok": True,
         "reason": "container_open_ok",
         "rewards": (result or {}).get("rewards") or [],
+        "roll_preview": (result or {}).get("roll_preview") or [],
         "inventory": (result or {}).get("inventory") or {},
         "opened": (result or {}).get("opened") or 0,
         "container_key": (result or {}).get("container_key") or item_key,
+        "container_name_key": (result or {}).get("container_name_key") or "",
+        "container_rarity": (result or {}).get("container_rarity") or "common",
         "state": state,
     }
     if request_id:
