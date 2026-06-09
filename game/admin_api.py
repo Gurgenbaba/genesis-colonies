@@ -627,6 +627,64 @@ def repair_homeworld(admin_id: int, player_id: int) -> Dict[str, Any]:
     return get_player_detail(player_id)
 
 
+def inventory_admin_catalog() -> Dict[str, Any]:
+    from game.inventory import admin_grant_catalog, inventory_schema_ready
+
+    conn = db()
+    try:
+        ready = inventory_schema_ready(conn)
+    finally:
+        conn.close()
+    if not ready:
+        return _err("inventory_unavailable", "Inventory schema not ready.")
+    return {"ok": True, "containers": admin_grant_catalog()}
+
+
+def grant_player_inventory(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.inventory import grant_inventory_item, inventory_schema_ready, is_known_item_key
+
+    item_key = str(body.get("item_key") or "").strip()
+    try:
+        amount = int(body.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+
+    if not item_key or not is_known_item_key(item_key):
+        return _err("invalid_item", "Unknown inventory item key.")
+    if amount < 1 or amount > 999:
+        return _err("invalid_amount", "Amount must be between 1 and 999.")
+
+    conn = db()
+    try:
+        if not inventory_schema_ready(conn):
+            return _err("inventory_unavailable", "Inventory schema not ready.")
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM users WHERE id = ? LIMIT 1;", (int(player_id),))
+        if not cur.fetchone():
+            return _err("not_found", "Player not found.")
+        begin_write_transaction(conn)
+        if not grant_inventory_item(int(player_id), item_key, amount, conn=conn):
+            rollback(conn)
+            return _err("grant_failed", "Could not grant inventory item.")
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    audit(
+        admin_id,
+        "grant_inventory",
+        target_type="player",
+        target_id=player_id,
+        payload={"item_key": item_key, "amount": amount},
+    )
+    detail = get_player_detail(player_id)
+    detail["granted"] = {"item_key": item_key, "amount": amount}
+    return detail
+
+
 def reset_planet(admin_id: int, planet_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
     if not validate_confirm("planet_reset", body.get("confirm_text")):
         return _err("confirm_required", "Type RESET PLANET to confirm.")

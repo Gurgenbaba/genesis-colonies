@@ -508,12 +508,26 @@
     return data;
   }
 
-  function renderPlayerDetail(data) {
+  async function renderPlayerDetail(data) {
     const el = qs("#admin-player-detail");
     if (!el || !data.ok) return;
     const p = data.player || {};
     const hw = data.homeworld || {};
     const score = data.score || {};
+    const cat = await adminGet("/api/admin/inventory/catalog");
+    const containers = cat.ok ? cat.containers || [] : [];
+    const invOpts = containers
+      .map(
+        (c) =>
+          `<option value="${esc(c.item_key)}">${esc(t(c.name_key || c.item_key, c.item_key))}</option>`
+      )
+      .join("");
+    const invQuick = containers
+      .map(
+        (c) =>
+          `<button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="player-inventory-grant-quick" data-player-id="${p.id}" data-item-key="${esc(c.item_key)}" data-amount="1">+1 ${esc(t(c.name_key || c.item_key, c.item_key))}</button>`
+      )
+      .join("");
     el.innerHTML = `
       <h3>#${p.id} ${playerNameLink(p.id, p.username)} ${p.is_admin ? statusBadge("ok", "Admin") : ""}</h3>
       <p>${t("admin_col_last_seen", "Zuletzt")}: ${esc(fmtTs(p.last_seen))} · Score: ${fmtInt(score.total)} (#${score.rank || "?"})</p>
@@ -529,13 +543,22 @@
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-crystal" placeholder="${t("crystal", "Crytite")}">
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="player-resources-add" data-player-id="${p.id}">${t("admin_btn_apply", "Addieren")}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-resources-set" data-player-id="${p.id}">${t("admin_btn_set_resources", "Setzen")}</button>
+      </div>
+      <div class="admin-panel-subsection">
+        <h4 class="admin-subsection-title">${t("admin_inventory_grant_title", "Lootboxen vergeben")}</h4>
+        <div class="admin-action-row">
+          <select class="admin-input admin-input-sm" id="admin-player-inv-key">${invOpts}</select>
+          <input type="number" min="1" max="999" value="1" class="admin-input admin-input-sm" id="admin-player-inv-amount" placeholder="${t("admin_inventory_amount", "Anzahl")}">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="player-inventory-grant" data-player-id="${p.id}">${t("admin_inventory_grant_btn", "Vergeben")}</button>
+        </div>
+        <div class="admin-action-row admin-inventory-quick">${invQuick}</div>
       </div>`;
   }
 
   async function loadAdminPlayer(id) {
     const data = await adminGet(`/api/admin/player/${id}`);
     if (!data.ok) showAlert(data.message, "error");
-    else renderPlayerDetail(data);
+    else await renderPlayerDetail(data);
     return data;
   }
 
@@ -1316,6 +1339,27 @@
       });
       notify(t("admin_action_success", "OK"), "success");
       return loadAdminPlayer(btn.dataset.playerId);
+    }
+    if (act === "player-inventory-grant" || act === "player-inventory-grant-quick") {
+      const playerId = btn.dataset.playerId;
+      const itemKey =
+        act === "player-inventory-grant-quick"
+          ? btn.dataset.itemKey
+          : qs("#admin-player-inv-key")?.value;
+      const amount =
+        act === "player-inventory-grant-quick"
+          ? parseInt(btn.dataset.amount || "1", 10)
+          : parseInt(qs("#admin-player-inv-amount")?.value || "1", 10);
+      const res = await adminPost(`/api/admin/player/${playerId}/inventory-grant`, {
+        item_key: itemKey,
+        amount: Number.isFinite(amount) ? amount : 1,
+      });
+      if (res.ok) {
+        notify(t("admin_inventory_grant_ok", "Lootbox vergeben"), "success");
+        return loadAdminPlayer(playerId);
+      }
+      showAlert(res.message || res.error, "error");
+      return res;
     }
     if (act === "planet-resources-set") {
       await adminPost(`/api/admin/planet/${btn.dataset.planetId}/resources`, {

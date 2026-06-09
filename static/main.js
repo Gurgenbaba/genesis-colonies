@@ -6160,6 +6160,11 @@
           const label = inventoryResourceLabel(r.reward_key);
           return `<li class="inventory-reward-row inventory-reward-row--resource"><span class="inventory-reward-label">${escapeHtml(label)}</span><span class="inventory-reward-amount gc-mono">+${amt.toLocaleString()}</span></li>`;
         }
+        if (r.reward_type === "ship" || r.reward_type === "defense") {
+          const name = t(r.name_key || `${r.reward_type}_${r.reward_key}`, r.reward_key);
+          const icon = r.reward_type === "ship" ? "🛰️" : "🛡️";
+          return `<li class="inventory-reward-row inventory-reward-row--${escapeHtml(r.reward_type)}"><span class="inventory-reward-icon" aria-hidden="true">${icon}</span><span class="inventory-reward-label">${escapeHtml(name)}</span><span class="inventory-reward-amount gc-mono">+${amt.toLocaleString()}</span></li>`;
+        }
         const name = t(r.name_key || `inv_item_${r.reward_key}`, r.reward_key);
         const rarity = t(`inv_rarity_${r.rarity || "common"}`, r.rarity || "common");
         const icon = r.icon || "📦";

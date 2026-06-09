@@ -4954,6 +4954,20 @@ def api_admin_player_repair_homeworld(player_id: int):
     return _admin_json(admin_api_logic.repair_homeworld(_admin_actor_id(), player_id))
 
 
+@app.route("/api/admin/inventory/catalog", methods=["GET"])
+@require_admin_api
+def api_admin_inventory_catalog():
+    return _admin_json(admin_api_logic.inventory_admin_catalog())
+
+
+@app.route("/api/admin/player/<int:player_id>/inventory-grant", methods=["POST"])
+@require_admin_api
+def api_admin_player_inventory_grant(player_id: int):
+    return _admin_json(
+        admin_api_logic.grant_player_inventory(_admin_actor_id(), player_id, _admin_body())
+    )
+
+
 @app.route("/api/admin/planets", methods=["GET"])
 @require_admin_api
 def api_admin_planets_search():

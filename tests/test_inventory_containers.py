@@ -113,13 +113,18 @@ def test_container_debited_and_loot_credited(inventory_db):
     ).fetchone()
     assert owned and int(owned["amount"]) == 1
 
+    assert result and result["rewards"]
+    assert any(int(r.get("amount") or 0) > 0 for r in result["rewards"])
     metal_after, crystal_after, fuel_after = _planet_resources(conn, pid)
-    assert (
+    ships_changed = any(r.get("reward_type") == "ship" for r in result["rewards"])
+    defense_changed = any(r.get("reward_type") == "defense" for r in result["rewards"])
+    items_changed = any(r.get("reward_type") in ("item", "booster") for r in result["rewards"])
+    resources_changed = (
         metal_after > metal_before
         or crystal_after > crystal_before
         or fuel_after > fuel_before
     )
-    assert result and result["rewards"]
+    assert resources_changed or ships_changed or defense_changed or items_changed
 
     log_count = conn.execute(
         "SELECT COUNT(*) AS c FROM container_open_log WHERE user_id = ?;",
@@ -293,6 +298,70 @@ def test_all_container_keys_have_pools():
 
         assert key in LOOT_POOLS
         assert LOOT_POOLS[key]
+
+
+def test_open_grants_ships_to_context_planet(inventory_db, monkeypatch):
+    from game import inventory_loot
+
+    monkeypatch.setitem(
+        inventory_loot.LOOT_POOLS,
+        "container_basic",
+        [
+            {
+                "weight": 100,
+                "reward_type": "ship",
+                "reward_key": "spark_drone",
+                "min_amount": 3,
+                "max_amount": 3,
+            }
+        ],
+    )
+    from game.fleet import get_planet_ships
+
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "container_basic", 1, conn=conn)
+    begin_write_transaction(conn)
+    ok, reason, _ = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(1))
+    assert ok, reason
+    commit(conn)
+    ships = get_planet_ships(pid, conn=conn)
+    assert int(ships.get("spark_drone") or 0) == 3
+    conn.close()
+
+
+def test_open_grants_defense_to_context_planet(inventory_db, monkeypatch):
+    from game import inventory_loot
+
+    monkeypatch.setitem(
+        inventory_loot.LOOT_POOLS,
+        "container_military_cache",
+        [
+            {
+                "weight": 100,
+                "reward_type": "defense",
+                "reward_key": "sentinel_turret",
+                "min_amount": 5,
+                "max_amount": 5,
+            }
+        ],
+    )
+    from game.models import get_planet_defense
+
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "container_military_cache", 1, conn=conn)
+    begin_write_transaction(conn)
+    ok, reason, _ = open_containers(uid, pid, "container_military_cache", 1, conn=conn, rng=random.Random(2))
+    assert ok, reason
+    commit(conn)
+    defense = get_planet_defense(pid, conn=conn)
+    assert int(defense.get("sentinel_turret") or 0) == 5
+    conn.close()
 
 
 def test_save_idempotent_action_roundtrip(inventory_db):

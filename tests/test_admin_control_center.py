@@ -36,6 +36,9 @@ def app_client(admin_env, monkeypatch):
     from game.bootstrap import bootstrap_application
 
     bootstrap_application(skip_migration_check=True)
+    import migrate
+
+    migrate.main()
 
     import importlib
     import app as app_module
@@ -314,6 +317,37 @@ def test_api_admin_queue_tick_forbidden_for_user(app_client):
     r = client.post("/api/admin/queue-tick", json={})
     assert r.status_code == 403
     assert r.get_json()["error"] == "forbidden"
+
+
+def test_admin_grant_inventory_container(app_client):
+    client, _, user_id = app_client
+    _login(client, "admin_cc", "adminpass123")
+
+    cat = client.get("/api/admin/inventory/catalog")
+    assert cat.status_code == 200
+    assert cat.get_json()["ok"] is True
+    assert len(cat.get_json()["containers"]) >= 8
+
+    r = client.post(
+        f"/api/admin/player/{user_id}/inventory-grant",
+        json={"item_key": "container_epic", "amount": 2},
+    )
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert data["granted"]["item_key"] == "container_epic"
+    assert data["granted"]["amount"] == 2
+
+    from game.db import db
+    from game.inventory import build_inventory_state
+
+    conn = db()
+    try:
+        state = build_inventory_state(user_id, conn=conn)
+        epic = next(c for c in state["containers"] if c["item_key"] == "container_epic")
+        assert epic["amount"] == 2
+    finally:
+        conn.close()
 
 
 def test_api_admin_queue_tick_error_response_shape(app_client):
