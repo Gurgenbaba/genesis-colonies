@@ -140,6 +140,8 @@
   "inv_effect_craft": "Crafted %(amount)s× %(item)s",
   "inv_effect_blueprint_unlock": "Blueprint unlocked: %(unlock_key)s",
   "inv_error_no_build_queue": "No building jobs in the queue.",
+  "inv_error_no_research_queue": "No research jobs in the queue.",
+  "inv_error_no_shipyard_queue": "No shipyard jobs in the queue.",
   "inv_error_no_effect_target": "No valid target for this item.",
   "inv_error_insufficient_items": "Not enough items in inventory.",
   "inv_error_item_not_usable": "This item cannot be used.",

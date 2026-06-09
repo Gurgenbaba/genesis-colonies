@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .db import lock_planet_for_update, table_exists
 from .inventory_catalog import (
+    BOOSTER_QUEUE_TARGET,
     BOOSTER_TIME_SECONDS,
     CRAFT_RECIPES,
     item_catalog_entry,
@@ -99,7 +100,7 @@ def _shift_queue_times(
     reduction_sec: float,
     now: float,
 ) -> float:
-    """Shift research/shipyard queue head job (and followers) by up to reduction_sec."""
+    """Legacy helper — prefer ``_apply_full_queue_time_shift`` for time boosters."""
     if not rows or reduction_sec <= 0:
         return 0.0
     first = rows[0]
@@ -125,6 +126,47 @@ def _shift_queue_times(
             (old_start - actual, old_finish - actual, int(row[id_col])),
         )
     return actual
+
+
+def _apply_full_queue_time_shift(
+    conn,
+    *,
+    rows: List[Mapping[str, Any]],
+    boost_seconds: int,
+    now: float,
+    table: str,
+    id_col: str,
+    start_col: str,
+    finish_col: str,
+    target: str,
+) -> Optional[Effect]:
+    """Shift an entire queue earlier — same contract as build boosters."""
+    if not rows:
+        return None
+    boost = max(0, int(boost_seconds))
+    if boost <= 0:
+        return None
+
+    last_finish = float(rows[-1][finish_col] or 0)
+    effective_shift = min(float(boost), max(0.0, last_finish - now))
+    if effective_shift <= 0:
+        return None
+
+    cur = conn.cursor()
+    for row in rows:
+        start = float(row[start_col] or 0)
+        finish = float(row[finish_col] or 0)
+        cur.execute(
+            f"UPDATE {table} SET {start_col} = ?, {finish_col} = ? WHERE {id_col} = ?;",
+            (start - effective_shift, finish - effective_shift, int(row[id_col])),
+        )
+
+    return {
+        "kind": "time_boost",
+        "target": target,
+        "seconds_reduced": boost,
+        "seconds_shifted": int(effective_shift),
+    }
 
 
 def apply_build_queue_booster(
@@ -155,7 +197,6 @@ def apply_build_queue_booster(
     if boost <= 0:
         return None
 
-    # Use caller conn — never open a parallel writer during inventory mutations.
     finish_due_work_once(
         uid,
         pid,
@@ -165,26 +206,19 @@ def apply_build_queue_booster(
         recalc_ranks=False,
     )
     rows = list(get_build_queue_rows(pid, conn=conn))
-    if not rows:
+    effect = _apply_full_queue_time_shift(
+        conn,
+        rows=rows,
+        boost_seconds=boost,
+        now=ts,
+        table="build_queue",
+        id_col="id",
+        start_col="start_time",
+        finish_col="finish_time",
+        target="build",
+    )
+    if not effect:
         return None
-
-    last_finish = float(rows[-1]["finish_time"] or 0)
-    effective_shift = min(float(boost), max(0.0, last_finish - ts))
-    if effective_shift <= 0:
-        return None
-
-    cur = conn.cursor()
-    for row in rows:
-        start = float(row["start_time"] or 0)
-        finish = float(row["finish_time"] or 0)
-        cur.execute(
-            """
-            UPDATE build_queue
-            SET start_time = ?, finish_time = ?
-            WHERE id = ?;
-            """,
-            (start - effective_shift, finish - effective_shift, int(row["id"])),
-        )
 
     finish_due_work_once(
         uid,
@@ -194,20 +228,140 @@ def apply_build_queue_booster(
         dedup=False,
         recalc_ranks=False,
     )
+    return effect
 
-    return {
-        "kind": "time_boost",
-        "target": "build",
-        "seconds_reduced": boost,
-        "seconds_shifted": int(effective_shift),
-    }
+
+def apply_research_queue_booster(
+    conn,
+    user_id: int,
+    boost_seconds: int,
+    *,
+    now: Optional[float] = None,
+) -> Optional[Effect]:
+    """Apply a research booster to the full account research queue."""
+    from .models import get_research_queue_rows
+    from .queue_engine import finish_due_work_once
+
+    ts = float(now if now is not None else time.time())
+    uid = int(user_id)
+    boost = max(0, int(boost_seconds))
+    if boost <= 0:
+        return None
+
+    finish_due_work_once(uid, conn=conn, source="inventory_use")
+    rows = list(get_research_queue_rows(uid, conn=conn))
+    effect = _apply_full_queue_time_shift(
+        conn,
+        rows=rows,
+        boost_seconds=boost,
+        now=ts,
+        table="research_queue",
+        id_col="id",
+        start_col="start_at",
+        finish_col="finish_at",
+        target="research",
+    )
+    if not effect:
+        return None
+
+    finish_due_work_once(uid, conn=conn, source="inventory_use")
+    return effect
+
+
+def apply_shipyard_queue_booster(
+    conn,
+    user_id: int,
+    planet_id: int,
+    boost_seconds: int,
+    *,
+    now: Optional[float] = None,
+) -> Optional[Effect]:
+    """Apply a shipyard booster to the full shipyard queue on ``planet_id``."""
+    from .queue_engine import finish_active_planet_due_work
+    from .shipyard_queue import list_shipyard_queue_rows, shipyard_queue_table_ready
+
+    if not shipyard_queue_table_ready(conn):
+        return None
+
+    ts = float(now if now is not None else time.time())
+    uid = int(user_id)
+    pid = int(planet_id)
+    boost = max(0, int(boost_seconds))
+    if boost <= 0:
+        return None
+
+    finish_active_planet_due_work(uid, pid, conn, source="inventory_use")
+    rows = list(list_shipyard_queue_rows(pid, conn=conn))
+    effect = _apply_full_queue_time_shift(
+        conn,
+        rows=rows,
+        boost_seconds=boost,
+        now=ts,
+        table="shipyard_queue",
+        id_col="id",
+        start_col="started_at",
+        finish_col="finish_at",
+        target="shipyard",
+    )
+    if not effect:
+        return None
+
+    finish_active_planet_due_work(uid, pid, conn, source="inventory_use")
+    return effect
+
+
+def _is_time_booster_item(item_key: str) -> bool:
+    return str(item_key or "") in BOOSTER_TIME_SECONDS
+
+
+def _time_booster_target(item_key: str) -> Optional[str]:
+    if not _is_time_booster_item(item_key):
+        return None
+    return str(BOOSTER_QUEUE_TARGET.get(str(item_key)) or "build")
+
+
+def _time_booster_fail_reason(item_key: str) -> str:
+    target = _time_booster_target(item_key)
+    if target == "build":
+        return "no_build_queue"
+    if target == "research":
+        return "no_research_queue"
+    if target == "shipyard":
+        return "no_shipyard_queue"
+    return "no_effect_target"
+
+
+def time_booster_has_active_queue(
+    user_id: int,
+    planet_id: int,
+    item_key: str,
+    *,
+    conn,
+) -> bool:
+    target = _time_booster_target(item_key)
+    if not target:
+        return True
+    return _queue_has_jobs(user_id, planet_id, target, conn=conn)
+
+
+def _queue_has_jobs(user_id: int, planet_id: int, target: str, *, conn) -> bool:
+    from .models import get_build_queue_rows, get_research_queue_rows
+
+    if target == "build":
+        return bool(get_build_queue_rows(int(planet_id), conn=conn))
+    if target == "research":
+        return bool(get_research_queue_rows(int(user_id), conn=conn))
+    if target == "shipyard":
+        from .shipyard_queue import list_shipyard_queue_rows, shipyard_queue_table_ready
+
+        if not shipyard_queue_table_ready(conn):
+            return False
+        return bool(list_shipyard_queue_rows(int(planet_id), conn=conn))
+    return False
 
 
 def _is_build_booster_item(item_key: str) -> bool:
-    from .inventory_catalog import BOOSTER_QUEUE_TARGET
-
-    key = str(item_key or "")
-    return BOOSTER_QUEUE_TARGET.get(key) == "build"
+    return _time_booster_target(item_key) == "build"
 
 
 def _apply_build_time_boost(
@@ -234,27 +388,12 @@ def _apply_research_time_boost(
     conn,
     now: Optional[float] = None,
 ) -> Optional[Effect]:
-    from .models import get_research_queue_rows
-    from .queue_engine import finish_due_work_once
-
-    ts = float(now if now is not None else time.time())
-    finish_due_work_once(int(user_id), conn=conn, source="inventory_use")
-    rows = get_research_queue_rows(int(user_id), conn=conn)
-    if not rows:
-        return None
-    reduced = _shift_queue_times(
+    return apply_research_queue_booster(
         conn,
-        table="research_queue",
-        id_col="id",
-        start_col="start_at",
-        finish_col="finish_at",
-        rows=rows,
-        reduction_sec=float(seconds),
-        now=ts,
+        int(user_id),
+        int(seconds),
+        now=now,
     )
-    if reduced <= 0:
-        return None
-    return {"kind": "time_boost", "target": "research", "seconds_reduced": int(reduced)}
 
 
 def _apply_shipyard_time_boost(
@@ -265,29 +404,13 @@ def _apply_shipyard_time_boost(
     conn,
     now: Optional[float] = None,
 ) -> Optional[Effect]:
-    from .queue_engine import finish_active_planet_due_work
-    from .shipyard_queue import list_shipyard_queue_rows, shipyard_queue_table_ready
-
-    if not shipyard_queue_table_ready(conn):
-        return None
-    ts = float(now if now is not None else time.time())
-    finish_active_planet_due_work(int(user_id), int(planet_id), conn, source="inventory_use")
-    rows = list_shipyard_queue_rows(int(planet_id), conn=conn)
-    if not rows:
-        return None
-    reduced = _shift_queue_times(
+    return apply_shipyard_queue_booster(
         conn,
-        table="shipyard_queue",
-        id_col="id",
-        start_col="started_at",
-        finish_col="finish_at",
-        rows=rows,
-        reduction_sec=float(seconds),
-        now=ts,
+        int(user_id),
+        int(planet_id),
+        int(seconds),
+        now=now,
     )
-    if reduced <= 0:
-        return None
-    return {"kind": "time_boost", "target": "shipyard", "seconds_reduced": int(reduced)}
 
 
 def _apply_time_boost(
@@ -524,8 +647,8 @@ def use_inventory_item(
 
     if consumed <= 0:
         fail_reason = "no_effect_target"
-        if _is_build_booster_item(key):
-            fail_reason = "no_build_queue"
+        if _is_time_booster_item(key):
+            fail_reason = _time_booster_fail_reason(key)
         return False, fail_reason, None
 
     merged = _merge_effects(effects)
@@ -627,7 +750,13 @@ def craft_inventory_item(
     }
 
 
-def enrich_inventory_item_row(row: Mapping[str, Any]) -> Dict[str, Any]:
+def enrich_inventory_item_row(
+    row: Mapping[str, Any],
+    *,
+    user_id: Optional[int] = None,
+    planet_id: Optional[int] = None,
+    conn=None,
+) -> Dict[str, Any]:
     """Attach use/craft/collectible metadata for UI."""
     out = dict(row)
     key = str(out.get("item_key") or "")
@@ -638,6 +767,16 @@ def enrich_inventory_item_row(row: Mapping[str, Any]) -> Dict[str, Any]:
     use_kind = resolve_item_use_kind(key)
     if use_kind:
         out["use_kind"] = use_kind
+
+    if (
+        _is_time_booster_item(key)
+        and user_id is not None
+        and planet_id is not None
+        and conn is not None
+    ):
+        if not time_booster_has_active_queue(int(user_id), int(planet_id), key, conn=conn):
+            out["usable"] = False
+            out["use_block_reason"] = _time_booster_fail_reason(key)
 
     from .inventory_catalog import craft_recipes_for_material
 

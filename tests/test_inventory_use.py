@@ -278,7 +278,7 @@ def test_research_booster_reduces_research_time(inventory_use_db):
     )
 
     begin_write_transaction(conn)
-    ok, reason, _ = use_inventory_item(uid, pid, "booster_research_15m", 1, conn=conn)
+    ok, reason, result = use_inventory_item(uid, pid, "booster_research_15m", 1, conn=conn)
     assert ok, reason
     commit(conn)
 
@@ -289,6 +289,46 @@ def test_research_booster_reduces_research_time(inventory_use_db):
         ).fetchone()["finish_at"]
     )
     assert finish_after <= finish_before - 800
+    assert int((result or {}).get("effect", {}).get("seconds_reduced") or 0) == 900
+    conn.close()
+
+
+def test_research_booster_applies_to_waiting_second_job(inventory_use_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    now = time.time()
+    add_research_job(uid, "energy_tech", now - 10, now + 3600, conn=conn)
+    add_research_job(uid, "mining_tech", now + 3600, now + 7200, conn=conn)
+    grant_inventory_item(uid, "booster_research_15m", 1, conn=conn)
+    conn.commit()
+
+    second_before = float(
+        conn.execute(
+            """
+            SELECT finish_at FROM research_queue
+            WHERE user_id = ? ORDER BY finish_at DESC LIMIT 1;
+            """,
+            (uid,),
+        ).fetchone()["finish_at"]
+    )
+
+    begin_write_transaction(conn)
+    ok, reason, _ = use_inventory_item(uid, pid, "booster_research_15m", 1, conn=conn)
+    assert ok, reason
+    commit(conn)
+
+    second_after = float(
+        conn.execute(
+            """
+            SELECT finish_at FROM research_queue
+            WHERE user_id = ? ORDER BY finish_at DESC LIMIT 1;
+            """,
+            (uid,),
+        ).fetchone()["finish_at"]
+    )
+    assert second_after <= second_before - 800
     conn.close()
 
 
@@ -446,6 +486,7 @@ def test_inventory_state_includes_use_metadata(inventory_use_db):
     conn = db()
     uid = _player(conn=conn)
     grant_inventory_item(uid, "booster_build_5m", 1, conn=conn)
+    grant_inventory_item(uid, "booster_research_15m", 1, conn=conn)
     grant_inventory_item(uid, "fragment_dna_common", 17, conn=conn)
     grant_inventory_item(uid, "mythic_genesis_core", 1, conn=conn)
     conn.commit()
@@ -453,9 +494,75 @@ def test_inventory_state_includes_use_metadata(inventory_use_db):
     state = build_inventory_state(uid, conn=conn)
     assert inventory_schema_ready(conn)
     by_key = {i["item_key"]: i for i in state["other_items"]}
-    assert by_key["booster_build_5m"]["usable"] is True
+    assert by_key["booster_build_5m"]["usable"] is False
+    assert by_key["booster_build_5m"]["use_block_reason"] == "no_build_queue"
+    assert by_key["booster_research_15m"]["usable"] is False
+    assert by_key["booster_research_15m"]["use_block_reason"] == "no_research_queue"
     assert by_key["fragment_dna_common"]["craft_material"] is True
     assert by_key["fragment_dna_common"]["craft_progress"][0]["owned"] == 17
     assert by_key["mythic_genesis_core"]["collectible"] is True
     assert by_key["mythic_genesis_core"]["usable"] is False
+    conn.close()
+
+
+def test_time_booster_usable_when_queue_active(inventory_use_db):
+    from game.inventory import build_inventory_state
+
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    now = time.time()
+    add_build_job(pid, "metal_mine", now - 5, now + 3600, conn=conn)
+    add_research_job(uid, "energy_tech", now - 5, now + 3600, conn=conn)
+    grant_inventory_item(uid, "booster_build_5m", 1, conn=conn)
+    grant_inventory_item(uid, "booster_research_15m", 1, conn=conn)
+    conn.commit()
+
+    state = build_inventory_state(uid, conn=conn)
+    by_key = {i["item_key"]: i for i in state["other_items"]}
+    assert by_key["booster_build_5m"]["usable"] is True
+    assert by_key["booster_research_15m"]["usable"] is True
+    conn.close()
+
+
+def test_research_booster_not_consumed_without_job(inventory_use_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "booster_research_15m", 1, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, _ = use_inventory_item(uid, pid, "booster_research_15m", 1, conn=conn)
+    rollback(conn)
+    assert not ok
+    assert reason == "no_research_queue"
+
+    amt = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, "booster_research_15m"),
+    ).fetchone()
+    assert int(amt["amount"]) == 1
+    conn.close()
+
+
+def test_shipyard_booster_not_consumed_without_job(inventory_use_db):
+    from game.shipyard_queue import shipyard_queue_table_ready
+
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    if not shipyard_queue_table_ready(conn):
+        pytest.skip("shipyard_queue schema not ready")
+    grant_inventory_item(uid, "booster_shipyard_15m", 1, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, _ = use_inventory_item(uid, pid, "booster_shipyard_15m", 1, conn=conn)
+    rollback(conn)
+    assert not ok
+    assert reason == "no_shipyard_queue"
     conn.close()

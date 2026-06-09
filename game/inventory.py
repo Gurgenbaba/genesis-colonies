@@ -244,10 +244,24 @@ def build_loot_drops_reference(*, conn=None) -> List[Dict[str, Any]]:
 
 
 def build_inventory_state(user_id: int, *, conn) -> Dict[str, Any]:
+    from .inventory_use import enrich_inventory_item_row
+    from .planet_evolution.repository import get_context_planet
+
     items = list_player_inventory(user_id, conn=conn)
+    planet = get_context_planet(user_id, conn=conn)
+    planet_id = int(planet["id"])
     owned_containers = {str(i["item_key"]): i for i in items if i["item_type"] == "container"}
     containers = build_container_catalog(owned_containers, user_id=int(user_id), conn=conn)
-    other_items = [i for i in items if i["item_type"] != "container"]
+    other_items = [
+        enrich_inventory_item_row(
+            i,
+            user_id=int(user_id),
+            planet_id=planet_id,
+            conn=conn,
+        )
+        for i in items
+        if i["item_type"] != "container"
+    ]
     return {
         "ready": inventory_schema_ready(conn),
         "containers": containers,
@@ -255,6 +269,7 @@ def build_inventory_state(user_id: int, *, conn) -> Dict[str, Any]:
         "loot_drops": build_loot_drops_reference(conn=conn),
         "craft_recipes": _craft_recipes_reference(),
         "all": items,
+        "planet_name": str(planet.get("name") or ""),
     }
 
 

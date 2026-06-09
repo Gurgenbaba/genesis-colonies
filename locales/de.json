@@ -148,6 +148,8 @@
   "inv_effect_craft": "%(amount)s× %(item)s hergestellt",
   "inv_effect_blueprint_unlock": "Blueprint freigeschaltet: %(unlock_key)s",
   "inv_error_no_build_queue": "Keine Bauaufträge in der Warteschlange.",
+  "inv_error_no_research_queue": "Keine Forschung in der Warteschlange.",
+  "inv_error_no_shipyard_queue": "Keine Schiffsbauaufträge in der Warteschlange.",
   "inv_error_no_effect_target": "Kein gültiges Ziel für dieses Item.",
   "inv_error_insufficient_items": "Nicht genug Items im Inventar.",
   "inv_error_item_not_usable": "Dieses Item kann nicht benutzt werden.",

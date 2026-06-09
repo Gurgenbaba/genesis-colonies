@@ -14729,13 +14729,19 @@ a.gc-galaxy-coord-link:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 0;
-  border-radius: 14px;
+  border-radius: 2px;
   overflow: hidden;
-  border: 1px solid rgba(120, 180, 255, 0.14);
+  border: 1px solid rgba(70, 229, 255, 0.18);
   background:
     linear-gradient(165deg, rgba(12, 22, 38, 0.96) 0%, rgba(6, 10, 18, 0.98) 100%);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(70, 229, 255, 0.06),
+    0 10px 28px rgba(0, 0, 0, 0.35);
   transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  clip-path: polygon(
+    0 6px, 6px 0, calc(100% - 6px) 0, 100% 6px,
+    100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px)
+  );
 }
 
 .inventory-loot-card:hover {
@@ -14776,7 +14782,7 @@ a.gc-galaxy-coord-link:focus-visible {
 .inventory-loot-card-glow {
   position: absolute;
   inset: 12% 10% 18%;
-  border-radius: 50%;
+  border-radius: 0;
   filter: blur(22px);
   opacity: 0.55;
   pointer-events: none;
@@ -14821,15 +14827,17 @@ a.gc-galaxy-coord-link:focus-visible {
   right: 10px;
   z-index: 2;
   min-width: 34px;
-  padding: 4px 10px;
-  border-radius: 999px;
+  padding: 3px 10px;
+  border-radius: 2px;
   font-size: 0.82rem;
   font-weight: 700;
   text-align: center;
+  letter-spacing: 0.04em;
   color: #e8f4ff;
-  background: rgba(8, 16, 28, 0.82);
-  border: 1px solid rgba(140, 200, 255, 0.28);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  background: rgba(8, 16, 28, 0.92);
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  box-shadow: 0 0 10px rgba(70, 229, 255, 0.12);
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
 }
 
 .inventory-loot-card--owned .inventory-loot-card-stock {
@@ -14885,10 +14893,16 @@ a.gc-galaxy-coord-link:focus-visible {
   min-width: 96px;
 }
 
+.inventory-container-grid .inventory-rarity-badge {
+  border-radius: 2px;
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 5px 100%, 0 calc(100% - 5px));
+  letter-spacing: 0.06em;
+}
+
 .inventory-rarity-badge {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 2px;
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;

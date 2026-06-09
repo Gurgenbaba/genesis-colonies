@@ -6297,6 +6297,8 @@
   function inventoryUseReasonText(reason) {
     const map = {
       no_build_queue: t("inv_error_no_build_queue", "Keine Bauaufträge in der Warteschlange."),
+      no_research_queue: t("inv_error_no_research_queue", "Keine Forschung in der Warteschlange."),
+      no_shipyard_queue: t("inv_error_no_shipyard_queue", "Keine Schiffsbauaufträge in der Warteschlange."),
       no_effect_target: t("inv_error_no_effect_target", "Kein gültiges Ziel für dieses Item."),
       insufficient_items: t("inv_error_insufficient_items", "Nicht genug Items im Inventar."),
       item_not_usable: t("inv_error_item_not_usable", "Dieses Item kann nicht benutzt werden."),
