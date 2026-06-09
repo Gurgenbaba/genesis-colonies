@@ -10642,14 +10642,43 @@
     return parseIntNumber(cur[tab.scoreKey]);
   }
 
+  function rankingAvatarFallbackHtml(initial, theme) {
+    const letter = rankingEscapeHtml(initial || "?");
+    const th = rankingEscapeHtml(theme || "cyan");
+    return `<span class="gc-ranking-avatar-fallback gc-ranking-avatar-fallback--${th}" aria-hidden="true">${letter}</span>`;
+  }
+
+  GC.fallbackRankingAvatar = function fallbackRankingAvatar(img) {
+    if (!img || img.dataset.fallbackApplied === "1") return;
+    img.dataset.fallbackApplied = "1";
+    const initial = img.getAttribute("data-avatar-initial") || "?";
+    const theme = img.getAttribute("data-avatar-theme") || "cyan";
+    const wrap = img.closest(".gc-ranking-avatar");
+    if (wrap) {
+      wrap.innerHTML = rankingAvatarFallbackHtml(initial, theme);
+      return;
+    }
+    img.replaceWith(
+      (() => {
+        const span = document.createElement("span");
+        span.innerHTML = rankingAvatarFallbackHtml(initial, theme);
+        return span.firstElementChild || span;
+      })()
+    );
+  };
+
   function rankingAvatarInner(row) {
     const initial = rankingEscapeHtml(row.avatar_initial || "?");
     const theme = rankingEscapeHtml(row.theme || "cyan");
     if (row.show_avatar && row.avatar_url) {
       const src = rankingEscapeHtml(row.avatar_url);
-      return `<img class="gc-ranking-avatar-img" src="${src}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`;
+      return (
+        `<img class="gc-ranking-avatar-img" src="${src}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" ` +
+        `data-avatar-initial="${initial}" data-avatar-theme="${theme}" ` +
+        `onerror="GC.fallbackRankingAvatar(this)">`
+      );
     }
-    return `<span class="gc-ranking-avatar-fallback gc-ranking-avatar-fallback--${theme}" aria-hidden="true">${initial}</span>`;
+    return rankingAvatarFallbackHtml(initial, theme);
   }
 
   function bustAvatarUrl(url, version) {
@@ -10676,7 +10705,9 @@
       if (!avatarWrap) return;
       if (show) {
         avatarWrap.innerHTML =
-          `<img class="gc-ranking-avatar-img" src="${rankingEscapeHtml(busted)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`;
+          `<img class="gc-ranking-avatar-img" src="${rankingEscapeHtml(busted)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" ` +
+          `data-avatar-initial="${rankingEscapeHtml(initial)}" data-avatar-theme="${rankingEscapeHtml(theme)}" ` +
+          `onerror="GC.fallbackRankingAvatar(this)">`;
       } else {
         avatarWrap.innerHTML =
           `<span class="gc-ranking-avatar-fallback gc-ranking-avatar-fallback--${rankingEscapeHtml(theme)}" aria-hidden="true">${rankingEscapeHtml(initial)}</span>`;

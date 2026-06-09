@@ -1119,7 +1119,7 @@ def enrich_ranking_social_fields(raw: Dict[str, Any]) -> Dict[str, Any]:
     Normalize player-card and alliance fields for ranking API / templates.
     Avatar URL is only exposed when the profile is public and passes validation.
     """
-    from .playercard import avatar_url_for_client, sanitize_text_field, validate_avatar_url, validate_theme, TITLE_MAX
+    from .playercard import resolve_avatar_display, sanitize_text_field, validate_theme, TITLE_MAX
 
     from .player_display import commander_display_name, commander_lookup_name
 
@@ -1135,10 +1135,15 @@ def enrich_ranking_social_fields(raw: Dict[str, Any]) -> Dict[str, Any]:
     if is_public:
         raw_url = str(raw.get("card_avatar_url") or "").strip()
         if raw_url:
-            ok, validated = validate_avatar_url(raw_url)
-            if ok and validated:
-                avatar_url = avatar_url_for_client(validated, card_updated_at)
-                show_avatar = True
+            try:
+                pid = int(raw.get("player_id") or 0)
+            except (TypeError, ValueError):
+                pid = 0
+            avatar_url, show_avatar = resolve_avatar_display(
+                raw_url,
+                card_updated_at,
+                player_id=pid if pid > 0 else None,
+            )
 
     title = sanitize_text_field(raw.get("card_title"), TITLE_MAX) if is_public else ""
     theme = validate_theme(raw.get("card_theme")) if raw.get("card_theme") is not None else "cyan"

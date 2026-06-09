@@ -33,7 +33,9 @@ from game.playercard import (
     ensure_player_card_tables,
     get_player_card_row,
     player_exists,
+    local_avatar_file_usable,
     process_avatar_upload,
+    resolve_avatar_display,
     save_own_card,
     sanitize_text_field,
     sort_badges_by_priority,
@@ -611,6 +613,44 @@ def avatar_storage(tmp_path, monkeypatch):
         lambda pid: root / f"avatar_{int(pid)}.webp",
     )
     return root
+
+
+def test_resolve_avatar_display_requires_local_file(temp_db, avatar_storage, monkeypatch):
+    monkeypatch.setattr("game.playercard.SAVE_COOLDOWN_SEC", 0)
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("avatar_resolve")
+
+    missing_url = avatar_public_path(pid)
+    display, show = resolve_avatar_display(missing_url, 99, player_id=pid)
+    assert display == ""
+    assert show is False
+
+    ok, path = process_avatar_upload(pid, _FakeUpload(_png_bytes()))
+    assert ok is True
+    display2, show2 = resolve_avatar_display(path, 100, player_id=pid)
+    assert show2 is True
+    assert display2.startswith("/static/uploads/avatars/")
+    assert local_avatar_file_usable(path, player_id=pid)
+
+
+def test_save_own_card_preserves_local_avatar_when_form_empty(temp_db, avatar_storage, monkeypatch):
+    monkeypatch.setattr("game.playercard.SAVE_COOLDOWN_SEC", 0)
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("avatar_preserve")
+
+    ok_up, _, _ = upload_own_avatar(pid, _FakeUpload(_png_bytes()))
+    assert ok_up is True
+
+    ok, reason, view = save_own_card(
+        pid,
+        {"title": "Bio only", "bio": "x", "avatar_url": "", "theme": "cyan", "is_public": "1"},
+    )
+    assert ok is True, reason
+    row = get_player_card_row(pid)
+    assert row["avatar_url"] == avatar_public_path(pid)
+    assert view.get("avatar_url_client")
 
 
 def test_validate_local_avatar_path():

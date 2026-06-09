@@ -32,7 +32,8 @@
                  src="{{ card.get('avatar_url') }}"
                  alt=""
                  loading="lazy"
-                 referrerpolicy="no-referrer">
+                 referrerpolicy="no-referrer"
+                 onerror="this.onerror=null;this.hidden=true;this.closest('.gc-player-card-avatar-wrap')?.querySelector('.gc-player-card-avatar-placeholder')?.removeAttribute('hidden');">
           </button>
         {% else %}
           <div class="gc-player-card-avatar gc-player-card-avatar-placeholder" aria-hidden="true">
