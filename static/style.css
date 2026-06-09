@@ -14942,23 +14942,3 @@ a.gc-galaxy-coord-link:focus-visible {
   gap: 8px;
 }
 
-.admin-inventory-quick {
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.admin-panel-subsection {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(120, 180, 255, 0.12);
-}
-
-.admin-subsection-title {
-  margin: 0 0 8px;
-  font-size: 0.88rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--gc-text-dim);
-}

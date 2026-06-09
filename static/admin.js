@@ -45,6 +45,19 @@
       .replace(/"/g, "&quot;");
   }
 
+  const ADMIN_SELECT_ATTRS = 'class="admin-input admin-select" data-gc-hud-select';
+
+  function syncAdminHudSelects(root) {
+    const scope = root && root.querySelectorAll ? root : adminRoot();
+    if (!scope || typeof GC.initHudSelects !== "function") return;
+    GC.initHudSelects(scope);
+    if (typeof GC.rebuildHudSelect === "function") {
+      scope.querySelectorAll("select[data-gc-hud-select]").forEach((sel) => {
+        if (sel._gcHudSelect) GC.rebuildHudSelect(sel);
+      });
+    }
+  }
+
   function playerNameLink(playerId, name) {
     const id = Number(playerId);
     if (!Number.isFinite(id) || id <= 0) return esc(name || "—");
@@ -216,32 +229,46 @@
 
   async function loadTab(name) {
     showAlert("");
+    let result;
     switch (name) {
       case "health":
-        return loadAdminHealth();
+        result = await loadAdminHealth();
+        break;
       case "migrations":
-        return loadAdminMigrations();
+        result = await loadAdminMigrations();
+        break;
       case "players":
-        return searchAdminPlayers();
+        result = await searchAdminPlayers();
+        break;
       case "planets":
-        return searchAdminPlanets();
+        result = await searchAdminPlanets();
+        break;
       case "queues":
-        return loadAdminQueues();
+        result = await loadAdminQueues();
+        break;
       case "audit":
-        return loadAuditLog();
+        result = await loadAuditLog();
+        break;
       case "chat":
-        return loadAdminChat();
+        result = await loadAdminChat();
+        break;
       case "support":
-        return loadAdminSupport();
+        result = await loadAdminSupport();
+        break;
       case "messages":
-        return loadAdminMessages();
+        result = await loadAdminMessages();
+        break;
       case "runtime":
-        return loadAdminRuntime();
+        result = await loadAdminRuntime();
+        break;
       case "balance":
-        return loadAdminBalance();
+        result = await loadAdminBalance();
+        break;
       default:
-        return null;
+        result = null;
     }
+    syncAdminHudSelects(qs(`[data-admin-panel="${name}"]`) || adminRoot());
+    return result;
   }
 
   function balanceFieldElements() {
@@ -482,37 +509,75 @@
       <tbody>${rows.join("")}</tbody></table></div>`;
   }
 
+  function buildAdminInventoryGrantUi(containers, { mode, playerId }) {
+    const isAll = mode === "all";
+    const grantAct = isAll ? "inventory-grant-all" : "player-inventory-grant";
+    const quickAct = isAll ? "inventory-grant-all-quick" : "player-inventory-grant-quick";
+    const selectId = isAll ? "admin-all-inv-key" : "admin-player-inv-key";
+    const amountId = isAll ? "admin-all-inv-amount" : "admin-player-inv-amount";
+    const playerAttr = playerId ? ` data-player-id="${esc(String(playerId))}"` : "";
+    const invOpts = (containers || [])
+      .map(
+        (c) =>
+          `<option value="${esc(c.item_key)}">${esc(t(c.name_key || c.item_key, c.item_key))}</option>`
+      )
+      .join("");
+    const quickChips = (containers || [])
+      .map((c) => {
+        const label = t(c.name_key || c.item_key, c.item_key);
+        return (
+          `<button type="button" class="gc-btn gc-btn-outline gc-btn-xs admin-chip-btn" data-admin-action="${quickAct}"` +
+          ` data-item-key="${esc(c.item_key)}" data-amount="1"${playerAttr} title="${esc(label)}">` +
+          `<span class="admin-chip-btn-qty">+1</span><span class="admin-chip-btn-label">${esc(label)}</span></button>`
+        );
+      })
+      .join("");
+    const title = isAll
+      ? t("admin_inventory_grant_all_title", "Lootboxen an alle Spieler")
+      : t("admin_inventory_grant_title", "Lootboxen vergeben");
+    const hint = isAll
+      ? `<p class="admin-small-hint admin-tool-panel__hint">${esc(t("admin_inventory_grant_all_hint", "Vergibt Container an jeden registrierten Spieler-Account."))}</p>`
+      : "";
+    const grantBtn = isAll
+      ? t("admin_inventory_grant_all_btn", "An alle vergeben")
+      : t("admin_inventory_grant_btn", "Vergeben");
+    return (
+      `<h4 class="admin-tool-panel__title">${esc(title)}</h4>${hint}` +
+      `<div class="admin-field-row">` +
+      `<label class="admin-field admin-field--grow">` +
+      `<span class="admin-label">${esc(t("admin_inventory_item_label", "Container"))}</span>` +
+      `<select ${ADMIN_SELECT_ATTRS} id="${selectId}">${invOpts}</select>` +
+      `</label>` +
+      `<label class="admin-field admin-field--qty">` +
+      `<span class="admin-label">${esc(t("admin_inventory_amount", "Anzahl"))}</span>` +
+      `<input type="number" min="1" max="999" value="1" class="admin-input admin-input-qty" id="${amountId}">` +
+      `</label>` +
+      `<div class="admin-field admin-field--action">` +
+      `<span class="admin-label admin-label--spacer" aria-hidden="true">&nbsp;</span>` +
+      `<button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="${grantAct}"${playerAttr}>${esc(grantBtn)}</button>` +
+      `</div></div>` +
+      `<div class="admin-chip-grid">${quickChips}</div>`
+    );
+  }
+
   async function renderAdminInventoryGrantAll() {
     const panel = qs("#admin-inventory-grant-all-panel");
     if (!panel) return;
     const cat = await adminGet("/api/admin/inventory/catalog");
     if (!cat.ok) {
       panel.hidden = true;
+      panel.innerHTML = "";
       return;
     }
     const containers = cat.containers || [];
     if (!containers.length) {
       panel.hidden = true;
+      panel.innerHTML = "";
       return;
     }
     panel.hidden = false;
-    const invOpts = containers
-      .map(
-        (c) =>
-          `<option value="${esc(c.item_key)}">${esc(t(c.name_key || c.item_key, c.item_key))}</option>`
-      )
-      .join("");
-    const select = qs("#admin-all-inv-key");
-    if (select) select.innerHTML = invOpts;
-    const quick = qs("#admin-all-inv-quick");
-    if (quick) {
-      quick.innerHTML = containers
-        .map(
-          (c) =>
-            `<button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="inventory-grant-all-quick" data-item-key="${esc(c.item_key)}" data-amount="1">+1 ${esc(t(c.name_key || c.item_key, c.item_key))}</button>`
-        )
-        .join("");
-    }
+    panel.innerHTML = buildAdminInventoryGrantUi(containers, { mode: "all" });
+    syncAdminHudSelects(panel);
   }
 
   async function searchAdminPlayers() {
@@ -550,43 +615,28 @@
     const score = data.score || {};
     const cat = await adminGet("/api/admin/inventory/catalog");
     const containers = cat.ok ? cat.containers || [] : [];
-    const invOpts = containers
-      .map(
-        (c) =>
-          `<option value="${esc(c.item_key)}">${esc(t(c.name_key || c.item_key, c.item_key))}</option>`
-      )
-      .join("");
-    const invQuick = containers
-      .map(
-        (c) =>
-          `<button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="player-inventory-grant-quick" data-player-id="${p.id}" data-item-key="${esc(c.item_key)}" data-amount="1">+1 ${esc(t(c.name_key || c.item_key, c.item_key))}</button>`
-      )
-      .join("");
+    const inventoryPanel =
+      containers.length > 0
+        ? `<div class="admin-tool-panel">${buildAdminInventoryGrantUi(containers, { mode: "player", playerId: p.id })}</div>`
+        : "";
     el.innerHTML = `
       <h3>#${p.id} ${playerNameLink(p.id, p.username)} ${p.is_admin ? statusBadge("ok", "Admin") : ""}</h3>
       <p>${t("admin_col_last_seen", "Zuletzt")}: ${esc(fmtTs(p.last_seen))} · Score: ${fmtInt(score.total)} (#${score.rank || "?"})</p>
       <p>Homeworld: ${esc(hw.name || "–")} · ${t("metal", "Ferronit")}: ${fmtInt(hw.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(hw.crystal)}</p>
-      <div class="admin-action-row">
+      <div class="admin-toolbar">
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-set-admin" data-player-id="${p.id}" data-is-admin="${p.is_admin ? 0 : 1}">${p.is_admin ? t("admin_btn_remove_admin", "Admin entfernen") : t("admin_btn_grant_admin", "Admin setzen")}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-repair-hw" data-player-id="${p.id}">${t("admin_btn_repair_homeworld", "Homeworld reparieren")}</button>
         <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="player-ban" data-player-id="${p.id}">${t("admin_btn_ban", "Bannen")}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-unban" data-player-id="${p.id}">${t("admin_btn_unban", "Entbannen")}</button>
       </div>
-      <div class="admin-action-row">
+      <div class="admin-toolbar admin-toolbar--tight">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-metal" placeholder="${t("metal", "Ferronit")}">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-crystal" placeholder="${t("crystal", "Crytite")}">
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="player-resources-add" data-player-id="${p.id}">${t("admin_btn_apply", "Addieren")}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-resources-set" data-player-id="${p.id}">${t("admin_btn_set_resources", "Setzen")}</button>
       </div>
-      <div class="admin-panel-subsection">
-        <h4 class="admin-subsection-title">${t("admin_inventory_grant_title", "Lootboxen vergeben")}</h4>
-        <div class="admin-action-row">
-          <select class="admin-input admin-input-sm" id="admin-player-inv-key">${invOpts}</select>
-          <input type="number" min="1" max="999" value="1" class="admin-input admin-input-sm" id="admin-player-inv-amount" placeholder="${t("admin_inventory_amount", "Anzahl")}">
-          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="player-inventory-grant" data-player-id="${p.id}">${t("admin_inventory_grant_btn", "Vergeben")}</button>
-        </div>
-        <div class="admin-action-row admin-inventory-quick">${invQuick}</div>
-      </div>`;
+      ${inventoryPanel}`;
+    syncAdminHudSelects(el);
   }
 
   async function loadAdminPlayer(id) {
@@ -634,13 +684,13 @@
       <h3>#${pl.id} ${esc(pl.name || "")}</h3>
       <p>${t("metal", "Ferronit")}: ${fmtInt(pl.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(pl.crystal)}</p>
       <details class="admin-buildings-detail"><summary>${t("admin_buildings", "Gebäude")}</summary><pre>${esc(JSON.stringify(b, null, 2))}</pre></details>
-      <div class="admin-action-row">
+      <div class="admin-toolbar admin-toolbar--tight">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-metal" placeholder="${t("metal", "Ferronit")}">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-crystal" placeholder="${t("crystal", "Crytite")}">
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="planet-resources-set" data-planet-id="${pl.id}">${t("admin_btn_set_resources", "Setzen")}</button>
       </div>
-      <div class="admin-action-row">
-        <select class="admin-input admin-input-sm" id="admin-planet-building-type">${buildingOpts}</select>
+      <div class="admin-toolbar admin-toolbar--tight">
+        <select ${ADMIN_SELECT_ATTRS} id="admin-planet-building-type">${buildingOpts}</select>
         <input type="number" min="0" max="100" class="admin-input admin-input-sm" id="admin-planet-building-level" placeholder="Level">
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="planet-building-set" data-planet-id="${pl.id}">${t("admin_btn_set_building", "Gebäude setzen")}</button>
       </div>
@@ -650,6 +700,7 @@
         <input type="text" class="admin-input" id="admin-planet-reset-confirm" placeholder="RESET PLANET" autocomplete="off">
         <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="planet-reset" data-planet-id="${pl.id}">${t("admin_btn_reset_planet", "Planet reset")}</button>
       </div>`;
+    syncAdminHudSelects(el);
   }
 
   async function loadAdminPlanet(id) {
@@ -703,12 +754,13 @@
         <div class="admin-danger-zone">
           <p class="admin-small-hint">${t("admin_queue_clear_hint", "Tippe CLEAR QUEUE")}</p>
           <input type="text" class="admin-input" id="admin-queue-clear-confirm" placeholder="CLEAR QUEUE" autocomplete="off">
-          <select class="admin-input admin-input-sm" id="admin-queue-clear-scope">
+          <select ${ADMIN_SELECT_ATTRS} id="admin-queue-clear-scope">
             <option value="planet">${t("admin_filter_planet_id", "Planet")}</option>
             <option value="player">${t("admin_filter_player_id", "Player")}</option>
           </select>
           <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="queue-clear">${t("admin_btn_clear_queue", "Queue leeren")}</button>
         </div>`;
+      syncAdminHudSelects(out);
     }
     return data;
   }
@@ -932,7 +984,7 @@
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="support-reply" data-ticket-id="${ticket.id}">
           ${esc(t("admin_support_reply_btn", "Antwort senden"))}
         </button>
-        <select class="admin-input admin-input-sm" id="admin-support-status-set">
+        <select ${ADMIN_SELECT_ATTRS} id="admin-support-status-set">
           <option value="open" ${ticket.status === "open" ? "selected" : ""}>${esc(t("admin_support_status_open", "Offen"))}</option>
           <option value="in_progress" ${ticket.status === "in_progress" ? "selected" : ""}>${esc(t("admin_support_status_progress", "In Bearbeitung"))}</option>
           <option value="closed" ${ticket.status === "closed" ? "selected" : ""}>${esc(t("admin_support_status_closed", "Geschlossen"))}</option>
@@ -941,6 +993,7 @@
           ${esc(t("admin_support_status_btn", "Status setzen"))}
         </button>
       </div>`;
+    syncAdminHudSelects(out);
   }
 
   async function loadAdminSupport() {
@@ -1552,6 +1605,7 @@
       loadAdminRuntime().then(() => loadTab("health"));
     }
 
+    syncAdminHudSelects(adminRoot());
     console.debug("[GC] admin panel initialized");
   }
 

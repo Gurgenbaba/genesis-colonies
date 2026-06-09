@@ -145,16 +145,7 @@
         </div>
       </div>
 
-      <div class="admin-panel-subsection" id="admin-inventory-grant-all-panel" hidden>
-        <h3 class="admin-subsection-title">{{ T("admin_inventory_grant_all_title", "Lootboxen an alle Spieler") }}</h3>
-        <p class="admin-small-hint">{{ T("admin_inventory_grant_all_hint", "Vergibt Container an jeden registrierten Spieler-Account.") }}</p>
-        <div class="admin-action-row">
-          <select class="admin-input admin-input-sm" id="admin-all-inv-key"></select>
-          <input type="number" min="1" max="999" value="1" class="admin-input admin-input-sm" id="admin-all-inv-amount" placeholder="{{ T('admin_inventory_amount', 'Anzahl') }}">
-          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="inventory-grant-all">{{ T("admin_inventory_grant_all_btn", "An alle vergeben") }}</button>
-        </div>
-        <div class="admin-action-row admin-inventory-quick" id="admin-all-inv-quick"></div>
-      </div>
+      <div class="admin-tool-panel" id="admin-inventory-grant-all-panel" hidden></div>
       
       <div id="admin-players-list" class="admin-table-wrap"></div>
       <div id="admin-player-detail" class="admin-card admin-detail"></div>
@@ -245,7 +236,7 @@
         <div class="admin-action-row">
           <input type="number" class="admin-input admin-input-sm" id="admin-queue-player-id" placeholder="{{ T('admin_filter_player_id') }}">
           <input type="number" class="admin-input admin-input-sm" id="admin-queue-planet-id" placeholder="{{ T('admin_filter_planet_id') }}">
-          <select class="admin-input admin-input-sm" id="admin-queue-status">
+          <select class="admin-input admin-select" data-gc-hud-select id="admin-queue-status">
             <option value="all">{{ T("admin_filter_status_all") }}</option>
             <option value="active">{{ T("admin_filter_status_active") }}</option>
             <option value="finished">{{ T("admin_filter_status_finished") }}</option>
@@ -289,7 +280,7 @@
         <p class="admin-small-hint">{{ T("admin_chat_moderation_hint", "Stummschaltung (temporär) und Chat-Bann (dauerhaft) sind getrennte Maßnahmen.") }}</p>
         <div class="admin-action-row admin-action-row-wrap">
           <input type="number" class="admin-input admin-input-sm" id="admin-chat-mod-player" placeholder="{{ T('admin_chat_mute_player_id') }}">
-          <select class="admin-input admin-input-sm" id="admin-chat-mute-scope">
+          <select class="admin-input admin-select" data-gc-hud-select id="admin-chat-mute-scope">
             <option value="global">{{ T("admin_chat_mute_scope_global") }}</option>
             <option value="room">{{ T("admin_chat_mute_scope_room") }}</option>
             <option value="alliance">{{ T("admin_chat_mute_scope_alliance") }}</option>
@@ -324,7 +315,7 @@
     <section id="admin-tab-support" class="admin-panel admin-tab-panel" data-admin-panel="support" role="tabpanel" hidden>
       <div class="admin-action-row admin-action-row-wrap">
         <h2 class="admin-panel-title">{{ T("admin_support_title", "Support-Tickets") }}</h2>
-        <select class="admin-input admin-input-sm" id="admin-support-status-filter">
+        <select class="admin-input admin-select" data-gc-hud-select id="admin-support-status-filter">
           <option value="">{{ T("admin_filter_status_all", "Alle Status") }}</option>
           <option value="open">{{ T("admin_support_status_open", "Offen") }}</option>
           <option value="in_progress">{{ T("admin_support_status_progress", "In Bearbeitung") }}</option>
@@ -346,7 +337,7 @@
         <h2 class="admin-panel-title">{{ T("admin_messages_title", "Spieler-Nachrichten") }}</h2>
         <input type="number" class="admin-input admin-input-sm" id="admin-messages-player-filter"
                placeholder="{{ T('admin_messages_filter_player', 'Spieler-ID') }}" min="1">
-        <select class="admin-input admin-input-sm" id="admin-messages-category-filter">
+        <select class="admin-input admin-select" data-gc-hud-select id="admin-messages-category-filter">
           <option value="">{{ T("admin_messages_filter_all", "Alle Kategorien") }}</option>
           <option value="system">{{ T("messages.category.system", "System") }}</option>
           <option value="player">{{ T("messages.category.player", "Spieler") }}</option>
@@ -526,7 +517,7 @@
         <div class="admin-form-grid-2">
           <div class="admin-field">
             <label class="admin-label" for="admin-balance-exchange-enabled">{{ T("admin_balance_exchange_enabled", "Aktiv") }}</label>
-            <select class="admin-input" id="admin-balance-exchange-enabled" data-balance-key="exchange_enabled">
+            <select class="admin-input admin-select" data-gc-hud-select id="admin-balance-exchange-enabled" data-balance-key="exchange_enabled">
               <option value="1">{{ T("admin_yes", "Ja") }}</option>
               <option value="0">{{ T("admin_no", "Nein") }}</option>
             </select>
@@ -549,7 +540,7 @@
           </div>
           <div class="admin-field">
             <label class="admin-label" for="admin-balance-fuel-enabled">{{ T("admin_balance_fuel_exchange_enabled", "Brennzellen-Tausch") }}</label>
-            <select class="admin-input" id="admin-balance-fuel-enabled" data-balance-key="fuel_exchange_enabled">
+            <select class="admin-input admin-select" data-gc-hud-select id="admin-balance-fuel-enabled" data-balance-key="fuel_exchange_enabled">
               <option value="1">{{ T("admin_yes", "Ja") }}</option>
               <option value="0">{{ T("admin_no", "Nein") }}</option>
             </select>

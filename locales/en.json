@@ -100,6 +100,7 @@
   "admin_inventory_grant_title": "Grant loot boxes",
   "admin_inventory_grant_btn": "Grant",
   "admin_inventory_amount": "Amount",
+  "admin_inventory_item_label": "Container",
   "admin_inventory_grant_ok": "Loot box granted",
   "admin_inventory_grant_all_title": "Loot boxes for all players",
   "admin_inventory_grant_all_hint": "Grants containers to every registered player account.",

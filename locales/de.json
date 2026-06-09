@@ -108,6 +108,7 @@
   "admin_inventory_grant_title": "Lootboxen vergeben",
   "admin_inventory_grant_btn": "Vergeben",
   "admin_inventory_amount": "Anzahl",
+  "admin_inventory_item_label": "Container",
   "admin_inventory_grant_ok": "Lootbox vergeben",
   "admin_inventory_grant_all_title": "Lootboxen an alle Spieler",
   "admin_inventory_grant_all_hint": "Vergibt Container an jeden registrierten Spieler-Account.",
