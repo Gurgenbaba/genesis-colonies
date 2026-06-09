@@ -99,6 +99,7 @@ def _shift_queue_times(
     reduction_sec: float,
     now: float,
 ) -> float:
+    """Shift research/shipyard queue head job (and followers) by up to reduction_sec."""
     if not rows or reduction_sec <= 0:
         return 0.0
     first = rows[0]
@@ -126,6 +127,89 @@ def _shift_queue_times(
     return actual
 
 
+def apply_build_queue_booster(
+    conn,
+    user_id: int,
+    planet_id: int,
+    boost_seconds: int,
+    *,
+    now: Optional[float] = None,
+) -> Optional[Effect]:
+    """
+    Apply a build-time booster to the full build queue on ``planet_id``.
+
+    Shifts every queued job earlier by ``effective_shift`` where:
+      effective_shift = min(boost_seconds, last_finish_time - now)
+
+    The booster is considered fully applied when the queue had jobs; callers
+    report ``seconds_reduced`` as the nominal ``boost_seconds`` even when the
+    queue had less remaining time than the booster duration.
+    """
+    from .models import get_build_queue_rows
+    from .queue_engine import finish_due_work_once
+
+    ts = float(now if now is not None else time.time())
+    pid = int(planet_id)
+    uid = int(user_id)
+    boost = max(0, int(boost_seconds))
+    if boost <= 0:
+        return None
+
+    # Use caller conn — never open a parallel writer during inventory mutations.
+    finish_due_work_once(
+        uid,
+        pid,
+        conn=conn,
+        source="inventory_use",
+        dedup=False,
+        recalc_ranks=False,
+    )
+    rows = list(get_build_queue_rows(pid, conn=conn))
+    if not rows:
+        return None
+
+    last_finish = float(rows[-1]["finish_time"] or 0)
+    effective_shift = min(float(boost), max(0.0, last_finish - ts))
+    if effective_shift <= 0:
+        return None
+
+    cur = conn.cursor()
+    for row in rows:
+        start = float(row["start_time"] or 0)
+        finish = float(row["finish_time"] or 0)
+        cur.execute(
+            """
+            UPDATE build_queue
+            SET start_time = ?, finish_time = ?
+            WHERE id = ?;
+            """,
+            (start - effective_shift, finish - effective_shift, int(row["id"])),
+        )
+
+    finish_due_work_once(
+        uid,
+        pid,
+        conn=conn,
+        source="inventory_use",
+        dedup=False,
+        recalc_ranks=False,
+    )
+
+    return {
+        "kind": "time_boost",
+        "target": "build",
+        "seconds_reduced": boost,
+        "seconds_shifted": int(effective_shift),
+    }
+
+
+def _is_build_booster_item(item_key: str) -> bool:
+    from .inventory_catalog import BOOSTER_QUEUE_TARGET
+
+    key = str(item_key or "")
+    return BOOSTER_QUEUE_TARGET.get(key) == "build"
+
+
 def _apply_build_time_boost(
     planet_id: int,
     user_id: int,
@@ -134,27 +218,13 @@ def _apply_build_time_boost(
     conn,
     now: Optional[float] = None,
 ) -> Optional[Effect]:
-    from .models import get_build_queue_rows
-    from .queue_engine import finish_active_planet_due_work
-
-    ts = float(now if now is not None else time.time())
-    finish_active_planet_due_work(int(user_id), int(planet_id), conn, source="inventory_use")
-    rows = get_build_queue_rows(int(planet_id), conn=conn)
-    if not rows:
-        return None
-    reduced = _shift_queue_times(
+    return apply_build_queue_booster(
         conn,
-        table="build_queue",
-        id_col="id",
-        start_col="start_time",
-        finish_col="finish_time",
-        rows=rows,
-        reduction_sec=float(seconds),
-        now=ts,
+        int(user_id),
+        int(planet_id),
+        int(seconds),
+        now=now,
     )
-    if reduced <= 0:
-        return None
-    return {"kind": "time_boost", "target": "build", "seconds_reduced": int(reduced)}
 
 
 def _apply_research_time_boost(
@@ -453,7 +523,10 @@ def use_inventory_item(
         effects.append(effect)
 
     if consumed <= 0:
-        return False, "no_effect_target", None
+        fail_reason = "no_effect_target"
+        if _is_build_booster_item(key):
+            fail_reason = "no_build_queue"
+        return False, fail_reason, None
 
     merged = _merge_effects(effects)
     inventory = build_inventory_state(user_id, conn=conn)

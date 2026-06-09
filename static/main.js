@@ -6201,6 +6201,18 @@
     return t(effect.message_key, effect.message_key, params);
   }
 
+  function inventoryUseReasonText(reason) {
+    const map = {
+      no_build_queue: t("inv_error_no_build_queue", "Keine Bauaufträge in der Warteschlange."),
+      no_effect_target: t("inv_error_no_effect_target", "Kein gültiges Ziel für dieses Item."),
+      insufficient_items: t("inv_error_insufficient_items", "Nicht genug Items im Inventar."),
+      item_not_usable: t("inv_error_item_not_usable", "Dieses Item kann nicht benutzt werden."),
+      invalid_item: t("inv_error_invalid_item", "Unbekanntes Item."),
+      inventory_unavailable: t("inv_unavailable", "Inventar ist derzeit nicht verfügbar."),
+    };
+    return map[reason] || t("msg_generic_error", "Aktion fehlgeschlagen.");
+  }
+
   function renderInventoryEffect(effect) {
     const panel = document.getElementById("inventory-rewards-panel");
     const msgEl = document.querySelector("[data-inventory-effect-message]");
@@ -6388,12 +6400,17 @@
             _inventoryLastState = res.inventory || _inventoryLastState;
             patchInventoryDom(_inventoryLastState);
           } else {
-            console.warn("[GC] inventory use failed:", res?.reason);
+            const reason = res?.reason || "generic";
+            console.warn("[GC] inventory use failed:", reason);
+            showNotify(inventoryUseReasonText(reason), "error");
             patchInventoryDom(_inventoryLastState || parseInventoryPageState());
           }
         } catch (err) {
           console.warn("[GC] inventory use error", err);
+          showNotify(inventoryUseReasonText("generic"), "error");
           patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+        } finally {
+          useBtn.disabled = false;
         }
         return;
       }
@@ -6421,12 +6438,17 @@
             _inventoryLastState = res.inventory || _inventoryLastState;
             patchInventoryDom(_inventoryLastState);
           } else {
-            console.warn("[GC] inventory craft failed:", res?.reason);
+            const reason = res?.reason || "generic";
+            console.warn("[GC] inventory craft failed:", reason);
+            showNotify(inventoryUseReasonText(reason), "error");
             patchInventoryDom(_inventoryLastState || parseInventoryPageState());
           }
         } catch (err) {
           console.warn("[GC] inventory craft error", err);
+          showNotify(inventoryUseReasonText("generic"), "error");
           patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+        } finally {
+          craftBtn.disabled = false;
         }
         return;
       }

@@ -1457,6 +1457,9 @@ def api_inventory_use_item():
     from game.planet_evolution.repository import get_context_planet
 
     conn = db()
+    ok = False
+    reason = "generic"
+    result = None
     try:
         if not inventory_schema_ready(conn):
             state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_use")
@@ -1472,17 +1475,19 @@ def api_inventory_use_item():
             amount,
             conn=conn,
         )
-        if not ok:
+        if ok:
+            commit(conn)
+        else:
             rollback(conn)
-            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_use")
-            return jsonify({"ok": False, "reason": reason, "state": state}), 400
-
-        commit(conn)
     except Exception:
         rollback(conn)
         raise
     finally:
         conn.close()
+
+    if not ok:
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_use")
+        return jsonify({"ok": False, "reason": reason, "state": state}), 400
 
     state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_use")
     resp = {

@@ -115,33 +115,108 @@ def test_resource_pack_credits_and_consumes(inventory_use_db):
 
 
 def test_build_booster_reduces_queue_time(inventory_use_db):
+    """Legacy alias — first job with 2h remaining, 15m booster."""
+    test_build_booster_applies_to_queued_build_job(inventory_use_db)
+
+
+def test_build_booster_applies_to_queued_build_job(inventory_use_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    now = time.time()
+    add_build_job(pid, "metal_mine", now - 10, now + 7200, conn=conn)
+    grant_inventory_item(uid, "booster_build_1h", 1, conn=conn)
+    conn.commit()
+
+    finish_before = float(
+        conn.execute(
+            "SELECT finish_time FROM build_queue WHERE planet_id = ? ORDER BY finish_time ASC LIMIT 1;",
+            (pid,),
+        ).fetchone()["finish_time"]
+    )
+
+    begin_write_transaction(conn)
+    ok, reason, result = use_inventory_item(uid, pid, "booster_build_1h", 1, conn=conn)
+    assert ok, reason
+    commit(conn)
+
+    finish_after = float(
+        conn.execute(
+            "SELECT finish_time FROM build_queue WHERE planet_id = ? ORDER BY finish_time ASC LIMIT 1;",
+            (pid,),
+        ).fetchone()["finish_time"]
+    )
+    assert finish_after <= finish_before - 3500
+    assert int((result or {}).get("effect", {}).get("seconds_reduced") or 0) == 3600
+    conn.close()
+
+
+def test_build_booster_applies_to_waiting_second_job(inventory_use_db):
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
     pid = int(planet["id"])
     now = time.time()
     add_build_job(pid, "metal_mine", now - 10, now + 3600, conn=conn)
-    grant_inventory_item(uid, "booster_build_15m", 1, conn=conn)
+    add_build_job(pid, "crystal_mine", now + 3600, now + 7200, conn=conn)
+    grant_inventory_item(uid, "booster_build_1h", 1, conn=conn)
     conn.commit()
 
-    row_before = conn.execute(
-        "SELECT finish_time FROM build_queue WHERE planet_id = ? ORDER BY finish_time ASC LIMIT 1;",
-        (pid,),
-    ).fetchone()
-    finish_before = float(row_before["finish_time"])
+    second_before = float(
+        conn.execute(
+            """
+            SELECT finish_time FROM build_queue
+            WHERE planet_id = ? ORDER BY finish_time DESC LIMIT 1;
+            """,
+            (pid,),
+        ).fetchone()["finish_time"]
+    )
 
     begin_write_transaction(conn)
-    ok, reason, result = use_inventory_item(uid, pid, "booster_build_15m", 1, conn=conn)
+    ok, reason, _ = use_inventory_item(uid, pid, "booster_build_1h", 1, conn=conn)
     assert ok, reason
     commit(conn)
 
-    row_after = conn.execute(
-        "SELECT finish_time FROM build_queue WHERE planet_id = ? ORDER BY finish_time ASC LIMIT 1;",
+    last_row = conn.execute(
+        """
+        SELECT finish_time FROM build_queue
+        WHERE planet_id = ? ORDER BY finish_time DESC LIMIT 1;
+        """,
         (pid,),
     ).fetchone()
-    finish_after = float(row_after["finish_time"])
-    assert finish_after <= finish_before - 800
-    assert int((result or {}).get("effect", {}).get("seconds_reduced") or 0) >= 800
+    assert last_row is not None
+    second_after = float(last_row["finish_time"])
+    assert second_after <= second_before - 3500
+    conn.close()
+
+
+def test_build_booster_consumed_even_if_remaining_time_shorter(inventory_use_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    now = time.time()
+    add_build_job(pid, "metal_mine", now - 10, now + 2400, conn=conn)
+    grant_inventory_item(uid, "booster_build_1h", 1, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, result = use_inventory_item(uid, pid, "booster_build_1h", 1, conn=conn)
+    assert ok, reason
+    commit(conn)
+
+    booster_row = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, "booster_build_1h"),
+    ).fetchone()
+    assert booster_row is None
+    assert int((result or {}).get("effect", {}).get("seconds_reduced") or 0) == 3600
+    queue_count = conn.execute(
+        "SELECT COUNT(*) AS c FROM build_queue WHERE planet_id = ?;",
+        (pid,),
+    ).fetchone()["c"]
+    assert int(queue_count) == 0
     conn.close()
 
 
@@ -157,7 +232,7 @@ def test_build_booster_not_consumed_without_job(inventory_use_db):
     ok, reason, _ = use_inventory_item(uid, pid, "booster_build_5m", 1, conn=conn)
     rollback(conn)
     assert not ok
-    assert reason == "no_effect_target"
+    assert reason == "no_build_queue"
 
     amt = conn.execute(
         "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
@@ -165,6 +240,24 @@ def test_build_booster_not_consumed_without_job(inventory_use_db):
     ).fetchone()
     assert int(amt["amount"]) == 1
     conn.close()
+
+
+def test_use_item_api_does_not_hang_on_build_booster_error(inventory_use_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_use_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "booster_build_1h", 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    r = client.post(
+        "/api/inventory/use-item",
+        json={"item_key": "booster_build_1h", "amount": 1},
+    )
+    assert r.status_code == 400
+    payload = r.get_json()
+    assert payload["ok"] is False
+    assert payload["reason"] == "no_build_queue"
+    assert "state" in payload
 
 
 def test_research_booster_reduces_research_time(inventory_use_db):
