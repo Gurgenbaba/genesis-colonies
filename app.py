@@ -1423,6 +1423,8 @@ def api_inventory_open_container():
         "reason": "container_open_ok",
         "rewards": (result or {}).get("rewards") or [],
         "roll_preview": (result or {}).get("roll_preview") or [],
+        "winning_index": int((result or {}).get("winning_index") or 0),
+        "winning_reward": (result or {}).get("winning_reward") or {},
         "inventory": (result or {}).get("inventory") or {},
         "opened": (result or {}).get("opened") or 0,
         "container_key": (result or {}).get("container_key") or item_key,

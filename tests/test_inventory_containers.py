@@ -516,6 +516,14 @@ def test_open_grants_defense_to_context_planet(inventory_db, monkeypatch):
     conn.close()
 
 
+def _preview_matches_winning(preview_entry, winning_reward):
+    assert preview_entry["key"] == winning_reward["preview_key"]
+    assert int(preview_entry["amount"]) == int(winning_reward["amount"])
+    assert preview_entry["rarity"] == winning_reward["rarity"]
+    assert preview_entry["type"] == winning_reward["type"]
+    assert preview_entry["icon"] == winning_reward["icon"]
+
+
 def test_open_container_returns_roll_preview(inventory_db, monkeypatch):
     client, uid, _ = _login_client(inventory_db, monkeypatch)
     conn = db()
@@ -538,6 +546,125 @@ def test_open_container_returns_roll_preview(inventory_db, monkeypatch):
     assert len(data["roll_preview"]) >= 20
 
 
+    assert "roll_preview" in data
+    assert len(data["roll_preview"]) >= 30
+
+
+def test_open_container_returns_winning_index(inventory_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "container_rare", 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    res = client.post(
+        "/api/inventory/open-container",
+        json={
+            "item_key": "container_rare",
+            "amount": 1,
+            "request_id": f"win-idx-{uuid.uuid4().hex}",
+        },
+    )
+    data = res.get_json()
+    assert data["ok"] is True
+    assert isinstance(data.get("winning_index"), int)
+    preview = data.get("roll_preview") or []
+    assert 0 <= data["winning_index"] < len(preview)
+
+
+def test_winning_index_points_to_real_reward(inventory_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "container_basic", 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    res = client.post(
+        "/api/inventory/open-container",
+        json={
+            "item_key": "container_basic",
+            "amount": 1,
+            "request_id": f"win-reward-{uuid.uuid4().hex}",
+        },
+    )
+    data = res.get_json()
+    assert data["ok"] is True
+    rewards = data.get("rewards") or []
+    winning = data.get("winning_reward") or {}
+    idx = int(data.get("winning_index") or 0)
+    preview = data.get("roll_preview") or []
+    assert preview
+    _preview_matches_winning(preview[idx], winning)
+    reward_keys = {str(r["reward_key"]) for r in rewards}
+    assert winning["key"] in reward_keys
+
+
+def test_roll_preview_contains_exact_winning_amount(inventory_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "container_rare", 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    res = client.post(
+        "/api/inventory/open-container",
+        json={
+            "item_key": "container_rare",
+            "amount": 1,
+            "request_id": f"win-amt-{uuid.uuid4().hex}",
+        },
+    )
+    data = res.get_json()
+    assert data["ok"] is True
+    idx = int(data["winning_index"])
+    winning = data["winning_reward"]
+    tile = (data["roll_preview"] or [])[idx]
+    assert int(tile["amount"]) == int(winning["amount"])
+    matching = [
+        r for r in (data.get("rewards") or [])
+        if str(r["reward_key"]) == str(winning["key"])
+    ]
+    assert matching
+    assert int(tile["amount"]) == int(matching[0]["amount"])
+
+
+def test_multiple_rewards_keep_primary_winning_reward(inventory_db, monkeypatch):
+    from game import inventory
+
+    rolls = iter(
+        [
+            {"reward_type": "resource", "reward_key": "metal", "amount": 5000},
+            {"reward_type": "item", "reward_key": "booster_build_15m", "amount": 1},
+        ]
+    )
+
+    def _fake_roll(pool, rng):
+        return dict(next(rolls))
+
+    monkeypatch.setattr(inventory, "_roll_single_reward", _fake_roll)
+
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "container_rare", 2, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, _, result = open_containers(uid, pid, "container_rare", 2, conn=conn, rng=random.Random(77))
+    assert ok
+    commit(conn)
+
+    rewards = (result or {}).get("rewards") or []
+    assert len(rewards) >= 2
+    winning = (result or {}).get("winning_reward") or {}
+    reward_keys = {str(r["reward_key"]) for r in rewards}
+    assert winning["key"] in reward_keys
+    idx = int((result or {}).get("winning_index") or 0)
+    _preview_matches_winning((result or {}).get("roll_preview")[idx], winning)
+    conn.close()
+
+
 def test_roll_preview_contains_real_reward(inventory_db, monkeypatch):
     client, uid, _ = _login_client(inventory_db, monkeypatch)
     conn = db()
@@ -557,12 +684,11 @@ def test_roll_preview_contains_real_reward(inventory_db, monkeypatch):
     assert data["ok"] is True
     rewards = data.get("rewards") or []
     assert rewards
-    main = rewards[0]
-    main_key = f"{main['reward_type']}:{main['reward_key']}"
-    preview_keys = {entry.get("key") for entry in (data.get("roll_preview") or [])}
-    assert main_key in preview_keys
-    assert (data["roll_preview"] or [])[-1]["key"] == main_key
-    assert int((data["roll_preview"] or [])[-1]["amount"]) == int(main.get("amount") or 0)
+    winning = data.get("winning_reward") or {}
+    idx = int(data.get("winning_index") or 0)
+    preview = data.get("roll_preview") or []
+    _preview_matches_winning(preview[idx], winning)
+    assert winning["key"] in {str(r["reward_key"]) for r in rewards}
 
 
 def test_open_container_response_still_has_state_and_inventory(inventory_db, monkeypatch):
@@ -611,8 +737,10 @@ def test_roll_preview_does_not_change_reward_outcome(inventory_db):
     assert (result_a or {}).get("rewards") == (result_b or {}).get("rewards")
     for result in (result_a, result_b):
         preview = (result or {}).get("roll_preview") or []
-        assert len(preview) >= 20
-        assert preview[-1]["key"] == f"{result['rewards'][0]['reward_type']}:{result['rewards'][0]['reward_key']}"
+        assert len(preview) >= 30
+        idx = int((result or {}).get("winning_index") or 0)
+        winning = (result or {}).get("winning_reward") or {}
+        _preview_matches_winning(preview[idx], winning)
     conn.close()
 
 

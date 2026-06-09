@@ -23,8 +23,10 @@ CONTAINER_BASIC_KEY = "container_basic"
 CONTAINER_BASIC_COOLDOWN_SEC = 24 * 60 * 60
 
 # GC-543 — lootbox roller strip length (UI-only; server rewards unchanged).
-ROLL_PREVIEW_MIN = 20
-ROLL_PREVIEW_MAX = 40
+ROLL_PREVIEW_MIN = 30
+ROLL_PREVIEW_MAX = 45
+ROLL_WINNING_INDEX_MIN = 26
+ROLL_WINNING_INDEX_MAX = 34
 
 CONTAINER_DISPLAY_ORDER: Tuple[str, ...] = (
     "container_basic",

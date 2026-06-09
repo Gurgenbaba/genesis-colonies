@@ -898,3 +898,15 @@ def test_gc551_card_artwork_dirs_png_only_no_svg():
         assert svgs == [], f"unexpected SVG in static/img/{sub}: {svgs[:3]}"
         pngs = list(folder.glob("*.png"))
         assert pngs, f"missing PNG artwork in static/img/{sub}"
+
+
+def test_main_js_lootbox_roll_accuracy_and_sound():
+    src = _read("static/main.js")
+    assert "function playLootboxOpenSound" in src
+    assert "winning_index" in src
+    assert "is-winning" in src
+    assert "/static/sounds/lootboxes/lootbox_sound.mp3" in src
+    assert "computeLootRollTarget" in src
+    assert "translate3d" in src.split("function animateLootRoll")[1].split("function showLootOpeningModal")[0]
+    assert (ROOT / "static/sounds/lootboxes/lootbox_sound.mp3").is_file()
+

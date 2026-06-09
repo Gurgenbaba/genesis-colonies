@@ -6363,6 +6363,15 @@
 
   let _lootModalState = null;
 
+  function playLootboxOpenSound() {
+    if (window.GC?.settings?.sound === false) return;
+    try {
+      const audio = new Audio("/static/sounds/lootboxes/lootbox_sound.mp3");
+      audio.volume = 0.45;
+      audio.play().catch(() => {});
+    } catch (_) {}
+  }
+
   function lootTileAmountLabel(tile) {
     const amt = parseInt(tile.amount, 10) || 0;
     const type = String(tile.type || "");
@@ -6401,23 +6410,42 @@
     return tiles.map((tile, i) => buildLootRollTileHtml(tile, i)).join("");
   }
 
-  function buildLootRewardResultHtml(reward) {
+  function buildLootRewardResultHtml(reward, primary) {
     const amt = parseInt(reward.amount, 10) || 0;
+    const rarity = reward.rarity || "common";
+    const primaryClass = primary ? " gc-loot-result-row--primary" : "";
     if (reward.reward_type === "resource") {
       const label = inventoryResourceLabel(reward.reward_key);
-      return `<div class="gc-loot-result-row rarity-${escapeHtml(reward.rarity || "common")}">
+      return `<div class="gc-loot-result-row rarity-${escapeHtml(rarity)}${primaryClass}">
         <span class="gc-loot-result-icon" aria-hidden="true">${reward.icon || "📦"}</span>
-        <span class="gc-loot-result-name">${escapeHtml(label)}</span>
-        <span class="gc-loot-result-amount gc-mono">+${amt.toLocaleString()}</span>
+        <div class="gc-loot-result-body">
+          <span class="gc-loot-result-name">${escapeHtml(label)}</span>
+          <span class="gc-loot-result-amount gc-mono">+${amt.toLocaleString()}</span>
+        </div>
+        <span class="gc-loot-result-rarity">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>
       </div>`;
     }
     const name = t(reward.name_key || `inv_item_${reward.reward_key}`, reward.reward_key);
     const icon = reward.icon || (reward.reward_type === "ship" ? "🛰️" : reward.reward_type === "defense" ? "🛡️" : "📦");
-    return `<div class="gc-loot-result-row rarity-${escapeHtml(reward.rarity || "common")}">
+    return `<div class="gc-loot-result-row rarity-${escapeHtml(rarity)}${primaryClass}">
       <span class="gc-loot-result-icon" aria-hidden="true">${icon}</span>
-      <span class="gc-loot-result-name">${escapeHtml(name)}</span>
-      <span class="gc-loot-result-amount gc-mono">×${amt.toLocaleString()}</span>
+      <div class="gc-loot-result-body">
+        <span class="gc-loot-result-name">${escapeHtml(name)}</span>
+        <span class="gc-loot-result-amount gc-mono">×${amt.toLocaleString()}</span>
+      </div>
+      <span class="gc-loot-result-rarity">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>
     </div>`;
+  }
+
+  function lootPrimaryRewardKey(payload) {
+    const wr = payload.winning_reward || {};
+    if (wr.preview_key) return String(wr.preview_key);
+    if (wr.key && wr.type) return `${wr.type}:${wr.key}`;
+    if (wr.key) return String(wr.key);
+    const rewards = payload.rewards || [];
+    if (!rewards.length) return "";
+    const r = rewards[0];
+    return `${r.reward_type}:${r.reward_key}`;
   }
 
   function canOpenContainerAgain(payload) {
@@ -6466,13 +6494,25 @@
 
     if (results) {
       const rewards = payload.rewards || [];
+      const primaryKey = lootPrimaryRewardKey(payload);
+      const card = modal.querySelector(".gc-loot-card");
+      if (card && payload.winning_reward?.rarity) {
+        card.classList.add(`gc-loot-card--win-${payload.winning_reward.rarity}`);
+      }
       results.innerHTML = `
-        <div class="gc-loot-results-title">${escapeHtml(t("inv_loot_modal_your_reward", "Deine Belohnung"))}</div>
-        <div class="gc-loot-results-grid">${rewards.map(buildLootRewardResultHtml).join("")}</div>
-        <div class="gc-loot-results-actions">
-          <button type="button" class="gc-btn gc-btn-primary gc-loot-to-inventory">${escapeHtml(t("inv_loot_modal_to_inventory", "Zum Inventar"))}</button>
-          ${canOpenContainerAgain(payload) ? `<button type="button" class="gc-btn gc-btn-secondary gc-loot-open-again">${escapeHtml(t("inv_loot_modal_open_again", "Noch einmal öffnen"))}</button>` : ""}
-          <button type="button" class="gc-btn gc-btn-ghost gc-loot-close-action">${escapeHtml(t("inv_loot_modal_close", "Schließen"))}</button>
+        <div class="gc-loot-results-panel">
+          <div class="gc-loot-results-title">${escapeHtml(t("inv_loot_modal_your_reward", "Deine Belohnung"))}</div>
+          <div class="gc-loot-results-grid">${rewards
+            .map((r) => {
+              const rk = `${r.reward_type}:${r.reward_key}`;
+              return buildLootRewardResultHtml(r, rk === primaryKey);
+            })
+            .join("")}</div>
+          <div class="gc-loot-results-actions">
+            <button type="button" class="gc-btn gc-btn-primary gc-loot-to-inventory">${escapeHtml(t("inv_loot_modal_to_inventory", "Zum Inventar"))}</button>
+            ${canOpenContainerAgain(payload) ? `<button type="button" class="gc-btn gc-btn-secondary gc-loot-open-again">${escapeHtml(t("inv_loot_modal_open_again", "Noch einmal öffnen"))}</button>` : ""}
+            <button type="button" class="gc-btn gc-btn-ghost gc-loot-close-action">${escapeHtml(t("inv_loot_modal_close", "Schließen"))}</button>
+          </div>
         </div>`;
       results.hidden = false;
     }
@@ -6496,6 +6536,15 @@
     }
   }
 
+  function computeLootRollTarget(strip, roller, winningIndex) {
+    const tiles = strip.querySelectorAll(".gc-loot-tile");
+    const tile = tiles[winningIndex];
+    if (!tile || !roller) return 0;
+    const tileCenter = tile.offsetLeft + tile.offsetWidth / 2;
+    const rollerCenter = roller.clientWidth / 2;
+    return rollerCenter - tileCenter;
+  }
+
   function animateLootRoll(modal, payload) {
     const strip = modal.querySelector(".gc-loot-strip");
     const roller = modal.querySelector(".gc-loot-roller");
@@ -6504,37 +6553,49 @@
       return;
     }
 
-    const tiles = strip.querySelectorAll(".gc-loot-tile");
-    const winnerIndex = Math.max(0, tiles.length - 1);
-    const firstTile = tiles[0];
-    const tileW = firstTile ? firstTile.offsetWidth + 8 : 148;
-    const rollerW = roller.clientWidth || 640;
-    const targetX = -(winnerIndex * tileW) + rollerW / 2 - tileW / 2;
+    playLootboxOpenSound();
 
-    const finish = () => {
-      strip.style.transition = "none";
-      strip.style.transform = `translateX(${targetX}px)`;
-      tiles[winnerIndex]?.classList.add("gc-loot-tile--winner");
-      revealLootRewards(modal, payload);
+    const winningIndex = Math.max(
+      0,
+      Math.min(
+        parseInt(payload.winning_index, 10) || 0,
+        (payload.roll_preview || []).length - 1
+      )
+    );
+
+    const runAnimation = () => {
+      const targetX = computeLootRollTarget(strip, roller, winningIndex);
+
+      const finish = () => {
+        strip.style.transition = "none";
+        strip.style.transform = `translate3d(${targetX}px, 0, 0)`;
+        strip.querySelectorAll(".gc-loot-tile.is-winning").forEach((el) => el.classList.remove("is-winning"));
+        strip.querySelector(`.gc-loot-tile[data-loot-tile-index="${winningIndex}"]`)?.classList.add("is-winning");
+        revealLootRewards(modal, payload);
+      };
+
+      if (_prefersReducedMotion) {
+        finish();
+        return;
+      }
+
+      strip.style.transform = "translate3d(0, 0, 0)";
+      strip.style.transition = "transform 2.4s cubic-bezier(0.12, 0.85, 0.18, 1)";
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          strip.style.transform = `translate3d(${targetX}px, 0, 0)`;
+        });
+      });
+
+      if (_lootModalState) {
+        _lootModalState.timerId = window.setTimeout(finish, 2400);
+        _lootModalState.skip = finish;
+      }
     };
 
-    if (_prefersReducedMotion) {
-      finish();
-      return;
-    }
-
-    strip.style.transform = "translateX(0)";
-    strip.style.transition = "transform 2.4s cubic-bezier(0.12, 0.85, 0.18, 1)";
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        strip.style.transform = `translateX(${targetX}px)`;
-      });
+      requestAnimationFrame(runAnimation);
     });
-
-    if (_lootModalState) {
-      _lootModalState.timerId = window.setTimeout(finish, 2400);
-      _lootModalState.skip = finish;
-    }
   }
 
   function showLootOpeningModal(payload) {
@@ -6553,20 +6614,23 @@
     modal.setAttribute("aria-modal", "true");
     modal.setAttribute("aria-label", t("inv_loot_modal_title", "Container geöffnet"));
     modal.innerHTML = `
-      <div class="gc-loot-card rarity-${escapeHtml(containerRarity)}">
-        <button type="button" class="gc-loot-close" aria-label="${escapeHtml(t("inv_loot_modal_close", "Schließen"))}" disabled>×</button>
+      <div class="gc-loot-card gc-loot-card--hud rarity-${escapeHtml(containerRarity)}">
+        <div class="gc-loot-card-corners" aria-hidden="true"></div>
+        <div class="gc-loot-card-scanlines" aria-hidden="true"></div>
+        <button type="button" class="gc-loot-close gc-btn gc-btn-ghost gc-btn-xs" aria-label="${escapeHtml(t("inv_loot_modal_close", "Schließen"))}" disabled>×</button>
         <div class="gc-loot-header">
-          <div class="gc-loot-title">${escapeHtml(t("inv_loot_modal_title", "Container geöffnet"))}</div>
-          <div class="gc-loot-subtitle">${escapeHtml(containerName)}</div>
+          <div class="gc-loot-title gc-mono">${escapeHtml(t("inv_loot_modal_title", "Container geöffnet"))}</div>
+          <div class="gc-loot-subtitle gc-mono rarity-${escapeHtml(containerRarity)}">${escapeHtml(containerName)}</div>
         </div>
         <div class="gc-loot-crate" aria-hidden="true"></div>
         <div class="gc-loot-roller">
+          <div class="gc-loot-roller-rail" aria-hidden="true"></div>
           <div class="gc-loot-marker" aria-hidden="true"></div>
           <div class="gc-loot-strip">${buildLootRollTiles(payload)}</div>
         </div>
-        <div class="gc-loot-status">${escapeHtml(t("inv_loot_modal_status", "Wird geöffnet…"))}</div>
+        <div class="gc-loot-status gc-mono">${escapeHtml(t("inv_loot_modal_status", "Wird geöffnet…"))}</div>
         <div class="gc-loot-results" hidden></div>
-        <button type="button" class="gc-btn-secondary gc-loot-skip">${escapeHtml(t("inv_loot_modal_skip", "Überspringen"))}</button>
+        <button type="button" class="gc-btn gc-btn-secondary gc-loot-skip">${escapeHtml(t("inv_loot_modal_skip", "Überspringen"))}</button>
       </div>`;
 
     root.appendChild(modal);
@@ -6628,6 +6692,7 @@
   GC.showLootOpeningModal = showLootOpeningModal;
   GC.revealLootRewards = revealLootRewards;
   GC.closeLootModal = closeLootModal;
+  GC.playLootboxOpenSound = playLootboxOpenSound;
 
   function renderInventoryRewards(rewards) {
     const panel = document.getElementById("inventory-rewards-panel");

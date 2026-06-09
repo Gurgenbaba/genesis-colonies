@@ -18,6 +18,8 @@ from .inventory_catalog import (
     GRANTABLE_ITEM_KEYS,
     ROLL_PREVIEW_MAX,
     ROLL_PREVIEW_MIN,
+    ROLL_WINNING_INDEX_MAX,
+    ROLL_WINNING_INDEX_MIN,
     admin_grant_catalog,
     container_image_path,
     is_known_item_key,
@@ -492,52 +494,98 @@ def _pool_entry_to_roll_preview(entry: LootEntry, rng: random.Random) -> Dict[st
     }
 
 
+_RARITY_RANK: Dict[str, int] = {
+    "common": 0,
+    "uncommon": 1,
+    "rare": 2,
+    "epic": 3,
+    "legendary": 4,
+    "mythic": 5,
+}
+
+
+def _pick_primary_reward(rewards: List[Reward]) -> Reward:
+    """Primary tile for the roller — highest rarity, then highest amount."""
+    positive = [r for r in rewards if int(r.get("amount") or 0) > 0]
+    if not positive:
+        return rewards[0] if rewards else {"reward_type": "resource", "reward_key": "metal", "amount": 0}
+
+    def _score(r: Reward) -> Tuple[int, int]:
+        rarity = str(r.get("rarity") or "common")
+        return (_RARITY_RANK.get(rarity, 0), int(r.get("amount") or 0))
+
+    return max(positive, key=_score)
+
+
+def _winning_reward_payload(reward: Reward) -> Dict[str, Any]:
+    entry = _reward_to_roll_preview_entry(reward)
+    rkey = str(reward.get("reward_key") or "")
+    return {
+        "key": rkey,
+        "preview_key": str(entry["key"]),
+        "name_key": str(entry["name_key"]),
+        "amount": int(entry["amount"]),
+        "rarity": str(entry["rarity"]),
+        "type": str(entry["type"]),
+        "icon": str(entry["icon"]),
+    }
+
+
 def build_roll_preview(
     rewards: List[Reward],
     pool: Sequence[LootEntry],
     rng: random.Random,
-) -> List[Dict[str, Any]]:
-    """UI-only roller strip: fake pool mix ending on the real main reward."""
+) -> Tuple[List[Dict[str, Any]], int, Dict[str, Any]]:
+    """UI-only roller strip; winning tile at winning_index matches the real primary reward."""
+    primary = _pick_primary_reward(rewards)
+    winning_entry = _reward_to_roll_preview_entry(primary)
+    winning_reward = _winning_reward_payload(primary)
+
     real_entries = [
         _reward_to_roll_preview_entry(r)
         for r in rewards
         if int(r.get("amount") or 0) > 0
     ]
-    if not real_entries:
-        real_entries = [_pool_entry_to_roll_preview(pool[0], rng)] if pool else []
+    other_reals = [e for e in real_entries if e["key"] != winning_entry["key"] or int(e["amount"]) != int(winning_entry["amount"])]
 
-    main_entry = real_entries[0]
-    other_reals = real_entries[1:]
     pool_entries = [e for e in pool if int(e.get("weight") or 0) > 0]
     if not pool_entries:
         pool_entries = list(pool)
-
-    total = rng.randint(ROLL_PREVIEW_MIN, ROLL_PREVIEW_MAX)
-    preview: List[Dict[str, Any]] = []
     weights = [int(e.get("weight") or 1) for e in pool_entries] if pool_entries else [1]
 
-    while len(preview) < max(1, total - 1):
+    total = rng.randint(ROLL_PREVIEW_MIN, ROLL_PREVIEW_MAX)
+    min_win = max(ROLL_WINNING_INDEX_MIN, int(total * 2 / 3))
+    max_win = min(ROLL_WINNING_INDEX_MAX, total - 1)
+    if min_win > max_win:
+        winning_index = total - 1
+    else:
+        winning_index = rng.randint(min_win, max_win)
+
+    preview: List[Dict[str, Any]] = []
+    for _ in range(total):
         if pool_entries:
             pick = rng.choices(pool_entries, weights=weights, k=1)[0]
             preview.append(_pool_entry_to_roll_preview(pick, rng))
         else:
-            preview.append(dict(main_entry))
+            preview.append(dict(winning_entry))
 
-    insert_slots = list(range(max(0, len(preview) - 1)))
-    rng.shuffle(insert_slots)
-    for idx, entry in zip(insert_slots, other_reals):
-        preview[idx] = entry
+    preview[winning_index] = dict(winning_entry)
+
+    open_slots = [i for i in range(total) if i != winning_index]
+    rng.shuffle(open_slots)
+    for idx, entry in zip(open_slots, other_reals):
+        preview[idx] = dict(entry)
 
     for entry in other_reals:
         if not any(
             p["key"] == entry["key"] and int(p["amount"]) == int(entry["amount"])
             for p in preview
         ):
-            pos = rng.randrange(max(1, len(preview)))
-            preview.insert(pos, entry)
+            replace_idx = rng.choice(open_slots) if open_slots else winning_index
+            if replace_idx != winning_index:
+                preview[replace_idx] = dict(entry)
 
-    preview.append(main_entry)
-    return preview
+    return preview, winning_index, winning_reward
 
 
 def _merge_rewards(rewards: List[Reward]) -> List[Reward]:
@@ -731,7 +779,7 @@ def open_containers(
     inventory = build_inventory_state(user_id, conn=conn)
     container_meta = item_catalog_entry(key)
     preview_rng = random.Random(roll_rng.randint(0, 2**31 - 1))
-    roll_preview = build_roll_preview(rewards, pool, preview_rng)
+    roll_preview, winning_index, winning_reward = build_roll_preview(rewards, pool, preview_rng)
     return True, "container_open_ok", {
         "opened": open_count,
         "container_key": key,
@@ -739,5 +787,7 @@ def open_containers(
         "container_rarity": container_meta["rarity"],
         "rewards": rewards,
         "roll_preview": roll_preview,
+        "winning_index": winning_index,
+        "winning_reward": winning_reward,
         "inventory": inventory,
     }
