@@ -100,6 +100,7 @@ def test_templates_import_progression_macros_with_context():
     assert "render_info_popover_trigger" in buildings
     assert "with context" in research
     assert "render_research_head_action" in research
+    assert "show_reqs" in research
     assert "render_hero_queue" in research
     assert "gc-bld-head-action-btn--busy" not in research
     assert "render_prog_identity" not in research

@@ -129,13 +129,25 @@
   <div class="gc-player-card-badges-section">
     <span class="gc-player-card-stat-label">{{ T("playercard_badges") }}</span>
     {% if card.get('badges') and card.get('badges')|length > 0 %}
-      <div class="gc-player-card-badges">
+      <div class="gc-player-card-badges gc-player-card-badges-showcase">
         {% for badge in card.get('badges') %}
-          <span class="gc-player-card-badge gc-player-card-badge-{{ badge.get('rarity', 'common') }}"
-                title="{{ T(badge.get('description_i18n_key', ''), badge.get('description_i18n_key', '')) }}">
-            <span class="gc-player-card-badge-icon" aria-hidden="true">{{ badge.get('icon', '★') }}</span>
-            <span class="gc-player-card-badge-name">{{ T(badge.get('name_i18n_key', ''), badge.get('name_i18n_key', '')) }}</span>
-          </span>
+          {% set badge_label = T(badge.get('name_i18n_key', ''), badge.get('name_i18n_key', '')) %}
+          {% set badge_desc = T(badge.get('description_i18n_key', ''), badge.get('description_i18n_key', '')) %}
+          <button type="button"
+                  class="gc-player-card-badge-tile gc-player-card-badge-zoom-btn gc-player-card-badge-{{ badge.get('rarity', 'common') }}"
+                  data-pc-badge-zoom
+                  data-badge-src="{{ badge.get('image_url') }}"
+                  data-badge-name="{{ badge_label }}"
+                  data-badge-desc="{{ badge_desc }}"
+                  aria-label="{{ T('playercard_badge_zoom', 'Abzeichen vergrößern') }}: {{ badge_label }}">
+            <img class="gc-player-card-badge-img"
+                 src="{{ badge.get('image_url') }}"
+                 alt=""
+                 loading="lazy"
+                 width="80"
+                 height="80">
+            <span class="gc-player-card-badge-name">{{ badge_label }}</span>
+          </button>
         {% endfor %}
       </div>
     {% else %}
@@ -145,13 +157,15 @@
 
   {% endif %}
 
-  {% if card.get('avatar_url') and not is_private %}
+  {% if not is_private %}
   <div class="gc-player-card-avatar-zoom"
+       data-pc-media-zoom-root
        data-pc-avatar-zoom-root
        hidden
        aria-hidden="true">
     <button type="button"
             class="gc-player-card-avatar-zoom-backdrop"
+            data-pc-media-zoom-close
             data-pc-avatar-zoom-close
             tabindex="-1"
             aria-label="{{ T('playercard_close') }}"></button>
@@ -160,8 +174,13 @@
            src=""
            alt=""
            referrerpolicy="no-referrer">
+      <figcaption class="gc-player-card-badge-zoom-caption" data-pc-media-zoom-caption hidden>
+        <span class="gc-player-card-badge-zoom-title" data-pc-media-zoom-title></span>
+        <span class="gc-player-card-badge-zoom-desc" data-pc-media-zoom-desc></span>
+      </figcaption>
       <button type="button"
               class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-avatar-zoom-close"
+              data-pc-media-zoom-close
               data-pc-avatar-zoom-close
               aria-label="{{ T('playercard_close') }}">✕</button>
     </figure>

@@ -121,22 +121,6 @@ PE_TRACK_DEFS: Tuple[Dict[str, Any], ...] = (
     },
 )
 
-ECONOMY_TRACK_DEFS: Tuple[Dict[str, Any], ...] = (
-    {
-        "key": "trader_hub",
-        "label_key": "techtree_economy_trader",
-        "description_key": "techtree_economy_trader_desc",
-        "status": "available",
-    },
-    {
-        "key": "resource_exchange",
-        "label_key": "techtree_economy_exchange",
-        "description_key": "techtree_economy_exchange_desc",
-        "status": "available",
-    },
-)
-
-
 # ---------------------------------------------------------------------------
 # Interne Helpers
 # ---------------------------------------------------------------------------
@@ -484,23 +468,6 @@ def _build_pe_items(planet_id: Optional[int]) -> List[Dict[str, Any]]:
     return items
 
 
-def _build_economy_items() -> List[Dict[str, Any]]:
-    return [
-        {
-            "key": track["key"],
-            "kind": "economy",
-            "label_key": track["label_key"],
-            "description_key": track.get("description_key"),
-            "level": 0,
-            "requirements": [],
-            "requirements_met": True,
-            "status": str(track.get("status") or "available"),
-            "effect_status": "active",
-        }
-        for track in ECONOMY_TRACK_DEFS
-    ]
-
-
 def _wrap_section(
     key: str,
     label_key: str,
@@ -580,7 +547,6 @@ def get_techtree_page_context(
         defense_stock=defense_stock,
     )
     pe_items = _build_pe_items(planet_id)
-    economy_items = _build_economy_items()
 
     sections = [
         _wrap_section(
@@ -621,14 +587,6 @@ def get_techtree_page_context(
             "techtree_pe_hint",
             "planet",
             pe_items,
-            default_collapsed=True,
-        ),
-        _wrap_section(
-            "economy",
-            "techtree_section_economy",
-            "techtree_economy_hint",
-            "economy",
-            economy_items,
             default_collapsed=True,
         ),
     ]

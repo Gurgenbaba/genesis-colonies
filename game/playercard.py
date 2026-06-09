@@ -41,10 +41,34 @@ _LAST_SAVE_TS: Dict[int, int] = {}
 
 ALLOWED_THEMES = frozenset({"cyan", "violet", "amber", "emerald", "rose"})
 
+# badge_key → static/img/badges/<stem>.png (higher tiers use upgraded art)
+BADGE_IMAGE_BY_KEY: Dict[str, str] = {
+    "founder": "founder",
+    "builder_1k": "builder",
+    "builder_10k": "architect",
+    "researcher_1k": "researcher",
+    "researcher_10k": "scientist",
+    "commander_5k": "commander",
+    "commander_50k": "legend",
+}
+BADGE_IMAGE_DEFAULT = "commander"
+
 _AVATAR_SCHEMES = frozenset({"http", "https"})
 _LOCAL_AVATAR_RE = re.compile(r"^/static/uploads/avatars/avatar_(\d+)\.webp$")
 _ALLOWED_AVATAR_MIME = frozenset({"image/png", "image/jpeg", "image/webp"})
 _AVATAR_STORAGE_REL = Path("static") / "uploads" / "avatars"
+
+
+def badge_image_static_path(badge_key: str) -> str:
+    """Public badge art under static/img/badges/."""
+    stem = BADGE_IMAGE_BY_KEY.get(str(badge_key or "").strip(), BADGE_IMAGE_DEFAULT)
+    return f"/static/img/badges/{stem}.png"
+
+
+def _enrich_badge_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(row)
+    out["image_url"] = badge_image_static_path(out.get("badge_key"))
+    return out
 
 
 def _now_ts() -> int:
@@ -516,7 +540,7 @@ def _list_unlocked_badges(player_id: int, conn=None) -> List[Dict[str, Any]]:
             """,
             (int(player_id),),
         )
-        return [dict(r) for r in cur.fetchall()]
+        return [_enrich_badge_row(dict(r)) for r in cur.fetchall()]
     finally:
         if own:
             c.close()

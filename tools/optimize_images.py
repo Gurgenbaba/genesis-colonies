@@ -12,7 +12,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 IMG_ROOT = ROOT / "static" / "img"
 
-CARD_DIRS = ("ships", "research", "defense", "buildings", "res")
+CARD_DIRS = ("ships", "research", "defense", "buildings", "res", "badges")
 CARD_MAX_WIDTH = 512
 PNG_COMPRESS_LEVEL = 9
 JPEG_CARD_QUALITY = 85

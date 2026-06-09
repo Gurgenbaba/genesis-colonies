@@ -39,7 +39,7 @@
             <p class="gc-player-card-bio-preview" id="pc-preview-bio">{{ form.get('bio') or '' }}</p>
           </div>
         </div>
-        <div class="gc-player-card-badges gc-player-card-badges-preview" id="pc-preview-badges" aria-live="polite"></div>
+        <div class="gc-player-card-badges gc-player-card-badges-showcase gc-player-card-badges-preview" id="pc-preview-badges" aria-live="polite"></div>
       </section>
 
       <section class="gc-player-card-fields">
@@ -107,11 +107,16 @@
                        name="badge_slot"
                        value="{{ bid }}"
                        data-pc-badge-id="{{ bid }}"
-                       data-pc-badge-icon="{{ badge.get('icon', '★') }}"
+                       data-pc-badge-image="{{ badge.get('image_url') }}"
                        data-pc-badge-name="{{ T(badge.get('name_i18n_key', ''), badge.get('name_i18n_key', '')) }}"
                        {% if bid == form.get('selected_badge_1') or bid == form.get('selected_badge_2') or bid == form.get('selected_badge_3') %}checked{% endif %}>
-                <span class="gc-player-card-badge-icon" aria-hidden="true">{{ badge.get('icon', '★') }}</span>
-                <span>{{ T(badge.get('name_i18n_key', ''), badge.get('name_i18n_key', '')) }}</span>
+                <img class="gc-player-card-badge-option-img"
+                     src="{{ badge.get('image_url') }}"
+                     alt=""
+                     loading="lazy"
+                     width="64"
+                     height="64">
+                <span class="gc-player-card-badge-option-name">{{ T(badge.get('name_i18n_key', ''), badge.get('name_i18n_key', '')) }}</span>
               </label>
             {% endfor %}
           </div>

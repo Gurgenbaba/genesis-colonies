@@ -26,6 +26,7 @@ from game.playercard import (
     _LAST_SAVE_TS,
     avatar_public_path,
     avatar_storage_path,
+    badge_image_static_path,
     build_public_card,
     ensure_player_card,
     ensure_player_card_tables,
@@ -754,3 +755,55 @@ def test_badge_seed_idempotent_via_service(temp_db):
         assert n1 >= 7
     finally:
         conn.close()
+
+
+def test_badge_image_static_paths():
+    assert badge_image_static_path("founder") == "/static/img/badges/founder.png"
+    assert badge_image_static_path("builder_10k") == "/static/img/badges/architect.png"
+    assert badge_image_static_path("commander_50k") == "/static/img/badges/legend.png"
+
+
+def test_unlocked_badges_include_image_url(temp_db):
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("badge_img_user")
+    card, err = build_public_card(pid, viewer_id=pid, sync_badges=True)
+    assert err is None
+    unlocked = card.get("unlocked_badges") or []
+    assert unlocked
+    assert all(b.get("image_url", "").startswith("/static/img/badges/") for b in unlocked)
+
+
+def test_playercard_view_includes_badge_zoom_markers(temp_db, app_client):
+    init_db()
+    _close_db_conn()
+    pid, login_name = _create_player("badge_zoom_user")
+    conn = db()
+    try:
+        build_public_card(pid, viewer_id=pid, sync_badges=True, conn=conn)
+        founder = conn.execute(
+            "SELECT id FROM player_card_badges WHERE badge_key = 'founder' LIMIT 1"
+        ).fetchone()
+        assert founder
+        conn.execute(
+            "UPDATE player_cards SET selected_badge_1 = ? WHERE player_id = ?",
+            (int(founder["id"]), int(pid)),
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    client = app_client
+    login = client.post(
+        "/login",
+        data={"username": login_name, "password": "test-pass-123"},
+        follow_redirects=True,
+    )
+    assert login.status_code in (200, 302)
+
+    res = client.get(f"/api/player-card/{pid}")
+    body = res.get_data(as_text=True)
+    assert res.status_code == 200
+    assert "data-pc-badge-zoom" in body
+    assert "data-pc-media-zoom-root" in body
+    assert "/static/img/badges/founder.png" in body

@@ -126,11 +126,14 @@
   {% set req_items = tech.requirements_items if tech.requirements_items is defined else [] %}
   {% set res_items = tech.resource_items if tech.resource_items is defined else [] %}
   {% set show_resources = tech.requirements_met and not tech.can_afford %}
-  {% if (not tech.requirements_met and req_items) or (show_resources and res_items) %}
+  {% set show_reqs = not tech.requirements_met and req_items %}
+  {% if show_reqs or (show_resources and res_items) %}
     <div class="research-card-blockers shipyard-blockers">
-      {% for item in req_items %}
-        {{ render_research_req_blocker(item) }}
-      {% endfor %}
+      {% if show_reqs %}
+        {% for item in req_items %}
+          {{ render_research_req_blocker(item) }}
+        {% endfor %}
+      {% endif %}
       {% if show_resources %}
         {% for item in res_items if not item.met %}
           {{ render_shipyard_resource_blocker(item.key, item.need, item.have) }}
@@ -273,25 +276,25 @@
               class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-research status-pill-icon-btn"
               disabled
               title="{{ lock_title }}"
-              aria-label="{{ lock_title }}"><span aria-hidden="true">⚠</span></button>
+              aria-label="{{ lock_title }}"><span class="gc-bld-head-action-icon">⚠</span></button>
     {% elif queue_full %}
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-research"
               disabled
               aria-disabled="true"
               title="{{ T('research_btn_queue_full', 'Forschungsliste voll') }}"
-              aria-label="{{ T('research_btn_queue_full', 'Forschungsliste voll') }}"><span aria-hidden="true">🔒</span></button>
+              aria-label="{{ T('research_btn_queue_full', 'Forschungsliste voll') }}"><span class="gc-bld-head-action-icon">🔒</span></button>
     {% elif not can_afford %}
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-research"
               disabled
               title="{{ T('research_not_enough_resources') }}"
-              aria-label="{{ T('research_not_enough_resources') }}"><span aria-hidden="true">+</span></button>
+              aria-label="{{ T('research_not_enough_resources') }}"><span class="gc-bld-head-action-icon">+</span></button>
     {% else %}
       <a href="{{ url_for('research_start', tech_key=tech.key) }}"
          class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-research"
          title="{{ _action_label }}"
-         aria-label="{{ _action_label }}"><span aria-hidden="true">+</span></a>
+         aria-label="{{ _action_label }}"><span class="gc-bld-head-action-icon">+</span></a>
     {% endif %}
   </div>
 {% endmacro %}
@@ -339,13 +342,15 @@
       <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero tech-level-current" title="{{ T('buildings_col_level') }}">
         {{ curr_lvl|fmt_int }}→{{ target_lvl|fmt_int }}
       </span>
-      {{ render_hero_time_chip(tech.queue_job if tech.queue_job is defined else none, tech.time_seconds, 'research', T('research_col_time')) }}
       <div class="gc-bld-card-hero-title">
         <div class="gc-bld-card-title-wrap">
           <h3 class="gc-bld-card-title">{{ tech_label }}</h3>
           {{ render_info_popover_trigger(tech_desc) }}
         </div>
-        {{ render_research_head_action(tech, rq_summary, queue_full) }}
+        <div class="gc-bld-hero-action-col">
+          {{ render_hero_time_chip(tech.queue_job if tech.queue_job is defined else none, tech.time_seconds, 'research', T('research_col_time')) }}
+          {{ render_research_head_action(tech, rq_summary, queue_full) }}
+        </div>
       </div>
     </div>
 
@@ -398,10 +403,6 @@
 
     <p class="section-hint hint">
       {{ T("research_hint_intro") }}
-      {% set tt = T("research_techtree_link") %}
-      <a href="{{ url_for('techtree_view') }}" class="research-techtree-link">
-        → {{ tt if tt != "research_techtree_link" else "Tech-Tree anzeigen" }}
-      </a>
     </p>
   </header>
 

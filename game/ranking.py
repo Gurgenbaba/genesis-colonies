@@ -1021,13 +1021,13 @@ def _ranking_social_select_and_join(conn) -> Tuple[str, str]:
         if table_exists(conn, "player_card_badges"):
             select_parts.extend(
                 [
-                    "b1.icon AS badge1_icon",
+                    "b1.badge_key AS badge1_badge_key",
                     "b1.rarity AS badge1_rarity",
                     "b1.name_i18n_key AS badge1_key",
-                    "b2.icon AS badge2_icon",
+                    "b2.badge_key AS badge2_badge_key",
                     "b2.rarity AS badge2_rarity",
                     "b2.name_i18n_key AS badge2_key",
-                    "b3.icon AS badge3_icon",
+                    "b3.badge_key AS badge3_badge_key",
                     "b3.rarity AS badge3_rarity",
                     "b3.name_i18n_key AS badge3_key",
                 ]
@@ -1042,9 +1042,9 @@ def _ranking_social_select_and_join(conn) -> Tuple[str, str]:
         else:
             select_parts.extend(
                 [
-                    "NULL AS badge1_icon", "NULL AS badge1_rarity", "NULL AS badge1_key",
-                    "NULL AS badge2_icon", "NULL AS badge2_rarity", "NULL AS badge2_key",
-                    "NULL AS badge3_icon", "NULL AS badge3_rarity", "NULL AS badge3_key",
+                    "NULL AS badge1_badge_key", "NULL AS badge1_rarity", "NULL AS badge1_key",
+                    "NULL AS badge2_badge_key", "NULL AS badge2_rarity", "NULL AS badge2_key",
+                    "NULL AS badge3_badge_key", "NULL AS badge3_rarity", "NULL AS badge3_key",
                 ]
             )
     else:
@@ -1057,9 +1057,9 @@ def _ranking_social_select_and_join(conn) -> Tuple[str, str]:
                 "NULL AS card_badge_1",
                 "NULL AS card_badge_2",
                 "NULL AS card_badge_3",
-                "NULL AS badge1_icon", "NULL AS badge1_rarity", "NULL AS badge1_key",
-                "NULL AS badge2_icon", "NULL AS badge2_rarity", "NULL AS badge2_key",
-                "NULL AS badge3_icon", "NULL AS badge3_rarity", "NULL AS badge3_key",
+                "NULL AS badge1_badge_key", "NULL AS badge1_rarity", "NULL AS badge1_key",
+                "NULL AS badge2_badge_key", "NULL AS badge2_rarity", "NULL AS badge2_key",
+                "NULL AS badge3_badge_key", "NULL AS badge3_rarity", "NULL AS badge3_key",
             ]
         )
 
@@ -1099,13 +1099,18 @@ def _avatar_initial_from_name(name: Any) -> str:
 
 
 def _badge_from_row(raw: Dict[str, Any], slot: int) -> Optional[Dict[str, str]]:
-    icon = raw.get(f"badge{slot}_icon")
-    if not icon:
+    badge_key = raw.get(f"badge{slot}_badge_key")
+    name_key = raw.get(f"badge{slot}_key")
+    if not badge_key and not name_key:
         return None
+    from .playercard import badge_image_static_path
+
+    key = str(badge_key or "")
     return {
-        "icon": str(icon),
+        "badge_key": key,
+        "image_url": badge_image_static_path(key) if key else "",
         "rarity": str(raw.get(f"badge{slot}_rarity") or "common"),
-        "name_key": str(raw.get(f"badge{slot}_key") or ""),
+        "name_key": str(name_key or ""),
     }
 
 

@@ -4,7 +4,7 @@
 
 <div class="gc-page techtree-page" id="techtree-page">
 
-  <header class="gc-page-header section-header">
+  <header class="section-header techtree-header">
     {% set ttl = T("techtree_title") %}
     <h2 class="section-title">
       {{ ttl if ttl != "techtree_title" else "Tech-Tree" }}
@@ -14,12 +14,6 @@
     <p class="section-hint hint">
       {{ hint if hint != "techtree_hint" else "Strategisches Entwicklungsarchiv deiner Kolonie — Gebäude, Forschung, Flotte und Planet Evolution." }}
     </p>
-
-    <div class="tech-nav-links">
-      <a href="{{ url_for('buildings_view') }}">← {{ T("nav_buildings") }}</a>
-      &nbsp;·&nbsp;
-      <a href="{{ url_for('research_view') }}">{{ T("nav_research") }} →</a>
-    </div>
   </header>
 
   {% set sections = (techtree_sections if techtree_sections is defined and techtree_sections else []) %}
@@ -72,7 +66,6 @@
               aria-expanded="{{ 'false' if collapsed else 'true' }}"
               aria-controls="techtree-section-body-{{ skey }}">
               <span class="techtree-section-chevron" aria-hidden="true"></span>
-              <span class="techtree-section-icon techtree-section-icon--{{ section.icon or 'default' }}" aria-hidden="true"></span>
               <span class="techtree-section-title">{{ T(section.label_key, skey) }}</span>
               <span class="techtree-section-progress">
                 {{ (section.progress_unlocked or 0)|fmt_int }} / {{ (section.progress_total or 0)|fmt_int }}
@@ -107,11 +100,19 @@
 
                   <div class="tech-card-head">
                     {% if item.icon %}
-                      <img
-                        src="{{ url_for('static', filename=item.icon) }}"
-                        alt=""
-                        class="tech-card-icon"
-                        loading="lazy">
+                      {% set _tech_icon_src = url_for('static', filename=item.icon) %}
+                      <button type="button"
+                              class="tech-card-icon-btn"
+                              data-techtree-img-zoom
+                              data-img-src="{{ _tech_icon_src }}"
+                              data-img-title="{{ ilabel }}"
+                              aria-label="{{ T('techtree_img_zoom', 'Bild vergrößern') }}: {{ ilabel }}">
+                        <img
+                          src="{{ _tech_icon_src }}"
+                          alt=""
+                          class="tech-card-icon"
+                          loading="lazy">
+                      </button>
                     {% endif %}
 
                     <div class="tech-card-head-text">
@@ -207,6 +208,29 @@
         <p class="tech-empty">{{ T("techtree_empty_buildings") }}</p>
       </div>
     {% endif %}
+  </div>
+
+  <div class="gc-player-card-avatar-zoom gc-techtree-media-zoom"
+       data-techtree-media-zoom-root
+       hidden
+       aria-hidden="true">
+    <button type="button"
+            class="gc-player-card-avatar-zoom-backdrop"
+            data-techtree-media-zoom-close
+            tabindex="-1"
+            aria-label="{{ T('playercard_close', 'Schließen') }}"></button>
+    <figure class="gc-player-card-avatar-zoom-panel gc-techtree-media-zoom-panel">
+      <img class="gc-player-card-avatar-zoom-img gc-techtree-media-zoom-img"
+           src=""
+           alt="">
+      <figcaption class="gc-techtree-media-zoom-caption">
+        <span class="gc-techtree-media-zoom-title" data-techtree-media-zoom-title></span>
+      </figcaption>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-avatar-zoom-close"
+              data-techtree-media-zoom-close
+              aria-label="{{ T('playercard_close', 'Schließen') }}">✕</button>
+    </figure>
   </div>
 </div>
 

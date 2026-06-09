@@ -655,7 +655,7 @@ def test_ranking_includes_badges_when_public(temp_db):
     rows = get_sorted_ranking_entries(limit=10)
     row = next(r for r in rows if r["player_id"] == pid)
     assert len(row.get("badges") or []) >= 1
-    assert row["badges"][0]["icon"]
+    assert row["badges"][0]["image_url"].startswith("/static/img/badges/")
 
 
 def test_ranking_invalid_avatar_url_rejected(temp_db):

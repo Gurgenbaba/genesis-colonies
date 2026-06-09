@@ -43,6 +43,11 @@
     {{ T("nav_research") }}
   </a>
 
+  <a href="{{ url_for('techtree_view') }}"
+     class="gc-nav-link {% if request.endpoint == 'techtree_view' %}active{% endif %}">
+    {{ T("nav_techtree", "Tech-Tree") }}
+  </a>
+
   <a href="{{ url_for('planet_evolution_view') }}"
      class="gc-nav-link {% if request.endpoint == 'planet_evolution_view' %}active{% endif %}">
     {{ T("nav_planet_evolution", "Planet Evolution") }}

@@ -57,7 +57,6 @@ def test_page_context_contains_all_sections(techtree_db):
         "buildings",
         "defense",
         "planet_evolution",
-        "economy",
     ]
 
 
