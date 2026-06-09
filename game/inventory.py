@@ -800,6 +800,7 @@ def open_containers(
         "container_key": key,
         "container_name_key": container_meta["name_key"],
         "container_rarity": container_meta["rarity"],
+        "container_image": str(container_meta.get("image") or container_image_path(key)),
         "rewards": rewards,
         "roll_preview": roll_preview,
         "winning_index": winning_index,

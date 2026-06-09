@@ -6226,6 +6226,21 @@
       );
     }
 
+    if (effect.kind === "exchange") {
+      const inName = t(`inv_${params.input_key}`, params.input_key || "");
+      const outName = t(`inv_${params.output_key}`, params.output_key || "");
+      const key = effect.message_key || "inv_effect_exchange";
+      return tf(
+        key,
+        {
+          ...params,
+          input_name: inName,
+          output_name: outName,
+        },
+        "%(input_amount)s× %(input_name)s zu %(output_amount)s× %(output_name)s verbessert."
+      );
+    }
+
     if (effect.message_key) {
       return tf(effect.message_key, params, effect.message_key);
     }
@@ -6300,7 +6315,10 @@
       no_research_queue: t("inv_error_no_research_queue", "Keine Forschung in der Warteschlange."),
       no_shipyard_queue: t("inv_error_no_shipyard_queue", "Keine Schiffsbauaufträge in der Warteschlange."),
       no_effect_target: t("inv_error_no_effect_target", "Kein gültiges Ziel für dieses Item."),
+      no_matching_research: t("inv_error_no_matching_research", "Keine passende aktive Forschung für diesen Datenkern."),
       insufficient_items: t("inv_error_insufficient_items", "Nicht genug Items im Inventar."),
+      insufficient_materials: t("inv_error_insufficient_materials", "Nicht genug Material im Inventar."),
+      invalid_recipe: t("inv_error_invalid_recipe", "Unbekanntes Rezept."),
       item_not_usable: t("inv_error_item_not_usable", "Dieses Item kann nicht benutzt werden."),
       invalid_item: t("inv_error_invalid_item", "Unbekanntes Item."),
       inventory_unavailable: t("inv_unavailable", "Inventar ist derzeit nicht verfügbar."),
@@ -6319,6 +6337,7 @@
       resource: "📦",
       planet_xp: "🪐",
       craft: "🧬",
+      exchange: "🧬",
       production_grant: "⚡",
       research_instant: "📜",
     };
@@ -6337,6 +6356,18 @@
     if (text) panel.hidden = false;
   }
 
+  function releaseInventoryActionBtn(btn) {
+    if (!btn) return;
+    btn.disabled = false;
+    btn.classList.remove("is-loading", "is-busy");
+  }
+
+  function lockInventoryActionBtn(btn) {
+    if (!btn) return;
+    btn.disabled = true;
+    btn.classList.add("is-loading", "is-busy");
+  }
+
   function buildInventoryItemRowHtml(item) {
     const rarity = item.rarity || "common";
     const name = t(item.name_key || `inv_item_${item.item_key}`, item.item_key);
@@ -6347,6 +6378,27 @@
           `<span class="inventory-craft-progress gc-mono">${amount.toLocaleString()} / ${parseInt(cp.required, 10) || 0} ${escapeHtml(t(cp.name_key, cp.output_key))}</span>`
       )
       .join("");
+    const exchangeProgress = (item.exchange_progress || [])
+      .map((ep) => {
+        const inputName = t(`inv_${ep.input_key}`, ep.input_key);
+        const outputName = t(`inv_${ep.output_key}`, ep.output_key);
+        return `<span class="inventory-exchange-progress gc-mono">${escapeHtml(
+          tf(
+            "inv_exchange_upgrade_hint",
+            {
+              input_amount: ep.required,
+              output_amount: ep.output_amount || 1,
+              input_name: inputName,
+              output_name: outputName,
+            },
+            "Upgrade möglich: %(input_amount)s %(input_name)s → %(output_amount)s %(output_name)s"
+          )
+        )}</span>`;
+      })
+      .join("");
+    const endgameHint = item.exchange_endgame
+      ? `<span class="inventory-endgame-hint">${escapeHtml(t("inv_dna_core_epic_hint", "Endgame-Material — später nutzbar"))}</span>`
+      : "";
     const collectibleBadge = item.collectible
       ? `<span class="inventory-collectible-badge">${escapeHtml(t("inv_collectible_badge", "Sammlerstück"))}</span>`
       : "";
@@ -6360,7 +6412,14 @@
           `<button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-craft-btn" data-inventory-craft="${escapeHtml(cp.recipe_key)}">${escapeHtml(t("inv_craft_btn", "Craften"))}</button>`
       )
       .join("");
-    return `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span><div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${amount.toLocaleString()}</span>${useBtn}${craftBtns}`;
+    const exchangeBtns = (item.exchange_progress || [])
+      .filter((ep) => ep.can_exchange)
+      .map(
+        (ep) =>
+          `<button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-exchange-btn" data-inventory-exchange="${escapeHtml(ep.recipe_key)}">${escapeHtml(t("inv_upgrade_btn", "Upgrade"))}</button>`
+      )
+      .join("");
+    return `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span><div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}${exchangeProgress}${endgameHint}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${amount.toLocaleString()}</span>${useBtn}${craftBtns}${exchangeBtns}`;
   }
 
   let _lootModalState = null;
@@ -6600,6 +6659,15 @@
     });
   }
 
+  function lootContainerImageUrl(payload) {
+    const fallback = "/static/img/lootboxes/Generic_Supply_Container.png";
+    const raw = String(payload.container_image || "").trim();
+    if (!raw) return fallback;
+    if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("/")) return raw;
+    const rel = raw.replace(/^static\//, "");
+    return `/static/${rel}`;
+  }
+
   function showLootOpeningModal(payload) {
     closeLootModal();
     const containerKey = payload.container_key || payload.item_key || "container_basic";
@@ -6608,6 +6676,7 @@
       containerKey
     );
     const containerRarity = payload.container_rarity || "common";
+    const crateImg = lootContainerImageUrl(payload);
     const root = document.getElementById("gc-loot-modal-root") || document.body;
 
     const modal = document.createElement("div");
@@ -6624,7 +6693,14 @@
           <div class="gc-loot-title gc-mono">${escapeHtml(t("inv_loot_modal_title", "Container geöffnet"))}</div>
           <div class="gc-loot-subtitle gc-mono rarity-${escapeHtml(containerRarity)}">${escapeHtml(containerName)}</div>
         </div>
-        <div class="gc-loot-crate" aria-hidden="true"></div>
+        <div class="gc-loot-crate rarity-${escapeHtml(containerRarity)}">
+          <div class="gc-loot-crate-glow inventory-loot-card-glow inventory-loot-card-glow--${escapeHtml(containerRarity)}" aria-hidden="true"></div>
+          <img class="gc-loot-crate-img"
+               src="${escapeHtml(crateImg)}"
+               alt="${escapeHtml(containerName)}"
+               decoding="async"
+               onerror="this.onerror=null;this.src='/static/img/lootboxes/Generic_Supply_Container.png';">
+        </div>
         <div class="gc-loot-roller">
           <div class="gc-loot-roller-rail" aria-hidden="true"></div>
           <div class="gc-loot-marker" aria-hidden="true"></div>
@@ -6829,7 +6905,7 @@
         if (!page || page.dataset.ready !== "1") return;
         const itemKey = useBtn.dataset.inventoryUse;
         if (!itemKey) return;
-        useBtn.disabled = true;
+        lockInventoryActionBtn(useBtn);
         try {
           const res = await GC.fetchGameAction("/api/inventory/use-item", {
             method: "POST",
@@ -6857,7 +6933,7 @@
           patchInventoryDom(_inventoryLastState || parseInventoryPageState());
         } finally {
           const liveBtn = document.querySelector(`[data-inventory-use="${CSS.escape(itemKey)}"]`);
-          if (liveBtn) liveBtn.disabled = false;
+          releaseInventoryActionBtn(liveBtn);
         }
         return;
       }
@@ -6868,7 +6944,7 @@
         if (!page || page.dataset.ready !== "1") return;
         const recipeKey = craftBtn.dataset.inventoryCraft;
         if (!recipeKey) return;
-        craftBtn.disabled = true;
+        lockInventoryActionBtn(craftBtn);
         try {
           const res = await GC.fetchGameAction("/api/inventory/craft", {
             method: "POST",
@@ -6896,7 +6972,46 @@
           patchInventoryDom(_inventoryLastState || parseInventoryPageState());
         } finally {
           const liveBtn = document.querySelector(`[data-inventory-craft="${CSS.escape(recipeKey)}"]`);
-          if (liveBtn) liveBtn.disabled = false;
+          releaseInventoryActionBtn(liveBtn);
+        }
+        return;
+      }
+
+      const exchangeBtn = ev.target.closest("[data-inventory-exchange]");
+      if (exchangeBtn && !exchangeBtn.disabled) {
+        const page = document.getElementById("inventory-page");
+        if (!page || page.dataset.ready !== "1") return;
+        const recipeKey = exchangeBtn.dataset.inventoryExchange;
+        if (!recipeKey) return;
+        lockInventoryActionBtn(exchangeBtn);
+        try {
+          const res = await GC.fetchGameAction("/api/inventory/exchange", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+            body: JSON.stringify({
+              recipe_key: recipeKey,
+              amount: 1,
+              request_id: `inv-exchange-${recipeKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            }),
+          });
+          if (res?.ok) {
+            applyActionState(res, "inventory_exchange");
+            renderInventoryEffect(res.effect || {});
+            applyInventoryActionResult(res);
+            void refreshInventoryFromServer();
+          } else {
+            const reason = res?.reason || "generic";
+            console.warn("[GC] inventory exchange failed:", reason);
+            showNotify(inventoryUseReasonText(reason), "error");
+            patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+          }
+        } catch (err) {
+          console.warn("[GC] inventory exchange error", err);
+          showNotify(inventoryUseReasonText("generic"), "error");
+          patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+        } finally {
+          const liveBtn = document.querySelector(`[data-inventory-exchange="${CSS.escape(recipeKey)}"]`);
+          releaseInventoryActionBtn(liveBtn);
         }
         return;
       }
@@ -6911,7 +7026,7 @@
       if (!itemKey) return;
 
       page.querySelectorAll("[data-inventory-open]").forEach((btn) => {
-        btn.disabled = true;
+        lockInventoryActionBtn(btn);
       });
 
       try {
@@ -6937,16 +7052,14 @@
           console.warn("[GC] inventory open failed:", reason);
           showNotify(inventoryUseReasonText(reason), "error");
           patchInventoryDom(_inventoryLastState || parseInventoryPageState());
-          page.querySelectorAll("[data-inventory-open]").forEach((btn) => {
-            btn.disabled = false;
-          });
         }
       } catch (err) {
         console.warn("[GC] inventory open error", err);
         showNotify(inventoryUseReasonText("generic"), "error");
         patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+      } finally {
         page.querySelectorAll("[data-inventory-open]").forEach((btn) => {
-          btn.disabled = false;
+          releaseInventoryActionBtn(btn);
         });
       }
     });

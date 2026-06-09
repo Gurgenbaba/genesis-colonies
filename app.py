@@ -1430,6 +1430,7 @@ def api_inventory_open_container():
         "container_key": (result or {}).get("container_key") or item_key,
         "container_name_key": (result or {}).get("container_name_key") or "",
         "container_rarity": (result or {}).get("container_rarity") or "common",
+        "container_image": (result or {}).get("container_image") or "",
         "state": state,
     }
     if request_id:
@@ -1566,6 +1567,70 @@ def api_inventory_craft():
         "crafted": (result or {}).get("crafted") or 0,
         "output_key": (result or {}).get("output_key") or recipe_key,
         "output_amount": (result or {}).get("output_amount") or 0,
+        "inventory": (result or {}).get("inventory") or {},
+        "state": state,
+    }
+    if request_id:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
+@app.route("/api/inventory/exchange", methods=["POST"])
+@require_login
+def api_inventory_exchange():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    recipe_key = str(data.get("recipe_key") or "").strip()
+    try:
+        amount = int(data.get("amount") or 1)
+    except (TypeError, ValueError):
+        amount = 0
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    from game.inventory import inventory_schema_ready
+    from game.inventory_use import exchange_inventory_item
+
+    conn = db()
+    try:
+        if not inventory_schema_ready(conn):
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_exchange")
+            return jsonify({"ok": False, "reason": "inventory_unavailable", "state": state}), 503
+
+        begin_write_transaction(conn)
+        ok, reason, result = exchange_inventory_item(
+            user_id,
+            recipe_key,
+            amount,
+            conn=conn,
+        )
+        if not ok:
+            rollback(conn)
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_exchange")
+            return jsonify({"ok": False, "reason": reason, "state": state}), 400
+
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_exchange")
+    exchange = (result or {}).get("exchange") or {}
+    resp = {
+        "ok": True,
+        "reason": reason,
+        "effect": (result or {}).get("effect") or {},
+        "exchanged": (result or {}).get("exchanged") or 0,
+        "exchange": exchange,
         "inventory": (result or {}).get("inventory") or {},
         "state": state,
     }

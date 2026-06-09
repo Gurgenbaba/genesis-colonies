@@ -14969,6 +14969,17 @@ a.gc-galaxy-coord-link:focus-visible {
   color: var(--gc-accent-warm, #ffb84d);
 }
 
+.inventory-exchange-progress {
+  font-size: 0.72rem;
+  color: var(--gc-accent-cool, #7ec8ff);
+}
+
+.inventory-endgame-hint {
+  font-size: 0.72rem;
+  color: var(--gc-text-muted, #9aa3b2);
+  font-style: italic;
+}
+
 .inventory-collectible-badge {
   display: inline-block;
   padding: 2px 8px;
@@ -14982,7 +14993,8 @@ a.gc-galaxy-coord-link:focus-visible {
 }
 
 .inventory-use-btn,
-.inventory-craft-btn {
+.inventory-craft-btn,
+.inventory-exchange-btn {
   flex-shrink: 0;
 }
 
@@ -15349,21 +15361,59 @@ body.gc-loot-modal-open {
 .gc-loot-subtitle.rarity-legendary { color: #ffb84d; }
 
 .gc-loot-crate {
-  height: 64px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 120px;
   margin: 4px auto 16px;
-  max-width: 108px;
+  max-width: 160px;
   border-radius: 2px;
-  border: 1px solid rgba(70, 229, 255, 0.25);
-  background:
-    radial-gradient(circle at 50% 35%, rgba(70, 229, 255, 0.55), transparent 62%),
-    linear-gradient(180deg, rgba(20, 36, 58, 0.95), rgba(6, 12, 24, 0.98));
-  box-shadow: 0 0 28px rgba(70, 229, 255, 0.35);
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  background: radial-gradient(ellipse at 50% 40%, rgba(70, 229, 255, 0.1), transparent 70%);
+  overflow: hidden;
+  clip-path: polygon(
+    0 6px, 6px 0, calc(100% - 6px) 0, 100% 6px,
+    100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px)
+  );
+}
+
+.gc-loot-crate-glow {
+  position: absolute;
+  inset: 8% 6% 12%;
+  border-radius: 0;
+  filter: blur(18px);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.gc-loot-crate-img {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 132px);
+  height: auto;
+  max-height: 96px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.45));
   animation: gc-loot-crate-glow 2.4s ease-in-out infinite alternate;
 }
 
+.gc-loot-crate.rarity-epic {
+  border-color: rgba(199, 125, 255, 0.35);
+  box-shadow: 0 0 24px rgba(199, 125, 255, 0.15);
+}
+
+.gc-loot-crate.rarity-legendary {
+  border-color: rgba(255, 184, 77, 0.4);
+  box-shadow: 0 0 28px rgba(255, 184, 77, 0.18);
+}
+
+.gc-loot-crate.rarity-rare {
+  border-color: rgba(94, 176, 255, 0.35);
+}
+
 @keyframes gc-loot-crate-glow {
-  from { box-shadow: 0 0 16px rgba(70, 229, 255, 0.22); }
-  to { box-shadow: 0 0 40px rgba(199, 125, 255, 0.45); }
+  from { filter: drop-shadow(0 8px 16px rgba(70, 229, 255, 0.25)); }
+  to { filter: drop-shadow(0 10px 24px rgba(199, 125, 255, 0.45)); }
 }
 
 .gc-loot-roller {
@@ -15604,7 +15654,7 @@ body.gc-loot-modal-open {
   justify-content: center;
 }
 
-body.gc-reduced-motion .gc-loot-crate {
+body.gc-reduced-motion .gc-loot-crate-img {
   animation: none;
 }
 

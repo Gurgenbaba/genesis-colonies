@@ -543,10 +543,7 @@ def test_open_container_returns_roll_preview(inventory_db, monkeypatch):
     data = res.get_json()
     assert data["ok"] is True
     assert "roll_preview" in data
-    assert len(data["roll_preview"]) >= 20
-
-
-    assert "roll_preview" in data
+    assert data.get("container_image", "").startswith("img/lootboxes/")
     assert len(data["roll_preview"]) >= 30
 
 

@@ -12,7 +12,11 @@ import pytest
 from game import db as gdb
 from game.db import begin_write_transaction, commit, db, rollback
 from game.inventory import grant_inventory_item, inventory_schema_ready
-from game.inventory_use import craft_inventory_item, use_inventory_item
+from game.inventory_use import craft_inventory_item, exchange_inventory_item, use_inventory_item
+from game.inventory_catalog import (
+    all_usable_catalog_keys,
+    resolve_item_use_role,
+)
 from game.models import (
     add_build_job,
     add_research_job,
@@ -565,4 +569,238 @@ def test_shipyard_booster_not_consumed_without_job(inventory_use_db):
     rollback(conn)
     assert not ok
     assert reason == "no_shipyard_queue"
+    conn.close()
+
+
+def test_all_usable_catalog_items_have_effect_handler(inventory_use_db):
+    from game.inventory_use import _resolve_use_spec
+
+    for key in all_usable_catalog_keys():
+        kind, effect = _resolve_use_spec(key)
+        assert kind, f"{key} has no use handler kind"
+        assert kind not in ("collectible", "craft_material", "exchange_material"), key
+        if kind == "research_datacore":
+            assert effect.get("tech_keys"), key
+            assert int(effect.get("seconds") or 0) > 0, key
+        elif kind == "time_boost":
+            assert int(effect.get("seconds") or 0) > 0, key
+
+
+def test_collectibles_do_not_render_as_usable(inventory_use_db):
+    from game.inventory import build_inventory_state
+    from game.inventory_catalog import COLLECTIBLE_ITEM_KEYS
+
+    conn = db()
+    uid = _player(conn=conn)
+    for key in list(COLLECTIBLE_ITEM_KEYS)[:3]:
+        grant_inventory_item(uid, key, 1, conn=conn)
+    conn.commit()
+
+    state = build_inventory_state(uid, conn=conn)
+    by_key = {i["item_key"]: i for i in state["other_items"]}
+    for key in list(COLLECTIBLE_ITEM_KEYS)[:3]:
+        row = by_key[key]
+        assert row["collectible"] is True
+        assert row["usable"] is False
+        assert resolve_item_use_role(key) == "collectible"
+    conn.close()
+
+
+def test_datacore_mining_reduces_matching_research_queue(inventory_use_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    now = time.time()
+    add_research_job(uid, "mining_tech", now - 5, now + 3600, conn=conn)
+    grant_inventory_item(uid, "research_data_mining", 1, conn=conn)
+    conn.commit()
+
+    finish_before = float(
+        conn.execute(
+            "SELECT finish_at FROM research_queue WHERE user_id = ? ORDER BY finish_at ASC LIMIT 1;",
+            (uid,),
+        ).fetchone()["finish_at"]
+    )
+
+    begin_write_transaction(conn)
+    ok, reason, result = use_inventory_item(uid, pid, "research_data_mining", 1, conn=conn)
+    assert ok, reason
+    commit(conn)
+
+    finish_after = float(
+        conn.execute(
+            "SELECT finish_at FROM research_queue WHERE user_id = ? ORDER BY finish_at ASC LIMIT 1;",
+            (uid,),
+        ).fetchone()["finish_at"]
+    )
+    assert finish_after <= finish_before - 800
+    row = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, "research_data_mining"),
+    ).fetchone()
+    assert row is None
+    assert int((result or {}).get("effect", {}).get("seconds_reduced") or 0) == 900
+    conn.close()
+
+
+def test_datacore_without_matching_research_not_consumed(inventory_use_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "research_data_mining", 1, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, _ = use_inventory_item(uid, pid, "research_data_mining", 1, conn=conn)
+    rollback(conn)
+    assert not ok
+    assert reason == "no_matching_research"
+
+    amt = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, "research_data_mining"),
+    ).fetchone()
+    assert int(amt["amount"]) == 1
+    conn.close()
+
+
+def test_dna_core_common_to_rare_exchange(inventory_use_db):
+    conn = db()
+    uid = _player(conn=conn)
+    grant_inventory_item(uid, "dna_core_common", 5, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, result = exchange_inventory_item(uid, "dna_core_common_to_rare", 1, conn=conn)
+    assert ok, reason
+    commit(conn)
+
+    common = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, "dna_core_common"),
+    ).fetchone()
+    assert common is None
+    rare = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, "dna_core_rare"),
+    ).fetchone()
+    assert int(rare["amount"]) == 1
+    assert (result or {}).get("exchange", {}).get("output_key") == "dna_core_rare"
+    conn.close()
+
+
+def test_dna_core_rare_to_epic_exchange(inventory_use_db):
+    conn = db()
+    uid = _player(conn=conn)
+    grant_inventory_item(uid, "dna_core_rare", 5, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, result = exchange_inventory_item(uid, "dna_core_rare_to_epic", 1, conn=conn)
+    assert ok, reason
+    commit(conn)
+
+    rare = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, "dna_core_rare"),
+    ).fetchone()
+    assert rare is None
+    epic = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, "dna_core_epic"),
+    ).fetchone()
+    assert int(epic["amount"]) == 1
+    assert (result or {}).get("exchange", {}).get("output_key") == "dna_core_epic"
+    conn.close()
+
+
+def test_dna_exchange_insufficient_material(inventory_use_db):
+    conn = db()
+    uid = _player(conn=conn)
+    grant_inventory_item(uid, "dna_core_common", 3, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, _ = exchange_inventory_item(uid, "dna_core_common_to_rare", 1, conn=conn)
+    rollback(conn)
+    assert not ok
+    assert reason == "insufficient_materials"
+
+    amt = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, "dna_core_common"),
+    ).fetchone()
+    assert int(amt["amount"]) == 3
+    conn.close()
+
+
+def test_inventory_exchange_idempotency(inventory_use_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_use_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "dna_core_common", 5, conn=conn)
+    conn.commit()
+    conn.close()
+
+    req_id = f"test-exchange-{uuid.uuid4().hex}"
+    body = {"recipe_key": "dna_core_common_to_rare", "amount": 1, "request_id": req_id}
+    r1 = client.post("/api/inventory/exchange", json=body)
+    r2 = client.post("/api/inventory/exchange", json=body)
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r1.get_json()["ok"] is True
+    assert r2.get_json() == r1.get_json()
+
+    conn = db()
+    rare = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, "dna_core_rare"),
+    ).fetchone()
+    assert int(rare["amount"]) == 1
+    conn.close()
+
+
+def test_inventory_actions_return_json_on_error(inventory_use_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_use_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "research_data_mining", 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    r = client.post(
+        "/api/inventory/use-item",
+        json={"item_key": "research_data_mining", "amount": 1},
+    )
+    assert r.status_code == 400
+    assert r.content_type.startswith("application/json")
+    payload = r.get_json()
+    assert payload["ok"] is False
+    assert payload["reason"] == "no_matching_research"
+    assert "state" in payload
+
+    r2 = client.post(
+        "/api/inventory/exchange",
+        json={"recipe_key": "dna_core_common_to_rare", "amount": 1},
+    )
+    assert r2.status_code == 400
+    assert r2.content_type.startswith("application/json")
+    payload2 = r2.get_json()
+    assert payload2["ok"] is False
+    assert payload2["reason"] == "insufficient_materials"
+
+
+def test_dna_cores_not_usable(inventory_use_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "dna_core_common", 5, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, _ = use_inventory_item(uid, pid, "dna_core_common", 1, conn=conn)
+    rollback(conn)
+    assert not ok
+    assert reason == "item_not_usable"
     conn.close()

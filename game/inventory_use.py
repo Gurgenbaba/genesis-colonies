@@ -12,9 +12,16 @@ from .inventory_catalog import (
     BOOSTER_QUEUE_TARGET,
     BOOSTER_TIME_SECONDS,
     CRAFT_RECIPES,
+    EXCHANGE_RECIPES,
+    datacore_boost_seconds,
+    datacore_fallback_any,
+    datacore_preferred_tech_keys,
+    exchange_recipes_for_material,
+    is_research_datacore_item,
     item_catalog_entry,
     item_is_collectible,
     item_is_craft_material,
+    item_is_exchange_material,
     item_is_usable,
     is_known_item_key,
     resolve_item_use_kind,
@@ -84,6 +91,16 @@ def _effect_message(effect: Effect) -> Dict[str, Any]:
             "message_params": {
                 "output_key": str(effect.get("output_key") or ""),
                 "amount": int(effect.get("amount") or 0),
+            },
+        }
+    if kind == "exchange":
+        return {
+            "message_key": "inv_effect_exchange",
+            "message_params": {
+                "input_amount": int(effect.get("input_amount") or 0),
+                "input_key": str(effect.get("input_key") or ""),
+                "output_amount": int(effect.get("output_amount") or 0),
+                "output_key": str(effect.get("output_key") or ""),
             },
         }
     return {"message_key": "inv_effect_generic", "message_params": {}}
@@ -248,7 +265,7 @@ def apply_research_queue_booster(
     if boost <= 0:
         return None
 
-    finish_due_work_once(uid, conn=conn, source="inventory_use")
+    finish_due_work_once(uid, conn=conn, source="inventory_use", dedup=False)
     rows = list(get_research_queue_rows(uid, conn=conn))
     effect = _apply_full_queue_time_shift(
         conn,
@@ -264,8 +281,88 @@ def apply_research_queue_booster(
     if not effect:
         return None
 
-    finish_due_work_once(uid, conn=conn, source="inventory_use")
+    finish_due_work_once(uid, conn=conn, source="inventory_use", dedup=False)
     return effect
+
+
+def apply_datacore_research_boost(
+    conn,
+    user_id: int,
+    item_key: str,
+    *,
+    now: Optional[float] = None,
+) -> Optional[Effect]:
+    """
+    Reduce account research queue when a matching tech is queued (or any research
+    when ``fallback_any`` is set on the datacore spec).
+    """
+    from .models import get_research_queue_rows
+    from .queue_engine import finish_due_work_once
+
+    key = str(item_key)
+    boost = datacore_boost_seconds(key)
+    if boost <= 0:
+        return None
+
+    preferred = set(datacore_preferred_tech_keys(key))
+    fallback = datacore_fallback_any(key)
+
+    ts = float(now if now is not None else time.time())
+    uid = int(user_id)
+
+    finish_due_work_once(uid, conn=conn, source="inventory_use", dedup=False)
+    rows = list(get_research_queue_rows(uid, conn=conn))
+    if not rows:
+        return None
+
+    techs_in_queue = {str(r["tech_key"]) for r in rows}
+    if preferred and preferred & techs_in_queue:
+        pass
+    elif fallback:
+        pass
+    else:
+        return None
+
+    effect = _apply_full_queue_time_shift(
+        conn,
+        rows=rows,
+        boost_seconds=boost,
+        now=ts,
+        table="research_queue",
+        id_col="id",
+        start_col="start_at",
+        finish_col="finish_at",
+        target="research",
+    )
+    if not effect:
+        return None
+
+    finish_due_work_once(uid, conn=conn, source="inventory_use", dedup=False)
+    return effect
+
+
+def datacore_has_usable_target(user_id: int, item_key: str, *, conn) -> bool:
+    from .models import get_research_queue_rows
+    from .queue_engine import finish_due_work_once
+
+    key = str(item_key)
+    if not is_research_datacore_item(key):
+        return True
+
+    preferred = set(datacore_preferred_tech_keys(key))
+    fallback = datacore_fallback_any(key)
+    uid = int(user_id)
+
+    finish_due_work_once(uid, conn=conn, source="inventory_use", dedup=False)
+    rows = list(get_research_queue_rows(uid, conn=conn))
+    if not rows:
+        return False
+    if not preferred:
+        return True
+    techs_in_queue = {str(r["tech_key"]) for r in rows}
+    if preferred & techs_in_queue:
+        return True
+    return bool(fallback)
 
 
 def apply_shipyard_queue_booster(
@@ -320,6 +417,12 @@ def _time_booster_target(item_key: str) -> Optional[str]:
     return str(BOOSTER_QUEUE_TARGET.get(str(item_key)) or "build")
 
 
+def _time_booster_target(item_key: str) -> Optional[str]:
+    if not _is_time_booster_item(item_key):
+        return None
+    return str(BOOSTER_QUEUE_TARGET.get(str(item_key)) or "build")
+
+
 def _time_booster_fail_reason(item_key: str) -> str:
     target = _time_booster_target(item_key)
     if target == "build":
@@ -328,6 +431,18 @@ def _time_booster_fail_reason(item_key: str) -> str:
         return "no_research_queue"
     if target == "shipyard":
         return "no_shipyard_queue"
+    return "no_effect_target"
+
+
+def _datacore_fail_reason(item_key: str) -> str:
+    return "no_matching_research"
+
+
+def _use_fail_reason(item_key: str) -> str:
+    if _is_time_booster_item(item_key):
+        return _time_booster_fail_reason(item_key)
+    if is_research_datacore_item(item_key):
+        return _datacore_fail_reason(item_key)
     return "no_effect_target"
 
 
@@ -558,11 +673,11 @@ def _apply_blueprint_unlock(
 
 def _resolve_use_spec(item_key: str) -> Tuple[Optional[str], Dict[str, Any]]:
     key = str(item_key)
-    if item_is_collectible(key) or item_is_craft_material(key):
+    if item_is_collectible(key) or item_is_craft_material(key) or item_is_exchange_material(key):
         return None, {}
     meta = item_catalog_entry(key)
     kind = resolve_item_use_kind(key)
-    if not kind or kind == "collectible" or kind == "craft_material":
+    if not kind or kind in ("collectible", "craft_material", "exchange_material"):
         return None, {}
     effect = dict(meta.get("use_effect") or {})
     if key in BOOSTER_TIME_SECONDS:
@@ -596,6 +711,8 @@ def _apply_single_use(
         target = str(effect.get("target") or "build")
         seconds = int(effect.get("seconds") or 0)
         return _apply_time_boost(target, seconds, user_id=user_id, planet_id=planet_id, conn=conn)
+    if kind == "research_datacore":
+        return apply_datacore_research_boost(conn, user_id, item_key)
     if kind == "production_grant":
         return _apply_production_grant(user_id, planet_id, effect, conn=conn)
     if kind == "research_instant":
@@ -646,9 +763,7 @@ def use_inventory_item(
         effects.append(effect)
 
     if consumed <= 0:
-        fail_reason = "no_effect_target"
-        if _is_time_booster_item(key):
-            fail_reason = _time_booster_fail_reason(key)
+        fail_reason = _use_fail_reason(key)
         return False, fail_reason, None
 
     merged = _merge_effects(effects)
@@ -696,6 +811,65 @@ def _merge_effects(effects: List[Effect]) -> Effect:
     out["count"] = len(effects)
     out.update(_effect_message(out))
     return out
+
+
+def exchange_inventory_item(
+    user_id: int,
+    recipe_key: str,
+    amount: int = 1,
+    *,
+    conn,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    if not inventory_schema_ready(conn):
+        return False, "inventory_unavailable", None
+
+    rkey = str(recipe_key or "").strip()
+    recipe = EXCHANGE_RECIPES.get(rkey)
+    if not recipe:
+        return False, "invalid_recipe", None
+
+    input_key = str(recipe.get("input_key") or "")
+    input_each = int(recipe.get("input_amount") or 0)
+    output_key = str(recipe.get("output_key") or "")
+    output_each = int(recipe.get("output_amount") or 1)
+    if input_each <= 0 or not input_key or not output_key:
+        return False, "invalid_recipe", None
+
+    exchange_count = max(1, min(int(amount), 100))
+    total_input = input_each * exchange_count
+    total_output = output_each * exchange_count
+
+    owned = _inventory_amount(user_id, input_key, conn=conn)
+    if owned < total_input:
+        return False, "insufficient_materials", None
+
+    if not _debit_inventory_item(user_id, input_key, total_input, conn=conn):
+        return False, "insufficient_materials", None
+
+    grant_inventory_item(user_id, output_key, total_output, conn=conn)
+
+    effect: Effect = {
+        "kind": "exchange",
+        "recipe_key": rkey,
+        "input_key": input_key,
+        "input_amount": total_input,
+        "output_key": output_key,
+        "output_amount": total_output,
+    }
+    effect.update(_effect_message(effect))
+    inventory = build_inventory_state(user_id, conn=conn)
+    return True, "exchange_ok", {
+        "recipe_key": rkey,
+        "exchanged": exchange_count,
+        "exchange": {
+            "input_key": input_key,
+            "input_amount": total_input,
+            "output_key": output_key,
+            "output_amount": total_output,
+        },
+        "effect": effect,
+        "inventory": inventory,
+    }
 
 
 def craft_inventory_item(
@@ -757,16 +931,30 @@ def enrich_inventory_item_row(
     planet_id: Optional[int] = None,
     conn=None,
 ) -> Dict[str, Any]:
-    """Attach use/craft/collectible metadata for UI."""
+    """Attach use/craft/exchange/collectible metadata for UI."""
     out = dict(row)
     key = str(out.get("item_key") or "")
     owned = int(out.get("amount") or 0)
+    from .inventory_catalog import (
+        ITEM_CATALOG,
+        craft_recipes_for_material,
+        resolve_item_use_role,
+    )
+
+    role = resolve_item_use_role(key)
+    if role:
+        out["use_role"] = role
     out["collectible"] = item_is_collectible(key)
     out["craft_material"] = item_is_craft_material(key)
+    out["exchange_material"] = item_is_exchange_material(key)
     out["usable"] = item_is_usable(key)
     use_kind = resolve_item_use_kind(key)
     if use_kind:
         out["use_kind"] = use_kind
+
+    spec = ITEM_CATALOG.get(key) or {}
+    if spec.get("exchange_endgame"):
+        out["exchange_endgame"] = True
 
     if (
         _is_time_booster_item(key)
@@ -778,7 +966,14 @@ def enrich_inventory_item_row(
             out["usable"] = False
             out["use_block_reason"] = _time_booster_fail_reason(key)
 
-    from .inventory_catalog import craft_recipes_for_material
+    if (
+        is_research_datacore_item(key)
+        and user_id is not None
+        and conn is not None
+    ):
+        if not datacore_has_usable_target(int(user_id), key, conn=conn):
+            out["usable"] = False
+            out["use_block_reason"] = _datacore_fail_reason(key)
 
     recipes = craft_recipes_for_material(key)
     if recipes:
@@ -796,5 +991,25 @@ def enrich_inventory_item_row(
             )
         out["craft_progress"] = progress
         out["can_craft"] = any(p["can_craft"] for p in progress)
+
+    exchange_recipes = exchange_recipes_for_material(key)
+    if exchange_recipes:
+        ex_progress: List[Dict[str, Any]] = []
+        for rec in exchange_recipes:
+            req = int(rec["input_amount"])
+            ex_progress.append(
+                {
+                    "recipe_key": rec["recipe_key"],
+                    "input_key": rec["input_key"],
+                    "output_key": rec["output_key"],
+                    "name_key": rec["name_key"],
+                    "owned": owned,
+                    "required": req,
+                    "output_amount": int(rec["output_amount"]),
+                    "can_exchange": owned >= req,
+                }
+            )
+        out["exchange_progress"] = ex_progress
+        out["can_exchange"] = any(p["can_exchange"] for p in ex_progress)
 
     return out

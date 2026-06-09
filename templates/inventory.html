@@ -135,7 +135,8 @@
       <li class="inventory-item-row" data-inventory-item="{{ item.item_key }}" data-rarity="{{ item.rarity }}"
           data-usable="{{ '1' if item.usable is defined and item.usable else '0' }}"
           data-collectible="{{ '1' if item.collectible is defined and item.collectible else '0' }}"
-          data-can-craft="{{ '1' if item.can_craft is defined and item.can_craft else '0' }}">
+          data-can-craft="{{ '1' if item.can_craft is defined and item.can_craft else '0' }}"
+          data-can-exchange="{{ '1' if item.can_exchange is defined and item.can_exchange else '0' }}">
         <span class="inventory-item-icon" aria-hidden="true">{{ item.icon }}</span>
         <div class="inventory-item-body">
           <span class="inventory-item-name">{{ T(item.name_key, item.item_key) }}</span>
@@ -145,6 +146,19 @@
             {{ cp.owned|fmt_int }} / {{ cp.required|fmt_int }} {{ T(cp.name_key, cp.output_key) }}
           </span>
           {% endfor %}
+          {% endif %}
+          {% if item.exchange_progress is defined and item.exchange_progress %}
+          {% for ep in item.exchange_progress %}
+          <span class="inventory-exchange-progress gc-mono" data-exchange-progress="{{ item.item_key }}">
+            {{ T("inv_exchange_upgrade_hint", "Upgrade möglich: %(input_amount)s %(input_name)s → %(output_amount)s %(output_name)s",
+                 input_amount=ep.required, output_amount=ep.output_amount,
+                 input_name=T("inv_" ~ ep.input_key, ep.input_key),
+                 output_name=T("inv_" ~ ep.output_key, ep.output_key)) }}
+          </span>
+          {% endfor %}
+          {% endif %}
+          {% if item.exchange_endgame is defined and item.exchange_endgame %}
+          <span class="inventory-endgame-hint">{{ T("inv_dna_core_epic_hint", "Endgame-Material — später nutzbar") }}</span>
           {% endif %}
         </div>
         <span class="inventory-rarity-badge inventory-rarity-badge--{{ item.rarity }}">
@@ -168,6 +182,16 @@
         <button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-craft-btn"
                 data-inventory-craft="{{ cp.recipe_key }}">
           {{ T("inv_craft_btn", "Craften") }}
+        </button>
+        {% endif %}
+        {% endfor %}
+        {% endif %}
+        {% if item.can_exchange is defined and item.can_exchange and item.exchange_progress is defined %}
+        {% for ep in item.exchange_progress %}
+        {% if ep.can_exchange %}
+        <button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-exchange-btn"
+                data-inventory-exchange="{{ ep.recipe_key }}">
+          {{ T("inv_upgrade_btn", "Upgrade") }}
         </button>
         {% endif %}
         {% endfor %}

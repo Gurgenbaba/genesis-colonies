@@ -127,8 +127,9 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
         "rarity": "uncommon",
         "name_key": "inv_research_data_energy",
         "icon": "💾",
-        "use_kind": "time_boost",
-        "use_effect": {"target": "research", "seconds": 15 * 60},
+        "use_role": "usable",
+        "use_kind": "research_datacore",
+        "use_effect": {"tech_keys": ["energy_tech"], "seconds": 15 * 60, "fallback_any": True},
     },
     "research_data_mining": {
         "item_type": "consumable",
@@ -136,8 +137,9 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
         "rarity": "uncommon",
         "name_key": "inv_research_data_mining",
         "icon": "💾",
-        "use_kind": "time_boost",
-        "use_effect": {"target": "research", "seconds": 15 * 60},
+        "use_role": "usable",
+        "use_kind": "research_datacore",
+        "use_effect": {"tech_keys": ["mining_tech"], "seconds": 15 * 60, "fallback_any": True},
     },
     "research_data_weapons": {
         "item_type": "consumable",
@@ -145,8 +147,9 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
         "rarity": "uncommon",
         "name_key": "inv_research_data_weapons",
         "icon": "💾",
-        "use_kind": "time_boost",
-        "use_effect": {"target": "research", "seconds": 15 * 60},
+        "use_role": "usable",
+        "use_kind": "research_datacore",
+        "use_effect": {"tech_keys": ["weapon_tech"], "seconds": 15 * 60, "fallback_any": True},
     },
     "research_instant_level": {
         "item_type": "consumable",
@@ -231,15 +234,14 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
         "use_kind": "resource",
         "use_effect": {"fuel_cells": 5_000},
     },
-    # --- Crafted DNA cores ---
+    # --- Crafted DNA cores (exchange / upgrade — not direct consume) ---
     "dna_core_common": {
         "item_type": "consumable",
         "category": "planet_evolution",
         "rarity": "rare",
         "name_key": "inv_dna_core_common",
         "icon": "🧬",
-        "use_kind": "planet_xp",
-        "use_effect": {"xp": 2_500},
+        "use_role": "exchange_material",
     },
     "dna_core_rare": {
         "item_type": "consumable",
@@ -247,8 +249,7 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
         "rarity": "epic",
         "name_key": "inv_dna_core_rare",
         "icon": "🧬",
-        "use_kind": "planet_xp",
-        "use_effect": {"xp": 10_000},
+        "use_role": "exchange_material",
     },
     "dna_core_epic": {
         "item_type": "consumable",
@@ -256,8 +257,8 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
         "rarity": "legendary",
         "name_key": "inv_dna_core_epic",
         "icon": "🧬",
-        "use_kind": "planet_xp",
-        "use_effect": {"xp": 50_000},
+        "use_role": "exchange_material",
+        "exchange_endgame": True,
     },
 }
 
@@ -318,6 +319,26 @@ CRAFT_RECIPES: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# DNA core upgrade exchange (POST /api/inventory/exchange).
+DNA_CORE_EXCHANGE_RECIPES: Dict[str, Dict[str, Any]] = {
+    "dna_core_common_to_rare": {
+        "input_key": "dna_core_common",
+        "input_amount": 5,
+        "output_key": "dna_core_rare",
+        "output_amount": 1,
+        "name_key": "inv_exchange_dna_common_to_rare",
+    },
+    "dna_core_rare_to_epic": {
+        "input_key": "dna_core_rare",
+        "input_amount": 5,
+        "output_key": "dna_core_epic",
+        "output_amount": 1,
+        "name_key": "inv_exchange_dna_rare_to_epic",
+    },
+}
+
+EXCHANGE_RECIPES: Dict[str, Dict[str, Any]] = dict(DNA_CORE_EXCHANGE_RECIPES)
+
 COLLECTIBLE_ITEM_KEYS: FrozenSet[str] = frozenset(
     {
         "fragment_artifact_alpha",
@@ -342,6 +363,13 @@ COLLECTIBLE_ITEM_KEYS: FrozenSet[str] = frozenset(
 CRAFT_MATERIAL_KEYS: FrozenSet[str] = frozenset(
     {"fragment_dna_common", "fragment_dna_rare", "fragment_dna_epic"}
 )
+
+EXCHANGE_MATERIAL_KEYS: FrozenSet[str] = frozenset(
+    {"dna_core_common", "dna_core_rare", "dna_core_epic"}
+)
+
+# use_role values for inventory UI: usable | craft_material | exchange_material | collectible
+USE_ROLES = frozenset({"usable", "craft_material", "exchange_material", "collectible"})
 
 GRANTABLE_ITEM_KEYS: FrozenSet[str] = frozenset(ITEM_CATALOG.keys())
 
@@ -383,12 +411,37 @@ def item_catalog_entry(item_key: str) -> Dict[str, Any]:
     return entry
 
 
-def resolve_item_use_kind(item_key: str) -> Optional[str]:
+def resolve_item_use_role(item_key: str) -> Optional[str]:
+    """Return UI role: usable | craft_material | exchange_material | collectible."""
     key = str(item_key)
-    if key in COLLECTIBLE_ITEM_KEYS:
-        return "collectible"
+    spec = ITEM_CATALOG.get(key) or {}
+    explicit = spec.get("use_role")
+    if explicit in USE_ROLES:
+        return str(explicit)
+    if key in CONTAINER_KEYS:
+        return None
+    if key in EXCHANGE_MATERIAL_KEYS:
+        return "exchange_material"
     if key in CRAFT_MATERIAL_KEYS:
         return "craft_material"
+    if key in COLLECTIBLE_ITEM_KEYS:
+        return "collectible"
+    if spec.get("use_kind") or key in BOOSTER_TIME_SECONDS:
+        return "usable"
+    if spec.get("item_type") == "blueprint":
+        return "usable"
+    return None
+
+
+def resolve_item_use_kind(item_key: str) -> Optional[str]:
+    key = str(item_key)
+    role = resolve_item_use_role(key)
+    if role == "collectible":
+        return "collectible"
+    if role == "craft_material":
+        return "craft_material"
+    if role == "exchange_material":
+        return "exchange_material"
     spec = ITEM_CATALOG.get(key) or {}
     if spec.get("use_kind"):
         return str(spec["use_kind"])
@@ -400,16 +453,67 @@ def resolve_item_use_kind(item_key: str) -> Optional[str]:
 
 
 def item_is_usable(item_key: str) -> bool:
-    kind = resolve_item_use_kind(item_key)
-    return kind not in (None, "collectible", "craft_material")
+    return resolve_item_use_role(item_key) == "usable"
 
 
 def item_is_collectible(item_key: str) -> bool:
-    return str(item_key) in COLLECTIBLE_ITEM_KEYS
+    return resolve_item_use_role(item_key) == "collectible"
 
 
 def item_is_craft_material(item_key: str) -> bool:
-    return str(item_key) in CRAFT_MATERIAL_KEYS
+    return resolve_item_use_role(item_key) == "craft_material"
+
+
+def item_is_exchange_material(item_key: str) -> bool:
+    return resolve_item_use_role(item_key) == "exchange_material"
+
+
+def datacore_preferred_tech_keys(item_key: str) -> Tuple[str, ...]:
+    spec = ITEM_CATALOG.get(str(item_key)) or {}
+    effect = spec.get("use_effect") or {}
+    keys = effect.get("tech_keys") or []
+    return tuple(str(k) for k in keys if k)
+
+
+def datacore_boost_seconds(item_key: str) -> int:
+    spec = ITEM_CATALOG.get(str(item_key)) or {}
+    effect = spec.get("use_effect") or {}
+    return int(effect.get("seconds") or 0)
+
+
+def datacore_fallback_any(item_key: str) -> bool:
+    spec = ITEM_CATALOG.get(str(item_key)) or {}
+    effect = spec.get("use_effect") or {}
+    return bool(effect.get("fallback_any"))
+
+
+def is_research_datacore_item(item_key: str) -> bool:
+    spec = ITEM_CATALOG.get(str(item_key)) or {}
+    return str(spec.get("use_kind") or "") == "research_datacore"
+
+
+def exchange_recipes_for_material(item_key: str) -> list[Dict[str, Any]]:
+    """Exchange recipes that consume this item (for UI upgrade buttons)."""
+    key = str(item_key)
+    out: list[Dict[str, Any]] = []
+    for recipe_key, recipe in EXCHANGE_RECIPES.items():
+        if str(recipe.get("input_key") or "") != key:
+            continue
+        out.append(
+            {
+                "recipe_key": recipe_key,
+                "input_key": key,
+                "input_amount": int(recipe.get("input_amount") or 0),
+                "output_key": str(recipe.get("output_key") or ""),
+                "output_amount": int(recipe.get("output_amount") or 1),
+                "name_key": str(recipe.get("name_key") or f"inv_exchange_{recipe_key}"),
+            }
+        )
+    return out
+
+
+def all_usable_catalog_keys() -> Tuple[str, ...]:
+    return tuple(k for k in ITEM_CATALOG if resolve_item_use_role(k) == "usable")
 
 
 def craft_recipes_for_material(item_key: str) -> list[Dict[str, Any]]:
