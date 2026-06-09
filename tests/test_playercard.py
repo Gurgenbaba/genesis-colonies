@@ -400,6 +400,26 @@ def test_api_routes_and_partials(app_client):
     assert "gc-player-card-form" in edit_body
     assert 'data-pc-field="avatar_file"' in edit_body
 
+    save_avatar = client.post(
+        "/api/player-card/me",
+        data=json.dumps(
+            {
+                "title": "",
+                "bio": "",
+                "avatar_url": "https://example.com/zoom-avatar.png",
+                "theme": "cyan",
+                "is_public": "1",
+            }
+        ),
+        content_type="application/json",
+    )
+    assert save_avatar.status_code == 200
+
+    res_zoom = client.get(f"/api/player-card/{pid}")
+    zoom_body = res_zoom.get_data(as_text=True)
+    assert 'data-pc-avatar-zoom' in zoom_body
+    assert 'data-pc-avatar-zoom-root' in zoom_body
+
     save = client.post(
         "/api/player-card/me",
         data=json.dumps(

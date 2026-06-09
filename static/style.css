@@ -9238,6 +9238,78 @@ body.gc-combat-report-open { overflow: hidden; }
   flex-shrink: 0;
 }
 
+.gc-player-card-avatar-btn {
+  display: block;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+  border-radius: var(--gc-radius-xl);
+  line-height: 0;
+}
+.gc-player-card-avatar-btn:focus-visible {
+  outline: 2px solid rgba(70, 229, 255, 0.75);
+  outline-offset: 2px;
+}
+.gc-player-card-avatar-btn:hover .gc-player-card-avatar,
+.gc-player-card-avatar-btn:focus-visible .gc-player-card-avatar {
+  border-color: rgba(70, 229, 255, 0.75);
+  box-shadow: 0 0 14px rgba(70, 229, 255, 0.22);
+}
+
+.gc-player-card-avatar-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 1250;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+           max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+.gc-player-card-avatar-zoom[hidden] {
+  display: none !important;
+}
+.gc-player-card-avatar-zoom-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: rgba(2, 6, 14, 0.9);
+  backdrop-filter: blur(6px);
+  cursor: zoom-out;
+}
+.gc-player-card-avatar-zoom-panel {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  max-width: min(92vw, 420px);
+}
+.gc-player-card-avatar-zoom-img {
+  display: block;
+  width: min(88vw, 384px);
+  height: min(88vw, 384px);
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: var(--gc-radius-xl);
+  border: 2px solid rgba(70, 229, 255, 0.45);
+  box-shadow:
+    0 0 36px rgba(70, 229, 255, 0.16),
+    0 24px 56px rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.55);
+}
+.gc-player-card-avatar-zoom-close {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 999px;
+  background: rgba(6, 10, 20, 0.92);
+  border: 1px solid rgba(70, 229, 255, 0.35);
+}
+
 .gc-player-card-avatar {
   width: 72px;
   height: 72px;

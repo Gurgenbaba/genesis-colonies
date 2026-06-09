@@ -1096,6 +1096,7 @@
   "playercard_save": "Save",
   "playercard_cancel": "Cancel",
   "playercard_avatar_url": "Avatar URL",
+  "playercard_avatar_zoom": "Enlarge avatar",
   "playercard_avatar_upload": "Avatar image",
   "playercard_avatar_upload_hint": "Automatically optimized on upload.",
   "playercard_avatar_upload_max": "Max. 5 MB upload.",

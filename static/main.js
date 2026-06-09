@@ -11981,6 +11981,7 @@
     errorEl: null,
     abort: null,
     open: false,
+    avatarZoomOpen: false,
     currentId: null,
     mode: "view",
     reqId: 0,
@@ -12066,9 +12067,37 @@
     }
   }
 
+  function closePlayerCardAvatarZoom() {
+    const openZoom = document.querySelector("[data-pc-avatar-zoom-root]:not([hidden])");
+    if (!openZoom) {
+      PLAYER_CARD.avatarZoomOpen = false;
+      document.body.classList.remove("gc-player-card-avatar-zoom-open");
+      return;
+    }
+    openZoom.hidden = true;
+    openZoom.setAttribute("aria-hidden", "true");
+    const img = openZoom.querySelector(".gc-player-card-avatar-zoom-img");
+    if (img) img.removeAttribute("src");
+    PLAYER_CARD.avatarZoomOpen = false;
+    document.body.classList.remove("gc-player-card-avatar-zoom-open");
+  }
+
+  function openPlayerCardAvatarZoom(src, shell) {
+    const zoom = shell?.querySelector("[data-pc-avatar-zoom-root]");
+    const url = String(src || "").trim();
+    if (!zoom || !url) return;
+    const img = zoom.querySelector(".gc-player-card-avatar-zoom-img");
+    if (img) img.src = url;
+    zoom.hidden = false;
+    zoom.setAttribute("aria-hidden", "false");
+    PLAYER_CARD.avatarZoomOpen = true;
+    document.body.classList.add("gc-player-card-avatar-zoom-open");
+  }
+
   function closePlayerCardModal() {
     const root = cachePlayerCardElements();
     if (!root) return;
+    closePlayerCardAvatarZoom();
     pcResetModalState();
     root.hidden = true;
     root.setAttribute("aria-hidden", "true");
@@ -12742,6 +12771,25 @@
     GC._playerCardBound = true;
 
     document.addEventListener("click", (e) => {
+      const zoomClose = e.target.closest("[data-pc-avatar-zoom-close]");
+      if (zoomClose) {
+        e.preventDefault();
+        e.stopPropagation();
+        closePlayerCardAvatarZoom();
+        return;
+      }
+
+      const zoomOpen = e.target.closest("[data-pc-avatar-zoom]");
+      if (zoomOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        const shell = zoomOpen.closest(".gc-player-card-shell");
+        const img = zoomOpen.querySelector("img");
+        const src = zoomOpen.getAttribute("data-avatar-src") || img?.currentSrc || img?.src;
+        if (shell && src) openPlayerCardAvatarZoom(src, shell);
+        return;
+      }
+
       const closeEl = e.target.closest("[data-pc-close]");
       if (closeEl) {
         const root = cachePlayerCardElements();
@@ -12771,6 +12819,10 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      if (PLAYER_CARD.avatarZoomOpen) {
+        closePlayerCardAvatarZoom();
+        return;
+      }
       if (SHIP_DETAIL.open) closeShipDetailModal();
       else if (PLAYER_CARD.open) closePlayerCardModal();
     });

@@ -1418,6 +1418,7 @@
   "playercard_save": "Speichern",
   "playercard_cancel": "Abbrechen",
   "playercard_avatar_url": "Avatar-URL",
+  "playercard_avatar_zoom": "Avatar vergrößern",
   "playercard_avatar_upload": "Avatar-Bild",
   "playercard_avatar_upload_hint": "Wird automatisch optimiert.",
   "playercard_avatar_upload_max": "Max. 5 MB Upload.",

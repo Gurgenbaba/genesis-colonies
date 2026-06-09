@@ -22,11 +22,17 @@
     <div class="gc-player-card-hero">
       <div class="gc-player-card-avatar-wrap">
         {% if card.get('avatar_url') %}
-          <img class="gc-player-card-avatar"
-               src="{{ card.get('avatar_url') }}"
-               alt=""
-               loading="lazy"
-               referrerpolicy="no-referrer">
+          <button type="button"
+                  class="gc-player-card-avatar-btn"
+                  data-pc-avatar-zoom
+                  data-avatar-src="{{ card.get('avatar_url') }}"
+                  aria-label="{{ T('playercard_avatar_zoom') }}">
+            <img class="gc-player-card-avatar"
+                 src="{{ card.get('avatar_url') }}"
+                 alt=""
+                 loading="lazy"
+                 referrerpolicy="no-referrer">
+          </button>
         {% else %}
           <div class="gc-player-card-avatar gc-player-card-avatar-placeholder" aria-hidden="true">
             {{ (card.get('commander_name_raw') or '?')[:1] }}
@@ -137,5 +143,28 @@
     {% endif %}
   </div>
 
+  {% endif %}
+
+  {% if card.get('avatar_url') and not is_private %}
+  <div class="gc-player-card-avatar-zoom"
+       data-pc-avatar-zoom-root
+       hidden
+       aria-hidden="true">
+    <button type="button"
+            class="gc-player-card-avatar-zoom-backdrop"
+            data-pc-avatar-zoom-close
+            tabindex="-1"
+            aria-label="{{ T('playercard_close') }}"></button>
+    <figure class="gc-player-card-avatar-zoom-panel">
+      <img class="gc-player-card-avatar-zoom-img"
+           src=""
+           alt=""
+           referrerpolicy="no-referrer">
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-avatar-zoom-close"
+              data-pc-avatar-zoom-close
+              aria-label="{{ T('playercard_close') }}">✕</button>
+    </figure>
+  </div>
   {% endif %}
 </div>
