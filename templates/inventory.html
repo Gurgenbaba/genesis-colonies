@@ -34,6 +34,7 @@
         {{ T("inv_rewards_close", "Schließen") }}
       </button>
     </div>
+    <p class="inventory-effect-message" data-inventory-effect-message hidden></p>
     <ul class="inventory-rewards-list" data-inventory-rewards-list></ul>
   </section>
 
@@ -129,15 +130,46 @@
     </div>
     <ul class="inventory-item-list" data-inventory-item-list>
       {% for item in inv_data['other_items'] %}
-      <li class="inventory-item-row" data-inventory-item="{{ item.item_key }}" data-rarity="{{ item.rarity }}">
+      <li class="inventory-item-row" data-inventory-item="{{ item.item_key }}" data-rarity="{{ item.rarity }}"
+          data-usable="{{ '1' if item.usable is defined and item.usable else '0' }}"
+          data-collectible="{{ '1' if item.collectible is defined and item.collectible else '0' }}"
+          data-can-craft="{{ '1' if item.can_craft is defined and item.can_craft else '0' }}">
         <span class="inventory-item-icon" aria-hidden="true">{{ item.icon }}</span>
-        <span class="inventory-item-name">{{ T(item.name_key, item.item_key) }}</span>
+        <div class="inventory-item-body">
+          <span class="inventory-item-name">{{ T(item.name_key, item.item_key) }}</span>
+          {% if item.craft_progress is defined and item.craft_progress %}
+          {% for cp in item.craft_progress %}
+          <span class="inventory-craft-progress gc-mono" data-craft-progress="{{ item.item_key }}">
+            {{ cp.owned|fmt_int }} / {{ cp.required|fmt_int }} {{ T(cp.name_key, cp.output_key) }}
+          </span>
+          {% endfor %}
+          {% endif %}
+        </div>
         <span class="inventory-rarity-badge inventory-rarity-badge--{{ item.rarity }}">
           {{ T("inv_rarity_" ~ item.rarity, item.rarity) }}
         </span>
+        {% if item.collectible is defined and item.collectible %}
+        <span class="inventory-collectible-badge">{{ T("inv_collectible_badge", "Sammlerstück") }}</span>
+        {% endif %}
         <span class="inventory-item-amount gc-mono" data-inventory-item-amount="{{ item.item_key }}">
           ×{{ item.amount|fmt_int }}
         </span>
+        {% if item.usable is defined and item.usable %}
+        <button type="button" class="gc-btn gc-btn-primary gc-btn-xs inventory-use-btn"
+                data-inventory-use="{{ item.item_key }}">
+          {{ T("inv_use_btn", "Benutzen") }}
+        </button>
+        {% endif %}
+        {% if item.can_craft is defined and item.can_craft and item.craft_progress is defined %}
+        {% for cp in item.craft_progress %}
+        {% if cp.can_craft %}
+        <button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-craft-btn"
+                data-inventory-craft="{{ cp.recipe_key }}">
+          {{ T("inv_craft_btn", "Craften") }}
+        </button>
+        {% endif %}
+        {% endfor %}
+        {% endif %}
       </li>
       {% else %}
       <li class="inventory-empty" data-inventory-empty-items>{{ T("inv_no_items", "Noch keine Items.") }}</li>

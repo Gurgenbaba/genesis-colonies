@@ -67,7 +67,9 @@ def _serialize_inventory_row(row: Mapping[str, Any]) -> Dict[str, Any]:
     }
     if meta.get("image"):
         out["image"] = meta["image"]
-    return out
+    from .inventory_use import enrich_inventory_item_row
+
+    return enrich_inventory_item_row(out)
 
 
 def _last_container_open_at(user_id: int, container_key: str, *, conn) -> Optional[float]:
@@ -247,8 +249,38 @@ def build_inventory_state(user_id: int, *, conn) -> Dict[str, Any]:
         "containers": containers,
         "other_items": other_items,
         "loot_drops": build_loot_drops_reference(conn=conn),
+        "craft_recipes": _craft_recipes_reference(),
         "all": items,
     }
+
+
+def _craft_recipes_reference() -> List[Dict[str, Any]]:
+    from .inventory_catalog import CRAFT_RECIPES, item_catalog_entry
+
+    rows: List[Dict[str, Any]] = []
+    for recipe_key, recipe in CRAFT_RECIPES.items():
+        requires = []
+        for mat_key, amt in (recipe.get("requires") or {}).items():
+            meta = item_catalog_entry(str(mat_key))
+            requires.append(
+                {
+                    "item_key": str(mat_key),
+                    "amount": int(amt),
+                    "name_key": meta["name_key"],
+                }
+            )
+        out_meta = item_catalog_entry(str(recipe.get("output_key") or recipe_key))
+        rows.append(
+            {
+                "recipe_key": recipe_key,
+                "name_key": str(recipe.get("name_key") or f"inv_craft_{recipe_key}"),
+                "output_key": str(recipe.get("output_key") or recipe_key),
+                "output_name_key": out_meta["name_key"],
+                "output_amount": int(recipe.get("output_amount") or 1),
+                "requires": requires,
+            }
+        )
+    return rows
 
 
 def _inventory_amount(user_id: int, item_key: str, *, conn) -> int:

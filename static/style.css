@@ -14942,6 +14942,45 @@ a.gc-galaxy-coord-link:focus-visible {
   padding: 12px 4px;
 }
 
+.inventory-item-body {
+  flex: 1 1 auto;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.inventory-craft-progress {
+  font-size: 0.72rem;
+  color: var(--gc-accent-warm, #ffb84d);
+}
+
+.inventory-collectible-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #c9b8ff;
+  background: rgba(201, 184, 255, 0.12);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.inventory-use-btn,
+.inventory-craft-btn {
+  flex-shrink: 0;
+}
+
+.inventory-effect-message {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(143, 232, 168, 0.1);
+  color: #8fe8a8;
+  font-weight: 600;
+}
+
 .inventory-rewards-list {
   list-style: none;
   margin: 0;

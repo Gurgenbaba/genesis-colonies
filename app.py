@@ -1432,6 +1432,138 @@ def api_inventory_open_container():
     return jsonify(resp)
 
 
+@app.route("/api/inventory/use-item", methods=["POST"])
+@require_login
+def api_inventory_use_item():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    item_key = str(data.get("item_key") or "").strip()
+    try:
+        amount = int(data.get("amount") or 1)
+    except (TypeError, ValueError):
+        amount = 0
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    from game.inventory import inventory_schema_ready
+    from game.inventory_use import use_inventory_item
+    from game.planet_evolution.repository import get_context_planet
+
+    conn = db()
+    try:
+        if not inventory_schema_ready(conn):
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_use")
+            return jsonify({"ok": False, "reason": "inventory_unavailable", "state": state}), 503
+
+        planet = get_context_planet(user_id, conn=conn)
+        planet_id = int(planet["id"])
+        begin_write_transaction(conn)
+        ok, reason, result = use_inventory_item(
+            user_id,
+            planet_id,
+            item_key,
+            amount,
+            conn=conn,
+        )
+        if not ok:
+            rollback(conn)
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_use")
+            return jsonify({"ok": False, "reason": reason, "state": state}), 400
+
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_use")
+    resp = {
+        "ok": True,
+        "reason": reason,
+        "effect": (result or {}).get("effect") or {},
+        "effects": (result or {}).get("effects") or [],
+        "consumed": (result or {}).get("consumed") or 0,
+        "item_key": (result or {}).get("item_key") or item_key,
+        "inventory": (result or {}).get("inventory") or {},
+        "state": state,
+    }
+    if request_id:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
+@app.route("/api/inventory/craft", methods=["POST"])
+@require_login
+def api_inventory_craft():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    recipe_key = str(data.get("recipe_key") or data.get("item_key") or "").strip()
+    try:
+        amount = int(data.get("amount") or 1)
+    except (TypeError, ValueError):
+        amount = 0
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    from game.inventory import inventory_schema_ready
+    from game.inventory_use import craft_inventory_item
+
+    conn = db()
+    try:
+        if not inventory_schema_ready(conn):
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_craft")
+            return jsonify({"ok": False, "reason": "inventory_unavailable", "state": state}), 503
+
+        begin_write_transaction(conn)
+        ok, reason, result = craft_inventory_item(
+            user_id,
+            recipe_key,
+            amount,
+            conn=conn,
+        )
+        if not ok:
+            rollback(conn)
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_craft")
+            return jsonify({"ok": False, "reason": reason, "state": state}), 400
+
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_craft")
+    resp = {
+        "ok": True,
+        "reason": reason,
+        "effect": (result or {}).get("effect") or {},
+        "crafted": (result or {}).get("crafted") or 0,
+        "output_key": (result or {}).get("output_key") or recipe_key,
+        "output_amount": (result or {}).get("output_amount") or 0,
+        "inventory": (result or {}).get("inventory") or {},
+        "state": state,
+    }
+    if request_id:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
 @app.route("/auction-house")
 @require_login
 def auction_house_view():

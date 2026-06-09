@@ -6175,6 +6175,77 @@
     return key;
   }
 
+  function inventoryEffectMessage(effect) {
+    if (!effect || !effect.message_key) return "";
+    const params = effect.message_params || {};
+    if (effect.kind === "time_boost") {
+      return t(effect.message_key, "Bauzeit um %(minutes)s Minuten reduziert", params);
+    }
+    if (effect.kind === "resource") {
+      const label = inventoryResourceLabel(effect.resource_key || "metal");
+      return t("inv_effect_resource_fmt", "+%(amount)s %(resource)s erhalten", {
+        amount: (params.amount || 0).toLocaleString(),
+        resource: label,
+      });
+    }
+    if (effect.kind === "planet_xp") {
+      return t(effect.message_key, "Planet erhielt +%(xp)s XP", params);
+    }
+    if (effect.kind === "craft") {
+      const outName = t(`inv_${params.output_key}`, params.output_key || "");
+      return t(effect.message_key, "%(amount)s× %(item)s hergestellt", {
+        amount: params.amount || 1,
+        item: outName,
+      });
+    }
+    return t(effect.message_key, effect.message_key, params);
+  }
+
+  function renderInventoryEffect(effect) {
+    const panel = document.getElementById("inventory-rewards-panel");
+    const msgEl = document.querySelector("[data-inventory-effect-message]");
+    const list = document.querySelector("[data-inventory-rewards-list]");
+    if (!panel) return;
+    const text = inventoryEffectMessage(effect);
+    if (msgEl) {
+      if (text) {
+        msgEl.textContent = text;
+        msgEl.hidden = false;
+      } else {
+        msgEl.textContent = "";
+        msgEl.hidden = true;
+      }
+    }
+    if (list) list.innerHTML = "";
+    if (text) panel.hidden = false;
+  }
+
+  function buildInventoryItemRowHtml(item) {
+    const rarity = item.rarity || "common";
+    const name = t(item.name_key || `inv_item_${item.item_key}`, item.item_key);
+    const amount = parseInt(item.amount, 10) || 0;
+    const craftProgress = (item.craft_progress || [])
+      .map(
+        (cp) =>
+          `<span class="inventory-craft-progress gc-mono">${amount.toLocaleString()} / ${parseInt(cp.required, 10) || 0} ${escapeHtml(t(cp.name_key, cp.output_key))}</span>`
+      )
+      .join("");
+    const collectibleBadge = item.collectible
+      ? `<span class="inventory-collectible-badge">${escapeHtml(t("inv_collectible_badge", "Sammlerstück"))}</span>`
+      : "";
+    const useBtn = item.usable
+      ? `<button type="button" class="gc-btn gc-btn-primary gc-btn-xs inventory-use-btn" data-inventory-use="${escapeHtml(item.item_key)}">${escapeHtml(t("inv_use_btn", "Benutzen"))}</button>`
+      : "";
+    const craftBtns = (item.craft_progress || [])
+      .filter((cp) => cp.can_craft)
+      .map(
+        (cp) =>
+          `<button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-craft-btn" data-inventory-craft="${escapeHtml(cp.recipe_key)}">${escapeHtml(t("inv_craft_btn", "Craften"))}</button>`
+      )
+      .join("");
+    return `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span><div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${amount.toLocaleString()}</span>${useBtn}${craftBtns}`;
+  }
+
   function renderInventoryRewards(rewards) {
     const panel = document.getElementById("inventory-rewards-panel");
     const list = document.querySelector("[data-inventory-rewards-list]");
@@ -6268,17 +6339,16 @@
     items.forEach((item) => {
       let row = itemList.querySelector(`[data-inventory-item="${item.item_key}"]`);
       if (!row) {
-        const rarity = item.rarity || "common";
-        const name = t(item.name_key || `inv_item_${item.item_key}`, item.item_key);
         row = document.createElement("li");
         row.className = "inventory-item-row";
         row.dataset.inventoryItem = item.item_key;
-        row.dataset.rarity = rarity;
-        row.innerHTML = `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span><span class="inventory-item-name">${escapeHtml(name)}</span><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span><span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×0</span>`;
+        row.dataset.rarity = item.rarity || "common";
         itemList.appendChild(row);
       }
-      const amtEl = row.querySelector(`[data-inventory-item-amount="${item.item_key}"]`);
-      if (amtEl) amtEl.textContent = `×${parseInt(item.amount, 10) || 0}`;
+      row.dataset.usable = item.usable ? "1" : "0";
+      row.dataset.collectible = item.collectible ? "1" : "0";
+      row.dataset.canCraft = item.can_craft ? "1" : "0";
+      row.innerHTML = buildInventoryItemRowHtml(item);
       row.hidden = false;
     });
 
@@ -6295,6 +6365,72 @@
     GC._inventoryEventsBound = true;
 
     document.addEventListener("click", async (ev) => {
+      const useBtn = ev.target.closest("[data-inventory-use]");
+      if (useBtn && !useBtn.disabled) {
+        const page = document.getElementById("inventory-page");
+        if (!page || page.dataset.ready !== "1") return;
+        const itemKey = useBtn.dataset.inventoryUse;
+        if (!itemKey) return;
+        useBtn.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/inventory/use-item", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+            body: JSON.stringify({
+              item_key: itemKey,
+              amount: 1,
+              request_id: `inv-use-${itemKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            }),
+          });
+          if (res?.ok) {
+            applyActionState(res, "inventory_use");
+            renderInventoryEffect(res.effect || {});
+            _inventoryLastState = res.inventory || _inventoryLastState;
+            patchInventoryDom(_inventoryLastState);
+          } else {
+            console.warn("[GC] inventory use failed:", res?.reason);
+            patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+          }
+        } catch (err) {
+          console.warn("[GC] inventory use error", err);
+          patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+        }
+        return;
+      }
+
+      const craftBtn = ev.target.closest("[data-inventory-craft]");
+      if (craftBtn && !craftBtn.disabled) {
+        const page = document.getElementById("inventory-page");
+        if (!page || page.dataset.ready !== "1") return;
+        const recipeKey = craftBtn.dataset.inventoryCraft;
+        if (!recipeKey) return;
+        craftBtn.disabled = true;
+        try {
+          const res = await GC.fetchGameAction("/api/inventory/craft", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+            body: JSON.stringify({
+              recipe_key: recipeKey,
+              amount: 1,
+              request_id: `inv-craft-${recipeKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            }),
+          });
+          if (res?.ok) {
+            applyActionState(res, "inventory_craft");
+            renderInventoryEffect(res.effect || {});
+            _inventoryLastState = res.inventory || _inventoryLastState;
+            patchInventoryDom(_inventoryLastState);
+          } else {
+            console.warn("[GC] inventory craft failed:", res?.reason);
+            patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+          }
+        } catch (err) {
+          console.warn("[GC] inventory craft error", err);
+          patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+        }
+        return;
+      }
+
       const openBtn = ev.target.closest("[data-inventory-open]");
       if (!openBtn || openBtn.disabled) return;
       const page = document.getElementById("inventory-page");
