@@ -1300,6 +1300,31 @@
     return `${m}:${String(sec).padStart(2, "0")}`;
   }
 
+  /** Unix seconds (or ms) → locale date + time for messages, chat, support. */
+  function formatLocaleDateTime(ts) {
+    const n = Number(ts);
+    if (!Number.isFinite(n) || n <= 0) return "–";
+    const ms = n < 1e12 ? n * 1000 : n;
+    const d = new Date(ms);
+    if (Number.isNaN(d.getTime())) return "–";
+    const lang = String(document.documentElement.lang || "de").trim().toLowerCase();
+    let locale = "de-DE";
+    if (lang === "en") locale = "en-GB";
+    else if (lang.includes("-")) locale = lang;
+    else if (lang === "de") locale = "de-DE";
+    else if (lang) locale = lang;
+    try {
+      return new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(d);
+    } catch (_) {
+      try {
+        return new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(d);
+      } catch (__) {
+        return "–";
+      }
+    }
+  }
+  GC.formatLocaleDateTime = formatLocaleDateTime;
+
   function formatCountdownRemain(seconds) {
     const s = Math.max(0, Math.floor(Number(seconds) || 0));
     const h = Math.floor(s / 3600);
@@ -5153,6 +5178,7 @@
     const file = BUILDING_ICON_FILE[key] || key;
     return `/static/img/buildings/${file}.png`;
   }
+  GC.buildingIconUrl = buildingIconUrl;
 
   // =========================
   // Messages unread badges (game-state polling)
@@ -5163,11 +5189,10 @@
 
   function coercePollUnreadForHud(data, reason) {
     if (!data || typeof data.unread_messages_count !== "number") return data;
-    if (String(reason || "") !== "poll") return data;
     const localUnread = GC.lastState?.unread_messages_count;
     if (typeof localUnread !== "number") return data;
-    const pollUnread = data.unread_messages_count;
-    if (pollUnread <= localUnread) return data;
+    const incomingUnread = data.unread_messages_count;
+    if (incomingUnread <= localUnread) return data;
     if (_messagesUnreadLocalAt && Date.now() - _messagesUnreadLocalAt < MESSAGES_UNREAD_LOCAL_GUARD_MS) {
       return { ...data, unread_messages_count: localUnread };
     }
@@ -5673,7 +5698,14 @@
         if (cfg.statusId) setText(cfg.statusId, statusText);
 
         const btn = document.getElementById(cfg.btnId);
-        if (btn && btn.tagName === "A" && !bqFull && btn.textContent !== btnLabel) btn.textContent = btnLabel;
+        if (btn && btn.classList.contains("gc-bld-head-action-btn")) {
+          if (btn.getAttribute("aria-label") !== btnLabel) {
+            btn.setAttribute("aria-label", btnLabel);
+            btn.title = btnLabel;
+          }
+        } else if (btn && btn.tagName === "A" && !bqFull && btn.textContent !== btnLabel) {
+          btn.textContent = btnLabel;
+        }
       });
 
       renderBuildQueue(buildQueueRaw);
@@ -8319,6 +8351,7 @@
     const sk = String(shipKey || "").trim();
     return `/static/img/ships/${sk}.png`;
   }
+  GC.shipyardIconUrl = shipyardIconUrl;
 
   function _syncShipyardQueueLiveState(queueList) {
     const first = queueList && queueList.length ? queueList[0] : null;
@@ -8854,6 +8887,7 @@
   function defenseIconUrl(defenseKey) {
     return `/static/img/defense/${String(defenseKey || "").trim()}.png`;
   }
+  GC.defenseIconUrl = defenseIconUrl;
 
   function defenseLabel(defenseKey) {
     const k = String(defenseKey || "").trim();

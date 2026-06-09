@@ -117,6 +117,45 @@
     return shipLabel(k);
   }
 
+  function unitIconUrl(key, defenseStock) {
+    const k = String(key || "").trim();
+    if (!k) return "";
+    if (defenseStock && Object.prototype.hasOwnProperty.call(defenseStock, k)) {
+      return typeof GC.defenseIconUrl === "function"
+        ? GC.defenseIconUrl(k)
+        : `/static/img/defense/${k}.png`;
+    }
+    return typeof GC.shipyardIconUrl === "function"
+      ? GC.shipyardIconUrl(k)
+      : `/static/img/ships/${k}.png`;
+  }
+
+  function reportBuildingIconUrl(key) {
+    const k = String(key || "").trim();
+    if (!k) return "";
+    return typeof GC.buildingIconUrl === "function"
+      ? GC.buildingIconUrl(k)
+      : `/static/img/buildings/${k}.png`;
+  }
+
+  function reportUnitChipImg(key, defenseStock) {
+    const src = unitIconUrl(key, defenseStock);
+    if (!src) return "";
+    return (
+      `<img class="gc-combat-unit-chip-img" src="${esc(src)}" alt="" loading="lazy" decoding="async"` +
+      ` onerror="this.style.display='none'">`
+    );
+  }
+
+  function reportBuildingChipImg(key) {
+    const src = reportBuildingIconUrl(key);
+    if (!src) return "";
+    return (
+      `<img class="gc-combat-unit-chip-img" src="${esc(src)}" alt="" loading="lazy" decoding="async"` +
+      ` onerror="this.style.display='none'">`
+    );
+  }
+
   function renderUnitRows(stock, defenseStock) {
     const entries = Object.entries(stock || {}).filter(([, qty]) => Number(qty) > 0);
     if (!entries.length) {
@@ -334,6 +373,7 @@
         .map(
           ([key, qty]) =>
             `<div class="gc-combat-unit-chip">` +
+            `${reportUnitChipImg(key, defenseStock)}` +
             `<span class="gc-combat-unit-chip-name">${esc(unitLabel(key, defenseStock))}</span>` +
             `<strong class="gc-combat-unit-chip-qty">×${esc(formatInt(qty))}</strong>` +
             `</div>`
@@ -856,6 +896,7 @@
         .map(
           ([key, lvl]) =>
             `<div class="gc-combat-unit-chip gc-combat-unit-chip--building">` +
+            `${reportBuildingChipImg(key)}` +
             `<span class="gc-combat-unit-chip-name">${esc(buildingLabel(key))}</span>` +
             `<strong class="gc-combat-unit-chip-qty">L${esc(formatInt(lvl))}</strong>` +
             `</div>`
@@ -1414,22 +1455,14 @@
   }
 
   function formatTime(ts) {
+    if (typeof GC.formatLocaleDateTime === "function") return GC.formatLocaleDateTime(ts);
     const n = Number(ts);
     if (!Number.isFinite(n) || n <= 0) return "–";
     try {
-      const d = new Date(n * 1000);
-      const now = new Date();
-      const sameDay =
-        d.getFullYear() === now.getFullYear() &&
-        d.getMonth() === now.getMonth() &&
-        d.getDate() === now.getDate();
-      const locale = document.documentElement.lang || undefined;
-      if (sameDay) {
-        return new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(d);
-      }
-      return new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(d);
+      const ms = n < 1e12 ? n * 1000 : n;
+      return new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(ms));
     } catch (_) {
-      return String(n);
+      return "–";
     }
   }
 
@@ -1506,6 +1539,9 @@
     const n = Math.max(0, Number(count) || 0);
     const el = document.getElementById("messages-unread-count");
     if (el) el.textContent = String(n);
+    if (typeof GC.updateMessagesUnreadBadges === "function") {
+      GC.updateMessagesUnreadBadges(n);
+    }
     if (typeof GC.mergeLastState === "function") {
       GC.mergeLastState({ unread_messages_count: n }, "messages_local");
     }
@@ -2116,6 +2152,8 @@
     }
 
     async function openMessage(id) {
+      const prevIdx = state.messages.findIndex((m) => m.id === id);
+      const wasUnread = prevIdx >= 0 && !state.messages[prevIdx].is_read;
       const data = await messagesApi(`/api/messages/${id}`);
       if (!isCurrentInit(state, initSeq)) return;
       if (!data || !data.ok) {
@@ -2130,9 +2168,19 @@
       state.selectedId = id;
       const idx = state.messages.findIndex((m) => m.id === id);
       if (idx >= 0) state.messages[idx] = msg;
+      if (!syncUnreadFromResponse(data)) {
+        if (wasUnread && msg.is_read) {
+          const cur =
+            typeof GC.lastState?.unread_messages_count === "number"
+              ? GC.lastState.unread_messages_count
+              : 1;
+          updateLocalUnread(Math.max(0, cur - 1));
+        } else {
+          await refreshBadgesFromServer();
+        }
+      }
       renderList();
       renderDetail(msg);
-      if (!syncUnreadFromResponse(data)) await refreshBadgesFromServer();
     }
 
     async function postAction(url) {

@@ -67,6 +67,15 @@ def test_messages_js_tab_and_initial_share_load_list():
     assert "force: true" in tab_section
 
 
+def test_messages_js_format_time_always_includes_date():
+    messages_js = _read("static/js/messages.js")
+    fmt = messages_js.split("function formatTime(ts)")[1].split("function getMessagesDom")[0]
+    assert "GC.formatLocaleDateTime" in fmt
+    assert "sameDay" not in fmt
+    main = _read("static/main.js")
+    assert "GC.formatLocaleDateTime = formatLocaleDateTime" in main
+
+
 def test_messages_js_spy_report_and_category_label():
     src = _read("static/js/messages.js")
     assert "function categoryLabel(cat)" in src
@@ -516,12 +525,32 @@ def test_main_js_gc546d_production_completion_poll_storm_guards():
     assert "_productionZeroHandled.defense" in render_def
 
 
+def test_main_js_building_upgrade_icon_not_overwritten_by_poll():
+    """Live game-state must not replace gc-bld-head-action-btn + icon with text label."""
+    src = _read("static/main.js")
+    block = src.split("const btn = document.getElementById(cfg.btnId)")[1].split("});")[0]
+    assert "gc-bld-head-action-btn" in block
+    assert "textContent = btnLabel" not in block.split("gc-bld-head-action-btn")[0]
+
+
+def test_messages_js_report_unit_images():
+    src = _read("static/js/messages.js")
+    assert "function unitIconUrl(key, defenseStock)" in src
+    assert "gc-combat-unit-chip-img" in src
+    assert "reportBuildingChipImg" in src
+    assert "GC.updateMessagesUnreadBadges(n)" in src
+
+
 def test_main_js_gc546e_stale_poll_unread_guard():
-    """GC-546E: game-state poll must not restore stale unread after messages.js sync."""
+    """GC-546E: game-state must not restore stale unread after messages.js sync."""
     src = _read("static/main.js")
     assert "function coercePollUnreadForHud(data, reason)" in src
     assert "_messagesUnreadLocalAt" in src
     assert "MESSAGES_UNREAD_LOCAL_GUARD_MS" in src
+    coerce = src.split("function coercePollUnreadForHud(data, reason)")[1].split("function updateMessagesUnreadBadges")[0]
+    assert "incomingUnread" in coerce
+    assert 'reason || "") !== "poll"' not in coerce
+    assert 'reason || "") !== "poll"' not in coerce
     merge = src.split("GC.mergeLastState = function mergeLastState")[1].split("function patchOverviewScoreFromState")[0]
     assert '_messagesUnreadLocalAt = Date.now()' in merge
     assert 'String(reason || "").includes("messages")' in merge

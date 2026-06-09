@@ -52,10 +52,15 @@ def test_chat_js_bootstrap_interval_60s():
 def test_chat_js_message_time_includes_date_outside_today():
     src = _read("static/js/chat.js")
     fmt = src.split("function formatTime(ts)")[1].split("function isNearBottom")[0]
-    assert "Intl.DateTimeFormat" in fmt
-    assert "dateStyle" in fmt
-    assert "timeStyle" in fmt
-    assert 'toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })' not in fmt
+    assert "GC.formatLocaleDateTime" in fmt
+    assert "sameDay" not in fmt
+    main = _read("static/main.js")
+    assert "function formatLocaleDateTime(ts)" in main
+    assert "GC.formatLocaleDateTime = formatLocaleDateTime" in main
+    locale_fmt = main.split("function formatLocaleDateTime(ts)")[1].split("GC.formatLocaleDateTime")[0]
+    assert "dateStyle" in locale_fmt
+    assert "timeStyle" in locale_fmt
+    assert "sameDay" not in locale_fmt
 
 
 def test_main_js_init_page_calls_init_chat_not_resume():

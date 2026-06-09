@@ -12838,6 +12838,15 @@ body.gc-combat-report-open { overflow: hidden; }
   font-size: 0.8rem;
 }
 
+.gc-combat-unit-chip-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
 .gc-combat-unit-chip-qty {
   font-family: var(--gc-mono);
   color: var(--gc-neon-cyan);

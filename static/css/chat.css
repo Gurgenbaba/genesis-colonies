@@ -381,6 +381,14 @@
   font-size: 0.62rem;
 }
 
+.gc-chat-msg-time {
+  margin-left: auto;
+  font-family: var(--gc-mono);
+  font-size: 0.66rem;
+  color: var(--gc-text-soft, var(--gc-text-dim));
+  white-space: nowrap;
+}
+
 .gc-chat-msg-body {
   font-size: 0.82rem;
 }
