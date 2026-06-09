@@ -51,6 +51,7 @@ from .effects.effect_resolver import EffectResolver
 
 from .techtree import (
     get_techtree_data as _tt_get_techtree_data,
+    get_techtree_page_context as _tt_get_techtree_page_context,
     get_building_tree_status as _tt_get_building_tree_status,
 )
 
@@ -559,6 +560,19 @@ def get_techtree_data(
     Wrapper um game.techtree.get_techtree_data.
     """
     return _tt_get_techtree_data(
+        buildings=buildings,
+        research=research,
+        user_id=user_id,
+    )
+
+
+def get_techtree_page_context(
+    buildings: Optional[Dict[str, int]] = None,
+    research: Optional[Dict[str, int]] = None,
+    user_id: Optional[int] = None,
+):
+    """Wrapper um game.techtree.get_techtree_page_context."""
+    return _tt_get_techtree_page_context(
         buildings=buildings,
         research=research,
         user_id=user_id,

@@ -5053,6 +5053,246 @@ img.gc-res-icon.gc-res-energy{
 .tech-req-missing{ color: rgba(255, 196, 0, 0.90); }
 .tech-req-current{ color: var(--gc-text-dim); margin-left: 6px; }
 
+/* Tech-Tree board (GC-555) */
+.techtree-page .techtree-toolbar{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(70, 229, 255, 0.18);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(5, 10, 22, 0.55);
+}
+.techtree-search-wrap{ flex: 1 1 220px; min-width: 0; }
+.techtree-search-input{
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  background: rgba(3, 8, 18, 0.72);
+  color: var(--gc-text-soft);
+  font-size: 0.9rem;
+}
+.techtree-search-input:focus{
+  outline: none;
+  border-color: rgba(70, 229, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(70, 229, 255, 0.25);
+}
+.techtree-filter-bar{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.techtree-filter-btn{
+  padding: 6px 10px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.18);
+  background: rgba(5, 10, 22, 0.58);
+  color: var(--gc-text-dim);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color .12s ease, color .12s ease, background .12s ease;
+}
+.techtree-filter-btn:hover{
+  border-color: rgba(70, 229, 255, 0.42);
+  color: var(--gc-text-soft);
+}
+.techtree-filter-btn.is-active{
+  border-color: rgba(70, 229, 255, 0.55);
+  background: rgba(70, 229, 255, 0.08);
+  color: var(--gc-primary-2);
+}
+.techtree-board{
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.techtree-section{
+  border: 1px solid rgba(70, 229, 255, 0.16);
+  border-radius: var(--gc-radius-sm);
+  background: linear-gradient(180deg, rgba(8, 14, 28, 0.82), rgba(5, 10, 22, 0.62));
+  box-shadow: 0 16px 40px rgba(0,0,0,0.42);
+  overflow: hidden;
+}
+.techtree-section-header{
+  border-bottom: 1px solid rgba(70, 229, 255, 0.1);
+}
+.techtree-section-toggle{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--gc-text-soft);
+  text-align: left;
+  cursor: pointer;
+}
+.techtree-section-toggle:hover{ background: rgba(70, 229, 255, 0.04); }
+.techtree-section-chevron{
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--gc-primary-2);
+  border-bottom: 2px solid var(--gc-primary-2);
+  transform: rotate(45deg);
+  transition: transform .15s ease;
+  flex-shrink: 0;
+}
+.techtree-section.is-collapsed .techtree-section-chevron{
+  transform: rotate(-45deg);
+}
+.techtree-section-icon{
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  background: rgba(70, 229, 255, 0.12);
+  flex-shrink: 0;
+}
+.techtree-section-title{
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-size: 0.92rem;
+  letter-spacing: 0.05em;
+  color: var(--gc-primary-2);
+}
+.techtree-section-progress{
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--gc-text-dim);
+  white-space: nowrap;
+}
+.techtree-section-hint{
+  margin: 0;
+  padding: 0 16px 12px;
+  color: var(--gc-text-dim);
+  font-size: 0.84rem;
+}
+.techtree-section-body{
+  padding: 14px 16px 16px;
+}
+.techtree-section.is-collapsed .techtree-section-body{
+  display: none;
+}
+.techtree-card-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+}
+.tech-card{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 14px;
+  border: 1px solid rgba(120, 190, 255, 0.14);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(3, 8, 18, 0.62);
+  min-width: 0;
+}
+.tech-card-head{
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.tech-card-icon{
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 8px rgba(70, 229, 255, 0.18));
+}
+.tech-card-head-text{ flex: 1; min-width: 0; }
+.tech-card-title{
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--gc-text-soft);
+  overflow-wrap: break-word;
+}
+.tech-card-meta{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.tech-card-tag{
+  padding: 2px 7px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.16);
+  background: rgba(5, 10, 22, 0.55);
+  color: var(--gc-text-dim);
+  font-size: 0.72rem;
+}
+.tech-card-tag--prepared{
+  border-color: rgba(255, 196, 0, 0.35);
+  color: rgba(255, 210, 80, 0.92);
+}
+.tech-card-status{
+  padding: 2px 7px;
+  border-radius: var(--gc-radius-sm);
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.tech-card-status--unlocked{
+  border: 1px solid rgba(80, 220, 160, 0.35);
+  color: rgba(140, 255, 200, 0.92);
+  background: rgba(40, 120, 90, 0.12);
+}
+.tech-card-status--available{
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  color: var(--gc-primary-2);
+  background: rgba(70, 229, 255, 0.08);
+}
+.tech-card-status--locked{
+  border: 1px solid rgba(255, 120, 120, 0.25);
+  color: rgba(255, 170, 170, 0.88);
+  background: rgba(120, 40, 40, 0.1);
+}
+.tech-card-status--planned{
+  border: 1px solid rgba(255, 196, 0, 0.35);
+  color: rgba(255, 210, 80, 0.92);
+  background: rgba(120, 90, 20, 0.12);
+}
+.tech-card-desc{
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--gc-text-dim);
+  line-height: 1.45;
+}
+.tech-card-reqs-label{
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+}
+.tech-card-cost-values{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+.tech-card.is-filter-hidden,
+.techtree-section.is-filter-empty{
+  display: none;
+}
+@media (max-width: 640px){
+  .techtree-section-toggle{
+    flex-wrap: wrap;
+    padding: 12px;
+  }
+  .techtree-section-progress{
+    width: 100%;
+    margin-left: 28px;
+  }
+  .techtree-filter-bar{ width: 100%; }
+}
+
 /* =========================
    19) Galaxy
    ========================= */

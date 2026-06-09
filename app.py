@@ -53,7 +53,7 @@ from game.logic import (
     cancel_research,
     get_storage_capacity,
     get_research_status,
-    get_techtree_data,
+    get_techtree_page_context,
 )
 
 from game.buildings import get_buildings_panel_rows
@@ -944,7 +944,7 @@ def techtree_view():
     techs = research_status.get("techs", []) or []
     research_levels = {t.get("key"): int(t.get("level", 0) or 0) for t in techs}
 
-    building_nodes, research_nodes = get_techtree_data(
+    techtree_ctx = get_techtree_page_context(
         buildings=buildings,
         research=research_levels,
         user_id=user_id,
@@ -957,8 +957,10 @@ def techtree_view():
         energy_total=ctx["energy_total"],
         energy_used=ctx["energy_used"],
         storage_caps=ctx["storage_caps"],
-        building_nodes=building_nodes,
-        research_nodes=research_nodes,
+        techtree_sections=techtree_ctx.get("sections") or [],
+        building_nodes=techtree_ctx.get("building_nodes") or [],
+        research_nodes=techtree_ctx.get("research_nodes") or [],
+        defense_ready=techtree_ctx.get("defense_ready", True),
     )
 
 

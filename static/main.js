@@ -10802,7 +10802,138 @@
   GC.modules.ranking = function initRankingPage() {
     GC.initRanking();
   };
-  GC.modules.techtree = function initTechtree() {};
+  const TECHTREE_STORAGE_KEY = "gc_techtree_collapsed";
+
+  function loadTechtreeCollapsed(defaultCollapsedKeys) {
+    try {
+      const raw = localStorage.getItem(TECHTREE_STORAGE_KEY);
+      if (!raw) return new Set(defaultCollapsedKeys || []);
+      const parsed = JSON.parse(raw);
+      return new Set(Array.isArray(parsed?.collapsed) ? parsed.collapsed.filter(Boolean) : []);
+    } catch (_) {
+      return new Set(defaultCollapsedKeys || []);
+    }
+  }
+
+  function saveTechtreeCollapsed(collapsedKeys) {
+    try {
+      localStorage.setItem(
+        TECHTREE_STORAGE_KEY,
+        JSON.stringify({ collapsed: collapsedKeys.filter(Boolean) })
+      );
+    } catch (_) {}
+  }
+
+  function applyTechtreeSectionCollapse(root, sectionKey, collapsed) {
+    if (!root || !sectionKey) return;
+    const section = root.querySelector(`[data-techtree-section="${sectionKey}"]`);
+    if (!section) return;
+    const toggle = section.querySelector("[data-techtree-section-toggle]");
+    const body = section.querySelector(".techtree-section-body");
+    section.classList.toggle("is-collapsed", collapsed);
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    }
+    if (body) {
+      if (collapsed) body.setAttribute("hidden", "");
+      else body.removeAttribute("hidden");
+    }
+  }
+
+  function bindTechtreeOnce() {
+    if (GC._techtreeBound) return;
+    GC._techtreeBound = true;
+
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-techtree-section-toggle]");
+      if (!btn) return;
+      const root = document.getElementById("techtree-page");
+      if (!root || !root.contains(btn)) return;
+      e.preventDefault();
+
+      const sectionKey = btn.dataset.techtreeSectionToggle;
+      if (!sectionKey) return;
+
+      const section = root.querySelector(`[data-techtree-section="${sectionKey}"]`);
+      const willCollapse = !section?.classList.contains("is-collapsed");
+      applyTechtreeSectionCollapse(root, sectionKey, willCollapse);
+
+      const collapsed = [];
+      root.querySelectorAll(".techtree-section.is-collapsed").forEach((el) => {
+        const key = el.dataset.techtreeSection;
+        if (key) collapsed.push(key);
+      });
+      saveTechtreeCollapsed(collapsed);
+    });
+
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-techtree-filter]");
+      if (!btn) return;
+      const root = document.getElementById("techtree-page");
+      if (!root || !root.contains(btn)) return;
+      e.preventDefault();
+      root.querySelectorAll(".techtree-filter-btn").forEach((el) => {
+        el.classList.toggle("is-active", el === btn);
+      });
+      applyTechtreeFilters(root);
+    });
+  }
+
+  function applyTechtreeFilters(root) {
+    if (!root) return;
+    const query = (root.querySelector("#techtree-search")?.value || "").trim().toLowerCase();
+    const activeFilter =
+      root.querySelector(".techtree-filter-btn.is-active")?.dataset?.techtreeFilter || "all";
+
+    root.querySelectorAll("[data-techtree-section]").forEach((section) => {
+      let visibleCount = 0;
+      section.querySelectorAll("[data-techtree-item]").forEach((card) => {
+        const status = card.dataset.status || "locked";
+        const searchText = card.dataset.searchText || "";
+        const matchesFilter = activeFilter === "all" || status === activeFilter;
+        const matchesSearch = !query || searchText.includes(query);
+        const visible = matchesFilter && matchesSearch;
+        card.classList.toggle("is-filter-hidden", !visible);
+        if (visible) visibleCount += 1;
+      });
+      section.classList.toggle("is-filter-empty", visibleCount === 0);
+    });
+  }
+
+  function initTechtree() {
+    const root = document.getElementById("techtree-page");
+    if (!root) return;
+
+    bindTechtreeOnce();
+
+    const defaultCollapsed = [];
+    root.querySelectorAll("[data-techtree-section]").forEach((section) => {
+      if (section.dataset.defaultCollapsed === "1") {
+        const key = section.dataset.techtreeSection;
+        if (key) defaultCollapsed.push(key);
+      }
+    });
+
+    const collapsed = loadTechtreeCollapsed(defaultCollapsed);
+    root.querySelectorAll("[data-techtree-section-toggle]").forEach((btn) => {
+      const key = btn.dataset.techtreeSectionToggle;
+      if (key) applyTechtreeSectionCollapse(root, key, collapsed.has(key));
+    });
+
+    const searchInput = root.querySelector("#techtree-search");
+    if (searchInput && !searchInput.dataset.bound) {
+      searchInput.dataset.bound = "1";
+      searchInput.addEventListener("input", () => applyTechtreeFilters(root));
+    }
+
+    applyTechtreeFilters(root);
+    GC.registerCleanup(() => {
+      if (searchInput) searchInput.dataset.bound = "";
+    });
+  }
+
+  GC.modules.techtree = initTechtree;
+
   GC.modules.options = function initOptionsModule() {
     if (typeof GC.initOptionsPage === "function") {
       GC.initOptionsPage();

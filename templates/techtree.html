@@ -2,9 +2,8 @@
 
 {% block content %}
 
-<div class="gc-page techtree-page">
+<div class="gc-page techtree-page" id="techtree-page">
 
-  <!-- Headline -->
   <header class="gc-page-header section-header">
     {% set ttl = T("techtree_title") %}
     <h2 class="section-title">
@@ -13,7 +12,7 @@
 
     {% set hint = T("techtree_hint") %}
     <p class="section-hint hint">
-      {{ hint if hint != "techtree_hint" else "Gebäude- und Forschungsbaum deiner Kolonie. Sieh, was freigeschaltet ist – und was noch vor dir liegt." }}
+      {{ hint if hint != "techtree_hint" else "Strategisches Entwicklungsarchiv deiner Kolonie — Gebäude, Forschung, Flotte und Planet Evolution." }}
     </p>
 
     <div class="tech-nav-links">
@@ -23,249 +22,191 @@
     </div>
   </header>
 
-  {# Defensive Defaults: niemals undefined explodieren lassen #}
-  {% set bnodes = (building_nodes if building_nodes is defined and building_nodes else []) %}
-  {% set rnodes = (research_nodes if research_nodes is defined and research_nodes else []) %}
+  {% set sections = (techtree_sections if techtree_sections is defined and techtree_sections else []) %}
 
-  <div class="gc-grid-2">
+  <div class="techtree-toolbar">
+    <label class="techtree-search-wrap">
+      <span class="sr-only">{{ T("techtree_search_label", "Tech-Tree durchsuchen") }}</span>
+      <input
+        type="search"
+        class="techtree-search-input"
+        id="techtree-search"
+        placeholder="{{ T('techtree_search_placeholder', 'Suche…') }}"
+        autocomplete="off">
+    </label>
 
-    <!-- ===================================================== -->
-    <!-- GEBÄUDE-BAUM                                          -->
-    <!-- ===================================================== -->
-    <section class="gc-panel tech-panel">
+    <div class="techtree-filter-bar" role="group" aria-label="{{ T('techtree_filter_label', 'Filter') }}">
+      {% for fkey, flabel in [
+        ('all', T('techtree_filter_all', 'Alle')),
+        ('unlocked', T('techtree_status_unlocked', 'Freigeschaltet')),
+        ('available', T('techtree_status_available', 'Verfügbar')),
+        ('locked', T('techtree_status_locked', 'Gesperrt')),
+        ('planned', T('techtree_status_planned', 'Geplant')),
+      ] %}
+        <button
+          type="button"
+          class="techtree-filter-btn{% if fkey == 'all' %} is-active{% endif %}"
+          data-techtree-filter="{{ fkey }}">
+          {{ flabel }}
+        </button>
+      {% endfor %}
+    </div>
+  </div>
 
-      <div class="gc-panel-header">
-        <span class="gc-panel-title">{{ T("nav_buildings") }}</span>
-        {% set bh = T("techtree_buildings_hint") %}
-        <span class="gc-panel-subtitle">
-          {{ bh if bh != "techtree_buildings_hint" else "Gebäude schalten neue Möglichkeiten frei – von effizienterer Produktion bis zu mächtigen Anlagen." }}
-        </span>
-      </div>
+  <div class="techtree-board">
+    {% if sections and sections|length > 0 %}
+      {% for section in sections %}
+        {% set skey = section.key if section and section.key is defined else "" %}
+        {% set collapsed = section.default_collapsed if section.default_collapsed is defined else true %}
 
-      <table class="tech-table table-std">
-        <thead>
-          <tr class="tech-head-row">
-            {% set hb = T("header_building") %}
-            {% set hl = T("header_level_short") %}
-            {% set hr = T("header_requirements") %}
-            <th>{{ hb if hb != "header_building" else "Gebäude" }}</th>
-            <th class="tech-col-level">{{ hl if hl != "header_level_short" else "L" }}</th>
-            <th class="tech-col-req">{{ hr if hr != "header_requirements" else "Voraussetzungen" }}</th>
-          </tr>
-        </thead>
+        <section
+          class="techtree-section{% if collapsed %} is-collapsed{% endif %}"
+          data-techtree-section="{{ skey }}"
+          data-default-collapsed="{{ '1' if collapsed else '0' }}">
 
-        <tbody>
-          {% if bnodes and bnodes|length > 0 %}
-            {% for node in bnodes %}
-              {# node defensiv #}
-              {% set nkey = (node.key if node and node.key is defined else "") %}
-              {% set nlevel = (node.level if node and node.level is defined else 0) %}
-              {% set nicon = (node.icon if node and node.icon is defined else None) %}
-              {% set ncat = (node.category if node and node.category is defined else None) %}
-              {% set nreqs = (node.requirements if node and node.requirements is defined and node.requirements else []) %}
+          <header class="techtree-section-header">
+            <button
+              type="button"
+              class="techtree-section-toggle"
+              data-techtree-section-toggle="{{ skey }}"
+              aria-expanded="{{ 'false' if collapsed else 'true' }}"
+              aria-controls="techtree-section-body-{{ skey }}">
+              <span class="techtree-section-chevron" aria-hidden="true"></span>
+              <span class="techtree-section-icon techtree-section-icon--{{ section.icon or 'default' }}" aria-hidden="true"></span>
+              <span class="techtree-section-title">{{ T(section.label_key, skey) }}</span>
+              <span class="techtree-section-progress">
+                {{ (section.progress_unlocked or 0)|fmt_int }} / {{ (section.progress_total or 0)|fmt_int }}
+                {{ T("techtree_progress_unlocked", "freigeschaltet") }}
+              </span>
+            </button>
+            {% if section.hint_key %}
+              <p class="techtree-section-hint">{{ T(section.hint_key) }}</p>
+            {% endif %}
+          </header>
 
-              <tr class="tech-row">
+          <div
+            class="techtree-section-body"
+            id="techtree-section-body-{{ skey }}"
+            {% if collapsed %}hidden{% endif %}>
 
-                <td>
-                  {# Label-Auflösung:
-                     1) building_<key>
-                     2) <key>
-                     3) fallback: key #}
-                  {% set b_key = "building_" ~ nkey %}
-                  {% set b_label_raw = T(b_key) %}
-                  {% if b_label_raw != b_key %}
-                    {% set b_label = b_label_raw %}
-                  {% else %}
-                    {% set b_label2 = T(nkey) %}
-                    {% set b_label = b_label2 if b_label2 != nkey else (nkey if nkey else "–") %}
-                  {% endif %}
+            <div class="techtree-card-grid">
+              {% for item in (section.nodes or []) %}
+                {% set ikey = item.key if item and item.key is defined else "" %}
+                {% set istatus = item.status if item and item.status is defined else "locked" %}
+                {% set ilabel_key = item.label_key if item and item.label_key is defined else ikey %}
+                {% set ilabel = T(ilabel_key) %}
+                {% if ilabel == ilabel_key %}
+                  {% set ilabel = T(ikey) if T(ikey) != ikey else ikey %}
+                {% endif %}
 
-                  <div class="tech-name">
-                    {% if nicon %}
+                <article
+                  class="tech-card tech-card--{{ istatus }}"
+                  data-techtree-item
+                  data-status="{{ istatus }}"
+                  data-search-text="{{ ilabel|lower }} {{ ikey|lower }}">
+
+                  <div class="tech-card-head">
+                    {% if item.icon %}
                       <img
-                        src="{{ url_for('static', filename=nicon) }}"
-                        alt="{{ b_label }}"
-                        class="tech-icon">
+                        src="{{ url_for('static', filename=item.icon) }}"
+                        alt=""
+                        class="tech-card-icon"
+                        loading="lazy">
                     {% endif %}
 
-                    <div class="tech-name-text">
-                      <span class="tech-name-main">{{ b_label }}</span>
+                    <div class="tech-card-head-text">
+                      <h3 class="tech-card-title">{{ ilabel }}</h3>
 
-                      {% if ncat %}
-                        {% set cat_key = "techtree_cat_" ~ ncat %}
-                        {% set cat_label = T(cat_key) %}
-                        <span class="tech-tag">
-                          {{ cat_label if cat_label != cat_key else (ncat|capitalize) }}
+                      <div class="tech-card-meta">
+                        {% if item.category_label_key %}
+                          <span class="tech-card-tag">{{ T(item.category_label_key) }}</span>
+                        {% elif item.role_label_key %}
+                          <span class="tech-card-tag">{{ T(item.role_label_key) }}</span>
+                        {% endif %}
+
+                        <span class="tech-card-status tech-card-status--{{ istatus }}">
+                          {% if istatus == 'unlocked' %}
+                            {{ T("techtree_status_unlocked", "Freigeschaltet") }}
+                          {% elif istatus == 'available' %}
+                            {{ T("techtree_status_available", "Verfügbar") }}
+                          {% elif istatus == 'planned' %}
+                            {{ T("techtree_status_planned", "Geplant") }}
+                          {% else %}
+                            {{ T("techtree_status_locked", "Gesperrt") }}
+                          {% endif %}
                         </span>
-                      {% endif %}
-                    </div>
-                  </div>
-                </td>
 
-                <td class="tech-col-level">
-                  <span class="tech-level-pill">L{{ (nlevel or 0)|fmt_int }}</span>
-                </td>
-
-                <td class="tech-col-req">
-                  {% if nreqs and nreqs|length > 0 %}
-                    <ul class="tech-req-list">
-                      {% for req in nreqs %}
-                        {% set rq_key = (req.key if req and req.key is defined else "") %}
-                        {% set rq_req_lvl = (req.required_level if req and req.required_level is defined else 0) %}
-                        {% set rq_cur_lvl = (req.current_level if req and req.current_level is defined else 0) %}
-                        {% set rq_met = (req.met if req and req.met is defined else False) %}
-
-                        {# Requirement Label:
-                           1) req.key
-                           2) building_<req.key>
-                           3) fallback: req.key #}
-                        {% set rq_label_1 = T(rq_key) %}
-                        {% if rq_label_1 != rq_key %}
-                          {% set rq_label = rq_label_1 %}
-                        {% else %}
-                          {% set rq_b_key = "building_" ~ rq_key %}
-                          {% set rq_label_2 = T(rq_b_key) %}
-                          {% set rq_label = rq_label_2 if rq_label_2 != rq_b_key else (rq_key if rq_key else "–") %}
+                        {% if item.effect_status == 'prepared' %}
+                          <span class="tech-card-tag tech-card-tag--prepared">
+                            {{ T("techtree_effect_prepared", "Effekt vorbereitet") }}
+                          </span>
                         {% endif %}
+                      </div>
+                    </div>
 
-                        <li class="{% if rq_met %}tech-req-met{% else %}tech-req-missing{% endif %}">
-                          {{ rq_label }} – L{{ (rq_req_lvl or 0)|fmt_int }}
-                          {% if not rq_met %}
-                            <span class="tech-req-current">
-                              (aktuell L{{ (rq_cur_lvl or 0)|fmt_int }})
-                            </span>
-                          {% endif %}
-                        </li>
-                      {% endfor %}
-                    </ul>
-                  {% else %}
-                    <span class="tech-req-met">–</span>
-                  {% endif %}
-                </td>
-
-              </tr>
-            {% endfor %}
-          {% else %}
-            <tr>
-              <td colspan="3" class="tech-empty">
-                {{ T("techtree_empty_buildings") if T("techtree_empty_buildings") != "techtree_empty_buildings"
-                   else "Keine Gebäude-Daten vorhanden (Tech-Tree Nodes prüfen)." }}
-              </td>
-            </tr>
-          {% endif %}
-        </tbody>
-      </table>
-    </section>
-
-    <!-- ===================================================== -->
-    <!-- FORSCHUNGS-BAUM                                       -->
-    <!-- ===================================================== -->
-    <section class="gc-panel tech-panel">
-
-      <div class="gc-panel-header">
-        <span class="gc-panel-title">{{ T("nav_research") }}</span>
-        {% set rh = T("techtree_research_hint") %}
-        <span class="gc-panel-subtitle">
-          {{ rh if rh != "techtree_research_hint" else "Forschung erweitert deine Möglichkeiten – Antrieb, Waffen, Schilde und mehr." }}
-        </span>
-      </div>
-
-      <table class="tech-table table-std">
-        <thead>
-          <tr class="tech-head-row">
-            {% set ht = T("header_technology") %}
-            {% set hl = T("header_level_short") %}
-            {% set hr = T("header_requirements") %}
-            <th>{{ ht if ht != "header_technology" else "Technologie" }}</th>
-            <th class="tech-col-level">{{ hl if hl != "header_level_short" else "L" }}</th>
-            <th class="tech-col-req">{{ hr if hr != "header_requirements" else "Voraussetzungen" }}</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {% if rnodes and rnodes|length > 0 %}
-            {% for node in rnodes %}
-              {% set nkey = (node.key if node and node.key is defined else "") %}
-              {% set nlabel = (node.label if node and node.label is defined else None) %}
-              {% set nlevel = (node.level if node and node.level is defined else 0) %}
-              {% set nicon = (node.icon if node and node.icon is defined else None) %}
-              {% set nreqs = (node.requirements if node and node.requirements is defined and node.requirements else []) %}
-
-              <tr class="tech-row">
-
-                <td>
-                  {# Research Label:
-                     1) T(node.key)
-                     2) node.label
-                     3) node.key #}
-                  {% set r_label_raw = T(nkey) %}
-                  {% set r_label = r_label_raw if r_label_raw != nkey else (nlabel or (nkey if nkey else "–")) %}
-
-                  <div class="tech-name">
-                    {% if nicon %}
-                      <img
-                        src="{{ url_for('static', filename='img/research/' ~ nicon) }}"
-                        alt="{{ r_label }}"
-                        class="tech-icon">
+                    {% if item.level is defined and item.level|int > 0 %}
+                      <span class="tech-level-pill">
+                        {% if item.kind == 'ship' or item.kind == 'defense' %}
+                          ×{{ item.level|fmt_int }}
+                        {% else %}
+                          L{{ item.level|fmt_int }}
+                        {% endif %}
+                      </span>
                     {% endif %}
-
-                    <div class="tech-name-text">
-                      <span class="tech-name-main">{{ r_label }}</span>
-                    </div>
                   </div>
-                </td>
 
-                <td class="tech-col-level">
-                  <span class="tech-level-pill">L{{ (nlevel or 0)|fmt_int }}</span>
-                </td>
-
-                <td class="tech-col-req">
-                  {% if nreqs and nreqs|length > 0 %}
-                    <ul class="tech-req-list">
-                      {% for req in nreqs %}
-                        {% set rq_key = (req.key if req and req.key is defined else "") %}
-                        {% set rq_req_lvl = (req.required_level if req and req.required_level is defined else 0) %}
-                        {% set rq_cur_lvl = (req.current_level if req and req.current_level is defined else 0) %}
-                        {% set rq_met = (req.met if req and req.met is defined else False) %}
-
-                        {% set rq_label_1 = T(rq_key) %}
-                        {% if rq_label_1 != rq_key %}
-                          {% set rq_label = rq_label_1 %}
-                        {% else %}
-                          {% set rq_b_key = "building_" ~ rq_key %}
-                          {% set rq_label_2 = T(rq_b_key) %}
-                          {% set rq_label = rq_label_2 if rq_label_2 != rq_b_key else (rq_key if rq_key else "–") %}
-                        {% endif %}
-
-                        <li class="{% if rq_met %}tech-req-met{% else %}tech-req-missing{% endif %}">
-                          {{ rq_label }} – L{{ (rq_req_lvl or 0)|fmt_int }}
-                          {% if not rq_met %}
-                            <span class="tech-req-current">
-                              (aktuell L{{ (rq_cur_lvl or 0)|fmt_int }})
-                            </span>
-                          {% endif %}
-                        </li>
-                      {% endfor %}
-                    </ul>
-                  {% else %}
-                    <span class="tech-req-met">–</span>
+                  {% if item.description_key %}
+                    <p class="tech-card-desc">{{ T(item.description_key) }}</p>
                   {% endif %}
-                </td>
 
-              </tr>
-            {% endfor %}
-          {% else %}
-            <tr>
-              <td colspan="3" class="tech-empty">
-                {{ T("techtree_empty_research") if T("techtree_empty_research") != "techtree_empty_research"
-                   else "Keine Forschungs-Daten vorhanden (Tech-Tree Nodes prüfen)." }}
-              </td>
-            </tr>
-          {% endif %}
-        </tbody>
-      </table>
-    </section>
+                  {% set reqs = item.requirements if item.requirements is defined and item.requirements else [] %}
+                  {% if reqs and reqs|length > 0 %}
+                    <div class="tech-card-reqs">
+                      <span class="tech-card-reqs-label">{{ T("header_requirements", "Voraussetzungen") }}</span>
+                      <ul class="tech-req-list">
+                        {% for req in reqs %}
+                          {% set rq_label_key = req.label_key if req.label_key is defined else req.key %}
+                          {% set rq_label = T(rq_label_key) %}
+                          {% if rq_label == rq_label_key %}
+                            {% set rq_label = T("building_" ~ req.key) if req.kind == 'building' else T(req.key) %}
+                          {% endif %}
+                          <li class="{% if req.met %}tech-req-met{% else %}tech-req-missing{% endif %}">
+                            {{ rq_label }} {{ T("techtree_level_word", "Stufe") }} {{ (req.required_level or 0)|fmt_int }}
+                            {% if not req.met %}
+                              <span class="tech-req-current">
+                                ({{ T("techtree_current_level", "aktuell") }} {{ (req.current_level or 0)|fmt_int }})
+                              </span>
+                            {% endif %}
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    </div>
+                  {% endif %}
 
+                  {% if item.build_cost is defined and item.build_cost %}
+                    {% set bc = item.build_cost %}
+                    {% if (bc.metal or 0) > 0 or (bc.crystal or 0) > 0 or (bc.fuel_cells or 0) > 0 %}
+                      <div class="tech-card-cost">
+                        <span class="tech-card-reqs-label">{{ T("techtree_build_cost", "Baukosten") }}</span>
+                        <span class="tech-card-cost-values">
+                          {% if (bc.metal or 0) > 0 %}<span class="res-metal">{{ (bc.metal or 0)|fmt_int }} {{ T("resource_metal_short", "Fe") }}</span>{% endif %}
+                          {% if (bc.crystal or 0) > 0 %}<span class="res-crystal">{{ (bc.crystal or 0)|fmt_int }} {{ T("resource_crystal_short", "Cr") }}</span>{% endif %}
+                          {% if (bc.fuel_cells or 0) > 0 %}<span class="res-fuel">{{ (bc.fuel_cells or 0)|fmt_int }} {{ T("resource_fuel_cells_short", "Bz") }}</span>{% endif %}
+                        </span>
+                      </div>
+                    {% endif %}
+                  {% endif %}
+                </article>
+              {% endfor %}
+            </div>
+          </div>
+        </section>
+      {% endfor %}
+    {% else %}
+      <div class="gc-panel tech-panel">
+        <p class="tech-empty">{{ T("techtree_empty_buildings") }}</p>
+      </div>
+    {% endif %}
   </div>
 </div>
 
