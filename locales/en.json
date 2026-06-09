@@ -153,6 +153,8 @@
   "inv_error_insufficient_items": "Not enough items in inventory.",
   "inv_error_insufficient_materials": "Not enough material in inventory.",
   "inv_error_invalid_recipe": "Unknown recipe.",
+  "inv_error_action_failed": "Inventory action failed.",
+  "inv_error_action_timeout": "Inventory action took too long.",
   "inv_error_item_not_usable": "This item cannot be used.",
   "inv_error_invalid_item": "Unknown item.",
   "admin_inventory_grant_title": "Grant loot boxes",

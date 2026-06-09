@@ -6322,8 +6322,87 @@
       item_not_usable: t("inv_error_item_not_usable", "Dieses Item kann nicht benutzt werden."),
       invalid_item: t("inv_error_invalid_item", "Unbekanntes Item."),
       inventory_unavailable: t("inv_unavailable", "Inventar ist derzeit nicht verfügbar."),
+      inventory_action_failed: t("inv_error_action_failed", "Inventar-Aktion ist fehlgeschlagen."),
     };
     return map[reason] || t("msg_generic_error", "Aktion fehlgeschlagen.");
+  }
+
+  const INVENTORY_ACTION_TIMEOUT_MS = 15000;
+
+  async function runInventoryAction(buttons, url, payload, onSuccess) {
+    const btnList = (Array.isArray(buttons) ? buttons : [buttons]).filter(Boolean);
+    if (!btnList.length) return;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), INVENTORY_ACTION_TIMEOUT_MS);
+    btnList.forEach((btn) => lockInventoryActionBtn(btn));
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body: JSON.stringify(payload),
+        credentials: "same-origin",
+        redirect: "manual",
+        signal: controller.signal,
+      });
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      let json = {};
+      if (ct.includes("application/json")) {
+        try {
+          json = await res.json();
+        } catch (_) {}
+      }
+      if (res.status === 401 || res.status === 403 || json.error === "not_logged_in") {
+        if (typeof handleAuthFailure === "function") handleAuthFailure(`inventory-action-http-${res.status}`);
+        if (typeof throwAuthError === "function") throwAuthError();
+      }
+      if (!json || json.ok !== true) {
+        const reason = json?.reason || "generic";
+        const msg = json?.message || inventoryUseReasonText(reason);
+        console.warn("[GC] inventory action failed:", reason, json);
+        showNotify(msg, "error");
+        scrollInventoryToFeedback();
+        patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+        return;
+      }
+      if (typeof onSuccess === "function") {
+        await onSuccess(json);
+      }
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        showNotify(t("inv_error_action_timeout", "Inventar-Aktion hat zu lange gedauert."), "error");
+      } else if (!err?.gcAuth) {
+        console.warn("[GC] inventory action error", err);
+        showNotify(t("inv_error_action_failed", "Inventar-Aktion ist fehlgeschlagen."), "error");
+      }
+      scrollInventoryToFeedback();
+      patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+    } finally {
+      clearTimeout(timeout);
+      btnList.forEach((btn) => releaseInventoryActionBtn(btn));
+    }
+  }
+
+  function scrollInventoryToFeedback() {
+    const panel = document.getElementById("inventory-rewards-panel");
+    const page = document.getElementById("inventory-page");
+    const scrollTarget = panel && !panel.hidden ? panel : page;
+    if (scrollTarget) {
+      try {
+        scrollTarget.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (_) {
+        scrollTarget.scrollIntoView(true);
+      }
+    }
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (_) {
+      window.scrollTo(0, 0);
+    }
   }
 
   function renderInventoryEffect(effect) {
@@ -6353,7 +6432,10 @@
       }
     }
     if (list) list.innerHTML = "";
-    if (text) panel.hidden = false;
+    if (text) {
+      panel.hidden = false;
+      scrollInventoryToFeedback();
+    }
   }
 
   function releaseInventoryActionBtn(btn) {
@@ -6905,36 +6987,21 @@
         if (!page || page.dataset.ready !== "1") return;
         const itemKey = useBtn.dataset.inventoryUse;
         if (!itemKey) return;
-        lockInventoryActionBtn(useBtn);
-        try {
-          const res = await GC.fetchGameAction("/api/inventory/use-item", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-            body: JSON.stringify({
-              item_key: itemKey,
-              amount: 1,
-              request_id: `inv-use-${itemKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            }),
-          });
-          if (res?.ok) {
+        void runInventoryAction(
+          useBtn,
+          "/api/inventory/use-item",
+          {
+            item_key: itemKey,
+            amount: 1,
+            request_id: `inv-use-${itemKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          },
+          (res) => {
             applyActionState(res, "inventory_use");
             renderInventoryEffect(res.effect || {});
             applyInventoryActionResult(res);
             void refreshInventoryFromServer();
-          } else {
-            const reason = res?.reason || "generic";
-            console.warn("[GC] inventory use failed:", reason);
-            showNotify(inventoryUseReasonText(reason), "error");
-            patchInventoryDom(_inventoryLastState || parseInventoryPageState());
           }
-        } catch (err) {
-          console.warn("[GC] inventory use error", err);
-          showNotify(inventoryUseReasonText("generic"), "error");
-          patchInventoryDom(_inventoryLastState || parseInventoryPageState());
-        } finally {
-          const liveBtn = document.querySelector(`[data-inventory-use="${CSS.escape(itemKey)}"]`);
-          releaseInventoryActionBtn(liveBtn);
-        }
+        );
         return;
       }
 
@@ -6944,36 +7011,21 @@
         if (!page || page.dataset.ready !== "1") return;
         const recipeKey = craftBtn.dataset.inventoryCraft;
         if (!recipeKey) return;
-        lockInventoryActionBtn(craftBtn);
-        try {
-          const res = await GC.fetchGameAction("/api/inventory/craft", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-            body: JSON.stringify({
-              recipe_key: recipeKey,
-              amount: 1,
-              request_id: `inv-craft-${recipeKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            }),
-          });
-          if (res?.ok) {
+        void runInventoryAction(
+          craftBtn,
+          "/api/inventory/craft",
+          {
+            recipe_key: recipeKey,
+            amount: 1,
+            request_id: `inv-craft-${recipeKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          },
+          (res) => {
             applyActionState(res, "inventory_craft");
             renderInventoryEffect(res.effect || {});
             applyInventoryActionResult(res);
             void refreshInventoryFromServer();
-          } else {
-            const reason = res?.reason || "generic";
-            console.warn("[GC] inventory craft failed:", reason);
-            showNotify(inventoryUseReasonText(reason), "error");
-            patchInventoryDom(_inventoryLastState || parseInventoryPageState());
           }
-        } catch (err) {
-          console.warn("[GC] inventory craft error", err);
-          showNotify(inventoryUseReasonText("generic"), "error");
-          patchInventoryDom(_inventoryLastState || parseInventoryPageState());
-        } finally {
-          const liveBtn = document.querySelector(`[data-inventory-craft="${CSS.escape(recipeKey)}"]`);
-          releaseInventoryActionBtn(liveBtn);
-        }
+        );
         return;
       }
 
@@ -6983,36 +7035,21 @@
         if (!page || page.dataset.ready !== "1") return;
         const recipeKey = exchangeBtn.dataset.inventoryExchange;
         if (!recipeKey) return;
-        lockInventoryActionBtn(exchangeBtn);
-        try {
-          const res = await GC.fetchGameAction("/api/inventory/exchange", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-            body: JSON.stringify({
-              recipe_key: recipeKey,
-              amount: 1,
-              request_id: `inv-exchange-${recipeKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            }),
-          });
-          if (res?.ok) {
+        void runInventoryAction(
+          exchangeBtn,
+          "/api/inventory/exchange",
+          {
+            recipe_key: recipeKey,
+            amount: 1,
+            request_id: `inv-exchange-${recipeKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          },
+          (res) => {
             applyActionState(res, "inventory_exchange");
             renderInventoryEffect(res.effect || {});
             applyInventoryActionResult(res);
             void refreshInventoryFromServer();
-          } else {
-            const reason = res?.reason || "generic";
-            console.warn("[GC] inventory exchange failed:", reason);
-            showNotify(inventoryUseReasonText(reason), "error");
-            patchInventoryDom(_inventoryLastState || parseInventoryPageState());
           }
-        } catch (err) {
-          console.warn("[GC] inventory exchange error", err);
-          showNotify(inventoryUseReasonText("generic"), "error");
-          patchInventoryDom(_inventoryLastState || parseInventoryPageState());
-        } finally {
-          const liveBtn = document.querySelector(`[data-inventory-exchange="${CSS.escape(recipeKey)}"]`);
-          releaseInventoryActionBtn(liveBtn);
-        }
+        );
         return;
       }
 
@@ -7025,21 +7062,16 @@
       const amount = parseInt(openBtn.dataset.openAmount, 10) || 1;
       if (!itemKey) return;
 
-      page.querySelectorAll("[data-inventory-open]").forEach((btn) => {
-        lockInventoryActionBtn(btn);
-      });
-
-      try {
-        const res = await GC.fetchGameAction("/api/inventory/open-container", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-          body: JSON.stringify({
-            item_key: itemKey,
-            amount,
-            request_id: `inv-open-${itemKey}-${amount}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          }),
-        });
-        if (res?.ok) {
+      const openButtons = Array.from(page.querySelectorAll("[data-inventory-open]"));
+      void runInventoryAction(
+        openButtons,
+        "/api/inventory/open-container",
+        {
+          item_key: itemKey,
+          amount,
+          request_id: `inv-open-${itemKey}-${amount}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        },
+        (res) => {
           showLootOpeningModal({
             ...res,
             item_key: itemKey,
@@ -7047,21 +7079,8 @@
             _deferredState: res.state,
             _deferredInventory: res.inventory,
           });
-        } else {
-          const reason = res?.reason || "generic";
-          console.warn("[GC] inventory open failed:", reason);
-          showNotify(inventoryUseReasonText(reason), "error");
-          patchInventoryDom(_inventoryLastState || parseInventoryPageState());
         }
-      } catch (err) {
-        console.warn("[GC] inventory open error", err);
-        showNotify(inventoryUseReasonText("generic"), "error");
-        patchInventoryDom(_inventoryLastState || parseInventoryPageState());
-      } finally {
-        page.querySelectorAll("[data-inventory-open]").forEach((btn) => {
-          releaseInventoryActionBtn(btn);
-        });
-      }
+      );
     });
 
     document.addEventListener("click", (ev) => {

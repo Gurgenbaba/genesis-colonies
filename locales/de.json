@@ -161,6 +161,8 @@
   "inv_error_insufficient_items": "Nicht genug Items im Inventar.",
   "inv_error_insufficient_materials": "Nicht genug Material im Inventar.",
   "inv_error_invalid_recipe": "Unbekanntes Rezept.",
+  "inv_error_action_failed": "Inventar-Aktion ist fehlgeschlagen.",
+  "inv_error_action_timeout": "Inventar-Aktion hat zu lange gedauert.",
   "inv_error_item_not_usable": "Dieses Item kann nicht benutzt werden.",
   "inv_error_invalid_item": "Unbekanntes Item.",
   "admin_inventory_grant_title": "Lootboxen vergeben",

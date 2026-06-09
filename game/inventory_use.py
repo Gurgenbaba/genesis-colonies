@@ -30,12 +30,43 @@ from .inventory import (
     _credit_planet_resources,
     _debit_inventory_item,
     _inventory_amount,
-    build_inventory_state,
     grant_inventory_item,
     inventory_schema_ready,
 )
 
 Effect = Dict[str, Any]
+
+_INVENTORY_FINISH_PASSES = 5
+
+
+def _finish_inventory_due_work(
+    conn,
+    user_id: int,
+    *,
+    planet_id: Optional[int] = None,
+    source: str = "inventory_use",
+) -> None:
+    """Finish due queue work on the passed connection — never opens a second conn."""
+    from .queue_engine import finish_due_work_once
+    from .queue_poll import player_has_due_queue_work
+
+    uid = int(user_id)
+    pid = int(planet_id) if planet_id is not None else None
+    for pass_idx in range(_INVENTORY_FINISH_PASSES):
+        finish_due_work_once(
+            uid,
+            pid,
+            conn=conn,
+            source=source if pass_idx == 0 else f"{source}_retry",
+            dedup=False,
+            recalc_ranks=False,
+            update_scores=False,
+        )
+        if pid is not None:
+            if not player_has_due_queue_work(uid, conn=conn, planet_id=pid):
+                break
+        elif not player_has_due_queue_work(uid, conn=conn):
+            break
 
 
 def unlocks_schema_ready(conn) -> bool:
@@ -165,7 +196,12 @@ def _apply_full_queue_time_shift(
         return None
 
     last_finish = float(rows[-1][finish_col] or 0)
-    effective_shift = min(float(boost), max(0.0, last_finish - now))
+    first_finish = float(rows[0][finish_col] or 0)
+    remaining = max(0.0, last_finish - now)
+    if remaining <= 0 and first_finish <= now:
+        first_start = float(rows[0][start_col] or 0)
+        remaining = max(1.0, first_finish - first_start)
+    effective_shift = min(float(boost), remaining)
     if effective_shift <= 0:
         return None
 
@@ -205,7 +241,6 @@ def apply_build_queue_booster(
     queue had less remaining time than the booster duration.
     """
     from .models import get_build_queue_rows
-    from .queue_engine import finish_due_work_once
 
     ts = float(now if now is not None else time.time())
     pid = int(planet_id)
@@ -214,14 +249,7 @@ def apply_build_queue_booster(
     if boost <= 0:
         return None
 
-    finish_due_work_once(
-        uid,
-        pid,
-        conn=conn,
-        source="inventory_use",
-        dedup=False,
-        recalc_ranks=False,
-    )
+    _finish_inventory_due_work(conn, uid, planet_id=pid, source="inventory_use")
     rows = list(get_build_queue_rows(pid, conn=conn))
     effect = _apply_full_queue_time_shift(
         conn,
@@ -237,14 +265,7 @@ def apply_build_queue_booster(
     if not effect:
         return None
 
-    finish_due_work_once(
-        uid,
-        pid,
-        conn=conn,
-        source="inventory_use",
-        dedup=False,
-        recalc_ranks=False,
-    )
+    _finish_inventory_due_work(conn, uid, planet_id=pid, source="inventory_use")
     return effect
 
 
@@ -257,7 +278,6 @@ def apply_research_queue_booster(
 ) -> Optional[Effect]:
     """Apply a research booster to the full account research queue."""
     from .models import get_research_queue_rows
-    from .queue_engine import finish_due_work_once
 
     ts = float(now if now is not None else time.time())
     uid = int(user_id)
@@ -265,7 +285,7 @@ def apply_research_queue_booster(
     if boost <= 0:
         return None
 
-    finish_due_work_once(uid, conn=conn, source="inventory_use", dedup=False)
+    _finish_inventory_due_work(conn, uid, source="inventory_use")
     rows = list(get_research_queue_rows(uid, conn=conn))
     effect = _apply_full_queue_time_shift(
         conn,
@@ -281,7 +301,7 @@ def apply_research_queue_booster(
     if not effect:
         return None
 
-    finish_due_work_once(uid, conn=conn, source="inventory_use", dedup=False)
+    _finish_inventory_due_work(conn, uid, source="inventory_use")
     return effect
 
 
@@ -297,7 +317,6 @@ def apply_datacore_research_boost(
     when ``fallback_any`` is set on the datacore spec).
     """
     from .models import get_research_queue_rows
-    from .queue_engine import finish_due_work_once
 
     key = str(item_key)
     boost = datacore_boost_seconds(key)
@@ -310,7 +329,7 @@ def apply_datacore_research_boost(
     ts = float(now if now is not None else time.time())
     uid = int(user_id)
 
-    finish_due_work_once(uid, conn=conn, source="inventory_use", dedup=False)
+    _finish_inventory_due_work(conn, uid, source="inventory_use")
     rows = list(get_research_queue_rows(uid, conn=conn))
     if not rows:
         return None
@@ -337,13 +356,12 @@ def apply_datacore_research_boost(
     if not effect:
         return None
 
-    finish_due_work_once(uid, conn=conn, source="inventory_use", dedup=False)
+    _finish_inventory_due_work(conn, uid, source="inventory_use")
     return effect
 
 
 def datacore_has_usable_target(user_id: int, item_key: str, *, conn) -> bool:
     from .models import get_research_queue_rows
-    from .queue_engine import finish_due_work_once
 
     key = str(item_key)
     if not is_research_datacore_item(key):
@@ -353,7 +371,6 @@ def datacore_has_usable_target(user_id: int, item_key: str, *, conn) -> bool:
     fallback = datacore_fallback_any(key)
     uid = int(user_id)
 
-    finish_due_work_once(uid, conn=conn, source="inventory_use", dedup=False)
     rows = list(get_research_queue_rows(uid, conn=conn))
     if not rows:
         return False
@@ -374,7 +391,6 @@ def apply_shipyard_queue_booster(
     now: Optional[float] = None,
 ) -> Optional[Effect]:
     """Apply a shipyard booster to the full shipyard queue on ``planet_id``."""
-    from .queue_engine import finish_active_planet_due_work
     from .shipyard_queue import list_shipyard_queue_rows, shipyard_queue_table_ready
 
     if not shipyard_queue_table_ready(conn):
@@ -387,7 +403,7 @@ def apply_shipyard_queue_booster(
     if boost <= 0:
         return None
 
-    finish_active_planet_due_work(uid, pid, conn, source="inventory_use")
+    _finish_inventory_due_work(conn, uid, planet_id=pid, source="inventory_use")
     rows = list(list_shipyard_queue_rows(pid, conn=conn))
     effect = _apply_full_queue_time_shift(
         conn,
@@ -403,18 +419,12 @@ def apply_shipyard_queue_booster(
     if not effect:
         return None
 
-    finish_active_planet_due_work(uid, pid, conn, source="inventory_use")
+    _finish_inventory_due_work(conn, uid, planet_id=pid, source="inventory_use")
     return effect
 
 
 def _is_time_booster_item(item_key: str) -> bool:
     return str(item_key or "") in BOOSTER_TIME_SECONDS
-
-
-def _time_booster_target(item_key: str) -> Optional[str]:
-    if not _is_time_booster_item(item_key):
-        return None
-    return str(BOOSTER_QUEUE_TARGET.get(str(item_key)) or "build")
 
 
 def _time_booster_target(item_key: str) -> Optional[str]:
@@ -620,7 +630,7 @@ def _apply_research_instant(user_id: int, *, conn) -> Optional[Effect]:
     from .models import get_research_queue_rows
     from .queue_engine import finish_due_work_once, finish_player_research_jobs
 
-    finish_due_work_once(int(user_id), conn=conn, source="inventory_use")
+    finish_due_work_once(int(user_id), conn=conn, source="inventory_use", dedup=False)
     rows = get_research_queue_rows(int(user_id), conn=conn)
     if not rows:
         return None
@@ -767,13 +777,11 @@ def use_inventory_item(
         return False, fail_reason, None
 
     merged = _merge_effects(effects)
-    inventory = build_inventory_state(user_id, conn=conn)
     return True, "item_use_ok", {
         "item_key": key,
         "consumed": consumed,
         "effects": effects,
         "effect": merged,
-        "inventory": inventory,
     }
 
 
@@ -857,7 +865,6 @@ def exchange_inventory_item(
         "output_amount": total_output,
     }
     effect.update(_effect_message(effect))
-    inventory = build_inventory_state(user_id, conn=conn)
     return True, "exchange_ok", {
         "recipe_key": rkey,
         "exchanged": exchange_count,
@@ -868,7 +875,6 @@ def exchange_inventory_item(
             "output_amount": total_output,
         },
         "effect": effect,
-        "inventory": inventory,
     }
 
 
@@ -913,14 +919,12 @@ def craft_inventory_item(
         "amount": total_out,
     }
     effect.update(_effect_message(effect))
-    inventory = build_inventory_state(user_id, conn=conn)
     return True, "craft_ok", {
         "recipe_key": rkey,
         "crafted": craft_count,
         "output_key": output_key,
         "output_amount": total_out,
         "effect": effect,
-        "inventory": inventory,
     }
 
 

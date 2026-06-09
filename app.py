@@ -1304,6 +1304,84 @@ def _render_placeholder_module(module_key: str):
     )
 
 
+_INVENTORY_ACTION_MESSAGES = {
+    "inventory_unavailable": "Inventar ist derzeit nicht verfügbar.",
+    "inventory_action_failed": "Aktion konnte nicht abgeschlossen werden.",
+    "invalid_item": "Unbekanntes Item.",
+    "item_not_usable": "Dieses Item kann nicht benutzt werden.",
+    "insufficient_items": "Nicht genug Items im Inventar.",
+    "insufficient_materials": "Nicht genug Material im Inventar.",
+    "invalid_recipe": "Unbekanntes Rezept.",
+    "no_build_queue": "Keine Bauaufträge in der Warteschlange.",
+    "no_research_queue": "Keine Forschung in der Warteschlange.",
+    "no_shipyard_queue": "Keine Schiffsbauaufträge in der Warteschlange.",
+    "no_matching_research": "Keine passende aktive Forschung für diesen Datenkern.",
+    "no_effect_target": "Kein gültiges Ziel für dieses Item.",
+    "container_cooldown": "Container ist noch im Cooldown.",
+    "insufficient_containers": "Nicht genug Container im Inventar.",
+}
+
+
+def _inventory_action_message(reason: str) -> str:
+    key = str(reason or "inventory_action_failed")
+    return _INVENTORY_ACTION_MESSAGES.get(key, "Aktion konnte nicht abgeschlossen werden.")
+
+
+def _inventory_action_context(user_id: int, finish_source: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Build fresh game state + inventory after mutation connection is closed."""
+    from game.inventory import build_inventory_state
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source=finish_source)
+    conn = db()
+    try:
+        inventory = build_inventory_state(int(user_id), conn=conn)
+    finally:
+        conn.close()
+    return state, inventory
+
+
+def _inventory_action_error_response(
+    user_id: int,
+    reason: str,
+    finish_source: str,
+    *,
+    status: int = 400,
+    extra: Optional[Dict[str, Any]] = None,
+):
+    state, inventory = _inventory_action_context(user_id, finish_source)
+    resp: Dict[str, Any] = {
+        "ok": False,
+        "reason": str(reason or "inventory_action_failed"),
+        "message": _inventory_action_message(reason),
+        "state": state,
+        "inventory": inventory,
+    }
+    if extra:
+        resp.update(extra)
+    return jsonify(resp), status
+
+
+def _inventory_action_ok_response(
+    user_id: int,
+    reason: str,
+    finish_source: str,
+    payload: Dict[str, Any],
+    *,
+    request_id: str = "",
+):
+    state, inventory = _inventory_action_context(user_id, finish_source)
+    resp: Dict[str, Any] = {
+        "ok": True,
+        "reason": reason,
+        "state": state,
+        "inventory": inventory,
+    }
+    resp.update(payload)
+    if request_id:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
 @app.route("/inventory")
 @require_login
 def inventory_view():
@@ -1365,7 +1443,7 @@ def api_inventory_state():
 def api_inventory_open_container():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
-        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+        return jsonify({"ok": False, "reason": "not_logged_in", "message": "Nicht angemeldet."}), 401
 
     data = request.get_json(silent=True) or {}
     item_key = str(data.get("item_key") or "").strip()
@@ -1380,62 +1458,56 @@ def api_inventory_open_container():
         if cached is not None:
             return jsonify(cached)
 
-    from game.inventory import inventory_schema_ready, open_containers
+    from game.inventory import inventory_schema_ready, open_containers, run_inventory_mutation
     from game.planet_evolution.repository import get_context_planet
 
     conn = db()
     try:
         if not inventory_schema_ready(conn):
-            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_open")
-            return jsonify({"ok": False, "reason": "inventory_unavailable", "state": state}), 503
-
+            return _inventory_action_error_response(
+                user_id, "inventory_unavailable", "inventory_open", status=503
+            )
         planet = get_context_planet(user_id, conn=conn)
         planet_id = int(planet["id"])
-        begin_write_transaction(conn)
-        ok, reason, result = open_containers(
-            user_id,
-            planet_id,
-            item_key,
-            amount,
-            conn=conn,
-        )
-        if not ok:
-            rollback(conn)
-            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_open")
-            resp = {"ok": False, "reason": reason, "state": state}
-            if isinstance(result, dict):
-                if result.get("cooldown_seconds") is not None:
-                    resp["cooldown_seconds"] = int(result["cooldown_seconds"])
-                if result.get("next_open_at") is not None:
-                    resp["next_open_at"] = float(result["next_open_at"])
-            return jsonify(resp), 400
-
-        commit(conn)
-    except Exception:
-        rollback(conn)
-        raise
     finally:
         conn.close()
 
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_open")
-    resp = {
-        "ok": True,
-        "reason": "container_open_ok",
-        "rewards": (result or {}).get("rewards") or [],
-        "roll_preview": (result or {}).get("roll_preview") or [],
-        "winning_index": int((result or {}).get("winning_index") or 0),
-        "winning_reward": (result or {}).get("winning_reward") or {},
-        "inventory": (result or {}).get("inventory") or {},
-        "opened": (result or {}).get("opened") or 0,
-        "container_key": (result or {}).get("container_key") or item_key,
-        "container_name_key": (result or {}).get("container_name_key") or "",
-        "container_rarity": (result or {}).get("container_rarity") or "common",
-        "container_image": (result or {}).get("container_image") or "",
-        "state": state,
-    }
-    if request_id:
-        save_idempotent_action(user_id, request_id, resp)
-    return jsonify(resp)
+    try:
+        ok, reason, result = run_inventory_mutation(
+            lambda conn: open_containers(user_id, planet_id, item_key, amount, conn=conn)
+        )
+    except Exception:
+        return _inventory_action_error_response(
+            user_id, "inventory_action_failed", "inventory_open", status=500
+        )
+
+    if not ok:
+        extra = {}
+        if isinstance(result, dict):
+            if result.get("cooldown_seconds") is not None:
+                extra["cooldown_seconds"] = int(result["cooldown_seconds"])
+            if result.get("next_open_at") is not None:
+                extra["next_open_at"] = float(result["next_open_at"])
+        return _inventory_action_error_response(user_id, reason, "inventory_open", extra=extra or None)
+
+    result = result or {}
+    return _inventory_action_ok_response(
+        user_id,
+        "container_open_ok",
+        "inventory_open",
+        {
+            "rewards": result.get("rewards") or [],
+            "roll_preview": result.get("roll_preview") or [],
+            "winning_index": int(result.get("winning_index") or 0),
+            "winning_reward": result.get("winning_reward") or {},
+            "opened": result.get("opened") or 0,
+            "container_key": result.get("container_key") or item_key,
+            "container_name_key": result.get("container_name_key") or "",
+            "container_rarity": result.get("container_rarity") or "common",
+            "container_image": result.get("container_image") or "",
+        },
+        request_id=request_id,
+    )
 
 
 @app.route("/api/inventory/use-item", methods=["POST"])
@@ -1443,7 +1515,7 @@ def api_inventory_open_container():
 def api_inventory_use_item():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
-        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+        return jsonify({"ok": False, "reason": "not_logged_in", "message": "Nicht angemeldet."}), 401
 
     data = request.get_json(silent=True) or {}
     item_key = str(data.get("item_key") or "").strip()
@@ -1458,57 +1530,46 @@ def api_inventory_use_item():
         if cached is not None:
             return jsonify(cached)
 
-    from game.inventory import inventory_schema_ready
+    from game.inventory import inventory_schema_ready, run_inventory_mutation
     from game.inventory_use import use_inventory_item
     from game.planet_evolution.repository import get_context_planet
 
     conn = db()
-    ok = False
-    reason = "generic"
-    result = None
     try:
         if not inventory_schema_ready(conn):
-            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_use")
-            return jsonify({"ok": False, "reason": "inventory_unavailable", "state": state}), 503
-
+            return _inventory_action_error_response(
+                user_id, "inventory_unavailable", "inventory_use", status=503
+            )
         planet = get_context_planet(user_id, conn=conn)
         planet_id = int(planet["id"])
-        begin_write_transaction(conn)
-        ok, reason, result = use_inventory_item(
-            user_id,
-            planet_id,
-            item_key,
-            amount,
-            conn=conn,
-        )
-        if ok:
-            commit(conn)
-        else:
-            rollback(conn)
-    except Exception:
-        rollback(conn)
-        raise
     finally:
         conn.close()
 
-    if not ok:
-        state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_use")
-        return jsonify({"ok": False, "reason": reason, "state": state}), 400
+    try:
+        ok, reason, result = run_inventory_mutation(
+            lambda conn: use_inventory_item(user_id, planet_id, item_key, amount, conn=conn)
+        )
+    except Exception:
+        return _inventory_action_error_response(
+            user_id, "inventory_action_failed", "inventory_use", status=500
+        )
 
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_use")
-    resp = {
-        "ok": True,
-        "reason": reason,
-        "effect": (result or {}).get("effect") or {},
-        "effects": (result or {}).get("effects") or [],
-        "consumed": (result or {}).get("consumed") or 0,
-        "item_key": (result or {}).get("item_key") or item_key,
-        "inventory": (result or {}).get("inventory") or {},
-        "state": state,
-    }
-    if request_id:
-        save_idempotent_action(user_id, request_id, resp)
-    return jsonify(resp)
+    if not ok:
+        return _inventory_action_error_response(user_id, reason, "inventory_use")
+
+    result = result or {}
+    return _inventory_action_ok_response(
+        user_id,
+        reason,
+        "inventory_use",
+        {
+            "effect": result.get("effect") or {},
+            "effects": result.get("effects") or [],
+            "consumed": result.get("consumed") or 0,
+            "item_key": result.get("item_key") or item_key,
+        },
+        request_id=request_id,
+    )
 
 
 @app.route("/api/inventory/craft", methods=["POST"])
@@ -1516,7 +1577,7 @@ def api_inventory_use_item():
 def api_inventory_craft():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
-        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+        return jsonify({"ok": False, "reason": "not_logged_in", "message": "Nicht angemeldet."}), 401
 
     data = request.get_json(silent=True) or {}
     recipe_key = str(data.get("recipe_key") or data.get("item_key") or "").strip()
@@ -1531,48 +1592,43 @@ def api_inventory_craft():
         if cached is not None:
             return jsonify(cached)
 
-    from game.inventory import inventory_schema_ready
+    from game.inventory import inventory_schema_ready, run_inventory_mutation
     from game.inventory_use import craft_inventory_item
 
     conn = db()
     try:
         if not inventory_schema_ready(conn):
-            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_craft")
-            return jsonify({"ok": False, "reason": "inventory_unavailable", "state": state}), 503
-
-        begin_write_transaction(conn)
-        ok, reason, result = craft_inventory_item(
-            user_id,
-            recipe_key,
-            amount,
-            conn=conn,
-        )
-        if not ok:
-            rollback(conn)
-            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_craft")
-            return jsonify({"ok": False, "reason": reason, "state": state}), 400
-
-        commit(conn)
-    except Exception:
-        rollback(conn)
-        raise
+            return _inventory_action_error_response(
+                user_id, "inventory_unavailable", "inventory_craft", status=503
+            )
     finally:
         conn.close()
 
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_craft")
-    resp = {
-        "ok": True,
-        "reason": reason,
-        "effect": (result or {}).get("effect") or {},
-        "crafted": (result or {}).get("crafted") or 0,
-        "output_key": (result or {}).get("output_key") or recipe_key,
-        "output_amount": (result or {}).get("output_amount") or 0,
-        "inventory": (result or {}).get("inventory") or {},
-        "state": state,
-    }
-    if request_id:
-        save_idempotent_action(user_id, request_id, resp)
-    return jsonify(resp)
+    try:
+        ok, reason, result = run_inventory_mutation(
+            lambda conn: craft_inventory_item(user_id, recipe_key, amount, conn=conn)
+        )
+    except Exception:
+        return _inventory_action_error_response(
+            user_id, "inventory_action_failed", "inventory_craft", status=500
+        )
+
+    if not ok:
+        return _inventory_action_error_response(user_id, reason, "inventory_craft")
+
+    result = result or {}
+    return _inventory_action_ok_response(
+        user_id,
+        reason,
+        "inventory_craft",
+        {
+            "effect": result.get("effect") or {},
+            "crafted": result.get("crafted") or 0,
+            "output_key": result.get("output_key") or recipe_key,
+            "output_amount": result.get("output_amount") or 0,
+        },
+        request_id=request_id,
+    )
 
 
 @app.route("/api/inventory/exchange", methods=["POST"])
@@ -1580,7 +1636,7 @@ def api_inventory_craft():
 def api_inventory_exchange():
     user_id = int(session.get("user_id") or 0)
     if not user_id:
-        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+        return jsonify({"ok": False, "reason": "not_logged_in", "message": "Nicht angemeldet."}), 401
 
     data = request.get_json(silent=True) or {}
     recipe_key = str(data.get("recipe_key") or "").strip()
@@ -1595,48 +1651,42 @@ def api_inventory_exchange():
         if cached is not None:
             return jsonify(cached)
 
-    from game.inventory import inventory_schema_ready
+    from game.inventory import inventory_schema_ready, run_inventory_mutation
     from game.inventory_use import exchange_inventory_item
 
     conn = db()
     try:
         if not inventory_schema_ready(conn):
-            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_exchange")
-            return jsonify({"ok": False, "reason": "inventory_unavailable", "state": state}), 503
-
-        begin_write_transaction(conn)
-        ok, reason, result = exchange_inventory_item(
-            user_id,
-            recipe_key,
-            amount,
-            conn=conn,
-        )
-        if not ok:
-            rollback(conn)
-            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_exchange")
-            return jsonify({"ok": False, "reason": reason, "state": state}), 400
-
-        commit(conn)
-    except Exception:
-        rollback(conn)
-        raise
+            return _inventory_action_error_response(
+                user_id, "inventory_unavailable", "inventory_exchange", status=503
+            )
     finally:
         conn.close()
 
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_exchange")
-    exchange = (result or {}).get("exchange") or {}
-    resp = {
-        "ok": True,
-        "reason": reason,
-        "effect": (result or {}).get("effect") or {},
-        "exchanged": (result or {}).get("exchanged") or 0,
-        "exchange": exchange,
-        "inventory": (result or {}).get("inventory") or {},
-        "state": state,
-    }
-    if request_id:
-        save_idempotent_action(user_id, request_id, resp)
-    return jsonify(resp)
+    try:
+        ok, reason, result = run_inventory_mutation(
+            lambda conn: exchange_inventory_item(user_id, recipe_key, amount, conn=conn)
+        )
+    except Exception:
+        return _inventory_action_error_response(
+            user_id, "inventory_action_failed", "inventory_exchange", status=500
+        )
+
+    if not ok:
+        return _inventory_action_error_response(user_id, reason, "inventory_exchange")
+
+    result = result or {}
+    return _inventory_action_ok_response(
+        user_id,
+        reason,
+        "inventory_exchange",
+        {
+            "effect": result.get("effect") or {},
+            "exchanged": result.get("exchanged") or 0,
+            "exchange": result.get("exchange") or {},
+        },
+        request_id=request_id,
+    )
 
 
 @app.route("/auction-house")

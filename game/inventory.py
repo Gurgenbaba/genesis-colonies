@@ -7,9 +7,9 @@ from __future__ import annotations
 import json
 import random
 import time
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .db import lock_planet_for_update, table_exists
+from .db import begin_write_transaction, commit, db, lock_planet_for_update, rollback, table_exists
 from .inventory_catalog import (
     CONTAINER_BASIC_COOLDOWN_SEC,
     CONTAINER_BASIC_KEY,
@@ -47,7 +47,10 @@ __all__ = [
     "item_catalog_entry",
     "list_player_inventory",
     "open_containers",
+    "run_inventory_mutation",
 ]
+
+MutationResult = Tuple[bool, str, Optional[Dict[str, Any]]]
 
 
 def inventory_schema_ready(conn) -> bool:
@@ -71,9 +74,7 @@ def _serialize_inventory_row(row: Mapping[str, Any]) -> Dict[str, Any]:
     }
     if meta.get("image"):
         out["image"] = meta["image"]
-    from .inventory_use import enrich_inventory_item_row
-
-    return enrich_inventory_item_row(out)
+    return out
 
 
 def _last_container_open_at(user_id: int, container_key: str, *, conn) -> Optional[float]:
@@ -791,7 +792,6 @@ def open_containers(
     _apply_rewards(user_id, planet_id, rewards, conn=conn)
     _log_container_open(user_id, planet_id, key, rewards, conn=conn)
 
-    inventory = build_inventory_state(user_id, conn=conn)
     container_meta = item_catalog_entry(key)
     preview_rng = random.Random(roll_rng.randint(0, 2**31 - 1))
     roll_preview, winning_index, winning_reward = build_roll_preview(rewards, pool, preview_rng)
@@ -805,5 +805,28 @@ def open_containers(
         "roll_preview": roll_preview,
         "winning_index": winning_index,
         "winning_reward": winning_reward,
-        "inventory": inventory,
     }
+
+
+def run_inventory_mutation(
+    mutation_fn: Callable[[Any], MutationResult],
+) -> MutationResult:
+    """
+    Run one inventory write mutation in a single transaction.
+
+    Callers must build ``state`` / ``inventory`` only after this returns (conn closed).
+    """
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, result = mutation_fn(conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+        return ok, reason, result
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()

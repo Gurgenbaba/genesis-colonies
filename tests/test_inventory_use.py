@@ -777,7 +777,9 @@ def test_inventory_actions_return_json_on_error(inventory_use_db, monkeypatch):
     payload = r.get_json()
     assert payload["ok"] is False
     assert payload["reason"] == "no_matching_research"
+    assert payload.get("message")
     assert "state" in payload
+    assert "inventory" in payload
 
     r2 = client.post(
         "/api/inventory/exchange",
@@ -788,6 +790,216 @@ def test_inventory_actions_return_json_on_error(inventory_use_db, monkeypatch):
     payload2 = r2.get_json()
     assert payload2["ok"] is False
     assert payload2["reason"] == "insufficient_materials"
+
+
+def test_dna_cores_not_usable(inventory_use_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "dna_core_common", 5, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, _ = use_inventory_item(uid, pid, "dna_core_common", 1, conn=conn)
+    rollback(conn)
+    assert not ok
+    assert reason == "item_not_usable"
+    conn.close()
+
+
+def _assert_inventory_json_response(response, *, expect_ok: bool):
+    assert response.content_type.startswith("application/json")
+    payload = response.get_json()
+    assert isinstance(payload, dict)
+    assert payload.get("ok") is expect_ok
+    assert "state" in payload
+    assert "inventory" in payload
+    if not expect_ok:
+        assert payload.get("message")
+        assert payload.get("reason")
+    return payload
+
+
+def test_all_inventory_use_actions_return_json(inventory_use_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_use_db, monkeypatch)
+    conn = db()
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    now = time.time()
+    add_build_job(pid, "metal_mine", now - 5, now + 3600, conn=conn)
+    add_research_job(uid, "mining_tech", now - 5, now + 3600, conn=conn)
+    grant_inventory_item(uid, "booster_build_5m", 1, conn=conn)
+    grant_inventory_item(uid, "booster_research_15m", 1, conn=conn)
+    grant_inventory_item(uid, "research_data_mining", 1, conn=conn)
+    grant_inventory_item(uid, "resource_pack_ferronit", 1, conn=conn)
+    grant_inventory_item(uid, "evo_planet_xp_500", 1, conn=conn)
+    grant_inventory_item(uid, "fragment_dna_common", 50, conn=conn)
+    grant_inventory_item(uid, "dna_core_common", 5, conn=conn)
+    grant_inventory_item(uid, "container_basic", 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    cases = [
+        ("/api/inventory/use-item", {"item_key": "resource_pack_ferronit", "amount": 1}, True),
+        ("/api/inventory/use-item", {"item_key": "booster_build_5m", "amount": 1}, True),
+        ("/api/inventory/use-item", {"item_key": "booster_research_15m", "amount": 1}, True),
+        ("/api/inventory/use-item", {"item_key": "research_data_mining", "amount": 1}, True),
+        ("/api/inventory/use-item", {"item_key": "evo_planet_xp_500", "amount": 1}, True),
+        ("/api/inventory/craft", {"recipe_key": "dna_core_common", "amount": 1}, True),
+        ("/api/inventory/exchange", {"recipe_key": "dna_core_common_to_rare", "amount": 1}, True),
+        ("/api/inventory/open-container", {"item_key": "container_basic", "amount": 1}, True),
+        ("/api/inventory/use-item", {"item_key": "not_a_real_item", "amount": 1}, False),
+    ]
+    for url, body, expect_ok in cases:
+        r = client.post(url, json=body)
+        _assert_inventory_json_response(r, expect_ok=expect_ok)
+
+
+def test_mutation_results_do_not_include_inventory(inventory_use_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "resource_pack_ferronit", 1, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, result = use_inventory_item(uid, pid, "resource_pack_ferronit", 1, conn=conn)
+    assert ok, reason
+    rollback(conn)
+    assert "inventory" not in (result or {})
+
+    grant_inventory_item(uid, "fragment_dna_common", 50, conn=conn)
+    grant_inventory_item(uid, "dna_core_common", 5, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, result = craft_inventory_item(uid, "dna_core_common", 1, conn=conn)
+    rollback(conn)
+    if ok:
+        assert "inventory" not in (result or {})
+
+    begin_write_transaction(conn)
+    ok, reason, result = exchange_inventory_item(uid, "dna_core_common_to_rare", 1, conn=conn)
+    assert ok, reason
+    rollback(conn)
+    assert "inventory" not in (result or {})
+    conn.close()
+
+
+def test_inventory_state_built_after_commit(inventory_use_db, monkeypatch):
+    from game import inventory as inv_mod
+
+    build_calls = []
+
+    original_build = inv_mod.build_inventory_state
+
+    def tracked_build(user_id, *, conn):
+        build_calls.append(user_id)
+        return original_build(user_id, conn=conn)
+
+    monkeypatch.setattr(inv_mod, "build_inventory_state", tracked_build)
+
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "resource_pack_crytite", 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    build_calls.clear()
+    ok, reason, result = inv_mod.run_inventory_mutation(
+        lambda c: use_inventory_item(uid, pid, "resource_pack_crytite", 1, conn=c)
+    )
+    assert ok, reason
+    assert "inventory" not in (result or {})
+    assert len(build_calls) == 0
+
+    client, _, _ = _login_client(inventory_use_db, monkeypatch)
+    build_calls.clear()
+    r = client.post("/api/inventory/use-item", json={"item_key": "resource_pack_crytite", "amount": 1})
+    assert r.status_code == 400
+    payload = r.get_json()
+    assert payload["ok"] is False
+    assert len(build_calls) >= 1
+
+
+@pytest.mark.parametrize(
+    "item_key,setup_fn",
+    [
+        ("booster_build_5m", lambda uid, pid, conn, now: add_build_job(pid, "metal_mine", now - 5, now + 3600, conn=conn)),
+        ("booster_research_15m", lambda uid, pid, conn, now: add_research_job(uid, "energy_tech", now - 5, now + 3600, conn=conn)),
+        ("research_data_mining", lambda uid, pid, conn, now: add_research_job(uid, "mining_tech", now - 5, now + 3600, conn=conn)),
+        ("resource_pack_ferronit", lambda uid, pid, conn, now: None),
+        ("evo_planet_xp_500", lambda uid, pid, conn, now: None),
+    ],
+)
+def test_inventory_use_actions_no_lock(inventory_use_db, monkeypatch, item_key, setup_fn):
+    client, uid, _ = _login_client(inventory_use_db, monkeypatch)
+    conn = db()
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    now = time.time()
+    setup_fn(uid, pid, conn, now)
+    grant_inventory_item(uid, item_key, 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    r = client.post("/api/inventory/use-item", json={"item_key": item_key, "amount": 1})
+    payload = _assert_inventory_json_response(r, expect_ok=True)
+    assert payload.get("item_key") == item_key or payload.get("consumed", 0) >= 1
+
+
+def test_craft_no_lock(inventory_use_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_use_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "fragment_dna_common", 50, conn=conn)
+    conn.commit()
+    conn.close()
+
+    r = client.post("/api/inventory/craft", json={"recipe_key": "dna_core_common", "amount": 1})
+    _assert_inventory_json_response(r, expect_ok=True)
+
+
+def test_exchange_no_lock(inventory_use_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_use_db, monkeypatch)
+    conn = db()
+    grant_inventory_item(uid, "dna_core_common", 5, conn=conn)
+    conn.commit()
+    conn.close()
+
+    r = client.post("/api/inventory/exchange", json={"recipe_key": "dna_core_common_to_rare", "amount": 1})
+    _assert_inventory_json_response(r, expect_ok=True)
+
+
+def test_shipyard_booster_no_lock(inventory_use_db, monkeypatch):
+    from game.shipyard_queue import shipyard_queue_table_ready
+
+    client, uid, _ = _login_client(inventory_use_db, monkeypatch)
+    conn = db()
+    if not shipyard_queue_table_ready(conn):
+        pytest.skip("shipyard_queue schema not ready")
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    now = time.time()
+    conn.execute(
+        """
+        INSERT INTO shipyard_queue (
+            player_id, planet_id, ship_key, amount, status,
+            started_at, finish_at, created_at, queue_position,
+            cost_metal, cost_crystal, cost_fuel_cells
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """,
+        (uid, pid, "spark_drone", 1, "queued", now - 5, now + 1800, now, 0, 0, 0, 0),
+    )
+    grant_inventory_item(uid, "booster_shipyard_15m", 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    r = client.post("/api/inventory/use-item", json={"item_key": "booster_shipyard_15m", "amount": 1})
+    _assert_inventory_json_response(r, expect_ok=True)
 
 
 def test_dna_cores_not_usable(inventory_use_db):
