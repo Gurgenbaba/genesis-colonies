@@ -42,13 +42,12 @@ def placeholder_db(tmp_path, monkeypatch):
 def test_placeholder_modules_registered():
     keys = {m["slug"] for m in list_placeholder_modules()}
     assert keys == {
-        "inventory",
         "auction-house",
         "galactic-politics",
         "skilltree",
         "premium",
     }
-    assert len(PLACEHOLDER_MODULES) == 5
+    assert len(PLACEHOLDER_MODULES) == 4
 
 
 def test_sidebar_has_military_and_trading_hub_nav():
@@ -85,7 +84,11 @@ def test_placeholder_routes_render(placeholder_db):
     with client.session_transaction() as sess:
         sess["user_id"] = int(user["id"])
 
-    for slug in ("inventory", "auction-house", "galactic-politics", "skilltree", "premium"):
+    inv = client.get("/inventory")
+    assert inv.status_code == 200
+    assert "inventory-page" in inv.get_data(as_text=True)
+
+    for slug in ("auction-house", "galactic-politics", "skilltree", "premium"):
         res = client.get(f"/{slug}")
         body = res.get_data(as_text=True)
         assert res.status_code == 200, slug

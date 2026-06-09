@@ -14701,3 +14701,231 @@ a.gc-galaxy-coord-link:focus-visible {
     font-size: 0.74rem;
   }
 }
+
+/* GC-540 — Inventory / Container loot */
+.inventory-page .inventory-planet-scope {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--gc-text-dim);
+}
+
+.inventory-container-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.inventory-loot-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(120, 180, 255, 0.14);
+  background:
+    linear-gradient(165deg, rgba(12, 22, 38, 0.96) 0%, rgba(6, 10, 18, 0.98) 100%);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.inventory-loot-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+}
+
+.inventory-loot-card--empty {
+  opacity: 0.72;
+}
+
+.inventory-loot-card--empty .inventory-loot-card-img {
+  filter: grayscale(0.85) brightness(0.72) saturate(0.65);
+}
+
+.inventory-loot-card--owned {
+  opacity: 1;
+}
+
+.inventory-loot-card--owned .inventory-loot-card-img {
+  filter: none;
+}
+
+.inventory-loot-card-hero {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  padding: 18px 14px 10px;
+  background: radial-gradient(ellipse at 50% 35%, rgba(80, 140, 220, 0.12), transparent 68%);
+}
+
+.inventory-loot-card-glow {
+  position: absolute;
+  inset: 12% 10% 18%;
+  border-radius: 50%;
+  filter: blur(22px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.inventory-loot-card-glow--common { background: rgba(184, 192, 204, 0.35); }
+.inventory-loot-card-glow--uncommon { background: rgba(110, 207, 143, 0.42); }
+.inventory-loot-card-glow--rare { background: rgba(94, 176, 255, 0.48); }
+.inventory-loot-card-glow--epic { background: rgba(199, 125, 255, 0.5); }
+.inventory-loot-card-glow--legendary { background: rgba(255, 184, 77, 0.55); }
+
+.inventory-loot-card--owned.inventory-loot-card[data-rarity="legendary"] {
+  border-color: rgba(255, 184, 77, 0.45);
+  box-shadow: 0 0 24px rgba(255, 184, 77, 0.12), 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.inventory-loot-card--owned.inventory-loot-card[data-rarity="epic"] {
+  border-color: rgba(199, 125, 255, 0.4);
+}
+
+.inventory-loot-card--owned.inventory-loot-card[data-rarity="rare"] {
+  border-color: rgba(94, 176, 255, 0.35);
+}
+
+.inventory-loot-card-img {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 168px);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));
+  transition: filter 0.25s ease, transform 0.25s ease;
+}
+
+.inventory-loot-card--owned:hover .inventory-loot-card-img {
+  transform: scale(1.04);
+}
+
+.inventory-loot-card-stock {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  min-width: 34px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+  color: #e8f4ff;
+  background: rgba(8, 16, 28, 0.82);
+  border: 1px solid rgba(140, 200, 255, 0.28);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.inventory-loot-card--owned .inventory-loot-card-stock {
+  color: #b8f5c8;
+  border-color: rgba(110, 207, 143, 0.45);
+}
+
+.inventory-loot-card-body {
+  padding: 12px 14px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inventory-loot-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.inventory-loot-card-name {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.inventory-loot-card-hint {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--gc-text-dim);
+}
+
+.inventory-loot-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px 14px;
+  margin-top: auto;
+}
+
+.inventory-loot-card-actions .inventory-open-btn {
+  flex: 1 1 calc(50% - 4px);
+  min-width: 96px;
+}
+
+.inventory-rarity-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.inventory-rarity-badge--common { color: #b8c0cc; background: rgba(184, 192, 204, 0.12); }
+.inventory-rarity-badge--uncommon { color: #6ecf8f; background: rgba(110, 207, 143, 0.14); }
+.inventory-rarity-badge--rare { color: #5eb0ff; background: rgba(94, 176, 255, 0.14); }
+.inventory-rarity-badge--epic { color: #c77dff; background: rgba(199, 125, 255, 0.14); }
+.inventory-rarity-badge--legendary { color: #ffb84d; background: rgba(255, 184, 77, 0.16); }
+
+.inventory-item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inventory-item-row,
+.inventory-reward-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.inventory-item-icon,
+.inventory-reward-icon {
+  font-size: 1.2rem;
+}
+
+.inventory-item-name,
+.inventory-reward-label {
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+.inventory-reward-amount {
+  color: #8fe8a8;
+  font-weight: 700;
+}
+
+.inventory-empty {
+  color: var(--gc-text-dim);
+  padding: 12px 4px;
+}
+
+.inventory-rewards-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

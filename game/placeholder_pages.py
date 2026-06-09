@@ -9,24 +9,6 @@ from typing import Any, Dict, List, Tuple
 FeaturePair = Tuple[str, str]
 
 PLACEHOLDER_MODULES: Dict[str, Dict[str, Any]] = {
-    "inventory": {
-        "slug": "inventory",
-        "endpoint": "inventory_view",
-        "title_key": "nav_inventory",
-        "hint_key": "placeholder_inventory_hint",
-        "intro_key": "placeholder_inventory_intro",
-        "note_key": "placeholder_inventory_note",
-        "features": [
-            ("placeholder_inventory_f1_title", "placeholder_inventory_f1_desc"),
-            ("placeholder_inventory_f2_title", "placeholder_inventory_f2_desc"),
-            ("placeholder_inventory_f3_title", "placeholder_inventory_f3_desc"),
-        ],
-        "pills": [
-            "placeholder_inventory_pill_1",
-            "placeholder_inventory_pill_2",
-            "placeholder_inventory_pill_3",
-        ],
-    },
     "auction_house": {
         "slug": "auction-house",
         "endpoint": "auction_house_view",

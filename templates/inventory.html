@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set inv_data = inventory if inventory is defined and inventory else {'ready': false, 'containers': [], 'other_items': []} %}
+{% set _loot_fallback = url_for('static', filename='img/lootboxes/Generic_Supply_Container.png') %}
+
+<div class="gc-page inventory-page" id="inventory-page"
+     data-ready="{{ '1' if inv_data.ready is not defined or inv_data.ready != false else '0' }}">
+
+  {% if inv_data.ready is not defined or inv_data.ready != false %}
+  <script type="application/json" id="inventory-page-state">{{ inv_data | tojson }}</script>
+  {% endif %}
+
+  <header class="gc-page-header section-header inventory-headline">
+    <h2 class="section-title">{{ T("inv_title", "Inventar") }}</h2>
+    <p class="section-hint hint">{{ T("inv_hint", "Öffne Container und verwalte deine Beute.") }}</p>
+    {% if inv_data.planet_name is defined and inv_data.planet_name %}
+    <p class="inventory-planet-scope gc-mono" data-inventory-planet-scope>
+      {{ T("inv_planet_scope", "Ressourcen werden gutgeschrieben auf: %(name)s", name=inv_data.planet_name) }}
+    </p>
+    {% endif %}
+  </header>
+
+  {% if inv_data.ready is defined and inv_data.ready == false %}
+  <section class="gc-panel inventory-panel">
+    <p class="inventory-empty">{{ T("inv_unavailable", "Inventar ist derzeit nicht verfügbar.") }}</p>
+  </section>
+  {% else %}
+
+  <section class="gc-panel inventory-panel inventory-rewards-panel-wrap" id="inventory-rewards-panel" hidden aria-live="polite">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("inv_rewards_title", "Erhaltene Belohnungen") }}</span>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-inventory-rewards-close>
+        {{ T("inv_rewards_close", "Schließen") }}
+      </button>
+    </div>
+    <ul class="inventory-rewards-list" data-inventory-rewards-list></ul>
+  </section>
+
+  <section class="gc-panel inventory-panel">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("inv_containers_title", "Container") }}</span>
+      <span class="gc-panel-subtitle">{{ T("inv_containers_subtitle", "Gewichtete Loot-Pools — serverseitig gerollt") }}</span>
+    </div>
+    <div class="inventory-container-grid" data-inventory-container-grid>
+      {% for c in inv_data.containers %}
+      {% set _owned = (c.amount|int) > 0 %}
+      {% set _img = url_for('static', filename=c.image) if c.image is defined else _loot_fallback %}
+      <article class="inventory-loot-card inventory-container-card {{ 'inventory-loot-card--owned' if _owned else 'inventory-loot-card--empty' }}"
+               data-inventory-container="{{ c.item_key }}"
+               data-rarity="{{ c.rarity }}">
+        <div class="inventory-loot-card-hero">
+          <div class="inventory-loot-card-glow inventory-loot-card-glow--{{ c.rarity }}" aria-hidden="true"></div>
+          <img class="inventory-loot-card-img"
+               src="{{ _img }}"
+               alt="{{ T(c.name_key, c.item_key) }}"
+               loading="lazy"
+               decoding="async"
+               onerror="this.onerror=null;this.src='{{ _loot_fallback }}';">
+          <span class="inventory-loot-card-stock gc-mono"
+                data-inventory-amount="{{ c.item_key }}"
+                title="{{ T('inv_amount_label', 'Anzahl') }}">
+            {{ c.amount|fmt_int }}
+          </span>
+        </div>
+        <div class="inventory-loot-card-body">
+          <div class="inventory-loot-card-head">
+            <h3 class="inventory-loot-card-name">{{ T(c.name_key, c.item_key) }}</h3>
+            <span class="inventory-rarity-badge inventory-rarity-badge--{{ c.rarity }}">
+              {{ T("inv_rarity_" ~ c.rarity, c.rarity) }}
+            </span>
+          </div>
+          <p class="inventory-loot-card-hint">
+            {% if _owned %}
+              {{ T("inv_card_owned_hint", "Bereit zum Öffnen") }}
+            {% else %}
+              {{ T("inv_card_empty_hint", "Noch nicht im Besitz") }}
+            {% endif %}
+          </p>
+        </div>
+        <div class="inventory-loot-card-actions">
+          <button type="button"
+                  class="gc-btn gc-btn-primary gc-btn-sm inventory-open-btn"
+                  data-inventory-open="{{ c.item_key }}"
+                  data-open-amount="1"
+                  {% if not _owned %}disabled{% endif %}>
+            {{ T("inv_open_btn", "Öffnen") }}
+          </button>
+          <button type="button"
+                  class="gc-btn gc-btn-secondary gc-btn-sm inventory-open-btn"
+                  data-inventory-open="{{ c.item_key }}"
+                  data-open-amount="10"
+                  {% if (c.amount|int) < 10 %}disabled{% endif %}>
+            {{ T("inv_open_10_btn", "10× öffnen") }}
+          </button>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="gc-panel inventory-panel">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("inv_items_title", "Items") }}</span>
+      <span class="gc-panel-subtitle">{{ T("inv_items_subtitle", "Booster, Fragmente und Spezialitems") }}</span>
+    </div>
+    <ul class="inventory-item-list" data-inventory-item-list>
+      {% for item in inv_data['other_items'] %}
+      <li class="inventory-item-row" data-inventory-item="{{ item.item_key }}" data-rarity="{{ item.rarity }}">
+        <span class="inventory-item-icon" aria-hidden="true">{{ item.icon }}</span>
+        <span class="inventory-item-name">{{ T(item.name_key, item.item_key) }}</span>
+        <span class="inventory-rarity-badge inventory-rarity-badge--{{ item.rarity }}">
+          {{ T("inv_rarity_" ~ item.rarity, item.rarity) }}
+        </span>
+        <span class="inventory-item-amount gc-mono" data-inventory-item-amount="{{ item.item_key }}">
+          ×{{ item.amount|fmt_int }}
+        </span>
+      </li>
+      {% else %}
+      <li class="inventory-empty" data-inventory-empty-items>{{ T("inv_no_items", "Noch keine Items.") }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  {% endif %}
+</div>
+{% endblock %}

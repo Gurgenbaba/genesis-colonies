@@ -1307,7 +1307,124 @@ def _render_placeholder_module(module_key: str):
 @app.route("/inventory")
 @require_login
 def inventory_view():
-    return _render_placeholder_module("inventory")
+    user_id = session.get("user_id")
+    if user_id is None:
+        return redirect(url_for("login"))
+
+    from game.inventory import build_inventory_state, inventory_schema_ready
+    from game.planet_evolution.repository import get_context_planet
+
+    ctx = _load_page_live_context(finish_source="inventory")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    inventory = {"ready": False, "containers": [], "other_items": []}
+    conn = db()
+    try:
+        if inventory_schema_ready(conn):
+            inventory = build_inventory_state(int(user_id), conn=conn)
+            planet = get_context_planet(int(user_id), conn=conn)
+            inventory["planet_id"] = int(planet["id"])
+            inventory["planet_name"] = str(planet.get("name") or "").strip()
+    finally:
+        conn.close()
+
+    return render_template(
+        "inventory.html",
+        player=ctx["player_view"],
+        buildings=ctx["buildings"],
+        energy_total=ctx["energy_total"],
+        energy_used=ctx["energy_used"],
+        storage_caps=ctx["storage_caps"],
+        inventory=inventory,
+    )
+
+
+@app.route("/api/inventory/state", methods=["GET"])
+@require_login
+def api_inventory_state():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    from game.inventory import build_inventory_state, inventory_schema_ready
+
+    conn = db()
+    try:
+        if not inventory_schema_ready(conn):
+            return jsonify({"ok": False, "reason": "inventory_unavailable"}), 503
+        inventory = build_inventory_state(user_id, conn=conn)
+    finally:
+        conn.close()
+
+    return jsonify({"ok": True, "inventory": inventory})
+
+
+@app.route("/api/inventory/open-container", methods=["POST"])
+@require_login
+def api_inventory_open_container():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    item_key = str(data.get("item_key") or "").strip()
+    try:
+        amount = int(data.get("amount") or 1)
+    except (TypeError, ValueError):
+        amount = 0
+
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    from game.inventory import inventory_schema_ready, open_containers
+    from game.planet_evolution.repository import get_context_planet
+
+    conn = db()
+    try:
+        if not inventory_schema_ready(conn):
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_open")
+            return jsonify({"ok": False, "reason": "inventory_unavailable", "state": state}), 503
+
+        planet = get_context_planet(user_id, conn=conn)
+        planet_id = int(planet["id"])
+        begin_write_transaction(conn)
+        ok, reason, result = open_containers(
+            user_id,
+            planet_id,
+            item_key,
+            amount,
+            conn=conn,
+        )
+        if not ok:
+            rollback(conn)
+            state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_open")
+            resp = {"ok": False, "reason": reason, "state": state}
+            return jsonify(resp), 400
+
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_open")
+    resp = {
+        "ok": True,
+        "reason": "container_open_ok",
+        "rewards": (result or {}).get("rewards") or [],
+        "inventory": (result or {}).get("inventory") or {},
+        "opened": (result or {}).get("opened") or 0,
+        "container_key": (result or {}).get("container_key") or item_key,
+        "state": state,
+    }
+    if request_id:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
 
 
 @app.route("/auction-house")

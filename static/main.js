@@ -6126,6 +6126,172 @@
     GC.applyOverviewPlanetName = setPlanetNameDisplay;
   }
 
+  function parseInventoryPageState() {
+    const el = document.getElementById("inventory-page-state");
+    if (el && el.textContent) {
+      try {
+        return JSON.parse(el.textContent);
+      } catch (_) {}
+    }
+    return { ready: false, containers: [], other_items: [] };
+  }
+
+  function inventoryResourceLabel(key) {
+    if (key === "metal") return t("resource_metal", "Ferronit");
+    if (key === "crystal") return t("resource_crystal", "Crytite");
+    if (key === "fuel_cells") return t("resource_fuel_cells", "Brennzellen");
+    return key;
+  }
+
+  function renderInventoryRewards(rewards) {
+    const panel = document.getElementById("inventory-rewards-panel");
+    const list = document.querySelector("[data-inventory-rewards-list]");
+    if (!panel || !list) return;
+    const rows = (rewards || []).filter((r) => (parseInt(r.amount, 10) || 0) > 0);
+    if (!rows.length) {
+      panel.hidden = true;
+      list.innerHTML = "";
+      return;
+    }
+    list.innerHTML = rows
+      .map((r) => {
+        const amt = parseInt(r.amount, 10) || 0;
+        if (r.reward_type === "resource") {
+          const label = inventoryResourceLabel(r.reward_key);
+          return `<li class="inventory-reward-row inventory-reward-row--resource"><span class="inventory-reward-label">${escapeHtml(label)}</span><span class="inventory-reward-amount gc-mono">+${amt.toLocaleString()}</span></li>`;
+        }
+        const name = t(r.name_key || `inv_item_${r.reward_key}`, r.reward_key);
+        const rarity = t(`inv_rarity_${r.rarity || "common"}`, r.rarity || "common");
+        const icon = r.icon || "📦";
+        return `<li class="inventory-reward-row inventory-reward-row--item" data-rarity="${escapeHtml(r.rarity || "common")}"><span class="inventory-reward-icon" aria-hidden="true">${icon}</span><span class="inventory-reward-label">${escapeHtml(name)}</span><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(r.rarity || "common")}">${escapeHtml(rarity)}</span><span class="inventory-reward-amount gc-mono">×${amt.toLocaleString()}</span></li>`;
+      })
+      .join("");
+    panel.hidden = false;
+  }
+
+  function patchInventoryDom(inventory) {
+    const inv = inventory || {};
+    const containers = inv.containers || [];
+    const items = inv.other_items || [];
+
+    document.querySelectorAll("[data-inventory-container]").forEach((card) => {
+      const key = card.dataset.inventoryContainer;
+      const row = containers.find((c) => c.item_key === key);
+      const amount = row ? parseInt(row.amount, 10) || 0 : 0;
+      const owned = amount > 0;
+      const amountEl = card.querySelector(`[data-inventory-amount="${key}"]`);
+      if (amountEl) amountEl.textContent = String(amount);
+      card.classList.toggle("inventory-loot-card--owned", owned);
+      card.classList.toggle("inventory-loot-card--empty", !owned);
+      card.hidden = false;
+      const hint = card.querySelector(".inventory-loot-card-hint");
+      if (hint) {
+        hint.textContent = owned
+          ? t("inv_card_owned_hint", "Bereit zum Öffnen")
+          : t("inv_card_empty_hint", "Noch nicht im Besitz");
+      }
+      card.querySelectorAll("[data-inventory-open]").forEach((btn) => {
+        const need = parseInt(btn.dataset.openAmount, 10) || 1;
+        btn.disabled = amount < need;
+      });
+    });
+
+    const itemList = document.querySelector("[data-inventory-item-list]");
+    if (!itemList) return;
+
+    const emptyItems = itemList.querySelector("[data-inventory-empty-items]");
+    if (emptyItems) emptyItems.hidden = items.length > 0;
+
+    items.forEach((item) => {
+      let row = itemList.querySelector(`[data-inventory-item="${item.item_key}"]`);
+      if (!row) {
+        const rarity = item.rarity || "common";
+        const name = t(item.name_key || `inv_item_${item.item_key}`, item.item_key);
+        row = document.createElement("li");
+        row.className = "inventory-item-row";
+        row.dataset.inventoryItem = item.item_key;
+        row.dataset.rarity = rarity;
+        row.innerHTML = `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span><span class="inventory-item-name">${escapeHtml(name)}</span><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span><span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×0</span>`;
+        itemList.appendChild(row);
+      }
+      const amtEl = row.querySelector(`[data-inventory-item-amount="${item.item_key}"]`);
+      if (amtEl) amtEl.textContent = `×${parseInt(item.amount, 10) || 0}`;
+      row.hidden = false;
+    });
+
+    itemList.querySelectorAll("[data-inventory-item]").forEach((row) => {
+      const key = row.dataset.inventoryItem;
+      if (!items.some((i) => i.item_key === key)) row.hidden = true;
+    });
+  }
+
+  let _inventoryLastState = null;
+
+  function bindInventoryOnce() {
+    if (GC._inventoryEventsBound) return;
+    GC._inventoryEventsBound = true;
+
+    document.addEventListener("click", async (ev) => {
+      const openBtn = ev.target.closest("[data-inventory-open]");
+      if (!openBtn || openBtn.disabled) return;
+      const page = document.getElementById("inventory-page");
+      if (!page || page.dataset.ready !== "1") return;
+
+      const itemKey = openBtn.dataset.inventoryOpen;
+      const amount = parseInt(openBtn.dataset.openAmount, 10) || 1;
+      if (!itemKey) return;
+
+      page.querySelectorAll("[data-inventory-open]").forEach((btn) => {
+        btn.disabled = true;
+      });
+
+      try {
+        const res = await GC.fetchGameAction("/api/inventory/open-container", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+          body: JSON.stringify({
+            item_key: itemKey,
+            amount,
+            request_id: `inv-open-${itemKey}-${amount}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          }),
+        });
+        if (res?.ok) {
+          applyActionState(res, "inventory_open");
+          renderInventoryRewards(res.rewards || []);
+          _inventoryLastState = res.inventory || _inventoryLastState;
+          patchInventoryDom(_inventoryLastState);
+        } else {
+          const reason = res?.reason || "generic";
+          console.warn("[GC] inventory open failed:", reason);
+          patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+        }
+      } catch (err) {
+        console.warn("[GC] inventory open error", err);
+        patchInventoryDom(_inventoryLastState || parseInventoryPageState());
+      }
+    });
+
+    document.addEventListener("click", (ev) => {
+      const closeBtn = ev.target.closest("[data-inventory-rewards-close]");
+      if (!closeBtn) return;
+      const panel = document.getElementById("inventory-rewards-panel");
+      if (panel) panel.hidden = true;
+    });
+  }
+
+  function initInventory() {
+    bindInventoryOnce();
+    syncTradingSubnav("inventory");
+    const page = document.getElementById("inventory-page");
+    if (!page || page.dataset.ready !== "1") return;
+    _inventoryLastState = parseInventoryPageState();
+    patchInventoryDom(_inventoryLastState);
+    GC.registerCleanup(() => {
+      const panel = document.getElementById("inventory-rewards-panel");
+      if (panel) panel.hidden = true;
+    });
+  }
+
   function initTraderHub() {
     initExchangePanel();
     initScrapyardPanel();
@@ -10849,6 +11015,7 @@
   }
 
   GC.modules.overview = initOverview;
+  GC.modules.inventory = initInventory;
   GC.modules.trader_hub = initTraderHub;
   GC.modules.fleet = initFleet;
   GC.modules.logistics = initLogistics;
