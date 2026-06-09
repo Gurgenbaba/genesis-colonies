@@ -1306,7 +1306,7 @@ def _render_placeholder_module(module_key: str):
 
 _INVENTORY_ACTION_MESSAGES = {
     "inventory_unavailable": "Inventar ist derzeit nicht verfügbar.",
-    "inventory_action_failed": "Aktion konnte nicht abgeschlossen werden.",
+    "inventory_action_failed": "Inventar-Aktion konnte nicht abgeschlossen werden.",
     "invalid_item": "Unbekanntes Item.",
     "item_not_usable": "Dieses Item kann nicht benutzt werden.",
     "insufficient_items": "Nicht genug Items im Inventar.",

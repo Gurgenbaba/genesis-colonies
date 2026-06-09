@@ -6361,9 +6361,13 @@
         if (typeof throwAuthError === "function") throwAuthError();
       }
       if (!json || json.ok !== true) {
-        const reason = json?.reason || "generic";
-        const msg = json?.message || inventoryUseReasonText(reason);
-        console.warn("[GC] inventory action failed:", reason, json);
+        const reason = json?.reason || (res.status >= 500 ? "inventory_action_failed" : "generic");
+        const msg =
+          json?.message ||
+          (res.status >= 500
+            ? t("inv_error_action_retry", "Inventar-Aktion fehlgeschlagen. Bitte erneut versuchen.")
+            : inventoryUseReasonText(reason));
+        console.warn("[GC] inventory action failed:", reason, res.status, json);
         showNotify(msg, "error");
         scrollInventoryToFeedback();
         patchInventoryDom(_inventoryLastState || parseInventoryPageState());

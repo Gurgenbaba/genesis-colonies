@@ -61,6 +61,7 @@ def _finish_inventory_due_work(
             dedup=False,
             recalc_ranks=False,
             update_scores=False,
+            manage_transaction=False,
         )
         if pid is not None:
             if not player_has_due_queue_work(uid, conn=conn, planet_id=pid):
@@ -630,7 +631,13 @@ def _apply_research_instant(user_id: int, *, conn) -> Optional[Effect]:
     from .models import get_research_queue_rows
     from .queue_engine import finish_due_work_once, finish_player_research_jobs
 
-    finish_due_work_once(int(user_id), conn=conn, source="inventory_use", dedup=False)
+    finish_due_work_once(
+        int(user_id),
+        conn=conn,
+        source="inventory_use",
+        dedup=False,
+        manage_transaction=False,
+    )
     rows = get_research_queue_rows(int(user_id), conn=conn)
     if not rows:
         return None

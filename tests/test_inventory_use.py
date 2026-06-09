@@ -1016,3 +1016,62 @@ def test_dna_cores_not_usable(inventory_use_db):
     assert not ok
     assert reason == "item_not_usable"
     conn.close()
+
+
+def test_build_booster_short_remaining_no_db_lock(inventory_use_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_use_db, monkeypatch)
+    conn = db()
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    now = time.time()
+    add_build_job(pid, "metal_mine", now - 10, now + 14 * 60, conn=conn)
+    grant_inventory_item(uid, "booster_build_1h", 1, conn=conn)
+    conn.commit()
+    conn.close()
+
+    r = client.post("/api/inventory/use-item", json={"item_key": "booster_build_1h", "amount": 1})
+    assert r.status_code == 200
+    payload = r.get_json()
+    assert payload["ok"] is True
+    assert payload.get("consumed") == 1
+
+    conn = db()
+    queue_count = conn.execute(
+        "SELECT COUNT(*) AS c FROM build_queue WHERE planet_id = ?;",
+        (pid,),
+    ).fetchone()["c"]
+    booster_row = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, "booster_build_1h"),
+    ).fetchone()
+    conn.close()
+    assert int(queue_count) == 0
+    assert booster_row is None
+
+
+def test_finish_due_work_once_nested_no_begin_immediate(inventory_use_db, monkeypatch):
+    from game import db as dbmod
+    from game.queue_engine import finish_due_work_once
+
+    begin_calls = []
+
+    def spy_begin(conn, **kwargs):
+        begin_calls.append(1)
+        return dbmod.begin_write_transaction(conn, **kwargs)
+
+    monkeypatch.setattr(dbmod, "begin_write_transaction", spy_begin)
+
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    now = time.time()
+    add_build_job(pid, "metal_mine", now - 5, now + 3600, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    begin_calls.clear()
+    finish_due_work_once(uid, pid, conn=conn, dedup=False, manage_transaction=False)
+    assert len(begin_calls) == 0
+    rollback(conn)
+    conn.close()

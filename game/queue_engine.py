@@ -158,6 +158,7 @@ def finish_active_planet_due_work(
     source: str = "live_state",
     update_scores: bool = True,
     recalc_ranks: bool = True,
+    manage_transaction: bool = True,
 ) -> Dict[str, Any]:
     """
     Finish due queue work on one planet, retrying while jobs remain due.
@@ -181,6 +182,7 @@ def finish_active_planet_due_work(
             update_scores=update_scores,
             recalc_ranks=recalc_ranks if pass_idx == 0 else False,
             force=pass_idx > 0,
+            manage_transaction=manage_transaction,
         )
         for key in aggregate["finished"]:
             aggregate["finished"][key] += int(last.get("finished", {}).get(key, 0) or 0)
@@ -210,6 +212,7 @@ def finish_player_due_work(
     source: str = "live_state",
     update_scores: bool = True,
     recalc_ranks: bool = True,
+    manage_transaction: bool = True,
 ) -> Dict[str, Any]:
     """
     Finish due queue work for one player (all colonies + account research).
@@ -232,6 +235,7 @@ def finish_player_due_work(
             update_scores=update_scores,
             recalc_ranks=recalc_ranks if pass_idx == 0 else False,
             force=pass_idx > 0,
+            manage_transaction=manage_transaction,
         )
         for key in aggregate["finished"]:
             aggregate["finished"][key] += int(last.get("finished", {}).get(key, 0) or 0)
@@ -265,6 +269,7 @@ def finish_due_work_once(
     recalc_ranks: bool = True,
     dedup: bool = True,
     force: bool = False,
+    manage_transaction: bool = True,
 ) -> Dict[str, Any]:
     """
     Request-level deduplicated finish. Same canonical scope runs at most once per request.
@@ -286,6 +291,7 @@ def finish_due_work_once(
             conn=conn,
             update_scores=update_scores,
             recalc_ranks=recalc_ranks,
+            manage_transaction=manage_transaction,
         )
         result["skipped_due_to_dedup"] = False
         result["dedup_scope_key"] = scope_key
@@ -315,8 +321,10 @@ def finish_due_work_once(
         planet_id=planet_id,
         now=now,
         source=source,
+        conn=conn,
         update_scores=update_scores,
         recalc_ranks=recalc_ranks,
+        manage_transaction=manage_transaction,
     )
     result["skipped_due_to_dedup"] = False
     result["dedup_scope_key"] = scope_key
@@ -507,6 +515,7 @@ def finish_due_work(
     *,
     update_scores: bool = True,
     recalc_ranks: bool = True,
+    manage_transaction: bool = True,
 ) -> Dict[str, Any]:
     """
     Central finish pipeline: due build + research jobs, batch score, single rank pass.
@@ -658,21 +667,21 @@ def finish_due_work(
                 )
         result["derived_sync_count"] = int(derived_synced)
 
-        if owns_conn:
-            commit(conn)
-
     try:
-        # Caller may already hold begin_write_transaction (write mutex). Never wait
-        # for _ENGINE_LOCK while holding that mutex — lock order is engine then write.
-        if in_transaction(conn):
-            _execute_finish()
-        else:
-            with _ENGINE_LOCK:
-                begin_write_transaction(conn)
+        if manage_transaction:
+            if in_transaction(conn):
                 _execute_finish()
+            else:
+                with _ENGINE_LOCK:
+                    begin_write_transaction(conn)
+                    _execute_finish()
+                    if owns_conn:
+                        commit(conn)
+        else:
+            _execute_finish()
 
     except Exception as exc:
-        if owns_conn:
+        if manage_transaction and owns_conn:
             rollback(conn)
         result["ok"] = False
         result["errors"].append(str(exc))
