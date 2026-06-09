@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .db import lock_planet_for_update, table_exists
 from .inventory_catalog import (
+    CONTAINER_BASIC_COOLDOWN_SEC,
+    CONTAINER_BASIC_KEY,
     CONTAINER_DISPLAY_ORDER,
     CONTAINER_KEYS,
     GRANTABLE_ITEM_KEYS,
@@ -67,7 +69,66 @@ def _serialize_inventory_row(row: Mapping[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def build_container_catalog(owned: Optional[Mapping[str, Mapping[str, Any]]] = None) -> List[Dict[str, Any]]:
+def _last_container_open_at(user_id: int, container_key: str, *, conn) -> Optional[float]:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT created_at FROM container_open_log
+        WHERE user_id = ? AND container_key = ?
+        ORDER BY created_at DESC LIMIT 1;
+        """,
+        (int(user_id), str(container_key)),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    return float(row["created_at"])
+
+
+def basic_container_cooldown_remaining(
+    user_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> int:
+    """Seconds until the next standard-container open is allowed (0 = ready)."""
+    if not inventory_schema_ready(conn):
+        return 0
+    last = _last_container_open_at(user_id, CONTAINER_BASIC_KEY, conn=conn)
+    if last is None:
+        return 0
+    ts = float(now if now is not None else time.time())
+    remaining = float(CONTAINER_BASIC_COOLDOWN_SEC) - (ts - float(last))
+    return max(0, int(remaining))
+
+
+def _attach_container_rules(
+    entry: Dict[str, Any],
+    *,
+    user_id: Optional[int] = None,
+    conn=None,
+) -> Dict[str, Any]:
+    key = str(entry["item_key"])
+    max_open = 10
+    cooldown_seconds = 0
+    open_blocked = False
+    if key == CONTAINER_BASIC_KEY:
+        max_open = 1
+        if user_id is not None and conn is not None:
+            cooldown_seconds = basic_container_cooldown_remaining(int(user_id), conn=conn)
+            open_blocked = cooldown_seconds > 0
+    entry["max_open_amount"] = max_open
+    entry["cooldown_seconds"] = cooldown_seconds
+    entry["open_blocked"] = open_blocked
+    return entry
+
+
+def build_container_catalog(
+    owned: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    *,
+    user_id: Optional[int] = None,
+    conn=None,
+) -> List[Dict[str, Any]]:
     owned_map = owned or {}
     catalog: List[Dict[str, Any]] = []
     for key in CONTAINER_DISPLAY_ORDER:
@@ -76,19 +137,18 @@ def build_container_catalog(owned: Optional[Mapping[str, Mapping[str, Any]]] = N
         meta = item_catalog_entry(key)
         row = owned_map.get(key)
         amount = int((row or {}).get("amount") or 0)
-        catalog.append(
-            {
-                "item_key": key,
-                "item_type": "container",
-                "category": "container",
-                "rarity": meta["rarity"],
-                "amount": amount,
-                "name_key": meta["name_key"],
-                "icon": meta["icon"],
-                "image": meta.get("image") or container_image_path(key),
-                "owned": amount > 0,
-            }
-        )
+        entry = {
+            "item_key": key,
+            "item_type": "container",
+            "category": "container",
+            "rarity": meta["rarity"],
+            "amount": amount,
+            "name_key": meta["name_key"],
+            "icon": meta["icon"],
+            "image": meta.get("image") or container_image_path(key),
+            "owned": amount > 0,
+        }
+        catalog.append(_attach_container_rules(entry, user_id=user_id, conn=conn))
     return catalog
 
 
@@ -111,7 +171,7 @@ def list_player_inventory(user_id: int, *, conn) -> List[Dict[str, Any]]:
 def build_inventory_state(user_id: int, *, conn) -> Dict[str, Any]:
     items = list_player_inventory(user_id, conn=conn)
     owned_containers = {str(i["item_key"]): i for i in items if i["item_type"] == "container"}
-    containers = build_container_catalog(owned_containers)
+    containers = build_container_catalog(owned_containers, user_id=int(user_id), conn=conn)
     other_items = [i for i in items if i["item_type"] != "container"]
     return {
         "ready": inventory_schema_ready(conn),
@@ -439,6 +499,19 @@ def open_containers(
         return False, "invalid_amount", None
     if open_count > 10:
         return False, "amount_too_high", None
+
+    if key == CONTAINER_BASIC_KEY:
+        if open_count > 1:
+            return False, "basic_open_once", None
+        cooldown_seconds = basic_container_cooldown_remaining(user_id, conn=conn)
+        if cooldown_seconds > 0:
+            last = _last_container_open_at(user_id, key, conn=conn)
+            next_open_at = float(last or time.time()) + float(CONTAINER_BASIC_COOLDOWN_SEC)
+            return False, "container_cooldown", {
+                "container_key": key,
+                "cooldown_seconds": cooldown_seconds,
+                "next_open_at": next_open_at,
+            }
 
     owned = _inventory_amount(user_id, key, conn=conn)
     if owned < open_count:

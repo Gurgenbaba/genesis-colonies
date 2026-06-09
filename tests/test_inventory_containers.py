@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import os
 import random
+import time
 import uuid
 
 import pytest
@@ -13,11 +14,14 @@ from game import db as gdb
 from game.db import begin_write_transaction, commit, db, rollback
 from game.inventory import (
     CONTAINER_KEYS,
+    basic_container_cooldown_remaining,
     build_container_catalog,
+    build_inventory_state,
     grant_inventory_item,
     inventory_schema_ready,
     open_containers,
 )
+from game.inventory_catalog import CONTAINER_BASIC_COOLDOWN_SEC, CONTAINER_BASIC_KEY
 from game.models import (
     create_user,
     ensure_player_and_homeworld,
@@ -193,9 +197,9 @@ def test_amount_above_owned_rejected(inventory_db):
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
     pid = int(planet["id"])
-    grant_inventory_item(uid, "container_basic", 2, conn=conn)
+    grant_inventory_item(uid, "container_rare", 2, conn=conn)
     begin_write_transaction(conn)
-    ok, reason, _ = open_containers(uid, pid, "container_basic", 3, conn=conn)
+    ok, reason, _ = open_containers(uid, pid, "container_rare", 3, conn=conn)
     rollback(conn)
     assert not ok
     assert reason == "insufficient_containers"
@@ -298,6 +302,72 @@ def test_all_container_keys_have_pools():
 
         assert key in LOOT_POOLS
         assert LOOT_POOLS[key]
+
+
+def test_basic_container_24h_cooldown(inventory_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "container_basic", 3, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok1, reason1, _ = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(99))
+    assert ok1, reason1
+    commit(conn)
+
+    begin_write_transaction(conn)
+    ok2, reason2, payload = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(100))
+    rollback(conn)
+    assert not ok2
+    assert reason2 == "container_cooldown"
+    assert int((payload or {}).get("cooldown_seconds") or 0) > 0
+
+    assert basic_container_cooldown_remaining(uid, conn=conn) > 0
+    state = build_inventory_state(uid, conn=conn)
+    basic = next(c for c in state["containers"] if c["item_key"] == CONTAINER_BASIC_KEY)
+    assert basic["open_blocked"] is True
+    assert basic["max_open_amount"] == 1
+    conn.close()
+
+
+def test_basic_container_cooldown_expires(inventory_db, monkeypatch):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "container_basic", 2, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok1, _, _ = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(11))
+    assert ok1
+    commit(conn)
+
+    future = time.time() + CONTAINER_BASIC_COOLDOWN_SEC + 5
+    assert basic_container_cooldown_remaining(uid, conn=conn, now=future) == 0
+    monkeypatch.setattr("game.inventory.time.time", lambda: future)
+
+    begin_write_transaction(conn)
+    ok2, reason2, _ = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(12))
+    assert ok2, reason2
+    commit(conn)
+    conn.close()
+
+
+def test_basic_container_rejects_multi_open(inventory_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "container_basic", 5, conn=conn)
+    begin_write_transaction(conn)
+    ok, reason, _ = open_containers(uid, pid, "container_basic", 2, conn=conn)
+    rollback(conn)
+    assert not ok
+    assert reason == "basic_open_once"
+    conn.close()
 
 
 def test_open_grants_ships_to_context_planet(inventory_db, monkeypatch):

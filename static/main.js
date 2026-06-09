@@ -6189,15 +6189,28 @@
       card.classList.toggle("inventory-loot-card--owned", owned);
       card.classList.toggle("inventory-loot-card--empty", !owned);
       card.hidden = false;
+      const cooldownSeconds = row ? parseInt(row.cooldown_seconds, 10) || 0 : 0;
+      const openBlocked = Boolean(row && row.open_blocked) || cooldownSeconds > 0;
+      const maxOpen = row ? parseInt(row.max_open_amount, 10) || 10 : 10;
       const hint = card.querySelector(".inventory-loot-card-hint");
       if (hint) {
-        hint.textContent = owned
-          ? t("inv_card_owned_hint", "Bereit zum Öffnen")
-          : t("inv_card_empty_hint", "Noch nicht im Besitz");
+        hint.dataset.cooldownSeconds = String(cooldownSeconds);
+        if (openBlocked && cooldownSeconds > 0) {
+          hint.textContent = tf(
+            "inv_basic_cooldown_hint",
+            { time: formatCountdownRemain(cooldownSeconds) },
+            "Nächstes Öffnen in %(time)s"
+          );
+        } else if (owned) {
+          hint.textContent = t("inv_card_owned_hint", "Bereit zum Öffnen");
+        } else {
+          hint.textContent = t("inv_card_empty_hint", "Noch nicht im Besitz");
+        }
       }
       card.querySelectorAll("[data-inventory-open]").forEach((btn) => {
         const need = parseInt(btn.dataset.openAmount, 10) || 1;
-        btn.disabled = amount < need;
+        const overMax = need > maxOpen;
+        btn.disabled = !owned || openBlocked || amount < need || overMax;
       });
     });
 

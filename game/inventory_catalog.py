@@ -19,6 +19,9 @@ CONTAINER_KEYS: FrozenSet[str] = frozenset(
     }
 )
 
+CONTAINER_BASIC_KEY = "container_basic"
+CONTAINER_BASIC_COOLDOWN_SEC = 24 * 60 * 60
+
 CONTAINER_DISPLAY_ORDER: Tuple[str, ...] = (
     "container_basic",
     "container_rare",

@@ -1403,6 +1403,11 @@ def api_inventory_open_container():
             rollback(conn)
             state, _ = _build_game_state_payload(include_panel=True, finish_source="inventory_open")
             resp = {"ok": False, "reason": reason, "state": state}
+            if isinstance(result, dict):
+                if result.get("cooldown_seconds") is not None:
+                    resp["cooldown_seconds"] = int(result["cooldown_seconds"])
+                if result.get("next_open_at") is not None:
+                    resp["next_open_at"] = float(result["next_open_at"])
             return jsonify(resp), 400
 
         commit(conn)
