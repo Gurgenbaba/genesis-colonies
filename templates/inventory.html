@@ -46,6 +46,7 @@
       {% for c in inv_data.containers %}
       {% set _owned = (c.amount|int) > 0 %}
       {% set _cooldown = (c.cooldown_seconds|int) if c.cooldown_seconds is defined else 0 %}
+      {% set _cooldown_active = c.cooldown_active is defined and c.cooldown_active %}
       {% set _blocked = c.open_blocked is defined and c.open_blocked %}
       {% set _max_open = (c.max_open_amount|int) if c.max_open_amount is defined else 10 %}
       {% set _img = url_for('static', filename=c.image) if c.image is defined else _loot_fallback %}
@@ -74,14 +75,24 @@
             </span>
           </div>
           <p class="inventory-loot-card-hint" data-inventory-hint="{{ c.item_key }}" data-cooldown-seconds="{{ _cooldown }}">
-            {% if _blocked %}
-              {{ T("inv_basic_cooldown_active", "Cooldown aktiv — 1× alle 24 Stunden") }}
-            {% elif _owned %}
+            {% if _owned %}
               {{ T("inv_card_owned_hint", "Bereit zum Öffnen") }}
+            {% elif _blocked %}
+              {{ T("inv_basic_cooldown_active", "Cooldown aktiv — 1× alle 24 Stunden") }}
             {% else %}
               {{ T("inv_card_empty_hint", "Noch nicht im Besitz") }}
             {% endif %}
           </p>
+          {% if c.item_key == 'container_basic' %}
+          <p class="inventory-loot-card-cooldown gc-mono"
+             data-inventory-cooldown="{{ c.item_key }}"
+             data-cooldown-seconds="{{ _cooldown }}"
+             {% if not _cooldown_active %}hidden{% endif %}>
+            {% if _cooldown_active %}
+              {{ T("inv_basic_cooldown_timer", "Gratis-Öffnung in") }} …
+            {% endif %}
+          </p>
+          {% endif %}
         </div>
         <div class="inventory-loot-card-actions">
           <button type="button"

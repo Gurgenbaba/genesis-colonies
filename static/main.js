@@ -6190,21 +6190,27 @@
       card.classList.toggle("inventory-loot-card--empty", !owned);
       card.hidden = false;
       const cooldownSeconds = row ? parseInt(row.cooldown_seconds, 10) || 0 : 0;
-      const openBlocked = Boolean(row && row.open_blocked) || cooldownSeconds > 0;
+      const openBlocked = Boolean(row && row.open_blocked);
       const maxOpen = row ? parseInt(row.max_open_amount, 10) || 10 : 10;
       const hint = card.querySelector(".inventory-loot-card-hint");
       if (hint) {
         hint.dataset.cooldownSeconds = String(cooldownSeconds);
-        if (openBlocked && cooldownSeconds > 0) {
-          hint.textContent = tf(
-            "inv_basic_cooldown_hint",
-            { time: formatCountdownRemain(cooldownSeconds) },
-            "Nächstes Öffnen in %(time)s"
-          );
-        } else if (owned) {
+        if (owned) {
           hint.textContent = t("inv_card_owned_hint", "Bereit zum Öffnen");
+        } else if (openBlocked && cooldownSeconds > 0) {
+          hint.textContent = t("inv_basic_cooldown_active", "Cooldown aktiv — 1× alle 24 Stunden");
         } else {
           hint.textContent = t("inv_card_empty_hint", "Noch nicht im Besitz");
+        }
+      }
+      const cooldownEl = card.querySelector("[data-inventory-cooldown]");
+      if (cooldownEl) {
+        cooldownEl.dataset.cooldownSeconds = String(cooldownSeconds);
+        if (cooldownSeconds > 0) {
+          cooldownEl.hidden = false;
+          cooldownEl.textContent = `${t("inv_basic_cooldown_timer", "Gratis-Öffnung in")} ${formatCountdownRemain(cooldownSeconds)}`;
+        } else {
+          cooldownEl.hidden = true;
         }
       }
       card.querySelectorAll("[data-inventory-open]").forEach((btn) => {
@@ -6297,6 +6303,20 @@
     });
   }
 
+  function tickInventoryCooldowns() {
+    document.querySelectorAll("[data-inventory-cooldown]").forEach((el) => {
+      let sec = parseInt(el.dataset.cooldownSeconds, 10) || 0;
+      if (sec <= 0) {
+        el.hidden = true;
+        return;
+      }
+      sec = Math.max(0, sec - 1);
+      el.dataset.cooldownSeconds = String(sec);
+      el.hidden = false;
+      el.textContent = `${t("inv_basic_cooldown_timer", "Gratis-Öffnung in")} ${formatCountdownRemain(sec)}`;
+    });
+  }
+
   function initInventory() {
     bindInventoryOnce();
     syncTradingSubnav("inventory");
@@ -6304,6 +6324,7 @@
     if (!page || page.dataset.ready !== "1") return;
     _inventoryLastState = parseInventoryPageState();
     patchInventoryDom(_inventoryLastState);
+    GC.setSafeInterval(tickInventoryCooldowns, 1000);
     GC.registerCleanup(() => {
       const panel = document.getElementById("inventory-rewards-panel");
       if (panel) panel.hidden = true;

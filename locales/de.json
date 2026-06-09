@@ -41,6 +41,7 @@
   "inv_card_empty_hint": "Noch nicht im Besitz",
   "inv_basic_cooldown_active": "Cooldown aktiv — 1× alle 24 Stunden",
   "inv_basic_cooldown_hint": "Nächstes Öffnen in %(time)s",
+  "inv_basic_cooldown_timer": "Gratis-Öffnung in",
   "inv_no_items": "Noch keine Items.",
   "inv_open_btn": "Öffnen",
   "inv_open_10_btn": "10× öffnen",

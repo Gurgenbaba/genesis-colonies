@@ -304,7 +304,7 @@ def test_all_container_keys_have_pools():
         assert LOOT_POOLS[key]
 
 
-def test_basic_container_24h_cooldown(inventory_db):
+def test_basic_container_owned_bypasses_cooldown(inventory_db):
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
@@ -318,17 +318,51 @@ def test_basic_container_24h_cooldown(inventory_db):
     commit(conn)
 
     begin_write_transaction(conn)
-    ok2, reason2, payload = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(100))
+    ok2, reason2, _ = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(100))
+    assert ok2, reason2
+    commit(conn)
+
+    assert basic_container_cooldown_remaining(uid, conn=conn) > 0
+    owned = conn.execute(
+        "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+        (uid, CONTAINER_BASIC_KEY),
+    ).fetchone()
+    assert owned and int(owned["amount"]) == 1
+
+    state = build_inventory_state(uid, conn=conn)
+    basic = next(c for c in state["containers"] if c["item_key"] == CONTAINER_BASIC_KEY)
+    assert basic["open_blocked"] is False
+    assert basic["cooldown_active"] is True
+    assert int(basic["cooldown_seconds"]) > 0
+    assert basic["max_open_amount"] == 1
+    conn.close()
+
+
+def test_basic_container_cooldown_without_stock(inventory_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+    grant_inventory_item(uid, "container_basic", 1, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok1, reason1, _ = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(88))
+    assert ok1, reason1
+    commit(conn)
+
+    begin_write_transaction(conn)
+    ok2, reason2, payload = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(89))
     rollback(conn)
     assert not ok2
     assert reason2 == "container_cooldown"
     assert int((payload or {}).get("cooldown_seconds") or 0) > 0
 
-    assert basic_container_cooldown_remaining(uid, conn=conn) > 0
     state = build_inventory_state(uid, conn=conn)
     basic = next(c for c in state["containers"] if c["item_key"] == CONTAINER_BASIC_KEY)
+    assert basic["amount"] == 0
     assert basic["open_blocked"] is True
-    assert basic["max_open_amount"] == 1
+    assert basic["cooldown_active"] is True
     conn.close()
 
 

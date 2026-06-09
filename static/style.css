@@ -14851,6 +14851,13 @@ a.gc-galaxy-coord-link:focus-visible {
   color: var(--gc-text-dim);
 }
 
+.inventory-loot-card-cooldown {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  color: var(--gc-accent-warm, #ffb84d);
+  letter-spacing: 0.02em;
+}
+
 .inventory-loot-card-actions {
   display: flex;
   flex-wrap: wrap;

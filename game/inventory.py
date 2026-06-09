@@ -109,16 +109,21 @@ def _attach_container_rules(
     conn=None,
 ) -> Dict[str, Any]:
     key = str(entry["item_key"])
+    amount = int(entry.get("amount") or 0)
     max_open = 10
     cooldown_seconds = 0
+    cooldown_active = False
     open_blocked = False
     if key == CONTAINER_BASIC_KEY:
         max_open = 1
         if user_id is not None and conn is not None:
             cooldown_seconds = basic_container_cooldown_remaining(int(user_id), conn=conn)
-            open_blocked = cooldown_seconds > 0
+            cooldown_active = cooldown_seconds > 0
+            # Cooldown limits the free daily open — owned stock can always be opened.
+            open_blocked = cooldown_active and amount <= 0
     entry["max_open_amount"] = max_open
     entry["cooldown_seconds"] = cooldown_seconds
+    entry["cooldown_active"] = cooldown_active
     entry["open_blocked"] = open_blocked
     return entry
 
@@ -500,20 +505,23 @@ def open_containers(
     if open_count > 10:
         return False, "amount_too_high", None
 
+    owned = _inventory_amount(user_id, key, conn=conn)
+
     if key == CONTAINER_BASIC_KEY:
         if open_count > 1:
             return False, "basic_open_once", None
-        cooldown_seconds = basic_container_cooldown_remaining(user_id, conn=conn)
-        if cooldown_seconds > 0:
-            last = _last_container_open_at(user_id, key, conn=conn)
-            next_open_at = float(last or time.time()) + float(CONTAINER_BASIC_COOLDOWN_SEC)
-            return False, "container_cooldown", {
-                "container_key": key,
-                "cooldown_seconds": cooldown_seconds,
-                "next_open_at": next_open_at,
-            }
+        if owned < open_count:
+            cooldown_seconds = basic_container_cooldown_remaining(user_id, conn=conn)
+            if cooldown_seconds > 0:
+                last = _last_container_open_at(user_id, key, conn=conn)
+                next_open_at = float(last or time.time()) + float(CONTAINER_BASIC_COOLDOWN_SEC)
+                return False, "container_cooldown", {
+                    "container_key": key,
+                    "cooldown_seconds": cooldown_seconds,
+                    "next_open_at": next_open_at,
+                }
+            return False, "insufficient_containers", None
 
-    owned = _inventory_amount(user_id, key, conn=conn)
     if owned < open_count:
         return False, "insufficient_containers", None
 
