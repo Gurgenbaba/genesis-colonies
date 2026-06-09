@@ -10429,13 +10429,14 @@
   function rankingBadgesHtml(row) {
     const badges = Array.isArray(row.badges) ? row.badges : [];
     if (!badges.length) return "";
+    const badgeImgFallback = "/static/img/badges/default.png";
     const chips = badges
       .map((badge) => {
         const label = rankingEscapeHtml(rankingT(badge.name_key, badge.badge_key || "Badge"));
         const imgSrc = rankingEscapeHtml(badge.image_url || "");
         const rarity = rankingEscapeHtml(badge.rarity || "common");
         const img = imgSrc
-          ? `<img class="gc-ranking-badge-img" src="${imgSrc}" alt="" width="20" height="20" loading="lazy">`
+          ? `<img class="gc-ranking-badge-img" src="${imgSrc}" alt="" width="20" height="20" loading="lazy" onerror="this.onerror=null;this.src='${badgeImgFallback}';">`
           : "";
         return (
           `<span class="gc-ranking-badge gc-ranking-badge--${rarity}" title="${label}" aria-label="${label}">` +
@@ -12486,19 +12487,37 @@
       const host = form.querySelector("#pc-preview-badges");
       if (!host) return;
       host.innerHTML = "";
+      const badgeImgFallback = "/static/img/badges/default.png";
       const checked = form.querySelectorAll('input[name="badge_slot"]:checked');
       let n = 0;
       checked.forEach((inp) => {
         if (n >= 3) return;
         const imgSrc = inp.getAttribute("data-pc-badge-image") || "";
         const name = inp.getAttribute("data-pc-badge-name") || "";
+        const rarity = inp.getAttribute("data-pc-badge-rarity") || "";
+        const desc = inp.getAttribute("data-pc-badge-desc") || "";
+        const tip = [name, rarity, desc].filter(Boolean).join("\n\n");
         const tile = document.createElement("div");
         tile.className = "gc-player-card-badge-tile";
-        tile.innerHTML =
-          (imgSrc
-            ? `<img class="gc-player-card-badge-img" src="${rankingEscapeHtml(imgSrc)}" alt="" width="64" height="64">`
-            : "") +
-          `<span class="gc-player-card-badge-name">${rankingEscapeHtml(name)}</span>`;
+        if (tip) tile.title = tip;
+        if (imgSrc) {
+          const img = document.createElement("img");
+          img.className = "gc-badge-icon gc-player-card-badge-img";
+          img.src = imgSrc;
+          img.alt = "";
+          img.width = 40;
+          img.height = 40;
+          img.loading = "lazy";
+          img.onerror = function () {
+            this.onerror = null;
+            this.src = badgeImgFallback;
+          };
+          tile.appendChild(img);
+        }
+        const nameEl = document.createElement("span");
+        nameEl.className = "gc-player-card-badge-name";
+        nameEl.textContent = name;
+        tile.appendChild(nameEl);
         host.appendChild(tile);
         n += 1;
       });

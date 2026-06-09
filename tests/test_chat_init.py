@@ -49,6 +49,15 @@ def test_chat_js_bootstrap_interval_60s():
     assert "bootstrapIntervalMs: 60000" in src
 
 
+def test_chat_js_message_time_includes_date_outside_today():
+    src = _read("static/js/chat.js")
+    fmt = src.split("function formatTime(ts)")[1].split("function isNearBottom")[0]
+    assert "Intl.DateTimeFormat" in fmt
+    assert "dateStyle" in fmt
+    assert "timeStyle" in fmt
+    assert 'toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })' not in fmt
+
+
 def test_main_js_init_page_calls_init_chat_not_resume():
     src = _read("static/main.js")
     init_section = src.split("function initPage")[1].split("function formatDuration")[0]

@@ -41,7 +41,7 @@ _LAST_SAVE_TS: Dict[int, int] = {}
 
 ALLOWED_THEMES = frozenset({"cyan", "violet", "amber", "emerald", "rose"})
 
-# badge_key → static/img/badges/<stem>.png (higher tiers use upgraded art)
+# badge_key → static/img/badges/<stem>.png (central asset mapping)
 BADGE_IMAGE_BY_KEY: Dict[str, str] = {
     "founder": "founder",
     "builder_1k": "builder",
@@ -50,8 +50,36 @@ BADGE_IMAGE_BY_KEY: Dict[str, str] = {
     "researcher_10k": "scientist",
     "commander_5k": "commander",
     "commander_50k": "legend",
+    "bug_hunter": "bughunter",
+    "community_hero": "community",
+    "galactic_legend": "galactic_legend",
+    "genesis": "genesis",
 }
-BADGE_IMAGE_DEFAULT = "commander"
+BADGE_IMAGE_DEFAULT = "default"
+_BADGE_IMAGE_DIR = Path("static") / "img" / "badges"
+
+BADGE_RARITY_ORDER: Dict[str, int] = {
+    "mythic": 0,
+    "legendary": 1,
+    "epic": 2,
+    "rare": 3,
+    "uncommon": 4,
+    "common": 5,
+}
+
+BADGE_KEY_TIER_ORDER: Dict[str, int] = {
+    "genesis": 0,
+    "galactic_legend": 1,
+    "founder": 2,
+    "commander_50k": 3,
+    "researcher_10k": 4,
+    "builder_10k": 5,
+    "bug_hunter": 6,
+    "community_hero": 7,
+    "commander_5k": 8,
+    "researcher_1k": 9,
+    "builder_1k": 10,
+}
 
 _AVATAR_SCHEMES = frozenset({"http", "https"})
 _LOCAL_AVATAR_RE = re.compile(r"^/static/uploads/avatars/avatar_(\d+)\.webp$")
@@ -59,15 +87,41 @@ _ALLOWED_AVATAR_MIME = frozenset({"image/png", "image/jpeg", "image/webp"})
 _AVATAR_STORAGE_REL = Path("static") / "uploads" / "avatars"
 
 
+def badge_image_asset_stem(badge_key: str) -> str:
+    key = str(badge_key or "").strip()
+    return BADGE_IMAGE_BY_KEY.get(key, BADGE_IMAGE_DEFAULT)
+
+
+def badge_image_default_path() -> str:
+    return f"/static/img/badges/{BADGE_IMAGE_DEFAULT}.png"
+
+
 def badge_image_static_path(badge_key: str) -> str:
-    """Public badge art under static/img/badges/."""
-    stem = BADGE_IMAGE_BY_KEY.get(str(badge_key or "").strip(), BADGE_IMAGE_DEFAULT)
+    """Public badge art under static/img/badges/ with default.png fallback."""
+    stem = badge_image_asset_stem(badge_key)
+    rel = _BADGE_IMAGE_DIR / f"{stem}.png"
+    if not (_project_root() / rel).is_file():
+        return badge_image_default_path()
     return f"/static/img/badges/{stem}.png"
+
+
+def _badge_sort_key(badge: Dict[str, Any]) -> Tuple[int, int, int]:
+    rarity = str(badge.get("rarity") or "common").lower()
+    rarity_rank = BADGE_RARITY_ORDER.get(rarity, 99)
+    key = str(badge.get("badge_key") or "")
+    key_rank = BADGE_KEY_TIER_ORDER.get(key, 50)
+    req_val = int(badge.get("requirement_value") or 0)
+    return (rarity_rank, key_rank, -req_val)
+
+
+def sort_badges_by_priority(badges: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted(badges, key=_badge_sort_key)
 
 
 def _enrich_badge_row(row: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(row)
     out["image_url"] = badge_image_static_path(out.get("badge_key"))
+    out.pop("icon", None)
     return out
 
 
@@ -136,13 +190,17 @@ def ensure_player_card_tables(conn=None) -> None:
 
 def _seed_default_badges(cur) -> None:
     seeds = [
-        ("founder", "◆", "legendary", "playercard_badge_founder", "playercard_badge_founder_desc", None, None),
-        ("builder_1k", "⬡", "common", "playercard_badge_builder_1k", "playercard_badge_builder_1k_desc", "score_buildings", 1000),
-        ("builder_10k", "⬢", "rare", "playercard_badge_builder_10k", "playercard_badge_builder_10k_desc", "score_buildings", 10000),
-        ("researcher_1k", "◎", "common", "playercard_badge_researcher_1k", "playercard_badge_researcher_1k_desc", "score_research", 1000),
-        ("researcher_10k", "◉", "rare", "playercard_badge_researcher_10k", "playercard_badge_researcher_10k_desc", "score_research", 10000),
-        ("commander_5k", "★", "uncommon", "playercard_badge_commander_5k", "playercard_badge_commander_5k_desc", "score_total", 5000),
-        ("commander_50k", "✦", "epic", "playercard_badge_commander_50k", "playercard_badge_commander_50k_desc", "score_total", 50000),
+        ("founder", "", "legendary", "playercard_badge_founder", "playercard_badge_founder_desc", None, None),
+        ("builder_1k", "", "common", "playercard_badge_builder_1k", "playercard_badge_builder_1k_desc", "score_buildings", 1000),
+        ("builder_10k", "", "rare", "playercard_badge_builder_10k", "playercard_badge_builder_10k_desc", "score_buildings", 10000),
+        ("researcher_1k", "", "common", "playercard_badge_researcher_1k", "playercard_badge_researcher_1k_desc", "score_research", 1000),
+        ("researcher_10k", "", "rare", "playercard_badge_researcher_10k", "playercard_badge_researcher_10k_desc", "score_research", 10000),
+        ("commander_5k", "", "uncommon", "playercard_badge_commander_5k", "playercard_badge_commander_5k_desc", "score_total", 5000),
+        ("commander_50k", "", "epic", "playercard_badge_commander_50k", "playercard_badge_commander_50k_desc", "score_total", 50000),
+        ("genesis", "", "mythic", "playercard_badge_genesis", "playercard_badge_genesis_desc", "score_planet_evolution", 10000),
+        ("galactic_legend", "", "mythic", "playercard_badge_galactic_legend", "playercard_badge_galactic_legend_desc", "score_total", 100000),
+        ("bug_hunter", "", "epic", "playercard_badge_bug_hunter", "playercard_badge_bug_hunter_desc", "score_defense", 25000),
+        ("community_hero", "", "rare", "playercard_badge_community_hero", "playercard_badge_community_hero_desc", "score_fleet", 15000),
     ]
     for row in seeds:
         cur.execute(
@@ -153,6 +211,27 @@ def _seed_default_badges(cur) -> None:
             VALUES (?, ?, ?, ?, ?, ?, ?, 1);
             """,
             row,
+        )
+    cur.execute(
+        """
+        UPDATE player_card_badges
+        SET icon = ''
+        WHERE icon IS NOT NULL AND TRIM(icon) != '';
+        """
+    )
+    for badge_key, req_type, req_val in (
+        ("genesis", "score_planet_evolution", 10000),
+        ("galactic_legend", "score_total", 100000),
+        ("bug_hunter", "score_defense", 25000),
+        ("community_hero", "score_fleet", 15000),
+    ):
+        cur.execute(
+            """
+            UPDATE player_card_badges
+            SET requirement_type = ?, requirement_value = ?
+            WHERE badge_key = ?;
+            """,
+            (req_type, req_val, badge_key),
         )
 
 
@@ -484,6 +563,9 @@ def _sync_badge_unlocks(player_id: int, conn=None) -> None:
         "score_total": int(score.get("score_total", 0) or 0),
         "score_buildings": int(score.get("score_buildings", 0) or 0),
         "score_research": int(score.get("score_research", 0) or 0),
+        "score_fleet": int(score.get("score_fleet", 0) or 0),
+        "score_defense": int(score.get("score_defense", 0) or 0),
+        "score_planet_evolution": int(score.get("score_planet_evolution", 0) or 0),
     }
     cur = c.cursor()
     cur.execute(
@@ -531,16 +613,15 @@ def _list_unlocked_badges(player_id: int, conn=None) -> List[Dict[str, Any]]:
         cur = c.cursor()
         cur.execute(
             """
-            SELECT b.id, b.badge_key, b.icon, b.rarity, b.name_i18n_key, b.description_i18n_key,
-                   u.unlocked_at
+            SELECT b.id, b.badge_key, b.rarity, b.name_i18n_key, b.description_i18n_key,
+                   b.requirement_type, b.requirement_value, u.unlocked_at
             FROM player_card_unlocked_badges u
             JOIN player_card_badges b ON b.id = u.badge_id
-            WHERE u.player_id = ? AND b.is_active = 1
-            ORDER BY u.unlocked_at DESC, b.id ASC;
+            WHERE u.player_id = ? AND b.is_active = 1;
             """,
             (int(player_id),),
         )
-        return [_enrich_badge_row(dict(r)) for r in cur.fetchall()]
+        return sort_badges_by_priority([_enrich_badge_row(dict(r)) for r in cur.fetchall()])
     finally:
         if own:
             c.close()

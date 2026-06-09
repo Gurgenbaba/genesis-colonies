@@ -135,6 +135,20 @@ def test_planet_evolution_tracks(techtree_db):
     assert "specialization" in track_keys
 
 
+def test_planet_evolution_tracks_use_evo_png_icons(techtree_db):
+    player_id = _create_player()
+    ctx = get_techtree_page_context(user_id=player_id)
+    pe_section = next(s for s in ctx["sections"] if s["key"] == "planet_evolution")
+    by_key = {item["key"]: item for item in pe_section["nodes"]}
+    assert by_key["planet_dna"]["icon"] == "img/evo/dna.png"
+    assert by_key["planet_level"]["icon"] == "img/evo/planetary.png"
+    assert by_key["traits"]["icon"] == "img/evo/trait.png"
+    assert by_key["specialization"]["icon"] == "img/evo/specialization.png"
+    assert by_key["policies"]["icon"] == "img/evo/policy.png"
+    assert by_key["planet_research"]["icon"] == "img/evo/planet_research_institute.png"
+    assert by_key["ascension"]["icon"] == "img/evo/ascension_monument.png"
+
+
 def test_section_progress_fields(techtree_db):
     player_id = _create_player()
     ctx = get_techtree_page_context(user_id=player_id)

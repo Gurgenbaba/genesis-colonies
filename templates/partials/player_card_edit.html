@@ -2,6 +2,7 @@
 {% set card = card if card is defined and card else {} %}
 {% set form = card.get('form') if card is mapping else {} %}
 {% if not form %}{% set form = {} %}{% endif %}
+{% set _badge_img_fallback = url_for('static', filename='img/badges/default.png') %}
 
 <div class="gc-player-card-shell gc-player-card-edit"
      data-player-id="{{ card.get('player_id', '') }}"
@@ -102,21 +103,28 @@
           <div class="gc-player-card-badge-options">
             {% for badge in card.get('unlocked_badges') %}
               {% set bid = badge.get('id') %}
-              <label class="gc-player-card-badge-option">
+              {% set badge_label = T(badge.get('name_i18n_key', ''), badge.get('name_i18n_key', '')) %}
+              {% set badge_desc = T(badge.get('description_i18n_key', ''), badge.get('description_i18n_key', '')) %}
+              {% set badge_rarity = T('playercard_badge_rarity_' ~ badge.get('rarity', 'common'), badge.get('rarity', 'common')) %}
+              {% set badge_tip = badge_label ~ '\n' ~ badge_rarity ~ '\n\n' ~ badge_desc %}
+              <label class="gc-player-card-badge-option" title="{{ badge_tip }}">
                 <input type="checkbox"
                        name="badge_slot"
                        value="{{ bid }}"
                        data-pc-badge-id="{{ bid }}"
                        data-pc-badge-image="{{ badge.get('image_url') }}"
-                       data-pc-badge-name="{{ T(badge.get('name_i18n_key', ''), badge.get('name_i18n_key', '')) }}"
+                       data-pc-badge-name="{{ badge_label }}"
+                       data-pc-badge-rarity="{{ badge_rarity }}"
+                       data-pc-badge-desc="{{ badge_desc }}"
                        {% if bid == form.get('selected_badge_1') or bid == form.get('selected_badge_2') or bid == form.get('selected_badge_3') %}checked{% endif %}>
-                <img class="gc-player-card-badge-option-img"
+                <img class="gc-badge-icon gc-player-card-badge-option-img"
                      src="{{ badge.get('image_url') }}"
                      alt=""
                      loading="lazy"
-                     width="64"
-                     height="64">
-                <span class="gc-player-card-badge-option-name">{{ T(badge.get('name_i18n_key', ''), badge.get('name_i18n_key', '')) }}</span>
+                     width="40"
+                     height="40"
+                     onerror="this.onerror=null;this.src='{{ _badge_img_fallback }}';">
+                <span class="gc-player-card-badge-option-name">{{ badge_label }}</span>
               </label>
             {% endfor %}
           </div>

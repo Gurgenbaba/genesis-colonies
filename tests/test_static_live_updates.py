@@ -760,8 +760,10 @@ def test_main_js_gc550_buildings_ux_contract():
     assert "gc-bld-hero-queue" in buildings_html
     assert "gc-bld-card-hero" in research_html
     assert "gc-bld-card-hero" in shipyard_html
+    assert "gc-bld-card-icon--title" not in shipyard_html
     assert "gc-bld-card-action-wrap" in shipyard_html
     assert "gc-bld-card-hero" in defense_html
+    assert "gc-bld-card-icon--title" not in defense_html
     assert "gc-nav-buildings-sub" in sidebar_html
     assert "data-building-tab" in sidebar_html
     assert "gc-nav-trading-sub" in sidebar_html

@@ -9856,9 +9856,9 @@ body.gc-combat-report-open { overflow: hidden; }
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
-  padding: 14px 10px 12px;
-  min-height: 132px;
+  gap: 6px;
+  padding: 10px 8px;
+  min-height: 88px;
   border-radius: var(--gc-radius-sm, 6px);
   border: 1px solid rgba(70, 229, 255, 0.22);
   background:
@@ -9867,9 +9867,10 @@ body.gc-combat-report-open { overflow: hidden; }
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
   text-align: center;
 }
+.gc-badge-icon,
 .gc-player-card-badge-img {
-  width: 80px;
-  height: 80px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
   flex-shrink: 0;
   filter: drop-shadow(0 4px 14px rgba(70, 229, 255, 0.22));
@@ -9913,6 +9914,13 @@ body.gc-combat-report-open { overflow: hidden; }
     rgba(20, 14, 4, 0.94);
   box-shadow: inset 0 0 0 1px rgba(255, 200, 80, 0.12), 0 0 18px rgba(255, 200, 80, 0.08);
 }
+.gc-player-card-badge-tile.gc-player-card-badge-mythic {
+  border-color: rgba(255, 120, 220, 0.55);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 120, 220, 0.14), transparent 70%),
+    rgba(16, 6, 20, 0.94);
+  box-shadow: inset 0 0 0 1px rgba(255, 120, 220, 0.14), 0 0 20px rgba(255, 120, 220, 0.1);
+}
 .gc-player-card-badge-rare { border-color: rgba(168, 120, 255, 0.45); }
 .gc-player-card-badge-epic { border-color: rgba(255, 190, 80, 0.5); }
 .gc-player-card-badge-legendary {
@@ -9924,9 +9932,14 @@ body.gc-combat-report-open { overflow: hidden; }
   .gc-player-card-badges-showcase {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .gc-player-card-badge-img {
-    width: 68px;
-    height: 68px;
+  .gc-badge-icon,
+  .gc-player-card-badge-img,
+  .gc-player-card-badge-option-img {
+    width: 32px;
+    height: 32px;
+  }
+  .gc-player-card-badge-tile {
+    min-height: 76px;
   }
 }
 
@@ -10187,8 +10200,8 @@ body.gc-combat-report-open { overflow: hidden; }
   pointer-events: none;
 }
 .gc-player-card-badge-option-img {
-  width: 64px;
-  height: 64px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
   filter: drop-shadow(0 3px 10px rgba(70, 229, 255, 0.18));
 }

@@ -1,6 +1,7 @@
 {# PlayerCard view partial (AJAX – no loading UI here) #}
 {% set card = card if card is defined and card else {} %}
 {% set is_private = card.get('is_private') if card is mapping else false %}
+{% set _badge_img_fallback = url_for('static', filename='img/badges/default.png') %}
 
 <div class="gc-player-card-shell gc-player-card-view"
      data-player-id="{{ card.get('player_id', '') }}"
@@ -133,19 +134,23 @@
         {% for badge in card.get('badges') %}
           {% set badge_label = T(badge.get('name_i18n_key', ''), badge.get('name_i18n_key', '')) %}
           {% set badge_desc = T(badge.get('description_i18n_key', ''), badge.get('description_i18n_key', '')) %}
+          {% set badge_rarity = T('playercard_badge_rarity_' ~ badge.get('rarity', 'common'), badge.get('rarity', 'common')) %}
+          {% set badge_tip = badge_label ~ '\n' ~ badge_rarity ~ '\n\n' ~ badge_desc %}
           <button type="button"
                   class="gc-player-card-badge-tile gc-player-card-badge-zoom-btn gc-player-card-badge-{{ badge.get('rarity', 'common') }}"
                   data-pc-badge-zoom
                   data-badge-src="{{ badge.get('image_url') }}"
                   data-badge-name="{{ badge_label }}"
                   data-badge-desc="{{ badge_desc }}"
+                  title="{{ badge_tip }}"
                   aria-label="{{ T('playercard_badge_zoom', 'Abzeichen vergrößern') }}: {{ badge_label }}">
-            <img class="gc-player-card-badge-img"
+            <img class="gc-badge-icon gc-player-card-badge-img"
                  src="{{ badge.get('image_url') }}"
                  alt=""
                  loading="lazy"
-                 width="80"
-                 height="80">
+                 width="40"
+                 height="40"
+                 onerror="this.onerror=null;this.src='{{ _badge_img_fallback }}';">
             <span class="gc-player-card-badge-name">{{ badge_label }}</span>
           </button>
         {% endfor %}

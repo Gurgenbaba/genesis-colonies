@@ -76,6 +76,16 @@ BUILDING_TAB_LABEL_KEYS: Dict[str, str] = {
     "infrastructure": "techtree_cat_infrastructure",
 }
 
+PE_TRACK_ICON: Dict[str, str] = {
+    "planet_dna": "img/evo/dna.png",
+    "planet_level": "img/evo/planetary.png",
+    "traits": "img/evo/trait.png",
+    "specialization": "img/evo/specialization.png",
+    "policies": "img/evo/policy.png",
+    "planet_research": "img/evo/planet_research_institute.png",
+    "ascension": "img/evo/ascension_monument.png",
+}
+
 PE_TRACK_DEFS: Tuple[Dict[str, Any], ...] = (
     {
         "key": "planet_dna",
@@ -447,6 +457,7 @@ def _build_pe_items(planet_id: Optional[int]) -> List[Dict[str, Any]]:
             {
                 "key": track["key"],
                 "kind": "planet_evolution",
+                "icon": PE_TRACK_ICON.get(track["key"]),
                 "label_key": track["label_key"],
                 "description_key": track.get("description_key"),
                 "level": planet_level if track["key"] == "planet_level" else 0,

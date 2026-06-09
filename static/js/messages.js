@@ -1417,7 +1417,17 @@
     const n = Number(ts);
     if (!Number.isFinite(n) || n <= 0) return "–";
     try {
-      return new Date(n * 1000).toLocaleString();
+      const d = new Date(n * 1000);
+      const now = new Date();
+      const sameDay =
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate();
+      const locale = document.documentElement.lang || undefined;
+      if (sameDay) {
+        return new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(d);
+      }
+      return new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(d);
     } catch (_) {
       return String(n);
     }

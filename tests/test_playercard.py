@@ -26,6 +26,7 @@ from game.playercard import (
     _LAST_SAVE_TS,
     avatar_public_path,
     avatar_storage_path,
+    badge_image_default_path,
     badge_image_static_path,
     build_public_card,
     ensure_player_card,
@@ -35,6 +36,7 @@ from game.playercard import (
     process_avatar_upload,
     save_own_card,
     sanitize_text_field,
+    sort_badges_by_priority,
     upload_own_avatar,
     validate_avatar_url,
 )
@@ -112,7 +114,7 @@ def test_migration_idempotent_and_tables(temp_db):
         assert table_exists(conn, "player_card_badges")
         assert table_exists(conn, "player_card_unlocked_badges")
         badge_count = conn.execute("SELECT COUNT(*) AS c FROM player_card_badges;").fetchone()["c"]
-        assert badge_count >= 7
+        assert badge_count >= 11
         dup = conn.execute(
             "SELECT badge_key, COUNT(*) AS c FROM player_card_badges GROUP BY badge_key HAVING c > 1;"
         ).fetchall()
@@ -752,15 +754,115 @@ def test_badge_seed_idempotent_via_service(temp_db):
         ensure_player_card_tables(conn)
         n2 = conn.execute("SELECT COUNT(*) AS c FROM player_card_badges;").fetchone()["c"]
         assert n1 == n2
-        assert n1 >= 7
+        assert n1 >= 11
     finally:
         conn.close()
 
 
 def test_badge_image_static_paths():
     assert badge_image_static_path("founder") == "/static/img/badges/founder.png"
+    assert badge_image_static_path("builder_1k") == "/static/img/badges/builder.png"
     assert badge_image_static_path("builder_10k") == "/static/img/badges/architect.png"
+    assert badge_image_static_path("researcher_1k") == "/static/img/badges/researcher.png"
+    assert badge_image_static_path("researcher_10k") == "/static/img/badges/scientist.png"
+    assert badge_image_static_path("commander_5k") == "/static/img/badges/commander.png"
     assert badge_image_static_path("commander_50k") == "/static/img/badges/legend.png"
+    assert badge_image_static_path("bug_hunter") == "/static/img/badges/bughunter.png"
+    assert badge_image_static_path("community_hero") == "/static/img/badges/community.png"
+    assert badge_image_static_path("galactic_legend") == "/static/img/badges/galactic_legend.png"
+    assert badge_image_static_path("genesis") == "/static/img/badges/genesis.png"
+    assert badge_image_static_path("unknown_badge_key") == badge_image_default_path()
+
+
+def test_badge_image_static_path_missing_asset_fallback(monkeypatch):
+    monkeypatch.setattr(
+        "game.playercard._project_root",
+        lambda: Path("/nonexistent/project/root"),
+    )
+    assert badge_image_static_path("founder") == badge_image_default_path()
+
+
+def test_sort_badges_by_priority():
+    badges = [
+        {"badge_key": "builder_1k", "rarity": "common", "requirement_value": 1000},
+        {"badge_key": "genesis", "rarity": "mythic", "requirement_value": 0},
+        {"badge_key": "commander_50k", "rarity": "epic", "requirement_value": 50000},
+        {"badge_key": "founder", "rarity": "legendary", "requirement_value": 0},
+    ]
+    ordered = [b["badge_key"] for b in sort_badges_by_priority(badges)]
+    assert ordered == ["genesis", "founder", "commander_50k", "builder_1k"]
+
+
+def test_badge_seeds_use_empty_icon_not_unicode(temp_db):
+    init_db()
+    _close_db_conn()
+    conn = db()
+    try:
+        rows = conn.execute(
+            "SELECT badge_key, icon FROM player_card_badges ORDER BY badge_key;"
+        ).fetchall()
+        assert len(rows) >= 11
+        for row in rows:
+            icon = str(row["icon"] or "").strip()
+            assert icon == "", f"badge {row['badge_key']} still has unicode icon: {icon!r}"
+    finally:
+        conn.close()
+
+
+def test_new_badges_have_score_requirements(temp_db):
+    init_db()
+    _close_db_conn()
+    conn = db()
+    try:
+        rows = {
+            row["badge_key"]: row
+            for row in conn.execute(
+                """
+                SELECT badge_key, requirement_type, requirement_value
+                FROM player_card_badges
+                WHERE badge_key IN ('genesis', 'galactic_legend', 'bug_hunter', 'community_hero');
+                """
+            ).fetchall()
+        }
+        assert rows["genesis"]["requirement_type"] == "score_planet_evolution"
+        assert int(rows["genesis"]["requirement_value"]) == 10000
+        assert rows["galactic_legend"]["requirement_type"] == "score_total"
+        assert int(rows["galactic_legend"]["requirement_value"]) == 100000
+        assert rows["bug_hunter"]["requirement_type"] == "score_defense"
+        assert int(rows["bug_hunter"]["requirement_value"]) == 25000
+        assert rows["community_hero"]["requirement_type"] == "score_fleet"
+        assert int(rows["community_hero"]["requirement_value"]) == 15000
+    finally:
+        conn.close()
+
+
+def test_sync_unlocks_score_based_badges(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("badge_unlock_user")
+    conn = db()
+    try:
+        conn.execute(
+            """
+            UPDATE player_scores
+            SET score_total = 100000,
+                score_fleet = 15000,
+                score_defense = 25000,
+                score_planet_evolution = 10000
+            WHERE player_id = ?;
+            """,
+            (int(pid),),
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    card, err = build_public_card(pid, viewer_id=pid, sync_badges=True)
+    assert err is None
+    unlocked_keys = {b["badge_key"] for b in (card.get("unlocked_badges") or [])}
+    for key in ("founder", "genesis", "galactic_legend", "bug_hunter", "community_hero"):
+        assert key in unlocked_keys, f"missing unlocked badge: {key}"
 
 
 def test_unlocked_badges_include_image_url(temp_db):
@@ -806,4 +908,6 @@ def test_playercard_view_includes_badge_zoom_markers(temp_db, app_client):
     assert res.status_code == 200
     assert "data-pc-badge-zoom" in body
     assert "data-pc-media-zoom-root" in body
+    assert "gc-badge-icon" in body
     assert "/static/img/badges/founder.png" in body
+    assert "onerror" in body
