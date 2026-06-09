@@ -761,9 +761,10 @@ body.gc-body-simple .auth-error {
   color: var(--gc-neon-cyan);
 }
 
-/* Sidebar submenu groups (Gebäude, Handelsposten — GC-550 / GC-621) */
+/* Sidebar submenu groups (Gebäude, Handelsposten, Militärproduktion) */
 .gc-nav-buildings-group,
 .gc-nav-trading-group,
+.gc-nav-military-group,
 .gc-nav-submenu-group{
   display: flex;
   flex-direction: column;
@@ -804,7 +805,9 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 .gc-nav-sub--buildings[hidden],
 .gc-nav-sub--buildings.gc-nav-sub--collapsed,
 .gc-nav-sub--trading[hidden],
-.gc-nav-sub--trading.gc-nav-sub--collapsed{
+.gc-nav-sub--trading.gc-nav-sub--collapsed,
+.gc-nav-sub--military[hidden],
+.gc-nav-sub--military.gc-nav-sub--collapsed{
   display: none !important;
 }
 
@@ -815,7 +818,8 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 }
 
 .gc-nav-sub--buildings,
-.gc-nav-sub--trading{
+.gc-nav-sub--trading,
+.gc-nav-sub--military{
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -824,8 +828,21 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
   margin: 0 0 2px 12px;
 }
 
-.gc-nav-sub--trading .gc-nav-sub-link{
+.gc-nav-sub--trading .gc-nav-sub-link,
+.gc-nav-sub--military .gc-nav-sub-link{
   text-decoration: none;
+}
+
+.gc-nav-sub-link--wip{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.gc-nav-sub-link--wip .gc-nav-wip-badge{
+  font-size: 0.58rem;
+  padding: 1px 5px;
 }
 
 .gc-nav-sub-link{
@@ -7850,6 +7867,42 @@ body.gc-techtree-media-zoom-open{
   color: rgba(255, 229, 138, 0.95);
   background: rgba(40, 28, 0, 0.65);
   border: 1px solid rgba(255, 196, 0, 0.45);
+}
+
+.gc-placeholder-page .gc-placeholder-head{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.gc-placeholder-page .gc-placeholder-badge{
+  font-size: 0.72rem;
+}
+.gc-placeholder-banner{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 196, 0, 0.28);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(40, 28, 0, 0.35);
+  color: rgba(255, 229, 138, 0.95);
+  font-size: 0.88rem;
+}
+.gc-placeholder-features .gc-placeholder-feature-desc{
+  color: var(--gc-text-soft);
+}
+.gc-placeholder-pills{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.gc-placeholder-note{
+  margin-top: 14px;
+  color: var(--gc-text-muted);
+  font-size: 0.88rem;
 }
 
 .gc-wip-banner{

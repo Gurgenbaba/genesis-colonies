@@ -767,6 +767,8 @@ def test_main_js_gc550_buildings_ux_contract():
     assert "gc-nav-buildings-sub" in sidebar_html
     assert "data-building-tab" in sidebar_html
     assert "gc-nav-trading-sub" in sidebar_html
+    assert "gc-nav-military-sub" in sidebar_html
+    assert "syncMilitarySubnav" in src
     assert "syncTradingSubnav" in src
     assert "activateBuildingTabByName" in src
     assert "hideBuildingsSubnav" in src

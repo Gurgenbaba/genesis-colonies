@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="gc-page gc-placeholder-page" data-placeholder-module="{{ module.key }}">
+
+  <header class="gc-page-header section-header">
+    <div class="gc-placeholder-head">
+      <h2 class="section-title">{{ T(module.title_key, module.title_key) }}</h2>
+      <span class="gc-nav-wip-badge gc-placeholder-badge">{{ T("wip_badge", "Dev") }}</span>
+    </div>
+    <p class="section-hint hint">{{ T(module.hint_key, "") }}</p>
+  </header>
+
+  <div class="gc-panel gc-placeholder-banner" role="status">
+    <strong>{{ T("wip_banner_title", "Modul in Entwicklung") }}</strong>
+    <span>{{ T("wip_banner_text", "Diese Seite ist eine Vorschau — Spielmechanik folgt in einem späteren Update.") }}</span>
+  </div>
+
+  <section class="gc-panel gc-placeholder-panel">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("placeholder_roadmap_title", "Geplante Funktionen") }}</span>
+      <span class="gc-panel-subtitle">{{ T(module.intro_key, "") }}</span>
+    </div>
+
+    <ul class="gc-list gc-placeholder-features">
+      {% for title_key, desc_key in module.features %}
+      <li>
+        <strong>{{ T(title_key, title_key) }}</strong>
+        {% if T(desc_key, "") %}<span class="gc-placeholder-feature-desc"> — {{ T(desc_key, "") }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+
+    {% if module.pills %}
+    <div class="gc-placeholder-pills" aria-label="{{ T('placeholder_roadmap_title', 'Geplante Funktionen') }}">
+      {% for pill_key in module.pills %}
+      <span class="roadmap-pill">{{ T(pill_key, pill_key) }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if T(module.note_key, "") %}
+    <p class="gc-body-text gc-placeholder-note">{{ T(module.note_key, "") }}</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

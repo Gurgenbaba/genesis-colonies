@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from flask import (
     Flask,
+    abort,
     render_template,
     redirect,
     url_for,
@@ -1279,6 +1280,58 @@ def alliance_view():
         storage_caps=storage_caps,
         alliance_members=alliance_members,
     )
+
+
+def _render_placeholder_module(module_key: str):
+    from game.placeholder_pages import get_placeholder_module
+
+    module = get_placeholder_module(module_key)
+    if not module:
+        abort(404)
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    if player_view is None:
+        return redirect(url_for("login"))
+    ctx = dict(module)
+    ctx["key"] = module_key
+    return render_template(
+        "placeholder_module.html",
+        player=player_view,
+        buildings=buildings,
+        energy_total=energy_total,
+        energy_used=energy_used,
+        storage_caps=storage_caps,
+        module=ctx,
+    )
+
+
+@app.route("/inventory")
+@require_login
+def inventory_view():
+    return _render_placeholder_module("inventory")
+
+
+@app.route("/auction-house")
+@require_login
+def auction_house_view():
+    return _render_placeholder_module("auction_house")
+
+
+@app.route("/galactic-politics")
+@require_login
+def galactic_politics_view():
+    return _render_placeholder_module("galactic_politics")
+
+
+@app.route("/skilltree")
+@require_login
+def skilltree_view():
+    return _render_placeholder_module("skilltree")
+
+
+@app.route("/premium")
+@require_login
+def premium_view():
+    return _render_placeholder_module("premium")
 
 
 # --------------------------------------------------------------------------

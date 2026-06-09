@@ -1018,6 +1018,12 @@
     if (path.endsWith("/trader-hub")) return "trader_hub";
     if (path.endsWith("/fleet")) return "fleet";
     if (path.endsWith("/logistics")) return "logistics";
+    if (path.endsWith("/inventory")) return "inventory";
+    if (path.endsWith("/auction-house")) return "auction_house";
+    if (path.endsWith("/galactic-politics")) return "galactic_politics";
+    if (path.endsWith("/skilltree")) return "skilltree";
+    if (path.endsWith("/premium")) return "premium";
+    if (path.endsWith("/alliance")) return "alliance";
     if (path.endsWith("/shipyard")) return "shipyard";
     if (path.endsWith("/defense")) return "defense";
     if (path.endsWith("/empire")) return "empire";
@@ -1230,6 +1236,7 @@
     }
 
     syncTradingSubnav(page);
+    syncMilitarySubnav(page);
 
     if (typeof normalizePopoverTriggers === "function") {
       normalizePopoverTriggers(document.getElementById("main-content") || document);
@@ -2811,10 +2818,23 @@
     GC.registerCleanup(hideBuildingsSubnav);
   }
 
-  const TRADING_NAV_PAGES = new Set(["trader_hub", "logistics"]);
+  const TRADING_NAV_PAGES = new Set([
+    "trader_hub",
+    "logistics",
+    "inventory",
+    "auction_house",
+    "galactic_politics",
+    "skilltree",
+    "premium",
+  ]);
+  const MILITARY_NAV_PAGES = new Set(["shipyard", "defense"]);
 
   function isTradingNavPage(page) {
     return TRADING_NAV_PAGES.has(String(page || ""));
+  }
+
+  function isMilitaryNavPage(page) {
+    return MILITARY_NAV_PAGES.has(String(page || ""));
   }
 
   function hideTradingSubnav() {
@@ -2851,6 +2871,42 @@
       return;
     }
     hideTradingSubnav();
+  }
+
+  function hideMilitarySubnav() {
+    const sub = document.getElementById("gc-nav-military-sub");
+    if (!sub) return;
+    sub.hidden = true;
+    sub.classList.add("gc-nav-sub--collapsed");
+    sub.setAttribute("aria-hidden", "true");
+  }
+
+  function showMilitarySubnav() {
+    const sub = document.getElementById("gc-nav-military-sub");
+    if (!sub) return;
+    sub.hidden = false;
+    sub.classList.remove("gc-nav-sub--collapsed");
+    sub.setAttribute("aria-hidden", "false");
+  }
+
+  function syncMilitarySubnav(page) {
+    const sub = document.getElementById("gc-nav-military-sub");
+    const parent = document.getElementById("gc-nav-military-parent");
+    if (!sub || !parent) return;
+
+    const activePage = page || GC.detectPage();
+    const onMilitaryPage = isMilitaryNavPage(activePage);
+
+    parent.classList.toggle("active", onMilitaryPage);
+    sub.querySelectorAll("[data-military-nav]").forEach((el) => {
+      el.classList.toggle("active", el.dataset.militaryNav === activePage);
+    });
+
+    if (onMilitaryPage) {
+      showMilitarySubnav();
+      return;
+    }
+    hideMilitarySubnav();
   }
 
   function updateResearchQueueActions(researchRaw) {
@@ -11184,12 +11240,24 @@
   // PJAX navigation
   // =========================
   const PJAX_NAV_LINK =
-    "a.gc-nav-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages, #gc-nav-trading-sub a.gc-nav-sub-link";
+    "a.gc-nav-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages, #gc-nav-trading-sub a.gc-nav-sub-link, #gc-nav-military-sub a.gc-nav-sub-link";
 
   function _tradingPageFromPath(path) {
     const p = String(path || "").replace(/\/$/, "") || "/";
     if (p.endsWith("/trader-hub")) return "trader_hub";
     if (p.endsWith("/logistics")) return "logistics";
+    if (p.endsWith("/inventory")) return "inventory";
+    if (p.endsWith("/auction-house")) return "auction_house";
+    if (p.endsWith("/galactic-politics")) return "galactic_politics";
+    if (p.endsWith("/skilltree")) return "skilltree";
+    if (p.endsWith("/premium")) return "premium";
+    return "";
+  }
+
+  function _militaryPageFromPath(path) {
+    const p = String(path || "").replace(/\/$/, "") || "/";
+    if (p.endsWith("/shipyard")) return "shipyard";
+    if (p.endsWith("/defense")) return "defense";
     return "";
   }
 
@@ -11205,6 +11273,20 @@
     });
     if (tradingPage) showTradingSubnav();
     else hideTradingSubnav();
+  }
+
+  function _syncMilitaryNavFromPath(path) {
+    const militaryPage = _militaryPageFromPath(path);
+    const parent = document.getElementById("gc-nav-military-parent");
+    const sub = document.getElementById("gc-nav-military-sub");
+    if (!parent || !sub) return;
+
+    parent.classList.toggle("active", !!militaryPage);
+    sub.querySelectorAll("[data-military-nav]").forEach((el) => {
+      el.classList.toggle("active", el.dataset.militaryNav === militaryPage);
+    });
+    if (militaryPage) showMilitarySubnav();
+    else hideMilitarySubnav();
   }
 
   function isPjaxEligibleLink(link) {
@@ -11267,10 +11349,12 @@
         return;
       }
       const isTradingParent = link.id === "gc-nav-trading-parent";
-      if (isTradingParent) return;
+      const isMilitaryParent = link.id === "gc-nav-military-parent";
+      if (isTradingParent || isMilitaryParent) return;
       link.classList.toggle("active", linkPath === path);
     });
     _syncTradingNavFromPath(path);
+    _syncMilitaryNavFromPath(path);
   }
 
   GC.navigateTo = async function navigateTo(url, opts = {}) {
