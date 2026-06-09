@@ -9841,7 +9841,7 @@
       e.stopPropagation();
       if (select.disabled || trigger.disabled) return;
       const isOpen = !menu.hidden;
-      closeAllHudSelects();
+      closeAllHudSelects(wrap);
       if (!isOpen) {
         menu.hidden = false;
         wrap.classList.add("is-open");
@@ -9870,7 +9870,10 @@
   function initHudSelects(root) {
     if (!GC._hudSelectBound) {
       GC._hudSelectBound = true;
-      document.addEventListener("click", () => closeAllHudSelects());
+      document.addEventListener("click", (e) => {
+        if (e.target.closest(".gc-hud-select")) return;
+        closeAllHudSelects();
+      });
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") closeAllHudSelects();
       });

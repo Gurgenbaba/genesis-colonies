@@ -101,6 +101,7 @@
       <button type="button" class="admin-tab-btn is-active" data-admin-tab="health" role="tab">{{ T("admin_health_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="migrations" role="tab">{{ T("admin_migrations_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="players" role="tab">{{ T("admin_players_title") }}</button>
+      <button type="button" class="admin-tab-btn" data-admin-tab="lootboxes" role="tab">{{ T("admin_lootboxes_title", "Lootboxen") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="planets" role="tab">{{ T("admin_planets_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="queues" role="tab">{{ T("admin_queues_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="audit" role="tab">{{ T("admin_audit_title") }}</button>
@@ -145,8 +146,6 @@
         </div>
       </div>
 
-      <div class="admin-tool-panel" id="admin-inventory-grant-all-panel" hidden></div>
-      
       <div id="admin-players-list" class="admin-table-wrap"></div>
       <div id="admin-player-detail" class="admin-card admin-detail"></div>
 
@@ -216,6 +215,28 @@
         <span class="admin-small-hint">{{ T("admin_no_bans") }}</span>
         {% endif %}
       </section>
+    </section>
+
+    <section id="admin-tab-lootboxes" class="admin-panel admin-tab-panel" data-admin-panel="lootboxes" role="tabpanel" hidden>
+      <div class="admin-action-row">
+        <h2 class="admin-panel-title">{{ T("admin_lootboxes_title", "Lootboxen") }}</h2>
+      </div>
+      <p class="admin-small-hint">{{ T("admin_lootboxes_hint", "Container vergeben und Loot-Pools live anpassen — Änderungen wirken sofort auf neue Öffnungen.") }}</p>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_lootboxes_section_grant_all", "Vergabe an alle Spieler") }}</span>
+      </div>
+      <div class="admin-tool-panel" id="admin-lootbox-grant-all"></div>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_lootboxes_section_grant_player", "Vergabe an einen Spieler") }}</span>
+      </div>
+      <div class="admin-tool-panel" id="admin-lootbox-grant-player"></div>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_lootboxes_section_pools", "Loot-Pools bearbeiten") }}</span>
+      </div>
+      <div id="admin-lootbox-pools-editor" class="admin-panel-body"></div>
     </section>
 
     <section id="admin-tab-planets" class="admin-panel admin-tab-panel" data-admin-panel="planets" role="tabpanel" hidden>

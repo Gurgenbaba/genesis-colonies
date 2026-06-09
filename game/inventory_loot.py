@@ -4,9 +4,13 @@ GC-540 — Weighted container loot pools (speedgame-tuned).
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import json
+from copy import deepcopy
+from typing import Any, Dict, List, Optional
 
 LootEntry = Dict[str, Any]
+
+LOOT_POOL_SETTINGS_KEY = "inventory_loot_pool_overrides"
 
 # reward_type: resource | item | booster | ship | defense
 LOOT_POOLS: Dict[str, List[LootEntry]] = {
@@ -109,3 +113,64 @@ LOOT_POOLS: Dict[str, List[LootEntry]] = {
         {"weight": 2, "reward_type": "item", "reward_key": "mythic_ancient_nexus", "min_amount": 1, "max_amount": 1},
     ],
 }
+
+
+def _parse_pool_overrides_raw(raw: Any) -> Dict[str, List[LootEntry]]:
+    if not raw:
+        return {}
+    parsed = raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    if not isinstance(parsed, dict):
+        return {}
+    out: Dict[str, List[LootEntry]] = {}
+    for key, entries in parsed.items():
+        if not isinstance(key, str) or not isinstance(entries, list):
+            continue
+        out[key] = [dict(e) for e in entries if isinstance(e, dict)]
+    return out
+
+
+def load_pool_overrides(conn=None) -> Dict[str, List[LootEntry]]:
+    from .models import get_game_settings
+
+    settings = get_game_settings(conn) or {}
+    return _parse_pool_overrides_raw(settings.get(LOOT_POOL_SETTINGS_KEY))
+
+
+def save_pool_overrides(overrides: Dict[str, List[LootEntry]]) -> None:
+    from .models import save_game_settings
+
+    payload = {k: v for k, v in overrides.items() if v}
+    save_game_settings({LOOT_POOL_SETTINGS_KEY: json.dumps(payload, separators=(",", ":"))})
+
+
+def get_loot_pools(conn=None) -> Dict[str, List[LootEntry]]:
+    """Effective loot pools: code defaults merged with admin overrides."""
+    pools = {k: deepcopy(v) for k, v in LOOT_POOLS.items()}
+    for key, entries in load_pool_overrides(conn).items():
+        if key in pools and entries:
+            pools[key] = deepcopy(entries)
+    return pools
+
+
+def set_container_pool_override(container_key: str, entries: List[LootEntry]) -> None:
+    overrides = load_pool_overrides()
+    overrides[str(container_key)] = deepcopy(entries)
+    save_pool_overrides(overrides)
+
+
+def clear_container_pool_override(container_key: str) -> None:
+    overrides = load_pool_overrides()
+    key = str(container_key)
+    if key not in overrides:
+        return
+    del overrides[key]
+    save_pool_overrides(overrides)
+
+
+def pool_has_override(container_key: str, conn=None) -> bool:
+    return str(container_key) in load_pool_overrides(conn)

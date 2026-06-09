@@ -743,6 +743,93 @@ def grant_inventory_all_players(admin_id: int, body: Dict[str, Any]) -> Dict[str
     )
 
 
+def lootboxes_admin_state() -> Dict[str, Any]:
+    from game.inventory import inventory_schema_ready
+    from game.inventory_admin import build_admin_loot_state
+
+    conn = db()
+    try:
+        ready = inventory_schema_ready(conn)
+    finally:
+        conn.close()
+    if not ready:
+        return _err("inventory_unavailable", "Inventory schema not ready.")
+    return build_admin_loot_state()
+
+
+def save_lootbox_pool(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.inventory import inventory_schema_ready
+    from game.inventory_admin import validate_loot_pool
+    from game.inventory_catalog import CONTAINER_KEYS
+    from game import inventory_loot
+
+    container_key = str(body.get("container_key") or "").strip()
+    if container_key not in CONTAINER_KEYS:
+        return _err("invalid_container", "Unknown container key.")
+
+    ok, reason, entries = validate_loot_pool(body.get("entries"))
+    if not ok:
+        return _err(reason or "invalid_pool", "Invalid loot pool.")
+
+    conn = db()
+    try:
+        if not inventory_schema_ready(conn):
+            return _err("inventory_unavailable", "Inventory schema not ready.")
+    finally:
+        conn.close()
+
+    inventory_loot.set_container_pool_override(container_key, entries)
+    audit(
+        admin_id,
+        "loot_pool_save",
+        target_type="container",
+        target_id=container_key,
+        payload={"container_key": container_key, "entry_count": len(entries)},
+    )
+    from game.inventory_admin import build_admin_loot_state
+
+    state = build_admin_loot_state()
+    return {
+        "ok": True,
+        "container_key": container_key,
+        "pool": state["pools"].get(container_key),
+    }
+
+
+def reset_lootbox_pool(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.inventory import inventory_schema_ready
+    from game.inventory_catalog import CONTAINER_KEYS
+    from game import inventory_loot
+
+    container_key = str(body.get("container_key") or "").strip()
+    if container_key not in CONTAINER_KEYS:
+        return _err("invalid_container", "Unknown container key.")
+
+    conn = db()
+    try:
+        if not inventory_schema_ready(conn):
+            return _err("inventory_unavailable", "Inventory schema not ready.")
+    finally:
+        conn.close()
+
+    inventory_loot.clear_container_pool_override(container_key)
+    audit(
+        admin_id,
+        "loot_pool_reset",
+        target_type="container",
+        target_id=container_key,
+        payload={"container_key": container_key},
+    )
+    from game.inventory_admin import build_admin_loot_state
+
+    state = build_admin_loot_state()
+    return {
+        "ok": True,
+        "container_key": container_key,
+        "pool": state["pools"].get(container_key),
+    }
+
+
 def reset_planet(admin_id: int, planet_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
     if not validate_confirm("planet_reset", body.get("confirm_text")):
         return _err("confirm_required", "Type RESET PLANET to confirm.")

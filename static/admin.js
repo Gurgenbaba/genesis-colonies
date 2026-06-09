@@ -11,6 +11,8 @@
   let _adminPanelBootstrapped = false;
   let _selectedSupportTicketId = null;
   let _selectedAdminMessageId = null;
+  let _lootboxAdminState = null;
+  let _lootboxSelectedContainer = null;
 
   function t(key, fallback) {
     return LOCALE[key] || fallback || key;
@@ -239,6 +241,9 @@
         break;
       case "players":
         result = await searchAdminPlayers();
+        break;
+      case "lootboxes":
+        result = await loadAdminLootboxes();
         break;
       case "planets":
         result = await searchAdminPlanets();
@@ -509,13 +514,12 @@
       <tbody>${rows.join("")}</tbody></table></div>`;
   }
 
-  function buildAdminInventoryGrantUi(containers, { mode, playerId }) {
+  function buildAdminInventoryGrantUi(containers, { mode, idPrefix = "admin-lootbox" }) {
     const isAll = mode === "all";
     const grantAct = isAll ? "inventory-grant-all" : "player-inventory-grant";
     const quickAct = isAll ? "inventory-grant-all-quick" : "player-inventory-grant-quick";
-    const selectId = isAll ? "admin-all-inv-key" : "admin-player-inv-key";
-    const amountId = isAll ? "admin-all-inv-amount" : "admin-player-inv-amount";
-    const playerAttr = playerId ? ` data-player-id="${esc(String(playerId))}"` : "";
+    const selectId = isAll ? `${idPrefix}-all-inv-key` : `${idPrefix}-player-inv-key`;
+    const amountId = isAll ? `${idPrefix}-all-inv-amount` : `${idPrefix}-player-inv-amount`;
     const invOpts = (containers || [])
       .map(
         (c) =>
@@ -527,7 +531,7 @@
         const label = t(c.name_key || c.item_key, c.item_key);
         return (
           `<button type="button" class="gc-btn gc-btn-outline gc-btn-xs admin-chip-btn" data-admin-action="${quickAct}"` +
-          ` data-item-key="${esc(c.item_key)}" data-amount="1"${playerAttr} title="${esc(label)}">` +
+          ` data-item-key="${esc(c.item_key)}" data-amount="1" title="${esc(label)}">` +
           `<span class="admin-chip-btn-qty">+1</span><span class="admin-chip-btn-label">${esc(label)}</span></button>`
         );
       })
@@ -541,9 +545,15 @@
     const grantBtn = isAll
       ? t("admin_inventory_grant_all_btn", "An alle vergeben")
       : t("admin_inventory_grant_btn", "Vergeben");
+    const playerIdRow = isAll
+      ? ""
+      : `<label class="admin-field admin-field--id">` +
+        `<span class="admin-label">${esc(t("admin_lootboxes_player_id", "Spieler-ID"))}</span>` +
+        `<input type="number" min="1" class="admin-input admin-input-sm" id="admin-lootbox-player-id" placeholder="ID">` +
+        `</label>`;
     return (
-      `<h4 class="admin-tool-panel__title">${esc(title)}</h4>${hint}` +
-      `<div class="admin-field-row">` +
+      `${hint}` +
+      `<div class="admin-field-row">${playerIdRow}` +
       `<label class="admin-field admin-field--grow">` +
       `<span class="admin-label">${esc(t("admin_inventory_item_label", "Container"))}</span>` +
       `<select ${ADMIN_SELECT_ATTRS} id="${selectId}">${invOpts}</select>` +
@@ -554,34 +564,177 @@
       `</label>` +
       `<div class="admin-field admin-field--action">` +
       `<span class="admin-label admin-label--spacer" aria-hidden="true">&nbsp;</span>` +
-      `<button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="${grantAct}"${playerAttr}>${esc(grantBtn)}</button>` +
+      `<button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="${grantAct}">${esc(grantBtn)}</button>` +
       `</div></div>` +
       `<div class="admin-chip-grid">${quickChips}</div>`
     );
   }
 
-  async function renderAdminInventoryGrantAll() {
-    const panel = qs("#admin-inventory-grant-all-panel");
-    if (!panel) return;
-    const cat = await adminGet("/api/admin/inventory/catalog");
-    if (!cat.ok) {
-      panel.hidden = true;
-      panel.innerHTML = "";
-      return;
+  function lootPoolRewardTypeOptions(selected) {
+    const types = (_lootboxAdminState && _lootboxAdminState.reward_types) || [
+      "resource",
+      "item",
+      "booster",
+      "ship",
+      "defense",
+    ];
+    return types
+      .map(
+        (tp) =>
+          `<option value="${esc(tp)}"${tp === selected ? " selected" : ""}>${esc(tp)}</option>`
+      )
+      .join("");
+  }
+
+  function lootPoolRewardKeyOptions(rewardType, selectedKey) {
+    const catalog =
+      (_lootboxAdminState && _lootboxAdminState.reward_keys_by_type) || {};
+    const keys = catalog[rewardType] || [];
+    if (!keys.length) {
+      const fallback = selectedKey || "";
+      return `<option value="${esc(fallback)}" selected>${esc(fallback || "—")}</option>`;
     }
-    const containers = cat.containers || [];
-    if (!containers.length) {
-      panel.hidden = true;
-      panel.innerHTML = "";
-      return;
+    let found = false;
+    const opts = keys
+      .map((entry) => {
+        const sel = entry.key === selectedKey;
+        if (sel) found = true;
+        const label = t(entry.name_key || entry.key, entry.key);
+        return `<option value="${esc(entry.key)}"${sel ? " selected" : ""}>${esc(label)}</option>`;
+      })
+      .join("");
+    if (selectedKey && !found) {
+      return (
+        `<option value="${esc(selectedKey)}" selected>${esc(selectedKey)}</option>` + opts
+      );
     }
-    panel.hidden = false;
-    panel.innerHTML = buildAdminInventoryGrantUi(containers, { mode: "all" });
-    syncAdminHudSelects(panel);
+    return opts;
+  }
+
+  function syncLootPoolRowKeySelect(row, rewardType, selectedKey) {
+    const keySel = row && row.querySelector('[data-field="reward_key"]');
+    if (!keySel) return;
+    const current = selectedKey || keySel.value || "";
+    keySel.innerHTML = lootPoolRewardKeyOptions(rewardType, current);
+    if (!keySel.value && keySel.options.length) {
+      keySel.selectedIndex = 0;
+    }
+    if (typeof GC.rebuildHudSelect === "function") GC.rebuildHudSelect(keySel);
+  }
+
+  function persistLootPoolDraft() {
+    const key = _lootboxSelectedContainer;
+    if (!key || !_lootboxAdminState || !_lootboxAdminState.pools[key]) return;
+    _lootboxAdminState.pools[key].entries = collectLootPoolEditorRows();
+  }
+
+  function collectLootPoolEditorRows() {
+    const tbody = qs("#admin-lootbox-pool-rows");
+    if (!tbody) return [];
+    return qsa("tr[data-pool-row]", tbody).map((row) => ({
+      weight: parseInt(row.querySelector('[data-field="weight"]')?.value || "0", 10),
+      reward_type: row.querySelector('[data-field="reward_type"]')?.value || "",
+      reward_key: row.querySelector('[data-field="reward_key"]')?.value || "",
+      min_amount: parseInt(row.querySelector('[data-field="min_amount"]')?.value || "1", 10),
+      max_amount: parseInt(row.querySelector('[data-field="max_amount"]')?.value || "1", 10),
+    }));
+  }
+
+  function renderLootPoolEditor(containerKey) {
+    const host = qs("#admin-lootbox-pools-editor");
+    if (!host || !_lootboxAdminState) return;
+    const containers = _lootboxAdminState.containers || [];
+    const pools = _lootboxAdminState.pools || {};
+    const keys = containers.map((c) => c.item_key);
+    const key = containerKey && pools[containerKey] ? containerKey : keys[0] || "";
+    _lootboxSelectedContainer = key;
+    const pool = pools[key] || { entries: [], is_custom: false };
+    const entries = pool.entries || [];
+    const badge = pool.is_custom
+      ? statusBadge("warn", t("admin_lootboxes_pool_custom_badge", "Angepasst"))
+      : statusBadge("ok", t("admin_lootboxes_pool_default_badge", "Standard"));
+    const containerOpts = containers
+      .map(
+        (c) =>
+          `<option value="${esc(c.item_key)}"${c.item_key === key ? " selected" : ""}>${esc(t(c.name_key || c.item_key, c.item_key))}</option>`
+      )
+      .join("");
+    const rows = entries
+      .map(
+        (entry, idx) =>
+          `<tr data-pool-row="${idx}">` +
+          `<td><input type="number" min="1" class="admin-input admin-input-sm" data-field="weight" value="${esc(entry.weight)}"></td>` +
+          `<td><select ${ADMIN_SELECT_ATTRS} data-field="reward_type">${lootPoolRewardTypeOptions(entry.reward_type)}</select></td>` +
+          `<td><select ${ADMIN_SELECT_ATTRS} data-field="reward_key">${lootPoolRewardKeyOptions(entry.reward_type, entry.reward_key)}</select></td>` +
+          `<td><input type="number" min="1" class="admin-input admin-input-sm" data-field="min_amount" value="${esc(entry.min_amount)}"></td>` +
+          `<td><input type="number" min="1" class="admin-input admin-input-sm" data-field="max_amount" value="${esc(entry.max_amount)}"></td>` +
+          `<td class="text-right"><button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="loot-pool-row-delete" data-row="${idx}">×</button></td>` +
+          `</tr>`
+      )
+      .join("");
+    host.innerHTML =
+      `<div class="admin-tool-panel admin-loot-pool-editor">` +
+      `<div class="admin-field-row admin-field-row-wrap">` +
+      `<label class="admin-field admin-field--grow">` +
+      `<span class="admin-label">${esc(t("admin_lootboxes_pool_container", "Container"))}</span>` +
+      `<select ${ADMIN_SELECT_ATTRS} id="admin-lootbox-pool-container">${containerOpts}</select>` +
+      `</label>` +
+      `<div class="admin-field admin-field--action">${badge}</div>` +
+      `</div>` +
+      `<div class="admin-table-wrap"><table class="admin-table table-std">` +
+      `<thead><tr>` +
+      `<th>${esc(t("admin_lootboxes_pool_col_weight", "Gewicht"))}</th>` +
+      `<th>${esc(t("admin_lootboxes_pool_col_type", "Typ"))}</th>` +
+      `<th>${esc(t("admin_lootboxes_pool_col_key", "Schlüssel"))}</th>` +
+      `<th>${esc(t("admin_lootboxes_pool_col_min", "Min"))}</th>` +
+      `<th>${esc(t("admin_lootboxes_pool_col_max", "Max"))}</th>` +
+      `<th></th>` +
+      `</tr></thead>` +
+      `<tbody id="admin-lootbox-pool-rows">${rows}</tbody>` +
+      `</table></div>` +
+      `<div class="admin-toolbar admin-toolbar--tight">` +
+      `<button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="loot-pool-add-row">${esc(t("admin_lootboxes_pool_add_row", "Zeile hinzufügen"))}</button>` +
+      `<button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="loot-pool-save">${esc(t("admin_lootboxes_pool_save", "Pool speichern"))}</button>` +
+      `<button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="loot-pool-reset">${esc(t("admin_lootboxes_pool_reset", "Standard wiederherstellen"))}</button>` +
+      `</div></div>`;
+    syncAdminHudSelects(host);
+  }
+
+  async function loadAdminLootboxes() {
+    const grantAll = qs("#admin-lootbox-grant-all");
+    const grantPlayer = qs("#admin-lootbox-grant-player");
+    const poolHost = qs("#admin-lootbox-pools-editor");
+    if (grantAll) grantAll.innerHTML = loadingHtml();
+    if (grantPlayer) grantPlayer.innerHTML = loadingHtml();
+    if (poolHost) poolHost.innerHTML = loadingHtml();
+
+    const data = await adminGet("/api/admin/lootboxes/state");
+    if (!data.ok) {
+      showAlert(data.message || data.error, "error");
+      if (grantAll) grantAll.innerHTML = errorCard(data);
+      if (grantPlayer) grantPlayer.innerHTML = "";
+      if (poolHost) poolHost.innerHTML = "";
+      return data;
+    }
+    _lootboxAdminState = data;
+    const containers = data.containers || [];
+    if (grantAll) {
+      grantAll.innerHTML =
+        `<h4 class="admin-tool-panel__title">${esc(t("admin_inventory_grant_all_title", "Lootboxen an alle Spieler"))}</h4>` +
+        buildAdminInventoryGrantUi(containers, { mode: "all" });
+      syncAdminHudSelects(grantAll);
+    }
+    if (grantPlayer) {
+      grantPlayer.innerHTML =
+        `<h4 class="admin-tool-panel__title">${esc(t("admin_inventory_grant_title", "Lootboxen vergeben"))}</h4>` +
+        buildAdminInventoryGrantUi(containers, { mode: "player" });
+      syncAdminHudSelects(grantPlayer);
+    }
+    renderLootPoolEditor(_lootboxSelectedContainer);
+    return data;
   }
 
   async function searchAdminPlayers() {
-    await renderAdminInventoryGrantAll();
     const q = (qs("#admin-players-search")?.value || "").trim();
     const list = qs("#admin-players-list");
     if (list) list.innerHTML = loadingHtml();
@@ -613,12 +766,6 @@
     const p = data.player || {};
     const hw = data.homeworld || {};
     const score = data.score || {};
-    const cat = await adminGet("/api/admin/inventory/catalog");
-    const containers = cat.ok ? cat.containers || [] : [];
-    const inventoryPanel =
-      containers.length > 0
-        ? `<div class="admin-tool-panel">${buildAdminInventoryGrantUi(containers, { mode: "player", playerId: p.id })}</div>`
-        : "";
     el.innerHTML = `
       <h3>#${p.id} ${playerNameLink(p.id, p.username)} ${p.is_admin ? statusBadge("ok", "Admin") : ""}</h3>
       <p>${t("admin_col_last_seen", "Zuletzt")}: ${esc(fmtTs(p.last_seen))} · Score: ${fmtInt(score.total)} (#${score.rank || "?"})</p>
@@ -634,8 +781,7 @@
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-crystal" placeholder="${t("crystal", "Crytite")}">
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="player-resources-add" data-player-id="${p.id}">${t("admin_btn_apply", "Addieren")}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-resources-set" data-player-id="${p.id}">${t("admin_btn_set_resources", "Setzen")}</button>
-      </div>
-      ${inventoryPanel}`;
+      </div>`;
     syncAdminHudSelects(el);
   }
 
@@ -1428,22 +1574,39 @@
       return loadAdminPlayer(btn.dataset.playerId);
     }
     if (act === "player-inventory-grant" || act === "player-inventory-grant-quick") {
-      const playerId = btn.dataset.playerId;
+      const playerId = btn.dataset.playerId || qs("#admin-lootbox-player-id")?.value;
+      if (!playerId) {
+        showAlert(t("admin_lootboxes_player_id_required", "Spieler-ID eingeben."), "error");
+        return null;
+      }
       const itemKey =
         act === "player-inventory-grant-quick"
           ? btn.dataset.itemKey
-          : qs("#admin-player-inv-key")?.value;
+          : qs("#admin-lootbox-player-inv-key")?.value || qs("#admin-player-inv-key")?.value;
       const amount =
         act === "player-inventory-grant-quick"
           ? parseInt(btn.dataset.amount || "1", 10)
-          : parseInt(qs("#admin-player-inv-amount")?.value || "1", 10);
-      const res = await adminPost(`/api/admin/player/${playerId}/inventory-grant`, {
-        item_key: itemKey,
-        amount: Number.isFinite(amount) ? amount : 1,
-      });
+          : parseInt(
+              qs("#admin-lootbox-player-inv-amount")?.value ||
+                qs("#admin-player-inv-amount")?.value ||
+                "1",
+              10
+            );
+      const useLootboxApi = !!qs("#admin-lootbox-grant-player");
+      const res = useLootboxApi
+        ? await adminPost("/api/admin/lootboxes/grant-player", {
+            player_id: playerId,
+            item_key: itemKey,
+            amount: Number.isFinite(amount) ? amount : 1,
+          })
+        : await adminPost(`/api/admin/player/${playerId}/inventory-grant`, {
+            item_key: itemKey,
+            amount: Number.isFinite(amount) ? amount : 1,
+          });
       if (res.ok) {
         notify(t("admin_inventory_grant_ok", "Lootbox vergeben"), "success");
-        return loadAdminPlayer(playerId);
+        if (btn.dataset.playerId) return loadAdminPlayer(playerId);
+        return res;
       }
       showAlert(res.message || res.error, "error");
       return res;
@@ -1452,14 +1615,18 @@
       const itemKey =
         act === "inventory-grant-all-quick"
           ? btn.dataset.itemKey
-          : qs("#admin-all-inv-key")?.value;
+          : qs("#admin-lootbox-all-inv-key")?.value || qs("#admin-all-inv-key")?.value;
       const amount =
         act === "inventory-grant-all-quick"
           ? parseInt(btn.dataset.amount || "1", 10)
-          : parseInt(qs("#admin-all-inv-amount")?.value || "1", 10);
+          : parseInt(
+              qs("#admin-lootbox-all-inv-amount")?.value || qs("#admin-all-inv-amount")?.value || "1",
+              10
+            );
+      const selectEl = qs("#admin-lootbox-all-inv-key") || qs("#admin-all-inv-key");
       const safeAmount = Number.isFinite(amount) ? amount : 1;
       const itemLabel =
-        qs(`#admin-all-inv-key option[value="${CSS.escape(itemKey || "")}"]`)?.textContent ||
+        selectEl?.querySelector(`option[value="${CSS.escape(itemKey || "")}"]`)?.textContent ||
         itemKey ||
         "?";
       const confirmMsg = t(
@@ -1469,7 +1636,10 @@
         .replace("%(amount)s", String(safeAmount))
         .replace("%(item)s", itemLabel);
       if (!window.confirm(confirmMsg)) return null;
-      const res = await adminPost("/api/admin/inventory/grant-all", {
+      const grantUrl = qs("#admin-lootbox-grant-all")
+        ? "/api/admin/lootboxes/grant-all"
+        : "/api/admin/inventory/grant-all";
+      const res = await adminPost(grantUrl, {
         item_key: itemKey,
         amount: safeAmount,
       });
@@ -1479,6 +1649,78 @@
           String(res.granted_count || res.player_count || 0)
         );
         notify(okMsg, "success");
+        return res;
+      }
+      showAlert(res.message || res.error, "error");
+      return res;
+    }
+    if (act === "loot-pool-select") {
+      return null;
+    }
+    if (act === "loot-pool-add-row") {
+      const tbody = qs("#admin-lootbox-pool-rows");
+      if (!tbody) return null;
+      const idx = qsa("tr[data-pool-row]", tbody).length;
+      const row = document.createElement("tr");
+      row.dataset.poolRow = String(idx);
+      row.innerHTML =
+        `<td><input type="number" min="1" class="admin-input admin-input-sm" data-field="weight" value="10"></td>` +
+        `<td><select ${ADMIN_SELECT_ATTRS} data-field="reward_type">${lootPoolRewardTypeOptions("resource")}</select></td>` +
+        `<td><select ${ADMIN_SELECT_ATTRS} data-field="reward_key">${lootPoolRewardKeyOptions("resource", "metal")}</select></td>` +
+        `<td><input type="number" min="1" class="admin-input admin-input-sm" data-field="min_amount" value="1"></td>` +
+        `<td><input type="number" min="1" class="admin-input admin-input-sm" data-field="max_amount" value="1"></td>` +
+        `<td class="text-right"><button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="loot-pool-row-delete" data-row="${idx}">×</button></td>`;
+      tbody.appendChild(row);
+      syncAdminHudSelects(row);
+      return null;
+    }
+    if (act === "loot-pool-row-delete") {
+      const tbody = qs("#admin-lootbox-pool-rows");
+      const row = btn.closest("tr[data-pool-row]");
+      if (tbody && row) row.remove();
+      return null;
+    }
+    if (act === "loot-pool-save") {
+      const containerKey = qs("#admin-lootbox-pool-container")?.value || _lootboxSelectedContainer;
+      if (!containerKey) return null;
+      const res = await adminPost("/api/admin/lootboxes/pools/save", {
+        container_key: containerKey,
+        entries: collectLootPoolEditorRows(),
+      });
+      if (res.ok) {
+        notify(t("admin_lootboxes_pool_save_ok", "Loot-Pool gespeichert"), "success");
+        if (_lootboxAdminState && res.pool) {
+          _lootboxAdminState.pools[containerKey] = res.pool;
+        }
+        renderLootPoolEditor(containerKey);
+        return res;
+      }
+      showAlert(res.message || res.error, "error");
+      return res;
+    }
+    if (act === "loot-pool-reset") {
+      const containerKey = qs("#admin-lootbox-pool-container")?.value || _lootboxSelectedContainer;
+      if (!containerKey) return null;
+      const label =
+        qs(`#admin-lootbox-pool-container option[value="${CSS.escape(containerKey)}"]`)?.textContent ||
+        containerKey;
+      if (
+        !window.confirm(
+          t("admin_lootboxes_pool_reset_confirm", "Standard-Pool für %(container)s wiederherstellen?").replace(
+            "%(container)s",
+            label
+          )
+        )
+      ) {
+        return null;
+      }
+      const res = await adminPost("/api/admin/lootboxes/pools/reset", { container_key: containerKey });
+      if (res.ok) {
+        notify(t("admin_lootboxes_pool_reset_ok", "Standard-Pool wiederhergestellt"), "success");
+        if (_lootboxAdminState && res.pool) {
+          _lootboxAdminState.pools[containerKey] = res.pool;
+        }
+        renderLootPoolEditor(containerKey);
         return res;
       }
       showAlert(res.message || res.error, "error");
@@ -1570,6 +1812,19 @@
       if (msgRow) {
         _selectedAdminMessageId = parseInt(msgRow.dataset.adminMessageId, 10);
         await loadAdminMessageDetail(_selectedAdminMessageId);
+      }
+    });
+
+    document.addEventListener("change", (e) => {
+      if (!isAdminEvent(e)) return;
+      if (e.target.id === "admin-lootbox-pool-container") {
+        persistLootPoolDraft();
+        renderLootPoolEditor(e.target.value);
+        return;
+      }
+      if (e.target.dataset.field === "reward_type") {
+        const row = e.target.closest("tr[data-pool-row]");
+        if (row) syncLootPoolRowKeySelect(row, e.target.value);
       }
     });
 

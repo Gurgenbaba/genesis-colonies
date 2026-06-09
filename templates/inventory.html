@@ -145,6 +145,57 @@
     </ul>
   </section>
 
+  <section class="gc-panel inventory-panel inventory-drops-panel">
+    <details class="inventory-drops-details" id="inventory-loot-drops">
+      <summary class="inventory-drops-summary">
+        <span class="inventory-drops-summary-text">
+          <span class="gc-panel-title">{{ T("inv_loot_drops_title", "Mögliche Drops") }}</span>
+          <span class="gc-panel-subtitle">{{ T("inv_loot_drops_subtitle", "Gewichtete Loot-Pools pro Container") }}</span>
+        </span>
+        <span class="inventory-drops-chevron gc-mono" aria-hidden="true">▾</span>
+      </summary>
+      <div class="inventory-drops-body">
+        <p class="inventory-drops-intro hint">{{ T("inv_loot_drops_intro", "Jede Öffnung wählt serverseitig einen Eintrag aus dem Pool — die Chance entspricht dem Gewicht.") }}</p>
+        <div class="inventory-drops-table">
+          {% set _loot_drops = inv_data.loot_drops if inv_data.loot_drops is defined else [] %}
+          {% for row in _loot_drops %}
+          {% set _row_img = url_for('static', filename=row.image) if row.image is defined else _loot_fallback %}
+          <article class="inventory-drops-row inventory-drops-row--{{ row.rarity }}" data-container="{{ row.item_key }}">
+            <header class="inventory-drops-row-head">
+              <img class="inventory-drops-row-img"
+                   src="{{ _row_img }}"
+                   alt=""
+                   loading="lazy"
+                   decoding="async"
+                   onerror="this.onerror=null;this.src='{{ _loot_fallback }}';">
+              <div class="inventory-drops-row-meta">
+                <h3 class="inventory-drops-row-name">{{ T(row.name_key, row.item_key) }}</h3>
+                <p class="inventory-drops-row-tagline">{{ T(row.tagline_key, "") }}</p>
+                <span class="inventory-rarity-badge inventory-rarity-badge--{{ row.rarity }}">
+                  {{ T("inv_rarity_" ~ row.rarity, row.rarity) }}
+                </span>
+              </div>
+            </header>
+            <div class="inventory-drops-grid">
+              {% for d in row.drops %}
+              <div class="inventory-drop-chip inventory-drop-chip--{{ d.rarity }}" data-reward-type="{{ d.reward_type }}">
+                <span class="inventory-drop-chip-icon" aria-hidden="true">{{ d.icon }}</span>
+                <div class="inventory-drop-chip-body">
+                  <span class="inventory-drop-chip-name">{{ T(d.name_key, d.reward_key) }}</span>
+                  <span class="inventory-drop-chip-amount gc-mono">{{ d.amount_label }}</span>
+                </div>
+                <span class="inventory-drop-chip-weight gc-mono" title="{{ T('inv_loot_drop_weight', 'Gewichtung') }}">{{ "%.1f"|format(d.weight_pct) }}%</span>
+              </div>
+              {% endfor %}
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+        <p class="inventory-drops-footnote gc-mono">{{ T("inv_loot_drops_footnote", "Alle Werte sind Richtwerte aus min/max — exakte Roll serverseitig.") }}</p>
+      </div>
+    </details>
+  </section>
+
   {% endif %}
 </div>
 {% endblock %}

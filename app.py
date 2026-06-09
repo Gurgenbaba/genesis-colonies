@@ -4981,6 +4981,45 @@ def api_admin_inventory_grant_all():
     )
 
 
+@app.route("/api/admin/lootboxes/state", methods=["GET"])
+@require_admin_api
+def api_admin_lootboxes_state():
+    return _admin_json(admin_api_logic.lootboxes_admin_state())
+
+
+@app.route("/api/admin/lootboxes/pools/save", methods=["POST"])
+@require_admin_api
+def api_admin_lootboxes_pools_save():
+    return _admin_json(admin_api_logic.save_lootbox_pool(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/lootboxes/pools/reset", methods=["POST"])
+@require_admin_api
+def api_admin_lootboxes_pools_reset():
+    return _admin_json(admin_api_logic.reset_lootbox_pool(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/lootboxes/grant-all", methods=["POST"])
+@require_admin_api
+def api_admin_lootboxes_grant_all():
+    return _admin_json(
+        admin_api_logic.grant_inventory_all_players(_admin_actor_id(), _admin_body())
+    )
+
+
+@app.route("/api/admin/lootboxes/grant-player", methods=["POST"])
+@require_admin_api
+def api_admin_lootboxes_grant_player():
+    body = _admin_body()
+    try:
+        player_id = int(body.get("player_id") or 0)
+    except (TypeError, ValueError):
+        player_id = 0
+    return _admin_json(
+        admin_api_logic.grant_player_inventory(_admin_actor_id(), player_id, body)
+    )
+
+
 @app.route("/api/admin/planets", methods=["GET"])
 @require_admin_api
 def api_admin_planets_search():

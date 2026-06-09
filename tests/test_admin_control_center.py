@@ -383,6 +383,84 @@ def test_admin_grant_inventory_container(app_client):
         conn.close()
 
 
+def test_admin_lootboxes_state(app_client):
+    client, _, _ = app_client
+    _login(client, "admin_cc", "adminpass123")
+    r = client.get("/api/admin/lootboxes/state")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert len(data["containers"]) >= 8
+    assert "container_basic" in data["pools"]
+    assert data["pools"]["container_basic"]["entries"]
+    assert "reward_keys_by_type" in data
+    assert "metal" in {e["key"] for e in data["reward_keys_by_type"]["resource"]}
+    assert len(data["reward_keys_by_type"]["ship"]) >= 1
+
+
+def test_admin_lootbox_pool_save_and_open(app_client):
+    client, admin_id, user_id = app_client
+    _login(client, "admin_cc", "adminpass123")
+
+    custom_pool = [
+        {
+            "weight": 100,
+            "reward_type": "resource",
+            "reward_key": "metal",
+            "min_amount": 42,
+            "max_amount": 42,
+        }
+    ]
+    save = client.post(
+        "/api/admin/lootboxes/pools/save",
+        json={"container_key": "container_rare", "entries": custom_pool},
+    )
+    assert save.status_code == 200
+    save_data = save.get_json()
+    assert save_data["ok"] is True
+    assert save_data["pool"]["is_custom"] is True
+
+    from game import inventory_loot
+
+    effective = inventory_loot.get_loot_pools()
+    assert effective["container_rare"][0]["reward_key"] == "metal"
+
+    from game.db import db, begin_write_transaction, commit
+    from game.inventory import grant_inventory_item, open_containers
+    from game.planet_evolution.repository import get_context_planet
+    import random
+
+    conn = db()
+    try:
+        planet = get_context_planet(user_id, conn=conn)
+        pid = int(planet["id"])
+        grant_inventory_item(user_id, "container_rare", 1, conn=conn)
+        begin_write_transaction(conn)
+        ok, reason, _ = open_containers(
+            user_id, pid, "container_rare", 1, conn=conn, rng=random.Random(99)
+        )
+        assert ok, reason
+        commit(conn)
+        cur = conn.cursor()
+        cur.execute("SELECT metal FROM planets WHERE id = ?;", (pid,))
+        row = cur.fetchone()
+        assert int(row["metal"]) >= 42
+    finally:
+        conn.close()
+
+    reset = client.post(
+        "/api/admin/lootboxes/pools/reset",
+        json={"container_key": "container_rare"},
+    )
+    assert reset.status_code == 200
+    assert reset.get_json()["pool"]["is_custom"] is False
+
+    audit = client.get("/api/admin/audit-log?action=loot_pool_save")
+    assert audit.status_code == 200
+    entries = audit.get_json()["entries"]
+    assert any(e["action"] == "loot_pool_save" for e in entries)
+
+
 def test_api_admin_queue_tick_error_response_shape(app_client):
     """Admin JS must receive structured JSON even when tick fails."""
     client, _, _ = app_client
@@ -423,6 +501,8 @@ def test_admin_page_smoke_html(app_client):
     assert 'class="admin-tab-btn' in html
     assert 'data-admin-tab="health"' in html
     assert 'data-admin-panel="health"' in html
+    assert 'data-admin-tab="lootboxes"' in html
+    assert 'data-admin-panel="lootboxes"' in html
     assert "admin.js" in html
     assert "admin.css" in html
     assert 'data-admin-action="run-queue-tick"' in html

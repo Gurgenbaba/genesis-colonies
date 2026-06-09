@@ -615,6 +615,24 @@
   max-width: 100px;
 }
 
+.admin-field--id {
+  max-width: 120px;
+}
+
+.admin-loot-pool-editor .admin-table-wrap {
+  margin-top: 12px;
+  margin-bottom: 12px;
+  overflow: visible;
+}
+
+.admin-loot-pool-editor .admin-table td {
+  vertical-align: middle;
+}
+
+.admin-loot-pool-editor .admin-table .gc-hud-select {
+  min-width: 140px;
+}
+
 .admin-field--action .gc-btn {
   white-space: nowrap;
 }

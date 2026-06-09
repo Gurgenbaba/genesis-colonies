@@ -36,6 +36,7 @@ __all__ = [
     "admin_grant_catalog",
     "build_container_catalog",
     "build_inventory_state",
+    "build_loot_drops_reference",
     "grant_inventory_item",
     "inventory_schema_ready",
     "is_known_item_key",
@@ -176,6 +177,66 @@ def list_player_inventory(user_id: int, *, conn) -> List[Dict[str, Any]]:
     return [_serialize_inventory_row(r) for r in cur.fetchall()]
 
 
+from .number_format import fmt_int_compact
+
+
+def _loot_amount_label(lo: int, hi: int) -> str:
+    lo_i, hi_i = int(lo), int(hi)
+    if hi_i < lo_i:
+        hi_i = lo_i
+    if lo_i == hi_i:
+        return fmt_int_compact(lo_i)
+    return f"{fmt_int_compact(lo_i)}–{fmt_int_compact(hi_i)}"
+
+
+def build_loot_drops_reference(*, conn=None) -> List[Dict[str, Any]]:
+    """Public loot-pool reference for inventory UI (server data only)."""
+    rows: List[Dict[str, Any]] = []
+    effective_pools = inventory_loot.get_loot_pools(conn)
+    for key in CONTAINER_DISPLAY_ORDER:
+        pool = effective_pools.get(key) or []
+        if not pool:
+            continue
+        meta = item_catalog_entry(key)
+        total_weight = sum(int(e.get("weight") or 0) for e in pool)
+        drops: List[Dict[str, Any]] = []
+        for entry in pool:
+            weight = int(entry.get("weight") or 0)
+            if weight <= 0:
+                continue
+            rtype = str(entry.get("reward_type") or "")
+            rkey = str(entry.get("reward_key") or "")
+            lo = int(entry.get("min_amount") or 1)
+            hi = int(entry.get("max_amount") or lo)
+            display = _reward_display_meta(rtype, rkey)
+            drops.append(
+                {
+                    "reward_type": rtype,
+                    "reward_key": rkey,
+                    "name_key": display["name_key"],
+                    "icon": display.get("icon") or "📦",
+                    "rarity": display.get("rarity") or "common",
+                    "min_amount": lo,
+                    "max_amount": hi,
+                    "amount_label": _loot_amount_label(lo, hi),
+                    "weight": weight,
+                    "weight_pct": round(100.0 * weight / total_weight, 1) if total_weight else 0.0,
+                }
+            )
+        suffix = key.replace("container_", "", 1)
+        rows.append(
+            {
+                "item_key": key,
+                "name_key": meta["name_key"],
+                "tagline_key": f"inv_loot_tagline_{suffix}",
+                "rarity": meta["rarity"],
+                "image": meta.get("image") or container_image_path(key),
+                "drops": drops,
+            }
+        )
+    return rows
+
+
 def build_inventory_state(user_id: int, *, conn) -> Dict[str, Any]:
     items = list_player_inventory(user_id, conn=conn)
     owned_containers = {str(i["item_key"]): i for i in items if i["item_type"] == "container"}
@@ -185,6 +246,7 @@ def build_inventory_state(user_id: int, *, conn) -> Dict[str, Any]:
         "ready": inventory_schema_ready(conn),
         "containers": containers,
         "other_items": other_items,
+        "loot_drops": build_loot_drops_reference(conn=conn),
         "all": items,
     }
 
@@ -494,7 +556,7 @@ def open_containers(
     if key not in CONTAINER_KEYS:
         return False, "invalid_container", None
 
-    pool = inventory_loot.LOOT_POOLS.get(key)
+    pool = inventory_loot.get_loot_pools(conn).get(key)
     if not pool:
         return False, "invalid_container", None
 

@@ -91,6 +91,29 @@ def _planet_resources(conn, planet_id: int):
     return float(row["metal"]), float(row["crystal"]), float(row["fuel_cells"] or 0)
 
 
+def test_loot_drops_reference_matches_pools(inventory_db):
+    from game.inventory import build_loot_drops_reference
+    from game.inventory_loot import LOOT_POOLS
+
+    rows = build_loot_drops_reference()
+    assert len(rows) == len(CONTAINER_KEYS)
+    for row in rows:
+        assert row["item_key"] in LOOT_POOLS
+        assert len(row["drops"]) == len(LOOT_POOLS[row["item_key"]])
+        assert row["drops"][0]["amount_label"]
+        assert row["drops"][0]["weight_pct"] > 0
+
+
+def test_inventory_page_shows_loot_drops(inventory_db, monkeypatch):
+    client, uid, _ = _login_client(inventory_db, monkeypatch)
+    res = client.get("/inventory")
+    body = res.get_data(as_text=True)
+    assert res.status_code == 200
+    assert "inventory-loot-drops" in body
+    assert "inventory-drops-row" in body
+    assert "inv_loot_drops_title" in body or "Mögliche Drops" in body or "Possible drops" in body
+
+
 def test_inventory_schema_ready(inventory_db):
     conn = db()
     assert inventory_schema_ready(conn)
