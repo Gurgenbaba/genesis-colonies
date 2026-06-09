@@ -20,14 +20,21 @@ import game.models as models
 from game.db import commit, db, table_exists
 from game.models import create_user, init_db, upsert_player_score
 from game.playercard import (
+    AVATAR_OUTPUT_SIZE,
+    AVATAR_UPLOAD_MAX_BYTES,
     SAVE_COOLDOWN_SEC,
     _LAST_SAVE_TS,
+    avatar_public_path,
+    avatar_storage_path,
     build_public_card,
     ensure_player_card,
     ensure_player_card_tables,
+    get_player_card_row,
     player_exists,
+    process_avatar_upload,
     save_own_card,
     sanitize_text_field,
+    upload_own_avatar,
     validate_avatar_url,
 )
 
@@ -391,6 +398,7 @@ def test_api_routes_and_partials(app_client):
     assert "gc-player-card-edit" in edit_body
     assert "data-pc-content" not in edit_body
     assert "gc-player-card-form" in edit_body
+    assert 'data-pc-field="avatar_file"' in edit_body
 
     save = client.post(
         "/api/player-card/me",
@@ -542,6 +550,175 @@ def test_fallback_private_player(app_client):
     res = client.get(f"/player/{owner}")
     assert res.status_code == 200
     assert "playercard_private_profile" in res.get_data(as_text=True) or "privat" in res.get_data(as_text=True).lower()
+
+
+def _png_bytes(width: int = 800, height: int = 600, color=(120, 80, 200, 255)) -> bytes:
+    from io import BytesIO
+
+    from PIL import Image
+
+    im = Image.new("RGBA", (width, height), color)
+    buf = BytesIO()
+    im.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def _png_upload(width: int = 800, height: int = 600, color=(120, 80, 200, 255)):
+    from io import BytesIO
+
+    return (BytesIO(_png_bytes(width, height, color)), "avatar.png", "image/png")
+
+
+class _FakeUpload:
+    def __init__(self, data: bytes, mimetype: str = "image/png"):
+        self._data = data
+        self.mimetype = mimetype
+
+    def read(self) -> bytes:
+        return self._data
+
+
+@pytest.fixture()
+def avatar_storage(tmp_path, monkeypatch):
+    root = tmp_path / "avatars"
+    root.mkdir(parents=True)
+    monkeypatch.setattr("game.playercard.avatar_storage_dir", lambda: root)
+    monkeypatch.setattr(
+        "game.playercard.avatar_storage_path",
+        lambda pid: root / f"avatar_{int(pid)}.webp",
+    )
+    return root
+
+
+def test_validate_local_avatar_path():
+    ok, url = validate_avatar_url("/static/uploads/avatars/avatar_42.webp", player_id=42)
+    assert ok is True
+    assert url.endswith("avatar_42.webp")
+
+    ok2, _ = validate_avatar_url("/static/uploads/avatars/avatar_42.webp", player_id=99)
+    assert ok2 is False
+
+    ok3, _ = validate_avatar_url("/static/uploads/avatars/evil.php", player_id=1)
+    assert ok3 is False
+
+
+def test_process_avatar_upload_resizes_and_webp(temp_db, avatar_storage):
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("avatar_proc")
+
+    ok, path = process_avatar_upload(pid, _FakeUpload(_png_bytes(1200, 800)))
+    assert ok is True
+    assert path == avatar_public_path(pid)
+
+    dest = avatar_storage_path(pid)
+    assert dest.exists()
+    assert dest.suffix == ".webp"
+    assert dest.stat().st_size < 100_000
+
+    from PIL import Image
+
+    with Image.open(dest) as im:
+        assert im.size == (AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE)
+        assert im.format == "WEBP"
+
+
+def test_process_avatar_rejects_invalid_types(temp_db, avatar_storage):
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("avatar_reject")
+
+    ok_gif, reason_gif = process_avatar_upload(
+        pid,
+        _FakeUpload(b"GIF89a" + b"\x00" * 32, mimetype="image/gif"),
+    )
+    assert ok_gif is False
+    assert reason_gif == "playercard_avatar_invalid_type"
+
+    ok_big, reason_big = process_avatar_upload(
+        pid,
+        _FakeUpload(b"\x00" * (AVATAR_UPLOAD_MAX_BYTES + 1)),
+    )
+    assert ok_big is False
+    assert reason_big == "playercard_avatar_too_large"
+
+    ok_svg, reason_svg = process_avatar_upload(
+        pid,
+        _FakeUpload(b"<svg xmlns='http://www.w3.org/2000/svg'></svg>", mimetype="image/png"),
+    )
+    assert ok_svg is False
+    assert reason_svg == "playercard_avatar_invalid_type"
+
+
+def test_upload_own_avatar_updates_db(temp_db, avatar_storage, monkeypatch):
+    monkeypatch.setattr("game.playercard.SAVE_COOLDOWN_SEC", 0)
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("avatar_db")
+
+    ok, reason, view = upload_own_avatar(pid, _FakeUpload(_png_bytes()))
+    assert ok is True
+    assert reason == "playercard_avatar_upload_success"
+    assert view is not None
+    assert "/static/uploads/avatars/" in view.get("avatar_url_client", "")
+
+    row = get_player_card_row(pid)
+    assert row is not None
+    assert row["avatar_url"] == avatar_public_path(pid)
+    assert "?v=" in view["avatar_url"] or "&v=" in view["avatar_url"]
+
+
+def test_api_avatar_upload_route(app_client, avatar_storage):
+    pid, login_name = _create_player("api_avatar")
+    client = app_client
+    client.post("/login", data={"username": login_name, "password": "test-pass-123"}, follow_redirects=True)
+
+    res = client.post(
+        "/api/player-card/me/avatar",
+        data={"avatar": _png_upload()},
+    )
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["card"]["show_avatar"] is True
+    assert "/static/uploads/avatars/" in payload["card"]["avatar_url"]
+
+    edit = client.get(f"/api/player-card/{pid}/edit")
+    assert edit.status_code == 200
+    edit_body = edit.get_data(as_text=True)
+    assert 'data-pc-field="avatar_file"' in edit_body
+    assert "playercard_avatar_upload" in edit_body or "Avatar" in edit_body
+
+    from io import BytesIO
+
+    bad = client.post(
+        "/api/player-card/me/avatar",
+        data={"avatar": (BytesIO(b"not-an-image"), "bad.txt", "text/plain")},
+    )
+    assert bad.status_code == 400
+    assert bad.get_json()["reason"] == "playercard_avatar_invalid_type"
+
+
+def test_save_own_card_local_avatar_path(temp_db, monkeypatch):
+    monkeypatch.setattr("game.playercard.SAVE_COOLDOWN_SEC", 0)
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("avatar_save_path")
+
+    ok, reason, view = save_own_card(
+        pid,
+        {
+            "title": "Pilot",
+            "bio": "",
+            "avatar_url": avatar_public_path(pid),
+            "theme": "cyan",
+            "is_public": "1",
+        },
+    )
+    assert ok is True
+    assert reason == "playercard_save_success"
+    assert view is not None
+    assert "/static/uploads/avatars/" in view.get("avatar_url_client", "")
 
 
 def test_badge_seed_idempotent_via_service(temp_db):

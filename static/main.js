@@ -12230,8 +12230,17 @@
       });
     }
 
+    function avatarPreviewSrc() {
+      const raw = (form.querySelector('[data-pc-field="avatar_url"]')?.value || "").trim();
+      if (!raw) return "";
+      const ver = String(form.getAttribute("data-avatar-version") || "").trim();
+      if (!ver || ver === "0") return raw;
+      const sep = raw.includes("?") ? "&" : "?";
+      return `${raw}${sep}v=${ver}`;
+    }
+
     function syncPreview() {
-      const avatarUrl = (form.querySelector('[data-pc-field="avatar_url"]')?.value || "").trim();
+      const avatarUrl = avatarPreviewSrc();
       if (avatarImg && avatarPh) {
         if (avatarUrl) {
           avatarImg.src = avatarUrl;
@@ -12262,7 +12271,72 @@
         syncBadgePreview();
       });
     });
+
+    const avatarFileInput = form.querySelector('[data-pc-field="avatar_file"]');
+    if (avatarFileInput && avatarFileInput.dataset.pcAvatarBound !== "1") {
+      avatarFileInput.dataset.pcAvatarBound = "1";
+      avatarFileInput.addEventListener("change", () => {
+        const file = avatarFileInput.files && avatarFileInput.files[0];
+        if (file) uploadPlayerCardAvatar(form, file, avatarFileInput);
+      });
+    }
+
     syncPreview();
+  }
+
+  async function uploadPlayerCardAvatar(form, file, fileInput) {
+    const msgEl = form.querySelector("[data-pc-form-msg]");
+    const fd = new FormData();
+    fd.append("avatar", file);
+
+    if (msgEl) { msgEl.hidden = true; msgEl.textContent = ""; }
+    pcSetLoading(true);
+
+    try {
+      const res = await fetch("/api/player-card/me/avatar", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        body: fd,
+      });
+      const data = await res.json();
+      pcSetLoading(false);
+      if (!data.ok) {
+        const key = data.reason || "playercard_avatar_upload_error";
+        const txt = t(key, t("playercard_avatar_upload_error", "Avatar-Upload fehlgeschlagen."));
+        if (msgEl) { msgEl.textContent = txt; msgEl.hidden = false; }
+        showNotify(txt, "error");
+        return;
+      }
+      const hidden = form.querySelector('[data-pc-field="avatar_url"]');
+      const card = data.card || {};
+      if (hidden && card.avatar_url) {
+        const busted = String(card.avatar_url);
+        const base = busted.split("?")[0].split("&")[0];
+        hidden.value = base;
+        const ver = String(card.avatar_version || "");
+        if (ver) form.setAttribute("data-avatar-version", ver);
+      }
+      const preview = form.querySelector("#gc-player-card-preview");
+      const avatarImg = form.querySelector("#pc-preview-avatar");
+      const avatarPh = form.querySelector("#pc-preview-avatar-ph");
+      if (card.avatar_url && avatarImg && avatarPh) {
+        avatarImg.src = card.avatar_url;
+        avatarImg.hidden = false;
+        avatarPh.hidden = true;
+      }
+      if (typeof GC.syncPlayerAvatarVisuals === "function") {
+        GC.syncPlayerAvatarVisuals(card);
+      }
+      showNotify(t("playercard_avatar_upload_success", "Avatar gespeichert."), "success");
+    } catch (_) {
+      pcSetLoading(false);
+      const txt = t("playercard_avatar_upload_error", "Avatar-Upload fehlgeschlagen.");
+      if (msgEl) { msgEl.textContent = txt; msgEl.hidden = false; }
+      showNotify(txt, "error");
+    } finally {
+      if (fileInput) fileInput.value = "";
+    }
   }
 
   async function savePlayerCardForm(form) {

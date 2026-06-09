@@ -6,11 +6,15 @@ Tables: player_cards, player_card_badges, player_card_unlocked_badges
 
 from __future__ import annotations
 
+import io
 import re
 import time
 from html import escape
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
+
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .db import begin_write_transaction, commit, db, rollback, table_exists
 from .models import (
@@ -27,6 +31,9 @@ from .ranking import get_playercard_ranking_snapshot
 TITLE_MAX = 64
 BIO_MAX = 400
 AVATAR_URL_MAX = 512
+AVATAR_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
+AVATAR_OUTPUT_SIZE = 256
+AVATAR_WEBP_QUALITY = 80
 SAVE_COOLDOWN_SEC = 2
 
 # In-process save throttle (per player_id); complements DB updated_at check
@@ -35,6 +42,9 @@ _LAST_SAVE_TS: Dict[int, int] = {}
 ALLOWED_THEMES = frozenset({"cyan", "violet", "amber", "emerald", "rose"})
 
 _AVATAR_SCHEMES = frozenset({"http", "https"})
+_LOCAL_AVATAR_RE = re.compile(r"^/static/uploads/avatars/avatar_(\d+)\.webp$")
+_ALLOWED_AVATAR_MIME = frozenset({"image/png", "image/jpeg", "image/webp"})
+_AVATAR_STORAGE_REL = Path("static") / "uploads" / "avatars"
 
 
 def _now_ts() -> int:
@@ -148,8 +158,24 @@ def sanitize_text_field(value: Any, max_len: int) -> str:
     return s
 
 
+def _project_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def avatar_storage_dir() -> Path:
+    return _project_root() / _AVATAR_STORAGE_REL
+
+
+def avatar_public_path(player_id: int) -> str:
+    return f"/static/uploads/avatars/avatar_{int(player_id)}.webp"
+
+
+def avatar_storage_path(player_id: int) -> Path:
+    return avatar_storage_dir() / f"avatar_{int(player_id)}.webp"
+
+
 def avatar_url_for_client(url: str, version: Any = None) -> str:
-    """Append cache-busting query param for http(s) avatar URLs."""
+    """Append cache-busting query param for avatar URLs (http(s) or local static)."""
     s = str(url or "").strip()
     if not s:
         return ""
@@ -159,6 +185,9 @@ def avatar_url_for_client(url: str, version: Any = None) -> str:
         v = 0
     if v <= 0:
         return s
+    if s.startswith("/"):
+        sep = "&" if "?" in s else "?"
+        return f"{s}{sep}v={v}"
     try:
         parsed = urlparse(s)
     except Exception:
@@ -169,12 +198,19 @@ def avatar_url_for_client(url: str, version: Any = None) -> str:
     return f"{s}{sep}v={v}"
 
 
-def validate_avatar_url(url: Any) -> Tuple[bool, str]:
+def validate_avatar_url(url: Any, *, player_id: Optional[int] = None) -> Tuple[bool, str]:
     s = _strip_control(str(url or "").strip())
     if len(s) > AVATAR_URL_MAX:
         s = s[:AVATAR_URL_MAX]
     if not s:
         return True, ""
+    if s.startswith("/static/uploads/avatars/"):
+        m = _LOCAL_AVATAR_RE.match(s)
+        if not m:
+            return False, "playercard_invalid_avatar"
+        if player_id is not None and int(m.group(1)) != int(player_id):
+            return False, "playercard_invalid_avatar"
+        return True, s
     try:
         parsed = urlparse(s)
     except Exception:
@@ -186,6 +222,122 @@ def validate_avatar_url(url: Any) -> Tuple[bool, str]:
     if re.search(r"[\s<>\"']", s):
         return False, "playercard_invalid_avatar"
     return True, s
+
+
+def _process_avatar_image(src: Image.Image) -> Image.Image:
+    im = ImageOps.exif_transpose(src)
+    if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+        im = im.convert("RGBA")
+    else:
+        im = im.convert("RGB")
+    w, h = im.size
+    side = min(w, h)
+    left = (w - side) // 2
+    top = (h - side) // 2
+    im = im.crop((left, top, left + side, top + side))
+    return im.resize((AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE), Image.Resampling.LANCZOS)
+
+
+def _save_avatar_webp(im: Image.Image, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    buf = io.BytesIO()
+    has_alpha = im.mode in ("RGBA", "LA") or "A" in im.getbands()
+    if has_alpha:
+        im.save(buf, "WEBP", quality=AVATAR_WEBP_QUALITY, method=6, lossless=False)
+    else:
+        im.convert("RGB").save(buf, "WEBP", quality=AVATAR_WEBP_QUALITY, method=6)
+    dest.write_bytes(buf.getvalue())
+
+
+def _read_upload_bytes(file_storage: Any) -> Tuple[Optional[bytes], str]:
+    if file_storage is None:
+        return None, "playercard_avatar_missing"
+    raw = file_storage.read()
+    if not raw:
+        return None, "playercard_avatar_missing"
+    if len(raw) > AVATAR_UPLOAD_MAX_BYTES:
+        return None, "playercard_avatar_too_large"
+    return raw, ""
+
+
+def _validate_upload_mime(file_storage: Any) -> Tuple[bool, str]:
+    mime = str(getattr(file_storage, "mimetype", "") or "").split(";")[0].strip().lower()
+    if mime not in _ALLOWED_AVATAR_MIME:
+        return False, "playercard_avatar_invalid_type"
+    return True, mime
+
+
+def process_avatar_upload(player_id: int, file_storage: Any) -> Tuple[bool, str]:
+    """Validate, resize, and persist avatar as deterministic WEBP. Returns (ok, reason)."""
+    pid = int(player_id)
+    raw, err = _read_upload_bytes(file_storage)
+    if raw is None:
+        return False, err
+
+    ok_mime, mime_err = _validate_upload_mime(file_storage)
+    if not ok_mime:
+        return False, mime_err
+
+    try:
+        with Image.open(io.BytesIO(raw)) as src:
+            fmt = str(src.format or "").upper()
+            if fmt in ("GIF", "SVG", "MPO"):
+                return False, "playercard_avatar_invalid_type"
+            im = _process_avatar_image(src)
+    except UnidentifiedImageError:
+        return False, "playercard_avatar_invalid_type"
+    except Exception:
+        return False, "playercard_avatar_invalid_type"
+
+    dest = avatar_storage_path(pid)
+    try:
+        _save_avatar_webp(im, dest)
+    except Exception:
+        return False, "playercard_avatar_save_failed"
+
+    return True, avatar_public_path(pid)
+
+
+def upload_own_avatar(
+    player_id: int,
+    file_storage: Any,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    pid = int(player_id)
+    card = ensure_player_card(pid)
+    now = _now_ts()
+    last_upd = int(card.get("updated_at") or 0)
+    last_mem = int(_LAST_SAVE_TS.get(pid, 0) or 0)
+    if last_mem and (now - last_mem) < SAVE_COOLDOWN_SEC:
+        return False, "playercard_rate_limited", None
+    if last_upd and (now - last_upd) < SAVE_COOLDOWN_SEC and last_mem:
+        return False, "playercard_rate_limited", None
+
+    ok_proc, result = process_avatar_upload(pid, file_storage)
+    if not ok_proc:
+        return False, result, None
+
+    public_path = result
+    c = db()
+    try:
+        begin_write_transaction(c)
+        cur = c.cursor()
+        cur.execute(
+            """
+            UPDATE player_cards SET avatar_url = ?, updated_at = ?
+            WHERE player_id = ?;
+            """,
+            (public_path, now, pid),
+        )
+        commit(c)
+    except Exception:
+        rollback(c)
+        raise
+    finally:
+        c.close()
+
+    _LAST_SAVE_TS[pid] = now
+    view, _ = build_public_card(pid, viewer_id=pid, sync_badges=True)
+    return True, "playercard_avatar_upload_success", view
 
 
 def validate_theme(theme: Any) -> str:
@@ -525,8 +677,15 @@ def build_edit_card(player_id: int, conn=None) -> Tuple[Optional[Dict[str, Any]]
     if not view.get("is_self"):
         return None, "playercard_forbidden"
     card = get_player_card_row(player_id, conn=conn) or {}
+    raw_url = str(card.get("avatar_url") or "")
+    ok_av, validated_url = validate_avatar_url(raw_url, player_id=player_id)
+    card_updated = int(card.get("updated_at") or 0)
+    avatar_display = (
+        avatar_url_for_client(validated_url, card_updated) if ok_av and validated_url else ""
+    )
     view["form"] = {
-        "avatar_url": str(card.get("avatar_url") or ""),
+        "avatar_url": validated_url if ok_av else "",
+        "avatar_url_display": avatar_display,
         "title": sanitize_text_field(card.get("title"), TITLE_MAX),
         "bio": sanitize_text_field(card.get("bio"), BIO_MAX),
         "theme": validate_theme(card.get("theme")),
@@ -557,7 +716,7 @@ def save_own_card(player_id: int, data: Dict[str, Any]) -> Tuple[bool, str, Opti
     if len(sanitize_text_field(data.get("bio"), BIO_MAX)) != len(_strip_control(str(data.get("bio") or "").strip())):
         pass  # already truncated
 
-    ok_av, avatar_url = validate_avatar_url(data.get("avatar_url"))
+    ok_av, avatar_url = validate_avatar_url(data.get("avatar_url"), player_id=pid)
     if not ok_av:
         return False, avatar_url, None
 

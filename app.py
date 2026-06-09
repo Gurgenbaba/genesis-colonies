@@ -1471,6 +1471,31 @@ def api_player_card_save():
     return jsonify({"ok": True, "reason": reason, "html": html, "card": sync})
 
 
+@app.route("/api/player-card/me/avatar", methods=["POST"])
+@require_login
+def api_player_card_avatar_upload():
+    viewer_id = _playercard_viewer_id()
+    if viewer_id is None:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    file_storage = request.files.get("avatar")
+    ok, reason, card = playercard_logic.upload_own_avatar(int(viewer_id), file_storage)
+    if not ok:
+        status = 429 if reason == "playercard_rate_limited" else 400
+        return jsonify({"ok": False, "reason": reason}), status
+
+    sync = {
+        "player_id": int(viewer_id),
+        "avatar_url": card.get("avatar_url_client") or "",
+        "avatar_version": int(card.get("avatar_version") or 0),
+        "show_avatar": bool(card.get("avatar_url_client")),
+        "theme": card.get("theme") or "cyan",
+        "avatar_initial": (card.get("commander_name_raw") or "?")[:1],
+        "avatar_path": card.get("avatar_url_client") or "",
+    }
+    return jsonify({"ok": True, "reason": reason, "card": sync})
+
+
 @app.route("/player/<int:player_id>")
 @require_login
 def player_card_fallback_page(player_id: int):

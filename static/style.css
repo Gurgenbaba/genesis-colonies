@@ -9468,15 +9468,108 @@ body.gc-combat-report-open { overflow: hidden; }
 }
 
 .gc-player-card-fields .gc-input,
-.gc-player-card-fields .gc-textarea {
+.gc-player-card-fields .gc-textarea,
+.gc-player-card-fields select.gc-input {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: var(--gc-radius-sm, 6px);
+  border: 1px solid rgba(120, 190, 255, 0.28);
+  background: rgba(5, 10, 22, 0.88);
+  color: var(--gc-text, #d7f6ff);
+  font-size: 0.88rem;
+  font-family: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+.gc-player-card-fields .gc-input::placeholder,
+.gc-player-card-fields .gc-textarea::placeholder {
+  color: rgba(200, 232, 244, 0.34);
+  font-style: italic;
+}
+.gc-player-card-fields .gc-input:hover,
+.gc-player-card-fields .gc-textarea:hover,
+.gc-player-card-fields select.gc-input:hover {
+  border-color: rgba(70, 229, 255, 0.42);
+  background: rgba(6, 12, 26, 0.92);
+}
+.gc-player-card-fields .gc-input:focus,
+.gc-player-card-fields .gc-textarea:focus,
+.gc-player-card-fields select.gc-input:focus {
+  outline: none;
+  border-color: rgba(70, 229, 255, 0.88);
+  box-shadow:
+    0 0 0 2px rgba(70, 229, 255, 0.14),
+    inset 0 0 12px rgba(70, 229, 255, 0.06);
+  background: rgba(4, 10, 22, 0.96);
+}
+.gc-player-card-fields select.gc-input {
+  appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(127, 255, 217, 0.75) 50%),
+    linear-gradient(135deg, rgba(127, 255, 217, 0.75) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) calc(50% + 2px),
+    calc(100% - 11px) calc(50% + 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.gc-player-card-fields select.gc-input option {
+  background: #060a16;
+  color: var(--gc-text, #d7f6ff);
+}
+.gc-player-card-fields .gc-input-file {
+  padding: 6px 0;
+  color: rgba(200, 232, 244, 0.72);
+  border-style: dashed;
+  cursor: pointer;
+}
+.gc-player-card-fields .gc-input-file::file-selector-button {
+  margin-right: 10px;
+  padding: 7px 12px;
+  border-radius: var(--gc-radius-sm, 6px);
+  border: 1px solid rgba(120, 190, 255, 0.28);
+  background: rgba(5, 10, 22, 0.88);
+  color: var(--gc-text, #d7f6ff);
+  font-family: inherit;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+.gc-player-card-fields .gc-input-file::file-selector-button:hover {
+  border-color: rgba(70, 229, 255, 0.42);
+  background: rgba(6, 12, 26, 0.92);
+  box-shadow: var(--gc-border-glow, 0 0 12px rgba(70, 229, 255, 0.12)), inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.gc-player-card-fields .gc-input-file::-webkit-file-upload-button {
+  margin-right: 10px;
+  padding: 7px 12px;
+  border-radius: var(--gc-radius-sm, 6px);
+  border: 1px solid rgba(120, 190, 255, 0.28);
+  background: rgba(5, 10, 22, 0.88);
+  color: var(--gc-text, #d7f6ff);
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.gc-player-card-field-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--gc-neon-cyan, #46e5ff);
+  flex-shrink: 0;
 }
 .gc-textarea {
   min-height: 88px;
   max-height: 200px;
   resize: vertical;
+  line-height: 1.45;
 }
 
 .gc-player-card-badges-picker {

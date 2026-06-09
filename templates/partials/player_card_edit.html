@@ -8,8 +8,13 @@
      data-theme="{{ form.get('theme', card.get('theme', 'cyan')) }}"
      data-mode="edit">
 
-  <form class="gc-player-card-form" id="gc-player-card-form" novalidate>
+  <form class="gc-player-card-form" id="gc-player-card-form" novalidate
+        data-avatar-version="{{ card.get('avatar_version', 0) }}">
     <input type="hidden" name="player_id" value="{{ card.get('player_id', '') }}">
+    <input type="hidden"
+           name="avatar_url"
+           value="{{ form.get('avatar_url', '') }}"
+           data-pc-field="avatar_url">
 
     <div class="gc-player-card-edit-layout">
       <section class="gc-player-card-preview" id="gc-player-card-preview" data-theme="{{ form.get('theme', 'cyan') }}" aria-label="{{ T('playercard_preview') }}">
@@ -18,13 +23,13 @@
           <div class="gc-player-card-avatar-wrap">
             <img class="gc-player-card-avatar"
                  id="pc-preview-avatar"
-                 src="{{ form.get('avatar_url') or '' }}"
+                 src="{{ form.get('avatar_url_display') or '' }}"
                  alt=""
-                 {% if not form.get('avatar_url') %}hidden{% endif %}
+                 {% if not form.get('avatar_url_display') %}hidden{% endif %}
                  referrerpolicy="no-referrer">
             <div class="gc-player-card-avatar gc-player-card-avatar-placeholder"
                  id="pc-preview-avatar-ph"
-                 {% if form.get('avatar_url') %}hidden{% endif %}
+                 {% if form.get('avatar_url_display') %}hidden{% endif %}
                  aria-hidden="true">{{ (card.get('commander_name_raw') or '?')[:1] }}</div>
           </div>
           <div class="gc-player-card-identity">
@@ -38,16 +43,16 @@
       </section>
 
       <section class="gc-player-card-fields">
-        <label class="gc-player-card-field">
-          <span class="gc-player-card-field-label">{{ T("playercard_avatar_url") }}</span>
-          <input type="url"
-                 name="avatar_url"
-                 class="gc-input"
-                 maxlength="512"
-                 placeholder="https://…"
-                 value="{{ form.get('avatar_url', '') }}"
-                 data-pc-field="avatar_url"
-                 autocomplete="off">
+        <label class="gc-player-card-field gc-player-card-avatar-upload">
+          <span class="gc-player-card-field-label">{{ T("playercard_avatar_upload") }}</span>
+          <input type="file"
+                 name="avatar_file"
+                 class="gc-input gc-input-file"
+                 accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+                 data-pc-field="avatar_file">
+          <span class="gc-player-card-field-hint">{{ T("playercard_avatar_upload_hint") }}</span>
+          <span class="gc-player-card-field-hint">{{ T("playercard_avatar_upload_max") }}</span>
+          <span class="gc-player-card-field-hint">{{ T("playercard_avatar_upload_format") }}</span>
         </label>
 
         <label class="gc-player-card-field">
