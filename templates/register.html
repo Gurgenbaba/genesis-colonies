@@ -1,169 +1,175 @@
-{% extends "base.html" %}
-
-{% block extra_head %}{% endblock %}
-
-{% block content %}
-
-{% set err = (error if error is defined and error else "") %}
-{% set v_user = (request.form.get('username') or '') if request.method == 'POST' else '' %}
-
-{% set aria = T('register_aria') %}
-{% if aria == 'register_aria' %}{% set aria = 'Registrierung' %}{% endif %}
-
-{% set ttl = T("register_title") %}
-{% if ttl == "register_title" %}{% set ttl = "Starte deine erste Kolonie." %}{% else %}{% set ttl = ttl | striptags %}{% endif %}
-
-{% set subtitle = T("register_subtitle") %}
-{% if subtitle == "register_subtitle" %}
-  {% set subtitle = "Erstelle deinen Commander und sichere dir deinen Platz im Genesis-Cluster." %}
-{% else %}
-  {% set subtitle = subtitle | striptags %}
-{% endif %}
-
-{% set lbl_user = T("register_label_username") %}
-{% if lbl_user == "register_label_username" %}{% set lbl_user = "Commander-Name" %}{% endif %}
-{% set ph_user = T("register_placeholder_username") %}
-{% if ph_user == "register_placeholder_username" %}{% set ph_user = "Commander-Name" %}{% endif %}
-
-{% set lbl_email = T("register_label_email") %}
-{% if lbl_email == "register_label_email" %}{% set lbl_email = "E-Mail" %}{% endif %}
-{% set ph_email = T("register_placeholder_email") %}
-{% if ph_email == "register_placeholder_email" %}{% set ph_email = "deine@email.de" %}{% endif %}
-
-{% set lbl_pass = T("register_label_password") %}
-{% if lbl_pass == "register_label_password" %}{% set lbl_pass = "Passwort" %}{% endif %}
-{% set ph_pass = T("register_placeholder_password") %}
-{% if ph_pass == "register_placeholder_password" %}{% set ph_pass = "Passwort" %}{% endif %}
-
-{% set lbl_pass2 = T("register_label_password2") %}
-{% if lbl_pass2 == "register_label_password2" %}{% set lbl_pass2 = "Passwort wiederholen" %}{% endif %}
-{% set ph_pass2 = T("register_placeholder_password2") %}
-{% if ph_pass2 == "register_placeholder_password2" %}{% set ph_pass2 = "Passwort bestätigen" %}{% endif %}
-
-{% set loading = T("register_loading") %}
-{% if loading == "register_loading" %}{% set loading = "Erstelle Account…" %}{% else %}{% set loading = loading | striptags %}{% endif %}
-{% set btn = T("register_btn_submit") %}
-{% if btn == "register_btn_submit" %}{% set btn = "Account erstellen" %}{% else %}{% set btn = btn | striptags %}{% endif %}
-
-{% set have_acc = T("register_footer_have_account") %}
-{% if have_acc == "register_footer_have_account" %}{% set have_acc = "Bereits Commander?" %}{% endif %}
-{% set to_login = T("register_footer_to_login") %}
-{% if to_login == "register_footer_to_login" %}{% set to_login = "Login" %}{% endif %}
-{% set footer_back = T("login_footer_back") %}
-{% if footer_back == "login_footer_back" %}{% set footer_back = "Zurück zur Startseite" %}{% endif %}
-
-<div class="gc-page auth-page auth-page--register">
-
-  <div class="auth-backdrop" aria-hidden="true"></div>
-  <div class="auth-backdrop-form" aria-hidden="true"></div>
-
-  <div class="auth-shell">
-
-    <div class="auth-hero">
-      <p class="auth-eyebrow">Genesis Colonies</p>
-      <h1 class="auth-hero-title">{{ ttl }}</h1>
-      <p class="auth-hero-sub">{{ subtitle }}</p>
-    </div>
-
-    <section class="auth-panel auth-panel--register" aria-label="{{ aria }}">
-
-      {% if err %}
-        <div class="auth-error auth-terminal-alert" id="form-error" role="alert" aria-live="assertive" tabindex="-1">
-          <span class="auth-terminal-alert-tag" aria-hidden="true">Alert</span>
-          <span class="auth-terminal-alert-text">{{ err | striptags }}</span>
-        </div>
-      {% endif %}
-
-      <form method="POST"
-            action="{{ url_for('register') }}"
-            class="auth-form"
-            novalidate
-            data-validate="register">
-
-        <div class="auth-form-scroll">
-          <label class="auth-label" for="username">{{ lbl_user }}</label>
-          <input
-            id="username"
-            type="text"
-            name="username"
-            class="auth-input"
-            placeholder="{{ ph_user }}"
-            autocomplete="username"
-            required
-            minlength="3"
-            maxlength="24"
-            {% if err %}aria-invalid="true"{% endif %}
-            value="{{ v_user }}"
-          >
-
-          <label class="auth-label" for="email">{{ lbl_email }}</label>
-          <input
-            id="email"
-            type="email"
-            name="email"
-            class="auth-input"
-            placeholder="{{ ph_email }}"
-            autocomplete="email"
-            required
-            maxlength="254"
-            {% if err %}aria-invalid="true"{% endif %}
-            value="{{ (request.form.get('email') or '') if request.method == 'POST' else '' }}"
-          >
-
-          <label class="auth-label" for="password">{{ lbl_pass }}</label>
-          <input
-            id="password"
-            type="password"
-            name="password"
-            class="auth-input"
-            placeholder="{{ ph_pass }}"
-            autocomplete="new-password"
-            required
-            minlength="8"
-            {% if err %}aria-invalid="true"{% endif %}
-          >
-
-          <label class="auth-label" for="password2">{{ lbl_pass2 }}</label>
-          <input
-            id="password2"
-            type="password"
-            name="password2"
-            class="auth-input"
-            placeholder="{{ ph_pass2 }}"
-            autocomplete="new-password"
-            required
-            minlength="8"
-            {% if err %}aria-invalid="true"{% endif %}
-          >
-        </div>
-
-        <p class="auth-hint auth-hint-compact">Sicheres Passwort empfohlen.</p>
-
-        <button type="submit"
-                class="gc-btn gc-btn-primary gc-btn-lg auth-btn-primary landing-btn-primary"
-                data-loading-text="{{ loading }}">
-          {{ btn }}
-        </button>
-
-        <div class="auth-error auth-terminal-alert hidden" id="client-error" role="alert" aria-live="assertive" tabindex="-1"></div>
-      </form>
-
-      <footer class="auth-footer">
-        <span>{{ have_acc }} <a href="{{ url_for('login') }}">{{ to_login }}</a></span>
-        <span><a href="{{ url_for('landing') }}">{{ footer_back }}</a></span>
-      </footer>
-
-    </section>
-  </div>
-</div>
-
-{% if err %}
-<script>
-  window.addEventListener('DOMContentLoaded', () => {
-    const el = document.getElementById('form-error');
-    if (el) el.focus();
-  });
-</script>
-{% endif %}
-
-{% endblock %}
+{% extends "base.html" %}
+
+{% block extra_head %}{% endblock %}
+
+{% block content %}
+
+{% set err = (error if error is defined and error else "") %}
+{% set v_user = (request.form.get('username') or '') if request.method == 'POST' else '' %}
+
+{% set aria = T('register_aria') %}
+{% if aria == 'register_aria' %}{% set aria = 'Registrierung' %}{% endif %}
+
+{% set ttl = T("register_title") %}
+{% if ttl == "register_title" %}{% set ttl = "Starte deine erste Kolonie." %}{% else %}{% set ttl = ttl | striptags %}{% endif %}
+
+{% set subtitle = T("register_subtitle") %}
+{% if subtitle == "register_subtitle" %}
+  {% set subtitle = "Erstelle deinen Commander und sichere dir deinen Platz im Genesis-Cluster." %}
+{% else %}
+  {% set sub_strong = T("register_subtitle_strong") %}
+  {% set sub2 = T("register_subtitle_2") %}
+  {% if sub_strong != "register_subtitle_strong" and sub2 != "register_subtitle_2" %}
+    {% set subtitle = (subtitle ~ " " ~ sub_strong ~ " " ~ sub2) | striptags %}
+  {% else %}
+    {% set subtitle = subtitle | striptags %}
+  {% endif %}
+{% endif %}
+
+{% set lbl_user = T("register_label_username") %}
+{% if lbl_user == "register_label_username" %}{% set lbl_user = "Commander-Name" %}{% endif %}
+{% set ph_user = T("register_placeholder_username") %}
+{% if ph_user == "register_placeholder_username" %}{% set ph_user = "Commander-Name" %}{% endif %}
+
+{% set lbl_email = T("register_label_email") %}
+{% if lbl_email == "register_label_email" %}{% set lbl_email = "E-Mail" %}{% endif %}
+{% set ph_email = T("register_placeholder_email") %}
+{% if ph_email == "register_placeholder_email" %}{% set ph_email = "deine@email.de" %}{% endif %}
+
+{% set lbl_pass = T("register_label_password") %}
+{% if lbl_pass == "register_label_password" %}{% set lbl_pass = "Passwort" %}{% endif %}
+{% set ph_pass = T("register_placeholder_password") %}
+{% if ph_pass == "register_placeholder_password" %}{% set ph_pass = "Passwort" %}{% endif %}
+
+{% set lbl_pass2 = T("register_label_password2") %}
+{% if lbl_pass2 == "register_label_password2" %}{% set lbl_pass2 = "Passwort wiederholen" %}{% endif %}
+{% set ph_pass2 = T("register_placeholder_password2") %}
+{% if ph_pass2 == "register_placeholder_password2" %}{% set ph_pass2 = "Passwort bestätigen" %}{% endif %}
+
+{% set loading = T("register_loading") %}
+{% if loading == "register_loading" %}{% set loading = "Erstelle Account…" %}{% else %}{% set loading = loading | striptags %}{% endif %}
+{% set btn = T("register_btn_submit") %}
+{% if btn == "register_btn_submit" %}{% set btn = "Account erstellen" %}{% else %}{% set btn = btn | striptags %}{% endif %}
+
+{% set have_acc = T("register_footer_have_account") %}
+{% if have_acc == "register_footer_have_account" %}{% set have_acc = "Bereits Commander?" %}{% endif %}
+{% set to_login = T("register_footer_to_login") %}
+{% if to_login == "register_footer_to_login" %}{% set to_login = "Login" %}{% endif %}
+{% set footer_back = T("login_footer_back") %}
+{% if footer_back == "login_footer_back" %}{% set footer_back = "Zurück zur Startseite" %}{% endif %}
+
+<div class="gc-page auth-page auth-page--register">
+
+  <div class="auth-backdrop" aria-hidden="true"></div>
+  <div class="auth-backdrop-form" aria-hidden="true"></div>
+
+  <div class="auth-shell">
+
+    <div class="auth-hero">
+      <p class="auth-eyebrow">Genesis Colonies</p>
+      <h1 class="auth-hero-title">{{ ttl }}</h1>
+      <p class="auth-hero-sub">{{ subtitle }}</p>
+    </div>
+
+    <section class="auth-panel auth-panel--register" aria-label="{{ aria }}">
+
+      {% if err %}
+        <div class="auth-error auth-terminal-alert" id="form-error" role="alert" aria-live="assertive" tabindex="-1">
+          <span class="auth-terminal-alert-tag" aria-hidden="true">Alert</span>
+          <span class="auth-terminal-alert-text">{{ err | striptags }}</span>
+        </div>
+      {% endif %}
+
+      <form method="POST"
+            action="{{ url_for('register') }}"
+            class="auth-form"
+            novalidate
+            data-validate="register">
+
+        <div class="auth-form-scroll">
+          <label class="auth-label" for="username">{{ lbl_user }}</label>
+          <input
+            id="username"
+            type="text"
+            name="username"
+            class="auth-input"
+            placeholder="{{ ph_user }}"
+            autocomplete="username"
+            required
+            minlength="3"
+            maxlength="24"
+            {% if err %}aria-invalid="true"{% endif %}
+            value="{{ v_user }}"
+          >
+
+          <label class="auth-label" for="email">{{ lbl_email }}</label>
+          <input
+            id="email"
+            type="email"
+            name="email"
+            class="auth-input"
+            placeholder="{{ ph_email }}"
+            autocomplete="email"
+            required
+            maxlength="254"
+            {% if err %}aria-invalid="true"{% endif %}
+            value="{{ (request.form.get('email') or '') if request.method == 'POST' else '' }}"
+          >
+
+          <label class="auth-label" for="password">{{ lbl_pass }}</label>
+          <input
+            id="password"
+            type="password"
+            name="password"
+            class="auth-input"
+            placeholder="{{ ph_pass }}"
+            autocomplete="new-password"
+            required
+            minlength="8"
+            {% if err %}aria-invalid="true"{% endif %}
+          >
+
+          <label class="auth-label" for="password2">{{ lbl_pass2 }}</label>
+          <input
+            id="password2"
+            type="password"
+            name="password2"
+            class="auth-input"
+            placeholder="{{ ph_pass2 }}"
+            autocomplete="new-password"
+            required
+            minlength="8"
+            {% if err %}aria-invalid="true"{% endif %}
+          >
+        </div>
+
+        <p class="auth-hint auth-hint-compact">Sicheres Passwort empfohlen.</p>
+
+        <button type="submit"
+                class="gc-btn gc-btn-primary gc-btn-lg auth-btn-primary landing-btn-primary"
+                data-loading-text="{{ loading }}">
+          {{ btn }}
+        </button>
+
+        <div class="auth-error auth-terminal-alert hidden" id="client-error" role="alert" aria-live="assertive" tabindex="-1"></div>
+      </form>
+
+      <footer class="auth-footer">
+        <span>{{ have_acc }} <a href="{{ url_for('login') }}">{{ to_login }}</a></span>
+        <span><a href="{{ url_for('landing') }}">{{ footer_back }}</a></span>
+      </footer>
+
+    </section>
+  </div>
+</div>
+
+{% if err %}
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('form-error');
+    if (el) el.focus();
+  });
+</script>
+{% endif %}
+
+{% endblock %}

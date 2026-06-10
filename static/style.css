@@ -2327,7 +2327,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .auth-hero-sub{
   margin: 0;
-  max-width: 34ch;
+  max-width: 42ch;
   color: rgba(210, 236, 248, 0.82);
   font-size: clamp(0.95rem, 1.35vw, 1.08rem);
   line-height: 1.55;
