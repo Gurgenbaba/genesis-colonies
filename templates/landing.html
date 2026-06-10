@@ -1,6 +1,43 @@
 {% extends "base.html" %}
 
-{% block extra_head %}{% endblock %}
+{% block extra_head %}
+<script>
+(function initLandingAmbience() {
+  function boot() {
+    var audio = document.getElementById("landing-ambience");
+    if (!audio || audio.dataset.gcAmbienceReady === "1") return;
+    audio.dataset.gcAmbienceReady = "1";
+    audio.volume = 0.15;
+
+    function tryPlay() {
+      var p = audio.play();
+      if (p && typeof p.catch === "function") p.catch(function () {});
+    }
+
+    tryPlay();
+
+    function unlock() {
+      tryPlay();
+    }
+    document.addEventListener("pointerdown", unlock, { once: true, passive: true });
+    document.addEventListener("keydown", unlock, { once: true });
+
+    if (window.GC && typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(function () {
+        audio.pause();
+        audio.currentTime = 0;
+      });
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot, { once: true });
+  } else {
+    boot();
+  }
+})();
+</script>
+{% endblock %}
 
 {% block content %}
 
@@ -90,13 +127,23 @@
 <div class="gc-page landing-wrapper">
 
   <div class="landing-fx" aria-hidden="true">
+    <div class="landing-fx-vignette"></div>
     <div class="landing-fx-stars"></div>
     <div class="landing-fx-nebula"></div>
+    <span class="landing-fx-ship landing-fx-ship-1"></span>
+    <span class="landing-fx-ship landing-fx-ship-2"></span>
+    <span class="landing-fx-ship landing-fx-ship-3"></span>
+    <span class="landing-fx-beacon landing-fx-beacon-1"></span>
+    <span class="landing-fx-beacon landing-fx-beacon-2"></span>
+    <span class="landing-fx-beacon landing-fx-beacon-3"></span>
+    <span class="landing-fx-beacon landing-fx-beacon-4"></span>
+    <span class="landing-fx-beacon landing-fx-beacon-5"></span>
     <span class="landing-fx-meteor"></span>
     <span class="landing-fx-meteor landing-fx-meteor-2"></span>
   </div>
 
   <section class="landing-hero" aria-labelledby="landing-title">
+    <div class="landing-hero-scan" aria-hidden="true"></div>
     {% set title_parts = landing_title.split(' ', 1) %}
 
     <div class="landing-hero-content">
@@ -232,5 +279,12 @@
   </section>
 
 </div>
+
+<audio id="landing-ambience"
+       class="landing-ambience"
+       loop
+       preload="metadata"
+       src="{{ url_for('static', filename='img/background_sound.mp3') }}"
+       aria-hidden="true"></audio>
 
 {% endblock %}
