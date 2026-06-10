@@ -260,6 +260,15 @@
 
   </div>
 
+  {% if request.endpoint in ['landing', 'login', 'register'] %}
+  <audio id="gc-ambience"
+         class="gc-ambience"
+         loop
+         preload="auto"
+         src="{{ url_for('static', filename='img/background_sound.mp3') }}?v={{ GC_ASSET_VERSION }}"
+         aria-hidden="true"></audio>
+  {% endif %}
+
   {% if not SIMPLE_LAYOUT %}
   {% include "partials/special_panel.html" %}
   {% endif %}

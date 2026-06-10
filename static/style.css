@@ -365,8 +365,8 @@ body.gc-body-simple[data-endpoint="login"],
 body.gc-body-simple[data-endpoint="register"]{
   background-color: #040810;
   background-image:
-    radial-gradient(ellipse 80% 70% at 50% 42%, rgba(2, 6, 14, 0.45) 0%, rgba(2, 6, 14, 0.88) 72%),
-    linear-gradient(180deg, rgba(2, 6, 14, 0.55) 0%, rgba(2, 6, 14, 0.82) 100%),
+    linear-gradient(90deg, rgba(2, 6, 14, 0.88) 0%, rgba(2, 6, 14, 0.58) 38%, rgba(2, 6, 14, 0.28) 62%, rgba(2, 6, 14, 0.12) 100%),
+    linear-gradient(180deg, rgba(2, 6, 14, 0.4) 0%, transparent 45%, rgba(2, 6, 14, 0.72) 100%),
     url("img/background.png");
   background-size: cover;
   background-position: center center;
@@ -2184,7 +2184,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   }
 }
 
-.landing-ambience{
+.landing-ambience,
+.gc-ambience{
   position: absolute;
   width: 0;
   height: 0;
@@ -2262,11 +2263,9 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
    ========================= */
 .auth-page{
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: clamp(20px, 4vw, 40px) 16px;
+  padding: clamp(24px, 4vw, 48px) clamp(16px, 3vw, 28px);
   min-height: calc(100vh - var(--gc-header-h) - var(--gc-page-pad-y) * 2);
+  overflow-x: hidden;
 }
 
 .auth-backdrop{
@@ -2274,79 +2273,136 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 55% 42% at 50% 44%, rgba(70, 229, 255, 0.07), transparent 68%),
-    radial-gradient(ellipse 100% 80% at 50% 50%, transparent 22%, rgba(2, 6, 14, 0.72) 100%);
+  background: radial-gradient(ellipse 70% 55% at 22% 42%, rgba(70, 229, 255, 0.06), transparent 68%);
 }
 
-.auth-card{
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  padding: clamp(24px, 4vw, 32px);
-  border-radius: var(--gc-radius-lg, 4px);
-  background: linear-gradient(180deg, rgba(6, 12, 28, 0.94), rgba(3, 8, 18, 0.92));
-  border: 1px solid rgba(70, 229, 255, 0.24);
-  box-shadow:
-    0 28px 70px rgba(0, 0, 0, 0.58),
-    inset 0 1px 0 rgba(127, 255, 217, 0.08),
-    inset 0 0 40px rgba(0, 0, 0, 0.35);
-}
-
-.auth-card::before{
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
+.auth-backdrop-form{
+  position: fixed;
+  inset: 0;
+  z-index: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse 90% 55% at 50% 0%, rgba(70, 229, 255, 0.1), transparent 62%);
-  opacity: 0.85;
+  background: linear-gradient(90deg, transparent 38%, rgba(2, 6, 14, 0.42) 58%, rgba(2, 6, 14, 0.78) 100%);
 }
 
-.auth-card > *{
+.auth-shell{
   position: relative;
   z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 500px);
+  gap: clamp(28px, 5vw, 56px);
+  align-items: center;
+  max-width: 1080px;
+  margin: 0 auto;
+  min-height: calc(100vh - var(--gc-header-h) - var(--gc-page-pad-y) * 2 - 48px);
 }
 
-.auth-card--login{
-  max-width: 460px;
-}
-
-.auth-card--register{
-  max-width: 520px;
-}
-
-.auth-card-head{
-  margin-bottom: 20px;
-  text-align: center;
+.auth-hero{
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(8px, 2vw, 20px) 0;
 }
 
 .auth-eyebrow{
-  margin: 0 0 10px;
+  margin: 0;
   font-family: Orbitron, Inter, system-ui, sans-serif;
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(70, 229, 255, 0.75);
+  color: var(--gc-primary);
 }
 
-.auth-card-title{
-  margin: 0 0 8px;
+.auth-hero-title{
+  margin: 0;
   font-family: Orbitron, Inter, system-ui, sans-serif;
   font-weight: 900;
-  font-size: clamp(1.45rem, 3vw, 1.85rem);
-  line-height: 1.15;
-  letter-spacing: 0.06em;
+  font-size: clamp(1.75rem, 3.8vw, 2.65rem);
+  line-height: 1.12;
+  letter-spacing: 0.05em;
   color: #f4fcff;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.55);
+  max-width: 16ch;
 }
 
-.auth-card-sub{
-  margin: 0 auto;
-  max-width: 32ch;
-  color: rgba(200, 232, 244, 0.78);
-  font-size: 0.92rem;
-  line-height: 1.5;
+.auth-hero-sub{
+  margin: 0;
+  max-width: 34ch;
+  color: rgba(210, 236, 248, 0.82);
+  font-size: clamp(0.95rem, 1.35vw, 1.08rem);
+  line-height: 1.55;
+}
+
+.auth-panel{
+  position: relative;
+  width: 100%;
+  justify-self: end;
+  padding: clamp(24px, 3vw, 30px);
+  border-radius: var(--gc-radius-lg, 4px);
+  background: linear-gradient(180deg, rgba(4, 9, 22, 0.96), rgba(2, 6, 16, 0.94));
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(127, 255, 217, 0.07),
+    inset 0 0 48px rgba(0, 0, 0, 0.4);
+}
+
+.auth-panel::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, rgba(70, 229, 255, 0.06) 0%, transparent 42%),
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(70, 229, 255, 0.08), transparent 60%);
+}
+
+.auth-panel > *{
+  position: relative;
+  z-index: 1;
+}
+
+.auth-panel--login{
+  max-width: 480px;
+}
+
+.auth-panel--register{
+  max-width: 520px;
+}
+
+@media (max-width: 900px){
+  .auth-shell{
+    grid-template-columns: 1fr;
+    gap: 20px;
+    min-height: 0;
+    max-width: 520px;
+  }
+
+  .auth-backdrop-form{
+    background: linear-gradient(180deg, transparent 0%, rgba(2, 6, 14, 0.5) 38%, rgba(2, 6, 14, 0.75) 100%);
+  }
+
+  .auth-hero{
+    text-align: center;
+    align-items: center;
+    padding-bottom: 4px;
+  }
+
+  .auth-hero-title{
+    max-width: none;
+    font-size: clamp(1.35rem, 5vw, 1.65rem);
+  }
+
+  .auth-hero-sub{
+    max-width: 36ch;
+    font-size: 0.9rem;
+  }
+
+  .auth-panel{
+    justify-self: stretch;
+    max-width: none;
+  }
 }
 
 .auth-terminal-alert{
@@ -2432,9 +2488,9 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   min-height: 54px;
   padding: 0 16px;
   border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(70, 229, 255, 0.2);
-  background: rgba(2, 6, 16, 0.88);
-  color: var(--gc-text);
+  border: 1px solid rgba(70, 229, 255, 0.24);
+  background: rgba(1, 4, 12, 0.92);
+  color: #eafcff;
   font-size: 1rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }

@@ -449,6 +449,69 @@
     else if (typeof mq.addListener === "function") mq.addListener(apply);
   }
 
+  const AMBIENCE_STORAGE_KEY = "gc_ambience_time";
+  const AMBIENCE_VOLUME = 0.15;
+  const AMBIENCE_ENDPOINTS = new Set(["landing", "login", "register"]);
+  let _ambiencePersistTimer = null;
+
+  function isAmbiencePage() {
+    const ep = document.body && document.body.dataset.endpoint;
+    return AMBIENCE_ENDPOINTS.has(ep);
+  }
+
+  function persistAmbienceTime() {
+    const audio = document.getElementById("gc-ambience");
+    if (!audio || !Number.isFinite(audio.currentTime)) return;
+    try {
+      sessionStorage.setItem(AMBIENCE_STORAGE_KEY, String(audio.currentTime));
+    } catch (_) {}
+  }
+
+  function restoreAmbienceTime(audio) {
+    let saved = null;
+    try {
+      saved = sessionStorage.getItem(AMBIENCE_STORAGE_KEY);
+    } catch (_) {}
+    if (saved == null) return;
+    const t = parseFloat(saved);
+    if (!Number.isFinite(t) || t < 0) return;
+
+    const apply = () => {
+      if (audio.duration && t >= audio.duration - 0.05) return;
+      audio.currentTime = t;
+    };
+
+    if (audio.readyState >= 1) apply();
+    else audio.addEventListener("loadedmetadata", apply, { once: true });
+  }
+
+  function initSimplePageAmbience() {
+    if (!isAmbiencePage()) return;
+    const audio = document.getElementById("gc-ambience");
+    if (!audio) return;
+
+    audio.volume = AMBIENCE_VOLUME;
+    restoreAmbienceTime(audio);
+
+    const tryPlay = () => {
+      const p = audio.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    };
+
+    tryPlay();
+    document.addEventListener("pointerdown", tryPlay, { once: true, passive: true });
+    document.addEventListener("keydown", tryPlay, { once: true });
+
+    if (!window.__gcAmbiencePersistBound) {
+      window.__gcAmbiencePersistBound = true;
+      window.addEventListener("pagehide", persistAmbienceTime);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") persistAmbienceTime();
+      });
+      _ambiencePersistTimer = window.setInterval(persistAmbienceTime, 4000);
+    }
+  }
+
   function pauseVisualLoops() {
     GC.stopProgressTicker();
     pauseResourceTicker();
@@ -1265,6 +1328,7 @@
 
     if (!shouldRunGameLoop()) {
       console.debug("[GC] game loop skipped (auth/simple page)");
+      initSimplePageAmbience();
       GC.abortGameLoop("initPage");
       return;
     }
@@ -14264,6 +14328,7 @@
     initGcPopoversOnce();
     initVisibilityPolling();
     initMotionPreferenceListener();
+    initSimplePageAmbience();
     bootstrapPlanetLandscapeFromBoot();
     syncPerfBodyClasses();
     initMobileNav();

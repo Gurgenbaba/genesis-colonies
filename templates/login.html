@@ -5,11 +5,11 @@
 {% set err = (error if error is defined and error else "") %}
 
 {% set ttl = T("login_title") %}
-{% if ttl == "login_title" %}{% set ttl = "Willkommen zurück" %}{% else %}{% set ttl = ttl | striptags %}{% endif %}
+{% if ttl == "login_title" %}{% set ttl = "Willkommen zurück, Commander." %}{% else %}{% set ttl = ttl | striptags %}{% endif %}
 
 {% set subtitle = T("login_subtitle") %}
 {% if subtitle == "login_subtitle" %}
-  {% set subtitle = "Logge dich ein und übernimm wieder deine Kolonie." %}
+  {% set subtitle = "Logge dich ein und übernimm wieder das Kommando deiner Kolonie." %}
 {% else %}
   {% set subtitle = subtitle | striptags %}
 {% endif %}
@@ -44,82 +44,81 @@
 <div class="gc-page auth-page auth-page--login">
 
   <div class="auth-backdrop" aria-hidden="true"></div>
+  <div class="auth-backdrop-form" aria-hidden="true"></div>
 
-  <section class="auth-card auth-card--login" aria-label="{{ ttl }}">
+  <div class="auth-shell">
 
-    <header class="auth-card-head">
-      <p class="auth-eyebrow">{{ T("title") if T("title") != "title" else "Genesis Colonies" }}</p>
-      <h1 class="auth-card-title">{{ ttl }}</h1>
-      <p class="auth-card-sub">{{ subtitle }}</p>
-    </header>
+    <div class="auth-hero">
+      <p class="auth-eyebrow">Genesis Colonies</p>
+      <h1 class="auth-hero-title">{{ ttl }}</h1>
+      <p class="auth-hero-sub">{{ subtitle }}</p>
+    </div>
 
-    {% if err %}
-      <div class="auth-error auth-terminal-alert" id="form-error" role="alert" aria-live="assertive" tabindex="-1">
-        <span class="auth-terminal-alert-tag" aria-hidden="true">Alert</span>
-        <span class="auth-terminal-alert-text">{{ err | striptags }}</span>
-      </div>
-    {% endif %}
+    <section class="auth-panel auth-panel--login" aria-label="{{ ttl }}">
 
-    {% set user_desc = "username-help" ~ (" form-error" if err else "") %}
-    {% set pass_desc = "password-help" ~ (" form-error" if err else "") %}
+      {% if err %}
+        <div class="auth-error auth-terminal-alert" id="form-error" role="alert" aria-live="assertive" tabindex="-1">
+          <span class="auth-terminal-alert-tag" aria-hidden="true">Alert</span>
+          <span class="auth-terminal-alert-text">{{ err | striptags }}</span>
+        </div>
+      {% endif %}
 
-    <form method="POST"
-          action="{{ url_for('login') }}"
-          class="auth-form"
-          novalidate
-          data-validate="login">
+      <form method="POST"
+            action="{{ url_for('login') }}"
+            class="auth-form"
+            novalidate
+            data-validate="login">
 
-      <label class="auth-label" for="username">{{ lbl_user }}</label>
-      <input
-        id="username"
-        type="text"
-        name="username"
-        class="auth-input"
-        placeholder="{{ ph_user }}"
-        autocomplete="username"
-        required
-        minlength="3"
-        maxlength="24"
-        aria-describedby="{{ user_desc }}"
-        {% if err %}aria-invalid="true"{% endif %}
-        value="{{ (request.form.get('username') or '') if request.method == 'POST' else '' }}"
-      >
+        <label class="auth-label" for="username">{{ lbl_user }}</label>
+        <input
+          id="username"
+          type="text"
+          name="username"
+          class="auth-input"
+          placeholder="{{ ph_user }}"
+          autocomplete="username"
+          required
+          minlength="3"
+          maxlength="24"
+          {% if err %}aria-invalid="true"{% endif %}
+          value="{{ (request.form.get('username') or '') if request.method == 'POST' else '' }}"
+        >
 
-      <label class="auth-label" for="password">{{ lbl_pass }}</label>
-      <input
-        id="password"
-        type="password"
-        name="password"
-        class="auth-input"
-        placeholder="{{ ph_pass }}"
-        autocomplete="current-password"
-        required
-        minlength="6"
-        aria-describedby="{{ pass_desc }}"
-        {% if err %}aria-invalid="true"{% endif %}
-      >
+        <label class="auth-label" for="password">{{ lbl_pass }}</label>
+        <input
+          id="password"
+          type="password"
+          name="password"
+          class="auth-input"
+          placeholder="{{ ph_pass }}"
+          autocomplete="current-password"
+          required
+          minlength="6"
+          {% if err %}aria-invalid="true"{% endif %}
+        >
 
-      <div class="auth-inline-link">
-        <a href="{{ url_for('forgot_password') }}">
-          {{ T("login_forgot_password") if T("login_forgot_password") != "login_forgot_password" else "Passwort vergessen?" }}
-        </a>
-      </div>
+        <div class="auth-inline-link">
+          <a href="{{ url_for('forgot_password') }}">
+            {{ T("login_forgot_password") if T("login_forgot_password") != "login_forgot_password" else "Passwort vergessen?" }}
+          </a>
+        </div>
 
-      <button type="submit"
-              class="gc-btn gc-btn-primary gc-btn-lg auth-btn-primary landing-btn-primary"
-              data-loading-text="{{ btn_loading }}">
-        {{ btn }}
-      </button>
+        <button type="submit"
+                class="gc-btn gc-btn-primary gc-btn-lg auth-btn-primary landing-btn-primary"
+                data-loading-text="{{ btn_loading }}">
+          {{ btn }}
+        </button>
 
-      <div class="auth-error auth-terminal-alert hidden" id="client-error" role="alert" aria-live="assertive" tabindex="-1"></div>
-    </form>
+        <div class="auth-error auth-terminal-alert hidden" id="client-error" role="alert" aria-live="assertive" tabindex="-1"></div>
+      </form>
 
-    <footer class="auth-footer">
-      <span>{{ footer_noacc }} <a href="{{ url_for('register') }}">{{ footer_create }}</a></span>
-      <span><a href="{{ url_for('landing') }}">{{ footer_back }}</a></span>
-    </footer>
+      <footer class="auth-footer">
+        <span>{{ footer_noacc }} <a href="{{ url_for('register') }}">{{ footer_create }}</a></span>
+        <span><a href="{{ url_for('landing') }}">{{ footer_back }}</a></span>
+      </footer>
 
-  </section>
+    </section>
+  </div>
 </div>
 
 {% if err %}

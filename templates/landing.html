@@ -1,43 +1,6 @@
 {% extends "base.html" %}
 
-{% block extra_head %}
-<script>
-(function initLandingAmbience() {
-  function boot() {
-    var audio = document.getElementById("landing-ambience");
-    if (!audio || audio.dataset.gcAmbienceReady === "1") return;
-    audio.dataset.gcAmbienceReady = "1";
-    audio.volume = 0.15;
-
-    function tryPlay() {
-      var p = audio.play();
-      if (p && typeof p.catch === "function") p.catch(function () {});
-    }
-
-    tryPlay();
-
-    function unlock() {
-      tryPlay();
-    }
-    document.addEventListener("pointerdown", unlock, { once: true, passive: true });
-    document.addEventListener("keydown", unlock, { once: true });
-
-    if (window.GC && typeof GC.registerCleanup === "function") {
-      GC.registerCleanup(function () {
-        audio.pause();
-        audio.currentTime = 0;
-      });
-    }
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot, { once: true });
-  } else {
-    boot();
-  }
-})();
-</script>
-{% endblock %}
+{% block extra_head %}{% endblock %}
 
 {% block content %}
 
@@ -279,12 +242,5 @@
   </section>
 
 </div>
-
-<audio id="landing-ambience"
-       class="landing-ambience"
-       loop
-       preload="metadata"
-       src="{{ url_for('static', filename='img/background_sound.mp3') }}?v={{ GC_ASSET_VERSION }}"
-       aria-hidden="true"></audio>
 
 {% endblock %}
