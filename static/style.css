@@ -1484,30 +1484,15 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 @keyframes landing-btn-glow{
   0%, 100%{
     box-shadow:
-      0 0 0 1px rgba(70, 229, 255, 0.45),
-      0 8px 28px rgba(70, 229, 255, 0.22),
-      0 0 18px rgba(70, 229, 255, 0.08);
+      0 0 0 1px rgba(70, 229, 255, 0.42),
+      0 4px 16px rgba(70, 229, 255, 0.16),
+      inset 0 0 14px rgba(70, 229, 255, 0.07);
   }
   50%{
     box-shadow:
-      0 0 0 1px rgba(127, 255, 217, 0.7),
-      0 10px 40px rgba(70, 229, 255, 0.38),
-      0 0 32px rgba(70, 229, 255, 0.2);
-  }
-}
-
-@keyframes landing-btn-power{
-  0%, 88%, 100%{
-    transform: scale(1);
-    filter: brightness(1);
-  }
-  92%{
-    transform: scale(1.04);
-    filter: brightness(1.12);
-  }
-  96%{
-    transform: scale(1.01);
-    filter: brightness(1.05);
+      0 0 0 1px rgba(127, 255, 217, 0.62),
+      0 6px 22px rgba(70, 229, 255, 0.26),
+      inset 0 0 20px rgba(70, 229, 255, 0.13);
   }
 }
 
@@ -1665,7 +1650,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   flex-direction: column;
   gap: 32px;
   min-height: calc(100vh - var(--gc-header-h) - var(--gc-page-pad-y) * 2);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .landing-fx{
@@ -1808,7 +1793,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   align-items: center;
   min-height: clamp(480px, 72vh, 720px);
   padding: clamp(24px, 4vw, 48px) 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .landing-hero-scan{
@@ -1921,6 +1906,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
+  padding: 10px 0;
 }
 
 .landing-actions .gc-btn-lg{
@@ -1933,39 +1919,18 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 }
 
 .landing-actions .landing-btn-primary{
-  position: relative;
-  z-index: 0;
   transition: transform 0.22s ease, box-shadow 0.22s ease, filter 0.22s ease;
-  animation:
-    landing-btn-glow 2.6s ease-in-out infinite,
-    landing-btn-power 4.5s ease-in-out infinite;
-}
-
-.landing-actions .landing-btn-primary::before{
-  content: "";
-  position: absolute;
-  inset: -6px;
-  border-radius: inherit;
-  background: radial-gradient(ellipse at 50% 50%, rgba(70, 229, 255, 0.35), transparent 68%);
-  opacity: 0;
-  z-index: -1;
-  transition: opacity 0.22s ease;
-  pointer-events: none;
+  animation: landing-btn-glow 2.8s ease-in-out infinite;
 }
 
 .landing-actions .landing-btn-primary:hover{
   animation: none;
-  transform: translateY(-3px) scale(1.03);
-  filter: brightness(1.1);
+  transform: translateY(-2px);
+  filter: brightness(1.08);
   box-shadow:
-    0 0 0 1px rgba(127, 255, 217, 0.75),
-    0 14px 42px rgba(70, 229, 255, 0.42),
-    0 0 40px rgba(70, 229, 255, 0.28),
-    0 0 80px rgba(70, 229, 255, 0.12);
-}
-
-.landing-actions .landing-btn-primary:hover::before{
-  opacity: 1;
+    0 0 0 1px rgba(127, 255, 217, 0.7),
+    0 6px 20px rgba(70, 229, 255, 0.3),
+    inset 0 0 22px rgba(70, 229, 255, 0.16);
 }
 
 .landing-features{
@@ -2155,7 +2120,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   }
 
   .landing-actions .landing-btn-primary{
-    animation: landing-btn-glow 2.6s ease-in-out infinite, landing-btn-power 4.5s ease-in-out infinite !important;
+    animation: landing-btn-glow 2.8s ease-in-out infinite !important;
   }
 }
 
