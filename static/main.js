@@ -6578,7 +6578,7 @@
     if (window.GC?.settings?.sound === false) return;
     try {
       const audio = new Audio("/static/sounds/lootboxes/lootbox_sound.mp3");
-      audio.volume = 0.45;
+      audio.volume = 0.2;
       audio.play().catch(() => {});
     } catch (_) {}
   }
