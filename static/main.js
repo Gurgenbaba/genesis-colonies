@@ -7258,21 +7258,34 @@
     )).join("");
   }
 
-  function selectAuctionHouseDetail(listingId) {
+  function toggleAuctionHouseExpand(listingId, forceOpen) {
     const page = document.getElementById("auction-house-page");
     if (!page || !listingId) return;
     const id = String(listingId);
+    const currentlyOpen = page.dataset.expandedAuction === id;
+    const open = forceOpen === true ? true : forceOpen === false ? false : !currentlyOpen;
+
+    page.querySelectorAll("[data-auction-expand]").forEach((expand) => {
+      expand.hidden = true;
+    });
     page.querySelectorAll("[data-auction-row]").forEach((row) => {
-      const active = row.dataset.auctionRow === id;
-      row.classList.toggle("is-selected", active);
-      row.setAttribute("aria-selected", active ? "true" : "false");
+      row.classList.remove("is-expanded", "is-selected");
+      row.setAttribute("aria-expanded", "false");
     });
-    page.querySelectorAll("[data-auction-detail]").forEach((panel) => {
-      const active = panel.dataset.auctionDetail === id;
-      panel.hidden = !active;
-      panel.classList.toggle("is-active", active);
-    });
-    page.dataset.selectedAuction = id;
+
+    if (!open) {
+      delete page.dataset.expandedAuction;
+      return;
+    }
+
+    const row = page.querySelector(`[data-auction-row="${id}"]`);
+    const expand = page.querySelector(`[data-auction-expand="${id}"]`);
+    if (row) {
+      row.classList.add("is-expanded", "is-selected");
+      row.setAttribute("aria-expanded", "true");
+    }
+    if (expand) expand.hidden = false;
+    page.dataset.expandedAuction = id;
   }
 
   function patchAuctionHousePanel(ah) {
@@ -7297,19 +7310,21 @@
         _setIfChanged(bidLabelEl, label);
       }
 
-      page.querySelectorAll(`[data-auction-current-bid="${id}"], [data-auction-detail-bid="${id}"]`).forEach((el) => {
-        _setIfChanged(el, bidTxt);
-      });
+      const bidEl = page.querySelector(`[data-auction-current-bid="${id}"]`);
+      if (bidEl) _setIfChanged(bidEl, bidTxt);
 
-      const currencyEl = page.querySelector(`[data-auction-currency-label="${id}"]`);
-      if (currencyEl && currencyTxt) _setIfChanged(currencyEl, currencyTxt);
-      const detailCurrencyEl = page.querySelector(`[data-auction-detail-currency="${id}"]`);
-      if (detailCurrencyEl && currencyTxt) _setIfChanged(detailCurrencyEl, currencyTxt);
+      const currencyWrap = page.querySelector(`[data-auction-currency-label="${id}"]`);
+      if (currencyWrap && currencyTxt) {
+        const labelSpan = currencyWrap.querySelector("span:not(.gc-res-icon):not([class*='gc-res-icon'])");
+        if (labelSpan) _setIfChanged(labelSpan, currencyTxt);
+      }
 
       const rowBidderEl = page.querySelector(`[data-auction-row-bidder="${id}"]`);
       if (rowBidderEl) {
         const rowTxt = hasBids
-          ? (a.is_leading ? tt("auction_house_you_short", "Du") : String(a.current_bidder_name || "—"))
+          ? (a.is_leading
+            ? tt("auction_house_you_lead_short", "Du (Führst)")
+            : String(a.current_bidder_name || "—"))
           : "—";
         _setIfChanged(rowBidderEl, rowTxt);
       }
@@ -7366,31 +7381,96 @@
       }
       renderAuctionRecentBids(id, a.recent_bids || []);
     });
-    const selected = page.dataset.selectedAuction
-      || page.querySelector("[data-auction-row].is-selected")?.dataset.auctionRow
-      || auctions[0]?.id;
-    if (selected) selectAuctionHouseDetail(selected);
+    const expanded = page.dataset.expandedAuction;
+    if (expanded && page.querySelector(`[data-auction-expand="${expanded}"]`)) {
+      toggleAuctionHouseExpand(expanded, true);
+    }
+    patchAuctionHouseRotation(ah);
+  }
+
+  function formatAuctionRotationRemain(seconds) {
+    const s = Math.max(0, Math.floor(Number(seconds) || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const secR = s % 60;
+    if (h > 0) return `${h}h ${m}m ${secR}s`;
+    if (m > 0) return `${m}m ${secR}s`;
+    return `${secR}s`;
+  }
+
+  async function refreshAuctionHouseState() {
+    if (GC._auctionHouseRefreshInFlight) return;
+    GC._auctionHouseRefreshInFlight = true;
+    try {
+      const res = await GC.fetchJSON("/api/auction-house/state");
+      const ah = res?.auction_house;
+      if (ah) patchAuctionHousePanel(ah);
+    } catch (err) {
+      console.warn("[GC] auction house state refresh failed", err);
+    } finally {
+      GC._auctionHouseRefreshInFlight = false;
+    }
+  }
+
+  function patchAuctionHouseRotation(ah) {
+    const page = document.getElementById("auction-house-page");
+    if (!page || !ah) return;
+    const nextAt = parseInt(String(ah.next_rotation_at || page.dataset.nextRotationAt || "0"), 10);
+    if (nextAt > 0) page.dataset.nextRotationAt = String(nextAt);
+    const timer = page.querySelector("[data-auction-rotation-timer]");
+    if (timer && nextAt > 0) timer.dataset.nextRotationAt = String(nextAt);
+    patchAuctionHouseUpcoming(ah.upcoming || []);
+  }
+
+  function patchAuctionHouseUpcoming(upcoming) {
+    const page = document.getElementById("auction-house-page");
+    if (!page || !Array.isArray(upcoming)) return;
+    upcoming.forEach((u) => {
+      const id = u.preview_index ?? u.id;
+      if (id === undefined || id === null) return;
+      const wrap = page.querySelector(`[data-auction-upcoming-available="${id}"]`);
+      if (!wrap) return;
+      const availableAt = u.available_at ?? u.starts_at;
+      if (availableAt) wrap.dataset.availableAt = String(availableAt);
+    });
   }
 
   function tickAuctionHouseCountdowns() {
     const page = document.getElementById("auction-house-page");
     if (!page) return;
     const now = Math.floor(getTimerServerNow());
-    const timerSelectors = ".auction-house-time-value, .auction-house-detail-time-value";
-    page.querySelectorAll("[data-auction-remaining], [data-auction-detail-remaining]").forEach((wrap) => {
+    page.querySelectorAll("[data-auction-remaining]").forEach((wrap) => {
       const endsAt = parseInt(
-        wrap.dataset.endsAt
-        || wrap.closest("[data-auction-card]")?.dataset.endsAt
-        || wrap.closest("[data-auction-detail]")?.querySelector("[data-ends-at]")?.dataset.endsAt
-        || "0",
+        wrap.dataset.endsAt || wrap.closest("[data-auction-card]")?.dataset.endsAt || "0",
         10
       );
       if (!endsAt) return;
       const rem = Math.max(0, endsAt - now);
-      const txt = formatCountdownRemain(rem);
-      wrap.querySelectorAll(timerSelectors).forEach((valEl) => _setIfChanged(valEl, txt));
-      wrap.classList.toggle("is-urgent", rem > 0 && rem < 3600);
+      const valEl = wrap.querySelector(".auction-house-time-value");
+      if (valEl) _setIfChanged(valEl, formatCountdownRemain(rem));
     });
+    page.querySelectorAll("[data-auction-upcoming-available]").forEach((wrap) => {
+      const availableAt = parseInt(wrap.dataset.availableAt || "0", 10);
+      if (!availableAt) return;
+      const rem = Math.max(0, availableAt - now);
+      const valEl = wrap.querySelector(".auction-house-upcoming-available-value");
+      if (valEl) _setIfChanged(valEl, formatCountdownRemain(rem));
+    });
+    const rotWrap = page.querySelector("[data-auction-rotation-timer]");
+    if (rotWrap) {
+      const nextAt = parseInt(rotWrap.dataset.nextRotationAt || page.dataset.nextRotationAt || "0", 10);
+      if (nextAt > 0) {
+        const rem = Math.max(0, nextAt - now);
+        const valEl = rotWrap.querySelector(".auction-rotation-timer-value");
+        if (valEl) _setIfChanged(valEl, formatAuctionRotationRemain(rem));
+        if (rem <= 0 && !GC._auctionHouseRotationRefreshDone) {
+          GC._auctionHouseRotationRefreshDone = true;
+          refreshAuctionHouseState().finally(() => {
+            GC._auctionHouseRotationRefreshDone = false;
+          });
+        }
+      }
+    }
   }
 
   function bindAuctionHouseOnce() {
@@ -7399,8 +7479,8 @@
 
     document.addEventListener("click", (ev) => {
       const row = ev.target?.closest?.("[data-auction-row]");
-      if (row && !ev.target?.closest?.("[data-auction-bid-form], button, a, input, label")) {
-        selectAuctionHouseDetail(row.dataset.auctionRow);
+      if (row && !ev.target?.closest?.("[data-auction-expand], [data-auction-bid-form], button, a, input, label")) {
+        toggleAuctionHouseExpand(row.dataset.auctionRow);
         return;
       }
 
@@ -7425,7 +7505,7 @@
       if (!row) return;
       if (ev.key === "Enter" || ev.key === " ") {
         ev.preventDefault();
-        selectAuctionHouseDetail(row.dataset.auctionRow);
+        toggleAuctionHouseExpand(row.dataset.auctionRow);
       }
     });
 
@@ -7595,10 +7675,6 @@
     if (!page || page.dataset.ready !== "1") return;
     const state = parseAuctionHousePageState();
     if (state) patchAuctionHousePanel(state);
-    else {
-      const firstRow = page.querySelector("[data-auction-row]");
-      if (firstRow) selectAuctionHouseDetail(firstRow.dataset.auctionRow);
-    }
     tickAuctionHouseCountdowns();
     GC.setSafeInterval(tickAuctionHouseCountdowns, 1000);
     GC.registerCleanup(() => {});

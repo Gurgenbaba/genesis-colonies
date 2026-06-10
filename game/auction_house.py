@@ -20,8 +20,10 @@ from .player_display import commander_display_name
 AUCTION_CURRENCIES = ("metal", "crystal", "fuel_cells")
 
 ACTIVE_AUCTION_TARGET = 3
+UPCOMING_AUCTION_TARGET = 4
 MIN_DURATION_SEC = 6 * 3600
 MAX_DURATION_SEC = 12 * 3600
+ROTATION_INTERVAL_SECONDS = 6 * 3600
 MIN_BID_INCREASE_PCT = 0.05
 
 # Ticket box keys → canonical inventory container keys (GC-540).
@@ -438,6 +440,94 @@ def generate_auction_rotation(*, conn=None, now: Optional[float] = None, seed: O
     return created
 
 
+def _compute_next_rotation_at(conn, now_i: int) -> int:
+    """Next slot opens when the earliest active auction ends."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT MIN(ends_at) AS m FROM auction_house_listings
+        WHERE status = 'active' AND ends_at > ?;
+        """,
+        (int(now_i),),
+    )
+    row = cur.fetchone()
+    if row and row["m"] is not None:
+        return int(row["m"])
+    return int(now_i)
+
+
+def get_rotation_meta(conn, *, now: Optional[float] = None) -> Dict[str, int]:
+    now_i = int(now if now is not None else time.time())
+    next_at = _compute_next_rotation_at(conn, now_i)
+    return {
+        "next_rotation_at": next_at,
+        "rotation_interval_seconds": ROTATION_INTERVAL_SECONDS,
+        "seconds_until_rotation": max(0, next_at - now_i),
+    }
+
+
+def build_upcoming_preview(
+    *,
+    next_rotation_at: int,
+    rotation_interval_seconds: int,
+    count: int = UPCOMING_AUCTION_TARGET,
+    now: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """Deterministic upcoming lootbox preview tied to rotation anchor."""
+    now_i = int(now if now is not None else time.time())
+    rng = random.Random(int(next_rotation_at))
+    items: List[Dict[str, Any]] = []
+    for i in range(int(count)):
+        box_key = _weighted_box_choice(rng)
+        guard = 0
+        while (not is_auction_allowed_box(box_key) or is_event_box(box_key)) and guard < 24:
+            box_key = _weighted_box_choice(rng)
+            guard += 1
+        if not is_auction_allowed_box(box_key) or is_event_box(box_key):
+            box_key = "generic_supply_container"
+        inv_key = resolve_inventory_key(box_key) or box_key
+        meta = item_catalog_entry(inv_key)
+        available_at = int(next_rotation_at) + i * int(rotation_interval_seconds)
+        items.append(
+            {
+                "preview_index": i,
+                "id": i,
+                "box_key": box_key,
+                "inventory_key": inv_key,
+                "name_key": meta["name_key"],
+                "rarity": meta["rarity"],
+                "image": meta.get("image"),
+                "currency": rng.choice(AUCTION_CURRENCIES),
+                "start_price": _start_price_for_box(box_key),
+                "available_at": available_at,
+                "seconds_until_available": max(0, available_at - now_i),
+                "rotation_anchor": int(next_rotation_at),
+            }
+        )
+    return items
+
+
+def get_upcoming_auctions(*, conn=None, now: Optional[float] = None) -> List[Dict[str, Any]]:
+    own = conn is None
+    if own:
+        conn = db()
+    if not auction_schema_ready(conn):
+        if own:
+            conn.close()
+        return []
+    try:
+        now_i = int(now if now is not None else time.time())
+        meta = get_rotation_meta(conn, now=now_i)
+        return build_upcoming_preview(
+            next_rotation_at=meta["next_rotation_at"],
+            rotation_interval_seconds=meta["rotation_interval_seconds"],
+            now=now_i,
+        )
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def get_active_auctions(player_id: int, *, conn=None) -> List[Dict[str, Any]]:
     own = conn is None
     if own:
@@ -486,10 +576,21 @@ def build_auction_house_state(
             "my_bids": 0,
             "won_auctions": 0,
         }
+        now_i = int(time.time())
+        rotation = get_rotation_meta(conn, now=now_i) if ready else {
+            "next_rotation_at": now_i,
+            "rotation_interval_seconds": ROTATION_INTERVAL_SECONDS,
+            "seconds_until_rotation": 0,
+        }
+        upcoming = get_upcoming_auctions(conn=conn, now=now_i) if ready else []
         return {
             "ready": ready,
             "auctions": auctions,
+            "upcoming": upcoming,
             "stats": stats,
+            "next_rotation_at": int(rotation["next_rotation_at"]),
+            "rotation_interval_seconds": int(rotation["rotation_interval_seconds"]),
+            "seconds_until_rotation": int(rotation["seconds_until_rotation"]),
             "balances": {
                 "metal": max(0, int(metal)),
                 "crystal": max(0, int(crystal)),

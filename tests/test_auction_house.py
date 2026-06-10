@@ -12,10 +12,15 @@ import pytest
 from game import db as gdb
 from game.auction_house import (
     ACTIVE_AUCTION_TARGET,
+    ROTATION_INTERVAL_SECONDS,
+    UPCOMING_AUCTION_TARGET,
     auction_schema_ready,
+    build_auction_house_state,
     finish_due_auctions,
     generate_auction_rotation,
     get_active_auctions,
+    get_rotation_meta,
+    get_upcoming_auctions,
     is_auction_allowed_box,
     is_event_box,
     place_bid,
@@ -121,6 +126,58 @@ def test_get_active_auctions_seeds_rotation(auction_db):
     auctions = get_active_auctions(uid, conn=conn)
     assert len(auctions) == ACTIVE_AUCTION_TARGET
     assert all(a["seconds_remaining"] > 0 for a in auctions)
+    conn.close()
+
+
+def test_upcoming_auctions_seeded(auction_db):
+    conn = db()
+    uid = _player(conn=conn)
+    get_active_auctions(uid, conn=conn)
+    upcoming = get_upcoming_auctions(conn=conn)
+    assert len(upcoming) == UPCOMING_AUCTION_TARGET
+    assert all(u["seconds_until_available"] >= 0 for u in upcoming)
+    assert all(not is_event_box(u["box_key"]) for u in upcoming)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    state = build_auction_house_state(uid, pid, conn=conn)
+    assert len(state["upcoming"]) == UPCOMING_AUCTION_TARGET
+    assert state["next_rotation_at"] > 0
+    assert state["rotation_interval_seconds"] == ROTATION_INTERVAL_SECONDS
+    conn.close()
+
+
+def test_upcoming_times_tied_to_rotation_anchor(auction_db):
+    conn = db()
+    uid = _player(conn=conn)
+    get_active_auctions(uid, conn=conn)
+    meta = get_rotation_meta(conn)
+    upcoming = get_upcoming_auctions(conn=conn)
+    anchor = int(meta["next_rotation_at"])
+    interval = int(meta["rotation_interval_seconds"])
+    assert upcoming[0]["available_at"] == anchor
+    assert upcoming[1]["available_at"] == anchor + interval
+    assert upcoming[2]["available_at"] == anchor + interval * 2
+    assert all(not is_event_box(u["box_key"]) for u in upcoming)
+    conn.close()
+
+
+def test_next_rotation_at_stable_within_same_window(auction_db):
+    conn = db()
+    uid = _player(conn=conn)
+    get_active_auctions(uid, conn=conn)
+    meta1 = get_rotation_meta(conn)
+    upcoming1 = get_upcoming_auctions(conn=conn)
+    meta2 = get_rotation_meta(conn)
+    upcoming2 = get_upcoming_auctions(conn=conn)
+    assert meta1["next_rotation_at"] == meta2["next_rotation_at"]
+    assert [u["box_key"] for u in upcoming1] == [u["box_key"] for u in upcoming2]
+    conn.close()
+
+
+def test_active_auctions_exclude_event_boxes(auction_db):
+    conn = db()
+    uid = _player(conn=conn)
+    auctions = get_active_auctions(uid, conn=conn)
+    assert all(not is_event_box(a["box_key"]) for a in auctions)
     conn.close()
 
 
@@ -305,6 +362,8 @@ def test_auction_house_page_reachable(auction_db, monkeypatch):
     body = res.get_data(as_text=True)
     assert "auction-house-page" in body
     assert "auction-house-card" in body or "auction-house-table" in body or "auction-house-empty" in body
+    assert "auction-upcoming-panel" in body or "auction-house-upcoming" in body or "auction-house-empty" in body
+    assert "auction-stats-bar" in body or "auction-house-empty" in body
 
 
 def test_context_planet_resources_used_for_bid(auction_db):

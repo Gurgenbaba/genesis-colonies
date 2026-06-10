@@ -16658,7 +16658,8 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   }
 }
 
-/* GC-550 — Auction House */
+/* GC-550 / GC-550B — Auction House Terminal */
+.auction-page,
 .auction-house-page {
   max-width: 100%;
 }
@@ -16690,36 +16691,83 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   margin: 8px 0 0;
 }
 
+.auction-stats-bar,
 .auction-house-stats-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
   margin-bottom: 14px;
+  padding: 0;
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  background: linear-gradient(165deg, rgba(3, 18, 30, 0.94) 0%, rgba(1, 10, 18, 0.86) 100%);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 
-.auction-house-stat.fleet-slots-badge {
-  min-width: 160px;
-  flex: 1 1 160px;
+.auction-stat,
+.auction-house-stat {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  gap: 2px 10px;
+  align-items: center;
+  padding: 10px 14px;
+  min-height: 58px;
 }
 
+.auction-stat + .auction-stat,
+.auction-house-stat + .auction-house-stat {
+  border-left: 1px solid rgba(0, 229, 255, 0.14);
+}
+
+.auction-stat-icon {
+  grid-row: 1 / span 2;
+  font-size: 1.1rem;
+  opacity: 0.85;
+}
+
+.auction-stat-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+}
+
+.auction-stat-value,
+.auction-stat strong {
+  grid-column: 2;
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--gc-accent);
+}
+
+.auction-active-panel,
 .auction-house-panel-wrap {
   padding: 14px;
+  background: linear-gradient(165deg, rgba(3, 18, 30, 0.94) 0%, rgba(1, 10, 18, 0.88) 100%);
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.32);
 }
 
 .auction-house-panel-header {
   margin-bottom: 12px;
 }
 
-/* Terminal layout: table + detail panel */
-.auction-house-terminal {
+.auction-layout,
+.auction-house-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
   gap: 14px;
   align-items: start;
 }
 
-.auction-house-terminal-list {
+.auction-house-main {
   min-width: 0;
+}
+
+.auction-house-table-scroll {
+  margin-top: 4px;
 }
 
 .auction-house-table {
@@ -16730,24 +16778,170 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   min-width: 11rem;
 }
 
-.auction-house-table .col-bid {
-  text-align: right;
-  font-weight: 600;
-  color: var(--gc-accent);
+.auction-house-table tbody tr.auction-row,
+.auction-house-table tbody tr.auction-house-row {
+  height: 88px;
 }
 
+.auction-house-table .col-bid,
+.auction-bid-cell {
+  text-align: right;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--gc-text);
+}
+
+.auction-currency-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+  color: var(--gc-text-soft);
+}
+
+.auction-row,
 .auction-house-row {
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+  background: linear-gradient(90deg, rgba(2, 12, 22, 0.72) 0%, rgba(4, 16, 28, 0.5) 100%);
 }
 
-.auction-house-row.is-selected {
+.auction-house-row--epic.is-selected,
+.auction-house-row--epic.is-expanded { box-shadow: inset 3px 0 0 rgba(199, 125, 255, 0.75); }
+.auction-house-row--rare.is-selected,
+.auction-house-row--rare.is-expanded { box-shadow: inset 3px 0 0 rgba(94, 176, 255, 0.75); }
+.auction-house-row--legendary.is-selected,
+.auction-house-row--legendary.is-expanded { box-shadow: inset 3px 0 0 rgba(255, 184, 77, 0.8); }
+.auction-house-row--uncommon.is-selected,
+.auction-house-row--uncommon.is-expanded { box-shadow: inset 3px 0 0 rgba(110, 207, 143, 0.75); }
+
+.auction-house-row.is-selected,
+.auction-house-row.is-expanded {
   background: rgba(70, 229, 255, 0.08);
   box-shadow: inset 3px 0 0 var(--gc-accent);
 }
 
-.auction-house-row--leading.is-selected {
+.auction-house-row--leading.is-selected,
+.auction-house-row--leading.is-expanded {
   background: rgba(70, 229, 255, 0.1);
+}
+
+.auction-house-col-chevron {
+  width: 2rem;
+  text-align: center;
+  color: var(--gc-text-dim);
+}
+
+.auction-house-chevron {
+  display: inline-block;
+  font-size: 1.1rem;
+  transition: transform 0.18s ease;
+}
+
+.auction-house-row.is-expanded .auction-house-chevron {
+  transform: rotate(90deg);
+  color: var(--gc-accent);
+}
+
+.auction-house-expand td {
+  padding: 0 !important;
+  border-top: none;
+  background: rgba(3, 8, 18, 0.72);
+}
+
+.auction-house-expand-inner {
+  display: grid;
+  gap: 12px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid rgba(70, 229, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(70, 229, 255, 0.06);
+}
+
+.auction-house-expand-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.auction-house-footnote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  font-size: 0.78rem;
+  color: var(--gc-text-dim);
+}
+
+.auction-house-footnote-icon {
+  color: var(--gc-accent);
+}
+
+.auction-upcoming-panel,
+.auction-house-upcoming {
+  position: sticky;
+  top: 12px;
+  padding: 12px;
+  background: linear-gradient(165deg, rgba(3, 18, 30, 0.94) 0%, rgba(1, 10, 18, 0.88) 100%);
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.32);
+}
+
+.auction-house-upcoming-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.auction-upcoming-card,
+.auction-house-upcoming-item {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(0, 229, 255, 0.14);
+  background: rgba(1, 10, 18, 0.82);
+}
+
+.auction-house-upcoming-item--epic { border-color: rgba(199, 125, 255, 0.22); }
+.auction-house-upcoming-item--rare { border-color: rgba(94, 176, 255, 0.22); }
+.auction-house-upcoming-item--legendary { border-color: rgba(255, 184, 77, 0.24); }
+.auction-house-upcoming-item--uncommon { border-color: rgba(110, 207, 143, 0.2); }
+
+.auction-house-upcoming-thumb {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+}
+
+.auction-house-upcoming-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.auction-house-upcoming-name {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--gc-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auction-house-upcoming-available {
+  font-size: 0.76rem;
+}
+
+.auction-house-upcoming-empty {
+  padding: 12px;
+  font-size: 0.82rem;
+  color: var(--gc-text-dim);
+  text-align: center;
 }
 
 .auction-house-row-item {
@@ -16758,8 +16952,8 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 }
 
 .auction-house-thumb {
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   flex-shrink: 0;
   object-fit: contain;
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
@@ -16796,120 +16990,54 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   font-weight: 600;
 }
 
-.auction-house-time,
-.auction-house-detail-time {
+.auction-time,
+.auction-house-time {
   display: inline-flex;
   align-items: center;
-  font-size: 0.84rem;
-  color: var(--gc-text-soft);
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 600;
 }
 
-.auction-house-time.is-urgent,
-.auction-house-detail-time.is-urgent {
+.auction-time-warn,
+.auction-house-time,
+.auction-house-upcoming-available {
   color: #ffb84d;
 }
 
-.auction-house-detail-panel {
-  position: sticky;
-  top: 12px;
-  display: grid;
-  gap: 0;
-  padding: 12px;
-  border: 1px solid rgba(70, 229, 255, 0.16);
-  background: rgba(5, 10, 22, 0.72);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+.auction-time-icon {
+  font-size: 0.9rem;
 }
 
-.auction-house-detail {
-  display: grid;
-  gap: 12px;
-}
-
-.auction-house-detail-head {
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-
-.auction-house-detail-visual {
-  display: grid;
-  place-items: center;
-  width: 88px;
-  height: 88px;
-  border: 1px solid rgba(70, 229, 255, 0.14);
-  background: radial-gradient(ellipse at 50% 35%, rgba(80, 140, 220, 0.1), transparent 70%);
-}
-
-.auction-house-detail-visual--epic { border-color: rgba(199, 125, 255, 0.28); }
-.auction-house-detail-visual--rare { border-color: rgba(94, 176, 255, 0.28); }
-.auction-house-detail-visual--uncommon { border-color: rgba(110, 207, 143, 0.28); }
-.auction-house-detail-visual--legendary { border-color: rgba(255, 184, 77, 0.32); }
-
-.auction-house-detail-img {
-  width: 72px;
-  height: 72px;
-  object-fit: contain;
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
-}
-
-.auction-house-detail-intro {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.auction-house-detail-name {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
-  line-height: 1.2;
-  color: var(--gc-text);
-}
-
-.auction-house-detail-stats {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 10px;
-  border: 1px solid rgba(70, 229, 255, 0.1);
-  background: rgba(3, 8, 18, 0.55);
-}
-
-.auction-house-detail-stat {
-  display: grid;
-  grid-template-columns: 7.5rem minmax(0, 1fr);
-  gap: 8px;
+.auction-rotation-timer {
+  display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
+  gap: 8px 12px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  background: rgba(1, 10, 18, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
 }
 
-.auction-house-detail-stat dt {
-  margin: 0;
-  font-size: 0.72rem;
+.auction-rotation-timer-label {
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--gc-text-dim);
 }
 
-.auction-house-detail-stat dd {
-  margin: 0;
-  font-size: 0.88rem;
-  color: var(--gc-text-soft);
-}
-
-.auction-house-detail-bid {
-  font-size: 1.15rem;
+.auction-rotation-timer-value {
+  font-size: 1.05rem;
   font-weight: 700;
-  color: var(--gc-accent);
+  color: #ffb84d;
 }
 
-.auction-house-detail-currency {
-  display: inline-block;
-  margin-left: 6px;
-  font-size: 0.78rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.auction-house-bid-hint {
+  margin: 0;
+  font-size: 0.76rem;
   color: var(--gc-text-dim);
 }
 
@@ -17119,23 +17247,27 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 }
 
 @media (max-width: 960px) {
-  .auction-house-terminal {
+  .auction-layout,
+  .auction-house-layout {
     grid-template-columns: 1fr;
   }
 
-  .auction-house-detail-panel {
+  .auction-upcoming-panel,
+  .auction-house-upcoming {
     position: static;
   }
 }
 
 @media (max-width: 640px) {
+  .auction-stats-bar,
   .auction-house-stats-bar {
     grid-template-columns: 1fr;
   }
 
-  .auction-house-detail-stat {
-    grid-template-columns: 1fr;
-    gap: 2px;
+  .auction-stat + .auction-stat,
+  .auction-house-stat + .auction-house-stat {
+    border-left: none;
+    border-top: 1px solid rgba(0, 229, 255, 0.14);
   }
 
   .auction-house-bid-row {
