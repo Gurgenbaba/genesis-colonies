@@ -5812,6 +5812,7 @@
       patchOverviewStatus(data.overview, data, buildings, prod);
       if (data.exchange) patchExchangePanel(data.exchange);
       if (data.scrapyard) patchScrapyardPanel(data.scrapyard);
+      if (data.auction_house) patchAuctionHousePanel(data.auction_house);
       patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, fuelCells, storageFuelCells);
       if (data.planet_teaser) patchPlanetTeaser(data.planet_teaser);
 
@@ -7198,6 +7199,409 @@
       const panel = document.getElementById("inventory-rewards-panel");
       if (panel) panel.hidden = true;
     });
+  }
+
+  function parseAuctionHousePageState() {
+    const el = document.getElementById("auction-house-page-state");
+    if (el && el.textContent) {
+      try { return JSON.parse(el.textContent); } catch (_) {}
+    }
+    return null;
+  }
+
+  function patchAuctionHouseStats(stats) {
+    const page = document.getElementById("auction-house-page");
+    if (!page || !stats) return;
+    const map = {
+      active: stats.active_auctions,
+      my_bids: stats.my_bids,
+      won: stats.won_auctions,
+    };
+    Object.entries(map).forEach(([key, val]) => {
+      const el = page.querySelector(`[data-auction-stat="${key}"]`);
+      if (el && val !== undefined) _setIfChanged(el, String(val));
+    });
+  }
+
+  function renderAuctionRecentBids(listingId, bids) {
+    const page = document.getElementById("auction-house-page");
+    if (!page) return;
+    const section = page.querySelector(`[data-auction-recent="${listingId}"]`);
+    if (!section) return;
+    const rows = Array.isArray(bids) ? bids : [];
+    let list = section.querySelector(`[data-auction-recent-list="${listingId}"]`);
+    let empty = section.querySelector(`[data-auction-recent-empty="${listingId}"]`);
+    if (!rows.length) {
+      if (list) list.remove();
+      if (!empty) {
+        empty = document.createElement("p");
+        empty.className = "auction-house-recent-empty";
+        empty.dataset.auctionRecentEmpty = String(listingId);
+        section.appendChild(empty);
+      }
+      empty.textContent = t("auction_house_recent_empty", "Noch keine Gebotshistorie.");
+      empty.hidden = false;
+      return;
+    }
+    if (empty) empty.remove();
+    if (!list) {
+      list = document.createElement("ul");
+      list.className = "auction-house-recent-list";
+      list.dataset.auctionRecentList = String(listingId);
+      section.appendChild(list);
+    }
+    list.innerHTML = rows.map((bid) => (
+      `<li class="auction-house-recent-row">`
+      + `<span class="auction-house-recent-name">${escapeHtml(String(bid.player_name || "—"))}</span>`
+      + `<span class="auction-house-recent-amount gc-mono">${escapeHtml(fmtNumber(bid.amount || 0))}</span>`
+      + `</li>`
+    )).join("");
+  }
+
+  function selectAuctionHouseDetail(listingId) {
+    const page = document.getElementById("auction-house-page");
+    if (!page || !listingId) return;
+    const id = String(listingId);
+    page.querySelectorAll("[data-auction-row]").forEach((row) => {
+      const active = row.dataset.auctionRow === id;
+      row.classList.toggle("is-selected", active);
+      row.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    page.querySelectorAll("[data-auction-detail]").forEach((panel) => {
+      const active = panel.dataset.auctionDetail === id;
+      panel.hidden = !active;
+      panel.classList.toggle("is-active", active);
+    });
+    page.dataset.selectedAuction = id;
+  }
+
+  function patchAuctionHousePanel(ah) {
+    const page = document.getElementById("auction-house-page");
+    if (!page || !ah || typeof ah !== "object") return;
+    const tt = (key, fallback) => t(key, fallback);
+    if (ah.stats) patchAuctionHouseStats(ah.stats);
+    const auctions = Array.isArray(ah.auctions) ? ah.auctions : [];
+    auctions.forEach((a) => {
+      const id = a.id;
+      if (!id) return;
+      const hasBids = Boolean(a.has_bids || (a.current_bid > 0 && a.current_bidder_id));
+      const displayBid = hasBids ? (a.current_bid || 0) : (a.display_bid || a.start_price || 0);
+      const bidTxt = fmtNumber(displayBid);
+      const currencyTxt = a.currency ? tt(`resource_${a.currency}`, a.currency) : "";
+
+      const bidLabelEl = page.querySelector(`[data-auction-bid-label="${id}"]`);
+      if (bidLabelEl) {
+        const label = hasBids
+          ? tt("auction_house_current_bid_upper", "AKTUELLES GEBOT")
+          : tt("auction_house_start_bid_upper", "STARTGEBOT");
+        _setIfChanged(bidLabelEl, label);
+      }
+
+      page.querySelectorAll(`[data-auction-current-bid="${id}"], [data-auction-detail-bid="${id}"]`).forEach((el) => {
+        _setIfChanged(el, bidTxt);
+      });
+
+      const currencyEl = page.querySelector(`[data-auction-currency-label="${id}"]`);
+      if (currencyEl && currencyTxt) _setIfChanged(currencyEl, currencyTxt);
+      const detailCurrencyEl = page.querySelector(`[data-auction-detail-currency="${id}"]`);
+      if (detailCurrencyEl && currencyTxt) _setIfChanged(detailCurrencyEl, currencyTxt);
+
+      const rowBidderEl = page.querySelector(`[data-auction-row-bidder="${id}"]`);
+      if (rowBidderEl) {
+        const rowTxt = hasBids
+          ? (a.is_leading ? tt("auction_house_you_short", "Du") : String(a.current_bidder_name || "—"))
+          : "—";
+        _setIfChanged(rowBidderEl, rowTxt);
+      }
+
+      const leaderBadge = page.querySelector(`[data-auction-leader="${id}"]`);
+      const noBidsEl = page.querySelector(`[data-auction-no-bids="${id}"]`);
+      const bidderEl = page.querySelector(`[data-auction-bidder="${id}"]`);
+      if (hasBids && leaderBadge) {
+        leaderBadge.hidden = false;
+        leaderBadge.classList.toggle("auction-house-leader-badge--you", Boolean(a.is_leading));
+        leaderBadge.classList.remove("auction-house-leader-badge--empty");
+        if (bidderEl) {
+          const txt = a.is_leading
+            ? tt("auction_house_you_lead", "Du führst aktuell")
+            : String(a.current_bidder_name || "—");
+          _setIfChanged(bidderEl, txt);
+        }
+        if (noBidsEl) noBidsEl.hidden = true;
+      } else if (leaderBadge) {
+        leaderBadge.hidden = true;
+        if (noBidsEl) noBidsEl.hidden = false;
+      }
+
+      const minEl = page.querySelector(`[data-auction-min-label="${id}"]`);
+      if (minEl && a.min_next_bid) {
+        const label = `(${tt("auction_house_min_bid", "min.")} ${fmtNumber(a.min_next_bid)})`;
+        _setIfChanged(minEl, label);
+      }
+      const input = page.querySelector(`[data-auction-bid-input="${id}"]`);
+      if (input) {
+        const minVal = String(a.min_next_bid || 1);
+        input.min = minVal;
+        input.placeholder = fmtNumber(a.min_next_bid || 1);
+        if (!input.matches(":focus") && (!input.value || Number(input.value) < Number(minVal))) {
+          input.value = minVal;
+        }
+      }
+      const card = page.querySelector(`[data-auction-card="${id}"]`);
+      if (card) {
+        card.dataset.minBid = String(a.min_next_bid || 1);
+        card.dataset.currentBid = String(a.current_bid || 0);
+        card.dataset.endsAt = String(a.ends_at || 0);
+        card.dataset.currency = String(a.currency || "");
+        card.dataset.hasBids = hasBids ? "1" : "0";
+        card.dataset.isLeading = a.is_leading ? "1" : "0";
+        card.classList.toggle("auction-house-row--leading", Boolean(a.is_leading));
+      }
+      const submitBtn = page.querySelector(`[data-auction-bid-submit="${id}"]`);
+      if (submitBtn) {
+        const label = a.is_leading
+          ? tt("auction_house_raise_bid", "Gebot erhöhen")
+          : tt("auction_house_place_bid", "Gebot abgeben");
+        _setIfChanged(submitBtn, label);
+      }
+      renderAuctionRecentBids(id, a.recent_bids || []);
+    });
+    const selected = page.dataset.selectedAuction
+      || page.querySelector("[data-auction-row].is-selected")?.dataset.auctionRow
+      || auctions[0]?.id;
+    if (selected) selectAuctionHouseDetail(selected);
+  }
+
+  function tickAuctionHouseCountdowns() {
+    const page = document.getElementById("auction-house-page");
+    if (!page) return;
+    const now = Math.floor(getTimerServerNow());
+    const timerSelectors = ".auction-house-time-value, .auction-house-detail-time-value";
+    page.querySelectorAll("[data-auction-remaining], [data-auction-detail-remaining]").forEach((wrap) => {
+      const endsAt = parseInt(
+        wrap.dataset.endsAt
+        || wrap.closest("[data-auction-card]")?.dataset.endsAt
+        || wrap.closest("[data-auction-detail]")?.querySelector("[data-ends-at]")?.dataset.endsAt
+        || "0",
+        10
+      );
+      if (!endsAt) return;
+      const rem = Math.max(0, endsAt - now);
+      const txt = formatCountdownRemain(rem);
+      wrap.querySelectorAll(timerSelectors).forEach((valEl) => _setIfChanged(valEl, txt));
+      wrap.classList.toggle("is-urgent", rem > 0 && rem < 3600);
+    });
+  }
+
+  function bindAuctionHouseOnce() {
+    if (GC._auctionHouseEventsBound) return;
+    GC._auctionHouseEventsBound = true;
+
+    document.addEventListener("click", (ev) => {
+      const row = ev.target?.closest?.("[data-auction-row]");
+      if (row && !ev.target?.closest?.("[data-auction-bid-form], button, a, input, label")) {
+        selectAuctionHouseDetail(row.dataset.auctionRow);
+        return;
+      }
+
+      const btn = ev.target?.closest?.("[data-auction-loot-toggle]");
+      if (!btn) return;
+      const id = btn.getAttribute("data-auction-loot-toggle");
+      const panel = document.getElementById(`auction-loot-panel-${id}`);
+      if (!panel) return;
+      const open = panel.hidden;
+      document.querySelectorAll(".auction-house-loot-preview-panel").forEach((p) => { p.hidden = true; });
+      document.querySelectorAll("[data-auction-loot-toggle]").forEach((b) => {
+        b.setAttribute("aria-expanded", "false");
+      });
+      if (open) {
+        panel.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+      }
+    });
+
+    document.addEventListener("keydown", (ev) => {
+      const row = ev.target?.closest?.("[data-auction-row]");
+      if (!row) return;
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        selectAuctionHouseDetail(row.dataset.auctionRow);
+      }
+    });
+
+  }
+
+  function bindAuctionHouseBidForms(root) {
+    const page = root || document.querySelector("[data-auction-house]");
+    if (!page) return;
+
+    const tt = (key, fallback) => t(key, fallback);
+    const auctionBidSucceeded = (res) => {
+      if (!res || typeof res !== "object") return false;
+      if (res.ok === true || res.reason === "bid_placed") return true;
+      if (res.bid && res.bid.listing_id) return true;
+      return false;
+    };
+    const auctionReasonText = (res) => {
+      const reason = String((res && res.reason) || "generic");
+      if (reason === "bid_must_raise") {
+        return tt("auction_error_bid_must_raise", "Your bid must be higher than your current high bid.");
+      }
+      if (reason === "bid_too_low") {
+        const minBid = Number(res?.min_bid || 0);
+        if (minBid > 0) {
+          return tt(
+            "auction_error_bid_too_low_min",
+            tt("auction_error_bid_too_low", "Bid is too low.") + ` (${tt("auction_house_min_bid", "min.")} ${fmtNumber(minBid)})`
+          ).replace("%(min)s", fmtNumber(minBid));
+        }
+      }
+      return tt(`auction_error_${reason}`, tt("auction_error_generic", "Bid failed."));
+    };
+    const setAuctionFormError = (listingId, message) => {
+      const el = page.querySelector(`[data-auction-form-error="${listingId}"]`);
+      if (!el) return;
+      const msg = String(message || "").trim();
+      el.textContent = msg;
+      el.hidden = !msg;
+    };
+
+    page.querySelectorAll("[data-auction-bid-form]").forEach((form) => {
+      if (form.dataset.bound === "1") return;
+      form.dataset.bound = "1";
+
+      form.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+
+        const listingId = parseInt(
+          form.querySelector("[name='listing_id']")?.value
+          || form.getAttribute("data-auction-bid-form")
+          || "0",
+          10
+        );
+        const card = page.querySelector(`[data-auction-card="${listingId}"]`);
+        const currency = String(
+          form.querySelector("[name='currency']")?.value
+          || card?.dataset.currency
+          || ""
+        ).trim();
+        const input = form.querySelector("[data-auction-bid-input], [name='amount']");
+        const btn = form.querySelector("[data-auction-bid-submit], [type='submit']");
+        const amount = parseInt(String(input?.value || "0"), 10);
+        const minBid = parseInt(String(card?.dataset.minBid || input?.min || "0"), 10);
+
+        setAuctionFormError(listingId, "");
+        if (!listingId || !currency || !amount) {
+          const msg = tt("auction_error_invalid_amount", "Enter a valid bid.");
+          setAuctionFormError(listingId, msg);
+          showNotify(msg, "error");
+          return;
+        }
+        if (minBid > 0 && amount < minBid) {
+          const msg = auctionReasonText({ reason: "bid_too_low", min_bid: minBid });
+          setAuctionFormError(listingId, msg);
+          showNotify(msg, "error");
+          return;
+        }
+        const isLeading = card?.dataset.isLeading === "1";
+        const currentBid = parseInt(String(card?.dataset.currentBid || "0"), 10);
+        if (isLeading && currentBid > 0 && amount <= currentBid) {
+          const msg = auctionReasonText({ reason: "bid_must_raise", min_bid: minBid });
+          setAuctionFormError(listingId, msg);
+          showNotify(msg, "error");
+          return;
+        }
+        if (form.dataset.submitting === "1") return;
+        form.dataset.submitting = "1";
+        if (btn) {
+          btn.disabled = true;
+          btn.classList.add("is-loading");
+        }
+
+        const requestId = newRequestId();
+        let res = null;
+        try {
+          res = await GC.fetchGameAction("/api/auction-house/bid", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Request-Id": requestId,
+            },
+            body: JSON.stringify({
+              listing_id: listingId,
+              amount,
+              currency,
+              request_id: requestId,
+            }),
+          });
+        } catch (err) {
+          if (err?.name === "AbortError") return;
+          const msg = tt("auction_error_generic", "Bid failed.");
+          setAuctionFormError(listingId, msg);
+          showNotify(msg, "error");
+          console.warn("[GC] auction bid request failed", err);
+        } finally {
+          form.dataset.submitting = "0";
+          if (btn) {
+            btn.disabled = false;
+            btn.classList.remove("is-loading");
+          }
+        }
+
+        if (!res) return;
+
+        const succeeded = auctionBidSucceeded(res);
+        const ahPayload = res?.auction_house || res?.state?.auction_house;
+        try {
+          if (ahPayload) patchAuctionHousePanel(ahPayload);
+        } catch (patchErr) {
+          console.warn("[GC] auction panel patch failed", patchErr);
+        }
+
+        if (succeeded) {
+          try {
+            if (res?.state) applyActionState(res, "auction_bid");
+          } catch (stateErr) {
+            console.warn("[GC] auction bid state apply failed", stateErr);
+          }
+          setAuctionFormError(listingId, "");
+          showNotify(tt("auction_bid_ok", "Bid placed."), "success");
+          if (input && ahPayload?.auctions) {
+            const row = ahPayload.auctions.find((a) => Number(a.id) === listingId);
+            if (row?.min_next_bid) input.value = String(row.min_next_bid);
+            else input.value = "";
+          } else if (input) {
+            input.value = "";
+          }
+        } else {
+          try {
+            if (res?.state) applyActionState(res, "auction_bid_error");
+          } catch (_) {}
+          const msg = auctionReasonText(res || { reason: "generic" });
+          setAuctionFormError(listingId, msg);
+          showNotify(msg, "error");
+        }
+      }, true);
+    });
+  }
+
+  function initAuctionHouse() {
+    bindAuctionHouseOnce();
+    syncTradingSubnav("auction_house");
+    const page = document.getElementById("auction-house-page");
+    bindAuctionHouseBidForms(page);
+    if (!page || page.dataset.ready !== "1") return;
+    const state = parseAuctionHousePageState();
+    if (state) patchAuctionHousePanel(state);
+    else {
+      const firstRow = page.querySelector("[data-auction-row]");
+      if (firstRow) selectAuctionHouseDetail(firstRow.dataset.auctionRow);
+    }
+    tickAuctionHouseCountdowns();
+    GC.setSafeInterval(tickAuctionHouseCountdowns, 1000);
+    GC.registerCleanup(() => {});
   }
 
   function initTraderHub() {
@@ -11960,6 +12364,7 @@
 
   GC.modules.overview = initOverview;
   GC.modules.inventory = initInventory;
+  GC.modules.auction_house = initAuctionHouse;
   GC.modules.trader_hub = initTraderHub;
   GC.modules.fleet = initFleet;
   GC.modules.logistics = initLogistics;

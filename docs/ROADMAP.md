@@ -96,6 +96,7 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | **Werft** — Schiffsbau, Queue, fuel_cells | ✅ | `orbital_shipyard` |
 | **Flotte** — Send, Tick, Missionen | ✅ | Attack combat active |
 | **Trader Hub** — Unified Exchange, Scrapyard | ✅ | GC-402 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
+| **Auktionshaus** — Lootbox-Auktionen (keine Eventboxen) | ✅ | GC-550 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
 | **Verteidigung** — Türme, Schilder, Queue, Ranking | ✅ | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) |
 | **Kampf-Auflösung** — Resolver, Reports, Loot, Debris, Ranking | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md); `test_combat.py` |
 | **GC-700** — Combat polish / gaps (kein Resolver-Neubau) | 📋 | Siehe [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) § GC-700 Readiness |

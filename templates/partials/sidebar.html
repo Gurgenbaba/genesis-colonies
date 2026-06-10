@@ -117,10 +117,9 @@
         {{ T("nav_inventory", "Inventar") }}
       </a>
       <a href="{{ url_for('auction_house_view') }}"
-         class="gc-nav-sub-link gc-nav-sub-link--wip {% if request.endpoint == 'auction_house_view' %}active{% endif %}"
+         class="gc-nav-sub-link {% if request.endpoint == 'auction_house_view' %}active{% endif %}"
          data-trading-nav="auction_house">
-        <span>{{ T("nav_auction_house", "Auktionshaus") }}</span>
-        <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+        {{ T("nav_auction_house", "Auktionshaus") }}
       </a>
       <a href="{{ url_for('galactic_politics_view') }}"
          class="gc-nav-sub-link gc-nav-sub-link--wip {% if request.endpoint == 'galactic_politics_view' %}active{% endif %}"

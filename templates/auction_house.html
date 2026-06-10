@@ -1,0 +1,586 @@
+{% extends "base.html" %}
+
+
+
+{% block content %}
+
+{% set ah = auction_house if auction_house is defined and auction_house else {'ready': false, 'auctions': []} %}
+
+{% set stats = ah.stats if ah.stats is defined else {'active_auctions': 0, 'my_bids': 0, 'won_auctions': 0} %}
+
+{% set _loot_fallback = url_for('static', filename='img/lootboxes/Generic_Supply_Container.png') %}
+
+
+
+<div class="gc-page auction-house-page" id="auction-house-page"
+     data-auction-house
+     data-ready="{{ '1' if ah.ready else '0' }}"
+     data-planet-id="{{ ah.planet_id if ah.planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else '') }}">
+
+
+
+  {% if ah.ready %}
+
+  <script type="application/json" id="auction-house-page-state">{{ ah | tojson }}</script>
+
+  {% endif %}
+
+
+
+  <header class="gc-page-header section-header auction-house-header">
+
+    <div class="fleet-headline-row auction-house-headline-row">
+
+      <div>
+
+        <p class="auction-house-eyebrow">{{ T("auction_house_eyebrow", "INTERSTELLARES AUKTIONSNETZWERK") }}</p>
+
+        <h1 class="section-title auction-house-title">{{ T("auction_house_title", "Auktionshaus") }}</h1>
+
+        <p class="section-hint hint auction-house-lore">
+
+          {{ T("auction_house_lore", "Seltene Bergungscontainer, Militärbestände und Forschungskapseln aus dem bekannten Raum werden hier versteigert.") }}
+
+        </p>
+
+      </div>
+
+    </div>
+
+  </header>
+
+
+
+  {% if ah.ready %}
+
+  <div class="auction-house-stats-bar" aria-label="{{ T('auction_house_stats_label', 'Auktions-Übersicht') }}">
+
+    <article class="fleet-slots-badge auction-house-stat">
+
+      <span class="fleet-slots-label">{{ T("auction_house_stat_active", "Aktive Auktionen") }}</span>
+
+      <span class="fleet-slots-value gc-mono" data-auction-stat="active">{{ stats.active_auctions|int }}</span>
+
+    </article>
+
+    <article class="fleet-slots-badge auction-house-stat">
+
+      <span class="fleet-slots-label">{{ T("auction_house_stat_my_bids", "Meine Gebote") }}</span>
+
+      <span class="fleet-slots-value gc-mono" data-auction-stat="my_bids">{{ stats.my_bids|int }}</span>
+
+    </article>
+
+    <article class="fleet-slots-badge auction-house-stat">
+
+      <span class="fleet-slots-label">{{ T("auction_house_stat_won", "Gewonnene Auktionen") }}</span>
+
+      <span class="fleet-slots-value gc-mono" data-auction-stat="won">{{ stats.won_auctions|int }}</span>
+
+    </article>
+
+  </div>
+
+  {% endif %}
+
+
+
+  {% if not ah.ready %}
+
+  <section class="gc-panel auction-house-panel">
+
+    <p class="auction-house-empty">{{ T("auction_house_unavailable", "Auktionshaus ist derzeit nicht verfügbar.") }}</p>
+
+  </section>
+
+  {% elif not ah.auctions %}
+
+  <section class="gc-panel auction-house-panel">
+
+    <p class="auction-house-empty">{{ T("auction_house_empty", "Aktuell sind keine Auktionen aktiv. Neue Angebote werden bald vom Handelsnetzwerk freigegeben.") }}</p>
+
+  </section>
+
+  {% else %}
+
+  <section class="gc-panel auction-house-panel-wrap">
+
+    <div class="gc-panel-header auction-house-panel-header">
+
+      <span class="gc-panel-title">{{ T("auction_house_panel_title", "Aktive Auktionen") }}</span>
+
+      <span class="gc-panel-subtitle">{{ T("auction_house_panel_subtitle", "Gebote werden vom aktiven Planeten abgebucht") }}</span>
+
+    </div>
+
+
+
+    <div class="auction-house-terminal" data-auction-terminal>
+
+      <div class="auction-house-terminal-list">
+
+        <div class="gc-table-scroll">
+
+          <table class="table-std auction-house-table">
+
+            <thead>
+
+              <tr>
+
+                <th class="auction-house-col-item">{{ T("auction_house_col_container", "Container") }}</th>
+
+                <th class="col-bid">{{ T("auction_house_col_bid", "Gebot") }}</th>
+
+                <th>{{ T("auction_house_col_currency", "Währung") }}</th>
+
+                <th>{{ T("auction_house_col_time", "Restzeit") }}</th>
+
+                <th>{{ T("auction_house_col_bidder", "Bieter") }}</th>
+
+              </tr>
+
+            </thead>
+
+            <tbody data-auction-grid>
+
+              {% for a in ah.auctions %}
+
+              {% set _has_bids = a.has_bids is defined and a.has_bids %}
+
+              {% set _display_bid = (a.display_bid if a.display_bid is defined else (a.current_bid if _has_bids else a.start_price))|int %}
+
+              {% set _img = url_for('static', filename=a.image) if a.image is defined and a.image else _loot_fallback %}
+
+              <tr class="auction-house-row auction-house-card auction-house-row--{{ a.rarity }} {{ 'is-selected' if loop.first else '' }}"
+
+                  data-auction-card="{{ a.id }}"
+
+                  data-auction-row="{{ a.id }}"
+
+                  data-listing-id="{{ a.id }}"
+
+                  data-currency="{{ a.currency }}"
+
+                  data-min-bid="{{ a.min_next_bid }}"
+
+                  data-current-bid="{{ a.current_bid if _has_bids else 0 }}"
+
+                  data-ends-at="{{ a.ends_at }}"
+
+                  data-rarity="{{ a.rarity }}"
+
+                  data-has-bids="{{ '1' if _has_bids else '0' }}"
+
+                  data-is-leading="{{ '1' if a.is_leading else '0' }}"
+
+                  tabindex="0"
+
+                  role="button"
+
+                  aria-selected="{{ 'true' if loop.first else 'false' }}">
+
+                <td class="auction-house-col-item">
+
+                  <div class="auction-house-row-item">
+
+                    <img class="auction-house-thumb"
+
+                         src="{{ _img }}"
+
+                         alt=""
+
+                         loading="lazy"
+
+                         decoding="async"
+
+                         onerror="this.onerror=null;this.src='{{ _loot_fallback }}';">
+
+                    <div class="auction-house-row-meta">
+
+                      <span class="auction-house-row-name">{{ T(a.name_key, a.box_key) }}</span>
+
+                      <span class="inventory-rarity-badge inventory-rarity-badge--{{ a.rarity }}">
+
+                        {{ T("inv_rarity_" ~ a.rarity, a.rarity) }}
+
+                      </span>
+
+                    </div>
+
+                  </div>
+
+                </td>
+
+                <td class="col-bid gc-mono" data-auction-current-bid="{{ a.id }}">{{ _display_bid|fmt_int_compact }}</td>
+
+                <td data-auction-currency-label="{{ a.id }}">{{ T("resource_" ~ a.currency, a.currency) }}</td>
+
+                <td>
+
+                  <span class="auction-house-time gc-mono"
+
+                        data-auction-remaining="{{ a.id }}"
+
+                        data-ends-at="{{ a.ends_at }}">
+
+                    <span class="auction-house-time-value">…</span>
+
+                  </span>
+
+                </td>
+
+                <td class="auction-house-col-bidder" data-auction-row-bidder="{{ a.id }}">
+
+                  {% if _has_bids %}
+
+                    {% if a.is_leading %}
+
+                      <span class="auction-house-row-you">{{ T("auction_house_you_short", "Du") }}</span>
+
+                    {% else %}
+
+                      {{ a.current_bidder_name }}
+
+                    {% endif %}
+
+                  {% else %}
+
+                    —
+
+                  {% endif %}
+
+                </td>
+
+              </tr>
+
+              {% endfor %}
+
+            </tbody>
+
+          </table>
+
+        </div>
+
+      </div>
+
+
+
+      <aside class="auction-house-detail-panel" id="auction-house-detail-panel" aria-label="{{ T('auction_house_detail_title', 'Auktionsdetail') }}">
+
+        {% for a in ah.auctions %}
+
+        {% set _has_bids = a.has_bids is defined and a.has_bids %}
+
+        {% set _display_bid = (a.display_bid if a.display_bid is defined else (a.current_bid if _has_bids else a.start_price))|int %}
+
+        {% set _img = url_for('static', filename=a.image) if a.image is defined and a.image else _loot_fallback %}
+
+        <section class="auction-house-detail {{ 'is-active' if loop.first else '' }}"
+
+                 data-auction-detail="{{ a.id }}"
+
+                 {% if not loop.first %}hidden{% endif %}>
+
+          <div class="auction-house-detail-head">
+
+            <div class="auction-house-detail-visual auction-house-detail-visual--{{ a.rarity }}">
+
+              <img class="auction-house-detail-img"
+
+                   src="{{ _img }}"
+
+                   alt="{{ T(a.name_key, a.box_key) }}"
+
+                   loading="lazy"
+
+                   decoding="async"
+
+                   onerror="this.onerror=null;this.src='{{ _loot_fallback }}';">
+
+            </div>
+
+            <div class="auction-house-detail-intro">
+
+              <h3 class="auction-house-detail-name">{{ T(a.name_key, a.box_key) }}</h3>
+
+              <span class="inventory-rarity-badge inventory-rarity-badge--{{ a.rarity }}">
+
+                {{ T("inv_rarity_" ~ a.rarity, a.rarity) }}
+
+              </span>
+
+            </div>
+
+          </div>
+
+
+
+          <dl class="auction-house-detail-stats">
+
+            <div class="auction-house-detail-stat">
+
+              <dt data-auction-bid-label="{{ a.id }}">
+
+                {% if _has_bids %}
+
+                  {{ T("auction_house_current_bid_upper", "AKTUELLES GEBOT") }}
+
+                {% else %}
+
+                  {{ T("auction_house_start_bid_upper", "STARTGEBOT") }}
+
+                {% endif %}
+
+              </dt>
+
+              <dd>
+
+                <span class="auction-house-detail-bid gc-mono" data-auction-detail-bid="{{ a.id }}">{{ _display_bid|fmt_int_compact }}</span>
+
+                <span class="auction-house-detail-currency" data-auction-detail-currency="{{ a.id }}">{{ T("resource_" ~ a.currency, a.currency) }}</span>
+
+              </dd>
+
+            </div>
+
+            <div class="auction-house-detail-stat">
+
+              <dt>{{ T("auction_house_col_bidder", "Bieter") }}</dt>
+
+              <dd data-auction-leader-wrap="{{ a.id }}">
+
+                {% if _has_bids %}
+
+                <span class="auction-house-leader-badge {{ 'auction-house-leader-badge--you' if a.is_leading else '' }}"
+
+                      data-auction-leader="{{ a.id }}">
+
+                  <span class="auction-house-leader-icon" aria-hidden="true">🏆</span>
+
+                  <span class="auction-house-leader-text" data-auction-bidder="{{ a.id }}">
+
+                    {% if a.is_leading %}
+
+                      {{ T("auction_house_you_lead", "Du führst aktuell") }}
+
+                    {% else %}
+
+                      {{ a.current_bidder_name }}
+
+                    {% endif %}
+
+                  </span>
+
+                </span>
+
+                {% else %}
+
+                <span class="auction-house-leader-badge auction-house-leader-badge--empty" data-auction-leader="{{ a.id }}" hidden>
+
+                  <span class="auction-house-leader-icon" aria-hidden="true">🏆</span>
+
+                  <span class="auction-house-leader-text" data-auction-bidder="{{ a.id }}"></span>
+
+                </span>
+
+                <span class="auction-house-no-bids" data-auction-no-bids="{{ a.id }}">
+
+                  {{ T("auction_house_no_bids_yet", "Noch keine Gebote — sei der Erste.") }}
+
+                </span>
+
+                {% endif %}
+
+              </dd>
+
+            </div>
+
+            <div class="auction-house-detail-stat">
+
+              <dt>{{ T("auction_house_col_time", "Restzeit") }}</dt>
+
+              <dd>
+
+                <span class="auction-house-detail-time gc-mono"
+
+                      data-auction-detail-remaining="{{ a.id }}"
+
+                      data-ends-at="{{ a.ends_at }}">
+
+                  <span class="auction-house-detail-time-value">…</span>
+
+                </span>
+
+              </dd>
+
+            </div>
+
+          </dl>
+
+
+
+          {% if a.loot_hints is defined and a.loot_hints %}
+
+          <div class="auction-house-loot-preview" data-auction-loot-preview="{{ a.id }}">
+
+            <button type="button"
+
+                    class="auction-house-loot-preview-toggle"
+
+                    data-auction-loot-toggle="{{ a.id }}"
+
+                    aria-expanded="false"
+
+                    aria-controls="auction-loot-panel-{{ a.id }}">
+
+              {{ T("auction_house_loot_preview_btn", "Inhalt") }}
+
+            </button>
+
+            <div class="auction-house-loot-preview-panel"
+
+                 id="auction-loot-panel-{{ a.id }}"
+
+                 hidden>
+
+              <p class="auction-house-loot-preview-title">{{ T("auction_house_loot_may_contain", "Kann enthalten") }}</p>
+
+              <ul class="auction-house-loot-preview-list">
+
+                {% for hint in a.loot_hints %}
+
+                <li>{{ T(hint.hint_key, hint.hint_key) }}</li>
+
+                {% endfor %}
+
+              </ul>
+
+            </div>
+
+          </div>
+
+          {% endif %}
+
+
+
+          <section class="auction-house-recent-bids" data-auction-recent="{{ a.id }}" aria-label="{{ T('auction_house_recent_bids', 'Letzte Gebote') }}">
+
+            <h4 class="auction-house-recent-title">{{ T("auction_house_recent_bids", "Letzte Gebote") }}</h4>
+
+            {% if a.recent_bids is defined and a.recent_bids %}
+
+            <ul class="auction-house-recent-list" data-auction-recent-list="{{ a.id }}">
+
+              {% for bid in a.recent_bids %}
+
+              <li class="auction-house-recent-row">
+
+                <span class="auction-house-recent-name">{{ bid.player_name }}</span>
+
+                <span class="auction-house-recent-amount gc-mono">{{ bid.amount|fmt_int_compact }}</span>
+
+              </li>
+
+              {% endfor %}
+
+            </ul>
+
+            {% else %}
+
+            <p class="auction-house-recent-empty" data-auction-recent-empty="{{ a.id }}">
+
+              {{ T("auction_house_recent_empty", "Noch keine Gebotshistorie.") }}
+
+            </p>
+
+            {% endif %}
+
+          </section>
+
+
+
+          <form class="auction-house-bid-form"
+                data-no-pjax
+                data-auction-bid-form="{{ a.id }}"
+                method="post"
+                action="{{ url_for('api_auction_house_bid') }}"
+                novalidate>
+
+            <input type="hidden" name="listing_id" value="{{ a.id }}">
+            <input type="hidden" name="currency" value="{{ a.currency }}">
+
+            <label class="auction-house-bid-label" for="auction-bid-{{ a.id }}">
+
+              {{ T("auction_house_bid_amount", "Gebot") }}
+
+              <span class="auction-house-bid-min gc-mono" data-auction-min-label="{{ a.id }}">
+
+                ({{ T("auction_house_min_bid", "min.") }} {{ a.min_next_bid|fmt_int_compact }})
+
+              </span>
+
+            </label>
+
+            <p class="auction-house-form-error" data-auction-form-error="{{ a.id }}" hidden></p>
+
+            <div class="auction-house-bid-row">
+
+              <input type="number"
+
+                     class="gc-trader-input auction-house-bid-input"
+
+                     id="auction-bid-{{ a.id }}"
+
+                     name="amount"
+
+                     min="{{ a.min_next_bid }}"
+
+                     step="1"
+
+                     inputmode="numeric"
+
+                     data-auction-bid-input="{{ a.id }}"
+
+                     value="{{ a.min_next_bid }}"
+
+                     placeholder="{{ a.min_next_bid|fmt_int_compact }}">
+
+              <button type="submit"
+
+                      class="gc-btn gc-btn-primary auction-house-bid-btn"
+
+                      data-auction-bid-submit="{{ a.id }}">
+
+                {% if a.is_leading %}
+
+                {{ T("auction_house_raise_bid", "Gebot erhöhen") }}
+
+                {% else %}
+
+                {{ T("auction_house_place_bid", "Gebot abgeben") }}
+
+                {% endif %}
+
+              </button>
+
+            </div>
+
+          </form>
+
+        </section>
+
+        {% endfor %}
+
+      </aside>
+
+    </div>
+
+  </section>
+
+  {% endif %}
+
+</div>
+
+{% endblock %}
+
+

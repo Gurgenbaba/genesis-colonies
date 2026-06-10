@@ -142,6 +142,34 @@ Recycelt Schiffe vom context planet → Ressourcen-Rückerstattung nach `fleet_d
 
 ---
 
+## Auktionshaus (`/auction-house`) — GC-550
+
+Meta-System für rotierende Lootbox-Auktionen (Wirtschaft → Auktionshaus, neben Trader Hub).
+
+| API | Methode | Owner |
+|-----|---------|-------|
+| Seite | `GET /auction-house` | `templates/auction_house.html` |
+| State | `GET /api/auction-house/state` | `game/auction_house.py` |
+| Gebot | `POST /api/auction-house/bid` | `game/auction_house.py` |
+
+### Regeln
+
+- Bis zu **3** aktive Auktionen; Laufzeit **6–12 h**; nach Ablauf neue Rotation (`generate_auction_rotation`).
+- Gebote in `metal`, `crystal` oder `fuel_cells` — Währung pro Listing fest.
+- Mindest-Erhöhung **5 %**; Abbuchung vom **context planet**; Überbotene erhalten sofort Refund auf ihre Bieter-Kolonie.
+- Gewinner erhält Box in `lootbox_inventory` + `player_inventory_items` (kanonisches Inventar).
+- **Eventboxen ausgeschlossen:** kein `event_container`, kein `event_*`-Prefix, keine Box mit `is_event` / Kategorie `event`.
+
+### Erlaubte Box-Keys (Rotation)
+
+`generic_supply_container`, `resource_cache`, `research_capsule`, `wreckage_container`, `military_cache`, `alien_cache`, `premium_cache` — gewichtet nach Seltenheit; `birthday_gift_container` nur manuell/admin.
+
+Poll liefert `auction_house` in `/api/game-state` (Panel).
+
+Migration: `047_auction_house.sql`
+
+---
+
 ## Shipyard-Kosten
 
 Schiffsbau zieht metal, crystal **und fuel_cells** ab (siehe [FLEET_SYSTEM.md](FLEET_SYSTEM.md)).
@@ -157,13 +185,15 @@ Schiffsbau zieht metal, crystal **und fuel_cells** ab (siehe [FLEET_SYSTEM.md](F
 | `game/exchange.py` | Unified Resource Trader |
 | `game/fuel_exchange.py` | Legacy-Wrapper (deprecated) |
 | `game/scrapyard.py` | Recycling |
+| `game/auction_house.py` | Lootbox-Auktionen |
 | `game/logic.py` | Poll-Fassade |
-| `templates/trader_hub.html` | UI |
+| `templates/trader_hub.html` | Trader Hub UI |
+| `templates/auction_house.html` | Auktionshaus UI |
 
 ---
 
 ## Tests
 
 ```bash
-python -m pytest tests/test_effects.py tests/test_exchange.py tests/test_fuel_exchange.py tests/test_scrapyard.py tests/test_fuel_cells_resource_bar.py tests/test_trader_hub.py -v
+python -m pytest tests/test_effects.py tests/test_exchange.py tests/test_fuel_exchange.py tests/test_scrapyard.py tests/test_fuel_cells_resource_bar.py tests/test_trader_hub.py tests/test_auction_house.py -v
 ```
