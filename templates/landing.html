@@ -89,16 +89,38 @@
 
 <div class="gc-page landing-wrapper">
 
-  <section class="landing-hero-card" aria-labelledby="landing-title">
+  <div class="landing-fx" aria-hidden="true">
+    <div class="landing-fx-stars"></div>
+    <div class="landing-fx-nebula"></div>
+    <span class="landing-fx-meteor"></span>
+    <span class="landing-fx-meteor landing-fx-meteor-2"></span>
+  </div>
+
+  <section class="landing-hero" aria-labelledby="landing-title">
+    {% set title_parts = landing_title.split(' ', 1) %}
 
     <div class="landing-hero-content">
-      <h1 class="landing-title" id="landing-title">{{ landing_title }}</h1>
+      <h1 class="landing-title" id="landing-title">
+        <span class="landing-title-top">{{ title_parts[0] }}</span>
+        {% if title_parts|length > 1 %}
+          <span class="landing-title-accent">{{ title_parts[1] }}</span>
+        {% endif %}
+      </h1>
       <p class="landing-tagline">{{ landing_tagline }}</p>
 
       <ul class="landing-vision">
-        <li>{{ vision1 }}</li>
-        <li>{{ vision2 }}</li>
-        <li>{{ vision3 }}</li>
+        <li>
+          <span class="landing-vision-icon" aria-hidden="true">⚡</span>
+          <span class="landing-vision-text">{{ vision1 }}</span>
+        </li>
+        <li>
+          <span class="landing-vision-icon" aria-hidden="true">🧪</span>
+          <span class="landing-vision-text">{{ vision2 }}</span>
+        </li>
+        <li>
+          <span class="landing-vision-icon" aria-hidden="true">🚀</span>
+          <span class="landing-vision-text">{{ vision3 }}</span>
+        </li>
       </ul>
 
       <div class="landing-actions">
@@ -123,17 +145,6 @@
         {% endif %}
       </div>
     </div>
-
-    <div class="landing-hero-art" aria-hidden="true">
-      <img src="{{ url_for('static', filename='img/landscapes/normaltempplanet04-h.jpg') }}"
-           alt=""
-           width="960"
-           height="540"
-           loading="eager"
-           decoding="async">
-      <div class="landing-hero-art-glow"></div>
-    </div>
-
   </section>
 
   <div class="landing-features" role="list">
