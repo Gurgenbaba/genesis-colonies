@@ -17,13 +17,7 @@
 {% if subtitle == "register_subtitle" %}
   {% set subtitle = "Erstelle deinen Commander und sichere dir deinen Platz im Genesis-Cluster." %}
 {% else %}
-  {% set sub_strong = T("register_subtitle_strong") %}
-  {% set sub2 = T("register_subtitle_2") %}
-  {% if sub_strong != "register_subtitle_strong" and sub2 != "register_subtitle_2" %}
-    {% set subtitle = (subtitle ~ " " ~ sub_strong ~ " " ~ sub2) | striptags %}
-  {% else %}
-    {% set subtitle = subtitle | striptags %}
-  {% endif %}
+  {% set subtitle = subtitle | striptags %}
 {% endif %}
 
 {% set lbl_user = T("register_label_username") %}
