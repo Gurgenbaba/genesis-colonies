@@ -2180,7 +2180,9 @@ def api_vote_visit():
     conn = db()
     try:
         begin_write_transaction(conn)
-        ok, created, reason = handle_vote_visit(user_id, provider_key, conn=conn)
+        ok, created, reason, cooldown_remaining_sec = handle_vote_visit(
+            user_id, provider_key, conn=conn
+        )
         if ok:
             commit(conn)
         else:
@@ -2203,6 +2205,7 @@ def api_vote_visit():
         "ok": bool(ok),
         "created": bool(created),
         "reason": reason,
+        "cooldown_remaining_sec": int(cooldown_remaining_sec),
         "vote_center": vote_center,
     }
     if request_id and ok:

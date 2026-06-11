@@ -192,8 +192,8 @@ Multi-Provider-Voting: Konfiguration in `vote_providers`, Postback erzeugt **pen
 |-----|----------|----------|
 | `topg` | `https://topg.org/ogame-private-servers/server-683112-{user_id}#vote` | 6h Cooldown; `p_resp`, `ip` |
 | `gtop100` | `https://gtop100.com/Ogame/server-106142?vote=1&pingUsername={user_id}` | 12h Cooldown; JSON/Form Pingback; `GTOP100_PINGBACK_KEY`, `siteid=106142`, `success=0` |
-| `gametoor` | `http://gametoor.com/in/3277/{user_id}` | IVN; `GAMETOOR_IVN_KEY`; 24h Cooldown |
-| `arena_top100` | `https://www.arena-top100.com/index.php?a=in&u=Gurgenbaba&id={user_id}` | Postback; `ARENA_TOP100_SECRET`; Cooldown via Arena `reset` |
+| `gametoor` | `http://gametoor.com/in/3277/{user_id}` | IVN + Klick; `GAMETOOR_IVN_KEY`; 12h Cooldown |
+| `arena_top100` | `https://www.arena-top100.com/index.php?a=in&u=Gurgenbaba&id={user_id}` | Postback + Klick; `ARENA_TOP100_SECRET`; 12h Cooldown |
 
 Neue Topliste: Zeile in `vote_providers` + optional Postback-Route — keine separaten Seiten.
 
@@ -202,13 +202,13 @@ Neue Topliste: Zeile in `vote_providers` + optional Postback-Route — keine sep
 - Postback nur nach echtem Vote; **kein** Reward beim Link-Klick.
 - Dev/Test IP-Lock: `GC_VOTE_SKIP_IP_CHECK=1` (oder Legacy `GC_TOPG_SKIP_IP_CHECK=1`).
 - Production TopG IP-Check: `TOPG_STRICT_IP_CHECK=1` (Default **0** — Railway/Proxy loggt nur, blockiert nicht).
-- **Cooldown** pro User/Provider (TopG: 6h, GTop100: 12h, GameToor: 24h) — `provider_ref = {provider}:{user_id}:{bucket}`.
+- **Cooldown** pro User/Provider (TopG: 6h, GTop100/GameToor/Arena: 12h) — hart beim Klick via `POST /api/vote/visit`; `provider_ref = {provider}:{user_id}:{bucket}`.
 - GTop100 Pingback-Key: Env `GTOP100_PINGBACK_KEY` (muss mit GTop100-Dashboard übereinstimmen).
 - Pro Vote **eine** gewichtete Zufallsbelohnung (`lootbox` / `resources` / `ships` / `defense`) — Auszahlung beim Claim auf context planet.
 - Dev-Test: `POST /api/dev/topg/postback-test` (Admin/Debug).
 - **Keine Eventboxen** als Vote-Reward.
 
-Migrationen: `048_vote_rewards.sql`, `049_vote_providers.sql`, `051_vote_provider_cooldowns.sql`, `052_vote_gtop100.sql`, `053_vote_arena_top100.sql`, `054_vote_arena_postback.sql`, `055_vote_gametoor_ivn.sql`
+Migrationen: `048_vote_rewards.sql`, `049_vote_providers.sql`, `051_vote_provider_cooldowns.sql`, `052_vote_gtop100.sql`, `053_vote_arena_top100.sql`, `054_vote_arena_postback.sql`, `055_vote_gametoor_ivn.sql`, `056_vote_hard_cooldowns.sql`
 
 ---
 

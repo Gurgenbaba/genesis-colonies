@@ -7908,18 +7908,21 @@
                 t("vote_center_visit_reward_pending", "Vote registriert — Belohnung wartet im Vote Center."),
                 "success"
               );
+              window.open(href, "_blank", "noopener,noreferrer");
+              startVoteCenterPoll();
             } else if (res?.ok && res?.reason === "cooldown_active") {
+              const rem = Math.max(0, Number(res.cooldown_remaining_sec) || 0);
               showNotify(
-                t("vote_center_visit_cooldown", "Cooldown aktiv — noch keine neue Belohnung möglich."),
+                `${t("vote_center_next_in", "Nächster Vote möglich in")} ${formatCountdownRemain(rem)}`,
                 "info"
               );
             }
           } catch (_) {
             showNotify(t("vote_center_visit_fail", "Vote konnte nicht registriert werden."), "error");
           }
+        } else {
+          window.open(href, "_blank", "noopener,noreferrer");
         }
-        window.open(href, "_blank", "noopener,noreferrer");
-        startVoteCenterPoll();
         return;
       }
 

@@ -49,7 +49,7 @@ VOTE_PROVIDERS: Dict[str, Dict[str, Any]] = {
     "gametoor": {
         "display_name": "GameToor",
         "vote_url_template": "http://gametoor.com/in/3277/{user_id}",
-        "cooldown_seconds": 24 * 60 * 60,
+        "cooldown_seconds": 12 * 60 * 60,
         "postback_enabled": True,
         "sort_order": 30,
         "subtitle_key": "vote_provider_gametoor_subtitle",
@@ -58,10 +58,9 @@ VOTE_PROVIDERS: Dict[str, Dict[str, Any]] = {
     "arena_top100": {
         "display_name": "Arena-Top100",
         "vote_url_template": "https://www.arena-top100.com/index.php?a=in&u=Gurgenbaba&id={user_id}",
-        "cooldown_seconds": 24 * 60 * 60,
+        "cooldown_seconds": 12 * 60 * 60,
         "postback_enabled": True,
         "sort_order": 40,
-        "use_arena_reset_cooldown": True,
         "subtitle_key": "vote_provider_arena_top100_subtitle",
         "reward_status_key": "vote_provider_arena_top100_reward_active",
         "postback_config_json": (
@@ -454,6 +453,47 @@ def _serialize_pending_reward(row: Any, *, conn, provider_names: Optional[Mappin
     }
 
 
+def _provider_last_vote_at(user_id: int, provider_key: str, *, conn) -> Optional[int]:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT MAX(voted_at) AS last_vote_at
+        FROM vote_rewards
+        WHERE user_id = ? AND provider = ?;
+        """,
+        (int(user_id), str(provider_key)),
+    )
+    row = cur.fetchone()
+    return int(row["last_vote_at"]) if row and row["last_vote_at"] is not None else None
+
+
+def get_provider_cooldown_status(
+    user_id: int,
+    provider: Mapping[str, Any],
+    *,
+    conn,
+    now: Optional[int] = None,
+) -> Dict[str, Any]:
+    ts = int(now if now is not None else time.time())
+    provider_key = str(provider["provider_key"])
+    cooldown_sec = int(provider.get("cooldown_sec") or VOTE_COOLDOWN_SEC)
+    last_vote_at = _provider_last_vote_at(user_id, provider_key, conn=conn)
+    can_vote = True
+    next_vote_at: Optional[int] = None
+    cooldown_remaining_sec = 0
+    if last_vote_at is not None and (ts - last_vote_at) < cooldown_sec:
+        can_vote = False
+        next_vote_at = last_vote_at + cooldown_sec
+        cooldown_remaining_sec = max(0, next_vote_at - ts)
+    return {
+        "can_vote": can_vote,
+        "last_vote_at": last_vote_at,
+        "next_vote_at": next_vote_at,
+        "cooldown_remaining_sec": cooldown_remaining_sec,
+        "cooldown_sec": cooldown_sec,
+    }
+
+
 def _provider_vote_stats(
     user_id: int,
     provider: Mapping[str, Any],
@@ -462,51 +502,13 @@ def _provider_vote_stats(
     now: int,
 ) -> Dict[str, Any]:
     provider_key = str(provider["provider_key"])
-    cooldown_sec = int(provider.get("cooldown_sec") or VOTE_COOLDOWN_SEC)
+    cd = get_provider_cooldown_status(user_id, provider, conn=conn, now=now)
+    last_vote_at = cd["last_vote_at"]
+    can_vote_hint = bool(cd["can_vote"])
+    next_vote_at = cd["next_vote_at"]
+    cooldown_remaining_sec = int(cd["cooldown_remaining_sec"])
+    cooldown_sec = int(cd["cooldown_sec"])
     cur = conn.cursor()
-    canon = VOTE_PROVIDERS.get(provider_key) or {}
-    use_arena_reset = bool(canon.get("use_arena_reset_cooldown"))
-    last_vote_at: Optional[int] = None
-    can_vote_hint = True
-    next_vote_at: Optional[int] = None
-    cooldown_remaining_sec = 0
-
-    if use_arena_reset and vote_reward_next_at_column_ready(conn):
-        cur.execute(
-            """
-            SELECT voted_at, provider_next_vote_at
-            FROM vote_rewards
-            WHERE user_id = ? AND provider = ?
-            ORDER BY voted_at DESC
-            LIMIT 1;
-            """,
-            (int(user_id), provider_key),
-        )
-        arena_row = cur.fetchone()
-        if arena_row and arena_row["voted_at"] is not None:
-            last_vote_at = int(arena_row["voted_at"])
-            arena_reset = arena_row["provider_next_vote_at"]
-            if arena_reset is not None:
-                reset_at = int(arena_reset)
-                if reset_at > now:
-                    can_vote_hint = False
-                    next_vote_at = reset_at
-                    cooldown_remaining_sec = max(0, reset_at - now)
-    else:
-        cur.execute(
-            """
-            SELECT MAX(voted_at) AS last_vote_at
-            FROM vote_rewards
-            WHERE user_id = ? AND provider = ?;
-            """,
-            (int(user_id), provider_key),
-        )
-        row = cur.fetchone()
-        last_vote_at = int(row["last_vote_at"]) if row and row["last_vote_at"] is not None else None
-        if last_vote_at is not None and (now - last_vote_at) < cooldown_sec:
-            can_vote_hint = False
-            next_vote_at = last_vote_at + cooldown_sec
-            cooldown_remaining_sec = max(0, next_vote_at - now)
     cur.execute(
         """
         SELECT COUNT(*) AS c
@@ -1073,29 +1075,40 @@ def handle_vote_visit(
     provider_key: str,
     *,
     conn,
-) -> Tuple[bool, bool, str]:
+    now: Optional[float] = None,
+) -> Tuple[bool, bool, str, int]:
     """
-    Record a vote attempt when the player clicks a provider link in Vote Center.
+    Record a vote when the player clicks a provider link in Vote Center.
 
-    Uses the same cooldown + reward pool as postbacks. Duplicate provider_ref
-    within the cooldown window is ignored (ON CONFLICT DO NOTHING).
+    Hard provider cooldown: no reward is created while cooldown is active.
     """
     provider = _get_provider(str(provider_key), conn=conn)
     if not provider or not provider["enabled"]:
-        return False, False, "provider_disabled"
+        return False, False, "provider_disabled", 0
     if not provider["postback_enabled"]:
-        return True, False, "postback_disabled"
+        return True, False, "postback_disabled", 0
 
     uid = int(user_id)
     if uid <= 0 or not _user_exists(uid, conn=conn):
-        return False, False, "invalid_user"
+        return False, False, "invalid_user", 0
 
-    processed, created = record_provider_vote(str(provider_key), uid, None, conn=conn)
+    ts = int(now if now is not None else time.time())
+    cd = get_provider_cooldown_status(uid, provider, conn=conn, now=ts)
+    if not cd["can_vote"]:
+        return True, False, "cooldown_active", int(cd["cooldown_remaining_sec"])
+
+    processed, created = record_provider_vote(
+        str(provider_key),
+        uid,
+        None,
+        conn=conn,
+        now=ts,
+    )
     if not processed:
-        return False, False, "unavailable"
+        return False, False, "unavailable", 0
     if created:
-        return True, True, "reward_pending"
-    return True, False, "cooldown_active"
+        return True, True, "reward_pending", 0
+    return True, False, "cooldown_active", int(cd["cooldown_remaining_sec"])
 
 
 def _credit_planet_resources(

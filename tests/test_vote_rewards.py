@@ -28,6 +28,7 @@ from game.vote_rewards import (
     VOTE_REWARD_POOL,
     claim_all_vote_rewards,
     claim_vote_reward,
+    get_provider_cooldown_status,
     get_vote_center_state,
     handle_vote_visit,
     is_allowed_vote_reward_box,
@@ -49,6 +50,7 @@ GTOP100_PINGBACK_TEST_KEY = "test-gtop100-key"
 ARENA_TOP100_SECRET_TEST = "test-arena-secret"
 GAMETOOR_IVN_TEST_KEY = "test-gametoor-ivn-key"
 GAMETOOR_URL = "http://gametoor.com/in/3277/{user_id}"
+TWELVE_H_COOLDOWN_SEC = 12 * 60 * 60
 
 LOOTBOX_PAYLOAD = {
     "reward_type": "lootbox",
@@ -242,7 +244,7 @@ def test_arena_top100_provider_config(vote_db):
     assert arena["display_name"] == "Arena-Top100"
     assert arena["vote_url_template"] == ARENA_TOP100_URL
     assert arena["postback_enabled"] is True
-    assert arena.get("use_arena_reset_cooldown") is True
+    assert arena["cooldown_seconds"] == TWELVE_H_COOLDOWN_SEC
 
 
 def test_arena_next_at_column_ready(vote_db):
@@ -334,37 +336,27 @@ def test_arena_top100_voted_zero_no_reward(vote_db, monkeypatch):
     conn.close()
 
 
-def test_arena_top100_cooldown_uses_reset_timestamp(vote_db, monkeypatch):
-    monkeypatch.setenv("ARENA_TOP100_SECRET", ARENA_TOP100_SECRET_TEST)
+def test_arena_top100_hard_cooldown_12h(vote_db):
     uid = _player()
-    now = int(time.time())
-    reset_at = now + 5400
     conn = db()
-    processed, created = record_provider_vote(
+    now = int(time.time())
+    providers = list_enabled_providers(conn=conn)
+    arena_row = next(p for p in providers if p["provider_key"] == ARENA_TOP100_PROVIDER)
+    record_provider_vote(
         ARENA_TOP100_PROVIDER,
         uid,
         "1.2.3.4",
         conn=conn,
         now=now,
         reward_payload=LOOTBOX_PAYLOAD,
-        provider_ref_override=f"{ARENA_TOP100_PROVIDER}:{uid}:{reset_at}",
-        provider_next_vote_at=reset_at,
     )
-    assert processed and created
-    from game.vote_rewards import _provider_vote_stats, list_enabled_providers
-
-    providers = list_enabled_providers(conn=conn)
-    arena_row = next(p for p in providers if p["provider_key"] == ARENA_TOP100_PROVIDER)
-    mid = now + 1000
-    stats = _provider_vote_stats(uid, arena_row, conn=conn, now=mid)
-    assert stats["last_vote_at"] == now
-    assert stats["next_vote_at"] == reset_at
-    assert stats["can_vote_hint"] is False
-    assert stats["cooldown_remaining_sec"] == reset_at - mid
-    after = reset_at + 1
-    stats_later = _provider_vote_stats(uid, arena_row, conn=conn, now=after)
-    assert stats_later["can_vote_hint"] is True
-    assert stats_later["next_vote_at"] is None
+    cd_locked = get_provider_cooldown_status(uid, arena_row, conn=conn, now=now + 3600)
+    assert cd_locked["can_vote"] is False
+    assert cd_locked["cooldown_remaining_sec"] > 0
+    cd_free = get_provider_cooldown_status(
+        uid, arena_row, conn=conn, now=now + TWELVE_H_COOLDOWN_SEC + 1
+    )
+    assert cd_free["can_vote"] is True
     conn.close()
 
 
@@ -373,7 +365,7 @@ def test_gametoor_provider_config(vote_db):
     assert gametoor["display_name"] == "GameToor"
     assert gametoor["vote_url_template"] == GAMETOOR_URL
     assert gametoor["postback_enabled"] is True
-    assert gametoor["cooldown_seconds"] == 24 * 60 * 60
+    assert gametoor["cooldown_seconds"] == TWELVE_H_COOLDOWN_SEC
 
 
 def test_gametoor_vote_link_contains_user_id(vote_db):
@@ -487,7 +479,7 @@ def test_gametoor_ivn_already_voted_zero_creates_reward(vote_db, monkeypatch):
     assert data["created"] == 1
 
 
-def test_gametoor_duplicate_within_24h_no_second_reward(vote_db, monkeypatch):
+def test_gametoor_duplicate_within_12h_no_second_reward(vote_db, monkeypatch):
     monkeypatch.setenv("GAMETOOR_IVN_KEY", GAMETOOR_IVN_TEST_KEY)
     uid = _player()
     conn = db()
@@ -539,10 +531,11 @@ def test_valid_topg_callback_creates_pending_reward(vote_db):
 def test_vote_visit_creates_pending_reward(vote_db):
     uid = _player()
     conn = db()
-    ok, created, reason = handle_vote_visit(uid, TOPG_PROVIDER, conn=conn)
+    ok, created, reason, rem = handle_vote_visit(uid, TOPG_PROVIDER, conn=conn)
     assert ok is True
     assert created is True
     assert reason == "reward_pending"
+    assert rem == 0
     row = conn.execute(
         "SELECT status, provider FROM vote_rewards WHERE user_id = ?;",
         (uid,),
@@ -550,25 +543,100 @@ def test_vote_visit_creates_pending_reward(vote_db):
     assert row is not None
     assert row["status"] == "pending"
     assert row["provider"] == TOPG_PROVIDER
+    count = conn.execute("SELECT COUNT(*) AS c FROM vote_rewards WHERE user_id = ?;", (uid,)).fetchone()["c"]
+    assert int(count) == 1
     conn.close()
 
 
-def test_vote_visit_cooldown_no_second_reward(vote_db):
+def test_topg_visit_blocked_within_6h(vote_db):
     uid = _player()
     conn = db()
     now = int(time.time())
-    _, created1, _ = handle_vote_visit(uid, TOPG_PROVIDER, conn=conn)
-    _, created2 = record_provider_vote(
-        TOPG_PROVIDER,
-        uid,
-        None,
-        conn=conn,
-        now=now + 30,
-        reward_payload=LOOTBOX_PAYLOAD,
-    )
+    _, created1, _, _ = handle_vote_visit(uid, TOPG_PROVIDER, conn=conn, now=now)
+    ok, created2, reason, rem = handle_vote_visit(uid, TOPG_PROVIDER, conn=conn, now=now + 120)
     assert created1 is True
+    assert ok is True
     assert created2 is False
+    assert reason == "cooldown_active"
+    assert rem > 0
+    assert rem <= TOPG_COOLDOWN_SEC
     count = conn.execute("SELECT COUNT(*) AS c FROM vote_rewards WHERE user_id = ?;", (uid,)).fetchone()["c"]
+    assert int(count) == 1
+    conn.close()
+
+
+def test_topg_visit_allowed_after_6h(vote_db):
+    uid = _player()
+    conn = db()
+    now = int(time.time())
+    _, created1, _, _ = handle_vote_visit(uid, TOPG_PROVIDER, conn=conn, now=now)
+    later = now + TOPG_COOLDOWN_SEC + 1
+    ok, created2, reason, _ = handle_vote_visit(uid, TOPG_PROVIDER, conn=conn, now=later)
+    assert created1 is True
+    assert ok is True
+    assert created2 is True
+    assert reason == "reward_pending"
+    count = conn.execute("SELECT COUNT(*) AS c FROM vote_rewards WHERE user_id = ?;", (uid,)).fetchone()["c"]
+    assert int(count) == 2
+    conn.close()
+
+
+def test_gtop100_visit_blocked_within_12h(vote_db):
+    uid = _player()
+    conn = db()
+    now = int(time.time())
+    _, created1, _, _ = handle_vote_visit(uid, GTOP100_PROVIDER, conn=conn, now=now)
+    ok, created2, reason, rem = handle_vote_visit(uid, GTOP100_PROVIDER, conn=conn, now=now + 300)
+    assert created1 is True
+    assert ok is True
+    assert created2 is False
+    assert reason == "cooldown_active"
+    assert rem > 0
+    assert rem <= GTOP100_COOLDOWN_SEC
+    conn.close()
+
+
+def test_gtop100_visit_allowed_after_12h(vote_db):
+    uid = _player()
+    conn = db()
+    now = int(time.time())
+    _, created1, _, _ = handle_vote_visit(uid, GTOP100_PROVIDER, conn=conn, now=now)
+    later = now + GTOP100_COOLDOWN_SEC + 1
+    ok, created2, reason, _ = handle_vote_visit(uid, GTOP100_PROVIDER, conn=conn, now=later)
+    assert created1 is True
+    assert ok is True
+    assert created2 is True
+    assert reason == "reward_pending"
+    conn.close()
+
+
+def test_gametoor_visit_blocked_within_12h(vote_db):
+    uid = _player()
+    conn = db()
+    now = int(time.time())
+    _, created1, _, _ = handle_vote_visit(uid, GAMETOOR_PROVIDER, conn=conn, now=now)
+    ok, created2, reason, rem = handle_vote_visit(uid, GAMETOOR_PROVIDER, conn=conn, now=now + 300)
+    assert created1 is True
+    assert ok is True
+    assert created2 is False
+    assert reason == "cooldown_active"
+    assert rem > 0
+    conn.close()
+
+
+def test_vote_visit_idempotent_request_id(vote_db, monkeypatch):
+    client, login_uid, _ = _login_client(vote_db, monkeypatch)
+    req_id = str(uuid.uuid4())
+    res1 = client.post("/api/vote/visit", json={"provider_key": "topg", "request_id": req_id})
+    res2 = client.post("/api/vote/visit", json={"provider_key": "topg", "request_id": req_id})
+    assert res1.status_code == 200
+    assert res2.status_code == 200
+    assert res1.get_json() == res2.get_json()
+    conn = db()
+    count = conn.execute(
+        "SELECT COUNT(*) AS c FROM vote_rewards WHERE user_id = ?;",
+        (login_uid,),
+    ).fetchone()["c"]
     assert int(count) == 1
     conn.close()
 
