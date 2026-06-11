@@ -97,6 +97,12 @@ Docs: [PLANET_SCOPE.md](PLANET_SCOPE.md), [PLANET_EVOLUTION.md](PLANET_EVOLUTION
 | **Flotte** — Send, Tick, Missionen | ✅ | Attack combat active |
 | **Trader Hub** — Unified Exchange, Scrapyard | ✅ | GC-402 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
 | **Auktionshaus** — Lootbox-Auktionen (keine Eventboxen) | ✅ | GC-550 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
+| **Vote Center** — TopG Postback + 12h Belohnung | ✅ | GC-551 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
+| **Vote Center** — Multi-Provider (TopG, GameToor) | ✅ | GC-552 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
+| **Vote Center** — GTop100 Pingback Provider | ✅ | GC-553 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
+| **Vote Center** — Arena-Top100 (Link only) | ✅ | GC-554 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
+| **Vote Center** — Arena-Top100 Postback + reset Cooldown | ✅ | GC-555 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
+| **Vote Center** — GameToor IVN Auto-Rewards | ✅ | GC-556 [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
 | **Verteidigung** — Türme, Schilder, Queue, Ranking | ✅ | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) |
 | **Kampf-Auflösung** — Resolver, Reports, Loot, Debris, Ranking | ✅ | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md); `test_combat.py` |
 | **GC-700** — Combat polish / gaps (kein Resolver-Neubau) | 📋 | Siehe [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) § GC-700 Readiness |

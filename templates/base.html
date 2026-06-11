@@ -359,6 +359,9 @@
           <a href="{{ url_for('auction_house_view') }}" class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-wip {% if request.endpoint == 'auction_house_view' %}active{% endif %}">
             {{ T("nav_auction_house", "Auktionshaus") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
           </a>
+          <a href="{{ url_for('vote_center_view') }}" class="gc-nav-drawer-link gc-nav-drawer-sublink {% if request.endpoint == 'vote_center_view' %}active{% endif %}">
+            {{ T("nav_vote_center", "Vote Center") }}
+          </a>
           <a href="{{ url_for('galactic_politics_view') }}" class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-wip {% if request.endpoint == 'galactic_politics_view' %}active{% endif %}">
             {{ T("nav_galactic_politics", "Galaktische Politik") }} <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
           </a>

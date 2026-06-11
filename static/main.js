@@ -1083,6 +1083,7 @@
     if (path.endsWith("/logistics")) return "logistics";
     if (path.endsWith("/inventory")) return "inventory";
     if (path.endsWith("/auction-house")) return "auction_house";
+    if (path.endsWith("/vote-center")) return "vote_center";
     if (path.endsWith("/galactic-politics")) return "galactic_politics";
     if (path.endsWith("/skilltree")) return "skilltree";
     if (path.endsWith("/premium")) return "premium";
@@ -2912,6 +2913,7 @@
     "logistics",
     "inventory",
     "auction_house",
+    "vote_center",
     "galactic_politics",
     "skilltree",
     "premium",
@@ -7680,6 +7682,227 @@
     GC.registerCleanup(() => {});
   }
 
+  function parseVoteCenterPageState() {
+    const el = document.getElementById("vote-center-page-state");
+    if (el && el.textContent) {
+      try { return JSON.parse(el.textContent); } catch (_) {}
+    }
+    return null;
+  }
+
+  function _voteRewardTypeLabel(r) {
+    const key = String(r?.reward_type_label_key || "");
+    if (key) return t(key, String(r?.reward_type || "lootbox"));
+    const map = {
+      lootbox: t("vote_reward_type_lootbox", "Lootbox"),
+      resources: t("vote_reward_type_resources", "Ressourcen"),
+      ships: t("vote_reward_type_ships", "Schiffe"),
+      defense: t("vote_reward_type_defense", "Verteidigung"),
+    };
+    return map[String(r?.reward_type || "lootbox")] || map.lootbox;
+  }
+
+  function _voteRewardDetail(r) {
+    const type = String(r?.reward_type || "lootbox");
+    if (type === "resources") {
+      return `M ${fmtNumber(r.metal || 0)} / C ${fmtNumber(r.crystal || 0)} / F ${fmtNumber(r.fuel_cells || 0)}`;
+    }
+    if (type === "ships" && r.ships && typeof r.ships === "object") {
+      return Object.entries(r.ships).map(([k, v]) => `${k} ×${v}`).join(", ");
+    }
+    if (type === "defense" && r.defense && typeof r.defense === "object") {
+      return Object.entries(r.defense).map(([k, v]) => `${k} ×${v}`).join(", ");
+    }
+    return `${String(r.box_key || "generic_supply_container")} × ${Number(r.amount) || 1}`;
+  }
+
+  function voteProviderCooldownRemaining(p, nowSec) {
+    const remSec = Number(p.cooldown_remaining_sec);
+    if (Number.isFinite(remSec) && remSec > 0) return Math.floor(remSec);
+    const nextAt = Number(p.next_vote_at);
+    if (!Number.isFinite(nextAt) || nextAt <= 0) return 0;
+    return Math.max(0, Math.floor(nextAt - nowSec));
+  }
+
+  function formatVoteProviderStatus(p, nowSec) {
+    const canVote = p.can_vote_now === true || p.can_vote_hint === true;
+    if (canVote) {
+      return t("vote_center_ready_to_vote", "Bereit zum Voten");
+    }
+    const rem = voteProviderCooldownRemaining(p, nowSec);
+    if (rem <= 0) {
+      return t("vote_center_now", "Jetzt");
+    }
+    return formatCountdownRemain(rem);
+  }
+
+  function patchVoteCenterDom(vc) {
+    if (!vc) return;
+    const rewards = Array.isArray(vc.pending_rewards) ? vc.pending_rewards : [];
+    const pendingCount = Number(vc.pending_count) || rewards.length;
+    const now = Math.floor(getApproxServerNow());
+
+    document.querySelectorAll("[data-vote-pending-count]").forEach((el) => {
+      el.textContent = String(pendingCount);
+    });
+    document.querySelectorAll("[data-vote-pending-count-inline]").forEach((el) => {
+      el.textContent = String(pendingCount);
+    });
+    const claimAllBtn = document.querySelector("[data-vote-claim-all]");
+    if (claimAllBtn) claimAllBtn.disabled = pendingCount <= 0;
+
+    const providers = Array.isArray(vc.providers) ? vc.providers : [];
+    providers.forEach((p) => {
+      const key = String(p.provider_key || "");
+      if (!key) return;
+      const lastEl = document.querySelector(`[data-vote-provider-last="${key}"]`);
+      const nextEl = document.querySelector(`[data-vote-provider-next="${key}"]`);
+      const subtitleEl = document.querySelector(`[data-vote-provider-subtitle="${key}"]`);
+      const rewardStatusEl = document.querySelector(`[data-vote-provider-reward-status="${key}"]`);
+      const hintEl = document.querySelector(`[data-vote-provider-hint="${key}"]`);
+      const pendingEl = document.querySelector(`[data-vote-provider-pending="${key}"]`);
+      const linkEl = document.querySelector(`[data-vote-provider-link="${key}"]`);
+      if (subtitleEl && p.subtitle_key) {
+        subtitleEl.textContent = t(p.subtitle_key, subtitleEl.textContent || "");
+      }
+      if (rewardStatusEl && p.reward_status_key) {
+        rewardStatusEl.textContent = t(p.reward_status_key, rewardStatusEl.textContent || "");
+      }
+      if (lastEl) {
+        lastEl.textContent = p.last_vote_at
+          ? formatLocaleDateTime(p.last_vote_at)
+          : t("vote_center_never", "Noch nie");
+      }
+      if (nextEl) {
+        nextEl.textContent = formatVoteProviderStatus(p, now);
+      }
+      if (hintEl) {
+        const rem = voteProviderCooldownRemaining(p, now);
+        const postbackEnabled = !!p.postback_enabled;
+        if (!postbackEnabled) {
+          const noRewardKey = String(p.no_auto_reward_key || "").trim();
+          hintEl.textContent = noRewardKey
+            ? t(noRewardKey, hintEl.textContent || "")
+            : t(
+                "vote_provider_gametoor_no_auto_reward",
+                "GameToor-Votes werden aktuell noch nicht automatisch belohnt."
+              );
+          hintEl.classList.add("vote-center-hint-wait");
+          hintEl.classList.remove("vote-center-hint-ready");
+        } else if (p.can_vote_hint) {
+          hintEl.textContent = t("vote_center_can_vote", "Du kannst jetzt voten.");
+          hintEl.classList.add("vote-center-hint-ready");
+          hintEl.classList.remove("vote-center-hint-wait");
+        } else if (rem > 0) {
+          hintEl.textContent = `${t("vote_center_already_voted", "Du hast bereits gevotet.")} ${t("vote_center_next_in", "Nächster Vote möglich in")} ${formatCountdownRemain(rem)}`;
+          hintEl.classList.add("vote-center-hint-wait");
+          hintEl.classList.remove("vote-center-hint-ready");
+        } else {
+          hintEl.textContent = t("vote_center_wait_vote", "Bitte warte, bis der Cooldown abgelaufen ist.");
+          hintEl.classList.add("vote-center-hint-wait");
+          hintEl.classList.remove("vote-center-hint-ready");
+        }
+      }
+      if (pendingEl) pendingEl.textContent = String(Number(p.pending_count) || 0);
+      if (linkEl && p.vote_url) linkEl.href = p.vote_url;
+    });
+
+    const list = document.querySelector("[data-vote-rewards-list]");
+    if (!list) return;
+    if (!rewards.length) {
+      list.innerHTML = `<p class="vote-center-empty" data-vote-rewards-empty>${escapeHtml(t("vote_center_no_rewards", "Keine offenen Belohnungen."))}</p>`;
+      return;
+    }
+    list.innerHTML = rewards.map((r) => `
+      <article class="vote-center-reward-card" data-vote-reward-id="${Number(r.id)}">
+        <div class="vote-center-reward-info">
+          <span class="vote-center-reward-title">${escapeHtml(t("vote_reward_title", "Vote Belohnung"))}</span>
+          <span class="vote-center-reward-provider">${escapeHtml(String(r.provider_name || r.provider || ""))}</span>
+          <span class="vote-center-reward-type">${escapeHtml(_voteRewardTypeLabel(r))}</span>
+          <span class="vote-center-reward-detail gc-mono">${escapeHtml(_voteRewardDetail(r))}</span>
+        </div>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm vote-center-claim-btn" data-vote-claim="${Number(r.id)}">
+          ${escapeHtml(t("vote_center_claim_btn", "Belohnung abholen"))}
+        </button>
+      </article>
+    `).join("");
+  }
+
+  async function _submitVoteClaim(endpoint, body, successKey, failKey, reasonKey) {
+    const res = await GC.fetchGameAction(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res?.state) applyActionState(res, res.ok ? reasonKey : `${reasonKey}_error`);
+    if (res?.vote_center) patchVoteCenterDom(res.vote_center);
+    if (res?.ok) {
+      showNotify(t(successKey, "Belohnung ins Inventar gutgeschrieben."), "success");
+    } else {
+      showNotify(t(failKey, "Belohnung konnte nicht abgeholt werden."), "error");
+    }
+    return res;
+  }
+
+  let _voteCenterBound = false;
+  function bindVoteCenterOnce() {
+    if (_voteCenterBound) return;
+    _voteCenterBound = true;
+    document.addEventListener("click", async (ev) => {
+      const page = document.getElementById("vote-center-page");
+      if (!page || page.dataset.ready !== "1") return;
+
+      const claimAllBtn = ev.target.closest("[data-vote-claim-all]");
+      if (claimAllBtn && !claimAllBtn.disabled) {
+        ev.preventDefault();
+        claimAllBtn.disabled = true;
+        try {
+          await _submitVoteClaim(
+            "/api/vote/rewards/claim-all",
+            { request_id: GC.newRequestId() },
+            "vote_center_claim_all_ok",
+            "vote_center_claim_all_fail",
+            "vote_reward_claim_all"
+          );
+        } catch (_) {
+          showNotify(t("vote_center_claim_all_fail", "Belohnungen konnten nicht abgeholt werden."), "error");
+        } finally {
+          claimAllBtn.disabled = false;
+        }
+        return;
+      }
+
+      const btn = ev.target.closest("[data-vote-claim]");
+      if (!btn || btn.disabled) return;
+      ev.preventDefault();
+      const rewardId = parseInt(btn.dataset.voteClaim, 10) || 0;
+      if (!rewardId) return;
+      btn.disabled = true;
+      try {
+        await _submitVoteClaim(
+          "/api/vote/rewards/claim",
+          { reward_id: rewardId, request_id: GC.newRequestId() },
+          "vote_center_claim_ok",
+          "vote_center_claim_fail",
+          "vote_reward_claim"
+        );
+      } catch (_) {
+        showNotify(t("vote_center_claim_fail", "Belohnung konnte nicht abgeholt werden."), "error");
+      } finally {
+        btn.disabled = false;
+      }
+    }, true);
+  }
+
+  function initVoteCenter() {
+    bindVoteCenterOnce();
+    syncTradingSubnav("vote_center");
+    const page = document.getElementById("vote-center-page");
+    if (!page || page.dataset.ready !== "1") return;
+    const state = parseVoteCenterPageState();
+    if (state) patchVoteCenterDom(state);
+  }
+
   function initTraderHub() {
     initExchangePanel();
     initScrapyardPanel();
@@ -12441,6 +12664,7 @@
   GC.modules.overview = initOverview;
   GC.modules.inventory = initInventory;
   GC.modules.auction_house = initAuctionHouse;
+  GC.modules.vote_center = initVoteCenter;
   GC.modules.trader_hub = initTraderHub;
   GC.modules.fleet = initFleet;
   GC.modules.logistics = initLogistics;
@@ -12840,6 +13064,7 @@
     if (p.endsWith("/logistics")) return "logistics";
     if (p.endsWith("/inventory")) return "inventory";
     if (p.endsWith("/auction-house")) return "auction_house";
+    if (p.endsWith("/vote-center")) return "vote_center";
     if (p.endsWith("/galactic-politics")) return "galactic_politics";
     if (p.endsWith("/skilltree")) return "skilltree";
     if (p.endsWith("/premium")) return "premium";

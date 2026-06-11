@@ -1852,6 +1852,406 @@ def api_auction_house_bid():
     return jsonify(resp)
 
 
+@app.route("/vote-center")
+@require_login
+def vote_center_view():
+    ctx = _load_page_live_context(finish_source="vote_center")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.vote_rewards import get_vote_center_state
+
+    vote_center = {"ready": False, "pending_rewards": []}
+    conn = db()
+    try:
+        vote_center = get_vote_center_state(int(session["user_id"]), conn=conn)
+    finally:
+        conn.close()
+
+    return render_template(
+        "vote_center.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        vote_center=vote_center,
+    )
+
+
+def _vote_postback_response(provider_key: str) -> Any:
+    from game.vote_rewards import handle_provider_postback
+
+    remote_addr = request.remote_addr
+    xff = request.headers.get("X-Forwarded-For")
+    p_resp = request.args.get("p_resp")
+    vote_ip = request.args.get("ip")
+    debug_payload = {
+        "provider": provider_key,
+        "remote_addr": remote_addr,
+        "x_forwarded_for": xff,
+        "p_resp": p_resp,
+        "ip": vote_ip,
+    }
+    logger.info("vote postback received %s", debug_payload)
+    if str(provider_key) == "topg":
+        print("[TopG] postback received", debug_payload, flush=True)
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, created, reason = handle_provider_postback(
+            provider_key,
+            query_params=request.args,
+            form_params=request.form,
+            remote_addr=remote_addr,
+            conn=conn,
+        )
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("vote postback failed provider=%s", provider_key)
+        return jsonify({"ok": False, "reason": "server_error"}), 500
+    finally:
+        conn.close()
+
+    if reason == "forbidden":
+        return jsonify({"ok": False, "reason": reason}), 403
+    if reason in ("invalid_user_id", "missing_user_id"):
+        status = 400 if reason == "invalid_user_id" else 400
+        return jsonify({"ok": False, "reason": reason}), status
+    if reason in ("provider_disabled", "postback_disabled", "vote_not_valid"):
+        return jsonify({"ok": True, "created": False, "reason": reason})
+    if not ok:
+        return jsonify({"ok": False, "reason": reason}), 503
+    return jsonify({"ok": True, "created": bool(created)})
+
+
+@app.route("/api/vote/postback/<provider_key>", methods=["GET", "POST"])
+def api_vote_provider_postback(provider_key: str):
+    return _vote_postback_response(str(provider_key or "").strip().lower())
+
+
+@app.route("/api/vote/topg/postback", methods=["GET"])
+def api_vote_topg_postback():
+    return _vote_postback_response("topg")
+
+
+def _gametoor_ivn_response() -> Any:
+    from game.vote_rewards import handle_gametoor_ivn
+
+    remote_addr = request.remote_addr
+    xff = request.headers.get("X-Forwarded-For")
+    json_data = request.get_json(silent=True)
+    form_data = dict(request.form) if request.form else None
+    logger.info(
+        "gametoor ivn received remote_addr=%s x_forwarded_for=%s has_json=%s has_form=%s",
+        remote_addr,
+        xff,
+        bool(json_data),
+        bool(form_data),
+    )
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, created_count, reason = handle_gametoor_ivn(
+            json_data if isinstance(json_data, dict) else None,
+            form_data,
+            conn=conn,
+        )
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("gametoor ivn failed")
+        return jsonify({"ok": False, "reason": "server_error"}), 500
+    finally:
+        conn.close()
+
+    if reason == "forbidden":
+        return jsonify({"ok": False, "reason": reason}), 403
+    if reason == "key_missing":
+        return jsonify({"ok": False, "reason": reason}), 503
+    if not ok:
+        return jsonify({"ok": False, "reason": reason}), 503
+    return jsonify({"ok": True, "created": int(created_count), "reason": reason}), 200
+
+
+@app.route("/api/vote/gametoor/ivn", methods=["POST"])
+def api_vote_gametoor_ivn():
+    return _gametoor_ivn_response()
+
+
+@app.route("/api/vote/gametoor/postback", methods=["GET", "POST"])
+def api_vote_gametoor_postback():
+    return _gametoor_ivn_response()
+
+
+@app.route("/api/vote/arena-top100/postback", methods=["POST"])
+def api_vote_arena_top100_postback():
+    from game.vote_rewards import handle_arena_top100_postback
+
+    remote_addr = request.remote_addr
+    xff = request.headers.get("X-Forwarded-For")
+    json_data = request.get_json(silent=True)
+    form_data = dict(request.form) if request.form else None
+    logger.info(
+        "arena_top100 postback received remote_addr=%s x_forwarded_for=%s has_json=%s has_form=%s",
+        remote_addr,
+        xff,
+        bool(json_data),
+        bool(form_data),
+    )
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, created_count, reason = handle_arena_top100_postback(
+            json_data if isinstance(json_data, dict) else None,
+            form_data,
+            conn=conn,
+        )
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("arena_top100 postback failed")
+        return jsonify({"ok": False, "reason": "server_error"}), 500
+    finally:
+        conn.close()
+
+    if reason == "forbidden":
+        return jsonify({"ok": False, "reason": reason}), 403
+    if reason == "secret_missing":
+        return jsonify({"ok": False, "reason": reason}), 503
+    if not ok:
+        return jsonify({"ok": False, "reason": reason}), 503
+    return jsonify({"ok": True, "created": int(created_count), "reason": reason}), 200
+
+
+@app.route("/api/vote/gtop100/pingback", methods=["POST"])
+def api_vote_gtop100_pingback():
+    from game.vote_rewards import handle_gtop100_pingback
+
+    remote_addr = request.remote_addr
+    xff = request.headers.get("X-Forwarded-For")
+    json_data = request.get_json(silent=True)
+    form_data = dict(request.form) if request.form else None
+    logger.info(
+        "gtop100 pingback received remote_addr=%s x_forwarded_for=%s has_json=%s has_form=%s",
+        remote_addr,
+        xff,
+        bool(json_data),
+        bool(form_data),
+    )
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, created_count, reason = handle_gtop100_pingback(
+            json_data if isinstance(json_data, dict) else None,
+            form_data,
+            conn=conn,
+        )
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("gtop100 pingback failed")
+        return jsonify({"ok": False, "reason": "server_error"}), 500
+    finally:
+        conn.close()
+
+    if reason == "forbidden":
+        return jsonify({"ok": False, "reason": reason}), 403
+    if reason == "invalid_site_id":
+        return jsonify({"ok": False, "reason": reason}), 400
+    if reason == "pingback_key_missing":
+        return jsonify({"ok": False, "reason": reason}), 503
+    if not ok:
+        return jsonify({"ok": False, "reason": reason}), 503
+    return jsonify({"ok": True, "created": int(created_count), "reason": reason}), 200
+
+
+@app.route("/api/dev/topg/postback-test", methods=["POST"])
+@require_login
+def api_dev_topg_postback_test():
+    """Dev/admin only: simulate TopG postback and create pending vote reward."""
+    from game.config import is_debug_enabled
+    from game.models import load_player
+    from game.vote_rewards import get_vote_center_state, record_topg_vote, roll_vote_reward
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    player = load_player(user_id)
+    allow = is_debug_enabled() or bool(player and player.get("is_admin"))
+    if not allow:
+        return jsonify({"ok": False, "reason": "forbidden"}), 403
+
+    data = request.get_json(silent=True) or {}
+    try:
+        target_user_id = int(data.get("user_id") or user_id)
+    except (TypeError, ValueError):
+        target_user_id = user_id
+
+    reward_payload = data.get("reward_payload")
+    if reward_payload is not None and not isinstance(reward_payload, dict):
+        reward_payload = None
+    if reward_payload is None and data.get("reward_type"):
+        reward_payload = dict(data)
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        processed, created = record_topg_vote(
+            target_user_id,
+            str(data.get("ip") or "127.0.0.1"),
+            conn=conn,
+            reward_payload=reward_payload or roll_vote_reward(),
+        )
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("dev topg postback-test failed user_id=%s", target_user_id)
+        return jsonify({"ok": False, "reason": "server_error"}), 500
+    finally:
+        conn.close()
+
+    vote_center: Dict[str, Any] = {}
+    conn2 = db()
+    try:
+        vote_center = get_vote_center_state(target_user_id, conn=conn2)
+    finally:
+        conn2.close()
+
+    return jsonify({
+        "ok": bool(processed),
+        "created": bool(created),
+        "user_id": target_user_id,
+        "vote_center": vote_center,
+    })
+
+
+@app.route("/api/vote/rewards/claim", methods=["POST"])
+@require_login
+def api_vote_rewards_claim():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    try:
+        reward_id = int(data.get("reward_id") or 0)
+    except (TypeError, ValueError):
+        reward_id = 0
+
+    from game.vote_rewards import claim_vote_reward, get_vote_center_state
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, claim_result = claim_vote_reward(user_id, reward_id, conn=conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("vote reward claim failed user_id=%s reward_id=%s", user_id, reward_id)
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_vote_rewards_claim")
+        return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_vote_rewards_claim")
+    vote_center: Dict[str, Any] = {}
+    conn2 = db()
+    try:
+        vote_center = get_vote_center_state(user_id, conn=conn2)
+    finally:
+        conn2.close()
+
+    resp: Dict[str, Any] = {
+        "ok": bool(ok),
+        "reason": reason,
+        "state": state,
+        "vote_center": vote_center,
+    }
+    if ok and claim_result:
+        resp["claim"] = claim_result
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
+@app.route("/api/vote/rewards/claim-all", methods=["POST"])
+@require_login
+def api_vote_rewards_claim_all():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    from game.vote_rewards import claim_all_vote_rewards, get_vote_center_state
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, claim_result = claim_all_vote_rewards(user_id, conn=conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("vote reward claim-all failed user_id=%s", user_id)
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_vote_rewards_claim_all")
+        return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_vote_rewards_claim_all")
+    vote_center: Dict[str, Any] = {}
+    conn2 = db()
+    try:
+        vote_center = get_vote_center_state(user_id, conn=conn2)
+    finally:
+        conn2.close()
+
+    resp: Dict[str, Any] = {
+        "ok": bool(ok),
+        "reason": reason,
+        "state": state,
+        "vote_center": vote_center,
+    }
+    if claim_result:
+        resp["claim_all"] = claim_result
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
 @app.route("/galactic-politics")
 @require_login
 def galactic_politics_view():

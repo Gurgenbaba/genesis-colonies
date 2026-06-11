@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set vc = vote_center if vote_center is defined and vote_center else {'ready': false, 'providers': [], 'pending_rewards': [], 'pending_count': 0} %}
+{% set providers = vc.providers if vc.providers is defined else [] %}
+{% set pending_count = vc.pending_count if vc.pending_count is defined else (vc.pending_rewards|length if vc.pending_rewards is defined else 0) %}
+
+<div class="gc-page vote-center-page" id="vote-center-page"
+     data-vote-center
+     data-ready="{{ '1' if vc.ready else '0' }}">
+
+  {% if vc.ready %}
+  <script type="application/json" id="vote-center-page-state">{{ vc | tojson }}</script>
+  {% endif %}
+
+  <header class="gc-page-header section-header vote-center-header">
+    <p class="vote-center-eyebrow">{{ T("vote_center_eyebrow", "VOTE REWARDS") }}</p>
+    <h1 class="section-title">{{ T("vote_center_title", "Vote Center") }}</h1>
+    <p class="section-hint hint vote-center-hint">
+      {{ T("vote_center_hint_multi", "Unterstütze Genesis Colonies auf Toplisten und hole deine Belohnungen hier ab.") }}
+    </p>
+  </header>
+
+  {% if not vc.ready %}
+  <section class="gc-panel vote-center-panel">
+    <p class="vote-center-empty">{{ T("vote_center_unavailable", "Vote Center ist derzeit nicht verfügbar.") }}</p>
+  </section>
+  {% else %}
+
+  <section class="gc-panel vote-center-panel vote-center-providers-panel">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("vote_center_providers_title", "Toplisten") }}</span>
+    </div>
+    <div class="vote-center-providers-list" data-vote-providers-list>
+      {% for p in providers %}
+      <article class="vote-center-provider-card" data-vote-provider="{{ p.provider_key }}">
+        <div class="vote-center-provider-head">
+          <h2 class="vote-center-provider-name">{{ p.display_name }}</h2>
+          <span class="vote-center-provider-pending gc-mono" data-vote-provider-pending="{{ p.provider_key }}">
+            {{ p.pending_count|int }}
+          </span>
+        </div>
+        {% if p.subtitle_key is defined and p.subtitle_key %}
+        <p class="vote-center-provider-subtitle" data-vote-provider-subtitle="{{ p.provider_key }}">
+          {{ T(p.subtitle_key, "") }}
+        </p>
+        {% endif %}
+        <dl class="vote-center-provider-meta">
+          <div class="vote-center-status-row">
+            <dt>{{ T("vote_center_last_vote", "Letzter Vote") }}</dt>
+            <dd class="gc-mono" data-vote-provider-last="{{ p.provider_key }}">
+              {% if p.last_vote_at %}{{ p.last_vote_at }}{% else %}{{ T("vote_center_never", "Noch nie") }}{% endif %}
+            </dd>
+          </div>
+          <div class="vote-center-status-row">
+            <dt>{{ T("vote_center_status_title", "Status") }}</dt>
+            <dd class="gc-mono" data-vote-provider-next="{{ p.provider_key }}">
+              {% if p.can_vote_hint is defined and p.can_vote_hint %}
+                {{ T("vote_center_ready_to_vote", "Bereit zum Voten") }}
+              {% elif p.cooldown_remaining_sec is defined and p.cooldown_remaining_sec > 0 %}
+                {{ T("vote_center_next_in", "Nächster Vote möglich in") }} …
+              {% else %}
+                {{ T("vote_center_now", "Jetzt") }}
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+        <p class="vote-center-provider-reward-status" data-vote-provider-reward-status="{{ p.provider_key }}">
+          {% if p.reward_status_key is defined and p.reward_status_key %}
+            {{ T(p.reward_status_key, "") }}
+          {% elif p.rewards_active is defined and p.rewards_active %}
+            {{ T("vote_provider_topg_reward_active", "Belohnung: aktiv") }}
+          {% else %}
+            {{ T("vote_provider_gametoor_reward_soon", "Automatische Belohnung: bald") }}
+          {% endif %}
+        </p>
+        <p class="vote-center-provider-hint {% if p.can_vote_hint %}vote-center-hint-ready{% else %}vote-center-hint-wait{% endif %}"
+           data-vote-provider-hint="{{ p.provider_key }}"
+           data-vote-provider-cooldown="{{ p.cooldown_remaining_sec if p.cooldown_remaining_sec is defined else 0 }}">
+          {% if p.postback_enabled is defined and not p.postback_enabled %}
+            {% if p.no_auto_reward_key is defined and p.no_auto_reward_key %}
+              {{ T(p.no_auto_reward_key, "") }}
+            {% else %}
+              {{ T("vote_provider_gametoor_no_auto_reward", "GameToor-Votes werden aktuell noch nicht automatisch belohnt.") }}
+            {% endif %}
+          {% elif p.can_vote_hint %}
+            {{ T("vote_center_can_vote", "Du kannst jetzt voten.") }}
+          {% else %}
+            {{ T("vote_center_already_voted", "Du hast bereits gevotet.") }}
+          {% endif %}
+        </p>
+        <a href="{{ p.vote_url }}" target="_blank" rel="noopener"
+           class="gc-btn gc-btn-primary gc-btn-sm vote-center-vote-btn"
+           data-vote-provider-link="{{ p.provider_key }}">
+          {% if p.provider_key == 'topg' %}
+            {{ T("vote_center_vote_btn_topg", "Auf TopG voten") }}
+          {% elif p.provider_key == 'gtop100' %}
+            {{ T("vote_center_vote_btn_gtop100", "Auf GTop100 voten") }}
+          {% elif p.provider_key == 'gametoor' %}
+            {{ T("vote_center_vote_btn_gametoor", "Auf GameToor voten") }}
+          {% elif p.provider_key == 'arena_top100' %}
+            {{ T("vote_center_vote_btn_arena_top100", "Auf Arena-Top100 voten") }}
+          {% else %}
+            {{ T("vote_center_vote_btn_short", "Voten") }}
+          {% endif %}
+        </a>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="gc-panel vote-center-panel vote-center-rewards-panel">
+    <div class="gc-panel-header vote-center-rewards-header">
+      <span class="gc-panel-title">{{ T("vote_center_rewards_title", "Belohnungen") }}</span>
+      <span class="vote-center-pending-badge gc-mono" data-vote-pending-count>{{ pending_count }}</span>
+    </div>
+    <p class="vote-center-rewards-summary">
+      {{ T("vote_center_rewards_available", "Belohnungen verfügbar:") }}
+      <strong class="gc-mono" data-vote-pending-count-inline>{{ pending_count }}</strong>
+    </p>
+    <div class="vote-center-rewards-actions">
+      <button type="button"
+              class="gc-btn gc-btn-secondary vote-center-claim-all-btn"
+              data-vote-claim-all
+              {% if pending_count <= 0 %}disabled{% endif %}>
+        {{ T("vote_center_claim_all_btn", "Alle Belohnungen abholen") }}
+      </button>
+    </div>
+    <div class="vote-center-rewards-list" data-vote-rewards-list>
+      {% if vc.pending_rewards %}
+        {% for r in vc.pending_rewards %}
+        <article class="vote-center-reward-card" data-vote-reward-id="{{ r.id }}">
+          <div class="vote-center-reward-info">
+            <span class="vote-center-reward-title">{{ T("vote_reward_title", "Vote Belohnung") }}</span>
+            <span class="vote-center-reward-provider">{{ r.provider_name if r.provider_name is defined else r.provider }}</span>
+            <span class="vote-center-reward-type" data-vote-reward-type="{{ r.reward_type if r.reward_type is defined else 'lootbox' }}">
+              {{ T(r.reward_type_label_key if r.reward_type_label_key is defined else "vote_reward_type_lootbox", "Lootbox") }}
+            </span>
+            <span class="vote-center-reward-detail gc-mono" data-vote-reward-detail="{{ r.id }}">
+              {% if r.reward_type == 'resources' %}
+                M {{ r.metal|default(0) }} / C {{ r.crystal|default(0) }} / F {{ r.fuel_cells|default(0) }}
+              {% elif r.reward_type == 'ships' and r.ships is defined %}
+                {% for sk, sa in r.ships.items() %}{{ sk }} ×{{ sa }}{% if not loop.last %}, {% endif %}{% endfor %}
+              {% elif r.reward_type == 'defense' and r.defense is defined %}
+                {% for dk, da in r.defense.items() %}{{ dk }} ×{{ da }}{% if not loop.last %}, {% endif %}{% endfor %}
+              {% else %}
+                {{ r.box_key|default('generic_supply_container') }} × {{ r.amount|default(1) }}
+              {% endif %}
+            </span>
+          </div>
+          <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm vote-center-claim-btn" data-vote-claim="{{ r.id }}">
+            {{ T("vote_center_claim_btn", "Belohnung abholen") }}
+          </button>
+        </article>
+        {% endfor %}
+      {% else %}
+        <p class="vote-center-empty" data-vote-rewards-empty>{{ T("vote_center_no_rewards", "Keine offenen Belohnungen.") }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  {% endif %}
+</div>
+{% endblock %}

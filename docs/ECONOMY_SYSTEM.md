@@ -170,6 +170,48 @@ Migration: `047_auction_house.sql`
 
 ---
 
+## Vote Center (`/vote-center`) — GC-551 / GC-552
+
+Multi-Provider-Voting: Konfiguration in `vote_providers`, Postback erzeugt **pending** Reward, Claim im Vote Center.
+
+| API | Methode | Owner |
+|-----|---------|-------|
+| Seite | `GET /vote-center` | `templates/vote_center.html` |
+| Provider Postback | `GET/POST /api/vote/postback/{provider_key}` | `game/vote_rewards.py` |
+| TopG (Alias) | `GET /api/vote/topg/postback?p_resp=USER_ID&ip=IP` | `game/vote_rewards.py` |
+| GTop100 | `POST /api/vote/gtop100/pingback` (JSON oder Form) | `game/vote_rewards.py` |
+| Arena-Top100 | `POST /api/vote/arena-top100/postback` | `game/vote_rewards.py` |
+| GameToor IVN | `POST /api/vote/gametoor/ivn` | `game/vote_rewards.py` |
+| GameToor (Alias) | `GET/POST /api/vote/gametoor/postback` | `game/vote_rewards.py` |
+| Claim | `POST /api/vote/rewards/claim` | `game/vote_rewards.py` |
+| Claim all | `POST /api/vote/rewards/claim-all` | `game/vote_rewards.py` |
+
+### Provider (Seed)
+
+| Key | Vote-URL | Postback |
+|-----|----------|----------|
+| `topg` | `https://topg.org/ogame-private-servers/server-683112-{user_id}#vote` | 6h Cooldown; `p_resp`, `ip` |
+| `gtop100` | `https://gtop100.com/Ogame/server-106142?vote=1&pingUsername={user_id}` | 12h Cooldown; JSON/Form Pingback; `GTOP100_PINGBACK_KEY`, `siteid=106142`, `success=0` |
+| `gametoor` | `http://gametoor.com/in/3277/{user_id}` | IVN; `GAMETOOR_IVN_KEY`; 24h Cooldown |
+| `arena_top100` | `https://www.arena-top100.com/index.php?a=in&u=Gurgenbaba&id={user_id}` | Postback; `ARENA_TOP100_SECRET`; Cooldown via Arena `reset` |
+
+Neue Topliste: Zeile in `vote_providers` + optional Postback-Route — keine separaten Seiten.
+
+### Regeln
+
+- Postback nur nach echtem Vote; **kein** Reward beim Link-Klick.
+- Dev/Test IP-Lock: `GC_VOTE_SKIP_IP_CHECK=1` (oder Legacy `GC_TOPG_SKIP_IP_CHECK=1`).
+- Production TopG IP-Check: `TOPG_STRICT_IP_CHECK=1` (Default **0** — Railway/Proxy loggt nur, blockiert nicht).
+- **Cooldown** pro User/Provider (TopG: 6h, GTop100: 12h, GameToor: 24h) — `provider_ref = {provider}:{user_id}:{bucket}`.
+- GTop100 Pingback-Key: Env `GTOP100_PINGBACK_KEY` (muss mit GTop100-Dashboard übereinstimmen).
+- Pro Vote **eine** gewichtete Zufallsbelohnung (`lootbox` / `resources` / `ships` / `defense`) — Auszahlung beim Claim auf context planet.
+- Dev-Test: `POST /api/dev/topg/postback-test` (Admin/Debug).
+- **Keine Eventboxen** als Vote-Reward.
+
+Migrationen: `048_vote_rewards.sql`, `049_vote_providers.sql`, `051_vote_provider_cooldowns.sql`, `052_vote_gtop100.sql`, `053_vote_arena_top100.sql`, `054_vote_arena_postback.sql`, `055_vote_gametoor_ivn.sql`
+
+---
+
 ## Shipyard-Kosten
 
 Schiffsbau zieht metal, crystal **und fuel_cells** ab (siehe [FLEET_SYSTEM.md](FLEET_SYSTEM.md)).
@@ -186,14 +228,16 @@ Schiffsbau zieht metal, crystal **und fuel_cells** ab (siehe [FLEET_SYSTEM.md](F
 | `game/fuel_exchange.py` | Legacy-Wrapper (deprecated) |
 | `game/scrapyard.py` | Recycling |
 | `game/auction_house.py` | Lootbox-Auktionen |
+| `game/vote_rewards.py` | TopG Vote Rewards |
 | `game/logic.py` | Poll-Fassade |
 | `templates/trader_hub.html` | Trader Hub UI |
 | `templates/auction_house.html` | Auktionshaus UI |
+| `templates/vote_center.html` | Vote Center UI |
 
 ---
 
 ## Tests
 
 ```bash
-python -m pytest tests/test_effects.py tests/test_exchange.py tests/test_fuel_exchange.py tests/test_scrapyard.py tests/test_fuel_cells_resource_bar.py tests/test_trader_hub.py tests/test_auction_house.py -v
+python -m pytest tests/test_effects.py tests/test_exchange.py tests/test_fuel_exchange.py tests/test_scrapyard.py tests/test_fuel_cells_resource_bar.py tests/test_trader_hub.py tests/test_auction_house.py tests/test_vote_rewards.py -v
 ```

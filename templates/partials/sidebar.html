@@ -89,7 +89,7 @@
 
   {% set _trading_open = request.endpoint in (
     'trader_hub_view', 'logistics_view', 'inventory_view', 'auction_house_view',
-    'galactic_politics_view', 'skilltree_view', 'premium_view'
+    'vote_center_view', 'galactic_politics_view', 'skilltree_view', 'premium_view'
   ) %}
   <div class="gc-nav-trading-group gc-nav-submenu-group">
     <a href="{{ url_for('trader_hub_view') }}"
@@ -120,6 +120,11 @@
          class="gc-nav-sub-link {% if request.endpoint == 'auction_house_view' %}active{% endif %}"
          data-trading-nav="auction_house">
         {{ T("nav_auction_house", "Auktionshaus") }}
+      </a>
+      <a href="{{ url_for('vote_center_view') }}"
+         class="gc-nav-sub-link {% if request.endpoint == 'vote_center_view' %}active{% endif %}"
+         data-trading-nav="vote_center">
+        {{ T("nav_vote_center", "Vote Center") }}
       </a>
       <a href="{{ url_for('galactic_politics_view') }}"
          class="gc-nav-sub-link gc-nav-sub-link--wip {% if request.endpoint == 'galactic_politics_view' %}active{% endif %}"
