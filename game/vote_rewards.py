@@ -611,11 +611,11 @@ def _provider_vote_stats(
         """
         SELECT COUNT(*) AS c
         FROM vote_rewards
-        WHERE user_id = ? AND provider = ? AND status = 'pending';
+        WHERE user_id = ? AND provider = ?;
         """,
         (int(user_id), provider_key),
     )
-    pending_count = int(cur.fetchone()["c"] or 0)
+    vote_count = int(cur.fetchone()["c"] or 0)
     vote_url = resolve_vote_url(str(provider["vote_url_template"]), int(user_id))
     postback_enabled = bool(provider.get("postback_enabled"))
     return {
@@ -627,7 +627,7 @@ def _provider_vote_stats(
         "cooldown_remaining_sec": cooldown_remaining_sec,
         "can_vote_hint": can_vote_hint,
         "can_vote_now": can_vote_hint,
-        "pending_count": pending_count,
+        "vote_count": vote_count,
         "cooldown_sec": cooldown_sec,
         "postback_enabled": postback_enabled,
         "rewards_active": postback_enabled,

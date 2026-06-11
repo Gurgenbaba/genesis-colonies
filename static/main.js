@@ -1965,8 +1965,7 @@
 
       const levelEl = row.querySelector(".tech-level-current");
       if (levelEl) {
-        const target = tech.target_level ?? tech.level + 1;
-        _setIfChanged(levelEl, `${fmtNumber(tech.level)}→${fmtNumber(target)}`);
+        _setIfChanged(levelEl, fmtNumber(tech.level || 0));
       }
 
       const costCell = row.querySelector(".tech-cost-cell, .bcell-cost");
@@ -7837,7 +7836,7 @@
       const subtitleEl = document.querySelector(`[data-vote-provider-subtitle="${key}"]`);
       const rewardStatusEl = document.querySelector(`[data-vote-provider-reward-status="${key}"]`);
       const hintEl = document.querySelector(`[data-vote-provider-hint="${key}"]`);
-      const pendingEl = document.querySelector(`[data-vote-provider-pending="${key}"]`);
+      const voteCountEl = document.querySelector(`[data-vote-provider-count="${key}"]`);
       const linkEl = document.querySelector(`[data-vote-provider-link="${key}"]`);
       if (subtitleEl && p.subtitle_key) {
         subtitleEl.textContent = t(p.subtitle_key, subtitleEl.textContent || "");
@@ -7888,7 +7887,7 @@
           hintEl.classList.remove("vote-center-hint-ready");
         }
       }
-      if (pendingEl) pendingEl.textContent = String(Number(p.pending_count) || 0);
+      if (voteCountEl) voteCountEl.textContent = fmtNumber(Number(p.vote_count) || 0);
       if (linkEl && p.vote_url) linkEl.href = p.vote_url;
     });
 

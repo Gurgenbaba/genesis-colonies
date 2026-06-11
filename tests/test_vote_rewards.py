@@ -903,7 +903,23 @@ def test_vote_center_state_cooldown(vote_db):
     assert topg["can_vote_hint"] is False
     assert topg["can_vote_now"] is False
     assert topg["cooldown_remaining_sec"] > 0
+    assert topg["vote_count"] == 1
     assert len(state["pending_rewards"]) == 1
+    conn.close()
+
+
+def test_provider_vote_count_persists_after_claim(vote_db):
+    uid = _player()
+    conn = db()
+    record_topg_vote(uid, "1.2.3.4", conn=conn, reward_payload=LOOTBOX_PAYLOAD)
+    state = get_vote_center_state(uid, conn=conn)
+    reward_id = int(state["pending_rewards"][0]["id"])
+    ok, reason, _ = claim_vote_reward(uid, reward_id, conn=conn)
+    assert ok is True
+    state_after = get_vote_center_state(uid, conn=conn)
+    topg = next(p for p in state_after["providers"] if p["provider_key"] == "topg")
+    assert topg["vote_count"] == 1
+    assert state_after["pending_count"] == 0
     conn.close()
 
 

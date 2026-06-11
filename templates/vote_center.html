@@ -44,16 +44,20 @@
              aria-label="{{ p.display_name }}">
           <div class="vote-center-provider-hero-overlay">
             <h2 class="vote-center-provider-name">{{ p.display_name }}</h2>
-            <span class="vote-center-provider-pending gc-mono" data-vote-provider-pending="{{ p.provider_key }}">
-              {{ p.pending_count|int }}
-            </span>
           </div>
+          <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero vote-center-provider-vote-count gc-mono"
+                data-vote-provider-count="{{ p.provider_key }}"
+                title="{{ T('vote_center_vote_count', 'Votes gesamt') }}">
+            {{ (p.vote_count if p.vote_count is defined else 0)|fmt_int }}
+          </span>
         </div>
         {% else %}
         <div class="vote-center-provider-head">
           <h2 class="vote-center-provider-name">{{ p.display_name }}</h2>
-          <span class="vote-center-provider-pending gc-mono" data-vote-provider-pending="{{ p.provider_key }}">
-            {{ p.pending_count|int }}
+          <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero vote-center-provider-vote-count gc-mono"
+                data-vote-provider-count="{{ p.provider_key }}"
+                title="{{ T('vote_center_vote_count', 'Votes gesamt') }}">
+            {{ (p.vote_count if p.vote_count is defined else 0)|fmt_int }}
           </span>
         </div>
         {% endif %}
