@@ -1792,6 +1792,13 @@
     _setIfChanged(reqEl, tooltip);
   }
 
+  function getResearchActionState(tech, queueFull) {
+    if (!tech.requirements_met) return "warn";
+    if (queueFull) return "locked";
+    if (tech.can_afford === false) return "afford";
+    return "go";
+  }
+
   function renderResearchActionCell(tech, summary) {
     const key = tech.key;
     const count = summary?.count ?? 0;
@@ -1802,34 +1809,62 @@
     const btnQueue = t("research_btn_queue", "Anreihen");
     const fullLabel = t("research_btn_queue_full", "Forschungsliste voll");
     const actionLabel = queueActive ? btnQueue : btnStart;
+    const state = getResearchActionState(tech, queueFull);
 
-    if (!tech.requirements_met) {
+    if (state === "warn") {
       let lockTitle = t("research_requirements_not_met", "Voraussetzungen nicht erfüllt.");
       const reqHint = formatResearchReqTooltip(tech.requirements_items);
       if (reqHint) lockTitle += " · " + reqHint;
       return (
         `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-research status-pill-icon-btn" type="button" disabled` +
-        ` title="${lockTitle}" aria-label="${lockTitle}"><span class="gc-bld-head-action-icon">⚠</span></button>`
+        ` data-action-state="warn" title="${lockTitle}" aria-label="${lockTitle}"><span class="gc-bld-head-action-icon">⚠</span></button>`
       );
     }
-    if (queueFull) {
+    if (state === "locked") {
       return (
         `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-research" type="button" disabled` +
-        ` aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span class="gc-bld-head-action-icon">🔒</span></button>`
+        ` data-action-state="locked" aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span class="gc-bld-head-action-icon">🔒</span></button>`
       );
     }
-    if (tech.can_afford === false) {
+    if (state === "afford") {
       const shortMsg = t("research_not_enough_resources", "Nicht genug Ressourcen.");
       return (
         `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-research" type="button" disabled` +
-        ` title="${shortMsg}" aria-label="${shortMsg}"><span class="gc-bld-head-action-icon">+</span></button>`
+        ` data-action-state="afford" title="${shortMsg}" aria-label="${shortMsg}"><span class="gc-bld-head-action-icon">+</span></button>`
       );
     }
     const href = `/research_start/${encodeURIComponent(key)}`;
     return (
       `<a href="${href}" class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-research"` +
-      ` title="${actionLabel}" aria-label="${actionLabel}"><span class="gc-bld-head-action-icon">+</span></a>`
+      ` data-action-state="go" title="${actionLabel}" aria-label="${actionLabel}"><span class="gc-bld-head-action-icon">+</span></a>`
     );
+  }
+
+  function syncResearchHeadAction(cell, tech, summary) {
+    if (!cell || !tech) return;
+    const count = summary?.count ?? 0;
+    const limit = summary?.limit ?? 3;
+    const queueFull = count >= limit;
+    const state = getResearchActionState(tech, queueFull);
+    const btn = cell.querySelector(".gc-bld-head-action-btn");
+    const prevState = btn?.dataset?.actionState || "";
+    const queueActive = count > 0;
+    const actionLabel = queueActive
+      ? t("research_btn_queue", "Anreihen")
+      : t("research_btn_start", "Forschung starten");
+
+    if (btn && prevState === state) {
+      if (state === "go") {
+        btn.title = actionLabel;
+        btn.setAttribute("aria-label", actionLabel);
+        const href = `/research_start/${encodeURIComponent(tech.key)}`;
+        if (btn.getAttribute("href") !== href) btn.setAttribute("href", href);
+      }
+      return;
+    }
+
+    const html = renderResearchActionCell(tech, summary);
+    if (cell.innerHTML.trim() !== html.trim()) cell.innerHTML = html;
   }
 
   function getBuildingActionState(b, bqQueueFull) {
@@ -2013,8 +2048,7 @@
 
       const actionCell = row.querySelector(".tech-status-cell, .gc-bld-card-action[data-tech-key]");
       if (actionCell) {
-        const html = renderResearchActionCell(tech, summary);
-        if (actionCell.innerHTML.trim() !== html.trim()) actionCell.innerHTML = html;
+        syncResearchHeadAction(actionCell, tech, summary);
       }
 
       if (useOwnerMap) {

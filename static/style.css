@@ -4292,8 +4292,13 @@ body:not(.gc-perf-idle) .research-bar-fill{
   justify-content: flex-end;
   gap: 5px;
   flex-shrink: 0;
-  width: 44px;
-  min-width: 44px;
+  width: 46px;
+  min-width: 46px;
+}
+
+.gc-bld-hero-right-stack .gc-bld-hero-action-slot{
+  width: 100%;
+  max-width: none;
 }
 
 .gc-bld-hero-action-col .gc-bld-hero-time-chip{
@@ -4385,19 +4390,53 @@ body:not(.gc-perf-idle) .research-bar-fill{
   z-index: 6;
 }
 
-/* GC-557E — level/timer/button stack (stable poll slots) */
+/* GC-557G — hero right stack: level badge + timer + action (buildings/research) */
+.gc-bld-hero-right-stack{
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  width: 46px;
+  max-width: calc(100% - 14px);
+  pointer-events: auto;
+}
+
+.gc-bld-hero-right-stack .gc-bld-card-level--hero,
+.gc-bld-hero-right-stack .gc-card-level-badge{
+  position: static;
+  top: auto;
+  right: auto;
+  width: 100%;
+  min-width: 38px;
+  max-width: none;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.gc-card-level-badge.gc-bld-card-level--hero{
+  min-width: 38px;
+  padding: 3px 10px;
+  font-size: clamp(0.78rem, 2.4vw, 0.92rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gc-building-card .gc-bld-hero-right-stack .gc-card-level-badge,
+.gc-research-card .gc-bld-hero-right-stack .gc-card-level-badge{
+  z-index: auto;
+}
+
+/* GC-557E — timer/button slots (stable poll layout) */
 .gc-bld-hero-level{
   position: static;
   top: auto;
   right: auto;
   z-index: auto;
-  min-width: 2.75rem;
-  width: 100%;
-  max-width: 36px;
-  padding: 2px 5px;
-  font-size: 0.72rem;
-  text-align: center;
-  box-sizing: border-box;
 }
 
 .gc-bld-hero-action-slot{
@@ -4405,7 +4444,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   align-items: center;
   justify-content: center;
   width: 100%;
-  max-width: 36px;
+  max-width: none;
 }
 
 .gc-bld-hero-action-slot--time{
@@ -4430,9 +4469,9 @@ body:not(.gc-perf-idle) .research-bar-fill{
   z-index: 5;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
-  padding: 6px 8px 7px;
+  padding: 6px 52px 7px 8px;
   min-width: 0;
   background: linear-gradient(180deg, transparent 0%, rgba(4, 8, 18, 0.62) 100%);
 }
@@ -4957,28 +4996,23 @@ a.gc-bld-head-action-btn--go:focus-visible{
   margin: 0;
 }
 
-.gc-bld-hero-action-col .gc-bld-head-action-btn{
+.gc-bld-hero-action-col .gc-bld-head-action-btn,
+.gc-bld-hero-right-stack .gc-bld-head-action-btn{
   width: 44px;
   height: 32px;
   min-width: 44px;
   min-height: 32px;
 }
 
-.gc-bld-hero-action-col{
+.gc-bld-hero-action-col,
+.gc-bld-hero-right-stack{
   width: 46px;
   min-width: 46px;
 }
-
-.gc-research-card .gc-bld-prod-val,
 .gc-research-card .gc-bld-prod-delta-val,
 .gc-building-card .gc-bld-prod-val,
 .gc-building-card .gc-bld-prod-delta-val{
   font-size: 0.76rem;
-}
-
-.gc-bld-hero-level{
-  font-size: 0.82rem;
-  font-weight: 800;
 }
 
 .gc-bld-card-costs .gc-cost-val{
@@ -5850,7 +5884,8 @@ a.gc-bld-head-action-btn--go:focus-visible{
   -webkit-backdrop-filter: none;
 }
 
-.gc-card-stock-badge.gc-bld-card-level--hero{
+.gc-card-stock-badge.gc-bld-card-level--hero,
+.gc-card-level-badge.gc-bld-card-level--hero{
   min-width: 38px;
   padding: 3px 10px;
   font-size: clamp(0.78rem, 2.4vw, 0.9rem);
@@ -6265,19 +6300,26 @@ img.gc-res-icon.gc-res-energy{
     padding-bottom: 8px;
   }
 
-  .gc-bld-hero-action-col{
+  .gc-bld-hero-action-col,
+  .gc-bld-hero-right-stack{
     width: 40px;
     min-width: 40px;
   }
 
-  .gc-bld-hero-action-col .gc-bld-head-action-btn{
+  .gc-bld-hero-action-col .gc-bld-head-action-btn,
+  .gc-bld-hero-right-stack .gc-bld-head-action-btn{
     width: 36px;
     height: 36px;
     min-width: 36px;
     min-height: 36px;
   }
 
-  .gc-bld-hero-level,
+  .gc-bld-hero-right-stack .gc-card-level-badge{
+    min-width: 34px;
+    padding: 2px 6px;
+    font-size: 0.72rem;
+  }
+
   .gc-bld-hero-action-slot,
   .gc-bld-hero-time-chip{
     max-width: 40px;

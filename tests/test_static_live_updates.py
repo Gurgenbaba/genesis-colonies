@@ -977,3 +977,28 @@ def test_main_js_lootbox_roll_accuracy_and_sound():
     assert "translate3d" in src.split("function animateLootRoll")[1].split("function showLootOpeningModal")[0]
     assert (ROOT / "static/sounds/lootboxes/lootbox_sound.mp3").is_file()
 
+
+def test_gc557g_unified_card_level_badge():
+    """GC-557G: buildings/research hero level badge matches shipyard stock badge stack."""
+    src = _read("static/main.js")
+    buildings_html = _read("templates/buildings.html")
+    research_html = _read("templates/research.html")
+    css = _read("static/style.css")
+
+    assert "gc-bld-hero-right-stack" in buildings_html
+    assert "gc-bld-hero-right-stack" in research_html
+    assert "gc-card-level-badge" in buildings_html
+    assert "gc-card-level-badge" in research_html
+    assert "tech-level-current" in research_html
+    assert 'id="level-' in buildings_html
+
+    assert "function syncResearchHeadAction" in src
+    research_patch = src.split("function patchResearchPanel(techs, researchRaw)")[1].split("function patchResearchEffects")[0]
+    assert "syncResearchHeadAction(actionCell, tech, summary)" in research_patch
+    research_action = src.split("function getResearchActionState")[1].split("function getBuildingActionState")[0]
+    assert 'data-action-state="go"' in research_action
+    assert 'data-action-state="warn"' in research_action
+
+    assert ".gc-bld-hero-right-stack{" in css
+    assert ".gc-card-level-badge.gc-bld-card-level--hero" in css
+    assert "data-action-state" in research_html

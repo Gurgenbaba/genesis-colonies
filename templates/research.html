@@ -242,6 +242,15 @@
   {% set locked = not tech.requirements_met %}
   {% set can_afford = tech.can_afford if tech.can_afford is defined else true %}
   {% set _action_label = T("research_btn_queue", "Anreihen") if rq_summary.count else T("research_btn_start", "Forschung starten") %}
+  {% if locked %}
+    {% set _action_state = 'warn' %}
+  {% elif queue_full %}
+    {% set _action_state = 'locked' %}
+  {% elif not can_afford %}
+    {% set _action_state = 'afford' %}
+  {% else %}
+    {% set _action_state = 'go' %}
+  {% endif %}
   <div class="gc-bld-card-head-action gc-bld-card-action tech-status-cell bcell-action" data-tech-key="{{ tech.key }}">
     {% if locked %}
       {% set lock_title = T("research_requirements_not_met") %}
@@ -259,12 +268,14 @@
       {% endif %}
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-research status-pill-icon-btn"
+              data-action-state="warn"
               disabled
               title="{{ lock_title }}"
               aria-label="{{ lock_title }}"><span class="gc-bld-head-action-icon">⚠</span></button>
     {% elif queue_full %}
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-research"
+              data-action-state="locked"
               disabled
               aria-disabled="true"
               title="{{ T('research_btn_queue_full', 'Forschungsliste voll') }}"
@@ -272,12 +283,14 @@
     {% elif not can_afford %}
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-research"
+              data-action-state="afford"
               disabled
               title="{{ T('research_not_enough_resources') }}"
               aria-label="{{ T('research_not_enough_resources') }}"><span class="gc-bld-head-action-icon">+</span></button>
     {% else %}
       <a href="{{ url_for('research_start', tech_key=tech.key) }}"
          class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-research"
+         data-action-state="go"
          title="{{ _action_label }}"
          aria-label="{{ _action_label }}"><span class="gc-bld-head-action-icon">+</span></a>
     {% endif %}
@@ -324,23 +337,23 @@
       {% if tech.queue_job is defined and tech.queue_job %}
       {{ render_hero_queue(tech.queue_job, 'research', 'research') }}
       {% endif %}
+      <div class="gc-bld-hero-right-stack">
+        <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero gc-card-level-badge gc-bld-hero-level tech-level-current"
+              title="{{ T('buildings_col_level') }}"
+              aria-label="{{ T('buildings_col_level') }}">{{ curr_lvl|fmt_int }}</span>
+        <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--time">
+          {{ render_hero_time_chip(tech.queue_job if tech.queue_job is defined else none, tech.time_seconds, 'research', T('research_col_time')) }}
+        </span>
+        <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--btn">
+          {{ render_research_head_action(tech, rq_summary, queue_full) }}
+        </span>
+      </div>
       <div class="gc-bld-card-hero-title">
         <div class="gc-bld-card-title-wrap">
           <button type="button"
                   class="gc-ship-detail-trigger gc-bld-card-title-btn gc-bld-card-title"
                   data-research-tech-data="{{ tech.key }}"
                   aria-label="{{ T('buildings_technical_data', 'Technische Daten') }}">{{ tech_label }}</button>
-        </div>
-        <div class="gc-bld-hero-action-col">
-          <span class="gc-level-badge gc-bld-card-level gc-bld-hero-level tech-level-current" title="{{ T('buildings_col_level') }}">
-            {{ curr_lvl|fmt_int }}
-          </span>
-          <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--time">
-            {{ render_hero_time_chip(tech.queue_job if tech.queue_job is defined else none, tech.time_seconds, 'research', T('research_col_time')) }}
-          </span>
-          <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--btn">
-            {{ render_research_head_action(tech, rq_summary, queue_full) }}
-          </span>
         </div>
       </div>
     </div>
