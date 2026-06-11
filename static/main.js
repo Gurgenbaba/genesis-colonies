@@ -12779,7 +12779,13 @@
   }
 
   function rankingSortedRows(payload, tabId) {
-    const top = Array.isArray(payload?.top_players) ? [...payload.top_players] : [];
+    const seen = new Set();
+    const top = (Array.isArray(payload?.top_players) ? payload.top_players : []).filter((row) => {
+      const pid = Number(row.player_id) || 0;
+      if (!pid || seen.has(pid)) return false;
+      seen.add(pid);
+      return true;
+    });
     top.sort((a, b) => {
       const diff = rankingScoreValue(b, tabId) - rankingScoreValue(a, tabId);
       if (diff !== 0) return diff;

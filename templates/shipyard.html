@@ -4,7 +4,7 @@
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 
 {% macro render_ship_card_stock(ship_key, owned) %}
-  <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero gc-card-stock-badge"
+  <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero gc-card-level gc-card-stock-badge"
         title="{{ T('shipyard_stock_label', 'Am Planeten') }}"
         aria-label="{{ T('shipyard_stock_label', 'Am Planeten') }}: {{ owned|fmt_int }}"
         data-shipyard-stock="{{ ship_key }}">{{ owned|fmt_int }}</span>

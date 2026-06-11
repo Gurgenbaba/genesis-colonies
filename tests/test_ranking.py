@@ -613,7 +613,8 @@ def test_ranking_uses_single_join_query(temp_db):
     conn.close()
 
     assert "LEFT JOIN player_cards pc ON pc.player_id = p.id" in sql
-    assert "LEFT JOIN alliance_members am ON am.player_id = p.id" in sql
+    assert "FROM alliance_members" in sql
+    assert "GROUP BY player_id" in sql
     assert "LEFT JOIN alliances a ON a.id = am.alliance_id" in sql
     assert "card_avatar_url" in social_select
     assert "alliance_tag" in social_select
@@ -693,6 +694,34 @@ def test_ranking_includes_player_without_score_row(temp_db):
     assert match["total_score"] == 0
     assert match["building_score"] == 0
     assert match["research_score"] == 0
+
+
+def test_ranking_dedupes_player_in_multiple_alliances(temp_db):
+    """One player in two alliances must not appear twice in ranking rows."""
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("dual_alliance")
+    _seed_scores(pid, 500, 100)
+    create_alliance("AAA", "Alpha", pid)
+    conn = db()
+    conn.execute(
+        "INSERT INTO alliances (tag, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+        ("BBB", "Beta", 1, 1),
+    )
+    beta_id = conn.execute("SELECT id FROM alliances WHERE tag = 'BBB'").fetchone()["id"]
+    conn.execute(
+        "INSERT INTO alliance_members (alliance_id, player_id, role, joined_at) VALUES (?, ?, 'member', ?)",
+        (beta_id, pid, 2),
+    )
+    conn.commit()
+    conn.close()
+    _close_db()
+
+    rows = get_sorted_ranking_entries(limit=200)
+    matches = [r for r in rows if r["player_id"] == pid]
+    assert len(matches) == 1
 
 
 def test_ranking_avatar_cache_bust(temp_db):

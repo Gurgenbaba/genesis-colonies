@@ -1077,7 +1077,11 @@ def _ranking_social_select_and_join(conn) -> Tuple[str, str]:
         )
         join_parts.extend(
             [
-                "LEFT JOIN alliance_members am ON am.player_id = p.id",
+                """LEFT JOIN (
+                    SELECT player_id, MIN(alliance_id) AS alliance_id
+                    FROM alliance_members
+                    GROUP BY player_id
+                ) am ON am.player_id = p.id""",
                 "LEFT JOIN alliances a ON a.id = am.alliance_id",
             ]
         )

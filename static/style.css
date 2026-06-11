@@ -4399,31 +4399,102 @@ body:not(.gc-perf-idle) .research-bar-fill{
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 5px;
-  width: 46px;
+  gap: 4px;
+  width: 72px;
+  min-width: 72px;
   max-width: calc(100% - 14px);
   pointer-events: auto;
 }
 
 .gc-bld-hero-right-stack .gc-bld-card-level--hero,
-.gc-bld-hero-right-stack .gc-card-level-badge{
+.gc-bld-hero-right-stack .gc-card-level-badge,
+.gc-bld-hero-right-stack .gc-card-level{
   position: static;
   top: auto;
   right: auto;
   width: 100%;
-  min-width: 38px;
+  min-width: 58px;
   max-width: none;
   text-align: center;
   box-sizing: border-box;
 }
 
-.gc-card-level-badge.gc-bld-card-level--hero{
-  min-width: 38px;
-  padding: 3px 10px;
-  font-size: clamp(0.78rem, 2.4vw, 0.92rem);
+/* GC-557H — angular Genesis command chips (level / timer / action) */
+.gc-card-level,
+.gc-card-level-badge.gc-bld-card-level--hero,
+.gc-card-stock-badge.gc-bld-card-level--hero{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  height: 42px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 255, 220, 0.45);
+  background: rgba(5, 15, 25, 0.92);
+  color: rgb(238, 252, 255);
+  font-family: var(--gc-font-level);
+  font-size: clamp(1rem, 2.8vw, 1.375rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  letter-spacing: 0.02em;
+  line-height: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 0 8px rgba(0, 255, 220, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.88) inset,
+    0 2px 10px rgba(0, 0, 0, 0.62),
+    0 0 14px rgba(0, 255, 220, 0.14);
+}
+
+.gc-card-timer,
+.gc-bld-hero-right-stack .gc-bld-hero-time-chip{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 58px;
+  max-width: none;
+  min-height: 32px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 255, 220, 0.28);
+  background: rgba(0, 0, 0, 0.9);
+  color: rgba(220, 245, 255, 0.98);
+  font-family: var(--gc-font-level);
+  font-size: clamp(0.75rem, 2.2vw, 1.125rem);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1.1;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55) inset;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+}
+
+.gc-bld-hero-right-stack .gc-bld-hero-action-slot--time{
+  min-height: 32px;
+}
+
+.gc-bld-hero-right-stack .gc-bld-hero-action-slot--btn{
+  min-height: 40px;
+}
+
+.gc-bld-hero-right-stack .gc-bld-head-action-btn,
+.gc-bld-hero-right-stack .gc-card-action{
+  width: 100%;
+  min-width: 72px;
+  height: 40px;
+  min-height: 40px;
+  border-radius: 4px;
+}
+
+.gc-bld-hero-right-stack .gc-bld-head-action-icon{
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .gc-building-card .gc-bld-hero-right-stack .gc-card-level-badge,
@@ -4471,7 +4542,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  padding: 6px 52px 7px 8px;
+  padding: 6px 80px 7px 8px;
   min-width: 0;
   background: linear-gradient(180deg, transparent 0%, rgba(4, 8, 18, 0.62) 100%);
 }
@@ -4998,16 +5069,17 @@ a.gc-bld-head-action-btn--go:focus-visible{
 
 .gc-bld-hero-action-col .gc-bld-head-action-btn,
 .gc-bld-hero-right-stack .gc-bld-head-action-btn{
-  width: 44px;
-  height: 32px;
-  min-width: 44px;
-  min-height: 32px;
+  width: 72px;
+  height: 40px;
+  min-width: 72px;
+  min-height: 40px;
+  border-radius: 4px;
 }
 
 .gc-bld-hero-action-col,
 .gc-bld-hero-right-stack{
-  width: 46px;
-  min-width: 46px;
+  width: 72px;
+  min-width: 72px;
 }
 .gc-research-card .gc-bld-prod-delta-val,
 .gc-building-card .gc-bld-prod-val,
@@ -5864,31 +5936,32 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-level-badge.gc-bld-card-level--hero{
-  min-width: 34px;
-  padding: 3px 8px;
-  border: 1.5px solid rgba(70, 229, 255, 0.78);
-  background: rgb(6, 12, 26);
-  background: linear-gradient(180deg, rgb(10, 18, 34) 0%, rgb(4, 10, 22) 100%);
+  min-width: 58px;
+  height: 42px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 255, 220, 0.45);
+  background: rgba(5, 15, 25, 0.92);
   color: rgb(238, 252, 255);
-  font-size: 0.84rem;
+  font-size: clamp(1rem, 2.8vw, 1.375rem);
   font-weight: 800;
-  text-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.92),
-    0 0 10px rgba(70, 229, 255, 0.28);
+  text-shadow: 0 0 8px rgba(0, 255, 220, 0.5);
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.88),
+    0 0 0 1px rgba(0, 0, 0, 0.88) inset,
     0 2px 10px rgba(0, 0, 0, 0.62),
-    0 0 16px rgba(70, 229, 255, 0.16);
+    0 0 14px rgba(0, 255, 220, 0.14);
   opacity: 1;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
 .gc-card-stock-badge.gc-bld-card-level--hero,
-.gc-card-level-badge.gc-bld-card-level--hero{
-  min-width: 38px;
-  padding: 3px 10px;
-  font-size: clamp(0.78rem, 2.4vw, 0.9rem);
+.gc-card-level-badge.gc-bld-card-level--hero,
+.gc-card-level.gc-bld-card-level--hero{
+  min-width: 58px;
+  height: 42px;
+  padding: 0 8px;
+  font-size: clamp(1rem, 2.8vw, 1.375rem);
   white-space: nowrap;
   max-width: calc(100% - 12px);
   overflow: hidden;
@@ -6302,27 +6375,45 @@ img.gc-res-icon.gc-res-energy{
 
   .gc-bld-hero-action-col,
   .gc-bld-hero-right-stack{
-    width: 40px;
-    min-width: 40px;
+    width: 64px;
+    min-width: 64px;
   }
 
   .gc-bld-hero-action-col .gc-bld-head-action-btn,
   .gc-bld-hero-right-stack .gc-bld-head-action-btn{
-    width: 36px;
+    width: 64px;
     height: 36px;
-    min-width: 36px;
+    min-width: 64px;
     min-height: 36px;
   }
 
-  .gc-bld-hero-right-stack .gc-card-level-badge{
-    min-width: 34px;
-    padding: 2px 6px;
-    font-size: 0.72rem;
+  .gc-card-level,
+  .gc-bld-hero-right-stack .gc-card-level-badge,
+  .gc-bld-hero-right-stack .gc-card-level{
+    min-width: 52px;
+    height: 36px;
+    padding: 0 6px;
+    font-size: 1rem;
+  }
+
+  .gc-card-timer,
+  .gc-bld-hero-right-stack .gc-bld-hero-time-chip{
+    min-width: 52px;
+    min-height: 28px;
+    font-size: 0.8125rem;
+  }
+
+  .gc-bld-hero-right-stack .gc-bld-head-action-icon{
+    font-size: 1.45rem;
+  }
+
+  .gc-bld-card-hero-title{
+    padding-right: 70px;
   }
 
   .gc-bld-hero-action-slot,
   .gc-bld-hero-time-chip{
-    max-width: 40px;
+    max-width: 64px;
   }
 
   .buildings-wrapper,
@@ -8578,6 +8669,8 @@ body.gc-techtree-media-zoom-open{
 .gc-ranking-my-value{
   font-family: Orbitron, Inter, system-ui, sans-serif;
   font-weight: 800;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
   color: var(--gc-primary-2);
 }
 
@@ -8704,7 +8797,9 @@ body.gc-techtree-media-zoom-open{
 .gc-ranking-place-num{
   font-family: Orbitron, Inter, system-ui, sans-serif;
   font-weight: 800;
+  font-size: 1.1rem;
   letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
   color: var(--gc-primary-2);
 }
 
@@ -8884,19 +8979,22 @@ body.gc-techtree-media-zoom-open{
 .gc-ranking-score{
   text-align: right;
   font-family: var(--gc-mono);
+  font-size: 1.05rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: var(--gc-text);
 }
 
 .gc-ranking-score--active{
-  font-weight: 700;
+  font-weight: 800;
   color: var(--gc-primary-2);
 }
 
 .gc-ranking-mobile-score-inline{
   margin-left: auto;
-  font-weight: 700;
+  font-weight: 800;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
   color: var(--gc-primary-2);
   white-space: nowrap;
 }
@@ -8955,9 +9053,10 @@ body.gc-techtree-media-zoom-open{
 
 .gc-ranking-mobile-score-value{
   font-family: var(--gc-mono);
+  font-size: 1rem;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: var(--gc-primary-2);
-  font-weight: 700;
 }
 
 @media (max-width: 820px){
