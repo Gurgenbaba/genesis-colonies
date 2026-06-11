@@ -987,12 +987,11 @@ def test_gc557g_unified_card_level_badge():
 
     assert "gc-bld-hero-right-stack" in buildings_html
     assert "gc-bld-hero-right-stack" in research_html
-    assert "gc-card-level-badge" in buildings_html
-    assert "gc-card-level" in buildings_html
+    assert "gc-hero-stat-badge" in buildings_html
+    assert "gc-hero-stat-badge" in research_html
+    assert "gc-bld-card-hero-action-slot" in buildings_html
+    assert "gc-bld-card-hero-action-slot" in research_html
     assert "gc-card-timer" in buildings_html
-    assert "gc-card-level-badge" in research_html
-    assert "gc-card-level" in research_html
-    assert "gc-card-timer" in research_html
     assert "tech-level-current" in research_html
     assert 'id="level-' in buildings_html
 
@@ -1004,7 +1003,6 @@ def test_gc557g_unified_card_level_badge():
     assert 'data-action-state="warn"' in research_action
 
     assert ".gc-bld-hero-right-stack{" in css
-    assert ".gc-card-level," in css
-    assert ".gc-card-timer," in css
-    assert ".gc-card-level-badge.gc-bld-card-level--hero" in css
+    assert ".gc-hero-stat-badge{" in css
+    assert ".gc-bld-card-hero-action-slot{" in css
     assert "data-action-state" in research_html

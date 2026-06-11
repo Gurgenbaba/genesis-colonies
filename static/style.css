@@ -4390,116 +4390,126 @@ body:not(.gc-perf-idle) .research-bar-fill{
   z-index: 6;
 }
 
-/* GC-557G — hero right stack: level badge + timer + action (buildings/research) */
+/* GC-557G — hero right stack: floating level + timer badges (buildings/research) */
 .gc-bld-hero-right-stack{
   position: absolute;
-  top: 7px;
-  right: 7px;
+  top: 5px;
+  right: 5px;
   z-index: 6;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-  width: 72px;
-  min-width: 72px;
-  max-width: calc(100% - 14px);
-  pointer-events: auto;
+  align-items: flex-end;
+  gap: 3px;
+  width: auto;
+  min-width: 0;
+  max-width: calc(100% - 10px);
+  pointer-events: none;
 }
 
-.gc-bld-hero-right-stack .gc-bld-card-level--hero,
-.gc-bld-hero-right-stack .gc-card-level-badge,
-.gc-bld-hero-right-stack .gc-card-level{
-  position: static;
-  top: auto;
-  right: auto;
-  width: 100%;
-  min-width: 58px;
-  max-width: none;
-  text-align: center;
-  box-sizing: border-box;
-}
-
-/* GC-557H — angular Genesis command chips (level / timer / action) */
-.gc-card-level,
-.gc-card-level-badge.gc-bld-card-level--hero,
-.gc-card-stock-badge.gc-bld-card-level--hero{
+.gc-hero-stat-badge{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 58px;
-  height: 42px;
-  padding: 0 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(0, 255, 220, 0.45);
-  background: rgba(5, 15, 25, 0.92);
-  color: rgb(238, 252, 255);
+  min-width: 34px;
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px solid rgba(0, 255, 220, 0.46);
+  border-radius: 3px;
+  background: rgba(5, 14, 24, 0.92);
+  color: rgb(244, 252, 255);
   font-family: var(--gc-font-level);
-  font-size: clamp(1rem, 2.8vw, 1.375rem);
+  font-size: 0.875rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums lining-nums;
   font-feature-settings: "tnum" 1, "lnum" 1;
   letter-spacing: 0.02em;
   line-height: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-shadow: 0 0 8px rgba(0, 255, 220, 0.5);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.85), 0 0 6px rgba(0, 255, 220, 0.32);
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.88) inset,
-    0 2px 10px rgba(0, 0, 0, 0.62),
-    0 0 14px rgba(0, 255, 220, 0.14);
+    0 0 0 1px rgba(0, 0, 0, 0.65) inset,
+    0 2px 8px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  pointer-events: auto;
 }
 
-.gc-card-timer,
-.gc-bld-hero-right-stack .gc-bld-hero-time-chip{
+.gc-bld-hero-right-stack .gc-bld-hero-action-slot--time{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-height: 0;
+  pointer-events: auto;
+}
+
+.gc-bld-hero-right-stack .gc-bld-hero-time-chip,
+.gc-bld-hero-right-stack .gc-card-timer{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  min-width: 58px;
-  max-width: none;
-  min-height: 32px;
-  padding: 4px 6px;
+  min-width: 34px;
+  min-height: 18px;
+  padding: 2px 6px;
+  border: 1px solid rgba(0, 255, 220, 0.32);
   border-radius: 3px;
-  border: 1px solid rgba(0, 255, 220, 0.28);
-  background: rgba(0, 0, 0, 0.9);
-  color: rgba(220, 245, 255, 0.98);
+  background: rgba(0, 0, 0, 0.88);
+  color: rgba(228, 244, 255, 0.98);
   font-family: var(--gc-font-level);
-  font-size: clamp(0.75rem, 2.2vw, 1.125rem);
+  font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   line-height: 1.1;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55) inset;
   font-variant-numeric: tabular-nums;
   box-sizing: border-box;
+  width: auto;
+  max-width: none;
 }
 
-.gc-bld-hero-right-stack .gc-bld-hero-action-slot--time{
-  min-height: 32px;
+.gc-bld-card-hero-action-slot{
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
+  pointer-events: auto;
 }
 
-.gc-bld-hero-right-stack .gc-bld-hero-action-slot--btn{
-  min-height: 40px;
+.gc-bld-card-hero-action-slot .gc-bld-card-head-action,
+.gc-bld-card-hero-action-slot .gc-bld-card-action{
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.gc-bld-hero-right-stack .gc-bld-head-action-btn,
-.gc-bld-hero-right-stack .gc-card-action{
-  width: 100%;
-  min-width: 72px;
-  height: 40px;
-  min-height: 40px;
-  border-radius: 4px;
+.gc-bld-card-hero-action-slot .gc-bld-head-action-btn{
+  width: 62px;
+  height: 30px;
+  min-width: 62px;
+  min-height: 30px;
+  border-radius: 3px;
 }
 
-.gc-bld-hero-right-stack .gc-bld-head-action-icon{
-  font-size: 1.75rem;
-  font-weight: 700;
+.gc-bld-card-hero-action-slot a.gc-bld-head-action-btn--go,
+.gc-bld-card-hero-action-slot button.gc-bld-head-action-btn--go{
+  border-color: rgba(0, 255, 220, 0.58);
+  background: linear-gradient(180deg, rgba(16, 42, 48, 0.98) 0%, rgba(8, 24, 32, 0.98) 100%);
+  color: rgba(127, 255, 217, 0.98);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55) inset,
+    0 0 10px rgba(0, 255, 220, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.gc-bld-card-hero-action-slot a.gc-bld-head-action-btn--go:hover,
+.gc-bld-card-hero-action-slot a.gc-bld-head-action-btn--go:focus-visible{
+  border-color: rgba(127, 255, 217, 0.82);
+  background: linear-gradient(180deg, rgba(22, 52, 58, 0.98) 0%, rgba(10, 30, 38, 0.98) 100%);
+}
+
+.gc-bld-card-hero-action-slot .gc-bld-head-action-icon{
+  font-size: 1.05rem;
+  font-weight: 800;
   line-height: 1;
-}
-
-.gc-building-card .gc-bld-hero-right-stack .gc-card-level-badge,
-.gc-research-card .gc-bld-hero-right-stack .gc-card-level-badge{
-  z-index: auto;
 }
 
 /* GC-557E — timer/button slots (stable poll layout) */
@@ -4540,11 +4550,11 @@ body:not(.gc-perf-idle) .research-bar-fill{
   z-index: 5;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  padding: 6px 80px 7px 8px;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 6px 6px 8px;
   min-width: 0;
-  background: linear-gradient(180deg, transparent 0%, rgba(4, 8, 18, 0.62) 100%);
+  background: linear-gradient(180deg, transparent 0%, rgba(4, 8, 18, 0.72) 100%);
 }
 
 .gc-bld-card-title-wrap{
@@ -5069,17 +5079,16 @@ a.gc-bld-head-action-btn--go:focus-visible{
 
 .gc-bld-hero-action-col .gc-bld-head-action-btn,
 .gc-bld-hero-right-stack .gc-bld-head-action-btn{
-  width: 72px;
-  height: 40px;
-  min-width: 72px;
-  min-height: 40px;
-  border-radius: 4px;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
 }
 
 .gc-bld-hero-action-col,
 .gc-bld-hero-right-stack{
-  width: 72px;
-  min-width: 72px;
+  width: auto;
+  min-width: 0;
 }
 .gc-research-card .gc-bld-prod-delta-val,
 .gc-building-card .gc-bld-prod-val,
@@ -5936,32 +5945,28 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-level-badge.gc-bld-card-level--hero{
-  min-width: 58px;
-  height: 42px;
-  padding: 0 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(0, 255, 220, 0.45);
-  background: rgba(5, 15, 25, 0.92);
-  color: rgb(238, 252, 255);
-  font-size: clamp(1rem, 2.8vw, 1.375rem);
+  min-width: 34px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 255, 220, 0.5);
+  background: rgba(5, 14, 24, 0.96);
+  color: rgb(244, 252, 255);
+  font-size: 0.84rem;
   font-weight: 800;
-  text-shadow: 0 0 8px rgba(0, 255, 220, 0.5);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.85), 0 0 8px rgba(0, 255, 220, 0.32);
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.88) inset,
-    0 2px 10px rgba(0, 0, 0, 0.62),
-    0 0 14px rgba(0, 255, 220, 0.14);
+    0 0 0 1px rgba(0, 0, 0, 0.72) inset,
+    0 2px 10px rgba(0, 0, 0, 0.55),
+    0 0 10px rgba(0, 255, 220, 0.1);
   opacity: 1;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
-.gc-card-stock-badge.gc-bld-card-level--hero,
-.gc-card-level-badge.gc-bld-card-level--hero,
-.gc-card-level.gc-bld-card-level--hero{
-  min-width: 58px;
-  height: 42px;
-  padding: 0 8px;
-  font-size: clamp(1rem, 2.8vw, 1.375rem);
+.gc-card-stock-badge.gc-bld-card-level--hero{
+  min-width: 36px;
+  padding: 3px 9px;
+  font-size: 0.84rem;
   white-space: nowrap;
   max-width: calc(100% - 12px);
   overflow: hidden;
@@ -6373,47 +6378,28 @@ img.gc-res-icon.gc-res-energy{
     padding-bottom: 8px;
   }
 
-  .gc-bld-hero-action-col,
-  .gc-bld-hero-right-stack{
-    width: 64px;
-    min-width: 64px;
-  }
-
-  .gc-bld-hero-action-col .gc-bld-head-action-btn,
-  .gc-bld-hero-right-stack .gc-bld-head-action-btn{
-    width: 64px;
-    height: 36px;
-    min-width: 64px;
-    min-height: 36px;
-  }
-
-  .gc-card-level,
-  .gc-bld-hero-right-stack .gc-card-level-badge,
-  .gc-bld-hero-right-stack .gc-card-level{
-    min-width: 52px;
-    height: 36px;
-    padding: 0 6px;
-    font-size: 1rem;
-  }
-
-  .gc-card-timer,
-  .gc-bld-hero-right-stack .gc-bld-hero-time-chip{
-    min-width: 52px;
-    min-height: 28px;
+  .gc-hero-stat-badge{
+    min-width: 30px;
+    min-height: 20px;
+    padding: 2px 5px;
     font-size: 0.8125rem;
   }
 
-  .gc-bld-hero-right-stack .gc-bld-head-action-icon{
-    font-size: 1.45rem;
+  .gc-bld-hero-right-stack .gc-bld-hero-time-chip{
+    min-width: 30px;
+    min-height: 16px;
+    font-size: 0.625rem;
   }
 
-  .gc-bld-card-hero-title{
-    padding-right: 70px;
+  .gc-bld-card-hero-action-slot .gc-bld-head-action-btn{
+    width: 54px;
+    height: 28px;
+    min-width: 54px;
+    min-height: 28px;
   }
 
-  .gc-bld-hero-action-slot,
-  .gc-bld-hero-time-chip{
-    max-width: 64px;
+  .gc-bld-card-hero-action-slot .gc-bld-head-action-icon{
+    font-size: 0.95rem;
   }
 
   .buildings-wrapper,

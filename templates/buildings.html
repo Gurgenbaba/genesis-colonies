@@ -166,14 +166,11 @@
             {% endif %}
             <div class="gc-bld-hero-right-stack">
               <span id="level-{{ building_type }}"
-                    class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero gc-card-level gc-card-level-badge gc-bld-hero-level"
+                    class="gc-hero-stat-badge gc-hero-stat-badge--level gc-bld-hero-level"
                     title="{{ T('buildings_col_level') }}"
                     aria-label="{{ T('buildings_col_level') }}">{{ b.level|fmt_int }}</span>
               <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--time">
                 {{ render_hero_time_chip(b.queue_job if b.queue_job is defined else none, b.time_seconds, 'build', T('buildings_col_time')) }}
-              </span>
-              <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--btn">
-                {{ render_building_head_action(b, tab_name, _bq_summary, _bq_queue_full) }}
               </span>
             </div>
             <div class="gc-bld-card-hero-title">
@@ -182,6 +179,9 @@
                         class="gc-ship-detail-trigger gc-bld-card-title-btn gc-bld-card-title"
                         data-building-tech-data="{{ building_type }}"
                         aria-label="{{ T('buildings_technical_data', 'Technische Daten') }}">{{ T("building_" ~ building_type) }}</button>
+              </div>
+              <div class="gc-bld-card-hero-action-slot">
+                {{ render_building_head_action(b, tab_name, _bq_summary, _bq_queue_full) }}
               </div>
             </div>
           </div>
