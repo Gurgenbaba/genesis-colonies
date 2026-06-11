@@ -211,7 +211,9 @@
   <div class="gc-layout">
 
     {% if not SIMPLE_LAYOUT %}
-      {% include "partials/sidebar.html" %}
+      <div class="gc-sidebar-anchor">
+        {% include "partials/sidebar.html" %}
+      </div>
     {% endif %}
 
     <main class="gc-main" id="main-content" role="main" tabindex="-1">

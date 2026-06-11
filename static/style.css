@@ -39,7 +39,7 @@ body {
   background: #060b16;
   color: #d7f6ff;
   line-height: 1.35;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 img { max-width: 100%; display: block; }
@@ -803,10 +803,13 @@ body.gc-body-simple .auth-error {
 }
 
 /* Sidebar */
-.gc-sidebar{
-  position: sticky;
-  top: calc(var(--gc-header-h) + 8px);
+.gc-sidebar-anchor{
   align-self: start;
+  width: 100%;
+  min-height: 0;
+}
+
+.gc-sidebar{
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -815,7 +818,6 @@ body.gc-body-simple .auth-error {
   background: var(--gc-panel-bg);
   border: 1px solid var(--gc-border-bright);
   box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0,0,0,0.4);
-  max-height: calc(100vh - var(--gc-header-h) - var(--gc-page-pad-y) - 20px);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1037,9 +1039,15 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 /* Tablet: single column main, sidebar becomes horizontal strip (desktop nav still visible) */
 @media (max-width: 980px){
   .gc-layout { grid-template-columns: 1fr; }
+  .gc-sidebar-anchor{
+    width: 100%;
+  }
   .gc-sidebar-desktop{
     position: relative;
+    left: auto;
     top: auto;
+    width: auto;
+    z-index: auto;
     max-height: none;
     overflow: visible;
     flex-direction: row;
@@ -9719,14 +9727,21 @@ body.gc-techtree-media-zoom-open{
 
   .gc-body-ingame{ padding-bottom: 0; }
 
+  .gc-sidebar-anchor{
+    width: 240px;
+    flex-shrink: 0;
+  }
+
   .gc-sidebar-desktop{
     display: flex;
-    position: sticky;
-    top: calc(var(--gc-header-h) + 8px);
-    max-height: calc(100vh - var(--gc-header-h) - var(--gc-page-pad-y) - 24px);
+    position: fixed;
+    left: var(--gc-sidebar-left, 18px);
+    top: var(--gc-sidebar-top, 136px);
+    width: 240px;
+    z-index: 75;
+    max-height: calc(100vh - var(--gc-sidebar-top, 136px) - var(--gc-page-pad-y) - 12px);
     overflow-y: auto;
     overflow-x: hidden;
-    align-self: start;
   }
 
   .gc-layout{

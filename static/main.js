@@ -13463,6 +13463,7 @@
         }
 
         _syncNavActive(url);
+        if (typeof GC.syncSidebarDock === "function") GC.syncSidebarDock();
         if (push) history.pushState({ gcPjax: true }, "", url);
 
         await GC.initPage({
@@ -14272,6 +14273,43 @@
         setTimeout(() => loadTickets(), 0);
       });
     });
+  }
+
+  function syncSidebarDock() {
+    if (!window.matchMedia("(min-width: 981px)").matches) {
+      document.documentElement.style.removeProperty("--gc-sidebar-left");
+      document.documentElement.style.removeProperty("--gc-sidebar-top");
+      return;
+    }
+    const header = document.querySelector(".gc-header-cmd");
+    const anchor = document.querySelector(".gc-sidebar-anchor");
+    if (!header || !anchor) return;
+    const headerH = Math.ceil(header.getBoundingClientRect().height);
+    const left = Math.round(anchor.getBoundingClientRect().left);
+    document.documentElement.style.setProperty("--gc-sidebar-top", `${headerH + 8}px`);
+    document.documentElement.style.setProperty("--gc-sidebar-left", `${left}px`);
+    document.documentElement.style.setProperty("--gc-header-h", `${headerH}px`);
+  }
+
+  function initSidebarDock() {
+    if (!document.querySelector(".gc-sidebar-desktop")) return;
+    let raf = 0;
+    const schedule = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        syncSidebarDock();
+      });
+    };
+    syncSidebarDock();
+    window.addEventListener("resize", schedule, { passive: true });
+    const header = document.querySelector(".gc-header-cmd");
+    if (header && typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(schedule);
+      ro.observe(header);
+      GC.registerCleanup(() => ro.disconnect());
+    }
+    GC.syncSidebarDock = syncSidebarDock;
   }
 
   function initStickyResourceBar() {
@@ -15320,6 +15358,7 @@
     initSpecialPanel();
     initSupportModule();
     initStickyResourceBar();
+    initSidebarDock();
     initPjax();
     initShipDetailOnce();
     initPlayerCardOnce();
