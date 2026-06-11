@@ -803,13 +803,10 @@ body.gc-body-simple .auth-error {
 }
 
 /* Sidebar */
-.gc-sidebar-anchor{
-  align-self: start;
-  width: 100%;
-  min-height: 0;
-}
-
 .gc-sidebar{
+  position: sticky;
+  top: var(--gc-sidebar-top, 136px);
+  align-self: start;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -818,10 +815,6 @@ body.gc-body-simple .auth-error {
   background: var(--gc-panel-bg);
   border: 1px solid var(--gc-border-bright);
   box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0,0,0,0.4);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
 }
 
 .gc-nav-icon{
@@ -1039,15 +1032,9 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 /* Tablet: single column main, sidebar becomes horizontal strip (desktop nav still visible) */
 @media (max-width: 980px){
   .gc-layout { grid-template-columns: 1fr; }
-  .gc-sidebar-anchor{
-    width: 100%;
-  }
   .gc-sidebar-desktop{
     position: relative;
-    left: auto;
     top: auto;
-    width: auto;
-    z-index: auto;
     max-height: none;
     overflow: visible;
     flex-direction: row;
@@ -9727,21 +9714,11 @@ body.gc-techtree-media-zoom-open{
 
   .gc-body-ingame{ padding-bottom: 0; }
 
-  .gc-sidebar-anchor{
-    width: 240px;
-    flex-shrink: 0;
-  }
-
   .gc-sidebar-desktop{
     display: flex;
-    position: fixed;
-    left: var(--gc-sidebar-left, 18px);
+    position: sticky;
     top: var(--gc-sidebar-top, 136px);
-    width: 240px;
-    z-index: 75;
-    max-height: calc(100vh - var(--gc-sidebar-top, 136px) - var(--gc-page-pad-y) - 12px);
-    overflow-y: auto;
-    overflow-x: hidden;
+    align-self: start;
   }
 
   .gc-layout{
