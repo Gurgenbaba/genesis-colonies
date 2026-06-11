@@ -18,7 +18,8 @@ Status: v1.5.3
 | EPIC-10 | Social (Chat, Messages) | ✅ | ARCHITECTURE |
 | EPIC-11 | Security Hardening | 📋 | [SECURITY.md](SECURITY.md) |
 | EPIC-12 | Platform Scale (Postgres) | 📋 | ARCHITECTURE |
-| EPIC-13 | Queue Card UX | 📋 | [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) |
+| EPIC-13 | Queue Card UX | ✅ | [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) |
+| EPIC-14 | Megabunker UX Feedback Polish | 📋 | [GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md](GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md) |
 
 ---
 
@@ -44,3 +45,16 @@ Status: v1.5.3
 | GC-536E | Planet Evolution / Ascension Cards |
 
 Details: [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) · [WORKFLOW.md](WORKFLOW.md)
+
+**EPIC-14 Megabunker UX** → nicht als Ganzes implementieren:
+
+| Ticket | Fokus |
+|--------|-------|
+| GC-557A | Ressourcenleiste — Icons, Kontrast, Mobile |
+| GC-557B | Navigation — logische Gruppen |
+| GC-557C | Empire Copy + Mobile Page-Scroll |
+| GC-557D | Trader Hub — dynamisches Tageslimit |
+| GC-557E | Building Cards — Upgrade-Button |
+| GC-557F | Technische-Daten-Modal (5 Level) |
+
+Details: [GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md](GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md)

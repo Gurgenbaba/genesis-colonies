@@ -668,6 +668,223 @@ def _panel_upgrade_effect_fields(
     )
 
 
+# =============================================================================
+# Technical data sheet (GC-557F)
+# =============================================================================
+
+def _technical_effects_at_level(
+    building_type: str,
+    buildings: Dict[str, int],
+    level: int,
+    ratio: float,
+    research_levels: Dict[str, int],
+) -> Dict[str, Any]:
+    """Authoritative per-level stats for the technical-data modal."""
+    from .logic import get_building_production_per_hour
+
+    bumped = dict(buildings)
+    bumped[building_type] = int(level)
+    r = EffectResolver(bumped, research_levels or {})
+
+    out: Dict[str, Any] = {
+        "effect_kind": "level",
+        "effect_label_key": "buildings_col_level",
+        "effect_value": int(level),
+        "effect_unit": "",
+        "effect_resource": "",
+        "production_metal_per_hour": None,
+        "production_crystal_per_hour": None,
+        "production_fuel_cells_per_hour": None,
+        "energy_total": None,
+        "energy_use": None,
+        "storage_metal": None,
+        "storage_crystal": None,
+        "storage_fuel_cells": None,
+    }
+
+    if building_type in BUILDING_PRODUCTION_RESOURCE:
+        prod = get_building_production_per_hour(bumped, ratio, research=research_levels)
+        val = int(prod.get(building_type, 0) or 0)
+        res = BUILDING_PRODUCTION_RESOURCE[building_type]
+        out["effect_kind"] = "production"
+        out["effect_value"] = val
+        out["effect_unit"] = "/h"
+        out["effect_resource"] = res
+        if res == "metal":
+            out["production_metal_per_hour"] = val
+        elif res == "crystal":
+            out["production_crystal_per_hour"] = val
+        elif res == "fuel_cells":
+            out["production_fuel_cells_per_hour"] = val
+        if building_type in BUILDING_ENERGY_CONSUMERS:
+            out["energy_use"] = int(r.building_energy_draw(building_type, level=int(level)))
+        return out
+
+    if building_type == "solar_plant":
+        et, _ = r.compute_energy()
+        out["effect_kind"] = "energy"
+        out["effect_value"] = int(et)
+        out["effect_resource"] = "energy"
+        out["energy_total"] = int(et)
+        return out
+
+    caps = r.get_storage_capacity()
+    if building_type == "metal_storage":
+        val = int(caps.get("metal", 0) or 0)
+        out.update(
+            effect_kind="storage",
+            effect_value=val,
+            effect_resource="metal",
+            storage_metal=val,
+        )
+        return out
+    if building_type == "crystal_storage":
+        val = int(caps.get("crystal", 0) or 0)
+        out.update(
+            effect_kind="storage",
+            effect_value=val,
+            effect_resource="crystal",
+            storage_crystal=val,
+        )
+        return out
+    if building_type == "fuel_storage":
+        val = int(caps.get("fuel_cells", 0) or 0)
+        out.update(
+            effect_kind="storage",
+            effect_value=val,
+            effect_resource="fuel_cells",
+            storage_fuel_cells=val,
+        )
+        return out
+
+    if building_type == "research_lab":
+        pct = int(round((r.research_lab_bonus() - 1.0) * 100))
+        out.update(effect_kind="bonus_percent", effect_value=pct, effect_unit="%", effect_resource="research")
+        return out
+
+    if building_type == "academy":
+        pct = int(round(max(0, int(level)) * 5))
+        out.update(effect_kind="bonus_percent", effect_value=pct, effect_unit="%", effect_resource="research")
+        return out
+
+    if building_type == "nanofactory":
+        pct = int(round((float(r.get_modifiers().get("build_time_speed", 1.0) or 1.0) - 1.0) * 100))
+        out.update(effect_kind="bonus_percent", effect_value=pct, effect_unit="%", effect_resource="build")
+        return out
+
+    if building_type == "command_center":
+        pct = int(25 * int(level))
+        out.update(effect_kind="bonus_percent", effect_value=pct, effect_unit="%", effect_resource="build")
+        return out
+
+    if building_type == "terraformer":
+        pct = int(5 * int(level))
+        out.update(effect_kind="bonus_percent", effect_value=pct, effect_unit="%", effect_resource="storage")
+        return out
+
+    if building_type in ("geothermal_nexus", "planet_core_nexus"):
+        val = int(r.get_max_building_level("metal_mine"))
+        out.update(effect_kind="max_level", effect_value=val, effect_resource="")
+        return out
+
+    if building_type == "radar_array":
+        out.update(effect_kind="scan", effect_value=int(2 * int(level)), effect_resource="")
+        return out
+
+    if building_type in BUILDING_ENERGY_CONSUMERS:
+        out["energy_use"] = int(r.building_energy_draw(building_type, level=int(level)))
+        out["effect_kind"] = "energy_use"
+        out["effect_value"] = out["energy_use"]
+        out["effect_resource"] = "energy"
+        return out
+
+    return out
+
+
+def _technical_level_row(
+    building_type: str,
+    buildings: Dict[str, int],
+    research_levels: Dict[str, int],
+    level: int,
+    *,
+    user_id: int,
+    conn,
+    ratio: float,
+    is_current: bool,
+) -> Dict[str, Any]:
+    bumped = dict(buildings)
+    bumped[building_type] = int(level)
+    upgrade_from = max(int(level) - 1, 0)
+    cost_m, cost_c = get_upgrade_cost(building_type, upgrade_from)
+    time_s = int(
+        get_build_time(
+            building_type,
+            int(level),
+            user_id=int(user_id),
+            conn=conn,
+            buildings=bumped,
+            research_levels=research_levels,
+        )
+    )
+    row: Dict[str, Any] = {
+        "level": int(level),
+        "is_current": bool(is_current),
+        "cost_metal": int(cost_m),
+        "cost_crystal": int(cost_c),
+        "time_seconds": time_s,
+    }
+    row.update(_technical_effects_at_level(building_type, buildings, level, ratio, research_levels))
+    return row
+
+
+def build_building_technical_data(
+    building_type: str,
+    *,
+    user_id: int,
+    conn,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    from .planet_evolution.repository import get_context_planet
+
+    btype = str(building_type or "").strip()
+    if btype not in BUILDING_ORDER:
+        return None, "unknown_building"
+
+    uid = int(user_id)
+    planet = get_context_planet(uid, conn=conn)
+    planet_id = int(planet["id"])
+    buildings = get_planet_buildings(planet_id, conn=conn)
+    research_levels = get_research_levels(user_id=uid, conn=conn)
+    ratio = _panel_energy_ratio(buildings, research_levels)
+    current = int(buildings.get(btype, 0) or 0)
+    max_level = get_max_level_for_building(btype, buildings)
+    end_level = min(current + 5, max_level)
+
+    levels: List[Dict[str, Any]] = []
+    for lvl in range(current, end_level + 1):
+        levels.append(
+            _technical_level_row(
+                btype,
+                buildings,
+                research_levels,
+                lvl,
+                user_id=uid,
+                conn=conn,
+                ratio=ratio,
+                is_current=(lvl == current),
+            )
+        )
+
+    return {
+        "building_type": btype,
+        "label_key": get_building_label_key(btype),
+        "description_key": f"desc_{btype}",
+        "kind": "building",
+        "current_level": current,
+        "max_level": max_level,
+        "levels": levels,
+    }, None
+
+
 def _make_panel_row(
     planet: dict,
     buildings: Dict[str, int],

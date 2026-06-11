@@ -18,7 +18,7 @@ def get_fuel_exchange_config(conn=None) -> Dict[str, Any]:
         "metal_per_unit": cfg["fuel_metal_per_unit"],
         "crystal_per_unit": cfg["fuel_crystal_per_unit"],
         "min_units": cfg["fuel_min_units"],
-        "daily_units_limit": cfg["daily_limit"],
+        "daily_units_limit": cfg["daily_limit_admin"],
     }
 
 

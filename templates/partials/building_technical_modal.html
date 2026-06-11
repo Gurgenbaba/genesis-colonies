@@ -1,0 +1,45 @@
+{# GC-557F — building/research technical data (persists across PJAX) #}
+<div id="gc-building-tech-root"
+     class="gc-player-card-modal gc-building-tech-modal"
+     hidden
+     aria-hidden="true">
+  <div class="gc-player-card-overlay" data-bt-close tabindex="-1"></div>
+  <div class="gc-player-card-dialog gc-building-tech-dialog"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="gc-building-tech-title"
+       data-theme="cyan">
+    <header class="gc-player-card-head">
+      <h2 id="gc-building-tech-title" class="gc-player-card-head-title">
+        {{ T("buildings_technical_modal_title", "Technische Daten") }}
+      </h2>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              data-bt-close
+              aria-label="{{ T('close', 'Schließen') }}">✕</button>
+    </header>
+    <div class="gc-player-card-body gc-building-tech-body" aria-live="polite">
+      <p class="gc-building-tech-desc hint" data-bt-desc hidden></p>
+      <div class="gc-building-tech-table-wrap" data-bt-table-wrap hidden>
+        <table class="gc-building-tech-table gc-table" data-bt-table>
+          <thead>
+            <tr>
+              <th scope="col">{{ T("buildings_technical_col_level", "Level") }}</th>
+              <th scope="col" data-bt-col-output>{{ T("buildings_technical_col_output", "Output") }}</th>
+              <th scope="col">{{ T("resource_metal", "Ferronit") }}</th>
+              <th scope="col">{{ T("resource_crystal", "Crytite") }}</th>
+              <th scope="col" data-bt-col-time>{{ T("buildings_technical_col_time", "Bauzeit") }}</th>
+              <th scope="col" data-bt-col-energy>{{ T("energy", "Energie") }}</th>
+            </tr>
+          </thead>
+          <tbody data-bt-tbody></tbody>
+        </table>
+      </div>
+      <div class="gc-player-card-loading" data-bt-loading hidden aria-hidden="true">
+        <span class="gc-player-card-spinner" aria-hidden="true"></span>
+        <span class="gc-player-card-loading-text">{{ T("buildings_technical_loading", "Lade Daten…") }}</span>
+      </div>
+      <div class="gc-player-card-error" data-bt-error hidden aria-hidden="true" role="alert"></div>
+    </div>
+  </div>
+</div>

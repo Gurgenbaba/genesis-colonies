@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_shipyard_resource_blocker, render_raster_picture with context %}
-{% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/building_effect_strip.html" import render_building_effect_value, building_effect_metric_label with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 
@@ -325,17 +324,23 @@
       {% if tech.queue_job is defined and tech.queue_job %}
       {{ render_hero_queue(tech.queue_job, 'research', 'research') }}
       {% endif %}
-      <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero tech-level-current" title="{{ T('buildings_col_level') }}">
-        {{ curr_lvl|fmt_int }}
-      </span>
       <div class="gc-bld-card-hero-title">
         <div class="gc-bld-card-title-wrap">
-          <h3 class="gc-bld-card-title">{{ tech_label }}</h3>
-          {{ render_info_popover_trigger(tech_desc) }}
+          <button type="button"
+                  class="gc-ship-detail-trigger gc-bld-card-title-btn gc-bld-card-title"
+                  data-research-tech-data="{{ tech.key }}"
+                  aria-label="{{ T('buildings_technical_data', 'Technische Daten') }}">{{ tech_label }}</button>
         </div>
         <div class="gc-bld-hero-action-col">
-          {{ render_hero_time_chip(tech.queue_job if tech.queue_job is defined else none, tech.time_seconds, 'research', T('research_col_time')) }}
-          {{ render_research_head_action(tech, rq_summary, queue_full) }}
+          <span class="gc-level-badge gc-bld-card-level gc-bld-hero-level tech-level-current" title="{{ T('buildings_col_level') }}">
+            {{ curr_lvl|fmt_int }}
+          </span>
+          <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--time">
+            {{ render_hero_time_chip(tech.queue_job if tech.queue_job is defined else none, tech.time_seconds, 'research', T('research_col_time')) }}
+          </span>
+          <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--btn">
+            {{ render_research_head_action(tech, rq_summary, queue_full) }}
+          </span>
         </div>
       </div>
     </div>

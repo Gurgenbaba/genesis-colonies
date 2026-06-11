@@ -10,7 +10,9 @@ from game.exchange import (
     execute_exchange,
     get_exchange_config,
     get_exchange_status,
+    resolve_exchange_daily_limit,
 )
+from game.models import get_homeworld
 
 
 @pytest.fixture
@@ -53,7 +55,10 @@ def test_exchange_config_defaults(exchange_db):
     assert cfg["enabled"] is True
     assert cfg["rate_metal_to_crystal"] == 0.85
     assert cfg["rate_crystal_to_metal"] == 0.85
-    assert cfg["daily_limit"] == 2000000000
+    assert cfg["daily_limit_admin"] == 2000000000
+    assert cfg["daily_limit_pct"] == 15.0
+    assert cfg["daily_limit_min"] == 1000000
+    assert cfg["daily_limit_max"] == 500000000
     assert cfg["min_amount"] == 100
     assert cfg["fuel_metal_per_unit"] == 20
     assert cfg["fuel_crystal_per_unit"] == 14
@@ -471,3 +476,85 @@ def test_overview_excludes_planet_teaser_widget(exchange_db, tmp_path, monkeypat
     assert "overview-upgrade-section" not in html
     assert "overview-log-panel" not in html
     assert "img/res/Ferronit.png" in html
+
+
+def test_exchange_daily_limit_uses_empire_production_floor(exchange_db):
+    conn = db()
+    uid = _player(conn=conn)
+    status = get_exchange_status(
+        player_id=uid,
+        planet_id=int(get_planets_by_player(uid, conn=conn)[0]["id"]),
+        metal=0,
+        crystal=0,
+        fuel_cells=0,
+        conn=conn,
+    )
+    conn.close()
+    assert status["daily_limit"] == 1_000_000
+    assert status["empire_production_day_total"] >= 0
+    assert status["daily_limit_pct"] == 15.0
+
+
+def test_exchange_daily_limit_scales_with_production(exchange_db):
+    conn = db()
+    uid = _player(conn=conn)
+    hw = get_homeworld(player_id=uid, conn=conn)
+    conn.execute(
+        """
+        UPDATE planet_buildings
+        SET metal_mine = 30, crystal_mine = 25, fuel_cell_plant = 20, solar_plant = 30
+        WHERE planet_id = ?;
+        """,
+        (int(hw["id"]),),
+    )
+    conn.commit()
+    block = resolve_exchange_daily_limit(uid, conn=conn)
+    conn.close()
+    assert block["empire_production_day_total"] > 100_000
+    assert block["daily_limit_scaled"] == int(block["empire_production_day_total"] * 15 / 100)
+    assert block["daily_limit"] >= 1_000_000
+    assert block["daily_limit"] <= 500_000_000
+
+
+def test_exchange_daily_limit_respects_admin_cap(exchange_db):
+    conn = db()
+    uid = _player(conn=conn)
+    conn.execute(
+        "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('exchange_daily_limit', '75000');"
+    )
+    conn.commit()
+    block = resolve_exchange_daily_limit(uid, conn=conn)
+    conn.close()
+    assert block["daily_limit"] == 75_000
+
+
+def test_trader_hub_shows_limit_breakdown(exchange_db, tmp_path, monkeypatch):
+    import importlib
+    import os
+
+    import app as app_module
+
+    db_path = os.environ.get("GC_DB_PATH")
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-not-default-value-32chars")
+    import game.db as dbmod
+    import game.models as models
+
+    dbmod.DB_PATH = db_path
+    models.DB_PATH = db_path
+    importlib.reload(app_module)
+
+    conn = db()
+    uid = _player(conn=conn)
+    uname = conn.execute("SELECT username FROM users WHERE id = ?;", (uid,)).fetchone()["username"]
+    conn.close()
+
+    client = app_module.app.test_client()
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    res = client.get("/trader-hub")
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+    assert "trader-hub-daily-panel" in html
+    assert "data-exchange-daily-used" in html
+    assert "data-exchange-empire-day" in html
+    assert "trader_hub_daily_formula" in html or "Empire-Produktion" in html or "empire production" in html.lower()

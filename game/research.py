@@ -1180,6 +1180,88 @@ def get_research_status(
     }
 
 
+def _research_technical_level_row(
+    tech_key: str,
+    level: int,
+    *,
+    user_id: int,
+    buildings: Dict[str, int],
+    is_current: bool,
+) -> Dict[str, Any]:
+    lvl = max(0, int(level))
+    cost_level = max(1, lvl) if lvl > 0 else 1
+    cost_m, cost_c = get_research_cost(tech_key, cost_level)
+    time_s = int(get_research_time(tech_key, cost_level, int(user_id), buildings=buildings))
+    effect = get_research_effect_preview(tech_key, lvl, lvl + 1)
+    row: Dict[str, Any] = {
+        "level": lvl,
+        "is_current": bool(is_current),
+        "cost_metal": int(cost_m),
+        "cost_crystal": int(cost_c),
+        "time_seconds": time_s,
+        "effect_kind": effect.get("effect_kind") or "level",
+        "effect_value": effect.get("effect_current"),
+        "effect_unit": effect.get("effect_unit") or "",
+        "effect_resource": effect.get("effect_resource") or "",
+        "effect_metric_key": effect.get("effect_metric_key") or "",
+    }
+    sec = effect.get("secondary_effect")
+    if isinstance(sec, dict):
+        row["secondary_effect"] = {
+            "effect_kind": sec.get("effect_kind") or "level",
+            "effect_value": sec.get("effect_current"),
+            "effect_unit": sec.get("effect_unit") or "",
+            "effect_resource": sec.get("effect_resource") or "",
+            "effect_metric_key": sec.get("effect_metric_key") or "",
+        }
+    return row
+
+
+def build_research_technical_data(
+    tech_key: str,
+    *,
+    user_id: int,
+    conn,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    key = str(tech_key or "").strip()
+    if key not in RESEARCH_TECHS:
+        return None, "unknown_research"
+
+    uid = int(user_id)
+    resource_planet = _research_resource_planet(uid, conn)
+    buildings = resolve_buildings_for_research(
+        get_planet_buildings(int(resource_planet["id"]), conn=conn),
+        uid,
+        conn=conn,
+    )
+    levels = get_research_levels(uid, conn=conn)
+    current = int(levels.get(key, 0) or 0)
+    end_level = current + 5
+    cfg = RESEARCH_TECHS[key]
+
+    level_rows: List[Dict[str, Any]] = []
+    for lvl in range(current, end_level + 1):
+        level_rows.append(
+            _research_technical_level_row(
+                key,
+                lvl,
+                user_id=uid,
+                buildings=buildings,
+                is_current=(lvl == current),
+            )
+        )
+
+    return {
+        "tech_key": key,
+        "label_key": cfg.get("label_key") or key,
+        "description_key": cfg.get("description_key") or f"desc_{key}",
+        "kind": "research",
+        "current_level": current,
+        "max_level": None,
+        "levels": level_rows,
+    }, None
+
+
 def _attach_queue_jobs_to_research_techs(
     techs: List[Dict[str, Any]],
     queue_list: List[Dict[str, Any]],

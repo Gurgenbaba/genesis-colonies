@@ -1832,6 +1832,15 @@
     );
   }
 
+  function getBuildingActionState(b, bqQueueFull) {
+    const isMax = (b.level >= b.max_level) || b.at_queue_max;
+    if (isMax) return "max";
+    if (!b.requirements_met) return "warn";
+    if (bqQueueFull) return "locked";
+    if (!b.can_afford) return "afford";
+    return "go";
+  }
+
   function renderBuildingActionCell(b, bqSummary, bqQueueFull) {
     const key = b.key;
     const btnUpgrade = t("buildings_btn_upgrade", "Ausbau starten");
@@ -1840,41 +1849,66 @@
     const btnQueue = t("research_btn_queue", "Anreihen");
     const queueActive = (bqSummary?.count || 0) > 0;
     const actionLabel = queueActive ? btnQueue : btnUpgrade;
-    const isMax = (b.level >= b.max_level) || b.at_queue_max;
+    const state = getBuildingActionState(b, bqQueueFull);
 
-    if (isMax) {
+    if (state === "max") {
       return (
-        `<span class="gc-bld-head-action-btn gc-bld-head-action-btn--max" title="${btnMax}"` +
+        `<span class="gc-bld-head-action-btn gc-bld-head-action-btn--max" data-action-state="max" title="${btnMax}"` +
         ` aria-label="${btnMax}"><span class="gc-bld-head-action-icon">✓</span></span>`
       );
     }
-    if (!b.requirements_met) {
+    if (state === "warn") {
       const lockTitle = t("msg_build_requirements", "Voraussetzungen nicht erfüllt.");
       return (
         `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-upgrade status-pill-icon-btn" type="button" disabled` +
-        ` title="${lockTitle}" aria-label="${lockTitle}"><span class="gc-bld-head-action-icon">⚠</span></button>`
+        ` data-action-state="warn" title="${lockTitle}" aria-label="${lockTitle}"><span class="gc-bld-head-action-icon">⚠</span></button>`
       );
     }
-    if (bqQueueFull) {
+    if (state === "locked") {
       return (
         `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-upgrade" type="button" disabled` +
-        ` aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span class="gc-bld-head-action-icon">🔒</span></button>`
+        ` data-action-state="locked" aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span class="gc-bld-head-action-icon">🔒</span></button>`
       );
     }
-    if (!b.can_afford) {
+    if (state === "afford") {
       const shortMsg = t("msg_build_not_enough_resources", "Nicht genug Ressourcen.");
       return (
         `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-upgrade" type="button" disabled` +
-        ` title="${shortMsg}" aria-label="${shortMsg}"><span class="gc-bld-head-action-icon">+</span></button>`
+        ` data-action-state="afford" title="${shortMsg}" aria-label="${shortMsg}"><span class="gc-bld-head-action-icon">+</span></button>`
       );
     }
     const tab = b.tab || _getActiveBuildingTab();
     const href = `/upgrade/${encodeURIComponent(key)}?src=buildings&tab=${encodeURIComponent(tab)}`;
     return (
-      `<a id="btn-${key}" data-building="${key}" href="${href}"` +
+      `<a id="btn-${key}" data-building="${key}" data-action-state="go" href="${href}"` +
       ` class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-upgrade"` +
       ` title="${actionLabel}" aria-label="${actionLabel}"><span class="gc-bld-head-action-icon">+</span></a>`
     );
+  }
+
+  function syncBuildingHeadAction(cell, b, bqSummary, bqQueueFull) {
+    if (!cell || !b) return;
+    const state = getBuildingActionState(b, bqQueueFull);
+    const btn = cell.querySelector(".gc-bld-head-action-btn");
+    const prevState = btn?.dataset?.actionState || "";
+    const queueActive = (bqSummary?.count || 0) > 0;
+    const actionLabel = queueActive
+      ? t("research_btn_queue", "Anreihen")
+      : t("buildings_btn_upgrade", "Ausbau starten");
+
+    if (btn && prevState === state) {
+      if (state === "go") {
+        btn.title = actionLabel;
+        btn.setAttribute("aria-label", actionLabel);
+        const tab = b.tab || _getActiveBuildingTab();
+        const href = `/upgrade/${encodeURIComponent(b.key)}?src=buildings&tab=${encodeURIComponent(tab)}`;
+        if (btn.getAttribute("href") !== href) btn.setAttribute("href", href);
+      }
+      return;
+    }
+
+    const html = renderBuildingActionCell(b, bqSummary, bqQueueFull);
+    if (cell.innerHTML.trim() !== html.trim()) cell.innerHTML = html;
   }
 
   function patchBuildingPanel(rowsByTab, buildQueueRaw) {
@@ -1922,8 +1956,7 @@
 
         const actionCell = row.querySelector(".bcell-action");
         if (actionCell) {
-          const html = renderBuildingActionCell(b, summary, bqQueueFull);
-          if (actionCell.innerHTML.trim() !== html.trim()) actionCell.innerHTML = html;
+          syncBuildingHeadAction(actionCell, b, summary, bqQueueFull);
         }
 
         if (useOwnerMap) {
@@ -2947,6 +2980,7 @@
 
   function initBuildings() {
     bindBuildingTabsOnce();
+    initBuildingTechnicalData();
     showBuildingsSubnav();
     const pageRoot = document.querySelector("[data-buildings-page]");
     if (!pageRoot) return;
@@ -2956,9 +2990,317 @@
     GC.registerCleanup(hideBuildingsSubnav);
   }
 
+  const BUILDING_TECH = {
+    root: null,
+    titleEl: null,
+    descEl: null,
+    tableWrap: null,
+    tbody: null,
+    loadingEl: null,
+    errorEl: null,
+    colTime: null,
+    colEnergy: null,
+    abort: null,
+    open: false,
+    reqId: 0,
+  };
+
+  function cacheBuildingTechElements() {
+    if (BUILDING_TECH.root && BUILDING_TECH.tbody) return BUILDING_TECH.root;
+    BUILDING_TECH.root = document.getElementById("gc-building-tech-root");
+    if (!BUILDING_TECH.root) return null;
+    BUILDING_TECH.titleEl = document.getElementById("gc-building-tech-title");
+    BUILDING_TECH.descEl = BUILDING_TECH.root.querySelector("[data-bt-desc]");
+    BUILDING_TECH.tableWrap = BUILDING_TECH.root.querySelector("[data-bt-table-wrap]");
+    BUILDING_TECH.tbody = BUILDING_TECH.root.querySelector("[data-bt-tbody]");
+    BUILDING_TECH.loadingEl = BUILDING_TECH.root.querySelector("[data-bt-loading]");
+    BUILDING_TECH.errorEl = BUILDING_TECH.root.querySelector("[data-bt-error]");
+    BUILDING_TECH.colTime = BUILDING_TECH.root.querySelector("[data-bt-col-time]");
+    BUILDING_TECH.colEnergy = BUILDING_TECH.root.querySelector("[data-bt-col-energy]");
+    return BUILDING_TECH.root;
+  }
+
+  function formatTechnicalOutputPart(row) {
+    if (!row || typeof row !== "object") return "";
+    const kind = String(row.effect_kind || "level");
+    const val = row.effect_value;
+    if (val == null || val === "") return "";
+    const unit = row.effect_unit || "";
+    const metricKey = row.effect_metric_key ? t(row.effect_metric_key, "") : "";
+    const metricPrefix = metricKey ? `${metricKey}: ` : "";
+    if (kind === "production") {
+      const res = row.effect_resource ? t("resource_" + row.effect_resource, row.effect_resource) : "";
+      return `${metricPrefix}+${fmtNumber(val)}${unit}${res ? " " + res : ""}`;
+    }
+    if (kind === "energy") {
+      return `${metricPrefix}${fmtNumber(val)} ${t("energy", "Energie")}`;
+    }
+    if (kind === "energy_use") {
+      return `${metricPrefix}-${fmtNumber(val)} ${t("buildings_technical_energy_use", "Verbrauch")}`;
+    }
+    if (kind === "storage") {
+      const res = row.effect_resource ? t("resource_" + row.effect_resource, row.effect_resource) : "";
+      return `${metricPrefix}${fmtNumber(val)}${res ? " " + res : ""}`;
+    }
+    if (kind === "bonus_percent") {
+      return `${metricPrefix}+${fmtNumber(val)}${unit || "%"}`;
+    }
+    if (kind === "reduction_percent") {
+      return `${metricPrefix}-${fmtNumber(val)}${unit || "%"}`;
+    }
+    if (kind === "max_level" || kind === "scan" || kind === "level") {
+      return `${metricPrefix}${fmtNumber(val)}`;
+    }
+    return `${metricPrefix}${fmtNumber(val)}`;
+  }
+
+  function formatTechnicalOutput(row) {
+    const primary = formatTechnicalOutputPart(row);
+    const sec = row?.secondary_effect;
+    const secondary = sec ? formatTechnicalOutputPart(sec) : "";
+    if (primary && secondary) return `${primary} · ${secondary}`;
+    return primary || secondary || "—";
+  }
+
+  function formatTechnicalEnergy(row) {
+    if (row?.energy_use != null) return `-${fmtNumber(row.energy_use)}`;
+    if (row?.energy_total != null) return fmtNumber(row.energy_total);
+    return "—";
+  }
+
+  function setTechnicalModalMode(kind) {
+    if (!cacheBuildingTechElements()) return;
+    const isResearch = kind === "research";
+    if (BUILDING_TECH.colTime) {
+      BUILDING_TECH.colTime.textContent = isResearch
+        ? t("research_technical_col_time", "Forschungszeit")
+        : t("buildings_technical_col_time", "Bauzeit");
+    }
+    if (BUILDING_TECH.colEnergy) {
+      BUILDING_TECH.colEnergy.hidden = isResearch;
+    }
+    BUILDING_TECH.root?.classList.toggle("gc-building-tech-modal--research", isResearch);
+  }
+
+  function setTechnicalModalDescription(data) {
+    if (!BUILDING_TECH.descEl) return;
+    const descKey = String(data?.description_key || "").trim();
+    let desc = descKey ? t(descKey, "") : "";
+    if (!desc || desc === descKey || desc.startsWith("desc_")) {
+      desc = "";
+    }
+    if (desc) {
+      BUILDING_TECH.descEl.textContent = desc;
+      BUILDING_TECH.descEl.hidden = false;
+    } else {
+      BUILDING_TECH.descEl.textContent = "";
+      BUILDING_TECH.descEl.hidden = true;
+    }
+  }
+
+  function renderBuildingTechnicalTable(data) {
+    if (!BUILDING_TECH.tbody || !BUILDING_TECH.tableWrap) return;
+    const kind = data?.kind === "research" ? "research" : "building";
+    setTechnicalModalMode(kind);
+    setTechnicalModalDescription(data);
+    const levels = Array.isArray(data?.levels) ? data.levels : [];
+    const currentLabel = t("buildings_technical_current_level", "Aktuell");
+    const showEnergy = kind !== "research";
+    BUILDING_TECH.tbody.innerHTML = levels
+      .map((row) => {
+        const cls = row.is_current ? "gc-building-tech-row gc-building-tech-row--current" : "gc-building-tech-row";
+        const levelCell = row.is_current
+          ? `<span class="gc-building-tech-current-badge">${currentLabel}</span> ${fmtNumber(row.level)}`
+          : fmtNumber(row.level);
+        const energyCell = showEnergy
+          ? `<td class="gc-mono">${escapeHtml(formatTechnicalEnergy(row))}</td>`
+          : "";
+        return (
+          `<tr class="${cls}">` +
+          `<td class="gc-mono">${levelCell}</td>` +
+          `<td class="gc-mono">${escapeHtml(formatTechnicalOutput(row))}</td>` +
+          `<td class="gc-mono">${fmtNumber(row.cost_metal || 0)}</td>` +
+          `<td class="gc-mono">${fmtNumber(row.cost_crystal || 0)}</td>` +
+          `<td class="gc-mono">${escapeHtml(formatDuration(row.time_seconds || 0))}</td>` +
+          energyCell +
+          `</tr>`
+        );
+      })
+      .join("");
+    BUILDING_TECH.tableWrap.hidden = levels.length === 0;
+  }
+
+  function setBuildingTechLoading(on) {
+    if (BUILDING_TECH.loadingEl) BUILDING_TECH.loadingEl.hidden = !on;
+    if (BUILDING_TECH.root) BUILDING_TECH.root.classList.toggle("is-loading", !!on);
+  }
+
+  function setBuildingTechError(msg) {
+    if (!BUILDING_TECH.errorEl) return;
+    if (msg) {
+      BUILDING_TECH.errorEl.hidden = false;
+      BUILDING_TECH.errorEl.textContent = msg;
+    } else {
+      BUILDING_TECH.errorEl.hidden = true;
+      BUILDING_TECH.errorEl.textContent = "";
+    }
+  }
+
+  function openBuildingTechnicalModal(focusClose) {
+    if (!cacheBuildingTechElements()) return;
+    BUILDING_TECH.open = true;
+    BUILDING_TECH.root.hidden = false;
+    BUILDING_TECH.root.setAttribute("aria-hidden", "false");
+    document.body.classList.add("gc-building-tech-open");
+    const closeBtn = BUILDING_TECH.root.querySelector("[data-bt-close].gc-player-card-close");
+    if (focusClose && closeBtn) closeBtn.focus();
+  }
+
+  function closeBuildingTechnicalModal() {
+    if (BUILDING_TECH.abort) {
+      BUILDING_TECH.abort.abort();
+      BUILDING_TECH.abort = null;
+    }
+    if (!BUILDING_TECH.root) return;
+    BUILDING_TECH.open = false;
+    BUILDING_TECH.root.hidden = true;
+    BUILDING_TECH.root.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("gc-building-tech-open");
+    setBuildingTechLoading(false);
+    setBuildingTechError("");
+    if (BUILDING_TECH.tableWrap) BUILDING_TECH.tableWrap.hidden = true;
+    if (BUILDING_TECH.tbody) BUILDING_TECH.tbody.innerHTML = "";
+    if (BUILDING_TECH.descEl) {
+      BUILDING_TECH.descEl.textContent = "";
+      BUILDING_TECH.descEl.hidden = true;
+    }
+    setTechnicalModalMode("building");
+  }
+
+  async function loadBuildingTechnicalData(buildingType) {
+    if (!cacheBuildingTechElements()) return;
+    const key = String(buildingType || "").trim();
+    if (!key) return;
+
+    if (BUILDING_TECH.abort) BUILDING_TECH.abort.abort();
+    BUILDING_TECH.abort = new AbortController();
+    const reqId = ++BUILDING_TECH.reqId;
+
+    setBuildingTechError("");
+    setBuildingTechLoading(true);
+    if (BUILDING_TECH.tableWrap) BUILDING_TECH.tableWrap.hidden = true;
+    openBuildingTechnicalModal(true);
+
+    try {
+      const res = await GC.fetchJSON(`/api/buildings/${encodeURIComponent(key)}/technical-data`, {
+        cache: "no-store",
+        signal: BUILDING_TECH.abort.signal,
+      });
+      if (reqId !== BUILDING_TECH.reqId) return;
+      if (!res?.ok || !res.data) {
+        setBuildingTechError(t("buildings_technical_load_error", "Technische Daten konnten nicht geladen werden."));
+        return;
+      }
+      const labelKey = res.data.label_key || key;
+      if (BUILDING_TECH.titleEl) {
+        BUILDING_TECH.titleEl.textContent =
+          `${t(labelKey, key)} · ${t("buildings_technical_modal_title", "Technische Daten")}`;
+      }
+      renderBuildingTechnicalTable(res.data);
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      if (reqId !== BUILDING_TECH.reqId) return;
+      setBuildingTechError(t("buildings_technical_load_error", "Technische Daten konnten nicht geladen werden."));
+    } finally {
+      if (reqId === BUILDING_TECH.reqId) setBuildingTechLoading(false);
+    }
+  }
+
+  async function loadResearchTechnicalData(techKey) {
+    if (!cacheBuildingTechElements()) return;
+    const key = String(techKey || "").trim();
+    if (!key) return;
+
+    if (BUILDING_TECH.abort) BUILDING_TECH.abort.abort();
+    BUILDING_TECH.abort = new AbortController();
+    const reqId = ++BUILDING_TECH.reqId;
+
+    setBuildingTechError("");
+    setBuildingTechLoading(true);
+    if (BUILDING_TECH.tableWrap) BUILDING_TECH.tableWrap.hidden = true;
+    openBuildingTechnicalModal(true);
+
+    try {
+      const res = await GC.fetchJSON(`/api/research/${encodeURIComponent(key)}/technical-data`, {
+        cache: "no-store",
+        signal: BUILDING_TECH.abort.signal,
+      });
+      if (reqId !== BUILDING_TECH.reqId) return;
+      if (!res?.ok || !res.data) {
+        setBuildingTechError(t("buildings_technical_load_error", "Technische Daten konnten nicht geladen werden."));
+        return;
+      }
+      const labelKey = res.data.label_key || key;
+      if (BUILDING_TECH.titleEl) {
+        BUILDING_TECH.titleEl.textContent =
+          `${t(labelKey, key)} · ${t("buildings_technical_modal_title", "Technische Daten")}`;
+      }
+      renderBuildingTechnicalTable(res.data);
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      if (reqId !== BUILDING_TECH.reqId) return;
+      setBuildingTechError(t("buildings_technical_load_error", "Technische Daten konnten nicht geladen werden."));
+    } finally {
+      if (reqId === BUILDING_TECH.reqId) setBuildingTechLoading(false);
+    }
+  }
+
+  function onBuildingTechnicalClick(e) {
+    const closeEl = e.target.closest("[data-bt-close]");
+    if (closeEl && BUILDING_TECH.root && !BUILDING_TECH.root.hidden) {
+      e.preventDefault();
+      closeBuildingTechnicalModal();
+      return;
+    }
+    const buildingTrigger = e.target.closest("[data-building-tech-data]");
+    if (buildingTrigger) {
+      e.preventDefault();
+      loadBuildingTechnicalData(buildingTrigger.getAttribute("data-building-tech-data"));
+      return;
+    }
+    const researchTrigger = e.target.closest("[data-research-tech-data]");
+    if (researchTrigger) {
+      e.preventDefault();
+      loadResearchTechnicalData(researchTrigger.getAttribute("data-research-tech-data"));
+    }
+  }
+
+  function onBuildingTechnicalKeydown(e) {
+    if (e.key === "Escape" && BUILDING_TECH.open) {
+      e.preventDefault();
+      closeBuildingTechnicalModal();
+    }
+  }
+
+  function initBuildingTechnicalDataOnce() {
+    if (GC._buildingTechBound) return;
+    GC._buildingTechBound = true;
+    document.addEventListener("click", onBuildingTechnicalClick);
+    document.addEventListener("keydown", onBuildingTechnicalKeydown);
+    GC.registerCleanup(() => {
+      closeBuildingTechnicalModal();
+    });
+  }
+
+  function initBuildingTechnicalData() {
+    initBuildingTechnicalDataOnce();
+  }
+
+  GC.openBuildingTechnicalData = loadBuildingTechnicalData;
+  GC.openResearchTechnicalData = loadResearchTechnicalData;
+
   const TRADING_NAV_PAGES = new Set([
     "trader_hub",
-    "logistics",
     "inventory",
     "auction_house",
     "vote_center",
@@ -3129,21 +3471,20 @@
 
       const bType = cell.dataset.building;
       if (!bType) return;
+      const btn = cell.querySelector(".gc-bld-head-action-btn");
+      const state = btn?.dataset?.actionState || "";
 
-      if (queueFull) {
-        const queueBtn = cell.querySelector(".gc-bld-head-action-btn--locked");
-        if (!queueBtn) {
-          cell.innerHTML =
-            `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-upgrade" type="button" disabled` +
-            ` aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span class="gc-bld-head-action-icon">🔒</span></button>`;
-        }
+      if (queueFull && state === "go") {
+        cell.innerHTML =
+          `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-upgrade" type="button" disabled` +
+          ` data-action-state="locked" aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span class="gc-bld-head-action-icon">🔒</span></button>`;
         return;
       }
 
-      if (cell.querySelector(".gc-bld-head-action-btn--locked")) {
+      if (!queueFull && state === "locked") {
         const href = `/upgrade/${encodeURIComponent(bType)}?src=buildings&tab=${encodeURIComponent(tab)}`;
         cell.innerHTML =
-          `<a id="btn-${bType}" data-building="${bType}" href="${href}"` +
+          `<a id="btn-${bType}" data-building="${bType}" data-action-state="go" href="${href}"` +
           ` class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-upgrade"` +
           ` title="${actionLabel}" aria-label="${actionLabel}"><span class="gc-bld-head-action-icon">+</span></a>`;
       }
@@ -3358,10 +3699,15 @@
       return;
     }
     const chip = cardEl.querySelector("[data-hero-time-chip]");
-    if (!chip) return;
+    if (!chip || chip.querySelector(".gc-card-queue-timer")) return;
     const label = formatDuration(seconds);
     chip.title = title || chip.title || "";
-    chip.innerHTML = `<span class="gc-hero-time-text">${label}</span>`;
+    let textEl = chip.querySelector(".gc-hero-time-text");
+    if (!textEl) {
+      chip.innerHTML = `<span class="gc-hero-time-text">${label}</span>`;
+      return;
+    }
+    _setIfChanged(textEl, label);
   }
 
   function ensureHeroTimeChipTimer(cardEl, queueJob, timerKind, refreshOnZero) {
@@ -11055,7 +11401,10 @@
     const receiveSummaryEl = panel.querySelector("[data-exchange-receive-summary]");
     const errorEl = panel.querySelector("[data-exchange-error]");
     const remainingEl = page?.querySelector("[data-exchange-daily-remaining]") || panel.querySelector("[data-exchange-daily-remaining]");
+    const dailyUsedEl = page?.querySelector("[data-exchange-daily-used]");
     const dailyLimitEl = page?.querySelector("[data-exchange-daily-limit]");
+    const dailyLimitDisplayEl = page?.querySelector("[data-exchange-daily-limit-display]");
+    const empireDayEl = page?.querySelector("[data-exchange-empire-day]");
     const submitBtn = panel.querySelector(".gc-exchange-submit");
     const rateDisplayEl = panel.querySelector("[data-exchange-rate-display]");
     const giveTiles = panel.querySelectorAll("[data-exchange-give]");
@@ -11234,11 +11583,24 @@
 
     const patchExchangeFromState = (exchange) => {
       if (!exchange) return;
+      if (typeof exchange.daily_used === "number" && dailyUsedEl) {
+        dailyUsedEl.textContent = fmtNumber(exchange.daily_used);
+      }
       if (typeof exchange.daily_remaining === "number" && remainingEl) {
         remainingEl.textContent = fmtNumber(exchange.daily_remaining);
       }
       if (typeof exchange.daily_limit === "number" && dailyLimitEl) {
         dailyLimitEl.textContent = fmtNumber(exchange.daily_limit);
+      }
+      if (typeof exchange.daily_limit === "number" && dailyLimitDisplayEl) {
+        dailyLimitDisplayEl.textContent = fmtNumber(exchange.daily_limit);
+      }
+      if (typeof exchange.empire_production_day_total === "number" && empireDayEl) {
+        empireDayEl.textContent = tf(
+          "trader_hub_empire_production_day",
+          { total: fmtNumber(exchange.empire_production_day_total) },
+          `Empire / Tag: ${fmtNumber(exchange.empire_production_day_total)}`
+        );
       }
       if (typeof exchange.rate_metal_to_crystal === "number") {
         panel.dataset.rateM2c = String(exchange.rate_metal_to_crystal);
@@ -11498,6 +11860,7 @@
   }
 
   function initResearch() {
+    initBuildingTechnicalData();
     GC.startProgressTicker();
   }
 
@@ -12383,19 +12746,32 @@
 
   function rankingSortedRows(payload, tabId) {
     const top = Array.isArray(payload?.top_players) ? [...payload.top_players] : [];
-    const tab = RANKING_TABS.find((t) => t.id === tabId) || RANKING_TABS[0];
     top.sort((a, b) => {
       const diff = rankingScoreValue(b, tabId) - rankingScoreValue(a, tabId);
       if (diff !== 0) return diff;
       return (Number(a.player_id) || 0) - (Number(b.player_id) || 0);
     });
-    return top.map((row, idx) => {
-      const displayRank = tab.rankKey && row[tab.rankKey] != null ? Number(row[tab.rankKey]) : idx + 1;
-      return { ...row, display_rank: displayRank, display_score: rankingScoreValue(row, tabId) };
-    });
+    return top.map((row, idx) => ({
+      ...row,
+      display_rank: idx + 1,
+      display_score: rankingScoreValue(row, tabId),
+    }));
+  }
+
+  function rankingCurrentPlayerId(payload) {
+    const pageEl = document.getElementById("ranking-page");
+    const fromPage = Number(pageEl?.dataset?.playerId || 0);
+    if (Number.isFinite(fromPage) && fromPage > 0) return fromPage;
+    const fromPayload = Number(payload?.current_player?.player_id || 0);
+    return Number.isFinite(fromPayload) && fromPayload > 0 ? fromPayload : 0;
   }
 
   function rankingCurrentRank(payload, tabId) {
+    const pid = rankingCurrentPlayerId(payload);
+    if (pid > 0) {
+      const inTop = rankingSortedRows(payload, tabId).find((row) => Number(row.player_id) === pid);
+      if (inTop) return Number(inTop.display_rank);
+    }
     const cur = payload?.current_player || {};
     const ranks = cur.ranks || {};
     if (ranks[tabId] != null) return Number(ranks[tabId]);
@@ -15353,6 +15729,7 @@
     initSidebarSticky();
     initPjax();
     initShipDetailOnce();
+    initBuildingTechnicalDataOnce();
     initPlayerCardOnce();
 
     document.addEventListener("click", (e) => {

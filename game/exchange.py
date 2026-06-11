@@ -19,6 +19,9 @@ _EXCHANGE_SETTING_DEFAULTS = {
     "exchange_rate_metal_to_crystal": "0.85",
     "exchange_rate_crystal_to_metal": "0.85",
     "exchange_daily_limit": "2000000000",
+    "exchange_daily_limit_pct": "15",
+    "exchange_daily_limit_min": "1000000",
+    "exchange_daily_limit_max": "500000000",
     "exchange_min_amount": "100",
     "fuel_exchange_enabled": "1",
     "fuel_exchange_metal_per_unit": "20",
@@ -71,7 +74,10 @@ def get_exchange_config(conn=None) -> Dict[str, Any]:
             "fuel_enabled": fuel_enabled,
             "rate_metal_to_crystal": _float_setting(settings, "exchange_rate_metal_to_crystal", "0.85"),
             "rate_crystal_to_metal": _float_setting(settings, "exchange_rate_crystal_to_metal", "0.85"),
-            "daily_limit": _int_setting(settings, "exchange_daily_limit", "2000000000"),
+            "daily_limit_admin": _int_setting(settings, "exchange_daily_limit", "2000000000"),
+            "daily_limit_pct": _float_setting(settings, "exchange_daily_limit_pct", "15"),
+            "daily_limit_min": _int_setting(settings, "exchange_daily_limit_min", "1000000"),
+            "daily_limit_max": _int_setting(settings, "exchange_daily_limit_max", "500000000"),
             "min_amount": _int_setting(settings, "exchange_min_amount", "100"),
             "fuel_metal_per_unit": _float_setting(settings, "fuel_exchange_metal_per_unit", "45"),
             "fuel_crystal_per_unit": _float_setting(settings, "fuel_exchange_crystal_per_unit", "28"),
@@ -198,6 +204,44 @@ def _storage_caps(planet_id: int, player_id: int, conn) -> Dict[str, int]:
     return get_storage_capacity(buildings, research=research)
 
 
+def resolve_exchange_daily_limit(player_id: int, *, conn=None) -> Dict[str, Any]:
+    """GC-557D — Trader limit from empire 24h production × pct, clamped min/max/admin."""
+    from .empire_page import get_empire_production_aggregate
+
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        cfg = get_exchange_config(conn=conn)
+        prod = get_empire_production_aggregate(int(player_id), conn=conn)
+        pct = float(cfg["daily_limit_pct"])
+        min_lim = int(cfg["daily_limit_min"])
+        max_lim = int(cfg["daily_limit_max"])
+        admin_cap = int(cfg["daily_limit_admin"])
+        empire_day_total = int(prod["total_per_day"])
+        scaled = int(empire_day_total * pct / 100.0)
+        clamped = max(min_lim, min(max_lim, scaled))
+        final = min(clamped, admin_cap) if admin_cap > 0 else clamped
+        return {
+            "daily_limit": int(final),
+            "daily_limit_scaled": int(scaled),
+            "daily_limit_clamped": int(clamped),
+            "empire_production_day_total": empire_day_total,
+            "empire_production_day": {
+                "metal": int(prod["metal_per_day"]),
+                "crystal": int(prod["crystal_per_day"]),
+                "fuel_cells": int(prod["fuel_cells_per_day"]),
+            },
+            "limit_pct": pct,
+            "limit_min": min_lim,
+            "limit_max": max_lim,
+            "admin_cap": admin_cap,
+        }
+    finally:
+        if own:
+            conn.close()
+
+
 def get_exchange_status(
     *,
     player_id: int,
@@ -212,6 +256,8 @@ def get_exchange_status(
         conn = db()
     try:
         cfg = get_exchange_config(conn=conn)
+        limit_block = resolve_exchange_daily_limit(int(player_id), conn=conn)
+        daily_limit = int(limit_block["daily_limit"])
         now = time.time()
         cur = conn.cursor()
         cur.execute(
@@ -221,7 +267,7 @@ def get_exchange_status(
         row = cur.fetchone()
         player_row = dict(row) if row else {}
         used = _daily_used(player_row, now)
-        remaining = max(0, int(cfg["daily_limit"] - used))
+        remaining = max(0, int(daily_limit - used))
         caps = _storage_caps(planet_id, player_id, conn)
         routes = {}
         for give, receive in _VALID_ROUTES:
@@ -240,9 +286,15 @@ def get_exchange_status(
             "fuel_crystal_per_unit": cfg["fuel_crystal_per_unit"],
             "fuel_min_units": cfg["fuel_min_units"],
             "routes": routes,
-            "daily_limit": cfg["daily_limit"],
+            "daily_limit": daily_limit,
             "daily_used": int(used),
             "daily_remaining": remaining,
+            "daily_limit_pct": limit_block["limit_pct"],
+            "daily_limit_min": limit_block["limit_min"],
+            "daily_limit_max": limit_block["limit_max"],
+            "daily_limit_admin_cap": limit_block["admin_cap"],
+            "empire_production_day_total": limit_block["empire_production_day_total"],
+            "empire_production_day": limit_block["empire_production_day"],
             "min_amount": cfg["min_amount"],
             "balances": {
                 "metal": max(0, int(metal)),
@@ -287,6 +339,8 @@ def execute_exchange(
             return False, "exchange_unavailable", None
 
         cfg = get_exchange_config(conn=conn)
+        limit_block = resolve_exchange_daily_limit(int(player_id), conn=conn)
+        daily_limit = int(limit_block["daily_limit"])
         if not _route_enabled(give_resource, receive_resource, cfg):
             return False, "exchange_disabled", None
 
@@ -320,12 +374,12 @@ def execute_exchange(
         )
         player_row = dict(cur.fetchone() or {})
         used = _daily_used(player_row, now)
-        if used + give_amount > float(cfg["daily_limit"]):
+        if used + give_amount > float(daily_limit):
             rollback(conn)
             return False, "daily_limit_exceeded", {
-                "daily_limit": int(cfg["daily_limit"]),
+                "daily_limit": int(daily_limit),
                 "daily_used": int(used),
-                "daily_remaining": max(0, int(cfg["daily_limit"] - used)),
+                "daily_remaining": max(0, int(daily_limit - used)),
             }
 
         current_metal = float(planet["metal"] or 0)

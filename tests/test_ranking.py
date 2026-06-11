@@ -754,6 +754,98 @@ def test_ranking_uses_component_sum_not_stale_score_total(temp_db):
     assert payload["current_player"]["rank"] == 1
 
 
+def test_ranking_api_rank_monotonic_despite_stale_rank_columns(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    players = []
+    for idx, total in enumerate((1000, 800, 600, 400, 200), start=1):
+        pid = _create_player(f"mono_{idx}")
+        _seed_scores(pid, building=total, research=0)
+        players.append(pid)
+
+    conn = db()
+    conn.execute(
+        """
+        UPDATE player_scores
+        SET rank_total = CASE
+            WHEN player_id = ? THEN 6
+            WHEN player_id = ? THEN 6
+            WHEN player_id = ? THEN 7
+            WHEN player_id = ? THEN 8
+            WHEN player_id = ? THEN 9
+            ELSE rank_total
+        END
+        """,
+        tuple(players),
+    )
+    conn.commit()
+    conn.close()
+
+    payload = build_ranking_api_payload(players[0], limit=10, refresh=False)
+    top = payload["top_players"][:5]
+    ranks = [row["rank"] for row in top]
+    scores = [row["total_score"] for row in top]
+
+    assert ranks == [1, 2, 3, 4, 5]
+    assert scores == sorted(scores, reverse=True)
+    assert payload["current_player"]["rank"] == 1
+
+
+def test_recalculate_ranks_includes_evolution_and_destroyed(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    low = _create_player("rank_low")
+    high = _create_player("rank_high")
+
+    conn = db()
+    conn.execute(
+        """
+        UPDATE player_scores
+        SET score_total = 100,
+            score_buildings = 100,
+            score_research = 0,
+            score_fleet = 0,
+            score_defense = 0,
+            score_destroyed = 0,
+            score_planet_evolution = 0
+        WHERE player_id = ?
+        """,
+        (low,),
+    )
+    conn.execute(
+        """
+        UPDATE player_scores
+        SET score_total = 50,
+            score_buildings = 50,
+            score_research = 0,
+            score_fleet = 0,
+            score_defense = 0,
+            score_destroyed = 0,
+            score_planet_evolution = 5000
+        WHERE player_id = ?
+        """,
+        (high,),
+    )
+    conn.commit()
+    conn.close()
+
+    recalculate_ranks()
+    _close_db()
+
+    payload = build_ranking_api_payload(high, limit=10, refresh=False)
+    top = payload["top_players"][:2]
+    assert top[0]["player_id"] == high
+    assert top[0]["rank"] == 1
+    assert top[0]["total_score"] == 5050
+    assert top[1]["player_id"] == low
+    assert top[1]["rank"] == 2
+    assert payload["current_player"]["rank"] == 1
+
+
 def test_combat_destruction_increases_ranking_scores(temp_db):
     _run_migrate(temp_db)
     init_db()

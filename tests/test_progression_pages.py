@@ -97,8 +97,11 @@ def test_templates_import_progression_macros_with_context():
     buildings = (ROOT / "templates" / "buildings.html").read_text(encoding="utf-8")
     research = (ROOT / "templates" / "research.html").read_text(encoding="utf-8")
     assert "with context" in buildings
-    assert "render_info_popover_trigger" in buildings
+    assert "data-building-tech-data" in buildings
+    assert "render_info_popover_trigger" not in buildings
     assert "with context" in research
+    assert "data-research-tech-data" in research
+    assert "render_info_popover_trigger" not in research
     assert "render_research_head_action" in research
     assert "show_reqs" in research
     assert "render_hero_queue" in research
@@ -128,11 +131,9 @@ def test_buildings_page_renders(temp_db, monkeypatch):
     assert "gc-prog-effect" not in html
     assert "gc-prog-desc" not in html
 
-    info_count = html.count('class="gc-prog-info')
-    assert info_count >= len(BUILDING_ORDER), f"expected >={len(BUILDING_ORDER)} info tooltips, got {info_count}"
-    assert "gc-popover-trigger" in html
-    assert 'class="gc-prog-info gc-popover-trigger"' in html
-    assert 'class="gc-prog-info gc-popover-trigger" title=' not in html
+    assert 'data-building-tech-data="' in html
+    assert "gc-bld-card-title-btn" in html
+    assert 'class="gc-prog-info' not in html
 
     assert "status-pill-icon-btn" in html or "⚠" in html or "gc-bld-head-action-btn--warn" in html
 
@@ -151,10 +152,9 @@ def test_research_page_renders(temp_db, monkeypatch):
     assert "gc-prog-effect" not in html
     assert "gc-prog-desc" not in html
 
-    info_count = html.count('class="gc-prog-info')
-    assert info_count >= len(RESEARCH_TECHS), f"expected >={len(RESEARCH_TECHS)} info tooltips, got {info_count}"
-    assert "gc-popover-trigger" in html
-    assert 'class="gc-prog-info gc-popover-trigger" title=' not in html
+    assert 'data-research-tech-data="' in html
+    assert "gc-bld-card-title-btn" in html
+    assert 'class="gc-prog-info' not in html
 
     assert "status-pill-icon-btn" in html or "⚠" in html or "gc-bld-head-action-btn--warn" in html
 

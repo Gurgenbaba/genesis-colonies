@@ -625,6 +625,8 @@ def _fetch_all_score_rows(conn) -> List[Dict[str, Any]]:
     _ensure_score_rows(conn)
     cur = conn.cursor()
     extra = _fleet_defense_select(conn)
+    evo = _evolution_score_select(conn)
+    combat_sel = _combat_ranking_select(conn)
     cur.execute(
         f"""
         SELECT
@@ -633,7 +635,9 @@ def _fetch_all_score_rows(conn) -> List[Dict[str, Any]]:
             COALESCE(ps.score_total, 0) AS score_total,
             COALESCE(ps.score_buildings, 0) AS score_buildings,
             COALESCE(ps.score_research, 0) AS score_research,
-            {extra}
+            {extra},
+            {evo},
+            {combat_sel}
         FROM players p
         LEFT JOIN player_scores ps ON ps.player_id = p.id
         ORDER BY p.id ASC
@@ -1409,22 +1413,45 @@ def get_player_category_ranks(
     my_destroyed = _safe_int(score_row["score_destroyed"]) if "score_destroyed" in keys else 0
     my_evo = _safe_int(score_row["score_planet_evolution"]) if "score_planet_evolution" in keys else 0
 
-    if column_exists(conn, "player_scores", "rank_total"):
-        rank_cols = ["rank_building", "rank_research"]
-        if column_exists(conn, "player_scores", "rank_fleet"):
-            rank_cols.append("rank_fleet")
+    cur.execute(
+        """
+        SELECT COUNT(*) AS better
+        FROM players p
+        LEFT JOIN player_scores ps ON ps.player_id = p.id
+        WHERE COALESCE(ps.score_buildings, 0) > ?
+           OR (COALESCE(ps.score_buildings, 0) = ? AND COALESCE(ps.score_research, 0) > ?)
+           OR (COALESCE(ps.score_buildings, 0) = ? AND COALESCE(ps.score_research, 0) = ? AND p.id < ?)
+        """,
+        (my_build, my_build, my_res, my_build, my_res, int(player_id)),
+    )
+    ranks["building"] = int(cur.fetchone()["better"]) + 1
+
+    cur.execute(
+        """
+        SELECT COUNT(*) AS better
+        FROM players p
+        LEFT JOIN player_scores ps ON ps.player_id = p.id
+        WHERE COALESCE(ps.score_research, 0) > ?
+           OR (COALESCE(ps.score_research, 0) = ? AND COALESCE(ps.score_buildings, 0) > ?)
+           OR (COALESCE(ps.score_research, 0) = ? AND COALESCE(ps.score_buildings, 0) = ? AND p.id < ?)
+        """,
+        (my_res, my_res, my_build, my_res, my_build, int(player_id)),
+    )
+    ranks["research"] = int(cur.fetchone()["better"]) + 1
+
+    if column_exists(conn, "player_scores", "score_fleet"):
         cur.execute(
-            f"SELECT {', '.join(rank_cols)} FROM player_scores WHERE player_id = ?",
-            (int(player_id),),
+            """
+            SELECT COUNT(*) AS better
+            FROM players p
+            LEFT JOIN player_scores ps ON ps.player_id = p.id
+            WHERE COALESCE(ps.score_fleet, 0) > ?
+               OR (COALESCE(ps.score_fleet, 0) = ? AND COALESCE(ps.score_buildings, 0) > ?)
+               OR (COALESCE(ps.score_fleet, 0) = ? AND COALESCE(ps.score_buildings, 0) = ? AND p.id < ?)
+            """,
+            (my_fleet, my_fleet, my_build, my_fleet, my_build, int(player_id)),
         )
-        row = cur.fetchone()
-        if row:
-            if row["rank_building"] is not None:
-                ranks["building"] = int(row["rank_building"])
-            if row["rank_research"] is not None:
-                ranks["research"] = int(row["rank_research"])
-            if "rank_fleet" in row.keys() and row["rank_fleet"] is not None:
-                ranks["fleet"] = int(row["rank_fleet"])
+        ranks["fleet"] = int(cur.fetchone()["better"]) + 1
 
     if not skip_live_total:
         live_total_rank, live_total_players = get_player_rank_from_snapshot(
@@ -1433,17 +1460,6 @@ def get_player_category_ranks(
         if live_total_rank is not None:
             ranks["total"] = int(live_total_rank)
         ranks["total_players"] = int(live_total_players)
-
-    if "fleet" not in ranks and column_exists(conn, "player_scores", "score_fleet"):
-        cur.execute(
-            """
-            SELECT COUNT(*) AS better FROM player_scores
-            WHERE COALESCE(score_fleet, 0) > ?
-               OR (COALESCE(score_fleet, 0) = ? AND player_id < ?)
-            """,
-            (my_fleet, my_fleet, int(player_id)),
-        )
-        ranks["fleet"] = int(cur.fetchone()["better"]) + 1
 
     if column_exists(conn, "player_scores", "score_defense"):
         cur.execute(
@@ -1602,6 +1618,19 @@ def _current_player_payload(
         conn.close()
 
 
+def _log_ranking_top_debug(top: List[Dict[str, Any]], *, limit: int = 20) -> None:
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
+    for row in top[:limit]:
+        logger.debug(
+            "ranking top: rank=%s player=%s total_score=%s rank_total=%s",
+            row.get("rank"),
+            row.get("commander_name"),
+            row.get("total_score"),
+            row.get("rank_total"),
+        )
+
+
 def build_ranking_api_payload(
     current_player_id: int,
     *,
@@ -1619,6 +1648,7 @@ def build_ranking_api_payload(
     # Normal GET: read-only snapshot (LEFT JOIN players); no _ensure_score_rows here.
 
     top = get_sorted_ranking_entries(limit=limit, offset=0)
+    _log_ranking_top_debug(top)
     for row in top:
         row["is_current_player"] = int(row["player_id"]) == int(current_player_id)
 

@@ -24,13 +24,27 @@
         <h1 class="section-title">{{ T("trader_hub_title", "Trader Hub") }}</h1>
         <p class="section-hint hint">{{ T("trader_hub_hint") }}</p>
       </div>
-      <div class="fleet-slots-badge trader-hub-daily-badge" aria-label="{{ T('exchange_daily_remaining') }}">
-        <span class="fleet-slots-label">{{ T('trader_hub_daily_limit', 'Daily limit (per commander)') }}</span>
-        <span class="fleet-slots-value gc-mono">
-          <strong data-exchange-daily-remaining>{{ ex.daily_remaining|fmt_int if ex.daily_remaining is defined else '–' }}</strong>
-          <span class="trader-hub-daily-sep">/</span>
-          <span data-exchange-daily-limit>{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}</span>
-        </span>
+      <div class="trader-hub-daily-panel" aria-label="{{ T('trader_hub_daily_limit', 'Daily limit (per commander)') }}">
+        <div class="trader-hub-daily-row">
+          <span class="fleet-slots-label">{{ T('trader_hub_daily_used', 'Heute genutzt') }}</span>
+          <span class="fleet-slots-value gc-mono">
+            <strong data-exchange-daily-used>{{ ex.daily_used|fmt_int if ex.daily_used is defined else '0' }}</strong>
+            <span class="trader-hub-daily-sep">/</span>
+            <span data-exchange-daily-limit>{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}</span>
+          </span>
+        </div>
+        <div class="trader-hub-daily-breakdown hint">
+          <div class="trader-hub-daily-row trader-hub-daily-row--compact">
+            <span>{{ T('trader_hub_daily_limit_label', 'Tageslimit') }}</span>
+            <span class="gc-mono" data-exchange-daily-limit-display>{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}</span>
+          </div>
+          <p class="trader-hub-daily-formula">
+            {{ T('trader_hub_daily_formula', 'Berechnung: Empire-Produktion × %(pct)s %%', pct=(ex.daily_limit_pct|default(15)|int)) }}
+          </p>
+          <p class="trader-hub-daily-empire gc-mono" data-exchange-empire-day>
+            {{ T('trader_hub_empire_production_day', 'Empire / Tag: %(total)s', total=(ex.empire_production_day_total|fmt_int if ex.empire_production_day_total is defined else '0')) }}
+          </p>
+        </div>
       </div>
     </div>
   </header>

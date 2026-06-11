@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_raster_picture with context %}
-{% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/building_effect_strip.html" import render_building_effect_bundle with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 
@@ -66,9 +65,20 @@
   {% set req_tooltip = render_req_tooltip(b.requirements_items) | trim %}
   {% set _action_queue = bq_summary.count if bq_summary.count is defined else 0 %}
   {% set _action_label = T("research_btn_queue", "Anreihen") if _action_queue else T("buildings_btn_upgrade", "Ausbau starten") %}
+  {% if is_max %}
+    {% set _action_state = 'max' %}
+  {% elif not b.requirements_met %}
+    {% set _action_state = 'warn' %}
+  {% elif bq_queue_full %}
+    {% set _action_state = 'locked' %}
+  {% elif not b.can_afford %}
+    {% set _action_state = 'afford' %}
+  {% else %}
+    {% set _action_state = 'go' %}
+  {% endif %}
   <div class="gc-bld-card-head-action gc-bld-card-action bcell-action" data-building="{{ b.key }}">
     {% if is_max %}
-      <span class="gc-bld-head-action-btn gc-bld-head-action-btn--max"
+      <span class="gc-bld-head-action-btn gc-bld-head-action-btn--max" data-action-state="max"
             title="{{ T('buildings_btn_max_level') }}"
             aria-label="{{ T('buildings_btn_max_level') }}"><span class="gc-bld-head-action-icon">✓</span></span>
     {% elif not b.requirements_met %}
@@ -78,12 +88,14 @@
       {% endif %}
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-upgrade status-pill-icon-btn"
+              data-action-state="warn"
               disabled
               title="{{ lock_title }}"
               aria-label="{{ lock_title }}"><span class="gc-bld-head-action-icon">⚠</span></button>
     {% elif bq_queue_full %}
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-upgrade"
+              data-action-state="locked"
               disabled
               aria-disabled="true"
               title="{{ T('buildings_btn_queue_full', 'Warteschlange voll') }}"
@@ -91,12 +103,14 @@
     {% elif not b.can_afford %}
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-upgrade"
+              data-action-state="afford"
               disabled
               title="{{ T('msg_build_not_enough_resources') }}"
               aria-label="{{ T('msg_build_not_enough_resources') }}"><span class="gc-bld-head-action-icon">+</span></button>
     {% else %}
       <a id="btn-{{ b.key }}"
          data-building="{{ b.key }}"
+         data-action-state="go"
          href="{{ url_for('upgrade', building_type=b.key, src='buildings', tab=tab_name) }}"
          class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-upgrade"
          title="{{ _action_label }}"
@@ -150,15 +164,21 @@
             {% if b.queue_job is defined and b.queue_job %}
             {{ render_hero_queue(b.queue_job, 'build', 'building') }}
             {% endif %}
-            <span id="level-{{ building_type }}" class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero">{{ b.level|fmt_int }}</span>
             <div class="gc-bld-card-hero-title">
               <div class="gc-bld-card-title-wrap">
-                <h3 class="gc-bld-card-title">{{ T("building_" ~ building_type) }}</h3>
-                {{ render_info_popover_trigger(desc) }}
+                <button type="button"
+                        class="gc-ship-detail-trigger gc-bld-card-title-btn gc-bld-card-title"
+                        data-building-tech-data="{{ building_type }}"
+                        aria-label="{{ T('buildings_technical_data', 'Technische Daten') }}">{{ T("building_" ~ building_type) }}</button>
               </div>
               <div class="gc-bld-hero-action-col">
-                {{ render_hero_time_chip(b.queue_job if b.queue_job is defined else none, b.time_seconds, 'build', T('buildings_col_time')) }}
-                {{ render_building_head_action(b, tab_name, _bq_summary, _bq_queue_full) }}
+                <span id="level-{{ building_type }}" class="gc-level-badge gc-bld-card-level gc-bld-hero-level">{{ b.level|fmt_int }}</span>
+                <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--time">
+                  {{ render_hero_time_chip(b.queue_job if b.queue_job is defined else none, b.time_seconds, 'build', T('buildings_col_time')) }}
+                </span>
+                <span class="gc-bld-hero-action-slot gc-bld-hero-action-slot--btn">
+                  {{ render_building_head_action(b, tab_name, _bq_summary, _bq_queue_full) }}
+                </span>
               </div>
             </div>
           </div>

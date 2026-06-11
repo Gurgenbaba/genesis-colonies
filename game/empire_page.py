@@ -426,6 +426,59 @@ def _aggregate_production(colonies: List[Dict[str, Any]]) -> Dict[str, int]:
     return totals
 
 
+def get_empire_production_aggregate(player_id: int, *, conn=None) -> Dict[str, int]:
+    """
+    Empire-wide hourly production (all colonies) and 24h totals.
+    Same EffectResolver path as build_empire_context / empire matrix.
+    """
+    from .models import db as _db
+
+    uid = int(player_id)
+    own_conn = conn is None
+    if own_conn:
+        conn = _db()
+
+    try:
+        planets = get_planets_by_player(uid, conn=conn)
+        research = get_research_levels(user_id=uid, conn=conn)
+        try:
+            settings = get_game_settings(conn=conn)
+        except TypeError:
+            settings = get_game_settings()
+
+        per_hour = {"metal": 0, "crystal": 0, "fuel_cells": 0}
+        for planet in planets:
+            if _safe_int(planet.get("player_id")) != uid:
+                continue
+            snapshot = _build_colony_snapshot(
+                planet,
+                player_id=uid,
+                research=research,
+                settings=settings or {},
+                conn=conn,
+            )
+            prod = snapshot.get("production_per_hour") if isinstance(snapshot.get("production_per_hour"), dict) else {}
+            per_hour["metal"] += _safe_int(prod.get("metal"))
+            per_hour["crystal"] += _safe_int(prod.get("crystal"))
+            per_hour["fuel_cells"] += _safe_int(prod.get("fuel_cells"))
+
+        metal_day = int(per_hour["metal"]) * 24
+        crystal_day = int(per_hour["crystal"]) * 24
+        fuel_day = int(per_hour["fuel_cells"]) * 24
+        return {
+            "metal_per_hour": int(per_hour["metal"]),
+            "crystal_per_hour": int(per_hour["crystal"]),
+            "fuel_cells_per_hour": int(per_hour["fuel_cells"]),
+            "metal_per_day": metal_day,
+            "crystal_per_day": crystal_day,
+            "fuel_cells_per_day": fuel_day,
+            "total_per_day": metal_day + crystal_day + fuel_day,
+        }
+    finally:
+        if own_conn and conn is not None:
+            conn.close()
+
+
 def _aggregate_energy(colonies: List[Dict[str, Any]]) -> Dict[str, int]:
     total = used = 0
     for colony in colonies:

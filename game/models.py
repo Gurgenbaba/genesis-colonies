@@ -51,6 +51,9 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     "exchange_rate_metal_to_crystal": "0.85",
     "exchange_rate_crystal_to_metal": "0.85",
     "exchange_daily_limit": "2000000000",
+    "exchange_daily_limit_pct": "15",
+    "exchange_daily_limit_min": "1000000",
+    "exchange_daily_limit_max": "500000000",
     "exchange_min_amount": "100",
 
     # Fuel cells (production + Trader Hub routes)

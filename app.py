@@ -5323,6 +5323,38 @@ def api_admin_planet_ships(planet_id: int):
     return _admin_json(fleet_err(reason))
 
 
+@app.route("/api/buildings/<building_type>/technical-data")
+@require_login
+def api_building_technical_data(building_type: str):
+    from game.buildings import build_building_technical_data
+
+    user_id = int(session.get("user_id") or 0)
+    conn = db()
+    try:
+        data, err = build_building_technical_data(building_type, user_id=user_id, conn=conn)
+    finally:
+        conn.close()
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": data})
+
+
+@app.route("/api/research/<tech_key>/technical-data")
+@require_login
+def api_research_technical_data(tech_key: str):
+    from game.research import build_research_technical_data
+
+    user_id = int(session.get("user_id") or 0)
+    conn = db()
+    try:
+        data, err = build_research_technical_data(tech_key, user_id=user_id, conn=conn)
+    finally:
+        conn.close()
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": data})
+
+
 @app.route("/api/buildings/upgrade", methods=["POST"])
 @require_login
 def api_buildings_upgrade():

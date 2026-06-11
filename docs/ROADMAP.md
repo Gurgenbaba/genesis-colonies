@@ -267,6 +267,7 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 | Admin Control Center auf PJAX/State (statt `reload`) | 💡 |
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
 | **GC-536** — [Queue Card UX](GC-536_QUEUE_CARD_UX.md) (536A–F ✅) | ✅ |
+| **GC-557** — [Megabunker UX Feedback Polish](GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md) (557A–F) | 📋 |
 
 ### Tech debt (pytest, nicht blockierend)
 
