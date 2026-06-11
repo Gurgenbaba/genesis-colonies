@@ -2,6 +2,21 @@
 
 {# Shared compact progression row helpers (Buildings + Research) #}
 
+{# GC-555 — WebP + PNG fallback for large card artwork #}
+{% macro render_raster_picture(src, alt='', class='', lazy=true, low_priority=true, onerror='') %}
+  {% set _webp = src|webp_static %}
+  <picture>
+    <source srcset="{{ _webp }}" type="image/webp">
+    <img src="{{ src }}"
+         alt="{{ alt }}"
+         class="{{ class }}"
+         {% if lazy %}loading="lazy"{% endif %}
+         decoding="async"
+         {% if low_priority %}fetchpriority="low"{% endif %}
+         {% if onerror %}onerror="{{ onerror }}"{% endif %}>
+  </picture>
+{% endmacro %}
+
 {# Canonical resource artwork — static/img/res/ (HUD, overview, cards, trader) #}
 {% macro render_resource_icon(res_key, size='') %}
   {% if res_key == 'metal' %}
@@ -25,6 +40,7 @@
          alt=""
          class="gc-res-icon {{ mod }}{% if size %} gc-res-icon--{{ size }}{% endif %}"
          loading="lazy"
+         decoding="async"
          aria-hidden="true">
   {% endif %}
 {% endmacro %}

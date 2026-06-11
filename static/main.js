@@ -415,6 +415,25 @@
     return shouldRunGameLoop() && isTabVisible();
   }
 
+  /** GC-553 — patch only DOM for the active page module (queue tracking always runs). */
+  const _GAME_STATE_PATCH_PAGES = {
+    overview: new Set(["overview"]),
+    buildings: new Set(["buildings"]),
+    research: new Set(["research"]),
+    shipyard: new Set(["shipyard"]),
+    defense: new Set(["defense"]),
+    trader: new Set(["trader_hub", "auction_house"]),
+    fleet: new Set(["fleet"]),
+    empire: new Set(["empire"]),
+  };
+
+  function shouldPatchGameStateModule(module) {
+    const page = GC.currentPage || (typeof GC.detectPage === "function" ? GC.detectPage() : "");
+    const allowed = _GAME_STATE_PATCH_PAGES[module];
+    if (!allowed) return true;
+    return allowed.has(page);
+  }
+
   /** GC-547C — perf-idle: simple/auth always; ingame when no active progress jobs. */
   function isPerfIdle() {
     if (!shouldRunGameLoop()) return true;
@@ -577,15 +596,29 @@
     return /HTTP 401|HTTP 403|not_logged_in|non_json_response|invalid_json_response/i.test(msg);
   }
 
+  function landscapeWebpUrlFromRaster(url) {
+    const raw = String(url || "").trim();
+    if (!raw) return "";
+    return raw.replace(/\.(png|jpe?g)(\?.*)?$/i, ".webp$2");
+  }
+
   function applyPlanetLandscapeFromState(data) {
-    const url = String(data?.active_planet?.landscape_url || "").trim();
+    const ap = data?.active_planet;
+    const url = String(ap?.landscape_url || "").trim();
     if (!url) {
       document.body.classList.remove("gc-has-planet-landscape");
       document.body.style.removeProperty("--planet-landscape");
+      document.body.style.removeProperty("--planet-landscape-webp");
       return;
     }
+    const webp = String(ap?.landscape_webp_url || landscapeWebpUrlFromRaster(url) || "").trim();
     document.body.classList.add("gc-has-planet-landscape");
     document.body.style.setProperty("--planet-landscape", `url("${url}")`);
+    if (webp) {
+      document.body.style.setProperty("--planet-landscape-webp", `url("${webp}")`);
+    } else {
+      document.body.style.removeProperty("--planet-landscape-webp");
+    }
   }
 
   /** GC-548 — SSR/PJAX landscape before first game-state poll (perf-idle must not hide it). */
@@ -1262,16 +1295,17 @@
     if (p.backoff && isError) next = Math.max(next, p.backoff);
 
     if (p.running && p.timeoutId && !isError) {
-      p.lastInterval = next;
-      console.debug("[GC] polling already active", next, "ms");
+      if (p.lastInterval !== next) {
+        p.lastInterval = next;
+        scheduleGameStatePoll(next);
+        console.debug("[GC] polling interval adjusted", next, "ms");
+      } else {
+        console.debug("[GC] polling already active", next, "ms");
+      }
       return;
     }
 
     GC.stopPolling();
-    if (document.hidden) {
-      console.debug("[GC] polling paused (hidden tab)");
-      return;
-    }
 
     p.running = true;
     p.started = true;
@@ -5667,8 +5701,6 @@
         return false;
       }
 
-      patchOverviewScoreFromState(data);
-
       if (typeof data.unread_messages_count === "number") {
         const onMessagesPage = GC.detectPage() === "messages";
         const hudUnread = coercePollUnreadForHud(data, reason).unread_messages_count;
@@ -5693,39 +5725,96 @@
         }
       }
 
-      // --- Overview-Ressourcen-Karten ---
-      const ovMetalVal = document.querySelector('#overview-metal-val .gc-val[data-res="metal"]');
-      if (ovMetalVal) _setIfChanged(ovMetalVal, fmtNumber(metal));
-
-      const ovCryVal = document.querySelector('#overview-crystal-val .gc-val[data-res="crystal"]');
-      if (ovCryVal) _setIfChanged(ovCryVal, fmtNumber(crystal));
-
-      const ovFuelVal = document.querySelector('#overview-fuel-val .gc-val[data-res="fuel_cells"]');
-      if (ovFuelVal) _setIfChanged(ovFuelVal, fmtNumber(fuelCells));
-
-      patchOverviewResourceBars(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells);
-
-      const ovEnergyUsed = document.querySelector('#overview-energy-card .gc-val[data-energy-used]');
-      const ovEnergyTotal = document.querySelector('#overview-energy-card [data-energy-total]');
-      if (ovEnergyUsed) _setIfChanged(ovEnergyUsed, fmtNumber(used));
-      if (ovEnergyTotal) _setIfChanged(ovEnergyTotal, fmtNumber(total));
-
-      // Effizienz (nur Serverwerte — keine lokale Gameplay-Formel)
-      const ovEff = document.getElementById("overview-efficiency");
-      if (ovEff) {
-        const pct = Number.isFinite(Number(data.energy_efficiency_pct))
-          ? Math.round(Number(data.energy_efficiency_pct))
-          : 100;
-        _setIfChanged(ovEff, pct);
-      }
-
-      // --- Build Queue / Buildings ---
+      // --- Queue tracking (always — ticker intervals / polling cadence) ---
       let queueList = [];
       if (Array.isArray(buildQueueRaw)) queueList = buildQueueRaw;
       else if (buildQueueRaw && Array.isArray(buildQueueRaw.queue)) queueList = buildQueueRaw.queue;
 
       const activeJob = queueList.length > 0 ? queueList[0] : null;
+      _syncBuildQueueLiveState(queueList);
 
+      const researchQueue = Array.isArray(research.queue) ? research.queue : (activeResearch ? [activeResearch] : []);
+      _syncResearchQueueLiveState(researchQueue);
+
+      if (data.shipyard_queue) {
+        const syJobs = Array.isArray(data.shipyard_queue.queue) ? data.shipyard_queue.queue : [];
+        _syncShipyardQueueLiveState(syJobs);
+      }
+      if (data.defense) {
+        const defQ = data.defense.queue || data.defense.defense_queue || [];
+        if (Array.isArray(defQ)) _syncDefenseQueueLiveState(defQ);
+      }
+
+      const hasActiveBuild = !!activeJob;
+      const bqLimitFinal = buildQueueRaw?.summary?.limit ?? 3;
+      const bqCountFinal = buildQueueRaw?.summary?.count ?? queueList.length;
+      lastBuildQueueCount = bqCountFinal;
+      lastBuildQueueFull = bqCountFinal >= bqLimitFinal;
+      lastHadActiveJob = hasActiveBuild;
+
+      const hasActiveResearchNow = researchQueue.length > 0;
+      const rqLimitFinal = research?.summary?.limit ?? 3;
+      const rqCountFinal = research?.summary?.count ?? researchQueue.length;
+      lastResearchQueueCount = rqCountFinal;
+      lastResearchQueueFull = rqCountFinal >= rqLimitFinal;
+      lastHadActiveResearch = hasActiveResearchNow;
+      lastHadActiveShipyard = SHIPYARDQ.active.finishTime > getTimerServerNow();
+
+      if (shouldPatchGameStateModule("overview")) {
+        patchOverviewScoreFromState(data);
+
+        const ovMetalVal = document.querySelector('#overview-metal-val .gc-val[data-res="metal"]');
+        if (ovMetalVal) _setIfChanged(ovMetalVal, fmtNumber(metal));
+
+        const ovCryVal = document.querySelector('#overview-crystal-val .gc-val[data-res="crystal"]');
+        if (ovCryVal) _setIfChanged(ovCryVal, fmtNumber(crystal));
+
+        const ovFuelVal = document.querySelector('#overview-fuel-val .gc-val[data-res="fuel_cells"]');
+        if (ovFuelVal) _setIfChanged(ovFuelVal, fmtNumber(fuelCells));
+
+        patchOverviewResourceBars(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells);
+
+        const ovEnergyUsed = document.querySelector('#overview-energy-card .gc-val[data-energy-used]');
+        const ovEnergyTotal = document.querySelector('#overview-energy-card [data-energy-total]');
+        if (ovEnergyUsed) _setIfChanged(ovEnergyUsed, fmtNumber(used));
+        if (ovEnergyTotal) _setIfChanged(ovEnergyTotal, fmtNumber(total));
+
+        const ovEff = document.getElementById("overview-efficiency");
+        if (ovEff) {
+          const pct = Number.isFinite(Number(data.energy_efficiency_pct))
+            ? Math.round(Number(data.energy_efficiency_pct))
+            : 100;
+          _setIfChanged(ovEff, pct);
+        }
+
+        if (activeResearch) {
+          const totalSec = Math.max(
+            1,
+            parseInt(activeResearch.total_seconds, 10) ||
+              parseInt(activeResearch.total, 10) ||
+              (resolveQueueJobRemaining(activeResearch) || 0) + 1
+          );
+          const finishAt = resolveQueueJobFinishTime(activeResearch);
+
+          const ovBox = document.getElementById("overview-research-active");
+          if (ovBox) {
+            ovBox.dataset.total = String(totalSec);
+            if (finishAt > 0) ovBox.dataset.finishAt = String(finishAt);
+            const rem = resolveQueueJobRemaining(activeResearch);
+            if (Number.isFinite(rem) && rem >= 0) {
+              assignMonotonicServerRemaining(ovBox, rem, finishAt);
+            } else {
+              delete ovBox.dataset.serverRemaining;
+            }
+          }
+        }
+
+        patchOverviewResearch(research);
+        patchOverviewStatus(data.overview, data, buildings, prod);
+        if (data.planet_teaser) patchPlanetTeaser(data.planet_teaser);
+      }
+
+      if (shouldPatchGameStateModule("buildings")) {
       Object.keys(BUILDINGS).forEach((key) => {
         const cfg = BUILDINGS[key];
         const lvl = buildings[key];
@@ -5776,73 +5865,42 @@
 
       renderBuildQueue(buildQueueRaw);
       updateBuildQueueActions(buildQueueRaw);
-      patchResearchPanelFromState(data);
-      updateResearchQueueActions(research);
-
-      if (activeResearch) {
-        const totalSec = Math.max(
-          1,
-          parseInt(activeResearch.total_seconds, 10) ||
-            parseInt(activeResearch.total, 10) ||
-            (resolveQueueJobRemaining(activeResearch) || 0) + 1
-        );
-        const finishAt = resolveQueueJobFinishTime(activeResearch);
-
-        const ovBox = document.getElementById("overview-research-active");
-        if (ovBox) {
-          ovBox.dataset.total = String(totalSec);
-          if (finishAt > 0) ovBox.dataset.finishAt = String(finishAt);
-          const rem = resolveQueueJobRemaining(activeResearch);
-          if (Number.isFinite(rem) && rem >= 0) {
-            assignMonotonicServerRemaining(ovBox, rem, finishAt);
-          } else {
-            delete ovBox.dataset.serverRemaining;
-          }
-        }
-
-        const totalLabel = document.getElementById("research-total");
-        if (totalLabel) _setIfChanged(totalLabel, `${totalSec}s`);
-
-        RESEARCHQ.active.finishTime = finishAt;
-        RESEARCHQ.active.totalSeconds = totalSec;
-      } else {
-        RESEARCHQ.active.finishTime = 0;
-        RESEARCHQ.active.totalSeconds = 0;
-      }
-
-      patchOverviewResearch(research);
-      patchOverviewStatus(data.overview, data, buildings, prod);
-      if (data.exchange) patchExchangePanel(data.exchange);
-      if (data.scrapyard) patchScrapyardPanel(data.scrapyard);
-      if (data.auction_house) patchAuctionHousePanel(data.auction_house);
-      patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, fuelCells, storageFuelCells);
-      if (data.planet_teaser) patchPlanetTeaser(data.planet_teaser);
 
       if (data.buildings_panel) {
         patchBuildingPanel(data.buildings_panel, buildQueueRaw);
       }
-
-      if (research.techs) {
-        patchResearchPanel(research.techs, research);
       }
 
-      patchShipyardPanelFromState(data, activePlanetId);
+      if (shouldPatchGameStateModule("research")) {
+        patchResearchPanelFromState(data);
+        updateResearchQueueActions(research);
 
-      const hasActiveBuild = !!activeJob;
-      const bqLimitFinal = buildQueueRaw?.summary?.limit ?? 3;
-      const bqCountFinal = buildQueueRaw?.summary?.count ?? queueList.length;
-      lastBuildQueueCount = bqCountFinal;
-      lastBuildQueueFull = bqCountFinal >= bqLimitFinal;
-      lastHadActiveJob = hasActiveBuild;
+        if (activeResearch) {
+          const totalSec = Math.max(
+            1,
+            parseInt(activeResearch.total_seconds, 10) ||
+              parseInt(activeResearch.total, 10) ||
+              (resolveQueueJobRemaining(activeResearch) || 0) + 1
+          );
+          const totalLabel = document.getElementById("research-total");
+          if (totalLabel) _setIfChanged(totalLabel, `${totalSec}s`);
+        }
+      }
 
-      const researchQueue = Array.isArray(research.queue) ? research.queue : (activeResearch ? [activeResearch] : []);
-      const hasActiveResearchNow = researchQueue.length > 0;
-      const rqLimitFinal = research?.summary?.limit ?? 3;
-      const rqCountFinal = research?.summary?.count ?? researchQueue.length;
-      lastResearchQueueCount = rqCountFinal;
-      lastResearchQueueFull = rqCountFinal >= rqLimitFinal;
-      lastHadActiveResearch = hasActiveResearchNow;
-      lastHadActiveShipyard = SHIPYARDQ.active.finishTime > getTimerServerNow();
+      if (shouldPatchGameStateModule("trader")) {
+        if (data.exchange) patchExchangePanel(data.exchange);
+        if (data.scrapyard) patchScrapyardPanel(data.scrapyard);
+        if (data.auction_house) patchAuctionHousePanel(data.auction_house);
+        patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, fuelCells, storageFuelCells);
+      }
+
+      if (shouldPatchGameStateModule("shipyard")) {
+        patchShipyardPanelFromState(data, activePlanetId);
+      }
+
+      if (shouldPatchGameStateModule("research") && research.techs) {
+        patchResearchPanel(research.techs, research);
+      }
 
       const stApplied = Number(data.server_time || 0);
       if (stApplied) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stApplied);
@@ -5850,7 +5908,9 @@
       GC.lastState = coercePollUnreadForHud(data, reason);
       GC.startProgressTicker();
       _maybeRefreshStaleMovementCountdowns();
-      syncProductionPanelsAfterGameState(data, reason, activePlanetId);
+      if (shouldPatchGameStateModule("shipyard") || shouldPatchGameStateModule("defense")) {
+        syncProductionPanelsAfterGameState(data, reason, activePlanetId);
+      }
       syncPerfBodyClasses();
 
       if (typeof GC.scheduleLogisticsRefreshFromState === "function") {
@@ -7894,7 +7954,8 @@
   function startVoteCenterPoll(maxAttempts = 24, intervalMs = 5000) {
     stopVoteCenterPoll();
     let attempts = 0;
-    _voteCenterPollTimer = setInterval(async () => {
+    _voteCenterPollTimer = GC.setSafeInterval(async () => {
+      if (document.hidden || !shouldRunVisualLoops()) return;
       attempts += 1;
       const page = document.getElementById("vote-center-page");
       if (!page || page.dataset.ready !== "1" || attempts > maxAttempts) {
@@ -13343,12 +13404,19 @@
           document.body.dataset.endpoint = fetchedBody.dataset.endpoint || "";
         }
         const landscape = fetchedBody?.style?.getPropertyValue("--planet-landscape");
+        const landscapeWebp = fetchedBody?.style?.getPropertyValue("--planet-landscape-webp");
         if (landscape && landscape.trim()) {
           document.body.classList.add("gc-has-planet-landscape");
           document.body.style.setProperty("--planet-landscape", landscape.trim());
+          if (landscapeWebp && landscapeWebp.trim()) {
+            document.body.style.setProperty("--planet-landscape-webp", landscapeWebp.trim());
+          } else {
+            document.body.style.removeProperty("--planet-landscape-webp");
+          }
         } else {
           document.body.classList.remove("gc-has-planet-landscape");
           document.body.style.removeProperty("--planet-landscape");
+          document.body.style.removeProperty("--planet-landscape-webp");
         }
 
         _syncNavActive(url);
@@ -13766,8 +13834,10 @@
     document.addEventListener("visibilitychange", () => {
       syncPerfBodyClasses();
       if (document.hidden) {
-        GC.stopPolling();
         pauseVisualLoops();
+        if (shouldRunGameLoop() && !_authLoopAborted) {
+          GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
+        }
         return;
       }
       if (!shouldRunGameLoop() || _authLoopAborted) return;
@@ -15131,6 +15201,58 @@
 
   GC.openPlayerCard = loadPlayerCardView;
   GC.closePlayerCard = closePlayerCardModal;
+
+  /** GC-553 — DevTools snapshot: polling, loops, lifecycle counters. */
+  GC.debugPerf = function debugPerf() {
+    const lc = GC.pageLifecycle;
+    const pol = GC.polling;
+    return {
+      page: typeof GC.detectPage === "function" ? GC.detectPage() : null,
+      currentPage: GC.currentPage,
+      gameLoop: shouldRunGameLoop(),
+      visualLoops: shouldRunVisualLoops(),
+      perfIdle: isPerfIdle(),
+      tabHidden: document.hidden,
+      authAborted: _authLoopAborted,
+      polling: {
+        running: pol.running,
+        started: pol.started,
+        inFlight: pol.inFlight,
+        lastInterval: pol.lastInterval,
+        intervalActive: pol.intervalActive,
+        intervalIdle: pol.intervalIdle,
+        intervalHidden: pol.intervalHidden,
+        backoff: pol.backoff,
+      },
+      queues: {
+        buildActive: lastHadActiveJob,
+        researchActive: lastHadActiveResearch,
+        shipyardActive: lastHadActiveShipyard,
+        progressJobs: _hasActiveProgressJobs(),
+      },
+      loops: {
+        resourceTicker: _resourceTickerId != null,
+        progressTicker: _pageTimerLoopRunning,
+        voteCenterPoll: _voteCenterPollTimer != null,
+        ambiencePersist: _ambiencePersistTimer != null,
+      },
+      lifecycle: {
+        rafIds: lc.rafIds.length,
+        intervals: lc.intervals.length,
+        timeouts: lc.timeouts.length,
+        abortControllers: lc.abortControllers.length,
+        cleanupFns: lc.cleanupFns.length,
+        pjaxInFlight: !!GC.pjaxInFlight,
+      },
+      bodyClasses: {
+        perfIdle: document.body?.classList.contains("gc-perf-idle"),
+        tabHidden: document.body?.classList.contains("gc-tab-hidden"),
+        reducedMotion: document.body?.classList.contains("gc-reduced-motion"),
+      },
+    };
+  };
+  GC.isPerfIdle = isPerfIdle;
+  GC.shouldPatchGameStateModule = shouldPatchGameStateModule;
 
   function initShellOnce() {
     if (GC._shellReady) return;

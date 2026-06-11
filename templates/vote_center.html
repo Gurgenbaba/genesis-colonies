@@ -35,14 +35,13 @@
     <div class="vote-center-providers-list" data-vote-providers-list>
       {% for p in providers %}
       {% set _provider_img = url_for('static', filename=p.card_image) if p.card_image is defined and p.card_image else '' %}
+      {% set _provider_webp = _provider_img|webp_static if _provider_img else '' %}
       <article class="vote-center-provider-card" data-vote-provider="{{ p.provider_key }}">
         {% if _provider_img %}
-        <div class="vote-center-provider-hero">
-          <img class="vote-center-provider-hero-img"
-               src="{{ _provider_img }}"
-               alt="{{ p.display_name }}"
-               loading="lazy"
-               decoding="async">
+        <div class="vote-center-provider-hero"
+             style="--vote-banner: url('{{ _provider_img }}');{% if _provider_webp %} --vote-banner-webp: url('{{ _provider_webp }}');{% endif %}"
+             role="img"
+             aria-label="{{ p.display_name }}">
           <div class="vote-center-provider-hero-overlay">
             <h2 class="vote-center-provider-name">{{ p.display_name }}</h2>
             <span class="vote-center-provider-pending gc-mono" data-vote-provider-pending="{{ p.provider_key }}">

@@ -192,6 +192,12 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-bg {
   background-image:
     linear-gradient(rgba(0, 8, 18, 0.34), rgba(0, 8, 18, 0.50)),
     var(--planet-landscape);
+  background-image:
+    linear-gradient(rgba(0, 8, 18, 0.34), rgba(0, 8, 18, 0.50)),
+    image-set(
+      var(--planet-landscape-webp) type("image/webp"),
+      var(--planet-landscape) type("image/jpeg")
+    );
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
@@ -349,6 +355,10 @@ body.gc-body-simple[data-endpoint="landing"]{
     linear-gradient(90deg, rgba(2, 6, 14, 0.9) 0%, rgba(2, 6, 14, 0.62) 34%, rgba(2, 6, 14, 0.22) 58%, rgba(2, 6, 14, 0.08) 100%),
     linear-gradient(180deg, rgba(2, 6, 14, 0.35) 0%, transparent 42%, rgba(2, 6, 14, 0.75) 100%),
     url("img/background.png");
+  background-image:
+    linear-gradient(90deg, rgba(2, 6, 14, 0.9) 0%, rgba(2, 6, 14, 0.62) 34%, rgba(2, 6, 14, 0.22) 58%, rgba(2, 6, 14, 0.08) 100%),
+    linear-gradient(180deg, rgba(2, 6, 14, 0.35) 0%, transparent 42%, rgba(2, 6, 14, 0.75) 100%),
+    image-set(url("img/background.webp") type("image/webp"), url("img/background.png") type("image/png"));
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
@@ -368,6 +378,10 @@ body.gc-body-simple[data-endpoint="register"]{
     linear-gradient(90deg, rgba(2, 6, 14, 0.88) 0%, rgba(2, 6, 14, 0.58) 38%, rgba(2, 6, 14, 0.28) 62%, rgba(2, 6, 14, 0.12) 100%),
     linear-gradient(180deg, rgba(2, 6, 14, 0.4) 0%, transparent 45%, rgba(2, 6, 14, 0.72) 100%),
     url("img/background.png");
+  background-image:
+    linear-gradient(90deg, rgba(2, 6, 14, 0.88) 0%, rgba(2, 6, 14, 0.58) 38%, rgba(2, 6, 14, 0.28) 62%, rgba(2, 6, 14, 0.12) 100%),
+    linear-gradient(180deg, rgba(2, 6, 14, 0.4) 0%, transparent 45%, rgba(2, 6, 14, 0.72) 100%),
+    image-set(url("img/background.webp") type("image/webp"), url("img/background.png") type("image/png"));
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
@@ -4066,6 +4080,14 @@ body:not(.gc-perf-idle) .research-bar-fill{
   object-position: center 35%;
 }
 
+/* GC-555 — picture wrapper fills hero slots */
+.gc-bld-card-hero > picture,
+.gc-bld-hero-img-stack > picture{
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
 .gc-bld-hero-img-stack{
   position: absolute;
   inset: 0;
@@ -4916,8 +4938,8 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 @keyframes gc-card-queue-pulse{
-  0%, 100%{ opacity: 0.55; box-shadow: 0 0 0 rgba(190, 150, 255, 0); }
-  50%{ opacity: 1; box-shadow: 0 0 8px rgba(190, 150, 255, 0.25); }
+  0%, 100%{ opacity: 0.55; }
+  50%{ opacity: 1; }
 }
 
 .gc-card-queue-scanline--research{
@@ -10361,6 +10383,16 @@ body.gc-perf-idle .gc-header-cmd {
 
 body.gc-perf-idle .gc-header::after {
   display: none;
+}
+
+/* GC-553 — pause decorative queue loops when idle or tab hidden */
+body.gc-perf-idle .gc-card-queue-glyph,
+body.gc-perf-idle .gc-card-queue-scanline,
+body.gc-perf-idle .gc-card-queue-glyph--research,
+body.gc-tab-hidden .gc-card-queue-glyph,
+body.gc-tab-hidden .gc-card-queue-scanline,
+body.gc-tab-hidden .gc-card-queue-glyph--research {
+  animation-play-state: paused;
 }
 
 /* ==========================================================================
@@ -17437,13 +17469,15 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-}
-
-.vote-center-provider-hero-img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  background-color: #040810;
+  background-image: var(--vote-banner);
+  background-image: image-set(
+    var(--vote-banner-webp) type("image/webp"),
+    var(--vote-banner) type("image/png")
+  );
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .vote-center-provider-hero-overlay {
@@ -17456,9 +17490,9 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   padding: 0.8rem 0.9rem;
   background: linear-gradient(
     180deg,
-    rgba(0, 8, 18, 0.72) 0%,
-    rgba(0, 8, 18, 0.08) 48%,
-    rgba(0, 8, 18, 0.42) 100%
+    rgba(0, 8, 18, 0.82) 0%,
+    rgba(0, 8, 18, 0.22) 42%,
+    rgba(0, 8, 18, 0.58) 100%
   );
   pointer-events: none;
 }

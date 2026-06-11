@@ -39,7 +39,7 @@
       data-endpoint="{{ request.endpoint or '' }}"
       data-auth-page="{{ '1' if SIMPLE_LAYOUT else '0' }}"
       {% if not SIMPLE_LAYOUT %}data-server-time="{{ SERVER_TIME }}"{% endif %}
-      {% if current_planet_landscape_url %}style="--planet-landscape: url('{{ current_planet_landscape_url }}');"{% endif %}>
+      {% if current_planet_landscape_url %}style="--planet-landscape: url('{{ current_planet_landscape_url }}');{% if current_planet_landscape_webp_url is defined and current_planet_landscape_webp_url %} --planet-landscape-webp: url('{{ current_planet_landscape_webp_url }}');{% endif %}"{% endif %}>
 
   <!-- Skip Link (Keyboard/Screenreader) -->
   <a class="gc-skip-link" href="#main-content">

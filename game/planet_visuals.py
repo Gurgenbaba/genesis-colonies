@@ -41,6 +41,20 @@ def landscape_static_relpath(position: int) -> str:
     return f"img/landscapes/{get_landscape_for_position(position)}"
 
 
+def raster_webp_relpath(relpath: str) -> str:
+    """Sibling WebP path for ``img/.../file.png`` or ``.jpg`` (GC-555)."""
+    rel = str(relpath or "").strip().lstrip("/")
+    if not rel:
+        return ""
+    stem = rel.rsplit(".", 1)[0] if "." in rel else rel
+    return f"{stem}.webp"
+
+
+def landscape_webp_relpath(position: int) -> str:
+    """WebP landscape path for galaxy slot 1–15."""
+    return raster_webp_relpath(landscape_static_relpath(position))
+
+
 def landscape_filename_for_planet(planet: dict | None) -> str:
     """Resolve landscape filename from a planet row (uses ``position`` when present)."""
     if not planet:

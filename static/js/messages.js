@@ -1539,9 +1539,6 @@
     const n = Math.max(0, Number(count) || 0);
     const el = document.getElementById("messages-unread-count");
     if (el) el.textContent = String(n);
-    if (typeof GC.updateMessagesUnreadBadges === "function") {
-      GC.updateMessagesUnreadBadges(n);
-    }
     if (typeof GC.mergeLastState === "function") {
       GC.mergeLastState({ unread_messages_count: n }, "messages_local");
     }

@@ -164,6 +164,18 @@ def fmt_int_compact_filter(value):
     return _fmt_int_compact_canonical(value)
 
 
+@app.template_filter("webp_static")
+def webp_static_filter(url: str) -> str:
+    """GC-555 — sibling WebP URL for a static raster asset URL."""
+    text = str(url or "").strip()
+    if not text or "." not in text:
+        return text
+    base, dot, ext = text.rpartition(".")
+    if ext.lower() not in ("png", "jpg", "jpeg"):
+        return text
+    return f"{base}.webp"
+
+
 @app.template_global()
 def player_name_link(
     player_id,
@@ -339,17 +351,21 @@ def inject_globals():
         header_active_planet = None
 
     current_planet_landscape_url = None
+    current_planet_landscape_webp_url = None
     try:
         user_id = session.get("user_id")
         if user_id is not None:
-            from game.planet_visuals import landscape_filename_for_planet
+            from game.planet_visuals import landscape_filename_for_planet, raster_webp_relpath
 
             landscape_fn = landscape_filename_for_planet(header_active_planet)
-            current_planet_landscape_url = url_for(
-                "static", filename=f"img/landscapes/{landscape_fn}"
+            landscape_rel = f"img/landscapes/{landscape_fn}"
+            current_planet_landscape_url = url_for("static", filename=landscape_rel)
+            current_planet_landscape_webp_url = url_for(
+                "static", filename=raster_webp_relpath(landscape_rel)
             )
     except Exception:
         current_planet_landscape_url = None
+        current_planet_landscape_webp_url = None
 
     from game.config import get_client_runtime_config
 
@@ -383,6 +399,7 @@ def inject_globals():
         HEADER_PLANETS=header_planets,
         HEADER_ACTIVE_PLANET=header_active_planet,
         current_planet_landscape_url=current_planet_landscape_url,
+        current_planet_landscape_webp_url=current_planet_landscape_webp_url,
         SERVER_TIME=int(time.time()),
     )
 
@@ -3507,11 +3524,12 @@ def _payload_from_live_context(
         from game.planet_evolution.dna import effective_planet_class
         from game.planet_evolution.ux_copy import planet_class_label_key
 
-        from game.planet_visuals import get_landscape_for_position
+        from game.planet_visuals import get_landscape_for_position, raster_webp_relpath
 
         coords = get_planet_coordinates(planet)
         position = int(coords.get("position") or 0)
         landscape_fn = get_landscape_for_position(position)
+        landscape_rel = f"img/landscapes/{landscape_fn}"
         planet_class = effective_planet_class(planet)
         payload["active_planet"] = {
             "planet_id": int(active_planet_id),
@@ -3521,11 +3539,13 @@ def _payload_from_live_context(
             "planet_class_label_key": planet_class_label_key(planet_class),
             "is_homeworld": bool(planet.get("is_homeworld")),
             "position": position,
-            "landscape_url": url_for("static", filename=f"img/landscapes/{landscape_fn}"),
+            "landscape_url": url_for("static", filename=landscape_rel),
+            "landscape_webp_url": url_for("static", filename=raster_webp_relpath(landscape_rel)),
         }
     except Exception:
-        from game.planet_visuals import DEFAULT_LANDSCAPE
+        from game.planet_visuals import DEFAULT_LANDSCAPE, raster_webp_relpath
 
+        fallback_rel = f"img/landscapes/{DEFAULT_LANDSCAPE}"
         payload["active_planet"] = {
             "planet_id": int(active_planet_id),
             "name": str(planet.get("name") or ""),
@@ -3534,7 +3554,8 @@ def _payload_from_live_context(
             "planet_class_label_key": "planet_class_terrestrial",
             "is_homeworld": bool(planet.get("is_homeworld")),
             "position": None,
-            "landscape_url": url_for("static", filename=f"img/landscapes/{DEFAULT_LANDSCAPE}"),
+            "landscape_url": url_for("static", filename=fallback_rel),
+            "landscape_webp_url": url_for("static", filename=raster_webp_relpath(fallback_rel)),
         }
 
     if include_panel:

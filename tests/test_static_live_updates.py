@@ -538,7 +538,9 @@ def test_messages_js_report_unit_images():
     assert "function unitIconUrl(key, defenseStock)" in src
     assert "gc-combat-unit-chip-img" in src
     assert "reportBuildingChipImg" in src
-    assert "GC.updateMessagesUnreadBadges(n)" in src
+    unread_local = src.split("function updateLocalUnread")[1].split("function refreshBadgesFromServer")[0]
+    assert "GC.mergeLastState({ unread_messages_count: n }" in unread_local
+    assert "GC.updateMessagesUnreadBadges(n)" not in unread_local
 
 
 def test_main_js_gc546e_stale_poll_unread_guard():
@@ -898,6 +900,71 @@ def test_gc551_card_artwork_dirs_png_only_no_svg():
         assert svgs == [], f"unexpected SVG in static/img/{sub}: {svgs[:3]}"
         pngs = list(folder.glob("*.png"))
         assert pngs, f"missing PNG artwork in static/img/{sub}"
+
+
+def test_gc555_asset_audit_and_webp_loading():
+    """GC-555: WebP tooling, picture macro, vote banner CSS, landscape webp var."""
+    audit = _read("tools/audit_assets.py")
+    convert = _read("tools/convert_webp.py")
+    doc = _read("docs/GC-555_ASSET_AUDIT.md")
+    report_path = ROOT / "docs" / "GC-555_asset_report.json"
+    assert report_path.is_file()
+    progression = _read("templates/partials/progression_cards.html")
+    vote_tpl = _read("templates/vote_center.html")
+    base = _read("templates/base.html")
+    css = _read("static/style.css")
+    main = _read("static/main.js")
+    app_py = _read("app.py")
+
+    assert "def categorize" in audit
+    assert "convert_one" in convert
+    assert "GC-555" in doc
+    assert "render_raster_picture" in progression
+    assert "<picture>" in progression
+    assert "webp_static" in progression
+    assert "--vote-banner" in vote_tpl
+    assert "vote-center-provider-hero-img" not in vote_tpl
+    assert "--planet-landscape-webp" in base
+    assert "image-set" in css.split("vote-center-provider-hero")[1][:400]
+    assert "landscapeWebpUrlFromRaster" in main
+    assert "landscape_webp_url" in app_py
+    assert "def webp_static_filter" in app_py
+    assert (ROOT / "static" / "img" / "background.webp").is_file()
+    assert (ROOT / "static" / "img" / "vote" / "TopG.webp").is_file()
+
+
+def test_main_js_gc553_global_perf_audit():
+    """GC-553: hidden-tab throttle, page-scoped patches, debugPerf, idle animation pause."""
+    src = _read("static/main.js")
+    css = _read("static/style.css")
+    buildings = _read("templates/buildings.html")
+
+    assert "GC.debugPerf = function debugPerf()" in src
+    assert "function shouldPatchGameStateModule" in src
+    apply_section = src.split("function applyGameStateData")[1].split("function gameStateIncludePanel")[0]
+    assert "_syncBuildQueueLiveState(queueList)" in apply_section
+    assert "shouldPatchGameStateModule(\"buildings\")" in src
+
+    start_poll = src.split("GC.startPolling = function startPolling")[1].split("GC.initPage = function initPage")[0]
+    assert "polling paused (hidden tab)" not in start_poll
+    assert "polling interval adjusted" in start_poll
+
+    vis = src.split("function initVisibilityPolling")[1].split("function initMobileNav")[0]
+    hidden_branch = vis.split("if (document.hidden)")[1].split("if (!shouldRunGameLoop()")[0]
+    assert "pauseVisualLoops()" in hidden_branch
+    assert "GC.stopPolling()" not in hidden_branch
+    assert "GC.startPolling(" in hidden_branch
+
+    vote_poll = src.split("function startVoteCenterPoll")[1].split("function bindVoteCenterOnce")[0]
+    assert "GC.setSafeInterval" in vote_poll
+    assert "document.hidden" in vote_poll
+
+    assert "animation-play-state: paused" in css
+    assert "box-shadow: 0 0 8px" not in css.split("@keyframes gc-card-queue-pulse")[1][:120]
+    progression = _read("templates/partials/progression_cards.html")
+    assert 'decoding="async"' in progression
+    assert 'fetchpriority="low"' in progression
+    assert "render_raster_picture" in buildings
 
 
 def test_main_js_lootbox_roll_accuracy_and_sound():

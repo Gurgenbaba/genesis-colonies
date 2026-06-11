@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip, render_shipyard_resource_blocker, render_shipyard_unlock_blockers with context %}
+{% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip, render_shipyard_resource_blocker, render_shipyard_unlock_blockers, render_raster_picture with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 
@@ -158,11 +158,7 @@
                data-ship-key="{{ ship.ship_key }}"
                data-unlocked="1" role="listitem">
         <div class="gc-bld-card-hero">
-          <img src="{{ _ship_img }}"
-               alt=""
-               class="gc-bld-card-hero-img"
-               loading="lazy"
-               onerror="this.onerror=null;this.src='{{ _ship_img_fallback }}';">
+          {{ render_raster_picture(_ship_img, '', 'gc-bld-card-hero-img', true, true, "this.onerror=null;this.src='" ~ _ship_img_fallback ~ "';") }}
           <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
           {{ render_ship_card_stock(ship.ship_key, owned) }}
           <div class="gc-bld-card-hero-title">
@@ -254,11 +250,7 @@
                data-ship-key="{{ ship.ship_key }}"
                data-unlocked="0" role="listitem">
         <div class="gc-bld-card-hero">
-          <img src="{{ _ship_img }}"
-               alt=""
-               class="gc-bld-card-hero-img"
-               loading="lazy"
-               onerror="this.onerror=null;this.src='{{ _ship_img_fallback }}';">
+          {{ render_raster_picture(_ship_img, '', 'gc-bld-card-hero-img', true, true, "this.onerror=null;this.src='" ~ _ship_img_fallback ~ "';") }}
           <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
           {{ render_ship_card_stock(ship.ship_key, owned) }}
           <div class="gc-bld-card-hero-title">
