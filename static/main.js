@@ -2863,12 +2863,22 @@
     return active?.dataset?.buildingTab || "resources";
   }
 
+  function _setSubnavGroupExpanded(groupEl, parentEl, expanded) {
+    if (groupEl) groupEl.classList.toggle("is-expanded", expanded);
+    if (parentEl) parentEl.setAttribute("aria-expanded", expanded ? "true" : "false");
+  }
+
   function hideBuildingsSubnav() {
     const sub = document.getElementById("gc-nav-buildings-sub");
     if (!sub) return;
     sub.hidden = true;
     sub.classList.add("gc-nav-sub--collapsed");
     sub.setAttribute("aria-hidden", "true");
+    _setSubnavGroupExpanded(
+      document.querySelector(".gc-nav-buildings-group"),
+      document.getElementById("gc-nav-buildings-parent"),
+      false
+    );
     sub.querySelectorAll("[data-building-tab]").forEach((btn) => {
       btn.disabled = true;
       btn.tabIndex = -1;
@@ -2881,6 +2891,11 @@
     sub.hidden = false;
     sub.classList.remove("gc-nav-sub--collapsed");
     sub.setAttribute("aria-hidden", "false");
+    _setSubnavGroupExpanded(
+      document.querySelector(".gc-nav-buildings-group"),
+      document.getElementById("gc-nav-buildings-parent"),
+      true
+    );
     sub.querySelectorAll("[data-building-tab]").forEach((btn) => {
       btn.disabled = false;
       btn.tabIndex = 0;
@@ -2967,6 +2982,11 @@
     sub.hidden = true;
     sub.classList.add("gc-nav-sub--collapsed");
     sub.setAttribute("aria-hidden", "true");
+    _setSubnavGroupExpanded(
+      document.querySelector(".gc-nav-trading-group"),
+      document.getElementById("gc-nav-trading-parent"),
+      false
+    );
   }
 
   function showTradingSubnav() {
@@ -2975,6 +2995,11 @@
     sub.hidden = false;
     sub.classList.remove("gc-nav-sub--collapsed");
     sub.setAttribute("aria-hidden", "false");
+    _setSubnavGroupExpanded(
+      document.querySelector(".gc-nav-trading-group"),
+      document.getElementById("gc-nav-trading-parent"),
+      true
+    );
   }
 
   function syncTradingSubnav(page) {
@@ -3003,6 +3028,11 @@
     sub.hidden = true;
     sub.classList.add("gc-nav-sub--collapsed");
     sub.setAttribute("aria-hidden", "true");
+    _setSubnavGroupExpanded(
+      document.querySelector(".gc-nav-military-group"),
+      document.getElementById("gc-nav-military-parent"),
+      false
+    );
   }
 
   function showMilitarySubnav() {
@@ -3011,6 +3041,11 @@
     sub.hidden = false;
     sub.classList.remove("gc-nav-sub--collapsed");
     sub.setAttribute("aria-hidden", "false");
+    _setSubnavGroupExpanded(
+      document.querySelector(".gc-nav-military-group"),
+      document.getElementById("gc-nav-military-parent"),
+      true
+    );
   }
 
   function syncMilitarySubnav(page) {
@@ -13339,11 +13374,20 @@
       } catch (_) {
         return;
       }
-      const isTradingParent = link.id === "gc-nav-trading-parent";
-      const isMilitaryParent = link.id === "gc-nav-military-parent";
-      if (isTradingParent || isMilitaryParent) return;
+      const isSubnavParent =
+        link.id === "gc-nav-trading-parent"
+        || link.id === "gc-nav-military-parent"
+        || link.id === "gc-nav-buildings-parent";
+      if (isSubnavParent) return;
       link.classList.toggle("active", linkPath === path);
     });
+    const buildingsParent = document.getElementById("gc-nav-buildings-parent");
+    if (buildingsParent) {
+      const onBuildings = path.endsWith("/buildings");
+      buildingsParent.classList.toggle("active", onBuildings);
+      if (onBuildings) showBuildingsSubnav();
+      else hideBuildingsSubnav();
+    }
     _syncTradingNavFromPath(path);
     _syncMilitaryNavFromPath(path);
   }

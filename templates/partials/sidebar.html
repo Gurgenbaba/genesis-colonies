@@ -1,14 +1,19 @@
 <nav class="gc-sidebar gc-sidebar-desktop" aria-label="Hauptnavigation">
 
+  <p class="gc-nav-section-label">{{ T("nav_section_colony", "Kolonie") }}</p>
+
   <a href="{{ url_for('overview') }}"
      class="gc-nav-link {% if request.endpoint == 'overview' %}active{% endif %}">
     {{ T("nav_overview") }}
   </a>
 
-  <div class="gc-nav-buildings-group gc-nav-submenu-group">
+  <div class="gc-nav-buildings-group gc-nav-submenu-group{% if request.endpoint == 'buildings_view' %} is-expanded{% endif %}">
     <a href="{{ url_for('buildings_view') }}"
-       class="gc-nav-link {% if request.endpoint == 'buildings_view' %}active{% endif %}">
-      {{ T("nav_buildings") }}
+       class="gc-nav-link gc-nav-link--has-sub {% if request.endpoint == 'buildings_view' %}active{% endif %}"
+       id="gc-nav-buildings-parent"
+       aria-expanded="{{ 'true' if request.endpoint == 'buildings_view' else 'false' }}">
+      <span class="gc-nav-link-label">{{ T("nav_buildings") }}</span>
+      <span class="gc-nav-chevron" aria-hidden="true"></span>
     </a>
     {% set _bld_nav_tab = request.args.get('tab') or 'resources' %}
     <div class="gc-nav-sub gc-nav-sub--buildings"
@@ -53,17 +58,23 @@
     {{ T("nav_planet_evolution", "Planet Evolution") }}
   </a>
 
+  <p class="gc-nav-section-label">{{ T("nav_section_empire", "Imperium") }}</p>
+
   <a href="{{ url_for('empire_view') }}"
      class="gc-nav-link {% if request.endpoint == 'empire_view' %}active{% endif %}">
     {{ T("nav_empire", "Empire") }}
   </a>
 
+  <p class="gc-nav-section-label">{{ T("nav_section_military", "Militär") }}</p>
+
   {% set _military_open = request.endpoint in ('shipyard_view', 'defense_view') %}
-  <div class="gc-nav-military-group gc-nav-submenu-group">
+  <div class="gc-nav-military-group gc-nav-submenu-group{% if _military_open %} is-expanded{% endif %}">
     <a href="{{ url_for('shipyard_view') }}"
-       class="gc-nav-link {% if _military_open %}active{% endif %}"
-       id="gc-nav-military-parent">
-      {{ T("nav_military_hub", "Militärproduktion") }}
+       class="gc-nav-link gc-nav-link--has-sub {% if _military_open %}active{% endif %}"
+       id="gc-nav-military-parent"
+       aria-expanded="{{ 'true' if _military_open else 'false' }}">
+      <span class="gc-nav-link-label">{{ T("nav_military_hub", "Militärproduktion") }}</span>
+      <span class="gc-nav-chevron" aria-hidden="true"></span>
     </a>
     <div class="gc-nav-sub gc-nav-sub--military"
          id="gc-nav-military-sub"
@@ -91,11 +102,13 @@
     'trader_hub_view', 'logistics_view', 'inventory_view', 'auction_house_view',
     'vote_center_view', 'galactic_politics_view', 'skilltree_view', 'premium_view'
   ) %}
-  <div class="gc-nav-trading-group gc-nav-submenu-group">
+  <div class="gc-nav-trading-group gc-nav-submenu-group{% if _trading_open %} is-expanded{% endif %}">
     <a href="{{ url_for('trader_hub_view') }}"
-       class="gc-nav-link {% if _trading_open %}active{% endif %}"
-       id="gc-nav-trading-parent">
-      {{ T("nav_trading_post", "Kommando") }}
+       class="gc-nav-link gc-nav-link--has-sub {% if _trading_open %}active{% endif %}"
+       id="gc-nav-trading-parent"
+       aria-expanded="{{ 'true' if _trading_open else 'false' }}">
+      <span class="gc-nav-link-label">{{ T("nav_trading_post", "Kommando") }}</span>
+      <span class="gc-nav-chevron" aria-hidden="true"></span>
     </a>
     <div class="gc-nav-sub gc-nav-sub--trading"
          id="gc-nav-trading-sub"
@@ -111,15 +124,15 @@
          data-trading-nav="logistics">
         {{ T("nav_logistics", "Logistics") }}
       </a>
-      <a href="{{ url_for('inventory_view') }}"
-         class="gc-nav-sub-link {% if request.endpoint == 'inventory_view' %}active{% endif %}"
-         data-trading-nav="inventory">
-        {{ T("nav_inventory", "Inventar") }}
-      </a>
       <a href="{{ url_for('auction_house_view') }}"
          class="gc-nav-sub-link {% if request.endpoint == 'auction_house_view' %}active{% endif %}"
          data-trading-nav="auction_house">
         {{ T("nav_auction_house", "Auktionshaus") }}
+      </a>
+      <a href="{{ url_for('inventory_view') }}"
+         class="gc-nav-sub-link {% if request.endpoint == 'inventory_view' %}active{% endif %}"
+         data-trading-nav="inventory">
+        {{ T("nav_inventory", "Inventar") }}
       </a>
       <a href="{{ url_for('vote_center_view') }}"
          class="gc-nav-sub-link {% if request.endpoint == 'vote_center_view' %}active{% endif %}"
@@ -147,21 +160,25 @@
     </div>
   </div>
 
-  <a href="{{ url_for('alliance_view') }}"
-     class="gc-nav-link gc-nav-wip {% if request.endpoint == 'alliance_view' %}active{% endif %}">
-    <span>{{ T("nav_alliance") }}</span>
-    <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
-  </a>
+  <p class="gc-nav-section-label">{{ T("nav_section_galaxy", "Galaxie") }}</p>
 
   <a href="{{ url_for('galaxy_view') }}"
      class="gc-nav-link {% if request.endpoint == 'galaxy_view' %}active{% endif %}">
     {{ T("nav_galaxy") }}
   </a>
 
+  <a href="{{ url_for('alliance_view') }}"
+     class="gc-nav-link gc-nav-wip {% if request.endpoint == 'alliance_view' %}active{% endif %}">
+    <span>{{ T("nav_alliance") }}</span>
+    <span class="gc-nav-wip-badge">{{ T("wip_badge", "Dev") }}</span>
+  </a>
+
   <a href="{{ url_for('ranking_view') }}"
      class="gc-nav-link {% if request.endpoint == 'ranking_view' %}active{% endif %}">
     {{ T("nav_ranking", "Ranking") }}
   </a>
+
+  <p class="gc-nav-section-label">{{ T("nav_section_system", "System") }}</p>
 
   <a href="{{ url_for('options_view') }}"
      class="gc-nav-link {% if request.endpoint == 'options_view' %}active{% endif %}">

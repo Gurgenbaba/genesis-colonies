@@ -828,6 +828,20 @@ body.gc-body-simple .auth-error {
   opacity: 0.85;
 }
 
+.gc-nav-section-label{
+  margin: 14px 14px 4px;
+  padding: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(70, 229, 255, 0.45);
+}
+
+.gc-nav-section-label:first-child{
+  margin-top: 4px;
+}
+
 .gc-nav-link{
   display: block;
   padding: 11px 14px;
@@ -857,13 +871,53 @@ body.gc-body-simple .auth-error {
   color: var(--gc-neon-cyan);
 }
 
-/* Sidebar submenu groups (Gebäude, Handelsposten, Militärproduktion) */
+/* Sidebar submenu groups (Gebäude, Kommando, Militärproduktion) */
 .gc-nav-buildings-group,
 .gc-nav-trading-group,
 .gc-nav-military-group,
 .gc-nav-submenu-group{
   display: flex;
   flex-direction: column;
+}
+
+.gc-nav-link--has-sub{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.gc-nav-link-label{
+  min-width: 0;
+  flex: 1;
+}
+
+.gc-nav-chevron{
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  margin-top: -1px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.5;
+  transition: transform 0.18s ease, opacity 0.18s ease, margin-top 0.18s ease;
+}
+
+.gc-nav-submenu-group.is-expanded > .gc-nav-link--has-sub .gc-nav-chevron,
+.gc-nav-link--has-sub[aria-expanded="true"] .gc-nav-chevron{
+  transform: rotate(-135deg);
+  margin-top: 2px;
+  opacity: 0.82;
+}
+
+.gc-nav-link--has-sub:hover .gc-nav-chevron,
+.gc-nav-link--has-sub.active .gc-nav-chevron{
+  opacity: 0.95;
+}
+
+.gc-nav-submenu-group.is-expanded > .gc-nav-sub{
+  border-left-color: rgba(70, 229, 255, 0.28);
 }
 
 button.gc-nav-link.gc-nav-submenu-toggle{
