@@ -2141,6 +2141,78 @@ def api_dev_topg_postback_test():
     })
 
 
+@app.route("/api/vote/center-state", methods=["GET"])
+@require_login
+def api_vote_center_state():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    from game.vote_rewards import get_vote_center_state
+
+    conn = db()
+    try:
+        vote_center = get_vote_center_state(user_id, conn=conn)
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "vote_center": vote_center})
+
+
+@app.route("/api/vote/visit", methods=["POST"])
+@require_login
+def api_vote_visit():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    provider_key = str(data.get("provider_key") or "").strip().lower()
+    if not provider_key:
+        return jsonify({"ok": False, "reason": "missing_provider_key"}), 400
+
+    from game.vote_rewards import get_vote_center_state, handle_vote_visit
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, created, reason = handle_vote_visit(user_id, provider_key, conn=conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("vote visit failed user_id=%s provider=%s", user_id, provider_key)
+        return jsonify({"ok": False, "reason": "server_error"}), 500
+    finally:
+        conn.close()
+
+    vote_center: Dict[str, Any] = {}
+    conn2 = db()
+    try:
+        vote_center = get_vote_center_state(user_id, conn=conn2)
+    finally:
+        conn2.close()
+
+    resp: Dict[str, Any] = {
+        "ok": bool(ok),
+        "created": bool(created),
+        "reason": reason,
+        "vote_center": vote_center,
+    }
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    status = 200 if ok else 400
+    if reason == "provider_disabled":
+        status = 404
+    return jsonify(resp), status
+
+
 @app.route("/api/vote/rewards/claim", methods=["POST"])
 @require_login
 def api_vote_rewards_claim():

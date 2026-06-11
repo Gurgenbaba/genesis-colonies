@@ -29,6 +29,7 @@ from game.vote_rewards import (
     claim_all_vote_rewards,
     claim_vote_reward,
     get_vote_center_state,
+    handle_vote_visit,
     is_allowed_vote_reward_box,
     is_topg_postback_allowed,
     list_enabled_providers,
@@ -532,6 +533,63 @@ def test_valid_topg_callback_creates_pending_reward(vote_db):
     payload = json.loads(row["reward_payload_json"])
     assert payload["reward_type"] == "lootbox"
     assert payload["box_key"] == DEFAULT_VOTE_BOX_KEY
+    conn.close()
+
+
+def test_vote_visit_creates_pending_reward(vote_db):
+    uid = _player()
+    conn = db()
+    ok, created, reason = handle_vote_visit(uid, TOPG_PROVIDER, conn=conn)
+    assert ok is True
+    assert created is True
+    assert reason == "reward_pending"
+    row = conn.execute(
+        "SELECT status, provider FROM vote_rewards WHERE user_id = ?;",
+        (uid,),
+    ).fetchone()
+    assert row is not None
+    assert row["status"] == "pending"
+    assert row["provider"] == TOPG_PROVIDER
+    conn.close()
+
+
+def test_vote_visit_cooldown_no_second_reward(vote_db):
+    uid = _player()
+    conn = db()
+    now = int(time.time())
+    _, created1, _ = handle_vote_visit(uid, TOPG_PROVIDER, conn=conn)
+    _, created2 = record_provider_vote(
+        TOPG_PROVIDER,
+        uid,
+        None,
+        conn=conn,
+        now=now + 30,
+        reward_payload=LOOTBOX_PAYLOAD,
+    )
+    assert created1 is True
+    assert created2 is False
+    count = conn.execute("SELECT COUNT(*) AS c FROM vote_rewards WHERE user_id = ?;", (uid,)).fetchone()["c"]
+    assert int(count) == 1
+    conn.close()
+
+
+def test_vote_visit_api_endpoint(vote_db, monkeypatch):
+    client, login_uid, _ = _login_client(vote_db, monkeypatch)
+    res = client.post(
+        "/api/vote/visit",
+        json={"provider_key": "topg", "request_id": str(uuid.uuid4())},
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is True
+    assert data["created"] is True
+    assert data.get("vote_center") is not None
+    conn = db()
+    count = conn.execute(
+        "SELECT COUNT(*) AS c FROM vote_rewards WHERE user_id = ? AND status = 'pending';",
+        (login_uid,),
+    ).fetchone()["c"]
+    assert int(count) == 1
     conn.close()
 
 

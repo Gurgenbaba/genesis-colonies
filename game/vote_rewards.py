@@ -1068,6 +1068,36 @@ def handle_provider_postback(
     return True, created, "ok"
 
 
+def handle_vote_visit(
+    user_id: int,
+    provider_key: str,
+    *,
+    conn,
+) -> Tuple[bool, bool, str]:
+    """
+    Record a vote attempt when the player clicks a provider link in Vote Center.
+
+    Uses the same cooldown + reward pool as postbacks. Duplicate provider_ref
+    within the cooldown window is ignored (ON CONFLICT DO NOTHING).
+    """
+    provider = _get_provider(str(provider_key), conn=conn)
+    if not provider or not provider["enabled"]:
+        return False, False, "provider_disabled"
+    if not provider["postback_enabled"]:
+        return True, False, "postback_disabled"
+
+    uid = int(user_id)
+    if uid <= 0 or not _user_exists(uid, conn=conn):
+        return False, False, "invalid_user"
+
+    processed, created = record_provider_vote(str(provider_key), uid, None, conn=conn)
+    if not processed:
+        return False, False, "unavailable"
+    if created:
+        return True, True, "reward_pending"
+    return True, False, "cooldown_active"
+
+
 def _credit_planet_resources(
     planet_id: int,
     *,

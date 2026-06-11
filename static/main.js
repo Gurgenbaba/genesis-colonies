@@ -7845,12 +7845,83 @@
   }
 
   let _voteCenterBound = false;
+  let _voteCenterPollTimer = null;
+
+  function stopVoteCenterPoll() {
+    if (_voteCenterPollTimer) {
+      clearInterval(_voteCenterPollTimer);
+      _voteCenterPollTimer = null;
+    }
+  }
+
+  async function refreshVoteCenterState() {
+    const page = document.getElementById("vote-center-page");
+    if (!page || page.dataset.ready !== "1") return null;
+    try {
+      const res = await GC.fetchGameAction("/api/vote/center-state");
+      if (res?.vote_center) patchVoteCenterDom(res.vote_center);
+      return res;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function startVoteCenterPoll(maxAttempts = 24, intervalMs = 5000) {
+    stopVoteCenterPoll();
+    let attempts = 0;
+    _voteCenterPollTimer = setInterval(async () => {
+      attempts += 1;
+      const page = document.getElementById("vote-center-page");
+      if (!page || page.dataset.ready !== "1" || attempts > maxAttempts) {
+        stopVoteCenterPoll();
+        return;
+      }
+      await refreshVoteCenterState();
+    }, intervalMs);
+  }
+
   function bindVoteCenterOnce() {
     if (_voteCenterBound) return;
     _voteCenterBound = true;
     document.addEventListener("click", async (ev) => {
       const page = document.getElementById("vote-center-page");
       if (!page || page.dataset.ready !== "1") return;
+
+      const voteLink = ev.target.closest("[data-vote-provider-link]");
+      if (voteLink && voteLink.href) {
+        ev.preventDefault();
+        const providerKey = String(voteLink.dataset.voteProviderLink || "").trim();
+        const href = voteLink.href;
+        if (providerKey) {
+          try {
+            const res = await GC.fetchGameAction("/api/vote/visit", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                provider_key: providerKey,
+                request_id: GC.newRequestId(),
+              }),
+            });
+            if (res?.vote_center) patchVoteCenterDom(res.vote_center);
+            if (res?.ok && res?.created) {
+              showNotify(
+                t("vote_center_visit_reward_pending", "Vote registriert — Belohnung wartet im Vote Center."),
+                "success"
+              );
+            } else if (res?.ok && res?.reason === "cooldown_active") {
+              showNotify(
+                t("vote_center_visit_cooldown", "Cooldown aktiv — noch keine neue Belohnung möglich."),
+                "info"
+              );
+            }
+          } catch (_) {
+            showNotify(t("vote_center_visit_fail", "Vote konnte nicht registriert werden."), "error");
+          }
+        }
+        window.open(href, "_blank", "noopener,noreferrer");
+        startVoteCenterPoll();
+        return;
+      }
 
       const claimAllBtn = ev.target.closest("[data-vote-claim-all]");
       if (claimAllBtn && !claimAllBtn.disabled) {
@@ -7901,6 +7972,21 @@
     if (!page || page.dataset.ready !== "1") return;
     const state = parseVoteCenterPageState();
     if (state) patchVoteCenterDom(state);
+    GC.registerCleanup(stopVoteCenterPoll);
+    if (!page._voteFocusBound) {
+      page._voteFocusBound = true;
+      const onFocus = () => {
+        if (document.visibilityState && document.visibilityState !== "visible") return;
+        refreshVoteCenterState();
+      };
+      window.addEventListener("focus", onFocus);
+      document.addEventListener("visibilitychange", onFocus);
+      GC.registerCleanup(() => {
+        window.removeEventListener("focus", onFocus);
+        document.removeEventListener("visibilitychange", onFocus);
+        page._voteFocusBound = false;
+      });
+    }
   }
 
   function initTraderHub() {
