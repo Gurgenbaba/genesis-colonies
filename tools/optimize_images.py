@@ -12,8 +12,9 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 IMG_ROOT = ROOT / "static" / "img"
 
-CARD_DIRS = ("ships", "research", "defense", "buildings", "res", "badges", "evo", "lootboxes")
+CARD_DIRS = ("ships", "research", "defense", "buildings", "res", "badges", "evo", "lootboxes", "vote")
 CARD_MAX_WIDTH = 512
+CARD_MAX_WIDTH_BY_DIR = {"vote": 720}
 PNG_COMPRESS_LEVEL = 9
 JPEG_CARD_QUALITY = 85
 
@@ -73,10 +74,15 @@ def _landscape_target(path: Path) -> Path:
     return path
 
 
+def card_max_width_for(path: Path) -> int:
+    return int(CARD_MAX_WIDTH_BY_DIR.get(path.parent.name, CARD_MAX_WIDTH))
+
+
 def optimize_card_file(path: Path, *, dry_run: bool = False) -> tuple[int, int]:
     before = path.stat().st_size
+    max_width = card_max_width_for(path)
     with Image.open(path) as im:
-        im = _resize_if_needed(im, CARD_MAX_WIDTH)
+        im = _resize_if_needed(im, max_width)
         after = _save_raster(im, path, dry_run=dry_run)
     return before, after
 
@@ -176,7 +182,7 @@ def main() -> None:
         if args.only != "all" and args.only in CARD_DIRS:
             card_files = [p for p in card_files if p.parts[-2] == args.only]
         if card_files:
-            print(f"=== Card assets ({len(card_files)} files, max {CARD_MAX_WIDTH}px) ===")
+            print(f"=== Card assets ({len(card_files)} files) ===")
             b, a = run_card_pass(card_files, dry_run=args.dry_run)
             grand_before += b
             grand_after += a

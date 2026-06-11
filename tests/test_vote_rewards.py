@@ -44,6 +44,8 @@ from game.vote_rewards import (
     vote_rewards_schema_ready,
     vote_reward_next_at_column_ready,
     vote_system_ready,
+    vote_provider_card_image,
+    _reward_summary,
 )
 
 GTOP100_PINGBACK_TEST_KEY = "test-gtop100-key"
@@ -668,6 +670,34 @@ def test_roll_vote_reward_single_entry(vote_db):
     assert reward["reward_key"]
     if reward["reward_type"] == "lootbox":
         assert is_allowed_vote_reward_box(reward.get("box_key", ""))
+
+
+def test_vote_provider_card_images_mapped(vote_db):
+    assert vote_provider_card_image("topg") == "img/vote/TopG.png"
+    assert vote_provider_card_image("gtop100") == "img/vote/GTop100.png"
+    assert vote_provider_card_image("gametoor") == "img/vote/GameToor.png"
+    assert vote_provider_card_image("arena_top100") == "img/vote/Arena-Top100.png"
+
+
+def test_reward_summary_display_items_use_canonical_labels(vote_db):
+    loot = _reward_summary(LOOTBOX_PAYLOAD)
+    assert loot["display_items"][0]["name_key"] == "inv_container_basic"
+    assert loot["display_items"][0]["image"].endswith("Basic_Container.png")
+
+    resources = _reward_summary(RESOURCE_PAYLOAD)
+    assert [item["name_key"] for item in resources["display_items"]] == [
+        "resource_metal",
+        "resource_crystal",
+        "resource_fuel_cells",
+    ]
+
+    ships = _reward_summary(SHIP_PAYLOAD)
+    assert ships["display_items"][0]["name_key"] == "fleet_ship_spark_drone"
+    assert ships["display_items"][0]["image"].endswith("spark_drone.png")
+
+    defense = _reward_summary(DEFENSE_PAYLOAD)
+    assert defense["display_items"][0]["name_key"] == "defense_sentinel_turret"
+    assert defense["display_items"][0]["image"].endswith("sentinel_turret.png")
 
 
 def test_pool_never_contains_event_box(vote_db):

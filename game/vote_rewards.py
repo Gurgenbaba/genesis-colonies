@@ -17,15 +17,17 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .auction_house import is_event_box, resolve_inventory_key
 from .db import db, lock_planet_for_update, table_exists
-from .defense_defs import is_known_defense_key
-from .fleet_defs import canonical_ship_key, is_known_ship_key
+from .defense_defs import defense_icon_static_path, get_defense, is_known_defense_key
+from .fleet_defs import canonical_ship_key, get_ship, is_known_ship_key, ship_icon_static_path
 from .inventory import grant_inventory_item, inventory_schema_ready
+from .inventory_catalog import container_image_path, item_catalog_entry
 
 logger = logging.getLogger(__name__)
 
 VOTE_PROVIDERS: Dict[str, Dict[str, Any]] = {
     "topg": {
         "display_name": "TopG",
+        "card_image": "img/vote/TopG.png",
         "vote_url_template": "https://topg.org/ogame-private-servers/server-683112-{user_id}#vote",
         "cooldown_seconds": 6 * 60 * 60,
         "postback_enabled": True,
@@ -39,6 +41,7 @@ VOTE_PROVIDERS: Dict[str, Dict[str, Any]] = {
     },
     "gtop100": {
         "display_name": "GTop100",
+        "card_image": "img/vote/GTop100.png",
         "vote_url_template": "https://gtop100.com/Ogame/server-106142?vote=1&pingUsername={user_id}",
         "cooldown_seconds": 12 * 60 * 60,
         "postback_enabled": True,
@@ -48,6 +51,7 @@ VOTE_PROVIDERS: Dict[str, Dict[str, Any]] = {
     },
     "gametoor": {
         "display_name": "GameToor",
+        "card_image": "img/vote/GameToor.png",
         "vote_url_template": "http://gametoor.com/in/3277/{user_id}",
         "cooldown_seconds": 12 * 60 * 60,
         "postback_enabled": True,
@@ -57,6 +61,7 @@ VOTE_PROVIDERS: Dict[str, Dict[str, Any]] = {
     },
     "arena_top100": {
         "display_name": "Arena-Top100",
+        "card_image": "img/vote/Arena-Top100.png",
         "vote_url_template": "https://www.arena-top100.com/index.php?a=in&u=Gurgenbaba&id={user_id}",
         "cooldown_seconds": 12 * 60 * 60,
         "postback_enabled": True,
@@ -147,6 +152,12 @@ REWARD_TYPE_LABEL_KEYS: Dict[str, str] = {
     "defense": "vote_reward_type_defense",
 }
 
+_VOTE_RESOURCE_DISPLAY: Tuple[Tuple[str, str, str], ...] = (
+    ("metal", "resource_metal", "/static/img/res/Ferronit.png"),
+    ("crystal", "resource_crystal", "/static/img/res/Crytite.png"),
+    ("fuel_cells", "resource_fuel_cells", "/static/img/res/Brennzellen.png"),
+)
+
 
 def vote_rewards_schema_ready(conn) -> bool:
     return table_exists(conn, "vote_rewards")
@@ -182,6 +193,14 @@ def topg_skip_ip_check_enabled() -> bool:
     return vote_skip_ip_check_enabled() or not topg_strict_ip_check_enabled()
 
 
+def vote_provider_card_image(provider_key: str) -> str:
+    canon = VOTE_PROVIDERS.get(str(provider_key or ""), {})
+    rel = str(canon.get("card_image") or "").strip().lstrip("/")
+    if rel.startswith("static/"):
+        rel = rel[7:]
+    return rel
+
+
 def _apply_canonical_provider_config(provider: Dict[str, Any]) -> Dict[str, Any]:
     key = str(provider.get("provider_key") or "")
     canon = VOTE_PROVIDERS.get(key)
@@ -196,6 +215,7 @@ def _apply_canonical_provider_config(provider: Dict[str, Any]) -> Dict[str, Any]
     out["subtitle_key"] = str(canon.get("subtitle_key") or "")
     out["reward_status_key"] = str(canon.get("reward_status_key") or "")
     out["no_auto_reward_key"] = str(canon.get("no_auto_reward_key") or "")
+    out["card_image"] = vote_provider_card_image(key)
     if canon.get("postback_config_json"):
         out["postback_config_json"] = str(canon["postback_config_json"])
     return out
@@ -405,6 +425,83 @@ def list_enabled_providers(*, conn) -> List[Dict[str, Any]]:
     return out
 
 
+def _static_image_url(rel_path: str) -> str:
+    rel = str(rel_path or "").strip().lstrip("/")
+    if rel.startswith("static/"):
+        rel = rel[7:]
+    return f"/static/{rel}" if rel else "/static/img/lootboxes/Generic_Supply_Container.png"
+
+
+def _reward_display_items(payload: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    rtype = str(payload.get("reward_type") or "lootbox")
+    items: List[Dict[str, Any]] = []
+    if rtype == "lootbox":
+        box_key = str(payload.get("box_key") or DEFAULT_VOTE_BOX_KEY)
+        inv_key = resolve_inventory_key(box_key) or box_key
+        meta = item_catalog_entry(inv_key)
+        items.append(
+            {
+                "kind": "lootbox",
+                "name_key": str(meta.get("name_key") or f"inv_{inv_key}"),
+                "name_fallback": inv_key,
+                "image": _static_image_url(container_image_path(inv_key)),
+                "amount": int(payload.get("amount") or 1),
+                "rarity": str(meta.get("rarity") or "common"),
+            }
+        )
+    elif rtype == "resources":
+        for res_key, name_key, image in _VOTE_RESOURCE_DISPLAY:
+            amount = int(payload.get(res_key) or 0)
+            if amount > 0:
+                items.append(
+                    {
+                        "kind": "resource",
+                        "resource_key": res_key,
+                        "name_key": name_key,
+                        "name_fallback": res_key,
+                        "image": image,
+                        "amount": amount,
+                    }
+                )
+    elif rtype == "ships":
+        ships = payload.get("ships") if isinstance(payload.get("ships"), dict) else {}
+        for ship_key, amount in ships.items():
+            amount_i = int(amount or 0)
+            if amount_i <= 0:
+                continue
+            canon = canonical_ship_key(str(ship_key))
+            ship = get_ship(canon) or {}
+            items.append(
+                {
+                    "kind": "ship",
+                    "item_key": canon,
+                    "name_key": str(ship.get("name_key") or f"fleet_ship_{canon}"),
+                    "name_fallback": canon,
+                    "image": ship_icon_static_path(canon),
+                    "amount": amount_i,
+                }
+            )
+    elif rtype == "defense":
+        defense = payload.get("defense") if isinstance(payload.get("defense"), dict) else {}
+        for defense_key, amount in defense.items():
+            amount_i = int(amount or 0)
+            if amount_i <= 0:
+                continue
+            key = str(defense_key)
+            spec = get_defense(key) or {}
+            items.append(
+                {
+                    "kind": "defense",
+                    "item_key": key,
+                    "name_key": str(spec.get("name_key") or f"defense_{key}"),
+                    "name_fallback": key,
+                    "image": defense_icon_static_path(key),
+                    "amount": amount_i,
+                }
+            )
+    return items
+
+
 def _reward_summary(payload: Mapping[str, Any]) -> Dict[str, Any]:
     rtype = str(payload.get("reward_type") or "lootbox")
     rkey = str(payload.get("reward_key") or DEFAULT_REWARD_KEY)
@@ -428,6 +525,7 @@ def _reward_summary(payload: Mapping[str, Any]) -> Dict[str, Any]:
     elif rtype == "defense":
         defense = payload.get("defense") if isinstance(payload.get("defense"), dict) else {}
         out["defense"] = {str(k): int(v) for k, v in defense.items() if int(v or 0) > 0}
+    out["display_items"] = _reward_display_items(payload)
     return out
 
 
@@ -536,6 +634,7 @@ def _provider_vote_stats(
         "subtitle_key": str(provider.get("subtitle_key") or ""),
         "reward_status_key": str(provider.get("reward_status_key") or ""),
         "no_auto_reward_key": str(provider.get("no_auto_reward_key") or ""),
+        "card_image": vote_provider_card_image(provider_key),
     }
 
 

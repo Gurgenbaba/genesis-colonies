@@ -7702,18 +7702,35 @@
     return map[String(r?.reward_type || "lootbox")] || map.lootbox;
   }
 
-  function _voteRewardDetail(r) {
-    const type = String(r?.reward_type || "lootbox");
-    if (type === "resources") {
-      return `M ${fmtNumber(r.metal || 0)} / C ${fmtNumber(r.crystal || 0)} / F ${fmtNumber(r.fuel_cells || 0)}`;
-    }
-    if (type === "ships" && r.ships && typeof r.ships === "object") {
-      return Object.entries(r.ships).map(([k, v]) => `${k} ×${v}`).join(", ");
-    }
-    if (type === "defense" && r.defense && typeof r.defense === "object") {
-      return Object.entries(r.defense).map(([k, v]) => `${k} ×${v}`).join(", ");
-    }
-    return `${String(r.box_key || "generic_supply_container")} × ${Number(r.amount) || 1}`;
+  const VOTE_REWARD_IMG_FALLBACK = "/static/img/lootboxes/Generic_Supply_Container.png";
+
+  function _voteRewardDisplayHtml(r) {
+    const items = Array.isArray(r?.display_items) ? r.display_items : [];
+    if (!items.length) return "";
+    return `<div class="vote-center-reward-visual">${items.map((item) => {
+      const kind = String(item?.kind || "");
+      const resKey = String(item?.resource_key || "");
+      const name = t(item?.name_key || "", item?.name_fallback || "");
+      const img = escapeHtml(String(item?.image || VOTE_REWARD_IMG_FALLBACK));
+      const amount = fmtNumber(Number(item?.amount) || 0);
+      const mods = [
+        "vote-center-reward-item",
+        kind ? `vote-center-reward-item--${escapeHtml(kind)}` : "",
+        resKey ? `vote-center-reward-item--${escapeHtml(resKey)}` : "",
+      ].filter(Boolean).join(" ");
+      return `<div class="${mods}">
+        <img class="vote-center-reward-item-img"
+             src="${img}"
+             alt="${escapeHtml(name)}"
+             loading="lazy"
+             decoding="async"
+             onerror="this.onerror=null;this.src='${VOTE_REWARD_IMG_FALLBACK}';">
+        <div class="vote-center-reward-item-meta">
+          <span class="vote-center-reward-item-name">${escapeHtml(name)}</span>
+          <span class="vote-center-reward-item-amount gc-mono">× ${escapeHtml(amount)}</span>
+        </div>
+      </div>`;
+    }).join("")}</div>`;
   }
 
   function voteProviderCooldownRemaining(p, nowSec) {
@@ -7774,12 +7791,20 @@
           : t("vote_center_never", "Noch nie");
       }
       if (nextEl) {
-        nextEl.textContent = formatVoteProviderStatus(p, now);
+        const rem = voteProviderCooldownRemaining(p, now);
+        if (p.can_vote_hint) {
+          nextEl.textContent = t("vote_center_now", "Jetzt");
+        } else if (rem > 0) {
+          nextEl.textContent = formatCountdownRemain(rem);
+        } else {
+          nextEl.textContent = t("vote_center_now", "Jetzt");
+        }
       }
       if (hintEl) {
         const rem = voteProviderCooldownRemaining(p, now);
         const postbackEnabled = !!p.postback_enabled;
         if (!postbackEnabled) {
+          hintEl.hidden = false;
           const noRewardKey = String(p.no_auto_reward_key || "").trim();
           hintEl.textContent = noRewardKey
             ? t(noRewardKey, hintEl.textContent || "")
@@ -7790,14 +7815,14 @@
           hintEl.classList.add("vote-center-hint-wait");
           hintEl.classList.remove("vote-center-hint-ready");
         } else if (p.can_vote_hint) {
+          hintEl.hidden = false;
           hintEl.textContent = t("vote_center_can_vote", "Du kannst jetzt voten.");
           hintEl.classList.add("vote-center-hint-ready");
           hintEl.classList.remove("vote-center-hint-wait");
         } else if (rem > 0) {
-          hintEl.textContent = `${t("vote_center_already_voted", "Du hast bereits gevotet.")} ${t("vote_center_next_in", "Nächster Vote möglich in")} ${formatCountdownRemain(rem)}`;
-          hintEl.classList.add("vote-center-hint-wait");
-          hintEl.classList.remove("vote-center-hint-ready");
+          hintEl.hidden = true;
         } else {
+          hintEl.hidden = false;
           hintEl.textContent = t("vote_center_wait_vote", "Bitte warte, bis der Cooldown abgelaufen ist.");
           hintEl.classList.add("vote-center-hint-wait");
           hintEl.classList.remove("vote-center-hint-ready");
@@ -7815,11 +7840,11 @@
     }
     list.innerHTML = rewards.map((r) => `
       <article class="vote-center-reward-card" data-vote-reward-id="${Number(r.id)}">
+        ${_voteRewardDisplayHtml(r)}
         <div class="vote-center-reward-info">
           <span class="vote-center-reward-title">${escapeHtml(t("vote_reward_title", "Vote Belohnung"))}</span>
           <span class="vote-center-reward-provider">${escapeHtml(String(r.provider_name || r.provider || ""))}</span>
           <span class="vote-center-reward-type">${escapeHtml(_voteRewardTypeLabel(r))}</span>
-          <span class="vote-center-reward-detail gc-mono">${escapeHtml(_voteRewardDetail(r))}</span>
         </div>
         <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm vote-center-claim-btn" data-vote-claim="${Number(r.id)}">
           ${escapeHtml(t("vote_center_claim_btn", "Belohnung abholen"))}
@@ -7899,7 +7924,7 @@
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 provider_key: providerKey,
-                request_id: GC.newRequestId(),
+                request_id: newRequestId(),
               }),
             });
             if (res?.vote_center) patchVoteCenterDom(res.vote_center);
@@ -7933,7 +7958,7 @@
         try {
           await _submitVoteClaim(
             "/api/vote/rewards/claim-all",
-            { request_id: GC.newRequestId() },
+            { request_id: newRequestId() },
             "vote_center_claim_all_ok",
             "vote_center_claim_all_fail",
             "vote_reward_claim_all"
@@ -7955,7 +7980,7 @@
       try {
         await _submitVoteClaim(
           "/api/vote/rewards/claim",
-          { reward_id: rewardId, request_id: GC.newRequestId() },
+          { reward_id: rewardId, request_id: newRequestId() },
           "vote_center_claim_ok",
           "vote_center_claim_fail",
           "vote_reward_claim"

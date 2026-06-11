@@ -17301,7 +17301,9 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 }
 
 .vote-center-vote-btn {
-  align-self: flex-start;
+  width: 100%;
+  justify-content: center;
+  margin-top: auto;
 }
 
 .vote-center-status-list {
@@ -17346,8 +17348,8 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 }
 
 .vote-center-reward-card {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 1rem;
   padding: 0.75rem 1rem;
@@ -17356,10 +17358,54 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   background: rgba(0, 0, 0, 0.18);
 }
 
+.vote-center-reward-visual {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.vote-center-reward-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(0, 229, 255, 0.1);
+  min-width: 8.5rem;
+}
+
+.vote-center-reward-item-img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.vote-center-reward-item-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.vote-center-reward-item-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.vote-center-reward-item-amount {
+  font-size: 0.8rem;
+  color: var(--gc-text-muted, #9aa8b8);
+}
+
 .vote-center-reward-info {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
+  min-width: 0;
 }
 
 .vote-center-reward-box {
@@ -17373,18 +17419,56 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 
 .vote-center-providers-list {
   display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .vote-center-provider-card {
   display: flex;
   flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.vote-center-provider-hero {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+}
+
+.vote-center-provider-hero-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vote-center-provider-hero-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   gap: 0.75rem;
-  padding: 1rem;
-  border: 1px solid rgba(0, 229, 255, 0.14);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.18);
+  padding: 0.8rem 0.9rem;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 8, 18, 0.72) 0%,
+    rgba(0, 8, 18, 0.08) 48%,
+    rgba(0, 8, 18, 0.42) 100%
+  );
+  pointer-events: none;
+}
+
+.vote-center-provider-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem 1rem;
+  flex: 1;
 }
 
 .vote-center-provider-head {
@@ -17392,32 +17476,39 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
+  padding: 0.85rem 1rem 0;
 }
 
 .vote-center-provider-name {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.65);
 }
 
 .vote-center-provider-subtitle {
   margin: 0;
-  font-size: 0.88rem;
-  color: var(--gc-text-muted, #9aa8b8);
+  font-size: 0.86rem;
+  color: var(--gc-accent-cyan, #00e5ff);
+  opacity: 0.92;
 }
 
 .vote-center-provider-reward-status {
-  margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   color: var(--gc-accent-green, #4ade80);
 }
 
 .vote-center-provider-pending {
   min-width: 1.75rem;
   text-align: center;
-  padding: 0.15rem 0.45rem;
+  padding: 0.18rem 0.5rem;
   border-radius: 999px;
-  background: rgba(0, 229, 255, 0.12);
+  background: rgba(0, 229, 255, 0.18);
+  border: 1px solid rgba(0, 229, 255, 0.35);
   color: var(--gc-accent-cyan, #00e5ff);
+  font-size: 0.82rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
 .vote-center-provider-meta {
@@ -17426,9 +17517,28 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   gap: 0.45rem;
 }
 
+.vote-center-status-row--reward .vote-center-status-dd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.vote-center-provider-cooldown {
+  color: var(--gc-text-muted, #9aa8b8);
+  white-space: nowrap;
+}
+
 .vote-center-provider-hint {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.86rem;
+}
+
+@media (max-width: 900px) {
+  .vote-center-providers-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 .vote-center-rewards-header {
@@ -17469,7 +17579,22 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   color: var(--gc-accent-cyan, #00e5ff);
 }
 
-.vote-center-reward-detail {
-  font-size: 0.85rem;
-  color: var(--gc-text-muted, #9aa8b8);
+@media (max-width: 720px) {
+  .vote-center-reward-card {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .vote-center-reward-visual {
+    order: 2;
+  }
+
+  .vote-center-reward-info {
+    order: 1;
+  }
+
+  .vote-center-claim-btn {
+    order: 3;
+    width: 100%;
+  }
 }
