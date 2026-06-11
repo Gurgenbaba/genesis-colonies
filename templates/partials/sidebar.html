@@ -95,12 +95,12 @@
     <a href="{{ url_for('trader_hub_view') }}"
        class="gc-nav-link {% if _trading_open %}active{% endif %}"
        id="gc-nav-trading-parent">
-      {{ T("nav_trading_post", "Wirtschaft") }}
+      {{ T("nav_trading_post", "Kommando") }}
     </a>
     <div class="gc-nav-sub gc-nav-sub--trading"
          id="gc-nav-trading-sub"
          {% if not _trading_open %}hidden{% endif %}
-         aria-label="{{ T('nav_trading_post', 'Wirtschaft') }}">
+         aria-label="{{ T('nav_trading_post', 'Kommando') }}">
       <a href="{{ url_for('trader_hub_view') }}"
          class="gc-nav-sub-link {% if request.endpoint == 'trader_hub_view' %}active{% endif %}"
          data-trading-nav="trader_hub">

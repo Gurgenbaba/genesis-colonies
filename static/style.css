@@ -17354,7 +17354,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   gap: 1rem;
   padding: 0.75rem 1rem;
   border: 1px solid rgba(0, 229, 255, 0.14);
-  border-radius: 8px;
+  border-radius: 0;
   background: rgba(0, 0, 0, 0.18);
 }
 
@@ -17370,7 +17370,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   align-items: center;
   gap: 0.55rem;
   padding: 0.4rem 0.55rem;
-  border-radius: 8px;
+  border-radius: 0;
   background: rgba(0, 0, 0, 0.28);
   border: 1px solid rgba(0, 229, 255, 0.1);
   min-width: 8.5rem;
@@ -17429,7 +17429,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   padding: 0;
   overflow: hidden;
   border: 1px solid rgba(0, 229, 255, 0.18);
-  border-radius: 10px;
+  border-radius: 0;
   background: rgba(0, 0, 0, 0.22);
 }
 
@@ -17503,7 +17503,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   min-width: 1.75rem;
   text-align: center;
   padding: 0.18rem 0.5rem;
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(0, 229, 255, 0.18);
   border: 1px solid rgba(0, 229, 255, 0.35);
   color: var(--gc-accent-cyan, #00e5ff);
@@ -17550,7 +17550,7 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 
 .vote-center-pending-badge {
   padding: 0.2rem 0.55rem;
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(74, 222, 128, 0.12);
   color: var(--gc-accent-green, #4ade80);
 }
@@ -17597,4 +17597,9 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
     order: 3;
     width: 100%;
   }
+}
+
+.vote-center-page .gc-panel,
+.vote-center-page .gc-btn {
+  border-radius: 0;
 }
