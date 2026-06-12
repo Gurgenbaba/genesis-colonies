@@ -115,10 +115,10 @@ Gleiche Ressource als Input/Output ist verboten.
 | `exchange_enabled` | 1 |
 | `exchange_rate_metal_to_crystal` | 0.85 |
 | `exchange_rate_crystal_to_metal` | 0.85 |
-| `exchange_daily_limit` | 2.000.000.000 | Admin-Hardcap (zusätzlich zu computed limit) |
-| `exchange_daily_limit_pct` | 15 | Prozent der Empire-Tagesproduktion (Fe+Cr+BZ/Tag) |
-| `exchange_daily_limit_min` | 1.000.000 | Untergrenze pro Commander |
-| `exchange_daily_limit_max` | 500.000.000 | Obergrenze pro Commander |
+| `exchange_daily_limit` | 50.000.000.000 | Admin-Hardcap (zusätzlich zu computed limit) |
+| `exchange_daily_limit_pct` | 80 | Prozent der Empire-Tagesproduktion (Fe+Cr+BZ/Tag) |
+| `exchange_daily_limit_min` | 25.000.000 | Untergrenze pro Commander |
+| `exchange_daily_limit_max` | 50.000.000.000 | Obergrenze pro Commander |
 | `exchange_min_amount` | 100 |
 | `fuel_exchange_enabled` | 1 |
 | `fuel_exchange_metal_per_unit` | 20 |

@@ -1335,6 +1335,7 @@
 
     syncTradingSubnav(page);
     syncMilitarySubnav(page);
+    syncFleetSubnav(page);
 
     if (typeof normalizePopoverTriggers === "function") {
       normalizePopoverTriggers(document.getElementById("main-content") || document);
@@ -3343,6 +3344,7 @@
     "premium",
   ]);
   const MILITARY_NAV_PAGES = new Set(["shipyard", "defense"]);
+  const FLEET_NAV_PAGES = new Set(["fleet", "logistics"]);
 
   function isTradingNavPage(page) {
     return TRADING_NAV_PAGES.has(String(page || ""));
@@ -3350,6 +3352,10 @@
 
   function isMilitaryNavPage(page) {
     return MILITARY_NAV_PAGES.has(String(page || ""));
+  }
+
+  function isFleetNavPage(page) {
+    return FLEET_NAV_PAGES.has(String(page || ""));
   }
 
   function hideTradingSubnav() {
@@ -3442,6 +3448,52 @@
       return;
     }
     hideMilitarySubnav();
+  }
+
+  function hideFleetSubnav() {
+    const sub = document.getElementById("gc-nav-fleet-sub");
+    if (!sub) return;
+    sub.hidden = true;
+    sub.classList.add("gc-nav-sub--collapsed");
+    sub.setAttribute("aria-hidden", "true");
+    _setSubnavGroupExpanded(
+      document.querySelector(".gc-nav-fleet-group"),
+      document.getElementById("gc-nav-fleet-parent"),
+      false
+    );
+  }
+
+  function showFleetSubnav() {
+    const sub = document.getElementById("gc-nav-fleet-sub");
+    if (!sub) return;
+    sub.hidden = false;
+    sub.classList.remove("gc-nav-sub--collapsed");
+    sub.setAttribute("aria-hidden", "false");
+    _setSubnavGroupExpanded(
+      document.querySelector(".gc-nav-fleet-group"),
+      document.getElementById("gc-nav-fleet-parent"),
+      true
+    );
+  }
+
+  function syncFleetSubnav(page) {
+    const sub = document.getElementById("gc-nav-fleet-sub");
+    const parent = document.getElementById("gc-nav-fleet-parent");
+    if (!sub || !parent) return;
+
+    const activePage = page || GC.detectPage();
+    const onFleetPage = isFleetNavPage(activePage);
+
+    parent.classList.toggle("active", onFleetPage);
+    sub.querySelectorAll("[data-fleet-nav]").forEach((el) => {
+      el.classList.toggle("active", el.dataset.fleetNav === activePage);
+    });
+
+    if (onFleetPage) {
+      showFleetSubnav();
+      return;
+    }
+    hideFleetSubnav();
   }
 
   function updateResearchQueueActions(researchRaw) {
@@ -13681,18 +13733,24 @@
   // PJAX navigation
   // =========================
   const PJAX_NAV_LINK =
-    "a.gc-nav-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages, #gc-nav-trading-sub a.gc-nav-sub-link, #gc-nav-military-sub a.gc-nav-sub-link";
+    "a.gc-nav-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages, #gc-nav-trading-sub a.gc-nav-sub-link, #gc-nav-military-sub a.gc-nav-sub-link, #gc-nav-fleet-sub a.gc-nav-sub-link";
 
   function _tradingPageFromPath(path) {
     const p = String(path || "").replace(/\/$/, "") || "/";
     if (p.endsWith("/trader-hub")) return "trader_hub";
-    if (p.endsWith("/logistics")) return "logistics";
     if (p.endsWith("/inventory")) return "inventory";
     if (p.endsWith("/auction-house")) return "auction_house";
     if (p.endsWith("/vote-center")) return "vote_center";
     if (p.endsWith("/galactic-politics")) return "galactic_politics";
     if (p.endsWith("/skilltree")) return "skilltree";
     if (p.endsWith("/premium")) return "premium";
+    return "";
+  }
+
+  function _fleetPageFromPath(path) {
+    const p = String(path || "").replace(/\/$/, "") || "/";
+    if (p.endsWith("/fleet")) return "fleet";
+    if (p.endsWith("/logistics")) return "logistics";
     return "";
   }
 
@@ -13729,6 +13787,20 @@
     });
     if (militaryPage) showMilitarySubnav();
     else hideMilitarySubnav();
+  }
+
+  function _syncFleetNavFromPath(path) {
+    const fleetPage = _fleetPageFromPath(path);
+    const parent = document.getElementById("gc-nav-fleet-parent");
+    const sub = document.getElementById("gc-nav-fleet-sub");
+    if (!parent || !sub) return;
+
+    parent.classList.toggle("active", !!fleetPage);
+    sub.querySelectorAll("[data-fleet-nav]").forEach((el) => {
+      el.classList.toggle("active", el.dataset.fleetNav === fleetPage);
+    });
+    if (fleetPage) showFleetSubnav();
+    else hideFleetSubnav();
   }
 
   function isPjaxEligibleLink(link) {
@@ -13793,6 +13865,7 @@
       const isSubnavParent =
         link.id === "gc-nav-trading-parent"
         || link.id === "gc-nav-military-parent"
+        || link.id === "gc-nav-fleet-parent"
         || link.id === "gc-nav-buildings-parent";
       if (isSubnavParent) return;
       link.classList.toggle("active", linkPath === path);
@@ -13806,6 +13879,50 @@
     }
     _syncTradingNavFromPath(path);
     _syncMilitaryNavFromPath(path);
+    _syncFleetNavFromPath(path);
+  }
+
+  const SUBNAV_PARENT_TOGGLE = {
+    "gc-nav-buildings-parent": {
+      subId: "gc-nav-buildings-sub",
+      pages: new Set(["buildings"]),
+      show: showBuildingsSubnav,
+      hide: hideBuildingsSubnav,
+    },
+    "gc-nav-military-parent": {
+      subId: "gc-nav-military-sub",
+      pages: MILITARY_NAV_PAGES,
+      show: showMilitarySubnav,
+      hide: hideMilitarySubnav,
+    },
+    "gc-nav-trading-parent": {
+      subId: "gc-nav-trading-sub",
+      pages: TRADING_NAV_PAGES,
+      show: showTradingSubnav,
+      hide: hideTradingSubnav,
+    },
+    "gc-nav-fleet-parent": {
+      subId: "gc-nav-fleet-sub",
+      pages: FLEET_NAV_PAGES,
+      show: showFleetSubnav,
+      hide: hideFleetSubnav,
+    },
+  };
+
+  function _subnavExpanded(sub) {
+    return !!(sub && !sub.hidden && !sub.classList.contains("gc-nav-sub--collapsed"));
+  }
+
+  function tryHandleSubnavParentClick(link, e) {
+    const cfg = SUBNAV_PARENT_TOGGLE[link.id];
+    if (!cfg) return false;
+    const page = GC.detectPage();
+    if (!cfg.pages.has(page)) return false;
+    e.preventDefault();
+    const sub = document.getElementById(cfg.subId);
+    if (_subnavExpanded(sub)) cfg.hide();
+    else cfg.show();
+    return true;
   }
 
   GC.navigateTo = async function navigateTo(url, opts = {}) {
@@ -13914,6 +14031,8 @@
     document.addEventListener("click", (e) => {
       if (e.defaultPrevented) return;
       const link = e.target.closest("a[href]");
+      if (!link) return;
+      if (tryHandleSubnavParentClick(link, e)) return;
       if (!isPjaxEligibleLink(link)) return;
       e.preventDefault();
       pjaxNavigateFromLink(link);

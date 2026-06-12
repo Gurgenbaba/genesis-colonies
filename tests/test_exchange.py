@@ -55,10 +55,10 @@ def test_exchange_config_defaults(exchange_db):
     assert cfg["enabled"] is True
     assert cfg["rate_metal_to_crystal"] == 0.85
     assert cfg["rate_crystal_to_metal"] == 0.85
-    assert cfg["daily_limit_admin"] == 2000000000
-    assert cfg["daily_limit_pct"] == 15.0
-    assert cfg["daily_limit_min"] == 1000000
-    assert cfg["daily_limit_max"] == 500000000
+    assert cfg["daily_limit_admin"] == 50000000000
+    assert cfg["daily_limit_pct"] == 80.0
+    assert cfg["daily_limit_min"] == 25000000
+    assert cfg["daily_limit_max"] == 50000000000
     assert cfg["min_amount"] == 100
     assert cfg["fuel_metal_per_unit"] == 20
     assert cfg["fuel_crystal_per_unit"] == 14
@@ -490,9 +490,9 @@ def test_exchange_daily_limit_uses_empire_production_floor(exchange_db):
         conn=conn,
     )
     conn.close()
-    assert status["daily_limit"] == 1_000_000
+    assert status["daily_limit"] == 25_000_000
     assert status["empire_production_day_total"] >= 0
-    assert status["daily_limit_pct"] == 15.0
+    assert status["daily_limit_pct"] == 80.0
 
 
 def test_exchange_daily_limit_scales_with_production(exchange_db):
@@ -511,9 +511,9 @@ def test_exchange_daily_limit_scales_with_production(exchange_db):
     block = resolve_exchange_daily_limit(uid, conn=conn)
     conn.close()
     assert block["empire_production_day_total"] > 100_000
-    assert block["daily_limit_scaled"] == int(block["empire_production_day_total"] * 15 / 100)
-    assert block["daily_limit"] >= 1_000_000
-    assert block["daily_limit"] <= 500_000_000
+    assert block["daily_limit_scaled"] == int(block["empire_production_day_total"] * 80 / 100)
+    assert block["daily_limit"] >= 25_000_000
+    assert block["daily_limit"] <= 50_000_000_000
 
 
 def test_exchange_daily_limit_respects_admin_cap(exchange_db):

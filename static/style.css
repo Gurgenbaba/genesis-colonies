@@ -823,20 +823,6 @@ body.gc-body-simple .auth-error {
   opacity: 0.85;
 }
 
-.gc-nav-section-label{
-  margin: 14px 14px 4px;
-  padding: 0;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(70, 229, 255, 0.45);
-}
-
-.gc-nav-section-label:first-child{
-  margin-top: 4px;
-}
-
 .gc-nav-link{
   display: block;
   padding: 11px 14px;
@@ -866,10 +852,11 @@ body.gc-body-simple .auth-error {
   color: var(--gc-neon-cyan);
 }
 
-/* Sidebar submenu groups (Gebäude, Kommando, Militärproduktion) */
+/* Sidebar submenu groups (Gebäude, Kommando, Militärproduktion, Flotte) */
 .gc-nav-buildings-group,
 .gc-nav-trading-group,
 .gc-nav-military-group,
+.gc-nav-fleet-group,
 .gc-nav-submenu-group{
   display: flex;
   flex-direction: column;

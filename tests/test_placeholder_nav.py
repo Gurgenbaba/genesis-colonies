@@ -55,6 +55,9 @@ def test_sidebar_has_military_and_trading_hub_nav():
     assert 'id="gc-nav-military-sub"' in sidebar
     assert 'data-military-nav="shipyard"' in sidebar
     assert 'data-military-nav="defense"' in sidebar
+    assert 'id="gc-nav-fleet-sub"' in sidebar
+    assert 'data-fleet-nav="fleet"' in sidebar
+    assert 'data-fleet-nav="logistics"' in sidebar
     assert 'id="gc-nav-trading-sub"' in sidebar
     assert 'data-trading-nav="inventory"' in sidebar
     assert 'data-trading-nav="skilltree"' in sidebar
@@ -69,6 +72,9 @@ def test_main_js_syncs_military_subnav():
     assert "MILITARY_NAV_PAGES" in src
     assert "gc-nav-military-sub" in src
     assert "syncMilitarySubnav(page)" in src.split("function initPage")[1].split("function normalizePopoverTriggers")[0]
+    assert "syncFleetSubnav" in src
+    assert "tryHandleSubnavParentClick" in src
+    assert "gc-nav-fleet-sub" in src
 
 
 def test_placeholder_routes_render(placeholder_db):
