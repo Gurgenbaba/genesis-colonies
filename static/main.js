@@ -2947,10 +2947,6 @@
       document.getElementById("gc-nav-buildings-parent"),
       false
     );
-    sub.querySelectorAll("[data-building-tab]").forEach((btn) => {
-      btn.disabled = true;
-      btn.tabIndex = -1;
-    });
   }
 
   function showBuildingsSubnav() {
@@ -2964,10 +2960,6 @@
       document.getElementById("gc-nav-buildings-parent"),
       true
     );
-    sub.querySelectorAll("[data-building-tab]").forEach((btn) => {
-      btn.disabled = false;
-      btn.tabIndex = 0;
-    });
   }
 
   function syncBuildingSidebarTab(tab) {
@@ -3001,7 +2993,8 @@
       const subBtn = e.target.closest("#gc-nav-buildings-sub [data-building-tab]");
       if (subBtn) {
         if (GC.detectPage() !== "buildings") return;
-        if (subBtn.disabled || subBtn.closest("#gc-nav-buildings-sub")?.hidden) return;
+        e.preventDefault();
+        showBuildingsSubnav();
         activateBuildingTabByName(subBtn.dataset.buildingTab, subBtn);
         return;
       }
@@ -13883,12 +13876,6 @@
   }
 
   const SUBNAV_PARENT_TOGGLE = {
-    "gc-nav-buildings-parent": {
-      subId: "gc-nav-buildings-sub",
-      pages: new Set(["buildings"]),
-      show: showBuildingsSubnav,
-      hide: hideBuildingsSubnav,
-    },
     "gc-nav-military-parent": {
       subId: "gc-nav-military-sub",
       pages: MILITARY_NAV_PAGES,
@@ -14032,6 +14019,11 @@
       if (e.defaultPrevented) return;
       const link = e.target.closest("a[href]");
       if (!link) return;
+      if (link.id === "gc-nav-buildings-parent" && GC.detectPage() === "buildings") {
+        e.preventDefault();
+        showBuildingsSubnav();
+        return;
+      }
       if (tryHandleSubnavParentClick(link, e)) return;
       if (!isPjaxEligibleLink(link)) return;
       e.preventDefault();
