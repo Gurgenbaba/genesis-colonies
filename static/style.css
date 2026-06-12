@@ -171,6 +171,7 @@ button, input, textarea { font: inherit; }
 .gc-body-ingame{
   padding-left: var(--gc-safe-left);
   padding-right: var(--gc-safe-right);
+  color-scheme: dark;
 }
 
 /* Planet landscape — rendered on .gc-bg (above body fill, below UI) */
@@ -7616,6 +7617,72 @@ body.gc-techtree-media-zoom-open{
   font-size: 0.78rem;
   color: var(--gc-text-soft);
 }
+
+/* Shared ingame form controls — Genesis HUD (fleet, logistics, gc-input) */
+body.gc-body-ingame .gc-input,
+body.gc-body-ingame input.gc-input,
+body.gc-body-ingame textarea.gc-input,
+body.gc-body-ingame select.gc-input:not(.gc-hud-select-native),
+body.gc-body-ingame .fleet-control,
+body.gc-body-ingame .fleet-page input[type="text"],
+body.gc-body-ingame .fleet-page input[type="number"]:not(.fleet-coord-input):not(.fleet-ship-input):not(.fleet-resource-input),
+body.gc-body-ingame .logistics-page input[type="text"],
+body.gc-body-ingame .logistics-page select:not(.gc-hud-select-native){
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.28);
+  background: rgba(5, 10, 22, 0.88);
+  color: var(--gc-text);
+  font-size: 0.88rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+body.gc-body-ingame .gc-input,
+body.gc-body-ingame input.gc-input,
+body.gc-body-ingame textarea.gc-input,
+body.gc-body-ingame .fleet-control,
+body.gc-body-ingame .fleet-page input[type="text"],
+body.gc-body-ingame .logistics-page input[type="text"]{
+  width: 100%;
+}
+body.gc-body-ingame .gc-input::placeholder,
+body.gc-body-ingame .fleet-control::placeholder{
+  color: rgba(200, 232, 244, 0.34);
+  font-style: italic;
+}
+body.gc-body-ingame .gc-input:hover,
+body.gc-body-ingame textarea.gc-input:hover,
+body.gc-body-ingame select.gc-input:not(.gc-hud-select-native):hover,
+body.gc-body-ingame .fleet-control:hover,
+body.gc-body-ingame .fleet-page input[type="text"]:hover,
+body.gc-body-ingame .logistics-page input[type="text"]:hover,
+body.gc-body-ingame .logistics-page select:not(.gc-hud-select-native):hover{
+  border-color: rgba(70, 229, 255, 0.42);
+  background: rgba(6, 12, 26, 0.92);
+}
+body.gc-body-ingame .gc-input:focus,
+body.gc-body-ingame textarea.gc-input:focus,
+body.gc-body-ingame select.gc-input:not(.gc-hud-select-native):focus,
+body.gc-body-ingame .fleet-control:focus,
+body.gc-body-ingame .fleet-page input[type="text"]:focus,
+body.gc-body-ingame .logistics-page input[type="text"]:focus,
+body.gc-body-ingame .logistics-page select:not(.gc-hud-select-native):focus{
+  outline: none;
+  border-color: rgba(70, 229, 255, 0.88);
+  box-shadow:
+    0 0 0 2px rgba(70, 229, 255, 0.14),
+    inset 0 0 12px rgba(70, 229, 255, 0.06);
+  background: rgba(4, 10, 22, 0.96);
+}
+body.gc-body-ingame .fleet-page input[type="number"]::-webkit-outer-spin-button,
+body.gc-body-ingame .fleet-page input[type="number"]::-webkit-inner-spin-button,
+body.gc-body-ingame .logistics-page input[type="number"]::-webkit-outer-spin-button,
+body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-button{
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .fleet-ship-input{
   width: 72px;
   padding: 6px 8px;
@@ -7625,6 +7692,11 @@ body.gc-techtree-media-zoom-open{
   background: rgba(3, 8, 18, 0.85);
   color: var(--gc-neon-cyan);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.fleet-ship-input:hover{
+  border-color: rgba(70, 229, 255, 0.38);
 }
 .fleet-ship-input:focus{
   outline: none;
@@ -7794,14 +7866,19 @@ body.gc-techtree-media-zoom-open{
 .fleet-page .gc-hud-select.is-open{
   z-index: 40;
 }
-.fleet-page .gc-hud-select-menu{
+.logistics-page .gc-hud-select.is-open{
+  z-index: 40;
+}
+.fleet-page .gc-hud-select-menu,
+.logistics-page .gc-hud-select-menu{
   z-index: 50;
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.22);
   background: linear-gradient(180deg, rgba(8, 14, 28, 0.98), rgba(6, 10, 22, 0.96));
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55), var(--gc-border-glow);
 }
-.fleet-page .gc-hud-select-trigger{
+.fleet-page .gc-hud-select-trigger,
+.logistics-page .gc-hud-select-trigger{
   display: flex;
   align-items: center;
   width: 100%;
@@ -7813,18 +7890,22 @@ body.gc-techtree-media-zoom-open{
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
   color: rgba(215, 246, 255, 0.94);
 }
-.fleet-page .gc-hud-select-trigger:hover{
+.fleet-page .gc-hud-select-trigger:hover,
+.logistics-page .gc-hud-select-trigger:hover{
   border-color: rgba(70, 229, 255, 0.38);
   box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
-.fleet-page .gc-hud-select.is-open .gc-hud-select-trigger{
+.fleet-page .gc-hud-select.is-open .gc-hud-select-trigger,
+.logistics-page .gc-hud-select.is-open .gc-hud-select-trigger{
   border-color: rgba(70, 229, 255, 0.48);
   box-shadow: var(--gc-border-glow-strong), inset 0 0 12px rgba(70, 229, 255, 0.06);
 }
-.fleet-page .gc-hud-select-value{
+.fleet-page .gc-hud-select-value,
+.logistics-page .gc-hud-select-value{
   color: rgba(215, 246, 255, 0.94);
 }
-.fleet-page .gc-hud-select-chevron{
+.fleet-page .gc-hud-select-chevron,
+.logistics-page .gc-hud-select-chevron{
   color: rgba(127, 255, 217, 0.65);
 }
 .fleet-form-inline .gc-hud-select{
@@ -7832,33 +7913,9 @@ body.gc-techtree-media-zoom-open{
   min-width: 0;
 }
 .fleet-mission-speed-row .gc-hud-select,
-.fleet-mass-expo-form .gc-hud-select{
+.fleet-mass-expo-form .gc-hud-select,
+.logistics-page .logistics-hub-select{
   width: 100%;
-}
-.fleet-page .gc-input,
-.fleet-page input.gc-input{
-  width: 100%;
-  min-height: 38px;
-  padding: 8px 10px;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(120, 190, 255, 0.28);
-  background: rgba(5, 10, 22, 0.88);
-  color: var(--gc-text);
-  font-size: 0.88rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
-  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
-}
-.fleet-page .gc-input:hover{
-  border-color: rgba(70, 229, 255, 0.42);
-  background-color: rgba(6, 12, 26, 0.92);
-}
-.fleet-page .gc-input:focus{
-  outline: none;
-  border-color: rgba(70, 229, 255, 0.88);
-  box-shadow:
-    0 0 0 2px rgba(70, 229, 255, 0.14),
-    inset 0 0 12px rgba(70, 229, 255, 0.06);
-  background-color: rgba(4, 10, 22, 0.96);
 }
 .fleet-colony-chips{ display: flex; flex-wrap: wrap; gap: 8px; }
 .fleet-colony-chip{
@@ -8045,6 +8102,16 @@ body.gc-techtree-media-zoom-open{
   background: rgba(3, 8, 18, 0.85);
   color: var(--gc-neon-cyan);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02), inset 0 0 10px rgba(0, 0, 0, 0.28);
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.fleet-resource-input:hover{
+  border-color: rgba(70, 229, 255, 0.32);
+}
+.fleet-resource-input:focus{
+  outline: none;
+  border-color: rgba(70, 229, 255, 0.45);
+  box-shadow: 0 0 0 2px rgba(70, 229, 255, 0.12);
 }
 .fleet-slots-value{ color: var(--gc-neon-cyan); font-weight: 700; }
 .fleet-preview-box{
@@ -8400,6 +8467,20 @@ body.gc-techtree-media-zoom-open{
 .logistics-layout-col{ min-width: 0; }
 .logistics-hub-row{ margin-bottom: 12px; }
 .logistics-hub-select{ width: 100%; max-width: 100%; }
+.logistics-page--compact .fleet-ship-input{
+  width: 64px;
+  min-width: 64px;
+  min-height: 28px;
+  padding: 5px 6px;
+  font-size: 0.82rem;
+}
+.logistics-page--compact .fleet-resource-input{
+  width: 88px;
+  min-width: 88px;
+  min-height: 28px;
+  padding: 5px 6px;
+  font-size: 0.82rem;
+}
 .logistics-sources-fieldset{ margin-top: 4px; }
 .logistics-sources-list{
   list-style: none;
