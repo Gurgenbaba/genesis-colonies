@@ -15260,8 +15260,56 @@
         return true;
       }
       const actionKey = String(cc?.primary_action?.action_key || "");
-      return ["attack", "spy", "transport", "station", "recycle", "expedition", "hold"].includes(actionKey)
+      return ["attack", "spy", "transport", "station", "deploy", "collect", "recycle", "expedition", "colonize", "salvage", "hold"].includes(actionKey)
         && cc.primary_action.enabled !== false;
+    }
+
+    function navigateMissionAction(action) {
+      const row = action && typeof action === "object" ? action : {};
+      if (row.enabled === false) return;
+      const href = String(row.href || "").trim();
+      if (!href) return;
+      closeModal();
+      if (typeof GC.navigateTo === "function") {
+        GC.navigateTo(href, { push: true });
+      }
+    }
+
+    function resetInspectorActions() {
+      actionsEl.innerHTML = "";
+      actionsEl.className = "gc-world-inspector-actions";
+    }
+
+    function appendMissionActions(cc) {
+      const rows = Array.isArray(cc?.mission_actions) ? cc.mission_actions : [];
+      if (!rows.length) return false;
+      if (!actionsEl.children.length) {
+        actionsEl.className = "gc-world-inspector-actions gc-world-inspector-actions--missions";
+      } else {
+        actionsEl.classList.add("gc-world-inspector-actions--missions");
+      }
+      rows.forEach((row) => {
+        if (!row || typeof row !== "object") return;
+        const missionKey = String(row.action_key || row.mission || "").trim();
+        if (!missionKey) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `gc-btn gc-world-inspector-cta gc-world-inspector-mission-btn gc-world-inspector-mission-btn--${missionKey}`;
+        btn.textContent = tf(row.label_key, row.label_key || missionKey);
+        if (row.enabled === false) {
+          btn.disabled = true;
+          btn.classList.add("gc-world-inspector-mission-btn--blocked");
+          const blockedKey = String(row.blocked_reason_key || "").trim();
+          if (blockedKey) {
+            btn.title = tf(blockedKey, blockedKey);
+          }
+        } else {
+          btn.classList.add(missionKey === "attack" ? "gc-btn-primary" : "gc-btn-outline");
+        }
+        btn.addEventListener("click", () => navigateMissionAction(row));
+        actionsEl.appendChild(btn);
+      });
+      return actionsEl.children.length > 0;
     }
 
     function shouldShowForeignDevPreview(kind, cc, btn) {
@@ -15381,6 +15429,80 @@
         if (coords && dds[idx]) dds[idx].textContent = coords;
       }
       appendForeignDevActions(btn);
+    }
+
+    function renderForeignMissionModal(cc, btn) {
+      const ds = btn?.dataset || {};
+      const isEmpire = cc.panel_kind === "foreign_empire" || btn?.matches?.("[data-foreign-empire-inspect]");
+      const empireName =
+        cc.empire_display_name
+        || ds.empireName
+        || ds.ownerUsername
+        || tf("world_map_foreign_empire", "Fremdes Reich");
+      const homeworldName = cc.homeworld_name || ds.homeworldName || cc.name || ds.empireName || "";
+      const name =
+        cc.name
+        || homeworldName
+        || ds.foreignColonyName
+        || ds.empireName
+        || ds.ownerUsername
+        || empireName;
+      const typeLabel =
+        cc._typeText
+        || (cc.type_label_key ? tf(cc.type_label_key, cc.type_label_key) : "")
+        || (cc.role_label_key ? tf(cc.role_label_key, cc.role_label_key) : "")
+        || ds.foreignColonyType
+        || ds.foreignColonyRole
+        || ds.empireRole
+        || "";
+      const details = Array.isArray(cc.details) ? cc.details : [];
+      const coords =
+        ds.empireCoords
+        || details.find((row) => row.label_key === "world_map_inspector_coords")?.value_text
+        || "";
+      const owner =
+        cc.owner_username
+        || ds.ownerUsername
+        || details.find((row) => row.label_key === "world_map_inspector_player")?.value_text
+        || "";
+
+      titleEl.textContent = isEmpire ? (homeworldName || empireName) : name;
+      contentEl.innerHTML = `
+        <div class="gc-player-card-shell gc-world-inspector-shell gc-world-inspector-shell--foreign-mission">
+          ${isEmpire ? `<p class="gc-world-inspector-empire-kicker">${empireName}</p>` : ""}
+          <h3 class="gc-world-inspector-place-name"></h3>
+          ${typeLabel ? `<p class="gc-world-inspector-kicker">${typeLabel}</p>` : ""}
+          <dl class="gc-world-inspector-stats"></dl>
+        </div>`;
+      const shell = contentEl.querySelector(".gc-world-inspector-shell--foreign-mission");
+      const placeName = shell?.querySelector(".gc-world-inspector-place-name");
+      const stats = shell?.querySelector(".gc-world-inspector-stats");
+      if (placeName) placeName.textContent = isEmpire ? (homeworldName || empireName) : name;
+      if (stats) {
+        const rows = [];
+        if (owner) {
+          rows.push(
+            `<div class="gc-world-inspector-stat"><dt>${tf("world_map_inspector_player", "Spieler")}</dt><dd></dd></div>`
+          );
+        }
+        if (coords) {
+          rows.push(
+            `<div class="gc-world-inspector-stat"><dt>${tf("world_map_inspector_coords", "Koordinate")}</dt><dd class="gc-mono"></dd></div>`
+          );
+        }
+        if (isEmpire && cc.colony_count != null) {
+          rows.push(
+            `<div class="gc-world-inspector-stat"><dt>${tf("world_map_inspector_colonies", "Kolonien")}</dt><dd></dd></div>`
+          );
+        }
+        stats.innerHTML = rows.join("");
+        const dds = stats.querySelectorAll("dd");
+        let idx = 0;
+        if (owner && dds[idx]) dds[idx++].textContent = owner;
+        if (coords && dds[idx]) dds[idx++].textContent = coords;
+        if (isEmpire && cc.colony_count != null && dds[idx]) dds[idx++].textContent = String(cc.colony_count);
+      }
+      appendPrimaryAction(cc, btn);
     }
 
     function renderForeignDevPreviewModal(cc, btn) {
@@ -15547,8 +15669,7 @@
     }
 
     function appendPrimaryAction(cc, btn) {
-      actionsEl.innerHTML = "";
-      actionsEl.className = "gc-world-inspector-actions";
+      resetInspectorActions();
       const action = cc.primary_action && typeof cc.primary_action === "object" ? cc.primary_action : {};
       const actionKey = String(action.action_key || "");
       if (cc.panel_kind === "colony") {
@@ -15556,19 +15677,22 @@
           String(cc.planet_id || btn?.dataset.planetId || btn?.dataset.empireIdentitySwitch || "0"),
           10
         );
-        if (!planetId) return;
+        if (!planetId) {
+          appendMissionActions(cc);
+          return;
+        }
         const cta = document.createElement("button");
         cta.type = "button";
         cta.className = "gc-btn gc-btn-primary gc-world-inspector-cta";
         cta.textContent = tf("world_inspector_open_colony", "Kolonie öffnen");
         cta.addEventListener("click", async () => {
-          const planetId = parseInt(String(cc.planet_id || btn?.dataset.planetId || "0"), 10);
-          if (!planetId) return;
+          const pid = parseInt(String(cc.planet_id || btn?.dataset.planetId || "0"), 10);
+          if (!pid) return;
           try {
             const res = await GC.fetchGameAction("/api/planets/active", {
               method: "POST",
               headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-              body: JSON.stringify({ planet_id: planetId }),
+              body: JSON.stringify({ planet_id: pid }),
             });
             if (res?.ok) {
               applyActionState(res, "planet_switch");
@@ -15580,8 +15704,10 @@
           } catch (_) {}
         });
         actionsEl.appendChild(cta);
+        appendMissionActions(cc);
         return;
       }
+      if (appendMissionActions(cc)) return;
       if (!actionKey || actionKey === "none" || action.enabled === false) return;
       const cta = document.createElement("button");
       cta.type = "button";
@@ -15595,9 +15721,15 @@
         if (actionKey === "colonize") {
           params.set("mission", "colonize");
           params.set("world_key", wk);
-        } else if (actionKey === "salvage" || actionKey === "expedition") {
-          params.set("mission", actionKey === "salvage" ? "expedition" : "expedition");
+          params.set("target_type", "strategic_world");
+        } else if (actionKey === "salvage") {
+          params.set("mission", "expedition");
           params.set("world_key", wk);
+          params.set("target_type", "wreckage");
+        } else if (actionKey === "expedition") {
+          params.set("mission", "expedition");
+          params.set("world_key", wk);
+          params.set("target_type", "expedition_world");
         } else {
           params.set("mission", "expedition");
           params.set("world_key", wk);
@@ -15711,7 +15843,9 @@
       root.classList.toggle("gc-world-inspector-modal--discovery", discovery);
       document.body.classList.add("gc-player-card-open");
 
-      if (kind === "foreign_empire") {
+      if (isForeignInspectorNode(kind, cc, btn) && hasForeignMissionPayload(cc)) {
+        renderForeignMissionModal(cc, btn);
+      } else if (kind === "foreign_empire") {
         renderForeignEmpirePresenceModal(cc, btn);
       } else if (shouldShowForeignDevPreview(kind, cc, btn)) {
         renderForeignDevPreviewModal(cc, btn);

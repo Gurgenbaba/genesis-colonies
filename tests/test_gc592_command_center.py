@@ -519,7 +519,7 @@ def test_build_foreign_command_center_public_only(gc592_db):
     assert "owner_player_id" not in cc
 
 
-def test_foreign_command_center_mission_actions_deferred_to_gc598(gc592_db):
+def test_foreign_command_center_mission_actions(gc592_db):
     from game.db import db
 
     field = _colonizable_field()
@@ -541,7 +541,9 @@ def test_foreign_command_center_mission_actions_deferred_to_gc598(gc592_db):
     finally:
         conn.close()
 
-    assert cc.get("actions") == []
+    missions = [row.get("mission") for row in (cc.get("mission_actions") or [])]
+    assert missions == ["spy", "attack"]
+    assert cc.get("actions") == cc.get("mission_actions")
 
 
 def test_foreign_command_center_rejects_own_and_viewer(gc592_db):

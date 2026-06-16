@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence
+from urllib.parse import urlencode
 
 from game.fleet import list_active_movements
 from game.fleet_calc import enrich_movement_timing
@@ -335,6 +336,219 @@ def _build_quick_actions(
         )
         grid.append(card)
     return grid
+
+
+def _fleet_prefill_href(
+    mission: str,
+    *,
+    world_key: str = "",
+    planet_id: int = 0,
+    target_type: str = "",
+) -> str:
+    """Build canonical /fleet prefill URL (GC-598 — no new fleet pipeline)."""
+    params: Dict[str, str] = {}
+    m = str(mission or "").strip().lower()
+    if m:
+        params["mission"] = m
+    wk = str(world_key or "").strip()
+    if wk:
+        params["world_key"] = wk
+    pid = int(planet_id or 0)
+    if pid:
+        params["target_planet_id"] = str(pid)
+    tt = str(target_type or "").strip()
+    if tt:
+        params["target_type"] = tt
+    query = urlencode(params)
+    return f"/fleet?{query}" if query else "/fleet"
+
+
+def _mission_action_row(
+    mission: str,
+    *,
+    label_key: str = "",
+    enabled: bool = True,
+    blocked_reason_key: str = "",
+    world_key: str = "",
+    planet_id: int = 0,
+    target_type: str = "",
+    action_key: str = "",
+) -> Dict[str, Any]:
+    m = str(mission or "").strip().lower()
+    ak = str(action_key or m).strip().lower()
+    row: Dict[str, Any] = {
+        "action_key": ak,
+        "mission": m,
+        "label_key": label_key or f"fleet_mission_{m}",
+        "enabled": bool(enabled),
+        "blocked_reason_key": str(blocked_reason_key or ""),
+        "href": _fleet_prefill_href(
+            m,
+            world_key=world_key,
+            planet_id=planet_id,
+            target_type=target_type,
+        ),
+    }
+    if world_key:
+        row["world_key"] = world_key
+    if planet_id:
+        row["planet_id"] = int(planet_id)
+    if target_type:
+        row["target_type"] = target_type
+    return row
+
+
+def _resolve_planet_world_key(planet_id: int, *, conn: sqlite3.Connection) -> str:
+    pid = int(planet_id or 0)
+    if not pid:
+        return ""
+    row = get_planet_row(pid, conn=conn)
+    if not row:
+        return ""
+    return str(row.get("world_key") or "").strip()
+
+
+def _build_colony_mission_actions(
+    planet_id: int,
+    *,
+    conn: sqlite3.Connection,
+) -> List[Dict[str, Any]]:
+    """Own-colony fleet missions for World Inspector (GC-598)."""
+    pid = int(planet_id or 0)
+    if not pid:
+        return []
+    world_key = _resolve_planet_world_key(pid, conn=conn)
+    target_type = "world_colony" if world_key else "planet"
+    return [
+        _mission_action_row(
+            mission,
+            world_key=world_key,
+            planet_id=pid,
+            target_type=target_type,
+        )
+        for mission in ("transport", "deploy", "collect")
+    ]
+
+
+def _build_foreign_mission_actions(
+    *,
+    world_key: str,
+    planet_id: int,
+    viewer_player_id: int,
+    owner_player_id: int,
+    conn: sqlite3.Connection,
+) -> List[Dict[str, Any]]:
+    """Spy / attack (or ally transport) for foreign map targets (GC-598)."""
+    wk = str(world_key or "").strip()
+    pid = int(planet_id or 0)
+    if not wk and not pid:
+        return []
+    if not wk and pid:
+        wk = _resolve_planet_world_key(pid, conn=conn)
+
+    from game.fleet import are_players_allied
+
+    viewer_id = int(viewer_player_id)
+    owner_id = int(owner_player_id)
+    if owner_id and are_players_allied(viewer_id, owner_id, conn=conn):
+        return [
+            _mission_action_row(
+                "transport",
+                world_key=wk,
+                planet_id=pid,
+                target_type="world_colony" if wk else "ally_planet",
+            ),
+        ]
+
+    target_type = "enemy_colony" if wk else "foreign_planet"
+    return [
+        _mission_action_row(
+            "spy",
+            world_key=wk,
+            planet_id=pid,
+            target_type=target_type,
+        ),
+        _mission_action_row(
+            "attack",
+            world_key=wk,
+            planet_id=pid,
+            target_type=target_type,
+        ),
+    ]
+
+
+def _build_expedition_site_mission_actions(
+    node: Mapping[str, Any],
+    player_id: int,
+    *,
+    conn: sqlite3.Connection,
+) -> List[Dict[str, Any]]:
+    wk = str(node.get("world_key") or "").strip()
+    if not wk or node.get("is_claimed"):
+        return []
+
+    if node.get("is_salvage") or expedition_site_kind(node) == "wreckage_field":
+        from .world_colonization import build_world_salvage_preview
+
+        preview = build_world_salvage_preview(int(player_id), wk, conn=conn)
+        enabled = bool(preview.get("can_start_salvage"))
+        blocked = str(preview.get("block_reason") or "no_expedition_ships") if not enabled else ""
+        return [
+            _mission_action_row(
+                "expedition",
+                label_key="strategic_world_btn_salvage",
+                action_key="salvage",
+                enabled=enabled,
+                blocked_reason_key=blocked,
+                world_key=wk,
+                target_type="wreckage",
+            ),
+        ]
+
+    if node.get("is_expedition") or expedition_site_kind(node) in {
+        "expedition_zone",
+        "anomaly_zone",
+        "ruins_world",
+    }:
+        return [
+            _mission_action_row(
+                "expedition",
+                label_key="strategic_world_btn_expedition",
+                world_key=wk,
+                target_type="expedition_world",
+            ),
+        ]
+    return []
+
+
+def _build_strategic_world_mission_actions(
+    node: Mapping[str, Any],
+    player_id: int,
+    *,
+    conn: sqlite3.Connection,
+) -> List[Dict[str, Any]]:
+    if is_expedition_site_node(node):
+        return _build_expedition_site_mission_actions(node, player_id, conn=conn)
+
+    wk = str(node.get("world_key") or "").strip()
+    if not wk or node.get("is_claimed") or not node.get("is_colonizable"):
+        return []
+
+    from .world_colonization import build_world_colonize_preview
+
+    preview = build_world_colonize_preview(int(player_id), wk, conn=conn)
+    enabled = bool(preview.get("can_colonize"))
+    blocked = str(preview.get("block_reason") or "fleet_error_colony_limit_reached") if not enabled else ""
+    return [
+        _mission_action_row(
+            "colonize",
+            label_key="strategic_world_btn_colonize",
+            enabled=enabled,
+            blocked_reason_key=blocked,
+            world_key=wk,
+            target_type="strategic_world",
+        ),
+    ]
 
 
 def _build_colony_primary_action(planet_id: int) -> Dict[str, Any]:
@@ -769,6 +983,7 @@ def build_colony_command_center(
             now=now,
         ),
         "news": _build_news_block(uid, conn=conn),
+        "mission_actions": _build_colony_mission_actions(pid, conn=conn),
     }
 
 
@@ -1000,6 +1215,7 @@ def build_expedition_site_command_center(
         "familiarity": familiarity,
         "expedition_activity": _build_expedition_activity_block(node),
         "primary_action": _build_expedition_primary_action(node),
+        "mission_actions": _build_expedition_site_mission_actions(node, int(player_id), conn=conn),
         "hints": _build_expedition_hints(node),
     }
 
@@ -1034,6 +1250,7 @@ def build_strategic_world_command_center(
         "familiarity": None,
         "expedition_activity": None,
         "primary_action": _build_strategic_primary_action(node, int(player_id), conn=conn),
+        "mission_actions": _build_strategic_world_mission_actions(node, int(player_id), conn=conn),
         "hints": _build_strategic_hints(node, int(player_id), conn=conn),
     }
 
@@ -1193,9 +1410,17 @@ def _build_foreign_actions(
     *,
     world_key: str,
     planet_id: int,
+    viewer_player_id: int,
+    owner_player_id: int,
+    conn: sqlite3.Connection,
 ) -> List[Dict[str, Any]]:
-    # GC-599A: no mission CTAs on the map — GC-598 will enable spy/attack/transport.
-    return []
+    return _build_foreign_mission_actions(
+        world_key=world_key,
+        planet_id=planet_id,
+        viewer_player_id=viewer_player_id,
+        owner_player_id=owner_player_id,
+        conn=conn,
+    )
 
 
 def build_foreign_colony_command_center(
@@ -1241,7 +1466,20 @@ def build_foreign_colony_command_center(
         "role_label_key": role_key,
         "type_label_key": type_key,
         "details": _build_foreign_details(node, conn=conn, owner_player_id=owner_id),
-        "actions": _build_foreign_actions(world_key=world_key, planet_id=planet_id),
+        "mission_actions": _build_foreign_mission_actions(
+            world_key=world_key,
+            planet_id=planet_id,
+            viewer_player_id=viewer_id,
+            owner_player_id=owner_id,
+            conn=conn,
+        ),
+        "actions": _build_foreign_actions(
+            world_key=world_key,
+            planet_id=planet_id,
+            viewer_player_id=viewer_id,
+            owner_player_id=owner_id,
+            conn=conn,
+        ),
         "hints": [{"label_key": "command_center_foreign_public_hint"}],
     }
 
