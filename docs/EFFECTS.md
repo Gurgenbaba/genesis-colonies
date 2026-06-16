@@ -50,7 +50,7 @@ Pipeline (single request, one finish pass):
 ### `energy_tech` (mine consumption only)
 
 - **Effect:** reduces **mine** energy draw only (`metal_mine` / `crystal_mine`), not solar output or other buildings.
-- **Formula:** `mine_energy_factor = max(0.4, 1 − 0.05 × level)` applied to summed mine usage before `planets.energy_used` is saved.
+- **Formula:** `mine_energy_factor = max(0, 1 − 0.05 × level)` applied to summed mine usage before `planets.energy_used` is saved. Display reduction % is linear and unbounded; gameplay clamps draw at 0.
 - **Not:** a flat reduction of total colony power draw from solar/command center/etc.
 - **UI:** `energy.used`, `energy.efficiency_pct`, overview energy hint class update on poll (no reload).
 

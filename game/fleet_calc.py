@@ -7,17 +7,15 @@ import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, TypedDict
 
 from .fleet_defs import FLEET_FUEL_RESOURCE, canonical_ship_key, get_ship, is_known_ship_key
+from .effects.effect_resolver import FUEL_EFFICIENCY_PER_LEVEL, EffectResolver
 
 # OGame-style flight-time divisor (seconds scale with distance and slowest hull speed).
 FLIGHT_TIME_DIVISOR = 35000.0
 FUEL_DISTANCE_DIVISOR = 35000.0
-FUEL_EFFICIENCY_PER_LEVEL = 0.03
-FUEL_EFFICIENCY_MIN_FACTOR = 0.5
 
 
 def fuel_efficiency_factor(fuel_efficiency_level: int) -> float:
-    lvl = max(0, int(fuel_efficiency_level or 0))
-    return max(FUEL_EFFICIENCY_MIN_FACTOR, 1.0 - lvl * FUEL_EFFICIENCY_PER_LEVEL)
+    return EffectResolver.fuel_efficiency_factor_for_level(fuel_efficiency_level)
 
 
 def calculate_distance(

@@ -279,52 +279,57 @@ def _research_effect_snapshot(
 
 
 def _mine_energy_reduction_pct(level: int) -> int:
-    lvl = max(0, int(level or 0))
-    if lvl <= 0:
-        return 0
-    factor = max(0.4, 1.0 - 0.05 * lvl)
-    return int(round((1.0 - factor) * 100))
+    from .effects import EffectResolver
+
+    return EffectResolver.mine_energy_reduction_pct(level)
 
 
 def _buildtime_reduction_pct(level: int) -> int:
-    lvl = max(0, int(level or 0))
-    if lvl <= 0:
-        return 0
-    factor = max(0.40, 1.0 - 0.03 * lvl)
-    return int(round((1.0 - factor) * 100))
+    from .effects import EffectResolver
+
+    return EffectResolver.buildtime_reduction_pct(level)
 
 
 def _metal_prod_bonus_pct(level: int) -> int:
-    return int(round(10.0 * max(0, int(level or 0))))
+    from .effects import EffectResolver
+
+    return EffectResolver.metal_prod_bonus_pct(level)
 
 
 def _crystal_prod_bonus_pct(level: int) -> int:
-    return int(round(4.0 * max(0, int(level or 0))))
+    from .effects import EffectResolver
+
+    return EffectResolver.crystal_prod_bonus_pct(level)
 
 
 def _drone_prod_bonus_pct(level: int) -> int:
-    return int(round(3.0 * max(0, int(level or 0))))
+    from .effects import EffectResolver
+
+    return EffectResolver.drone_prod_bonus_pct(level)
 
 
 def _storage_bonus_pct(level: int) -> int:
-    return int(round(25.0 * max(0, int(level or 0))))
+    from .effects import EffectResolver
+
+    return EffectResolver.storage_bonus_pct(level)
 
 
 def _combat_bonus_pct(level: int) -> int:
-    return int(round(5.0 * max(0, int(level or 0))))
+    from .effects import EffectResolver
+
+    return EffectResolver.combat_bonus_pct(level)
 
 
 def _fleet_speed_bonus_pct(level: int, per_level: float) -> int:
-    lvl = max(0, int(level or 0))
-    return int(round(per_level * lvl * 100))
+    from .effects import EffectResolver
+
+    return EffectResolver.fleet_speed_bonus_pct(level, per_level)
 
 
 def _fuel_reduction_pct(level: int) -> int:
-    from .fleet_calc import FUEL_EFFICIENCY_MIN_FACTOR, FUEL_EFFICIENCY_PER_LEVEL
+    from .effects import EffectResolver
 
-    lvl = max(0, int(level or 0))
-    factor = max(FUEL_EFFICIENCY_MIN_FACTOR, 1.0 - lvl * FUEL_EFFICIENCY_PER_LEVEL)
-    return int(round((1.0 - factor) * 100))
+    return EffectResolver.fuel_efficiency_reduction_pct(level)
 
 
 def get_research_effect_preview(tech_key: str, current_level: int, next_level: int) -> Dict[str, Any]:

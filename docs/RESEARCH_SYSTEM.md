@@ -79,10 +79,12 @@ Migration `008`: `research_queue.start_at` für präzise UI-Fortschritte.
 **Prepared (noch kein Consumer):**
 
 `weapon_tech`, `armor_tech`, `shield_tech` → Combat modifiers  
-`navigation_tech`, `engine_tech` → `fleet_speed_multiplier` (teilweise in fleet_calc)  
-`fuel_efficiency` → Fleet fuel (in `fleet_calc`, nicht EffectResolver active)
+`navigation_tech`, `engine_tech` → `fleet_speed_multiplier` (prepared in resolver)  
+`fuel_efficiency` → `fuel_efficiency_factor` (active — `fleet_calc.calculate_fuel_cost`)
 
 Details: [EFFECTS.md](EFFECTS.md) — prepared modifiers **nicht** als aktiv bewerben.
+
+Research-Effekte skalieren linear pro Level ohne Balancing-Cap. Anzeige-% ist unbegrenzt; Gameplay clampet nur physisch (Verbrauch ≥ 0, Zeiten ≥ 1s).
 
 ---
 

@@ -9,7 +9,11 @@ from game.planet_evolution.bootstrap import backfill_all_planets_evolution, ensu
 from game.planet_evolution.dna import MAX_SQLITE_SIGNED_INT, generate_planet_dna, _stable_seed
 from game.planet_evolution.definitions import reload_definitions
 from game.planet_evolution.repository import evolution_schema_ready, get_planet_dna, get_locked_choices
-from game.planet_evolution.planet_research import queue_planet_research, finish_planet_research_jobs
+from game.planet_evolution.planet_research import (
+    compute_planet_research_time,
+    queue_planet_research,
+    finish_planet_research_jobs,
+)
 from game.planet_evolution.service import make_locked_choice, colonize_planet, pick_specialization, upgrade_specialization_tier
 from game.planet_evolution.specialization import eligible_specialization_keys, list_specialization_options
 from game.planet_evolution.mechanics import compile_planet_mechanics
@@ -216,6 +220,32 @@ def test_planet_research_queue(evo_db):
 
     n = finish_planet_research_jobs(conn, pid, time.time() + 99999)
     assert n >= 1
+    conn.close()
+
+
+def test_planet_research_time_has_only_small_safety_floor(evo_db):
+    """
+    GC-622B / Zusatz: No 30s balancing floor.
+    Even at extreme planet_research_speed, duration must not clamp to 30s.
+    """
+    conn = db()
+    uid = _ensure_test_player(99, conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+
+    # Ensure planet evolution flags exist.
+    ensure_planet_evolution(pid, conn)
+
+    # Make computed duration << 30 seconds.
+    conn.execute(
+        "INSERT INTO game_settings (key, value) VALUES ('planet_research_speed', '10000') "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value;"
+    )
+    conn.commit()
+
+    duration = float(compute_planet_research_time(pid, "industry_t1_automation", 3, conn=conn))
+    assert duration >= 1.0
+    assert duration < 30.0
+
     conn.close()
 
 

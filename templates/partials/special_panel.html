@@ -141,11 +141,11 @@
       <details class="gc-special-card">
         <summary>Nerd-Wiki: Multiplikatoren (pro Level)</summary>
         <p>
-          <strong>energy_tech:</strong> <code>mine_energy_factor = max(0.4, 1 - 0.05 * lvl)</code><br>
+          <strong>energy_tech:</strong> <code>mine_energy_factor = max(0, 1 - 0.05 * lvl)</code> (Anzeige: linear %, unbegrenzt)<br>
           <strong>mining_tech:</strong> <code>metal +10%</code>, <code>crystal +4%</code><br>
           <strong>drone_tech:</strong> <code>metal +3%</code> und <code>crystal +3%</code><br>
           <strong>storage_tech:</strong> <code>storage +25%</code><br>
-          <strong>buildtime_tech:</strong> Dauerfaktor <code>max(0.4, 1 - 0.03*lvl)</code>, Speed = <code>1 / Dauerfaktor</code><br>
+          <strong>buildtime_tech:</strong> Dauerfaktor <code>max(0, 1 - 0.03*lvl)</code>, Speed = <code>1 / Dauerfaktor</code> (Mindestzeit 1s)<br>
           <strong>academy:</strong> <code>research_time_speed +5%</code> pro Level<br>
           <strong>nanofactory:</strong> <code>build_time_speed +3%</code> pro Level<br>
           <strong>geothermal_nexus:</strong> <code>solar_output +3%</code> pro Level
