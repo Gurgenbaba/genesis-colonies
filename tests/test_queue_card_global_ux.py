@@ -16,7 +16,7 @@ QUEUE_PAGES = {
         "compact_id": "build-queue-compact",
         "compact_label": "build-queue-compact-label",
         "card_attr": "data-building-card",
-        "card_queue": "render_building_card_queue",
+        "card_queue": "render_hero_queue",
     },
     "research": {
         "template": "templates/research.html",
@@ -147,15 +147,22 @@ def test_style_unified_queue_compact_and_reduced_motion():
     assert ".gc-card-queue-block--queued{" in css
     assert ".gc-card-queue-bar{" in css
     assert "@media (prefers-reduced-motion: reduce)" in css
-    reduced = css.split("@media (prefers-reduced-motion: reduce)")[1]
-    assert ".gc-card-queue-glyph," in reduced
-    assert ".gc-card-queue-scanline," in reduced
-    assert "animation: none !important" in reduced
+    idx = css.find("\n@media (prefers-reduced-motion: reduce){")
+    while idx >= 0:
+        chunk = css[idx : idx + 800]
+        if ".gc-card-queue-glyph," in chunk and ".gc-card-queue-scanline," in chunk:
+            assert "animation: none !important" in chunk
+            break
+        idx = css.find("\n@media (prefers-reduced-motion: reduce){", idx + 1)
+    else:
+        raise AssertionError("queue card reduced-motion block not found")
 
 
 def test_style_card_queue_mobile_safe():
     css = _read("static/style.css")
-    block = css.split(".gc-card-queue-block{")[1].split("}")[0]
+    idx = css.find("\n.gc-card-queue-block{")
+    assert idx >= 0, "standalone .gc-card-queue-block rule missing"
+    block = css[idx : idx + 500]
     assert "max-width: 100%" in block
     assert "min-width: 0" in block
 

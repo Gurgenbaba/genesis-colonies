@@ -786,7 +786,14 @@
       return `${t("spy_report_modal_title", "Spy report")} — ${coords}`;
     }
     if (kind === "expedition") {
+      const place = expeditionTargetLabel(meta, { linked: false });
       const eventLabel = t(meta.event_label_key || `expedition_event_${meta.event_key}`, meta.event_key || "");
+      if (meta.report_kind === "world_expedition" && place) {
+        return `${t("expedition_report_modal_title", "Expedition report")} — ${place}`;
+      }
+      if (meta.report_kind === "world_salvage" && place) {
+        return `${t("salvage_report_modal_title", "Salvage report")} — ${place}`;
+      }
       return `${t("expedition_report_modal_title", "Expedition report")} — ${eventLabel}`;
     }
     return t("messages.detail", "Message");
@@ -1293,6 +1300,14 @@
     );
   }
 
+  function expeditionTargetLabel(meta, { linked = true } = {}) {
+    if (meta?.world_name_key) {
+      return t(meta.world_name_key, meta.world_name_key);
+    }
+    const coords = meta?.target_coords || "—";
+    return linked ? coordLink(coords, coords) : coords;
+  }
+
   function expeditionHeroBadge(eventKey) {
     const visual = expeditionEventVisual(eventKey);
     const badgeByTheme = {
@@ -1323,7 +1338,7 @@
         `<div class="gc-combat-teaser-top">` +
           `<span class="gc-combat-teaser-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
           `<div class="gc-combat-teaser-headings">` +
-            `<span class="gc-combat-teaser-coords gc-mono">${coordLink(meta.target_coords, meta.target_coords || "—")}</span>` +
+            `<span class="gc-combat-teaser-coords gc-mono">${expeditionTargetLabel(meta)}</span>` +
             `<span class="gc-combat-teaser-vs">${esc(eventLabel)}</span>` +
           `</div>` +
           `<span class="gc-combat-teaser-badge">${esc(expeditionEventBadge(eventKey, meta.event_severity))}</span>` +
@@ -1364,7 +1379,15 @@
         `<div class="gc-combat-report-hero-top">` +
           `<span class="gc-combat-report-hero-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
           `<div class="gc-combat-report-hero-text">` +
-            `<div class="gc-combat-report-coords gc-mono">${coordLink(meta.target_coords, meta.target_coords || "—")}</div>` +
+            `<div class="gc-combat-report-coords gc-mono">${expeditionTargetLabel(meta)}</div>` +
+            (meta.world_risk_key
+              ? `<div class="gc-combat-report-world-risk">${esc(
+                  t("fleet_world_expedition_report_risk", "Risk: %(risk)s").replace(
+                    "%(risk)s",
+                    t(meta.world_risk_key, "")
+                  )
+                )}</div>`
+              : "") +
             `<div class="gc-combat-report-vs">${esc(eventLabel)}</div>` +
           `</div>` +
           `<span class="gc-combat-report-result-badge">` +
@@ -1594,8 +1617,8 @@
 
   function ensureMessagesState() {
     if (!document.getElementById("messages-page")) return null;
-    if (!GC.messagesPageState) {
-      initMessagesPage();
+    if (inboxNeedsReload(GC.messagesPageState)) {
+      bootMessagesInbox();
     }
     return GC.messagesPageState || null;
   }
@@ -1604,6 +1627,11 @@
     const prev = GC.messagesPageState;
     if (prev) {
       prev.requestSeq += 1;
+      if (prev.listAbort) {
+        try {
+          prev.listAbort.abort();
+        } catch (_) {}
+      }
       prev.loading = false;
       prev.listInflight = null;
       prev.inflightFilter = null;
@@ -1796,6 +1824,48 @@
     return activeTab?.dataset.filter || "all";
   }
 
+  function syncMessagesDomInit(initSeq) {
+    const page = document.getElementById("messages-page");
+    if (page) page.dataset.messagesInit = String(initSeq);
+  }
+
+  function messagesDomMatchesState(st) {
+    if (!st) return false;
+    const page = document.getElementById("messages-page");
+    if (!page) return false;
+    return Number(page.dataset.messagesInit || 0) === Number(st.initSeq || 0);
+  }
+
+  function inboxNeedsReload(st) {
+    if (!st) return true;
+    if (!messagesDomMatchesState(st)) return true;
+    if (st.loading && st.listInflight) return false;
+    if (!st.listLoaded) return true;
+    if (st.loading && !st.listInflight) return true;
+    const hasItems = !!document.querySelector("#messages-list .gc-messages-item");
+    const msgCount = Array.isArray(st.messages) ? st.messages.length : 0;
+    if (msgCount > 0 && !hasItems) return true;
+    return false;
+  }
+
+  /** PJAX-safe inbox boot — ensure state matches DOM and start list fetch. */
+  function bootMessagesInbox(opts = {}) {
+    if (!document.getElementById("messages-page")) return null;
+    const force = Boolean(opts && opts.force);
+    const st = GC.messagesPageState;
+
+    if (inboxNeedsReload(st)) {
+      initMessagesPage({ boot: true });
+      const fresh = GC.messagesPageState;
+      return fresh?.listInflight || fresh?.loadList?.(true, { force: false }) || null;
+    }
+
+    if (!st || typeof st.loadList !== "function") return null;
+    if (st.loading && st.listInflight) return st.listInflight;
+    if (st.listLoaded && !force) return null;
+    return st.loadList(true, { force });
+  }
+
   function initMessagesPage(options) {
     bindMessagesUiOnce();
 
@@ -1806,6 +1876,8 @@
 
     const initSeq = ++_messagesInitSeq;
     resetMessagesPageState();
+
+    syncMessagesDomInit(initSeq);
 
     const tabsEl = document.getElementById("messages-tabs");
     tabsEl?.querySelectorAll(".tab-btn[data-filter]").forEach((btn) => {
@@ -2012,7 +2084,10 @@
     }
 
     function clearLoadingIfStale(requestId) {
-      if (state.requestSeq !== requestId) return;
+      if (state.requestSeq !== requestId) {
+        if (!state.listInflight) state.loading = false;
+        return;
+      }
       state.loading = false;
       getMessagesDom()?.list?.classList.remove("is-loading");
     }
@@ -2116,7 +2191,10 @@
       const force = Boolean(opts && opts.force);
 
       if (state.listInflight) {
-        if (!force && state.inflightFilter === state.filter) {
+        if (state.inflightFilter === state.filter) {
+          return state.listInflight;
+        }
+        if (!force) {
           return state.listInflight;
         }
         cancelInboxFetch();
@@ -2241,16 +2319,13 @@
 
     GC.messagesPageState = state;
 
-    queueMicrotask(() => {
-      if (GC.messagesPageState === state && isCurrentInit(state, initSeq)) {
-        loadList(true, { force: true });
-      }
-    });
+    void loadList(true, { force: false });
   }
 
   GC.modules = GC.modules || {};
   GC.modules.messages = initMessagesPage;
   GC.initMessagesPage = initMessagesPage;
+  GC.bootMessagesInbox = bootMessagesInbox;
   GC.openMessagesCompose = openCompose;
   GC.ensureMessagesState = ensureMessagesState;
   GC.openInboxReportModal = openInboxReportModal;

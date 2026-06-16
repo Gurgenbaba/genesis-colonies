@@ -367,7 +367,26 @@ def inject_globals():
         current_planet_landscape_url = None
         current_planet_landscape_webp_url = None
 
-    from game.config import get_client_runtime_config
+    from game.config import get_client_runtime_config, is_command_map_dev_mode
+    from game.planet_evolution.sidebar_nav import (
+        ADMINISTRATION_MODULES,
+        client_sidebar_nav_config,
+        mobile_bottom_modules,
+        mobile_drawer_shows_module,
+        module_display_section,
+        module_in_section,
+        nav_link_visible,
+        nav_module_tier,
+        resolve_sidebar_nav,
+        secondary_overflow_modules,
+        sidebar_section_visible,
+        visible_sidebar_modules,
+    )
+
+    sidebar_nav = resolve_sidebar_nav(
+        empire_role_key=str((header_active_planet or {}).get("empire_role_key") or "general"),
+        is_homeworld=bool((header_active_planet or {}).get("is_homeworld")),
+    )
 
     active_locale = current_locale()
     return dict(
@@ -382,6 +401,7 @@ def inject_globals():
         AUTH_USER=auth_user,
         AUTH_ADMIN=auth_admin,
         GC_DEBUG_ENABLED=is_debug_enabled(),
+        COMMAND_MAP_DEV_MODE=is_command_map_dev_mode(),
 
         GAME_SETTINGS=settings,
         motd_enabled=motd_enabled,
@@ -398,6 +418,18 @@ def inject_globals():
 
         HEADER_PLANETS=header_planets,
         HEADER_ACTIVE_PLANET=header_active_planet,
+        SIDEBAR_NAV=sidebar_nav,
+        SIDEBAR_NAV_CLIENT=client_sidebar_nav_config(),
+        ADMINISTRATION_MODULES=sorted(ADMINISTRATION_MODULES),
+        MOBILE_BOTTOM_MODULES=mobile_bottom_modules(sidebar_nav),
+        nav_module_tier=nav_module_tier,
+        nav_link_visible=nav_link_visible,
+        module_in_section=module_in_section,
+        module_display_section=module_display_section,
+        secondary_overflow_modules=secondary_overflow_modules,
+        visible_sidebar_modules=visible_sidebar_modules,
+        sidebar_section_visible=sidebar_section_visible,
+        mobile_drawer_shows_module=mobile_drawer_shows_module,
         current_planet_landscape_url=current_planet_landscape_url,
         current_planet_landscape_webp_url=current_planet_landscape_webp_url,
         SERVER_TIME=int(time.time()),
@@ -1004,6 +1036,12 @@ def galaxy_view():
     from game.planet_evolution.repository import get_active_planet_id, get_context_planet
 
     user_id = int(session["user_id"])
+    view = (request.args.get("view") or "command_map").strip().lower()
+    if view == "imperium":
+        view = "command_map"
+    if view not in ("system", "command_map"):
+        view = "command_map"
+
     galaxy = 1
     system = 1
     active_planet_id: int | None = None
@@ -1042,24 +1080,34 @@ def galaxy_view():
     session["galaxy_view_system"] = int(system)
 
     conn = db()
+    command_map: dict[str, Any] = {"nodes": [], "edges": []}
     try:
         hold_mission_enabled = _hold_mission_enabled(conn=conn)
+        if view == "command_map":
+            from game.planet_evolution.command_map import build_command_map_payload
+
+            command_map = build_command_map_payload(user_id, conn=conn)
     finally:
         conn.close()
 
-    galaxy_nav = build_galaxy_nav(galaxy, system)
-    system_data = list_system(
-        galaxy,
-        system,
-        viewer_player_id=user_id,
-        active_planet_id=active_planet_id,
-        highlight_position=highlight_pos,
-    )
-    minimap = build_minimap_range(
-        galaxy,
-        system,
-        viewer_player_id=user_id,
-    )
+    if view == "command_map":
+        galaxy_nav = build_galaxy_nav(galaxy, system)
+        system_data = {"galaxy": galaxy, "system": system, "slots": []}
+        minimap = []
+    else:
+        galaxy_nav = build_galaxy_nav(galaxy, system)
+        system_data = list_system(
+            galaxy,
+            system,
+            viewer_player_id=user_id,
+            active_planet_id=active_planet_id,
+            highlight_position=highlight_pos,
+        )
+        minimap = build_minimap_range(
+            galaxy,
+            system,
+            viewer_player_id=user_id,
+        )
 
     return render_template(
         "galaxy.html",
@@ -1071,8 +1119,10 @@ def galaxy_view():
         system_data=system_data,
         minimap=minimap,
         viewer_player_id=user_id,
-        expedition_slot=build_expedition_slot(galaxy, system),
+        expedition_slot=build_expedition_slot(galaxy, system) if view != "command_map" else None,
         hold_mission_enabled=hold_mission_enabled,
+        galaxy_view=view,
+        command_map=command_map,
     )
 
 
@@ -1136,6 +1186,153 @@ def api_galaxy_system():
     except Exception as e:
         logger.exception("api_galaxy_system failed")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/command-map/sectors")
+@require_login_api
+def api_command_map_sectors():
+    """Viewport-aware sector chunk payload for Command Map (GC-580B)."""
+    from game.planet_evolution.sector_grid import (
+        DEFAULT_SECTOR_SEED,
+        SectorBoundsTooLargeError,
+        build_sector_chunks_for_request,
+        normalize_world_bounds,
+    )
+
+    min_wx = request.args.get("min_wx", type=float)
+    min_wy = request.args.get("min_wy", type=float)
+    max_wx = request.args.get("max_wx", type=float)
+    max_wy = request.args.get("max_wy", type=float)
+    if None in (min_wx, min_wy, max_wx, max_wy):
+        return jsonify({"ok": False, "error": "bounds_required"}), 400
+
+    seed = request.args.get("seed", type=int) or DEFAULT_SECTOR_SEED
+    try:
+        bounds = normalize_world_bounds(min_wx, min_wy, max_wx, max_wy)
+        chunks = build_sector_chunks_for_request(*bounds, seed=int(seed))
+    except SectorBoundsTooLargeError:
+        return jsonify({"ok": False, "error": "bounds_too_large"}), 400
+    except Exception as e:
+        logger.exception("api_command_map_sectors failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    return jsonify(
+        {
+            "ok": True,
+            "sector_chunks": chunks,
+            "bounds": {
+                "min_wx": bounds[0],
+                "min_wy": bounds[1],
+                "max_wx": bounds[2],
+                "max_wy": bounds[3],
+            },
+            "seed": int(seed),
+        }
+    )
+
+
+_COMMAND_MAP_TELEMETRY_EVENTS = frozenset({
+    "map_open",
+    "node_click",
+    "inspector_open",
+})
+
+
+@app.route("/api/command-map/telemetry", methods=["POST"])
+@require_login_api
+def api_command_map_telemetry():
+    """Lightweight Command Map usage log for closed alpha (GC-597D)."""
+    from game.config import is_command_map_dev_mode
+
+    if not is_command_map_dev_mode():
+        return jsonify({"ok": True, "skipped": True})
+
+    pid = _current_player_id()
+    if pid is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    event = str(payload.get("event") or "").strip().lower()[:64]
+    if event not in _COMMAND_MAP_TELEMETRY_EVENTS:
+        return jsonify({"ok": False, "error": "invalid_event"}), 400
+
+    node_kind = str(payload.get("node_kind") or "").strip()[:32]
+    logger.info(
+        "command_map_telemetry player_id=%s event=%s node_kind=%s",
+        int(pid),
+        event,
+        node_kind or "-",
+    )
+    return jsonify({"ok": True})
+
+
+@app.route("/api/worlds/colonize-preview", methods=["GET"])
+@require_login_api
+def api_worlds_colonize_preview():
+    """Presentation-only strategic world colonize preview (GC-582C)."""
+    from game.planet_evolution.world_colonization import build_world_colonize_preview
+
+    user_id = int(session.get("user_id") or 0)
+    world_key = str(request.args.get("world_key") or "").strip()
+    if not world_key:
+        return jsonify({"ok": False, "error": "invalid_world_key"}), 400
+
+    conn = db()
+    try:
+        preview = build_world_colonize_preview(user_id, world_key, conn=conn)
+    finally:
+        conn.close()
+
+    if not preview.get("presentation"):
+        return jsonify({"ok": False, "error": preview.get("block_reason") or "invalid_world_key"}), 400
+
+    return jsonify({"ok": True, "data": preview})
+
+
+@app.route("/api/worlds/expedition-preview", methods=["GET"])
+@require_login_api
+def api_worlds_expedition_preview():
+    """Presentation-only strategic world expedition preview (GC-583A)."""
+    from game.planet_evolution.world_colonization import build_world_expedition_preview
+
+    user_id = int(session.get("user_id") or 0)
+    world_key = str(request.args.get("world_key") or "").strip()
+    if not world_key:
+        return jsonify({"ok": False, "error": "invalid_world_key"}), 400
+
+    conn = db()
+    try:
+        preview = build_world_expedition_preview(user_id, world_key, conn=conn)
+    finally:
+        conn.close()
+
+    if not preview.get("presentation"):
+        return jsonify({"ok": False, "error": preview.get("block_reason") or "invalid_world_key"}), 400
+
+    return jsonify({"ok": True, "data": preview})
+
+
+@app.route("/api/worlds/salvage-preview", methods=["GET"])
+@require_login_api
+def api_worlds_salvage_preview():
+    """Presentation-only strategic wreckage/salvage preview (GC-584)."""
+    from game.planet_evolution.world_colonization import build_world_salvage_preview
+
+    user_id = int(session.get("user_id") or 0)
+    world_key = str(request.args.get("world_key") or "").strip()
+    if not world_key:
+        return jsonify({"ok": False, "error": "invalid_world_key"}), 400
+
+    conn = db()
+    try:
+        preview = build_world_salvage_preview(user_id, world_key, conn=conn)
+    finally:
+        conn.close()
+
+    if not preview.get("presentation"):
+        return jsonify({"ok": False, "error": preview.get("block_reason") or "invalid_world_key"}), 400
+
+    return jsonify({"ok": True, "data": preview})
 
 
 @app.route("/shipyard")
@@ -3531,6 +3728,10 @@ def _payload_from_live_context(
         landscape_fn = get_landscape_for_position(position)
         landscape_rel = f"img/landscapes/{landscape_fn}"
         planet_class = effective_planet_class(planet)
+        from game.planet_evolution.empire_identity import empire_identity_for_planet
+        from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
+
+        identity = empire_identity_for_planet(planet, conn=conn)
         payload["active_planet"] = {
             "planet_id": int(active_planet_id),
             "name": str(planet.get("name") or ""),
@@ -3541,11 +3742,20 @@ def _payload_from_live_context(
             "position": position,
             "landscape_url": url_for("static", filename=landscape_rel),
             "landscape_webp_url": url_for("static", filename=raster_webp_relpath(landscape_rel)),
+            **identity,
+            "sidebar_nav": resolve_sidebar_nav(
+                empire_role_key=identity["empire_role_key"],
+                is_homeworld=bool(planet.get("is_homeworld")),
+            ),
         }
     except Exception:
         from game.planet_visuals import DEFAULT_LANDSCAPE, raster_webp_relpath
 
         fallback_rel = f"img/landscapes/{DEFAULT_LANDSCAPE}"
+        from game.planet_evolution.empire_identity import empire_identity_for_planet
+        from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
+
+        identity = empire_identity_for_planet(planet, conn=conn)
         payload["active_planet"] = {
             "planet_id": int(active_planet_id),
             "name": str(planet.get("name") or ""),
@@ -3556,6 +3766,11 @@ def _payload_from_live_context(
             "position": None,
             "landscape_url": url_for("static", filename=fallback_rel),
             "landscape_webp_url": url_for("static", filename=raster_webp_relpath(fallback_rel)),
+            **identity,
+            "sidebar_nav": resolve_sidebar_nav(
+                empire_role_key=identity["empire_role_key"],
+                is_homeworld=bool(planet.get("is_homeworld")),
+            ),
         }
 
     if include_panel:
@@ -3688,7 +3903,9 @@ def _payload_from_live_context(
     if own_conn and conn is not None:
         conn.close()
 
-    return payload
+    from game.logic import attach_canonical_server_time
+
+    return attach_canonical_server_time(payload)
 
 
 def _build_game_state_payload(
@@ -3996,7 +4213,8 @@ def api_fleet_preview():
     from game.fleet import build_fleet_send_preview, fleet_schema_ready
     from game.fleet_api import fleet_err, fleet_ok
     from game.fleet_calc import normalize_ships
-    from game.planet_evolution.repository import get_context_planet
+    from game.fleet_origin import resolve_fleet_origin_planet_id
+    from game.fleet_target import parse_fleet_target_request
 
     user_id = int(session.get("user_id") or 0)
     if not user_id:
@@ -4007,20 +4225,23 @@ def api_fleet_preview():
     data = request.get_json(silent=True) or {}
     conn = db()
     try:
-        planet = get_context_planet(user_id, conn=conn)
-        origin_id = int(data.get("origin_planet_id") or planet["id"])
-        if int(planet["id"]) != origin_id:
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
-                (origin_id, user_id),
-            )
-            origin_row = cur.fetchone()
-            if not origin_row:
-                return jsonify(fleet_err("origin_not_found")), 400
-            origin_planet = dict(origin_row)
-        else:
-            origin_planet = dict(planet)
+        dom_raw = request.headers.get("X-GC-Dom-Planet-Id") or data.get("dom_planet_id")
+        dom_planet_id = int(dom_raw) if dom_raw not in (None, "") else None
+        origin_id, _origin_audit = resolve_fleet_origin_planet_id(
+            user_id,
+            data.get("origin_planet_id"),
+            conn=conn,
+            dom_planet_id=dom_planet_id,
+        )
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
+            (origin_id, user_id),
+        )
+        origin_row = cur.fetchone()
+        if not origin_row:
+            return jsonify(fleet_err("origin_not_found")), 400
+        origin_planet = dict(origin_row)
 
         ships = normalize_ships(data.get("ships") or {})
         if not ships and data.get("ships"):
@@ -4032,6 +4253,7 @@ def api_fleet_preview():
             speed_percent = 100
 
         mission_type = str(data.get("mission_type") or "transport")
+        target_req = parse_fleet_target_request(data)
         preview = build_fleet_send_preview(
             player_id=user_id,
             origin_planet=origin_planet,
@@ -4043,6 +4265,11 @@ def api_fleet_preview():
             resources=data.get("resources") or {},
             speed_percent=speed_percent,
             conn=conn,
+            world_key=target_req.get("world_key"),
+            target_type=target_req.get("target_type"),
+            target_planet_id=target_req.get("target_planet_id"),
+            target_world_x=target_req.get("target_world_x"),
+            target_world_y=target_req.get("target_world_y"),
         )
         return jsonify(fleet_ok({"preview": preview}, message_key="fleet_preview_ok"))
     finally:
@@ -4052,8 +4279,18 @@ def api_fleet_preview():
 @app.route("/api/fleet/resolve-target", methods=["GET", "POST"])
 @require_login
 def api_fleet_resolve_target():
-    from game.fleet import fleet_schema_ready, resolve_fleet_target
+    from game.fleet import (
+        evaluate_fleet_mission_target,
+        fleet_schema_ready,
+        resolve_fleet_target,
+    )
     from game.fleet_api import fleet_err, fleet_ok
+    from game.fleet_target import attach_world_target, parse_fleet_target_request
+    from game.planet_evolution.world_colonization import (
+        validate_world_colonize_target,
+        validate_world_expedition_target,
+        validate_world_salvage_target,
+    )
 
     user_id = int(session.get("user_id") or 0)
     if not user_id:
@@ -4066,14 +4303,75 @@ def api_fleet_resolve_target():
     else:
         data = request.args
 
-    try:
-        galaxy = int(data.get("galaxy") or data.get("target_galaxy") or 1)
-        system = int(data.get("system") or data.get("target_system") or 1)
-        position = int(data.get("position") or data.get("target_position") or 1)
-    except (TypeError, ValueError):
-        return jsonify(fleet_err("invalid_target")), 400
+    target_req = parse_fleet_target_request(data)
+    mission = str(data.get("mission_type") or data.get("mission") or "transport").strip().lower()
+    world_key = target_req.get("world_key")
 
-    target = resolve_fleet_target(user_id, galaxy, system, position)
+    conn = db()
+    try:
+        if world_key:
+            if mission == "colonize":
+                ok, reason, target = validate_world_colonize_target(world_key, conn=conn)
+            elif mission == "expedition":
+                ok, reason, target = validate_world_expedition_target(world_key, conn=conn)
+                if not ok:
+                    ok, reason, target = validate_world_salvage_target(world_key, conn=conn)
+            else:
+                ok, reason, target = True, "", {}
+                try:
+                    from game.planet_evolution.world_colonization import parse_world_key
+                    from game.planet_evolution.strategic_worlds import build_strategic_world_presentation
+
+                    parsed = parse_world_key(world_key)
+                    target = {
+                        "target_type": "strategic_world",
+                        "world_key": world_key,
+                        "world_x": parsed["world_x"],
+                        "world_y": parsed["world_y"],
+                        "planet_role": parsed["planet_role"],
+                        "coords": world_key,
+                        "strategic_world": build_strategic_world_presentation(
+                            parsed["world_x"],
+                            parsed["world_y"],
+                            world_type=parsed["world_type"],
+                        ),
+                    }
+                except Exception:
+                    ok, reason, target = False, "invalid_world_key", {}
+            if not ok:
+                return jsonify(fleet_err(reason or "invalid_target")), 400
+            attach_world_target(
+                target,
+                player_id=user_id,
+                conn=conn,
+                explicit_native_type=target_req.get("target_type"),
+            )
+            return jsonify(fleet_ok({"target": target}, message_key="fleet_target_ok"))
+
+        try:
+            galaxy = int(data.get("galaxy") or data.get("target_galaxy") or 1)
+            system = int(data.get("system") or data.get("target_system") or 1)
+            position = int(data.get("position") or data.get("target_position") or 1)
+        except (TypeError, ValueError):
+            return jsonify(fleet_err("invalid_target")), 400
+
+        target = resolve_fleet_target(user_id, galaxy, system, position, conn=conn)
+        attach_world_target(
+            target,
+            player_id=user_id,
+            conn=conn,
+            explicit_native_type=target_req.get("target_type"),
+            legacy_coords={"galaxy": galaxy, "system": system, "position": position},
+        )
+        if mission:
+            ok, reason, _ = evaluate_fleet_mission_target(
+                user_id, mission, galaxy, system, position, conn=conn
+            )
+            if not ok:
+                target["mission_block_reason"] = reason
+    finally:
+        conn.close()
+
     return jsonify(fleet_ok({"target": target}, message_key="fleet_target_ok"))
 
 
@@ -4123,7 +4421,8 @@ def api_fleet_send():
     from game.fleet import fleet_schema_ready, send_fleet
     from game.fleet_api import fleet_err, fleet_ok
     from game.fleet_calc import normalize_ships
-    from game.planet_evolution.repository import get_context_planet
+    from game.fleet_origin import resolve_fleet_origin_planet_id
+    from game.fleet_target import parse_fleet_target_request
 
     user_id = int(session.get("user_id") or 0)
     if not user_id:
@@ -4143,8 +4442,15 @@ def api_fleet_send():
         speed_percent = 100
 
     def _send(conn):
-        planet = get_context_planet(user_id, conn=conn)
-        origin_id = int(data.get("origin_planet_id") or planet["id"])
+        dom_raw = request.headers.get("X-GC-Dom-Planet-Id") or data.get("dom_planet_id")
+        dom_planet_id = int(dom_raw) if dom_raw not in (None, "") else None
+        origin_id, _origin_audit = resolve_fleet_origin_planet_id(
+            user_id,
+            data.get("origin_planet_id"),
+            conn=conn,
+            dom_planet_id=dom_planet_id,
+        )
+        target_req = parse_fleet_target_request(data)
         return send_fleet(
             player_id=user_id,
             origin_planet_id=origin_id,
@@ -4158,6 +4464,11 @@ def api_fleet_send():
             preset_id=int(data["preset_id"]) if data.get("preset_id") else None,
             batch_id=int(data["batch_id"]) if data.get("batch_id") else None,
             colony_name=str(data.get("colony_name") or "").strip() or None,
+            world_key=target_req.get("world_key"),
+            target_type=target_req.get("target_type"),
+            target_planet_id=target_req.get("target_planet_id"),
+            target_world_x=target_req.get("target_world_x"),
+            target_world_y=target_req.get("target_world_y"),
             conn=conn,
         )
 

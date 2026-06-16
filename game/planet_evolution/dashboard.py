@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Mapping, Optional
 
 from ..models import get_planet_buildings
 from .constants import LEVEL_UNLOCKS, MAX_PLANET_LEVEL, SPECIALIZATION_UNLOCK_LEVEL, IDENTITY_TEASER_MIN_LEVEL
+from .expansion_gates import build_expansion_unlock_block
 from .definitions import get_event, get_policy, get_policies as get_policy_definitions, get_research_def, get_trait
 from .specialization import list_specialization_options
 from .dna import all_trait_keys
@@ -819,6 +820,15 @@ def build_dashboard_extras(
     )
     open_events = int(cur.fetchone()["c"])
 
+    expansion_unlock: Dict[str, Any] = {"visible": False}
+    player_id = int(planet.get("player_id") or 0)
+    if player_id:
+        expansion_unlock = build_expansion_unlock_block(
+            player_id,
+            conn=conn,
+            viewing_homeworld=bool(planet.get("is_homeworld")),
+        )
+
     return {
         "header": {
             "xp_in_level": xp_in_level,
@@ -872,4 +882,5 @@ def build_dashboard_extras(
             xp_pct=_pct(xp_in_level, xp_span),
             planet_score=compute_single_planet_score(planet_id, conn=conn),
         ),
+        "expansion_unlock": expansion_unlock,
     }

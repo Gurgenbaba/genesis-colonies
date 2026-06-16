@@ -219,24 +219,38 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-bg::after {
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-sidebar {
-  background: rgba(2, 8, 18, 0.97);
-  border-color: rgba(70, 229, 255, 0.24);
+  background: linear-gradient(180deg, rgba(2, 10, 20, 0.98) 0%, rgba(2, 8, 18, 0.97) 100%);
+  border-color: rgba(70, 229, 255, 0.32);
   box-shadow:
-    var(--gc-border-glow),
+    0 0 0 1px rgba(70, 229, 255, 0.14),
+    0 0 22px rgba(70, 229, 255, 0.1),
+    inset 0 1px 0 rgba(127, 255, 217, 0.07),
     inset 0 0 0 1px rgba(0, 0, 0, 0.55),
     0 14px 36px rgba(0, 0, 0, 0.48);
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-nav-link {
-  background: rgba(2, 8, 16, 0.42);
+  background: linear-gradient(180deg, rgba(3, 12, 22, 0.92) 0%, rgba(2, 8, 16, 0.88) 100%);
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-nav-link:hover {
-  background: rgba(70, 229, 255, 0.11);
+  background: linear-gradient(90deg, rgba(70, 229, 255, 0.14) 0%, rgba(70, 229, 255, 0.05) 100%);
+  box-shadow: inset 0 0 14px rgba(70, 229, 255, 0.08);
 }
 
-body.gc-body-ingame.gc-has-planet-landscape .gc-nav-link.active {
-  background: rgba(70, 229, 255, 0.14);
+body.gc-body-ingame.gc-has-planet-landscape .gc-nav-link.active,
+body.gc-body-ingame.gc-has-planet-landscape .gc-nav-section.is-expanded > .gc-nav-section-toggle,
+body.gc-body-ingame.gc-has-planet-landscape .gc-nav-section:has(.gc-nav-sub-link.active) > .gc-nav-section-toggle {
+  background: linear-gradient(90deg, rgba(0, 88, 102, 0.42) 0%, rgba(70, 229, 255, 0.12) 100%);
+  box-shadow: inset 0 0 18px rgba(70, 229, 255, 0.1);
+}
+
+body.gc-body-ingame.gc-has-planet-landscape .gc-nav-sub-link:hover {
+  background: rgba(70, 229, 255, 0.09);
+}
+
+body.gc-body-ingame.gc-has-planet-landscape .gc-nav-sub-link.active {
+  background: linear-gradient(90deg, rgba(70, 229, 255, 0.18) 0%, rgba(70, 229, 255, 0.07) 100%);
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-panel,
@@ -803,19 +817,125 @@ body.gc-body-simple .auth-error {
   justify-content: flex-start;
 }
 
-/* Sidebar */
+/* Sidebar — GC-621C accordion + Genesis cyan glow */
 .gc-sidebar{
   position: sticky;
   top: var(--gc-sidebar-top, 136px);
   align-self: start;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
   padding: 0;
   border-radius: var(--gc-radius-sm);
-  background: var(--gc-panel-bg);
-  border: 1px solid var(--gc-border-bright);
-  box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0,0,0,0.4);
+  background:
+    linear-gradient(180deg, rgba(3, 12, 22, 0.98) 0%, rgba(2, 8, 18, 0.96) 100%);
+  border: 1px solid rgba(70, 229, 255, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(70, 229, 255, 0.12),
+    0 0 18px rgba(70, 229, 255, 0.08),
+    inset 0 1px 0 rgba(127, 255, 217, 0.06),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.gc-sidebar--role-nav:not(.is-more-expanded) > .gc-nav-module--secondary,
+.gc-sidebar--role-nav:not(.is-more-expanded) > .gc-nav-group--secondary {
+  display: none;
+}
+
+.gc-sidebar--role-nav:not(.is-more-expanded) .gc-nav-group--prominent .gc-nav-sub-link.gc-nav-module--secondary {
+  display: none;
+}
+
+.gc-sidebar--role-nav.is-more-expanded > .gc-nav-module--secondary,
+.gc-sidebar--role-nav.is-more-expanded > .gc-nav-group--secondary {
+  display: block;
+}
+
+.gc-sidebar--role-nav.is-more-expanded .gc-nav-group--prominent .gc-nav-sub-link.gc-nav-module--secondary {
+  display: block;
+}
+
+.gc-nav-section{
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid rgba(70, 229, 255, 0.1);
+}
+
+.gc-nav-section:last-child{
+  border-bottom: none;
+}
+
+.gc-nav-section-toggle{
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gc-nav-section-body,
+.gc-nav-group-body{
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 0;
+  overflow: hidden;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: max-height 0.22s ease, opacity 0.18s ease;
+}
+
+.gc-nav-section.is-expanded > .gc-nav-section-body,
+.gc-nav-submenu-group.is-expanded > .gc-nav-group-body{
+  max-height: 480px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.gc-nav-section.is-expanded > .gc-nav-section-body{
+  background: rgba(4, 14, 24, 0.72);
+  border-top: 1px solid rgba(70, 229, 255, 0.08);
+  padding-bottom: 2px;
+}
+
+.gc-nav-submenu-group.is-expanded > .gc-nav-group-body{
+  background: rgba(2, 8, 16, 0.42);
+  border-left: 2px solid rgba(70, 229, 255, 0.14);
+  margin: 0 0 2px 12px;
+  padding-bottom: 2px;
+}
+
+.gc-nav-section.is-expanded > .gc-nav-section-toggle,
+.gc-nav-section:has(.gc-nav-sub-link.active) > .gc-nav-section-toggle,
+.gc-nav-section:has(.gc-nav-group-toggle.active) > .gc-nav-section-toggle{
+  border-left-color: rgba(0, 234, 255, 0.72);
+  background: linear-gradient(90deg, rgba(0, 72, 84, 0.58) 0%, rgba(4, 18, 28, 0.94) 100%);
+  color: #7af0ff;
+  box-shadow: inset 0 0 16px rgba(70, 229, 255, 0.08);
+  text-shadow: 0 0 10px rgba(0, 234, 255, 0.22);
+}
+
+.gc-nav-sub-link--button{
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.gc-nav-link--more {
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gc-nav-link--more .gc-nav-chevron {
+  transform: rotate(-90deg);
+}
+
+.gc-sidebar.is-more-expanded .gc-nav-link--more .gc-nav-chevron {
+  transform: rotate(0deg);
 }
 
 .gc-nav-icon{
@@ -825,32 +945,38 @@ body.gc-body-simple .auth-error {
 }
 
 .gc-nav-link{
-  display: block;
-  padding: 11px 14px;
-  border-radius: var(--gc-radius-sm);
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 40px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 0;
   border: none;
-  border-left: 2px solid transparent;
-  border-bottom: 1px solid var(--gc-border);
-  background: transparent;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  border-left: 3px solid transparent;
+  border-bottom: none;
+  background: linear-gradient(180deg, rgba(5, 16, 26, 0.98) 0%, rgba(4, 12, 22, 0.94) 100%);
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--gc-text-soft);
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  color: rgba(215, 246, 255, 0.92);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .gc-nav-link:hover{
   transform: none;
-  border-left-color: var(--gc-neon-cyan);
-  background: rgba(70, 229, 255, 0.06);
-  box-shadow: inset 0 0 12px rgba(70, 229, 255, 0.04);
-  color: var(--gc-text);
+  border-left-color: #00eaff;
+  background: linear-gradient(90deg, rgba(0, 234, 255, 0.14) 0%, rgba(0, 234, 255, 0.05) 100%);
+  box-shadow: inset 0 0 14px rgba(70, 229, 255, 0.08);
+  color: #d7f6ff;
 }
 .gc-nav-link.active{
-  border-left-color: var(--gc-neon-cyan);
-  background: rgba(70, 229, 255, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(70, 229, 255, 0.12);
-  color: var(--gc-neon-cyan);
+  border-left-color: #00eaff;
+  background: linear-gradient(90deg, rgba(0, 234, 255, 0.18) 0%, rgba(0, 234, 255, 0.08) 100%);
+  box-shadow: inset 0 0 18px rgba(70, 229, 255, 0.1);
+  color: #00eaff;
+  text-shadow: 0 0 12px rgba(0, 234, 255, 0.32);
 }
 
 /* Sidebar submenu groups (Gebäude, Kommando, Militärproduktion, Flotte) */
@@ -861,6 +987,47 @@ body.gc-body-simple .auth-error {
 .gc-nav-submenu-group{
   display: flex;
   flex-direction: column;
+}
+
+.gc-nav-group-toggle{
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  justify-content: space-between;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.gc-nav-buildings-group > .gc-nav-group-toggle{
+  padding-left: 22px;
+  min-height: 34px;
+  height: 34px;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  background: rgba(3, 10, 18, 0.55);
+  border-left: 3px solid transparent;
+}
+
+.gc-nav-buildings-group > .gc-nav-group-toggle:hover,
+.gc-nav-buildings-group > .gc-nav-group-toggle.active{
+  border-left-color: rgba(0, 234, 255, 0.72);
+}
+
+.gc-nav-buildings-group.is-expanded > .gc-nav-group-toggle{
+  background: linear-gradient(90deg, rgba(0, 72, 84, 0.35) 0%, rgba(4, 14, 24, 0.72) 100%);
+  color: #7af0ff;
+}
+
+.gc-nav-sub-link--nested{
+  padding-left: 32px;
+  min-height: 32px;
+  height: 32px;
+  font-size: 0.78rem;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: rgba(200, 232, 244, 0.8);
 }
 
 .gc-nav-link--has-sub{
@@ -883,7 +1050,7 @@ body.gc-body-simple .auth-error {
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: rotate(45deg);
-  opacity: 0.5;
+  opacity: 0.62;
   transition: transform 0.18s ease, opacity 0.18s ease, margin-top 0.18s ease;
 }
 
@@ -897,10 +1064,6 @@ body.gc-body-simple .auth-error {
 .gc-nav-link--has-sub:hover .gc-nav-chevron,
 .gc-nav-link--has-sub.active .gc-nav-chevron{
   opacity: 0.95;
-}
-
-.gc-nav-submenu-group.is-expanded > .gc-nav-sub{
-  border-left-color: rgba(70, 229, 255, 0.28);
 }
 
 button.gc-nav-link.gc-nav-submenu-toggle{
@@ -956,9 +1119,9 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 0 0 4px 10px;
-  border-left: 2px solid rgba(70, 229, 255, 0.14);
-  margin: 0 0 2px 12px;
+  padding: 0;
+  border-left: none;
+  margin: 0;
 }
 
 .gc-nav-sub--trading .gc-nav-sub-link,
@@ -979,34 +1142,48 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 }
 
 .gc-nav-sub-link{
-  display: block;
+  display: flex;
+  align-items: center;
   width: 100%;
-  padding: 7px 10px 7px 12px;
+  min-height: 34px;
+  height: 34px;
+  padding: 0 12px 0 22px;
   border: none;
-  border-left: 2px solid transparent;
+  border-left: 3px solid transparent;
   border-radius: 0;
   background: transparent;
   font-family: inherit;
-  font-size: 0.72rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  text-transform: none;
   text-align: left;
-  color: var(--gc-text-dim);
+  text-decoration: none;
+  color: rgba(200, 232, 244, 0.84);
+  opacity: 1;
   cursor: pointer;
-  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
 }
 
 .gc-nav-sub-link:hover{
-  color: var(--gc-text-soft);
-  border-left-color: rgba(70, 229, 255, 0.35);
-  background: rgba(70, 229, 255, 0.04);
+  color: #d7f6ff;
+  border-left-color: rgba(0, 234, 255, 0.55);
+  background: rgba(0, 234, 255, 0.07);
+  box-shadow: inset 0 0 12px rgba(70, 229, 255, 0.06);
 }
 
 .gc-nav-sub-link.active{
-  color: var(--gc-neon-cyan);
-  border-left-color: var(--gc-neon-cyan);
-  background: rgba(70, 229, 255, 0.07);
+  color: #00eaff;
+  border-left-color: #00eaff;
+  background: linear-gradient(90deg, rgba(0, 234, 255, 0.16) 0%, rgba(0, 234, 255, 0.06) 100%);
+  box-shadow: inset 0 0 16px rgba(70, 229, 255, 0.1);
+  text-shadow: 0 0 10px rgba(0, 234, 255, 0.28);
+}
+
+.gc-nav-sub-link--nested.active{
+  color: #00eaff;
+  border-left-color: #00eaff;
+  background: linear-gradient(90deg, rgba(0, 234, 255, 0.14) 0%, rgba(0, 234, 255, 0.05) 100%);
 }
 .gc-nav-admin { border-left-color: rgba(255, 176, 32, 0.35); }
 .gc-nav-admin.active{
@@ -1316,7 +1493,30 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
   justify-content: space-between;
   gap: 12px;
 }
-.motd-banner-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.motd-banner-toggle{
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.motd-banner--expandable .motd-banner-toggle{
+  cursor: pointer;
+}
+.motd-banner--expanded{
+  align-items: flex-start;
+}
+.motd-banner--expanded .motd-banner-toggle{
+  align-items: flex-start;
+}
 .motd-banner-pill{
   padding: 4px 10px;
   border-radius: var(--gc-radius-sm);
@@ -1328,13 +1528,43 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
   flex: 0 0 auto;
 }
 .motd-banner-text{
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--gc-text-soft);
   font-size: 0.88rem;
+}
+.motd-banner--collapsed .motd-banner-text{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.motd-banner-close{ padding: 6px 10px; }
+.motd-banner--expanded .motd-banner-text{
+  overflow: visible;
+  white-space: pre-line;
+  line-height: 1.45;
+}
+.motd-banner-chevron{
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  margin-top: 2px;
+  border-right: 2px solid rgba(255, 210, 120, 0.85);
+  border-bottom: 2px solid rgba(255, 210, 120, 0.85);
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+  display: none;
+}
+.motd-banner--expandable .motd-banner-chevron{
+  display: block;
+}
+.motd-banner--expanded .motd-banner-chevron{
+  transform: rotate(-135deg);
+  margin-top: 6px;
+}
+.motd-banner-close{
+  flex: 0 0 auto;
+  padding: 6px 10px;
+}
 
 /* =========================
    9) Grids
@@ -7033,6 +7263,1566 @@ body.gc-techtree-media-zoom-open{
   color: var(--gc-text-soft);
   font-size: 0.88rem;
 }
+
+/* --- Galaxy world map (command map) --- */
+.galaxy-view-tabs{
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.galaxy-view-tab{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.18);
+  background: rgba(5, 10, 22, 0.55);
+  color: var(--gc-text-soft);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.galaxy-view-tab.is-active,
+.galaxy-view-tab--world.is-active{
+  border-color: rgba(70, 229, 255, 0.45);
+  color: var(--gc-primary-2);
+  background: rgba(70, 229, 255, 0.08);
+}
+.gc-dev-preview-badge{
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: var(--gc-radius-sm);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(160, 240, 255, 0.98);
+  background: rgba(8, 28, 42, 0.85);
+  border: 1px solid rgba(70, 229, 255, 0.42);
+}
+.gc-dev-preview-badge--banner{
+  font-size: 0.68rem;
+  align-self: flex-start;
+}
+.gc-command-map-dev-banner{
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--gc-radius-md);
+  border: 1px solid rgba(70, 229, 255, 0.28);
+  background: linear-gradient(135deg, rgba(8, 24, 38, 0.92), rgba(12, 18, 32, 0.88));
+}
+.gc-command-map-dev-banner-copy strong{
+  display: block;
+  margin-bottom: 4px;
+  color: var(--gc-primary-2);
+  font-size: 0.92rem;
+}
+.gc-command-map-dev-banner-copy .hint{
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.galaxy-command-map-panel{
+  margin-top: 4px;
+}
+.galaxy-command-map-head{
+  margin-bottom: 10px;
+}
+.galaxy-command-map-title{
+  margin: 0 0 6px;
+}
+.galaxy-command-map-graph{
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(720px, min(72vh, 780px));
+  gap: 0;
+  min-height: 720px;
+  border-radius: 12px;
+  border: 1px solid rgba(70, 229, 255, 0.14);
+  background: rgba(2, 8, 18, 0.92);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.galaxy-command-map-graph--fullmap .galaxy-command-map-viewport{
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-height: 720px;
+}
+.galaxy-command-map-legacy-shell{
+  display: none !important;
+}
+.galaxy-command-map-controls{
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 12;
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+.galaxy-command-map-viewport{
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  outline: none;
+  user-select: none;
+  -webkit-user-select: none;
+  min-height: 680px;
+  background:
+    radial-gradient(ellipse at 50% 38%, rgba(70, 229, 255, 0.16), transparent 58%),
+    radial-gradient(ellipse at 14% 78%, rgba(150, 90, 255, 0.12), transparent 52%),
+    radial-gradient(ellipse at 86% 22%, rgba(255, 130, 70, 0.1), transparent 48%),
+    #020812;
+}
+.galaxy-command-map-viewport.is-dragging{
+  cursor: grabbing;
+}
+.galaxy-command-map-viewport.is-dragging .galaxy-command-map-node{
+  pointer-events: none;
+}
+.galaxy-command-map-canvas{
+  position: relative;
+  width: 4000px;
+  height: 4000px;
+  transform-origin: 0 0;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: visible;
+}
+.galaxy-command-map-bg{
+  position: absolute;
+  left: -8000px;
+  top: -8000px;
+  width: 20000px;
+  height: 20000px;
+  z-index: 0;
+  pointer-events: none;
+  background-color: #020812;
+  background-image: url("/static/img/map.png");
+  background-repeat: repeat;
+  background-size: 1600px 900px;
+  background-position: 0 0;
+  opacity: 0.42;
+}
+.galaxy-command-map-bg::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("/static/img/map.png");
+  background-repeat: repeat;
+  background-size: 2300px 1294px;
+  background-position: 400px 220px;
+  opacity: 0.18;
+  mix-blend-mode: screen;
+  transform: rotate(180deg);
+}
+.galaxy-command-map-bg::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 28% 34%, rgba(70, 229, 255, 0.22), transparent 46%),
+    radial-gradient(ellipse at 74% 62%, rgba(160, 110, 255, 0.2), transparent 44%),
+    radial-gradient(ellipse at 52% 48%, rgba(255, 150, 80, 0.1), transparent 52%),
+    radial-gradient(ellipse at 50% 50%, transparent 38%, rgba(2, 8, 18, 0.28) 100%);
+}
+.galaxy-command-map-ambient-glow{
+  position: absolute;
+  left: -6000px;
+  top: -6000px;
+  width: 18000px;
+  height: 18000px;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 42% 38%, rgba(70, 229, 255, 0.14), transparent 42%),
+    radial-gradient(circle at 68% 58%, rgba(130, 80, 255, 0.12), transparent 40%),
+    radial-gradient(circle at 55% 72%, rgba(255, 110, 60, 0.08), transparent 38%);
+  mix-blend-mode: screen;
+  opacity: 0.85;
+}
+.galaxy-command-map-svg-layer,
+.galaxy-command-map-sector-layer,
+.galaxy-command-map-nebulas,
+.galaxy-command-map-influence,
+.galaxy-command-map-edges{
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4000px;
+  height: 4000px;
+  overflow: visible;
+  pointer-events: none;
+}
+.galaxy-command-map-sector-layer{ z-index: 1; }
+.galaxy-command-map-influence{ z-index: 2; }
+.galaxy-command-map-fleet-routes{
+  z-index: 3;
+  pointer-events: none;
+  overflow: visible;
+}
+.galaxy-command-map-fleet-route-group{
+  pointer-events: none;
+}
+.galaxy-command-map-fleet-route-hit{
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.galaxy-command-map-fleet-route-track{
+  fill: none;
+  stroke: rgba(90, 220, 255, 0.14);
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+.galaxy-command-map-fleet-route-flow{
+  fill: none;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  pointer-events: none;
+  animation: galaxy-command-map-fleet-flow var(--fleet-route-flow-dur, 3.2s) linear infinite;
+}
+.galaxy-command-map-fleet-route-flow--colonize{
+  stroke: rgba(255, 196, 86, 0.92);
+  stroke-dasharray: 7 20;
+  filter: url(#galaxy-command-map-fleet-glow-colonize);
+}
+.galaxy-command-map-fleet-route-flow--expedition{
+  stroke: rgba(176, 132, 255, 0.88);
+  stroke-dasharray: 2 16;
+  animation-duration: calc(var(--fleet-route-flow-dur, 3.2s) * 0.75);
+}
+.galaxy-command-map-fleet-route-flow--transport,
+.galaxy-command-map-fleet-route-flow--deploy,
+.galaxy-command-map-fleet-route-flow--collect{
+  stroke: rgba(96, 168, 255, 0.86);
+  stroke-dasharray: 5 14;
+}
+.galaxy-command-map-fleet-route-flow--attack{
+  stroke: rgba(255, 96, 96, 0.9);
+  stroke-dasharray: 4 8 1 8;
+  filter: url(#galaxy-command-map-fleet-glow-attack);
+}
+.galaxy-command-map-fleet-route-group--returning .galaxy-command-map-fleet-route-flow{
+  opacity: 0.78;
+}
+.galaxy-command-map-fleet-route-group--returning .galaxy-command-map-fleet-route-track{
+  stroke: rgba(120, 190, 255, 0.12);
+  stroke-dasharray: 6 8;
+}
+.galaxy-command-map-fleet-route-group--holding .galaxy-command-map-fleet-route-flow{
+  animation-play-state: paused;
+  opacity: 0.45;
+}
+.galaxy-command-map-fleet-route-ship{
+  pointer-events: none;
+}
+.galaxy-command-map-fleet-route-ship--colonize{
+  fill: rgba(255, 220, 120, 0.98);
+  stroke: rgba(255, 196, 86, 1);
+  stroke-width: 0.8;
+  filter: drop-shadow(0 0 4px rgba(255, 196, 86, 0.65));
+}
+.galaxy-command-map-fleet-route-ship--expedition{
+  fill: rgba(210, 170, 255, 0.95);
+  stroke: rgba(176, 132, 255, 1);
+  stroke-width: 1;
+  filter: drop-shadow(0 0 5px rgba(176, 132, 255, 0.55));
+}
+.galaxy-command-map-fleet-route-ship--cargo{
+  fill: rgba(170, 210, 255, 0.95);
+  stroke: rgba(96, 168, 255, 1);
+  stroke-width: 0.8;
+}
+.galaxy-command-map-fleet-route-ship--attack{
+  fill: rgba(255, 120, 120, 0.98);
+  stroke: rgba(255, 70, 70, 1);
+  stroke-width: 0.8;
+  filter: drop-shadow(0 0 4px rgba(255, 96, 96, 0.6));
+}
+.galaxy-command-map-fleet-route-dest{
+  pointer-events: none;
+}
+.galaxy-command-map-fleet-route-dest-ring{
+  fill: none;
+  stroke: rgba(176, 132, 255, 0.55);
+  stroke-width: 1.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: galaxy-command-map-fleet-dest-pulse 2.4s ease-in-out infinite;
+}
+.galaxy-command-map-fleet-route-dest-glyph{
+  fill: rgba(220, 190, 255, 0.95);
+  font-size: 11px;
+  font-family: inherit;
+  pointer-events: none;
+}
+.galaxy-command-map-fleet-route-group.is-hovered .galaxy-command-map-fleet-route-flow,
+.galaxy-command-map-fleet-route-group:focus-visible .galaxy-command-map-fleet-route-flow{
+  stroke-width: 3.2;
+  opacity: 1;
+}
+.galaxy-command-map-fleet-route-tooltip{
+  position: fixed;
+  z-index: 120;
+  min-width: 168px;
+  max-width: 240px;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid rgba(127, 255, 217, 0.22);
+  background: rgba(8, 16, 28, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: rgba(230, 242, 255, 0.95);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  pointer-events: none;
+}
+.galaxy-command-map-fleet-route-tooltip strong{
+  display: block;
+  color: rgba(127, 255, 217, 0.95);
+  font-size: 0.82rem;
+  margin-bottom: 0.25rem;
+}
+.galaxy-command-map-fleet-route-tooltip dl{
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.12rem 0.55rem;
+}
+.galaxy-command-map-fleet-route-tooltip dt{
+  margin: 0;
+  color: rgba(160, 185, 210, 0.85);
+}
+.galaxy-command-map-fleet-route-tooltip dd{
+  margin: 0;
+  color: rgba(235, 245, 255, 0.96);
+}
+@keyframes galaxy-command-map-fleet-flow{
+  to { stroke-dashoffset: -48; }
+}
+@keyframes galaxy-command-map-fleet-dest-pulse{
+  0%, 100%{ transform: scale(0.75); opacity: 0.35; }
+  50%{ transform: scale(1.25); opacity: 0.85; }
+}
+.galaxy-command-map-viewport.is-dragging .galaxy-command-map-fleet-route-tooltip{
+  display: none !important;
+}
+.galaxy-command-map-fleet-route-group.is-expedition-route .galaxy-command-map-fleet-route-flow--expedition,
+.galaxy-command-map-fleet-route-group.is-expedition-route .galaxy-command-map-fleet-route-track{
+  stroke-width: 3.2;
+  opacity: 1;
+}
+.galaxy-command-map-fleet-route-group.is-expedition-route .galaxy-command-map-fleet-route-flow--expedition{
+  animation-duration: calc(var(--fleet-route-flow-dur, 3.2s) * 0.55);
+  filter: drop-shadow(0 0 8px rgba(176, 132, 255, 0.75));
+}
+.galaxy-command-map-discovery-banner{
+  display: none;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(127, 255, 217, 0.35);
+  background: rgba(127, 255, 217, 0.08);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--gc-text-soft);
+  animation: gc-discovery-banner-enter 0.5s ease-out;
+}
+.galaxy-command-map-discovery-banner.is-visible{
+  display: block;
+}
+.galaxy-command-map-discovery-banner strong{
+  display: block;
+  color: rgba(127, 255, 217, 0.95);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+@keyframes gc-discovery-banner-enter{
+  from{ opacity: 0; transform: translateY(-6px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+.galaxy-command-map-node--world-field.is-discovery-reveal{
+  animation: gc-discovery-node-reveal 1.2s ease-out;
+}
+.galaxy-command-map-node--world-field.is-discovery-reveal .galaxy-command-map-node-discovery-ring{
+  opacity: 1;
+  border: 2px solid rgba(255, 210, 120, 0.85);
+  box-shadow:
+    0 0 16px rgba(127, 255, 217, 0.45),
+    0 0 28px rgba(255, 210, 120, 0.25);
+  animation: gc-discovery-node-glow 2.4s ease-in-out infinite;
+}
+.galaxy-command-map-node-discovery-ring{
+  position: absolute;
+  inset: -10px;
+  border-radius: 16px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: -1;
+}
+@keyframes gc-discovery-node-reveal{
+  from{ opacity: 0.2; transform: translate(-50%, -50%) scale(0.82); }
+  to{ opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes gc-discovery-node-glow{
+  0%, 100%{ opacity: 0.55; transform: scale(1); }
+  50%{ opacity: 1; transform: scale(1.05); }
+}
+.galaxy-command-map-edges{ z-index: 4; }
+.galaxy-command-map-sector-fill{
+  fill-opacity: 0.06;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  stroke-opacity: 0.18;
+}
+.galaxy-command-map-sector-label{
+  fill: rgba(190, 210, 235, 0.34);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-family: inherit;
+  font-weight: 600;
+  pointer-events: none;
+}
+.galaxy-command-map-sector--core .galaxy-command-map-sector-fill{
+  fill: rgba(70, 229, 255, 0.1);
+  stroke: rgba(127, 255, 217, 0.16);
+}
+.galaxy-command-map-sector--rim .galaxy-command-map-sector-fill{
+  fill: rgba(90, 190, 140, 0.08);
+  stroke: rgba(120, 210, 160, 0.14);
+}
+.galaxy-command-map-sector--ancient .galaxy-command-map-sector-fill{
+  fill: rgba(210, 180, 120, 0.07);
+  stroke: rgba(210, 180, 120, 0.15);
+}
+.galaxy-command-map-sector--dark .galaxy-command-map-sector-fill{
+  fill: rgba(120, 80, 180, 0.08);
+  stroke: rgba(160, 120, 220, 0.15);
+}
+.galaxy-command-map-sector--nebula .galaxy-command-map-sector-fill{
+  fill: rgba(100, 140, 255, 0.07);
+  stroke: rgba(140, 170, 255, 0.14);
+}
+.galaxy-command-map-sector--void .galaxy-command-map-sector-fill{
+  fill: rgba(70, 80, 100, 0.09);
+  stroke: rgba(110, 120, 140, 0.13);
+}
+.galaxy-command-map-sector--crystal .galaxy-command-map-sector-fill{
+  fill: rgba(80, 220, 240, 0.07);
+  stroke: rgba(120, 240, 255, 0.15);
+}
+.galaxy-command-map-sector--dead .galaxy-command-map-sector-fill{
+  fill: rgba(160, 60, 70, 0.07);
+  stroke: rgba(200, 90, 100, 0.14);
+}
+.galaxy-command-map-influence-blob{
+  fill: rgba(70, 229, 255, 0.14);
+  stroke: rgba(127, 255, 217, 0.34);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  filter: url(#galaxy-command-map-influence-glow);
+}
+.galaxy-command-map-edge-group{
+  pointer-events: none;
+}
+.galaxy-command-map-edge-glow{
+  stroke: rgba(70, 229, 255, 0.22);
+  stroke-width: 5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.55;
+  animation: gc-map-edge-pulse-idle 4.5s ease-in-out infinite;
+}
+.galaxy-command-map-edge-group--trade_route .galaxy-command-map-edge-glow{
+  stroke: rgba(127, 255, 217, 0.35);
+  opacity: 0.72;
+}
+.galaxy-command-map-edge-group.is-route-active .galaxy-command-map-edge-glow{
+  stroke: rgba(127, 255, 217, 0.82);
+  opacity: 1;
+  stroke-width: 6;
+  animation: gc-map-edge-pulse-active 1.6s ease-in-out infinite;
+}
+@keyframes gc-map-edge-pulse-idle{
+  0%, 100%{ opacity: 0.35; stroke-opacity: 0.35; }
+  50%{ opacity: 0.72; stroke-opacity: 0.72; }
+}
+@keyframes gc-map-edge-pulse-active{
+  0%, 100%{ opacity: 0.65; stroke-opacity: 0.65; filter: drop-shadow(0 0 4px rgba(127, 255, 217, 0.35)); }
+  50%{ opacity: 1; stroke-opacity: 1; filter: drop-shadow(0 0 10px rgba(127, 255, 217, 0.65)); }
+}
+.galaxy-command-map-edge{
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.galaxy-command-map-edge--trade_route{
+  stroke: rgba(127, 255, 217, 0.82);
+  stroke-dasharray: 2.5 1.5;
+  filter: drop-shadow(0 0 6px rgba(70, 229, 255, 0.35));
+}
+.galaxy-command-map-edge--hub_link{
+  stroke: rgba(70, 229, 255, 0.28);
+}
+.galaxy-command-map-edge--expansion_locked{
+  stroke: rgba(140, 150, 170, 0.38);
+  stroke-dasharray: 1.8 2.2;
+}
+.galaxy-command-map-edge--expansion_unlocked{
+  stroke: rgba(180, 140, 255, 0.55);
+}
+.galaxy-command-map-edge--chokepoint_link{
+  stroke: rgba(100, 210, 255, 0.62);
+  stroke-width: 0.45;
+}
+.galaxy-command-map-edge--foreign_hub_link{
+  stroke: rgba(255, 120, 90, 0.42);
+  stroke-dasharray: 1.5 2;
+}
+.galaxy-command-map-nodes{
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4000px;
+  height: 4000px;
+  z-index: 5;
+  pointer-events: none;
+}
+.galaxy-command-map-colony-actions-source{
+  display: none !important;
+}
+.galaxy-command-map-node{
+  position: absolute;
+  left: calc(var(--world-x, 2000) * 1px);
+  top: calc(var(--world-y, 2000) * 1px);
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 5.5rem;
+  max-width: 9rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  background: rgba(6, 14, 28, 0.88);
+  color: var(--gc-text-soft);
+  text-align: center;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 40;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.35);
+  margin: 0;
+  overflow: visible;
+}
+.galaxy-command-map-node-activity-ring{
+  position: absolute;
+  inset: -7px;
+  border-radius: 14px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: -1;
+}
+.galaxy-command-map-node.has-activity-build .galaxy-command-map-node-activity-ring{
+  opacity: 1;
+  border: 2px solid rgba(255, 168, 72, 0.75);
+  animation: gc-map-node-pulse-build 2.2s ease-in-out infinite;
+}
+.galaxy-command-map-node.has-activity-research .galaxy-command-map-node-activity-ring{
+  opacity: 1;
+  border: 2px solid rgba(96, 168, 255, 0.82);
+  box-shadow: 0 0 12px rgba(96, 168, 255, 0.35);
+  animation: gc-map-node-pulse-research 1.8s ease-in-out infinite;
+}
+.galaxy-command-map-node.has-activity-shipyard .galaxy-command-map-node-activity-ring{
+  opacity: 1;
+  border: 2px solid rgba(255, 140, 60, 0.85);
+  animation: gc-map-node-pulse-shipyard 1.1s ease-in-out infinite;
+  box-shadow:
+    0 0 6px rgba(255, 140, 60, 0.45),
+    2px -2px 0 rgba(255, 200, 80, 0.55),
+    -2px 2px 0 rgba(255, 120, 40, 0.45);
+}
+.galaxy-command-map-node.has-activity-fleet .galaxy-command-map-node-activity-ring{
+  opacity: 1;
+  border: 2px solid rgba(210, 230, 255, 0.55);
+  animation: gc-map-node-pulse-fleet 2.8s linear infinite;
+}
+.galaxy-command-map-node.is-hover-summary{
+  border-color: rgba(127, 255, 217, 0.72);
+  box-shadow: 0 0 18px rgba(127, 255, 217, 0.28);
+}
+@keyframes gc-map-node-pulse-build{
+  0%, 100%{ transform: scale(1); opacity: 0.55; }
+  50%{ transform: scale(1.06); opacity: 1; }
+}
+@keyframes gc-map-node-pulse-research{
+  0%, 100%{ opacity: 0.45; box-shadow: 0 0 6px rgba(96, 168, 255, 0.25); }
+  50%{ opacity: 1; box-shadow: 0 0 16px rgba(96, 168, 255, 0.55); }
+}
+@keyframes gc-map-node-pulse-shipyard{
+  0%, 100%{ opacity: 0.6; filter: brightness(1); }
+  40%{ opacity: 1; filter: brightness(1.25); }
+  55%{ opacity: 0.75; filter: brightness(1.05); }
+}
+@keyframes gc-map-node-pulse-fleet{
+  0%{ transform: scale(1); opacity: 0.35; }
+  25%{ opacity: 0.85; }
+  50%{ transform: scale(1.08); opacity: 0.45; }
+  100%{ transform: scale(1); opacity: 0.35; }
+}
+.galaxy-command-map-colony-hover-tooltip{
+  position: fixed;
+  z-index: 120;
+  min-width: 11rem;
+  max-width: 16rem;
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  background: rgba(6, 14, 28, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--gc-text-soft);
+}
+.galaxy-command-map-colony-hover-name{
+  display: block;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(127, 255, 217, 0.95);
+}
+.galaxy-command-map-colony-hover-role{
+  display: block;
+  margin-top: 2px;
+  color: var(--gc-text-dim);
+  font-size: 0.72rem;
+}
+.galaxy-command-map-colony-hover-level,
+.galaxy-command-map-colony-hover-prod,
+.galaxy-command-map-colony-hover-fleets{
+  margin: 6px 0 0;
+  font-size: 0.74rem;
+}
+.galaxy-command-map-colony-hover-queues{
+  margin: 8px 0 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  font-size: 0.72rem;
+}
+.galaxy-command-map-colony-hover-queues dt{
+  color: var(--gc-text-dim);
+}
+.galaxy-command-map-colony-hover-queues dd{
+  margin: 0;
+  text-align: right;
+}
+.galaxy-command-map-colony-hover-queues dd.is-active{
+  color: rgba(127, 255, 217, 0.92);
+}
+.galaxy-command-map-colony-hover-queues dd.is-idle{
+  color: var(--gc-text-dim);
+}
+.galaxy-command-map-node-icon{
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.galaxy-command-map-node-name{
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.15;
+  word-break: break-word;
+}
+.galaxy-command-map-node-role,
+.galaxy-command-map-node-type,
+.galaxy-command-map-node-coord{
+  font-size: 0.62rem;
+  color: var(--gc-text-dim);
+  line-height: 1.1;
+}
+.galaxy-command-map-node--hub{
+  min-width: 6.5rem;
+  border-color: rgba(70, 229, 255, 0.65);
+  box-shadow: 0 0 16px rgba(70, 229, 255, 0.18);
+}
+.galaxy-command-map-node--hub .galaxy-command-map-node-icon{
+  font-size: 1.35rem;
+}
+.galaxy-command-map-node--own.galaxy-command-map-node--hub{
+  border-color: rgba(70, 229, 255, 0.65);
+}
+.galaxy-command-map-node--colony.is-active{
+  border-color: rgba(127, 255, 217, 0.85);
+  box-shadow: 0 0 14px rgba(127, 255, 217, 0.22);
+}
+.galaxy-command-map-node--chokepoint{
+  pointer-events: none;
+  opacity: 0.85;
+  border-style: dashed;
+}
+.galaxy-command-map-node--foreign-empire{
+  border-color: rgba(255, 120, 90, 0.55);
+  box-shadow: 0 0 12px rgba(255, 90, 60, 0.25);
+}
+.galaxy-command-map-node--foreign-empire .galaxy-command-map-node-role{
+  color: rgba(255, 140, 110, 0.92);
+}
+.galaxy-command-map-node--foreign-colony{
+  pointer-events: none;
+  opacity: 0.72;
+  transform: translate(-50%, -50%) scale(0.82);
+  min-width: 0;
+  padding: 0.35rem;
+  border-color: rgba(255, 120, 90, 0.35);
+  box-shadow: none;
+}
+.galaxy-command-map-node--foreign-colony .galaxy-command-map-node-name,
+.galaxy-command-map-node--foreign-colony .galaxy-command-map-node-role,
+.galaxy-command-map-node--foreign-colony .galaxy-command-map-node-coord{
+  display: none;
+}
+.galaxy-command-map-node--world-field{
+  min-width: 4.5rem;
+  border-color: rgba(160, 180, 220, 0.42);
+}
+.galaxy-command-map-node--world-field-settlement{
+  border-color: rgba(127, 255, 217, 0.45);
+}
+.galaxy-command-map-node--locked{
+  opacity: 0.72;
+}
+.galaxy-command-map-node--expansion{
+  max-width: 10rem;
+}
+/* GC-571E — compact map markers; labels live in the right panel only */
+.galaxy-command-map-nodes--markers .galaxy-command-map-node{
+  min-width: 0;
+  max-width: none;
+  width: 2.65rem;
+  height: 2.65rem;
+  padding: 0;
+  border-radius: 50%;
+  justify-content: center;
+  align-items: center;
+  gap: 0;
+  z-index: 42;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--hub{
+  width: 3.15rem;
+  height: 3.15rem;
+  z-index: 50;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--colony{
+  z-index: 46;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--expansion{
+  z-index: 44;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--landmark,
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--world-field{
+  z-index: 41;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--foreign-empire{
+  width: 3rem;
+  height: 3rem;
+  z-index: 43;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--foreign-colony{
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--chokepoint{
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  opacity: 0.55;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node-name,
+.galaxy-command-map-nodes--markers .galaxy-command-map-node-role,
+.galaxy-command-map-nodes--markers .galaxy-command-map-node-type,
+.galaxy-command-map-nodes--markers .galaxy-command-map-node-coord,
+.galaxy-command-map-nodes--markers .galaxy-command-map-node-level,
+.galaxy-command-map-nodes--markers .galaxy-command-map-node-badge,
+.galaxy-command-map-nodes--markers .galaxy-command-map-node-lock-ring{
+  display: none !important;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node-badge--new-colony,
+.galaxy-command-map-nodes--markers .galaxy-command-map-node-badge--expedition,
+.galaxy-command-map-nodes--markers .galaxy-command-map-node-badge--report{
+  display: block !important;
+  position: absolute;
+  top: -0.35rem;
+  right: -0.15rem;
+  font-size: 0.58rem;
+  line-height: 1.1;
+  padding: 0.12rem 0.35rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+.galaxy-command-map-node-badge--expedition{
+  background: rgba(70, 229, 255, 0.22);
+  border: 1px solid rgba(70, 229, 255, 0.55);
+  color: #b8f4ff;
+}
+.galaxy-command-map-node-badge--report{
+  background: rgba(180, 140, 255, 0.22);
+  border: 1px solid rgba(180, 140, 255, 0.5);
+  color: #e6dcff;
+}
+.galaxy-command-map-node-badge--new-colony{
+  background: rgba(127, 255, 217, 0.18);
+  border: 1px solid rgba(127, 255, 217, 0.55);
+  color: #cffff0;
+}
+.galaxy-command-map-node--newly-colonized{
+  box-shadow: 0 0 0 2px rgba(127, 255, 217, 0.35), 0 0 18px rgba(127, 255, 217, 0.25);
+}
+.galaxy-command-map-open-colony-btn{
+  width: 100%;
+  margin: 0.65rem 0 0.75rem;
+}
+.galaxy-command-map-colony-panel-origin{
+  margin: 0.35rem 0 0;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node-icon{
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--hub .galaxy-command-map-node-icon{
+  font-size: 1.45rem;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--expansion .galaxy-command-map-node-icon,
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--landmark .galaxy-command-map-node-icon,
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--world-field .galaxy-command-map-node-icon{
+  font-size: 1.05rem;
+}
+.galaxy-command-map-node.is-selected,
+.galaxy-command-map-node.is-active.is-selected{
+  z-index: 120 !important;
+  transform: translate(-50%, -50%) scale(1.14);
+  box-shadow:
+    0 0 0 3px rgba(127, 255, 217, 0.65),
+    0 0 28px rgba(70, 229, 255, 0.55),
+    0 0 48px rgba(130, 90, 255, 0.28);
+  border-color: rgba(127, 255, 217, 0.9);
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--colony.is-active:not(.is-selected){
+  box-shadow: 0 0 0 2px rgba(127, 255, 217, 0.35);
+  border-color: rgba(127, 255, 217, 0.65);
+}
+.galaxy-command-map-viewport.is-dragging .galaxy-command-map-node.is-selected{
+  transform: translate(-50%, -50%) scale(1.08);
+}
+.galaxy-command-map-colony-panel,
+.galaxy-command-map-site-inspector{
+  grid-column: 2;
+  border-radius: 10px;
+  border: 1px solid rgba(70, 229, 255, 0.14);
+  background: rgba(4, 10, 22, 0.92);
+  padding: 12px;
+  overflow: hidden;
+  max-height: min(62vh, 580px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.gc-command-center-hud .gc-command-center-hud-body{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+}
+.gc-command-center-hud-status{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--gc-text-soft);
+}
+.gc-command-center-hud-status li{
+  line-height: 1.3;
+}
+.gc-command-center-hud .gc-command-center-section--activity{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.gc-command-center-hud .gc-command-center-activity-feed{
+  max-height: 7.5rem;
+  overflow-y: auto;
+}
+.gc-command-center-hud .gc-command-center-activity-item:nth-child(n+4){
+  display: none;
+}
+.gc-world-inspector-modal.is-open{
+  display: flex;
+}
+.gc-world-inspector-modal .gc-player-card-dialog{
+  max-width: min(92vw, 420px);
+}
+.gc-world-inspector-modal--discovery .gc-player-card-dialog{
+  border-color: rgba(255, 210, 120, 0.45);
+  box-shadow: 0 0 32px rgba(255, 210, 120, 0.12);
+}
+.gc-world-inspector-shell{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gc-world-inspector-shell--discovery .gc-world-inspector-discovery-sub{
+  margin: 0;
+  font-size: 0.78rem;
+  color: rgba(255, 210, 120, 0.88);
+}
+.gc-world-inspector-place-name{
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(127, 255, 217, 0.95);
+}
+.gc-world-inspector-kicker{
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--gc-text-dim);
+}
+.gc-world-inspector-stats{
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 0.78rem;
+}
+.gc-world-inspector-stat{
+  display: contents;
+}
+.gc-world-inspector-stat dt{
+  color: var(--gc-text-dim);
+}
+.gc-world-inspector-stat dd{
+  margin: 0;
+  text-align: right;
+  color: var(--gc-text-soft);
+}
+.gc-world-inspector-stat dd.is-active{
+  color: rgba(127, 255, 217, 0.92);
+}
+.gc-world-inspector-flavor{
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border-left: 2px solid rgba(127, 255, 217, 0.35);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--gc-text-soft);
+  font-style: normal;
+}
+.gc-world-inspector-actions{
+  margin-top: 12px;
+  display: flex;
+  justify-content: stretch;
+}
+.gc-world-inspector-actions--stacked{
+  flex-direction: column;
+  gap: 8px;
+}
+.gc-world-inspector-shell--foreign-dev .gc-dev-preview-badge--banner{
+  align-self: flex-start;
+}
+.gc-world-inspector-foreign-dev-lead{
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--gc-text-soft);
+}
+.gc-world-inspector-cta{
+  width: 100%;
+}
+@media (prefers-reduced-motion: reduce){
+  .gc-world-inspector-modal .gc-player-card-dialog{
+    animation: none !important;
+  }
+}
+[data-command-map-empty-panel][hidden],
+[data-command-map-detail-panel][hidden]{
+  display: none !important;
+}
+.galaxy-command-map-colony-panel[hidden],
+.galaxy-command-map-site-inspector[hidden]{
+  display: none !important;
+}
+[data-command-map-detail-panel]{
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.galaxy-command-map-colony-panel{ grid-row: 1; }
+.galaxy-command-map-site-inspector{ grid-row: 1; }
+.galaxy-command-map-colony-panel.is-active,
+.galaxy-command-map-site-inspector.is-active{
+  z-index: 2;
+}
+.galaxy-command-map-site-inspector-title,
+.galaxy-command-map-colony-panel-name{
+  margin: 0;
+  font-size: 0.95rem;
+}
+.galaxy-command-map-site-inspector-status--foreign{
+  color: rgba(255, 140, 110, 0.95);
+}
+.galaxy-command-map-site-inspector-status--field{
+  color: rgba(160, 200, 240, 0.92);
+}
+.galaxy-command-map-inspector-colonize{
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+}
+.galaxy-command-map-colonize-btn{
+  align-self: flex-start;
+}
+.galaxy-command-map-node--world-colony{
+  border-color: rgba(127, 255, 217, 0.55);
+  box-shadow: 0 0 16px rgba(70, 229, 255, 0.22);
+}
+.galaxy-command-map-node--foreign-world-colony{
+  border-color: rgba(255, 170, 110, 0.45);
+  box-shadow: 0 0 14px rgba(255, 120, 70, 0.18);
+}
+.galaxy-command-map-world-hint{
+  color: rgba(127, 255, 217, 0.85);
+}
+.fleet-coords-strip.is-world-target{
+  opacity: 0.55;
+}
+.fleet-coords-strip.is-world-target .fleet-coord-input{
+  pointer-events: none;
+}
+.fleet-target-block.is-world-target .fleet-coords-row{
+  display: none;
+}
+.fleet-target-block.is-world-target .fleet-coords-hint{
+  display: none;
+}
+.fleet-world-target-panel{
+  margin-top: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(120, 170, 220, 0.22);
+  background: rgba(8, 16, 28, 0.55);
+}
+.fleet-world-target-head{
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  margin-bottom: 0.55rem;
+}
+.fleet-world-target-icon{
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.fleet-world-target-kicker{
+  margin: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.72;
+}
+.fleet-world-target-name{
+  margin: 0.15rem 0 0;
+  font-size: 1rem;
+}
+.fleet-world-target-type{
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+  opacity: 0.88;
+}
+.fleet-world-target-meta{
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+.fleet-world-target-meta dt{
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+.fleet-world-target-meta dd{
+  margin: 0.1rem 0 0;
+  font-size: 0.85rem;
+}
+.fleet-world-target-risk--medium{
+  color: rgba(255, 196, 86, 0.95);
+}
+.fleet-world-target-risk--high{
+  color: rgba(255, 120, 90, 0.95);
+}
+.fleet-mission-speed-row.is-mission-locked [data-fleet-mission]{
+  pointer-events: none;
+  opacity: 0.72;
+}
+@media (max-width: 960px){
+  .galaxy-command-map-graph{
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(360px, 52vh);
+  }
+  .galaxy-command-map-viewport{
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 360px;
+  }
+}
+
+.gc-command-center{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gc-command-center-head{
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(70, 229, 255, 0.12);
+}
+
+.gc-command-center-icon{
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.gc-command-center-name{
+  margin: 0;
+  font-size: 1rem;
+  color: #00eaff;
+}
+
+.gc-command-center-role{
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: rgba(127, 255, 217, 0.88);
+  opacity: 1;
+}
+
+.gc-command-center-coord{
+  margin: 2px 0 0;
+  font-size: 0.68rem;
+  color: rgba(127, 255, 217, 0.42);
+}
+
+.gc-command-center-status{
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: rgba(127, 255, 217, 0.9);
+}
+
+.gc-command-center-risk{
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  opacity: 0.88;
+}
+
+.gc-command-center-section{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gc-command-center-section:last-of-type{
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.gc-command-center-section-title{
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(127, 255, 217, 0.72);
+}
+
+.gc-command-center-resource-list,
+.gc-command-center-fleet-list,
+.gc-command-center-news-list,
+.gc-command-center-activity-feed{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gc-command-center-resource-row{
+  display: grid;
+  grid-template-columns: 2.5rem 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.82rem;
+}
+
+.gc-command-center-resource-short{
+  opacity: 0.75;
+}
+
+.gc-command-center-resource-rate{
+  color: rgba(127, 255, 217, 0.88);
+  font-size: 0.78rem;
+}
+
+.gc-command-center-fleet-link,
+.gc-command-center-news-link{
+  display: block;
+  font-size: 0.82rem;
+  color: var(--gc-text-soft);
+  text-decoration: none;
+}
+
+.gc-command-center-fleet-link:hover,
+.gc-command-center-news-link:hover{
+  color: #00eaff;
+}
+
+.gc-command-center-activity-item{
+  margin: 0;
+}
+.gc-command-center-activity-item.is-new{
+  animation: gc-activity-feed-enter 0.45s ease-out, gc-activity-feed-glow 2s ease-out;
+}
+@keyframes gc-activity-feed-enter{
+  from{ opacity: 0; transform: translateX(-8px); }
+  to{ opacity: 1; transform: translateX(0); }
+}
+@keyframes gc-activity-feed-glow{
+  0%, 15%{ box-shadow: 0 0 0 rgba(127, 255, 217, 0); background: rgba(127, 255, 217, 0.12); }
+  40%{ box-shadow: 0 0 14px rgba(127, 255, 217, 0.35); background: rgba(127, 255, 217, 0.08); }
+  100%{ box-shadow: none; background: transparent; }
+}
+.gc-command-center-activity-item.is-new .gc-command-center-activity-link{
+  border-color: rgba(127, 255, 217, 0.35);
+}
+.gc-command-center-activity-item.is-expedition .gc-command-center-activity-link{
+  border-color: rgba(176, 132, 255, 0.28);
+}
+.gc-command-center-activity-item.is-discovery .gc-command-center-activity-link{
+  border-color: rgba(255, 210, 120, 0.35);
+  background: rgba(255, 210, 120, 0.06);
+}
+.gc-command-center-activity-item.is-discovery.is-new{
+  animation: gc-activity-feed-enter 0.45s ease-out, gc-discovery-feed-glow 2.4s ease-out;
+}
+@keyframes gc-discovery-feed-glow{
+  0%, 20%{ box-shadow: 0 0 18px rgba(255, 210, 120, 0.35); }
+  100%{ box-shadow: none; }
+}
+.gc-command-center-activity-subtitle{
+  display: block;
+  margin-top: 2px;
+  font-size: 0.68rem;
+  color: var(--gc-text-dim);
+  line-height: 1.25;
+}
+.gc-command-center-panel.is-discovery-inspect .gc-command-center-coord{
+  display: none !important;
+}
+.gc-command-center-discovery-flavor{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.gc-command-center-discovery-flavor-text{
+  margin: 0;
+  color: var(--gc-text-soft);
+}
+.gc-command-center-discovery-scan-list{
+  margin: 0;
+  padding-left: 1rem;
+  color: var(--gc-text-dim);
+  font-size: 0.76rem;
+}
+@media (prefers-reduced-motion: reduce){
+  .galaxy-command-map-node--world-field.is-discovery-reveal,
+  .galaxy-command-map-node--world-field.is-discovery-reveal .galaxy-command-map-node-discovery-ring,
+  .galaxy-command-map-discovery-banner,
+  .gc-command-center-activity-item.is-discovery.is-new{
+    animation: none !important;
+  }
+}
+
+.gc-command-center-activity-link{
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid transparent;
+  color: var(--gc-text-soft);
+  text-decoration: none;
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.gc-command-center-activity-link:hover{
+  border-color: rgba(70, 229, 255, 0.18);
+  background: rgba(70, 229, 255, 0.05);
+  color: #00eaff;
+}
+
+.gc-command-center-activity-icon{
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.gc-command-center-activity-body{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.gc-command-center-activity-title{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc-command-center-activity-timer{
+  font-size: 0.68rem;
+  color: rgba(127, 255, 217, 0.82);
+}
+
+.gc-command-center-activity-empty{
+  padding: 4px 2px;
+}
+
+@media (max-width: 768px){
+  .gc-command-center-activity-feed{
+    max-height: 9.5rem;
+    overflow-y: auto;
+  }
+  .gc-command-center-activity-item:nth-child(n+6){
+    display: none;
+  }
+}
+
+.gc-command-center-action-grid{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.gc-command-center-action-card{
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 52px;
+  padding: 8px 10px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.18);
+  background: rgba(0, 255, 255, 0.04);
+  color: var(--gc-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  text-align: left;
+}
+
+.gc-command-center-action-card--recommended{
+  border-color: rgba(127, 255, 217, 0.38);
+  background: rgba(127, 255, 217, 0.06);
+}
+
+.gc-command-center-action-card--queue_active{
+  border-color: rgba(70, 229, 255, 0.42);
+  background: rgba(70, 229, 255, 0.08);
+}
+
+.gc-command-center-action-card--blocked{
+  border-color: rgba(255, 120, 100, 0.28);
+  background: rgba(255, 80, 60, 0.05);
+  opacity: 0.82;
+}
+
+.gc-command-center-action-icon{
+  flex: 0 0 auto;
+  font-size: 1rem;
+  line-height: 1;
+  margin-top: 1px;
+}
+
+.gc-command-center-action-body{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.gc-command-center-action-label{
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(215, 246, 255, 0.94);
+  line-height: 1.2;
+}
+
+.gc-command-center-action-status{
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: rgba(127, 255, 217, 0.72);
+  line-height: 1.25;
+}
+
+.gc-command-center-action-card--blocked .gc-command-center-action-status{
+  color: rgba(255, 160, 140, 0.88);
+}
+
+.gc-command-center-action-card--recommended .gc-command-center-action-status{
+  color: rgba(127, 255, 217, 0.92);
+}
+
+.gc-command-center-action-timer{
+  font-size: 0.68rem;
+  color: rgba(127, 255, 217, 0.88);
+}
+
+.gc-command-center-action-card:hover{
+  border-color: rgba(70, 229, 255, 0.42);
+  background: rgba(0, 255, 255, 0.08);
+  color: #00eaff;
+}
+
+.gc-command-center-action-btn{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 6px 8px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.18);
+  background: rgba(0, 255, 255, 0.04);
+  color: var(--gc-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  text-align: center;
+}
+
+.gc-command-center-action-btn:hover{
+  border-color: rgba(70, 229, 255, 0.42);
+  background: rgba(0, 255, 255, 0.08);
+  color: #00eaff;
+}
+
+.gc-command-center-action-btn:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px){
+  .gc-command-center-action-grid{
+    grid-template-columns: 1fr;
+  }
+  .gc-command-center-action-card{
+    min-height: 48px;
+  }
+}
+
+.gc-command-center-open-btn{
+  width: 100%;
+  margin-top: 4px;
+}
+
+.gc-command-center-primary-btn{
+  width: 100%;
+  margin-top: 4px;
+}
+
+.gc-command-center-detail-list{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.gc-command-center-detail-row{
+  display: grid;
+  grid-template-columns: minmax(5rem, 38%) 1fr;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.82rem;
+}
+
+.gc-command-center-detail-row dt{
+  margin: 0;
+  opacity: 0.72;
+}
+
+.gc-command-center-detail-row dd{
+  margin: 0;
+}
+
+.gc-command-center-detail-tone--high,
+.gc-command-center-detail-tone--medium{
+  color: rgba(255, 180, 80, 0.95);
+}
+
+.gc-command-center-progress-list{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gc-command-center-progress-row{
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.gc-command-center-progress-label{
+  opacity: 0.75;
+}
+
+.gc-command-center-hint-row{
+  font-size: 0.82rem;
+}
+
 .galaxy-slots{
   display: flex;
   flex-direction: column;
@@ -8390,6 +10180,69 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   gap: 8px;
   margin-bottom: 4px;
 }
+.fleet-active-target{
+  margin-bottom: 6px;
+}
+.fleet-active-target-primary{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  margin-bottom: 2px;
+}
+.fleet-active-target-name{
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--gc-text);
+}
+.fleet-active-origin-name{
+  font-size: 0.85rem;
+  color: var(--gc-text-soft);
+}
+.fleet-active-route-arrow{
+  color: var(--gc-text-soft);
+  font-size: 0.85rem;
+}
+.fleet-active-target-type{
+  display: block;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gc-accent);
+  margin-bottom: 4px;
+}
+.fleet-active-coords-secondary{
+  font-size: 0.72rem;
+  opacity: 0.72;
+}
+.fleet-preview-target-hero{
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(120, 170, 220, 0.18);
+  background: rgba(8, 16, 28, 0.45);
+}
+.fleet-preview-target-hero.is-empty{
+  display: none;
+}
+.fleet-preview-target-name{
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--gc-text);
+}
+.fleet-preview-target-native-type{
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gc-accent);
+}
+.fleet-preview-target-coords{
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+.fleet-preview-stat--legacy{ display: none; }
 .fleet-active-mission{ font-weight: 600; color: var(--gc-text); }
 .fleet-active-status{ color: var(--gc-accent); font-size: 0.85rem; }
 .fleet-ship-chip{
@@ -9909,10 +11762,13 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   .section-header{ padding: 12px; margin-bottom: 12px; }
 
   .motd-banner{
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: flex-start;
   }
-  .motd-banner-text{ white-space: normal; }
+  .motd-banner--expanded .motd-banner-toggle{
+    flex-direction: column;
+    align-items: flex-start;
+  }
 
   /* Bottom navigation */
   .gc-bottom-nav{
@@ -10246,9 +12102,16 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+.gc-hslot-messages{
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 /* Segmented HUD panels (Score / Online / User) */
@@ -13376,9 +15239,18 @@ body.gc-combat-report-open { overflow: hidden; }
 
 .gc-hud-panel-messages {
   position: relative;
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 0;
+  height: auto;
   text-decoration: none;
   color: inherit;
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.gc-hud-panel-messages.active {
+  border-color: rgba(70, 229, 255, 0.42);
+  box-shadow: var(--gc-border-glow), 0 10px 22px rgba(0, 0, 0, 0.32);
 }
 
 .gc-hud-panel-messages .gc-chat-fab-badge {
@@ -13436,6 +15308,18 @@ body.gc-combat-report-open { overflow: hidden; }
   min-width: 0;
   flex: 1 1 auto;
 }
+.gc-planet-switcher-name-row{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.gc-planet-switcher-icon{
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+  line-height: 1;
+}
 .gc-planet-switcher-name{
   font-size: 0.82rem;
   font-weight: 600;
@@ -13443,11 +15327,22 @@ body.gc-combat-report-open { overflow: hidden; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.gc-planet-switcher-role{
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: rgba(127, 255, 217, 0.88);
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   max-width: 100%;
 }
 .gc-planet-switcher-coord{
-  font-size: 0.72rem;
-  color: rgba(127, 255, 217, 0.75);
+  font-size: 0.68rem;
+  color: rgba(127, 255, 217, 0.45);
 }
 .gc-planet-switcher-chevron{
   flex: 0 0 auto;
@@ -13499,14 +15394,42 @@ body.gc-combat-report-open { overflow: hidden; }
   background: rgba(70, 229, 255, 0.1);
   border-color: rgba(70, 229, 255, 0.28);
 }
+.gc-planet-switcher-item-name-row{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.gc-planet-switcher-item-icon{
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+  line-height: 1;
+}
 .gc-planet-switcher-item-name{
   font-size: 0.8rem;
   font-weight: 600;
   color: rgba(215, 246, 255, 0.94);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 .gc-planet-switcher-item-meta{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
   font-size: 0.72rem;
   color: var(--gc-text-dim);
+}
+.gc-planet-switcher-item-role{
+  font-weight: 500;
+  color: rgba(127, 255, 217, 0.82);
+}
+.gc-planet-switcher-item-coord{
+  font-size: 0.66rem;
+  color: rgba(127, 255, 217, 0.42);
 }
 .gc-planet-switcher.is-open .gc-planet-switcher-trigger{
   border-color: rgba(70, 229, 255, 0.38);
@@ -13631,6 +15554,11 @@ body.gc-combat-report-open { overflow: hidden; }
 }
 
 @media (max-width: 768px){
+  .gc-hslot-messages{
+    order: 2;
+    margin-left: auto;
+  }
+
   .gc-hslot-planet-switcher{
     order: 2;
     flex: 1 1 100%;
@@ -13638,6 +15566,12 @@ body.gc-combat-report-open { overflow: hidden; }
     width: 100%;
   }
   .gc-planet-switcher-trigger .gc-hud-panel-tag{
+    display: none;
+  }
+  .gc-planet-switcher-coord{
+    display: none;
+  }
+  .gc-planet-switcher-item-coord{
     display: none;
   }
 }

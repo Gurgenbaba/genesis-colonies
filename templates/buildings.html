@@ -213,7 +213,7 @@
 {% set bq_limit = (bq_summary.limit if bq_summary.limit is defined else 3) %}
 {% set bq_queue_full = (bq_summary.count or 0)|int >= bq_limit|int %}
 
-<div class="gc-page buildings-wrapper" data-buildings-page data-active-building-tab="{{ active_tab }}">
+<div class="gc-page buildings-wrapper" data-buildings-page data-active-building-tab="{{ active_tab }}" data-planet-id="{{ (active_planet_id if active_planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else 0))|int }}">
 
   <header class="buildings-headline section-header">
     <h2 class="section-title">{{ T("buildings_title") }}</h2>
@@ -228,7 +228,7 @@
     <div class="gc-queue-compact build-queue-compact gc-panel-header build-queue-head"
          id="build-queue-compact"
          aria-live="polite"
-         {% if active_planet_id is defined %}data-planet-id="{{ active_planet_id|int }}"{% endif %}>
+         data-planet-id="{{ (active_planet_id if active_planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else 0))|int }}">
       <span class="build-queue-compact-icon" aria-hidden="true">🏗</span>
       <span class="gc-panel-title build-queue-compact-label" id="build-queue-compact-label">
         {% if bq_summary and bq_summary.count %}

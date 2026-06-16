@@ -216,9 +216,18 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Account-Forschung | `game/research.py` | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) |
 | Shipyard-Queue | `game/shipyard_queue.py`, `game/shipyard.py` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
 | Fleet / Missionen | `game/fleet.py`, `game/fleet_calc.py` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
+| Fleet world-native targets (GC-590A) | `game/fleet_target.py` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |
+| Fleet origin scope audit (GC-557C) | `game/fleet_origin.py` | [GC-557_GLOBAL_TIMER_AUDIT.md](GC-557_GLOBAL_TIMER_AUDIT.md) |
 | Defense-Queue | `game/defense.py`, `game/defense_api.py` | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) |
 | Combat | `game/combat.py` | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
-| Galaxy | `game/galaxy.py` | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) |
+| Galaxy (Legacy system view) | `game/galaxy.py` | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) |
+| World Map (command_map payload, layout) | `game/planet_evolution/command_map.py` | [GC-570_WORLD_MAP_DIRECTION.md](GC-570_WORLD_MAP_DIRECTION.md) |
+| Shared world presence (all empires on map) | `game/planet_evolution/world_map.py` | [GC-571_SHARED_WORLD_PRESENCE.md](GC-571_SHARED_WORLD_PRESENCE.md) |
+| Sector grid geography (Command Map chunks) | `game/planet_evolution/sector_grid.py` | GC-580A; viewport chunks via `GET /api/command-map/sectors` (GC-580B) |
+| Strategic worlds (free field presentation) | `game/planet_evolution/strategic_worlds.py` | [GC-581_STRATEGIC_WORLDS.md](GC-581_STRATEGIC_WORLDS.md) |
+| World colonization from map | `game/planet_evolution/world_colonization.py` | [GC-582_DYNAMIC_COLONIZATION.md](GC-582_DYNAMIC_COLONIZATION.md) — GC-582A claims |
+| Location role actions (Map → Routes) | `game/planet_evolution/location_actions.py` | [GC-570_WORLD_MAP_DIRECTION.md](GC-570_WORLD_MAP_DIRECTION.md) |
+| Command Center panel (own colony snapshot) | `game/planet_evolution/command_center.py` | [GC-592_COMMAND_CENTER_PANEL.md](GC-592_COMMAND_CENTER_PANEL.md) |
 | Planet Evolution | `game/planet_evolution/` | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
 
 **Ticket-Check:** Domäne identifizieren → nur Owner-Modul (+ Routes/`app.py`) ändern → kein zweites Modul für dieselbe Wahrheit.

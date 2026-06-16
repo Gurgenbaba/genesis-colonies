@@ -47,12 +47,22 @@ Default coords wenn URL leer: **active/context planet** coordinates.
 
 ---
 
-## Routes
+## Routes (Zielarchitektur GC-570)
 
 | Route | Methode | Rolle |
 |-------|---------|-------|
-| `/galaxy` | GET | SSR — Minimap, prev/next, 15 slots + expedition row |
-| `/api/galaxy/system` | GET | JSON — `?galaxy=&system=` |
+| `/galaxy` | GET | SSR — **Ziel:** Default Weltkarte (`view=command_map`) |
+| `/galaxy?view=command_map` | GET | **Weltkarte** — Imperium, Orte, rollenbasierte Actions (GC-570) |
+| `/galaxy?view=system` | GET | **Legacy** — klassische Systemansicht (OGame-Slots) |
+| `/api/galaxy/system` | GET | JSON — `?galaxy=&system=` (Legacy/API) |
+
+**Zwei Ansichten, eine Route.** Tabs in `templates/galaxy.html`. Koordinatenmodell `[G:S:P]` bleibt intern für Fleet, Kolonisierung und Legacy-View.
+
+**Weltkarte** ersetzt langfristig die klassische Ansicht als Spieler-Hauptnavigation — nicht sofort entfernen. Siehe [GC-570_WORLD_MAP_DIRECTION.md](GC-570_WORLD_MAP_DIRECTION.md).
+
+Vision: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · GC-560: [GC-560_EMPIRE_IDENTITY_LAYER.md](GC-560_EMPIRE_IDENTITY_LAYER.md)
+
+**`/empire` ist keine Command Map** — Wirtschafts-/Produktionsmatrix; nicht mit Imperiumsidentität vermischen.
 
 Partial: `templates/partials/galaxy_fleet_actions.html` — Mission-Links zu `/fleet?target_*&mission=`.
 

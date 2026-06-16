@@ -179,6 +179,41 @@ Details: [SECURITY.md](SECURITY.md)
 
 ---
 
+## Phase 9 — Imperium & Expansion (Genesis 2.0) 📋
+
+Langfristige Vision: Planet Evolution als zentrales Fortschrittssystem, Command Map als Empire Screen. **Kein Neubau** — Erweiterung auf Planet Scope, Galaxy, Fleet und Planet Evolution.
+
+Design Manifest: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · Epic: **EPIC-15**
+
+| Ticket | Fokus | Status |
+|--------|-------|--------|
+| **GC-560** | Empire Identity Layer — [Spec](GC-560_EMPIRE_IDENTITY_LAYER.md) | 📋 |
+| **GC-561** | Colony Roles Extended (PlayerCard, Surfaces) | 📋 |
+| **GC-562** | Evolution Unlock Gates — Level → Expansion Sites ([Spec](GC-562_EVOLUTION_UNLOCK_GATES.md)) | ✅ |
+| **GC-562A** | Expansion Gates Polish ([Spec](GC-562A_EXPANSION_GATES_POLISH.md)) | ✅ |
+| **GC-563** | Command Map MVP — Hub-and-Spoke Graph ([Spec](GC-563_COMMAND_MAP_MVP.md)) | ✅ |
+| **GC-563B** | Command Map Viewport — Pan & Zoom ([Spec](GC-563B_COMMAND_MAP_VIEWPORT.md)) | ✅ |
+| **GC-564** | Regions & Sectors — Panel-Bänder + Teaser-Sites ([Spec](GC-564_REGIONS_SECTORS.md)) | ✅ |
+| **GC-564B** | Spatial Command Map — Nebel + freie Knoten ([Spec](GC-564B_SPATIAL_COMMAND_MAP.md)) | ✅ |
+| **GC-565** | Chokepoints — Gate-Knoten zwischen Regionen ([Spec](GC-565_CHOKEPOINTS.md)) | ✅ |
+| **GC-566** | Influence Layer — Eigenreich-Territorium ([Spec](GC-566_INFLUENCE_LAYER.md)) | ✅ |
+| **GC-567** | Expansion Sites v2 — Orte mit Versprechen & Inspector ([Spec](GC-567_EXPANSION_SITES_V2.md)) | ✅ |
+| **GC-567B** | Region Landmarks ([Spec](GC-567B_REGION_LANDMARKS.md)) | ✅ |
+| **GC-570** | World Map + Role Actions ([Spec](GC-570_WORLD_MAP_DIRECTION.md)) | ✅ |
+| **GC-580B** | Viewport-aware Sector Loading | ✅ |
+| **GC-580C** | Infinite Map Background Tiling | ✅ |
+| **GC-581** | Strategic Worlds (Presentation) ([Spec](GC-581_STRATEGIC_WORLDS.md)) | ✅ |
+| **GC-582** | Dynamic Colonization ([Spec](GC-582_DYNAMIC_COLONIZATION.md)) | ✅ 582A–582D + [582F UX](GC-582F_COLONIZATION_UX_POLISH.md) |
+| **GC-583** | Expedition Worlds ([Spec](GC-583_EXPEDITION_WORLDS.md)) | ✅ 583A–583C |
+| **GC-566B** | Dynamic Influence ([Spec](GC-566B_DYNAMIC_INFLUENCE.md)) | 📋 Spec |
+| **GC-571** | Shared World Presence ([Spec](GC-571_SHARED_WORLD_PRESENCE.md)) | 📋 Spec |
+| **GC-569** | ~~Presence Overlay~~ → siehe GC-571 | 📋 superseded |
+| **GC-568** | Territorial Warfare | 📋 |
+
+Start nach Completion-First-Pass (GC-610), sofern nicht reine Identity-Tickets (560–561) parallel.
+
+---
+
 ## Meilenstein-Übersicht
 
 ```
@@ -186,6 +221,7 @@ Details: [SECURITY.md](SECURITY.md)
 2025 Q3–Q4   Phase 3–4 🔄   Multi-Kolonie, Galaxy, Fleet
 2026 Q1      Phase 4b 🔄     Defense ✅; Combat ✅
 2026 Q2      Phase 5–6       Alliance polish, Security, Scale
+2026 Q3+     Phase 9         Imperium & Expansion (EPIC-15, GC-560+)
 ```
 
 *Timeline orientierend — keine festen Release-Daten.*
@@ -215,6 +251,7 @@ Details: [SECURITY.md](SECURITY.md)
 | EPIC-03 Galaxy | GC-310 Live slot API client |
 | EPIC-04 Economy | GC-320 Fuel bar sync |
 | EPIC-05 Planet Evolution | GC-330 Policy cooldown UI |
+| EPIC-15 Imperium & Expansion | GC-560 Empire Identity → GC-568 Territorial Warfare |
 
 ---
 
@@ -280,6 +317,7 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 
 ## Verwandte Dokumente
 
+- [IMPERIUM_VISION.md](IMPERIUM_VISION.md) — Genesis 2.0 Design Manifest (EPIC-15)
 - [GC-610_COMPLETE_DEFINITION_AUDIT.md](GC-610_COMPLETE_DEFINITION_AUDIT.md) — Definition of Complete / Reifegrade
 - [GC-600_PROJECT_GAP_ANALYSIS.md](GC-600_PROJECT_GAP_ANALYSIS.md) — Strategisches Gap-Audit
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Systemübersicht

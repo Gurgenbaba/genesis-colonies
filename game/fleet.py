@@ -87,7 +87,20 @@ from .spy import (
 logger = logging.getLogger(__name__)
 
 TARGET_TYPES = frozenset(
-    {"own_planet", "ally_planet", "foreign_planet", "empty_slot", "expedition_slot"}
+    {
+        "own_planet",
+        "ally_planet",
+        "foreign_planet",
+        "empty_slot",
+        "expedition_slot",
+        "strategic_world",
+        "world_colony",
+        "enemy_colony",
+        "expedition_world",
+        "anomaly",
+        "wreckage",
+        "planet",
+    }
 )
 
 # Canonical mission × target-type matrix (hold on allies when alliance schema exists).
@@ -96,7 +109,14 @@ _BASE_ALLOWED_MISSIONS: Dict[str, Set[str]] = {
     "ally_planet": {"transport", "spy"},
     "foreign_planet": {"spy", "attack"},
     "empty_slot": {"colonize"},
+    "strategic_world": {"colonize"},
     "expedition_slot": {"expedition"},
+    "world_colony": {"transport", "collect", "deploy", "spy"},
+    "enemy_colony": {"spy", "attack"},
+    "expedition_world": {"expedition"},
+    "anomaly": {"expedition"},
+    "wreckage": {"recycle", "expedition"},
+    "planet": {"transport", "collect", "deploy", "spy"},
 }
 
 _MISSIONS_REQUIRING_PLANET = frozenset(
@@ -565,6 +585,19 @@ def allowed_missions_for_target_type(target_type: str, *, hold_enabled: bool) ->
     return allowed
 
 
+def merge_world_native_allowed_missions(target_info: Dict[str, Any]) -> None:
+    """Merge world-native target missions into legacy target payloads (GC-590B P0)."""
+    if not target_info:
+        return
+    wt = target_info.get("world_target") or {}
+    native = str(wt.get("target_type") or "").strip()
+    if not native or native not in _BASE_ALLOWED_MISSIONS:
+        return
+    allowed = set(_BASE_ALLOWED_MISSIONS[native])
+    allowed.update(target_info.get("allowed_missions") or [])
+    target_info["allowed_missions"] = sorted(allowed)
+
+
 def resolve_fleet_target(
     player_id: int,
     galaxy: int,
@@ -747,7 +780,7 @@ def evaluate_fleet_mission_target(
     if m == "expedition" and p != EXPEDITION_POSITION:
         return False, "mission_blocked_not_expedition_slot", target_info
 
-    if m == "colonize" and target_info.get("target_type") != "empty_slot":
+    if m == "colonize" and target_info.get("target_type") not in ("empty_slot", "strategic_world"):
         return False, "coordinate_occupied", target_info
 
     ok_mission, m_reason = mission_allowed_for_target(m, target_info)
@@ -758,6 +791,85 @@ def evaluate_fleet_mission_target(
         return False, "invalid_target", target_info
 
     return True, "", target_info
+
+
+def _colonize_fleet_target(
+    player_id: int,
+    target_galaxy: int,
+    target_system: int,
+    target_position: int,
+    *,
+    world_key: str | None,
+    conn,
+) -> Tuple[bool, str, Tuple[int, int, int], Dict[str, Any]]:
+    """Resolve colonize target for classic empty slot or strategic world."""
+    wk = str(world_key or "").strip() or None
+    if wk:
+        from .planet_evolution.world_colonization import (
+            check_colony_limit_available,
+            validate_world_colonize_target,
+        )
+        from .galaxy import assign_free_coordinates
+
+        ok_w, w_reason, target_info = validate_world_colonize_target(wk, conn=conn)
+        if not ok_w:
+            return False, w_reason, (0, 0, 0), target_info
+        ok_limit, limit_reason = check_colony_limit_available(int(player_id), conn=conn)
+        if not ok_limit:
+            return False, limit_reason, (0, 0, 0), target_info
+        g, s, p = assign_free_coordinates(conn)
+        return True, "", (int(g), int(s), int(p)), target_info
+
+    ok_target, t_reason, target_info = evaluate_fleet_mission_target(
+        int(player_id),
+        "colonize",
+        int(target_galaxy),
+        int(target_system),
+        int(target_position),
+        conn=conn,
+    )
+    if not ok_target:
+        return False, t_reason, (0, 0, 0), target_info
+    return True, "", (int(target_galaxy), int(target_system), int(target_position)), target_info
+
+
+def _expedition_fleet_target(
+    player_id: int,
+    target_galaxy: int,
+    target_system: int,
+    target_position: int,
+    *,
+    world_key: str | None,
+    conn,
+) -> Tuple[bool, str, Tuple[int, int, int], Dict[str, Any]]:
+    """Resolve expedition target for classic slot 16 or strategic world (GC-583A)."""
+    wk = str(world_key or "").strip() or None
+    if wk:
+        from .planet_evolution.world_colonization import (
+            validate_world_expedition_target,
+            validate_world_salvage_target,
+        )
+
+        ok_w, w_reason, target_info = validate_world_expedition_target(wk, conn=conn)
+        if not ok_w:
+            ok_s, s_reason, target_info = validate_world_salvage_target(wk, conn=conn)
+            if not ok_s:
+                return False, w_reason or s_reason, (0, 0, 0), target_info
+        tg = int(target_galaxy)
+        ts = int(target_system)
+        return True, "", (tg, ts, EXPEDITION_POSITION), target_info
+
+    ok_target, t_reason, target_info = evaluate_fleet_mission_target(
+        int(player_id),
+        "expedition",
+        int(target_galaxy),
+        int(target_system),
+        int(target_position),
+        conn=conn,
+    )
+    if not ok_target:
+        return False, t_reason, (0, 0, 0), target_info
+    return True, "", (int(target_galaxy), int(target_system), EXPEDITION_POSITION), target_info
 
 
 def validate_fleet_send(
@@ -772,12 +884,14 @@ def validate_fleet_send(
     resources: Mapping[str, Any] | None,
     speed_percent: int,
     conn,
+    world_key: str | None = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """Full pre-send validation including target resolution and balances preview."""
     mission = str(mission_type or "").strip().lower()
     ships_n = normalize_ships(ships)
     resources_n = calculate_loaded_resources(resources)
     pct = int(speed_percent)
+    wk = str(world_key or "").strip() or None
 
     if mission not in MISSION_TYPES:
         return False, "invalid_mission", None
@@ -797,24 +911,37 @@ def validate_fleet_send(
     origin_planet = dict(origin_row)
 
     origin = _origin_coords(origin_planet)
-    target = (int(target_galaxy), int(target_system), int(target_position))
-    if mission == "expedition":
-        target = (int(target_galaxy), int(target_system), EXPEDITION_POSITION)
-
     if mission == "colonize":
-        ok_target, t_reason, target_info = evaluate_fleet_mission_target(
+        ok_target, t_reason, target, target_info = _colonize_fleet_target(
             player_id,
-            mission,
             target_galaxy,
             target_system,
             target_position,
+            world_key=wk,
             conn=conn,
         )
         if not ok_target:
             return False, t_reason, {"target": target_info}
-    elif origin == target and mission not in ("expedition", "recycle"):
+    elif mission == "expedition" and wk:
+        ok_target, t_reason, target, target_info = _expedition_fleet_target(
+            player_id,
+            target_galaxy,
+            target_system,
+            target_position,
+            world_key=wk,
+            conn=conn,
+        )
+        if not ok_target:
+            return False, t_reason, {"target": target_info}
+    elif origin == (int(target_galaxy), int(target_system), int(target_position)) and mission not in (
+        "expedition",
+        "recycle",
+    ):
         return False, "same_origin_target", None
     else:
+        target = (int(target_galaxy), int(target_system), int(target_position))
+        if mission == "expedition":
+            target = (int(target_galaxy), int(target_system), EXPEDITION_POSITION)
         ok_target, t_reason, target_info = evaluate_fleet_mission_target(
             player_id,
             mission,
@@ -825,6 +952,9 @@ def validate_fleet_send(
         )
         if not ok_target:
             return False, t_reason, {"target": target_info}
+
+    if mission == "expedition":
+        target = (int(target_galaxy), int(target_system), EXPEDITION_POSITION)
 
     ok_ship_mission, ship_reason = _mission_allowed(mission, ships_n, resources_n)
     if not ok_ship_mission:
@@ -864,7 +994,12 @@ def validate_fleet_send(
     if mission == "colonize" and int(ships_n.get("seed_ark") or 0) < 1:
         return False, "colonize_requires_ark", {"target": target_info, "preview": preview}
 
-    return True, "", {"target": target_info, "preview": preview, "origin_planet": origin_planet}
+    return True, "", {
+        "target": target_info,
+        "preview": preview,
+        "origin_planet": origin_planet,
+        "resolved_target": target,
+    }
 
 
 def build_fleet_send_preview(
@@ -879,23 +1014,91 @@ def build_fleet_send_preview(
     resources: Mapping[str, Any] | None,
     speed_percent: int,
     conn=None,
+    world_key: str | None = None,
+    target_type: str | None = None,
+    target_planet_id: int | None = None,
+    target_world_x: float | None = None,
+    target_world_y: float | None = None,
 ) -> Dict[str, Any]:
     """Flight preview enriched with target resolution and send eligibility."""
     own = conn is None
     if own:
         conn = db()
     try:
+        from .fleet_target import attach_world_target, normalize_fleet_target_request
+
         mission = str(mission_type or "").strip().lower()
         ships_n = normalize_ships(ships)
         resources_n = calculate_loaded_resources(resources)
-        target_info = resolve_fleet_target(
-            player_id,
-            target_galaxy,
-            target_system,
-            target_position,
-            conn=conn,
-        )
-        tg, ts, tp = int(target_galaxy), int(target_system), int(target_position)
+        try:
+            norm = normalize_fleet_target_request(
+                int(player_id),
+                mission,
+                target_type=target_type,
+                world_key=world_key,
+                target_world_x=target_world_x,
+                target_world_y=target_world_y,
+                target_planet_id=target_planet_id,
+                target_galaxy=int(target_galaxy),
+                target_system=int(target_system),
+                target_position=int(target_position),
+                origin_planet=origin_planet,
+                conn=conn,
+            )
+        except ValueError:
+            return {
+                "target": {},
+                "mission_type": mission,
+                "mission_allowed": False,
+                "mission_block_reason": "invalid_target_planet",
+                "can_send": False,
+                "block_reason": "invalid_target_planet",
+                "departure_at": None,
+                "arrival_at": None,
+                "countdown_at": None,
+                "duration_seconds": 0,
+            }
+        tg, ts, tp = norm.target_galaxy, norm.target_system, norm.target_position
+        wk = norm.world_key
+        explicit_native = norm.world_native_type
+        if mission == "colonize":
+            mission_ok, mission_reason, resolved, target_info = _colonize_fleet_target(
+                player_id,
+                tg,
+                ts,
+                tp,
+                world_key=wk,
+                conn=conn,
+            )
+            if mission_ok:
+                tg, ts, tp = resolved
+        elif mission == "expedition" and wk:
+            mission_ok, mission_reason, resolved, target_info = _expedition_fleet_target(
+                player_id,
+                tg,
+                ts,
+                tp,
+                world_key=wk,
+                conn=conn,
+            )
+            if mission_ok:
+                tg, ts, tp = resolved
+        else:
+            target_info = resolve_fleet_target(
+                player_id,
+                tg,
+                ts,
+                tp,
+                conn=conn,
+            )
+            mission_ok, mission_reason, _ = evaluate_fleet_mission_target(
+                player_id,
+                mission,
+                tg,
+                ts,
+                tp,
+                conn=conn,
+            )
         flight_tp = EXPEDITION_POSITION if mission == "expedition" else tp
         flight = preview_fleet_flight(
             origin_planet=origin_planet,
@@ -913,15 +1116,6 @@ def build_fleet_send_preview(
         outbound = build_outbound_timing(departure_at=now, duration_seconds=flight_seconds)
         arrival_at = outbound["arrival_at"] if ships_n else None
 
-        mission_ok, mission_reason, _ = evaluate_fleet_mission_target(
-            player_id,
-            mission,
-            tg,
-            ts,
-            tp,
-            conn=conn,
-        )
-
         can_send = False
         block_reason = mission_reason if not mission_ok else ""
         if ships_n and mission_ok:
@@ -936,9 +1130,20 @@ def build_fleet_send_preview(
                 resources=resources_n,
                 speed_percent=int(speed_percent),
                 conn=conn,
+                world_key=wk,
             )
             can_send = ok
             block_reason = reason or ""
+
+        if target_info:
+            attach_world_target(
+                target_info,
+                player_id=int(player_id),
+                conn=conn,
+                explicit_native_type=explicit_native,
+                legacy_coords={"galaxy": tg, "system": ts, "position": tp},
+            )
+            merge_world_native_allowed_missions(target_info)
 
         return {
             **flight,
@@ -1126,6 +1331,54 @@ def build_expedition_slot(galaxy: int, system: int) -> Dict[str, Any]:
     }
 
 
+def _enrich_movement_world_target(
+    mv: Dict[str, Any],
+    player_id: int,
+    *,
+    conn,
+) -> Dict[str, Any]:
+    """Attach world_target for fleet UI named destinations (GC-590B)."""
+    from .fleet_target import attach_world_target, _load_planet_row
+
+    tg = int(mv.get("target_galaxy") or 0)
+    ts = int(mv.get("target_system") or 0)
+    tp = int(mv.get("target_position") or 0)
+    target_info = resolve_fleet_target(int(player_id), tg, ts, tp, conn=conn)
+    if mv.get("target_planet_id"):
+        target_info["target_planet_id"] = mv["target_planet_id"]
+
+    resources = mv.get("resources") or {}
+    wk = str(resources.get("world_key") or "").strip() or None
+    if wk:
+        target_info["world_key"] = wk
+        try:
+            from .planet_evolution.strategic_worlds import build_strategic_world_presentation_from_key
+
+            target_info["strategic_world"] = build_strategic_world_presentation_from_key(wk)
+        except Exception:
+            pass
+    elif target_info.get("target_planet_id"):
+        row = _load_planet_row(int(target_info["target_planet_id"]), conn=conn)
+        if row:
+            if row.get("world_key"):
+                target_info["world_key"] = str(row["world_key"])
+            if row.get("planet_role"):
+                target_info["planet_role"] = str(row["planet_role"])
+            if row.get("name"):
+                target_info["target_owner_name"] = str(row["name"])
+
+    attach_world_target(
+        target_info,
+        player_id=int(player_id),
+        conn=conn,
+        legacy_coords={"galaxy": tg, "system": ts, "position": tp},
+    )
+    wt = target_info.get("world_target")
+    if wt:
+        mv["world_target"] = wt
+    return mv
+
+
 def list_active_movements(player_id: int, *, conn=None) -> List[Dict[str, Any]]:
     own = conn is None
     if own:
@@ -1155,7 +1408,8 @@ def list_active_movements(player_id: int, *, conn=None) -> List[Dict[str, Any]]:
                 )
             except GalaxyCoordinateError:
                 mv["origin_coords"] = ""
-            out.append(enrich_movement_timing(mv, now=_now()))
+            mv = enrich_movement_timing(mv, now=_now())
+            out.append(_enrich_movement_world_target(mv, int(player_id), conn=conn))
         return out
     finally:
         if own and conn is not None:
@@ -1390,6 +1644,11 @@ def send_fleet(
     preset_id: int | None = None,
     batch_id: int | None = None,
     colony_name: str | None = None,
+    world_key: str | None = None,
+    target_type: str | None = None,
+    target_planet_id: int | None = None,
+    target_world_x: float | None = None,
+    target_world_y: float | None = None,
     conn=None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     mission = str(mission_type or "").strip().lower()
@@ -1401,7 +1660,6 @@ def send_fleet(
     ships_n = normalize_ships(ships)
     resources_n = calculate_loaded_resources(resources)
     pct = int(speed_percent)
-
     if not ships_n:
         return False, "no_ships", None
     if pct < 10 or pct > 100:
@@ -1411,6 +1669,8 @@ def send_fleet(
     if own:
         conn = db()
     try:
+        from .fleet_target import normalize_fleet_target_request
+
         if not fleet_schema_ready(conn):
             return False, "fleet_unavailable", None
 
@@ -1424,19 +1684,50 @@ def send_fleet(
         )
         origin_row = cur.fetchone()
         if not origin_row:
+            if own:
+                rollback(conn)
             return False, "origin_not_found", None
         origin_planet = dict(origin_row)
         lock_planet_for_update(conn, int(origin_planet_id))
-
-        ok_coords, reason = _validate_target_coords(
-            mission, target_galaxy, target_system, target_position, conn=conn
-        )
-        if not ok_coords:
+        raw_wk = str(world_key or "").strip() or None
+        if mission == "expedition" and not raw_wk and int(target_position) != EXPEDITION_POSITION:
             if own:
                 rollback(conn)
-            return False, reason, None
+            return False, "mission_blocked_not_expedition_slot", None
+        try:
+            norm = normalize_fleet_target_request(
+                int(player_id),
+                mission,
+                target_type=target_type,
+                world_key=world_key,
+                target_world_x=target_world_x,
+                target_world_y=target_world_y,
+                target_planet_id=target_planet_id,
+                target_galaxy=int(target_galaxy),
+                target_system=int(target_system),
+                target_position=int(target_position),
+                origin_planet=origin_planet,
+                conn=conn,
+            )
+        except ValueError:
+            if own:
+                rollback(conn)
+            return False, "invalid_target_planet", None
+        wk = norm.world_key
+        target_galaxy = norm.target_galaxy
+        target_system = norm.target_system
+        target_position = norm.target_position
 
-        if mission == "expedition" and int(target_position) != EXPEDITION_POSITION:
+        if not (mission == "colonize" and wk) and not (mission == "expedition" and wk):
+            ok_coords, reason = _validate_target_coords(
+                mission, target_galaxy, target_system, target_position, conn=conn
+            )
+            if not ok_coords:
+                if own:
+                    rollback(conn)
+                return False, reason, None
+
+        if mission == "expedition" and int(target_position) != EXPEDITION_POSITION and not wk:
             if own:
                 rollback(conn)
             return False, "mission_blocked_not_expedition_slot", None
@@ -1457,6 +1748,7 @@ def send_fleet(
             resources=resources_n,
             speed_percent=pct,
             conn=conn,
+            world_key=wk,
         )
         if not ok_send:
             if own:
@@ -1467,6 +1759,10 @@ def send_fleet(
         preview = send_ctx["preview"]
         target_info = send_ctx["target"]
         target_planet_id = target_info.get("target_planet_id")
+        resolved_target = send_ctx.get("resolved_target")
+        if resolved_target:
+            target = tuple(resolved_target)
+            target_position = int(target[2])
 
         ok_deduct, d_reason = deduct_planet_ships(int(origin_planet_id), ships_n, conn=conn)
         if not ok_deduct:
@@ -1503,6 +1799,10 @@ def send_fleet(
                 base = str(orow["name"] if orow else "Colony")
                 name = f"{base} Outpost"
             resources_store["colony_name"] = name[:64]
+            if wk:
+                resources_store["world_key"] = wk
+        if mission == "expedition" and wk:
+            resources_store["world_key"] = wk
 
         now = _now()
         flight_seconds = int(preview["flight_seconds"])
@@ -2717,6 +3017,18 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         return True
 
     if mission == "expedition":
+        raw_res = movement.get("resources") or {}
+        world_key = str(raw_res.get("world_key") or "").strip()
+        report_coords = world_key or coords
+        world_context = None
+        if world_key:
+            from .planet_evolution.strategic_worlds import build_strategic_world_presentation_from_key
+            from .planet_evolution.world_colonization import WorldKeyError, is_expedition_world_type
+
+            try:
+                world_context = build_strategic_world_presentation_from_key(world_key)
+            except WorldKeyError:
+                world_context = None
         cargo_total = calculate_expedition_loot_cap(ships)
         flight_seconds_base = int(movement.get("flight_seconds") or 1)
         outcome = resolve_expedition_outcome(
@@ -2724,6 +3036,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             cargo_total=cargo_total,
             expedition_ship_count=count_expedition_ships(ships),
             flight_seconds=flight_seconds_base,
+            world_type=str(world_context.get("world_type") or "") if world_context else None,
         )
         rewards = outcome["rewards"]
         delay_extra = int(outcome.get("delay_extra") or 0)
@@ -2740,30 +3053,97 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         )
         if not claimed:
             return False
-        body, meta = build_expedition_report(coords, ships, outcome, locale=sender_locale)
-        meta["fleet_id"] = movement_id
+        if world_key and world_context and is_expedition_world_type(str(world_context.get("world_type") or "")):
+            from .planet_evolution.world_progress import record_world_expedition_progress
 
-        notify_expedition(
-            player_id,
-            tr(
-                "fleet_report_expedition_subject_coords",
-                "Expedition report — %(coords)s",
-                locale=sender_locale,
-                coords=coords,
-            ),
-            body,
-            metadata=meta,
+            record_world_expedition_progress(player_id, world_key, conn=conn)
+        body, meta = build_expedition_report(
+            report_coords,
+            ships,
+            outcome,
             locale=sender_locale,
-            conn=conn,
+            world_context=world_context,
         )
+        meta["fleet_id"] = movement_id
+        if world_key:
+            meta["world_key"] = world_key
+
+        if world_context and world_context.get("name_key"):
+            is_salvage = str(world_context.get("world_type") or "") == "wreckage_field"
+            notify_expedition(
+                player_id,
+                tr(
+                    "fleet_report_salvage_subject_world" if is_salvage else "fleet_report_expedition_subject_world",
+                    "Salvage report — %(world)s" if is_salvage else "Expedition report — %(world)s",
+                    locale=sender_locale,
+                    world=tr(str(world_context["name_key"]), str(world_context["name_key"]), locale=sender_locale),
+                ),
+                body,
+                metadata=meta,
+                locale=sender_locale,
+                conn=conn,
+            )
+        else:
+            notify_expedition(
+                player_id,
+                tr(
+                    "fleet_report_expedition_subject_coords",
+                    "Expedition report — %(coords)s",
+                    locale=sender_locale,
+                    coords=report_coords,
+                ),
+                body,
+                metadata=meta,
+                locale=sender_locale,
+                conn=conn,
+            )
         return True
 
     if mission == "colonize":
         from .planet_evolution.service import colonize_planet
+        from .planet_evolution.world_colonization import (
+            complete_world_claim,
+            WorldKeyError,
+            build_world_colonize_report,
+            parse_world_key,
+            release_world_claim,
+            reserve_world_claim,
+        )
+
+        def _notify_world_colonize(
+            *,
+            success: bool,
+            fail_reason: str | None = None,
+            planet_id: int | None = None,
+        ) -> None:
+            if not world_key:
+                return
+            try:
+                subject, body, meta = build_world_colonize_report(
+                    world_key,
+                    colony_name,
+                    locale=sender_locale,
+                    success=success,
+                    fail_reason=fail_reason,
+                )
+            except WorldKeyError:
+                return
+            meta["fleet_id"] = movement_id
+            if planet_id is not None:
+                meta["planet_id"] = int(planet_id)
+            notify_combat(
+                player_id,
+                subject,
+                body,
+                metadata=meta,
+                locale=sender_locale,
+                conn=conn,
+            )
 
         coords = movement.get("target_coords") or ""
         raw_res = movement.get("resources") or {}
         colony_name = str(raw_res.get("colony_name") or "").strip() or f"Colony {coords}"
+        world_key = str(raw_res.get("world_key") or "").strip()
         tg = int(movement.get("target_galaxy") or 0)
         ts = int(movement.get("target_system") or 0)
         tp = int(movement.get("target_position") or 0)
@@ -2787,35 +3167,122 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         if not claimed:
             return False
 
-        ok_col, reason, _extra = colonize_planet(
+        world_binding = None
+        report_coords = coords
+        if world_key:
+            try:
+                parsed = parse_world_key(world_key)
+            except WorldKeyError:
+                parsed = None
+            if not parsed:
+                release_world_claim(world_key, conn=conn, player_id=player_id)
+                if not _notify_world_colonize(success=False, fail_reason="invalid_world_key"):
+                    notify_combat(
+                        player_id,
+                        tr(
+                            "fleet_report_colonize_failed_subject_coords",
+                            "Colonization failed — %(coords)s",
+                            locale=sender_locale,
+                            coords=world_key,
+                        ),
+                        tr(
+                            "fleet_report_colonize_failed_body",
+                            "Could not establish colony at %(coords)s: %(reason)s.",
+                            locale=sender_locale,
+                            coords=world_key,
+                            reason="invalid_world_key",
+                        ),
+                        metadata={"fleet_id": movement_id, "mission_type": "colonize", "reason": "invalid_world_key"},
+                        locale=sender_locale,
+                        conn=conn,
+                    )
+                return True
+            ok_claim, claim_reason, claim_data = reserve_world_claim(
+                player_id,
+                parsed["world_x"],
+                parsed["world_y"],
+                world_type=parsed["world_type"],
+                conn=conn,
+            )
+            if not ok_claim or not claim_data:
+                fail = claim_reason or "world_already_claimed"
+                if not _notify_world_colonize(success=False, fail_reason=fail):
+                    notify_combat(
+                        player_id,
+                        tr(
+                            "fleet_report_colonize_failed_subject_coords",
+                            "Colonization failed — %(coords)s",
+                            locale=sender_locale,
+                            coords=world_key,
+                        ),
+                        tr(
+                            "fleet_report_colonize_failed_body",
+                            "Could not establish colony at %(coords)s: %(reason)s.",
+                            locale=sender_locale,
+                            coords=world_key,
+                            reason=fail,
+                        ),
+                        metadata={
+                            "fleet_id": movement_id,
+                            "mission_type": "colonize",
+                            "reason": fail,
+                        },
+                        locale=sender_locale,
+                        conn=conn,
+                    )
+                return True
+            world_binding = {
+                "world_key": claim_data["world_key"],
+                "world_x": claim_data["world_x"],
+                "world_y": claim_data["world_y"],
+                "sector_x": claim_data["sector_x"],
+                "sector_y": claim_data["sector_y"],
+                "planet_role": claim_data["planet_role"],
+                "origin_world_key": claim_data["world_key"],
+            }
+            report_coords = world_key
+
+        ok_col, reason, extra = colonize_planet(
             player_id,
             name=colony_name,
             galaxy=tg,
             system=ts,
             position=tp,
+            world_binding=world_binding,
             conn=conn,
         )
         if not ok_col:
+            if world_key:
+                release_world_claim(world_key, conn=conn, player_id=player_id)
+            fail_reason = reason
+            if fail_reason == "max_colonies":
+                fail_reason = "colony_limit_reached"
+            if world_key:
+                if _notify_world_colonize(success=False, fail_reason=fail_reason):
+                    return True
             notify_combat(
                 player_id,
                 tr(
                     "fleet_report_colonize_failed_subject_coords",
                     "Colonization failed — %(coords)s",
                     locale=sender_locale,
-                    coords=coords,
+                    coords=report_coords,
                 ),
                 tr(
                     "fleet_report_colonize_failed_body",
                     "Could not establish colony at %(coords)s: %(reason)s.",
                     locale=sender_locale,
-                    coords=coords,
-                    reason=reason,
+                    coords=report_coords,
+                    reason=fail_reason,
                 ),
-                metadata={"fleet_id": movement_id, "mission_type": "colonize", "reason": reason},
+                metadata={"fleet_id": movement_id, "mission_type": "colonize", "reason": fail_reason},
                 locale=sender_locale,
                 conn=conn,
             )
             return True
+
+        if world_key and extra:
+            complete_world_claim(world_key, player_id, int(extra["planet_id"]), conn=conn)
 
         ark_used = min(1, int(return_ships.get("seed_ark") or 0))
         if ark_used:
@@ -2832,29 +3299,35 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             else:
                 _complete_movement(movement_id, conn=conn, now=now, from_status="returning")
 
-        notify_combat(
-            player_id,
-            tr(
-                "fleet_report_colonize_success_subject_coords",
-                "Colony established — %(coords)s",
+        if world_key:
+            _notify_world_colonize(
+                success=True,
+                planet_id=int(extra["planet_id"]) if extra else None,
+            )
+        else:
+            notify_combat(
+                player_id,
+                tr(
+                    "fleet_report_colonize_success_subject_coords",
+                    "Colony established — %(coords)s",
+                    locale=sender_locale,
+                    coords=report_coords,
+                ),
+                tr(
+                    "fleet_report_colonize_success_body",
+                    "New colony «%(colony_name)s» founded at %(coords)s.",
+                    locale=sender_locale,
+                    colony_name=colony_name,
+                    coords=report_coords,
+                ),
+                metadata={
+                    "fleet_id": movement_id,
+                    "mission_type": "colonize",
+                    "colony_name": colony_name,
+                },
                 locale=sender_locale,
-                coords=coords,
-            ),
-            tr(
-                "fleet_report_colonize_success_body",
-                "New colony «%(colony_name)s» founded at %(coords)s.",
-                locale=sender_locale,
-                colony_name=colony_name,
-                coords=coords,
-            ),
-            metadata={
-                "fleet_id": movement_id,
-                "mission_type": "colonize",
-                "colony_name": colony_name,
-            },
-            locale=sender_locale,
-            conn=conn,
-        )
+                conn=conn,
+            )
         return True
 
     return False

@@ -4,6 +4,8 @@
 
 Bestehende `game/game.db` **nicht löschen**, wenn du einen vorhandenen Spielstand testen willst.
 
+**Spieler-Journey (empfohlen vor technischer Regression):** [GC-621 — First 30 Minutes](GC-621_FIRST_30_MINUTES.md) — frischer Account, Minute 0–15, „Will ich wiederkommen?“
+
 ---
 
 ## 1. Auth

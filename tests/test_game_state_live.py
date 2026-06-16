@@ -423,5 +423,5 @@ def test_main_js_gc541_server_time_fallback_chain():
     assert "GC.lastState?.server_time" in timer_now
     assert "GC.lastState?.server_now" in timer_now
     apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
-    assert "data.server_now" in apply
+    assert "syncServerClockFromState(data)" in apply
 

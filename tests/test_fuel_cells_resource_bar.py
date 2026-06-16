@@ -80,8 +80,9 @@ def test_main_js_patches_fuel_cells():
     root = Path(__file__).resolve().parent.parent
     js = (root / "static" / "main.js").read_text(encoding="utf-8")
     assert "function applyGameStateData" in js
-    assert "fuelValEls" in js
-    assert "fuelCapEls" in js
+    assert "function patchShellHudLiveResources" in js
+    assert 'bar.querySelectorAll(".res-value.fuel_cells")' in js
+    assert 'bar.querySelectorAll(".res-cap.fuel_cells")' in js
     assert "prodFuelCells" in js
     assert "buildingIconUrl" in js
     assert "syncResourceLiveBaseline" in js
@@ -194,7 +195,7 @@ def test_shipyard_build_reduces_fuel_cells(fuel_db):
     cur.execute("UPDATE planet_buildings SET orbital_shipyard = 2 WHERE planet_id = ?;", (pid,))
     cur.executemany(
         "INSERT OR REPLACE INTO research_levels (user_id, tech_key, level) VALUES (?, ?, ?);",
-        [(uid, "engine_tech", 1), (uid, "navigation_tech", 1)],
+        [(uid, "engine_tech", 3), (uid, "navigation_tech", 3)],
     )
     conn.commit()
     before = float(cur.execute("SELECT fuel_cells FROM planets WHERE id = ?;", (pid,)).fetchone()["fuel_cells"])

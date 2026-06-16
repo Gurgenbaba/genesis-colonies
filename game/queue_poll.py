@@ -20,6 +20,46 @@ POLL_FINISH_INTERVAL_SEC = float(os.environ.get("GC_POLL_FINISH_INTERVAL_SEC", "
 DUE_TIME_EPSILON_SEC = float(os.environ.get("GC_DUE_TIME_EPSILON_SEC", "0.05"))
 
 
+def player_fleet_is_dirty(
+    player_id: int,
+    conn=None,
+    *,
+    now: Optional[float] = None,
+) -> bool:
+    """
+    True when any fleet movement phase is past due but not yet transitioned (GC-557C).
+
+    Used to force process_fleet_tick before returning stale outbound/returning state.
+    """
+    owns_conn = conn is None
+    if owns_conn:
+        conn = db()
+    ts = float(now if now is not None else time.time()) + DUE_TIME_EPSILON_SEC
+    try:
+        from .fleet import fleet_schema_ready
+
+        if not fleet_schema_ready(conn):
+            return False
+        row = conn.execute(
+            """
+            SELECT 1 FROM fleet_movements
+            WHERE player_id = ? AND (
+                (status = 'outbound' AND arrival_at <= ?)
+                OR (status = 'holding' AND holding_until <= ?)
+                OR (status = 'returning' AND return_at <= ?)
+            )
+            LIMIT 1;
+            """,
+            (int(player_id), ts, ts, ts),
+        ).fetchone()
+        return row is not None
+    except Exception:
+        return False
+    finally:
+        if owns_conn and conn is not None:
+            conn.close()
+
+
 def player_has_due_queue_work(
     player_id: int,
     conn=None,
@@ -180,19 +220,7 @@ def player_has_due_queue_work(
             from .fleet import fleet_schema_ready
 
             if fleet_schema_ready(conn):
-                cur.execute(
-                    """
-                    SELECT 1 FROM fleet_movements
-                    WHERE player_id = ? AND (
-                        (status = 'outbound' AND arrival_at <= ?)
-                        OR (status = 'holding' AND holding_until <= ?)
-                        OR (status = 'returning' AND return_at <= ?)
-                    )
-                    LIMIT 1;
-                    """,
-                    (int(player_id), ts, ts, ts),
-                )
-                if cur.fetchone():
+                if player_fleet_is_dirty(int(player_id), conn=conn, now=(now if now is not None else time.time())):
                     return True
         except Exception:
             pass

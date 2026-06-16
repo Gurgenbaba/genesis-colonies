@@ -118,7 +118,13 @@ def get_gunicorn_workers() -> int:
     return _env_int("GUNICORN_WORKERS", default, minimum=1)
 
 
-def get_client_runtime_config() -> dict[str, int]:
+def is_command_map_dev_mode() -> bool:
+    """When True, Command Map shows DEV PREVIEW badge and disclaimer (GC-597D)."""
+    val = os.environ.get("GC_COMMAND_MAP_DEV_MODE", "1")
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+
+def get_client_runtime_config() -> dict[str, int | bool]:
     """
     Client poll intervals (ms) injected into templates as GC_CLIENT_CONFIG.
 
@@ -146,6 +152,7 @@ def get_client_runtime_config() -> dict[str, int]:
         "shipyard_poll_ms": _env_int(
             "GC_SHIPYARD_POLL_MS", defaults["shipyard_poll_ms"], minimum=3000
         ),
+        "command_map_dev_mode": is_command_map_dev_mode(),
     }
 
 

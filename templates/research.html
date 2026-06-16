@@ -394,7 +394,7 @@
 {% set rq_limit = (rq_summary.limit if rq_summary.limit is defined else 3) %}
 {% set queue_full = (rq_summary.count or 0)|int >= rq_limit|int %}
 
-<div class="gc-page research-page">
+<div class="gc-page research-page" data-planet-id="{{ (active_planet_id if active_planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else 0))|int }}">
 
   <header class="gc-page-header section-header research-page-header">
     <div class="section-header-row">
@@ -415,7 +415,7 @@
     <div class="gc-queue-compact research-queue-compact gc-panel-header research-queue-head"
          id="research-queue-compact"
          aria-live="polite"
-         {% if active_planet_id is defined %}data-planet-id="{{ active_planet_id|int }}"{% endif %}>
+         data-planet-id="{{ (active_planet_id if active_planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else 0))|int }}">
       <span class="research-queue-compact-icon" aria-hidden="true">🔬</span>
       <span class="gc-panel-title research-queue-compact-label" id="research-queue-compact-label">
         {% if rq_summary and rq_summary.count %}

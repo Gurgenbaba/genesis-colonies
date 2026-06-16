@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # (relative path, 1-based line number) — documented exceptions only
 ALLOWLIST_RELOAD = {
-    ("static/main.js", 679),
+    ("static/main.js", 1168),
     ("static/admin.js", 1289),
     ("static/admin.js", 1298),
 }

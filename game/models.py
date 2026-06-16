@@ -710,7 +710,7 @@ def ensure_player_and_homeworld(
                     """,
                     (
                         int(player_id),
-                        "Aurora Prime",
+                        "Genesis Ark",
                         start_metal,
                         start_crystal,
                         now,
@@ -732,7 +732,7 @@ def ensure_player_and_homeworld(
                     """,
                     (
                         int(player_id),
-                        "Aurora Prime",
+                        "Genesis Ark",
                         start_metal,
                         start_crystal,
                         now,

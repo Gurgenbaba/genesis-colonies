@@ -1,4 +1,4 @@
-"""Trader Hub fuel cell exchange tests."""
+"""Trader Hub fuel cell exchange tests (unified exchange API)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ import pytest
 
 from game import db as gdb
 from game.db import db
-from game.fuel_exchange import buy_fuel_cells, get_fuel_exchange_status, preview_fuel_purchase
+from game.exchange import get_exchange_status
+from game.fuel_exchange import buy_fuel_cells, preview_fuel_purchase
 from game.models import create_user, ensure_player_and_homeworld, init_db
 
 
@@ -50,11 +51,14 @@ def test_buy_fuel_cells_costs_metal_and_crystal(fuel_ex_db):
             player_id=uid, planet_id=planet_id, units=100, conn=conn
         )
         assert ok_b, reason
-        assert result["units"] == 100
+        assert result is not None
+        assert result["to"] == "fuel_cells"
+        assert int(result["receive_amount"]) >= 100
 
         cur.execute("SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;", (planet_id,))
         after = dict(cur.fetchone())
         assert float(after["fuel_cells"]) >= float(row["fuel_cells"]) + 100
+        assert float(after["metal"]) < 50000.0
     finally:
         conn.close()
 
@@ -67,10 +71,20 @@ def test_fuel_exchange_status_ready(fuel_ex_db):
     try:
         ensure_player_and_homeworld(uid, conn=conn)
         cur = conn.cursor()
-        cur.execute("SELECT id FROM planets WHERE player_id = ? LIMIT 1;", (uid,))
-        planet_id = int(cur.fetchone()["id"])
-        st = get_fuel_exchange_status(uid, planet_id, conn=conn)
-        assert st.get("ready") is True
+        cur.execute("SELECT id, metal, crystal, fuel_cells FROM planets WHERE player_id = ? LIMIT 1;", (uid,))
+        row = dict(cur.fetchone())
+        planet_id = int(row["id"])
+        st = get_exchange_status(
+            player_id=uid,
+            planet_id=planet_id,
+            metal=float(row["metal"] or 0),
+            crystal=float(row["crystal"] or 0),
+            fuel_cells=float(row["fuel_cells"] or 0),
+            conn=conn,
+        )
         assert st.get("enabled") is True
+        assert st.get("fuel_enabled") is True
+        routes = st.get("routes") or {}
+        assert routes.get("metal_to_fuel_cells", {}).get("enabled") is True
     finally:
         conn.close()

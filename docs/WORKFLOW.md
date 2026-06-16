@@ -17,6 +17,7 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-05 | Planet Evolution | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
 | EPIC-06 | Buildings | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) |
 | EPIC-07 | Research (Account-Tech) | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) |
+| EPIC-15 | Imperium & Expansion (Genesis 2.0) | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) |
 
 Epic → in **3–5 Tickets** zerlegen. Siehe [EPICS.md](EPICS.md).
 
@@ -42,6 +43,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) | Kampf-Resolver, Loot, Debris, Reports |
 | [GALAXY_SYSTEM.md](GALAXY_SYSTEM.md) | Koordinaten, Systemansicht |
 | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) | DNA, Planet-Tech, Events |
+| [IMPERIUM_VISION.md](IMPERIUM_VISION.md) | Genesis 2.0 — Empire Screen, Command Map, EPIC-15 |
 | [EFFECTS.md](EFFECTS.md) | EffectResolver, Formeln |
 | [STATE_AJAX.md](STATE_AJAX.md) | Polling, PJAX, Live-State |
 

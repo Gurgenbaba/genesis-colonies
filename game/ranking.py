@@ -1349,7 +1349,15 @@ def get_playercard_ranking_snapshot(
         rank = category_ranks.get("total")
         total_players = int(category_ranks.get("total_players") or 0)
         if rank is None:
-            rank, total_players = get_player_rank_from_snapshot(int(player_id), conn=conn)
+            try:
+                rank, total_players = get_player_rank_from_snapshot(int(player_id), conn=conn)
+            except sqlite3.OperationalError:
+                logger.debug(
+                    "playercard ranking snapshot rank unavailable (player_id=%s)",
+                    player_id,
+                    exc_info=True,
+                )
+                rank = None
         return {
             "rank": rank,
             "total_players": total_players,
@@ -1458,12 +1466,19 @@ def get_player_category_ranks(
         ranks["fleet"] = int(cur.fetchone()["better"]) + 1
 
     if not skip_live_total:
-        live_total_rank, live_total_players = get_player_rank_from_snapshot(
-            int(player_id), conn=conn
-        )
-        if live_total_rank is not None:
-            ranks["total"] = int(live_total_rank)
-        ranks["total_players"] = int(live_total_players)
+        try:
+            live_total_rank, live_total_players = get_player_rank_from_snapshot(
+                int(player_id), conn=conn
+            )
+            if live_total_rank is not None:
+                ranks["total"] = int(live_total_rank)
+            ranks["total_players"] = int(live_total_players)
+        except sqlite3.OperationalError:
+            logger.debug(
+                "category rank live total unavailable (player_id=%s)",
+                player_id,
+                exc_info=True,
+            )
 
     if column_exists(conn, "player_scores", "score_defense"):
         cur.execute(

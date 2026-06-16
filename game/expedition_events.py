@@ -84,6 +84,10 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
 
 _EVENT_BY_KEY: Dict[str, Dict[str, Any]] = {str(e["key"]): e for e in _EXPEDITION_EVENTS}
 
+_SALVAGE_EVENT_KEYS: frozenset[str] = frozenset(
+    {"debris_salvage", "mineral_deposit", "fuel_cache", "distress_beacon"}
+)
+
 
 def expedition_event_keys() -> frozenset[str]:
     return frozenset(_EVENT_BY_KEY.keys())
@@ -122,19 +126,23 @@ def calculate_expedition_loot_cap(ships: Mapping[str, int]) -> int:
     return max(0, expedition_cargo * EXPEDITION_LOOT_CARGO_MULTIPLIER)
 
 
-def _pick_event_key(rng: random.Random, expedition_ship_count: int) -> str:
+def _pick_event_key(rng: random.Random, expedition_ship_count: int, *, salvage: bool = False) -> str:
     """Pick event; extra expedition hulls shift weight away from empty outcomes."""
     bonus = min(0.12, max(0, int(expedition_ship_count)) * 0.03)
     empty_keys = {"void_scan", "sensor_glitch"}
     adjusted: list[tuple[str, float]] = []
     for event in _EXPEDITION_EVENTS:
         key = str(event["key"])
+        if salvage and key not in _SALVAGE_EVENT_KEYS:
+            continue
         weight = float(event["weight"])
         if key in empty_keys:
             weight = max(1.0, weight * (1.0 - bonus))
         elif event.get("rewards"):
             weight = weight * (1.0 + bonus)
         adjusted.append((key, weight))
+    if not adjusted:
+        adjusted = [(str(_EXPEDITION_EVENTS[0]["key"]), 1.0)]
     total = sum(w for _, w in adjusted)
     roll = rng.random() * total
     for key, weight in adjusted:
@@ -175,10 +183,12 @@ def resolve_expedition_outcome(
     cargo_total: int,
     expedition_ship_count: int,
     flight_seconds: int,
+    world_type: str | None = None,
 ) -> Dict[str, Any]:
     """Idempotent expedition resolution keyed by movement id."""
     rng = random.Random(int(movement_id) * 7919 + 104729)
-    event_key = _pick_event_key(rng, expedition_ship_count)
+    salvage = str(world_type or "") == "wreckage_field"
+    event_key = _pick_event_key(rng, expedition_ship_count, salvage=salvage)
     event = _EVENT_BY_KEY[event_key]
     rewards = _roll_rewards(rng, event.get("rewards") or {})
     _scale_rewards_to_cargo(rewards, int(cargo_total))
@@ -210,6 +220,7 @@ def build_expedition_report(
     outcome: Mapping[str, Any],
     *,
     locale: str | None = None,
+    world_context: Mapping[str, Any] | None = None,
 ) -> Tuple[str, Dict[str, Any]]:
     from .i18n import fmt_int, tr
 
@@ -223,26 +234,78 @@ def build_expedition_report(
     rewards = dict(outcome.get("rewards") or {})
     delay_extra = int(outcome.get("delay_extra") or 0)
     expedition_ships = int(outcome.get("expedition_ship_count") or 0)
+    world = dict(world_context or {}) if world_context else {}
+    is_salvage = str(world.get("world_type") or "") == "wreckage_field"
 
-    body_lines: list[str] = [
-        _t("fleet_expedition_report_coords", "Coordinates: %(coords)s", coords=coords),
-        _t("fleet_expedition_report_event", "Event: %(event)s", event=label),
-    ]
+    body_lines: list[str] = []
+    if world.get("name_key"):
+        world_name = _t(str(world["name_key"]), str(world["name_key"]))
+        body_lines.append(
+            _t(
+                "fleet_world_salvage_report_location" if is_salvage else "fleet_world_expedition_report_location",
+                "Location: %(world)s",
+                world=world_name,
+            )
+        )
+        if world.get("risk_key"):
+            body_lines.append(
+                _t(
+                    "fleet_world_expedition_report_risk",
+                    "Risk: %(risk)s",
+                    risk=_t(str(world["risk_key"]), ""),
+                )
+            )
+    else:
+        body_lines.append(
+            _t("fleet_expedition_report_coords", "Coordinates: %(coords)s", coords=coords)
+        )
+
+    body_lines.append(
+        _t(
+            "fleet_world_salvage_report_find" if is_salvage else "fleet_expedition_report_event",
+            "Find: %(event)s" if is_salvage else "Event: %(event)s",
+            event=label,
+        )
+    )
     if desc:
         body_lines.append(desc)
 
     reward_lines: list[str] = []
     if int(rewards.get("metal") or 0):
-        reward_lines.append(f"{_t('resource_metal', 'Ferronit')}: {fmt_int(rewards['metal'])}")
+        reward_lines.append(
+            _t(
+                "fleet_world_expedition_report_loot_line",
+                "+ %(amount)s %(resource)s",
+                amount=fmt_int(rewards["metal"]),
+                resource=_t("resource_metal", "Ferronit"),
+            )
+        )
     if int(rewards.get("crystal") or 0):
-        reward_lines.append(f"{_t('resource_crystal', 'Crytite')}: {fmt_int(rewards['crystal'])}")
+        reward_lines.append(
+            _t(
+                "fleet_world_expedition_report_loot_line",
+                "+ %(amount)s %(resource)s",
+                amount=fmt_int(rewards["crystal"]),
+                resource=_t("resource_crystal", "Crytite"),
+            )
+        )
     if int(rewards.get("fuel_cells") or 0):
         reward_lines.append(
-            f"{_t('resource_fuel_cells', 'Fuel Cells')}: {fmt_int(rewards['fuel_cells'])}"
+            _t(
+                "fleet_world_expedition_report_loot_line",
+                "+ %(amount)s %(resource)s",
+                amount=fmt_int(rewards["fuel_cells"]),
+                resource=_t("resource_fuel_cells", "Fuel Cells"),
+            )
         )
     if reward_lines:
-        body_lines.append(_t("fleet_expedition_report_section_loot", "Recovered cargo"))
-        body_lines.extend(f"  {line}" for line in reward_lines)
+        body_lines.append(
+            _t(
+                "fleet_world_salvage_report_section_loot" if is_salvage else "fleet_world_expedition_report_section_loot",
+                "Salvage",
+            )
+        )
+        body_lines.extend(reward_lines)
     elif delay_extra:
         body_lines.append(
             _t(
@@ -252,7 +315,17 @@ def build_expedition_report(
             )
         )
     else:
-        body_lines.append(_t("fleet_expedition_report_no_loot", "No recoverable cargo."))
+        body_lines.append(
+            _t(
+                "fleet_world_salvage_report_loot_none" if is_salvage else "fleet_world_expedition_report_loot_none",
+                "Salvage: none",
+            )
+        )
+
+    if world.get("name_key"):
+        body_lines.append(
+            _t("fleet_world_expedition_report_losses_none", "Losses: none")
+        )
 
     if delay_extra and reward_lines:
         body_lines.append(
@@ -275,5 +348,20 @@ def build_expedition_report(
         "rewards": rewards,
         "delay_extra": delay_extra,
         "cargo_total": int(outcome.get("cargo_total") or 0),
+        "losses": {},
+        "losses_total": 0,
     }
+    if world.get("world_key"):
+        metadata.update(
+            {
+                "report_kind": "world_salvage" if is_salvage else "world_expedition",
+                "world_key": str(world["world_key"]),
+                "world_name_key": str(world.get("name_key") or ""),
+                "world_type": str(world.get("world_type") or ""),
+                "world_type_key": str(world.get("type_key") or ""),
+                "world_risk_key": str(world.get("risk_key") or ""),
+                "world_risk_level": str(world.get("risk_level") or "low"),
+                "world_role_icon": str(world.get("role_icon") or ""),
+            }
+        )
     return "\n".join(body_lines), metadata

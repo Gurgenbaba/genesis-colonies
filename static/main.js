@@ -367,12 +367,21 @@
     bootstrapServerTimeFromDom();
   }
 
-  function getApproxServerNow() {
+  function serverNow() {
     if (TIME.serverNow && TIME.clientPerfAt) {
       const dt = (performance.now() - TIME.clientPerfAt) / 1000;
       return TIME.serverNow + dt;
     }
     return Math.floor(Date.now() / 1000);
+  }
+
+  function syncServerClockFromState(data) {
+    const st = Number(data?.server_now ?? data?.server_time ?? 0);
+    if (st > 0) setServerTime(st);
+  }
+
+  function getApproxServerNow() {
+    return serverNow();
   }
 
   bootstrapServerTimeFromDom();
@@ -638,6 +647,8 @@
   function getDomPlanetId() {
     const roots = [
       document.querySelector(".overview-wrapper[data-planet-id]"),
+      document.querySelector(".buildings-wrapper[data-planet-id]"),
+      document.querySelector(".research-page[data-planet-id]"),
       document.getElementById("build-queue-compact"),
       document.getElementById("research-queue-compact"),
       document.getElementById("shipyard-page"),
@@ -670,6 +681,13 @@
       const el = document.getElementById(id);
       if (el) el.dataset.planetId = String(pid);
     });
+    document.querySelectorAll(".buildings-wrapper[data-planet-id], .research-page[data-planet-id]").forEach((el) => {
+      el.dataset.planetId = String(pid);
+    });
+    const fleetPage = document.getElementById("fleet-page");
+    if (fleetPage && fleetPage._fleetRt?.data) {
+      fleetPage._fleetRt.data.planet_id = pid;
+    }
     document.querySelectorAll(".planet-evolution-page[data-planet-id]").forEach((el) => {
       el.dataset.planetId = String(pid);
     });
@@ -718,6 +736,7 @@
     if (isPlanetSwitch) {
       GC.stopPolling();
       GC.stopProgressTicker();
+      _resetQueueLiveStates();
       _clearMovementCountdownExpiryState();
       _timerZeroRefreshLastAt.clear();
       _lastShipyardQueueSignature = "";
@@ -817,6 +836,8 @@
   GC.fmtIntParts = fmtIntParts;
   GC.fmtNumber = fmtNumber;
   GC.fmtIntFull = fmtIntFull;
+  GC.t = t;
+  GC.tf = tf;
 
   (function applyClientRuntimeConfig() {
     const cfg = typeof window !== "undefined" ? window.GC_CLIENT_CONFIG : null;
@@ -971,6 +992,7 @@
     lc.abortControllers = [];
     GC.stopProgressTicker();
     stopResourceTicker();
+    _resetQueueLiveStates();
     GC.stopPolling();
     GC.actionLocks.build = false;
     GC.actionLocks.research = false;
@@ -1134,7 +1156,9 @@
     return "other";
   };
 
-  GC.getServerNow = getApproxServerNow;
+  GC.getServerNow = getTimerServerNow;
+  GC.serverNow = getTimerServerNow;
+  GC.syncServerClockFromState = syncServerClockFromState;
 
   GC.reloadCurrentPage = function reloadCurrentPage(opts) {
     const target = `${window.location.pathname || "/"}${window.location.search || ""}`;
@@ -1314,6 +1338,16 @@
     scheduleGameStatePoll(next);
   };
 
+  function scheduleMessagesInboxBoot() {
+    if (GC.detectPage() !== "messages") return;
+    GC.setSafeTimeout(() => {
+      if (GC.detectPage() !== "messages") return;
+      if (typeof GC.bootMessagesInbox === "function") {
+        GC.bootMessagesInbox({ force: true });
+      }
+    }, 500);
+  }
+
   GC.initPage = function initPage(opts) {
     const page = GC.detectPage();
     const force = opts && opts.force;
@@ -1356,7 +1390,12 @@
       }
     }
 
+    if (page === "messages") {
+      scheduleMessagesInboxBoot();
+    }
+
     initFlashAutohide();
+    initMotdBanner();
 
     if (shouldRunGameLoop() && !skipHydrate) {
       hydratePageFromLastState({ skipMessagesUnread: page === "messages" });
@@ -1381,6 +1420,9 @@
       }
       GC.startProgressTicker();
       if (typeof GC.initChat === "function") GC.initChat();
+      if (GC.detectPage() === "messages" && typeof GC.bootMessagesInbox === "function") {
+        GC.bootMessagesInbox({ force: true });
+      }
     };
 
     if (page === "messages") {
@@ -2445,7 +2487,7 @@
             }
             const rem = act.key.startsWith("fleet_")
               ? movementRemainingSeconds(endAt, getTimerServerNow(), act.remaining)
-              : Math.max(0, Math.ceil(endAt - getTimerServerNow()));
+              : queueJobRemainingSeconds(endAt, getTimerServerNow(), act.remaining);
             etaEl.textContent = act.key.startsWith("fleet_")
               ? formatCountdownRemain(rem)
               : formatEta(rem);
@@ -2517,7 +2559,7 @@
             }
             const rem = act.key.startsWith("fleet_")
               ? movementRemainingSeconds(endAt, getTimerServerNow(), act.remaining)
-              : Math.max(0, Math.ceil(endAt - getTimerServerNow()));
+              : queueJobRemainingSeconds(endAt, getTimerServerNow(), act.remaining);
             _setIfChanged(
               etaEl,
               act.key.startsWith("fleet_") ? formatCountdownRemain(rem) : formatEta(rem)
@@ -2936,30 +2978,19 @@
     if (parentEl) parentEl.setAttribute("aria-expanded", expanded ? "true" : "false");
   }
 
+  function syncBuildingsSubnavFromState() {
+    const group = document.querySelector(".gc-nav-buildings-group");
+    if (!group) return;
+    const state = readNavSectionState();
+    setNavGroupExpanded(group, resolveNavGroupExpanded(group, state), false);
+  }
+
   function hideBuildingsSubnav() {
-    const sub = document.getElementById("gc-nav-buildings-sub");
-    if (!sub) return;
-    sub.hidden = true;
-    sub.classList.add("gc-nav-sub--collapsed");
-    sub.setAttribute("aria-hidden", "true");
-    _setSubnavGroupExpanded(
-      document.querySelector(".gc-nav-buildings-group"),
-      document.getElementById("gc-nav-buildings-parent"),
-      false
-    );
+    syncBuildingsSubnavFromState();
   }
 
   function showBuildingsSubnav() {
-    const sub = document.getElementById("gc-nav-buildings-sub");
-    if (!sub) return;
-    sub.hidden = false;
-    sub.classList.remove("gc-nav-sub--collapsed");
-    sub.setAttribute("aria-hidden", "false");
-    _setSubnavGroupExpanded(
-      document.querySelector(".gc-nav-buildings-group"),
-      document.getElementById("gc-nav-buildings-parent"),
-      true
-    );
+    syncBuildingsSubnavFromState();
   }
 
   function syncBuildingSidebarTab(tab) {
@@ -2992,10 +3023,13 @@
     document.addEventListener("click", (e) => {
       const subBtn = e.target.closest("#gc-nav-buildings-sub [data-building-tab]");
       if (subBtn) {
-        if (GC.detectPage() !== "buildings") return;
         e.preventDefault();
-        showBuildingsSubnav();
-        activateBuildingTabByName(subBtn.dataset.buildingTab, subBtn);
+        const tab = subBtn.dataset.buildingTab || "resources";
+        if (GC.detectPage() !== "buildings") {
+          GC.navigateTo(`/buildings?tab=${encodeURIComponent(tab)}`);
+          return;
+        }
+        activateBuildingTabByName(tab, subBtn);
         return;
       }
 
@@ -3009,7 +3043,7 @@
   function initBuildings() {
     bindBuildingTabsOnce();
     initBuildingTechnicalData();
-    showBuildingsSubnav();
+    syncBuildingsSubnavFromState();
     const pageRoot = document.querySelector("[data-buildings-page]");
     if (!pageRoot) return;
     const initialTab = pageRoot.dataset.activeBuildingTab || "resources";
@@ -3338,6 +3372,7 @@
   ]);
   const MILITARY_NAV_PAGES = new Set(["shipyard", "defense"]);
   const FLEET_NAV_PAGES = new Set(["fleet", "logistics"]);
+  const BUILDINGS_NAV_PAGES = new Set(["buildings"]);
 
   function isTradingNavPage(page) {
     return TRADING_NAV_PAGES.has(String(page || ""));
@@ -3349,6 +3384,10 @@
 
   function isFleetNavPage(page) {
     return FLEET_NAV_PAGES.has(String(page || ""));
+  }
+
+  function isBuildingsNavPage(page) {
+    return BUILDINGS_NAV_PAGES.has(String(page || ""));
   }
 
   function hideTradingSubnav() {
@@ -4693,12 +4732,12 @@
   let _pageTimerLoopRunning = false;
 
   function getTimerServerNow() {
-    const st = Number(GC.lastState?.server_time || GC.lastState?.server_now || 0);
+    const st = Number(GC.lastState?.server_now ?? GC.lastState?.server_time ?? 0);
     if (st) {
-      const approx = getApproxServerNow();
+      const approx = serverNow();
       if (!TIME.serverNow || st > approx - 0.5) setServerTime(st);
     }
-    return getApproxServerNow();
+    return serverNow();
   }
 
   function queryTimerElements(root) {
@@ -4980,7 +5019,7 @@
   }
 
   function _anyStaleMovementCountdownDom() {
-    const now = getApproxServerNow();
+    const now = getTimerServerNow();
     for (const el of document.querySelectorAll("[data-countdown-at]")) {
       const scope = el.dataset.countdownScope || "";
       if (scope !== "fleet" && scope !== "overview") continue;
@@ -5023,7 +5062,7 @@
         const srvRem = el.dataset.serverRemaining;
         const remaining = movementRemainingSeconds(
           countdownAt,
-          getApproxServerNow(),
+          getTimerServerNow(),
           srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
         );
         if (remaining <= 0) staleKeys.push(_movementCountdownKey(el));
@@ -5168,8 +5207,23 @@
 
   let _buildZeroHandled = "";
 
+  /** GC-557 — drop cached queue timer state (planet switch / PJAX cleanup). */
+  function _resetQueueLiveStates() {
+    BUILDQ.active.finishTime = 0;
+    BUILDQ.active.totalSeconds = 0;
+    RESEARCHQ.active.finishTime = 0;
+    RESEARCHQ.active.totalSeconds = 0;
+    SHIPYARDQ.active.finishTime = 0;
+    SHIPYARDQ.active.totalSeconds = 0;
+    DEFENSEQ.active.finishTime = 0;
+    DEFENSEQ.active.totalSeconds = 0;
+    _buildZeroHandled = "";
+    _productionZeroHandled.shipyard = "";
+    _productionZeroHandled.defense = "";
+  }
+
   function updateAllProgressBars(serverNow) {
-    const serverNowTs = Number.isFinite(serverNow) ? serverNow : getApproxServerNow();
+    const serverNowTs = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
 
     const path = window.location.pathname || "";
     const isResearchPage = path.endsWith("/research");
@@ -6061,8 +6115,7 @@
         }
       }
 
-      if (data.server_time) setServerTime(data.server_time);
-      else if (data.server_now) setServerTime(data.server_now);
+      syncServerClockFromState(data);
 
       const activePlanetId = Number(data.active_planet_id || data.build_queue?.planet_id || 0);
       if (!hudOnly) {
@@ -6073,8 +6126,10 @@
         ) {
           // Build queue is per active colony — never reuse the previous planet's panel state.
           _lastQueueSignature = "";
-          BUILDQ.active.finishTime = 0;
-          BUILDQ.active.totalSeconds = 0;
+          _lastResearchQueueSignature = "";
+          _lastShipyardQueueSignature = "";
+          _lastDefenseQueueSignature = "";
+          _resetQueueLiveStates();
         }
         if (activePlanetId > 0) {
           _last.activePlanetId = activePlanetId;
@@ -6101,6 +6156,10 @@
 
         if (typeof GC.updateHeaderPlanetSwitcherFromState === "function") {
           GC.updateHeaderPlanetSwitcherFromState(data);
+        }
+
+        if (typeof GC.syncRoleBasedSidebar === "function") {
+          GC.syncRoleBasedSidebar(data);
         }
 
         applyPlanetLandscapeFromState(data);
@@ -6485,7 +6544,7 @@
         p.backoff = 0;
         _statusPollErrorLogged = false;
         clearStatusWidgetOffline();
-        if (data.server_time) setServerTime(data.server_time);
+        syncServerClockFromState(data);
 
         if (stateGenAtStart !== _clientStateGen) {
           resolveFlight(null);
@@ -8562,6 +8621,21 @@
     return page._fleetRt;
   }
 
+  /** GC-557 — fleet send/preview origin must match active/context planet. */
+  function resolveFleetOriginPlanetId(page) {
+    if (!page) return 0;
+    const rt = getFleetRuntime(page);
+    const fromDom = parseInt(page.dataset.planetId || "0", 10);
+    const fromState = Number(GC.lastState?.active_planet_id || 0);
+    const fromRt = parseInt(rt.data?.planet_id || "0", 10);
+    const pid = fromDom || fromState || fromRt;
+    if (pid > 0) {
+      page.dataset.planetId = String(pid);
+      if (rt.data) rt.data.planet_id = pid;
+    }
+    return pid > 0 ? pid : 0;
+  }
+
   function fleetFuelLabel(tt, fuelResource) {
     if (fuelResource === "fuel_cells") return tt("resource_fuel_cells", "Fuel Cells");
     if (fuelResource === "metal") return tt("resource_metal", "Ferronit");
@@ -8609,6 +8683,326 @@
       };
     };
 
+    const getFleetUrlParams = () => new URLSearchParams(window.location.search);
+
+    const getFleetUrlMissionPrefill = () => {
+      const mission = (getFleetUrlParams().get("mission") || "").trim().toLowerCase();
+      return mission || "";
+    };
+
+    const hasFleetWorldKeyPrefill = () => !!(getFleetUrlParams().get("world_key") || "").trim();
+
+    const refreshFleetUrlMissionLock = (page) => {
+      if (!page) return "";
+      const params = getFleetUrlParams();
+      const missionRaw = (params.get("mission") || "").trim().toLowerCase();
+      const worldKeyRaw = (params.get("world_key") || "").trim();
+      if (missionRaw) {
+        page.dataset.fleetUrlMission = missionRaw;
+      } else if (worldKeyRaw) {
+        page.dataset.fleetUrlMission = "colonize";
+      }
+      if (worldKeyRaw) {
+        page.dataset.fleetWorldKey = worldKeyRaw;
+      }
+      return String(page.dataset.fleetUrlMission || "").trim().toLowerCase();
+    };
+
+    const isFleetUrlPrefillLocked = (page) => {
+      const locked = String(page?.dataset?.fleetUrlMission || "").trim().toLowerCase();
+      if (locked) return true;
+      return hasFleetWorldKeyPrefill() || !!getFleetUrlMissionPrefill();
+    };
+
+    const enforceFleetUrlMissionLock = (page) => {
+      const form = getForm(page);
+      const ms = form?.querySelector("[data-fleet-mission]");
+      if (!ms) return "";
+      const locked = String(page.dataset.fleetUrlMission || refreshFleetUrlMissionLock(page) || "").trim().toLowerCase();
+      if (!locked) return "";
+      const known = Array.from(ms.options).some((opt) => opt.value === locked);
+      if (!known) return locked;
+      if (ms.value !== locked) {
+        ms.value = locked;
+        if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
+        if (typeof GC.updateFleetFormMode === "function") GC.updateFleetFormMode(page);
+      }
+      syncFleetMissionLockUi(page);
+      return locked;
+    };
+
+    const getFleetWorldKey = (page) => {
+      const fromDataset = String(page?.dataset?.fleetWorldKey || "").trim();
+      if (fromDataset) return fromDataset;
+      return (getFleetUrlParams().get("world_key") || "").trim();
+    };
+    const getFleetTargetType = (page) => {
+      const fromPreview = String(page?.dataset?.fleetNativeTargetType || "").trim().toLowerCase();
+      if (fromPreview) return fromPreview;
+      const fromUrl = String(getFleetUrlParams().get("target_type") || "").trim().toLowerCase();
+      if (fromUrl) return fromUrl;
+      return String(page?.dataset?.fleetTargetType || "").trim().toLowerCase();
+    };
+
+    const buildFleetTargetPayload = (page) => {
+      const wk = getFleetWorldKey(page);
+      if (!wk) return {};
+      const payload = { world_key: wk };
+      const targetType = getFleetTargetType(page);
+      if (targetType) payload.target_type = targetType;
+      return payload;
+    };
+
+    const syncFleetMissionLockUi = (page) => {
+      const form = getForm(page);
+      const ms = form?.querySelector("[data-fleet-mission]");
+      const row = page?.querySelector(".fleet-mission-speed-row");
+      if (!ms || !row) return;
+      const locked = isFleetUrlPrefillLocked(page);
+      ms.disabled = locked;
+      row.classList.toggle("is-mission-locked", locked);
+      if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
+    };
+
+    const resolveFleetWorldTargetPresentation = (target) => {
+      if (!target || typeof target !== "object") return null;
+      const sw = target.strategic_world;
+      if (sw?.world_key) return { ...sw };
+      const wt = target.world_target;
+      const worldKey = String(wt?.target_world_key || target.world_key || "").trim();
+      if (!worldKey) return null;
+      return {
+        world_key: worldKey,
+        name_key: wt?.target_name_key || sw?.name_key || null,
+        display_name: wt?.target_name || null,
+        type_key: sw?.type_key || null,
+        native_type: wt?.target_type || null,
+        role_icon: sw?.role_icon || "✦",
+        promise_key: sw?.promise_key || null,
+        risk_key: sw?.risk_key || null,
+        risk_level: sw?.risk_level || "low",
+        reward_hint_key: sw?.reward_hint_key || null,
+      };
+    };
+
+    const _fleetEsc = (text) => String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+
+    const formatFleetNamedTarget = (worldTarget, target, fallbackCoords) => {
+      const wt = worldTarget || target?.world_target || null;
+      const coords = String(fallbackCoords || target?.coords || "").trim();
+      if (!wt) {
+        const legacyType = String(target?.target_type || "").trim();
+        let name = String(target?.target_owner_name || "").trim();
+        if (!name && legacyType === "expedition_slot") {
+          name = tt("fleet_target_expedition_label", "Deep space");
+        }
+        if (!name && legacyType === "empty_slot") {
+          name = tt("fleet_target_empty_label", "—");
+        }
+        if (!name) name = coords || "–";
+        return {
+          name,
+          typeLabel: legacyType ? tt(`fleet_target_${legacyType}`, legacyType) : "",
+          coords,
+        };
+      }
+      let name = wt.target_name_key
+        ? tt(wt.target_name_key, wt.target_name_key)
+        : String(wt.target_name || "").trim();
+      if (!name && wt.target_type === "expedition_world") {
+        name = tt("fleet_target_expedition_label", "Deep space");
+      }
+      if (!name) name = coords || "–";
+      const typeLabel = wt.target_type
+        ? tt(`fleet_target_${wt.target_type}`, wt.target_type)
+        : "";
+      const legacyCoords = wt.legacy_coords;
+      const coordsText = legacyCoords
+        ? `[${legacyCoords.galaxy}:${legacyCoords.system}:${legacyCoords.position}]`
+        : coords;
+      return { name, typeLabel, coords: coordsText };
+    };
+
+    const renderFleetActiveTargetBlock = (mv) => {
+      const named = formatFleetNamedTarget(mv.world_target, null, mv.target_coords);
+      const routeHtml = GC.coordRouteHtml(mv.origin_coords, mv.target_coords);
+      if (!mv.world_target) {
+        return `<div class="fleet-active-coords gc-mono">${routeHtml}</div>`;
+      }
+      const originName = String(mv.origin_name || "").trim();
+      const originPrefix = originName
+        ? `<span class="fleet-active-origin-name">${_fleetEsc(originName)}</span><span class="fleet-active-route-arrow" aria-hidden="true">→</span>`
+        : "";
+      return `<div class="fleet-active-target">
+          <div class="fleet-active-target-primary">${originPrefix}<span class="fleet-active-target-name">${_fleetEsc(named.name)}</span></div>
+          ${named.typeLabel ? `<span class="fleet-active-target-type">${_fleetEsc(named.typeLabel)}</span>` : ""}
+          <div class="fleet-active-coords-secondary gc-mono hint">${routeHtml}</div>
+        </div>`;
+    };
+
+    const applyFleetPreviewNamedTarget = (page, target, fallbackCoords) => {
+      const named = formatFleetNamedTarget(target?.world_target, target, fallbackCoords);
+      const previewTargetName = page.querySelector("[data-preview-target-name]");
+      const previewTargetNativeType = page.querySelector("[data-preview-target-native-type]");
+      const previewTargetCoords = page.querySelector("[data-preview-target-coords]");
+      const previewTargetHero = page.querySelector("[data-preview-target-hero]");
+      if (previewTargetName) previewTargetName.textContent = named.name || "–";
+      if (previewTargetNativeType) previewTargetNativeType.textContent = named.typeLabel || "–";
+      if (previewTargetCoords) {
+        if (named.coords) {
+          previewTargetCoords.textContent = named.coords;
+          previewTargetCoords.hidden = false;
+        } else {
+          previewTargetCoords.textContent = "";
+          previewTargetCoords.hidden = true;
+        }
+      }
+      if (previewTargetHero) {
+        previewTargetHero.classList.toggle("is-empty", !named.name || named.name === "–");
+      }
+      return named;
+    };
+
+    const clearFleetWorldKey = (page) => {
+      if (!page) return;
+      delete page.dataset.fleetWorldKey;
+      delete page.dataset.fleetTargetType;
+      delete page.dataset.fleetNativeTargetType;
+      page.querySelector("[data-fleet-coords-row]")?.removeAttribute("hidden");
+      page.querySelector("[data-fleet-target-block]")?.classList.remove("is-world-target");
+      page.querySelector(".fleet-send-panel")?.classList.remove("is-world-target-mode");
+      page.querySelector("[data-fleet-coords-strip]")?.classList.remove("is-world-target");
+      const hint = page.querySelector("[data-fleet-coords-hint]");
+      if (hint?.dataset.worldTargetHint === "1") {
+        hint.textContent = "";
+        hint.hidden = true;
+        delete hint.dataset.worldTargetHint;
+      }
+      hideFleetWorldTargetPanel(page);
+    };
+    const syncFleetWorldTargetUi = (page) => {
+      const wk = getFleetWorldKey(page);
+      const targetBlock = page.querySelector("[data-fleet-target-block]");
+      const coordsRow = page.querySelector("[data-fleet-coords-row]");
+      const strip = page.querySelector("[data-fleet-coords-strip]");
+      const sendPanel = page.querySelector(".fleet-send-panel");
+      const hint = page.querySelector("[data-fleet-coords-hint]");
+      if (targetBlock) targetBlock.classList.toggle("is-world-target", !!wk);
+      if (coordsRow) coordsRow.hidden = !!wk;
+      if (strip) strip.classList.toggle("is-world-target", !!wk);
+      if (sendPanel) sendPanel.classList.toggle("is-world-target-mode", !!wk);
+      if (!hint) return;
+      if (wk) {
+        hint.hidden = true;
+        delete hint.dataset.worldTargetHint;
+      } else if (hint.dataset.worldTargetHint === "1") {
+        hint.textContent = "";
+        hint.hidden = true;
+        delete hint.dataset.worldTargetHint;
+      }
+    };
+    const renderFleetWorldTargetPanel = (page, presentation, extras = {}) => {
+      const panel = page.querySelector("[data-fleet-world-target]");
+      if (!panel) return;
+      const sw = presentation && typeof presentation === "object" ? presentation : null;
+      if (!sw?.world_key) {
+        panel.hidden = true;
+        return;
+      }
+      panel.hidden = false;
+      syncFleetWorldTargetUi(page);
+      const iconEl = panel.querySelector("[data-fleet-world-target-icon]");
+      const nameEl = panel.querySelector("[data-fleet-world-target-name]");
+      const typeEl = panel.querySelector("[data-fleet-world-target-type]");
+      const promiseEl = panel.querySelector("[data-fleet-world-target-promise]");
+      const riskEl = panel.querySelector("[data-fleet-world-target-risk]");
+      const rewardEl = panel.querySelector("[data-fleet-world-target-reward]");
+      const missionEl = panel.querySelector("[data-fleet-world-target-mission]");
+      const flightEl = panel.querySelector("[data-fleet-world-target-flight]");
+      if (iconEl) iconEl.textContent = sw.role_icon || "✦";
+      if (nameEl) {
+        nameEl.textContent = sw.display_name
+          || (sw.name_key ? tt(sw.name_key, sw.name_key) : "–");
+      }
+      if (typeEl) {
+        typeEl.textContent = sw.type_key
+          ? tt(sw.type_key, sw.type_key)
+          : sw.native_type
+            ? tt(`fleet_target_${sw.native_type}`, sw.native_type)
+            : "–";
+      }
+      const setMetaRow = (el, text) => {
+        const row = el?.closest("div");
+        if (!el || !row) return;
+        const label = String(text || "").trim();
+        if (!label || label === "–") {
+          row.hidden = true;
+          el.textContent = "–";
+          return;
+        }
+        row.hidden = false;
+        el.textContent = label;
+      };
+      setMetaRow(promiseEl, sw.promise_key ? tt(sw.promise_key, "") : "");
+      if (riskEl) {
+        const riskText = sw.risk_key ? tt(sw.risk_key, "") : "";
+        setMetaRow(riskEl, riskText);
+        if (riskText) {
+          riskEl.className = `fleet-world-target-risk fleet-world-target-risk--${sw.risk_level || "low"}`;
+        }
+      }
+      setMetaRow(rewardEl, sw.reward_hint_key ? tt(sw.reward_hint_key, "") : "");
+      if (missionEl) {
+        const mission = String(extras.mission || "").trim().toLowerCase();
+        missionEl.textContent = mission ? tt(`fleet_mission_${mission}`, mission) : "–";
+      }
+      if (flightEl) {
+        flightEl.textContent = extras.flightLabel || "–";
+      }
+    };
+    const hideFleetWorldTargetPanel = (page) => renderFleetWorldTargetPanel(page, null);
+    const loadFleetWorldTargetPreview = async (page, worldKey) => {
+      const wk = String(worldKey || "").trim();
+      if (!wk) {
+        hideFleetWorldTargetPanel(page);
+        return;
+      }
+      const mission = getForm(page)?.querySelector("[data-fleet-mission]")?.value || "colonize";
+      const previewPath = mission === "expedition"
+        ? "/api/worlds/expedition-preview"
+        : "/api/worlds/colonize-preview";
+      try {
+        let res = await GC.fetchJSON(
+          `${previewPath}?world_key=${encodeURIComponent(wk)}`,
+          { cache: "no-store" }
+        );
+        if (
+          mission === "expedition"
+          && (!res?.ok || !res.data?.can_expedition)
+        ) {
+          res = await GC.fetchJSON(
+            `/api/worlds/salvage-preview?world_key=${encodeURIComponent(wk)}`,
+            { cache: "no-store" }
+          );
+        }
+        if (res?.ok && res.data?.presentation) {
+          const mission = enforceFleetUrlMissionLock(page)
+            || getForm(page)?.querySelector("[data-fleet-mission]")?.value
+            || "";
+          renderFleetWorldTargetPanel(page, res.data.presentation, { mission });
+          syncFleetMissionLockUi(page);
+        } else {
+          hideFleetWorldTargetPanel(page);
+        }
+      } catch (_) {
+        hideFleetWorldTargetPanel(page);
+      }
+    };
+
     const formatFleetDuration = (sec) => formatCountdownRemain(sec);
 
     const buildShipRoleMap = (page) => {
@@ -8640,6 +9034,7 @@
     const syncExpeditionMissionTarget = (page) => {
       const form = getForm(page);
       if (!form) return;
+      const wk = getFleetWorldKey(page);
       const rt = getFleetRuntime(page);
       const expPos = parseInt(rt.data.expedition_position || "16", 10);
       const g = parseInt(form.querySelector('[name="target_galaxy"]')?.value || "0", 10);
@@ -8652,6 +9047,19 @@
       const sendPanel = page.querySelector(".fleet-send-panel");
       const previewHud = page.querySelector("[data-fleet-preview]");
       const isExpoSlot = pos === expPos;
+
+      if (wk) {
+        if (strip) {
+          strip.classList.remove("is-expedition");
+          strip.classList.add("is-world-target");
+        }
+        if (sendPanel) sendPanel.classList.toggle("is-expedition-mode", mission === "expedition");
+        if (previewHud) previewHud.classList.toggle("is-expedition", mission === "expedition");
+        syncFleetWorldTargetUi(page);
+        updateFleetFormMode(page);
+        if (missionSel) GC.syncHudSelect(missionSel);
+        return;
+      }
 
       if (strip) strip.classList.toggle("is-expedition", isExpoSlot);
       if (sendPanel) sendPanel.classList.toggle("is-expedition-mode", mission === "expedition" || isExpoSlot);
@@ -8706,29 +9114,31 @@
     const syncMissionAllowlistFromTarget = (page, target) => {
       const sel = page.querySelector("[data-fleet-mission]");
       if (!sel || !target) return;
-      const allowed = new Set(target.allowed_missions || []);
-      const urlMission = String(page.dataset.fleetUrlMission || "").trim().toLowerCase();
+      const urlMission = String(page.dataset.fleetUrlMission || refreshFleetUrlMissionLock(page) || "").trim().toLowerCase();
+      const locked = isFleetUrlPrefillLocked(page);
       const prevValue = sel.value;
-      let currentOk = true;
+      const allowed = new Set(target.allowed_missions || []);
       Array.from(sel.options).forEach((opt) => {
+        if (urlMission && opt.value === urlMission) {
+          opt.disabled = false;
+          return;
+        }
         const ok = allowed.size === 0 || allowed.has(opt.value);
         opt.disabled = !ok;
-        if (opt.value === sel.value) currentOk = ok;
       });
-      if (!currentOk) {
-        if (urlMission && allowed.has(urlMission)) {
-          sel.value = urlMission;
-        } else {
-          if (urlMission && !allowed.has(urlMission)) {
-            delete page.dataset.fleetUrlMission;
-          }
-          const first = Array.from(sel.options).find((o) => !o.disabled);
-          if (first) sel.value = first.value;
-        }
+      if (urlMission && Array.from(sel.options).some((opt) => opt.value === urlMission)) {
+        sel.value = urlMission;
+      } else if (!locked && allowed.size > 0 && !allowed.has(sel.value)) {
+        const first = Array.from(sel.options).find((o) => !o.disabled);
+        if (first) sel.value = first.value;
       }
       if (typeof GC.rebuildHudSelect === "function") GC.rebuildHudSelect(sel);
       else if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(sel);
-      if (sel.value !== prevValue) {
+      if (locked) {
+        enforceFleetUrlMissionLock(page);
+        return;
+      }
+      if (sel.value !== prevValue && !urlMission) {
         sel.dispatchEvent(new Event("change", { bubbles: true }));
       }
     };
@@ -8784,7 +9194,9 @@
       if (mission === "expedition") {
         const expoShips = countShipsByRole(page, ships, "expedition");
         const cargoTotal = parseInt(preview?.cargo_total || "0", 10) || 0;
-        if (target.target_type && target.target_type !== "expedition_slot") {
+        const validTarget = target.target_type === "expedition_slot"
+          || target.target_type === "strategic_world";
+        if (target.target_type && !validTarget) {
           hints.push({
             tone: "warn",
             text: formatMissionHint("fleet_expedition_hint_wrong_position", { position: expPos }),
@@ -8965,7 +9377,7 @@
             <span class="fleet-active-mission fleet-active-mission--${mission}">${tt(`fleet_mission_${mv.mission_type}`, mv.mission_type)}</span>
             <span class="fleet-active-status">${tt(`fleet_status_${mv.status}`, mv.status)}</span>
           </div>
-          <div class="fleet-active-coords gc-mono">${GC.coordRouteHtml(mv.origin_coords, mv.target_coords)}</div>
+          ${renderFleetActiveTargetBlock(mv)}
           <div class="fleet-active-ships">${renderShipChips(mv.ships)}</div>
           ${cargo.length ? `<div class="fleet-active-cargo">${cargo.map((c) => `<span>${c}</span>`).join(" ")}</div>` : ""}
           <div class="fleet-active-times gc-mono">${countdown}</div>
@@ -9126,17 +9538,29 @@
       const previewFlight = page.querySelector("[data-preview-flight]");
       const previewTargetType = page.querySelector("[data-preview-target-type]");
       const previewTargetOwner = page.querySelector("[data-preview-target-owner]");
+      const previewTargetName = page.querySelector("[data-preview-target-name]");
+      const previewTargetNativeType = page.querySelector("[data-preview-target-native-type]");
+      const previewTargetCoords = page.querySelector("[data-preview-target-coords]");
+      const previewTargetHero = page.querySelector("[data-preview-target-hero]");
       const previewMissionStatus = page.querySelector("[data-preview-mission-status]");
       const previewMissionBadge = page.querySelector("[data-preview-mission-badge]");
       const previewArrival = page.querySelector("[data-preview-arrival]");
       const missionFeedback = page.querySelector("[data-fleet-mission-feedback]");
       const sendBtn = page.querySelector("[data-fleet-send-btn]");
       const ships = getShipsSelection(page);
+      enforceFleetUrlMissionLock(page);
       const missionType = form.querySelector("[data-fleet-mission]")?.value || "transport";
       const resetPreview = () => {
         rt.lastPreview = null;
         if (previewTargetType) previewTargetType.textContent = "–";
         if (previewTargetOwner) previewTargetOwner.textContent = "–";
+        if (previewTargetName) previewTargetName.textContent = "–";
+        if (previewTargetNativeType) previewTargetNativeType.textContent = "–";
+        if (previewTargetCoords) {
+          previewTargetCoords.textContent = "–";
+          previewTargetCoords.hidden = true;
+        }
+        if (previewTargetHero) previewTargetHero.classList.add("is-empty");
         if (previewMissionStatus) {
           previewMissionStatus.textContent = "–";
           previewMissionStatus.classList.remove("is-ok", "is-blocked");
@@ -9161,33 +9585,36 @@
         return;
       }
       try {
+        const originId = resolveFleetOriginPlanetId(page);
+        const domPlanetId = getDomPlanetId();
         const res = await GC.fetchJSON("/api/fleet/preview", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+            ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),
+          },
           body: JSON.stringify({
-            origin_planet_id: rt.data.planet_id,
+            origin_planet_id: originId,
             ships,
             resources: getResourcesSelection(page),
             speed_percent: parseInt(form.querySelector("[data-fleet-speed]")?.value || "100", 10),
             mission_type: missionType,
             ...getTargetCoords(page),
+            ...buildFleetTargetPayload(page),
           }),
         });
         const p = fleetPayload(res).preview || res.preview;
         if (res?.ok && p) {
           rt.lastPreview = p;
           const target = p.target || {};
+          const named = applyFleetPreviewNamedTarget(page, target, target.coords);
           if (previewTargetType) {
-            previewTargetType.textContent = target.target_type
-              ? tt(`fleet_target_${target.target_type}`, target.target_type)
-              : "–";
+            previewTargetType.textContent = named.typeLabel
+              || (target.target_type ? tt(`fleet_target_${target.target_type}`, target.target_type) : "–");
           }
           if (previewTargetOwner) {
-            previewTargetOwner.textContent = target.target_owner_name || (target.target_type === "expedition_slot"
-              ? tt("fleet_target_expedition_label", "Deep space")
-              : target.target_type === "empty_slot"
-                ? tt("fleet_target_empty_label", "—")
-                : "–");
+            previewTargetOwner.textContent = named.name || "–";
           }
           const debrisRow = page.querySelector("[data-preview-debris-row]");
           const previewDebris = page.querySelector("[data-preview-debris]");
@@ -9197,9 +9624,28 @@
             if (showDebris) previewDebris.textContent = formatDebrisPreview(target.debris);
           }
           syncMissionAllowlistFromTarget(page, target);
+          const lockedMission = enforceFleetUrlMissionLock(page) || missionType;
+          const wk = getFleetWorldKey(page);
+          if (wk) {
+            if (target.world_target?.target_type) {
+              page.dataset.fleetNativeTargetType = String(target.world_target.target_type);
+            }
+            const presentation = resolveFleetWorldTargetPresentation(target);
+            if (presentation) {
+              renderFleetWorldTargetPanel(page, presentation, {
+                mission: lockedMission,
+                flightLabel: formatFleetDuration(p.duration_seconds ?? p.flight_seconds ?? 0),
+              });
+            }
+            syncFleetWorldTargetUi(page);
+          } else if (target.strategic_world) {
+            renderFleetWorldTargetPanel(page, target.strategic_world, { mission: lockedMission });
+          } else {
+            hideFleetWorldTargetPanel(page);
+          }
           updateFleetFormMode(page);
           if (previewMissionBadge) {
-            previewMissionBadge.textContent = tt(`fleet_mission_${missionType}`, missionType);
+            previewMissionBadge.textContent = tt(`fleet_mission_${lockedMission}`, lockedMission);
           }
           if (previewMissionStatus) {
             previewMissionStatus.classList.remove("is-ok", "is-blocked");
@@ -9216,12 +9662,13 @@
           if (previewHud) {
             previewHud.classList.toggle(
               "is-expedition",
-              missionType === "expedition" && target.target_type === "expedition_slot"
+              lockedMission === "expedition"
+                && (target.target_type === "expedition_slot" || target.target_type === "strategic_world")
             );
             previewHud.classList.toggle("is-ready", !!p.can_send);
             previewHud.classList.toggle("is-blocked", !p.can_send);
           }
-          updateMissionFeedback(page, p, missionType, ships);
+          updateMissionFeedback(page, p, lockedMission, ships);
           if (previewCargo) previewCargo.textContent = `${p.cargo_used || 0} / ${p.cargo_total || 0}`;
           if (previewCargoFree) previewCargoFree.textContent = String(p.cargo_free || 0);
           if (previewFuel) previewFuel.textContent = String(p.fuel_cost || 0);
@@ -9230,14 +9677,19 @@
             previewFlight.textContent = formatCountdownRemain(p.duration_seconds ?? p.flight_seconds ?? 0);
           }
           if (previewArrival) {
-            const arrivalAt = Number(p.countdown_at || p.arrival_at || 0);
+            const arrivalAt = parseTimerTarget(p.countdown_at || p.arrival_at || 0);
             if (arrivalAt > 0) {
+              previewArrival.dataset.timerTarget = String(arrivalAt);
               previewArrival.dataset.countdownAt = String(arrivalAt);
-              const nowSec = getApproxServerNow();
-              previewArrival.textContent = formatCountdownRemain(Math.max(0, Math.ceil(arrivalAt - nowSec)));
+              previewArrival.dataset.timerKind = "fleet";
+              const nowSec = getTimerServerNow();
+              const rem = queueJobRemainingSeconds(arrivalAt, nowSec);
+              previewArrival.textContent = formatCountdownRemain(rem);
               GC.startProgressTicker();
             } else {
+              delete previewArrival.dataset.timerTarget;
               delete previewArrival.dataset.countdownAt;
+              delete previewArrival.dataset.timerKind;
               previewArrival.textContent = "–";
             }
           }
@@ -9251,6 +9703,7 @@
     };
 
     const schedulePreview = (page) => {
+      enforceFleetUrlMissionLock(page);
       const rt = getFleetRuntime(page);
       if (rt.previewTimer) clearTimeout(rt.previewTimer);
       rt.previewTimer = setTimeout(() => runPreview(page), 300);
@@ -9288,7 +9741,10 @@
     };
 
     const pickDefaultFleetTargetIfNeeded = (page) => {
-      const params = new URLSearchParams(window.location.search);
+      const params = getFleetUrlParams();
+      if (params.has("world_key") || params.get("mission")) {
+        return;
+      }
       if (
         params.has("target_galaxy")
         && params.has("target_system")
@@ -9331,16 +9787,19 @@
       if (p) p.value = chip.getAttribute("data-position") || chip.dataset.position || "";
       const mission = chip.getAttribute("data-mission") || chip.dataset.mission;
       const ms = form.querySelector("[data-fleet-mission]");
-      if (mission && ms) {
+      if (mission && ms && !isFleetUrlPrefillLocked(page)) {
         ms.value = mission;
         GC.syncHudSelect(ms);
         setColonizeRowVisible(page, mission);
-      } else if (ms && ms.value === "expedition") {
+      } else if (ms && ms.value === "expedition" && !isFleetUrlPrefillLocked(page)) {
         ms.value = "transport";
         GC.syncHudSelect(ms);
         setColonizeRowVisible(page, "transport");
       }
-      delete page.dataset.fleetUrlMission;
+      if (!isFleetUrlPrefillLocked(page)) {
+        delete page.dataset.fleetUrlMission;
+        clearFleetWorldKey(page);
+      }
       page.querySelectorAll(".fleet-colony-chip").forEach((c) => c.classList.remove("is-selected"));
       chip.classList.add("is-selected");
       syncExpeditionMissionTarget(page);
@@ -9355,6 +9814,15 @@
     GC.runFleetPreview = runPreview;
     GC.applyFleetUrlPrefill = applyFleetUrlPrefill;
     GC.pickDefaultFleetTargetIfNeeded = pickDefaultFleetTargetIfNeeded;
+    GC.getFleetWorldKey = getFleetWorldKey;
+    GC.clearFleetWorldKey = clearFleetWorldKey;
+    GC.syncFleetWorldTargetUi = syncFleetWorldTargetUi;
+    GC.renderFleetWorldTargetPanel = renderFleetWorldTargetPanel;
+    GC.loadFleetWorldTargetPreview = loadFleetWorldTargetPreview;
+    GC.enforceFleetUrlMissionLock = enforceFleetUrlMissionLock;
+    GC.buildFleetTargetPayload = buildFleetTargetPayload;
+    GC.syncFleetMissionLockUi = syncFleetMissionLockUi;
+    GC.resolveFleetWorldTargetPresentation = resolveFleetWorldTargetPresentation;
 
     document.addEventListener("click", async (e) => {
       const page = getPage();
@@ -9476,13 +9944,18 @@
       if (e.target.matches("[data-fleet-mission]")) {
         delete page.dataset.fleetUrlMission;
         setColonizeRowVisible(page, e.target.value);
-        if (e.target.value === "expedition") applyExpeditionTarget(page);
+        if (e.target.value === "expedition" && !getFleetWorldKey(page)) applyExpeditionTarget(page);
         syncExpeditionMissionTarget(page);
         updateFleetFormMode(page);
+        const wk = getFleetWorldKey(page);
+        if (wk) loadFleetWorldTargetPreview(page, wk);
         schedulePreview(page);
       }
       if (e.target.matches('[name="target_galaxy"], [name="target_system"], [name="target_position"]')) {
-        delete page.dataset.fleetUrlMission;
+        if (!isFleetUrlPrefillLocked(page)) {
+          delete page.dataset.fleetUrlMission;
+          clearFleetWorldKey(page);
+        }
         syncExpeditionMissionTarget(page);
       }
       if (e.target.closest("#fleet-send-form")) schedulePreview(page);
@@ -9492,7 +9965,10 @@
       const page = getPage();
       if (!page) return;
       if (e.target.matches('[name="target_galaxy"], [name="target_system"], [name="target_position"]')) {
-        delete page.dataset.fleetUrlMission;
+        if (!isFleetUrlPrefillLocked(page)) {
+          delete page.dataset.fleetUrlMission;
+          clearFleetWorldKey(page);
+        }
         syncExpeditionMissionTarget(page);
       }
       if (e.target.closest("#fleet-send-form")) schedulePreview(page);
@@ -9525,17 +10001,24 @@
           return;
         }
         try {
+          enforceFleetUrlMissionLock(page);
+          const originId = resolveFleetOriginPlanetId(page);
+          const domPlanetId = getDomPlanetId();
           const res = await GC.fetchGameAction("/api/fleet/send", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...(domPlanetId ? { "X-GC-Dom-Planet-Id": String(domPlanetId) } : {}),
+            },
             body: JSON.stringify({
-              origin_planet_id: rt.data.planet_id,
+              origin_planet_id: originId,
               ships: getShipsSelection(page),
               resources: getResourcesSelection(page),
               speed_percent: parseInt(form.querySelector("[data-fleet-speed]")?.value || "100", 10),
               mission_type: form.querySelector("[data-fleet-mission]")?.value,
               colony_name: form.querySelector("[data-fleet-colony-name]")?.value || undefined,
               ...getTargetCoords(page),
+              ...buildFleetTargetPayload(page),
             }),
           });
           if (res?.ok) {
@@ -9555,9 +10038,8 @@
             }
             if (res.state) {
               applyActionState(res, "fleet_send_success");
-            } else {
-              await refreshFleetState(page);
             }
+            await refreshFleetState(page);
             page.querySelectorAll("[data-ship-input]").forEach((inp) => { inp.value = "0"; });
             const mInp = page.querySelector("[data-fleet-res-metal]");
             const cInp = page.querySelector("[data-fleet-res-crystal]");
@@ -9606,11 +10088,12 @@
           return;
         }
         try {
+          const originId = resolveFleetOriginPlanetId(page);
           const res = await GC.fetchGameAction("/api/fleet/mass-expedition", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              origin_planet_id: rt.data.planet_id,
+              origin_planet_id: originId,
               preset_id: parseInt(presetId, 10),
               waves,
             }),
@@ -10313,14 +10796,21 @@
     page._fleetApplySeq = 0;
     page._fleetLiveServerTime = 0;
     const initParams = new URLSearchParams(window.location.search);
-    if (!(initParams.get("mission") || "").trim()) {
+    const initMission = (initParams.get("mission") || "").trim();
+    const initWorldKey = (initParams.get("world_key") || "").trim();
+    if (!initMission && !initWorldKey) {
       delete page.dataset.fleetUrlMission;
+    }
+    if (!initWorldKey) {
+      delete page.dataset.fleetWorldKey;
+      delete page.dataset.fleetTargetType;
+      delete page.dataset.fleetNativeTargetType;
     }
 
     const rt = getFleetRuntime(page);
     rt.data = parseFleetPageData(page);
     rt.lastPreview = null;
-    if (rt.data?.planet_id) page.dataset.planetId = String(rt.data.planet_id);
+    resolveFleetOriginPlanetId(page);
 
     const fuelResource = rt.data.fuel_resource || page.dataset.fuelResource || "fuel_cells";
     const fuelLabelEl = page.querySelector("[data-fuel-resource-label]");
@@ -10342,6 +10832,7 @@
     tickFleetCountdowns();
     GC.startProgressTicker();
     if (typeof GC.refreshFleetState === "function") GC.refreshFleetState(page);
+    if (typeof GC.syncFleetMissionLockUi === "function") GC.syncFleetMissionLockUi(page);
   }
 
   function applyFleetUrlPrefill(page) {
@@ -10386,10 +10877,30 @@
       page.dataset.fleetUrlMission = missionRaw;
       ms.value = missionRaw;
       if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
-      setColonizeRowVisible(page, missionRaw);
-      updateFleetFormMode(page);
+      if (typeof GC.updateFleetFormMode === "function") GC.updateFleetFormMode(page);
     } else {
       delete page.dataset.fleetUrlMission;
+    }
+
+    const worldKeyRaw = (params.get("world_key") || "").trim();
+    const targetTypeRaw = (params.get("target_type") || "").trim().toLowerCase();
+    if (worldKeyRaw) {
+      page.dataset.fleetWorldKey = worldKeyRaw;
+      if (targetTypeRaw) {
+        page.dataset.fleetTargetType = targetTypeRaw;
+      }
+      if (!missionKnown && ms) {
+        page.dataset.fleetUrlMission = "colonize";
+        ms.value = "colonize";
+        if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
+        if (typeof GC.updateFleetFormMode === "function") GC.updateFleetFormMode(page);
+      }
+      if (typeof GC.syncFleetWorldTargetUi === "function") GC.syncFleetWorldTargetUi(page);
+      if (typeof GC.loadFleetWorldTargetPreview === "function") {
+        GC.loadFleetWorldTargetPreview(page, worldKeyRaw);
+      }
+    } else if (typeof GC.clearFleetWorldKey === "function") {
+      GC.clearFleetWorldKey(page);
     }
 
     const colonyName = params.get("colony_name");
@@ -10408,9 +10919,11 @@
     if (urlMission && ms && ms.value !== urlMission) {
       ms.value = urlMission;
       if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
-      setColonizeRowVisible(page, urlMission);
-      updateFleetFormMode(page);
+      if (typeof GC.updateFleetFormMode === "function") GC.updateFleetFormMode(page);
     }
+    if (typeof GC.syncFleetWorldTargetUi === "function") GC.syncFleetWorldTargetUi(page);
+    if (typeof GC.enforceFleetUrlMissionLock === "function") GC.enforceFleetUrlMissionLock(page);
+    if (typeof GC.syncFleetMissionLockUi === "function") GC.syncFleetMissionLockUi(page);
     if (typeof GC.runFleetPreview === "function") {
       GC.runFleetPreview(page);
     }
@@ -12092,6 +12605,16 @@
   GC.syncHudSelect = syncHudSelect;
   GC.rebuildHudSelect = rebuildHudSelect;
 
+  function empireIdentityLabelKey(planet) {
+    if (!planet) return "";
+    return (
+      planet.identity_title_key ||
+      planet.empire_subtitle_key ||
+      planet.empire_role_label_key ||
+      ""
+    );
+  }
+
   function rebuildHeaderPlanetSwitcher(planets) {
     const root = document.getElementById("gc-planet-switcher");
     if (!root || !Array.isArray(planets) || !planets.length) return;
@@ -12104,8 +12627,20 @@
 
     const trigger = document.getElementById("gc-planet-switcher-trigger");
     const nameEl = root.querySelector("[data-planet-switcher-name]");
+    const roleEl = root.querySelector("[data-planet-switcher-role]");
+    const iconEl = root.querySelector("[data-planet-switcher-icon]");
     const coordEl = root.querySelector("[data-planet-switcher-coord]");
     if (nameEl) nameEl.textContent = active.name || "";
+    if (iconEl) {
+      iconEl.textContent = active.empire_role_icon || "";
+      iconEl.hidden = !active.empire_role_icon;
+    }
+    if (roleEl) {
+      const roleKey = empireIdentityLabelKey(active);
+      const roleText = roleKey ? t(roleKey, roleKey) : "";
+      roleEl.textContent = roleText;
+      roleEl.hidden = !roleText;
+    }
     if (coordEl) {
       const coord = active.coordinates_formatted || "";
       coordEl.hidden = !coord;
@@ -12154,8 +12689,6 @@
     }
 
     menu.replaceChildren();
-    const hwLabel = t("header_planet_homeworld", "Heimatwelt");
-    const colLabel = t("header_planet_colony", "Kolonie");
 
     planets.forEach((p) => {
       const btn = document.createElement("button");
@@ -12169,20 +12702,43 @@
       btn.dataset.planetClassKey = p.planet_class_label_key || "";
       btn.dataset.planetClass = p.planet_class || "";
       btn.dataset.planetHomeworld = p.is_homeworld ? "1" : "0";
+      btn.dataset.planetRoleKey = p.empire_role_key || "";
+      btn.dataset.planetRoleLabelKey = p.empire_role_label_key || "";
+      btn.dataset.planetRoleIcon = p.empire_role_icon || "";
+      btn.dataset.planetIdentityKey = empireIdentityLabelKey(p);
 
+      const nameRow = document.createElement("span");
+      nameRow.className = "gc-planet-switcher-item-name-row";
+      if (p.empire_role_icon) {
+        const iconSpan = document.createElement("span");
+        iconSpan.className = "gc-planet-switcher-item-icon";
+        iconSpan.setAttribute("aria-hidden", "true");
+        iconSpan.textContent = p.empire_role_icon;
+        nameRow.appendChild(iconSpan);
+      }
       const nameSpan = document.createElement("span");
       nameSpan.className = "gc-planet-switcher-item-name";
       nameSpan.textContent = p.name || "";
+      nameRow.appendChild(nameSpan);
 
       const metaSpan = document.createElement("span");
-      metaSpan.className = "gc-planet-switcher-item-meta gc-mono";
+      metaSpan.className = "gc-planet-switcher-item-meta";
+      const identityKey = empireIdentityLabelKey(p);
+      if (identityKey) {
+        const roleSpan = document.createElement("span");
+        roleSpan.className = "gc-planet-switcher-item-role";
+        roleSpan.textContent = t(identityKey, identityKey);
+        metaSpan.appendChild(roleSpan);
+      }
       const coord = p.coordinates_formatted || "";
-      const suffix = p.is_homeworld ? hwLabel : colLabel;
-      metaSpan.innerHTML = coord
-        ? `${GC.coordLinkHtml(coord, { label: coord })} · ${gcEscHtml(suffix)}`
-        : gcEscHtml(suffix);
+      if (coord) {
+        const coordSpan = document.createElement("span");
+        coordSpan.className = "gc-planet-switcher-item-coord gc-mono";
+        coordSpan.innerHTML = GC.coordLinkHtml(coord, { label: coord });
+        metaSpan.appendChild(coordSpan);
+      }
 
-      btn.appendChild(nameSpan);
+      btn.appendChild(nameRow);
       btn.appendChild(metaSpan);
       menu.appendChild(btn);
     });
@@ -12190,6 +12746,389 @@
 
   function updateHeaderPlanetSwitcherFromPlanets(planets) {
     rebuildHeaderPlanetSwitcher(planets);
+  }
+
+  function buildSidebarNavFromRole(empireRoleKey, isHomeworld) {
+    const cfg = window.GC_SIDEBAR_NAV_CONFIG || {};
+    const allModules = Array.isArray(cfg.all_modules) ? cfg.all_modules : [];
+    const homeworldRoles = new Set(Array.isArray(cfg.homeworld_roles) ? cfg.homeworld_roles : ["homeworld"]);
+    const role = String(empireRoleKey || "general").trim().toLowerCase();
+    if (isHomeworld || homeworldRoles.has(role)) {
+      const modules = {};
+      allModules.forEach((key) => { modules[key] = "prominent"; });
+      return {
+        empire_role_key: "homeworld",
+        is_homeworld: true,
+        full_nav: true,
+        show_more_section: false,
+        modules,
+      };
+    }
+    const prominent = cfg.prominent_by_role && cfg.prominent_by_role[role];
+    if (!Array.isArray(prominent) || !prominent.length) {
+      const modules = {};
+      allModules.forEach((key) => { modules[key] = "prominent"; });
+      return {
+        empire_role_key: role,
+        is_homeworld: false,
+        full_nav: true,
+        show_more_section: false,
+        modules,
+      };
+    }
+    const prominentSet = new Set(prominent);
+    const modules = {};
+    allModules.forEach((key) => {
+      modules[key] = prominentSet.has(key) ? "prominent" : "secondary";
+    });
+    return {
+      empire_role_key: role,
+      is_homeworld: false,
+      full_nav: false,
+      show_more_section: true,
+      modules,
+    };
+  }
+
+  function resolveSidebarNavFromState(data) {
+    if (!data || typeof data !== "object") return null;
+    if (data.active_planet && data.active_planet.sidebar_nav) {
+      return data.active_planet.sidebar_nav;
+    }
+    const activeId = Number(data.active_planet_id || data.active_planet?.planet_id || 0);
+    if (!activeId) return null;
+    let roleKey = "general";
+    let isHomeworld = false;
+    const ap = data.active_planet;
+    if (ap && Number(ap.planet_id) === activeId) {
+      roleKey = ap.empire_role_key || roleKey;
+      isHomeworld = !!ap.is_homeworld;
+    } else if (Array.isArray(data.planets)) {
+      const row = data.planets.find((p) => Number(p.planet_id) === activeId);
+      if (row) {
+        roleKey = row.empire_role_key || roleKey;
+        isHomeworld = !!row.is_homeworld;
+      }
+    }
+    return buildSidebarNavFromRole(roleKey, isHomeworld);
+  }
+
+  const MOBILE_BOTTOM_PRIORITY = (() => {
+    const cfg = window.GC_SIDEBAR_NAV_CONFIG || {};
+    return Array.isArray(cfg.mobile_bottom_priority) && cfg.mobile_bottom_priority.length
+      ? cfg.mobile_bottom_priority
+      : [
+        "overview",
+        "buildings",
+        "research",
+        "defense",
+        "logistics",
+        "fleet",
+        "galaxy",
+        "planet_evolution",
+        "trading",
+        "ranking",
+      ];
+  })();
+  const MOBILE_BOTTOM_MAX = Number((window.GC_SIDEBAR_NAV_CONFIG || {}).mobile_bottom_max) || 4;
+
+  function navTierForModule(nav, module) {
+    const fullNav = !!nav.full_nav;
+    const modules = nav.modules && typeof nav.modules === "object" ? nav.modules : {};
+    return fullNav ? "prominent" : (modules[module] || "prominent");
+  }
+
+  function applyRoleNavTiers(root, nav) {
+    if (!root || !nav) return;
+    const fullNav = !!nav.full_nav;
+    const modules = nav.modules && typeof nav.modules === "object" ? nav.modules : {};
+    root.dataset.navRole = String(nav.empire_role_key || "general");
+    root.dataset.navFull = fullNav ? "1" : "0";
+
+    root.querySelectorAll("[data-nav-module]").forEach((el) => {
+      const key = String(el.dataset.navModule || "");
+      const tier = fullNav ? "prominent" : (modules[key] || "prominent");
+      el.dataset.navTier = tier;
+      el.classList.remove("gc-nav-module--prominent", "gc-nav-module--secondary");
+      el.classList.add(`gc-nav-module--${tier}`);
+    });
+
+    root.querySelectorAll("[data-nav-group]").forEach((group) => {
+      const keys = String(group.dataset.navGroupModules || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const tiers = keys.map((key) => (fullNav ? "prominent" : (modules[key] || "prominent")));
+      const anyProminent = tiers.some((tier) => tier === "prominent");
+      const allSecondary = tiers.length > 0 && tiers.every((tier) => tier === "secondary");
+      group.classList.toggle("gc-nav-group--prominent", anyProminent);
+      group.classList.toggle("gc-nav-group--secondary", allSecondary);
+    });
+  }
+
+  function moduleDisplaySection(nav, module) {
+    const cfg = window.GC_SIDEBAR_NAV_CONFIG || {};
+    const primaryMap = cfg.module_primary_section || {};
+    if (module === "support") return null;
+    const utility = new Set(
+      Array.isArray(cfg.utility_modules)
+        ? cfg.utility_modules
+        : (cfg.administration_modules || [])
+    );
+    if (utility.has(module)) return "administration";
+    return primaryMap[module] || null;
+  }
+
+  function shouldShowSidebarNavLink(nav, el) {
+    const module = String(el.dataset.navModule || "");
+    if (!module) return false;
+    const section = String(el.closest("[data-nav-section]")?.dataset.navSection || "");
+    const display = moduleDisplaySection(nav, module);
+    return !!(display && display === section);
+  }
+
+  function navLinkShows(nav, module, placement) {
+    const display = moduleDisplaySection(nav, module);
+    if (!display) return false;
+    if (placement === "administration") return display === "administration";
+    return display === (window.GC_SIDEBAR_NAV_CONFIG?.module_primary_section || {})[module];
+  }
+
+  const NAV_SECTION_STORAGE_KEY = "gc_sidebar_state";
+
+  function readNavSectionState() {
+    try {
+      return JSON.parse(localStorage.getItem(NAV_SECTION_STORAGE_KEY) || "{}");
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function writeNavSectionState(state) {
+    try {
+      localStorage.setItem(NAV_SECTION_STORAGE_KEY, JSON.stringify(state));
+    } catch (_) {}
+  }
+
+  function resolveNavSectionExpanded(section, state) {
+    const key = String(section.dataset.navSection || "");
+    if (key && Object.prototype.hasOwnProperty.call(state, key)) {
+      return !!state[key];
+    }
+    return section.classList.contains("is-expanded");
+  }
+
+  function resolveNavGroupExpanded(group, state) {
+    const key = String(group.dataset.navGroupKey || "");
+    if (key && Object.prototype.hasOwnProperty.call(state, key)) {
+      return !!state[key];
+    }
+    if (key === "buildings") {
+      return typeof GC.detectPage === "function" && GC.detectPage() === "buildings";
+    }
+    return false;
+  }
+
+  function setNavSectionExpanded(section, expanded, persist) {
+    if (!section) return;
+    const toggle = section.querySelector(".gc-nav-section-toggle");
+    const body = section.querySelector(".gc-nav-section-body");
+    if (!toggle || !body) return;
+    section.classList.toggle("is-expanded", expanded);
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    if (persist) {
+      const key = String(section.dataset.navSection || "");
+      if (!key) return;
+      const state = readNavSectionState();
+      state[key] = expanded;
+      writeNavSectionState(state);
+    }
+  }
+
+  function setNavGroupExpanded(group, expanded, persist) {
+    if (!group) return;
+    const toggle = group.querySelector(".gc-nav-group-toggle");
+    const body = group.querySelector(".gc-nav-group-body");
+    if (!toggle || !body) return;
+    group.classList.toggle("is-expanded", expanded);
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    if (persist) {
+      const key = String(group.dataset.navGroupKey || "");
+      if (!key) return;
+      const state = readNavSectionState();
+      state[key] = expanded;
+      writeNavSectionState(state);
+    }
+  }
+
+  function syncNavGroupAccordionState(sidebar, state) {
+    if (!sidebar) return;
+    const stored = state || readNavSectionState();
+    sidebar.querySelectorAll("[data-nav-group-key]").forEach((group) => {
+      if (group.hidden) return;
+      setNavGroupExpanded(group, resolveNavGroupExpanded(group, stored), false);
+    });
+  }
+
+  function syncNavSectionAccordionState(sidebar) {
+    if (!sidebar) return;
+    const state = readNavSectionState();
+    sidebar.querySelectorAll("[data-nav-section]").forEach((section) => {
+      if (section.hidden) return;
+      setNavSectionExpanded(section, resolveNavSectionExpanded(section, state), false);
+    });
+    syncNavGroupAccordionState(sidebar, state);
+  }
+
+  function applyDesktopSidebarNav(sidebar, nav) {
+    if (!sidebar || !nav) return;
+    applyRoleNavTiers(sidebar, nav);
+    const fullNav = !!nav.full_nav;
+    sidebar.classList.toggle("gc-sidebar--full-nav", fullNav);
+    sidebar.classList.toggle("gc-sidebar--role-nav", !fullNav);
+
+    sidebar.querySelectorAll("[data-nav-module]").forEach((el) => {
+      el.hidden = true;
+    });
+    sidebar.querySelectorAll("[data-nav-module]").forEach((el) => {
+      if (shouldShowSidebarNavLink(nav, el)) {
+        el.hidden = false;
+      }
+    });
+
+    sidebar.querySelectorAll("[data-nav-section]").forEach((section) => {
+      const anyVisible = !!section.querySelector("[data-nav-module]:not([hidden])");
+      section.hidden = !anyVisible;
+    });
+
+    syncNavSectionAccordionState(sidebar);
+  }
+
+  function applyMobileBottomNav(bottomNav, nav) {
+    if (!bottomNav || !nav) return new Set(["overview", "buildings", "research", "ranking"]);
+    applyRoleNavTiers(bottomNav, nav);
+    const fullNav = !!nav.full_nav;
+    bottomNav.classList.toggle("gc-bottom-nav--full-nav", fullNav);
+    bottomNav.classList.toggle("gc-bottom-nav--role-nav", !fullNav);
+
+    const prominent = MOBILE_BOTTOM_PRIORITY.filter(
+      (key) => navTierForModule(nav, key) === "prominent"
+    );
+    const visible = fullNav
+      ? ["overview", "buildings", "research", "ranking"]
+      : prominent.slice(0, MOBILE_BOTTOM_MAX);
+    const visibleSet = new Set(visible);
+
+    bottomNav.querySelectorAll("a.gc-bottom-nav-item[data-nav-module]").forEach((el) => {
+      const key = String(el.dataset.navModule || "");
+      const show = visibleSet.has(key);
+      el.hidden = !show;
+      el.classList.toggle("gc-nav-bottom-slot", show);
+    });
+
+    return visibleSet;
+  }
+
+  function applyMobileDrawerNav(drawer, nav, bottomModules) {
+    if (!drawer || !nav) return;
+    applyRoleNavTiers(drawer, nav);
+    const fullNav = !!nav.full_nav;
+    const bottomSet = bottomModules instanceof Set ? bottomModules : new Set(bottomModules || []);
+    drawer.classList.toggle("gc-nav-drawer--full-nav", fullNav);
+    drawer.classList.toggle("gc-nav-drawer--role-nav", !fullNav);
+
+    drawer.querySelectorAll("[data-nav-module]").forEach((el) => {
+      el.hidden = true;
+    });
+    drawer.querySelectorAll("[data-nav-module]").forEach((el) => {
+      const module = String(el.dataset.navModule || "");
+      if (bottomSet.has(module)) return;
+      if (fullNav) {
+        el.hidden = false;
+        return;
+      }
+      el.hidden = !mobileDrawerShowsModule(nav, module, bottomSet);
+    });
+
+    drawer.querySelectorAll("[data-nav-group]").forEach((group) => {
+      const links = group.querySelectorAll("[data-nav-module]");
+      let anyVisible = false;
+      links.forEach((el) => {
+        if (!el.hidden) anyVisible = true;
+      });
+      group.hidden = !anyVisible;
+    });
+  }
+
+  function mobileDrawerShowsModule(nav, module, bottomSet) {
+    const utility = new Set(
+      Array.isArray(window.GC_SIDEBAR_NAV_CONFIG?.utility_modules)
+        ? window.GC_SIDEBAR_NAV_CONFIG.utility_modules
+        : (window.GC_SIDEBAR_NAV_CONFIG?.administration_modules || [])
+    );
+    if (utility.has(module)) return true;
+    const display = moduleDisplaySection(nav, module);
+    if (display === "administration") {
+      return navTierForModule(nav, module) === "secondary";
+    }
+    return display === (window.GC_SIDEBAR_NAV_CONFIG?.module_primary_section || {})[module]
+      && navTierForModule(nav, module) === "prominent";
+  }
+
+  GC.syncRoleBasedSidebar = function syncRoleBasedSidebar(data) {
+    const nav = resolveSidebarNavFromState(data);
+    if (!nav) return;
+
+    const sidebar = document.getElementById("gc-sidebar-nav");
+    if (sidebar) applyDesktopSidebarNav(sidebar, nav);
+
+    const bottomNav = document.getElementById("gc-bottom-nav");
+    const drawer = document.getElementById("gc-nav-drawer");
+    if (bottomNav || drawer) {
+      const bottomModules = bottomNav
+        ? applyMobileBottomNav(bottomNav, nav)
+        : new Set();
+      if (drawer) applyMobileDrawerNav(drawer, nav, bottomModules);
+    }
+  };
+
+  function initRoleBasedSidebar() {
+    if (GC._roleBasedSidebarBound) return;
+    GC._roleBasedSidebarBound = true;
+
+    initSidebarSectionAccordion();
+
+    if (GC.lastState && GC.lastState.ok !== false) {
+      GC.syncRoleBasedSidebar(GC.lastState);
+    }
+  }
+
+  function initSidebarSectionAccordion() {
+    if (GC._sidebarSectionAccordionBound) return;
+    GC._sidebarSectionAccordionBound = true;
+
+    const sidebar = document.getElementById("gc-sidebar-nav");
+    if (!sidebar) return;
+
+    sidebar.addEventListener("click", (e) => {
+      const groupToggle = e.target.closest(".gc-nav-group-toggle");
+      if (groupToggle && sidebar.contains(groupToggle)) {
+        e.preventDefault();
+        const group = groupToggle.closest("[data-nav-group-key]");
+        if (!group || group.hidden) return;
+        setNavGroupExpanded(group, !group.classList.contains("is-expanded"), true);
+        return;
+      }
+
+      const toggle = e.target.closest(".gc-nav-section-toggle");
+      if (!toggle || !sidebar.contains(toggle)) return;
+      e.preventDefault();
+      const section = toggle.closest("[data-nav-section]");
+      if (!section || section.hidden) return;
+      setNavSectionExpanded(section, !section.classList.contains("is-expanded"), true);
+    });
+
+    syncNavSectionAccordionState(sidebar);
   }
 
   GC.updateHeaderPlanetSwitcherFromState = function updateHeaderPlanetSwitcherFromState(data) {
@@ -12207,6 +13146,12 @@
           coordinates_formatted: ap.coordinates_formatted,
           planet_class: ap.planet_class,
           planet_class_label_key: ap.planet_class_label_key,
+          is_homeworld: ap.is_homeworld,
+          empire_role_key: ap.empire_role_key,
+          empire_role_label_key: ap.empire_role_label_key,
+          empire_role_icon: ap.empire_role_icon,
+          empire_subtitle_key: ap.empire_subtitle_key,
+          identity_title_key: ap.identity_title_key,
           is_active: true,
         },
       ]);
@@ -12225,6 +13170,18 @@
       if (on && btn.dataset.planetName) {
         const nameEl = root.querySelector("[data-planet-switcher-name]");
         if (nameEl) nameEl.textContent = btn.dataset.planetName;
+        const roleEl = root.querySelector("[data-planet-switcher-role]");
+        if (roleEl) {
+          const identityKey = btn.dataset.planetIdentityKey || "";
+          const roleText = identityKey ? t(identityKey, identityKey) : "";
+          roleEl.textContent = roleText;
+          roleEl.hidden = !roleText;
+        }
+        const iconEl = root.querySelector("[data-planet-switcher-icon]");
+        if (iconEl) {
+          iconEl.textContent = btn.dataset.planetRoleIcon || "";
+          iconEl.hidden = !btn.dataset.planetRoleIcon;
+        }
         const coordEl = root.querySelector("[data-planet-switcher-coord]");
         if (coordEl) {
           const coord = btn.dataset.planetCoord || "";
@@ -12711,8 +13668,3379 @@
     });
   }
 
+  function bindGalaxyCommandMapSwitchOnce() {
+    if (GC._galaxyCommandMapSwitchBound) return;
+    GC._galaxyCommandMapSwitchBound = true;
+
+    document.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-empire-identity-switch]");
+      if (!btn) return;
+      const root = document.getElementById("galaxy-page-root");
+      if (!root || !root.contains(btn)) return;
+      const graph = document.getElementById("galaxy-command-map-graph");
+      if (graph?.dataset.wasDragging === "1") {
+        graph.dataset.wasDragging = "0";
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (btn.classList.contains("is-active")) {
+        e.preventDefault();
+        if (typeof GC.showCommandMapColonyPanel === "function") {
+          GC.showCommandMapColonyPanel(btn);
+        }
+        return;
+      }
+
+      const planetId = parseInt(btn.dataset.empireIdentitySwitch || btn.dataset.planetId || "0", 10);
+      if (!planetId) return;
+
+      e.preventDefault();
+      btn.disabled = true;
+      root.classList.add("is-busy");
+
+      try {
+        const res = await GC.fetchGameAction("/api/planets/active", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+          body: JSON.stringify({ planet_id: planetId }),
+        });
+        if (res?.ok) {
+          applyActionState(res, "planet_switch");
+          if (Array.isArray(res.planets)) {
+            updateHeaderPlanetSwitcherFromPlanets(res.planets);
+          } else if (res.state) {
+            GC.updateHeaderPlanetSwitcherFromState(res.state);
+          }
+          root.querySelectorAll("[data-empire-identity-switch]").forEach((item) => {
+            const pid = parseInt(item.dataset.empireIdentitySwitch || item.dataset.planetId || "0", 10);
+            const on = pid === planetId;
+            item.classList.toggle("is-active", on);
+            item.setAttribute("aria-pressed", on ? "true" : "false");
+          });
+          if (typeof GC.showCommandMapColonyPanel === "function") {
+            GC.showCommandMapColonyPanel(btn);
+          }
+        }
+      } finally {
+        btn.disabled = false;
+        root.classList.remove("is-busy");
+      }
+    });
+  }
+
+  const COMMAND_MAP_VIEWPORT_STORAGE_KEY = "gc_command_map_viewport_v6";
+  const COMMAND_MAP_SCALE_MIN = 0.35;
+  const COMMAND_MAP_SCALE_MAX = 2.2;
+  const COMMAND_MAP_DEFAULT_SCALE = 0.62;
+  const COMMAND_MAP_DRAG_THRESHOLD_PX = 4;
+  const COMMAND_MAP_CLICK_SUPPRESS_MS = 220;
+
+  function clampCommandMapScale(value) {
+    return Math.min(COMMAND_MAP_SCALE_MAX, Math.max(COMMAND_MAP_SCALE_MIN, value));
+  }
+
+  function isCommandMapInteractiveTarget(target) {
+    if (!(target instanceof Element)) return false;
+    return !!target.closest(
+      "button, a, input, select, textarea, [data-map-node], .galaxy-command-map-node, [data-command-map-reset], .galaxy-command-map-controls, [data-fleet-route]"
+    );
+  }
+
+  function isCommandMapPanSurface(target) {
+    if (!(target instanceof Element)) return false;
+    if (isCommandMapInteractiveTarget(target)) return false;
+    return !!target.closest(
+      "[data-command-map-viewport], [data-command-map-canvas], [data-command-map-bg], .galaxy-command-map-bg, [data-command-map-ambient-glow], .galaxy-command-map-ambient-glow, [data-command-map-sector-layer], .galaxy-command-map-svg-layer, .galaxy-command-map-edges, .galaxy-command-map-fleet-routes, .galaxy-command-map-influence, .galaxy-command-map-nodes"
+    );
+  }
+
+  function syncCommandMapBackgroundExtent(canvas) {
+    if (!canvas) return;
+    const worldWidth = parseFloat(canvas.dataset.worldWidth || "4000") || 4000;
+    const worldHeight = parseFloat(canvas.dataset.worldHeight || "4000") || 4000;
+    const canvasW = parseFloat(canvas.style.width) || worldWidth;
+    const canvasH = parseFloat(canvas.style.height) || worldHeight;
+    const mapBg = canvas.querySelector("[data-command-map-bg]");
+    const mapAmbient = canvas.querySelector("[data-command-map-ambient-glow]");
+    const bgPad = 8000;
+    const glowPad = 6000;
+    if (mapBg) {
+      mapBg.style.left = `${-bgPad}px`;
+      mapBg.style.top = `${-bgPad}px`;
+      mapBg.style.width = `${canvasW + bgPad * 2}px`;
+      mapBg.style.height = `${canvasH + bgPad * 2}px`;
+    }
+    if (mapAmbient) {
+      mapAmbient.style.left = `${-glowPad}px`;
+      mapAmbient.style.top = `${-glowPad}px`;
+      mapAmbient.style.width = `${canvasW + glowPad * 2}px`;
+      mapAmbient.style.height = `${canvasH + glowPad * 2}px`;
+    }
+  }
+
+  function initCommandMapSectorLoader(opts) {
+    const { canvas, getState, viewportSizeFn } = opts || {};
+    const layer = canvas?.querySelector("[data-command-map-sector-layer]");
+    const root = layer?.querySelector("[data-command-map-sector-root]");
+    if (!layer || !root) return null;
+
+    const seed = parseInt(layer.dataset.sectorSeed || "1", 10) || 1;
+    const sectorPad = parseFloat(layer.dataset.sectorPad || "2000") || 2000;
+    const sectorSize = parseFloat(layer.dataset.sectorSize || "2000") || 2000;
+    const worldWidth = parseFloat(canvas.dataset.worldWidth || "4000") || 4000;
+    const worldHeight = parseFloat(canvas.dataset.worldHeight || "4000") || 4000;
+    const prunePad = sectorPad * 3;
+    const loaded = new Map();
+    let loadTimer = null;
+    let loadAbort = null;
+    let loadGen = 0;
+
+    function sectorLabel(chunk) {
+      const key = chunk?.label_key || "";
+      if (key) return t(key, chunk?.type || "");
+      return chunk?.type || "";
+    }
+
+    function visibleBounds() {
+      const state = getState();
+      const { width, height } = viewportSizeFn();
+      const z = Math.max(state.zoom, 0.001);
+      return {
+        minWx: (0 - state.x) / z - sectorPad,
+        minWy: (0 - state.y) / z - sectorPad,
+        maxWx: (width - state.x) / z + sectorPad,
+        maxWy: (height - state.y) / z + sectorPad,
+      };
+    }
+
+    function syncSectorLayerLayout(bounds) {
+      let minX = Math.min(0, bounds.minWx - sectorPad);
+      let minY = Math.min(0, bounds.minWy - sectorPad);
+      let maxX = worldWidth;
+      let maxY = worldHeight;
+      const half = sectorSize * 0.55;
+      loaded.forEach((el) => {
+        const cx = parseFloat(el.dataset.centerX || "0");
+        const cy = parseFloat(el.dataset.centerY || "0");
+        if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+        minX = Math.min(minX, cx - half);
+        minY = Math.min(minY, cy - half);
+        maxX = Math.max(maxX, cx + half);
+        maxY = Math.max(maxY, cy + half);
+      });
+      const width = Math.max(Math.ceil(maxX - minX), 1);
+      const height = Math.max(Math.ceil(maxY - minY), 1);
+      layer.style.left = `${minX}px`;
+      layer.style.top = `${minY}px`;
+      layer.style.width = `${width}px`;
+      layer.style.height = `${height}px`;
+      layer.setAttribute("viewBox", `${minX} ${minY} ${width} ${height}`);
+      const canvasW = Math.max(Math.ceil(maxX), worldWidth) - Math.min(0, Math.floor(minX));
+      const canvasH = Math.max(Math.ceil(maxY), worldHeight) - Math.min(0, Math.floor(minY));
+      canvas.style.width = `${Math.max(canvasW, 1)}px`;
+      canvas.style.height = `${Math.max(canvasH, 1)}px`;
+      syncCommandMapBackgroundExtent(canvas);
+    }
+
+    function appendChunk(chunk) {
+      const id = String(chunk?.id || "");
+      if (!id || loaded.has(id)) return;
+      const ns = "http://www.w3.org/2000/svg";
+      const g = document.createElementNS(ns, "g");
+      g.setAttribute("class", `galaxy-command-map-sector galaxy-command-map-sector--${chunk.tone || "rim"}`);
+      g.setAttribute("data-sector-id", id);
+      g.setAttribute("data-sector-type", chunk.type || "");
+      g.dataset.centerX = String(chunk.center_x ?? "");
+      g.dataset.centerY = String(chunk.center_y ?? "");
+      const path = document.createElementNS(ns, "path");
+      path.setAttribute("class", "galaxy-command-map-sector-fill");
+      path.setAttribute("d", chunk.path || "");
+      const text = document.createElementNS(ns, "text");
+      text.setAttribute("class", "galaxy-command-map-sector-label");
+      text.setAttribute("x", String(chunk.center_x ?? 0));
+      text.setAttribute("y", String(chunk.center_y ?? 0));
+      text.setAttribute("text-anchor", "middle");
+      text.textContent = sectorLabel(chunk);
+      g.appendChild(path);
+      g.appendChild(text);
+      root.appendChild(g);
+      loaded.set(id, g);
+    }
+
+    function pruneDistant(bounds) {
+      loaded.forEach((el, id) => {
+        const cx = parseFloat(el.dataset.centerX || "0");
+        const cy = parseFloat(el.dataset.centerY || "0");
+        if (
+          cx < bounds.minWx - prunePad ||
+          cx > bounds.maxWx + prunePad ||
+          cy < bounds.minWy - prunePad ||
+          cy > bounds.maxWy + prunePad
+        ) {
+          el.remove();
+          loaded.delete(id);
+        }
+      });
+    }
+
+    async function loadNow() {
+      const bounds = visibleBounds();
+      const gen = ++loadGen;
+      if (loadAbort) {
+        try {
+          loadAbort.abort();
+        } catch (_) {}
+      }
+      loadAbort = new AbortController();
+      const params = new URLSearchParams({
+        min_wx: String(bounds.minWx),
+        min_wy: String(bounds.minWy),
+        max_wx: String(bounds.maxWx),
+        max_wy: String(bounds.maxWy),
+        seed: String(seed),
+      });
+      try {
+        const res = await GC.fetchJSON(`/api/command-map/sectors?${params.toString()}`, {
+          cache: "no-store",
+          signal: loadAbort.signal,
+        });
+        if (gen !== loadGen || !res?.ok) return;
+        (res.sector_chunks || []).forEach(appendChunk);
+        pruneDistant(bounds);
+        syncSectorLayerLayout(bounds);
+      } catch (err) {
+        if (err && err.name === "AbortError") return;
+      }
+    }
+
+    function scheduleLoad() {
+      if (loadTimer) clearTimeout(loadTimer);
+      loadTimer = setTimeout(() => {
+        loadTimer = null;
+        loadNow();
+      }, 120);
+    }
+
+    function destroy() {
+      if (loadTimer) clearTimeout(loadTimer);
+      if (loadAbort) {
+        try {
+          loadAbort.abort();
+        } catch (_) {}
+      }
+      loaded.clear();
+      root.replaceChildren();
+      layer.style.left = "0";
+      layer.style.top = "0";
+      layer.style.width = `${worldWidth}px`;
+      layer.style.height = `${worldHeight}px`;
+      layer.setAttribute("viewBox", `0 0 ${worldWidth} ${worldHeight}`);
+    }
+
+    return { scheduleLoad, loadNow, destroy };
+  }
+
+  function initCommandMapViewport() {
+    const graph = document.querySelector("[data-command-map-graph]");
+    if (!graph) return;
+
+    const viewport = graph.querySelector("[data-command-map-viewport]");
+    const canvas = graph.querySelector("[data-command-map-canvas]");
+    const resetBtn = graph.querySelector("[data-command-map-reset]");
+    if (!viewport || !canvas) return;
+
+    const worldWidth = parseFloat(canvas.dataset.worldWidth || "4000") || 4000;
+    const worldHeight = parseFloat(canvas.dataset.worldHeight || "4000") || 4000;
+    const hubWorldX = parseFloat(canvas.dataset.hubWorldX || String(worldWidth / 2));
+    const hubWorldY = parseFloat(canvas.dataset.hubWorldY || String(worldHeight / 2));
+    if (!Number.isFinite(hubWorldX) || !Number.isFinite(hubWorldY)) {
+      console.warn("[command-map] invalid hub world coords — viewport init aborted");
+      if (resetBtn) resetBtn.disabled = true;
+      return;
+    }
+    const defaultScale = clampCommandMapScale(
+      parseFloat(canvas.dataset.defaultScale || String(COMMAND_MAP_DEFAULT_SCALE)) || COMMAND_MAP_DEFAULT_SCALE
+    );
+
+    canvas.style.width = `${worldWidth}px`;
+    canvas.style.height = `${worldHeight}px`;
+
+    const state = {
+      zoom: defaultScale,
+      x: 0,
+      y: 0,
+    };
+
+    let dragging = false;
+    let dragMoved = false;
+    let startX = 0;
+    let startY = 0;
+    let startPanX = 0;
+    let startPanY = 0;
+    let pinchStartDist = 0;
+    let pinchStartScale = defaultScale;
+    let pinchMidX = 0;
+    let pinchMidY = 0;
+    let saveTimer = null;
+    let suppressClickUntil = 0;
+
+    const sectorLoader = initCommandMapSectorLoader({
+      canvas,
+      getState: () => state,
+      viewportSizeFn: viewportSize,
+    });
+    syncCommandMapBackgroundExtent(canvas);
+
+    function applyTransform() {
+      canvas.style.transformOrigin = "0 0";
+      canvas.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.zoom})`;
+      if (sectorLoader) sectorLoader.scheduleLoad();
+    }
+
+    function viewportSize() {
+      const rect = viewport.getBoundingClientRect();
+      return { width: rect.width || 1, height: rect.height || 1 };
+    }
+
+    function clearViewportStorage() {
+      try {
+        sessionStorage.removeItem(COMMAND_MAP_VIEWPORT_STORAGE_KEY);
+      } catch (_) {}
+    }
+
+    function persistViewport() {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        saveTimer = null;
+        try {
+          sessionStorage.setItem(
+            COMMAND_MAP_VIEWPORT_STORAGE_KEY,
+            JSON.stringify({ scale: state.zoom, panX: state.x, panY: state.y })
+          );
+        } catch (_) {}
+      }, 120);
+    }
+
+    function isViewportStateValid() {
+      if (!Number.isFinite(state.zoom) || !Number.isFinite(state.x) || !Number.isFinite(state.y)) {
+        return false;
+      }
+      const { width, height } = viewportSize();
+      const hubScreenX = state.x + hubWorldX * state.zoom;
+      const hubScreenY = state.y + hubWorldY * state.zoom;
+      const margin = Math.max(width, height) * 0.75;
+      if (hubScreenX < -margin || hubScreenX > width + margin) return false;
+      if (hubScreenY < -margin || hubScreenY > height + margin) return false;
+      return true;
+    }
+
+    function loadViewport() {
+      try {
+        const raw = sessionStorage.getItem(COMMAND_MAP_VIEWPORT_STORAGE_KEY);
+        if (!raw) return false;
+        const saved = JSON.parse(raw);
+        const nextZoom = clampCommandMapScale(Number(saved.scale));
+        const nextX = Number(saved.panX);
+        const nextY = Number(saved.panY);
+        if (!Number.isFinite(nextZoom) || !Number.isFinite(nextX) || !Number.isFinite(nextY)) {
+          return false;
+        }
+        state.zoom = nextZoom;
+        state.x = nextX;
+        state.y = nextY;
+        return isViewportStateValid();
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function centerOnHub(targetScale) {
+      const { width, height } = viewportSize();
+      state.zoom = clampCommandMapScale(
+        typeof targetScale === "number" ? targetScale : defaultScale
+      );
+      state.x = width / 2 - hubWorldX * state.zoom;
+      state.y = height / 2 - hubWorldY * state.zoom;
+      applyTransform();
+      persistViewport();
+    }
+
+    function suppressClickAfterDrag(e) {
+      if (graph.dataset.wasDragging !== "1" && Date.now() >= suppressClickUntil) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === "function") {
+        e.stopImmediatePropagation();
+      }
+      graph.dataset.wasDragging = "0";
+      suppressClickUntil = 0;
+    }
+
+    function zoomAt(clientX, clientY, factor) {
+      const rect = viewport.getBoundingClientRect();
+      const mouseX = clientX - rect.left;
+      const mouseY = clientY - rect.top;
+      const beforeX = (mouseX - state.x) / state.zoom;
+      const beforeY = (mouseY - state.y) / state.zoom;
+      const nextZoom = clampCommandMapScale(state.zoom * factor);
+      if (nextZoom === state.zoom) return;
+      state.x = mouseX - beforeX * nextZoom;
+      state.y = mouseY - beforeY * nextZoom;
+      state.zoom = nextZoom;
+      applyTransform();
+      persistViewport();
+    }
+
+    function touchDistance(touches) {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.hypot(dx, dy);
+    }
+
+    function touchMidpoint(touches, rect) {
+      return {
+        x: (touches[0].clientX + touches[1].clientX) / 2 - rect.left,
+        y: (touches[0].clientY + touches[1].clientY) / 2 - rect.top,
+      };
+    }
+
+    function onPointerDown(e) {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (!isCommandMapPanSurface(e.target)) return;
+      dragging = true;
+      dragMoved = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      startPanX = state.x;
+      startPanY = state.y;
+      viewport.classList.add("is-dragging");
+      if (typeof viewport.setPointerCapture === "function") {
+        viewport.setPointerCapture(e.pointerId);
+      }
+    }
+
+    function onPointerMove(e) {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.abs(dx) + Math.abs(dy) > COMMAND_MAP_DRAG_THRESHOLD_PX) dragMoved = true;
+      state.x = startPanX + dx;
+      state.y = startPanY + dy;
+      applyTransform();
+    }
+
+    function onPointerUp(e) {
+      if (!dragging) return;
+      dragging = false;
+      viewport.classList.remove("is-dragging");
+      if (typeof viewport.releasePointerCapture === "function") {
+        try {
+          viewport.releasePointerCapture(e.pointerId);
+        } catch (_) {}
+      }
+      if (dragMoved) {
+        graph.dataset.wasDragging = "1";
+        suppressClickUntil = Date.now() + COMMAND_MAP_CLICK_SUPPRESS_MS;
+        persistViewport();
+      }
+    }
+
+    function onWheel(e) {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      zoomAt(e.clientX, e.clientY, factor);
+    }
+
+    function onTouchStart(e) {
+      if (e.touches.length === 2) {
+        pinchStartDist = touchDistance(e.touches);
+        pinchStartScale = state.zoom;
+        const rect = viewport.getBoundingClientRect();
+        const mid = touchMidpoint(e.touches, rect);
+        pinchMidX = mid.x;
+        pinchMidY = mid.y;
+      }
+    }
+
+    function onTouchMove(e) {
+      if (e.touches.length !== 2 || pinchStartDist <= 0) return;
+      e.preventDefault();
+      const dist = touchDistance(e.touches);
+      const factor = dist / pinchStartDist;
+      const nextZoom = clampCommandMapScale(pinchStartScale * factor);
+      const beforeX = (pinchMidX - state.x) / state.zoom;
+      const beforeY = (pinchMidY - state.y) / state.zoom;
+      state.x = pinchMidX - beforeX * nextZoom;
+      state.y = pinchMidY - beforeY * nextZoom;
+      state.zoom = nextZoom;
+      applyTransform();
+    }
+
+    function onTouchEnd() {
+      if (pinchStartDist > 0) {
+        pinchStartDist = 0;
+        persistViewport();
+      }
+    }
+
+    function onResetClick(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      centerOnHub(defaultScale);
+    }
+
+    function initViewportPosition() {
+      if (loadViewport()) {
+        applyTransform();
+      } else {
+        clearViewportStorage();
+        centerOnHub(defaultScale);
+      }
+    }
+
+    initViewportPosition();
+    requestAnimationFrame(() => {
+      if (!isViewportStateValid()) {
+        clearViewportStorage();
+        centerOnHub(defaultScale);
+      }
+      if (sectorLoader) sectorLoader.loadNow();
+    });
+
+    let focusAnimFrame = null;
+
+    function prefersReducedMotion() {
+      try {
+        return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function focusOnWorld(worldX, worldY, opts) {
+      const options = opts && typeof opts === "object" ? opts : {};
+      const wx = parseFloat(worldX);
+      const wy = parseFloat(worldY);
+      if (!Number.isFinite(wx) || !Number.isFinite(wy)) return;
+      const { width, height } = viewportSize();
+      const isMobile = width < 768;
+      const zoomBoost = isMobile ? 1.08 : 1.15;
+      const maxScale = isMobile ? 0.85 : 1.05;
+      const requestedScale = typeof options.scale === "number" ? options.scale : state.zoom * zoomBoost;
+      const targetScale = clampCommandMapScale(Math.min(requestedScale, maxScale));
+      const targetX = width / 2 - wx * targetScale;
+      const targetY = height / 2 - wy * targetScale;
+      if (focusAnimFrame) {
+        cancelAnimationFrame(focusAnimFrame);
+        focusAnimFrame = null;
+      }
+      if (options.animate === false || prefersReducedMotion()) {
+        state.zoom = targetScale;
+        state.x = targetX;
+        state.y = targetY;
+        applyTransform();
+        persistViewport();
+        return;
+      }
+      const start = { zoom: state.zoom, x: state.x, y: state.y };
+      const startTime = performance.now();
+      const duration = 650;
+      const tick = (now) => {
+        const t = Math.min(1, (now - startTime) / duration);
+        const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        state.zoom = start.zoom + (targetScale - start.zoom) * ease;
+        state.x = start.x + (targetX - start.x) * ease;
+        state.y = start.y + (targetY - start.y) * ease;
+        applyTransform();
+        if (t < 1) {
+          focusAnimFrame = requestAnimationFrame(tick);
+        } else {
+          focusAnimFrame = null;
+          persistViewport();
+        }
+      };
+      focusAnimFrame = requestAnimationFrame(tick);
+    }
+
+    GC.focusCommandMapWorld = focusOnWorld;
+
+    graph.addEventListener("click", suppressClickAfterDrag, true);
+
+    viewport.addEventListener("pointerdown", onPointerDown);
+    viewport.addEventListener("pointermove", onPointerMove);
+    viewport.addEventListener("pointerup", onPointerUp);
+    viewport.addEventListener("pointercancel", onPointerUp);
+    viewport.addEventListener("wheel", onWheel, { passive: false });
+    viewport.addEventListener("touchstart", onTouchStart, { passive: true });
+    viewport.addEventListener("touchmove", onTouchMove, { passive: false });
+    viewport.addEventListener("touchend", onTouchEnd);
+    viewport.addEventListener("touchcancel", onTouchEnd);
+    resetBtn?.addEventListener("click", onResetClick);
+
+    GC.registerCleanup(() => {
+      if (saveTimer) clearTimeout(saveTimer);
+      if (focusAnimFrame) cancelAnimationFrame(focusAnimFrame);
+      delete GC.focusCommandMapWorld;
+      if (sectorLoader) sectorLoader.destroy();
+      viewport.removeEventListener("pointerdown", onPointerDown);
+      viewport.removeEventListener("pointermove", onPointerMove);
+      viewport.removeEventListener("pointerup", onPointerUp);
+      viewport.removeEventListener("pointercancel", onPointerUp);
+      viewport.removeEventListener("wheel", onWheel);
+      viewport.removeEventListener("touchstart", onTouchStart);
+      viewport.removeEventListener("touchmove", onTouchMove);
+      viewport.removeEventListener("touchend", onTouchEnd);
+      viewport.removeEventListener("touchcancel", onTouchEnd);
+      resetBtn?.removeEventListener("click", onResetClick);
+      graph.removeEventListener("click", suppressClickAfterDrag, true);
+    });
+  }
+
+  function setCommandMapSidePanelState(panel, emptyPanel, detailPanel, mode) {
+    if (!panel) return;
+    const showDetail = mode === "detail";
+    const showEmpty = mode === "empty";
+    panel.hidden = !(showDetail || showEmpty);
+    if (emptyPanel) emptyPanel.hidden = !showEmpty;
+    if (detailPanel) detailPanel.hidden = !showDetail;
+    panel.classList.toggle("is-active", showDetail);
+  }
+
+  function resetCommandMapSidePanels(graph) {
+    const siteInspector = document.querySelector("[data-command-map-site-inspector]");
+    if (!siteInspector || siteInspector.hidden || siteInspector.closest("[hidden]")) return;
+    setCommandMapSidePanelState(
+      siteInspector,
+      siteInspector.querySelector("[data-command-map-empty-panel]"),
+      siteInspector.querySelector("[data-command-map-detail-panel]"),
+      "empty"
+    );
+  }
+
+  function initCommandMapSiteInspector() {
+    const graph = document.querySelector("[data-command-map-graph]");
+    const inspector = document.querySelector("[data-command-map-site-inspector]");
+    if (!graph || !inspector || inspector.hidden) return;
+
+    const emptyState = inspector.querySelector("[data-command-map-empty-panel]");
+    const body = inspector.querySelector("[data-command-map-detail-panel]");
+    const iconEl = inspector.querySelector("[data-command-map-site-inspector-icon]");
+    const typeEl = inspector.querySelector("[data-command-map-site-inspector-type]");
+    const nameEl = inspector.querySelector("[data-command-map-site-inspector-name]");
+    const statusEl = inspector.querySelector("[data-command-map-site-inspector-status]");
+    const regionEl = inspector.querySelector("[data-command-map-site-inspector-region]");
+    const levelEl = inspector.querySelector("[data-command-map-site-inspector-level]");
+    const riskEl = inspector.querySelector("[data-command-map-site-inspector-risk]");
+    const promiseEl = inspector.querySelector("[data-command-map-site-inspector-promise]");
+    const rewardEl = inspector.querySelector("[data-command-map-site-inspector-reward]");
+    const futureEl = inspector.querySelector("[data-command-map-site-inspector-future]");
+    const expansionMeta = inspector.querySelector("[data-command-map-inspector-expansion-meta]");
+    const landmarkMeta = inspector.querySelector("[data-command-map-inspector-landmark-meta]");
+    const landmarkRegionEl = inspector.querySelector("[data-command-map-inspector-landmark-region]");
+    const landmarkFlavorEl = inspector.querySelector("[data-command-map-inspector-landmark-flavor]");
+    const expansionSections = inspector.querySelectorAll("[data-command-map-inspector-expansion-section]");
+    const landmarkSection = inspector.querySelector("[data-command-map-inspector-landmark-section]");
+    const foreignSection = inspector.querySelector("[data-command-map-inspector-foreign-section]");
+    const foreignPlayerEl = inspector.querySelector("[data-command-map-inspector-foreign-player]");
+    const foreignCoordsEl = inspector.querySelector("[data-command-map-inspector-foreign-coords]");
+    const foreignColoniesEl = inspector.querySelector("[data-command-map-inspector-foreign-colonies]");
+    const foreignWorldSection = inspector.querySelector("[data-command-map-inspector-foreign-world-section]");
+    const foreignWorldOwnerEl = inspector.querySelector("[data-command-map-inspector-foreign-world-owner]");
+    const foreignWorldRoleEl = inspector.querySelector("[data-command-map-inspector-foreign-world-role]");
+    const expeditionActivitySection = inspector.querySelector("[data-command-map-inspector-expedition-activity]");
+    const expeditionStatusEl = inspector.querySelector("[data-command-map-inspector-expedition-status]");
+    const expeditionEtaEl = inspector.querySelector("[data-command-map-inspector-expedition-eta]");
+    const expeditionReportEl = inspector.querySelector("[data-command-map-inspector-expedition-report]");
+    const worldFieldSection = inspector.querySelector("[data-command-map-inspector-world-field-section]");
+    const strategicOwnerEl = inspector.querySelector("[data-command-map-inspector-strategic-owner]");
+    const strategicRiskEl = inspector.querySelector("[data-command-map-inspector-strategic-risk]");
+    const strategicPromiseEl = inspector.querySelector("[data-command-map-inspector-strategic-promise]");
+    const strategicRewardEl = inspector.querySelector("[data-command-map-inspector-strategic-reward]");
+    const strategicFutureEl = inspector.querySelector("[data-command-map-inspector-strategic-future]");
+    const colonizeActions = inspector.querySelector("[data-command-map-inspector-colonize-actions]");
+    const colonizeBtn = inspector.querySelector("[data-command-map-colonize-world]");
+    const colonizeBlocked = inspector.querySelector("[data-command-map-inspector-colonize-blocked]");
+    const colonizeLimit = inspector.querySelector("[data-command-map-inspector-colony-limit]");
+    const expeditionActions = inspector.querySelector("[data-command-map-inspector-expedition-actions]");
+    const expeditionBtn = inspector.querySelector("[data-command-map-expedition-world]");
+    const salvageActions = inspector.querySelector("[data-command-map-inspector-salvage-actions]");
+    const salvageBtn = inspector.querySelector("[data-command-map-salvage-world]");
+    const salvagePrepare = inspector.querySelector("[data-command-map-inspector-salvage-prepare]");
+    const salvageBlocked = inspector.querySelector("[data-command-map-inspector-salvage-blocked]");
+    const worldProgressSection = inspector.querySelector("[data-command-map-inspector-world-progress]");
+    const familiarityStatusEl = inspector.querySelector("[data-command-map-inspector-familiarity-status]");
+    const familiarityProgressEl = inspector.querySelector("[data-command-map-inspector-familiarity-progress]");
+    const outpostPreparedHint = inspector.querySelector("[data-command-map-inspector-outpost-prepared]");
+    const strategicClaimedHint = inspector.querySelector("[data-command-map-inspector-strategic-claimed]");
+    const strategicNoncolonizableHint = inspector.querySelector("[data-command-map-inspector-strategic-noncolonizable]");
+    const siteButtons = graph.querySelectorAll("[data-expansion-site-inspect]");
+    const landmarkButtons = graph.querySelectorAll("[data-landmark-inspect]");
+    const foreignButtons = graph.querySelectorAll("[data-foreign-empire-inspect]");
+    const foreignWorldColonyButtons = graph.querySelectorAll("[data-foreign-world-colony-inspect]");
+    const worldFieldButtons = graph.querySelectorAll("[data-world-field-inspect]");
+    if (!body || (!siteButtons.length && !landmarkButtons.length && !foreignButtons.length && !foreignWorldColonyButtons.length && !worldFieldButtons.length)) return;
+
+    let activeBtn = null;
+    let selectedWorldKey = "";
+    let selectedWorldName = "";
+
+    function formatInspectorHint(key, vars = {}) {
+      return tf(key, vars, key);
+    }
+
+    function readPlanetLimitBlock() {
+      const block = GC.lastState?.planet_limit || {};
+      let current = Number(block.current);
+      let max = Number(block.max);
+      if (!Number.isFinite(current)) current = 0;
+      if (!Number.isFinite(max) || max < 1) max = 9;
+      return { current: Math.floor(current), max: Math.floor(max) };
+    }
+
+    function clearSelection() {
+      if (activeBtn) {
+        activeBtn.classList.remove("is-selected");
+        activeBtn.setAttribute("aria-pressed", "false");
+        activeBtn = null;
+      }
+    }
+
+    function hideInspectorModes() {
+      if (foreignSection) foreignSection.hidden = true;
+      if (foreignWorldSection) foreignWorldSection.hidden = true;
+      if (expeditionActivitySection) expeditionActivitySection.hidden = true;
+      if (worldFieldSection) worldFieldSection.hidden = true;
+      if (worldProgressSection) worldProgressSection.hidden = true;
+    }
+
+    function updateWorldProgressInspector(ds) {
+      const isExpedition = ds?.strategicExpedition === "1";
+      if (worldProgressSection) worldProgressSection.hidden = !isExpedition;
+      if (!isExpedition) return;
+      const famKey = String(ds.familiarityLabelKey || "world_familiarity_unknown");
+      if (familiarityStatusEl) familiarityStatusEl.textContent = tf(famKey, {}, famKey);
+      const count = parseInt(ds.expeditionCount || "0", 10) || 0;
+      const nextMilestone = parseInt(ds.nextMilestone || "0", 10) || 0;
+      const isOutpost = String(ds.familiarityStatus || "") === "outpost_prepared";
+      if (outpostPreparedHint) outpostPreparedHint.hidden = !isOutpost;
+      if (familiarityProgressEl) {
+        if (isOutpost || nextMilestone <= 0) {
+          familiarityProgressEl.hidden = true;
+          familiarityProgressEl.textContent = "";
+        } else {
+          familiarityProgressEl.hidden = false;
+          familiarityProgressEl.textContent = formatInspectorHint("world_progress_inspector_next", {
+            current: count,
+            target: nextMilestone,
+            milestone: nextMilestone,
+          });
+        }
+      }
+    }
+
+    function setExpansionMode(visible) {
+      if (expansionMeta) expansionMeta.hidden = !visible;
+      expansionSections.forEach((section) => {
+        section.hidden = !visible;
+      });
+      if (landmarkMeta) landmarkMeta.hidden = visible;
+      if (landmarkSection) landmarkSection.hidden = visible;
+      hideInspectorModes();
+    }
+
+    function setForeignMode(visible) {
+      if (expansionMeta) expansionMeta.hidden = true;
+      expansionSections.forEach((section) => {
+        section.hidden = true;
+      });
+      if (landmarkMeta) landmarkMeta.hidden = true;
+      if (landmarkSection) landmarkSection.hidden = true;
+      hideInspectorModes();
+      if (foreignSection) foreignSection.hidden = !visible;
+    }
+
+    function setForeignWorldColonyMode(visible) {
+      if (expansionMeta) expansionMeta.hidden = true;
+      expansionSections.forEach((section) => {
+        section.hidden = true;
+      });
+      if (landmarkMeta) landmarkMeta.hidden = true;
+      if (landmarkSection) landmarkSection.hidden = true;
+      hideInspectorModes();
+      if (foreignWorldSection) foreignWorldSection.hidden = !visible;
+    }
+
+    function setWorldFieldMode(visible) {
+      if (expansionMeta) expansionMeta.hidden = true;
+      expansionSections.forEach((section) => {
+        section.hidden = true;
+      });
+      if (landmarkMeta) landmarkMeta.hidden = true;
+      if (landmarkSection) landmarkSection.hidden = true;
+      hideInspectorModes();
+      if (worldFieldSection) worldFieldSection.hidden = !visible;
+    }
+
+    function formatExpeditionEta(etaAt) {
+      const ts = parseTimerTarget(etaAt);
+      if (!ts) return "";
+      const rem = movementRemainingSeconds(ts, getTimerServerNow());
+      if (typeof GC.formatCountdownRemain === "function") {
+        return GC.formatCountdownRemain(rem);
+      }
+      return String(Math.max(0, Math.floor(rem)));
+    }
+
+    function updateExpeditionActivityInspector(ds) {
+      const status = String(ds.expeditionStatus || "idle");
+      const showActivity = status !== "idle";
+      if (expeditionActivitySection) expeditionActivitySection.hidden = !showActivity;
+      if (!showActivity) {
+        if (expeditionEtaEl) expeditionEtaEl.hidden = true;
+        if (expeditionReportEl) expeditionReportEl.hidden = true;
+        return;
+      }
+      let statusText = GC.t?.("world_expedition_status_idle", "No active expedition") || "No active expedition";
+      const isSalvage = ds.strategicSalvage === "1";
+      if (status === "expedition_active") {
+        statusText = isSalvage
+          ? (GC.t?.("world_salvage_status_active", "Salvage in progress") || "Salvage in progress")
+          : (GC.t?.("world_expedition_status_active", "Expedition in progress") || "Expedition in progress");
+      } else if (status === "expedition_returning") {
+        statusText = isSalvage
+          ? (GC.t?.("world_salvage_status_returning", "Fleet returning with salvage") || "Fleet returning with salvage")
+          : (GC.t?.("world_expedition_status_returning", "Fleet returning") || "Fleet returning");
+      } else if (status === "recently_reported") {
+        const eventKey = ds.expeditionEventLabelKey || "";
+        const eventLabel = eventKey ? (GC.t?.(eventKey, eventKey) || eventKey) : "";
+        statusText = isSalvage
+          ? (GC.t?.("world_salvage_status_report", "Latest salvage report") || "Latest salvage report")
+          : (GC.t?.("world_expedition_status_report", "Latest expedition report") || "Latest expedition report");
+        if (expeditionReportEl) {
+          expeditionReportEl.hidden = false;
+          expeditionReportEl.textContent = eventLabel
+            ? formatInspectorHint(
+                isSalvage ? "world_salvage_inspector_report_hint" : "world_expedition_inspector_report_hint",
+                { event: eventLabel }
+              )
+            : (GC.t?.("world_expedition_inspector_report_open", "Open your inbox for the full report.") || "");
+        }
+      }
+      if (expeditionStatusEl) expeditionStatusEl.textContent = statusText;
+      const etaAt = Number(ds.expeditionEtaAt || 0);
+      if (expeditionEtaEl) {
+        if (status === "expedition_active" || status === "expedition_returning") {
+          expeditionEtaEl.hidden = false;
+          expeditionEtaEl.textContent = formatInspectorHint("world_expedition_inspector_eta", {
+            eta: formatExpeditionEta(etaAt),
+          });
+        } else {
+          expeditionEtaEl.hidden = true;
+          expeditionEtaEl.textContent = "";
+        }
+      }
+      if (status !== "recently_reported" && expeditionReportEl) {
+        expeditionReportEl.hidden = true;
+        expeditionReportEl.textContent = "";
+      }
+    }
+
+    function hideColonyPanel() {
+      /* GC-597: colony HUD stays visible; only clear map selection if needed */
+      graph.querySelectorAll("[data-colony-location-inspect].is-selected").forEach((btn) => {
+        btn.classList.remove("is-selected");
+        btn.setAttribute("aria-pressed", "false");
+      });
+    }
+
+    function showInspectorDetail() {
+      setCommandMapSidePanelState(inspector, emptyState, body, "detail");
+    }
+
+    function showSite(btn) {
+      if (!btn) return;
+      if (graph.dataset.wasDragging === "1") {
+        delete graph.dataset.wasDragging;
+        return;
+      }
+      hideColonyPanel();
+      if (activeBtn && activeBtn !== btn) {
+        activeBtn.classList.remove("is-selected");
+        activeBtn.setAttribute("aria-pressed", "false");
+      }
+      activeBtn = btn;
+      btn.classList.add("is-selected");
+      btn.setAttribute("aria-pressed", "true");
+
+      const ds = btn.dataset;
+      const status = ds.siteStatus || "locked";
+      showInspectorDetail();
+      setExpansionMode(true);
+
+      if (iconEl) iconEl.textContent = ds.siteIcon || "🌌";
+      if (typeEl) typeEl.textContent = ds.siteType || "";
+      if (nameEl) nameEl.textContent = ds.siteName || "";
+      if (statusEl) {
+        statusEl.textContent = ds.siteStatusLabel || "";
+        statusEl.className = `galaxy-command-map-site-inspector-status galaxy-command-map-site-inspector-status--${status}`;
+      }
+      if (regionEl) regionEl.textContent = ds.siteRegion || "";
+      if (levelEl) levelEl.textContent = ds.siteLevel || "—";
+      if (riskEl) {
+        riskEl.textContent = ds.siteRisk || "";
+        riskEl.className = `galaxy-command-map-site-inspector-risk galaxy-command-map-site-inspector-risk--${ds.siteRiskLevel || "low"}`;
+      }
+      if (promiseEl) promiseEl.textContent = ds.sitePromise || "";
+      if (rewardEl) rewardEl.textContent = ds.siteReward || "";
+      if (futureEl) futureEl.textContent = ds.siteFuture || "";
+    }
+
+    function showLandmark(btn) {
+      if (!btn) return;
+      if (graph.dataset.wasDragging === "1") {
+        delete graph.dataset.wasDragging;
+        return;
+      }
+      hideColonyPanel();
+      if (activeBtn && activeBtn !== btn) {
+        activeBtn.classList.remove("is-selected");
+        activeBtn.setAttribute("aria-pressed", "false");
+      }
+      activeBtn = btn;
+      btn.classList.add("is-selected");
+      btn.setAttribute("aria-pressed", "true");
+
+      const ds = btn.dataset;
+      showInspectorDetail();
+      setExpansionMode(false);
+
+      if (iconEl) iconEl.textContent = ds.landmarkIcon || "✦";
+      if (typeEl) typeEl.textContent = ds.landmarkType || "Landmark";
+      if (nameEl) nameEl.textContent = ds.landmarkName || "";
+      if (statusEl) {
+        statusEl.textContent = ds.landmarkStatusLabel || "";
+        statusEl.className = "galaxy-command-map-site-inspector-status galaxy-command-map-site-inspector-status--landmark";
+      }
+      if (landmarkRegionEl) landmarkRegionEl.textContent = ds.landmarkRegion || "";
+      if (landmarkFlavorEl) landmarkFlavorEl.textContent = ds.landmarkFlavor || "";
+    }
+
+    function showForeignEmpire(btn) {
+      if (!btn) return;
+      if (graph.dataset.wasDragging === "1") {
+        delete graph.dataset.wasDragging;
+        return;
+      }
+      hideColonyPanel();
+      if (activeBtn && activeBtn !== btn) {
+        activeBtn.classList.remove("is-selected");
+        activeBtn.setAttribute("aria-pressed", "false");
+      }
+      activeBtn = btn;
+      btn.classList.add("is-selected");
+      btn.setAttribute("aria-pressed", "true");
+
+      const ds = btn.dataset;
+      showInspectorDetail();
+      setForeignMode(true);
+
+      if (iconEl) iconEl.textContent = ds.empireIcon || "🏛";
+      if (typeEl) typeEl.textContent = GC.t?.("world_map_foreign_empire", "Foreign empire") || "Foreign empire";
+      if (nameEl) nameEl.textContent = ds.empireName || ds.ownerUsername || "";
+      if (statusEl) {
+        statusEl.textContent = GC.t?.("world_map_inspector_status", "Detected") || "Detected";
+        statusEl.className = "galaxy-command-map-site-inspector-status galaxy-command-map-site-inspector-status--foreign";
+      }
+      if (foreignPlayerEl) foreignPlayerEl.textContent = ds.ownerUsername || "—";
+      if (foreignCoordsEl) foreignCoordsEl.textContent = ds.empireCoords || "—";
+      if (foreignColoniesEl) foreignColoniesEl.textContent = String(ds.empireColonyCount || "0");
+    }
+
+    function showForeignWorldColony(btn) {
+      if (!btn) return;
+      if (graph.dataset.wasDragging === "1") {
+        delete graph.dataset.wasDragging;
+        return;
+      }
+      hideColonyPanel();
+      if (activeBtn && activeBtn !== btn) {
+        activeBtn.classList.remove("is-selected");
+        activeBtn.setAttribute("aria-pressed", "false");
+      }
+      activeBtn = btn;
+      btn.classList.add("is-selected");
+      btn.setAttribute("aria-pressed", "true");
+
+      const ds = btn.dataset;
+      showInspectorDetail();
+      setForeignWorldColonyMode(true);
+
+      if (iconEl) iconEl.textContent = ds.foreignColonyIcon || "🌍";
+      if (typeEl) typeEl.textContent = ds.foreignColonyType || GC.t?.("strategic_world_inspector_kicker", "Strategic world") || "Strategic world";
+      if (nameEl) nameEl.textContent = ds.foreignColonyName || "";
+      if (statusEl) {
+        statusEl.textContent = GC.t?.("foreign_world_colony_status_settled", "Settled") || "Settled";
+        statusEl.className = "galaxy-command-map-site-inspector-status galaxy-command-map-site-inspector-status--foreign";
+      }
+      if (foreignWorldOwnerEl) foreignWorldOwnerEl.textContent = ds.ownerUsername || "—";
+      if (foreignWorldRoleEl) foreignWorldRoleEl.textContent = ds.foreignColonyRole || "—";
+    }
+
+    function showWorldField(btn) {
+      if (!btn) return;
+      if (graph.dataset.wasDragging === "1") {
+        delete graph.dataset.wasDragging;
+        return;
+      }
+      hideColonyPanel();
+      if (activeBtn && activeBtn !== btn) {
+        activeBtn.classList.remove("is-selected");
+        activeBtn.setAttribute("aria-pressed", "false");
+      }
+      activeBtn = btn;
+      btn.classList.add("is-selected");
+      btn.setAttribute("aria-pressed", "true");
+
+      const ds = btn.dataset;
+      showInspectorDetail();
+      setWorldFieldMode(true);
+
+      if (iconEl) iconEl.textContent = ds.strategicIcon || "✦";
+      if (typeEl) typeEl.textContent = ds.strategicType || GC.t?.("strategic_world_inspector_kicker", "Strategic world") || "Strategic world";
+      if (nameEl) nameEl.textContent = ds.strategicName || "";
+      const colonizable = ds.strategicColonizable === "1";
+      const claimed = ds.strategicClaimed === "1";
+      const isExpedition = ds.strategicExpedition === "1";
+      const isExpeditionPrepared = ds.strategicExpeditionPrepared === "1";
+      const isSalvage = ds.strategicSalvage === "1";
+      if (statusEl) {
+        if (claimed) {
+          statusEl.textContent =
+            GC.t?.("strategic_world_inspector_status_settled", "Already settled") || "Already settled";
+        } else if (isExpedition) {
+          const famKey = ds.familiarityLabelKey || "world_familiarity_unknown";
+          statusEl.textContent = tf(famKey, {}, famKey);
+        } else if (isSalvage) {
+          statusEl.textContent =
+            GC.t?.("strategic_world_inspector_status_salvage", "Salvage target") || "Salvage target";
+        } else if (isExpeditionPrepared) {
+          statusEl.textContent =
+            GC.t?.("strategic_world_inspector_status_prepared", "Coming soon") || "Coming soon";
+        } else if (!colonizable) {
+          statusEl.textContent =
+            GC.t?.("strategic_world_inspector_status_not_colonizable", "Not colonizable") || "Not colonizable";
+        } else {
+          statusEl.textContent = GC.t?.("strategic_world_inspector_status", "Unclaimed") || "Unclaimed";
+        }
+        statusEl.className = "galaxy-command-map-site-inspector-status galaxy-command-map-site-inspector-status--field";
+      }
+      if (strategicOwnerEl) strategicOwnerEl.textContent = ds.strategicOwner || "";
+      if (strategicRiskEl) {
+        strategicRiskEl.textContent = ds.strategicRisk || "";
+        strategicRiskEl.className = `galaxy-command-map-site-inspector-risk galaxy-command-map-site-inspector-risk--${ds.strategicRiskLevel || "low"}`;
+      }
+      if (strategicPromiseEl) strategicPromiseEl.textContent = ds.strategicPromise || "";
+      if (strategicRewardEl) strategicRewardEl.textContent = ds.strategicReward || "";
+      if (strategicFutureEl) strategicFutureEl.textContent = ds.strategicFuture || "";
+
+      selectedWorldKey = String(ds.strategicWorldKey || "").trim();
+      selectedWorldName = String(ds.strategicName || "").trim();
+
+      const limit = readPlanetLimitBlock();
+      const atLimit = limit.current >= limit.max;
+
+      if (strategicClaimedHint) strategicClaimedHint.hidden = !claimed;
+      if (strategicNoncolonizableHint) {
+        strategicNoncolonizableHint.hidden = colonizable || claimed || isExpedition || isExpeditionPrepared || isSalvage;
+      }
+      if (salvageActions) salvageActions.hidden = !isSalvage || claimed;
+      if (colonizeActions) colonizeActions.hidden = !colonizable || claimed;
+      if (expeditionActions) expeditionActions.hidden = !isExpedition || claimed;
+      if (expeditionBtn) expeditionBtn.hidden = !isExpedition || claimed;
+      if (salvageBtn) salvageBtn.hidden = !isSalvage || claimed;
+      if (salvagePrepare) salvagePrepare.hidden = true;
+      if (salvageBlocked) {
+        salvageBlocked.hidden = true;
+        salvageBlocked.textContent = "";
+      }
+
+      if (isSalvage && !claimed && selectedWorldKey) {
+        void refreshSalvageInspectorState();
+      } else if (salvageBtn) {
+        salvageBtn.disabled = false;
+      }
+
+      if (colonizeLimit) {
+        if (colonizable && !claimed) {
+          colonizeLimit.hidden = false;
+          colonizeLimit.textContent = formatInspectorHint("strategic_world_colony_limit", limit);
+        } else {
+          colonizeLimit.hidden = true;
+          colonizeLimit.textContent = "";
+        }
+      }
+
+      if (colonizeBtn) {
+        colonizeBtn.hidden = !colonizable || claimed;
+        colonizeBtn.disabled = atLimit;
+      }
+
+      if (colonizeBlocked) {
+        if (colonizable && !claimed && atLimit) {
+          colonizeBlocked.hidden = false;
+          colonizeBlocked.textContent =
+            GC.t?.("fleet_error_colony_limit_reached", "Colony limit reached.") || "Colony limit reached.";
+        } else {
+          colonizeBlocked.hidden = true;
+          colonizeBlocked.textContent = "";
+        }
+      }
+
+      updateExpeditionActivityInspector(ds);
+      updateWorldProgressInspector(ds);
+    }
+
+    async function refreshSalvageInspectorState() {
+      if (!selectedWorldKey || !salvageActions || salvageActions.hidden) return;
+      try {
+        const res = await GC.fetchJSON(
+          `/api/worlds/salvage-preview?world_key=${encodeURIComponent(selectedWorldKey)}`,
+          { cache: "no-store" }
+        );
+        const data = res?.data || {};
+        const canStart = Boolean(data.can_start_salvage);
+        const hasShips = Boolean(data.has_salvage_ships);
+        if (salvageBtn) {
+          salvageBtn.hidden = false;
+          salvageBtn.disabled = !canStart;
+          salvageBtn.textContent = canStart
+            ? (GC.t?.("strategic_world_btn_salvage", "Start salvage") || "Start salvage")
+            : (GC.t?.("strategic_world_btn_salvage_prepare", "Prepare salvage") || "Prepare salvage");
+        }
+        if (salvagePrepare) {
+          salvagePrepare.hidden = hasShips;
+        }
+        if (salvageBlocked) {
+          if (data.block_reason === "no_expedition_ships" && !hasShips) {
+            salvageBlocked.hidden = false;
+            salvageBlocked.textContent =
+              GC.t?.("strategic_world_salvage_no_ships", "Build expedition ships on your active planet first.") || "";
+          } else {
+            salvageBlocked.hidden = true;
+            salvageBlocked.textContent = "";
+          }
+        }
+      } catch (_) {
+        if (salvageBtn) salvageBtn.disabled = true;
+      }
+    }
+
+    function onSalvageWorldClick(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!selectedWorldKey) return;
+      const params = new URLSearchParams();
+      params.set("mission", "expedition");
+      params.set("world_key", selectedWorldKey);
+      if (typeof GC.navigateTo === "function") {
+        GC.navigateTo(`/fleet?${params.toString()}`, { push: true });
+      }
+    }
+
+    function onExpeditionWorldClick(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!selectedWorldKey) return;
+      const params = new URLSearchParams();
+      params.set("mission", "expedition");
+      params.set("world_key", selectedWorldKey);
+      if (typeof GC.navigateTo === "function") {
+        GC.navigateTo(`/fleet?${params.toString()}`, { push: true });
+      }
+    }
+
+    function onColonizeWorldClick(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!selectedWorldKey) return;
+      const params = new URLSearchParams();
+      params.set("mission", "colonize");
+      params.set("world_key", selectedWorldKey);
+      if (selectedWorldName) params.set("colony_name", selectedWorldName);
+      if (typeof GC.navigateTo === "function") {
+        GC.navigateTo(`/fleet?${params.toString()}`, { push: true });
+      }
+    }
+
+    function onSiteClick(e) {
+      const btn = e.currentTarget;
+      if (!(btn instanceof HTMLElement)) return;
+      e.stopPropagation();
+      if (graph.dataset.wasDragging === "1") {
+        delete graph.dataset.wasDragging;
+        return;
+      }
+      if (typeof GC.openWorldInspectorFromNode === "function" && GC.openWorldInspectorFromNode(btn)) {
+        hideColonyPanel();
+        return;
+      }
+      showSite(btn);
+    }
+
+    function onLandmarkClick(e) {
+      const btn = e.currentTarget;
+      if (!(btn instanceof HTMLElement)) return;
+      e.stopPropagation();
+      if (graph.dataset.wasDragging === "1") {
+        delete graph.dataset.wasDragging;
+        return;
+      }
+      if (typeof GC.openWorldInspectorFromNode === "function" && GC.openWorldInspectorFromNode(btn)) {
+        hideColonyPanel();
+        return;
+      }
+      showLandmark(btn);
+    }
+
+    function onForeignClick(e) {
+      const btn = e.currentTarget;
+      if (!(btn instanceof HTMLElement)) return;
+      e.stopPropagation();
+      if (graph.dataset.wasDragging === "1") {
+        delete graph.dataset.wasDragging;
+        return;
+      }
+      if (typeof GC.openWorldInspectorFromNode === "function" && GC.openWorldInspectorFromNode(btn)) {
+        return;
+      }
+      if (typeof GC.showCommandMapForeignColonyPanel === "function") {
+        GC.showCommandMapForeignColonyPanel(btn);
+        return;
+      }
+      showForeignEmpire(btn);
+    }
+
+    function onForeignWorldColonyClick(e) {
+      const btn = e.currentTarget;
+      if (!(btn instanceof HTMLElement)) return;
+      e.stopPropagation();
+      if (graph.dataset.wasDragging === "1") {
+        delete graph.dataset.wasDragging;
+        return;
+      }
+      if (typeof GC.openWorldInspectorFromNode === "function" && GC.openWorldInspectorFromNode(btn)) {
+        return;
+      }
+      if (typeof GC.showCommandMapForeignColonyPanel === "function") {
+        GC.showCommandMapForeignColonyPanel(btn);
+        return;
+      }
+      showForeignWorldColony(btn);
+    }
+
+    function onWorldFieldClick(e) {
+      const btn = e.currentTarget;
+      if (!(btn instanceof HTMLElement)) return;
+      e.stopPropagation();
+      if (graph.dataset.wasDragging === "1") {
+        delete graph.dataset.wasDragging;
+        return;
+      }
+      if (typeof GC.openWorldInspectorFromNode === "function" && GC.openWorldInspectorFromNode(btn)) {
+        return;
+      }
+      if (typeof GC.showCommandMapStrategicWorldPanel === "function") {
+        GC.showCommandMapStrategicWorldPanel(btn);
+        return;
+      }
+      showWorldField(btn);
+    }
+
+    siteButtons.forEach((btn) => {
+      btn.addEventListener("click", onSiteClick);
+    });
+    landmarkButtons.forEach((btn) => {
+      btn.addEventListener("click", onLandmarkClick);
+    });
+    foreignButtons.forEach((btn) => {
+      btn.addEventListener("click", onForeignClick);
+    });
+    foreignWorldColonyButtons.forEach((btn) => {
+      btn.addEventListener("click", onForeignWorldColonyClick);
+    });
+    worldFieldButtons.forEach((btn) => {
+      btn.addEventListener("click", onWorldFieldClick);
+    });
+    colonizeBtn?.addEventListener("click", onColonizeWorldClick);
+    expeditionBtn?.addEventListener("click", onExpeditionWorldClick);
+    salvageBtn?.addEventListener("click", onSalvageWorldClick);
+
+    resetCommandMapSidePanels(graph);
+
+    GC.registerCleanup(() => {
+      clearSelection();
+      resetCommandMapSidePanels(graph);
+      siteButtons.forEach((btn) => {
+        btn.removeEventListener("click", onSiteClick);
+      });
+      landmarkButtons.forEach((btn) => {
+        btn.removeEventListener("click", onLandmarkClick);
+      });
+      foreignButtons.forEach((btn) => {
+        btn.removeEventListener("click", onForeignClick);
+      });
+      foreignWorldColonyButtons.forEach((btn) => {
+        btn.removeEventListener("click", onForeignWorldColonyClick);
+      });
+      worldFieldButtons.forEach((btn) => {
+        btn.removeEventListener("click", onWorldFieldClick);
+      });
+      colonizeBtn?.removeEventListener("click", onColonizeWorldClick);
+      expeditionBtn?.removeEventListener("click", onExpeditionWorldClick);
+      salvageBtn?.removeEventListener("click", onSalvageWorldClick);
+    });
+  }
+
+  function initWorldInspectorModal() {
+    const root = document.getElementById("gc-world-inspector-root");
+    if (!root) return;
+
+    const graph = document.querySelector("[data-command-map-graph]");
+    const titleEl = root.querySelector("#gc-world-inspector-title");
+    const contentEl = root.querySelector("[data-world-inspector-content]");
+    const actionsEl = root.querySelector("[data-world-inspector-actions]");
+    if (!titleEl || !contentEl || !actionsEl) return;
+
+    let lastFocus = null;
+    const _wiDebug = {
+      modalFound: true,
+      mapRootFound: !!graph,
+      nodeCount: 0,
+      lastClickedNode: null,
+      lastPayload: null,
+    };
+
+    const INSPECT_NODE_SELECTOR = [
+      "[data-colony-location-inspect]",
+      "[data-world-field-inspect]",
+      "[data-expansion-site-inspect]",
+      "[data-landmark-inspect]",
+      "[data-foreign-world-colony-inspect]",
+      "[data-foreign-empire-inspect]",
+    ].join(", ");
+
+    function refreshInspectorNodeCount() {
+      _wiDebug.nodeCount = graph ? graph.querySelectorAll(INSPECT_NODE_SELECTOR).length : 0;
+    }
+    refreshInspectorNodeCount();
+
+    function parseCommandCenterFromSource(source) {
+      if (!source) return {};
+      const raw = source.getAttribute("data-command-center") || source.dataset.commandCenter || "{}";
+      try {
+        return JSON.parse(raw);
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function detailText(row) {
+      if (!row || typeof row !== "object") return "";
+      if (row.value_text) return String(row.value_text);
+      if (row.value_key) return tf(row.value_key, row.value_key);
+      return "";
+    }
+
+    function mergeColonyPayload(btn, cc) {
+      const base = cc && typeof cc === "object" ? { ...cc } : {};
+      const planetId = parseInt(
+        String(btn?.dataset.planetId || btn?.dataset.empireIdentitySwitch || base.planet_id || "0"),
+        10
+      );
+      base.panel_kind = "colony";
+      if (planetId) base.planet_id = planetId;
+      if (!base.name) base.name = btn?.dataset.colonyName || "";
+      if (!base.role_label_key && btn?.dataset.colonyRole) {
+        base._roleText = btn.dataset.colonyRole;
+      }
+      if (!base.role_icon && btn?.dataset.colonyIcon) base.role_icon = btn.dataset.colonyIcon;
+      const action = base.primary_action && typeof base.primary_action === "object" ? base.primary_action : {};
+      if (planetId && String(action.action_key || "") !== "open_colony") {
+        base.primary_action = { action_key: "open_colony", enabled: true, planet_id: planetId };
+      }
+      return base;
+    }
+
+    function mergeWorldFieldPayload(btn, cc) {
+      const base = cc && typeof cc === "object" ? { ...cc } : {};
+      const ds = btn?.dataset || {};
+      const worldKey = String(ds.strategicWorldKey || base.world_key || "").trim();
+      base.panel_kind = base.panel_kind || "expedition_site";
+      if (worldKey) base.world_key = worldKey;
+      if (!base.name_key && ds.strategicName) base._nameText = ds.strategicName;
+      if (!base.type_key && ds.strategicType) base._typeText = ds.strategicType;
+      const details = Array.isArray(base.details) ? [...base.details] : [];
+      const hasRisk = details.some((row) => String(row.label_key || "").includes("risk"));
+      const hasReward = details.some((row) => String(row.label_key || "").includes("reward"));
+      const hasPromise = details.some((row) => String(row.label_key || "").includes("promise"));
+      if (!hasRisk && ds.strategicRisk) {
+        details.push({ label_key: "expansion_site_inspector_risk", value_text: ds.strategicRisk });
+      }
+      if (!hasReward && ds.strategicReward) {
+        details.push({ label_key: "strategic_world_inspector_bonus", value_text: ds.strategicReward });
+      }
+      if (!hasPromise && ds.strategicPromise) base._promiseText = ds.strategicPromise;
+      base.details = details;
+      if (ds.expeditionStatus && ds.expeditionStatus !== "idle") {
+        base.status_key = base.status_key || `world_expedition_status_${ds.expeditionStatus.replace("expedition_", "")}`;
+      }
+      const action = base.primary_action && typeof base.primary_action === "object" ? base.primary_action : {};
+      if (worldKey && !action.action_key) {
+        let actionKey = "expedition";
+        if (ds.strategicColonizable === "1") actionKey = "colonize";
+        else if (ds.strategicSalvage === "1") actionKey = "salvage";
+        base.primary_action = {
+          action_key: actionKey,
+          world_key: worldKey,
+          enabled: true,
+          label_key: actionKey === "colonize" ? "strategic_world_btn_colonize" : "world_inspector_explore",
+        };
+      }
+      return base;
+    }
+
+    function mergeExpansionSitePayload(btn) {
+      const ds = btn?.dataset || {};
+      return {
+        panel_kind: "expedition_site",
+        _nameText: ds.siteName || "",
+        _typeText: ds.siteType || "",
+        _promiseText: ds.sitePromise || "",
+        details: [
+          ds.siteRegion ? { label_key: "expansion_site_inspector_region", value_text: ds.siteRegion } : null,
+          ds.siteRisk ? { label_key: "expansion_site_inspector_risk", value_text: ds.siteRisk } : null,
+          ds.siteReward ? { label_key: "strategic_world_inspector_bonus", value_text: ds.siteReward } : null,
+        ].filter(Boolean),
+        primary_action: { action_key: "none", enabled: false },
+      };
+    }
+
+    function mergeLandmarkPayload(btn) {
+      const ds = btn?.dataset || {};
+      return {
+        panel_kind: "expedition_site",
+        _nameText: ds.landmarkName || "",
+        _typeText: ds.landmarkType || "",
+        _promiseText: ds.landmarkFlavor || "",
+        details: [
+          ds.landmarkRegion ? { label_key: "expansion_site_inspector_region", value_text: ds.landmarkRegion } : null,
+          ds.landmarkStatusLabel ? { label_key: "world_inspector_status", value_text: ds.landmarkStatusLabel } : null,
+        ].filter(Boolean),
+        primary_action: { action_key: "none", enabled: false },
+      };
+    }
+
+    function mergeForeignPayload(btn, cc) {
+      const base = cc && typeof cc === "object" ? { ...cc } : {};
+      const ds = btn?.dataset || {};
+      const isEmpire = btn?.matches?.("[data-foreign-empire-inspect]");
+      base.panel_kind = isEmpire ? "foreign_empire" : "foreign_colony";
+      if (!base.name) {
+        base.name = ds.foreignColonyName || ds.empireName || ds.ownerUsername || "";
+      }
+      if (!base._typeText) {
+        base._typeText = isEmpire
+          ? tf("world_map_foreign_empire", "Fremdes Reich")
+          : ds.foreignColonyType || ds.foreignColonyRole || "";
+      }
+      if (!Array.isArray(base.details) || !base.details.length) {
+        base.details = [
+          ds.ownerUsername ? { label_key: "world_map_inspector_player", value_text: ds.ownerUsername } : null,
+          ds.empireCoords ? { label_key: "world_map_inspector_coords", value_text: ds.empireCoords } : null,
+          isEmpire && ds.empireColonyCount
+            ? { label_key: "world_map_inspector_colonies", value_text: String(ds.empireColonyCount) }
+            : null,
+        ].filter(Boolean);
+      }
+      return base;
+    }
+
+    function isForeignInspectorNode(kind, cc, btn) {
+      if (kind === "foreign_colony" || kind === "foreign_empire") return true;
+      const panelKind = String(cc?.panel_kind || "");
+      if (panelKind === "foreign_colony" || panelKind === "foreign_empire") return true;
+      return Boolean(
+        btn?.matches?.("[data-foreign-world-colony-inspect], [data-foreign-empire-inspect]")
+      );
+    }
+
+    function hasForeignMissionPayload(cc) {
+      const actions = Array.isArray(cc?.mission_actions) ? cc.mission_actions : [];
+      if (actions.some((row) => row && row.enabled !== false && String(row.action_key || row.mission || ""))) {
+        return true;
+      }
+      const actionKey = String(cc?.primary_action?.action_key || "");
+      return ["attack", "spy", "transport", "station", "recycle", "expedition", "hold"].includes(actionKey)
+        && cc.primary_action.enabled !== false;
+    }
+
+    function shouldShowForeignDevPreview(kind, cc, btn) {
+      if (!isForeignInspectorNode(kind, cc, btn)) return false;
+      return !hasForeignMissionPayload(cc);
+    }
+
+    function resolveForeignClassicHref(btn) {
+      const ds = btn?.dataset || {};
+      const raw = String(ds.empireCoords || ds.coordinatesFormatted || "").trim();
+      if (!raw) return "/galaxy?view=system";
+      return `/galaxy?view=system&q=${encodeURIComponent(raw)}`;
+    }
+
+    function appendForeignDevActions(btn) {
+      actionsEl.innerHTML = "";
+      actionsEl.className = "gc-world-inspector-actions gc-world-inspector-actions--stacked";
+      const classicHref = resolveForeignClassicHref(btn);
+      const classic = document.createElement("button");
+      classic.type = "button";
+      classic.className = "gc-btn gc-btn-primary gc-world-inspector-cta";
+      classic.textContent = tf("world_inspector_foreign_dev_classic_cta", "Klassische Ansicht öffnen");
+      classic.addEventListener("click", () => {
+        closeModal();
+        if (typeof GC.navigateTo === "function") {
+          GC.navigateTo(classicHref, { push: true });
+        }
+      });
+      actionsEl.appendChild(classic);
+
+      const fleet = document.createElement("button");
+      fleet.type = "button";
+      fleet.className = "gc-btn gc-btn-outline gc-world-inspector-cta";
+      fleet.textContent = tf(
+        "world_inspector_foreign_dev_fleet_cta",
+        "Flotte über klassische Ansicht senden"
+      );
+      fleet.addEventListener("click", () => {
+        closeModal();
+        if (typeof GC.navigateTo === "function") {
+          GC.navigateTo(classicHref, { push: true });
+        }
+      });
+      actionsEl.appendChild(fleet);
+    }
+
+    function renderForeignDevPreviewModal(cc, btn) {
+      const ds = btn?.dataset || {};
+      const name =
+        cc.name
+        || ds.foreignColonyName
+        || ds.empireName
+        || ds.ownerUsername
+        || tf("world_map_foreign_empire", "Fremdes Reich");
+      const typeLabel =
+        cc._typeText || ds.foreignColonyType || ds.foreignColonyRole || "";
+      const coords =
+        ds.empireCoords
+        || (Array.isArray(cc.details)
+          ? cc.details.find((row) => row.label_key === "world_map_inspector_coords")?.value_text
+          : "")
+        || "";
+      const owner =
+        ds.ownerUsername
+        || (Array.isArray(cc.details)
+          ? cc.details.find((row) => row.label_key === "world_map_inspector_player")?.value_text
+          : "")
+        || "";
+
+      titleEl.textContent = name;
+      contentEl.innerHTML = `
+        <div class="gc-player-card-shell gc-world-inspector-shell gc-world-inspector-shell--foreign-dev">
+          <span class="gc-dev-preview-badge gc-dev-preview-badge--banner">${tf("command_map_dev_badge", "DEV")} ${tf("command_map_dev_preview_label", "PREVIEW")}</span>
+          <h3 class="gc-world-inspector-place-name"></h3>
+          <p class="gc-world-inspector-foreign-dev-lead hint"></p>
+          <dl class="gc-world-inspector-stats"></dl>
+        </div>`;
+      const shell = contentEl.querySelector(".gc-world-inspector-shell--foreign-dev");
+      const placeName = shell?.querySelector(".gc-world-inspector-place-name");
+      const lead = shell?.querySelector(".gc-world-inspector-foreign-dev-lead");
+      const stats = shell?.querySelector(".gc-world-inspector-stats");
+      if (placeName) placeName.textContent = name;
+      if (lead) {
+        lead.textContent = tf(
+          "world_inspector_foreign_dev_body",
+          "Fremde Welten sind sichtbar, Missionen werden noch vorbereitet."
+        );
+      }
+      if (stats) {
+        const rows = [];
+        if (typeLabel) {
+          rows.push(
+            `<div class="gc-world-inspector-stat"><dt>${tf("world_inspector_type", "Typ")}</dt><dd></dd></div>`
+          );
+        }
+        if (coords) {
+          rows.push(
+            `<div class="gc-world-inspector-stat"><dt>${tf("world_map_inspector_coords", "Koordinate")}</dt><dd class="gc-mono"></dd></div>`
+          );
+        }
+        if (owner) {
+          rows.push(
+            `<div class="gc-world-inspector-stat"><dt>${tf("world_map_inspector_player", "Spieler")}</dt><dd></dd></div>`
+          );
+        }
+        stats.innerHTML = rows.join("");
+        const dds = stats.querySelectorAll("dd");
+        let idx = 0;
+        if (typeLabel && dds[idx]) dds[idx++].textContent = typeLabel;
+        if (coords && dds[idx]) dds[idx++].textContent = coords;
+        if (owner && dds[idx]) dds[idx].textContent = owner;
+      }
+      appendForeignDevActions(btn);
+    }
+
+    function resolveInspectorContext(btn) {
+      if (!(btn instanceof HTMLElement)) return null;
+      if (btn.matches("[data-colony-location-inspect]")) {
+        const planetId = String(btn.dataset.planetId || btn.dataset.empireIdentitySwitch || "");
+        const source = graph?.querySelector(`[data-colony-actions-source="${planetId}"]`);
+        return {
+          cc: mergeColonyPayload(btn, parseCommandCenterFromSource(source)),
+          btn,
+          kind: "colony",
+          discovery: false,
+        };
+      }
+      if (btn.matches("[data-world-field-inspect]")) {
+        const worldKey = String(btn.dataset.strategicWorldKey || "").trim();
+        const source = worldKey ? graph?.querySelector(`[data-world-field-source="${worldKey}"]`) : null;
+        return {
+          cc: mergeWorldFieldPayload(btn, parseCommandCenterFromSource(source)),
+          btn,
+          kind: "expedition_site",
+          discovery: btn.dataset.expeditionStatus === "recently_reported",
+        };
+      }
+      if (btn.matches("[data-expansion-site-inspect]")) {
+        return { cc: mergeExpansionSitePayload(btn), btn, kind: "expedition_site", discovery: false };
+      }
+      if (btn.matches("[data-landmark-inspect]")) {
+        return { cc: mergeLandmarkPayload(btn), btn, kind: "expedition_site", discovery: false };
+      }
+      if (btn.matches("[data-foreign-world-colony-inspect], [data-foreign-empire-inspect]")) {
+        const sourceKey = String(btn.dataset.foreignColonySource || "").trim();
+        const source = sourceKey ? graph?.querySelector(`[data-foreign-colony-source="${sourceKey}"]`) : null;
+        const isEmpire = btn.matches("[data-foreign-empire-inspect]");
+        return {
+          cc: mergeForeignPayload(btn, parseCommandCenterFromSource(source)),
+          btn,
+          kind: isEmpire ? "foreign_empire" : "foreign_colony",
+          discovery: false,
+        };
+      }
+      return null;
+    }
+
+    function inspectorHasContent(cc) {
+      if (!cc || typeof cc !== "object") return false;
+      if (cc.planet_id || cc.name || cc._nameText || cc.name_key || cc.world_key) return true;
+      return false;
+    }
+
+    function markInspectorNodeSelected(btn) {
+      if (!graph || !btn) return;
+      graph.querySelectorAll(`${INSPECT_NODE_SELECTOR}.is-selected`).forEach((el) => {
+        el.classList.remove("is-selected");
+        el.setAttribute("aria-pressed", "false");
+      });
+      btn.classList.add("is-selected");
+      btn.setAttribute("aria-pressed", "true");
+    }
+
+    function formatFleetLabel(labelKey) {
+      const raw = String(labelKey || "");
+      const pipe = raw.indexOf("|");
+      if (pipe >= 0) {
+        const missionKey = raw.slice(0, pipe);
+        const targetName = raw.slice(pipe + 1).trim();
+        const mission = tf(missionKey, missionKey);
+        return targetName ? `${mission} · ${targetName}` : mission;
+      }
+      return tf(raw, raw);
+    }
+
+    function queueLine(cc, key, labelKey) {
+      const rows = Array.isArray(cc.queues) ? cc.queues : [];
+      const row = rows.find((item) => String(item.key || "") === key);
+      const active = row && String(row.state || "") === "active";
+      const statusKey = active ? "command_map_hover_queue_active" : "command_map_hover_queue_free";
+      return `<div class="gc-world-inspector-stat"><dt>${tf(labelKey, labelKey)}</dt><dd class="${active ? "is-active" : ""}">${tf(statusKey, active ? "Active" : "Idle")}</dd></div>`;
+    }
+
+    function closeModal() {
+      root.hidden = true;
+      root.setAttribute("aria-hidden", "true");
+      root.classList.remove("is-open");
+      root.classList.remove("gc-world-inspector-modal--discovery");
+      document.body.classList.remove("gc-player-card-open");
+      contentEl.innerHTML = "";
+      actionsEl.innerHTML = "";
+      if (lastFocus && typeof lastFocus.focus === "function") {
+        try {
+          lastFocus.focus();
+        } catch (_) {}
+      }
+      lastFocus = null;
+    }
+
+    function appendPrimaryAction(cc, btn) {
+      actionsEl.innerHTML = "";
+      actionsEl.className = "gc-world-inspector-actions";
+      const action = cc.primary_action && typeof cc.primary_action === "object" ? cc.primary_action : {};
+      const actionKey = String(action.action_key || "");
+      if (cc.panel_kind === "colony") {
+        const planetId = parseInt(
+          String(cc.planet_id || btn?.dataset.planetId || btn?.dataset.empireIdentitySwitch || "0"),
+          10
+        );
+        if (!planetId) return;
+        const cta = document.createElement("button");
+        cta.type = "button";
+        cta.className = "gc-btn gc-btn-primary gc-world-inspector-cta";
+        cta.textContent = tf("world_inspector_open_colony", "Kolonie öffnen");
+        cta.addEventListener("click", async () => {
+          const planetId = parseInt(String(cc.planet_id || btn?.dataset.planetId || "0"), 10);
+          if (!planetId) return;
+          try {
+            const res = await GC.fetchGameAction("/api/planets/active", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+              body: JSON.stringify({ planet_id: planetId }),
+            });
+            if (res?.ok) {
+              applyActionState(res, "planet_switch");
+              closeModal();
+              if (typeof GC.navigateTo === "function") {
+                GC.navigateTo("/overview", { push: true });
+              }
+            }
+          } catch (_) {}
+        });
+        actionsEl.appendChild(cta);
+        return;
+      }
+      if (!actionKey || actionKey === "none" || action.enabled === false) return;
+      const cta = document.createElement("button");
+      cta.type = "button";
+      cta.className = "gc-btn gc-btn-primary gc-world-inspector-cta";
+      cta.textContent = tf(action.label_key || "world_inspector_explore", action.label_key || "Erkunden");
+      cta.disabled = action.enabled === false;
+      cta.addEventListener("click", () => {
+        const wk = String(action.world_key || cc.world_key || btn?.dataset.strategicWorldKey || "").trim();
+        if (!wk) return;
+        const params = new URLSearchParams();
+        if (actionKey === "colonize") {
+          params.set("mission", "colonize");
+          params.set("world_key", wk);
+        } else if (actionKey === "salvage" || actionKey === "expedition") {
+          params.set("mission", actionKey === "salvage" ? "expedition" : "expedition");
+          params.set("world_key", wk);
+        } else {
+          params.set("mission", "expedition");
+          params.set("world_key", wk);
+        }
+        closeModal();
+        if (typeof GC.navigateTo === "function") {
+          GC.navigateTo(`/fleet?${params.toString()}`, { push: true });
+        }
+      });
+      actionsEl.appendChild(cta);
+    }
+
+    function renderColonyModal(cc, btn) {
+      const name = cc.name || btn?.dataset.colonyName || "";
+      const roleKey = String(cc.role_label_key || "").trim();
+      const role = roleKey ? tf(roleKey, roleKey) : (cc._roleText || btn?.dataset.colonyRole || "");
+      const coord = String(cc.coordinates_formatted || "").trim();
+      const progress = cc.progress && typeof cc.progress === "object" ? cc.progress : {};
+      const resources = Array.isArray(cc.resources) ? cc.resources : [];
+      const metal = resources.find((row) => row.key === "metal");
+      const fleetCount = (Array.isArray(cc.fleets) ? cc.fleets : []).filter(
+        (row) => String(row.label_key || "") !== "command_center_fleet_ready"
+      ).length;
+
+      titleEl.textContent = name;
+      contentEl.innerHTML = `
+        <div class="gc-player-card-shell gc-world-inspector-shell">
+          <p class="gc-world-inspector-kicker">${role}${coord ? ` · <span class="gc-mono hint">${coord}</span>` : ""}</p>
+          <dl class="gc-world-inspector-stats">
+            ${progress.level ? `<div class="gc-world-inspector-stat"><dt>${tf("world_inspector_level", "Level")}</dt><dd>${progress.level}</dd></div>` : ""}
+            ${metal?.rate ? `<div class="gc-world-inspector-stat"><dt>${tf("world_inspector_production", "Produktion")}</dt><dd>${metal.rate}</dd></div>` : ""}
+            ${queueLine(cc, "build", "command_map_hover_queue_build")}
+            ${queueLine(cc, "research", "command_map_hover_queue_research")}
+            ${queueLine(cc, "shipyard", "command_map_hover_queue_shipyard")}
+            ${fleetCount > 0 ? `<div class="gc-world-inspector-stat"><dt>${tf("world_inspector_fleets", "Flotten")}</dt><dd>${tf("command_map_hover_fleets", { count: fleetCount })}</dd></div>` : ""}
+          </dl>
+        </div>`;
+      appendPrimaryAction(cc, btn);
+    }
+
+    function renderWorldModal(cc, btn, discovery) {
+      const name = cc._nameText
+        || cc.name
+        || (cc.name_key ? tf(cc.name_key, cc.name_key) : "")
+        || btn?.dataset.strategicName
+        || btn?.dataset.siteName
+        || btn?.dataset.landmarkName
+        || btn?.dataset.foreignColonyName
+        || btn?.dataset.empireName
+        || "";
+      const typeKey = cc.type_key || "";
+      const typeLabel = cc._typeText
+        || (typeKey ? tf(typeKey, typeKey) : "")
+        || btn?.dataset.strategicType
+        || btn?.dataset.siteType
+        || btn?.dataset.landmarkType
+        || "";
+      const details = Array.isArray(cc.details) ? cc.details : [];
+      const detailRow = (needle) => details.find((row) => String(row.label_key || "").includes(needle));
+      const promise = detailRow("promise");
+      const risk = detailRow("risk") || (cc.risk_key ? { value_key: cc.risk_key } : null);
+      const reward = detailRow("reward");
+      const region = detailRow("region");
+      const activity = cc.expedition_activity && typeof cc.expedition_activity === "object"
+        ? cc.expedition_activity
+        : null;
+      const statusKey = activity?.status_key || cc.status_key || "";
+      const statusText = details.find((row) => row.label_key === "world_inspector_status")?.value_text || "";
+      const riskText = detailText(risk) || btn?.dataset.strategicRisk || btn?.dataset.siteRisk || "";
+      const rewardText = detailText(reward) || btn?.dataset.strategicReward || btn?.dataset.siteReward || "";
+      const regionText = detailText(region) || btn?.dataset.siteRegion || btn?.dataset.landmarkRegion || "";
+      const promiseText = cc._promiseText
+        || (promise?.value_key ? tf(promise.value_key, promise.value_key) : detailText(promise))
+        || btn?.dataset.strategicPromise
+        || btn?.dataset.sitePromise
+        || btn?.dataset.landmarkFlavor
+        || "";
+
+      titleEl.textContent = discovery
+        ? tf("command_map_discovery_feed_title", "Neuer Kontakt entdeckt")
+        : name;
+      contentEl.innerHTML = `
+        <div class="gc-player-card-shell gc-world-inspector-shell${discovery ? " gc-world-inspector-shell--discovery" : ""}">
+          ${discovery ? `<p class="gc-world-inspector-discovery-sub">${tf("command_map_discovery_feed_subtitle", "Ein unbekannter Ort wurde im Sektor bestätigt.")}</p>` : ""}
+          <h3 class="gc-world-inspector-place-name">${name}</h3>
+          ${typeLabel ? `<p class="gc-world-inspector-kicker">${typeLabel}</p>` : ""}
+          <dl class="gc-world-inspector-stats">
+            ${regionText ? `<div class="gc-world-inspector-stat"><dt>${tf("expansion_site_inspector_region", "Region")}</dt><dd>${regionText}</dd></div>` : ""}
+            ${riskText ? `<div class="gc-world-inspector-stat"><dt>${tf("expansion_site_inspector_risk", "Gefahr")}</dt><dd>${riskText}</dd></div>` : ""}
+            ${rewardText ? `<div class="gc-world-inspector-stat"><dt>${tf("strategic_world_inspector_bonus", "Belohnung")}</dt><dd>${rewardText}</dd></div>` : ""}
+            ${statusText ? `<div class="gc-world-inspector-stat"><dt>${tf("world_inspector_status", "Status")}</dt><dd>${statusText}</dd></div>` : ""}
+            ${!statusText && statusKey ? `<div class="gc-world-inspector-stat"><dt>${tf("world_inspector_status", "Status")}</dt><dd>${tf(statusKey, statusKey)}</dd></div>` : ""}
+          </dl>
+          ${promiseText ? `<blockquote class="gc-world-inspector-flavor">${promiseText}</blockquote>` : ""}
+        </div>`;
+      appendPrimaryAction(cc, btn);
+    }
+
+    function openModal(opts) {
+      const cc = opts?.cc && typeof opts.cc === "object" ? opts.cc : {};
+      const btn = opts?.btn || null;
+      const discovery = Boolean(opts?.discovery);
+      const kind = String(opts?.kind || cc.panel_kind || "colony");
+
+      logCommandMapTelemetry("inspector_open", { node_kind: kind });
+
+      lastFocus = document.activeElement;
+      root.hidden = false;
+      root.setAttribute("aria-hidden", "false");
+      root.classList.add("is-open");
+      root.classList.toggle("gc-world-inspector-modal--discovery", discovery);
+      document.body.classList.add("gc-player-card-open");
+
+      if (shouldShowForeignDevPreview(kind, cc, btn)) {
+        renderForeignDevPreviewModal(cc, btn);
+      } else if (kind === "colony" || cc.panel_kind === "colony") {
+        renderColonyModal(cc, btn);
+      } else {
+        renderWorldModal(cc, btn, discovery);
+      }
+
+      const closeBtn = root.querySelector("[data-world-inspector-close].gc-player-card-close");
+      closeBtn?.focus();
+    }
+
+    function onKeyDown(ev) {
+      if (ev.key === "Escape" && !root.hidden) {
+        ev.preventDefault();
+        closeModal();
+      }
+    }
+
+    root.querySelectorAll("[data-world-inspector-close]").forEach((el) => {
+      el.addEventListener("click", closeModal);
+    });
+    document.addEventListener("keydown", onKeyDown);
+
+    function openFromNode(btn) {
+      const ctx = resolveInspectorContext(btn);
+      if (!ctx || !inspectorHasContent(ctx.cc)) return false;
+      _wiDebug.lastClickedNode = btn;
+      _wiDebug.lastPayload = ctx.cc;
+      markInspectorNodeSelected(btn);
+      logCommandMapTelemetry("node_click", {
+        node_kind: String(btn.dataset.panelKind || btn.dataset.nodeKind || btn.dataset.mapNodeKind || ""),
+      });
+      openModal(ctx);
+      return true;
+    }
+
+    function onInspectorNodeClick(e) {
+      if (!graph || !graph.contains(e.target)) return;
+      if (graph.dataset.wasDragging === "1") {
+        graph.dataset.wasDragging = "0";
+        return;
+      }
+      const btn = e.target.closest(INSPECT_NODE_SELECTOR);
+      if (!btn || !graph.contains(btn)) return;
+      if (btn.matches("[data-colony-location-inspect]") && !btn.classList.contains("is-active")) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      openFromNode(btn);
+    }
+
+    GC.openWorldInspectorModal = openModal;
+    GC.closeWorldInspectorModal = closeModal;
+    GC.openWorldInspectorFromNode = openFromNode;
+    GC.debugWorldInspector = function debugWorldInspector() {
+      refreshInspectorNodeCount();
+      return {
+        ..._wiDebug,
+        modalOpen: root.classList.contains("is-open") && !root.hidden,
+      };
+    };
+
+    if (graph) {
+      graph.addEventListener("click", onInspectorNodeClick);
+    }
+
+    GC.registerCleanup(() => {
+      if (graph) graph.removeEventListener("click", onInspectorNodeClick);
+      root.querySelectorAll("[data-world-inspector-close]").forEach((el) => {
+        el.removeEventListener("click", closeModal);
+      });
+      document.removeEventListener("keydown", onKeyDown);
+      delete GC.openWorldInspectorModal;
+      delete GC.closeWorldInspectorModal;
+      delete GC.openWorldInspectorFromNode;
+      delete GC.debugWorldInspector;
+      closeModal();
+    });
+  }
+
+  function initCommandMapLocationActions() {
+    const graph = document.querySelector("[data-command-map-graph]");
+    if (!graph) return;
+
+    const mapRoot = document.querySelector(".galaxy-command-map-panel");
+    const colonyPanel = mapRoot?.querySelector("[data-command-map-colony-panel]");
+    const hudBody = colonyPanel?.querySelector("[data-command-map-hud-body]");
+    const iconEl = colonyPanel?.querySelector("[data-command-center-icon]");
+    const nameEl = colonyPanel?.querySelector("[data-command-center-name]");
+    const roleEl = colonyPanel?.querySelector("[data-command-center-role]");
+    const coordEl = colonyPanel?.querySelector("[data-command-center-coord]");
+    const statusEl = colonyPanel?.querySelector("[data-command-center-status]");
+    const riskEl = colonyPanel?.querySelector("[data-command-center-risk]");
+    const resourcesEl = colonyPanel?.querySelector("[data-command-center-resources]");
+    const fleetsEl = colonyPanel?.querySelector("[data-command-center-fleets]");
+    const hudStatusEl = colonyPanel?.querySelector("[data-command-center-hud-status]");
+    const actionsEl = colonyPanel?.querySelector("[data-command-center-actions]");
+    const newsEl = colonyPanel?.querySelector("[data-command-center-activity-feed]")
+      || colonyPanel?.querySelector("[data-command-center-news]");
+    const openColonyBtn = colonyPanel?.querySelector("[data-command-map-open-colony]");
+    const primaryBtn = colonyPanel?.querySelector("[data-command-center-primary]");
+    const blockedEl = colonyPanel?.querySelector("[data-command-center-blocked]");
+    const siteInspector = document.querySelector("[data-command-map-site-inspector]");
+
+    let ccWorldKey = "";
+    let ccWorldName = "";
+
+    resetCommandMapSidePanels(graph);
+
+    function parseColonyCommandCenter(planetId) {
+      const source = graph.querySelector(`[data-colony-actions-source="${planetId}"]`);
+      if (!source) return {};
+      try {
+        return JSON.parse(source.dataset.commandCenter || "{}");
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function findHudColonyButton() {
+      return graph.querySelector("[data-colony-location-inspect].is-active")
+        || graph.querySelector(".galaxy-command-map-node--colony.galaxy-command-map-node--hub[data-colony-location-inspect]")
+        || graph.querySelector("[data-colony-location-inspect]");
+    }
+
+    function renderSidebarHud(cc) {
+      if (!cc || cc.panel_kind !== "colony") return;
+      if (iconEl) iconEl.textContent = cc.role_icon || "🌍";
+      if (nameEl) nameEl.textContent = cc.name || "";
+      if (roleEl) {
+        const roleKey = String(cc.role_label_key || "").trim();
+        roleEl.textContent = roleKey ? tf(roleKey, roleKey) : "";
+        roleEl.hidden = !roleEl.textContent;
+      }
+      if (hudStatusEl) {
+        hudStatusEl.innerHTML = "";
+        const progress = cc.progress && typeof cc.progress === "object" ? cc.progress : {};
+        if (progress.level != null) {
+          const li = document.createElement("li");
+          li.textContent = tf("command_center_colony_level", { level: progress.level }, `Level ${progress.level}`);
+          hudStatusEl.appendChild(li);
+        }
+        const fleetCount = (Array.isArray(cc.fleets) ? cc.fleets : []).filter(
+          (row) => String(row.label_key || "") !== "command_center_fleet_ready"
+        ).length;
+        if (fleetCount > 0) {
+          const li = document.createElement("li");
+          li.textContent = tf("command_map_hover_fleets", { count: fleetCount });
+          hudStatusEl.appendChild(li);
+        }
+        const queues = Array.isArray(cc.queues) ? cc.queues : [];
+        const activeQueues = queues.filter((row) => String(row.state || "") === "active");
+        if (activeQueues.length) {
+          const li = document.createElement("li");
+          li.textContent = activeQueues
+            .map((row) => tf(row.label_key, row.label_key || row.key || ""))
+            .join(" · ");
+          hudStatusEl.appendChild(li);
+        } else {
+          const li = document.createElement("li");
+          li.className = "hint";
+          li.textContent = tf("command_center_hud_idle", "Keine aktiven Queues");
+          hudStatusEl.appendChild(li);
+        }
+      }
+      if (actionsEl) {
+        actionsEl.innerHTML = "";
+        (Array.isArray(cc.quick_actions) ? cc.quick_actions : []).slice(0, 4).forEach((row) => {
+          actionsEl.appendChild(renderColonyActionCard(row));
+        });
+        GC.startProgressTicker();
+      }
+      if (newsEl) {
+        const feed = Array.isArray(cc.activity_feed) ? cc.activity_feed : (Array.isArray(cc.news) ? cc.news : []);
+        renderActivityFeed(feed, newsEl, { maxItems: 3 });
+      }
+    }
+
+    function bootstrapSidebarHud() {
+      const btn = findHudColonyButton();
+      const planetId = String(btn?.dataset.planetId || btn?.dataset.empireIdentitySwitch || "");
+      if (!planetId) return;
+      renderSidebarHud(parseColonyCommandCenter(planetId));
+    }
+
+    function setCommandCenterSectionTitles() {
+      /* GC-597: section titles live in modal / compact HUD only */
+    }
+
+    const progressSection = null;
+
+    function formatCcFleetLabel(labelKey) {
+      const raw = String(labelKey || "");
+      const pipe = raw.indexOf("|");
+      if (pipe >= 0) {
+        const missionKey = raw.slice(0, pipe);
+        const targetName = raw.slice(pipe + 1).trim();
+        const mission = tf(missionKey, missionKey);
+        return targetName ? `${mission} ${targetName}` : mission;
+      }
+      return tf(raw, raw);
+    }
+
+    function formatCcExpeditionEta(etaAt) {
+      const ts = parseTimerTarget(etaAt);
+      if (!ts) return "";
+      const rem = movementRemainingSeconds(ts, getTimerServerNow());
+      if (typeof GC.formatCountdownRemain === "function") {
+        return GC.formatCountdownRemain(rem);
+      }
+      return String(Math.max(0, Math.floor(rem)));
+    }
+
+    function renderCcDetailList(cc) {
+      if (!resourcesEl) return;
+      resourcesEl.innerHTML = "";
+      resourcesEl.className = "gc-command-center-detail-list";
+      (Array.isArray(cc.details) ? cc.details : []).forEach((row) => {
+        const wrap = document.createElement("div");
+        wrap.className = "gc-command-center-detail-row";
+        const dt = document.createElement("dt");
+        dt.textContent = tf(row.label_key, row.label_key || "");
+        const dd = document.createElement("dd");
+        if (row.value_text) {
+          dd.textContent = row.value_text;
+        } else {
+          dd.textContent = tf(row.value_key, row.value_key || "");
+        }
+        if (row.tone) dd.classList.add(`gc-command-center-detail-tone--${row.tone}`);
+        wrap.appendChild(dt);
+        wrap.appendChild(dd);
+        resourcesEl.appendChild(wrap);
+      });
+    }
+
+    function renderCcExpeditionProgress(cc, { showExpeditionCount = false } = {}) {
+      if (!fleetsEl) return;
+      fleetsEl.innerHTML = "";
+      fleetsEl.className = "gc-command-center-progress-list";
+      const fam = cc.familiarity && typeof cc.familiarity === "object" ? cc.familiarity : null;
+      if (fam) {
+        const li = document.createElement("li");
+        li.className = "gc-command-center-progress-row";
+        const title = tf(fam.title_key || "world_progress_inspector_title", "Bekanntheit");
+        const status = tf(fam.label_key, fam.label_key || "");
+        li.innerHTML = `<span class="gc-command-center-progress-label">${title}</span><span class="gc-command-center-progress-value">${status}</span>`;
+        fleetsEl.appendChild(li);
+        const nextMs = parseInt(fam.next_milestone, 10) || 0;
+        const count = parseInt(fam.expedition_count, 10) || 0;
+        if (showExpeditionCount) {
+          const countLi = document.createElement("li");
+          countLi.className = "gc-command-center-progress-row hint";
+          countLi.textContent = tf("command_center_expedition_count", {
+            current: count,
+            target: nextMs > 0 ? nextMs : count,
+          });
+          fleetsEl.appendChild(countLi);
+        }
+        if (!fam.outpost_prepared && nextMs > 0) {
+          const prog = document.createElement("li");
+          prog.className = "gc-command-center-progress-row hint";
+          prog.textContent = tf("world_progress_inspector_next", {
+            current: count,
+            target: nextMs,
+            milestone: nextMs,
+          });
+          fleetsEl.appendChild(prog);
+        }
+        if (fam.outpost_prepared) {
+          const hint = document.createElement("li");
+          hint.className = "gc-command-center-progress-row hint";
+          hint.textContent = tf("world_progress_outpost_prepared_hint", "Außenposten vorbereitet.");
+          fleetsEl.appendChild(hint);
+        }
+      }
+      const activity = cc.expedition_activity && typeof cc.expedition_activity === "object"
+        ? cc.expedition_activity
+        : null;
+      if (activity) {
+        const li = document.createElement("li");
+        li.className = "gc-command-center-progress-row";
+        const statusText = tf(activity.status_key || "", activity.status_key || "");
+        li.innerHTML = `<span class="gc-command-center-progress-label">${tf("world_expedition_inspector_activity", "Expedition")}</span><span class="gc-command-center-progress-value">${statusText}</span>`;
+        fleetsEl.appendChild(li);
+        if (activity.status === "expedition_active" || activity.status === "expedition_returning") {
+          const eta = document.createElement("li");
+          eta.className = "gc-command-center-progress-row hint gc-mono";
+          eta.textContent = tf("world_expedition_inspector_eta", {
+            eta: formatCcExpeditionEta(activity.eta_at),
+          });
+          fleetsEl.appendChild(eta);
+        }
+        if (activity.status === "recently_reported" && activity.report_event_key) {
+          const report = document.createElement("li");
+          report.className = "gc-command-center-progress-row hint";
+          const eventLabel = tf(activity.report_event_key, activity.report_event_key);
+          const hintKey = activity.is_salvage
+            ? "world_salvage_inspector_report_hint"
+            : "world_expedition_inspector_report_hint";
+          report.textContent = tf(hintKey, { event: eventLabel });
+          fleetsEl.appendChild(report);
+        }
+      }
+      if (!fleetsEl.children.length) {
+        const empty = document.createElement("li");
+        empty.className = "hint";
+        empty.textContent = tf("command_center_progress_empty", "Noch keine Aktivität.");
+        fleetsEl.appendChild(empty);
+      }
+    }
+
+    function ccOpenColonyAction(cc) {
+      const payload = cc && typeof cc === "object" ? cc : {};
+      if (String(payload.panel_kind || "") !== "colony") return null;
+      if (payload.is_own === false) return null;
+      const action = payload.primary_action && typeof payload.primary_action === "object"
+        ? payload.primary_action
+        : null;
+      if (!action || String(action.action_key || "") !== "open_colony") return null;
+      const planetId = parseInt(action.planet_id || payload.planet_id || "0", 10);
+      if (!planetId) return null;
+      if (action.enabled === false) return null;
+      return { planetId };
+    }
+
+    function syncOpenColonyButton(cc) {
+      if (!openColonyBtn) return;
+      const open = ccOpenColonyAction(cc);
+      if (!open) {
+        openColonyBtn.hidden = true;
+        delete openColonyBtn.dataset.planetId;
+        return;
+      }
+      openColonyBtn.hidden = false;
+      openColonyBtn.dataset.planetId = String(open.planetId);
+    }
+
+    function renderCcPrimaryAndHints(cc) {
+      const action = cc.primary_action && typeof cc.primary_action === "object" ? cc.primary_action : {};
+      ccWorldKey = String(action.world_key || cc.world_key || "").trim();
+      if (primaryBtn) {
+        const actionKey = String(action.action_key || "none");
+        if (actionKey === "none" || !action.label_key) {
+          primaryBtn.hidden = true;
+          primaryBtn.disabled = true;
+        } else {
+          primaryBtn.hidden = false;
+          primaryBtn.disabled = !action.enabled;
+          primaryBtn.textContent = tf(action.label_key, action.label_key);
+          primaryBtn.dataset.actionKey = actionKey;
+          primaryBtn.dataset.worldKey = ccWorldKey;
+        }
+      }
+      if (blockedEl) {
+        const blockedKey = String(action.blocked_reason_key || "").trim();
+        if (blockedKey && !action.enabled) {
+          blockedEl.hidden = false;
+          blockedEl.textContent = tf(blockedKey, blockedKey);
+        } else {
+          blockedEl.hidden = true;
+          blockedEl.textContent = "";
+        }
+      }
+      if (action.action_key === "salvage" && ccWorldKey) {
+        void refreshCcSalvageState(ccWorldKey);
+      }
+
+      if (newsEl) {
+        newsEl.className = "gc-command-center-news-list";
+        newsEl.innerHTML = "";
+        const hints = Array.isArray(cc.hints) ? cc.hints : [];
+        if (!hints.length) {
+          const li = document.createElement("li");
+          li.className = "hint gc-command-center-news-empty";
+          li.textContent = tf("command_center_hints_empty", "Keine Hinweise.");
+          newsEl.appendChild(li);
+        } else {
+          hints.forEach((row) => {
+            if (row.salvage_prepare) return;
+            const li = document.createElement("li");
+            li.className = "gc-command-center-hint-row hint";
+            li.textContent = tf(row.label_key, row.vars || {}, row.label_key || "");
+            newsEl.appendChild(li);
+          });
+        }
+      }
+    }
+
+    function applyCommandCenterHeader(cc) {
+      if (nameEl && cc.name_key) nameEl.textContent = tf(cc.name_key, cc.name_key);
+      else if (nameEl && cc.name) nameEl.textContent = cc.name;
+      if (roleEl) {
+        const roleKey = String(cc.role_label_key || cc.type_key || "").trim();
+        if (roleKey) {
+          roleEl.hidden = false;
+          roleEl.textContent = tf(roleKey, roleKey);
+        } else if (cc.type_key) {
+          roleEl.hidden = false;
+          roleEl.textContent = tf(cc.type_key, cc.type_key);
+        } else {
+          roleEl.textContent = "";
+          roleEl.hidden = true;
+        }
+      }
+      if (iconEl && cc.role_icon) {
+        iconEl.textContent = cc.role_icon;
+        iconEl.hidden = false;
+      }
+      if (coordEl) {
+        const coord = String(cc.coordinates_formatted || "").trim();
+        if (coord) {
+          coordEl.hidden = false;
+          coordEl.innerHTML = GC.coordLinkHtml(coord, { label: coord });
+        } else {
+          coordEl.hidden = true;
+          coordEl.textContent = "";
+        }
+      }
+      if (riskEl) {
+        const riskKey = String(cc.risk_key || "");
+        if (riskKey && String(cc.panel_kind || "") === "expedition_site") {
+          riskEl.hidden = false;
+          riskEl.textContent = tf(riskKey, riskKey);
+          riskEl.className = `gc-command-center-risk gc-command-center-detail-tone--${cc.risk_level || "low"}`;
+        } else {
+          riskEl.hidden = true;
+          riskEl.textContent = "";
+          riskEl.className = "gc-command-center-risk";
+        }
+      }
+    }
+
+    function renderExpeditionSiteCommandCenter(cc) {
+      renderCcDetailList(cc);
+      renderCcExpeditionProgress(cc, { showExpeditionCount: true });
+      renderCcPrimaryAndHints(cc);
+    }
+
+    function renderStrategicCommandCenter(cc) {
+      setCommandCenterSectionTitles("strategic_world");
+      if (actionsEl) actionsEl.hidden = true;
+      if (progressSection) progressSection.hidden = true;
+      renderCcDetailList(cc);
+      renderCcPrimaryAndHints(cc);
+    }
+
+    function navigateForeignFleetAction(action) {
+      const row = action && typeof action === "object" ? action : {};
+      const actionKey = String(row.action_key || "");
+      if (!actionKey || actionKey === "observe" || row.enabled === false) return;
+      const wk = String(row.world_key || ccWorldKey || "").trim();
+      const planetId = parseInt(row.planet_id || "0", 10) || 0;
+      if (!wk && !planetId) return;
+      const params = new URLSearchParams();
+      params.set("mission", actionKey === "spy" ? "spy" : "attack");
+      params.set("target_type", String(row.target_type || "enemy_colony"));
+      if (wk) params.set("world_key", wk);
+      if (planetId) params.set("target_planet_id", String(planetId));
+      if (typeof GC.navigateTo === "function") {
+        GC.navigateTo(`/fleet?${params.toString()}`, { push: true });
+      }
+    }
+
+    function renderForeignCommandCenter(cc) {
+      setCommandCenterSectionTitles("foreign_colony");
+      if (progressSection) progressSection.hidden = false;
+      if (primaryBtn) {
+        primaryBtn.hidden = true;
+        primaryBtn.disabled = true;
+      }
+      if (blockedEl) {
+        blockedEl.hidden = true;
+        blockedEl.textContent = "";
+      }
+
+      ccWorldKey = String(cc.world_key || "").trim();
+
+      if (resourcesEl) {
+        resourcesEl.innerHTML = "";
+        resourcesEl.className = "gc-command-center-detail-list";
+        (Array.isArray(cc.details) ? cc.details : []).forEach((row) => {
+          const wrap = document.createElement("div");
+          wrap.className = "gc-command-center-detail-row";
+          const dt = document.createElement("dt");
+          dt.textContent = tf(row.label_key, row.label_key || "");
+          const dd = document.createElement("dd");
+          if (row.value_text) {
+            dd.textContent = row.value_text;
+          } else {
+            dd.textContent = tf(row.value_key, row.value_key || "");
+          }
+          wrap.appendChild(dt);
+          wrap.appendChild(dd);
+          resourcesEl.appendChild(wrap);
+        });
+      }
+
+      if (fleetsEl) {
+        fleetsEl.innerHTML = "";
+        fleetsEl.className = "gc-command-center-progress-list";
+        const statusKey = String(cc.status_key || "");
+        if (statusKey) {
+          const li = document.createElement("li");
+          li.className = "gc-command-center-progress-row";
+          li.innerHTML = `<span class="gc-command-center-progress-label">${tf("command_center_foreign_status_label", "Status")}</span><span class="gc-command-center-progress-value">${tf(statusKey, statusKey)}</span>`;
+          fleetsEl.appendChild(li);
+        } else {
+          const empty = document.createElement("li");
+          empty.className = "hint";
+          empty.textContent = tf("command_center_intel_empty", "Keine weiteren öffentlichen Daten.");
+          fleetsEl.appendChild(empty);
+        }
+      }
+
+      if (actionsEl) {
+        actionsEl.hidden = false;
+        actionsEl.innerHTML = "";
+        (Array.isArray(cc.actions) ? cc.actions : []).forEach((row) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "gc-command-center-action-btn";
+          if (row.enabled === false) btn.disabled = true;
+          btn.textContent = tf(row.label_key, row.label_key || row.action_key || "");
+          btn.dataset.actionKey = row.action_key || "";
+          btn.dataset.targetType = row.target_type || "enemy_colony";
+          btn.dataset.worldKey = row.world_key || ccWorldKey || "";
+          if (row.planet_id) btn.dataset.planetId = String(row.planet_id);
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            navigateForeignFleetAction(row);
+          });
+          actionsEl.appendChild(btn);
+        });
+      }
+
+      if (newsEl) {
+        newsEl.className = "gc-command-center-news-list";
+        newsEl.innerHTML = "";
+        const hints = Array.isArray(cc.hints) ? cc.hints : [];
+        if (!hints.length) {
+          const li = document.createElement("li");
+          li.className = "hint gc-command-center-news-empty";
+          li.textContent = tf("command_center_hints_empty", "Keine Hinweise.");
+          newsEl.appendChild(li);
+        } else {
+          hints.forEach((row) => {
+            const li = document.createElement("li");
+            li.className = "gc-command-center-hint-row hint";
+            li.textContent = tf(row.label_key, row.vars || {}, row.label_key || "");
+            newsEl.appendChild(li);
+          });
+        }
+      }
+    }
+
+    function activityFeedId(row) {
+      if (row && row.feed_id) return String(row.feed_id);
+      return [
+        row?.kind || "",
+        row?.label_key || "",
+        row?.detail_key || "",
+        row?.text || "",
+        row?.countdown_at || "",
+      ].join("|");
+    }
+
+    function renderActivityFeed(feedRows, targetEl, opts) {
+      if (!targetEl) return;
+      const options = opts && typeof opts === "object" ? opts : {};
+      const maxItems = parseInt(options.maxItems, 10) || 0;
+      let rows = Array.isArray(feedRows) ? feedRows : [];
+      if (maxItems > 0) rows = rows.slice(0, maxItems);
+      const seen = GC._activityFeedSeenIds || (GC._activityFeedSeenIds = new Set());
+      const seedOnly = !GC._activityFeedSeenInitialized;
+      GC._activityFeedSeenInitialized = true;
+      targetEl.className = "gc-command-center-activity-feed gc-command-center-news-list";
+      targetEl.innerHTML = "";
+      if (!rows.length) {
+        const li = document.createElement("li");
+        li.className = "gc-command-center-activity-empty hint";
+        li.textContent = tf("command_center_feed_empty", "Keine aktuellen Ereignisse.");
+        targetEl.appendChild(li);
+        return;
+      }
+      rows.forEach((row) => {
+        const feedId = activityFeedId(row);
+        const isNew = !seedOnly && feedId && !seen.has(feedId);
+        if (feedId) seen.add(feedId);
+        const presentation = String(row.presentation || "").trim();
+        const forceHighlight = presentation === "discovery"
+          && !GC._discoveryFeedSeenIds?.has(feedId);
+        if (forceHighlight) {
+          (GC._discoveryFeedSeenIds || (GC._discoveryFeedSeenIds = new Set())).add(feedId);
+        }
+        const li = document.createElement("li");
+        li.className = `gc-command-center-activity-item gc-command-center-activity-item--${row.kind || "system"}${(isNew || forceHighlight) ? " is-new" : ""}${presentation === "expedition_launch" ? " is-expedition" : ""}${presentation === "discovery" ? " is-discovery" : ""}`;
+        if (isNew || forceHighlight) {
+          li.dataset.activityFeedId = feedId;
+        }
+        const link = document.createElement("a");
+        link.className = "gc-nav-link gc-command-center-activity-link gc-command-center-news-link";
+        link.href = row.href || "/overview";
+        link.dataset.gcNav = "1";
+
+        const icon = String(row.icon || "•");
+        let title = row.text || tf(row.label_key, row.label_key || "");
+        let subtitleHtml = "";
+        if (presentation === "discovery") {
+          title = tf("command_map_discovery_feed_title", "Neuer Kontakt entdeckt");
+          subtitleHtml = `<span class="gc-command-center-activity-subtitle">${tf("command_map_discovery_feed_subtitle", "Ein unbekannter Ort wurde im Sektor bestätigt.")}</span>`;
+        } else if (presentation === "expedition_launch") {
+          title = tf("command_map_expedition_feed_title", "Expedition unterwegs…");
+          if (row.detail_key) {
+            const detail = formatCcFleetLabel(row.detail_key);
+            if (detail) subtitleHtml = `<span class="gc-command-center-activity-subtitle">${detail}</span>`;
+          }
+        } else if (row.detail_key) {
+          const detail = String(row.detail_key).includes("|")
+            ? formatCcFleetLabel(row.detail_key)
+            : tf(row.detail_key, row.detail_key);
+          title = detail ? `${title} · ${detail}` : title;
+        }
+
+        let timerHtml = "";
+        if (row.countdown_at) {
+          const rem = queueJobRemainingSeconds(
+            row.countdown_at,
+            getTimerServerNow(),
+            row.remaining
+          );
+          timerHtml = `<time class="gc-command-center-activity-timer gc-mono" data-timer-target="${row.countdown_at}" data-timer-kind="queue"${row.remaining != null ? ` data-server-remaining="${Math.max(0, Math.floor(Number(row.remaining) || 0))}"` : ""}>${GC.formatCountdownRemain(rem)}</time>`;
+        }
+
+        link.innerHTML = `<span class="gc-command-center-activity-icon" aria-hidden="true">${icon}</span><span class="gc-command-center-activity-body"><span class="gc-command-center-activity-title">${title}</span>${subtitleHtml}${timerHtml}</span>`;
+        li.appendChild(link);
+        targetEl.appendChild(li);
+      });
+      GC.startProgressTicker();
+    }
+
+    function renderColonyActionCard(row) {
+      const status = String(row.status || "free");
+      const card = document.createElement("a");
+      card.className = `gc-nav-link gc-command-center-action-card gc-command-center-action-btn gc-command-center-action-card--${status}`;
+      card.href = row.href || "/overview";
+      card.dataset.gcNav = "1";
+      card.dataset.actionStatus = status;
+
+      const icon = String(row.icon || "").trim();
+      const label = tf(row.label_key, row.label_key || row.action_key || "");
+      let statusText = tf(row.status_key, row.status_key || "");
+      if (row.detail_key && status === "queue_active") {
+        const detail = tf(row.detail_key, row.detail_key);
+        statusText = detail ? `${statusText} · ${detail}` : statusText;
+      }
+
+      let timerHtml = "";
+      if (status === "queue_active" && row.countdown_at) {
+        const rem = queueJobRemainingSeconds(
+          row.countdown_at,
+          getTimerServerNow(),
+          row.remaining
+        );
+        timerHtml = `<time class="gc-command-center-action-timer gc-mono" data-timer-target="${row.countdown_at}" data-timer-kind="queue"${row.remaining != null ? ` data-server-remaining="${Math.max(0, Math.floor(Number(row.remaining) || 0))}"` : ""}>${GC.formatCountdownRemain(rem)}</time>`;
+      }
+
+      card.innerHTML = `${icon ? `<span class="gc-command-center-action-icon" aria-hidden="true">${icon}</span>` : ""}<span class="gc-command-center-action-body"><span class="gc-command-center-action-label">${label}</span><span class="gc-command-center-action-status">${statusText}</span>${timerHtml}</span>`;
+      return card;
+    }
+
+    function renderColonyQueueRow(row) {
+      const li = document.createElement("li");
+      li.className = "gc-command-center-progress-row";
+      const label = tf(row.label_key, row.label_key || row.key || "");
+      const summary = String(row.summary || "").trim();
+      const labelText = summary ? `${label} ${summary}` : label;
+      if (row.state === "active" && row.countdown_at) {
+        const rem = queueJobRemainingSeconds(
+          row.countdown_at,
+          getTimerServerNow(),
+          row.remaining
+        );
+        li.innerHTML = `<span class="gc-command-center-progress-label">${labelText}</span><time class="gc-command-center-progress-value gc-mono" data-timer-target="${row.countdown_at}" data-timer-kind="queue"${row.remaining != null ? ` data-server-remaining="${Math.max(0, Math.floor(Number(row.remaining) || 0))}"` : ""}>${GC.formatCountdownRemain(rem)}</time>`;
+      } else {
+        li.innerHTML = `<span class="gc-command-center-progress-label">${labelText}</span><span class="gc-command-center-progress-value hint">${tf("command_center_queue_idle", "Idle")}</span>`;
+      }
+      return li;
+    }
+
+    function renderColonyCommandCenter(cc) {
+      setCommandCenterSectionTitles("colony");
+      if (progressSection) progressSection.hidden = false;
+      if (actionsEl) actionsEl.hidden = false;
+      if (primaryBtn) {
+        primaryBtn.hidden = true;
+        primaryBtn.disabled = true;
+      }
+      if (blockedEl) {
+        blockedEl.hidden = true;
+        blockedEl.textContent = "";
+      }
+      if (resourcesEl) {
+        resourcesEl.className = "gc-command-center-resource-list";
+        resourcesEl.innerHTML = "";
+        (Array.isArray(cc.resources) ? cc.resources : []).forEach((row) => {
+          const li = document.createElement("li");
+          li.className = "gc-command-center-resource-row";
+          li.innerHTML = `<span class="gc-command-center-resource-short">${row.short || ""}</span><span class="gc-command-center-resource-amount gc-mono">${row.amount || "0"}</span><span class="gc-command-center-resource-rate gc-mono">${row.rate || ""}</span>`;
+          resourcesEl.appendChild(li);
+        });
+      }
+      if (fleetsEl) {
+        fleetsEl.className = "gc-command-center-progress-list";
+        fleetsEl.innerHTML = "";
+        const progress = cc.progress && typeof cc.progress === "object" ? cc.progress : null;
+        if (progress && progress.level != null) {
+          const li = document.createElement("li");
+          li.className = "gc-command-center-progress-row gc-command-center-progress-row--level";
+          const levelLabel = tf("command_center_colony_level", { level: progress.level }, `Level ${progress.level}`);
+          const xpHint = progress.xp_remaining > 0
+            ? tf("command_center_colony_xp_remaining", { xp: progress.xp_remaining }, `${progress.xp_remaining} XP`)
+            : "";
+          li.innerHTML = `<span class="gc-command-center-progress-label">${levelLabel}</span><span class="gc-command-center-progress-value gc-mono hint">${xpHint}</span>`;
+          fleetsEl.appendChild(li);
+        }
+        (Array.isArray(cc.queues) ? cc.queues : []).forEach((row) => {
+          fleetsEl.appendChild(renderColonyQueueRow(row));
+        });
+        (Array.isArray(cc.fleets) ? cc.fleets : []).forEach((row) => {
+          const li = document.createElement("li");
+          const link = document.createElement("a");
+          link.className = "gc-nav-link gc-command-center-fleet-link";
+          link.href = row.href || "/fleet";
+          link.dataset.gcNav = "1";
+          link.textContent = `${row.icon || "▶"} ${formatCcFleetLabel(row.label_key)}`;
+          li.appendChild(link);
+          fleetsEl.appendChild(li);
+        });
+      }
+      if (actionsEl) {
+        actionsEl.innerHTML = "";
+        (Array.isArray(cc.quick_actions) ? cc.quick_actions : []).forEach((row) => {
+          actionsEl.appendChild(renderColonyActionCard(row));
+        });
+        GC.startProgressTicker();
+      }
+      if (newsEl) {
+        const feed = Array.isArray(cc.activity_feed) ? cc.activity_feed : (Array.isArray(cc.news) ? cc.news : []);
+        renderActivityFeed(feed, newsEl);
+      }
+    }
+
+    async function refreshCcSalvageState(worldKey) {
+      if (!primaryBtn || primaryBtn.hidden || primaryBtn.dataset.actionKey !== "salvage") return;
+      try {
+        const res = await GC.fetchJSON(
+          `/api/worlds/salvage-preview?world_key=${encodeURIComponent(worldKey)}`,
+          { cache: "no-store" }
+        );
+        const data = res?.data || {};
+        const canStart = Boolean(data.can_start_salvage);
+        const hasShips = Boolean(data.has_salvage_ships);
+        primaryBtn.disabled = !canStart;
+        primaryBtn.textContent = canStart
+          ? tf("strategic_world_btn_salvage", "Bergung starten")
+          : tf("strategic_world_btn_salvage_prepare", "Bergung vorbereiten");
+        if (blockedEl) {
+          if (data.block_reason === "no_expedition_ships" && !hasShips) {
+            blockedEl.hidden = false;
+            blockedEl.textContent = tf(
+              "strategic_world_salvage_no_ships",
+              "Expeditionsschiffe auf dem aktiven Planeten benötigt."
+            );
+          } else if (canStart || hasShips) {
+            blockedEl.hidden = true;
+            blockedEl.textContent = "";
+          }
+        }
+      } catch (_) {
+        if (primaryBtn) primaryBtn.disabled = true;
+      }
+    }
+
+    function renderCommandCenterPanel(data) {
+      const cc = data && typeof data === "object" ? data : {};
+      const panelKind = String(cc.panel_kind || "");
+      if (panelKind === "strategic_world") {
+        renderStrategicCommandCenter(cc);
+      } else if (panelKind === "expedition_site") {
+        renderExpeditionSiteCommandCenter(cc);
+      } else if (panelKind === "foreign_colony") {
+        renderForeignCommandCenter(cc);
+      } else if (panelKind === "colony") {
+        renderColonyCommandCenter(cc);
+      } else if (openColonyBtn) {
+        openColonyBtn.hidden = true;
+        delete openColonyBtn.dataset.planetId;
+      }
+      syncOpenColonyButton(cc);
+      applyCommandCenterHeader(cc);
+      if (statusEl) {
+        const statusKey = String(cc.status_key || "");
+        if (statusKey) {
+          statusEl.hidden = false;
+          statusEl.textContent = tf(statusKey, statusKey);
+        } else {
+          statusEl.hidden = true;
+          statusEl.textContent = "";
+        }
+      }
+    }
+
+    function hideSiteInspector() {
+      graph.querySelectorAll("[data-expansion-site-inspect].is-selected, [data-landmark-inspect].is-selected, [data-foreign-empire-inspect].is-selected, [data-foreign-world-colony-inspect].is-selected, [data-world-field-inspect].is-selected").forEach((btn) => {
+        btn.classList.remove("is-selected");
+        btn.setAttribute("aria-pressed", "false");
+      });
+    }
+
+    GC.showCommandMapColonyPanel = function showCommandMapColonyPanel(btn) {
+      if (!btn) return;
+      const planetId = String(btn.dataset.planetId || btn.dataset.empireIdentitySwitch || "");
+      hideSiteInspector();
+      if (typeof GC.openWorldInspectorFromNode === "function") {
+        GC.openWorldInspectorFromNode(btn);
+      } else if (typeof GC.openWorldInspectorModal === "function") {
+        const cc = mergeColonyPayloadFallback(btn, parseColonyCommandCenter(planetId));
+        GC.openWorldInspectorModal({ cc, btn, kind: "colony" });
+      }
+
+      graph.querySelectorAll("[data-world-field-inspect]").forEach((item) => {
+        item.classList.remove("is-selected");
+        item.setAttribute("aria-pressed", "false");
+      });
+      graph.querySelectorAll("[data-foreign-empire-inspect], [data-foreign-world-colony-inspect]").forEach((item) => {
+        item.classList.remove("is-selected");
+        item.setAttribute("aria-pressed", "false");
+      });
+      graph.querySelectorAll("[data-colony-location-inspect]").forEach((item) => {
+        const selected = item === btn;
+        item.classList.toggle("is-selected", selected);
+        item.setAttribute("aria-pressed", selected ? "true" : "false");
+      });
+    };
+
+    function mergeColonyPayloadFallback(btn, cc) {
+      const base = cc && typeof cc === "object" ? { ...cc } : {};
+      const pid = parseInt(String(btn?.dataset.planetId || btn?.dataset.empireIdentitySwitch || base.planet_id || "0"), 10);
+      base.panel_kind = "colony";
+      if (pid) base.planet_id = pid;
+      if (!base.name) base.name = btn?.dataset.colonyName || "";
+      if (!base.primary_action && pid) {
+        base.primary_action = { action_key: "open_colony", enabled: true, planet_id: pid };
+      }
+      return base;
+    }
+
+    GC.showCommandMapStrategicWorldPanel = function showCommandMapStrategicWorldPanel(btn) {
+      if (!btn) return;
+      hideSiteInspector();
+      if (typeof GC.openWorldInspectorFromNode === "function") {
+        GC.openWorldInspectorFromNode(btn);
+      } else if (typeof GC.openWorldInspectorModal === "function") {
+        const worldKey = String(btn.dataset.strategicWorldKey || "").trim();
+        const source = worldKey ? graph.querySelector(`[data-world-field-source="${worldKey}"]`) : null;
+        let cc = {};
+        try {
+          cc = JSON.parse(source?.getAttribute("data-command-center") || source?.dataset.commandCenter || "{}");
+        } catch (_) {
+          cc = {};
+        }
+        const discovery = btn.dataset.expeditionStatus === "recently_reported";
+        GC.openWorldInspectorModal({ cc, btn, kind: cc.panel_kind || "expedition_site", discovery });
+      }
+
+      graph.querySelectorAll("[data-colony-location-inspect]").forEach((item) => {
+        item.classList.remove("is-selected");
+        item.setAttribute("aria-pressed", "false");
+      });
+      graph.querySelectorAll("[data-foreign-empire-inspect], [data-foreign-world-colony-inspect]").forEach((item) => {
+        item.classList.remove("is-selected");
+        item.setAttribute("aria-pressed", "false");
+      });
+      graph.querySelectorAll("[data-world-field-inspect]").forEach((item) => {
+        const selected = item === btn;
+        item.classList.toggle("is-selected", selected);
+        item.setAttribute("aria-pressed", selected ? "true" : "false");
+      });
+    };
+
+    GC.showCommandMapForeignColonyPanel = function showCommandMapForeignColonyPanel(btn) {
+      if (!btn) return;
+      hideSiteInspector();
+      if (typeof GC.openWorldInspectorFromNode === "function") {
+        GC.openWorldInspectorFromNode(btn);
+      } else if (typeof GC.openWorldInspectorModal === "function") {
+        const sourceKey = String(btn.dataset.foreignColonySource || "").trim();
+        const source = sourceKey ? graph.querySelector(`[data-foreign-colony-source="${sourceKey}"]`) : null;
+        let cc = {};
+        try {
+          cc = JSON.parse(source?.getAttribute("data-command-center") || source?.dataset.commandCenter || "{}");
+        } catch (_) {
+          cc = {};
+        }
+        GC.openWorldInspectorModal({ cc, btn, kind: cc.panel_kind || "foreign_colony" });
+      }
+
+      graph.querySelectorAll("[data-colony-location-inspect], [data-world-field-inspect]").forEach((item) => {
+        item.classList.remove("is-selected");
+        item.setAttribute("aria-pressed", "false");
+      });
+      graph.querySelectorAll("[data-foreign-empire-inspect], [data-foreign-world-colony-inspect]").forEach((item) => {
+        const selected = item === btn;
+        item.classList.toggle("is-selected", selected);
+        item.setAttribute("aria-pressed", selected ? "true" : "false");
+      });
+    };
+
+    function onPrimaryActionClick(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const actionKey = String(primaryBtn?.dataset.actionKey || "");
+      const wk = String(primaryBtn?.dataset.worldKey || ccWorldKey || "").trim();
+      if (!wk || !actionKey || actionKey === "none") return;
+      const params = new URLSearchParams();
+      if (actionKey === "colonize") {
+        params.set("mission", "colonize");
+        params.set("world_key", wk);
+        if (ccWorldName) params.set("colony_name", ccWorldName);
+      } else {
+        params.set("mission", "expedition");
+        params.set("world_key", wk);
+      }
+      if (typeof GC.navigateTo === "function") {
+        GC.navigateTo(`/fleet?${params.toString()}`, { push: true });
+      }
+    }
+
+    async function onOpenColonyClick(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!openColonyBtn || openColonyBtn.hidden) return;
+      const planetId = parseInt(openColonyBtn.dataset.planetId || "0", 10);
+      if (!planetId) return;
+      try {
+        const res = await GC.fetchGameAction("/api/planets/active", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+          body: JSON.stringify({ planet_id: planetId }),
+        });
+        if (res?.ok) {
+          applyActionState(res, "planet_switch");
+          if (typeof GC.navigateTo === "function") {
+            GC.navigateTo("/overview", { push: true });
+          }
+        }
+      } catch (_) {
+        /* ignore */
+      }
+    }
+
+    openColonyBtn?.addEventListener("click", onOpenColonyClick);
+    primaryBtn?.addEventListener("click", onPrimaryActionClick);
+
+    GC.registerCleanup(() => {
+      delete GC.showCommandMapColonyPanel;
+      delete GC.showCommandMapStrategicWorldPanel;
+      delete GC.showCommandMapForeignColonyPanel;
+      openColonyBtn?.removeEventListener("click", onOpenColonyClick);
+      primaryBtn?.removeEventListener("click", onPrimaryActionClick);
+      resetCommandMapSidePanels(graph);
+    });
+  }
+
+  function initCommandMapFleetRoutes() {
+    const graph = document.querySelector("[data-command-map-graph]");
+    const layer = graph?.querySelector("[data-command-map-fleet-routes]");
+    if (!graph || !layer) return;
+
+    let tooltip = graph.querySelector("[data-fleet-route-tooltip]");
+    if (!tooltip) {
+      tooltip = document.createElement("div");
+      tooltip.className = "galaxy-command-map-fleet-route-tooltip";
+      tooltip.setAttribute("data-fleet-route-tooltip", "");
+      tooltip.hidden = true;
+      graph.appendChild(tooltip);
+    }
+
+    const nodeIndex = [];
+    graph.querySelectorAll(".galaxy-command-map-node").forEach((el) => {
+      const wx = parseFloat(el.style.getPropertyValue("--world-x") || "0");
+      const wy = parseFloat(el.style.getPropertyValue("--world-y") || "0");
+      if (!Number.isFinite(wx) || !Number.isFinite(wy)) return;
+      const name = (
+        el.dataset.colonyName
+        || el.dataset.strategicName
+        || el.dataset.siteName
+        || el.dataset.foreignColonyName
+        || el.dataset.empireName
+        || el.querySelector(".galaxy-command-map-node-name")?.textContent
+        || ""
+      ).trim();
+      if (!name) return;
+      nodeIndex.push({
+        wx,
+        wy,
+        name,
+        worldKey: el.dataset.strategicWorldKey || el.dataset.worldKey || "",
+      });
+    });
+
+    const resolveRouteLabel = (x, y, worldKey, preferWorldKey) => {
+      const wk = String(worldKey || "").trim();
+      if (preferWorldKey && wk) {
+        const hit = nodeIndex.find((n) => n.worldKey === wk);
+        if (hit) return hit.name;
+      }
+      let best = null;
+      let bestDist = 140;
+      nodeIndex.forEach((n) => {
+        const d = Math.hypot(n.wx - x, n.wy - y);
+        if (d < bestDist) {
+          bestDist = d;
+          best = n;
+        }
+      });
+      return best?.name || "–";
+    };
+
+    const legLabel = (phase) => {
+      const key = {
+        outbound: "fleet_leg_outbound",
+        returning: "fleet_leg_returning",
+        holding: "fleet_leg_holding",
+      }[String(phase || "").toLowerCase()] || "fleet_leg_outbound";
+      return tt(key, phase);
+    };
+
+    const formatRouteEta = (routeEl) => {
+      const etaAt = parseInt(routeEl.dataset.fleetRouteEtaAt || "0", 10);
+      const remaining = parseInt(routeEl.dataset.fleetRouteRemaining || "0", 10);
+      if (remaining > 0) return formatCountdownRemain(remaining);
+      if (etaAt > 0) {
+        const nowSec = getApproxServerNow();
+        return formatCountdownRemain(Math.max(0, Math.ceil(etaAt - nowSec)));
+      }
+      return "–";
+    };
+
+    const hideTooltip = () => {
+      tooltip.hidden = true;
+      layer.querySelectorAll(".galaxy-command-map-fleet-route-group.is-hovered").forEach((g) => {
+        g.classList.remove("is-hovered");
+      });
+    };
+
+    const showTooltip = (routeEl, clientX, clientY) => {
+      const mission = String(routeEl.dataset.fleetRouteMission || "transport");
+      const phase = String(routeEl.dataset.fleetRoutePhase || "outbound");
+      const fromX = parseFloat(routeEl.dataset.fleetRouteFromX || "0");
+      const fromY = parseFloat(routeEl.dataset.fleetRouteFromY || "0");
+      const toX = parseFloat(routeEl.dataset.fleetRouteToX || "0");
+      const toY = parseFloat(routeEl.dataset.fleetRouteToY || "0");
+      const worldKey = routeEl.dataset.fleetRouteWorldKey || "";
+      const missionLabel = tt(`fleet_mission_${mission}`, mission);
+      const fromLabel = resolveRouteLabel(fromX, fromY, worldKey, false);
+      const toLabel = resolveRouteLabel(toX, toY, worldKey, true);
+      const statusLabel = legLabel(phase);
+      const etaLabel = formatRouteEta(routeEl);
+
+      tooltip.innerHTML = `<strong>${missionLabel}</strong><dl>
+        <dt>${tt("fleet_route_tooltip_from", "From")}</dt><dd>${fromLabel}</dd>
+        <dt>${tt("fleet_route_tooltip_to", "To")}</dt><dd>${toLabel}</dd>
+        <dt>${tt("fleet_route_tooltip_status", "Status")}</dt><dd>${statusLabel}</dd>
+        <dt>${tt("fleet_route_tooltip_eta", "ETA")}</dt><dd class="gc-mono">${etaLabel}</dd>
+      </dl>`;
+      tooltip.hidden = false;
+      const pad = 12;
+      const rect = tooltip.getBoundingClientRect();
+      let left = clientX + pad;
+      let top = clientY + pad;
+      if (left + rect.width > window.innerWidth - 8) left = clientX - rect.width - pad;
+      if (top + rect.height > window.innerHeight - 8) top = clientY - rect.height - pad;
+      tooltip.style.left = `${Math.max(8, left)}px`;
+      tooltip.style.top = `${Math.max(8, top)}px`;
+    };
+
+    const onRouteEnter = (e) => {
+      const routeEl = e.target.closest("[data-fleet-route]");
+      if (!routeEl || !layer.contains(routeEl)) return;
+      routeEl.classList.add("is-hovered");
+      showTooltip(routeEl, e.clientX, e.clientY);
+    };
+
+    const onRouteMove = (e) => {
+      const routeEl = e.target.closest("[data-fleet-route]");
+      if (!routeEl || tooltip.hidden) return;
+      showTooltip(routeEl, e.clientX, e.clientY);
+    };
+
+    const onRouteLeave = (e) => {
+      const routeEl = e.target.closest("[data-fleet-route]");
+      if (!routeEl) return;
+      const related = e.relatedTarget;
+      if (related && routeEl.contains(related)) return;
+      hideTooltip();
+    };
+
+    const onViewportDragStart = () => hideTooltip();
+
+    layer.addEventListener("pointerenter", onRouteEnter, true);
+    layer.addEventListener("pointermove", onRouteMove, true);
+    layer.addEventListener("pointerleave", onRouteLeave, true);
+    graph.querySelector("[data-command-map-viewport]")?.addEventListener("pointerdown", onViewportDragStart);
+
+    GC.registerCleanup(() => {
+      layer.removeEventListener("pointerenter", onRouteEnter, true);
+      layer.removeEventListener("pointermove", onRouteMove, true);
+      layer.removeEventListener("pointerleave", onRouteLeave, true);
+      graph.querySelector("[data-command-map-viewport]")?.removeEventListener("pointerdown", onViewportDragStart);
+      hideTooltip();
+    });
+  }
+
+  function initCommandMapVisualPolish() {
+    const graph = document.querySelector("[data-command-map-graph]");
+    if (!graph) return;
+
+    const ACTIVITY_CLASS = [
+      "has-activity-build",
+      "has-activity-research",
+      "has-activity-shipyard",
+      "has-activity-fleet",
+    ];
+
+    function parseCommandCenter(sourceEl) {
+      if (!sourceEl) return {};
+      try {
+        return JSON.parse(sourceEl.dataset.commandCenter || "{}");
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function queueActive(cc, key) {
+      const rows = Array.isArray(cc.queues) ? cc.queues : [];
+      return rows.some((row) => String(row.key || "") === key && String(row.state || "") === "active");
+    }
+
+    function fleetActive(cc) {
+      const rows = Array.isArray(cc.fleets) ? cc.fleets : [];
+      return rows.some((row) => String(row.label_key || "") !== "command_center_fleet_ready");
+    }
+
+    function applyColonyNodeActivity() {
+      graph.querySelectorAll("[data-colony-actions-source]").forEach((source) => {
+        const planetId = String(source.dataset.colonyActionsSource || "");
+        const btn = graph.querySelector(`[data-colony-location-inspect][data-planet-id="${planetId}"]`);
+        if (!btn) return;
+        const cc = parseCommandCenter(source);
+        ACTIVITY_CLASS.forEach((cls) => btn.classList.remove(cls));
+        if (fleetActive(cc)) {
+          btn.classList.add("has-activity-fleet");
+        } else if (queueActive(cc, "shipyard")) {
+          btn.classList.add("has-activity-shipyard");
+        } else if (queueActive(cc, "research")) {
+          btn.classList.add("has-activity-research");
+        } else if (queueActive(cc, "build")) {
+          btn.classList.add("has-activity-build");
+        }
+      });
+    }
+
+    function edgeEndpointsMatch(edgeEl, x1, y1, x2, y2, eps = 36) {
+      const ex1 = parseFloat(edgeEl.dataset.edgeX1 || "0");
+      const ey1 = parseFloat(edgeEl.dataset.edgeY1 || "0");
+      const ex2 = parseFloat(edgeEl.dataset.edgeX2 || "0");
+      const ey2 = parseFloat(edgeEl.dataset.edgeY2 || "0");
+      const direct = Math.hypot(ex1 - x1, ey1 - y1) + Math.hypot(ex2 - x2, ey2 - y2);
+      const flipped = Math.hypot(ex1 - x2, ey1 - y2) + Math.hypot(ex2 - x1, ey2 - y2);
+      return Math.min(direct, flipped) <= eps * 2;
+    }
+
+    function applyEdgeRouteGlow() {
+      const edges = graph.querySelectorAll("[data-command-map-edge]");
+      const routes = graph.querySelectorAll("[data-fleet-route]");
+      edges.forEach((edgeEl) => {
+        edgeEl.classList.remove("is-route-active");
+        const edgeType = String(edgeEl.dataset.edgeType || "");
+        if (!["hub_link", "trade_route"].includes(edgeType)) return;
+        let active = false;
+        routes.forEach((routeEl) => {
+          const rx1 = parseFloat(routeEl.dataset.fleetRouteFromX || "0");
+          const ry1 = parseFloat(routeEl.dataset.fleetRouteFromY || "0");
+          const rx2 = parseFloat(routeEl.dataset.fleetRouteToX || "0");
+          const ry2 = parseFloat(routeEl.dataset.fleetRouteToY || "0");
+          if (edgeEndpointsMatch(edgeEl, rx1, ry1, rx2, ry2)) {
+            active = true;
+          }
+        });
+        if (active) edgeEl.classList.add("is-route-active");
+      });
+      routes.forEach((routeEl) => {
+        if (String(routeEl.dataset.fleetRouteMission || "") === "expedition") {
+          routeEl.classList.add("is-expedition-route");
+        }
+      });
+    }
+
+    let hoverTooltip = graph.querySelector("[data-colony-hover-tooltip]");
+    if (!hoverTooltip) {
+      hoverTooltip = document.createElement("div");
+      hoverTooltip.className = "galaxy-command-map-colony-hover-tooltip";
+      hoverTooltip.setAttribute("data-colony-hover-tooltip", "");
+      hoverTooltip.hidden = true;
+      graph.appendChild(hoverTooltip);
+    }
+
+    function queueStatusLabel(cc, key, labelKey) {
+      const active = queueActive(cc, key);
+      const statusKey = active ? "command_map_hover_queue_active" : "command_map_hover_queue_free";
+      return `<dt>${tf(labelKey, labelKey)}</dt><dd class="${active ? "is-active" : "is-idle"}">${tf(statusKey, active ? "Active" : "Idle")}</dd>`;
+    }
+
+    function buildColonyHoverHtml(cc, btn) {
+      const name = cc.name || btn?.dataset.colonyName || "";
+      const roleKey = String(cc.role_label_key || "").trim();
+      const role = roleKey ? tf(roleKey, roleKey) : (btn?.dataset.colonyRole || "");
+      const progress = cc.progress && typeof cc.progress === "object" ? cc.progress : {};
+      const level = parseInt(progress.level, 10) || 0;
+      const resources = Array.isArray(cc.resources) ? cc.resources : [];
+      const metal = resources.find((row) => row.key === "metal");
+      const prodLine = metal?.rate
+        ? tf("command_map_hover_production", { rate: metal.rate }, metal.rate)
+        : "";
+      const fleetCount = (Array.isArray(cc.fleets) ? cc.fleets : []).filter(
+        (row) => String(row.label_key || "") !== "command_center_fleet_ready"
+      ).length;
+      const fleetLine = fleetCount > 0
+        ? tf("command_map_hover_fleets", { count: fleetCount }, `${fleetCount} fleets`)
+        : "";
+      const levelLine = level > 0
+        ? tf("command_map_hover_level", { level }, `Level ${level}`)
+        : "";
+      return `<strong class="galaxy-command-map-colony-hover-name">${name}</strong>
+        ${role ? `<span class="galaxy-command-map-colony-hover-role">${role}</span>` : ""}
+        ${levelLine ? `<p class="galaxy-command-map-colony-hover-level">${levelLine}</p>` : ""}
+        ${prodLine ? `<p class="galaxy-command-map-colony-hover-prod">${prodLine}</p>` : ""}
+        <dl class="galaxy-command-map-colony-hover-queues">
+          ${queueStatusLabel(cc, "build", "command_map_hover_queue_build")}
+          ${queueStatusLabel(cc, "shipyard", "command_map_hover_queue_shipyard")}
+          ${queueStatusLabel(cc, "research", "command_map_hover_queue_research")}
+        </dl>
+        ${fleetLine ? `<p class="galaxy-command-map-colony-hover-fleets">${fleetLine}</p>` : ""}`;
+    }
+
+    const hideColonyHover = () => {
+      hoverTooltip.hidden = true;
+      graph.querySelectorAll("[data-colony-location-inspect].is-hover-summary").forEach((btn) => {
+        btn.classList.remove("is-hover-summary");
+      });
+    };
+
+    const showColonyHover = (btn, clientX, clientY) => {
+      const planetId = String(btn.dataset.planetId || "");
+      const source = graph.querySelector(`[data-colony-actions-source="${planetId}"]`);
+      const cc = parseCommandCenter(source);
+      if (!cc || !cc.panel_kind) return;
+      hoverTooltip.innerHTML = buildColonyHoverHtml(cc, btn);
+      hoverTooltip.hidden = false;
+      graph.querySelectorAll("[data-colony-location-inspect].is-hover-summary").forEach((el) => {
+        el.classList.remove("is-hover-summary");
+      });
+      btn.classList.add("is-hover-summary");
+      const pad = 12;
+      const rect = hoverTooltip.getBoundingClientRect();
+      let left = clientX + pad;
+      let top = clientY + pad;
+      if (left + rect.width > window.innerWidth - 8) left = clientX - rect.width - pad;
+      if (top + rect.height > window.innerHeight - 8) top = clientY - rect.height - pad;
+      hoverTooltip.style.left = `${Math.max(8, left)}px`;
+      hoverTooltip.style.top = `${Math.max(8, top)}px`;
+    };
+
+    const onColonyEnter = (e) => {
+      const btn = e.target.closest("[data-colony-location-inspect]");
+      if (!btn || !graph.contains(btn)) return;
+      showColonyHover(btn, e.clientX, e.clientY);
+    };
+
+    const onColonyMove = (e) => {
+      const btn = e.target.closest("[data-colony-location-inspect]");
+      if (!btn || hoverTooltip.hidden) return;
+      showColonyHover(btn, e.clientX, e.clientY);
+    };
+
+    const onColonyLeave = (e) => {
+      const btn = e.target.closest("[data-colony-location-inspect]");
+      if (!btn) return;
+      const related = e.relatedTarget;
+      if (related && btn.contains(related)) return;
+      hideColonyHover();
+    };
+
+    applyColonyNodeActivity();
+    applyEdgeRouteGlow();
+
+    graph.addEventListener("pointerenter", onColonyEnter, true);
+    graph.addEventListener("pointermove", onColonyMove, true);
+    graph.addEventListener("pointerleave", onColonyLeave, true);
+    graph.querySelector("[data-command-map-viewport]")?.addEventListener("pointerdown", hideColonyHover);
+
+    GC.registerCleanup(() => {
+      graph.removeEventListener("pointerenter", onColonyEnter, true);
+      graph.removeEventListener("pointermove", onColonyMove, true);
+      graph.removeEventListener("pointerleave", onColonyLeave, true);
+      graph.querySelector("[data-command-map-viewport]")?.removeEventListener("pointerdown", hideColonyHover);
+      hideColonyHover();
+      graph.querySelectorAll("[data-colony-location-inspect]").forEach((btn) => {
+        ACTIVITY_CLASS.forEach((cls) => btn.classList.remove(cls));
+      });
+      graph.querySelectorAll("[data-command-map-edge].is-route-active").forEach((edgeEl) => {
+        edgeEl.classList.remove("is-route-active");
+      });
+    });
+  }
+
+  function initFirstDiscoveryMoment() {
+    const graph = document.querySelector("[data-command-map-graph]");
+    if (!graph) return;
+
+    const LAUNCH_KEY_PREFIX = "gc_discovery_launch:";
+    const REVEAL_KEY_PREFIX = "gc_discovery_reveal:";
+    const BANNER_KEY = "gc_discovery_banner_shown";
+
+    function sessionFlag(key) {
+      try {
+        return sessionStorage.getItem(key) === "1";
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function setSessionFlag(key) {
+      try {
+        sessionStorage.setItem(key, "1");
+      } catch (_) {}
+    }
+
+    function nodeWorldCoords(btn) {
+      const wx = parseFloat(btn.style.getPropertyValue("--world-x") || "0");
+      const wy = parseFloat(btn.style.getPropertyValue("--world-y") || "0");
+      return { wx, wy };
+    }
+
+    function focusNode(btn, scale, animate) {
+      if (typeof GC.focusCommandMapWorld !== "function") return;
+      const { wx, wy } = nodeWorldCoords(btn);
+      if (!Number.isFinite(wx) || !Number.isFinite(wy)) return;
+      GC.focusCommandMapWorld(wx, wy, { scale, animate });
+    }
+
+    const banner = graph.querySelector("[data-command-map-discovery-banner]");
+    let revealNode = null;
+
+    graph.querySelectorAll("[data-world-field-inspect]").forEach((btn) => {
+      const status = String(btn.dataset.expeditionStatus || "idle");
+      const worldKey = String(btn.dataset.strategicWorldKey || "").trim();
+      if (!worldKey) return;
+
+      if (status === "expedition_active" || status === "expedition_returning") {
+        const launchKey = `${LAUNCH_KEY_PREFIX}${worldKey}`;
+        if (!sessionFlag(launchKey)) {
+          focusNode(btn, null, true);
+          setSessionFlag(launchKey);
+        }
+      }
+
+      if (status === "recently_reported") {
+        btn.classList.add("is-discovery-reveal");
+        revealNode = btn;
+        const revealKey = `${REVEAL_KEY_PREFIX}${worldKey}`;
+        if (!sessionFlag(revealKey)) {
+          focusNode(btn, null, true);
+          setSessionFlag(revealKey);
+        }
+        const autoModalKey = `gc_discovery_modal_auto:${worldKey}`;
+        if (!sessionFlag(autoModalKey)) {
+          const reducedMotion = (() => {
+            try {
+              return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            } catch (_) {
+              return false;
+            }
+          })();
+          const openDiscovery = () => {
+            if (typeof GC.openWorldInspectorFromNode === "function") {
+              GC.openWorldInspectorFromNode(btn);
+            } else if (typeof GC.openWorldInspectorModal === "function") {
+              const source = graph.querySelector(`[data-world-field-source="${worldKey}"]`);
+              let cc = {};
+              try {
+                cc = JSON.parse(source?.getAttribute("data-command-center") || source?.dataset.commandCenter || "{}");
+              } catch (_) {
+                cc = {};
+              }
+              GC.openWorldInspectorModal({
+                cc,
+                btn,
+                kind: cc.panel_kind || "expedition_site",
+                discovery: true,
+              });
+            }
+          };
+          if (reducedMotion) openDiscovery();
+          else requestAnimationFrame(openDiscovery);
+          setSessionFlag(autoModalKey);
+        }
+      }
+    });
+
+    if (banner && revealNode && !sessionFlag(BANNER_KEY)) {
+      banner.hidden = false;
+      banner.className = "galaxy-command-map-discovery-banner is-visible";
+      banner.innerHTML = `<strong>${tf("command_map_discovery_feed_title", "Neuer Kontakt entdeckt")}</strong><span>${tf("command_map_discovery_feed_subtitle", "Ein unbekannter Ort wurde im Sektor bestätigt.")}</span>`;
+      setSessionFlag(BANNER_KEY);
+      const bannerTimer = setTimeout(() => {
+        banner.classList.remove("is-visible");
+      }, 4200);
+      GC.registerCleanup(() => {
+        clearTimeout(bannerTimer);
+        banner.hidden = true;
+        banner.classList.remove("is-visible");
+        graph.querySelectorAll("[data-world-field-inspect].is-discovery-reveal").forEach((btn) => {
+          btn.classList.remove("is-discovery-reveal");
+        });
+      });
+      return;
+    }
+
+    GC.registerCleanup(() => {
+      graph.querySelectorAll("[data-world-field-inspect].is-discovery-reveal").forEach((btn) => {
+        btn.classList.remove("is-discovery-reveal");
+      });
+    });
+  }
+
+  function logCommandMapTelemetry(event, detail = {}) {
+    const cfg = window.GC_CLIENT_CONFIG || {};
+    if (!cfg.command_map_dev_mode) return;
+    const ev = String(event || "").trim().toLowerCase();
+    if (!ev) return;
+    const body = { event: ev, ...(detail && typeof detail === "object" ? detail : {}) };
+    fetch("/api/command-map/telemetry", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      body: JSON.stringify(body),
+    }).catch(() => {});
+  }
+  GC.logCommandMapTelemetry = logCommandMapTelemetry;
+
   function initGalaxy() {
     if (!document.querySelector(".galaxy-page")) return;
+    const galaxyRoot = document.getElementById("galaxy-page-root");
+    if (galaxyRoot?.dataset?.galaxyView === "command_map") {
+      logCommandMapTelemetry("map_open");
+    }
+    bindGalaxyCommandMapSwitchOnce();
+    initCommandMapViewport();
+    initCommandMapFleetRoutes();
+    initWorldInspectorModal();
+    initCommandMapVisualPolish();
+    initCommandMapLocationActions();
+    initFirstDiscoveryMoment();
+    initCommandMapSiteInspector();
     prefetchGalaxyAdjacent();
   }
 
@@ -13726,7 +18054,12 @@
   // PJAX navigation
   // =========================
   const PJAX_NAV_LINK =
-    "a.gc-nav-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages, #gc-nav-trading-sub a.gc-nav-sub-link, #gc-nav-military-sub a.gc-nav-sub-link, #gc-nav-fleet-sub a.gc-nav-sub-link";
+    "a.gc-nav-link, a.gc-nav-sub-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages, " +
+    "a.gc-hud-panel-score, a.galaxy-view-tab, a.galaxy-nav-step, a.galaxy-range-item, " +
+    "a.gc-command-center-action-btn, a.gc-command-center-fleet-link, a.gc-command-center-news-link, a.gc-command-center-activity-link, " +
+    "a[data-gc-nav], a[data-command-action], " +
+    "#gc-sidebar-nav a[href], " +
+    "#gc-nav-trading-sub a.gc-nav-sub-link, #gc-nav-military-sub a.gc-nav-sub-link, #gc-nav-fleet-sub a.gc-nav-sub-link";
 
   function _tradingPageFromPath(path) {
     const p = String(path || "").replace(/\/$/, "") || "/";
@@ -13845,7 +18178,7 @@
       return;
     }
     document.querySelectorAll(
-      ".gc-nav-link, .gc-bottom-nav-item, .gc-nav-drawer-link, a.gc-hud-panel-messages"
+      ".gc-nav-link, .gc-nav-sub-link, .gc-bottom-nav-item, .gc-nav-drawer-link, a.gc-hud-panel-messages"
     ).forEach((link) => {
       const href = link.getAttribute("href");
       if (!href) return;
@@ -13856,43 +18189,24 @@
         return;
       }
       const isSubnavParent =
-        link.id === "gc-nav-trading-parent"
-        || link.id === "gc-nav-military-parent"
-        || link.id === "gc-nav-fleet-parent"
-        || link.id === "gc-nav-buildings-parent";
+        link.id === "gc-nav-buildings-toggle";
       if (isSubnavParent) return;
       link.classList.toggle("active", linkPath === path);
     });
-    const buildingsParent = document.getElementById("gc-nav-buildings-parent");
-    if (buildingsParent) {
-      const onBuildings = path.endsWith("/buildings");
-      buildingsParent.classList.toggle("active", onBuildings);
-      if (onBuildings) showBuildingsSubnav();
-      else hideBuildingsSubnav();
+    const buildingsToggle = document.getElementById("gc-nav-buildings-toggle");
+    if (buildingsToggle) {
+      buildingsToggle.classList.toggle("active", path.endsWith("/buildings"));
     }
+    syncBuildingsSubnavFromState();
     _syncTradingNavFromPath(path);
-    _syncMilitaryNavFromPath(path);
-    _syncFleetNavFromPath(path);
   }
 
   const SUBNAV_PARENT_TOGGLE = {
-    "gc-nav-military-parent": {
-      subId: "gc-nav-military-sub",
-      pages: MILITARY_NAV_PAGES,
-      show: showMilitarySubnav,
-      hide: hideMilitarySubnav,
-    },
     "gc-nav-trading-parent": {
       subId: "gc-nav-trading-sub",
       pages: TRADING_NAV_PAGES,
       show: showTradingSubnav,
       hide: hideTradingSubnav,
-    },
-    "gc-nav-fleet-parent": {
-      subId: "gc-nav-fleet-sub",
-      pages: FLEET_NAV_PAGES,
-      show: showFleetSubnav,
-      hide: hideFleetSubnav,
     },
   };
 
@@ -14019,11 +18333,6 @@
       if (e.defaultPrevented) return;
       const link = e.target.closest("a[href]");
       if (!link) return;
-      if (link.id === "gc-nav-buildings-parent" && GC.detectPage() === "buildings") {
-        e.preventDefault();
-        showBuildingsSubnav();
-        return;
-      }
       if (tryHandleSubnavParentClick(link, e)) return;
       if (!isPjaxEligibleLink(link)) return;
       e.preventDefault();
@@ -14393,6 +18702,57 @@
       box.style.opacity = "0";
       GC.setSafeTimeout(() => box.remove(), 450);
     }, 4000);
+  }
+
+  function initMotdBanner() {
+    const banner = document.querySelector("[data-motd-banner]");
+    if (!banner) return;
+
+    const toggle = banner.querySelector("[data-motd-toggle]");
+    const dismiss = banner.querySelector("[data-motd-dismiss]");
+    const textEl = banner.querySelector(".motd-banner-text");
+    if (!toggle || !textEl) return;
+
+    const syncExpandable = () => {
+      const raw = (textEl.textContent || "").trim();
+      const truncated = textEl.scrollWidth > textEl.clientWidth + 1;
+      const expandable = truncated || raw.includes("\n") || raw.length > 72;
+      banner.classList.toggle("motd-banner--expandable", expandable);
+      if (!expandable) {
+        banner.classList.remove("motd-banner--expanded");
+        banner.classList.add("motd-banner--collapsed");
+        toggle.setAttribute("aria-expanded", "false");
+      }
+    };
+
+    const setExpanded = (expanded) => {
+      banner.classList.toggle("motd-banner--expanded", expanded);
+      banner.classList.toggle("motd-banner--collapsed", !expanded);
+      toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    };
+
+    const onToggle = () => {
+      if (!banner.classList.contains("motd-banner--expandable")) return;
+      setExpanded(!banner.classList.contains("motd-banner--expanded"));
+    };
+
+    const onDismiss = (event) => {
+      event.stopPropagation();
+      banner.hidden = true;
+    };
+
+    const onResize = () => syncExpandable();
+
+    toggle.addEventListener("click", onToggle);
+    if (dismiss) dismiss.addEventListener("click", onDismiss);
+    window.addEventListener("resize", onResize);
+    requestAnimationFrame(syncExpandable);
+
+    GC.registerCleanup(() => {
+      toggle.removeEventListener("click", onToggle);
+      if (dismiss) dismiss.removeEventListener("click", onDismiss);
+      window.removeEventListener("resize", onResize);
+    });
   }
 
   // =========================
@@ -15833,8 +20193,21 @@
       loops: {
         resourceTicker: _resourceTickerId != null,
         progressTicker: _pageTimerLoopRunning,
+        progressTickerScheduled: _progressTickerTimerId != null,
         voteCenterPoll: _voteCenterPollTimer != null,
         ambiencePersist: _ambiencePersistTimer != null,
+      },
+      timers: {
+        movementCountdownRefresh: _movementCountdownRefreshTimer != null,
+        productionCompletion: _productionCompletionTimer != null,
+        queueTimerZero: _queueTimerZeroRefreshTimer != null,
+        queueZeroRefreshKeys: _queueTimerZeroRefreshKeys.size,
+        movementExpiryStateEntries: _movementCountdownExpiryState.size,
+      },
+      scope: {
+        domPlanetId: getDomPlanetId(),
+        activePlanetId: Number(GC.lastState?.active_planet_id || 0) || null,
+        buildQueuePlanetId: Number(GC.lastState?.build_queue?.planet_id || 0) || null,
       },
       lifecycle: {
         rafIds: lc.rafIds.length,
@@ -15853,6 +20226,82 @@
   };
   GC.isPerfIdle = isPerfIdle;
   GC.shouldPatchGameStateModule = shouldPatchGameStateModule;
+  GC.resolveFleetOriginPlanetId = resolveFleetOriginPlanetId;
+  GC.resetQueueLiveStates = _resetQueueLiveStates;
+
+  GC.debugTimers = function debugTimers() {
+    const now = getTimerServerNow();
+    const clientWall = Math.floor(Date.now() / 1000);
+    const driftSec = Math.round((now - clientWall) * 10) / 10;
+    const activePid = Number(GC.lastState?.active_planet_id || 0);
+    const domPid = getDomPlanetId();
+    const scopeOk = !activePid || !domPid || activePid === domPid;
+    const lines = [
+      `SERVER NOW (auth)  ${Math.floor(now)}`,
+      `CLIENT WALL        ${clientWall}`,
+      `DRIFT (s)          ${driftSec}`,
+      "",
+      `ACTIVE PLANET      ${activePid || "—"}`,
+      `DOM PLANET         ${domPid || "—"}`,
+      `SCOPE OK           ${scopeOk ? "yes" : "NO — mismatch"}`,
+      `BUILD QUEUE PID    ${Number(GC.lastState?.build_queue?.planet_id || 0) || "—"}`,
+      "",
+    ];
+
+    const bq = GC.lastState?.build_queue?.queue?.[0] || GC.lastState?.build_queue?.[0];
+    if (bq) {
+      const fin = resolveQueueJobFinishTime(bq);
+      lines.push(
+        "BUILDQ",
+        `  job ${bq.id || bq.building_type || "?"}`,
+        `  finish_at ${fin || "—"}`,
+        `  remaining ${fin ? queueJobRemainingSeconds(fin, now, resolveQueueJobRemaining(bq)) : "—"}`,
+        ""
+      );
+    }
+
+    const rq = GC.lastState?.research?.active || GC.lastState?.research_queue?.[0];
+    if (rq) {
+      const fin = resolveQueueJobFinishTime(rq);
+      lines.push(
+        "RESEARCH",
+        `  job ${rq.tech_key || rq.id || "?"}`,
+        `  finish_at ${fin || "—"}`,
+        `  remaining ${fin ? queueJobRemainingSeconds(fin, now, resolveQueueJobRemaining(rq)) : "—"}`,
+        ""
+      );
+    }
+
+    const fleetPage = document.getElementById("fleet-page");
+    const fleets = fleetPage?._fleetRt?.data?.active_fleets || [];
+    if (fleets.length) {
+      lines.push("FLEET");
+      fleets.slice(0, 6).forEach((mv) => {
+        const endAt = parseTimerTarget(mv.countdown_at || mv.arrival_at || mv.return_at || 0);
+        const rem = endAt ? movementRemainingSeconds(endAt, now, mv.remaining_seconds) : "—";
+        lines.push(
+          `  movement ${mv.id || mv.fleet_id || "?"}`,
+          `  ${mv.phase || mv.status || "?"}`,
+          `  arrival_at ${endAt || "—"}`,
+          `  remaining ${rem}`
+        );
+      });
+      lines.push("");
+    }
+
+    const perf = typeof GC.debugPerf === "function" ? GC.debugPerf() : {};
+    lines.push(
+      `rAF                ${perf.lifecycle?.rafIds ?? "?"}`,
+      `Intervals          ${perf.lifecycle?.intervals ?? "?"}`,
+      `Timeouts           ${perf.lifecycle?.timeouts ?? "?"}`,
+      `Poll active        ${perf.polling?.running ?? "?"}`,
+      `Progress ticker    ${perf.loops?.progressTicker ?? "?"}`
+    );
+
+    const report = lines.join("\n");
+    console.info("[GC] debugTimers\n" + report);
+    return { now, clientWall, driftSec, lines, perf };
+  };
 
   function initShellOnce() {
     if (GC._shellReady) return;
@@ -15867,6 +20316,7 @@
     bindPlanetEvolutionOnce();
     bindFleetOnce();
     initHeaderPlanetSwitcher();
+    initRoleBasedSidebar();
     initGcPopoversOnce();
     initVisibilityPolling();
     initMotionPreferenceListener();

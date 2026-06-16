@@ -6,24 +6,63 @@
 {% set sys = system_data if system_data is defined else {'slots': []} %}
 {% set slots = sys.slots if sys.slots is defined else [] %}
 {% set map_cells = minimap if minimap is defined else [] %}
+{% set gview = galaxy_view if galaxy_view is defined else 'system' %}
+{% set is_command_map = (gview == 'command_map') %}
 
 <div class="gc-page galaxy-page"
      id="galaxy-page-root"
+     data-galaxy-view="{{ gview }}"
      data-galaxy="{{ nav.galaxy or 1 }}"
      data-system="{{ nav.system or 1 }}"
-     {% if nav.has_prev %}data-prev-url="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=nav.prev_system) }}"{% endif %}
-     {% if nav.has_next %}data-next-url="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=nav.next_system) }}"{% endif %}>
+      {% if nav.has_prev and not is_command_map %}data-prev-url="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy, system=nav.prev_system) }}"{% endif %}
+     {% if nav.has_next and not is_command_map %}data-next-url="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy, system=nav.next_system) }}"{% endif %}>
 
   <header class="galaxy-page-head section-header">
     <h2 class="section-title">{{ T("nav_galaxy") }}</h2>
-    <p class="section-hint hint">{{ T("galaxy_system_scan") }}</p>
+    <p class="section-hint hint">
+      {% if is_command_map %}
+      {{ T("galaxy_command_map_subtitle", "Imperiumsübersicht deiner Kolonien.") }}
+      {% else %}
+      {{ T("galaxy_system_scan") }}
+      {% endif %}
+    </p>
   </header>
+
+  <nav class="galaxy-view-tabs" aria-label="{{ T('galaxy_view_tabs_label', 'Galaxie-Ansicht') }}">
+    <a href="{{ url_for('galaxy_view', view='command_map') }}"
+       class="gc-nav-link galaxy-view-tab galaxy-view-tab--world{% if is_command_map %} is-active{% endif %}"
+       {% if is_command_map %}aria-current="page"{% endif %}>
+      <span class="galaxy-view-tab-label">{{ T("galaxy_view_world_map", "Weltkarte") }}</span>
+      {% if COMMAND_MAP_DEV_MODE %}
+      <span class="gc-dev-preview-badge" title="{{ T('command_map_dev_preview_title') }}">{{ T("command_map_dev_badge", "DEV") }}</span>
+      {% endif %}
+    </a>
+    <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy or 1, system=nav.system or 1) }}"
+       class="gc-nav-link galaxy-view-tab galaxy-view-tab--classic{% if not is_command_map %} is-active{% endif %}"
+       {% if not is_command_map %}aria-current="page"{% endif %}>
+      <span class="galaxy-view-tab-label">{{ T("galaxy_view_classic", "Klassische Ansicht") }}</span>
+    </a>
+  </nav>
+
+  {% if is_command_map and COMMAND_MAP_DEV_MODE %}
+  <aside class="gc-command-map-dev-banner" role="note" aria-label="{{ T('command_map_dev_preview_title') }}">
+    <span class="gc-dev-preview-badge gc-dev-preview-badge--banner">{{ T("command_map_dev_badge", "DEV") }} {{ T("command_map_dev_preview_label", "PREVIEW") }}</span>
+    <div class="gc-command-map-dev-banner-copy">
+      <strong>{{ T("command_map_dev_preview_title", "Command Map — DEV PREVIEW") }}</strong>
+      <p class="hint">{{ T("command_map_dev_preview_body", "Eine neue Art, Genesis Colonies zu erleben. Nicht alle Missionen und Welt-Typen sind bereits verfügbar.") }}</p>
+    </div>
+  </aside>
+  {% endif %}
+
+  {% if is_command_map %}
+  {% include "partials/galaxy_command_map_panel.html" %}
+  {% else %}
 
   <section class="gc-panel galaxy-panel">
 
     <nav class="galaxy-nav-bar" aria-label="{{ T('galaxy_nav_label') }}">
       {% if nav.has_prev %}
-      <a href="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=nav.prev_system) }}"
+      <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy, system=nav.prev_system) }}"
          class="galaxy-nav-step galaxy-nav-step--prev"
          title="{{ T('galaxy_prev_system') }}">&lsaquo; {{ T('galaxy_prev_system') }}</a>
       {% else %}
@@ -31,12 +70,13 @@
       {% endif %}
 
       <form class="galaxy-jump-form galaxy-nav-jump" method="get" action="{{ url_for('galaxy_view') }}">
+        <input type="hidden" name="view" value="system">
         <div class="galaxy-nav-field">
           <label class="galaxy-nav-field-label" for="galaxy-jump-galaxy">{{ T("galaxy_label_galaxy") }}</label>
           <div class="galaxy-nav-field-controls">
             {% if nav.multi_galaxy %}
               {% if nav.has_prev_galaxy %}
-              <a href="{{ url_for('galaxy_view', galaxy=nav.prev_galaxy, system=nav.system) }}"
+              <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.prev_galaxy, system=nav.system) }}"
                  class="galaxy-nav-arrow"
                  title="{{ T('galaxy_prev_galaxy') }}"
                  aria-label="{{ T('galaxy_prev_galaxy') }}">&lsaquo;</a>
@@ -53,7 +93,7 @@
                      required
                      aria-label="{{ T('galaxy_label_galaxy') }}">
               {% if nav.has_next_galaxy %}
-              <a href="{{ url_for('galaxy_view', galaxy=nav.next_galaxy, system=nav.system) }}"
+              <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.next_galaxy, system=nav.system) }}"
                  class="galaxy-nav-arrow"
                  title="{{ T('galaxy_next_galaxy') }}"
                  aria-label="{{ T('galaxy_next_galaxy') }}">&rsaquo;</a>
@@ -86,7 +126,7 @@
       </form>
 
       {% if nav.has_next %}
-      <a href="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=nav.next_system) }}"
+      <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy, system=nav.next_system) }}"
          class="galaxy-nav-step galaxy-nav-step--next"
          title="{{ T('galaxy_next_system') }}">{{ T('galaxy_next_system') }} &rsaquo;</a>
       {% else %}
@@ -102,7 +142,7 @@
           {% if cell.is_current %}
             <span class="galaxy-range-item galaxy-range-current gc-mono" aria-current="true">[{{ cell.system }}]</span>
           {% else %}
-            <a href="{{ url_for('galaxy_view', galaxy=nav.galaxy, system=cell.system) }}"
+            <a href="{{ url_for('galaxy_view', view='system', galaxy=nav.galaxy, system=cell.system) }}"
                class="galaxy-range-item gc-mono {% if cell.has_own_planet %}has-own{% endif %} {% if cell.has_occupancy %}has-data{% endif %}"
                title="{{ T('galaxy_minimap_system') }} {{ cell.system }}">{{ cell.system }}</a>
           {% endif %}
@@ -112,6 +152,7 @@
     {% endif %}
 
     <form class="galaxy-search-bar" method="get" action="{{ url_for('galaxy_view') }}" role="search">
+      <input type="hidden" name="view" value="system">
       <label class="galaxy-search-label" for="galaxy-coord-q">{{ T("galaxy_search_label") }}</label>
       <input id="galaxy-coord-q"
              class="galaxy-search-input gc-mono"
@@ -127,7 +168,6 @@
       <span id="galaxy-search-hint" class="galaxy-search-hint">{{ T("galaxy_search_hint") }}</span>
     </form>
 
-    <!-- Slot cards -->
     <div class="galaxy-slots" role="list">
       {% for slot in slots %}
       <article class="galaxy-slot-card
@@ -252,6 +292,7 @@
     </div>
 
   </section>
+  {% endif %}
 </div>
 
 {% endblock %}

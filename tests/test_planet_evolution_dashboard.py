@@ -284,7 +284,8 @@ def test_planet_research_icon_maps_branch_to_existing_asset():
 def test_planet_evolution_template_uses_research_icon_field():
     tpl = (Path(__file__).resolve().parents[1] / "templates" / "planet_evolution.html").read_text(encoding="utf-8")
     assert "tech.icon" in tpl
-    assert "job.icon" in tpl
+    assert "tech.icon_fallback" in tpl
+    assert "gc-card-queue-glyph" in tpl
     assert "tech_key ~ '.png'" not in tpl
 
 

@@ -138,4 +138,12 @@ def test_research_pjax_page_queue_subtitle_matches_status(research_timer_db, mon
     html = res.get_data(as_text=True)
     status = get_research_status(pid, skip_finish=True)
     expected_remaining = int(status["summary"]["first_finish_in"])
-    assert f">{expected_remaining}s</span>" in html or f">{expected_remaining}s<" in html
+    assert "gc-card-queue-timer" in html
+    assert 'data-timer-kind="research"' in html
+    import re
+
+    timer_match = re.search(r'gc-card-queue-timer[^>]*>(\d+)s</div>', html)
+    assert timer_match, "research queue timer SSR contract missing"
+    rendered_remaining = int(timer_match.group(1))
+    assert abs(rendered_remaining - expected_remaining) <= 2
+    assert "data-server-remaining=" in html

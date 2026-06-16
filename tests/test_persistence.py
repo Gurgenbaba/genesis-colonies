@@ -243,9 +243,6 @@ def _seed_legacy_planets_db(db_path: Path) -> None:
             crystal REAL NOT NULL DEFAULT 500,
             last_update REAL NOT NULL DEFAULT 0
         );
-        CREATE TABLE planet_buildings (
-            planet_id INTEGER PRIMARY KEY
-        );
         CREATE TABLE game_settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -302,28 +299,7 @@ def test_legacy_planets_hardening_idempotent(temp_db):
 
 def test_legacy_planets_migration_idempotent(temp_db):
     _seed_legacy_planets_db(temp_db)
-    conn = db()
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS migration_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            applied_at INTEGER NOT NULL
-        );
-        """
-    )
-    for name in (
-        "006_add_player_scores.sql",
-        "007_seed_player_scores.sql",
-        "008_persistence_hardening.sql",
-    ):
-        conn.execute(
-            "INSERT INTO migration_history (name, applied_at) VALUES (?, ?);",
-            (name, int(time.time())),
-        )
-    conn.commit()
-    conn.close()
-
+    init_db()
     first = _run_migrate(temp_db)
     assert first.returncode == 0, first.stderr or first.stdout
 

@@ -10,11 +10,16 @@ from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 
 def fleet_ok(data: Any = None, *, message_key: str = "fleet_ok", message: str = "") -> Dict[str, Any]:
+    from .logic import live_server_timestamp
+
+    ts = live_server_timestamp()
     out: Dict[str, Any] = {
         "ok": True,
         "message": message or message_key,
         "message_key": message_key,
         "data": data if data is not None else {},
+        "server_now": ts,
+        "server_time": float(ts),
     }
     return out
 

@@ -1,0 +1,524 @@
+{% set cm = command_map if command_map is defined else {} %}
+{% set cm_nodes = cm.nodes if cm.nodes is defined else [] %}
+{% set cm_edges = cm.edges if cm.edges is defined else [] %}
+{% set cm_sector_grid = cm.sector_grid if cm.sector_grid is defined else {} %}
+{% set cm_influence = cm.influence if cm.influence is defined else {} %}
+{% set cm_fleet_routes = cm.fleet_routes if cm.fleet_routes is defined else [] %}
+{% set cm_world = cm.world if cm.world is defined else {} %}
+{% set cm_expansion_sites = cm_nodes | selectattr('node_kind', 'equalto', 'expansion_site') | list %}
+{% set hub_node = cm_nodes | selectattr('empire_role_key', 'equalto', 'homeworld') | selectattr('cluster_kind', 'equalto', 'own_cluster') | list | first %}
+{% if not hub_node %}
+{% set hub_node = cm_nodes | selectattr('empire_role_key', 'equalto', 'homeworld') | list | first %}
+{% endif %}
+{% set hub_x_pct = cm_world.hub_layout_x_pct if cm_world.hub_layout_x_pct is defined else (hub_node.layout_x_pct if hub_node else 50) %}
+{% set hub_y_pct = cm_world.hub_layout_y_pct if cm_world.hub_layout_y_pct is defined else (hub_node.layout_y_pct if hub_node else 52) %}
+{% set map_hub_wx = cm_world.hub_world_x if cm_world.hub_world_x is defined else 2000 %}
+{% set map_hub_wy = cm_world.hub_world_y if cm_world.hub_world_y is defined else 2000 %}
+{% set map_world_w = cm_world.world_width if cm_world.world_width is defined else 4000 %}
+{% set map_world_h = cm_world.world_height if cm_world.world_height is defined else 4000 %}
+
+{% macro map_world_style(node) -%}
+{%- set wx = node.world_x if node.world_x is defined else ((node.layout_x_pct | default(50)) * (map_world_w / 100.0)) -%}
+{%- set wy = node.world_y if node.world_y is defined else ((node.layout_y_pct | default(52)) * (map_world_h / 100.0)) -%}
+style="--world-x: {{ wx }}; --world-y: {{ wy }};"
+{%- endmacro %}
+
+{% macro map_edge_coord(edge, axis, role) -%}
+{%- if role == 'source' -%}
+{%- if edge.source_world_x is defined and axis == 'x' -%}{{ edge.source_world_x }}{%- elif edge.source_world_y is defined and axis == 'y' -%}{{ edge.source_world_y }}{%- elif axis == 'x' -%}{{ (edge.source_x_pct | default(50)) * (map_world_w / 100.0) }}{%- else -%}{{ (edge.source_y_pct | default(52)) * (map_world_h / 100.0) }}{%- endif -%}
+{%- else -%}
+{%- if edge.target_world_x is defined and axis == 'x' -%}{{ edge.target_world_x }}{%- elif edge.target_world_y is defined and axis == 'y' -%}{{ edge.target_world_y }}{%- elif axis == 'x' -%}{{ (edge.target_x_pct | default(50)) * (map_world_w / 100.0) }}{%- else -%}{{ (edge.target_y_pct | default(52)) * (map_world_h / 100.0) }}{%- endif -%}
+{%- endif -%}
+{%- endmacro %}
+
+<section class="gc-panel galaxy-command-map-panel" aria-label="{{ T('galaxy_command_map_label', 'Command Map') }}">
+  <header class="galaxy-command-map-head">
+    <div class="galaxy-command-map-discovery-banner" data-command-map-discovery-banner hidden aria-live="polite"></div>
+    <h3 class="galaxy-command-map-title">{{ T("galaxy_command_map_title", "Command Map") }}</h3>
+    <p class="galaxy-command-map-hint hint">{{ T("galaxy_command_map_graph_hint", "Dein Imperium als Karte — Genesis Ark im Zentrum, Kolonien und Handelsrouten verbunden.") }}</p>
+    {% if cm_world.mode is defined and cm_world.mode == 'shared' and (cm_world.empire_count or 0) > 1 %}
+    <p class="galaxy-command-map-world-hint hint">{{ T("galaxy_command_map_shared_world_hint", "Gemeinsame Weltkarte — %(count)s Reiche sichtbar.", count=(cm_world.empire_count or 0)) }}</p>
+    {% endif %}
+    <p class="galaxy-command-map-viewport-hint hint">{{ T("galaxy_command_map_viewport_hint", "Ziehen zum Verschieben · Mausrad zum Zoomen") }}</p>
+    <p class="galaxy-command-map-landmark-hint hint">{{ T("galaxy_command_map_landmark_hint", "Landmarks erzählen Geschichte — noch nicht erschließbar.") }}</p>
+  </header>
+
+  {% if cm_nodes %}
+  <div class="galaxy-command-map-graph galaxy-command-map-graph--fullmap"
+       id="galaxy-command-map-graph"
+       data-command-map-graph>
+    <div class="galaxy-command-map-viewport" data-command-map-viewport tabindex="0" aria-label="{{ T('galaxy_command_map_viewport_aria', 'Imperiumskarte') }}">
+      <div class="galaxy-command-map-controls" aria-label="{{ T('galaxy_command_map_controls_aria', 'Kartensteuerung') }}">
+        <button type="button"
+                class="gc-btn gc-btn-sm galaxy-command-map-reset"
+                data-command-map-reset
+                title="{{ T('galaxy_command_map_reset_center', 'Zentrum') }}">
+          {{ T("galaxy_command_map_reset_center", "Zentrum") }}
+        </button>
+      </div>
+      <div class="galaxy-command-map-canvas"
+           data-command-map-canvas
+           data-hub-world-x="{{ map_hub_wx }}"
+           data-hub-world-y="{{ map_hub_wy }}"
+           data-world-width="{{ map_world_w }}"
+           data-world-height="{{ map_world_h }}"
+           data-default-scale="{{ cm_world.default_scale if cm_world.default_scale is defined else 0.85 }}"
+           {% if cm_world.mode is defined %}data-world-mode="{{ cm_world.mode }}"{% endif %}
+           {% if cm_world.empire_count is defined %}data-world-empire-count="{{ cm_world.empire_count }}"{% endif %}>
+        <div class="galaxy-command-map-bg" data-command-map-bg aria-hidden="true"></div>
+        <div class="galaxy-command-map-ambient-glow" data-command-map-ambient-glow aria-hidden="true"></div>
+        <svg class="galaxy-command-map-svg-layer galaxy-command-map-sector-layer"
+             data-command-map-sector-layer
+             data-sector-seed="{{ cm_sector_grid.seed if cm_sector_grid.seed is defined else 1 }}"
+             data-sector-pad="{{ cm_sector_grid.viewport_pad if cm_sector_grid.viewport_pad is defined else 2000 }}"
+             data-sector-size="{{ cm_sector_grid.sector_size if cm_sector_grid.sector_size is defined else 2000 }}"
+             aria-hidden="true"
+             focusable="false">
+          <g data-command-map-sector-root></g>
+        </svg>
+
+        {% if cm_influence.visible and cm_influence.svg_path %}
+        <svg class="galaxy-command-map-svg-layer galaxy-command-map-influence"
+             viewBox="0 0 {{ map_world_w }} {{ map_world_h }}"
+             aria-hidden="true"
+             focusable="false">
+          <defs>
+            <filter id="galaxy-command-map-influence-glow" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="14" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+          <path class="galaxy-command-map-influence-blob"
+                d="{{ cm_influence.svg_path }}" />
+        </svg>
+        {% endif %}
+
+        {% if cm_fleet_routes %}
+        <svg class="galaxy-command-map-svg-layer galaxy-command-map-fleet-routes"
+             viewBox="0 0 {{ map_world_w }} {{ map_world_h }}"
+             data-command-map-fleet-routes
+             aria-hidden="true"
+             focusable="false">
+          <defs>
+            <filter id="galaxy-command-map-fleet-glow-colonize" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.5" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <filter id="galaxy-command-map-fleet-glow-expedition" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+            <filter id="galaxy-command-map-fleet-glow-attack" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.5" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+          {% for route in cm_fleet_routes %}
+          {% set route_mission = route.mission or 'transport' %}
+          {% set route_phase = route.phase or 'outbound' %}
+          {% set route_id = route.fleet_id %}
+          {% set flow_dur = [2.2, ((route.remaining_seconds or 60) / 18)|round(1)|float, 7.5]|sort %}
+          {% set anim_dur = flow_dur[1] %}
+          <g class="galaxy-command-map-fleet-route-group galaxy-command-map-fleet-route-group--{{ route_mission }} galaxy-command-map-fleet-route-group--{{ route_phase }}"
+             data-fleet-route
+             data-fleet-route-id="{{ route_id }}"
+             data-fleet-route-mission="{{ route_mission }}"
+             data-fleet-route-phase="{{ route_phase }}"
+             data-fleet-route-from-x="{{ route.from_world_x }}"
+             data-fleet-route-from-y="{{ route.from_world_y }}"
+             data-fleet-route-to-x="{{ route.to_world_x }}"
+             data-fleet-route-to-y="{{ route.to_world_y }}"
+             {% if route.world_key %}data-fleet-route-world-key="{{ route.world_key }}"{% endif %}
+             data-fleet-route-eta-at="{{ route.eta_at | int }}"
+             data-fleet-route-remaining="{{ route.remaining_seconds | int }}"
+             style="--fleet-route-flow-dur: {{ anim_dur }}s;"
+             role="img"
+             tabindex="0"
+             aria-label="{{ T('fleet_mission_' ~ route_mission, route_mission) }}">
+            <path id="fleet-route-path-{{ route_id }}"
+                  class="galaxy-command-map-fleet-route-hit"
+                  d="M {{ route.from_world_x }} {{ route.from_world_y }} L {{ route.to_world_x }} {{ route.to_world_y }}" />
+            <path class="galaxy-command-map-fleet-route-track"
+                  d="M {{ route.from_world_x }} {{ route.from_world_y }} L {{ route.to_world_x }} {{ route.to_world_y }}" />
+            <path class="galaxy-command-map-fleet-route-flow galaxy-command-map-fleet-route-flow--{{ route_mission }}"
+                  d="M {{ route.from_world_x }} {{ route.from_world_y }} L {{ route.to_world_x }} {{ route.to_world_y }}"
+                  pathLength="100" />
+            {% if route_mission == 'expedition' and route_phase == 'outbound' %}
+            <g class="galaxy-command-map-fleet-route-dest galaxy-command-map-fleet-route-dest--expedition" transform="translate({{ route.to_world_x }}, {{ route.to_world_y }})">
+              <circle class="galaxy-command-map-fleet-route-dest-ring" r="7" />
+              <text class="galaxy-command-map-fleet-route-dest-glyph" y="4" text-anchor="middle" aria-hidden="true">✦</text>
+            </g>
+            {% endif %}
+            {% if route_mission == 'colonize' %}
+            <path class="galaxy-command-map-fleet-route-ship galaxy-command-map-fleet-route-ship--colonize"
+                  d="M -5 -3.5 L 5 0 L -5 3.5 Z">
+              <animateMotion dur="{{ anim_dur }}s" repeatCount="indefinite" rotate="auto">
+                <mpath href="#fleet-route-path-{{ route_id }}" />
+              </animateMotion>
+            </path>
+            {% elif route_mission == 'expedition' %}
+            <circle class="galaxy-command-map-fleet-route-ship galaxy-command-map-fleet-route-ship--expedition" r="3.5">
+              <animateMotion dur="{{ anim_dur }}s" repeatCount="indefinite">
+                <mpath href="#fleet-route-path-{{ route_id }}" />
+              </animateMotion>
+            </circle>
+            {% elif route_mission == 'attack' %}
+            <path class="galaxy-command-map-fleet-route-ship galaxy-command-map-fleet-route-ship--attack"
+                  d="M -4.5 -3 L 4.5 0 L -4.5 3 Z">
+              <animateMotion dur="{{ anim_dur }}s" repeatCount="indefinite" rotate="auto">
+                <mpath href="#fleet-route-path-{{ route_id }}" />
+              </animateMotion>
+            </path>
+            {% else %}
+            <rect class="galaxy-command-map-fleet-route-ship galaxy-command-map-fleet-route-ship--cargo"
+                  x="-3.5" y="-3.5" width="7" height="7" rx="1">
+              <animateMotion dur="{{ anim_dur }}s" repeatCount="indefinite">
+                <mpath href="#fleet-route-path-{{ route_id }}" />
+              </animateMotion>
+            </rect>
+            {% endif %}
+          </g>
+          {% endfor %}
+        </svg>
+        <div class="galaxy-command-map-fleet-route-tooltip" data-fleet-route-tooltip hidden></div>
+        {% endif %}
+
+        <div class="galaxy-command-map-colony-hover-tooltip" data-colony-hover-tooltip hidden></div>
+
+        <svg class="galaxy-command-map-svg-layer galaxy-command-map-edges"
+             viewBox="0 0 {{ map_world_w }} {{ map_world_h }}"
+             aria-hidden="true"
+             focusable="false">
+          {% for edge in cm_edges %}
+          {% set edge_x1 = map_edge_coord(edge, 'x', 'source') %}
+          {% set edge_y1 = map_edge_coord(edge, 'y', 'source') %}
+          {% set edge_x2 = map_edge_coord(edge, 'x', 'target') %}
+          {% set edge_y2 = map_edge_coord(edge, 'y', 'target') %}
+          <g class="galaxy-command-map-edge-group galaxy-command-map-edge-group--{{ edge.edge_type or 'hub_link' }}"
+             data-command-map-edge
+             data-edge-type="{{ edge.edge_type or 'hub_link' }}"
+             {% if edge.source_planet_id %}data-edge-source-planet="{{ edge.source_planet_id }}"{% endif %}
+             {% if edge.target_planet_id %}data-edge-target-planet="{{ edge.target_planet_id }}"{% endif %}
+             data-edge-x1="{{ edge_x1 }}"
+             data-edge-y1="{{ edge_y1 }}"
+             data-edge-x2="{{ edge_x2 }}"
+             data-edge-y2="{{ edge_y2 }}">
+            <line class="galaxy-command-map-edge-glow"
+                  x1="{{ edge_x1 }}" y1="{{ edge_y1 }}"
+                  x2="{{ edge_x2 }}" y2="{{ edge_y2 }}" />
+            <line class="galaxy-command-map-edge galaxy-command-map-edge--{{ edge.edge_type or 'hub_link' }}"
+                  x1="{{ edge_x1 }}" y1="{{ edge_y1 }}"
+                  x2="{{ edge_x2 }}" y2="{{ edge_y2 }}" />
+          </g>
+          {% endfor %}
+        </svg>
+
+        <div class="galaxy-command-map-nodes galaxy-command-map-nodes--markers">
+          {% for node in cm_nodes %}
+          {% set node_kind = node.node_kind or 'colony' %}
+          {% set node_identity_key = node.identity_title_key or node.empire_subtitle_key or node.empire_role_label_key %}
+          {% set is_hub = (node.empire_role_key == 'homeworld') %}
+          {% set is_locked_site = (node_kind == 'expansion_site' and node.is_locked) %}
+          {% set is_new_site = (node_kind == 'expansion_site' and node.is_newly_discovered) %}
+          {% set is_expansion = (node_kind == 'expansion_site') %}
+          {% set is_chokepoint = (node_kind == 'chokepoint') %}
+          {% set is_landmark = (node_kind == 'landmark') %}
+          {% set is_foreign_empire = (node_kind == 'foreign_empire') %}
+          {% set is_foreign_colony = (node_kind == 'foreign_colony') %}
+          {% set is_foreign_world_colony = (node_kind == 'foreign_world_colony') %}
+          {% set is_world_field = (node_kind == 'world_field') %}
+          {% if is_chokepoint %}
+          <div class="galaxy-command-map-node galaxy-command-map-node--chokepoint"
+               {{ map_world_style(node) }}
+               data-node-kind="chokepoint"
+               data-chokepoint-key="{{ node.chokepoint_key or '' }}"
+               aria-disabled="true"
+               title="{{ T(node.label_key or node.chokepoint_key, node.chokepoint_key or '') }}">
+            <span class="galaxy-command-map-node-icon" aria-hidden="true">{{ node.empire_role_icon or '🚪' }}</span>
+            <span class="galaxy-command-map-node-name">{{ T(node.label_key or node.chokepoint_key, node.chokepoint_key or '') }}</span>
+          </div>
+          {% elif is_landmark %}
+          {% set landmark_region_key = node.region_label_key or ('imperium_region_' ~ (node.region_key or 'outer_rim')) %}
+          <button type="button"
+                  class="galaxy-command-map-node galaxy-command-map-node--landmark galaxy-command-map-node--landmark-{{ node.tone or 'rim' }}"
+                  {{ map_world_style(node) }}
+                  data-node-kind="landmark"
+                  data-landmark-inspect
+                  data-landmark-key="{{ node.landmark_key or '' }}"
+                  data-landmark-name="{{ T(node.label_key or node.landmark_key, node.landmark_key or '') }}"
+                  data-landmark-region="{{ T(landmark_region_key, node.region_key or '') }}"
+                  data-landmark-flavor="{{ T(node.flavor_key or node.label_key) }}"
+                  data-landmark-icon="{{ node.role_icon or '✦' }}"
+                  data-landmark-type="{{ T('landmark_inspector_kicker', 'Landmark') }}"
+                  data-landmark-status-label="{{ T('landmark_status_discovered', 'Entdeckt — nicht erschließbar') }}"
+                  aria-label="{{ T(node.label_key or node.landmark_key, node.landmark_key or '') }}"
+                  aria-pressed="false"
+                  title="{{ T(node.label_key or node.landmark_key, node.landmark_key or '') }} · {{ T(node.flavor_key or node.label_key) }}">
+            <span class="galaxy-command-map-node-icon" aria-hidden="true">{{ node.role_icon or '✦' }}</span>
+            <span class="galaxy-command-map-node-name">{{ T(node.label_key or node.landmark_key, node.landmark_key or '') }}</span>
+          </button>
+          {% elif is_foreign_empire %}
+          <button type="button"
+                  class="galaxy-command-map-node galaxy-command-map-node--foreign-empire galaxy-command-map-node--hub"
+                  {{ map_world_style(node) }}
+                  data-node-kind="foreign_empire"
+                  data-foreign-empire-inspect
+                  data-foreign-colony-source="{{ node.node_key or '' }}"
+                  data-owner-player-id="{{ node.owner_player_id or '' }}"
+                  data-owner-username="{{ node.owner_username or '' }}"
+                  data-empire-name="{{ node.name }}"
+                  data-empire-coords="{{ node.coordinates_formatted or '' }}"
+                  data-empire-colony-count="{{ node.colony_count or 0 }}"
+                  data-empire-icon="{{ node.empire_role_icon or '🏛' }}"
+                  aria-label="{{ node.owner_username or node.name }}"
+                  aria-pressed="false"
+                  title="{{ node.owner_username or node.name }}{% if node.coordinates_formatted %} · {{ node.coordinates_formatted }}{% endif %}">
+            <span class="galaxy-command-map-node-icon" aria-hidden="true">{{ node.empire_role_icon or '🏛' }}</span>
+            <span class="galaxy-command-map-node-name">{{ node.owner_username or node.name }}</span>
+            <span class="galaxy-command-map-node-role">{{ T('world_map_foreign_empire', 'Fremdes Reich') }}</span>
+            {% if node.coordinates_formatted %}
+            <span class="galaxy-command-map-node-coord gc-mono">{{ galaxy_coord_link(node.coordinates_formatted) }}</span>
+            {% endif %}
+          </button>
+          {% elif is_foreign_world_colony %}
+          <button type="button"
+                  class="galaxy-command-map-node galaxy-command-map-node--foreign-world-colony galaxy-command-map-node--world-colony"
+                  {{ map_world_style(node) }}
+                  data-node-kind="foreign_world_colony"
+                  data-foreign-world-colony-inspect
+                  data-foreign-colony-source="{{ node.node_key or '' }}"
+                  data-owner-player-id="{{ node.owner_player_id or '' }}"
+                  data-owner-username="{{ node.owner_username or '' }}"
+                  data-foreign-colony-name="{{ node.name }}"
+                  data-foreign-colony-type="{{ T(node.strategic_type_key) if node.strategic_type_key else '' }}"
+                  data-foreign-colony-role="{{ T(node.empire_role_label_key or node.identity_title_key) }}"
+                  data-foreign-colony-icon="{{ node.empire_role_icon or '🌍' }}"
+                  aria-label="{{ node.name }} · {{ node.owner_username or '' }}"
+                  aria-pressed="false"
+                  title="{{ node.name }} · {{ node.owner_username or '' }}{% if node.strategic_type_key %} · {{ T(node.strategic_type_key) }}{% endif %}">
+            <span class="galaxy-command-map-node-icon" aria-hidden="true">{{ node.empire_role_icon or '🌍' }}</span>
+            <span class="galaxy-command-map-node-name">{{ node.name }}</span>
+            {% if node.strategic_type_key %}
+            <span class="galaxy-command-map-node-role">{{ T(node.strategic_type_key) }}</span>
+            {% endif %}
+          </button>
+          {% elif is_foreign_colony %}
+          <div class="galaxy-command-map-node galaxy-command-map-node--foreign-colony"
+               {{ map_world_style(node) }}
+               data-node-kind="foreign_colony"
+               aria-hidden="true"
+               title="{{ node.owner_username or '' }} · {{ T(node.empire_role_label_key or node.identity_title_key) }}">
+            <span class="galaxy-command-map-node-icon" aria-hidden="true">{{ node.empire_role_icon or '🌍' }}</span>
+          </div>
+          {% elif is_world_field %}
+          {% set sw_type_key = node.type_key or 'strategic_world_type_mining_world' %}
+          {% set sw_promise_key = node.promise_key or '' %}
+          {% set sw_risk_key = node.risk_key or 'expansion_site_risk_low' %}
+          {% set sw_reward_key = node.reward_hint_key or '' %}
+          {% set sw_future_key = node.future_action_key or '' %}
+          {% set sw_owner_key = node.owner_key or 'strategic_world_owner_unclaimed' %}
+          <button type="button"
+                  class="galaxy-command-map-node galaxy-command-map-node--world-field galaxy-command-map-node--strategic-world galaxy-command-map-node--strategic-{{ node.world_type or 'mining_world' }}{% if node.is_claimed %} galaxy-command-map-node--world-claimed{% endif %}{% if node.expedition_status and node.expedition_status != 'idle' %} galaxy-command-map-node--expedition-{{ node.expedition_status }}{% endif %}"
+                  {{ map_world_style(node) }}
+                  data-node-kind="world_field"
+                  data-world-field-inspect
+                  data-strategic-world-key="{{ node.world_key or '' }}"
+                  data-strategic-colonizable="{{ '1' if node.is_colonizable else '0' }}"
+                  data-strategic-expedition="{{ '1' if node.is_expedition else '0' }}"
+                  data-strategic-expedition-prepared="{{ '1' if node.is_expedition_prepared else '0' }}"
+                  data-strategic-salvage="{{ '1' if node.is_salvage else '0' }}"
+                  data-expedition-count="{{ node.expedition_count | default(0) }}"
+                  data-familiarity-status="{{ node.familiarity_status | default('unknown') }}"
+                  data-familiarity-label-key="{{ node.familiarity_label_key | default('world_familiarity_unknown') }}"
+                  {% if node.next_milestone is not none %}data-next-milestone="{{ node.next_milestone }}"{% endif %}
+                  data-strategic-claimed="{{ '1' if node.is_claimed else '0' }}"
+                  data-strategic-name="{{ T(node.name_key or node.field_key, node.field_key or '') }}"
+                  data-strategic-type="{{ T(sw_type_key) }}"
+                  data-strategic-icon="{{ node.role_icon or '✦' }}"
+                  data-strategic-owner="{{ T(sw_owner_key) }}"
+                  data-strategic-risk="{{ T(sw_risk_key) }}"
+                  data-strategic-risk-level="{{ node.risk_level or 'low' }}"
+                  data-strategic-promise="{{ T(sw_promise_key) if sw_promise_key else '' }}"
+                  data-strategic-reward="{{ T(sw_reward_key) if sw_reward_key else '' }}"
+                  data-strategic-future="{{ T(sw_future_key) if sw_future_key else '' }}"
+                  data-expedition-status="{{ node.expedition_status or 'idle' }}"
+                  {% if node.expedition_eta_at %}data-expedition-eta-at="{{ node.expedition_eta_at }}"{% endif %}
+                  {% if node.expedition_report_message_id %}data-expedition-report-id="{{ node.expedition_report_message_id }}"{% endif %}
+                  {% if node.expedition_event_label_key %}data-expedition-event-label-key="{{ node.expedition_event_label_key }}"{% endif %}
+                  aria-label="{{ T(node.name_key or node.field_key, node.field_key or '') }}"
+                  aria-pressed="false"
+                  title="{{ T(node.name_key or node.field_key, node.field_key or '') }} · {{ T(sw_type_key) }}">
+            <span class="galaxy-command-map-node-discovery-ring" aria-hidden="true"></span>
+            {% if node.expedition_status == 'expedition_active' %}
+            <span class="galaxy-command-map-node-badge galaxy-command-map-node-badge--expedition">{% if node.is_salvage %}{{ T("world_salvage_badge_active", "Bergung aktiv") }}{% else %}{{ T("world_expedition_badge_active", "Expedition aktiv") }}{% endif %}</span>
+            {% elif node.expedition_status == 'expedition_returning' %}
+            <span class="galaxy-command-map-node-badge galaxy-command-map-node-badge--expedition">{% if node.is_salvage %}{{ T("world_salvage_badge_returning", "Rückkehr") }}{% else %}{{ T("world_expedition_badge_returning", "Rückkehr") }}{% endif %}</span>
+            {% elif node.expedition_status == 'recently_reported' %}
+            <span class="galaxy-command-map-node-badge galaxy-command-map-node-badge--report">{% if node.is_salvage %}{{ T("world_salvage_badge_report", "Bergungsbericht") }}{% else %}{{ T("world_expedition_badge_report", "Bericht") }}{% endif %}</span>
+            {% endif %}
+            <span class="galaxy-command-map-node-icon" aria-hidden="true">{{ node.role_icon or '✦' }}</span>
+            <span class="galaxy-command-map-node-type">{{ T(sw_type_key) }}</span>
+            <span class="galaxy-command-map-node-name">{{ T(node.name_key or node.field_key, node.field_key or '') }}</span>
+          </button>
+          {% elif is_expansion %}
+          {% set site_status = 'new' if is_new_site else ('locked' if is_locked_site else 'unlocked') %}
+          {% set site_type_key = node.type_key or 'expansion_site_type_outpost' %}
+          {% set site_promise_key = node.promise_key or node.label_key %}
+          {% set site_risk_key = node.risk_key or 'expansion_site_risk_low' %}
+          {% set site_reward_key = node.reward_hint_key or '' %}
+          {% set site_future_key = node.future_role_key or '' %}
+          {% set site_region_label_key = node.region_label_key or ('imperium_region_' ~ (node.region_key or 'outer_rim')) %}
+          <button type="button"
+                  class="galaxy-command-map-node galaxy-command-map-node--expansion galaxy-command-map-node--expansion-{{ node.site_type or 'outpost' }}{% if is_locked_site %} galaxy-command-map-node--locked{% elif is_new_site %} galaxy-command-map-node--new{% else %} galaxy-command-map-node--unlocked{% endif %}"
+                  {{ map_world_style(node) }}
+                  data-node-kind="expansion_site"
+                  data-expansion-site-inspect
+                  data-site-key="{{ node.site_key or '' }}"
+                  data-site-status="{{ site_status }}"
+                  data-site-level="{{ node.required_homeworld_level or 0 }}"
+                  data-site-name="{{ T(node.label_key or node.name_key, node.site_key or '') }}"
+                  data-site-type="{{ T(site_type_key) }}"
+                  data-site-region="{{ T(site_region_label_key, node.region_key or '') }}"
+                  data-site-promise="{{ T(site_promise_key) }}"
+                  data-site-risk="{{ T(site_risk_key) }}"
+                  data-site-risk-level="{{ node.risk_level or 'low' }}"
+                  data-site-reward="{{ T(site_reward_key) if site_reward_key else '' }}"
+                  data-site-future="{{ T(site_future_key) if site_future_key else '' }}"
+                  data-site-icon="{{ node.role_icon or '🌌' }}"
+                  data-site-status-label="{% if is_locked_site %}{{ T('expansion_site_status_locked', 'Gesperrt — bald erreichbar') }}{% elif is_new_site %}{{ T('expansion_site_status_new', 'Neu entdeckt') }}{% else %}{{ T('expansion_site_status_unlocked', 'Erschlossen') }}{% endif %}"
+                  aria-label="{{ T(node.label_key or node.name_key, node.site_key or '') }}"
+                  aria-pressed="false"
+                  title="{{ T(site_promise_key) }}{% if site_reward_key %} · {{ T(site_reward_key) }}{% endif %}">
+            {% if is_locked_site %}
+            <span class="galaxy-command-map-node-lock-ring" aria-hidden="true"></span>
+            {% endif %}
+            {% if is_new_site %}
+            <span class="galaxy-command-map-node-badge galaxy-command-map-node-badge--new">{{ T("expansion_site_newly_discovered", "Neu entdeckt") }}</span>
+            {% endif %}
+            <span class="galaxy-command-map-node-icon" aria-hidden="true">{{ node.empire_role_icon or '🔒' }}</span>
+            <span class="galaxy-command-map-node-type">{{ T(site_type_key) }}</span>
+            <span class="galaxy-command-map-node-name">{{ T(node.label_key or node.name_key, node.site_key or '') }}</span>
+            <span class="galaxy-command-map-node-role">
+              {% if is_locked_site %}
+                {{ T(site_promise_key) }}
+              {% elif is_new_site %}
+                {{ T("expansion_site_newly_discovered", "Neu entdeckt") }}
+              {% else %}
+                {{ T(site_future_key) if site_future_key else T(node_identity_key) }}
+              {% endif %}
+            </span>
+            {% if is_locked_site %}
+            <span class="galaxy-command-map-node-level hint">{{ T('expansion_site_requires_level', 'Benötigt Evolution Level %(level)s', level=(node.required_homeworld_level or 0)) }}</span>
+            {% endif %}
+          </button>
+          {% else %}
+          <button type="button"
+                  class="galaxy-command-map-node galaxy-command-map-node--colony galaxy-command-map-node--own{% if node.world_map_bound %} galaxy-command-map-node--world-colony{% endif %}{% if node.is_newly_colonized %} galaxy-command-map-node--newly-colonized{% endif %}{% if is_hub %} galaxy-command-map-node--hub{% endif %}{% if node.is_active %} is-active{% endif %}"
+                  {{ map_world_style(node) }}
+                  data-empire-identity-switch="{{ node.planet_id }}"
+                  data-colony-location-inspect
+                  data-planet-id="{{ node.planet_id }}"
+                  data-colony-name="{{ node.name }}"
+                  data-colony-role="{{ T(node.empire_role_label_key or node.identity_title_key) }}"
+                  data-colony-icon="{{ node.empire_role_icon or '🌍' }}"
+                  data-region-key="{{ node.region_key or 'genesis_core' }}"
+                  {% if node.world_map_bound and node.world_key %}data-world-key="{{ node.world_key }}" data-world-colony="1"{% endif %}
+                  {% if node.origin_world_name_key %}data-origin-world-name="{{ T(node.origin_world_name_key) }}"{% endif %}
+                  {% if node.origin_world_type_key %}data-origin-world-type="{{ T(node.origin_world_type_key) }}"{% endif %}
+                  {% if node.is_newly_colonized %}data-newly-colonized="1"{% endif %}
+                  aria-label="{{ node.name }}"
+                  aria-pressed="{{ 'true' if node.is_active else 'false' }}"
+                  title="{{ node.name }}{% if node.strategic_type_key %} · {{ T(node.strategic_type_key) }}{% elif node.coordinates_formatted %} · {{ node.coordinates_formatted }}{% endif %}">
+            <span class="galaxy-command-map-node-activity-ring" aria-hidden="true"></span>
+            {% if node.is_newly_colonized %}
+            <span class="galaxy-command-map-node-badge galaxy-command-map-node-badge--new-colony">{{ T("command_map_badge_newly_colonized", "Neu kolonisiert") }}</span>
+            {% endif %}
+            <span class="galaxy-command-map-node-icon" aria-hidden="true">{{ node.empire_role_icon or '🌍' }}</span>
+            <span class="galaxy-command-map-node-name">{{ node.name }}</span>
+            {% if node.world_map_bound and node.strategic_type_key %}
+            <span class="galaxy-command-map-node-role">{{ T(node.strategic_type_key) }}</span>
+            {% elif node_identity_key %}
+            <span class="galaxy-command-map-node-role">{{ T(node_identity_key) }}</span>
+            {% endif %}
+            {% if node.coordinates_formatted %}
+            <span class="galaxy-command-map-node-coord gc-mono">{{ galaxy_coord_link(node.coordinates_formatted) }}</span>
+            {% endif %}
+          </button>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {% for node in cm_nodes %}
+    {% if (node.node_kind or 'colony') == 'colony' and node.planet_id %}
+    <div class="galaxy-command-map-colony-actions-source"
+         data-colony-actions-source="{{ node.planet_id }}"
+         data-command-center='{{ (node.command_center or {}) | tojson }}'
+         hidden></div>
+    {% elif (node.node_kind or '') == 'world_field' and node.world_key and (node.command_center or {}) %}
+    <div class="galaxy-command-map-world-field-source"
+         data-world-field-source="{{ node.world_key }}"
+         data-command-center='{{ node.command_center | tojson }}'
+         hidden></div>
+    {% elif (node.node_kind or '') in ('foreign_world_colony', 'foreign_empire') and (node.command_center or {}) %}
+    <div class="galaxy-command-map-foreign-colony-source"
+         data-foreign-colony-source="{{ node.node_key }}"
+         data-command-center='{{ node.command_center | tojson }}'
+         hidden></div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="galaxy-command-map-legacy-shell" hidden aria-hidden="true">
+    <aside class="galaxy-command-map-colony-panel"
+           data-command-map-colony-panel
+           hidden>
+      <ul class="gc-command-center-resource-list" data-command-center-resources></ul>
+    </aside>
+    <aside class="galaxy-command-map-site-inspector"
+           data-command-map-site-inspector
+           hidden>
+      <div class="galaxy-command-map-site-inspector-empty"
+           data-command-map-empty-panel
+           data-command-map-site-inspector-empty
+           hidden></div>
+      <div class="galaxy-command-map-site-inspector-body"
+           data-command-map-detail-panel
+           data-command-map-site-inspector-body
+           hidden></div>
+    </aside>
+  </div>
+  {% else %}
+  <p class="galaxy-command-map-empty hint">{{ T("galaxy_command_map_empty", "Noch keine Kolonien im Imperium.") }}</p>
+  {% endif %}
+
+  <div id="gc-world-inspector-root"
+       class="gc-player-card-modal gc-world-inspector-modal"
+       data-world-inspector-modal
+       hidden
+       aria-hidden="true">
+    <div class="gc-player-card-overlay" data-world-inspector-close tabindex="-1"></div>
+    <div class="gc-player-card-dialog gc-world-inspector-dialog"
+         data-theme="cyan"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="gc-world-inspector-title">
+      <header class="gc-player-card-head">
+        <h2 id="gc-world-inspector-title" class="gc-player-card-head-title"></h2>
+        <button type="button"
+                class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+                data-world-inspector-close
+                aria-label="{{ T('world_inspector_close', 'Schließen') }}">×</button>
+      </header>
+      <div class="gc-player-card-body">
+        <div class="gc-player-card-content gc-world-inspector-content" data-world-inspector-content></div>
+        <div class="gc-world-inspector-actions" data-world-inspector-actions></div>
+      </div>
+    </div>
+  </div>
+</section>

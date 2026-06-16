@@ -143,6 +143,7 @@
   {% set spec_options = ps.specialization_options if ps.specialization_options is defined else [] %}
   {% set policy_ux = dash.policy_ux if dash.policy_ux is defined else {} %}
   {% set id_teaser = dash.identity_teaser if dash.identity_teaser is defined else {} %}
+  {% set exp_unlock = dash.expansion_unlock if dash.expansion_unlock is defined else {} %}
   {% set asc = dash.ascension_ux if dash.ascension_ux is defined else {} %}
   {% set strengths = traits | selectattr('polarity', 'in', ['positive', 'rare', 'neutral']) | list %}
   {% set weaknesses = traits | selectattr('polarity', 'equalto', 'negative') | list %}
@@ -209,6 +210,53 @@
     </div>
     {% endif %}
   </section>
+
+  {# ── 1b. Expansion Gate (prominent) ── #}
+  {% if exp_unlock.visible %}
+  <section class="pe-expansion-gate gc-panel{% if exp_unlock.newly_discovered %} pe-expansion-gate--discovered{% elif exp_unlock.next_unlock and exp_unlock.on_homeworld %} pe-expansion-gate--locked{% endif %}"
+           id="pe-section-expansion-gate"
+           aria-label="{{ T('pe_expansion_gate_aria', 'Imperiums-Expansion') }}">
+    <div class="pe-expansion-gate-head">
+      <span class="gc-panel-title">{{ T("pe_expansion_gate_title", "Imperiums-Expansion") }}</span>
+      <span class="pe-expansion-gate-level gc-mono">
+        {{ T("pe_expansion_genesis_ark_level", "Genesis Ark Stufe %(level)s", level=(exp_unlock.homeworld_level or 1)) }}
+      </span>
+    </div>
+
+    {% if exp_unlock.show_genesis_ark_hint %}
+    <p class="pe-expansion-gate-hint hint">
+      {{ T("pe_expansion_genesis_ark_hint", "Expansion basiert auf der Evolution deiner Genesis Ark — nicht auf diesem Planeten.") }}
+    </p>
+    {% endif %}
+
+    {% if exp_unlock.newly_discovered %}
+      {% for site in exp_unlock.newly_discovered %}
+      <div class="pe-expansion-gate-body pe-expansion-gate-body--new">
+        <span class="pe-expansion-gate-badge pe-expansion-gate-badge--new">{{ T("expansion_site_newly_discovered", "Neu entdeckt") }}</span>
+        <h3 class="pe-expansion-gate-site">{{ site.role_icon or '🌌' }} {{ T(site.label_key, site.site_key) }}</h3>
+        <p class="hint">{{ T("pe_expansion_discovered_hint", "Neuer Bereich auf der Command Map — schau in die Galaxy-Ansicht.") }}</p>
+      </div>
+      {% endfor %}
+    {% elif exp_unlock.next_unlock and exp_unlock.on_homeworld %}
+    <div class="pe-expansion-gate-body pe-expansion-gate-body--locked">
+      <span class="pe-expansion-gate-badge pe-expansion-gate-badge--locked">🔒</span>
+      <h3 class="pe-expansion-gate-site">{{ T(exp_unlock.next_unlock.label_key, exp_unlock.next_unlock.site_key) }}</h3>
+      <p class="pe-expansion-gate-req">
+        {{ T("expansion_site_requires_level", "Benötigt Evolution Level %(level)s", level=(exp_unlock.next_unlock.required_homeworld_level or 0)) }}
+      </p>
+      <p class="hint">{{ T("pe_expansion_locked_hint", "Entwickle die Genesis Ark weiter — dann wächst deine Command Map.") }}</p>
+    </div>
+    {% elif exp_unlock.next_unlock and exp_unlock.show_genesis_ark_hint %}
+    <div class="pe-expansion-gate-body pe-expansion-gate-body--locked">
+      <span class="pe-expansion-gate-badge pe-expansion-gate-badge--locked">🔒</span>
+      <h3 class="pe-expansion-gate-site">{{ T(exp_unlock.next_unlock.label_key, exp_unlock.next_unlock.site_key) }}</h3>
+      <p class="pe-expansion-gate-req">
+        {{ T("expansion_site_requires_level", "Benötigt Evolution Level %(level)s", level=(exp_unlock.next_unlock.required_homeworld_level or 0)) }}
+      </p>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
 
   {# ── 2. Nächste Evolution ── #}
   <section class="pe-next-evolution gc-panel" id="pe-section-action">

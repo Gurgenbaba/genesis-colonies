@@ -74,7 +74,9 @@ def _planet_switcher_row(
     except (TypeError, ValueError):
         position_i = None
 
-    return {
+    from .empire_identity import empire_identity_for_planet
+
+    row = {
         "planet_id": pid,
         "name": planet_row.get("name"),
         "is_homeworld": bool(planet_row.get("is_homeworld")),
@@ -88,6 +90,8 @@ def _planet_switcher_row(
         "coordinates_formatted": coords_formatted,
         "position": position_i,
     }
+    row.update(empire_identity_for_planet(planet_row, conn=conn))
+    return row
 
 
 def list_player_planets(player_id: int, conn: Optional[sqlite3.Connection] = None) -> List[Dict[str, Any]]:
@@ -584,6 +588,7 @@ def colonize_planet(
     galaxy: int = 1,
     system: Optional[int] = None,
     position: Optional[int] = None,
+    world_binding: Optional[Dict[str, Any]] = None,
     conn: Optional[sqlite3.Connection] = None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     own = conn is None
@@ -616,6 +621,14 @@ def colonize_planet(
         )
         from .dna import generate_planet_dna
 
+        binding = dict(world_binding) if world_binding else None
+        if binding:
+            from .world_colonization import world_colonization_schema_ready
+
+            if not world_colonization_schema_ready(conn=conn):
+                rollback(conn)
+                return False, "schema_missing", None
+
         if system is None or position is None:
             galaxy, system, position = assign_free_coordinates(conn, galaxy=int(galaxy))
         else:
@@ -627,28 +640,60 @@ def colonize_planet(
 
         dna = generate_planet_dna(galaxy=int(galaxy), system=system, position=position)
         now = time.time()
-        cur.execute(
-            """
-            INSERT INTO planets (
-                player_id, name, is_homeworld, metal, crystal, last_update,
-                galaxy, system, position, planet_class, dna_seed, created_at, last_evolution_tick
-            ) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """,
-            (
-                int(player_id),
-                str(name),
-                500.0,
-                250.0,
-                now,
-                int(galaxy),
-                int(system),
-                int(position),
-                str(dna.get("planet_class") or "terrestrial"),
-                int(dna.get("dna_seed") or 0),
-                now,
-                now,
-            ),
-        )
+        if binding:
+            cur.execute(
+                """
+                INSERT INTO planets (
+                    player_id, name, is_homeworld, metal, crystal, last_update,
+                    galaxy, system, position, planet_class, dna_seed, created_at, last_evolution_tick,
+                    world_key, world_x, world_y, sector_x, sector_y, planet_role, origin_world_key
+                ) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    int(player_id),
+                    str(name),
+                    500.0,
+                    250.0,
+                    now,
+                    int(galaxy),
+                    int(system),
+                    int(position),
+                    str(dna.get("planet_class") or "terrestrial"),
+                    int(dna.get("dna_seed") or 0),
+                    now,
+                    now,
+                    str(binding.get("world_key") or ""),
+                    float(binding.get("world_x") or 0),
+                    float(binding.get("world_y") or 0),
+                    int(binding.get("sector_x") or 0),
+                    int(binding.get("sector_y") or 0),
+                    str(binding.get("planet_role") or ""),
+                    str(binding.get("origin_world_key") or binding.get("world_key") or ""),
+                ),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO planets (
+                    player_id, name, is_homeworld, metal, crystal, last_update,
+                    galaxy, system, position, planet_class, dna_seed, created_at, last_evolution_tick
+                ) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    int(player_id),
+                    str(name),
+                    500.0,
+                    250.0,
+                    now,
+                    int(galaxy),
+                    int(system),
+                    int(position),
+                    str(dna.get("planet_class") or "terrestrial"),
+                    int(dna.get("dna_seed") or 0),
+                    now,
+                    now,
+                ),
+            )
         planet_id = int(cur.lastrowid)
         cur.execute("INSERT INTO planet_buildings (planet_id) VALUES (?);", (planet_id,))
         ensure_planet_evolution(planet_id, conn)

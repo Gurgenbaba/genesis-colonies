@@ -2,7 +2,7 @@
 
 Flotten, Schiffe, Missionen und Tick (v1.5.4).
 
-Kanonische Module: `game/fleet.py`, `game/fleet_calc.py`, `game/fleet_defs.py`, `game/fleet_api.py`, `game/expedition_events.py`.
+Kanonische Module: `game/fleet.py`, `game/fleet_calc.py`, `game/fleet_defs.py`, `game/fleet_api.py`, `game/fleet_target.py`, `game/expedition_events.py`.
 
 **Kein zweites Fleet-State-System** — alle Bewegungen in `fleet_movements`.
 
@@ -52,6 +52,27 @@ Schiffsbau: [Shipyard](BUILDINGS_SYSTEM.md) → `orbital_shipyard` → `shipyard
 Flotten-Slots: accountweit über **`navigation_tech`** (Basis 3; Stufe 3→4, 5→5, 8→6, 10→7; danach alle 3 Stufen +1 Slot, ohne Obergrenze). Zählt alle aktiven `fleet_movements`.
 
 Overview zeigt **alle** Bewegungen des Spielers (nicht nur active planet).
+
+---
+
+## World-native targets (GC-590A)
+
+Flotten-Ziele sind **Orte**, nicht primär G:S:P-Koordinaten. Legacy-Koordinaten bleiben interner Adapter; API und Preview liefern zusätzlich `target.world_target`.
+
+| Feld | Bedeutung |
+|------|-----------|
+| `target_type` | `planet`, `world_colony`, `expedition_world`, `anomaly`, `wreckage`, `enemy_colony` |
+| `target_world_key` | Kanonischer Welt-Schlüssel (`field:…`) |
+| `target_world_x` / `target_world_y` | Kartenposition |
+| `planet_role` | Strategischer Welttyp / Kolonie-Rolle |
+| `target_name_key` / `target_name` | Anzeigename (Locale oder Planet) |
+| `legacy_coords` | `{galaxy, system, position}` — intern, bis GC-590B UI coords entfernt |
+
+**Owner:** `game/fleet_target.py` — `parse_fleet_target_request()`, `normalize_fleet_target_request()`, `attach_world_target()`.
+
+**API-Eingabe (Priorität):** `target_planet_id` → `world_key` / `target_world_key` → `target_world_x/y` → legacy `target_galaxy/system/position`.
+
+**Endpoints:** `POST /api/fleet/preview`, `POST /api/fleet/send`, `GET|POST /api/fleet/resolve-target` akzeptieren world-native Felder.
 
 ---
 

@@ -27,6 +27,7 @@ def test_messages_js_always_reinits_and_persistent_cleanup():
     assert "requestSeq" in src
     assert "isCurrentRequest" in src
     assert "bootMessagesIfPresent" not in src
+    assert "bootMessagesInbox" in src
 
 
 def test_messages_js_initial_load_and_stale_request_guards():
@@ -36,8 +37,12 @@ def test_messages_js_initial_load_and_stale_request_guards():
     assert "isCurrentRequest(state, initSeq, requestId)" in src
     assert "showLoadingList" in src
     assert "showErrorList" in src
-    assert "queueMicrotask" in src.split("GC.messagesPageState = state")[1][:400]
-    assert "force: true" in src.split("GC.messagesPageState = state")[1][:400]
+    assert "function bootMessagesInbox(opts" in src
+    assert "GC.bootMessagesInbox = bootMessagesInbox" in src
+    assert "data-messages-init" in src or "messagesInit" in src
+    assert "inboxNeedsReload" in src
+    assert "messagesDomMatchesState" in src
+    assert "void loadList(true, { force: false })" in src
     assert "clearLoadingIfStale" in src
     assert "inflightFilter" in src
     init_section = src.split("function initMessagesPage")[1][:900]
@@ -49,6 +54,14 @@ def test_messages_js_initial_load_and_stale_request_guards():
 
 def test_main_js_messages_inbox_reload_only_on_unread_increase():
     src = _read("static/main.js")
+    assert "function scheduleMessagesInboxBoot()" in src
+    assert "GC.bootMessagesInbox" in src
+    boot_fn = src.split("function scheduleMessagesInboxBoot()")[1].split("GC.initPage")[0]
+    assert "setSafeTimeout" in boot_fn
+    assert boot_fn.count("setSafeTimeout") == 1
+    after_init = src.split("const afterInit = async () => {")[1].split("};", 1)[0]
+    assert "GC.detectPage() === \"messages\"" in after_init
+    assert "bootMessagesInbox({ force: true })" in after_init
     unread_section = src.split("if (typeof data.unread_messages_count === \"number\")")[1].split("// --- Overview-Ressourcen")[0]
     assert "emptyInboxNeedsFill" not in unread_section
     assert "unreadSyncedFromApi" not in unread_section
@@ -61,7 +74,8 @@ def test_main_js_messages_inbox_reload_only_on_unread_increase():
 def test_messages_js_tab_and_initial_share_load_list():
     src = _read("static/js/messages.js")
     assert "state.loadList = loadList" in src
-    assert "state.loadList?.(true, { force: true })" in src
+    assert "bootMessagesInbox" in src
+    assert "st.loadList(true, { force })" in src or "return st.loadList(true, { force })" in src
     tab_section = src.split("tabBtn.dataset.filter")[1][:400]
     assert "loadList" in tab_section
     assert "force: true" in tab_section
@@ -131,7 +145,9 @@ def test_main_js_progress_ticker_uses_server_time_and_interval():
     bootstrap = src.split("function bootstrapServerTimeFromDom()")[1].split("function getApproxServerNow()")[0]
     assert "TIME.serverNow && TIME.clientPerfAt" in bootstrap
     time_section = src.split("function getApproxServerNow()")[1].split("bootstrapServerTimeFromDom();")[0]
-    assert "Math.floor(Date.now() / 1000)" in time_section
+    assert "return serverNow();" in time_section
+    server_now = src.split("function serverNow()")[1].split("function syncServerClockFromState")[0]
+    assert "Math.floor(Date.now() / 1000)" in server_now
     ticker_section = src.split("GC.startProgressTicker = function startProgressTicker()")[1].split("GC.stopPolling")[0]
     assert "_progressTickerDelayMs" in ticker_section
     assert "setTimeout(tick, _progressTickerDelayMs(serverNow))" in ticker_section
@@ -384,7 +400,7 @@ def test_main_js_gc541_queue_timer_hotfix():
     assert "data-finish-time" in sync
     apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
     assert "GC.startProgressTicker();" in apply
-    assert "else if (data.server_now) setServerTime(data.server_now)" in apply
+    assert "syncServerClockFromState(data)" in apply
     build_partial = _read("templates/partials/build_queue.html")
     assert 'data-timer-target' in build_partial
     assert 'id="build-eta-live"' in build_partial
@@ -754,10 +770,11 @@ def test_main_js_gc550c_buildings_hero_queue_and_subnav():
     assert "grayscale(1)" not in css.split(".gc-bld-hero-img-stack .gc-bld-card-hero-img--muted")[1].split("}")[0]
     assert "saturate(" in css
     assert "gc-nav-sub--collapsed" in src
-    assert "GC.detectPage() !== \"buildings\"" in src
+    assert "BUILDINGS_NAV_PAGES" in src
+    assert "gc-nav-buildings-toggle" in src
+    assert "syncBuildingsSubnavFromState" in src
     assert sidebar_html.count('id="gc-nav-buildings-sub"') == 1
-    assert ".gc-bld-hero-queue{" in css
-    assert ".gc-nav-sub--buildings[hidden]" in css
+    assert ".gc-nav-group-body" in css
     assert "if (domain === \"building\" || domain === \"research\")" in src
 
     building_action = src.split("function renderBuildingActionCell")[1].split("function patchBuildingPanel")[0]
@@ -797,8 +814,9 @@ def test_main_js_gc550_buildings_ux_contract():
     assert "gc-bld-card-icon--title" not in defense_html
     assert "gc-nav-buildings-sub" in sidebar_html
     assert "data-building-tab" in sidebar_html
-    assert "gc-nav-trading-sub" in sidebar_html
-    assert "gc-nav-military-sub" in sidebar_html
+    assert 'data-nav-section="economy"' in sidebar_html
+    assert 'data-nav-section="military"' in sidebar_html
+    assert "syncNavSectionAccordionState" in src
     assert "syncMilitarySubnav" in src
     assert "syncTradingSubnav" in src
     assert "activateBuildingTabByName" in src
@@ -882,7 +900,9 @@ def test_gc551a_fuel_cell_icon_and_hero_level_badge():
     assert "onerror" not in fuel_block
     assert "icons/energy.png" not in fuel_block
     assert ".gc-level-badge.gc-bld-card-level--hero" in css
-    assert "background: rgb(6, 12, 26)" in css
+    hero_badge = css.split(".gc-level-badge.gc-bld-card-level--hero")[1].split("}", 1)[0]
+    assert "background:" in hero_badge
+    assert "rgba(5, 14, 24" in hero_badge or "rgb(6, 12, 26)" in hero_badge
     assert ".hud-res-fuel-cells .res-icon" in css
     assert "gc-res-fuel-cells" in css
     assert "render_resource_icon('fuel_cells', 'xl')" in _read("templates/overview.html")

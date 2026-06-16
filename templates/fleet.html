@@ -24,7 +24,7 @@
         <h2 class="section-title">{{ T("fleet_title") }}</h2>
         <p class="section-hint hint">{{ T("fleet_hint") }}</p>
       </div>
-      <a href="{{ url_for('logistics_view') }}" class="gc-btn gc-btn-outline gc-btn-sm">{{ T("nav_logistics", "Logistics") }}</a>
+      <a href="{{ url_for('logistics_view') }}" class="gc-nav-link gc-btn gc-btn-outline gc-btn-sm">{{ T("nav_logistics", "Logistics") }}</a>
       <div class="fleet-slots-badge" aria-live="polite">
         <span class="fleet-slots-label">{{ T("fleet_slots_label") }}</span>
         <span class="fleet-slots-value gc-mono" data-fleet-slots>
@@ -44,7 +44,7 @@
   {% if fleet_ctx.ready and not fleet_ctx.has_ships %}
   <section class="gc-panel fleet-panel fleet-no-ships-panel" aria-live="polite">
     <p class="fleet-empty">{{ T("fleet_no_ships_hint") }}</p>
-    <a href="{{ url_for('shipyard_view') }}" class="gc-btn gc-btn-primary">{{ T("fleet_go_shipyard_btn") }}</a>
+    <a href="{{ url_for('shipyard_view') }}" class="gc-nav-link gc-btn gc-btn-primary">{{ T("fleet_go_shipyard_btn") }}</a>
   </section>
   {% endif %}
 
@@ -71,7 +71,24 @@
               <span class="fleet-active-mission fleet-active-mission--{{ mv.mission_type }}">{{ T("fleet_mission_" ~ mv.mission_type) }}</span>
               <span class="fleet-active-status">{{ T("fleet_status_" ~ mv.status) }}</span>
             </div>
+            {% set wt = mv.world_target if mv.world_target is defined and mv.world_target else none %}
+            {% if wt and (wt.target_name or wt.target_name_key) %}
+            <div class="fleet-active-target">
+              <div class="fleet-active-target-primary">
+                {% if mv.origin_name %}
+                <span class="fleet-active-origin-name">{{ mv.origin_name }}</span>
+                <span class="fleet-active-route-arrow" aria-hidden="true">→</span>
+                {% endif %}
+                <span class="fleet-active-target-name">{% if wt.target_name_key %}{{ T(wt.target_name_key) }}{% else %}{{ wt.target_name }}{% endif %}</span>
+              </div>
+              {% if wt.target_type %}
+              <span class="fleet-active-target-type">{{ T("fleet_target_" ~ wt.target_type, wt.target_type) }}</span>
+              {% endif %}
+              <div class="fleet-active-coords-secondary gc-mono hint">{{ galaxy_coord_link(mv.origin_coords) }} → {{ galaxy_coord_link(mv.target_coords) }}</div>
+            </div>
+            {% else %}
             <div class="fleet-active-coords gc-mono">{{ galaxy_coord_link(mv.origin_coords) }} → {{ galaxy_coord_link(mv.target_coords) }}</div>
+            {% endif %}
             <div class="fleet-active-ships">
               {% for sk, qty in mv.ships.items() %}
                 <span class="fleet-ship-chip">{{ T("fleet_ship_" ~ sk, sk) }} × {{ qty|fmt_int }}</span>
@@ -147,7 +164,7 @@
           </div>
         </div>
 
-        <div class="fleet-target-block">
+        <div class="fleet-target-block" data-fleet-target-block>
           <div class="fleet-form-row fleet-target-row">
             <label class="fleet-form-label">{{ T("fleet_quick_targets") }}</label>
             <div class="fleet-colony-chips" data-fleet-colony-chips>
@@ -176,7 +193,7 @@
             </div>
           </div>
 
-          <div class="fleet-form-row fleet-coords-row">
+          <div class="fleet-form-row fleet-coords-row" data-fleet-coords-row>
             <label class="fleet-form-label" for="fleet-coord-galaxy">{{ T("fleet_target_coords") }}</label>
             <div class="fleet-coords-strip" data-fleet-coords-strip>
               <span class="fleet-coords-bracket" aria-hidden="true">[</span>
@@ -195,6 +212,39 @@
               <span class="fleet-coords-bracket" aria-hidden="true">]</span>
             </div>
             <p class="fleet-coords-hint hint" data-fleet-coords-hint hidden></p>
+          </div>
+
+          <div class="fleet-world-target-panel gc-panel" data-fleet-world-target hidden aria-live="polite">
+            <header class="fleet-world-target-head">
+              <span class="fleet-world-target-icon" data-fleet-world-target-icon aria-hidden="true">✦</span>
+              <div>
+                <p class="fleet-world-target-kicker">{{ T("fleet_world_target_kicker", "Strategic world target") }}</p>
+                <h4 class="fleet-world-target-name" data-fleet-world-target-name></h4>
+                <p class="fleet-world-target-type" data-fleet-world-target-type></p>
+              </div>
+            </header>
+            <dl class="fleet-world-target-meta">
+              <div>
+                <dt>{{ T("expansion_site_inspector_promise", "Versprechen") }}</dt>
+                <dd data-fleet-world-target-promise></dd>
+              </div>
+              <div>
+                <dt>{{ T("expansion_site_inspector_risk", "Risiko") }}</dt>
+                <dd data-fleet-world-target-risk></dd>
+              </div>
+              <div>
+                <dt>{{ T("strategic_world_inspector_bonus", "Bonus") }}</dt>
+                <dd data-fleet-world-target-reward></dd>
+              </div>
+              <div>
+                <dt>{{ T("fleet_world_target_mission", "Mission") }}</dt>
+                <dd data-fleet-world-target-mission>–</dd>
+              </div>
+              <div>
+                <dt>{{ T("fleet_world_target_flight", "Flight time") }}</dt>
+                <dd class="gc-mono" data-fleet-world-target-flight>–</dd>
+              </div>
+            </dl>
           </div>
 
           <div class="fleet-mission-speed-row">
@@ -277,12 +327,17 @@
             <span class="gc-panel-tag fleet-preview-mission-badge" data-preview-mission-badge>{{ T("fleet_mission_transport") }}</span>
             <span class="fleet-preview-mission-status" data-preview-mission-status>–</span>
           </div>
+          <div class="fleet-preview-target-hero" data-preview-target-hero>
+            <p class="fleet-preview-target-name" data-preview-target-name>–</p>
+            <p class="fleet-preview-target-native-type" data-preview-target-native-type>–</p>
+            <p class="fleet-preview-target-coords hint gc-mono" data-preview-target-coords hidden>–</p>
+          </div>
           <div class="fleet-preview-grid">
-            <div class="fleet-preview-stat">
+            <div class="fleet-preview-stat fleet-preview-stat--legacy" data-preview-legacy-target-type hidden>
               <span class="fleet-preview-stat-label">{{ T("fleet_preview_target_type") }}</span>
               <span class="fleet-preview-stat-value" data-preview-target-type>–</span>
             </div>
-            <div class="fleet-preview-stat">
+            <div class="fleet-preview-stat fleet-preview-stat--legacy" data-preview-legacy-target-owner hidden>
               <span class="fleet-preview-stat-label">{{ T("fleet_preview_target_owner") }}</span>
               <span class="fleet-preview-stat-value" data-preview-target-owner>–</span>
             </div>
@@ -296,7 +351,7 @@
             </div>
             <div class="fleet-preview-stat">
               <span class="fleet-preview-stat-label">{{ T("fleet_preview_arrival") }}</span>
-              <span class="fleet-preview-stat-value gc-mono" data-preview-arrival>–</span>
+              <span class="fleet-preview-stat-value gc-mono" data-preview-arrival data-timer-kind="fleet">–</span>
             </div>
             <div class="fleet-preview-stat">
               <span class="fleet-preview-stat-label">{{ T("fleet_preview_cargo") }}</span>
@@ -331,7 +386,7 @@
 
     <section class="gc-panel fleet-panel fleet-shipyard-link-panel">
       <p class="fleet-shipyard-link-hint">{{ T("fleet_shipyard_link_hint") }}</p>
-      <a href="{{ url_for('shipyard_view') }}" class="gc-btn gc-btn-secondary">{{ T("fleet_go_shipyard_btn") }}</a>
+      <a href="{{ url_for('shipyard_view') }}" class="gc-nav-link gc-btn gc-btn-secondary">{{ T("fleet_go_shipyard_btn") }}</a>
     </section>
 
     <section class="gc-panel fleet-panel fleet-presets-panel" aria-labelledby="fleet-presets-title">

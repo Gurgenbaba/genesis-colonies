@@ -3516,6 +3516,30 @@ def test_resolve_fleet_target_empty_slot(fleet_db):
     conn.close()
 
 
+def test_colonize_fleet_send_preview_classic_empty_slot(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    _seed_ships(pid, uid, {"seed_ark": 1}, conn=conn)
+    origin = conn.cursor().execute("SELECT * FROM planets WHERE id = ?;", (pid,)).fetchone()
+    conn.commit()
+
+    preview = build_fleet_send_preview(
+        player_id=uid,
+        origin_planet=dict(origin),
+        target_galaxy=1,
+        target_system=499,
+        target_position=12,
+        mission_type="colonize",
+        ships={"seed_ark": 1},
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert preview["can_send"] is True
+    conn.close()
+
+
 def test_colonize_fleet_send_to_empty_slot(fleet_db):
     conn = db()
     uid = _player(conn=conn)
@@ -3994,7 +4018,7 @@ def test_galaxy_fleet_links_have_query_params(fleet_db, monkeypatch):
     assert ok
     client = app_module.app.test_client()
     client.post("/login", data={"username": uname, "password": "test-pass-123"})
-    resp = client.get("/galaxy")
+    resp = client.get("/galaxy?view=system")
     body = resp.get_data(as_text=True)
     assert "target_galaxy=" in body
     assert "mission=transport" in body

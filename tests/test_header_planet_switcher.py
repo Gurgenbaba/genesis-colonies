@@ -57,9 +57,6 @@ def _second_planet(player_id: int) -> int:
     ok, reason, extra = colonize_planet(
         player_id,
         name=f"Colony_{uuid.uuid4().hex[:4]}",
-        galaxy=1,
-        system=301,
-        position=4,
     )
     assert ok, reason
     return int(extra["planet_id"])
@@ -83,6 +80,66 @@ def test_list_player_planets_for_switcher_includes_coords(switcher_db):
     by_id = {int(p["planet_id"]): p for p in planets}
     assert by_id[colony_id]["coordinates_formatted"]
     assert by_id[colony_id]["planet_class_label_key"]
+
+
+def test_switcher_payload_includes_empire_identity(switcher_db):
+    player_id, _ = _create_player()
+    hw_id = int(get_homeworld(player_id=player_id)["id"])
+    colony_id = _second_planet(player_id)
+    save_planet_buildings(colony_id, {"metal_mine": 10, "crystal_mine": 8})
+
+    planets = list_player_planets_for_switcher(player_id)
+    by_id = {int(p["planet_id"]): p for p in planets}
+    hw = by_id[hw_id]
+    colony = by_id[colony_id]
+
+    assert hw["empire_role_key"] == "homeworld"
+    assert hw["empire_role_label_key"] == "empire_role_homeworld"
+    assert hw["empire_role_icon"] == "🏛"
+    assert colony["empire_role_key"] == "mining"
+    assert colony["empire_role_label_key"] == "empire_role_mining"
+    assert colony["empire_role_icon"] == "⛏"
+
+
+def test_header_switcher_shows_role_and_secondary_coords(switcher_db, monkeypatch):
+    player_id, uname = _create_player()
+    colony_id = _second_planet(player_id)
+    save_planet_buildings(colony_id, {"research_lab": 12, "academy": 6})
+
+    client = _app_client(monkeypatch)
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    body = client.get("/overview").get_data(as_text=True)
+
+    for needle in (
+        "data-planet-switcher-name",
+        "data-planet-switcher-role",
+        "data-planet-switcher-coord",
+        "data-planet-switcher-icon",
+        "gc-planet-switcher-item-role",
+        "gc-planet-switcher-item-coord",
+        "data-planet-role-key",
+        "data-planet-identity-key",
+    ):
+        assert needle in body, f"missing switcher marker: {needle}"
+    assert "empire_role_homeworld" in body or "Genesis Ark" in body
+
+
+def test_main_js_header_switcher_role_contract():
+    src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    assert "empireIdentityLabelKey" in src
+    assert "data-planet-switcher-role" in src
+    assert "data-planet-switcher-icon" in src
+    assert "planetRoleKey" in src
+    assert "planetIdentityKey" in src
+    assert "planetRoleIcon" in src
+
+
+def test_switcher_css_role_hierarchy():
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    assert ".gc-planet-switcher-role" in css
+    assert ".gc-planet-switcher-item-role" in css
+    assert ".gc-planet-switcher-coord" in css
+    assert ".gc-planet-switcher-item-coord" in css
 
 
 def test_header_shows_switcher_with_all_planets(switcher_db, monkeypatch):
@@ -290,15 +347,24 @@ def test_game_state_includes_landscape_url(switcher_db, monkeypatch):
     player_id, uname = _create_player()
     colony_id = _second_planet(player_id)
 
+    from game.models import db
+    from game.planet_visuals import get_landscape_for_position
+
+    conn = db()
+    row = conn.execute("SELECT position FROM planets WHERE id = ?;", (colony_id,)).fetchone()
+    conn.close()
+    position = int(row["position"])
+    expected_fn = get_landscape_for_position(position)
+
     client = _app_client(monkeypatch)
     client.post("/login", data={"username": uname, "password": "test-pass-123"})
 
     set_active_planet(player_id, colony_id)
     gs = client.get("/api/game-state").get_json()
     ap = gs.get("active_planet") or {}
-    assert ap.get("position") == 4
+    assert ap.get("position") == position
     assert ap.get("landscape_url")
-    assert "trockenplanet08-h.jpg" in ap["landscape_url"]
+    assert expected_fn in ap["landscape_url"]
 
 
 def test_trader_hub_and_shipyard_render_active_planet_id(switcher_db, monkeypatch):

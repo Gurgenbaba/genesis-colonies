@@ -1,0 +1,104 @@
+"""GC-621 / GC-621B — Sidebar restoration & navigation logic."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _read(rel: str) -> str:
+    return (ROOT / rel).read_text(encoding="utf-8")
+
+
+def test_sidebar_flat_buildings_group_without_nested_box():
+    sidebar = _read("templates/partials/sidebar.html")
+    assert 'id="gc-nav-buildings-toggle"' in sidebar
+    assert 'id="gc-nav-buildings-parent"' not in sidebar
+    assert "gc-nav-sub--buildings" not in sidebar
+    assert 'data-nav-group-key="buildings"' in sidebar
+    assert 'data-building-tab="military"' in sidebar
+    assert "buildings_nav_tab_resources" in sidebar
+    assert "buildings_nav_tab_research" in sidebar
+    assert sidebar.count('class="gc-nav-group-body"') >= 1
+
+
+def test_sidebar_economy_has_trading_subnav():
+    sidebar = _read("templates/partials/sidebar.html")
+    assert 'id="gc-nav-trading-parent"' in sidebar
+    assert 'id="gc-nav-trading-sub"' in sidebar
+    assert 'data-trading-nav="inventory"' in sidebar
+    assert 'data-trading-nav="vote_center"' in sidebar
+    assert 'data-trading-nav="auction_house"' in sidebar
+    assert 'data-nav-module="trading"' in sidebar
+    assert 'data-nav-module="empire"' in sidebar
+
+
+def test_sidebar_section_bodies_use_css_collapse_not_hidden():
+    sidebar = _read("templates/partials/sidebar.html")
+    assert "gc-nav-section-body gc-nav-sub" not in sidebar
+    assert 'id="gc-nav-section-infrastructure"' in sidebar
+    assert 'id="gc-nav-section-infrastructure" hidden' not in sidebar
+
+
+def test_sidebar_verwaltung_has_no_support_or_overflow():
+    sidebar = _read("templates/partials/sidebar.html")
+    assert "secondary_overflow_modules" not in sidebar
+    assert 'data-nav-overflow="1"' not in sidebar
+    assert 'data-nav-module="support"' not in sidebar
+    assert 'data-special-open-window="support"' not in sidebar
+    admin = sidebar.split('data-nav-section="administration"', 1)[1].split("</div>", 1)[0]
+    for module in ("alliance", "ranking", "options"):
+        assert f'data-nav-module="{module}"' in admin
+
+
+def test_sidebar_messages_in_command_section():
+    sidebar = _read("templates/partials/sidebar.html")
+    command = sidebar.split('data-nav-section="command"', 1)[1].split('data-nav-section="infrastructure"', 1)[0]
+    assert 'data-nav-module="messages"' in command
+    assert "data-messages-unread-badge" in command
+    admin = sidebar.split('data-nav-section="administration"', 1)[1].split("</nav>", 1)[0]
+    assert 'data-nav-module="messages"' not in admin
+
+
+def test_sidebar_buildings_tabs_distinct_from_research_module():
+    sidebar = _read("templates/partials/sidebar.html")
+    infra = sidebar.split('data-nav-section="infrastructure"', 1)[1].split('data-nav-section="military"', 1)[0]
+    assert infra.count('data-nav-module="research"') == 1
+    assert 'data-building-tab="research"' in infra
+    assert 'data-nav-module="techtree"' in infra
+
+
+def test_german_buildings_nav_tab_labels():
+    de = _read("locales/de.json")
+    assert '"buildings_nav_tab_resources": "Ressourcen"' in de
+    assert '"buildings_nav_tab_research": "Forschung"' in de
+    assert '"buildings_nav_tab_military": "Militär"' in de
+    assert '"buildings_nav_tab_infrastructure": "Infrastruktur"' in de
+
+
+def test_style_sidebar_command_interface_tokens():
+    css = _read("static/style.css")
+    block = css.split("/* Sidebar — GC-621C", 1)[1].split("/* Main */", 1)[0]
+    assert "GC-621C accordion + Genesis cyan glow" in css
+    assert "border-left: 3px solid transparent;" in block
+    assert "text-transform: uppercase;" in block
+    assert "0.8125rem" in block
+    assert "rgba(0, 234, 255, 0.16)" in block
+    assert ".gc-nav-section.is-expanded > .gc-nav-section-toggle" in block
+    assert "border-left-color: transparent;" not in block.split(".gc-nav-sub-link:hover")[1].split(".gc-nav-sub-link.active")[0]
+
+
+def test_main_js_persists_sidebar_state_in_local_storage():
+    src = _read("static/main.js")
+    assert 'const NAV_SECTION_STORAGE_KEY = "gc_sidebar_state"' in src
+    assert "localStorage.getItem(NAV_SECTION_STORAGE_KEY" in src
+    assert "localStorage.setItem(NAV_SECTION_STORAGE_KEY" in src
+    assert "resolveNavGroupExpanded" in src
+    assert "setNavGroupExpanded" in src
+    assert "syncBuildingsSubnavFromState" in src
+    assert "gc-nav-group-toggle" in src
+    accordion = src.split("function syncNavSectionAccordionState", 1)[1].split("function applyDesktopSidebarNav", 1)[0]
+    assert "hasActive" not in accordion
+    resolve_group = src.split("function resolveNavGroupExpanded", 1)[1].split("function setNavSectionExpanded", 1)[0]
+    assert 'key === "buildings"' in resolve_group

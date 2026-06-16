@@ -89,7 +89,8 @@ def test_main_js_queue_actions_use_apply_action_state():
 def test_main_js_clamps_queue_progress_display():
     text = _read("static/main.js")
     assert "Math.max(0, Math.min(100" in text
-    assert 'dataset.serverRemaining = String(Math.max(0' in text
+    assert "function assignMonotonicServerRemaining" in text
+    assert "el.dataset.serverRemaining = String(next)" in text
 
 
 def test_build_research_cancel_api_routes_return_action_state():

@@ -186,7 +186,7 @@ def test_galaxy_page_url_system_304(galaxy_db, monkeypatch):
     assert ok
     client = app_module.app.test_client()
     client.post("/login", data={"username": uname, "password": "test-pass-123"})
-    resp = client.get("/galaxy?galaxy=1&system=304")
+    resp = client.get("/galaxy?view=system&galaxy=1&system=304")
     assert resp.status_code == 200
     assert "304" in resp.get_data(as_text=True)
 
@@ -295,7 +295,7 @@ def test_galaxy_page_loads(galaxy_db, monkeypatch):
     client = app_module.app.test_client()
     login = client.post("/login", data={"username": uname, "password": "test-pass-123"})
     assert login.status_code in (200, 302)
-    resp = client.get("/galaxy")
+    resp = client.get("/galaxy?view=system")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "galaxy-slot-card" in body
@@ -375,7 +375,9 @@ def test_galaxy_own_planet_fleet_shortcuts(galaxy_db, monkeypatch):
     client, uid = _galaxy_client(monkeypatch)
     planet = get_planets_by_player(uid)[0]
     coords = get_planet_coordinates(planet)
-    resp = client.get(f"/galaxy?galaxy={coords['galaxy']}&system={coords['system']}")
+    resp = client.get(
+        f"/galaxy?view=system&galaxy={coords['galaxy']}&system={coords['system']}"
+    )
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     pos = int(coords["position"])
@@ -397,7 +399,7 @@ def test_galaxy_foreign_planet_fleet_shortcuts(galaxy_db, monkeypatch):
         g, s, avoid_position=int(viewer_coords["position"])
     )
     assert int(foreign_coords["position"]) != EXPEDITION_POSITION
-    resp = client.get(f"/galaxy?galaxy={g}&system={s}")
+    resp = client.get(f"/galaxy?view=system&galaxy={g}&system={s}")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     fp = int(foreign_coords["position"])
@@ -410,7 +412,7 @@ def test_galaxy_foreign_planet_fleet_shortcuts(galaxy_db, monkeypatch):
 
 def test_galaxy_empty_slot_colonize_shortcut(galaxy_db, monkeypatch):
     client, _uid = _galaxy_client(monkeypatch)
-    resp = client.get("/galaxy?galaxy=1&system=499")
+    resp = client.get("/galaxy?view=system&galaxy=1&system=499")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "mission=colonize" in body
@@ -425,7 +427,9 @@ def test_galaxy_expedition_slot_shortcut(galaxy_db, monkeypatch):
     client, uid = _galaxy_client(monkeypatch)
     planet = get_planets_by_player(uid)[0]
     coords = get_planet_coordinates(planet)
-    resp = client.get(f"/galaxy?galaxy={coords['galaxy']}&system={coords['system']}")
+    resp = client.get(
+        f"/galaxy?view=system&galaxy={coords['galaxy']}&system={coords['system']}"
+    )
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "galaxy-slot-expedition" in body or "is-expedition" in body
@@ -460,8 +464,14 @@ def test_fleet_url_prefill_contract_in_main_js(galaxy_db):
     assert "page.dataset.fleetUrlMission" in js
     assert "data-expedition-position" in js or "dataset.expeditionPosition" in js
     assert "syncMissionAllowlistFromTarget" in js
-    assert "urlMission && allowed.has(urlMission)" in js
+    assert "enforceFleetUrlMissionLock" in js
+    assert "refreshFleetUrlMissionLock" in js
     assert "GC.applyFleetUrlPrefill = applyFleetUrlPrefill" in js
+    assert "page.dataset.fleetWorldKey" in js
+    assert "world_key" in js
+    assert "openWorldInspectorFromNode" in js
+    assert "mergeWorldFieldPayload" in js
+    assert "/api/worlds/colonize-preview" in js
 
 
 def test_api_galaxy_system(galaxy_db, monkeypatch):

@@ -52,29 +52,26 @@ def test_placeholder_modules_registered():
 
 def test_sidebar_has_military_and_trading_hub_nav():
     sidebar = _read("templates/partials/sidebar.html")
-    assert 'id="gc-nav-military-sub"' in sidebar
-    assert 'data-military-nav="shipyard"' in sidebar
-    assert 'data-military-nav="defense"' in sidebar
-    assert 'id="gc-nav-fleet-sub"' in sidebar
-    assert 'data-fleet-nav="fleet"' in sidebar
-    assert 'data-fleet-nav="logistics"' in sidebar
-    assert 'id="gc-nav-trading-sub"' in sidebar
-    assert 'data-trading-nav="inventory"' in sidebar
-    assert 'data-trading-nav="skilltree"' in sidebar
-    assert 'data-trading-nav="alliance"' not in sidebar
+    assert 'data-nav-section="military"' in sidebar
+    assert 'data-nav-module="shipyard"' in sidebar
+    assert 'data-nav-module="defense"' in sidebar
+    assert 'data-nav-module="fleet"' in sidebar
+    assert 'data-nav-module="logistics"' in sidebar
+    assert 'data-nav-section="economy"' in sidebar
+    assert 'data-nav-module="trading"' in sidebar
+    assert "url_for('trader_hub_view')" in sidebar
+    assert "auction_house_view" in sidebar
     assert "url_for('alliance_view')" in sidebar
     assert "gc-nav-wip-section" not in sidebar
 
 
 def test_main_js_syncs_military_subnav():
     src = _read("static/main.js")
-    assert "syncMilitarySubnav" in src
-    assert "MILITARY_NAV_PAGES" in src
-    assert "gc-nav-military-sub" in src
-    assert "syncMilitarySubnav(page)" in src.split("function initPage")[1].split("function normalizePopoverTriggers")[0]
-    assert "syncFleetSubnav" in src
     assert "tryHandleSubnavParentClick" in src
-    assert "gc-nav-fleet-sub" in src
+    assert "syncNavSectionAccordionState" in src
+    assert "syncMilitarySubnav" in src
+    assert "syncTradingSubnav" in src
+    assert "gc-nav-buildings-sub" in src
 
 
 def test_placeholder_routes_render(placeholder_db):
@@ -94,9 +91,13 @@ def test_placeholder_routes_render(placeholder_db):
     assert inv.status_code == 200
     assert "inventory-page" in inv.get_data(as_text=True)
 
-    for slug in ("auction-house", "galactic-politics", "skilltree", "premium"):
+    for slug in ("galactic-politics", "skilltree", "premium"):
         res = client.get(f"/{slug}")
         body = res.get_data(as_text=True)
         assert res.status_code == 200, slug
         assert "gc-placeholder-page" in body
         assert "gc-nav-wip-badge" in body or "gc-placeholder-badge" in body
+
+    auction = client.get("/auction-house")
+    assert auction.status_code == 200
+    assert "auction-house-page" in auction.get_data(as_text=True)

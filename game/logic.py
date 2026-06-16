@@ -106,6 +106,7 @@ def read_player_live_state_for_poll(
     from .models import db as _db, load_player, rollback
     from .queue_engine import finish_player_due_work
     from .queue_poll import (
+        player_fleet_is_dirty,
         player_has_due_queue_work,
         player_has_pending_queue_work,
         record_poll_queue_finish,
@@ -132,12 +133,13 @@ def read_player_live_state_for_poll(
         last = float(last_raw) if last_raw is not None else now
         persist_resources = (now - last) >= 120.0
 
-        has_due = player_has_due_queue_work(uid, conn=conn)
+        fleet_dirty = player_fleet_is_dirty(uid, conn=conn, now=now)
+        has_due = player_has_due_queue_work(uid, conn=conn, now=now) or fleet_dirty
         has_pending = player_has_pending_queue_work(uid, conn=conn)
         should_finish = has_due or (
             has_pending and seconds_until_poll_finish_allowed(uid, conn=conn) <= 0.0
         )
-        need_write = bool(should_finish or persist_resources)
+        need_write = bool(should_finish or persist_resources or fleet_dirty)
 
         try:
             if need_write:
@@ -644,6 +646,14 @@ def get_planet_limit_block(
 def live_server_timestamp() -> int:
     """Canonical unix seconds for client timer sync."""
     return int(time.time())
+
+
+def attach_canonical_server_time(payload: dict[str, Any]) -> dict[str, Any]:
+    """Ensure game-state and action payloads expose server_now + server_time."""
+    ts = live_server_timestamp()
+    payload["server_now"] = ts
+    payload["server_time"] = float(ts)
+    return payload
 
 
 def game_state_panel_finish_source() -> str:
