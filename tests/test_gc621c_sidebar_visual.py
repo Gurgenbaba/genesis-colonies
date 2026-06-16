@@ -17,9 +17,8 @@ def test_gc621c_sidebar_genesis_glow_tokens():
 
     assert "linear-gradient(180deg, rgba(3, 12, 22" in block
     assert "border: 1px solid rgba(70, 229, 255, 0.28)" in block
-    assert ".gc-nav-section.is-expanded > .gc-nav-section-toggle" in block
-    assert ".gc-nav-section:has(.gc-nav-sub-link.active) > .gc-nav-section-toggle" in block
-    assert "text-shadow: 0 0 10px rgba(0, 234, 255" in block
+    assert ".gc-nav-section.is-expanded > .gc-nav-section-body" in block
+    assert ":has(.gc-nav-sub-link.active)" not in block
     assert ".gc-nav-submenu-group.is-expanded > .gc-nav-group-body" in block
     assert "border-left: 2px solid rgba(70, 229, 255, 0.14)" in block
 

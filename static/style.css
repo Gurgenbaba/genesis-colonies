@@ -238,9 +238,7 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-nav-link:hover {
   box-shadow: inset 0 0 14px rgba(70, 229, 255, 0.08);
 }
 
-body.gc-body-ingame.gc-has-planet-landscape .gc-nav-link.active,
-body.gc-body-ingame.gc-has-planet-landscape .gc-nav-section.is-expanded > .gc-nav-section-toggle,
-body.gc-body-ingame.gc-has-planet-landscape .gc-nav-section:has(.gc-nav-sub-link.active) > .gc-nav-section-toggle {
+body.gc-body-ingame.gc-has-planet-landscape .gc-nav-link.active {
   background: linear-gradient(90deg, rgba(0, 88, 102, 0.42) 0%, rgba(70, 229, 255, 0.12) 100%);
   box-shadow: inset 0 0 18px rgba(70, 229, 255, 0.1);
 }
@@ -967,15 +965,6 @@ body.gc-body-simple .auth-error {
   padding-bottom: 2px;
 }
 
-.gc-nav-section.is-expanded > .gc-nav-section-toggle,
-.gc-nav-section:has(.gc-nav-sub-link.active) > .gc-nav-section-toggle,
-.gc-nav-section:has(.gc-nav-group-toggle.active) > .gc-nav-section-toggle{
-  border-left-color: rgba(0, 234, 255, 0.72);
-  background: linear-gradient(90deg, rgba(0, 72, 84, 0.58) 0%, rgba(4, 18, 28, 0.94) 100%);
-  color: #7af0ff;
-  box-shadow: inset 0 0 16px rgba(70, 229, 255, 0.08);
-  text-shadow: 0 0 10px rgba(0, 234, 255, 0.22);
-}
 
 .gc-nav-sub-link--button{
   width: 100%;
@@ -1072,14 +1061,12 @@ body.gc-body-simple .auth-error {
   border-left: 3px solid transparent;
 }
 
-.gc-nav-buildings-group > .gc-nav-group-toggle:hover,
-.gc-nav-buildings-group > .gc-nav-group-toggle.active{
+.gc-nav-buildings-group > .gc-nav-group-toggle:hover {
   border-left-color: rgba(0, 234, 255, 0.72);
 }
 
-.gc-nav-buildings-group.is-expanded > .gc-nav-group-toggle{
-  background: linear-gradient(90deg, rgba(0, 72, 84, 0.35) 0%, rgba(4, 14, 24, 0.72) 100%);
-  color: #7af0ff;
+.gc-nav-buildings-group.is-expanded > .gc-nav-group-toggle {
+  color: rgba(215, 246, 255, 0.92);
 }
 
 .gc-nav-sub-link--nested{

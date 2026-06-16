@@ -3000,6 +3000,10 @@
   function syncBuildingSidebarTab(tab) {
     const sub = document.getElementById("gc-nav-buildings-sub");
     if (!sub) return;
+    if (tab == null || tab === "") {
+      sub.querySelectorAll("[data-building-tab]").forEach((el) => el.classList.remove("active"));
+      return;
+    }
     const target = String(tab || "resources");
     sub.querySelectorAll("[data-building-tab]").forEach((el) => {
       el.classList.toggle("active", el.dataset.buildingTab === target);
@@ -3428,9 +3432,9 @@
     const activePage = page || GC.detectPage();
     const onTradingPage = isTradingNavPage(activePage);
 
-    parent.classList.toggle("active", onTradingPage);
+    parent.classList.remove("active");
     sub.querySelectorAll("[data-trading-nav]").forEach((el) => {
-      el.classList.toggle("active", el.dataset.tradingNav === activePage);
+      el.classList.toggle("active", onTradingPage && el.dataset.tradingNav === activePage);
     });
 
     if (onTradingPage) {
@@ -18147,9 +18151,9 @@
     const sub = document.getElementById("gc-nav-trading-sub");
     if (!parent || !sub) return;
 
-    parent.classList.toggle("active", !!tradingPage);
+    parent.classList.remove("active");
     sub.querySelectorAll("[data-trading-nav]").forEach((el) => {
-      el.classList.toggle("active", el.dataset.tradingNav === tradingPage);
+      el.classList.toggle("active", !!tradingPage && el.dataset.tradingNav === tradingPage);
     });
     if (tradingPage) showTradingSubnav();
     else hideTradingSubnav();
@@ -18224,15 +18228,68 @@
     });
   }
 
+  function _clearSidebarNavActive() {
+    const sidebar = document.getElementById("gc-sidebar-nav");
+    if (!sidebar) return;
+    sidebar.querySelectorAll(".active").forEach((el) => el.classList.remove("active"));
+  }
+
+  function _pickSidebarHrefActive(path) {
+    let best = null;
+    let bestDepth = -1;
+    document.querySelectorAll("#gc-sidebar-nav a.gc-nav-sub-link[href]").forEach((link) => {
+      if (link.id === "gc-nav-trading-parent") return;
+      const href = link.getAttribute("href");
+      if (!href) return;
+      let linkPath;
+      try {
+        linkPath = new URL(href, window.location.origin).pathname.replace(/\/$/, "") || "/";
+      } catch (_) {
+        return;
+      }
+      if (linkPath !== path) return;
+      const depth = link.classList.contains("gc-nav-sub-link--nested") ? 2 : 1;
+      if (depth > bestDepth) {
+        bestDepth = depth;
+        best = link;
+      }
+    });
+    return best;
+  }
+
   function _syncNavActive(url) {
-    let path;
+    let urlObj;
     try {
-      path = new URL(url, window.location.origin).pathname.replace(/\/$/, "") || "/";
+      urlObj = new URL(url, window.location.origin);
     } catch (_) {
       return;
     }
+    const path = urlObj.pathname.replace(/\/$/, "") || "/";
+    const onBuildings = path.endsWith("/buildings");
+    const tradingPage = _tradingPageFromPath(path);
+
+    _clearSidebarNavActive();
+
+    if (onBuildings) {
+      const tab = urlObj.searchParams.get("tab") || "resources";
+      syncBuildingSidebarTab(tab);
+      const buildingsGroup = document.querySelector(".gc-nav-buildings-group");
+      if (buildingsGroup) setNavGroupExpanded(buildingsGroup, true, false);
+    } else {
+      syncBuildingSidebarTab(null);
+    }
+
+    _syncTradingNavFromPath(path);
+
+    if (!onBuildings && !tradingPage) {
+      const activeLink = _pickSidebarHrefActive(path);
+      if (activeLink) activeLink.classList.add("active");
+    }
+
+    syncBuildingsSubnavFromState();
+
     document.querySelectorAll(
-      ".gc-nav-link, .gc-nav-sub-link, .gc-bottom-nav-item, .gc-nav-drawer-link, a.gc-hud-panel-messages"
+      ".gc-bottom-nav-item, .gc-nav-drawer-link, a.gc-hud-panel-messages"
     ).forEach((link) => {
       const href = link.getAttribute("href");
       if (!href) return;
@@ -18242,17 +18299,8 @@
       } catch (_) {
         return;
       }
-      const isSubnavParent =
-        link.id === "gc-nav-buildings-toggle";
-      if (isSubnavParent) return;
       link.classList.toggle("active", linkPath === path);
     });
-    const buildingsToggle = document.getElementById("gc-nav-buildings-toggle");
-    if (buildingsToggle) {
-      buildingsToggle.classList.toggle("active", path.endsWith("/buildings"));
-    }
-    syncBuildingsSubnavFromState();
-    _syncTradingNavFromPath(path);
   }
 
   const SUBNAV_PARENT_TOGGLE = {

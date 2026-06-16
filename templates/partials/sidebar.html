@@ -77,7 +77,7 @@
            data-nav-group-modules="buildings"
            {% if not module_in_section(_sn, 'buildings', 'infrastructure') %}hidden{% endif %}>
         <button type="button"
-                class="gc-nav-sub-link gc-nav-group-toggle gc-nav-link--has-sub gc-nav-module--{{ nav_module_tier(_sn, 'buildings') }} {% if request.endpoint == 'buildings_view' %}active{% endif %}"
+                class="gc-nav-sub-link gc-nav-group-toggle gc-nav-link--has-sub gc-nav-module--{{ nav_module_tier(_sn, 'buildings') }}"
                 id="gc-nav-buildings-toggle"
                 data-nav-module="buildings"
                 aria-expanded="false"
@@ -189,7 +189,7 @@
            id="gc-nav-trading-parent"
            data-nav-module="trading"
            data-trading-nav="trader_hub"
-           class="gc-nav-sub-link gc-nav-link--has-sub gc-nav-module--{{ nav_module_tier(_sn, 'trading') }} {% if request.endpoint in ('trader_hub_view', 'inventory_view', 'auction_house_view', 'vote_center_view', 'galactic_politics_view', 'skilltree_view', 'premium_view') %}active{% endif %}">
+           class="gc-nav-sub-link gc-nav-link--has-sub gc-nav-module--{{ nav_module_tier(_sn, 'trading') }}">
           <span class="gc-nav-link-label">{{ T("nav_trader_hub", "Trader Hub") }}</span>
           <span class="gc-nav-chevron" aria-hidden="true"></span>
         </a>

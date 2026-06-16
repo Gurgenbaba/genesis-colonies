@@ -85,7 +85,8 @@ def test_style_sidebar_command_interface_tokens():
     assert "text-transform: uppercase;" in block
     assert "0.8125rem" in block
     assert "rgba(0, 234, 255, 0.16)" in block
-    assert ".gc-nav-section.is-expanded > .gc-nav-section-toggle" in block
+    assert ".gc-nav-section.is-expanded > .gc-nav-section-body" in block
+    assert ":has(.gc-nav-sub-link.active)" not in block
     assert "border-left-color: transparent;" not in block.split(".gc-nav-sub-link:hover")[1].split(".gc-nav-sub-link.active")[0]
 
 
@@ -97,6 +98,8 @@ def test_main_js_persists_sidebar_state_in_local_storage():
     assert "resolveNavGroupExpanded" in src
     assert "setNavGroupExpanded" in src
     assert "syncBuildingsSubnavFromState" in src
+    assert "_clearSidebarNavActive" in src
+    assert "syncBuildingSidebarTab(null)" in src
     assert "gc-nav-group-toggle" in src
     accordion = src.split("function syncNavSectionAccordionState", 1)[1].split("function applyDesktopSidebarNav", 1)[0]
     assert "hasActive" not in accordion
