@@ -48,7 +48,7 @@ Aufgerufen von:
 - **Supply:** `solar_plant` (+ `geothermal_nexus` via `solar_output_factor`)
 - **Demand:** `metal_mine`, `crystal_mine`, `fuel_cell_plant`
 - **Skalierung:** `energy_ratio = min(1, total/used)` drosselt alle Produktionsraten
-- **`energy_tech`:** reduziert nur Minen-Verbrauch (`mine_energy_factor`, min 40%)
+- **`energy_tech`:** reduziert nur Minen-Verbrauch (`mine_energy_factor`)
 
 ---
 
@@ -57,8 +57,8 @@ Aufgerufen von:
 | Ressource | Basis |
 |-----------|-------|
 | Metal | `0.04 × metal_mine^1.4 × metal_prod_factor` |
-| Crystal | `0.03 × crystal_mine^1.35 × crystal_prod_factor` |
-| Fuel cells | `fuel_production_per_hour` × `fuel_cell_plant_level` × `1.35^(level-1)` |
+| Crystal | `0.046 × crystal_mine^1.39 × crystal_prod_factor` |
+| Fuel cells | `fuel_production_per_hour` × `fuel_cell_plant_level` × `1.255^(level-1)` |
 
 Modifier: `mining_tech`, `drone_tech`, `storage_tech`, Settings (`production_speed`, `fuel_production_per_hour`).
 
@@ -124,7 +124,7 @@ Gleiche Ressource als Input/Output ist verboten.
 | `fuel_exchange_metal_per_unit` | 20 |
 | `fuel_exchange_crystal_per_unit` | 14 |
 | `fuel_exchange_min_units` | 10 |
-| `fuel_production_per_hour` | 4 (Stufe 1; Lager skaliert mit) |
+| `fuel_production_per_hour` | 2.0 (Stufe 1; Lager skaliert mit) |
 
 ### Regeln
 

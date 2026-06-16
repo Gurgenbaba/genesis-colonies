@@ -24,6 +24,20 @@ logger = logging.getLogger(__name__)
 
 EFFECT_DEBUG = os.environ.get("GC_EFFECT_DEBUG", "").strip().lower() in ("1", "true", "yes")
 
+# Research reduction formulas — single source of truth (GC-622C).
+# Linear per level; display % is unbounded. Gameplay clamps factor at 0 (no negative draw).
+MINE_ENERGY_PER_LEVEL = 0.05
+BUILDTIME_PER_LEVEL = 0.03
+FUEL_EFFICIENCY_PER_LEVEL = 0.03
+_DIVISION_EPS = 1e-12  # avoid div-by-zero only; not a balance cap
+
+# Production balance (GC-622C / GC-622D — Ferronit:Crytite:Brennzellen ≈ 100:65:35)
+METAL_PROD_BASE = 0.04
+METAL_PROD_EXP = 1.4
+CRYSTAL_PROD_BASE = 0.046  # GC-622D buff (+24% vs 622C, +53% vs original 0.03)
+CRYSTAL_PROD_EXP = 1.39  # was 1.35 — stronger late scaling
+FUEL_CELL_GROWTH = 1.255  # was 1.35 — late-game Brennzellen nerf (GC-622D)
+
 # Combat modifiers — consumed by game.combat (GC-504).
 COMBAT_MODIFIER_KEYS = frozenset({
     "weapon_bonus",
@@ -46,6 +60,7 @@ ACTIVE_MODIFIER_KEYS = frozenset({
     "build_time_speed",
     "research_time_speed",
     "solar_output_factor",
+    "fuel_efficiency_factor",
 }) | COMBAT_MODIFIER_KEYS
 
 
@@ -63,6 +78,16 @@ def _bld(buildings: Dict[str, int], key: str) -> int:
         return 0
 
 
+def _mod_float(mods: Dict[str, Any], key: str, default: float = 1.0) -> float:
+    """Read modifier float; preserves legitimate 0.0 (unlike ``val or default``)."""
+    if key not in mods:
+        return default
+    val = mods[key]
+    if val is None:
+        return default
+    return float(val)
+
+
 class EffectResolver:
     """
     Deterministic, server-side effect calculator for one planet + player research.
@@ -71,6 +96,75 @@ class EffectResolver:
     BASE_STORAGE = 100_000
     STORAGE_GROW = 1.8
     MAX_BUILDING_LEVEL = 50
+
+    # ------------------------------------------------------------------
+    # Per-research formulas (display + gameplay — no duplicate min() elsewhere)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _reduction_factor(level: int, per_level: float) -> float:
+        """Gameplay multiplier in [0, 1]; clamps at 0 when linear reduction exceeds 100%."""
+        lvl = max(0, int(level or 0))
+        if lvl <= 0:
+            return 1.0
+        return max(0.0, 1.0 - per_level * lvl)
+
+    @staticmethod
+    def _reduction_pct(level: int, per_level: float) -> int:
+        """Display reduction % — unbounded (can exceed 100%)."""
+        lvl = max(0, int(level or 0))
+        if lvl <= 0:
+            return 0
+        return int(round(per_level * lvl * 100))
+
+    @staticmethod
+    def mine_energy_factor_for_level(level: int) -> float:
+        return EffectResolver._reduction_factor(level, MINE_ENERGY_PER_LEVEL)
+
+    @staticmethod
+    def mine_energy_reduction_pct(level: int) -> int:
+        return EffectResolver._reduction_pct(level, MINE_ENERGY_PER_LEVEL)
+
+    @staticmethod
+    def buildtime_duration_factor_for_level(level: int) -> float:
+        return EffectResolver._reduction_factor(level, BUILDTIME_PER_LEVEL)
+
+    @staticmethod
+    def buildtime_reduction_pct(level: int) -> int:
+        return EffectResolver._reduction_pct(level, BUILDTIME_PER_LEVEL)
+
+    @staticmethod
+    def fuel_efficiency_factor_for_level(level: int) -> float:
+        return EffectResolver._reduction_factor(level, FUEL_EFFICIENCY_PER_LEVEL)
+
+    @staticmethod
+    def fuel_efficiency_reduction_pct(level: int) -> int:
+        return EffectResolver._reduction_pct(level, FUEL_EFFICIENCY_PER_LEVEL)
+
+    @staticmethod
+    def metal_prod_bonus_pct(level: int) -> int:
+        return int(round(10.0 * max(0, int(level or 0))))
+
+    @staticmethod
+    def crystal_prod_bonus_pct(level: int) -> int:
+        return int(round(4.0 * max(0, int(level or 0))))
+
+    @staticmethod
+    def drone_prod_bonus_pct(level: int) -> int:
+        return int(round(3.0 * max(0, int(level or 0))))
+
+    @staticmethod
+    def storage_bonus_pct(level: int) -> int:
+        return int(round(25.0 * max(0, int(level or 0))))
+
+    @staticmethod
+    def combat_bonus_pct(level: int) -> int:
+        return int(round(5.0 * max(0, int(level or 0))))
+
+    @staticmethod
+    def fleet_speed_bonus_pct(level: int, per_level: float) -> int:
+        lvl = max(0, int(level or 0))
+        return int(round(per_level * lvl * 100))
 
     def __init__(
         self,
@@ -156,11 +250,12 @@ class EffectResolver:
         scan_range = 0
         fleet_speed_multiplier = 1.0
         cargo_multiplier = 1.0
+        fuel_efficiency_factor = 1.0
 
-        # --- Research: energy_tech (-5% mine draw per level, min 40%; mines only, not solar) ---
+        # --- Research: energy_tech (-5% mine draw per level; mines only, not solar) ---
         le = _lvl(r, "energy_tech")
         if le > 0:
-            mine_energy_factor = max(0.4, 1.0 - 0.05 * le)
+            mine_energy_factor = self.mine_energy_factor_for_level(le)
             sources.append(self._source_entry("mine_energy_factor", "energy_tech", mine_energy_factor, le))
 
         # --- Research: mining_tech (+10% metal, +4% crystal per level) ---
@@ -184,14 +279,22 @@ class EffectResolver:
             storage_factor *= 1.0 + 0.25 * ls
             sources.append(self._source_entry("storage_factor", "storage_tech", storage_factor, ls))
 
-        # --- Research: buildtime_tech (-3% build+research time per level, min 40% duration) ---
+        # --- Research: buildtime_tech (-3% build+research time per level) ---
         lb = _lvl(r, "buildtime_tech")
         if lb > 0:
-            duration_factor = max(0.40, 1.0 - 0.03 * lb)
-            speed_boost = 1.0 / duration_factor
+            duration_factor = self.buildtime_duration_factor_for_level(lb)
+            speed_boost = 1.0 / max(duration_factor, _DIVISION_EPS)
             build_time_speed *= speed_boost
             research_time_speed *= speed_boost
             sources.append(self._source_entry("build_time_speed", "buildtime_tech", speed_boost, lb))
+
+        # --- Research: fuel_efficiency (-3% fleet fuel per level) ---
+        lf = _lvl(r, "fuel_efficiency")
+        if lf > 0:
+            fuel_efficiency_factor = self.fuel_efficiency_factor_for_level(lf)
+            sources.append(
+                self._source_entry("fuel_efficiency_factor", "fuel_efficiency", fuel_efficiency_factor, lf)
+            )
 
         # --- Research: combat (weapon_tech / armor_tech / shield_tech → game.combat) ---
         lw = _lvl(r, "weapon_tech")
@@ -260,11 +363,12 @@ class EffectResolver:
             "scan_range": int(scan_range),
             "fleet_speed_multiplier": float(fleet_speed_multiplier),
             "cargo_multiplier": float(cargo_multiplier),
+            "fuel_efficiency_factor": float(fuel_efficiency_factor),
             # Legacy aliases (deprecated; kept one release for external callers)
             "prod_multiplier": float(metal_prod_factor),
             "storage_multiplier": float(storage_factor),
-            "build_time_multiplier": float(max(0.01, 1.0 / max(0.01, build_time_speed))),
-            "research_time_multiplier": float(max(0.01, 1.0 / max(0.01, research_time_speed))),
+            "build_time_multiplier": float(1.0 / max(build_time_speed, _DIVISION_EPS)),
+            "research_time_multiplier": float(1.0 / max(research_time_speed, _DIVISION_EPS)),
             "energy_efficiency": float(mine_energy_factor),
         }
 
@@ -372,7 +476,7 @@ class EffectResolver:
         metal_lvl = _bld(b, "metal_mine")
         crystal_lvl = _bld(b, "crystal_mine")
 
-        solar_factor = float(mods.get("solar_output_factor", 1.0) or 1.0)
+        solar_factor = _mod_float(mods, "solar_output_factor")
         energy_total = int(20 * (solar_lvl ** 1.4) * solar_factor) if solar_lvl > 0 else 0
 
         energy_metal = int(10 * (metal_lvl ** 1.25)) if metal_lvl > 0 else 0
@@ -381,8 +485,8 @@ class EffectResolver:
         energy_fuel_cell = int(8 * (fuel_cell_lvl ** 1.25)) if fuel_cell_lvl > 0 else 0
         energy_used = energy_metal + energy_crystal + energy_fuel_cell
 
-        mine_energy_factor = float(mods.get("mine_energy_factor", 1.0) or 1.0)
-        energy_used = int(energy_used * mine_energy_factor)
+        mine_energy_factor = _mod_float(mods, "mine_energy_factor")
+        energy_used = max(0, int(energy_used * mine_energy_factor))
 
         return energy_total, energy_used
 
@@ -399,8 +503,8 @@ class EffectResolver:
             raw = int(8 * (lvl ** 1.25))
         else:
             return 0
-        factor = float(self.get_modifiers().get("mine_energy_factor", 1.0) or 1.0)
-        return int(raw * factor)
+        factor = _mod_float(self.get_modifiers(), "mine_energy_factor")
+        return max(0, int(raw * factor))
 
     @staticmethod
     def energy_ratio(energy_total: int, energy_used: int) -> float:
@@ -415,16 +519,16 @@ class EffectResolver:
         metal_lvl = _bld(b, "metal_mine")
         crystal_lvl = _bld(b, "crystal_mine")
 
-        metal_rate = 0.04 * (metal_lvl ** 1.4) if metal_lvl > 0 else 0.0
-        crystal_rate = 0.03 * (crystal_lvl ** 1.35) if crystal_lvl > 0 else 0.0
+        metal_rate = METAL_PROD_BASE * (metal_lvl ** METAL_PROD_EXP) if metal_lvl > 0 else 0.0
+        crystal_rate = CRYSTAL_PROD_BASE * (crystal_lvl ** CRYSTAL_PROD_EXP) if crystal_lvl > 0 else 0.0
 
-        metal_rate *= float(mods.get("metal_prod_factor", 1.0) or 1.0)
-        crystal_rate *= float(mods.get("crystal_prod_factor", 1.0) or 1.0)
+        metal_rate *= _mod_float(mods, "metal_prod_factor")
+        crystal_rate *= _mod_float(mods, "crystal_prod_factor")
 
         return metal_rate, crystal_rate
 
     def fuel_cells_rate_per_sec(self) -> float:
-        """Brennzellen-Produktion: fuel_production_per_hour * level * 1.35^(level-1)."""
+        """Brennzellen-Produktion: fuel_production_per_hour * level * FUEL_CELL_GROWTH^(level-1)."""
         per_hour = self.fuel_cells_production_per_hour()
         return per_hour / 3600.0 if per_hour > 0 else 0.0
 
@@ -432,8 +536,8 @@ class EffectResolver:
         lvl = _bld(self.buildings, "fuel_cell_plant")
         if lvl <= 0:
             return 0.0
-        base_ph = float(self._settings_dict().get("fuel_production_per_hour", 4) or 4)
-        return base_ph * lvl * (1.35 ** max(0, lvl - 1))
+        base_ph = float(self._settings_dict().get("fuel_production_per_hour", 2.0) or 2.0)
+        return base_ph * lvl * (FUEL_CELL_GROWTH ** max(0, lvl - 1))
 
     def fuel_storage_capacity(self) -> int:
         """Planet fuel cell depot capacity (fuel_storage building + tech/terraformer)."""
@@ -442,7 +546,7 @@ class EffectResolver:
 
         terra_lvl = _bld(b, "terraformer")
         terra_factor = 1.0 + 0.05 * terra_lvl
-        storage_factor = float(mods.get("storage_factor", 1.0) or 1.0) * terra_factor
+        storage_factor = _mod_float(mods, "storage_factor") * terra_factor
 
         f_lvl = _bld(b, "fuel_storage")
         if f_lvl <= 0:
@@ -460,7 +564,7 @@ class EffectResolver:
 
         terra_lvl = _bld(b, "terraformer")
         terra_factor = 1.0 + 0.05 * terra_lvl
-        storage_factor = float(mods.get("storage_factor", 1.0) or 1.0) * terra_factor
+        storage_factor = _mod_float(mods, "storage_factor") * terra_factor
 
         m_lvl = _bld(b, "metal_storage")
         c_lvl = _bld(b, "crystal_storage")
@@ -524,7 +628,7 @@ class EffectResolver:
         seconds = float(base_time * lvl_factor)
 
         mods = self.get_modifiers()
-        build_time_speed = float(mods.get("build_time_speed", 1.0) or 1.0)
+        build_time_speed = _mod_float(mods, "build_time_speed")
         if str(building_type) == "nanofactory":
             command_center = _bld(self.buildings, "command_center")
             if command_center > 0:
@@ -547,7 +651,7 @@ class EffectResolver:
         raw = float(base_time * factor)
 
         mods = self.get_modifiers()
-        research_time_speed = float(mods.get("research_time_speed", 1.0) or 1.0)
+        research_time_speed = _mod_float(mods, "research_time_speed")
         effective_speed = max(
             0.1,
             self.build_speed_setting()
@@ -556,7 +660,8 @@ class EffectResolver:
             * research_time_speed,
         )
         raw /= effective_speed
-        return max(5, int(raw))
+        # Technical safety floor only (no balance cap). Keep >0 to avoid stuck/0-duration queues.
+        return max(1, int(raw))
 
 
 def get_effect_resolver(

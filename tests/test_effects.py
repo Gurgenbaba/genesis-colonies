@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 import uuid
+import math
 from pathlib import Path
 from unittest.mock import patch
 
@@ -455,12 +456,14 @@ class TestLiveRefreshGuards:
                 mock_finish.assert_not_called()
                 mock_complete.assert_not_called()
 
-    def test_energy_tech_mine_factor_caps_at_0_4(self):
+    def test_energy_tech_scales_without_hard_stop(self):
         b = {"metal_mine": 10, "crystal_mine": 10, "solar_plant": 5}
-        for level in (12, 20):
+        for level in (12, 20, 50):
             r = {f"energy_tech": level}
             mods = EffectResolver(b, r).get_modifiers()
-            assert mods["mine_energy_factor"] == pytest.approx(0.4)
+            expected = max(0.0, 1.0 - 0.05 * level)
+            assert mods["mine_energy_factor"] == pytest.approx(expected)
+            assert EffectResolver.mine_energy_reduction_pct(level) == int(round(0.05 * level * 100))
 
     def test_overview_rows_production_after_mining_tech(self):
         pid = _create_player("overview_rows")
@@ -548,3 +551,186 @@ class TestMultiPlayerIsolation:
         m2 = get_research_modifiers(p2)["metal_prod_factor"]
         assert m1 == pytest.approx(1.6)
         assert m2 == pytest.approx(1.0)
+
+
+class TestResearchEffectRealityAudit:
+    """GC-622 — technical display, EffectResolver, and gameplay must agree."""
+
+    def test_buildtime_tech_matches_effect_resolver(self):
+        level = 24
+        b = {}
+        r = {"buildtime_tech": level}
+        er = EffectResolver(b, r)
+        mods = er.get_modifiers()
+
+        # factor = max(SAFETY_MIN_FACTOR, 1 - 0.03 * level)
+        # => level 24: 1 - 0.03*24 = 0.28 => reduction = 72%
+        assert EffectResolver.buildtime_reduction_pct(level) == 72
+        assert mods["build_time_multiplier"] == pytest.approx(0.28)
+        assert mods["build_time_speed"] == pytest.approx(1 / 0.28)
+
+        base_seconds = 600
+        actual = er.get_build_time_seconds("planet_core_nexus", 1)
+        expected = int(base_seconds * mods["build_time_multiplier"] / er.build_speed_setting())
+        assert actual == expected
+
+    def test_energy_efficiency_matches_display(self):
+        level = 35
+        b = {"metal_mine": 8, "crystal_mine": 4}
+        r = {"energy_tech": level}
+        er = EffectResolver(b, r)
+
+        # linear display: 0.05 * 35 * 100 = 175%; gameplay factor clamps at 0
+        assert EffectResolver.mine_energy_reduction_pct(level) == 175
+        assert er.get_modifiers()["mine_energy_factor"] == pytest.approx(0.0)
+
+        preview = __import__("game.research", fromlist=["get_research_effect_preview"]).get_research_effect_preview(
+            "energy_tech", level, level + 1
+        )
+        assert preview["effect_current"] == 175
+
+        _, used = er.compute_energy()
+        assert used == 0
+
+    def test_fuel_efficiency_matches_display(self):
+        level = 17
+        factor = EffectResolver.fuel_efficiency_factor_for_level(level)
+        mods = EffectResolver({}, {"fuel_efficiency": level}).get_modifiers()
+
+        # factor = max(SAFETY_MIN_FACTOR, 1 - 0.03 * level)
+        # => level 17: 1 - 0.03*17 = 0.49 => reduction = 51%
+        assert factor == pytest.approx(0.49)
+        assert mods["fuel_efficiency_factor"] == pytest.approx(0.49)
+        assert EffectResolver.fuel_efficiency_reduction_pct(level) == 51
+
+        from game.fleet_calc import calculate_fuel_cost, fuel_efficiency_factor
+
+        assert fuel_efficiency_factor(level) == pytest.approx(factor)
+        base = calculate_fuel_cost({"mule_courier": 10}, 5000, 100, fuel_efficiency_level=0)
+        reduced = calculate_fuel_cost({"mule_courier": 10}, 5000, 100, fuel_efficiency_level=level)
+        assert reduced == int(math.ceil(base * factor))
+
+    def test_research_modal_output_matches_effect(self):
+        from game.research import RESEARCH_TECHS, get_research_effect_preview
+
+        cases = {
+            "energy_tech": (35, EffectResolver.mine_energy_reduction_pct),
+            "buildtime_tech": (24, EffectResolver.buildtime_reduction_pct),
+            "fuel_efficiency": (17, EffectResolver.fuel_efficiency_reduction_pct),
+            "mining_tech": (6, EffectResolver.metal_prod_bonus_pct),
+            "storage_tech": (4, EffectResolver.storage_bonus_pct),
+            "weapon_tech": (8, EffectResolver.combat_bonus_pct),
+        }
+        for tech_key, (level, fn) in cases.items():
+            assert tech_key in RESEARCH_TECHS
+            preview = get_research_effect_preview(tech_key, level, level + 1)
+            assert preview["effect_current"] == fn(level)
+
+    def test_buildtime_tech_l24_ten_minute_base_becomes_four_minutes(self):
+        """Browser repro sanity: Bauoptimierung L24 matches EffectResolver math."""
+        pid = _create_player("gc622_buildtime")
+        _set_buildings(pid, {})
+        _set_research(pid, {"buildtime_tech": 24})
+        clear_effect_resolver_cache(pid)
+
+        t = get_build_time("planet_core_nexus", 1, user_id=pid)
+        er = EffectResolver({}, {"buildtime_tech": 24})
+        mods = er.get_modifiers()
+        base = EffectResolver({}, {}).get_build_time_seconds("planet_core_nexus", 1)
+        assert t == int(base * mods["build_time_multiplier"])
+
+        preview = __import__("game.research", fromlist=["get_research_effect_preview"]).get_research_effect_preview(
+            "buildtime_tech", 24, 25
+        )
+        assert preview["effect_current"] == 72
+        assert preview["effect_kind"] == "reduction_percent"
+
+    def test_research_effects_scale_without_hard_stop(self):
+        """GC-622C — infinite scaling display; gameplay clamps at 0 draw / 1s time."""
+        from game.research import get_research_effect_preview, RESEARCH_TECHS
+        from game.fleet_calc import calculate_fuel_cost
+
+        levels = (50, 100, 250)
+
+        for lvl in levels:
+            assert "energy_tech" in RESEARCH_TECHS
+            factor = max(0.0, 1.0 - 0.05 * lvl)
+            expected_reduction = int(round(0.05 * lvl * 100))
+
+            er = EffectResolver({}, {"energy_tech": lvl}, settings={"build_speed": 1.0})
+            mods = er.get_modifiers()
+            assert mods["mine_energy_factor"] == pytest.approx(factor)
+
+            preview = get_research_effect_preview("energy_tech", lvl, lvl + 1)
+            assert preview["effect_current"] == expected_reduction
+
+            b = {"metal_mine": 5, "crystal_mine": 5}
+            _, used = EffectResolver(b, {"energy_tech": lvl}).compute_energy()
+            assert used >= 0
+
+        base = 600  # BUILD_TIME_BASE["planet_core_nexus"]
+        for lvl in levels:
+            assert "buildtime_tech" in RESEARCH_TECHS
+            duration_factor = max(0.0, 1.0 - 0.03 * lvl)
+            expected_reduction = int(round(0.03 * lvl * 100))
+
+            er = EffectResolver({}, {"buildtime_tech": lvl}, settings={"build_speed": 1.0})
+            mods = er.get_modifiers()
+            assert mods["build_time_multiplier"] == pytest.approx(duration_factor)
+            assert er.get_build_time_seconds("planet_core_nexus", 1) >= 1
+            if duration_factor > 0:
+                assert er.get_build_time_seconds("planet_core_nexus", 1) == int(base * duration_factor)
+
+            preview = get_research_effect_preview("buildtime_tech", lvl, lvl + 1)
+            assert preview["effect_current"] == expected_reduction
+
+        for lvl in levels:
+            assert "fuel_efficiency" in RESEARCH_TECHS
+            factor = max(0.0, 1.0 - 0.03 * lvl)
+            expected_reduction = int(round(0.03 * lvl * 100))
+
+            er = EffectResolver({}, {"fuel_efficiency": lvl})
+            mods = er.get_modifiers()
+            assert mods["fuel_efficiency_factor"] == pytest.approx(factor)
+
+            preview = get_research_effect_preview("fuel_efficiency", lvl, lvl + 1)
+            assert preview["effect_current"] == expected_reduction
+
+            base_cost = calculate_fuel_cost({"mule_courier": 10}, 5000, 100, fuel_efficiency_level=0)
+            reduced_cost = calculate_fuel_cost({"mule_courier": 10}, 5000, 100, fuel_efficiency_level=lvl)
+            assert reduced_cost == int(math.ceil(base_cost * factor))
+            assert reduced_cost >= 0
+
+    def test_crystal_production_buffed_vs_metal_at_equal_mine_level(self):
+        lvl = 10
+        b = {"metal_mine": lvl, "crystal_mine": lvl}
+        metal, crystal = EffectResolver(b, {}).production_rates_per_sec()
+        assert crystal > 0.03 * (lvl ** 1.35)
+        assert crystal / metal > 0.72
+
+    def test_fuel_cell_plant_production_nerfed(self):
+        b = {"fuel_cell_plant": 5}
+        er = EffectResolver(b, {}, settings={"fuel_production_per_hour": 2.0})
+        per_hour = er.fuel_cells_production_per_hour()
+        old_formula = 4 * 5 * (1.35 ** 4)
+        assert per_hour < old_formula
+        assert per_hour == pytest.approx(2.0 * 5 * (1.255 ** 4))
+
+    def test_gc622d_economy_ratio_targets(self):
+        """High-level mines: Crytite ~65% of Ferronit, Brennzellen ~35–40% of Ferronit."""
+        ps = 400.0
+        ratio = 1.0
+        er = EffectResolver(
+            {"metal_mine": 29, "crystal_mine": 27, "fuel_cell_plant": 27},
+            {"mining_tech": 15, "drone_tech": 10},
+            settings={"production_speed": ps, "fuel_production_per_hour": 2.0},
+        )
+        prod = er.get_building_production_per_hour(ratio)
+        metal_ph = float(prod["metal_mine"])
+        crystal_ph = float(prod["crystal_mine"])
+        fuel_ph = float(prod["fuel_cell_plant"])
+
+        assert metal_ph > crystal_ph > fuel_ph
+        assert 0.60 <= crystal_ph / metal_ph <= 0.68
+        assert 0.34 <= fuel_ph / metal_ph <= 0.42
+        assert 0.52 <= fuel_ph / crystal_ph <= 0.68

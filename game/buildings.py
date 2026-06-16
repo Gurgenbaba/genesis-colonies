@@ -92,7 +92,7 @@ BASE_COST: Dict[str, Tuple[int, int]] = {
     "metal_mine": (75, 25),
     "crystal_mine": (40, 28),
     "solar_plant": (45, 11),
-    "fuel_cell_plant": (120, 80),
+    "fuel_cell_plant": (108, 72),
     "research_lab": (200, 400),
     "academy": (400, 600),
     "metal_storage": (1000, 0),

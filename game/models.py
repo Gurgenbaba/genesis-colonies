@@ -61,7 +61,7 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     "fuel_exchange_metal_per_unit": "20",
     "fuel_exchange_crystal_per_unit": "14",
     "fuel_exchange_min_units": "10",
-    "fuel_production_per_hour": "4",
+    "fuel_production_per_hour": "2.0",
 
     # historischer Alias (build_speed)
     "speed": "1.1",
