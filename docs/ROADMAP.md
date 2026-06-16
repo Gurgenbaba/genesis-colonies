@@ -144,10 +144,11 @@ Vor öffentlichem Production-Launch.
 
 | Item | Priorität | Status |
 |------|-----------|--------|
-| Passwort-KDF (bcrypt/argon2) | P0 | 📋 |
-| Rate-Limiting Login/Register | P0 | 📋 |
-| Session-Cookie Flags | P1 | 📋 |
-| CSRF HTML-Forms | P1 | 📋 |
+| Passwort-KDF (argon2id) | P0 | ✅ GC-SEC-P0 |
+| Rate-Limiting Login/Register | P0 | ✅ GC-SEC-P0 |
+| Session-Cookie Flags | P1 | ✅ GC-SEC-P0 |
+| CSRF HTML-Forms (Auth) | P1 | ✅ GC-SEC-P0 |
+| Security Headers | P2 | ✅ GC-SEC-P0 |
 | Security-Headers | P2 | 📋 |
 
 Details: [SECURITY.md](SECURITY.md)
@@ -209,9 +210,9 @@ Design Manifest: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · Epic: **EPIC-15**
 | **GC-571** | Shared World Presence ([Spec](GC-571_SHARED_WORLD_PRESENCE.md)) | 📋 Spec |
 | **GC-597D/E** | Command Map DEV Preview + Foreign Node Fallback | ✅ |
 | **GC-620B** | Locale Reality Sync ([Spec](GC-620B_LOCALE_REALITY_SYNC.md)) | ✅ |
-| **GC-SEC-P0** | KDF, Rate Limits, Security Headers | 📋 Next |
-| **GC-599A** | Foreign Empire Presence — Map glaubwürdig bewohnt ([Spec](GC-599A_FOREIGN_EMPIRE_PRESENCE.md)) | 📋 After SEC |
-| **GC-598** | Mission Actions im World Inspector | 📋 After 599A |
+| **GC-SEC-P0** | KDF, Rate Limits, Security Headers | ✅ |
+| **GC-599A** | Foreign Empire Presence — Map glaubwürdig bewohnt ([Spec](GC-599A_FOREIGN_EMPIRE_PRESENCE.md)) | ✅ |
+| **GC-598** | Mission Actions im World Inspector | 📋 Next |
 | **GC-599** | Foreign Worlds / Enemy Nodes vollständig | 📋 |
 | **GC-569** | ~~Presence Overlay~~ → siehe GC-571 | 📋 superseded |
 | **GC-568** | Territorial Warfare | 📋 |
@@ -238,8 +239,8 @@ Start nach Completion-First-Pass (GC-610), sofern nicht reine Identity-Tickets (
 
 | Thema | Impact | Ziel |
 |-------|--------|------|
-| SHA-256 Passwörter | Security | Phase 6 |
-| Kein Rate-Limiting (Login) | Abuse | Phase 6 |
+| SHA-256 Passwörter (Legacy) | Security | Migriert bei Login (GC-SEC-P0) |
+| Kein Rate-Limiting (Login) | Abuse | ✅ GC-SEC-P0 |
 | Chat rate limit in-process | Multi-worker | Redis |
 | Recycler UX polish (GC-800C) | Optional UX | GC-800A/B ✅ — [GC-800_RECYCLER.md](GC-800_RECYCLER.md) |
 | Legacy Admin Forms doppelt | Wartung | Cleanup |

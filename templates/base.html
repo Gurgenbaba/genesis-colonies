@@ -294,7 +294,7 @@
 
   {% if not SIMPLE_LAYOUT %}
   {% set _sn = SIDEBAR_NAV or {'full_nav': true, 'modules': {}} %}
-  {% set _mb = MOBILE_BOTTOM_MODULES or ['overview', 'buildings', 'research', 'ranking'] %}
+  {% set _mb = MOBILE_BOTTOM_MODULES or ['overview', 'buildings', 'research', 'messages'] %}
   <nav class="gc-bottom-nav{% if _sn.full_nav %} gc-bottom-nav--full-nav{% else %} gc-bottom-nav--role-nav{% endif %}"
        id="gc-bottom-nav"
        aria-label="{{ T('nav_mobile', 'Mobile Navigation') }}"
@@ -320,6 +320,15 @@
        {% if 'research' not in _mb %}hidden{% endif %}>
       <span class="gc-bottom-nav-icon" aria-hidden="true">🔬</span>
       <span class="gc-bottom-nav-label">{{ T("nav_research") }}</span>
+    </a>
+    <a href="{{ url_for('messages_view') }}"
+       data-nav-module="messages"
+       data-nav-always-visible="1"
+       class="gc-bottom-nav-item gc-nav-module--{{ nav_module_tier(_sn, 'messages') }} {% if request.endpoint == 'messages_view' %}active{% endif %}"
+       {% if 'messages' not in _mb %}hidden{% endif %}>
+      <span class="gc-bottom-nav-icon gc-bottom-nav-icon--letter" aria-hidden="true">N</span>
+      <span class="gc-bottom-nav-label">{{ T("nav_messages", "Nachrichten") }}</span>
+      <span class="gc-messages-nav-badge hidden" data-messages-unread-badge hidden aria-hidden="true"></span>
     </a>
     <a href="{{ url_for('fleet_view') }}"
        data-nav-module="fleet"

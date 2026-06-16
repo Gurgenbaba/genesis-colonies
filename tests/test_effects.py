@@ -590,7 +590,12 @@ class TestResearchEffectRealityAudit:
         assert preview["effect_current"] == 175
 
         _, used = er.compute_energy()
-        assert used == 0
+        assert used > 0
+        raw_metal = int(10 * (8 ** 1.25))
+        raw_crystal = int(6 * (4 ** 1.25))
+        assert used == EffectResolver.apply_mine_energy_draw(raw_metal, 0.0) + EffectResolver.apply_mine_energy_draw(
+            raw_crystal, 0.0
+        )
 
     def test_fuel_efficiency_matches_display(self):
         level = 17
@@ -666,7 +671,7 @@ class TestResearchEffectRealityAudit:
 
             b = {"metal_mine": 5, "crystal_mine": 5}
             _, used = EffectResolver(b, {"energy_tech": lvl}).compute_energy()
-            assert used >= 0
+            assert used >= 2
 
         base = 600  # BUILD_TIME_BASE["planet_core_nexus"]
         for lvl in levels:

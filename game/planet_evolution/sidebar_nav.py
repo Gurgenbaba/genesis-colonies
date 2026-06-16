@@ -24,8 +24,12 @@ ALL_NAV_MODULES: List[str] = [
     "support",
 ]
 
+STANDALONE_NAV_MODULES = frozenset({"messages"})
+MOBILE_ALWAYS_BOTTOM: Tuple[str, ...] = ("messages",)
+
 NAV_SECTION_MODULES: Dict[str, Tuple[str, ...]] = {
-    "command": ("overview", "galaxy", "planet_evolution", "messages"),
+    "command": ("overview", "galaxy", "planet_evolution"),
+    "messages": ("messages",),
     "infrastructure": ("buildings", "research", "techtree"),
     "military": ("shipyard", "fleet", "defense", "logistics"),
     "economy": ("trading", "empire"),
@@ -153,6 +157,8 @@ def _full_nav_payload(role_key: str) -> Dict[str, Any]:
 
 def nav_module_tier(sidebar_nav: Dict[str, Any] | None, module: str) -> str:
     """Template helper — unknown modules stay prominent."""
+    if module in STANDALONE_NAV_MODULES:
+        return "prominent"
     if not sidebar_nav or sidebar_nav.get("full_nav"):
         return "prominent"
     return str(sidebar_nav.get("modules", {}).get(module) or "prominent")
@@ -162,6 +168,8 @@ def module_display_section(sidebar_nav: Dict[str, Any] | None, module: str) -> O
     """Exactly one sidebar section per module, or None if hidden."""
     if module == "support":
         return None
+    if module in STANDALONE_NAV_MODULES:
+        return "messages"
     if module in UTILITY_MODULES:
         return "administration"
     return MODULE_PRIMARY_SECTION.get(module)
@@ -213,15 +221,18 @@ def nav_module_shows_administration(sidebar_nav: Dict[str, Any] | None, module: 
 
 
 def mobile_bottom_modules(sidebar_nav: Dict[str, Any] | None) -> List[str]:
-    """Prominent modules shown in the mobile bottom bar (max 4)."""
+    """Prominent modules shown in the mobile bottom bar (max 4, messages always pinned)."""
+    always = list(MOBILE_ALWAYS_BOTTOM)
+    slot_count = max(0, MOBILE_BOTTOM_MAX - len(always))
     if not sidebar_nav or sidebar_nav.get("full_nav"):
-        return ["overview", "buildings", "research", "ranking"]
-    prominent = [
-        key
-        for key in MOBILE_BOTTOM_PRIORITY
-        if nav_module_tier(sidebar_nav, key) == "prominent"
-    ]
-    return prominent[:MOBILE_BOTTOM_MAX]
+        base = ["overview", "buildings", "research"]
+    else:
+        base = [
+            key
+            for key in MOBILE_BOTTOM_PRIORITY
+            if key not in always and nav_module_tier(sidebar_nav, key) == "prominent"
+        ]
+    return base[:slot_count] + always
 
 
 def mobile_drawer_shows_module(
@@ -252,6 +263,8 @@ def client_sidebar_nav_config() -> Dict[str, Any]:
         "homeworld_roles": sorted(_HOMEWORLD_ROLE_KEYS),
         "mobile_bottom_priority": list(MOBILE_BOTTOM_PRIORITY),
         "mobile_bottom_max": MOBILE_BOTTOM_MAX,
+        "mobile_always_bottom": list(MOBILE_ALWAYS_BOTTOM),
+        "standalone_modules": sorted(STANDALONE_NAV_MODULES),
         "utility_modules": sorted(UTILITY_MODULES),
         "administration_modules": sorted(UTILITY_MODULES),
         "module_primary_section": dict(MODULE_PRIMARY_SECTION),

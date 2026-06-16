@@ -1748,6 +1748,13 @@
         return;
       }
 
+      if (e.target.closest("#messages-open-newest")) {
+        e.preventDefault();
+        e.stopPropagation();
+        state.openNewestMessage?.();
+        return;
+      }
+
       const tabBtn = e.target.closest("#messages-tabs .tab-btn[data-filter]");
       if (tabBtn) {
         e.preventDefault();
@@ -1909,6 +1916,21 @@
       if (!dom) return;
       if (dom.detail) dom.detail.hidden = !show;
       if (dom.detailEmpty) dom.detailEmpty.hidden = show;
+      syncDetailPlaceholder();
+    }
+
+    function syncDetailPlaceholder() {
+      const btn = document.getElementById("messages-open-newest");
+      if (!btn) return;
+      const hasMessages = Array.isArray(state.messages) && state.messages.length > 0;
+      const showBtn = hasMessages && !state.selectedId;
+      btn.hidden = !showBtn;
+    }
+
+    function openNewestMessage() {
+      const newest = state.messages?.[0];
+      if (!newest?.id) return;
+      state.openMessage?.(newest.id);
     }
 
     function showListMessage(html) {
@@ -1995,6 +2017,7 @@
           );
         })
         .join("");
+      syncDetailPlaceholder();
     }
 
     function renderDetail(msg) {
@@ -2316,6 +2339,8 @@
     state.openMessage = openMessage;
     state.handleAction = handleAction;
     state.setDetailVisible = setDetailVisible;
+    state.syncDetailPlaceholder = syncDetailPlaceholder;
+    state.openNewestMessage = openNewestMessage;
 
     GC.messagesPageState = state;
 

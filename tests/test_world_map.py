@@ -181,6 +181,7 @@ def test_galaxy_renders_foreign_empire_node(world_map_db, monkeypatch):
     assert ok and user, err
 
     client = app_module.app.test_client()
+    app_module.app.config["TESTING"] = True
     client.post("/login", data={"username": uname, "password": "test-pass-123"})
     body = client.get("/galaxy?view=command_map").get_data(as_text=True)
 

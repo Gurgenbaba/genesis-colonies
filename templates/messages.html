@@ -41,15 +41,27 @@
                 role="tab" aria-selected="false">
           {{ T("messages.category.system") }}
         </button>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="combat"
+                role="tab" aria-selected="false">
+          {{ T("messages.category.combat") }}
+        </button>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="espionage"
+                role="tab" aria-selected="false">
+          {{ T("messages.category.espionage") }}
+        </button>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="expedition"
+                role="tab" aria-selected="false">
+          {{ T("messages.category.expedition") }}
+        </button>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="trade"
+                role="tab" aria-selected="false">
+          {{ T("messages.filter.trade") }}
+        </button>
         <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="player"
                 role="tab" aria-selected="false">
           {{ T("messages.category.player") }}
         </button>
-        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="reports"
-                role="tab" aria-selected="false">
-          {{ T("messages.filter.reports") }}
-        </button>
-        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="archive"
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn tab-btn--utility" data-filter="archive"
                 role="tab" aria-selected="false">
           {{ T("messages.filter.archive") }}
         </button>
@@ -72,8 +84,14 @@
             <div class="gc-messages-detail-actions" id="messages-detail-actions"></div>
           </article>
 
-          <div id="messages-detail-empty" class="gc-messages-empty gc-messages-detail-placeholder">
-            {{ T("messages.select_hint") }}
+          <div id="messages-detail-empty" class="gc-messages-detail-placeholder" role="status">
+            <div class="gc-messages-detail-placeholder-inner">
+              <h2 class="gc-messages-detail-placeholder-title">{{ T("messages.placeholder.title") }}</h2>
+              <p class="gc-messages-detail-placeholder-text">{{ T("messages.placeholder.body") }}</p>
+              <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" id="messages-open-newest" hidden>
+                {{ T("messages.placeholder.open_newest") }}
+              </button>
+            </div>
           </div>
         </div>
       </div>

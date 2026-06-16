@@ -134,6 +134,7 @@ def test_galaxy_command_map_renders_influence_layer(influence_db, monkeypatch):
     assert ok, reason
 
     client = app_module.app.test_client()
+    app_module.app.config["TESTING"] = True
     client.post("/login", data={"username": uname, "password": "test-pass-123"})
     body = client.get("/galaxy?view=command_map").get_data(as_text=True)
 

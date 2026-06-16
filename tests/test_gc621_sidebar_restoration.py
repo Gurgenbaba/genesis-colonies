@@ -52,13 +52,19 @@ def test_sidebar_verwaltung_has_no_support_or_overflow():
         assert f'data-nav-module="{module}"' in admin
 
 
-def test_sidebar_messages_in_command_section():
+def test_sidebar_messages_standalone_shortcut():
     sidebar = _read("templates/partials/sidebar.html")
+    assert 'data-nav-section="messages"' in sidebar
+    assert 'class="gc-nav-link gc-nav-module--' in sidebar
+    assert "gc-nav-icon--mail" not in sidebar
+    assert "gc-nav-messages-toggle" not in sidebar
+    assert "gc-nav-section-messages-body" not in sidebar
+    assert "gc-nav-section--messages" not in sidebar
     command = sidebar.split('data-nav-section="command"', 1)[1].split('data-nav-section="infrastructure"', 1)[0]
-    assert 'data-nav-module="messages"' in command
-    assert "data-messages-unread-badge" in command
-    admin = sidebar.split('data-nav-section="administration"', 1)[1].split("</nav>", 1)[0]
-    assert 'data-nav-module="messages"' not in admin
+    assert 'data-nav-module="messages"' not in command
+    messages_block = sidebar.split('data-nav-section="messages"', 1)[1].split('data-nav-section="command"', 1)[0]
+    assert 'data-nav-module="messages"' in messages_block
+    assert "data-messages-unread-badge" in messages_block
 
 
 def test_sidebar_buildings_tabs_distinct_from_research_module():

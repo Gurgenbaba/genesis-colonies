@@ -96,10 +96,11 @@ def test_homeworld_verwaltung_only_utility_modules():
     assert set(admin_modules) == {"alliance", "ranking", "options"}
 
 
-def test_homeworld_messages_in_command_section():
+def test_homeworld_messages_standalone_shortcut():
     nav = resolve_sidebar_nav(empire_role_key="homeworld", is_homeworld=True)
-    assert module_display_section(nav, "messages") == "command"
-    assert module_in_section(nav, "messages", "command")
+    assert module_display_section(nav, "messages") == "messages"
+    assert module_in_section(nav, "messages", "messages")
+    assert not module_in_section(nav, "messages", "command")
     assert not module_in_section(nav, "messages", "administration")
 
 

@@ -79,6 +79,7 @@
             class="auth-form"
             novalidate
             data-validate="register">
+        {{ csrf_input() }}
 
         <div class="auth-form-scroll">
           <label class="auth-label" for="username">{{ lbl_user }}</label>

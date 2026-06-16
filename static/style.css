@@ -995,6 +995,25 @@ body.gc-body-simple .auth-error {
   opacity: 0.85;
 }
 
+.gc-nav-section--standalone > .gc-nav-link{
+  justify-content: space-between;
+  border-bottom: none;
+}
+
+.gc-nav-section--standalone > .gc-nav-link .gc-nav-link-label{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.gc-nav-section--standalone > .gc-nav-link .gc-messages-nav-badge{
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.gc-nav-section--standalone{
+  border-bottom: 1px solid rgba(70, 229, 255, 0.1);
+}
+
 .gc-nav-link{
   display: flex;
   align-items: center;
@@ -7790,6 +7809,14 @@ body.gc-techtree-media-zoom-open{
   vector-effect: non-scaling-stroke;
   filter: url(#galaxy-command-map-influence-glow);
 }
+.galaxy-command-map-influence--foreign{
+  z-index: 1;
+  pointer-events: none;
+}
+.galaxy-command-map-influence-blob--foreign{
+  filter: none;
+  stroke-width: 1.6;
+}
 .galaxy-command-map-edge-group{
   pointer-events: none;
 }
@@ -7953,6 +7980,21 @@ body.gc-techtree-media-zoom-open{
   line-height: 1.35;
   color: var(--gc-text-soft);
 }
+.galaxy-command-map-colony-hover-tooltip--foreign{
+  border-color: rgba(255, 120, 90, 0.45);
+  box-shadow: 0 8px 28px rgba(255, 90, 60, 0.18);
+}
+.gc-world-inspector-shell--foreign-presence .gc-world-inspector-empire-kicker{
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 170, 130, 0.95);
+}
+.gc-world-inspector-foreign-presence-lead{
+  margin: 0.35rem 0 0.75rem;
+}
 .galaxy-command-map-colony-hover-name{
   display: block;
   font-size: 0.82rem;
@@ -8034,16 +8076,30 @@ body.gc-techtree-media-zoom-open{
   box-shadow: 0 0 12px rgba(255, 90, 60, 0.25);
 }
 .galaxy-command-map-node--foreign-empire .galaxy-command-map-node-role{
-  color: rgba(255, 140, 110, 0.92);
+  color: rgba(255, 180, 140, 0.92);
+}
+.galaxy-command-map-node-empire-label{
+  display: none;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 170, 130, 0.95);
+  line-height: 1.1;
+  max-width: 9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .galaxy-command-map-node--foreign-colony{
-  pointer-events: none;
-  opacity: 0.72;
-  transform: translate(-50%, -50%) scale(0.82);
+  pointer-events: auto;
+  opacity: 0.82;
+  transform: translate(-50%, -50%) scale(0.86);
   min-width: 0;
   padding: 0.35rem;
   border-color: rgba(255, 120, 90, 0.35);
   box-shadow: none;
+  cursor: default;
 }
 .galaxy-command-map-node--foreign-colony .galaxy-command-map-node-name,
 .galaxy-command-map-node--foreign-colony .galaxy-command-map-node-role,
@@ -8095,6 +8151,19 @@ body.gc-techtree-media-zoom-open{
   width: 3rem;
   height: 3rem;
   z-index: 43;
+}
+.galaxy-command-map-nodes--markers .galaxy-command-map-node--foreign-empire .galaxy-command-map-node-empire-label{
+  display: block;
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 7.5rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(8, 12, 22, 0.88);
+  border: 1px solid rgba(255, 120, 90, 0.28);
+  pointer-events: none;
 }
 .galaxy-command-map-nodes--markers .galaxy-command-map-node--foreign-colony{
   width: 2rem;
@@ -15264,19 +15333,18 @@ body.gc-combat-report-open { overflow: hidden; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.15rem;
-  height: 1.15rem;
+  min-width: 1rem;
+  height: 1rem;
   margin-left: 0.35rem;
-  padding: 0 0.3rem;
-  border: 1px solid rgba(70, 229, 255, 0.45);
+  padding: 0 0.28rem;
+  border: 1px solid rgba(70, 229, 255, 0.35);
   border-radius: var(--gc-radius-sm);
-  background: rgba(70, 229, 255, 0.14);
+  background: rgba(70, 229, 255, 0.1);
   color: var(--gc-primary-2);
   font-family: var(--gc-mono);
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 800;
   line-height: 1;
-  box-shadow: var(--gc-btn-glow-1);
 }
 
 .gc-messages-nav-badge.hidden,
@@ -15284,6 +15352,30 @@ body.gc-combat-report-open { overflow: hidden; }
 .gc-messages-nav-badge[hidden],
 .gc-messages-hud-badge[hidden] {
   display: none !important;
+}
+
+.gc-bottom-nav-icon--letter{
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  opacity: 0.92;
+}
+
+.gc-bottom-nav-item[data-nav-module="messages"]{
+  position: relative;
+}
+
+.gc-bottom-nav-item[data-nav-module="messages"] .gc-messages-nav-badge{
+  position: absolute;
+  top: 2px;
+  right: calc(50% - 1.35rem);
+  min-width: 1rem;
+  height: 1rem;
+  margin-left: 0;
+  padding: 0 0.22rem;
+  font-size: 0.58rem;
+  pointer-events: none;
 }
 
 .gc-hud-panel-messages {
@@ -15676,17 +15768,28 @@ body.gc-combat-report-open { overflow: hidden; }
 .gc-messages-page .gc-messages-tabs.building-tabs {
   padding: 10px 0 12px;
   gap: 8px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .gc-messages-page .gc-messages-tabs .tab-btn {
   border-radius: var(--gc-radius-sm);
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.gc-messages-page .gc-messages-tabs .tab-btn--utility {
+  opacity: 0.82;
 }
 
 .gc-messages-layout {
   display: grid;
-  grid-template-columns: minmax(0, 36%) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 30%) minmax(0, 1fr);
   gap: 12px;
-  min-height: 440px;
+  min-height: 480px;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -15836,12 +15939,13 @@ body.gc-combat-report-open { overflow: hidden; }
 }
 
 .gc-messages-detail-wrap {
-  min-height: 320px;
+  min-height: 360px;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  flex: 1;
 }
 
 .gc-messages-detail {
@@ -16862,6 +16966,64 @@ a.gc-galaxy-coord-link:focus-visible {
   color: var(--gc-text-soft);
   font-size: 0.86rem;
   text-align: center;
+}
+
+.gc-messages-detail-placeholder {
+  flex: 1;
+  min-height: 360px;
+  padding: 2rem 1.5rem;
+  border: none;
+  border-radius: 0;
+  background:
+    radial-gradient(ellipse 72% 55% at 50% 38%, rgba(70, 229, 255, 0.08) 0%, transparent 72%),
+    linear-gradient(180deg, rgba(4, 14, 24, 0.55) 0%, rgba(2, 8, 16, 0.82) 100%);
+}
+
+.gc-messages-detail-placeholder-inner {
+  display: grid;
+  gap: 0.65rem;
+  justify-items: center;
+  max-width: 26rem;
+  padding: 1.35rem 1.25rem;
+  border: 1px dashed rgba(70, 229, 255, 0.28);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(3, 10, 20, 0.62);
+  box-shadow:
+    inset 0 0 24px rgba(70, 229, 255, 0.06),
+    0 0 18px rgba(0, 0, 0, 0.28);
+}
+
+.gc-messages-detail-placeholder-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.42);
+  background: linear-gradient(180deg, rgba(70, 229, 255, 0.16) 0%, rgba(255, 159, 67, 0.08) 100%);
+  color: var(--gc-primary-2);
+  font-size: 1.35rem;
+  box-shadow:
+    0 0 16px rgba(70, 229, 255, 0.28),
+    0 0 8px rgba(255, 159, 67, 0.14);
+}
+
+.gc-messages-detail-placeholder-title {
+  margin: 0;
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-primary-2);
+}
+
+.gc-messages-detail-placeholder-text {
+  margin: 0;
+  line-height: 1.55;
+  font-size: 0.84rem;
+  color: var(--gc-text-soft);
 }
 
 /* Compose modal */

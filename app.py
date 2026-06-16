@@ -88,6 +88,15 @@ from game import account_email as account_email_logic
 
 from game.bootstrap import bootstrap_application
 from game.config import get_secret_key, is_debug_enabled, is_production
+from game.security import (
+    apply_security_headers,
+    check_login_rate_limit,
+    check_register_rate_limit,
+    client_ip,
+    generate_csrf_token,
+    session_cookie_secure_override,
+    validate_csrf_request,
+)
 
 # --------------------------------------------------------------------------
 # APP SETUP
@@ -444,6 +453,40 @@ _skip_mig = os.environ.get("GC_SKIP_MIGRATION_CHECK", "0").strip().lower() in ("
 bootstrap_application(skip_migration_check=_skip_mig)
 app.secret_key = get_secret_key() or os.urandom(32).hex()
 
+_cookie_secure = session_cookie_secure_override()
+if _cookie_secure is None:
+    _cookie_secure = is_production()
+
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=_cookie_secure,
+)
+
+
+@app.template_global()
+def csrf_input() -> Markup:
+    """Hidden input for HTML form CSRF (GC-SEC-P0)."""
+    token = escape(generate_csrf_token())
+    return Markup(f'<input type="hidden" name="csrf_token" value="{token}">')
+
+
+def _session_cookie_secure() -> bool:
+    return bool(app.config.get("SESSION_COOKIE_SECURE"))
+
+
+@app.after_request
+def _gc_security_headers(response):
+    secure = _session_cookie_secure() or bool(request.is_secure)
+    return apply_security_headers(response, secure=secure)
+
+
+def _auth_form_error_key() -> Optional[str]:
+    """Validate CSRF for public auth HTML forms. Returns locale error key or None."""
+    if not validate_csrf_request(request, testing=bool(app.config.get("TESTING"))):
+        return "msg_csrf_invalid"
+    return None
+
 
 @app.teardown_request
 def _teardown_queue_finish_dedup(_exc=None):
@@ -609,17 +652,25 @@ def login():
     error = None
 
     if request.method == "POST":
-        username = (request.form.get("username") or "").strip()
-        password = request.form.get("password") or ""
+        csrf_key = _auth_form_error_key()
+        if csrf_key:
+            error = T(csrf_key) if T(csrf_key) != csrf_key else csrf_key
+        elif not check_login_rate_limit(client_ip(request)):
+            error = T("msg_auth_rate_limited") if T("msg_auth_rate_limited") != "msg_auth_rate_limited" else (
+                "Zu viele Login-Versuche – bitte später erneut versuchen."
+            )
+        else:
+            username = (request.form.get("username") or "").strip()
+            password = request.form.get("password") or ""
 
-        # Login uses username only; resolve_login_username() prepared for GC_LOGIN_ALLOW_EMAIL=1
-        user = verify_user(username, password)
-        if user:
-            login_user(user)
-            flash(T("msg_login_success"), "success")
-            return redirect(url_for("overview"))
+            # Login uses username only; resolve_login_username() prepared for GC_LOGIN_ALLOW_EMAIL=1
+            user = verify_user(username, password)
+            if user:
+                login_user(user)
+                flash(T("msg_login_success"), "success")
+                return redirect(url_for("overview"))
 
-        error = T("msg_login_failed") or "Ungültiger Benutzername oder falsches Passwort."
+            error = T("msg_login_failed") or "Ungültiger Benutzername oder falsches Passwort."
 
     return render_template("login.html", error=error)
 
@@ -636,27 +687,35 @@ def register():
     error = None
 
     if request.method == "POST":
-        username = (request.form.get("username") or "").strip()
-        email = (request.form.get("email") or "").strip()
-        password = request.form.get("password") or ""
-        password2 = request.form.get("password2") or ""
-
-        if not username or not password or not email:
-            error = T("msg_register_need_user_pass_email") or T("msg_register_need_user_pass")
-        elif password != password2:
-            error = T("msg_register_pw_mismatch") or "Die Passwörter stimmen nicht überein."
-        elif len(username) < 3:
-            error = T("msg_register_username_short") or "Benutzername muss mindestens 3 Zeichen lang sein."
-        elif len(password) < 4:
-            error = T("msg_register_password_short") or "Passwort muss mindestens 4 Zeichen lang sein."
+        csrf_key = _auth_form_error_key()
+        if csrf_key:
+            error = T(csrf_key) if T(csrf_key) != csrf_key else csrf_key
+        elif not check_register_rate_limit(client_ip(request)):
+            error = T("msg_auth_rate_limited") if T("msg_auth_rate_limited") != "msg_auth_rate_limited" else (
+                "Zu viele Registrierungsversuche – bitte später erneut versuchen."
+            )
         else:
-            ok, err, user = account_email_logic.register_user_with_email(username, password, email)
-            if not ok:
-                error = T(err) if err and T(err) != err else (err or T("msg_register_failed"))
+            username = (request.form.get("username") or "").strip()
+            email = (request.form.get("email") or "").strip()
+            password = request.form.get("password") or ""
+            password2 = request.form.get("password2") or ""
+
+            if not username or not password or not email:
+                error = T("msg_register_need_user_pass_email") or T("msg_register_need_user_pass")
+            elif password != password2:
+                error = T("msg_register_pw_mismatch") or "Die Passwörter stimmen nicht überein."
+            elif len(username) < 3:
+                error = T("msg_register_username_short") or "Benutzername muss mindestens 3 Zeichen lang sein."
+            elif len(password) < 4:
+                error = T("msg_register_password_short") or "Passwort muss mindestens 4 Zeichen lang sein."
             else:
-                login_user(user)
-                flash(T("msg_register_success_verify") or T("msg_register_success"), "success")
-                return redirect(url_for("overview"))
+                ok, err, user = account_email_logic.register_user_with_email(username, password, email)
+                if not ok:
+                    error = T(err) if err and T(err) != err else (err or T("msg_register_failed"))
+                else:
+                    login_user(user)
+                    flash(T("msg_register_success_verify") or T("msg_register_success"), "success")
+                    return redirect(url_for("overview"))
 
     return render_template("register.html", error=error)
 
@@ -691,10 +750,14 @@ def forgot_password():
     error = None
     sent = False
     if request.method == "POST":
-        email = (request.form.get("email") or "").strip()
-        meta = _options_request_meta()
-        account_email_logic.request_password_reset(email, ip=meta["ip"])
-        sent = True
+        csrf_key = _auth_form_error_key()
+        if csrf_key:
+            error = T(csrf_key) if T(csrf_key) != csrf_key else csrf_key
+        else:
+            email = (request.form.get("email") or "").strip()
+            meta = _options_request_meta()
+            account_email_logic.request_password_reset(email, ip=meta["ip"])
+            sent = True
     return render_template(
         "forgot_password.html",
         error=error,
@@ -708,13 +771,17 @@ def reset_password(token: str):
     error = None
     success = False
     if request.method == "POST":
-        password = request.form.get("password") or ""
-        password2 = request.form.get("password2") or ""
-        ok, err = account_email_logic.reset_password_with_token(token, password, password2)
-        if ok:
-            success = True
+        csrf_key = _auth_form_error_key()
+        if csrf_key:
+            error = T(csrf_key) if T(csrf_key) != csrf_key else csrf_key
         else:
-            error = T(err) if err and T(err) != err else err
+            password = request.form.get("password") or ""
+            password2 = request.form.get("password2") or ""
+            ok, err = account_email_logic.reset_password_with_token(token, password, password2)
+            if ok:
+                success = True
+            else:
+                error = T(err) if err and T(err) != err else err
     return render_template(
         "reset_password.html",
         error=error,

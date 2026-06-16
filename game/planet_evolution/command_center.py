@@ -1169,6 +1169,22 @@ def _build_foreign_details(
                 "value_text": str(count),
             }
         )
+        empire_name = str(node.get("empire_display_name") or "").strip()
+        if empire_name:
+            rows.append(
+                {
+                    "label_key": "world_map_inspector_empire",
+                    "value_text": empire_name,
+                }
+            )
+        influence = int(node.get("influence_pct") or 0)
+        if influence > 0:
+            rows.append(
+                {
+                    "label_key": "world_map_inspector_influence",
+                    "value_text": f"{influence}%",
+                }
+            )
 
     return rows
 
@@ -1178,33 +1194,8 @@ def _build_foreign_actions(
     world_key: str,
     planet_id: int,
 ) -> List[Dict[str, Any]]:
-    has_target = bool(world_key or planet_id)
-    return [
-        {
-            "action_key": "spy",
-            "label_key": "fleet_mission_spy",
-            "target_type": "enemy_colony",
-            "world_key": world_key,
-            "planet_id": planet_id,
-            "enabled": has_target,
-        },
-        {
-            "action_key": "attack",
-            "label_key": "fleet_mission_attack",
-            "target_type": "enemy_colony",
-            "world_key": world_key,
-            "planet_id": planet_id,
-            "enabled": has_target,
-        },
-        {
-            "action_key": "observe",
-            "label_key": "command_center_foreign_observe",
-            "target_type": "enemy_colony",
-            "world_key": world_key,
-            "planet_id": planet_id,
-            "enabled": False,
-        },
-    ]
+    # GC-599A: no mission CTAs on the map — GC-598 will enable spy/attack/transport.
+    return []
 
 
 def build_foreign_colony_command_center(
@@ -1228,16 +1219,23 @@ def build_foreign_colony_command_center(
         return {}
 
     icon = str(node.get("empire_role_icon") or "🌍")
-    name = str(node.get("name") or node.get("owner_username") or "").strip()
+    homeworld_name = str(node.get("homeworld_name") or node.get("name") or "").strip()
+    name = homeworld_name or str(node.get("owner_username") or "").strip()
     type_key = str(node.get("strategic_type_key") or "").strip()
     role_key = str(node.get("empire_role_label_key") or node.get("identity_title_key") or "").strip()
+    panel_kind = "foreign_empire" if kind == "foreign_empire" else "foreign_colony"
 
     payload: Dict[str, Any] = {
-        "panel_kind": "foreign_colony",
+        "panel_kind": panel_kind,
         "node_key": str(node.get("node_key") or ""),
         "planet_id": planet_id,
         "world_key": world_key,
         "name": name,
+        "empire_display_name": str(node.get("empire_display_name") or "").strip(),
+        "homeworld_name": homeworld_name,
+        "influence_pct": int(node.get("influence_pct") or 0),
+        "colony_count": max(0, int(node.get("colony_count") or 0)),
+        "owner_username": str(node.get("owner_username") or "").strip(),
         "icon": icon,
         "status_key": _foreign_status_key(node),
         "role_label_key": role_key,

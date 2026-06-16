@@ -78,6 +78,7 @@ def test_mobile_nav_contains_data_nav_module():
     assert 'id="gc-bottom-nav"' in base
     assert 'id="gc-nav-drawer"' in base
     assert 'data-nav-module="overview"' in base
+    assert 'data-nav-module="messages"' in base
     assert 'data-nav-module="fleet"' in base
     assert 'data-nav-module="defense"' in base
     assert 'data-nav-module="logistics"' in base
@@ -96,15 +97,16 @@ def test_role_sync_targets_mobile_drawer():
 def test_homeworld_mobile_full_nav():
     nav = resolve_sidebar_nav(empire_role_key="homeworld", is_homeworld=True)
     bottom = mobile_bottom_modules(nav)
-    assert bottom == ["overview", "buildings", "research", "ranking"]
+    assert bottom == ["overview", "buildings", "research", "messages"]
     assert mobile_drawer_shows_module(nav, "techtree", bottom_modules=bottom)
     assert not mobile_drawer_shows_module(nav, "overview", bottom_modules=bottom)
+    assert not mobile_drawer_shows_module(nav, "messages", bottom_modules=bottom)
 
 
 def test_mining_role_mobile_filter():
     nav = resolve_sidebar_nav(empire_role_key="mining", is_homeworld=False)
     bottom = mobile_bottom_modules(nav)
-    assert bottom == ["overview", "buildings", "defense", "logistics"]
+    assert bottom == ["overview", "buildings", "defense", "messages"]
     assert module_display_section(nav, "research") == "infrastructure"
     assert module_display_section(nav, "buildings") == "infrastructure"
 
@@ -112,7 +114,7 @@ def test_mining_role_mobile_filter():
 def test_unknown_role_mobile_fallback():
     nav = resolve_sidebar_nav(empire_role_key="mystery", is_homeworld=False)
     bottom = mobile_bottom_modules(nav)
-    assert bottom == ["overview", "buildings", "research", "ranking"]
+    assert bottom == ["overview", "buildings", "research", "messages"]
 
 
 def test_planet_switch_updates_mobile_nav_markup(gc591b_db, monkeypatch):

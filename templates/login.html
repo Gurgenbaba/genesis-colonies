@@ -1,133 +1,134 @@
-{% extends "base.html" %}
-
-{% block content %}
-
-{% set err = (error if error is defined and error else "") %}
-
-{% set ttl = T("login_title") %}
-{% if ttl == "login_title" %}{% set ttl = "Willkommen zurück, Commander." %}{% else %}{% set ttl = ttl | striptags %}{% endif %}
-
-{% set subtitle = T("login_subtitle") %}
-{% if subtitle == "login_subtitle" %}
-  {% set subtitle = "Logge dich ein und übernimm wieder das Kommando deiner Kolonie." %}
-{% else %}
-  {% set subtitle = subtitle | striptags %}
-{% endif %}
-
-{% set lbl_user = T("login_label_username") %}
-{% if lbl_user == "login_label_username" %}{% set lbl_user = "Benutzername" %}{% endif %}
-
-{% set ph_user = T("login_placeholder_username") %}
-{% if ph_user == "login_placeholder_username" %}{% set ph_user = "Commander-Name" %}{% endif %}
-
-{% set lbl_pass = T("login_label_password") %}
-{% if lbl_pass == "login_label_password" %}{% set lbl_pass = "Passwort" %}{% endif %}
-
-{% set ph_pass = T("login_placeholder_password") %}
-{% if ph_pass == "login_placeholder_password" %}{% set ph_pass = "Passwort" %}{% endif %}
-
-{% set btn = T("login_btn_submit") %}
-{% if btn == "login_btn_submit" %}{% set btn = "Einloggen" %}{% else %}{% set btn = btn | striptags %}{% endif %}
-
-{% set btn_loading = T("login_btn_loading") %}
-{% if btn_loading == "login_btn_loading" %}{% set btn_loading = "Prüfe Zugang…" %}{% else %}{% set btn_loading = btn_loading | striptags %}{% endif %}
-
-{% set footer_noacc = T("login_footer_no_account") %}
-{% if footer_noacc == "login_footer_no_account" %}{% set footer_noacc = "Noch kein Account?" %}{% endif %}
-
-{% set footer_create = T("login_footer_create") %}
-{% if footer_create == "login_footer_create" %}{% set footer_create = "Jetzt starten" %}{% endif %}
-
-{% set footer_back = T("login_footer_back") %}
-{% if footer_back == "login_footer_back" %}{% set footer_back = "Zurück zur Startseite" %}{% endif %}
-
-<div class="gc-page auth-page auth-page--login">
-
-  <div class="auth-backdrop" aria-hidden="true"></div>
-  <div class="auth-backdrop-form" aria-hidden="true"></div>
-
-  <div class="auth-shell">
-
-    <div class="auth-hero">
-      <p class="auth-eyebrow">Genesis Colonies</p>
-      <h1 class="auth-hero-title">{{ ttl }}</h1>
-      <p class="auth-hero-sub">{{ subtitle }}</p>
-    </div>
-
-    <section class="auth-panel auth-panel--login" aria-label="{{ ttl }}">
-
-      {% if err %}
-        <div class="auth-error auth-terminal-alert" id="form-error" role="alert" aria-live="assertive" tabindex="-1">
-          <span class="auth-terminal-alert-tag" aria-hidden="true">Alert</span>
-          <span class="auth-terminal-alert-text">{{ err | striptags }}</span>
-        </div>
-      {% endif %}
-
-      <form method="POST"
-            action="{{ url_for('login') }}"
-            class="auth-form"
-            novalidate
-            data-validate="login">
-
-        <label class="auth-label" for="username">{{ lbl_user }}</label>
-        <input
-          id="username"
-          type="text"
-          name="username"
-          class="auth-input"
-          placeholder="{{ ph_user }}"
-          autocomplete="username"
-          required
-          minlength="3"
-          maxlength="24"
-          {% if err %}aria-invalid="true"{% endif %}
-          value="{{ (request.form.get('username') or '') if request.method == 'POST' else '' }}"
-        >
-
-        <label class="auth-label" for="password">{{ lbl_pass }}</label>
-        <input
-          id="password"
-          type="password"
-          name="password"
-          class="auth-input"
-          placeholder="{{ ph_pass }}"
-          autocomplete="current-password"
-          required
-          minlength="6"
-          {% if err %}aria-invalid="true"{% endif %}
-        >
-
-        <div class="auth-inline-link">
-          <a href="{{ url_for('forgot_password') }}">
-            {{ T("login_forgot_password") if T("login_forgot_password") != "login_forgot_password" else "Passwort vergessen?" }}
-          </a>
-        </div>
-
-        <button type="submit"
-                class="gc-btn gc-btn-primary gc-btn-lg auth-btn-primary landing-btn-primary"
-                data-loading-text="{{ btn_loading }}">
-          {{ btn }}
-        </button>
-
-        <div class="auth-error auth-terminal-alert hidden" id="client-error" role="alert" aria-live="assertive" tabindex="-1"></div>
-      </form>
-
-      <footer class="auth-footer">
-        <span>{{ footer_noacc }} <a href="{{ url_for('register') }}">{{ footer_create }}</a></span>
-        <span><a href="{{ url_for('landing') }}">{{ footer_back }}</a></span>
-      </footer>
-
-    </section>
-  </div>
-</div>
-
-{% if err %}
-<script>
-  window.addEventListener('DOMContentLoaded', () => {
-    const el = document.getElementById('form-error');
-    if (el) el.focus();
-  });
-</script>
-{% endif %}
-
-{% endblock %}
+{% extends "base.html" %}
+
+{% block content %}
+
+{% set err = (error if error is defined and error else "") %}
+
+{% set ttl = T("login_title") %}
+{% if ttl == "login_title" %}{% set ttl = "Willkommen zurück, Commander." %}{% else %}{% set ttl = ttl | striptags %}{% endif %}
+
+{% set subtitle = T("login_subtitle") %}
+{% if subtitle == "login_subtitle" %}
+  {% set subtitle = "Logge dich ein und übernimm wieder das Kommando deiner Kolonie." %}
+{% else %}
+  {% set subtitle = subtitle | striptags %}
+{% endif %}
+
+{% set lbl_user = T("login_label_username") %}
+{% if lbl_user == "login_label_username" %}{% set lbl_user = "Benutzername" %}{% endif %}
+
+{% set ph_user = T("login_placeholder_username") %}
+{% if ph_user == "login_placeholder_username" %}{% set ph_user = "Commander-Name" %}{% endif %}
+
+{% set lbl_pass = T("login_label_password") %}
+{% if lbl_pass == "login_label_password" %}{% set lbl_pass = "Passwort" %}{% endif %}
+
+{% set ph_pass = T("login_placeholder_password") %}
+{% if ph_pass == "login_placeholder_password" %}{% set ph_pass = "Passwort" %}{% endif %}
+
+{% set btn = T("login_btn_submit") %}
+{% if btn == "login_btn_submit" %}{% set btn = "Einloggen" %}{% else %}{% set btn = btn | striptags %}{% endif %}
+
+{% set btn_loading = T("login_btn_loading") %}
+{% if btn_loading == "login_btn_loading" %}{% set btn_loading = "Prüfe Zugang…" %}{% else %}{% set btn_loading = btn_loading | striptags %}{% endif %}
+
+{% set footer_noacc = T("login_footer_no_account") %}
+{% if footer_noacc == "login_footer_no_account" %}{% set footer_noacc = "Noch kein Account?" %}{% endif %}
+
+{% set footer_create = T("login_footer_create") %}
+{% if footer_create == "login_footer_create" %}{% set footer_create = "Jetzt starten" %}{% endif %}
+
+{% set footer_back = T("login_footer_back") %}
+{% if footer_back == "login_footer_back" %}{% set footer_back = "Zurück zur Startseite" %}{% endif %}
+
+<div class="gc-page auth-page auth-page--login">
+
+  <div class="auth-backdrop" aria-hidden="true"></div>
+  <div class="auth-backdrop-form" aria-hidden="true"></div>
+
+  <div class="auth-shell">
+
+    <div class="auth-hero">
+      <p class="auth-eyebrow">Genesis Colonies</p>
+      <h1 class="auth-hero-title">{{ ttl }}</h1>
+      <p class="auth-hero-sub">{{ subtitle }}</p>
+    </div>
+
+    <section class="auth-panel auth-panel--login" aria-label="{{ ttl }}">
+
+      {% if err %}
+        <div class="auth-error auth-terminal-alert" id="form-error" role="alert" aria-live="assertive" tabindex="-1">
+          <span class="auth-terminal-alert-tag" aria-hidden="true">Alert</span>
+          <span class="auth-terminal-alert-text">{{ err | striptags }}</span>
+        </div>
+      {% endif %}
+
+      <form method="POST"
+            action="{{ url_for('login') }}"
+            class="auth-form"
+            novalidate
+            data-validate="login">
+        {{ csrf_input() }}
+
+        <label class="auth-label" for="username">{{ lbl_user }}</label>
+        <input
+          id="username"
+          type="text"
+          name="username"
+          class="auth-input"
+          placeholder="{{ ph_user }}"
+          autocomplete="username"
+          required
+          minlength="3"
+          maxlength="24"
+          {% if err %}aria-invalid="true"{% endif %}
+          value="{{ (request.form.get('username') or '') if request.method == 'POST' else '' }}"
+        >
+
+        <label class="auth-label" for="password">{{ lbl_pass }}</label>
+        <input
+          id="password"
+          type="password"
+          name="password"
+          class="auth-input"
+          placeholder="{{ ph_pass }}"
+          autocomplete="current-password"
+          required
+          minlength="6"
+          {% if err %}aria-invalid="true"{% endif %}
+        >
+
+        <div class="auth-inline-link">
+          <a href="{{ url_for('forgot_password') }}">
+            {{ T("login_forgot_password") if T("login_forgot_password") != "login_forgot_password" else "Passwort vergessen?" }}
+          </a>
+        </div>
+
+        <button type="submit"
+                class="gc-btn gc-btn-primary gc-btn-lg auth-btn-primary landing-btn-primary"
+                data-loading-text="{{ btn_loading }}">
+          {{ btn }}
+        </button>
+
+        <div class="auth-error auth-terminal-alert hidden" id="client-error" role="alert" aria-live="assertive" tabindex="-1"></div>
+      </form>
+
+      <footer class="auth-footer">
+        <span>{{ footer_noacc }} <a href="{{ url_for('register') }}">{{ footer_create }}</a></span>
+        <span><a href="{{ url_for('landing') }}">{{ footer_back }}</a></span>
+      </footer>
+
+    </section>
+  </div>
+</div>
+
+{% if err %}
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('form-error');
+    if (el) el.focus();
+  });
+</script>
+{% endif %}
+
+{% endblock %}

@@ -3,6 +3,7 @@
 {% set cm_edges = cm.edges if cm.edges is defined else [] %}
 {% set cm_sector_grid = cm.sector_grid if cm.sector_grid is defined else {} %}
 {% set cm_influence = cm.influence if cm.influence is defined else {} %}
+{% set cm_foreign_influence = cm.foreign_influence if cm.foreign_influence is defined else [] %}
 {% set cm_fleet_routes = cm.fleet_routes if cm.fleet_routes is defined else [] %}
 {% set cm_world = cm.world if cm.world is defined else {} %}
 {% set cm_expansion_sites = cm_nodes | selectattr('node_kind', 'equalto', 'expansion_site') | list %}
@@ -94,6 +95,22 @@ style="--world-x: {{ wx }}; --world-y: {{ wy }};"
           </defs>
           <path class="galaxy-command-map-influence-blob"
                 d="{{ cm_influence.svg_path }}" />
+        </svg>
+        {% endif %}
+
+        {% if cm_foreign_influence %}
+        <svg class="galaxy-command-map-svg-layer galaxy-command-map-influence galaxy-command-map-influence--foreign"
+             viewBox="0 0 {{ map_world_w }} {{ map_world_h }}"
+             aria-hidden="true"
+             focusable="false">
+          {% for blob in cm_foreign_influence %}
+          {% if blob.visible and blob.svg_path %}
+          <path class="galaxy-command-map-influence-blob galaxy-command-map-influence-blob--foreign"
+                data-foreign-influence-owner="{{ blob.owner_player_id }}"
+                style="fill: {{ blob.fill_rgba }}; stroke: {{ blob.stroke_rgba }};"
+                d="{{ blob.svg_path }}" />
+          {% endif %}
+          {% endfor %}
         </svg>
         {% endif %}
 
@@ -270,16 +287,20 @@ style="--world-x: {{ wx }}; --world-y: {{ wy }};"
                   data-foreign-colony-source="{{ node.node_key or '' }}"
                   data-owner-player-id="{{ node.owner_player_id or '' }}"
                   data-owner-username="{{ node.owner_username or '' }}"
-                  data-empire-name="{{ node.name }}"
+                  data-empire-name="{{ node.empire_display_name or node.owner_username or node.name }}"
+                  data-homeworld-name="{{ node.homeworld_name or node.name }}"
                   data-empire-coords="{{ node.coordinates_formatted or '' }}"
                   data-empire-colony-count="{{ node.colony_count or 0 }}"
+                  data-empire-influence="{{ node.influence_pct or 0 }}"
                   data-empire-icon="{{ node.empire_role_icon or '🏛' }}"
-                  aria-label="{{ node.owner_username or node.name }}"
+                  data-empire-role="{{ T(node.empire_subtitle_key or node.identity_title_key or 'empire_homeworld_subtitle') }}"
+                  aria-label="{{ node.empire_display_name or node.owner_username or node.name }} · {{ node.homeworld_name or node.name }}"
                   aria-pressed="false"
-                  title="{{ node.owner_username or node.name }}{% if node.coordinates_formatted %} · {{ node.coordinates_formatted }}{% endif %}">
+                  title="{{ node.empire_display_name or node.owner_username or node.name }} · {{ node.homeworld_name or node.name }}{% if node.coordinates_formatted %} · {{ node.coordinates_formatted }}{% endif %}">
+            <span class="galaxy-command-map-node-empire-label" aria-hidden="true">{{ node.empire_display_name or node.owner_username or node.name }}</span>
             <span class="galaxy-command-map-node-icon" aria-hidden="true">{{ node.empire_role_icon or '🏛' }}</span>
-            <span class="galaxy-command-map-node-name">{{ node.owner_username or node.name }}</span>
-            <span class="galaxy-command-map-node-role">{{ T('world_map_foreign_empire', 'Fremdes Reich') }}</span>
+            <span class="galaxy-command-map-node-name">{{ node.homeworld_name or node.name }}</span>
+            <span class="galaxy-command-map-node-role">{{ T(node.empire_subtitle_key or node.identity_title_key or 'empire_homeworld_subtitle') }}</span>
             {% if node.coordinates_formatted %}
             <span class="galaxy-command-map-node-coord gc-mono">{{ galaxy_coord_link(node.coordinates_formatted) }}</span>
             {% endif %}
@@ -310,9 +331,14 @@ style="--world-x: {{ wx }}; --world-y: {{ wy }};"
           <div class="galaxy-command-map-node galaxy-command-map-node--foreign-colony"
                {{ map_world_style(node) }}
                data-node-kind="foreign_colony"
+               data-foreign-colony-hover
+               data-owner-username="{{ node.owner_username or '' }}"
+               data-foreign-colony-name="{{ node.name }}"
+               data-foreign-colony-role="{{ T(node.empire_role_label_key or node.identity_title_key) }}"
                aria-hidden="true"
-               title="{{ node.owner_username or '' }} · {{ T(node.empire_role_label_key or node.identity_title_key) }}">
+               title="{{ node.name }} · {{ node.owner_username or '' }} · {{ T(node.empire_role_label_key or node.identity_title_key) }}">
             <span class="galaxy-command-map-node-icon" aria-hidden="true">{{ node.empire_role_icon or '🌍' }}</span>
+            <span class="galaxy-command-map-node-name">{{ node.name }}</span>
           </div>
           {% elif is_world_field %}
           {% set sw_type_key = node.type_key or 'strategic_world_type_mining_world' %}

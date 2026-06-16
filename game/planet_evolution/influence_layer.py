@@ -153,6 +153,102 @@ def _envelope_points(points: Sequence[Dict[str, Any]]) -> List[Tuple[float, floa
     return envelope
 
 
+def _svg_path_from_influence_rows(influence_nodes: List[Dict[str, Any]]) -> str:
+    if not influence_nodes:
+        return ""
+    if len(influence_nodes) == 1:
+        row = influence_nodes[0]
+        return _circle_path(float(row["x_pct"]), float(row["y_pct"]), float(row["radius_pct"]))
+    coord_max = float(influence_nodes[0].get("coord_max") or 98.0)
+    pad = _HULL_PAD_PCT * (_WORLD_PCT_SCALE if coord_max > 100 else 1.0)
+    hull = _convex_hull(_envelope_points(influence_nodes))
+    hull = _expand_hull(hull, pad_pct=pad, coord_min=0.0, coord_max=coord_max)
+    return _smooth_hull_path(hull)
+
+
+FOREIGN_HUB_INFLUENCE_RADIUS_WORLD = 38.0
+FOREIGN_COLONY_INFLUENCE_RADIUS_WORLD = 26.0
+
+
+def _is_foreign_influence_node(node: Dict[str, Any]) -> bool:
+    return str(node.get("node_kind") or "") in ("foreign_empire", "foreign_colony")
+
+
+def _foreign_influence_point_row(node: Dict[str, Any]) -> Dict[str, Any]:
+    is_hub = str(node.get("node_kind") or "") == "foreign_empire"
+    x = float(node.get("world_x") or node.get("layout_x_pct") or 50)
+    y = float(node.get("world_y") or node.get("layout_y_pct") or 52)
+    radius = FOREIGN_HUB_INFLUENCE_RADIUS_WORLD if is_hub else FOREIGN_COLONY_INFLUENCE_RADIUS_WORLD
+    coord_max = 4000.0 if node.get("world_x") is not None else 98.0
+    return {
+        "node_key": str(node.get("node_key") or ""),
+        "owner_player_id": int(node.get("owner_player_id") or 0),
+        "is_homeworld": is_hub,
+        "x_pct": x,
+        "y_pct": y,
+        "radius_pct": radius,
+        "coord_max": coord_max,
+    }
+
+
+def select_foreign_influence_groups(
+    nodes: Sequence[Dict[str, Any]],
+) -> Dict[int, List[Dict[str, Any]]]:
+    """Foreign empire clusters grouped by owner (GC-599A)."""
+    groups: Dict[int, List[Dict[str, Any]]] = {}
+    for node in nodes:
+        if not _is_foreign_influence_node(node):
+            continue
+        owner_id = int(node.get("owner_player_id") or 0)
+        if owner_id <= 0:
+            continue
+        groups.setdefault(owner_id, []).append(_foreign_influence_point_row(node))
+    for owner_id, rows in groups.items():
+        rows.sort(key=lambda row: (0 if row.get("is_homeworld") else 1, str(row.get("node_key") or "")))
+        groups[owner_id] = rows
+    return groups
+
+
+def _foreign_empire_color(owner_player_id: int) -> Tuple[int, int, int]:
+    """Deterministic warm accent per foreign empire (visual only)."""
+    pid = int(owner_player_id)
+    hues = (
+        (255, 120, 90),
+        (210, 140, 255),
+        (255, 170, 80),
+        (120, 200, 255),
+        (255, 100, 150),
+        (160, 220, 140),
+    )
+    return hues[pid % len(hues)]
+
+
+def build_foreign_influence_payloads(nodes: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Per-foreign-empire influence blobs for the shared world map (GC-599A)."""
+    groups = select_foreign_influence_groups(nodes)
+    payloads: List[Dict[str, Any]] = []
+    for owner_id in sorted(groups.keys()):
+        rows = groups[owner_id]
+        if not rows:
+            continue
+        svg_path = _svg_path_from_influence_rows(rows)
+        if not svg_path:
+            continue
+        r, g, b = _foreign_empire_color(owner_id)
+        payloads.append(
+            {
+                "owner_player_id": owner_id,
+                "empire_key": f"foreign:{owner_id}",
+                "visible": True,
+                "svg_path": svg_path,
+                "node_keys": [str(row["node_key"]) for row in rows if row.get("node_key")],
+                "fill_rgba": f"rgba({r}, {g}, {b}, 0.11)",
+                "stroke_rgba": f"rgba({r}, {g}, {b}, 0.34)",
+            }
+        )
+    return payloads
+
+
 def build_influence_payload(nodes: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     """SVG influence blob derived from own colony positions only."""
     influence_nodes = select_influence_nodes(nodes)
@@ -164,15 +260,7 @@ def build_influence_payload(nodes: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
             "points": [],
         }
 
-    if len(influence_nodes) == 1:
-        row = influence_nodes[0]
-        svg_path = _circle_path(float(row["x_pct"]), float(row["y_pct"]), float(row["radius_pct"]))
-    else:
-        coord_max = float(influence_nodes[0].get("coord_max") or 98.0)
-        pad = _HULL_PAD_PCT * (_WORLD_PCT_SCALE if coord_max > 100 else 1.0)
-        hull = _convex_hull(_envelope_points(influence_nodes))
-        hull = _expand_hull(hull, pad_pct=pad, coord_min=0.0, coord_max=coord_max)
-        svg_path = _smooth_hull_path(hull)
+    svg_path = _svg_path_from_influence_rows(influence_nodes)
 
     return {
         "visible": True,

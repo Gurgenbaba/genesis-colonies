@@ -196,6 +196,17 @@ def _category_clause(category: str | None) -> tuple[str, list[Any]]:
     if cat == "reports":
         placeholders = ",".join("?" for _ in REPORT_CATEGORIES)
         return f" AND category IN ({placeholders})", list(REPORT_CATEGORIES)
+    if cat == "trade":
+        return (
+            " AND category = 'system' AND ("
+            "metadata_json LIKE '%\"mission_type\":\"transport\"%' OR "
+            "metadata_json LIKE '%\"mission_type\":\"collect\"%' OR "
+            "metadata_json LIKE '%\"mission_type\":\"deploy\"%' OR "
+            "metadata_json LIKE '%\"mission_type\":\"recycle\"%' OR "
+            "metadata_json LIKE '%\"report_phase\"%'"
+            ")",
+            [],
+        )
     if cat in VALID_CATEGORIES:
         return " AND category = ?", [cat]
     return "", []

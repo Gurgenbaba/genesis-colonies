@@ -351,7 +351,7 @@ def test_password_change(app_client):
     row = conn.execute("SELECT password_hash FROM users WHERE id = ?;", (pid,)).fetchone()
     conn.close()
     assert verify_password(row["password_hash"], "newpass9")
-    assert str(row["password_hash"]).startswith("pbkdf2:")
+    assert str(row["password_hash"]).startswith("$argon2")
 
 
 def test_api_requires_login(app_client):

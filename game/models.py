@@ -5,7 +5,9 @@ import math
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List, Mapping
 
-from werkzeug.security import check_password_hash, generate_password_hash
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+from werkzeug.security import check_password_hash
 
 from .db import (
     DB_PATH,
@@ -443,16 +445,60 @@ def init_db() -> None:
 # USERS / AUTH
 # ======================================================================
 
+_PASSWORD_HASHER = PasswordHasher(
+    time_cost=3,
+    memory_cost=65536,
+    parallelism=4,
+    hash_len=32,
+    salt_len=16,
+)
+
+
 def hash_password(pwd: str) -> str:
-    """PBKDF2-SHA256 (Werkzeug). New passwords always use this format."""
-    return generate_password_hash(pwd, method="pbkdf2:sha256")
+    """Argon2id via argon2-cffi. New passwords always use this format."""
+    return _PASSWORD_HASHER.hash(pwd)
+
+
+def password_needs_upgrade(stored_hash: str) -> bool:
+    """True when stored hash should be re-written to the current KDF on next login."""
+    stored = str(stored_hash or "")
+    if not stored:
+        return False
+    if stored.startswith("$argon2"):
+        try:
+            return _PASSWORD_HASHER.check_needs_rehash(stored)
+        except Exception:
+            return True
+    return True
+
+
+def upgrade_password_hash(user_id: int, password: str) -> None:
+    """Re-hash password with the current KDF after successful legacy verification."""
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?;",
+            (hash_password(password), int(user_id)),
+        )
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
 
 
 def verify_password(stored_hash: str, pwd: str) -> bool:
-    """Verify password; accepts legacy SHA-256 hex hashes for existing accounts."""
+    """Verify password; accepts legacy SHA-256 hex and older Werkzeug KDF hashes."""
     stored = str(stored_hash or "")
     if not stored or not pwd:
         return False
+    if stored.startswith("$argon2"):
+        try:
+            return _PASSWORD_HASHER.verify(stored, pwd)
+        except VerifyMismatchError:
+            return False
     if stored.startswith(("pbkdf2:", "scrypt:", "argon2:")):
         return check_password_hash(stored, pwd)
     if len(stored) == 64 and all(c in "0123456789abcdef" for c in stored.lower()):
@@ -526,9 +572,15 @@ def verify_user(username: str, password: str):
     user = get_user_by_username(username)
     if not user:
         return None
-    if verify_password(user["password_hash"], password):
-        return dict(user)
-    return None
+    stored = user["password_hash"]
+    if not verify_password(stored, password):
+        return None
+    if password_needs_upgrade(stored):
+        try:
+            upgrade_password_hash(int(user["id"]), password)
+        except Exception:
+            pass
+    return dict(user)
 
 
 def create_user(username: str, password: str, is_admin: int = 0, email: str | None = None):

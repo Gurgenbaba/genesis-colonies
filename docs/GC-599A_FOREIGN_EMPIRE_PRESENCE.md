@@ -1,6 +1,11 @@
-# GC-599A — Foreign Empire Presence (Backlog)
+# GC-599A — Foreign Empire Presence
 
-> **Nicht vor GC-SEC-P0 und nicht vor GC-598.** Nur Presence — keine Missionen.
+> **Nach GC-SEC-P0, vor GC-598.** Nur Presence — keine Missionen.  
+> **Status:** ✅ Implementiert
+
+## Leitmotiv
+
+> **Andere Spieler sollen wie echte Reiche wirken, nicht wie Koordinaten.**
 
 ## Problem
 
@@ -41,9 +46,17 @@ Aurora Prime          papa-fanti
 
 ## Abhängigkeiten
 
+```text
+GC-SEC-P0
+    ↓
+GC-599A
+    ↓
+GC-598
+```
+
 1. **GC-SEC-P0** — öffentliche Alpha-Sicherheit
-2. **GC-599A** — glaubwürdige Fremdpräsenz
-3. **GC-598** — Mission Actions im World Inspector
+2. **GC-599A** — glaubwürdige Fremdpräsenz (dieses Ticket)
+3. **GC-598** — Mission Actions im World Inspector (baut auf benannten Fremdreichen auf)
 4. **GC-599** — Foreign Worlds / Enemy Nodes vollständig
 
 ## Akzeptanz (Entwurf)

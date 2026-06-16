@@ -1,5 +1,5 @@
 {% set _sn = SIDEBAR_NAV or {'full_nav': true, 'modules': {}} %}
-{% set _cmd_open = request.endpoint in ('overview', 'galaxy_view', 'planet_evolution_view', 'messages_view') %}
+{% set _cmd_open = request.endpoint in ('overview', 'galaxy_view', 'planet_evolution_view') %}
 {% set _infra_open = request.endpoint in ('buildings_view', 'research_view', 'techtree_view') %}
 {% set _mil_open = request.endpoint in ('shipyard_view', 'defense_view', 'fleet_view', 'logistics_view') %}
 {% set _eco_open = request.endpoint in (
@@ -12,6 +12,18 @@
      aria-label="Hauptnavigation"
      data-nav-role="{{ _sn.empire_role_key | default('general') }}"
      data-nav-full="{{ '1' if _sn.full_nav else '0' }}">
+
+  <div class="gc-nav-section gc-nav-section--standalone"
+       data-nav-section="messages"
+       {% if not sidebar_section_visible(_sn, 'messages') %}hidden{% endif %}>
+    <a href="{{ url_for('messages_view') }}"
+       data-nav-module="messages"
+       class="gc-nav-link gc-nav-module--{{ nav_module_tier(_sn, 'messages') }} {% if request.endpoint == 'messages_view' %}active{% endif %}"
+       {% if not module_in_section(_sn, 'messages', 'messages') %}hidden{% endif %}>
+      <span class="gc-nav-link-label">{{ T("nav_messages", "Nachrichten") }}</span>
+      <span class="gc-messages-nav-badge hidden" data-messages-unread-badge hidden aria-hidden="true"></span>
+    </a>
+  </div>
 
   <div class="gc-nav-section gc-nav-submenu-group{% if _cmd_open %} is-expanded{% endif %}"
        data-nav-section="command"
@@ -46,13 +58,6 @@
          class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'planet_evolution') }} {% if request.endpoint == 'planet_evolution_view' %}active{% endif %}"
          {% if not module_in_section(_sn, 'planet_evolution', 'command') %}hidden{% endif %}>
         {{ T("nav_planet_evolution", "Planet Evolution") }}
-      </a>
-      <a href="{{ url_for('messages_view') }}"
-         data-nav-module="messages"
-         class="gc-nav-sub-link gc-nav-sub-link--messages gc-nav-module--{{ nav_module_tier(_sn, 'messages') }} {% if request.endpoint == 'messages_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'messages', 'command') %}hidden{% endif %}>
-        <span class="gc-nav-link-label">{{ T("nav_messages", "Nachrichten") }}</span>
-        <span class="gc-messages-nav-badge hidden" data-messages-unread-badge hidden aria-hidden="true"></span>
       </a>
     </div>
   </div>

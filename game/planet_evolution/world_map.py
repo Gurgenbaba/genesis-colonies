@@ -21,7 +21,7 @@ VIEWER_HOME_X = 2000.0
 VIEWER_HOME_Y = 2000.0
 _GOLDEN_ANGLE = 2.399963229728653
 _WORLD_EDGE_PAD = 140.0
-_FOREIGN_MAX_SATELLITES = 6
+_FOREIGN_MAX_SATELLITES = 2
 _FREE_FIELD_GRID_STEP = 480
 _FREE_FIELD_MIN_EMPIRE_DIST = 260.0
 _FREE_FIELD_MIN_FIELD_DIST = 180.0
@@ -236,6 +236,23 @@ def _homeworld_coords(row: Mapping[str, Any]) -> str:
         return ""
 
 
+def format_empire_display_name(owner_username: str, homeworld_name: str) -> str:
+    """Player-facing empire label for foreign presence (GC-599A)."""
+    player = str(owner_username or "").strip()
+    if player:
+        return player.upper().replace("-", " ")
+    hw = str(homeworld_name or "").strip()
+    if hw:
+        return f"{hw.upper()} EMPIRE"
+    return "FOREIGN EMPIRE"
+
+
+def estimate_foreign_influence_pct(colony_count: int, *, satellite_count: int = 0) -> int:
+    """Visual-only influence hint for foreign empire inspector (not gameplay)."""
+    base = 24 + max(0, int(colony_count)) * 14 + max(0, int(satellite_count)) * 8
+    return min(92, max(18, base))
+
+
 def _layout_foreign_satellites(
     colonies: Sequence[Mapping[str, Any]],
     *,
@@ -295,8 +312,11 @@ def _build_foreign_empire_hub(
     owner_id = int(homeworld["player_id"])
     planet_id = int(homeworld["planet_id"])
     username = str(homeworld.get("owner_username") or "")
+    homeworld_name = str(homeworld.get("name") or username or "Empire")
     coords = _homeworld_coords(homeworld)
     identity = role_payload("homeworld")
+    empire_label = format_empire_display_name(username, homeworld_name)
+    influence_pct = estimate_foreign_influence_pct(colony_count)
 
     node: Dict[str, Any] = {
         "node_kind": "foreign_empire",
@@ -304,8 +324,11 @@ def _build_foreign_empire_hub(
         "is_own": False,
         "owner_player_id": owner_id,
         "owner_username": username,
+        "empire_display_name": empire_label,
+        "homeworld_name": homeworld_name,
+        "influence_pct": influence_pct,
         "planet_id": planet_id,
-        "name": str(homeworld.get("name") or username or "Empire"),
+        "name": homeworld_name,
         "coordinates_formatted": coords,
         "colony_count": max(0, int(colony_count)),
         "layout_slot": "hub",
@@ -348,6 +371,8 @@ def build_foreign_cluster_nodes(
         owner_username=str(homeworld.get("owner_username") or ""),
         homeworld_planet_id=int(homeworld["planet_id"]),
     )
+    hub["satellite_count"] = len(satellites)
+    hub["influence_pct"] = estimate_foreign_influence_pct(colony_count, satellite_count=len(satellites))
     return [hub] + satellites
 
 
@@ -627,9 +652,10 @@ def apply_shared_world_layout(
 
     payload["nodes"] = nodes
     payload["edges"] = edges
-    from .influence_layer import build_influence_payload
+    from .influence_layer import build_foreign_influence_payloads, build_influence_payload
 
     payload["influence"] = build_influence_payload(nodes)
+    payload["foreign_influence"] = build_foreign_influence_payloads(nodes)
     payload["world"] = {
         "mode": "shared",
         "empire_count": len(homeworlds),

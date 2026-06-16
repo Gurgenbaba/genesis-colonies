@@ -12876,6 +12876,10 @@
 
   function moduleDisplaySection(nav, module) {
     const cfg = window.GC_SIDEBAR_NAV_CONFIG || {};
+    const standalone = new Set(
+      Array.isArray(cfg.standalone_modules) ? cfg.standalone_modules : ["messages"]
+    );
+    if (standalone.has(module)) return module;
     const primaryMap = cfg.module_primary_section || {};
     if (module === "support") return null;
     const utility = new Set(
@@ -12890,9 +12894,10 @@
   function shouldShowSidebarNavLink(nav, el) {
     const module = String(el.dataset.navModule || "");
     if (!module) return false;
-    const section = String(el.closest("[data-nav-section]")?.dataset.navSection || "");
     const display = moduleDisplaySection(nav, module);
-    return !!(display && display === section);
+    if (!display) return false;
+    const section = String(el.closest("[data-nav-section]")?.dataset.navSection || "");
+    return display === section;
   }
 
   function navLinkShows(nav, module, placement) {
@@ -13013,23 +13018,26 @@
   }
 
   function applyMobileBottomNav(bottomNav, nav) {
-    if (!bottomNav || !nav) return new Set(["overview", "buildings", "research", "ranking"]);
+    if (!bottomNav || !nav) return new Set(["overview", "buildings", "research", "messages"]);
     applyRoleNavTiers(bottomNav, nav);
     const fullNav = !!nav.full_nav;
     bottomNav.classList.toggle("gc-bottom-nav--full-nav", fullNav);
     bottomNav.classList.toggle("gc-bottom-nav--role-nav", !fullNav);
 
+    const cfg = window.GC_SIDEBAR_NAV_CONFIG || {};
+    const alwaysBottom = Array.isArray(cfg.mobile_always_bottom) ? cfg.mobile_always_bottom : ["messages"];
+    const slotMax = Math.max(0, MOBILE_BOTTOM_MAX - alwaysBottom.length);
     const prominent = MOBILE_BOTTOM_PRIORITY.filter(
-      (key) => navTierForModule(nav, key) === "prominent"
+      (key) => !alwaysBottom.includes(key) && navTierForModule(nav, key) === "prominent"
     );
     const visible = fullNav
-      ? ["overview", "buildings", "research", "ranking"]
-      : prominent.slice(0, MOBILE_BOTTOM_MAX);
-    const visibleSet = new Set(visible);
+      ? ["overview", "buildings", "research"].slice(0, slotMax)
+      : prominent.slice(0, slotMax);
+    const visibleSet = new Set([...visible, ...alwaysBottom]);
 
     bottomNav.querySelectorAll("a.gc-bottom-nav-item[data-nav-module]").forEach((el) => {
       const key = String(el.dataset.navModule || "");
-      const show = visibleSet.has(key);
+      const show = visibleSet.has(key) || el.dataset.navAlwaysVisible === "1";
       el.hidden = !show;
       el.classList.toggle("gc-nav-bottom-slot", show);
     });
@@ -13069,6 +13077,7 @@
   }
 
   function mobileDrawerShowsModule(nav, module, bottomSet) {
+    if (bottomSet.has(module)) return false;
     const utility = new Set(
       Array.isArray(window.GC_SIDEBAR_NAV_CONFIG?.utility_modules)
         ? window.GC_SIDEBAR_NAV_CONFIG.utility_modules
@@ -14705,9 +14714,9 @@
 
       if (iconEl) iconEl.textContent = ds.empireIcon || "🏛";
       if (typeEl) typeEl.textContent = GC.t?.("world_map_foreign_empire", "Foreign empire") || "Foreign empire";
-      if (nameEl) nameEl.textContent = ds.empireName || ds.ownerUsername || "";
+      if (nameEl) nameEl.textContent = ds.homeworldName || ds.empireName || ds.ownerUsername || "";
       if (statusEl) {
-        statusEl.textContent = GC.t?.("world_map_inspector_status", "Detected") || "Detected";
+        statusEl.textContent = ds.empireRole || GC.t?.("empire_homeworld_subtitle", "Founder World") || "Founder World";
         statusEl.className = "galaxy-command-map-site-inspector-status galaxy-command-map-site-inspector-status--foreign";
       }
       if (foreignPlayerEl) foreignPlayerEl.textContent = ds.ownerUsername || "—";
@@ -15205,11 +15214,23 @@
       const isEmpire = btn?.matches?.("[data-foreign-empire-inspect]");
       base.panel_kind = isEmpire ? "foreign_empire" : "foreign_colony";
       if (!base.name) {
-        base.name = ds.foreignColonyName || ds.empireName || ds.ownerUsername || "";
+        base.name = ds.homeworldName || ds.foreignColonyName || ds.empireName || ds.ownerUsername || "";
+      }
+      if (!base.empire_display_name) {
+        base.empire_display_name = ds.empireName || ds.ownerUsername || "";
+      }
+      if (!base.homeworld_name) {
+        base.homeworld_name = ds.homeworldName || ds.empireName || "";
+      }
+      if (!base.influence_pct && ds.empireInfluence) {
+        base.influence_pct = parseInt(ds.empireInfluence, 10) || 0;
+      }
+      if (!base.colony_count && ds.empireColonyCount) {
+        base.colony_count = parseInt(ds.empireColonyCount, 10) || 0;
       }
       if (!base._typeText) {
         base._typeText = isEmpire
-          ? tf("world_map_foreign_empire", "Fremdes Reich")
+          ? (ds.empireRole || tf("empire_homeworld_subtitle", "Founder World"))
           : ds.foreignColonyType || ds.foreignColonyRole || "";
       }
       if (!Array.isArray(base.details) || !base.details.length) {
@@ -15285,6 +15306,81 @@
         }
       });
       actionsEl.appendChild(fleet);
+    }
+
+    function renderForeignEmpirePresenceModal(cc, btn) {
+      const ds = btn?.dataset || {};
+      const empireName =
+        cc.empire_display_name
+        || ds.empireName
+        || ds.ownerUsername
+        || tf("world_map_foreign_empire", "Fremdes Reich");
+      const homeworldName = cc.homeworld_name || ds.homeworldName || cc.name || ds.empireName || "";
+      const roleLabel = ds.empireRole || tf(cc.role_label_key || "empire_homeworld_subtitle", "Founder World");
+      const owner = cc.owner_username || ds.ownerUsername || "";
+      const coords =
+        ds.empireCoords
+        || (Array.isArray(cc.details)
+          ? cc.details.find((row) => row.label_key === "world_map_inspector_coords")?.value_text
+          : "")
+        || "";
+      const colonyCount = parseInt(
+        String(cc.colony_count ?? ds.empireColonyCount ?? "0"),
+        10
+      ) || 0;
+      const influencePct = parseInt(
+        String(cc.influence_pct ?? ds.empireInfluence ?? "0"),
+        10
+      ) || 0;
+
+      titleEl.textContent = homeworldName || empireName;
+      contentEl.innerHTML = `
+        <div class="gc-player-card-shell gc-world-inspector-shell gc-world-inspector-shell--foreign-presence">
+          <span class="gc-dev-preview-badge gc-dev-preview-badge--banner">${tf("command_map_dev_badge", "DEV")} ${tf("command_map_dev_preview_label", "PREVIEW")}</span>
+          <p class="gc-world-inspector-empire-kicker">${empireName}</p>
+          <h3 class="gc-world-inspector-place-name"></h3>
+          <p class="gc-world-inspector-foreign-presence-lead hint"></p>
+          <dl class="gc-world-inspector-stats"></dl>
+        </div>`;
+      const shell = contentEl.querySelector(".gc-world-inspector-shell--foreign-presence");
+      const placeName = shell?.querySelector(".gc-world-inspector-place-name");
+      const lead = shell?.querySelector(".gc-world-inspector-foreign-presence-lead");
+      const stats = shell?.querySelector(".gc-world-inspector-stats");
+      if (placeName) placeName.textContent = homeworldName || empireName;
+      if (lead) {
+        lead.textContent = tf(
+          "world_inspector_foreign_presence_lead",
+          "Hier lebt jemand — Missionen auf der Karte folgen in Kürze."
+        );
+      }
+      if (stats) {
+        const rows = [
+          roleLabel
+            ? `<div class="gc-world-inspector-stat"><dt>${tf("world_inspector_type", "Typ")}</dt><dd></dd></div>`
+            : "",
+          owner
+            ? `<div class="gc-world-inspector-stat"><dt>${tf("world_map_inspector_player", "Spieler")}</dt><dd></dd></div>`
+            : "",
+          colonyCount >= 0
+            ? `<div class="gc-world-inspector-stat"><dt>${tf("world_map_inspector_colonies", "Kolonien")}</dt><dd></dd></div>`
+            : "",
+          influencePct > 0
+            ? `<div class="gc-world-inspector-stat"><dt>${tf("world_map_inspector_influence", "Einfluss")}</dt><dd></dd></div>`
+            : "",
+          coords
+            ? `<div class="gc-world-inspector-stat"><dt>${tf("world_map_inspector_coords", "Koordinate")}</dt><dd class="gc-mono"></dd></div>`
+            : "",
+        ].filter(Boolean);
+        stats.innerHTML = rows.join("");
+        const dds = stats.querySelectorAll("dd");
+        let idx = 0;
+        if (roleLabel && dds[idx]) dds[idx++].textContent = roleLabel;
+        if (owner && dds[idx]) dds[idx++].textContent = owner;
+        if (colonyCount >= 0 && dds[idx]) dds[idx++].textContent = String(colonyCount);
+        if (influencePct > 0 && dds[idx]) dds[idx++].textContent = `${influencePct}%`;
+        if (coords && dds[idx]) dds[idx].textContent = coords;
+      }
+      appendForeignDevActions(btn);
     }
 
     function renderForeignDevPreviewModal(cc, btn) {
@@ -15615,7 +15711,9 @@
       root.classList.toggle("gc-world-inspector-modal--discovery", discovery);
       document.body.classList.add("gc-player-card-open");
 
-      if (shouldShowForeignDevPreview(kind, cc, btn)) {
+      if (kind === "foreign_empire") {
+        renderForeignEmpirePresenceModal(cc, btn);
+      } else if (shouldShowForeignDevPreview(kind, cc, btn)) {
         renderForeignDevPreviewModal(cc, btn);
       } else if (kind === "colony" || cc.panel_kind === "colony") {
         renderColonyModal(cc, btn);
@@ -16874,14 +16972,56 @@
         ${fleetLine ? `<p class="galaxy-command-map-colony-hover-fleets">${fleetLine}</p>` : ""}`;
     }
 
+    function buildForeignHoverHtml(ds) {
+      const empireName = ds.empireName || ds.ownerUsername || "";
+      const homeworldName = ds.homeworldName || "";
+      const role = ds.empireRole || "";
+      const owner = ds.ownerUsername || "";
+      const colonies = ds.empireColonyCount || "";
+      const influence = ds.empireInfluence || "";
+      const colonyName = ds.foreignColonyName || "";
+      const colonyRole = ds.foreignColonyRole || "";
+      if (colonyName) {
+        return `<strong class="galaxy-command-map-colony-hover-name">${colonyName}</strong>
+          ${colonyRole ? `<span class="galaxy-command-map-colony-hover-role">${colonyRole}</span>` : ""}
+          ${owner ? `<p class="galaxy-command-map-colony-hover-level">${owner}</p>` : ""}`;
+      }
+      return `<strong class="galaxy-command-map-colony-hover-name">${homeworldName || empireName}</strong>
+        ${role ? `<span class="galaxy-command-map-colony-hover-role">${role}</span>` : ""}
+        ${empireName && homeworldName ? `<p class="galaxy-command-map-colony-hover-level">${empireName}</p>` : ""}
+        ${owner ? `<p class="galaxy-command-map-colony-hover-prod">${tf("world_map_inspector_player", "Spieler")}: ${owner}</p>` : ""}
+        ${colonies !== "" ? `<p class="galaxy-command-map-colony-hover-fleets">${tf("world_map_inspector_colonies", "Kolonien")}: ${colonies}</p>` : ""}
+        ${influence ? `<p class="galaxy-command-map-colony-hover-fleets">${tf("world_map_inspector_influence", "Einfluss")}: ${influence}%</p>` : ""}`;
+    }
+
     const hideColonyHover = () => {
       hoverTooltip.hidden = true;
-      graph.querySelectorAll("[data-colony-location-inspect].is-hover-summary").forEach((btn) => {
+      hoverTooltip.classList.remove("galaxy-command-map-colony-hover-tooltip--foreign");
+      graph.querySelectorAll("[data-colony-location-inspect].is-hover-summary, [data-foreign-empire-inspect].is-hover-summary, [data-foreign-colony-hover].is-hover-summary").forEach((btn) => {
         btn.classList.remove("is-hover-summary");
       });
     };
 
+    const showForeignHover = (el, clientX, clientY) => {
+      if (!el?.dataset) return;
+      hoverTooltip.innerHTML = buildForeignHoverHtml(el.dataset);
+      hoverTooltip.hidden = false;
+      hoverTooltip.classList.add("galaxy-command-map-colony-hover-tooltip--foreign");
+      graph.querySelectorAll("[data-foreign-empire-inspect], [data-foreign-colony-hover]").forEach((node) => {
+        node.classList.toggle("is-hover-summary", node === el);
+      });
+      const pad = 12;
+      const rect = hoverTooltip.getBoundingClientRect();
+      let left = clientX + pad;
+      let top = clientY + pad;
+      if (left + rect.width > window.innerWidth - 8) left = clientX - rect.width - pad;
+      if (top + rect.height > window.innerHeight - 8) top = clientY - rect.height - pad;
+      hoverTooltip.style.left = `${Math.max(8, left)}px`;
+      hoverTooltip.style.top = `${Math.max(8, top)}px`;
+    };
+
     const showColonyHover = (btn, clientX, clientY) => {
+      hoverTooltip.classList.remove("galaxy-command-map-colony-hover-tooltip--foreign");
       const planetId = String(btn.dataset.planetId || "");
       const source = graph.querySelector(`[data-colony-actions-source="${planetId}"]`);
       const cc = parseCommandCenter(source);
@@ -16903,18 +17043,35 @@
     };
 
     const onColonyEnter = (e) => {
+      const foreignEl = e.target.closest("[data-foreign-empire-inspect], [data-foreign-colony-hover]");
+      if (foreignEl && graph.contains(foreignEl)) {
+        showForeignHover(foreignEl, e.clientX, e.clientY);
+        return;
+      }
       const btn = e.target.closest("[data-colony-location-inspect]");
       if (!btn || !graph.contains(btn)) return;
       showColonyHover(btn, e.clientX, e.clientY);
     };
 
     const onColonyMove = (e) => {
+      const foreignEl = e.target.closest("[data-foreign-empire-inspect], [data-foreign-colony-hover]");
+      if (foreignEl && !hoverTooltip.hidden) {
+        showForeignHover(foreignEl, e.clientX, e.clientY);
+        return;
+      }
       const btn = e.target.closest("[data-colony-location-inspect]");
       if (!btn || hoverTooltip.hidden) return;
       showColonyHover(btn, e.clientX, e.clientY);
     };
 
     const onColonyLeave = (e) => {
+      const foreignEl = e.target.closest("[data-foreign-empire-inspect], [data-foreign-colony-hover]");
+      if (foreignEl) {
+        const related = e.relatedTarget;
+        if (related && foreignEl.contains(related)) return;
+        hideColonyHover();
+        return;
+      }
       const btn = e.target.closest("[data-colony-location-inspect]");
       if (!btn) return;
       const related = e.relatedTarget;

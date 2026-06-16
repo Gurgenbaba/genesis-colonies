@@ -25,8 +25,9 @@ logger = logging.getLogger(__name__)
 EFFECT_DEBUG = os.environ.get("GC_EFFECT_DEBUG", "").strip().lower() in ("1", "true", "yes")
 
 # Research reduction formulas — single source of truth (GC-622C).
-# Linear per level; display % is unbounded. Gameplay clamps factor at 0 (no negative draw).
+# Linear per level; display % is unbounded. mine_energy_factor may reach 0; actual draw is floored.
 MINE_ENERGY_PER_LEVEL = 0.05
+MINE_ENERGY_MIN_DRAW_FACTOR = 0.01  # gameplay floor: never 0 draw for active consumers
 BUILDTIME_PER_LEVEL = 0.03
 FUEL_EFFICIENCY_PER_LEVEL = 0.03
 _DIVISION_EPS = 1e-12  # avoid div-by-zero only; not a balance cap
@@ -124,6 +125,15 @@ class EffectResolver:
     @staticmethod
     def mine_energy_reduction_pct(level: int) -> int:
         return EffectResolver._reduction_pct(level, MINE_ENERGY_PER_LEVEL)
+
+    @staticmethod
+    def apply_mine_energy_draw(raw: int, factor: float) -> int:
+        """Apply energy_tech to one consumer; draw never 0 when raw > 0."""
+        raw_i = int(raw or 0)
+        if raw_i <= 0:
+            return 0
+        effective = max(MINE_ENERGY_MIN_DRAW_FACTOR, float(factor))
+        return max(1, int(raw_i * effective))
 
     @staticmethod
     def buildtime_duration_factor_for_level(level: int) -> float:
@@ -483,10 +493,13 @@ class EffectResolver:
         energy_crystal = int(6 * (crystal_lvl ** 1.25)) if crystal_lvl > 0 else 0
         fuel_cell_lvl = _bld(b, "fuel_cell_plant")
         energy_fuel_cell = int(8 * (fuel_cell_lvl ** 1.25)) if fuel_cell_lvl > 0 else 0
-        energy_used = energy_metal + energy_crystal + energy_fuel_cell
 
         mine_energy_factor = _mod_float(mods, "mine_energy_factor")
-        energy_used = max(0, int(energy_used * mine_energy_factor))
+        energy_used = (
+            self.apply_mine_energy_draw(energy_metal, mine_energy_factor)
+            + self.apply_mine_energy_draw(energy_crystal, mine_energy_factor)
+            + self.apply_mine_energy_draw(energy_fuel_cell, mine_energy_factor)
+        )
 
         return energy_total, energy_used
 
@@ -504,7 +517,7 @@ class EffectResolver:
         else:
             return 0
         factor = _mod_float(self.get_modifiers(), "mine_energy_factor")
-        return max(0, int(raw * factor))
+        return self.apply_mine_energy_draw(raw, factor)
 
     @staticmethod
     def energy_ratio(energy_total: int, energy_used: int) -> float:

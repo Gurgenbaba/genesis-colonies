@@ -10,16 +10,16 @@ Sicherheitsmodell, bekannte Limitierungen und Operator-Checkliste für Genesis C
 
 | Bedrohung | Relevanz | Mitigation (aktuell) |
 |-----------|----------|----------------------|
-| Session-Hijacking | Hoch (öffentlicher Server) | `SECRET_KEY`, HTTPS via Reverse Proxy, HttpOnly-Session (Flask-Default) |
-| Credential Theft (DB-Leak) | Hoch | SHA-256 ohne Salt — **schwach**; siehe Auth-Roadmap |
+| Session-Hijacking | Hoch (öffentlicher Server) | `SECRET_KEY`, HTTPS, HttpOnly + SameSite=Lax + Secure (Prod) |
+| Credential Theft (DB-Leak) | Hoch | Argon2id KDF; Legacy-Hashes werden bei Login migriert |
 | Double-Submit / Race auf Queues | Mittel | `BEGIN IMMEDIATE`, Idempotency-Store, Tests |
 | Privilege Escalation | Hoch | `@require_admin`, `@require_admin_api`, Ban-Check |
 | Admin-Missbrauch | Mittel | Audit-Log, Confirm-Phrases, separate JSON-Guards |
 | SQL Injection | Mittel | Parametrisierte Queries (`?` Placeholders) |
 | CSRF auf JSON-APIs | Mittel | Same-Site-Session; keine expliziten CSRF-Tokens auf APIs |
-| CSRF auf HTML-Forms | Mittel | Session-Cookie; SameSite empfohlen am Proxy |
+| CSRF auf HTML-Forms | Mittel | Session-CSRF-Token auf Auth-Forms; Admin-Panel noch ohne Token |
 | Information Disclosure | Niedrig | `/health` öffentlich (keine Secrets); Stack-Traces nur bei `FLASK_DEBUG=1` |
-| Denial of Service | Mittel | Gunicorn-Timeout; kein Rate-Limiting implementiert |
+| Denial of Service | Mittel | Gunicorn-Timeout; Login/Register Rate-Limits (in-process) |
 
 ---
 
@@ -31,25 +31,29 @@ Sicherheitsmodell, bekannte Limitierungen und Operator-Checkliste für Genesis C
 - `session["user_id"]` = Player-ID (`users.id == players.id`)
 - Login: `game/auth.py` → `login_user()` setzt Session nach `verify_user()`
 
-### Passwort-Hashing (bekannte Schwäche)
+### Passwort-Hashing
 
-```python
-# game/models.py
-hashlib.sha256(password.encode("utf-8")).hexdigest()
-```
+Neue Passwörter: **Argon2id** via Werkzeug + `argon2-cffi` (`game/models.py`).
 
 | Aspekt | Status |
 |--------|--------|
-| Salt | ❌ Keiner |
-| KDF / Iterationen | ❌ Keine |
-| Timing-safe compare | ⚠️ String-Vergleich |
+| KDF | ✅ Argon2id (`$argon2id$…`) |
+| Salt | ✅ pro Hash (Werkzeug) |
+| Legacy SHA-256 | ✅ Verifizierung + Re-Hash bei Login |
+| Legacy PBKDF2 | ✅ Verifizierung + Re-Hash bei Login |
+| Timing-safe compare | ✅ Werkzeug `check_password_hash` |
 
-**Empfehlung vor öffentlichem Launch:** bcrypt, scrypt oder argon2 mit per-User-Salt. Migration: Spalte `password_algo` oder Re-Hash bei Login.
+```python
+# game/models.py — argon2-cffi PasswordHasher (Argon2id)
+```
 
 ### Registrierung
 
 - Mindestlänge Username 3, Passwort 4 (nur Basis-Validierung)
-- Keine E-Mail-Verifikation, kein CAPTCHA, kein Rate-Limit
+- E-Mail-Verifikation aktiv (`game/account_email.py`)
+- Rate-Limit Register: **5 / Stunde / IP** (in-process, `game/security.py`)
+- Rate-Limit Login: **10 / 15 Min / IP**
+- CSRF-Token auf Auth-HTML-Forms (Login, Register, Forgot/Reset Password)
 
 ### Ban-System
 
@@ -175,16 +179,18 @@ python -c "import secrets; print(secrets.token_hex(32))"
 - Build-Time-`SECRET_KEY` im Dockerfile ist nur für `install.py` — **Runtime-Override Pflicht**
 - Volume `gc_data` für persistente DB
 
-### Headers (empfohlen am Reverse Proxy)
+### Headers (App + empfohlen am Reverse Proxy)
+
+Flask `after_request` setzt:
 
 ```
-Strict-Transport-Security: max-age=31536000
 X-Content-Type-Options: nosniff
 X-Frame-Options: SAMEORIGIN
 Referrer-Policy: strict-origin-when-cross-origin
+Strict-Transport-Security: … (wenn SESSION_COOKIE_SECURE / HTTPS)
 ```
 
-Nicht im App-Code implementiert — Proxy-Konfiguration.
+Zusätzlich am Proxy: TLS-Terminierung.
 
 ---
 
@@ -213,12 +219,12 @@ Admin-Panel rendert dynamische Tabellen aus API — Admin-only, trotzdem vertrau
 
 ## Bekannte Limitierungen (v1.5.1)
 
-1. **SHA-256-Passwörter** — nicht production-tauglich für Internet-Exposure
-2. **Kein Rate-Limiting** — Login/Register/API offen für Brute-Force
-3. **Keine CSRF-Tokens** auf POST-APIs — Same-Origin-Session als einzige Barriere
-4. **Keine 2FA** für Admin
-5. **Öffentliches `/health`** — akzeptabel; keine Secrets, aber Versions-Leak
-6. **SQLite Single-Writer** — kein Cluster-Betrieb
+1. **CSRF auf Admin-HTML-Forms** — `admin_panel.html` POST noch ohne Token
+2. **Keine CSRF-Tokens** auf JSON-APIs — Same-Origin-Session + SameSite=Lax
+3. **Keine 2FA** für Admin
+4. **Öffentliches `/health`** — akzeptabel; keine Secrets, aber Versions-Leak
+5. **SQLite Single-Writer** — kein Cluster-Betrieb
+6. **Rate-Limits in-process** — pro Worker, nicht clusterweit (Redis-Roadmap)
 
 ---
 
@@ -226,11 +232,11 @@ Admin-Panel rendert dynamische Tabellen aus API — Admin-only, trotzdem vertrau
 
 | Priorität | Maßnahme |
 |-----------|----------|
-| P0 | Passwort-KDF (bcrypt/argon2) + Migration |
-| P0 | Rate-Limiting Login/Register (Flask-Limiter oder Proxy) |
-| P1 | CSRF für HTML-Forms; optional API-Token für Admin |
-| P1 | Session-Cookie: `Secure`, `HttpOnly`, `SameSite=Lax` explizit |
-| P2 | Security-Headers in Flask `after_request` oder zentral im Proxy |
+| P0 | Passwort-KDF (argon2id) + Migration bei Login | ✅ GC-SEC-P0 |
+| P0 | Rate-Limiting Login/Register | ✅ GC-SEC-P0 |
+| P1 | CSRF für HTML-Forms; optional API-Token für Admin | ⚠️ Auth-Forms ✅; Admin offen |
+| P1 | Session-Cookie: `Secure`, `HttpOnly`, `SameSite=Lax` explizit | ✅ GC-SEC-P0 |
+| P2 | Security-Headers in Flask `after_request` oder zentral im Proxy | ✅ GC-SEC-P0 (App) |
 | P2 | Strukturiertes Security-Logging (failed logins) |
 | P3 | Postgres + Row-Locks für Multi-Worker unter Last |
 
