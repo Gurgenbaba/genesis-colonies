@@ -306,12 +306,9 @@ Kompakte Browser-QA (ergänzt [ALPHA_TESTPLAN.md](ALPHA_TESTPLAN.md)):
 
 ### P1 — Alpha wichtig
 
-#### GC-620B — Locale & Player-Facing Copy Reality Sync
+#### GC-620B — Locale & Player-Facing Copy Reality Sync ✅
 
-- **Problem:** `fleet_mission_hint_attack`, `logistics_tab_distribute_soon`, Foreign-Inspector-Hints widersprechen Implementierung
-- **Scope:** `locales/en.json`, `locales/de.json`
-- **Tests:** `test_locale_keys.py`, ggf. `test_i18n_messages.py`
-- **Warum P1:** Vertrauensverlust / falsche Erwartungen in Alpha
+- **Erledigt:** `docs/GC-620B_LOCALE_REALITY_SYNC.md`, `tests/test_gc620b_locale_reality_sync.py`
 
 #### GC-620C — PlayerCard Ranking Lock Resilience
 

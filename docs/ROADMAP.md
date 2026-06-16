@@ -207,6 +207,12 @@ Design Manifest: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · Epic: **EPIC-15**
 | **GC-583** | Expedition Worlds ([Spec](GC-583_EXPEDITION_WORLDS.md)) | ✅ 583A–583C |
 | **GC-566B** | Dynamic Influence ([Spec](GC-566B_DYNAMIC_INFLUENCE.md)) | 📋 Spec |
 | **GC-571** | Shared World Presence ([Spec](GC-571_SHARED_WORLD_PRESENCE.md)) | 📋 Spec |
+| **GC-597D/E** | Command Map DEV Preview + Foreign Node Fallback | ✅ |
+| **GC-620B** | Locale Reality Sync ([Spec](GC-620B_LOCALE_REALITY_SYNC.md)) | ✅ |
+| **GC-SEC-P0** | KDF, Rate Limits, Security Headers | 📋 Next |
+| **GC-599A** | Foreign Empire Presence — Map glaubwürdig bewohnt ([Spec](GC-599A_FOREIGN_EMPIRE_PRESENCE.md)) | 📋 After SEC |
+| **GC-598** | Mission Actions im World Inspector | 📋 After 599A |
+| **GC-599** | Foreign Worlds / Enemy Nodes vollständig | 📋 |
 | **GC-569** | ~~Presence Overlay~~ → siehe GC-571 | 📋 superseded |
 | **GC-568** | Territorial Warfare | 📋 |
 
