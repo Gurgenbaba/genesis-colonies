@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="{{ GC_LOCALE }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -85,6 +85,10 @@
           {% include "partials/header_planet_switcher.html" %}
         </div>
         {% endif %}
+
+        <div class="gc-hslot gc-hslot-lang">
+          {% include "partials/header_language_switcher.html" %}
+        </div>
 
         {% if not SIMPLE_LAYOUT %}
         <div class="gc-hud-user" aria-label="{{ T('account', 'Account') }}">

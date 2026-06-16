@@ -1,0 +1,22 @@
+{% set _locale_api = url_for('api_options_locale') if AUTH_USER and AUTH_USER.id else url_for('api_locale') %}
+<div class="gc-language-switcher"
+     id="gc-language-switcher"
+     role="group"
+     aria-label="{{ T('language_switcher_label', 'Sprache') }}"
+     data-locale="{{ GC_LOCALE }}"
+     data-api="{{ _locale_api }}">
+  <button type="button"
+          class="gc-lang-btn{% if GC_LOCALE == 'de' %} is-active{% endif %}"
+          data-locale="de"
+          aria-pressed="{{ 'true' if GC_LOCALE == 'de' else 'false' }}"
+          title="{{ T('language_name_de', 'Deutsch') }}">
+    DE
+  </button>
+  <button type="button"
+          class="gc-lang-btn{% if GC_LOCALE == 'en' %} is-active{% endif %}"
+          data-locale="en"
+          aria-pressed="{{ 'true' if GC_LOCALE == 'en' else 'false' }}"
+          title="{{ T('language_name_en', 'English') }}">
+    EN
+  </button>
+</div>

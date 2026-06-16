@@ -1161,6 +1161,10 @@
   GC.syncServerClockFromState = syncServerClockFromState;
 
   GC.reloadCurrentPage = function reloadCurrentPage(opts) {
+    if (opts && opts.fullDocument) {
+      window.location.reload();
+      return Promise.resolve();
+    }
     const target = `${window.location.pathname || "/"}${window.location.search || ""}`;
     if (typeof GC.navigateTo === "function") {
       return GC.navigateTo(target, { push: false, force: true, ...(opts || {}) });
@@ -13192,6 +13196,56 @@
     });
   };
 
+  function initLanguageSwitcher() {
+    const root = document.getElementById("gc-language-switcher");
+    if (!root || root.dataset.gcBound === "1") return;
+    root.dataset.gcBound = "1";
+
+    const apiUrl = root.dataset.api || "/api/locale";
+    let busy = false;
+
+    root.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-locale]");
+      if (!btn || busy) return;
+      const loc = String(btn.dataset.locale || "").trim().toLowerCase();
+      if (!loc || loc === root.dataset.locale) return;
+
+      busy = true;
+      root.classList.add("is-busy");
+      root.querySelectorAll(".gc-lang-btn").forEach((b) => {
+        b.disabled = true;
+      });
+      try {
+        const res = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ locale: loc }),
+          credentials: "same-origin",
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data || data.ok !== true) {
+          console.warn("[GC] locale switch rejected", data && data.error);
+          return;
+        }
+        // Locale affects header, sidebar, nav and GC_LOCALE — PJAX main-content swap is not enough.
+        if (typeof GC.reloadCurrentPage === "function") {
+          await GC.reloadCurrentPage({ force: true, fullDocument: true });
+        } else {
+          window.location.reload();
+        }
+        return;
+      } catch (err) {
+        console.error("[GC] locale switch failed", err);
+      } finally {
+        busy = false;
+        root.classList.remove("is-busy");
+        root.querySelectorAll(".gc-lang-btn").forEach((b) => {
+          b.disabled = false;
+        });
+      }
+    });
+  }
+
   function initHeaderPlanetSwitcher() {
     if (GC._headerPlanetSwitcherBound) return;
     GC._headerPlanetSwitcherBound = true;
@@ -20316,6 +20370,7 @@
     bindPlanetEvolutionOnce();
     bindFleetOnce();
     initHeaderPlanetSwitcher();
+    initLanguageSwitcher();
     initRoleBasedSidebar();
     initGcPopoversOnce();
     initVisibilityPolling();

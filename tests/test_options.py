@@ -373,3 +373,57 @@ def test_html_injection_rejected():
     ok2, err2, cleaned = validate_display_name("Valid_Name-1")
     assert ok2
     assert cleaned == "Valid_Name-1"
+
+
+def test_language_switcher_in_header(app_client):
+    res = app_client.get("/login")
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+    assert 'id="gc-language-switcher"' in html
+    assert 'data-locale="de"' in html
+    assert 'data-api="/api/locale"' in html
+
+
+def test_api_locale_cookie_guest(app_client):
+    res = app_client.post(
+        "/api/locale",
+        json={"locale": "en"},
+        headers={"Accept": "application/json"},
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is True
+    assert data["data"]["locale"] == "en"
+    cookies = res.headers.getlist("Set-Cookie")
+    assert any("gc_locale=en" in c for c in cookies)
+
+    res_page = app_client.get("/login")
+    assert res_page.status_code == 200
+    assert 'data-locale="en"' in res_page.get_data(as_text=True)
+
+
+def test_api_locale_invalid(app_client):
+    res = app_client.post(
+        "/api/locale",
+        json={"locale": "fr"},
+        headers={"Accept": "application/json"},
+    )
+    assert res.status_code == 400
+    assert res.get_json()["error"] == "options_error_invalid_locale"
+
+
+def test_api_options_locale_logged_in(app_client):
+    from game.i18n import get_player_locale
+
+    pid, uname, _ = _create_player()
+    _login(app_client, uname)
+    res = app_client.post(
+        "/api/options/locale",
+        json={"locale": "en"},
+        headers={"Accept": "application/json"},
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is True
+    assert data["data"]["locale"] == "en"
+    assert get_player_locale(pid) == "en"

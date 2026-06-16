@@ -3335,6 +3335,22 @@ def api_options_password():
     return _options_api_response(True, err, data)
 
 
+@app.route("/api/locale", methods=["POST"])
+def api_locale():
+    """Guest / pre-login locale — persists display language in gc_locale cookie only."""
+    payload = request.get_json(silent=True) or {}
+    raw = str(payload.get("locale") or "").strip().lower()
+    if raw not in {"de", "en"}:
+        return _options_api_response(False, "options_error_invalid_locale", None, 400)
+    loc = normalize_locale(raw)
+    from flask import make_response
+
+    body, status = _options_api_response(True, None, {"locale": loc})
+    resp = make_response(body, status)
+    resp.set_cookie("gc_locale", loc, max_age=365 * 24 * 3600, samesite="Lax")
+    return resp
+
+
 @app.route("/api/options/locale", methods=["POST"])
 @require_login_api
 def api_options_locale():
