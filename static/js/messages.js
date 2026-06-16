@@ -77,8 +77,47 @@
     if (!raw) return `<p class="gc-messages-plain-line">${esc("—")}</p>`;
     return raw
       .split(/\n/)
-      .map((line) => `<p class="gc-messages-plain-line">${linkifyCoordsText(line)}</p>`)
+      .map((line) => `<p class="gc-messages-plain-line">${formatPlainMessageLine(line)}</p>`)
       .join("");
+  }
+
+  function formatWorldKeyLine(line) {
+    const m = String(line || "").trim().match(/^field:([a-z_]+):(\d+):(\d+)$/i);
+    if (!m) return null;
+    const typeKey = m[1];
+    const coords = `${m[2]}:${m[3]}`;
+    const typeLabel = t(`strategic_world_type_${typeKey}`, keyFallbackLabel(typeKey));
+    return esc(`${typeLabel} [${coords}]`);
+  }
+
+  function formatErrorCodeLine(line) {
+    const key = String(line || "").trim();
+    if (!/^[a-z][a-z0-9_]*$/i.test(key)) return null;
+    const colonize = t(`fleet_colonize_fail_${key}`, "");
+    if (colonize) return esc(colonize);
+    const generic = t(`messages.error_code.${key}`, "");
+    if (generic) return esc(generic);
+    return esc(keyFallbackLabel(key));
+  }
+
+  function formatPlainMessageLine(line) {
+    const raw = String(line || "").trim();
+    if (!raw) return esc("—");
+    const worldOnly = formatWorldKeyLine(raw);
+    if (worldOnly) return worldOnly;
+    const worldPref = raw.match(/^World:\s*(field:.+)$/i);
+    if (worldPref) {
+      const formatted = formatWorldKeyLine(worldPref[1]);
+      if (formatted) return esc(t("fleet_world_colonize_report_world_label", "World:")) + " " + formatted;
+    }
+    const weltPref = raw.match(/^Welt:\s*(field:.+)$/i);
+    if (weltPref) {
+      const formatted = formatWorldKeyLine(weltPref[1]);
+      if (formatted) return esc(t("fleet_world_colonize_report_world_label", "World:")) + " " + formatted;
+    }
+    const code = formatErrorCodeLine(raw);
+    if (code) return code;
+    return linkifyCoordsText(raw);
   }
 
   function formatInt(n) {
@@ -1741,17 +1780,38 @@
         return;
       }
 
-      if (e.target.closest("#messages-mark-all-read")) {
+      if (e.target.closest("#messages-enter-select")) {
         e.preventDefault();
-        e.stopPropagation();
-        state.onMarkAllRead?.();
+        state.enterSelectionMode?.();
         return;
       }
-
-      if (e.target.closest("#messages-open-newest")) {
+      if (e.target.closest("#messages-exit-select")) {
         e.preventDefault();
+        state.exitSelectionMode?.();
+        return;
+      }
+      if (e.target.closest("#messages-bulk-read")) {
+        e.preventDefault();
+        state.runBulkAction?.("read");
+        return;
+      }
+      if (e.target.closest("#messages-bulk-archive")) {
+        e.preventDefault();
+        state.runBulkAction?.("archive");
+        return;
+      }
+      if (e.target.closest("#messages-bulk-delete")) {
+        e.preventDefault();
+        state.runBulkAction?.("delete");
+        return;
+      }
+      if (e.target.closest("#messages-select-all")) {
+        return;
+      }
+      const rowCheck = e.target.closest(".gc-messages-item-check input[type=checkbox]");
+      if (rowCheck) {
         e.stopPropagation();
-        state.openNewestMessage?.();
+        state.toggleChecked?.(Number(rowCheck.dataset.id), rowCheck.checked);
         return;
       }
 
@@ -1767,6 +1827,7 @@
         });
         state.filter = tabBtn.dataset.filter || "all";
         state.selectedId = null;
+        state.exitSelectionMode?.({ skipRender: true });
         state.setDetailVisible?.(false);
         state.loadList?.(true, { force: true });
         return;
@@ -1811,9 +1872,15 @@
       }
 
       const item = e.target.closest(".gc-messages-item[data-id]");
-      if (item) {
+      if (item && !e.target.closest("[data-stop-row]")) {
         const id = Number(item.dataset.id);
-        if (Number.isFinite(id)) state.openMessage?.(id);
+        if (!Number.isFinite(id)) return;
+        if (state.selectionMode) {
+          e.preventDefault();
+          state.toggleChecked?.(id, !state.checkedIds.has(id));
+          return;
+        }
+        state.openMessage?.(id);
         return;
       }
 
@@ -1902,6 +1969,8 @@
       filter,
       messages: [],
       selectedId: null,
+      selectionMode: false,
+      checkedIds: new Set(),
       requestSeq: 0,
       listAbort: null,
       listInflight: null,
@@ -1914,23 +1983,103 @@
     function setDetailVisible(show) {
       const dom = getMessagesDom();
       if (!dom) return;
-      if (dom.detail) dom.detail.hidden = !show;
-      if (dom.detailEmpty) dom.detailEmpty.hidden = show;
-      syncDetailPlaceholder();
+      const hasMessage = Boolean(show);
+      if (dom.detail) dom.detail.hidden = !hasMessage;
+      if (dom.detailEmpty) dom.detailEmpty.hidden = hasMessage;
+      const wrap = document.getElementById("messages-detail-wrap");
+      if (wrap) wrap.classList.toggle("has-message", hasMessage);
     }
 
-    function syncDetailPlaceholder() {
-      const btn = document.getElementById("messages-open-newest");
-      if (!btn) return;
-      const hasMessages = Array.isArray(state.messages) && state.messages.length > 0;
-      const showBtn = hasMessages && !state.selectedId;
-      btn.hidden = !showBtn;
+    function syncSelectionUi() {
+      const n = state.checkedIds.size;
+      const has = n > 0;
+      const listWrap = document.querySelector(".gc-messages-list-wrap");
+      if (listWrap) listWrap.classList.toggle("is-selecting", state.selectionMode);
+
+      const normalBar = document.getElementById("messages-select-normal");
+      const activeBar = document.getElementById("messages-select-active");
+      const hasMessages = state.messages.length > 0 && state.listLoaded && !state.loading;
+
+      if (normalBar) normalBar.hidden = state.selectionMode || !hasMessages;
+      if (activeBar) activeBar.hidden = !state.selectionMode;
+
+      ["messages-bulk-read", "messages-bulk-archive", "messages-bulk-delete"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !has;
+      });
+
+      const countEl = document.getElementById("messages-selected-count");
+      if (countEl) {
+        countEl.textContent =
+          n > 0 ? t("messages.selected_count", "%(count)s selected").replace("%(count)s", String(n)) : "";
+        countEl.hidden = n <= 0;
+      }
+
+      const selectAll = document.getElementById("messages-select-all");
+      if (selectAll && state.messages.length && state.selectionMode) {
+        selectAll.indeterminate = n > 0 && n < state.messages.length;
+        selectAll.checked = n > 0 && n === state.messages.length;
+      } else if (selectAll) {
+        selectAll.indeterminate = false;
+        selectAll.checked = false;
+      }
     }
 
-    function openNewestMessage() {
-      const newest = state.messages?.[0];
-      if (!newest?.id) return;
-      state.openMessage?.(newest.id);
+    function enterSelectionMode() {
+      if (!state.messages.length) return;
+      state.selectionMode = true;
+      state.checkedIds.clear();
+      syncSelectionUi();
+      renderList();
+    }
+
+    function exitSelectionMode(opts = {}) {
+      if (!state.selectionMode && !state.checkedIds.size) {
+        syncSelectionUi();
+        return;
+      }
+      state.selectionMode = false;
+      state.checkedIds.clear();
+      syncSelectionUi();
+      if (!opts.skipRender) renderList();
+    }
+
+    function toggleChecked(id, checked) {
+      if (!Number.isFinite(id)) return;
+      if (checked) state.checkedIds.add(id);
+      else state.checkedIds.delete(id);
+      syncSelectionUi();
+      const rowCheck = document.querySelector(`.gc-messages-item-check input[data-id="${id}"]`);
+      if (rowCheck) rowCheck.checked = checked;
+    }
+
+    function setAllChecked(checked) {
+      state.checkedIds.clear();
+      if (checked) state.messages.forEach((m) => state.checkedIds.add(m.id));
+      renderList();
+    }
+
+    async function runBulkAction(action) {
+      const ids = [...state.checkedIds];
+      if (!ids.length) return;
+      if (action === "delete" && !window.confirm(t("messages.delete_confirm"))) return;
+      const data = await messagesApi("/api/messages/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ids }),
+      });
+      if (!data?.ok) {
+        showErrorList(data?.error || "error_load");
+        return;
+      }
+      syncUnreadFromResponse(data);
+      if (action === "delete" && state.selectedId && ids.includes(state.selectedId)) {
+        state.selectedId = null;
+        setDetailVisible(false);
+      }
+      state.checkedIds.clear();
+      exitSelectionMode({ skipRender: true });
+      await loadList(true, { force: true });
     }
 
     function showListMessage(html) {
@@ -1996,7 +2145,10 @@
       if (!state.messages.length) {
         showListMessage(`<div class="gc-messages-empty">${esc(t("messages.empty"))}</div>`);
         state.selectedId = null;
+        state.selectionMode = false;
+        state.checkedIds.clear();
         setDetailVisible(false);
+        syncSelectionUi();
         return;
       }
 
@@ -2005,19 +2157,28 @@
           const unread = !m.is_read;
           const active = state.selectedId === m.id ? " is-active" : "";
           const unreadCls = unread ? " is-unread" : "";
+          const checked = state.checkedIds.has(m.id) ? " checked" : "";
           const reportKind = getInboxReportKind(m);
           const reportCls = reportKind ? ` gc-messages-item--report gc-messages-item--${reportKind}` : "";
           const teaser = reportKind ? renderInboxReportTeaser(m, { compact: true, messageId: m.id }) : "";
+          const checkHtml = state.selectionMode
+            ? `<label class="gc-messages-item-check" data-stop-row="1">` +
+              `<input type="checkbox" data-id="${m.id}"${checked} aria-label="${esc(t("messages.select_one", "Select"))}" />` +
+              `</label>`
+            : "";
           return (
             `<div role="button" tabindex="0" class="gc-messages-item${active}${unreadCls}${reportCls}" data-id="${m.id}">` +
+            checkHtml +
+            `<span class="gc-messages-item-content">` +
             `<span class="gc-messages-item-subject">${linkifyCoordsText(m.subject)}</span>` +
             (teaser ? `<span class="gc-messages-item-teaser">${teaser}</span>` : "") +
             `<span class="gc-messages-item-meta">${esc(categoryLabel(m.category))} · ${esc(formatTime(m.created_at))}</span>` +
+            `</span>` +
             `</div>`
           );
         })
         .join("");
-      syncDetailPlaceholder();
+      syncSelectionUi();
     }
 
     function renderDetail(msg) {
@@ -2098,7 +2259,6 @@
           }
         }
       }
-      if (!msg.is_read) dom.detailActions.appendChild(mkBtn(t("messages.read"), "read", "outline"));
       if (msg.reply_to_player_id || msg.sender_player_id) {
         dom.detailActions.appendChild(mkBtn(t("messages.reply"), "reply", "primary"));
       }
@@ -2317,32 +2477,24 @@
       if (state.selectedId && action !== "delete") await openMessage(state.selectedId);
     }
 
-    state.onMarkAllRead = async () => {
-      const payload = {};
-      if (state.filter && !["all", "archive"].includes(state.filter)) {
-        payload.category = state.filter;
-      }
-      const data = await messagesApi("/api/messages/read-all", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (data?.ok) {
-        syncUnreadFromResponse(data);
-        await loadList();
-      } else {
-        showErrorList(data?.error || "error_load");
-      }
-    };
-
     state.loadList = loadList;
     state.openMessage = openMessage;
     state.handleAction = handleAction;
     state.setDetailVisible = setDetailVisible;
-    state.syncDetailPlaceholder = syncDetailPlaceholder;
-    state.openNewestMessage = openNewestMessage;
+    state.toggleChecked = toggleChecked;
+    state.runBulkAction = runBulkAction;
+    state.setAllChecked = setAllChecked;
+    state.enterSelectionMode = enterSelectionMode;
+    state.exitSelectionMode = exitSelectionMode;
+
+    document.getElementById("messages-select-all")?.addEventListener("change", (ev) => {
+      setAllChecked(Boolean(ev.target?.checked));
+    });
 
     GC.messagesPageState = state;
+
+    setDetailVisible(false);
+    syncSelectionUi();
 
     void loadList(true, { force: false });
   }

@@ -978,6 +978,74 @@ def archive_message(player_id: int, message_id: int) -> dict[str, Any]:
         conn.close()
 
 
+def bulk_update_messages(
+    player_id: int,
+    message_ids: list[int],
+    *,
+    action: str,
+) -> dict[str, Any]:
+    """Bulk read / archive / delete for selected inbox rows."""
+    conn = db()
+    try:
+        if not _table_ready(conn):
+            return _err("messages_not_ready")
+        act = str(action or "").strip().lower()
+        if act not in ("read", "archive", "delete"):
+            return _err("validation")
+        ids = sorted({int(i) for i in (message_ids or []) if int(i) > 0})
+        if not ids:
+            return _err("validation")
+
+        _prepare_inbox(conn, int(player_id))
+        placeholders = ",".join("?" for _ in ids)
+        begin_write_transaction(conn)
+        cur = conn.cursor()
+        now = _now()
+
+        if act == "read":
+            cur.execute(
+                f"""
+                UPDATE player_messages
+                SET is_read = 1, read_at = COALESCE(read_at, ?)
+                WHERE recipient_player_id = ? AND id IN ({placeholders})
+                  AND {_not_deleted_sql()};
+                """,
+                (now, int(player_id), *ids),
+            )
+        elif act == "archive":
+            cur.execute(
+                f"""
+                UPDATE player_messages
+                SET is_archived = 1
+                WHERE recipient_player_id = ? AND id IN ({placeholders})
+                  AND {_not_deleted_sql()};
+                """,
+                (int(player_id), *ids),
+            )
+        else:
+            cur.execute(
+                f"""
+                UPDATE player_messages
+                SET deleted_at = ?
+                WHERE recipient_player_id = ? AND id IN ({placeholders})
+                  AND {_not_deleted_sql()};
+                """,
+                (now, int(player_id), *ids),
+            )
+
+        updated = int(cur.rowcount or 0)
+        if updated < 1:
+            rollback(conn)
+            return _err("not_found")
+        commit(conn)
+        return _with_unread(player_id, {"updated": updated, "action": act, "ids": ids})
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+
 def delete_message(player_id: int, message_id: int) -> dict[str, Any]:
     conn = db()
     try:

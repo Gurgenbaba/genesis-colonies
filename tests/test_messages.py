@@ -18,6 +18,7 @@ import game.models as models
 from game.db import db, table_exists
 from game.messages import (
     archive_message,
+    bulk_update_messages,
     create_message,
     delete_message,
     dispatch_combat_reports,
@@ -177,6 +178,36 @@ def test_mark_all_read(temp_db):
     result = mark_all_messages_read(pid)
     assert result["ok"]
     assert unread_count(pid) == 0
+
+
+def test_bulk_update_messages_read_archive_delete(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("bulk_msg")
+    for i in range(3):
+        notify_player(pid, f"Msg {i}", f"Body {i}", category="system")
+    _close_db()
+
+    listed = list_messages(pid)
+    ids = [m["id"] for m in listed["data"]["messages"]]
+    assert len(ids) == 3
+
+    read_res = bulk_update_messages(pid, ids[:2], action="read")
+    assert read_res["ok"]
+    assert read_res["data"]["updated"] == 2
+    assert unread_count(pid) == 1
+
+    arch_res = bulk_update_messages(pid, [ids[0]], action="archive")
+    assert arch_res["ok"]
+    archived = list_messages(pid, category="archive", include_archived=True)
+    assert any(m["id"] == ids[0] for m in archived["data"]["messages"])
+
+    del_res = bulk_update_messages(pid, [ids[2]], action="delete")
+    assert del_res["ok"]
+    listed_after = list_messages(pid)
+    assert len(listed_after["data"]["messages"]) == 1
 
 
 def test_send_player_message_validation(temp_db):
@@ -785,6 +816,39 @@ def test_bob_archive_and_delete_api(app_client, temp_db):
 
     archived_after = _api_inbox(client, bob, category="archive").get_json()
     assert not any(m["id"] == mid for m in archived_after["data"]["messages"])
+
+
+def test_api_messages_bulk_read_archive_delete(app_client, temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("bulk_api")
+    notify_player(pid, "One", "Body one", category="system")
+    notify_player(pid, "Two", "Body two", category="system")
+    _close_db()
+
+    client = app_client
+    with client.session_transaction() as sess:
+        sess["user_id"] = pid
+    inbox = client.get("/api/messages").get_json()
+    ids = [m["id"] for m in inbox["data"]["messages"]]
+
+    bulk_read = client.post("/api/messages/bulk", json={"ids": ids, "action": "read"})
+    assert bulk_read.get_json()["ok"]
+    assert bulk_read.get_json()["data"]["updated"] == 2
+    assert bulk_read.get_json()["data"]["unread_count"] == 0
+
+    bulk_arch = client.post("/api/messages/bulk", json={"ids": [ids[0]], "action": "archive"})
+    assert bulk_arch.get_json()["ok"]
+
+    archived = client.get("/api/messages?category=archive").get_json()
+    assert any(m["id"] == ids[0] for m in archived["data"]["messages"])
+
+    bulk_del = client.post("/api/messages/bulk", json={"ids": [ids[1]], "action": "delete"})
+    assert bulk_del.get_json()["ok"]
+    active = client.get("/api/messages").get_json()
+    assert active["data"]["messages"] == []
 
 
 def test_send_lookup_exact_stored_name_api(app_client, temp_db):

@@ -21,60 +21,88 @@
         </span>
       </div>
       <div class="gc-panel-head-right gc-messages-head-actions">
-        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" id="messages-mark-all-read">
-          {{ T("messages.mark_all_read") }}
-        </button>
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" id="messages-compose-btn">
           {{ T("messages.compose") }}
         </button>
       </div>
     </div>
 
-    <div class="gc-messages-body">
-      <div id="messages-tabs" class="gc-messages-tabs building-tabs" role="tablist"
-           aria-label="{{ T('messages.title') }}">
-        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn active" data-filter="all"
-                role="tab" aria-selected="true">
-          {{ T("messages.filter.all") }}
-        </button>
-        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="system"
-                role="tab" aria-selected="false">
-          {{ T("messages.category.system") }}
-        </button>
-        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="combat"
-                role="tab" aria-selected="false">
-          {{ T("messages.category.combat") }}
-        </button>
-        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="espionage"
-                role="tab" aria-selected="false">
-          {{ T("messages.category.espionage") }}
-        </button>
-        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="expedition"
-                role="tab" aria-selected="false">
-          {{ T("messages.category.expedition") }}
-        </button>
-        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="trade"
-                role="tab" aria-selected="false">
-          {{ T("messages.filter.trade") }}
-        </button>
-        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="player"
-                role="tab" aria-selected="false">
-          {{ T("messages.category.player") }}
-        </button>
-        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn tab-btn--utility" data-filter="archive"
-                role="tab" aria-selected="false">
-          {{ T("messages.filter.archive") }}
-        </button>
-      </div>
+    <div id="messages-tabs" class="gc-messages-tabs gc-messages-tabs--global building-tabs" role="tablist"
+         aria-label="{{ T('messages.title') }}">
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn active" data-filter="all"
+              role="tab" aria-selected="true">
+        {{ T("messages.filter.all") }}
+      </button>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="system"
+              role="tab" aria-selected="false">
+        {{ T("messages.category.system") }}
+      </button>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="combat"
+              role="tab" aria-selected="false">
+        {{ T("messages.category.combat") }}
+      </button>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="espionage"
+              role="tab" aria-selected="false">
+        {{ T("messages.category.espionage") }}
+      </button>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="expedition"
+              role="tab" aria-selected="false">
+        {{ T("messages.category.expedition") }}
+      </button>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="trade"
+              role="tab" aria-selected="false">
+        {{ T("messages.filter.trade") }}
+      </button>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn" data-filter="player"
+              role="tab" aria-selected="false">
+        {{ T("messages.category.player") }}
+      </button>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm tab-btn tab-btn--utility" data-filter="archive"
+              role="tab" aria-selected="false">
+        {{ T("messages.filter.archive") }}
+      </button>
+    </div>
 
+    <div class="gc-messages-body">
       <div class="gc-messages-layout">
         <aside class="gc-messages-list-wrap gc-messages-inset" aria-label="{{ T('messages.list') }}">
           <div id="messages-list" class="gc-messages-list" aria-live="polite">
             <div class="gc-messages-empty">{{ T("messages.loading") }}</div>
           </div>
+
+          <footer class="gc-messages-list-footer" id="messages-list-footer">
+            <div class="gc-messages-select-normal" id="messages-select-normal">
+              <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" id="messages-enter-select">
+                {{ T("messages.select_mode") }}
+              </button>
+            </div>
+            <div class="gc-messages-select-active" id="messages-select-active" hidden>
+              <div class="gc-messages-select-active-head">
+                <label class="gc-messages-select-all" for="messages-select-all">
+                  <input type="checkbox" id="messages-select-all" />
+                  <span>{{ T("messages.select_all") }}</span>
+                </label>
+                <span class="gc-messages-selected-count" id="messages-selected-count" aria-live="polite"></span>
+                <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" id="messages-exit-select">
+                  {{ T("messages.done_selecting") }}
+                </button>
+              </div>
+              <div class="gc-messages-bulk-actions">
+                <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" id="messages-bulk-read" disabled>
+                  {{ T("messages.bulk_read") }}
+                </button>
+                <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" id="messages-bulk-archive" disabled>
+                  {{ T("messages.archive") }}
+                </button>
+                <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs gc-btn-danger" id="messages-bulk-delete" disabled>
+                  {{ T("messages.delete") }}
+                </button>
+              </div>
+            </div>
+          </footer>
         </aside>
 
-        <div class="gc-messages-detail-wrap gc-messages-inset">
+        <div class="gc-messages-detail-wrap gc-messages-inset" id="messages-detail-wrap">
           <article id="messages-detail" class="gc-messages-detail" aria-live="polite" hidden>
             <header class="gc-messages-detail-head">
               <h2 class="gc-messages-detail-subject" id="messages-detail-subject"></h2>
@@ -84,14 +112,9 @@
             <div class="gc-messages-detail-actions" id="messages-detail-actions"></div>
           </article>
 
-          <div id="messages-detail-empty" class="gc-messages-detail-placeholder" role="status">
-            <div class="gc-messages-detail-placeholder-inner">
-              <h2 class="gc-messages-detail-placeholder-title">{{ T("messages.placeholder.title") }}</h2>
-              <p class="gc-messages-detail-placeholder-text">{{ T("messages.placeholder.body") }}</p>
-              <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" id="messages-open-newest" hidden>
-                {{ T("messages.placeholder.open_newest") }}
-              </button>
-            </div>
+          <div id="messages-detail-empty" class="gc-messages-detail-empty" role="status">
+            <p class="gc-messages-detail-empty-title">{{ T("messages.placeholder.title") }}</p>
+            <p class="gc-messages-detail-empty-text">{{ T("messages.placeholder.body") }}</p>
           </div>
         </div>
       </div>

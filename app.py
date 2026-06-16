@@ -3528,6 +3528,28 @@ def api_messages_archive(message_id: int):
     return _messages_json(messages_logic.archive_message(int(pid), int(message_id)))
 
 
+@app.route("/api/messages/bulk", methods=["POST"])
+@require_login_api
+def api_messages_bulk():
+    pid = _current_player_id()
+    assert pid is not None
+    payload = request.get_json(silent=True) or {}
+    raw_ids = payload.get("ids") or payload.get("message_ids") or []
+    if not isinstance(raw_ids, list):
+        return _messages_json({"ok": False, "error": "validation", "data": None})
+    try:
+        ids = [int(i) for i in raw_ids]
+    except (TypeError, ValueError):
+        return _messages_json({"ok": False, "error": "validation", "data": None})
+    return _messages_json(
+        messages_logic.bulk_update_messages(
+            int(pid),
+            ids,
+            action=str(payload.get("action") or ""),
+        )
+    )
+
+
 @app.route("/api/messages/<int:message_id>/delete", methods=["POST"])
 @require_login_api
 def api_messages_delete(message_id: int):

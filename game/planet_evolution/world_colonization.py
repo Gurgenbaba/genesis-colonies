@@ -578,6 +578,44 @@ def is_newly_colonized_world(claimed_at: Any, *, now: Optional[float] = None) ->
     return (ref - ts) <= NEWLY_COLONIZED_SECONDS
 
 
+def colonize_fail_reason_label(reason: str, *, locale: str | None = None) -> str:
+    """Localized colonization failure reason (never raw error codes in inbox)."""
+    from ..i18n import tr
+
+    key = str(reason or "generic").strip().lower()
+    return tr(
+        f"fleet_colonize_fail_{key}",
+        tr(
+            "fleet_colonize_fail_generic",
+            "The colony could not be established.",
+            locale=locale,
+        ),
+        locale=locale,
+    )
+
+
+def format_world_key_display(world_key: str, *, locale: str | None = None) -> str:
+    """Human-readable world label for inbox reports, e.g. Mining World [1520:2480]."""
+    from ..i18n import tr
+    from .strategic_worlds import build_strategic_world_presentation_from_key
+
+    wk = str(world_key or "").strip()
+    try:
+        parsed = parse_world_key(wk)
+        world = build_strategic_world_presentation_from_key(wk)
+        name = tr(str(world["name_key"]), str(world["name_key"]), locale=locale)
+        coords = f"{int(parsed['world_x'])}:{int(parsed['world_y'])}"
+        return tr(
+            "messages_world_display",
+            "%(name)s [%(coords)s]",
+            locale=locale,
+            name=name,
+            coords=coords,
+        )
+    except WorldKeyError:
+        return wk
+
+
 def build_world_colonize_report(
     world_key: str,
     colony_name: str,
@@ -636,9 +674,9 @@ def build_world_colonize_report(
                 ),
                 tr(
                     "fleet_world_colonize_report_world_key",
-                    "World: %(world_key)s",
+                    "World: %(world)s",
                     locale=locale,
-                    world_key=wk,
+                    world=format_world_key_display(wk, locale=locale),
                 ),
             ]
         )
@@ -646,6 +684,8 @@ def build_world_colonize_report(
         return subject, body, metadata
 
     reason = str(fail_reason or "generic")
+    reason_text = colonize_fail_reason_label(reason, locale=locale)
+    world_display = format_world_key_display(wk, locale=locale)
     subject = tr(
         "fleet_report_colonize_failed_subject_world",
         "Colonization failed — %(world)s",
@@ -655,18 +695,15 @@ def build_world_colonize_report(
     body = "\n".join(
         [
             tr(
-                "fleet_world_colonize_report_failed",
-                "Could not establish colony at %(world)s: %(reason)s.",
+                "fleet_world_colonize_report_failed_headline",
+                "Colony could not be founded.",
                 locale=locale,
-                world=world_name,
-                reason=reason,
             ),
-            tr(
-                "fleet_world_colonize_report_world_key",
-                "World: %(world_key)s",
-                locale=locale,
-                world_key=wk,
-            ),
+            "",
+            reason_text,
+            "",
+            tr("fleet_world_colonize_report_world_label", "World:", locale=locale),
+            world_display,
         ]
     )
     metadata["success"] = False

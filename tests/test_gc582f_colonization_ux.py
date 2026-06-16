@@ -73,6 +73,23 @@ def _colonizable_field():
     raise AssertionError("no colonizable field in sample grid")
 
 
+def test_build_world_colonize_report_failure_localized():
+    subject, body, meta = build_world_colonize_report(
+        "field:mining_world:1520:2480",
+        "Helios",
+        locale="de",
+        success=False,
+        fail_reason="world_already_claimed",
+    )
+    assert meta["success"] is False
+    assert "world_already_claimed" not in body
+    assert "1520:2480" in body
+    assert "field:mining_world" not in body
+    assert "Kolonie konnte nicht gegründet werden" in body
+    assert "anderen Imperium" in body
+    assert "Kolonisierung fehlgeschlagen" in subject
+
+
 def test_build_world_colonize_report_contains_strategic_name():
     field = _colonizable_field()
     subject, body, meta = build_world_colonize_report(
@@ -84,7 +101,7 @@ def test_build_world_colonize_report_contains_strategic_name():
     assert meta["report_kind"] == "world_colonize"
     assert meta["world_name_key"] == field["name_key"]
     assert "New colony founded" in body
-    assert field["world_key"] in body
+    assert "field:" not in body
     assert "New colony founded" in subject
 
 
@@ -210,7 +227,7 @@ def test_fleet_world_colonize_report_metadata(gc582f_db):
         meta = json.loads(msg["metadata_json"])
         assert meta.get("report_kind") == "world_colonize"
         assert meta.get("world_name_key") == field["name_key"]
-        assert field["world_key"] in msg["body"]
+        assert "field:" not in msg["body"]
     finally:
         conn.close()
 
