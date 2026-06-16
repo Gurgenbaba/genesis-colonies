@@ -1127,8 +1127,9 @@ def adjust_homeworld_resources(
     player_id: Optional[int],
     metal_delta: int = 0,
     crystal_delta: int = 0,
+    fuel_cells_delta: int = 0,
 ) -> None:
-    if not metal_delta and not crystal_delta:
+    if not metal_delta and not crystal_delta and not fuel_cells_delta:
         return
 
     conn = db()
@@ -1142,21 +1143,23 @@ def adjust_homeworld_resources(
                 """
                 UPDATE planets
                 SET metal   = MAX(0, metal   + ?),
-                    crystal = MAX(0, crystal + ?)
+                    crystal = MAX(0, crystal + ?),
+                    fuel_cells = MAX(0, fuel_cells + ?)
                 WHERE is_homeworld = 1;
                 """,
-                (int(metal_delta), int(crystal_delta)),
+                (int(metal_delta), int(crystal_delta), int(fuel_cells_delta)),
             )
         else:
             cur.execute(
                 """
                 UPDATE planets
                 SET metal   = MAX(0, metal   + ?),
-                    crystal = MAX(0, crystal + ?)
+                    crystal = MAX(0, crystal + ?),
+                    fuel_cells = MAX(0, fuel_cells + ?)
                 WHERE player_id = ?
                   AND is_homeworld = 1;
                 """,
-                (int(metal_delta), int(crystal_delta), int(player_id)),
+                (int(metal_delta), int(crystal_delta), int(fuel_cells_delta), int(player_id)),
             )
 
         conn.commit()

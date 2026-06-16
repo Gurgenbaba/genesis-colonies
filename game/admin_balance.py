@@ -25,10 +25,15 @@ BALANCE_SETTING_KEYS: Tuple[str, ...] = (
     "score_weight_buildings",
     "score_weight_research",
     "score_weight_fleet",
+    "score_cost_exponent",
+    "score_softcap",
     "exchange_enabled",
     "exchange_rate_metal_to_crystal",
     "exchange_rate_crystal_to_metal",
     "exchange_daily_limit",
+    "exchange_daily_limit_pct",
+    "exchange_daily_limit_min",
+    "exchange_daily_limit_max",
     "exchange_min_amount",
     "fuel_exchange_enabled",
     "fuel_exchange_metal_per_unit",
@@ -44,6 +49,9 @@ _INT_NONNEG = frozenset({
     "exchange_min_amount",
     "fuel_exchange_min_units",
     "fuel_production_per_hour",
+    "exchange_daily_limit_pct",
+    "exchange_daily_limit_min",
+    "exchange_daily_limit_max",
 })
 _INT_POS = frozenset({"queue_limit", "research_queue_limit", "shipyard_queue_limit"})
 _FLOAT_POS = frozenset(
@@ -59,9 +67,16 @@ _FLOAT_POS = frozenset(
         "exchange_rate_crystal_to_metal",
         "fuel_exchange_metal_per_unit",
         "fuel_exchange_crystal_per_unit",
+        "score_cost_exponent",
     }
 )
-_FLOAT_NONNEG = frozenset({"score_weight_buildings", "score_weight_research", "score_weight_fleet"})
+_INT_PCT = frozenset({"exchange_daily_limit_pct"})
+_FLOAT_NONNEG = frozenset({
+    "score_weight_buildings",
+    "score_weight_research",
+    "score_weight_fleet",
+    "score_softcap",
+})
 _BOOL_KEYS = frozenset({"exchange_enabled", "fuel_exchange_enabled"})
 
 PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
@@ -77,16 +92,21 @@ PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
     "score_weight_buildings": 1.0,
     "score_weight_research": 0.7,
     "score_weight_fleet": 1.0,
+    "score_cost_exponent": float(DEFAULT_GAME_SETTINGS.get("score_cost_exponent", 1.0)),
+    "score_softcap": float(DEFAULT_GAME_SETTINGS.get("score_softcap", 0.0)),
     "exchange_enabled": True,
     "exchange_rate_metal_to_crystal": float(DEFAULT_GAME_SETTINGS["exchange_rate_metal_to_crystal"]),
     "exchange_rate_crystal_to_metal": float(DEFAULT_GAME_SETTINGS["exchange_rate_crystal_to_metal"]),
     "exchange_daily_limit": int(DEFAULT_GAME_SETTINGS["exchange_daily_limit"]),
+    "exchange_daily_limit_pct": int(float(DEFAULT_GAME_SETTINGS.get("exchange_daily_limit_pct", 80))),
+    "exchange_daily_limit_min": int(DEFAULT_GAME_SETTINGS.get("exchange_daily_limit_min", 0)),
+    "exchange_daily_limit_max": int(DEFAULT_GAME_SETTINGS["exchange_daily_limit_max"]),
     "exchange_min_amount": int(DEFAULT_GAME_SETTINGS["exchange_min_amount"]),
     "fuel_exchange_enabled": True,
     "fuel_exchange_metal_per_unit": float(DEFAULT_GAME_SETTINGS["fuel_exchange_metal_per_unit"]),
     "fuel_exchange_crystal_per_unit": float(DEFAULT_GAME_SETTINGS["fuel_exchange_crystal_per_unit"]),
     "fuel_exchange_min_units": int(DEFAULT_GAME_SETTINGS["fuel_exchange_min_units"]),
-    "fuel_production_per_hour": int(DEFAULT_GAME_SETTINGS["fuel_production_per_hour"]),
+    "fuel_production_per_hour": int(float(DEFAULT_GAME_SETTINGS["fuel_production_per_hour"])),
 }
 
 
@@ -94,7 +114,8 @@ def _parse_int(raw: Any) -> Optional[int]:
     if raw is None or raw == "":
         return None
     try:
-        return int(str(raw).strip().replace(" ", ""))
+        s = str(raw).strip().replace(" ", "").replace(",", ".")
+        return int(float(s))
     except (TypeError, ValueError):
         return None
 
@@ -128,12 +149,14 @@ def _coerce_setting_value(key: str, raw: Any) -> Tuple[Optional[Any], Optional[s
             return None, f"{key}: invalid boolean"
         return val, None
 
-    if key in _INT_NONNEG | _INT_POS:
+    if key in _INT_NONNEG | _INT_POS | _INT_PCT:
         val = _parse_int(raw)
         if val is None:
             return None, f"{key}: invalid integer"
         if key in _INT_POS and val < 1:
             return None, f"{key}: must be >= 1"
+        if key in _INT_PCT and (val < 0 or val > 100):
+            return None, f"{key}: must be 0–100"
         if val < 0:
             return None, f"{key}: must be >= 0"
         return val, None
@@ -154,7 +177,7 @@ def _coerce_setting_value(key: str, raw: Any) -> Tuple[Optional[Any], Optional[s
 def _display_value(key: str, raw: Any) -> Any:
     if key in _BOOL_KEYS:
         return str(raw).strip().lower() not in ("0", "false", "no", "off", "")
-    if key in _INT_NONNEG | _INT_POS:
+    if key in _INT_NONNEG | _INT_POS | _INT_PCT:
         try:
             return int(float(raw or 0))
         except (TypeError, ValueError):

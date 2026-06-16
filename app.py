@@ -2710,6 +2710,38 @@ def api_admin_balance_preset_b():
     return _admin_json(admin_api_logic.api_apply_balance_preset_b(_admin_actor_id()))
 
 
+@app.route("/api/admin/server", methods=["GET"])
+@require_admin_api
+def api_admin_server_get():
+    return _admin_json(admin_api_logic.api_get_server_settings())
+
+
+@app.route("/api/admin/server", methods=["POST"])
+@require_admin_api
+def api_admin_server_save():
+    return _admin_json(admin_api_logic.api_save_server_settings(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/resources", methods=["POST"])
+@require_admin_api
+def api_admin_resources_apply():
+    return _admin_json(
+        admin_api_logic.api_apply_resource_tools(_admin_actor_id(), _admin_body(), _admin_actor_id())
+    )
+
+
+@app.route("/api/admin/wipe", methods=["POST"])
+@require_admin_api
+def api_admin_wipe():
+    return _admin_json(admin_api_logic.api_wipe_universe(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/bans", methods=["GET"])
+@require_admin_api
+def api_admin_bans_list():
+    return _admin_json(admin_api_logic.api_get_bans())
+
+
 # --------------------------------------------------------------------------
 # PLAYER CARD (global profile popup)
 # --------------------------------------------------------------------------

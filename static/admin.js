@@ -11,6 +11,8 @@
   let _adminPanelBootstrapped = false;
   let _selectedSupportTicketId = null;
   let _selectedAdminMessageId = null;
+  let _selectedPlayerId = null;
+  let _selectedPlanetId = null;
   let _lootboxAdminState = null;
   let _lootboxSelectedContainer = null;
 
@@ -241,6 +243,7 @@
         break;
       case "players":
         result = await searchAdminPlayers();
+        await loadAdminBans();
         break;
       case "lootboxes":
         result = await loadAdminLootboxes();
@@ -268,6 +271,9 @@
         break;
       case "balance":
         result = await loadAdminBalance();
+        break;
+      case "server":
+        result = await loadAdminServer();
         break;
       default:
         result = null;
@@ -320,7 +326,7 @@
     host.textContent = `×${prod} / ×${build} / ×${research}`;
   }
 
-  /** Apply lightweight HUD from balance save response (no full game-state tick). */
+  /** Apply HUD snapshot when server returned one (balance save). */
   function applyBalanceHudSnapshot(hud, reason) {
     if (!hud || hud.ok === false) return false;
     if (typeof GC.applyHudFromGameState === "function") {
@@ -329,21 +335,60 @@
     return false;
   }
 
-  /** Deferred fallback only — full game-state is heavy and can block the dev server. */
-  function scheduleDeferredHudRefresh(reason) {
-    if (typeof GC.shouldRunGameLoop === "function" && !GC.shouldRunGameLoop()) return;
-    if (typeof GC.refreshHudFromGameState !== "function") return;
-    window.setTimeout(() => {
-      GC.refreshHudFromGameState(reason || "admin_balance_save");
-    }, 1200);
+  function focusAdminDetail(el) {
+    if (!el) return;
+    if (window.matchMedia("(max-width: 640px)").matches) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function markSelectedEntityRow(listSelector, attrName, selectedId) {
+    const list = qs(listSelector);
+    if (!list) return;
+    qsa(`tr[${attrName}]`, list).forEach((row) => {
+      row.classList.toggle("is-active", String(row.getAttribute(attrName)) === String(selectedId));
+    });
+  }
+
+  /** Push admin mutations into live game UI immediately (HUD + optional tab reload). */
+  async function syncAfterAdminChange(reason, opts) {
+    const options = opts || {};
+    if (options.settings) updateAdminHeaderKpis(options.settings);
+    if (options.hud) applyBalanceHudSnapshot(options.hud, reason || "admin_change");
+
+    if (options.skipGameState !== true) {
+      if (typeof GC.refreshGameState === "function") {
+        try {
+          await GC.refreshGameState(reason || "admin_change");
+        } catch (_) {
+          /* non-fatal */
+        }
+      } else if (typeof GC.refreshHudFromGameState === "function") {
+        try {
+          await GC.refreshHudFromGameState(reason || "admin_change");
+        } catch (_) {
+          /* non-fatal */
+        }
+      }
+    }
+
+    if (options.reloadTab) {
+      await loadTab(_activeTab);
+    } else if (_activeTab === "players" && _selectedPlayerId) {
+      await loadAdminPlayer(_selectedPlayerId);
+    } else if (_activeTab === "planets" && _selectedPlanetId) {
+      await loadAdminPlanet(_selectedPlanetId);
+    } else if (_activeTab === "queues") {
+      await loadAdminQueues();
+    }
   }
 
   async function afterBalanceMutation(settings, reason, extras) {
     updateAdminSpeedKpi(settings || {});
-    const hud = extras && extras.hud;
-    applyBalanceHudSnapshot(hud, reason || "admin_balance_save");
-    // Follow-up sync for accrued resources (snapshot is read-only, no queue tick).
-    scheduleDeferredHudRefresh(reason || "admin_balance_save");
+    await syncAfterAdminChange(reason || "admin_balance_save", {
+      settings,
+      hud: extras && extras.hud,
+    });
   }
 
   async function loadAdminBalance() {
@@ -401,6 +446,173 @@
     return res;
   }
 
+  function setServerStatus(msg) {
+    const host = qs("#admin-server-status");
+    if (host) host.textContent = msg || "";
+  }
+
+  function populateServerForm(settings) {
+    if (!settings) return;
+    const un = qs("#universe_name");
+    if (un) un.value = settings.universe_name || "";
+    const gc = qs("#galaxy_count");
+    if (gc) gc.value = settings.galaxy_count != null ? settings.galaxy_count : 1;
+    const motd = qs("#motd_text");
+    if (motd) motd.value = settings.motd_text || "";
+    const motdOn = qs("#motd_enabled");
+    if (motdOn) motdOn.checked = !!settings.motd_enabled;
+    updateAdminHeaderKpis(settings);
+  }
+
+  function updateAdminHeaderKpis(settings) {
+    if (!settings) return;
+    const universeEl = qs(".admin-kpi-grid .admin-metric-value");
+    const cards = qsa(".admin-kpi-card");
+    cards.forEach((card) => {
+      const label = card.querySelector(".admin-metric-label")?.textContent || "";
+      if (label.includes("Universum") || label.toLowerCase().includes("universe")) {
+        const val = card.querySelector(".admin-metric-value");
+        if (val && settings.universe_name) val.textContent = settings.universe_name;
+      }
+      if (label.includes("Galaxien") || label.toLowerCase().includes("galax")) {
+        const val = card.querySelector(".admin-metric-value");
+        if (val && settings.galaxy_count != null) val.textContent = String(settings.galaxy_count);
+      }
+    });
+    updateAdminSpeedKpi(settings);
+  }
+
+  function collectServerPayload() {
+    return {
+      universe_name: (qs("#universe_name")?.value || "").trim(),
+      galaxy_count: parseInt(qs("#galaxy_count")?.value, 10) || 1,
+      motd_text: (qs("#motd_text")?.value || "").trim(),
+      motd_enabled: qs("#motd_enabled")?.checked ? 1 : 0,
+    };
+  }
+
+  async function loadAdminServer() {
+    setServerStatus("");
+    const data = await adminGet("/api/admin/server");
+    if (!data.ok) {
+      showAlert(data.message || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      return data;
+    }
+    populateServerForm(data.settings || {});
+    return data;
+  }
+
+  async function saveAdminServer() {
+    setServerStatus(t("admin_balance_saving", "Speichern…"));
+    const res = await adminPost("/api/admin/server", collectServerPayload());
+    if (res.ok) {
+      populateServerForm(res.settings || {});
+      notify(t("msg_settings_saved", "Einstellungen gespeichert."), "success");
+      setServerStatus(t("msg_settings_saved", "Einstellungen gespeichert."));
+      await syncAfterAdminChange("admin_server_save", { settings: res.settings });
+    } else {
+      showAlert(res.message || res.error, "error");
+      setServerStatus("");
+    }
+    return res;
+  }
+
+  async function applyAdminResources() {
+    const payload = {
+      metal_delta: (qs("#metal_delta")?.value || "").trim(),
+      crystal_delta: (qs("#crystal_delta")?.value || "").trim(),
+      fuel_cells_delta: (qs("#fuel_cells_delta")?.value || "").trim(),
+      resource_player_id: (qs("#resource_player_id")?.value || "").trim(),
+      resource_apply_all: qs("#resource_all")?.checked ? 1 : 0,
+    };
+    const res = await adminPost("/api/admin/resources", payload);
+    if (res.ok) {
+      notify(t("msg_admin_resources_updated", "Ressourcen angepasst."), "success");
+      setServerStatus(t("msg_admin_resources_updated", "Ressourcen angepasst."));
+      if (qs("#metal_delta")) qs("#metal_delta").value = "";
+      if (qs("#crystal_delta")) qs("#crystal_delta").value = "";
+      if (qs("#fuel_cells_delta")) qs("#fuel_cells_delta").value = "";
+      await syncAfterAdminChange("admin_resources_apply");
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  async function wipeAdminUniverse() {
+    if (!qs("#wipe_confirm")?.checked) {
+      showAlert(t("admin_wipe_confirm_required", "Wipe-Bestätigung erforderlich."), "error");
+      return null;
+    }
+    const c = prompt(t("admin_wipe_type_confirm", "Tippe WIPE UNIVERSE"));
+    if (c !== "WIPE UNIVERSE") return null;
+    const payload = {
+      wipe_confirm: 1,
+      wipe_reset_research: qs("#wipe_research")?.checked ? 1 : 0,
+      wipe_reset_resources: qs("#wipe_resources")?.checked ? 1 : 0,
+      wipe_delete_messages: qs("#wipe_messages")?.checked ? 1 : 0,
+    };
+    const res = await adminPost("/api/admin/wipe", payload);
+    if (res.ok) {
+      notify(t("msg_admin_wipe", "Universum wurde zurückgesetzt."), "success");
+      setServerStatus(t("msg_admin_wipe", "Universum wurde zurückgesetzt."));
+      if (qs("#wipe_confirm")) qs("#wipe_confirm").checked = false;
+      await syncAfterAdminChange("admin_universe_wipe", { reloadTab: true });
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  function renderAdminBans(bans) {
+    const host = qs("#admin-bans-output");
+    if (!host) return;
+    const rows = (bans || []).map((ban) => {
+      const expires = ban.is_permanent
+        ? `<span class="ban-permanent">${esc(t("admin_ban_permanent", "permanent"))}</span>`
+        : esc(ban.expires_text || "–");
+      return `<tr>
+        <td>${ban.player_id}</td>
+        <td>${ban.player_id && ban.username ? playerNameLink(ban.player_id, ban.username) : esc(ban.username || "–")}</td>
+        <td>${esc(ban.player_name || "–")}</td>
+        <td>${esc(ban.reason || "–")}</td>
+        <td>${esc(ban.created_text || "–")}</td>
+        <td>${expires}</td>
+        <td class="text-right">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-action="player-unban" data-player-id="${ban.player_id}">
+            ${esc(t("admin_btn_unban_player", "Aufheben"))}
+          </button>
+        </td>
+      </tr>`;
+    });
+    if (!rows.length) {
+      host.innerHTML = `<p class="admin-small-hint">${esc(t("admin_no_bans", "Keine aktiven Banns."))}</p>`;
+      return;
+    }
+    host.innerHTML = renderTable(
+      [
+        t("admin_col_id", "ID"),
+        t("admin_col_username", "Username"),
+        t("admin_col_player_name", "Name"),
+        t("admin_label_ban_reason", "Grund"),
+        t("admin_col_created", "Erstellt"),
+        t("admin_col_expires", "Gültig bis"),
+        t("admin_col_action", "Aktion"),
+      ],
+      rows
+    );
+  }
+
+  async function loadAdminBans() {
+    const data = await adminGet("/api/admin/bans");
+    if (!data.ok) {
+      showAlert(data.message, "error");
+      return data;
+    }
+    renderAdminBans(data.bans || []);
+    return data;
+  }
+
   async function loadAdminHealth() {
     const out = qs("#admin-health-output");
     if (out) out.innerHTML = loadingHtml();
@@ -435,21 +647,21 @@
         </div>
         <div class="admin-kpi-grid">
           <div class="admin-card">
-            <h3>${t("admin_health_db", "Datenbank")}</h3>
+            <h3 class="admin-subtitle">${t("admin_health_db", "Datenbank")}</h3>
             ${statusBadge(db.ok ? "ok" : "error", db.ok ? "OK" : "FAIL")}
             <p class="admin-small-hint">${esc(db.path || "")}</p>
           </div>
           <div class="admin-card">
-            <h3>${t("admin_migrations_title", "Migrationen")}</h3>
+            <h3 class="admin-subtitle">${t("admin_migrations_title", "Migrationen")}</h3>
             ${statusBadge(mig.ok ? "ok" : "warn", mig.current ? "OK" : "PENDING")}
             <p class="admin-small-hint">${(mig.pending || []).length} pending</p>
           </div>
           <div class="admin-card">
-            <h3>${t("admin_health_writable", "Writable")}</h3>
+            <h3 class="admin-subtitle">${t("admin_health_writable", "Writable")}</h3>
             ${statusBadge(wr.ok ? "ok" : "error", wr.ok ? "OK" : "FAIL")}
           </div>
           <div class="admin-card">
-            <h3>${t("admin_health_config", "Config")}</h3>
+            <h3 class="admin-subtitle">${t("admin_health_config", "Config")}</h3>
             ${statusBadge(cfg.ok ? "ok" : "warn", cfg.production ? "PROD" : "DEV")}
             ${cfg.debug ? `<p class="admin-small-hint">Debug ON</p>` : ""}
           </div>
@@ -484,11 +696,11 @@
         </div>
         <div class="admin-kpi-grid">
           <div class="admin-card">
-            <h3>${t("admin_migrations_applied", "Angewendet")} (${(m.applied || []).length})</h3>
+            <h3 class="admin-subtitle">${t("admin_migrations_applied", "Angewendet")} (${(m.applied || []).length})</h3>
             <ul class="admin-list">${(m.applied || []).map((x) => `<li>${esc(x)}</li>`).join("") || `<li>${t("admin_none", "Keine")}</li>`}</ul>
           </div>
           <div class="admin-card">
-            <h3>${t("admin_migrations_pending", "Ausstehend")} (${(m.pending || []).length})</h3>
+            <h3 class="admin-subtitle">${t("admin_migrations_pending", "Ausstehend")} (${(m.pending || []).length})</h3>
             <ul class="admin-list admin-list-warn">${(m.pending || []).map((x) => `<li>${esc(x)}</li>`).join("") || `<li>${t("admin_none", "Keine")}</li>`}</ul>
           </div>
         </div>`;
@@ -507,11 +719,18 @@
     return data;
   }
 
-  function renderTable(headers, rows) {
+  function renderTable(headers, rows, opts) {
     if (!rows.length) return emptyState(t("admin_empty", "Keine Einträge"));
-    return `<div class="admin-table-wrap"><table class="admin-table ban-table table-std">
-      <thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>
-      <tbody>${rows.join("")}</tbody></table></div>`;
+    const inline = opts && opts.inline;
+    const tableHtml = `<table class="admin-table ban-table table-std${inline ? " admin-table--entity" : ""}">
+      <thead><tr>${headers.map((h) => {
+        if (typeof h === "string") return `<th>${h}</th>`;
+        const cls = h.className ? ` class="${h.className}"` : "";
+        return `<th${cls}>${esc(h.label)}</th>`;
+      }).join("")}</tr></thead>
+      <tbody>${rows.join("")}</tbody></table>`;
+    if (inline) return tableHtml;
+    return `<div class="admin-table-wrap">${tableHtml}</div>`;
   }
 
   function buildAdminInventoryGrantUi(containers, { mode, idPrefix = "admin-lootbox" }) {
@@ -745,17 +964,23 @@
       return data;
     }
     const rows = (data.players || []).map(
-      (p) => `<tr>
-        <td>${p.id}</td><td>${playerNameLink(p.id, p.username)}</td><td>${p.is_admin ? "✓" : "–"}</td>
-        <td>${esc(fmtTs(p.last_seen))}</td>
-        <td><button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-player-id="${p.id}">${t("admin_btn_details", "Details")}</button></td>
+      (p) => `<tr class="admin-entity-row${_selectedPlayerId === p.id ? " is-active" : ""}" data-admin-player-id="${p.id}" title="${esc(t("admin_btn_details", "Details"))}">
+        <td class="col-id">${p.id}</td><td class="col-name">${playerNameLink(p.id, p.username)}</td><td class="col-flag">${p.is_admin ? "✓" : "–"}</td>
+        <td class="col-date">${esc(fmtTs(p.last_seen))}</td>
       </tr>`
     );
     if (list) {
       list.innerHTML = renderTable(
-        ["ID", t("admin_col_username", "Username"), t("admin_col_admin", "Admin"), t("admin_col_last_seen", "Zuletzt"), ""],
-        rows
+        [
+          t("admin_col_id", "ID"),
+          t("admin_col_username", "Username"),
+          t("admin_col_admin", "Admin"),
+          t("admin_col_last_seen", "Zuletzt"),
+        ],
+        rows,
+        { inline: true }
       );
+      markSelectedEntityRow("#admin-players-list", "data-admin-player-id", _selectedPlayerId);
     }
     return data;
   }
@@ -767,10 +992,11 @@
     const hw = data.homeworld || {};
     const score = data.score || {};
     el.innerHTML = `
-      <h3>#${p.id} ${playerNameLink(p.id, p.username)} ${p.is_admin ? statusBadge("ok", "Admin") : ""}</h3>
+      <h3 class="admin-subtitle">#${p.id} ${playerNameLink(p.id, p.username)} ${p.is_admin ? statusBadge("ok", "Admin") : ""}</h3>
       <p>${t("admin_col_last_seen", "Zuletzt")}: ${esc(fmtTs(p.last_seen))} · Score: ${fmtInt(score.total)} (#${score.rank || "?"})</p>
-      <p>Homeworld: ${esc(hw.name || "–")} · ${t("metal", "Ferronit")}: ${fmtInt(hw.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(hw.crystal)}</p>
+      <p>Homeworld: ${esc(hw.name || "–")} · ${t("metal", "Ferronit")}: ${fmtInt(hw.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(hw.crystal)} · ${t("fuel_cells", "Brennzellen")}: ${fmtInt(hw.fuel_cells)}</p>
       <div class="admin-toolbar">
+        <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-effects" data-player-id="${p.id}">${t("admin_btn_effects", "Effekte")}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-set-admin" data-player-id="${p.id}" data-is-admin="${p.is_admin ? 0 : 1}">${p.is_admin ? t("admin_btn_remove_admin", "Admin entfernen") : t("admin_btn_grant_admin", "Admin setzen")}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-repair-hw" data-player-id="${p.id}">${t("admin_btn_repair_homeworld", "Homeworld reparieren")}</button>
         <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="player-ban" data-player-id="${p.id}">${t("admin_btn_ban", "Bannen")}</button>
@@ -779,13 +1005,17 @@
       <div class="admin-toolbar admin-toolbar--tight">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-metal" placeholder="${t("metal", "Ferronit")}">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-crystal" placeholder="${t("crystal", "Crytite")}">
+        <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-fuel" placeholder="${t("fuel_cells", "Brennzellen")}">
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="player-resources-add" data-player-id="${p.id}">${t("admin_btn_apply", "Addieren")}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-resources-set" data-player-id="${p.id}">${t("admin_btn_set_resources", "Setzen")}</button>
       </div>`;
     syncAdminHudSelects(el);
+    focusAdminDetail(el);
   }
 
   async function loadAdminPlayer(id) {
+    _selectedPlayerId = parseInt(id, 10) || null;
+    markSelectedEntityRow("#admin-players-list", "data-admin-player-id", _selectedPlayerId);
     const data = await adminGet(`/api/admin/player/${id}`);
     if (!data.ok) showAlert(data.message, "error");
     else await renderPlayerDetail(data);
@@ -803,17 +1033,23 @@
       return data;
     }
     const rows = (data.planets || []).map(
-      (pl) => `<tr>
-        <td>${pl.id}</td><td>${esc(pl.name)}</td><td>${pl.player_id ? playerNameLink(pl.player_id, pl.owner_username || pl.player_id) : esc(pl.owner_username || "–")}</td>
-        <td>${pl.is_homeworld ? "✓" : "–"}</td>
-        <td><button type="button" class="gc-btn gc-btn-outline gc-btn-xs" data-admin-planet-id="${pl.id}">${t("admin_btn_details", "Details")}</button></td>
+      (pl) => `<tr class="admin-entity-row${_selectedPlanetId === pl.id ? " is-active" : ""}" data-admin-planet-id="${pl.id}" title="${esc(t("admin_btn_details", "Details"))}">
+        <td class="col-id">${pl.id}</td><td class="col-name">${esc(pl.name)}</td><td class="col-name">${pl.player_id ? playerNameLink(pl.player_id, pl.owner_username || pl.player_id) : esc(pl.owner_username || "–")}</td>
+        <td class="col-flag">${pl.is_homeworld ? "✓" : "–"}</td>
       </tr>`
     );
     if (list) {
       list.innerHTML = renderTable(
-        ["ID", t("admin_col_name", "Name"), t("admin_col_owner", "Owner"), "HW", ""],
-        rows
+        [
+          t("admin_col_id", "ID"),
+          t("admin_col_name", "Name"),
+          t("admin_col_owner", "Owner"),
+          "HW",
+        ],
+        rows,
+        { inline: true }
       );
+      markSelectedEntityRow("#admin-planets-list", "data-admin-planet-id", _selectedPlanetId);
     }
     return data;
   }
@@ -827,12 +1063,13 @@
       .map((k) => `<option value="${esc(k)}">${esc(k)} (${b[k]})</option>`)
       .join("");
     el.innerHTML = `
-      <h3>#${pl.id} ${esc(pl.name || "")}</h3>
-      <p>${t("metal", "Ferronit")}: ${fmtInt(pl.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(pl.crystal)}</p>
+      <h3 class="admin-subtitle">#${pl.id} ${esc(pl.name || "")}</h3>
+      <p>${t("metal", "Ferronit")}: ${fmtInt(pl.metal)} · ${t("crystal", "Crytite")}: ${fmtInt(pl.crystal)} · ${t("fuel_cells", "Brennzellen")}: ${fmtInt(pl.fuel_cells)}</p>
       <details class="admin-buildings-detail"><summary>${t("admin_buildings", "Gebäude")}</summary><pre>${esc(JSON.stringify(b, null, 2))}</pre></details>
       <div class="admin-toolbar admin-toolbar--tight">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-metal" placeholder="${t("metal", "Ferronit")}">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-crystal" placeholder="${t("crystal", "Crytite")}">
+        <input type="number" min="0" class="admin-input admin-input-sm" id="admin-planet-fuel" placeholder="${t("fuel_cells", "Brennzellen")}">
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="planet-resources-set" data-planet-id="${pl.id}">${t("admin_btn_set_resources", "Setzen")}</button>
       </div>
       <div class="admin-toolbar admin-toolbar--tight">
@@ -847,9 +1084,12 @@
         <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="planet-reset" data-planet-id="${pl.id}">${t("admin_btn_reset_planet", "Planet reset")}</button>
       </div>`;
     syncAdminHudSelects(el);
+    focusAdminDetail(el);
   }
 
   async function loadAdminPlanet(id) {
+    _selectedPlanetId = parseInt(id, 10) || null;
+    markSelectedEntityRow("#admin-planets-list", "data-admin-planet-id", _selectedPlanetId);
     const data = await adminGet(`/api/admin/planet/${id}`);
     if (!data.ok) showAlert(data.message, "error");
     else renderPlanetDetail(data);
@@ -875,10 +1115,12 @@
       `<button type="button" class="gc-btn gc-btn-danger gc-btn-xs" data-admin-action="queue-cancel" data-queue-type="${type}" data-job-id="${id}">${t("admin_btn_cancel", "Abbrechen")}</button>`;
     const bq = data.build_queue || [];
     const rq = data.research_queue || [];
+    const sq = data.shipyard_queue || [];
+    const dq = data.defense_queue || [];
     if (out) {
       out.innerHTML = `
         <div class="admin-card">
-          <h3>${t("admin_build_queue", "Bau-Queue")} (${bq.length})</h3>
+          <h3 class="admin-subtitle">${t("admin_build_queue", "Bau-Queue")} (${bq.length})</h3>
           ${renderTable(
             ["ID", "Planet", "Typ", "Status", ""],
             bq.map(
@@ -888,12 +1130,32 @@
           )}
         </div>
         <div class="admin-card">
-          <h3>${t("admin_research_queue", "Forschungs-Queue")} (${rq.length})</h3>
+          <h3 class="admin-subtitle">${t("admin_research_queue", "Forschungs-Queue")} (${rq.length})</h3>
           ${renderTable(
             ["ID", "User", "Tech", "Status", ""],
             rq.map(
               (j) =>
                 `<tr><td>${j.id}</td><td>${j.user_id}</td><td>${esc(j.tech_key)}</td><td>${esc(j.status)}</td><td>${cancelBtn("research", j.id)}</td></tr>`
+            )
+          )}
+        </div>
+        <div class="admin-card">
+          <h3 class="admin-subtitle">${t("admin_shipyard_queue", "Werft-Queue")} (${sq.length})</h3>
+          ${renderTable(
+            ["ID", "Planet", "Schiff", "Menge", "Status", ""],
+            sq.map(
+              (j) =>
+                `<tr><td>${j.id}</td><td>${j.planet_id}</td><td>${esc(j.ship_key)}</td><td>${j.amount || 1}</td><td>${esc(j.status)}</td><td>${cancelBtn("shipyard", j.id)}</td></tr>`
+            )
+          )}
+        </div>
+        <div class="admin-card">
+          <h3 class="admin-subtitle">${t("admin_defense_queue", "Verteidigungs-Queue")} (${dq.length})</h3>
+          ${renderTable(
+            ["ID", "Planet", "Typ", "Menge", "Status", ""],
+            dq.map(
+              (j) =>
+                `<tr><td>${j.id}</td><td>${j.planet_id}</td><td>${esc(j.defense_key)}</td><td>${j.amount || 1}</td><td>${esc(j.status)}</td><td>${cancelBtn("defense", j.id)}</td></tr>`
             )
           )}
         </div>
@@ -913,17 +1175,19 @@
 
   async function cancelQueueJob(type, id) {
     const data = await adminPost(`/api/admin/queue/${type}/${id}/cancel`, {});
-    if (data.ok) notify(t("admin_action_success", "Erfolgreich"), "success");
-    else showAlert(data.message, "error");
-    await loadAdminQueues();
+    if (data.ok) {
+      notify(t("admin_action_success", "Erfolgreich"), "success");
+      await syncAfterAdminChange("admin_queue_cancel");
+    } else showAlert(data.message, "error");
     return data;
   }
 
   async function finishDueQueues() {
     const data = await adminPost("/api/admin/queues/finish-due", {});
-    if (data.ok) notify(t("admin_action_success", "Erfolgreich"), "success");
-    else showAlert(data.message, "error");
-    await loadAdminQueues();
+    if (data.ok) {
+      notify(t("admin_action_success", "Erfolgreich"), "success");
+      await syncAfterAdminChange("admin_queues_finish_due");
+    } else showAlert(data.message, "error");
     return data;
   }
 
@@ -967,6 +1231,7 @@
         showAlert((data.errors || []).join("\n"), "error");
       }
       await loadAdminRuntime();
+      await syncAfterAdminChange("admin_queue_tick");
       return data;
     } catch (err) {
       const msg = err && err.message ? err.message : t("admin_tick_failed", "Queue-Tick fehlgeschlagen");
@@ -985,9 +1250,10 @@
     if (scope === "planet") body.planet_id = qs("#admin-queue-planet-id")?.value;
     else body.player_id = qs("#admin-queue-player-id")?.value;
     const data = await adminPost("/api/admin/queues/clear", body);
-    if (data.ok) notify(t("admin_action_success", "Erfolgreich"), "success");
-    else showAlert(data.message, "error");
-    await loadAdminQueues();
+    if (data.ok) {
+      notify(t("admin_action_success", "Erfolgreich"), "success");
+      await syncAfterAdminChange("admin_queue_clear");
+    } else showAlert(data.message, "error");
     return data;
   }
 
@@ -1070,7 +1336,9 @@
             )
             .join("")}
         </div>
-        <h3 class="admin-subtitle">${esc(t("admin_queue_tick_title", "Queue-Tick (Cron/Worker)"))}</h3>
+        <div class="admin-section-title">
+          <span class="admin-section-title-text">${esc(t("admin_queue_tick_title", "Queue-Tick (Cron/Worker)"))}</span>
+        </div>
         <div class="admin-kpi-grid">
           ${[
             [t("admin_tick_last", "Letzter Queue-Tick"), tickAt],
@@ -1126,7 +1394,7 @@
       <div class="admin-support-timeline">${msgs || `<p class="admin-small-hint">${esc(t("admin_support_no_messages", "Keine Nachrichten."))}</p>`}</div>
       <label class="admin-label">${esc(t("admin_support_reply_label", "Antwort an Spieler"))}</label>
       <textarea class="admin-input" id="admin-support-reply-body" rows="3" maxlength="1200"></textarea>
-      <div class="admin-action-row admin-action-row-wrap">
+      <div class="admin-toolbar admin-action-row-wrap">
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="support-reply" data-ticket-id="${ticket.id}">
           ${esc(t("admin_support_reply_btn", "Antwort senden"))}
         </button>
@@ -1160,31 +1428,26 @@
       renderAdminSupportDetail(null);
       return data;
     }
-    listOut.innerHTML = `
-      <table class="admin-table">
-        <thead><tr>
-          <th>ID</th>
-          <th>${esc(t("admin_support_col_player", "Spieler"))}</th>
-          <th>${esc(t("admin_support_col_subject", "Betreff"))}</th>
-          <th>${esc(t("admin_support_col_status", "Status"))}</th>
-          <th>${esc(t("admin_support_col_updated", "Aktualisiert"))}</th>
-        </tr></thead>
-        <tbody>
-          ${tickets
-            .map(
-              (tk) => `
-            <tr class="admin-support-ticket-row${_selectedSupportTicketId === tk.id ? " is-active" : ""}"
+    listOut.innerHTML = renderTable(
+      [
+        { label: "ID", className: "col-id" },
+        { label: t("admin_support_col_player", "Spieler"), className: "col-name" },
+        { label: t("admin_support_col_subject", "Betreff"), className: "col-subject" },
+        { label: t("admin_support_col_status", "Status"), className: "col-status" },
+        { label: t("admin_support_col_updated", "Aktualisiert"), className: "col-date" },
+      ],
+      tickets.map(
+        (tk) => `<tr class="admin-support-ticket-row${_selectedSupportTicketId === tk.id ? " is-active" : ""}"
                 data-admin-support-ticket-id="${tk.id}">
-              <td>${tk.id}</td>
-              <td>${playerNameLink(tk.player_id, tk.player_name)}</td>
-              <td>${esc(tk.subject)}</td>
-              <td>${esc(tk.status_label || tk.status)}</td>
-              <td>${esc(fmtTs(tk.last_message_at || tk.updated_at))}</td>
+              <td class="col-id">${tk.id}</td>
+              <td class="col-name">${playerNameLink(tk.player_id, tk.player_name)}</td>
+              <td class="col-subject">${esc(tk.subject)}</td>
+              <td class="col-status">${esc(tk.status_label || tk.status)}</td>
+              <td class="col-date">${esc(fmtTs(tk.last_message_at || tk.updated_at))}</td>
             </tr>`
-            )
-            .join("")}
-        </tbody>
-      </table>`;
+      ),
+      { inline: true }
+    );
     const selected =
       tickets.find((tk) => tk.id === _selectedSupportTicketId) || tickets[0];
     _selectedSupportTicketId = selected?.id || null;
@@ -1242,31 +1505,26 @@
       return data;
     }
 
-    listOut.innerHTML = `
-      <table class="admin-table">
-        <thead><tr>
-          <th>ID</th>
-          <th>${esc(t("admin_messages_col_recipient", "Empfaenger"))}</th>
-          <th>${esc(t("admin_messages_col_subject", "Betreff"))}</th>
-          <th>${esc(t("messages.category.system", "Kategorie"))}</th>
-          <th>${esc(t("admin_messages_col_date", "Datum"))}</th>
-        </tr></thead>
-        <tbody>
-          ${messages
-            .map(
-              (m) => `
-            <tr class="admin-support-ticket-row${_selectedAdminMessageId === m.id ? " is-active" : ""}"
+    listOut.innerHTML = renderTable(
+      [
+        { label: "ID", className: "col-id" },
+        { label: t("admin_messages_col_recipient", "Empfaenger"), className: "col-name" },
+        { label: t("admin_messages_col_subject", "Betreff"), className: "col-subject" },
+        { label: t("messages.category.system", "Kat."), className: "col-cat" },
+        { label: t("admin_messages_col_date", "Datum"), className: "col-date" },
+      ],
+      messages.map(
+        (m) => `<tr class="admin-support-ticket-row${_selectedAdminMessageId === m.id ? " is-active" : ""}"
                 data-admin-message-id="${m.id}">
-              <td>${m.id}</td>
-              <td>${playerNameLink(m.recipient_player_id, m.recipient_name || `#${m.recipient_player_id}`)}</td>
-              <td>${esc(m.subject)}</td>
-              <td>${esc(t(`messages.category.${m.category}`, m.category))}</td>
-              <td>${esc(fmtTs(m.created_at))}</td>
+              <td class="col-id">${m.id}</td>
+              <td class="col-name">${playerNameLink(m.recipient_player_id, m.recipient_name || `#${m.recipient_player_id}`)}</td>
+              <td class="col-subject">${esc(m.subject)}</td>
+              <td class="col-cat">${esc(t(`messages.category.${m.category}`, m.category))}</td>
+              <td class="col-date">${esc(fmtTs(m.created_at))}</td>
             </tr>`
-            )
-            .join("")}
-        </tbody>
-      </table>`;
+      ),
+      { inline: true }
+    );
 
     if (_selectedAdminMessageId) {
       const hit = messages.find((m) => m.id === _selectedAdminMessageId);
@@ -1494,6 +1752,9 @@
     if (act === "balance-save") return saveAdminBalance();
     if (act === "balance-preset-b") return applyBalancePresetB();
     if (act === "balance-recalculate") return recalculateAdminRankings();
+    if (act === "server-save") return saveAdminServer();
+    if (act === "server-resources") return applyAdminResources();
+    if (act === "server-wipe") return wipeAdminUniverse();
     if (act === "run-queue-tick") return runQueueTick(btn);
     if (act === "queue-cancel") return cancelQueueJob(btn.dataset.queueType, btn.dataset.jobId);
     if (act === "queue-clear") return clearQueues();
@@ -1506,10 +1767,11 @@
         body.confirm_text = c;
       }
       const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/set-admin`, body);
-      if (res.ok) notify(t("admin_action_success", "OK"), "success");
-      else showAlert(res.message, "error");
-      await loadAdminPlayer(btn.dataset.playerId);
-      await searchAdminPlayers();
+      if (res.ok) {
+        notify(t("admin_action_success", "OK"), "success");
+        await searchAdminPlayers();
+        await syncAfterAdminChange("admin_player_set_admin");
+      } else showAlert(res.message, "error");
       return res;
     }
     if (act === "player-ban") {
@@ -1520,9 +1782,11 @@
         reason: "admin panel",
         hours: 24,
       });
-      if (res.ok) notify(t("admin_action_success", "OK"), "success");
-      else showAlert(res.message, "error");
-      await loadAdminPlayer(btn.dataset.playerId);
+      if (res.ok) {
+        notify(t("admin_action_success", "OK"), "success");
+        await loadAdminBans();
+        await syncAfterAdminChange("admin_player_ban");
+      } else showAlert(res.message, "error");
       return res;
     }
     if (act === "ban-player-form") {
@@ -1542,7 +1806,9 @@
       });
       if (res.ok) {
         notify(t("admin_action_success", "OK"), "success");
-        window.location.reload();
+        await loadAdminBans();
+        if (qs("#admin-ban-player-id")) qs("#admin-ban-player-id").value = "";
+        await syncAfterAdminChange("admin_player_ban");
       } else showAlert(res.message, "error");
       return res;
     }
@@ -1550,28 +1816,54 @@
       const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/unban`, {});
       if (res.ok) {
         notify(t("admin_action_success", "OK"), "success");
-        if (btn.closest("#admin-players-list, .ban-table-wrapper")) {
-          window.location.reload();
-        } else {
-          await loadAdminPlayer(btn.dataset.playerId);
-        }
+        await loadAdminBans();
+        await syncAfterAdminChange("admin_player_unban");
       } else showAlert(res.message, "error");
       return res;
     }
+    if (act === "player-effects") {
+      const pid = btn.dataset.playerId;
+      const data = await adminGet(`/api/admin/player/${pid}/effects`);
+      if (!data.ok) {
+        showAlert(data.message || data.error, "error");
+        return data;
+      }
+      const el = qs("#admin-player-detail");
+      if (!el) return data;
+      let box = qs("#admin-player-effects", el);
+      if (!box) {
+        box = document.createElement("details");
+        box.id = "admin-player-effects";
+        box.className = "admin-buildings-detail";
+        box.innerHTML = `<summary>${esc(t("admin_effects_debug", "Effekt-Debug"))}</summary><pre></pre>`;
+        el.appendChild(box);
+      }
+      const pre = box.querySelector("pre");
+      if (pre) pre.textContent = JSON.stringify(data.effects || data, null, 2);
+      box.open = true;
+      return data;
+    }
     if (act === "player-repair-hw") {
-      await adminPost(`/api/admin/player/${btn.dataset.playerId}/repair-homeworld`, {});
-      notify(t("admin_action_success", "OK"), "success");
-      return loadAdminPlayer(btn.dataset.playerId);
+      const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/repair-homeworld`, {});
+      if (res.ok) {
+        notify(t("admin_action_success", "OK"), "success");
+        await syncAfterAdminChange("admin_repair_homeworld");
+      }
+      return res;
     }
     if (act === "player-resources-add" || act === "player-resources-set") {
       const mode = act.endsWith("set") ? "set" : "add";
-      await adminPost(`/api/admin/player/${btn.dataset.playerId}/resources`, {
+      const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/resources`, {
         mode,
         metal: qs("#admin-player-metal")?.value || 0,
         crystal: qs("#admin-player-crystal")?.value || 0,
+        fuel_cells: qs("#admin-player-fuel")?.value || 0,
       });
-      notify(t("admin_action_success", "OK"), "success");
-      return loadAdminPlayer(btn.dataset.playerId);
+      if (res.ok) {
+        notify(t("admin_action_success", "OK"), "success");
+        await syncAfterAdminChange("admin_player_resources");
+      } else showAlert(res.message, "error");
+      return res;
     }
     if (act === "player-inventory-grant" || act === "player-inventory-grant-quick") {
       const playerId = btn.dataset.playerId || qs("#admin-lootbox-player-id")?.value;
@@ -1727,29 +2019,40 @@
       return res;
     }
     if (act === "planet-resources-set") {
-      await adminPost(`/api/admin/planet/${btn.dataset.planetId}/resources`, {
+      const res = await adminPost(`/api/admin/planet/${btn.dataset.planetId}/resources`, {
         mode: "set",
         metal: qs("#admin-planet-metal")?.value || 0,
         crystal: qs("#admin-planet-crystal")?.value || 0,
+        fuel_cells: qs("#admin-planet-fuel")?.value || 0,
       });
-      notify(t("admin_action_success", "OK"), "success");
-      return loadAdminPlanet(btn.dataset.planetId);
+      if (res.ok) {
+        notify(t("admin_action_success", "OK"), "success");
+        await searchAdminPlanets();
+        await syncAfterAdminChange("admin_planet_resources");
+      } else showAlert(res.message, "error");
+      return res;
     }
     if (act === "planet-building-set") {
-      await adminPost(`/api/admin/planet/${btn.dataset.planetId}/building`, {
+      const res = await adminPost(`/api/admin/planet/${btn.dataset.planetId}/building`, {
         building_type: qs("#admin-planet-building-type")?.value,
         level: qs("#admin-planet-building-level")?.value || 0,
       });
-      notify(t("admin_action_success", "OK"), "success");
-      return loadAdminPlanet(btn.dataset.planetId);
+      if (res.ok) {
+        notify(t("admin_action_success", "OK"), "success");
+        await syncAfterAdminChange("admin_planet_building");
+      } else showAlert(res.message, "error");
+      return res;
     }
     if (act === "planet-reset") {
       const res = await adminPost(`/api/admin/planet/${btn.dataset.planetId}/reset`, {
         confirm_text: qs("#admin-planet-reset-confirm")?.value || "",
       });
-      if (res.ok) notify(t("admin_action_success", "OK"), "success");
-      else showAlert(res.message, "error");
-      return loadAdminPlanet(btn.dataset.planetId);
+      if (res.ok) {
+        notify(t("admin_action_success", "OK"), "success");
+        await searchAdminPlanets();
+        await syncAfterAdminChange("admin_planet_reset");
+      } else showAlert(res.message, "error");
+      return res;
     }
     return null;
   }
@@ -1793,13 +2096,16 @@
         return;
       }
 
-      const pBtn = e.target.closest("[data-admin-player-id]");
-      if (pBtn) {
-        await loadAdminPlayer(pBtn.dataset.adminPlayerId);
+      const pRow = e.target.closest("tr[data-admin-player-id]");
+      if (pRow) {
+        await loadAdminPlayer(pRow.dataset.adminPlayerId);
         return;
       }
-      const plBtn = e.target.closest("[data-admin-planet-id]");
-      if (plBtn) await loadAdminPlanet(plBtn.dataset.adminPlanetId);
+      const plRow = e.target.closest("tr[data-admin-planet-id]");
+      if (plRow) {
+        await loadAdminPlanet(plRow.dataset.adminPlanetId);
+        return;
+      }
 
       const supportRow = e.target.closest("[data-admin-support-ticket-id]");
       if (supportRow) {

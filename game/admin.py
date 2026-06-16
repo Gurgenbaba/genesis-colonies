@@ -186,7 +186,8 @@ def update_admin_settings(form: Dict[str, Any]) -> None:
         new_settings["galaxy_count"] = gal_count
 
     motd_text = str(form.get("motd_text") or "").strip()
-    motd_enabled = (form.get("motd_enabled") == "1") and bool(motd_text)
+    motd_enabled_raw = form.get("motd_enabled")
+    motd_enabled = motd_enabled_raw in (True, 1, "1", "true", "on") and bool(motd_text)
 
     new_settings["motd_text"] = motd_text
     new_settings["motd_enabled"] = 1 if motd_enabled else 0
@@ -214,6 +215,7 @@ def handle_resource_tools(form: Dict[str, Any], current_user_id: Optional[int]) 
     """
     raw_m = str(form.get("metal_delta") or "").replace(" ", "").strip()
     raw_c = str(form.get("crystal_delta") or "").replace(" ", "").strip()
+    raw_f = str(form.get("fuel_cells_delta") or "").replace(" ", "").strip()
 
     try:
         metal_delta = int(raw_m) if raw_m else 0
@@ -225,10 +227,15 @@ def handle_resource_tools(form: Dict[str, Any], current_user_id: Optional[int]) 
     except ValueError:
         crystal_delta = 0
 
-    if metal_delta == 0 and crystal_delta == 0:
+    try:
+        fuel_delta = int(raw_f) if raw_f else 0
+    except ValueError:
+        fuel_delta = 0
+
+    if metal_delta == 0 and crystal_delta == 0 and fuel_delta == 0:
         return
 
-    apply_all = form.get("resource_apply_all") == "1"
+    apply_all = form.get("resource_apply_all") in (True, 1, "1", "true", "on")
     player_id_raw = form.get("resource_player_id")
 
     if apply_all:
@@ -236,6 +243,7 @@ def handle_resource_tools(form: Dict[str, Any], current_user_id: Optional[int]) 
             player_id=None,
             metal_delta=metal_delta,
             crystal_delta=crystal_delta,
+            fuel_cells_delta=fuel_delta,
         )
         return
 
@@ -256,6 +264,7 @@ def handle_resource_tools(form: Dict[str, Any], current_user_id: Optional[int]) 
         player_id=int(target_player_id),
         metal_delta=metal_delta,
         crystal_delta=crystal_delta,
+        fuel_cells_delta=fuel_delta,
     )
 
 
@@ -282,11 +291,11 @@ def wipe_universe(form: Dict[str, Any]) -> None:
       - für alle Spieler neue Homeworlds erzeugen (ensure_player_and_homeworld)
       - bans optional löschen? -> NICHT automatisch (Fairplay). Wenn du willst: extra Checkbox.
     """
-    if form.get("wipe_confirm") != "1":
+    if form.get("wipe_confirm") not in (True, 1, "1", "true", "on"):
         return
 
-    reset_research = form.get("wipe_reset_research") == "1"
-    delete_messages = form.get("wipe_delete_messages") == "1"
+    reset_research = form.get("wipe_reset_research") in (True, 1, "1", "true", "on")
+    delete_messages = form.get("wipe_delete_messages") in (True, 1, "1", "true", "on")
     _ = form.get("wipe_reset_resources")  # Placeholder
 
     conn = db()

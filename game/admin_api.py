@@ -413,6 +413,7 @@ def set_player_resources(admin_id: int, player_id: int, body: Dict[str, Any]) ->
     mode = str(body.get("mode") or "add").lower()
     metal = clamp_resource(body.get("metal", 0))
     crystal = clamp_resource(body.get("crystal", 0))
+    fuel_cells = clamp_resource(body.get("fuel_cells", 0))
 
     conn = db()
     try:
@@ -433,18 +434,19 @@ def set_player_resources(admin_id: int, player_id: int, body: Dict[str, Any]) ->
 
         if mode == "set":
             cur.execute(
-                "UPDATE planets SET metal = ?, crystal = ? WHERE id = ?;",
-                (metal, crystal, planet_id),
+                "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+                (metal, crystal, fuel_cells, planet_id),
             )
         else:
             cur.execute(
                 """
                 UPDATE planets
                 SET metal = MIN(?, MAX(0, metal + ?)),
-                    crystal = MIN(?, MAX(0, crystal + ?))
+                    crystal = MIN(?, MAX(0, crystal + ?)),
+                    fuel_cells = MIN(?, MAX(0, fuel_cells + ?))
                 WHERE id = ?;
                 """,
-                (MAX_RESOURCE, metal, MAX_RESOURCE, crystal, planet_id),
+                (MAX_RESOURCE, metal, MAX_RESOURCE, crystal, MAX_RESOURCE, fuel_cells, planet_id),
             )
         commit(conn)
     except Exception:
@@ -458,7 +460,7 @@ def set_player_resources(admin_id: int, player_id: int, body: Dict[str, Any]) ->
         "player_resources",
         target_type="player",
         target_id=player_id,
-        payload={"mode": mode, "metal": metal, "crystal": crystal},
+        payload={"mode": mode, "metal": metal, "crystal": crystal, "fuel_cells": fuel_cells},
     )
     return get_player_detail(player_id)
 
@@ -543,6 +545,7 @@ def set_planet_resources(admin_id: int, planet_id: int, body: Dict[str, Any]) ->
     mode = str(body.get("mode") or "add").lower()
     metal = clamp_resource(body.get("metal", 0))
     crystal = clamp_resource(body.get("crystal", 0))
+    fuel_cells = clamp_resource(body.get("fuel_cells", 0))
 
     conn = db()
     try:
@@ -554,18 +557,19 @@ def set_planet_resources(admin_id: int, planet_id: int, body: Dict[str, Any]) ->
             return _err("not_found", "Planet not found.")
         if mode == "set":
             cur.execute(
-                "UPDATE planets SET metal = ?, crystal = ? WHERE id = ?;",
-                (metal, crystal, int(planet_id)),
+                "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
+                (metal, crystal, fuel_cells, int(planet_id)),
             )
         else:
             cur.execute(
                 """
                 UPDATE planets
                 SET metal = MIN(?, MAX(0, metal + ?)),
-                    crystal = MIN(?, MAX(0, crystal + ?))
+                    crystal = MIN(?, MAX(0, crystal + ?)),
+                    fuel_cells = MIN(?, MAX(0, fuel_cells + ?))
                 WHERE id = ?;
                 """,
-                (MAX_RESOURCE, metal, MAX_RESOURCE, crystal, int(planet_id)),
+                (MAX_RESOURCE, metal, MAX_RESOURCE, crystal, MAX_RESOURCE, fuel_cells, int(planet_id)),
             )
         commit(conn)
     except Exception:
@@ -579,7 +583,7 @@ def set_planet_resources(admin_id: int, planet_id: int, body: Dict[str, Any]) ->
         "planet_resources",
         target_type="planet",
         target_id=planet_id,
-        payload={"mode": mode, "metal": metal, "crystal": crystal},
+        payload={"mode": mode, "metal": metal, "crystal": crystal, "fuel_cells": fuel_cells},
     )
     return get_planet_detail(planet_id)
 
@@ -885,14 +889,22 @@ def get_queues(filters: Dict[str, Any]) -> Dict[str, Any]:
         cur = conn.cursor()
         b_params: List[Any] = []
         r_params: List[Any] = []
+        s_params: List[Any] = []
+        d_params: List[Any] = []
         b_where = ["1=1"]
         r_where = ["1=1"]
+        s_where = ["1=1"]
+        d_where = ["1=1"]
 
         if planet_id is not None:
             try:
                 pid = int(planet_id)
                 b_where.append("bq.planet_id = ?")
                 b_params.append(pid)
+                s_where.append("sq.planet_id = ?")
+                s_params.append(pid)
+                d_where.append("dq.planet_id = ?")
+                d_params.append(pid)
             except (TypeError, ValueError):
                 pass
         if player_id is not None:
@@ -902,6 +914,10 @@ def get_queues(filters: Dict[str, Any]) -> Dict[str, Any]:
                 b_params.append(uid)
                 r_where.append("rq.user_id = ?")
                 r_params.append(uid)
+                s_where.append("sq.player_id = ?")
+                s_params.append(uid)
+                d_where.append("dq.player_id = ?")
+                d_params.append(uid)
             except (TypeError, ValueError):
                 pass
 
@@ -932,6 +948,37 @@ def get_queues(filters: Dict[str, Any]) -> Dict[str, Any]:
         )
         research_rows = [dict(r) for r in cur.fetchall()]
 
+        shipyard_rows: List[Dict[str, Any]] = []
+        defense_rows: List[Dict[str, Any]] = []
+        if table_exists(conn, "shipyard_queue"):
+            cur.execute(
+                f"""
+                SELECT sq.*, pl.name AS planet_name, u.username
+                FROM shipyard_queue sq
+                JOIN planets pl ON pl.id = sq.planet_id
+                LEFT JOIN users u ON u.id = sq.player_id
+                WHERE {' AND '.join(s_where)}
+                ORDER BY sq.finish_at ASC
+                LIMIT 200;
+                """,
+                s_params,
+            )
+            shipyard_rows = [dict(r) for r in cur.fetchall()]
+        if table_exists(conn, "defense_queue"):
+            cur.execute(
+                f"""
+                SELECT dq.*, pl.name AS planet_name, u.username
+                FROM defense_queue dq
+                JOIN planets pl ON pl.id = dq.planet_id
+                LEFT JOIN users u ON u.id = dq.player_id
+                WHERE {' AND '.join(d_where)}
+                ORDER BY dq.finish_at ASC
+                LIMIT 200;
+                """,
+                d_params,
+            )
+            defense_rows = [dict(r) for r in cur.fetchall()]
+
         def _tag(row: Dict[str, Any], finish_key: str) -> str:
             ft = float(row.get(finish_key) or 0)
             if ft <= now:
@@ -942,15 +989,28 @@ def get_queues(filters: Dict[str, Any]) -> Dict[str, Any]:
             row["status"] = _tag(row, "finish_time")
         for row in research_rows:
             row["status"] = _tag(row, "finish_at")
+        for row in shipyard_rows:
+            row["status"] = _tag(row, "finish_at")
+        for row in defense_rows:
+            row["status"] = _tag(row, "finish_at")
 
         if status == "active":
             build_rows = [r for r in build_rows if r["status"] == "active"]
             research_rows = [r for r in research_rows if r["status"] == "active"]
+            shipyard_rows = [r for r in shipyard_rows if r["status"] == "active"]
+            defense_rows = [r for r in defense_rows if r["status"] == "active"]
         elif status == "finished":
             build_rows = [r for r in build_rows if r["status"] == "finished"]
             research_rows = [r for r in research_rows if r["status"] == "finished"]
+            shipyard_rows = [r for r in shipyard_rows if r["status"] == "finished"]
+            defense_rows = [r for r in defense_rows if r["status"] == "finished"]
 
-        return _ok(build_queue=build_rows, research_queue=research_rows)
+        return _ok(
+            build_queue=build_rows,
+            research_queue=research_rows,
+            shipyard_queue=shipyard_rows,
+            defense_queue=defense_rows,
+        )
     finally:
         conn.close()
 
@@ -981,8 +1041,30 @@ def cancel_queue_job(admin_id: int, queue_type: str, job_id: int) -> Dict[str, A
             conn.commit()
         finally:
             conn.close()
+    elif qtype == "shipyard":
+        conn = db()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM shipyard_queue WHERE id = ? LIMIT 1;", (int(job_id),))
+            if not cur.fetchone():
+                return _err("not_found", "Shipyard job not found.")
+            cur.execute("DELETE FROM shipyard_queue WHERE id = ?;", (int(job_id),))
+            conn.commit()
+        finally:
+            conn.close()
+    elif qtype == "defense":
+        conn = db()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM defense_queue WHERE id = ? LIMIT 1;", (int(job_id),))
+            if not cur.fetchone():
+                return _err("not_found", "Defense job not found.")
+            cur.execute("DELETE FROM defense_queue WHERE id = ?;", (int(job_id),))
+            conn.commit()
+        finally:
+            conn.close()
     else:
-        return _err("invalid_type", "Queue type must be build or research.")
+        return _err("invalid_type", "Queue type must be build, research, shipyard, or defense.")
 
     audit(
         admin_id,
@@ -1178,3 +1260,68 @@ def api_apply_balance_preset_b(admin_id: int) -> Dict[str, Any]:
     audit(int(admin_id), "balance_preset_b", target_type="system")
     hud = build_balance_hud_snapshot(int(admin_id))
     return _ok(settings=settings, hud=hud)
+
+
+# ---------------------------------------------------------------------------
+# Server settings, resources, wipe, bans (Admin → Server tab)
+# ---------------------------------------------------------------------------
+
+def api_get_server_settings() -> Dict[str, Any]:
+    from game.admin import get_admin_settings
+
+    return _ok(settings=get_admin_settings())
+
+
+def api_save_server_settings(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.admin import get_admin_settings, update_admin_settings
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+    update_admin_settings(body)
+    settings = get_admin_settings()
+    audit(
+        int(admin_id),
+        "server_settings_save",
+        target_type="system",
+        payload={"keys": sorted(body.keys())},
+    )
+    return _ok(settings=settings)
+
+
+def api_apply_resource_tools(admin_id: int, body: Dict[str, Any], actor_user_id: int) -> Dict[str, Any]:
+    from game.admin import handle_resource_tools
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+    handle_resource_tools(body, current_user_id=int(actor_user_id))
+    audit(
+        int(admin_id),
+        "resource_tools",
+        target_type="system",
+        payload={
+            "metal_delta": body.get("metal_delta"),
+            "crystal_delta": body.get("crystal_delta"),
+            "fuel_cells_delta": body.get("fuel_cells_delta"),
+            "apply_all": body.get("resource_apply_all"),
+            "player_id": body.get("resource_player_id"),
+        },
+    )
+    return _ok(applied=True)
+
+
+def api_wipe_universe(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.admin import wipe_universe
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+    if body.get("wipe_confirm") not in (True, 1, "1", "true", "on"):
+        return _err("confirm_required", "wipe_confirm required")
+    wipe_universe(body)
+    audit(int(admin_id), "universe_wipe", target_type="system", payload={"keys": sorted(body.keys())})
+    return _ok(wiped=True)
+
+
+def api_get_bans() -> Dict[str, Any]:
+    from game.admin import get_ban_list
+
+    return _ok(bans=get_ban_list())

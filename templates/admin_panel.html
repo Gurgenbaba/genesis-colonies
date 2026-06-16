@@ -37,7 +37,7 @@
     <!-- ============================================================= -->
     <!-- QUICK STATS                                                   -->
     <!-- ============================================================= -->
-    <section class="admin-section admin-section-metrics admin-kpi-grid">
+    <section class="admin-section-metrics">
       <div class="admin-metrics-grid">
 
         <div class="admin-metric-card admin-kpi-card">
@@ -140,21 +140,26 @@
     <section id="admin-tab-players" class="admin-panel admin-tab-panel" data-admin-panel="players" role="tabpanel" hidden>
       <div class="admin-action-row">
         <h2 class="admin-panel-title">{{ T("admin_players_title") }}</h2>
-        <div class="admin-action-row">
+        <div class="admin-toolbar">
           <input type="search" class="admin-input" id="admin-players-search" placeholder="{{ T('admin_search_players_placeholder') }}">
           <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="search-players">{{ T("admin_btn_search") }}</button>
         </div>
       </div>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_entity_row_hint", "Zeile anklicken für Details.") }}</p>
 
-      <div id="admin-players-list" class="admin-table-wrap"></div>
-      <div id="admin-player-detail" class="admin-card admin-detail"></div>
+      <div class="admin-entity-layout">
+        <div id="admin-players-list" class="admin-entity-list" aria-live="polite"></div>
+        <div id="admin-player-detail" class="admin-card admin-detail admin-entity-detail">
+          <p class="admin-small-hint">{{ T("admin_player_select_hint", "Spieler aus der Liste wählen.") }}</p>
+        </div>
+      </div>
 
       <div class="admin-section-title">
         <span class="admin-section-title-text">{{ T("admin_section_bans", "Account-Banns") }}</span>
       </div>
       <section class="admin-section">
         <p class="admin-small-hint">{{ T("admin_ban_hint") }}</p>
-        <div class="admin-action-row admin-action-row-wrap">
+        <div class="admin-toolbar admin-action-row-wrap">
           <input type="number" class="admin-input admin-input-sm" id="admin-ban-player-id"
                  placeholder="{{ T('admin_label_ban_player_id', 'Spieler-ID') }}" min="1">
           <input type="text" class="admin-input admin-input-sm" id="admin-ban-reason"
@@ -165,55 +170,7 @@
             {{ T("admin_btn_ban_player", "Spieler bannen") }}
           </button>
         </div>
-        {% if banned_players and banned_players|length > 0 %}
-        <div class="ban-table-wrapper admin-table-wrap">
-          <table class="ban-table table-std admin-table">
-            <thead>
-              <tr>
-                <th>{{ T("admin_col_id", "ID") }}</th>
-                <th>{{ T("admin_col_username", "Username") }}</th>
-                <th>{{ T("admin_col_player_name", "Name") }}</th>
-                <th>{{ T("admin_label_ban_reason", "Grund") }}</th>
-                <th>{{ T("admin_col_created", "Erstellt") }}</th>
-                <th>{{ T("admin_col_expires", "Gültig bis") }}</th>
-                <th class="text-right">{{ T("admin_col_action", "Aktion") }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for ban in banned_players %}
-              <tr>
-                <td>{{ ban.player_id }}</td>
-                <td>
-                  {% if ban.player_id and ban.username %}
-                    {{ player_name_link(ban.player_id, ban.username) }}
-                  {% else %}
-                    {{ ban.username or "–" }}
-                  {% endif %}
-                </td>
-                <td>{{ ban.player_name or "–" }}</td>
-                <td>{{ ban.reason or "–" }}</td>
-                <td>{{ ban.created_text }}</td>
-                <td>
-                  {% if ban.is_permanent %}
-                    <span class="ban-permanent">{{ T("admin_ban_permanent", "permanent") }}</span>
-                  {% else %}
-                    {{ ban.expires_text }}
-                  {% endif %}
-                </td>
-                <td class="text-right">
-                  <button type="button" class="gc-btn gc-btn-outline gc-btn-xs"
-                          data-admin-action="player-unban" data-player-id="{{ ban.player_id }}">
-                    {{ T("admin_btn_unban_player", "Aufheben") }}
-                  </button>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-        <span class="admin-small-hint">{{ T("admin_no_bans") }}</span>
-        {% endif %}
+        <div id="admin-bans-output" class="ban-table-wrapper admin-table-wrap" aria-live="polite"></div>
       </section>
     </section>
 
@@ -221,7 +178,7 @@
       <div class="admin-action-row">
         <h2 class="admin-panel-title">{{ T("admin_lootboxes_title", "Lootboxen") }}</h2>
       </div>
-      <p class="admin-small-hint">{{ T("admin_lootboxes_hint", "Container vergeben und Loot-Pools live anpassen — Änderungen wirken sofort auf neue Öffnungen.") }}</p>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_lootboxes_hint", "Container vergeben und Loot-Pools live anpassen — Änderungen wirken sofort auf neue Öffnungen.") }}</p>
 
       <div class="admin-section-title">
         <span class="admin-section-title-text">{{ T("admin_lootboxes_section_grant_all", "Vergabe an alle Spieler") }}</span>
@@ -242,19 +199,24 @@
     <section id="admin-tab-planets" class="admin-panel admin-tab-panel" data-admin-panel="planets" role="tabpanel" hidden>
       <div class="admin-action-row">
         <h2 class="admin-panel-title">{{ T("admin_planets_title") }}</h2>
-        <div class="admin-action-row">
+        <div class="admin-toolbar">
           <input type="search" class="admin-input" id="admin-planets-search" placeholder="{{ T('admin_search_planets_placeholder') }}">
           <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="search-planets">{{ T("admin_btn_search") }}</button>
         </div>
       </div>
-      <div id="admin-planets-list" class="admin-table-wrap"></div>
-      <div id="admin-planet-detail" class="admin-card admin-detail"></div>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_entity_row_hint", "Zeile anklicken für Details.") }}</p>
+      <div class="admin-entity-layout">
+        <div id="admin-planets-list" class="admin-entity-list" aria-live="polite"></div>
+        <div id="admin-planet-detail" class="admin-card admin-detail admin-entity-detail">
+          <p class="admin-small-hint">{{ T("admin_planet_select_hint", "Planet aus der Liste wählen.") }}</p>
+        </div>
+      </div>
     </section>
 
     <section id="admin-tab-queues" class="admin-panel admin-tab-panel" data-admin-panel="queues" role="tabpanel" hidden>
-      <div class="admin-action-row admin-action-row-wrap">
+      <div class="admin-action-row">
         <h2 class="admin-panel-title">{{ T("admin_queues_title") }}</h2>
-        <div class="admin-action-row">
+        <div class="admin-toolbar admin-action-row-wrap">
           <input type="number" class="admin-input admin-input-sm" id="admin-queue-player-id" placeholder="{{ T('admin_filter_player_id') }}">
           <input type="number" class="admin-input admin-input-sm" id="admin-queue-planet-id" placeholder="{{ T('admin_filter_planet_id') }}">
           <select class="admin-input admin-select" data-gc-hud-select id="admin-queue-status">
@@ -270,9 +232,9 @@
     </section>
 
     <section id="admin-tab-audit" class="admin-panel admin-tab-panel" data-admin-panel="audit" role="tabpanel" hidden>
-      <div class="admin-action-row admin-action-row-wrap">
+      <div class="admin-action-row">
         <h2 class="admin-panel-title">{{ T("admin_audit_title") }}</h2>
-        <div class="admin-action-row">
+        <div class="admin-toolbar admin-action-row-wrap">
           <input type="number" class="admin-input admin-input-sm" id="admin-audit-admin-id" placeholder="{{ T('admin_filter_admin_id') }}">
           <input type="text" class="admin-input admin-input-sm" id="admin-audit-action" placeholder="{{ T('admin_filter_action') }}">
           <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="load-audit">{{ T("admin_btn_load_audit") }}</button>
@@ -282,24 +244,30 @@
     </section>
 
     <section id="admin-tab-chat" class="admin-panel admin-tab-panel" data-admin-panel="chat" role="tabpanel" hidden>
-      <div class="admin-action-row admin-action-row-wrap">
+      <div class="admin-action-row">
         <h2 class="admin-panel-title">{{ T("admin_chat_title") }}</h2>
       </div>
-      <p class="admin-small-hint">{{ T("admin_chat_hint") }}</p>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_chat_hint") }}</p>
 
-      <div class="admin-card">
-        <h3 class="admin-subtitle">{{ T("admin_chat_notice_title") }}</h3>
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_chat_notice_title") }}</span>
+      </div>
+      <section class="admin-section admin-card">
         <textarea class="admin-input" id="admin-chat-notice-body" rows="3" maxlength="500"
                   placeholder="{{ T('admin_chat_notice_placeholder') }}"></textarea>
+        <div class="admin-btn-row">
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="chat-system-notice">
           {{ T("admin_chat_notice_send") }}
         </button>
-      </div>
+        </div>
+      </section>
 
-      <div class="admin-card">
-        <h3 class="admin-subtitle">{{ T("admin_chat_moderation_title", "Moderation") }}</h3>
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_chat_moderation_title", "Moderation") }}</span>
+      </div>
+      <section class="admin-section admin-card">
         <p class="admin-small-hint">{{ T("admin_chat_moderation_hint", "Stummschaltung (temporär) und Chat-Bann (dauerhaft) sind getrennte Maßnahmen.") }}</p>
-        <div class="admin-action-row admin-action-row-wrap">
+        <div class="admin-toolbar admin-action-row-wrap">
           <input type="number" class="admin-input admin-input-sm" id="admin-chat-mod-player" placeholder="{{ T('admin_chat_mute_player_id') }}">
           <select class="admin-input admin-select" data-gc-hud-select id="admin-chat-mute-scope">
             <option value="global">{{ T("admin_chat_mute_scope_global") }}</option>
@@ -321,21 +289,24 @@
             {{ T("admin_chat_unmute_btn", "Stumm aufheben") }}
           </button>
         </div>
-      </div>
+      </section>
 
-      <div class="admin-card">
-        <h3 class="admin-subtitle">{{ T("admin_chat_search_title") }}</h3>
-        <div class="admin-action-row">
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_chat_search_title") }}</span>
+      </div>
+      <section class="admin-section admin-card">
+        <div class="admin-toolbar">
           <input type="search" class="admin-input" id="admin-chat-search-q" placeholder="{{ T('admin_chat_search_placeholder') }}">
           <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="chat-search">{{ T("admin_btn_search") }}</button>
         </div>
         <div id="admin-chat-search-output" class="admin-table-wrap"></div>
-      </div>
+      </section>
     </section>
 
     <section id="admin-tab-support" class="admin-panel admin-tab-panel" data-admin-panel="support" role="tabpanel" hidden>
-      <div class="admin-action-row admin-action-row-wrap">
+      <div class="admin-action-row">
         <h2 class="admin-panel-title">{{ T("admin_support_title", "Support-Tickets") }}</h2>
+        <div class="admin-toolbar admin-action-row-wrap">
         <select class="admin-input admin-select" data-gc-hud-select id="admin-support-status-filter">
           <option value="">{{ T("admin_filter_status_all", "Alle Status") }}</option>
           <option value="open">{{ T("admin_support_status_open", "Offen") }}</option>
@@ -343,10 +314,11 @@
           <option value="closed">{{ T("admin_support_status_closed", "Geschlossen") }}</option>
         </select>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="support-refresh">{{ T("admin_btn_refresh", "Aktualisieren") }}</button>
+        </div>
       </div>
-      <p class="admin-small-hint">{{ T("admin_support_hint", "Alle Spieler-Tickets – antworten und Status setzen.") }}</p>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_support_hint", "Alle Spieler-Tickets – antworten und Status setzen.") }}</p>
       <div class="admin-support-layout">
-        <div id="admin-support-list" class="admin-table-wrap admin-support-list" aria-live="polite"></div>
+        <div id="admin-support-list" class="admin-support-list" aria-live="polite"></div>
         <div id="admin-support-detail" class="admin-card admin-support-detail">
           <p class="admin-small-hint">{{ T("admin_support_select_hint", "Ticket aus der Liste waehlen.") }}</p>
         </div>
@@ -354,8 +326,9 @@
     </section>
 
     <section id="admin-tab-messages" class="admin-panel admin-tab-panel" data-admin-panel="messages" role="tabpanel" hidden>
-      <div class="admin-action-row admin-action-row-wrap">
+      <div class="admin-action-row">
         <h2 class="admin-panel-title">{{ T("admin_messages_title", "Spieler-Nachrichten") }}</h2>
+        <div class="admin-toolbar admin-action-row-wrap">
         <input type="number" class="admin-input admin-input-sm" id="admin-messages-player-filter"
                placeholder="{{ T('admin_messages_filter_player', 'Spieler-ID') }}" min="1">
         <select class="admin-input admin-select" data-gc-hud-select id="admin-messages-category-filter">
@@ -368,17 +341,20 @@
           <option value="admin">{{ T("messages.category.admin", "Admin") }}</option>
         </select>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="messages-refresh">{{ T("admin_btn_refresh", "Aktualisieren") }}</button>
+        </div>
       </div>
-      <p class="admin-small-hint">{{ T("admin_messages_hint", "Posteingänge aller Spieler einsehen und Admin-Nachrichten senden.") }}</p>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_messages_hint", "Posteingänge aller Spieler einsehen und Admin-Nachrichten senden.") }}</p>
       <div class="admin-support-layout">
-        <div id="admin-messages-list" class="admin-table-wrap admin-support-list" aria-live="polite"></div>
+        <div id="admin-messages-list" class="admin-support-list" aria-live="polite"></div>
         <div id="admin-messages-detail" class="admin-card admin-support-detail">
           <p class="admin-small-hint">{{ T("admin_messages_select_hint", "Nachricht aus der Liste wählen.") }}</p>
         </div>
       </div>
-      <div class="admin-card admin-messages-compose">
-        <h3 class="admin-subtitle">{{ T("admin_messages_send_title", "Admin-Nachricht senden") }}</h3>
-        <div class="admin-action-row admin-action-row-wrap">
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_messages_send_title", "Admin-Nachricht senden") }}</span>
+      </div>
+      <section class="admin-section admin-card admin-messages-compose">
+        <div class="admin-toolbar admin-action-row-wrap">
           <input type="text" class="admin-input admin-input-sm" id="admin-messages-send-recipient"
                  placeholder="{{ T('admin_messages_send_recipient', 'Spieler-ID oder Name') }}">
           <input type="text" class="admin-input" id="admin-messages-send-subject"
@@ -386,32 +362,36 @@
         </div>
         <textarea class="admin-input" id="admin-messages-send-body" rows="4" maxlength="5000"
                   placeholder="{{ T('messages.body', 'Nachricht') }}"></textarea>
+        <div class="admin-btn-row">
         <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="messages-send">
           {{ T("admin_messages_send_btn", "Nachricht senden") }}
         </button>
-      </div>
+        </div>
+      </section>
     </section>
 
     <section id="admin-tab-runtime" class="admin-panel admin-tab-panel" data-admin-panel="runtime" role="tabpanel" hidden>
       <div class="admin-action-row">
         <h2 class="admin-panel-title">{{ T("admin_runtime_title") }}</h2>
+        <div class="admin-toolbar">
         <button type="button" id="admin-btn-queue-tick" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="run-queue-tick">{{ T("admin_tick_now") }}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="refresh-runtime">{{ T("admin_btn_refresh_runtime") }}</button>
+        </div>
       </div>
       <div id="admin-queue-tick-result" class="admin-small-hint" aria-live="polite"></div>
       <div id="admin-runtime-output" class="admin-panel-body"></div>
     </section>
 
     <section id="admin-tab-balance" class="admin-panel admin-tab-panel" data-admin-panel="balance" role="tabpanel" hidden>
-      <div class="admin-action-row admin-action-row-wrap">
+      <div class="admin-action-row">
         <h2 class="admin-panel-title">{{ T("admin_balance_title", "Balance") }}</h2>
-        <div class="admin-action-row">
+        <div class="admin-toolbar">
           <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="balance-save">{{ T("admin_balance_btn_save", "Speichern") }}</button>
           <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="balance-preset-b">{{ T("admin_balance_btn_preset_b", "Preset B anwenden") }}</button>
           <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="balance-recalculate">{{ T("admin_balance_btn_recalc", "Ranking neu berechnen") }}</button>
         </div>
       </div>
-      <p class="admin-small-hint">{{ T("admin_balance_hint", "Pacing, Queues, Score-Gewichte und Tauschhub — nur whitelisted Keys.") }}</p>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_balance_hint", "Pacing, Queues, Score-Gewichte und Tauschhub — nur whitelisted Keys.") }}</p>
       <div id="admin-balance-status" class="admin-small-hint" aria-live="polite"></div>
 
       <div class="admin-section-title">
@@ -528,6 +508,14 @@
             <label class="admin-label" for="admin-balance-score-fleet">{{ T("admin_balance_score_fleet", "Flotte") }}</label>
             <input class="admin-input" id="admin-balance-score-fleet" type="number" min="0" step="0.01" data-balance-key="score_weight_fleet">
           </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-score-exp">{{ T("admin_balance_score_cost_exponent", "Kosten-Exponent") }}</label>
+            <input class="admin-input" id="admin-balance-score-exp" type="number" min="0.01" step="0.01" data-balance-key="score_cost_exponent">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-score-softcap">{{ T("admin_balance_score_softcap", "Score-Softcap (0=aus)") }}</label>
+            <input class="admin-input" id="admin-balance-score-softcap" type="number" min="0" step="1" data-balance-key="score_softcap">
+          </div>
         </div>
       </section>
 
@@ -550,6 +538,18 @@
           <div class="admin-field">
             <label class="admin-label" for="admin-balance-exchange-daily">{{ T("admin_balance_exchange_daily", "Tageslimit") }}</label>
             <input class="admin-input" id="admin-balance-exchange-daily" type="number" min="0" step="1" data-balance-key="exchange_daily_limit">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-exchange-daily-pct">{{ T("admin_balance_exchange_daily_pct", "Tageslimit % Lager") }}</label>
+            <input class="admin-input" id="admin-balance-exchange-daily-pct" type="number" min="0" max="100" step="1" data-balance-key="exchange_daily_limit_pct">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-exchange-daily-min">{{ T("admin_balance_exchange_daily_min", "Tageslimit Minimum") }}</label>
+            <input class="admin-input" id="admin-balance-exchange-daily-min" type="number" min="0" step="1" data-balance-key="exchange_daily_limit_min">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-exchange-daily-max">{{ T("admin_balance_exchange_daily_max", "Tageslimit Maximum") }}</label>
+            <input class="admin-input" id="admin-balance-exchange-daily-max" type="number" min="0" step="1" data-balance-key="exchange_daily_limit_max">
           </div>
           <div class="admin-field">
             <label class="admin-label" for="admin-balance-rate-m2c">{{ T("exchange_rate_metal_to_crystal", "Ferronit → Crytite") }}</label>
@@ -588,26 +588,28 @@
     </section>
 
     <section id="admin-tab-server" class="admin-panel admin-tab-panel" data-admin-panel="server" role="tabpanel" hidden>
-    <div class="admin-card">
-      <h2 class="admin-panel-title">{{ T("admin_server_title", "Server") }}</h2>
-      <p class="admin-small-hint">{{ T("admin_server_hint", "Universum, MOTD, Ressourcen-Tools und Wipe. Pacing & Balance: Tab „Balance“.") }}</p>
-    </div>
-    <form method="POST" action="{{ url_for('admin_update') }}">
+      <div class="admin-action-row">
+        <h2 class="admin-panel-title">{{ T("admin_server_title", "Server") }}</h2>
+        <div class="admin-toolbar">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="server-save">{{ T("admin_btn_save_settings", "Einstellungen speichern") }}</button>
+        </div>
+      </div>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_server_hint", "Universum, MOTD, Ressourcen-Tools und Wipe. Pacing & Balance: Tab „Balance“.") }}</p>
+      <div id="admin-server-status" class="admin-small-hint" aria-live="polite"></div>
 
       <div class="admin-section-title">
         <span class="admin-section-title-text">{{ T("admin_section_game_settings", "Allgemeine Einstellungen") }}</span>
       </div>
-
       <section class="admin-section">
         <div class="admin-form-grid-2">
           <div class="admin-field">
             <label class="admin-label" for="universe_name">{{ T("universe_name", "Universums-Name") }}</label>
-            <input class="admin-input" id="universe_name" type="text" name="universe_name"
+            <input class="admin-input" id="universe_name" type="text"
                    value="{{ (settings.universe_name if settings and settings.universe_name is defined else '') }}">
           </div>
           <div class="admin-field">
             <label class="admin-label" for="galaxy_count">{{ T("admin_label_galaxy_count", "Anzahl Galaxien") }}</label>
-            <input class="admin-input" id="galaxy_count" type="number" name="galaxy_count"
+            <input class="admin-input" id="galaxy_count" type="number"
                    value="{{ (settings.galaxy_count if settings and settings.galaxy_count is defined else 1) }}"
                    min="1" max="15">
           </div>
@@ -617,151 +619,98 @@
       <div class="admin-section-title">
         <span class="admin-section-title-text">{{ T("admin_section_motd", "Universums-Meldung (MOTD)") }}</span>
       </div>
-
       <section class="admin-section">
         <div class="admin-row">
           <div class="admin-field admin-field-wide">
             <label class="admin-label" for="motd_text">{{ T("admin_motd_label", "Anzeige-Text im Spiel") }}</label>
             <span class="admin-small-hint">{{ T("admin_motd_hint") }}</span>
-            <textarea class="admin-textarea" name="motd_text" id="motd_text"
+            <textarea class="admin-textarea" id="motd_text"
                       placeholder="Kurze Info, z. B. Server-News, Wartung, Events...">{{ (settings.motd_text if settings and settings.motd_text is defined else "") }}</textarea>
           </div>
         </div>
         <div class="admin-row-full">
           <label class="admin-checkbox-row" for="motd_enabled">
-            <input type="checkbox" id="motd_enabled" name="motd_enabled" value="1"
+            <input type="checkbox" id="motd_enabled" value="1"
                    {% if settings and settings.motd_enabled is defined and settings.motd_enabled %}checked{% endif %}>
             <span>{{ T("admin_motd_enabled_label", "MOTD aktuell aktiv anzeigen") }}</span>
           </label>
         </div>
+      </section>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_section_resources_tools", "Ressourcen-Tools (Overflow)") }}</span>
+      </div>
+      <section class="admin-section">
+        <p class="admin-small-hint">{{ T("admin_resources_hint", "Ressourcen direkt auf Homeworlds verteilen — ohne Lager-Cap.") }}</p>
+        <div class="admin-form-grid-3">
+          <div class="admin-field">
+            <label class="admin-label" for="metal_delta">{{ T("admin_label_metal_delta", "Ferronit-Delta") }}</label>
+            <input class="admin-input" type="text" id="metal_delta" placeholder="z.B. 100000 oder -50000">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="crystal_delta">{{ T("admin_label_crystal_delta", "Crytite-Delta") }}</label>
+            <input class="admin-input" type="text" id="crystal_delta" placeholder="z.B. 50000 oder -25000">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="fuel_cells_delta">{{ T("admin_label_fuel_delta", "Brennzellen-Delta") }}</label>
+            <input class="admin-input" type="text" id="fuel_cells_delta" placeholder="z.B. 1000 oder -500">
+          </div>
+        </div>
+        <div class="admin-row">
+          <div class="admin-field admin-field-wide">
+            <label class="admin-label" for="resource_player_id">{{ T("admin_label_resource_player_id", "Spieler-ID (optional)") }}</label>
+            <input class="admin-input" type="text" id="resource_player_id" placeholder="leer = deine Homeworld">
+          </div>
+        </div>
+        <div class="admin-row-full">
+          <label class="admin-checkbox-row" for="resource_all">
+            <input type="checkbox" id="resource_all">
+            <span>{{ T("admin_label_resource_apply_all", "Auf alle Homeworlds anwenden (Spieler-ID wird ignoriert)") }}</span>
+          </label>
+        </div>
         <div class="admin-btn-row">
-          <button class="gc-btn gc-btn-primary gc-btn-sm" type="submit">
-            {{ T("admin_btn_save_settings", "Einstellungen speichern") }}
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="server-resources">
+            {{ T("admin_btn_apply_resources", "Ressourcen anwenden (kein Cap)") }}
           </button>
         </div>
       </section>
-    </form>
 
-    <!-- ============================================================= -->
-    <!-- RESOURCE TOOLS                                                -->
-    <!-- ============================================================= -->
-    <div class="admin-section-title">
-      <span class="admin-section-title-text">
-        {{ T("admin_section_resources_tools") if T("admin_section_resources_tools") != "admin_section_resources_tools" else "Ressourcen-Tools (Overflow)" }}
-      </span>
-    </div>
-
-    <section class="admin-section">
-      <p class="admin-small-hint">
-        {{ T("admin_resources_hint") if T("admin_resources_hint") != "admin_resources_hint"
-           else "Hier kannst du Ressourcen direkt auf Homeworlds verteilen. Die Änderungen ignorieren die Lagerkapazität – Overflows sind erlaubt. Spieler-ID leer ⇒ deine Homeworld · Spieler-ID gesetzt ⇒ genau dieser Spieler · Checkbox ⇒ alle bestehenden Homeworlds (Spieler-ID wird ignoriert)." }}
-      </p>
-
-      <form method="post" action="{{ url_for('admin_resources') }}">
-        <div class="admin-form-grid-2">
-          <div class="admin-field">
-            <label class="admin-label" for="metal_delta">
-              {{ T("admin_label_metal_delta") if T("admin_label_metal_delta") != "admin_label_metal_delta" else "Ferronit-Delta" }}
-            </label>
-            <input class="admin-input" type="text" id="metal_delta" name="metal_delta" placeholder="z.B. 100000 oder -50000">
-          </div>
-
-          <div class="admin-field">
-            <label class="admin-label" for="crystal_delta">
-              {{ T("admin_label_crystal_delta") if T("admin_label_crystal_delta") != "admin_label_crystal_delta" else "Crytite-Delta" }}
-            </label>
-            <input class="admin-input" type="text" id="crystal_delta" name="crystal_delta" placeholder="z.B. 50000 oder -25000">
-          </div>
-        </div>
-
-        <div class="admin-row">
-          <div class="admin-field admin-field-wide">
-            <label class="admin-label" for="resource_player_id">
-              {{ T("admin_label_resource_player_id") if T("admin_label_resource_player_id") != "admin_label_resource_player_id" else "Spieler-ID (optional)" }}
-            </label>
-            <input class="admin-input" type="text" id="resource_player_id" name="resource_player_id" placeholder="leer = du selbst">
-          </div>
-        </div>
-
-        <div class="admin-row-full">
-          <label class="admin-checkbox-row" for="resource_all">
-            <input type="checkbox" name="resource_apply_all" value="1" id="resource_all">
-            <span>
-              {{ T("admin_label_resource_apply_all") if T("admin_label_resource_apply_all") != "admin_label_resource_apply_all"
-                 else "Auf alle Homeworlds anwenden (Spieler-ID wird ignoriert)" }}
-            </span>
-          </label>
-        </div>
-
-        <div class="admin-btn-row">
-          <button type="submit" class="gc-btn gc-btn-danger gc-btn-sm">
-            {{ T("admin_btn_apply_resources") if T("admin_btn_apply_resources") != "admin_btn_apply_resources" else "Ressourcen anwenden (kein Cap)" }}
-          </button>
-        </div>
-      </form>
-    </section>
-
-    <!-- ============================================================= -->
-    <!-- UNIVERSE WIPE                                                 -->
-    <!-- ============================================================= -->
-    <div class="admin-section-title">
-      <span class="admin-section-title-text">
-        {{ T("admin_section_wipe") if T("admin_section_wipe") != "admin_section_wipe" else "Universum zurücksetzen (Wipe)" }}
-      </span>
-    </div>
-
-    <section class="admin-section admin-section-danger">
-      <p class="admin-small-hint">
-        {{ T("admin_wipe_hint") if T("admin_wipe_hint") != "admin_wipe_hint"
-           else "Achtung: Dieser Vorgang setzt das gesamte Universum zurück. Alle Planeten, Gebäude, Queues und Flotten werden gelöscht. Spieler-Accounts bleiben bestehen. Homeworlds werden neu erzeugt." }}
-      </p>
-
-      <form method="post" action="{{ url_for('admin_wipe_universe') }}">
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_section_wipe", "Universum zurücksetzen (Wipe)") }}</span>
+      </div>
+      <section class="admin-section admin-section-danger">
+        <p class="admin-small-hint">{{ T("admin_wipe_hint", "Setzt Planeten, Gebäude, Queues und Flotten zurück. Accounts bleiben.") }}</p>
         <div class="admin-row-full">
           <label class="admin-checkbox-row" for="wipe_research">
-            <input type="checkbox" id="wipe_research" name="wipe_reset_research" value="1" checked>
-            <span>
-              {{ T("admin_wipe_research") if T("admin_wipe_research") != "admin_wipe_research" else "Forschungsstände zurücksetzen" }}
-            </span>
+            <input type="checkbox" id="wipe_research" checked>
+            <span>{{ T("admin_wipe_research", "Forschungsstände zurücksetzen") }}</span>
           </label>
         </div>
-
         <div class="admin-row-full">
           <label class="admin-checkbox-row" for="wipe_resources">
-            <input type="checkbox" id="wipe_resources" name="wipe_reset_resources" value="1" checked>
-            <span>
-              {{ T("admin_wipe_resources") if T("admin_wipe_resources") != "admin_wipe_resources" else "Ressourcen auf Startwerte setzen" }}
-            </span>
+            <input type="checkbox" id="wipe_resources" checked>
+            <span>{{ T("admin_wipe_resources", "Ressourcen auf Startwerte setzen") }}</span>
           </label>
         </div>
-
         <div class="admin-row-full">
           <label class="admin-checkbox-row" for="wipe_messages">
-            <input type="checkbox" id="wipe_messages" name="wipe_delete_messages" value="1" checked>
-            <span>
-              {{ T("admin_wipe_messages") if T("admin_wipe_messages") != "admin_wipe_messages" else "Nachrichten/Logs leeren" }}
-            </span>
+            <input type="checkbox" id="wipe_messages" checked>
+            <span>{{ T("admin_wipe_messages", "Nachrichten/Logs leeren") }}</span>
           </label>
         </div>
-
         <div class="admin-row-full">
           <label class="admin-checkbox-row" for="wipe_confirm">
-            <input type="checkbox" id="wipe_confirm" name="wipe_confirm" value="1">
-            <span>
-              {{ T("admin_wipe_confirm") if T("admin_wipe_confirm") != "admin_wipe_confirm" else "Ich verstehe: Dieser Wipe ist endgültig." }}
-            </span>
+            <input type="checkbox" id="wipe_confirm">
+            <span>{{ T("admin_wipe_confirm", "Ich verstehe: Dieser Wipe ist endgültig.") }}</span>
           </label>
         </div>
-
         <div class="admin-btn-row">
-          <button class="gc-btn gc-btn-danger gc-btn-sm" type="submit">
-            {{ T("admin_wipe_execute") if T("admin_wipe_execute") != "admin_wipe_execute" else "Wipe ausführen" }}
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="server-wipe">
+            {{ T("admin_wipe_execute", "Wipe ausführen") }}
           </button>
         </div>
-      </form>
+      </section>
     </section>
-
-    </section><!-- /admin-tab-server -->
 
   </div>
 </div>
