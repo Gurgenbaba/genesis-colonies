@@ -11161,7 +11161,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-records-row{
   display: grid;
-  grid-template-columns: 36px minmax(0, 1.4fr) 72px minmax(0, 1.6fr);
+  grid-template-columns: 36px minmax(0, 1fr) 88px;
   gap: 10px 14px;
   align-items: center;
   padding: 12px 4px;
@@ -11189,6 +11189,8 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-records-row--empty .gc-records-row-value{
   color: var(--gc-text-dim);
+  font-weight: 500;
+  font-size: 0.82rem;
 }
 
 .gc-records-row-label{
@@ -11205,58 +11207,17 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   font-variant-numeric: tabular-nums;
 }
 
-.gc-records-row-holder{
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  font-size: 0.84rem;
-}
-
-.gc-records-player{
-  font-weight: 600;
-  color: var(--gc-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.gc-records-planet{
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
-  color: var(--gc-text-soft);
-}
-
-.gc-records-planet-name{
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.gc-records-coords{
-  font-size: 0.8rem;
-  color: var(--gc-text-dim);
-}
-
 .gc-records-none{
   color: var(--gc-text-dim);
   font-style: italic;
+  font-weight: 500;
+  font-size: 0.82rem;
 }
 
 @media (max-width: 720px){
   .gc-records-row{
-    grid-template-columns: 36px 1fr auto;
-    grid-template-areas:
-      "icon label value"
-      "holder holder holder";
+    grid-template-columns: 36px minmax(0, 1fr) auto;
   }
-
-  .gc-records-row-icon{ grid-area: icon; }
-  .gc-records-row-label{ grid-area: label; }
-  .gc-records-row-value{ grid-area: value; }
-  .gc-records-row-holder{ grid-area: holder; }
 }
 
 .gc-ranking-row.is-me td{

@@ -39,16 +39,8 @@
           {{ T(record.label_key, record.key) }}
         </div>
         <div class="gc-records-row-value gc-mono" title="{{ record.value_fmt }}">
-          {{ record.value_fmt }}
-        </div>
-        <div class="gc-records-row-holder">
           {% if record.has_holder %}
-          <span class="gc-records-player">{{ record.player_name or "—" }}</span>
-          {% if record.planet_name %}
-          <span class="gc-records-planet">
-            <span class="gc-records-planet-name">{{ record.planet_name }}</span>
-          </span>
-          {% endif %}
+          {{ record.value_fmt }}
           {% else %}
           <span class="gc-records-none">{{ T("records_no_holder", "Noch kein Rekord") }}</span>
           {% endif %}
