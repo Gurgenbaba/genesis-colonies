@@ -11161,7 +11161,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-records-row{
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 88px;
+  grid-template-columns: 36px minmax(0, 1.2fr) minmax(0, 1fr) 72px;
   gap: 10px 14px;
   align-items: center;
   padding: 12px 4px;
@@ -11207,6 +11207,19 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   font-variant-numeric: tabular-nums;
 }
 
+.gc-records-row-holder{
+  min-width: 0;
+  font-size: 0.84rem;
+}
+
+.gc-records-player{
+  font-weight: 600;
+  color: var(--gc-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .gc-records-none{
   color: var(--gc-text-dim);
   font-style: italic;
@@ -11217,7 +11230,15 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 @media (max-width: 720px){
   .gc-records-row{
     grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "icon label value"
+      "holder holder holder";
   }
+
+  .gc-records-row-icon{ grid-area: icon; }
+  .gc-records-row-label{ grid-area: label; }
+  .gc-records-row-holder{ grid-area: holder; }
+  .gc-records-row-value{ grid-area: value; }
 }
 
 .gc-ranking-row.is-me td{

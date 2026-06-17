@@ -38,12 +38,15 @@
         <div class="gc-records-row-label">
           {{ T(record.label_key, record.key) }}
         </div>
-        <div class="gc-records-row-value gc-mono" title="{{ record.value_fmt }}">
+        <div class="gc-records-row-holder">
           {% if record.has_holder %}
-          {{ record.value_fmt }}
+          <span class="gc-records-player">{{ record.player_name or "—" }}</span>
           {% else %}
           <span class="gc-records-none">{{ T("records_no_holder", "Noch kein Rekord") }}</span>
           {% endif %}
+        </div>
+        <div class="gc-records-row-value gc-mono" title="{{ record.value_fmt }}">
+          {{ record.value_fmt if record.has_holder else "—" }}
         </div>
       </article>
       {% endfor %}
