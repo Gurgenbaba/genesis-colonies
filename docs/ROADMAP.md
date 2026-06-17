@@ -247,6 +247,7 @@ Start nach Completion-First-Pass (GC-610), sofern nicht reine Identity-Tickets (
 | SQLite Single-Writer | Scale | Phase 7 |
 | README vs VERSION drift | Docs | README auf 1.5.3 |
 | `fleet_presets` CHECK ohne colonize | Schema | Migration fix |
+| Ressourcen als REAL statt INTEGER | Präzision ab ~9×10¹⁵ | [GC-622B](GC-622B_RESOURCE_INTEGER_MIGRATION.md) (Backlog) |
 
 ---
 
@@ -312,6 +313,8 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 | GC-000 v2 — Regeln 15–17 (Parallel Systems, Duplicate Math, Owners) | ✅ |
 | **GC-536** — [Queue Card UX](GC-536_QUEUE_CARD_UX.md) (536A–F ✅) | ✅ |
 | **GC-557** — [Megabunker UX Feedback Polish](GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md) (557A–F) | 📋 |
+| **GC-622** — [Integer Overflow Audit](GC-622_INTEGER_OVERFLOW_AUDIT.md) (INT32-Risiko geschlossen) | ✅ |
+| **GC-622B** — [Resource INTEGER Migration](GC-622B_RESOURCE_INTEGER_MIGRATION.md) | 💡 |
 
 ### Tech debt (pytest, nicht blockierend)
 
@@ -327,6 +330,7 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 - [IMPERIUM_VISION.md](IMPERIUM_VISION.md) — Genesis 2.0 Design Manifest (EPIC-15)
 - [GC-610_COMPLETE_DEFINITION_AUDIT.md](GC-610_COMPLETE_DEFINITION_AUDIT.md) — Definition of Complete / Reifegrade
 - [GC-600_PROJECT_GAP_ANALYSIS.md](GC-600_PROJECT_GAP_ANALYSIS.md) — Strategisches Gap-Audit
+- [GC-622_INTEGER_OVERFLOW_AUDIT.md](GC-622_INTEGER_OVERFLOW_AUDIT.md) — INT32/Overflow Tech-Audit ✅
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Systemübersicht
 - [ALPHA_TESTPLAN.md](ALPHA_TESTPLAN.md) — Manuelle Tests
 - [SECURITY.md](SECURITY.md) — Phase 6 Details
