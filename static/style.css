@@ -11215,9 +11215,9 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .gc-records-player{
   font-weight: 600;
   color: var(--gc-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.35;
 }
 
 .gc-records-none{

@@ -19242,6 +19242,8 @@
     }
   }
 
+  const GC_COMMANDER_NAME_MAX = 40;
+
   function validateLogin(form) {
     const username = qs(form, "#username");
     const password = qs(form, "#password");
@@ -19259,9 +19261,9 @@
       username?.focus();
       return false;
     }
-    if (u.length > 24) {
+    if (u.length > GC_COMMANDER_NAME_MAX) {
       markInvalid(username, true);
-      setClientError(form, t("err_username_long", "Benutzername ist zu lang (max. 24 Zeichen)."));
+      setClientError(form, t("err_username_long", "Benutzername ist zu lang (max. 40 Zeichen)."));
       username?.focus();
       return false;
     }
@@ -19297,9 +19299,9 @@
       username?.focus();
       return false;
     }
-    if (u.length > 24) {
+    if (u.length > GC_COMMANDER_NAME_MAX) {
       markInvalid(username, true);
-      setClientError(form, t("err_username_long", "Commander-Name ist zu lang (max. 24 Zeichen)."));
+      setClientError(form, t("err_username_long", "Commander-Name ist zu lang (max. 40 Zeichen)."));
       username?.focus();
       return false;
     }

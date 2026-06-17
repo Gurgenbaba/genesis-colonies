@@ -706,6 +706,8 @@ def register():
                 error = T("msg_register_pw_mismatch") or "Die Passwörter stimmen nicht überein."
             elif len(username) < 3:
                 error = T("msg_register_username_short") or "Benutzername muss mindestens 3 Zeichen lang sein."
+            elif len(username) > 40:
+                error = T("err_username_long") or "Benutzername ist zu lang."
             elif len(password) < 4:
                 error = T("msg_register_password_short") or "Passwort muss mindestens 4 Zeichen lang sein."
             else:

@@ -16,7 +16,7 @@ from .playercard import _strip_control, sanitize_text_field
 from .i18n import get_player_locale, normalize_locale, set_player_locale, ensure_locale_schema
 
 NAME_MIN = 2
-NAME_MAX = 32
+NAME_MAX = 40
 PASSWORD_MIN = 4
 EMAIL_MAX = 254
 
@@ -24,7 +24,7 @@ SENSITIVE_RATE_WINDOW_SEC = 60.0
 SENSITIVE_RATE_MAX = 5
 _SENSITIVE_BUCKETS: Dict[str, Dict[int, list]] = {"email": {}, "password": {}}
 
-_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _\-.]{1,31}$")
+_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _\-.]{1,39}$")
 _EMAIL_RE = re.compile(
     r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
     r"(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$"
