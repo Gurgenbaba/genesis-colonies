@@ -44,6 +44,190 @@ def shipyard_level_for_planet(planet_id: int, *, conn=None) -> int:
     return max(0, orbital, legacy)
 
 
+def orbital_production_batch_capacity(shipyard_level: int) -> int:
+    """Parallel units delivered per production cycle (3^level; L1=3, L2=9, …)."""
+    lvl = max(1, int(shipyard_level or 1))
+    return int(3**lvl)
+
+
+PRODUCTION_WEIGHT_SECONDS_DIVISOR = 5
+
+
+def base_unit_seconds_for_ship(ship_key: str) -> int:
+    """Intrinsic build time from ship defs (before yard level / speed modifiers)."""
+    spec = get_ship(ship_key) or {}
+    return max(1, int(spec.get("build_seconds") or 1))
+
+
+def unit_production_weight(base_unit_seconds: int) -> int:
+    """Heavier/slower units consume more of the yard's parallel capacity."""
+    base = max(1, int(base_unit_seconds))
+    return max(1, int(math.ceil(base / PRODUCTION_WEIGHT_SECONDS_DIVISOR)))
+
+
+def effective_unit_batch_capacity(base_capacity: int, base_unit_seconds: int) -> int:
+    """Per-unit parallel delivery count for one production cycle."""
+    base = max(1, int(base_capacity))
+    weight = unit_production_weight(base_unit_seconds)
+    return max(1, base // weight)
+
+
+def unit_batch_capacity(shipyard_level: int, base_unit_seconds: int) -> int:
+    """Effective parallel units per cycle for a unit type at this yard level."""
+    return effective_unit_batch_capacity(
+        orbital_production_batch_capacity(shipyard_level),
+        base_unit_seconds,
+    )
+
+
+PRODUCTION_TECH_EXAMPLE_BASE_SECONDS: Dict[str, int] = {
+    "light": 30,
+    "medium": 120,
+    "heavy": 480,
+}
+
+
+def shipyard_level_from_buildings(buildings: Mapping[str, Any] | None) -> int:
+    """Orbital shipyard level from planet building map (minimum 1 when yard exists)."""
+    if not buildings:
+        return 1
+    orbital = int(buildings.get("orbital_shipyard") or 0)
+    legacy = int(buildings.get("shipyard") or 0)
+    lvl = max(orbital, legacy)
+    return max(1, lvl) if lvl > 0 else 1
+
+
+def production_metrics_at_yard(
+    *,
+    base_unit_seconds: int,
+    shipyard_level: int,
+    effective_unit_seconds: int | None = None,
+) -> Dict[str, Any]:
+    """Authoritative production snapshot for detail cards and building technical sheets."""
+    lvl = max(1, int(shipyard_level or 1))
+    base = max(1, int(base_unit_seconds))
+    unit = max(1, int(effective_unit_seconds if effective_unit_seconds is not None else base))
+    yard_cap = orbital_production_batch_capacity(lvl)
+    eff_cap = unit_batch_capacity(lvl, base)
+    reduction = (
+        int(round((1 - BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)) * 100)) if lvl > 1 else 0
+    )
+    samples: Dict[str, int] = {}
+    for amt in (1, 10, 100, 1000):
+        samples[str(amt)] = production_job_duration_seconds(
+            unit_seconds=unit, amount=amt, batch_capacity=eff_cap
+        )
+    parallel_examples: Dict[str, int] = {
+        tag: unit_batch_capacity(lvl, sec)
+        for tag, sec in PRODUCTION_TECH_EXAMPLE_BASE_SECONDS.items()
+    }
+    return {
+        "cycle_seconds": unit,
+        "base_unit_seconds": base,
+        "yard_batch_capacity": yard_cap,
+        "effective_batch_capacity": eff_cap,
+        "build_time_reduction_percent": reduction,
+        "order_duration_samples": samples,
+        "parallel_examples": parallel_examples,
+    }
+
+
+def production_job_duration_seconds(
+    *, unit_seconds: int, amount: int, batch_capacity: int
+) -> int:
+    """Order duration: ceil(amount / capacity) production cycles × unit_seconds."""
+    unit = max(1, int(unit_seconds))
+    cap = max(1, int(batch_capacity))
+    amt = max(1, int(amount))
+    batches = (amt + cap - 1) // cap
+    return max(1, batches * unit)
+
+
+def production_infer_total_units(
+    *,
+    remaining: int,
+    scheduled_duration: int,
+    unit_seconds: int,
+    batch_capacity: int,
+) -> int:
+    """Recover original order size from remaining amount + scheduled batch duration."""
+    rem = max(0, int(remaining))
+    if rem <= 0:
+        return 0
+    unit = max(1, int(unit_seconds))
+    cap = max(1, int(batch_capacity))
+    batches = max(1, int(scheduled_duration) // unit)
+    inferred_total = batches * cap - (cap - 1)
+    return max(rem, inferred_total)
+
+
+def production_units_elapsed(
+    *,
+    started_at: float,
+    now: float,
+    unit_seconds: int,
+    batch_capacity: int,
+    total_units: int,
+    epsilon: float = 0.0,
+) -> int:
+    """Units that should have been delivered by ``now`` (batch production)."""
+    unit = max(1, int(unit_seconds))
+    cap = max(1, int(batch_capacity))
+    elapsed = float(now) + float(epsilon) - float(started_at)
+    if elapsed < unit:
+        return 0
+    batches_done = int(elapsed // unit)
+    return min(max(0, int(total_units)), batches_done * cap)
+
+
+def production_progressive_units_to_deliver(
+    *,
+    remaining: int,
+    total_units: int,
+    started_at: float,
+    finish_at: float,
+    unit_seconds: int,
+    batch_capacity: int,
+    now: float,
+    epsilon: float = 0.0,
+) -> int:
+    """How many units from an active job are due for delivery at ``now``."""
+    rem = max(0, int(remaining))
+    if rem <= 0:
+        return 0
+    if float(now) + float(epsilon) >= float(finish_at):
+        return rem
+    total = max(rem, int(total_units))
+    already_delivered = total - rem
+    units_elapsed = production_units_elapsed(
+        started_at=started_at,
+        now=now,
+        unit_seconds=unit_seconds,
+        batch_capacity=batch_capacity,
+        total_units=total,
+        epsilon=epsilon,
+    )
+    return max(0, min(rem, units_elapsed - already_delivered))
+
+
+def production_next_batch_finish_at(
+    *,
+    started_at: float,
+    delivered: int,
+    unit_seconds: int,
+    batch_capacity: int,
+) -> float:
+    """Unix time when the next production batch completes."""
+    unit = max(1, int(unit_seconds))
+    cap = max(1, int(batch_capacity))
+    delivered_n = max(0, int(delivered))
+    if delivered_n <= 0:
+        next_batch = 1
+    else:
+        next_batch = (delivered_n + cap - 1) // cap + 1
+    return float(started_at) + next_batch * unit
+
+
 def _effective_build_seconds(ship_key: str, shipyard_level: int, *, conn=None) -> int:
     spec = get_ship(ship_key)
     if not spec:
@@ -126,6 +310,9 @@ def _ship_catalog_entry(
         "cost_crystal": cost["crystal"],
         "cost_fuel_cells": cost["fuel_cells"],
         "build_seconds": _effective_build_seconds(ship_key, shipyard_level, conn=conn),
+        "effective_batch_capacity": unit_batch_capacity(
+            shipyard_level, base_unit_seconds_for_ship(ship_key)
+        ),
         "max_build": max_qty,
         "can_build": False,
         "block_reason": "",
@@ -323,10 +510,9 @@ def can_build_ship(
     sk = canonical_ship_key(ship_key)
     if not is_known_ship_key(sk) or sk not in SHIPS:
         return False, "unknown_ship"
-    try:
-        qty = int(amount)
-    except (TypeError, ValueError):
-        return False, "invalid_amount"
+    from .number_format import parse_int_number
+
+    qty = parse_int_number(amount, default=0)
     if qty <= 0:
         return False, "invalid_amount"
 
@@ -453,7 +639,11 @@ def build_ships(
     if not ok_check:
         return False, reason, None
 
-    qty = int(amount)
+    from .number_format import parse_int_number
+
+    qty = parse_int_number(amount, default=0)
+    if qty <= 0:
+        return False, "invalid_amount", None
     unit = _unit_build_cost(sk)
     total_m = unit["metal"] * qty
     total_c = unit["crystal"] * qty
@@ -555,10 +745,9 @@ def add_ships_to_planet(
     sk = canonical_ship_key(ship_key)
     if not is_known_ship_key(sk):
         return False, "unknown_ship", None
-    try:
-        qty = int(amount)
-    except (TypeError, ValueError):
-        return False, "invalid_amount", None
+    from .number_format import parse_int_number
+
+    qty = parse_int_number(amount, default=0)
     if qty <= 0:
         return False, "invalid_amount", None
 
@@ -673,8 +862,11 @@ def build_shipyard_api_payload(player_id: int, planet_id: int, *, conn=None) -> 
         _attach_queue_jobs_to_ship_rows(buildable, by_owner)
         _attach_queue_jobs_to_ship_rows(locked, by_owner)
 
+        from .shipyard import orbital_production_batch_capacity
+
         return {
             "orbital_shipyard_level": sy_level,
+            "production_batch_capacity": orbital_production_batch_capacity(sy_level),
             "buildable_ships": buildable,
             "locked_ships": locked,
             "current_ships": ships,

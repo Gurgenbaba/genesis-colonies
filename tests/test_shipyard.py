@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 
 import pytest
@@ -424,9 +425,14 @@ def test_api_shipyard_get_and_build(shipyard_db, monkeypatch):
 
 
 def test_progressive_shipyard_delivery(shipyard_db):
-    """Multi-ship orders deliver one unit at a time as each build step completes."""
+    """Multi-ship orders deliver in orbital-shipyard batches (L1 capacity = 3)."""
     from game.fleet import get_planet_ships
-    from game.shipyard import build_ship, unit_build_seconds
+    from game.shipyard import (
+        build_ship,
+        unit_batch_capacity,
+        base_unit_seconds_for_ship,
+        unit_build_seconds,
+    )
     from game.shipyard_queue import (
         finish_due_shipyard_jobs_for_planet,
         list_shipyard_queue_rows,
@@ -460,28 +466,30 @@ def test_progressive_shipyard_delivery(shipyard_db):
     started = float(job["started_at"])
     finish = float(job["finish_at"])
     unit = unit_build_seconds("mule_courier", 1, conn=conn)
+    cap = unit_batch_capacity(1, base_unit_seconds_for_ship("mule_courier"))
+    batches = (qty + cap - 1) // cap
     assert int(job["amount"]) == qty
-    assert int(finish - started) == unit * qty
+    assert int(finish - started) == unit * batches
 
     q_before = shipyard_queue_for_client(uid, pid, 1, conn=conn, now=started + unit - 0.5)
     assert q_before["queue"][0]["units_delivered"] == 0
-    assert q_before["queue"][0]["order_total_seconds"] == unit * qty
+    assert q_before["queue"][0]["order_total_seconds"] == unit * batches
 
     finish_due_shipyard_jobs_for_planet(conn, pid, uid, now=started + unit - 0.5)
     assert get_planet_ships(pid, conn=conn).get("mule_courier", 0) == 0
     assert queue_count(pid, conn=conn) == 1
 
     finish_due_shipyard_jobs_for_planet(conn, pid, uid, now=started + unit + 0.01)
-    assert get_planet_ships(pid, conn=conn).get("mule_courier", 0) == 1
+    assert get_planet_ships(pid, conn=conn).get("mule_courier", 0) == cap
     q_after = shipyard_queue_for_client(uid, pid, 1, conn=conn, now=started + unit + 0.01)
-    assert q_after["queue"][0]["units_delivered"] == 1
+    assert q_after["queue"][0]["units_delivered"] == cap
     assert q_after["queue"][0]["remaining"] == q_after["queue"][0]["order_remaining"]
     rows = list_shipyard_queue_rows(pid, conn=conn)
     assert len(rows) == 1
-    assert int(rows[0]["amount"]) == qty - 1
+    assert int(rows[0]["amount"]) == qty - cap
 
-    finish_due_shipyard_jobs_for_planet(conn, pid, uid, now=started + 4 * unit + 0.01)
-    assert get_planet_ships(pid, conn=conn).get("mule_courier", 0) == 4
+    finish_due_shipyard_jobs_for_planet(conn, pid, uid, now=started + 2 * unit + 0.01)
+    assert get_planet_ships(pid, conn=conn).get("mule_courier", 0) == cap * 2
 
     finish_due_shipyard_jobs_for_planet(conn, pid, uid, now=finish + 1)
     assert get_planet_ships(pid, conn=conn).get("mule_courier", 0) == qty
@@ -527,7 +535,7 @@ def test_progressive_ships_available_for_fleet_preview(shipyard_db, monkeypatch)
     assert rv.status_code == 200
     data = rv.get_json()
     assert data["ok"] is True
-    assert data["data"]["ships"].get("mule_courier", 0) == 1
+    assert data["data"]["ships"].get("mule_courier", 0) == 3
     assert data["data"]["has_ships"] is True
 
 
@@ -558,4 +566,54 @@ def test_shipyard_queue_client_includes_countdown_at(shipyard_db):
     assert head.get("finish_time") == int(head["finish_at"])
     assert int(head.get("remaining_seconds") or 0) > 0
     assert head.get("next_countdown_at") >= 0
+    conn.close()
+
+
+def test_weighted_unit_batch_capacity_differs_by_ship(shipyard_db):
+    """GC-633: faster/cheaper ships get higher effective parallel capacity."""
+    from game.shipyard import (
+        base_unit_seconds_for_ship,
+        orbital_production_batch_capacity,
+        unit_batch_capacity,
+    )
+
+    lvl = 5
+    base = orbital_production_batch_capacity(lvl)
+    fast = unit_batch_capacity(lvl, base_unit_seconds_for_ship("veil_probe"))
+    slow = unit_batch_capacity(lvl, base_unit_seconds_for_ship("atlas_hauler"))
+    assert fast > slow
+    assert slow >= 1
+    assert fast <= base
+
+
+def test_shipyard_job_force_completes_at_finish_at(shipyard_db):
+    """GC-633: jobs past finish_at deliver remaining units and leave the queue."""
+    from game.fleet import get_planet_ships
+    from game.shipyard import build_ship
+    from game.shipyard_queue import finish_due_shipyard_jobs_for_planet, queue_count
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, metal=500000, crystal=500000)
+    cur.execute(
+        "UPDATE planet_buildings SET orbital_shipyard = 1 WHERE planet_id = ?;",
+        (pid,),
+    )
+    _grant_ship_test_prereqs(cur, pid, uid)
+    conn.commit()
+
+    ok, reason, _ = build_ship(
+        player_id=uid, planet_id=pid, ship_key="mule_courier", amount=1, conn=conn
+    )
+    assert ok, reason
+    cur.execute(
+        "UPDATE shipyard_queue SET finish_at = ? WHERE planet_id = ?;",
+        (time.time() - 1, pid),
+    )
+    conn.commit()
+    finish_due_shipyard_jobs_for_planet(conn, pid, uid, now=time.time())
+    assert queue_count(pid, conn=conn) == 0
+    assert get_planet_ships(pid, conn=conn).get("mule_courier", 0) >= 1
     conn.close()

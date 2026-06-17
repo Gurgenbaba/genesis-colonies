@@ -1,0 +1,35 @@
+{# GC-634 — shared production block for ship + defense detail modals #}
+{% macro render_unit_production_detail(prod, unlock_label_key, unlock_level) %}
+{% if prod %}
+<div class="gc-ship-detail-production">
+  <span class="gc-player-card-stat-label">{{ T("unit_detail_production_section") }}</span>
+  <div class="gc-player-card-stats gc-player-card-stats--production">
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("prod_stat_cycle_label") }}</span>
+      <span class="gc-player-card-stat-value gc-mono">{{ prod.cycle_seconds|fmt_int }}s</span>
+    </div>
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("unit_detail_effective_capacity") }}</span>
+      <span class="gc-player-card-stat-value gc-mono gc-num-compact"
+            {% if (prod.effective_batch_capacity|fmt_int_compact) != (prod.effective_batch_capacity|fmt_int) %}
+            title="{{ prod.effective_batch_capacity|fmt_int }}"
+            {% endif %}>{{ prod.effective_batch_capacity|fmt_int_compact }}</span>
+    </div>
+    <div class="gc-player-card-stat">
+      <span class="gc-player-card-stat-label">{{ T("unit_detail_yard_capacity") }}</span>
+      <span class="gc-player-card-stat-value gc-mono gc-num-compact"
+            {% if (prod.yard_batch_capacity|fmt_int_compact) != (prod.yard_batch_capacity|fmt_int) %}
+            title="{{ prod.yard_batch_capacity|fmt_int }}"
+            {% endif %}>{{ prod.yard_batch_capacity|fmt_int_compact }}</span>
+    </div>
+  </div>
+  <p class="gc-ship-detail-meta hint">{{ T("unit_detail_production_hint") }}</p>
+  <ul class="gc-ship-detail-duration-list gc-mono">
+    {% for amt, sec in prod.order_duration_samples.items() %}
+    <li>{{ T("unit_detail_order_duration", amount=amt|fmt_int, seconds=sec|fmt_int) }}</li>
+    {% endfor %}
+  </ul>
+  <p class="gc-ship-detail-meta">{{ T(unlock_label_key, level=unlock_level|fmt_int) }}</p>
+</div>
+{% endif %}
+{% endmacro %}

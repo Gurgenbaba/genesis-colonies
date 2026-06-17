@@ -13,17 +13,22 @@ def test_build_defense_detail_card_known_unit():
     assert card["attack"] >= 0
     assert card["score_value"] > 0
     assert card["icon"].endswith("plasma_arc.png")
+    prod = card.get("production") or {}
+    assert prod.get("cycle_seconds", 0) > 0
+    assert prod.get("effective_batch_capacity", 0) >= 1
 
 
 def test_build_defense_detail_card_with_requirements():
     card, err = build_defense_detail_card(
         "ion_bastion",
-        buildings={"defense_factory": 4},
+        buildings={"defense_factory": 4, "orbital_shipyard": 3},
         research={"weapon_tech": 6, "armor_tech": 3},
     )
     assert err is None
     assert card is not None
     assert card.get("requirements_items")
+    prod = card.get("production") or {}
+    assert prod.get("yard_batch_capacity", 0) > prod.get("effective_batch_capacity", 0)
 
 
 def test_build_defense_detail_card_unknown():

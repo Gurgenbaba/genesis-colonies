@@ -63,3 +63,26 @@ def defense_panel_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, An
         "queue": queue,
         "defenses": {"ready": True, **payload},
     }
+
+
+def shipyard_panel_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
+    """Shipyard queue + stock slice for /api/game-state include_panel (GC-630)."""
+    from game.fleet import fleet_schema_ready
+    from game.planet_evolution.repository import get_context_planet
+    from game.shipyard import build_shipyard_api_payload
+    from game.shipyard_queue import shipyard_queue_table_ready
+
+    if not fleet_schema_ready(conn) or not shipyard_queue_table_ready(conn):
+        return None
+
+    planet = get_context_planet(user_id, conn=conn)
+    if not planet:
+        return None
+
+    pid = int(planet["id"])
+    payload = build_shipyard_api_payload(int(user_id), pid, conn=conn)
+    queue = payload.pop("shipyard_queue", {"queue": [], "summary": {}})
+    return {
+        "queue": queue,
+        "ships": {"ready": True, **payload},
+    }

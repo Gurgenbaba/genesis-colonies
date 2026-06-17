@@ -4017,6 +4017,16 @@ def _payload_from_live_context(
         except Exception:
             pass
 
+        try:
+            from game.live_state import shipyard_panel_for_game_state
+
+            shipyard_panel = shipyard_panel_for_game_state(user_id, conn=conn)
+            if shipyard_panel is not None:
+                payload["shipyard"] = shipyard_panel
+                payload["shipyard_queue"] = shipyard_panel.get("queue")
+        except Exception:
+            pass
+
     if not lightweight:
         try:
             from game.planet_evolution.teaser import get_overview_planet_teaser
@@ -5062,10 +5072,16 @@ def api_defense_build():
 
     data = request.get_json(silent=True) or {}
     defense_key = str(data.get("defense_key") or "").strip()
-    try:
-        amount = int(data.get("amount") or 1)
-    except (TypeError, ValueError):
-        amount = 0
+    from game.number_format import parse_int_number
+
+    amount = parse_int_number(data.get("amount") or 1, default=0)
+    if amount <= 0:
+        return _defense_json_response(
+            False,
+            "invalid_amount",
+            finish_source=defense_finish_source("build"),
+            status=400,
+        )
 
     request_id = _extract_request_id(data)
     if request_id:
@@ -5198,10 +5214,9 @@ def api_shipyard_build():
 
     data = request.get_json(silent=True) or {}
     ship_key = str(data.get("ship_key") or "").strip()
-    try:
-        amount = int(data.get("amount") or 1)
-    except (TypeError, ValueError):
-        amount = 0
+    from game.number_format import parse_int_number
+
+    amount = parse_int_number(data.get("amount") or 1, default=0)
 
     conn = db()
     try:

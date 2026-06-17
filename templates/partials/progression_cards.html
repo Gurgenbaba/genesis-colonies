@@ -54,6 +54,26 @@
   </span>
 {% endmacro %}
 
+{# GC-632 — compact cycle / parallel stat chips (Shipyard + Defense cards) #}
+{% macro render_production_stat_chips(cycle_seconds, batch_capacity) %}
+  {% set _sec = (cycle_seconds|default(1))|int %}
+  {% set _cap = (batch_capacity|default(1))|int %}
+  {% set _cap_full = _cap|fmt_int %}
+  {% set _cap_compact = _cap|fmt_int_compact %}
+  <div class="gc-prod-stat-grid gc-mono" data-production-stats
+       aria-label="{{ T('prod_stat_aria', cycle=_sec, capacity=_cap_full) }}">
+    <div class="gc-prod-stat-chip gc-prod-stat-chip--cycle">
+      <span class="gc-prod-stat-chip-label">{{ T('prod_stat_cycle_label') }}</span>
+      <span class="gc-prod-stat-chip-value" data-prod-cycle-seconds>{{ _sec|fmt_int }}s</span>
+    </div>
+    <div class="gc-prod-stat-chip gc-prod-stat-chip--parallel">
+      <span class="gc-prod-stat-chip-label">{{ T('prod_stat_parallel_label') }}</span>
+      <span class="gc-prod-stat-chip-value" data-prod-batch-capacity
+            {% if _cap_compact != _cap_full %}title="{{ _cap_full }}"{% endif %}>{{ _cap_compact }}</span>
+    </div>
+  </div>
+{% endmacro %}
+
 {% macro render_shipyard_req_blocker(item) %}
   {% if item.type == 'building' %}
     {% set req_label = T('building_' ~ item.key, item.key) %}

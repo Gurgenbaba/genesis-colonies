@@ -42,14 +42,40 @@ def test_messages_js_initial_load_and_stale_request_guards():
     assert "data-messages-init" in src or "messagesInit" in src
     assert "inboxNeedsReload" in src
     assert "messagesDomMatchesState" in src
-    assert "void loadList(true, { force: false })" in src
-    assert "clearLoadingIfStale" in src
+    assert "ensureInboxFetching" in src
     assert "inflightFilter" in src
-    init_section = src.split("function initMessagesPage")[1][:900]
-    assert 'const filter = "all"' in init_section
+    assert "inboxShowsLoadingShell" in src
+    assert "messagesDomNeedsFreshInit" in src
+    assert "reconcileInboxPaint" in src
+    assert "whenMessagesDomReady" in src
+    assert "countInboxItemsInDocument" in src
+    assert "data-messages-shell" in src
+    assert "attachInboxLoadPaint" in src
+    assert "clearLoadingIfStale" in src
+    init_section = src.split("function initMessagesPage")[1][:1200]
+    assert "readActiveFilterFromDom()" in init_section
+    assert "const initSeq = ++_messagesInitSeq" in init_section
     assert "bypass GC.fetchJSON" in src
     assert "await GC.fetchJSON" not in src
     assert "loadGen" not in src
+
+
+def test_messages_js_pjax_repair_repaints_cached_inbox():
+    src = _read("static/js/messages.js")
+    assert "function repairInboxPaint" in src
+    assert "function scheduleInboxPaintRepair" in src
+    assert "function attachInboxLoadPaint" in src
+    assert "function inboxNeedsRepaint" in src
+    assert "function inboxShowsPlaceholderOnly" in src
+    assert "function inboxShowsLoadingShell" in src
+    assert "function inboxPaintIsHealthy" in src
+    assert "function commitInboxRender" in src
+    assert "state.commitInboxRender" in src
+    assert "[messages] rendered" in src
+    assert "GC.scheduleInboxPaintRepair" in src
+    assert "startMessagesInboxLoad" in src
+    boot_section = src.split("function bootMessagesInbox")[1].split("function initMessagesPage")[0]
+    assert "initMessagesPage({ boot: true" not in boot_section
 
 
 def test_main_js_messages_inbox_reload_only_on_unread_increase():
@@ -57,11 +83,16 @@ def test_main_js_messages_inbox_reload_only_on_unread_increase():
     assert "function scheduleMessagesInboxBoot()" in src
     assert "GC.bootMessagesInbox" in src
     boot_fn = src.split("function scheduleMessagesInboxBoot()")[1].split("GC.initPage")[0]
-    assert "setSafeTimeout" in boot_fn
-    assert boot_fn.count("setSafeTimeout") == 1
+    assert "repairInboxIfNeeded" in boot_fn
+    assert boot_fn.count("setSafeTimeout") == 0
+    assert "runMessagesPageModule" in src.split("GC.initPage = function initPage")[1].split("function formatDuration")[0]
+    assert "window.GC = GC" in _read("static/main.js").split("initShellOnce")[0]
     after_init = src.split("const afterInit = async () => {")[1].split("};", 1)[0]
     assert "GC.detectPage() === \"messages\"" in after_init
-    assert "bootMessagesInbox({ force: true })" in after_init
+    assert "bootMessagesInbox({ force: false" in after_init
+    assert after_init.index("bootMessagesInbox") > after_init.index("refreshGameState")
+    assert "function recoverStuckInbox" in _read("static/js/messages.js")
+    assert "function ensureInboxFetching" in _read("static/js/messages.js")
     unread_section = src.split("if (typeof data.unread_messages_count === \"number\")")[1].split("// --- Overview-Ressourcen")[0]
     assert "emptyInboxNeedsFill" not in unread_section
     assert "unreadSyncedFromApi" not in unread_section
@@ -75,7 +106,7 @@ def test_messages_js_tab_and_initial_share_load_list():
     src = _read("static/js/messages.js")
     assert "state.loadList = loadList" in src
     assert "bootMessagesInbox" in src
-    assert "st.loadList(true, { force })" in src or "return st.loadList(true, { force })" in src
+    assert "startMessagesInboxLoad" in src
     tab_section = src.split("tabBtn.dataset.filter")[1][:400]
     assert "loadList" in tab_section
     assert "force: true" in tab_section
@@ -485,6 +516,94 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     action = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "_lastDefenseQueueSignature = \"\"" in action
     assert "_lastPePlanetTechQueueSignature = \"\"" in action
+
+
+def test_main_js_gc631_formatted_unit_inputs_and_queue_clear():
+    """GC-631: de-DE qty parsing, readNumberInput submit, production queue clear."""
+    src = _read("static/main.js")
+    parse_fn = src.split("function parseIntNumber(n)")[1].split("function formatNumber")[0]
+    assert r"^-?\d{1,3}(\.\d{3})+$" in parse_fn
+    assert "GC.readNumberInput = readNumberInput" in src
+    shipyard_bind = src.split("function bindShipyardOnce()")[1].split("function initShipyard")[0]
+    assert "readNumberInput(qtyInp)" in shipyard_bind
+    assert "parseIntNumber(maxBtn.dataset.maxQty" in shipyard_bind
+    assert "function clearProductionCardQueueState(card)" in src
+    patch_sy = src.split("function patchShipyardCardQueues(page, queueData)")[1].split("function shipyardIconUrl")[0]
+    assert "queueData?.card_jobs_by_owner" in patch_sy
+    assert ": {}" in patch_sy
+    render_sy = src.split("function renderShipyardQueue(page, queueData)")[1].split("function parseShipyardPageData")[0]
+    assert "card_jobs_by_owner: {}" in render_sy
+    assert "clearProductionCardQueueState(card)" in src.split("function applyShipyardState(page, data)")[1].split("async function refreshShipyardState")[0]
+    shipyard_tpl = _read("templates/shipyard.html")
+    assert 'data-shipyard-qty' in shipyard_tpl
+    assert 'type="text"' in shipyard_tpl
+    assert 'type="number"' not in shipyard_tpl.split("data-shipyard-qty")[0][-400:]
+    assert "shipyard_parallel_capacity" in shipyard_tpl
+    defense_tpl = _read("templates/defense.html")
+    assert "defense_production_capacity" in defense_tpl
+    de = _read("locales/de.json")
+    assert '"shipyard_parallel_capacity"' in de
+    assert '"defense_production_capacity"' in de
+
+
+def test_main_js_gc632_production_stat_chips():
+    """GC-632: compact cycle/parallel stat chips replace long inline production text."""
+    src = _read("static/main.js")
+    assert "function patchProductionStatChips(card, cycleSeconds, batchCapacity, tt)" in src
+    assert "fmtIntParts(cap)" in src.split("function patchProductionStatChips")[1].split("function applyShipyardShipCard")[0]
+    assert ".shipyard-ship-build-time" not in src.split("function applyShipyardShipCard")[1].split("function applyShipyardState")[0]
+    assert "patchProductionStatChips(card, ship.build_seconds, batchCap, tt)" in src
+    assert "patchProductionStatChips(card, unit.build_seconds, batchCap, tt)" in src
+    macro = _read("templates/partials/progression_cards.html")
+    assert "render_production_stat_chips" in macro
+    assert "gc-prod-stat-grid" in macro
+    assert "data-prod-cycle-seconds" in macro
+    assert "data-prod-batch-capacity" in macro
+    shipyard_tpl = _read("templates/shipyard.html")
+    assert "render_production_stat_chips" in shipyard_tpl
+    assert "shipyard-ship-build-time" not in shipyard_tpl
+    defense_tpl = _read("templates/defense.html")
+    assert "render_production_stat_chips" in defense_tpl
+    assert "shipyard-ship-build-time" not in defense_tpl
+    css = _read("static/style.css")
+    assert ".gc-prod-stat-grid" in css
+    assert ".gc-prod-stat-chip" in css
+    de = _read("locales/de.json")
+    en = _read("locales/en.json")
+    assert '"prod_stat_cycle_label"' in de
+    assert '"prod_stat_parallel_label"' in de
+    assert '"prod_stat_cycle_label"' in en
+    assert '"prod_stat_parallel_label"' in en
+
+
+def test_main_js_gc633_weighted_capacity_and_queue_clear():
+    """GC-633: per-unit effective_batch_capacity; hard clear when queue empty."""
+    src = _read("static/main.js")
+    assert "ship.effective_batch_capacity" in src.split("function applyShipyardShipCard")[1].split("function applyShipyardState")[0]
+    assert "unit.effective_batch_capacity" in src.split("function applyDefenseUnitCard")[1].split("async function refreshDefenseState")[0]
+    assert "function clearAllProductionCardQueues(page)" in src
+    shipyard_py = _read("game/shipyard.py")
+    assert "def unit_batch_capacity(" in shipyard_py
+    assert "def unit_production_weight(" in shipyard_py
+    defense_py = _read("game/defense.py")
+    assert "_batch_capacity_for_defense" in defense_py
+    assert "orbital_production_batch_capacity(shipyard_level)" not in defense_py.split("def progressive_units_to_deliver")[1].split("def list_defense_queue_rows")[0]
+
+
+def test_main_js_gc630_shipyard_game_state_panel_patch():
+    """GC-630: game-state shipyard slice patches queue + stock via applyShipyardState."""
+    src = _read("static/main.js")
+    patch = src.split("function patchShipyardPanelFromState(data, activePlanetId)")[1].split("function patchDefensePanelFromGameState")[0]
+    assert "applyShipyardState(page" in patch
+    assert "data?.shipyard" in patch
+    assert "slice.queue" in patch
+    live = _read("game/live_state.py")
+    assert "shipyard_panel_for_game_state" in live
+    app_py = _read("app.py")
+    assert "shipyard_panel_for_game_state" in app_py
+    shipyard_py = _read("game/shipyard.py")
+    assert "orbital_production_batch_capacity" in shipyard_py
+    assert "production_job_duration_seconds" in shipyard_py
 
 
 def test_main_js_gc546d_production_completion_poll_storm_guards():

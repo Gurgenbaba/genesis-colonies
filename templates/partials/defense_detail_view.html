@@ -1,5 +1,6 @@
 {# Defense unit detail partial (AJAX) #}
 {% from "partials/progression_cards.html" import render_resource_cost_chip with context %}
+{% from "partials/unit_production_detail.html" import render_unit_production_detail with context %}
 {% set card = card if card is defined and card else {} %}
 
 <div class="gc-player-card-shell gc-ship-detail-shell gc-defense-detail-shell"
@@ -51,11 +52,7 @@
       {{ render_resource_cost_chip('metal', card.get('build_cost_metal') or 0) }}
       {{ render_resource_cost_chip('crystal', card.get('build_cost_crystal') or 0) }}
     </div>
-    <p class="gc-ship-detail-meta">
-      {{ T("ship_detail_build_time", seconds=(card.get('build_seconds') or 0)|fmt_int) }}
-      ·
-      {{ T("defense_detail_factory_level", level=(card.get('required_defense_factory_level') or 0)|fmt_int) }}
-    </p>
+    {{ render_unit_production_detail(card.get('production'), 'defense_detail_factory_level', card.get('required_defense_factory_level') or 0) }}
   </div>
 
   {% if card.get('requirements_items') %}

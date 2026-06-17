@@ -59,6 +59,9 @@ def test_build_ship_detail_card_known_ship():
     assert card["ship_key"] == "mule_courier"
     assert card["cargo"] == 5000
     assert card["build_cost_metal"] > 0
+    prod = card.get("production") or {}
+    assert prod.get("effective_batch_capacity") >= 1
+    assert "1" in (prod.get("order_duration_samples") or {})
 
 
 def test_build_ship_detail_card_legacy_key():

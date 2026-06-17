@@ -32,7 +32,7 @@
       </div>
       <div class="overview-meta-item">
         <dt>{{ T("empire_label_total_score", "Gesamtpunkte") }}</dt>
-        <dd class="gc-mono empire-summary-value empire-summary-value--score">{{ (em.total_score or 0)|fmt_int }}</dd>
+        <dd class="gc-mono empire-summary-value empire-summary-value--score gc-num-compact" title="{{ (em.total_score or 0)|fmt_int }}">{{ (em.total_score or 0)|fmt_int_compact }}</dd>
       </div>
       <div class="overview-meta-item">
         <dt>{{ T("empire_label_energy_surplus", "Energie-Surplus") }}</dt>

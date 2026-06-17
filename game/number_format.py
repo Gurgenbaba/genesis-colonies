@@ -6,10 +6,14 @@ Used by Jinja filters, PlayerCard, ranking API consumers, and mirrored in static
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Tuple
 
 COMPACT_THRESHOLD = 10_000_000
 COMPACT_INFINITY = 10**18
+
+# de-DE grouped integers: 999.999 / 1.000 / 10.000.000
+_DE_GROUPED_INT_RE = re.compile(r"^-?\d{1,3}(\.\d{3})+$")
 
 
 def parse_int_number(value: object, *, default: int = 0) -> int:
@@ -36,7 +40,13 @@ def parse_int_number(value: object, *, default: int = 0) -> int:
         except ValueError:
             return default
 
-    # de-DE grouped: 149.539.413.840 — remove thousand dots, keep decimal comma if any
+    if _DE_GROUPED_INT_RE.match(cleaned):
+        try:
+            return int(cleaned.replace(".", ""))
+        except ValueError:
+            return default
+
+    # de-DE grouped with decimal comma: 1.234,56 — rare for build amounts
     if "," in cleaned and "." in cleaned:
         cleaned = cleaned.replace(".", "").replace(",", ".")
     elif cleaned.count(".") > 1:

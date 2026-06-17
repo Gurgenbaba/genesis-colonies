@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip, render_shipyard_resource_blocker, render_raster_picture with context %}
+{% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip, render_shipyard_resource_blocker, render_raster_picture, render_production_stat_chips with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 
@@ -100,6 +100,9 @@
       <span class="gc-panel-subtitle gc-mono" data-defense-factory-label>
         {{ T("defense_factory_level", level=df.defense_factory_level|default(0)) }}
       </span>
+      <span class="gc-panel-subtitle gc-mono" data-defense-batch-capacity>
+        {{ T("defense_production_capacity", capacity=(df.production_batch_capacity|default(3))) }}
+      </span>
     </div>
     <div class="shipyard-resource-summary gc-mono" aria-live="polite">
       <span class="gc-resource-summary-item">
@@ -172,10 +175,7 @@
             {{ render_resource_cost_chip('metal', unit.cost_metal, unmet=(p_metal < unit.cost_metal)) }}
             {{ render_resource_cost_chip('crystal', unit.cost_crystal, unmet=(p_crystal < unit.cost_crystal)) }}
           </div>
-          <span class="gc-bld-card-time gc-mono shipyard-ship-build-time hint"
-                title="{{ T('defense_build_time_per_unit', seconds=unit.build_seconds) }}">
-            {{ T("defense_build_time_per_unit", seconds=unit.build_seconds|fmt_int) }}
-          </span>
+          {{ render_production_stat_chips(unit.build_seconds, unit.effective_batch_capacity|default(1)) }}
         </div>
         {% set unit_res_blocked = (unit.cost_metal and p_metal < unit.cost_metal) or (unit.cost_crystal and p_crystal < unit.cost_crystal) %}
         {% if unit_res_blocked %}
@@ -190,8 +190,9 @@
         {% endif %}
         <div class="gc-bld-card-action-wrap">
           <footer class="gc-ship-card-action shipyard-ship-actions">
-            <input type="number" min="1" max="999" value="1"
-                   class="gc-input shipyard-qty-input" data-defense-qty="{{ unit.defense_key }}"
+            <input type="text" inputmode="numeric" value="1" maxlength="20"
+                   class="gc-input shipyard-qty-input gc-num-input" data-defense-qty="{{ unit.defense_key }}"
+                   {% if unit.max_build %}data-input-max="{{ unit.max_build }}"{% endif %}
                    aria-label="{{ T('defense_amount_label') }}">
             <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs"
                     data-defense-max="{{ unit.defense_key }}"
@@ -258,7 +259,7 @@
             {{ render_resource_cost_chip('metal', unit.cost_metal) }}
             {{ render_resource_cost_chip('crystal', unit.cost_crystal) }}
           </div>
-          <span class="gc-bld-card-time gc-mono shipyard-ship-build-time hint"
+          <span class="gc-bld-card-time gc-mono gc-ship-card-locked-hint hint"
                 title="{{ T('defense_locked_level', level=unit.required_defense_factory_level) }}">
             {{ T("defense_locked_level", level=unit.required_defense_factory_level) }}
           </span>

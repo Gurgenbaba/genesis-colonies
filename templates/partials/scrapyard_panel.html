@@ -34,7 +34,7 @@
           </div>
         </div>
         <div class="fleet-ship-row-controls gc-trader-scrap-actions">
-          <input type="number" class="gc-trader-input fleet-ship-input gc-scrapyard-qty" min="1" max="{{ row.amount }}" value="1"
+          <input type="text" class="gc-trader-input fleet-ship-input gc-scrapyard-qty gc-num-input" min="1" max="{{ row.amount }}" value="1" inputmode="numeric"
                  data-scrap-qty="{{ row.ship_key }}" aria-label="{{ T('scrapyard_amount') }}">
           <button type="button" class="gc-btn gc-btn-secondary gc-trader-scrap-btn" data-scrap-recycle="{{ row.ship_key }}">
             {{ T('scrapyard_recycle_btn')|upper }}

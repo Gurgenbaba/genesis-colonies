@@ -48,11 +48,22 @@ def _unit_build_seconds(ship_key: str, shipyard_level: int, *, conn=None) -> int
     return max(1, unit_build_seconds(ship_key, shipyard_level, conn=conn))
 
 
+def _batch_capacity_for_ship(ship_key: str, shipyard_level: int) -> int:
+    from .shipyard import base_unit_seconds_for_ship, unit_batch_capacity
+
+    return unit_batch_capacity(shipyard_level, base_unit_seconds_for_ship(ship_key))
+
+
 def _job_duration_seconds(
     ship_key: str, amount: int, shipyard_level: int, *, conn=None
 ) -> int:
+    from .shipyard import production_job_duration_seconds
+
     unit = _unit_build_seconds(ship_key, shipyard_level, conn=conn)
-    return max(1, unit * max(1, int(amount)))
+    cap = _batch_capacity_for_ship(ship_key, shipyard_level)
+    return production_job_duration_seconds(
+        unit_seconds=unit, amount=int(amount), batch_capacity=cap
+    )
 
 
 def _job_scheduled_duration_seconds(row: Mapping[str, Any]) -> int:
@@ -65,30 +76,18 @@ def _job_total_units(
     row: Mapping[str, Any], shipyard_level: int, *, conn
 ) -> int:
     """Original order size (stable while amount tracks remaining units)."""
+    from .shipyard import production_infer_total_units
+
     sk = canonical_ship_key(str(row["ship_key"]))
     remaining = max(0, int(row.get("amount") or 0))
     unit_sec = _unit_build_seconds(sk, shipyard_level, conn=conn)
-    scheduled = max(1, int(round(_job_scheduled_duration_seconds(row) / unit_sec)))
-    return max(remaining, scheduled)
-
-
-def _units_elapsed_for_job(
-    row: Mapping[str, Any],
-    shipyard_level: int,
-    *,
-    now: float,
-    conn,
-) -> int:
-    from .queue_poll import DUE_TIME_EPSILON_SEC
-
-    sk = canonical_ship_key(str(row["ship_key"]))
-    started = float(row.get("started_at") or 0)
-    unit_sec = _unit_build_seconds(sk, shipyard_level, conn=conn)
-    total = _job_total_units(row, shipyard_level, conn=conn)
-    elapsed = float(now) + float(DUE_TIME_EPSILON_SEC) - started
-    if elapsed < unit_sec:
-        return 0
-    return min(total, int(elapsed // unit_sec))
+    cap = _batch_capacity_for_ship(sk, shipyard_level)
+    return production_infer_total_units(
+        remaining=remaining,
+        scheduled_duration=_job_scheduled_duration_seconds(row),
+        unit_seconds=unit_sec,
+        batch_capacity=cap,
+    )
 
 
 def progressive_units_to_deliver(
@@ -99,33 +98,48 @@ def progressive_units_to_deliver(
     conn,
 ) -> int:
     """How many ships from this job are due for delivery at ``now``."""
+    from .queue_poll import DUE_TIME_EPSILON_SEC
+    from .shipyard import production_progressive_units_to_deliver
+
     remaining = max(0, int(row.get("amount") or 0))
     if remaining <= 0:
         return 0
 
-    from .queue_poll import DUE_TIME_EPSILON_SEC
-
-    finish = float(row.get("finish_at") or 0)
-    if float(now) + float(DUE_TIME_EPSILON_SEC) >= finish:
-        return remaining
-
+    sk = canonical_ship_key(str(row["ship_key"]))
+    unit_sec = _unit_build_seconds(sk, shipyard_level, conn=conn)
+    cap = _batch_capacity_for_ship(sk, shipyard_level)
     total = _job_total_units(row, shipyard_level, conn=conn)
-    already_delivered = total - remaining
-    units_elapsed = _units_elapsed_for_job(row, shipyard_level, now=now, conn=conn)
-    return max(0, min(remaining, units_elapsed - already_delivered))
+    return production_progressive_units_to_deliver(
+        remaining=remaining,
+        total_units=total,
+        started_at=float(row.get("started_at") or 0),
+        finish_at=float(row.get("finish_at") or 0),
+        unit_seconds=unit_sec,
+        batch_capacity=cap,
+        now=float(now),
+        epsilon=float(DUE_TIME_EPSILON_SEC),
+    )
 
 
 def _next_unit_finish_at(
     row: Mapping[str, Any], shipyard_level: int, *, conn
 ) -> float:
-    """Unix time when the next ship in this job completes."""
+    """Unix time when the next production batch in this job completes."""
+    from .shipyard import production_next_batch_finish_at
+
     sk = canonical_ship_key(str(row["ship_key"]))
     started = float(row.get("started_at") or 0)
     unit_sec = _unit_build_seconds(sk, shipyard_level, conn=conn)
+    cap = _batch_capacity_for_ship(sk, shipyard_level)
     total = _job_total_units(row, shipyard_level, conn=conn)
     remaining = max(0, int(row.get("amount") or 0))
     delivered = max(0, total - remaining)
-    return started + (delivered + 1) * unit_sec
+    return production_next_batch_finish_at(
+        started_at=started,
+        delivered=delivered,
+        unit_seconds=unit_sec,
+        batch_capacity=cap,
+    )
 
 
 def _job_row_for_client(
@@ -447,7 +461,17 @@ def _finish_due_shipyard_jobs_impl(
 
     while rows:
         head = rows[0]
+        remaining_amt = max(0, int(head.get("amount") or 0))
+        if remaining_amt <= 0:
+            cur.execute("DELETE FROM shipyard_queue WHERE id = ?;", (int(head["id"]),))
+            completed_jobs += 1
+            rows = list_shipyard_queue_rows(planet_id, conn=conn)
+            continue
+
         to_deliver = progressive_units_to_deliver(head, sy_level, now=ts, conn=conn)
+        finish_at = float(head.get("finish_at") or 0)
+        if to_deliver <= 0 and remaining_amt > 0 and finish_at > 0 and ts + 0.001 >= finish_at:
+            to_deliver = remaining_amt
         if to_deliver <= 0:
             break
 

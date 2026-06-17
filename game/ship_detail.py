@@ -5,6 +5,12 @@ from __future__ import annotations
 from typing import Any, Dict, Mapping, Tuple
 
 from game.fleet_defs import canonical_ship_key, get_ship, ship_icon_static_path
+from game.shipyard import (
+    base_unit_seconds_for_ship,
+    production_metrics_at_yard,
+    shipyard_level_from_buildings,
+    unit_build_seconds,
+)
 
 ShipDetailCard = Dict[str, Any]
 ShipDetailError = str | None
@@ -43,6 +49,12 @@ def build_ship_detail_card(
         "required_shipyard_level": int(spec.get("required_shipyard_level", 0) or 0),
         "phase2_only": bool(spec.get("phase2_only")),
     }
+    sy_level = shipyard_level_from_buildings(buildings)
+    card["production"] = production_metrics_at_yard(
+        base_unit_seconds=base_unit_seconds_for_ship(key),
+        shipyard_level=sy_level,
+        effective_unit_seconds=unit_build_seconds(key, sy_level),
+    )
     if buildings is not None and research is not None:
         from game.ship_requirements import requirements_summary_for_client
 

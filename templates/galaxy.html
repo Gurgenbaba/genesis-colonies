@@ -208,7 +208,7 @@
             </div>
             <div class="galaxy-slot-stats">
               <span class="galaxy-stat galaxy-stat-class">{{ T(slot.planet_class_label_key, slot.planet_class) }}</span>
-              <span class="galaxy-stat galaxy-stat-score gc-mono">{{ T('galaxy_score_short') }} {{ (slot.planet_score or 0)|fmt_int }}</span>
+              <span class="galaxy-stat galaxy-stat-score gc-mono gc-num-compact" title="{{ (slot.planet_score or 0)|fmt_int }}">{{ T('galaxy_score_short') }} {{ (slot.planet_score or 0)|fmt_int_compact }}</span>
               <span class="galaxy-stat galaxy-stat-temp gc-mono">{{ slot.temperature_display }}</span>
             </div>
             {% if slot.has_debris %}

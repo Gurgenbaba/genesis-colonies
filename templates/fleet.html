@@ -281,8 +281,8 @@
                 <span class="fleet-ship-stock gc-mono">×{{ have|fmt_int }}</span>
               </div>
               <div class="fleet-ship-row-controls">
-                <input type="number" min="0" max="{{ have }}" value="0"
-                       class="fleet-ship-input gc-mono" data-ship-input="{{ ship.key }}"
+                <input type="text" min="0" max="{{ have }}" value="0" inputmode="numeric"
+                       class="fleet-ship-input gc-mono gc-num-input" data-ship-input="{{ ship.key }}"
                        aria-label="{{ T(ship.name_key) }}">
                 <button type="button" class="gc-btn gc-btn-ghost fleet-ship-max" data-ship-max="{{ ship.key }}">
                   {{ T("fleet_btn_max") }}
@@ -304,20 +304,20 @@
           <legend class="gc-fieldset-legend">{{ T("fleet_resources_title") }}</legend>
           <div class="fleet-resource-row fleet-resource-row--metal">
             <label for="fleet-res-metal" class="fleet-resource-label">{{ render_resource_icon('metal') }}{{ T("resource_metal") }}</label>
-            <input type="number" id="fleet-res-metal" name="metal" min="0" value="0"
-                   class="fleet-resource-input gc-mono" data-fleet-res-metal>
+            <input type="text" id="fleet-res-metal" name="metal" min="0" value="0" inputmode="numeric"
+                   class="fleet-resource-input gc-mono gc-num-input" data-fleet-res-metal>
             <button type="button" class="gc-btn gc-btn-ghost fleet-res-max-btn" data-fleet-res-max="metal">{{ T("fleet_btn_max") }}</button>
           </div>
           <div class="fleet-resource-row fleet-resource-row--crystal">
             <label for="fleet-res-crystal" class="fleet-resource-label">{{ render_resource_icon('crystal') }}{{ T("resource_crystal") }}</label>
-            <input type="number" id="fleet-res-crystal" name="crystal" min="0" value="0"
-                   class="fleet-resource-input gc-mono" data-fleet-res-crystal>
+            <input type="text" id="fleet-res-crystal" name="crystal" min="0" value="0" inputmode="numeric"
+                   class="fleet-resource-input gc-mono gc-num-input" data-fleet-res-crystal>
             <button type="button" class="gc-btn gc-btn-ghost fleet-res-max-btn" data-fleet-res-max="crystal">{{ T("fleet_btn_max") }}</button>
           </div>
           <div class="fleet-resource-row fleet-resource-row--fuel">
             <label for="fleet-res-fuel-cells" class="fleet-resource-label">{{ render_resource_icon('fuel_cells') }}{{ T("resource_fuel_cells") }}</label>
-            <input type="number" id="fleet-res-fuel-cells" name="fuel_cells" min="0" value="0"
-                   class="fleet-resource-input gc-mono" data-fleet-res-fuel-cells>
+            <input type="text" id="fleet-res-fuel-cells" name="fuel_cells" min="0" value="0" inputmode="numeric"
+                   class="fleet-resource-input gc-mono gc-num-input" data-fleet-res-fuel-cells>
             <button type="button" class="gc-btn gc-btn-ghost fleet-res-max-btn" data-fleet-res-max="fuel_cells">{{ T("fleet_btn_max") }}</button>
           </div>
         </fieldset>

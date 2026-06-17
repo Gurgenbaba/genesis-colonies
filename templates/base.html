@@ -57,7 +57,7 @@
                aria-label="{{ T('nav_ranking','Ranking') }}"
                title="{{ T('nav_ranking','Ranking') }}">
               <span class="gc-hud-panel-tag">{{ T("overview_label_score", "Score") }}</span>
-              <span class="gc-hud-panel-value gc-mono" id="hud-score-total">{{ (score or 0)|fmt_int }}</span>
+              <span class="gc-hud-panel-value gc-mono gc-num-compact" id="hud-score-total" data-num-value="{{ score or 0 }}" title="{{ (score or 0)|fmt_int }}">{{ (score or 0)|fmt_int_compact }}</span>
               <span class="gc-hud-panel-sep" aria-hidden="true">|</span>
               {% if rank_text is defined and rank_text %}
                 <span class="gc-hud-panel-value gc-mono" id="hud-score-rank">{{ rank_text }}</span>

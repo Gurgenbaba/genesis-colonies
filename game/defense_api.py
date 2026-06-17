@@ -69,13 +69,11 @@ def resolve_context_planet_id(
 
 
 def build_queue_slice(player_id: int, planet_id: int, *, conn) -> Dict[str, Any]:
-    from game.defense import defense_queue_for_client, get_defense_factory_level
+    from game.defense import defense_queue_for_client
 
-    factory_level = get_defense_factory_level(int(player_id), int(planet_id), conn=conn)
     return defense_queue_for_client(
         int(player_id),
         int(planet_id),
-        factory_level,
         conn=conn,
     )
 
@@ -195,7 +193,7 @@ def cancel_defense_job(
         _refund_planet_resources(conn, int(planet_id), metal=refund_m, crystal=refund_c)
         _renumber_defense_queue(conn, int(planet_id))
         factory_level = get_defense_factory_level(int(player_id), int(planet_id), conn=conn)
-        recalculate_queue_finish_times(int(planet_id), factory_level, conn=conn)
+        recalculate_queue_finish_times(int(planet_id), conn=conn)
 
         if began_tx:
             commit(conn)

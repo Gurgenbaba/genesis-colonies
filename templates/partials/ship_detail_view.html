@@ -1,5 +1,6 @@
 {# Ship detail partial (AJAX) #}
 {% from "partials/progression_cards.html" import render_resource_cost_chip with context %}
+{% from "partials/unit_production_detail.html" import render_unit_production_detail with context %}
 {% set card = card if card is defined and card else {} %}
 
 <div class="gc-player-card-shell gc-ship-detail-shell"
@@ -68,11 +69,7 @@
       {{ render_resource_cost_chip('fuel_cells', card.get('build_cost_fuel_cells')) }}
       {% endif %}
     </div>
-    <p class="gc-ship-detail-meta">
-      {{ T("ship_detail_build_time", seconds=(card.get('build_seconds') or 0)|fmt_int) }}
-      ·
-      {{ T("ship_detail_shipyard_level", level=(card.get('required_shipyard_level') or 0)|fmt_int) }}
-    </p>
+    {{ render_unit_production_detail(card.get('production'), 'ship_detail_shipyard_level', card.get('required_shipyard_level') or 0) }}
     {% if card.get('phase2_only') %}
     <p class="gc-ship-detail-phase hint">{{ T("ship_detail_phase2_only") }}</p>
     {% endif %}

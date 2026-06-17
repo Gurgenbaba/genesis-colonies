@@ -204,16 +204,15 @@
                     </label>
                     <p class="auction-house-form-error" data-auction-form-error="{{ a.id }}" hidden></p>
                     <div class="auction-house-bid-row">
-                      <input type="number"
-                             class="gc-trader-input auction-house-bid-input"
+                      <input type="text"
+                             class="gc-trader-input auction-house-bid-input gc-num-input"
                              id="auction-bid-{{ a.id }}"
                              name="amount"
                              min="{{ a.min_next_bid }}"
-                             step="1"
                              inputmode="numeric"
                              data-auction-bid-input="{{ a.id }}"
-                             value="{{ a.min_next_bid }}"
-                             placeholder="{{ a.min_next_bid|fmt_int_compact }}">
+                             value="{{ a.min_next_bid|fmt_int }}"
+                             placeholder="{{ a.min_next_bid|fmt_int }}">
                       <button type="submit"
                               class="gc-btn gc-btn-primary auction-house-bid-btn"
                               data-auction-bid-submit="{{ a.id }}">

@@ -71,11 +71,10 @@
     <div class="gc-trader-amount-row">
       <div class="gc-trader-amount-field">
         <label class="gc-trader-field-label" for="gc-exchange-amount">{{ T('exchange_amount_give', 'Amount to give')|upper }}</label>
-        <input type="number"
+        <input type="text"
                id="gc-exchange-amount"
-               class="gc-trader-input gc-exchange-input"
+               class="gc-trader-input gc-exchange-input gc-num-input"
                min="{{ ex.min_amount }}"
-               step="1"
                inputmode="numeric"
                value="{{ ex.min_amount }}"
                data-exchange-min="{{ ex.min_amount }}">

@@ -798,6 +798,51 @@ def _technical_effects_at_level(
         out["effect_resource"] = "energy"
         return out
 
+    if building_type == "orbital_shipyard":
+        from .shipyard import (
+            PRODUCTION_TECH_EXAMPLE_BASE_SECONDS,
+            orbital_production_batch_capacity,
+            unit_batch_capacity,
+            BUILD_TIME_LEVEL_FACTOR,
+        )
+
+        lvl = max(1, int(level))
+        yard_cap = orbital_production_batch_capacity(lvl)
+        reduction = (
+            int(round((1 - BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)) * 100)) if lvl > 1 else 0
+        )
+        examples = {
+            tag: unit_batch_capacity(lvl, sec)
+            for tag, sec in PRODUCTION_TECH_EXAMPLE_BASE_SECONDS.items()
+        }
+        out.update(
+            effect_kind="yard_production",
+            effect_value=yard_cap,
+            yard_batch_capacity=yard_cap,
+            build_time_reduction_percent=reduction,
+            parallel_light=examples.get("light"),
+            parallel_medium=examples.get("medium"),
+            parallel_heavy=examples.get("heavy"),
+        )
+        return out
+
+    if building_type == "defense_factory":
+        from .shipyard import orbital_production_batch_capacity, shipyard_level_from_buildings
+
+        sy_lvl = shipyard_level_from_buildings(buildings)
+        out.update(
+            effect_kind="defense_unlock",
+            effect_value=int(level),
+        )
+        if sy_lvl > 0 and int(buildings.get("orbital_shipyard") or buildings.get("shipyard") or 0) > 0:
+            yard_cap = orbital_production_batch_capacity(sy_lvl)
+            out["secondary_effect"] = {
+                "effect_kind": "yard_reference",
+                "effect_value": yard_cap,
+                "yard_level": sy_lvl,
+            }
+        return out
+
     return out
 
 

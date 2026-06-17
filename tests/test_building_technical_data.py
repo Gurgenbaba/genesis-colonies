@@ -125,6 +125,43 @@ def test_technical_data_mining_tech_levels(tech_db):
     assert data["kind"] == "research"
 
 
+def test_technical_data_orbital_shipyard_production(tech_db):
+    uid, _ = _create_player()
+    planet = get_homeworld(player_id=uid)
+    save_planet_buildings(int(planet["id"]), {"orbital_shipyard": 2, "solar_plant": 1})
+
+    conn = db()
+    data, err = build_building_technical_data("orbital_shipyard", user_id=uid, conn=conn)
+    conn.close()
+
+    assert err is None
+    row = data["levels"][0]
+    assert row["effect_kind"] == "yard_production"
+    assert row["yard_batch_capacity"] == 9
+    assert row["parallel_light"] >= row["parallel_heavy"] >= 1
+
+
+def test_technical_data_defense_factory_unlock(tech_db):
+    uid, _ = _create_player()
+    planet = get_homeworld(player_id=uid)
+    save_planet_buildings(
+        int(planet["id"]),
+        {"defense_factory": 2, "orbital_shipyard": 1, "solar_plant": 1},
+    )
+
+    conn = db()
+    data, err = build_building_technical_data("defense_factory", user_id=uid, conn=conn)
+    conn.close()
+
+    assert err is None
+    row = data["levels"][0]
+    assert row["effect_kind"] == "defense_unlock"
+    assert row["effect_value"] == 2
+    sec = row.get("secondary_effect") or {}
+    assert sec.get("effect_kind") == "yard_reference"
+    assert sec.get("effect_value") == 3
+
+
 def test_technical_data_api_route(tech_db, monkeypatch):
     app_mod = _reload_app(monkeypatch, tech_db)
     uid, uname = _create_player()

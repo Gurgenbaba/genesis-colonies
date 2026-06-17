@@ -6,6 +6,8 @@ from typing import Any, Dict, Mapping, Tuple
 
 from .combat_models import combat_stats_for_defense
 from .defense_defs import defense_icon_static_path, get_defense, unit_build_cost
+from .defense import base_unit_seconds_for_defense, unit_build_seconds
+from .shipyard import production_metrics_at_yard, shipyard_level_from_buildings
 
 DefenseDetailCard = Dict[str, Any]
 DefenseDetailError = str | None
@@ -44,6 +46,12 @@ def build_defense_detail_card(
             spec.get("required_defense_factory_level", 0) or 0
         ),
     }
+    sy_level = shipyard_level_from_buildings(buildings)
+    card["production"] = production_metrics_at_yard(
+        base_unit_seconds=base_unit_seconds_for_defense(key),
+        shipyard_level=sy_level,
+        effective_unit_seconds=unit_build_seconds(key, sy_level),
+    )
     if buildings is not None and research is not None:
         from .defense_requirements import requirements_summary_for_client
 

@@ -69,12 +69,18 @@
   // =========================
   // Format helpers (mirrors game/number_format.py)
   // =========================
+  const _deIntFormatter = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 });
+
   function parseIntNumber(n) {
     if (typeof n === "number" && Number.isFinite(n)) return Math.trunc(n);
     const raw = String(n ?? "").trim();
     if (!raw) return 0;
     if (/^-?\d+$/.test(raw)) return parseInt(raw, 10);
     let cleaned = raw.replace(/\s/g, "");
+    // de-DE grouped integers: 999.999 / 1.000 / 10.000.000
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(cleaned)) {
+      return parseInt(cleaned.replace(/\./g, ""), 10);
+    }
     if (cleaned.includes(",") && cleaned.includes(".")) {
       cleaned = cleaned.replace(/\./g, "").replace(",", ".");
     } else if ((cleaned.match(/\./g) || []).length > 1) {
@@ -85,6 +91,13 @@
     const num = Number(cleaned);
     return Number.isFinite(num) ? Math.trunc(num) : 0;
   }
+
+  function formatNumber(n) {
+    return _deIntFormatter.format(parseIntNumber(n));
+  }
+
+  const COMPACT_THRESHOLD = 10_000_000;
+  const COMPACT_INFINITY = 1e18;
 
   function formatCompactMantissa(val) {
     const absVal = Math.abs(val);
@@ -99,13 +112,12 @@
     return body.replace(".", ",");
   }
 
-  function fmtIntParts(n) {
+  /** Compact German display for large scores: 12,3 Mio. / 149,5 Mrd. */
+  function formatNumberCompact(n) {
     const num = parseIntNumber(n);
-    const full = num.toLocaleString("de-DE", { maximumFractionDigits: 0 });
     const abs = Math.abs(num);
-    if (abs < 10000000) return { display: full, full };
-
-    if (abs >= 1e18) return { display: "∞", full };
+    if (abs < COMPACT_THRESHOLD) return formatNumber(num);
+    if (abs >= COMPACT_INFINITY) return "∞";
 
     const sign = num < 0 ? "-" : "";
     let suffix;
@@ -126,15 +138,133 @@
 
     const val = abs / div;
     const body = formatCompactMantissa(val);
-    return { display: `${sign}${body} ${suffix}`, full };
+    return `${sign}${body} ${suffix}`;
+  }
+
+  function formatScore(n) {
+    return formatNumberCompact(n);
   }
 
   function fmtNumber(n) {
-    return fmtIntParts(n).display;
+    return formatNumber(n);
   }
 
   function fmtIntFull(n) {
-    return parseIntNumber(n).toLocaleString("de-DE", { maximumFractionDigits: 0 });
+    return formatNumber(n);
+  }
+
+  function fmtIntParts(n) {
+    const full = formatNumber(n);
+    const display = formatNumberCompact(n);
+    return { display, full };
+  }
+
+  const GC_NUM_INPUT_SELECTOR = [
+    ".gc-num-input",
+    "[data-shipyard-qty]",
+    "[data-defense-qty]",
+    "[data-ship-input]",
+    "[data-logistics-ship-input]",
+    "[data-fleet-res-metal]",
+    "[data-fleet-res-crystal]",
+    "[data-fleet-res-fuel-cells]",
+    "#gc-exchange-amount",
+    "#gc-fuel-exchange-units",
+    ".gc-scrapyard-qty",
+    "[data-auction-bid-input]",
+    "[data-scrap-qty]",
+    "[data-logistics-resource]",
+  ].join(",");
+
+  let _numInputDelegationBound = false;
+
+  function isFormattedNumberInput(el) {
+    return !!(el && el.matches && el.matches(GC_NUM_INPUT_SELECTOR));
+  }
+
+  function getNumberInputCap(inp) {
+    if (!inp) return null;
+    const dataMax = inp.getAttribute("data-input-max");
+    if (dataMax != null && dataMax !== "") {
+      const n = parseIntNumber(dataMax);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    }
+    if (
+      inp.matches(
+        "[data-ship-input],[data-logistics-ship-input],[data-scrap-qty],.gc-scrapyard-qty,[data-logistics-resource]"
+      )
+    ) {
+      const maxAttr = inp.getAttribute("max");
+      if (maxAttr != null && maxAttr !== "") {
+        const n = parseIntNumber(maxAttr);
+        return Number.isFinite(n) && n >= 0 ? n : null;
+      }
+    }
+    return null;
+  }
+
+  function clampToNumberInputCap(inp, num) {
+    const cap = getNumberInputCap(inp);
+    if (cap != null && num > cap) return cap;
+    return num;
+  }
+
+  function readNumberInput(el) {
+    return parseIntNumber(el?.value ?? "0");
+  }
+
+  function setNumberInputValue(el, n) {
+    if (!el) return;
+    let num = Math.max(0, parseIntNumber(n));
+    num = clampToNumberInputCap(el, num);
+    el.value = formatNumber(num);
+  }
+
+  function formatNumberInputOnInput(inp) {
+    if (!inp) return;
+    const digits = String(inp.value ?? "").replace(/[^\d]/g, "");
+    if (!digits) {
+      inp.value = "";
+      return;
+    }
+    let num = clampToNumberInputCap(inp, parseInt(digits, 10));
+    const formatted = formatNumber(num);
+    inp.value = formatted;
+    try {
+      inp.setSelectionRange(formatted.length, formatted.length);
+    } catch (_) {}
+  }
+
+  function ensureFormattedNumberInput(inp) {
+    if (!inp || inp.dataset.gcNumFmt === "1") return;
+    inp.dataset.gcNumFmt = "1";
+    if (inp.type === "number") {
+      inp.type = "text";
+      inp.inputMode = "numeric";
+      inp.autocomplete = "off";
+    }
+    if (!inp.getAttribute("maxlength")) inp.maxLength = 20;
+    if (inp.matches("[data-shipyard-qty],[data-defense-qty]")) {
+      inp.removeAttribute("max");
+    }
+    const raw = String(inp.value ?? "").trim();
+    if (raw && /\d/.test(raw)) {
+      inp.value = formatNumber(parseIntNumber(raw));
+    }
+  }
+
+  function bindFormattedNumberInputs(root) {
+    const scope = root || document;
+    scope.querySelectorAll(GC_NUM_INPUT_SELECTOR).forEach(ensureFormattedNumberInput);
+  }
+
+  function initFormattedNumberInputDelegation() {
+    if (_numInputDelegationBound) return;
+    _numInputDelegationBound = true;
+    document.addEventListener("input", (e) => {
+      if (!isFormattedNumberInput(e.target)) return;
+      formatNumberInputOnInput(e.target);
+    });
   }
 
   function renderMonoCompact(n, prefix = "", suffix = "") {
@@ -148,11 +278,7 @@
   }
 
   function renderCostVal(n) {
-    const p = fmtIntParts(n);
-    if (p.display === p.full) {
-      return `<span class="gc-cost-val gc-num-compact">${p.display}</span>`;
-    }
-    return `<span class="gc-cost-val gc-num-compact" title="${p.full}">${p.display}</span>`;
+    return `<span class="gc-cost-val gc-num-compact">${formatNumber(n)}</span>`;
   }
 
   // UI-style ETA: "3m 12s" etc
@@ -832,10 +958,22 @@
     modules: {},
   };
 
+  window.GC = GC;
+
   GC.parseIntNumber = parseIntNumber;
+  GC.readNumberInput = readNumberInput;
+  GC.setNumberInputValue = setNumberInputValue;
+  GC.formatNumber = formatNumber;
+  GC.formatNumberCompact = formatNumberCompact;
+  GC.formatScore = formatScore;
+  GC.setScoreDisplayInstant = setScoreDisplayInstant;
   GC.fmtIntParts = fmtIntParts;
   GC.fmtNumber = fmtNumber;
   GC.fmtIntFull = fmtIntFull;
+  GC.readNumberInput = readNumberInput;
+  GC.setNumberInputValue = setNumberInputValue;
+  GC.bindFormattedNumberInputs = bindFormattedNumberInputs;
+  initFormattedNumberInputDelegation();
   GC.t = t;
   GC.tf = tf;
 
@@ -1344,12 +1482,44 @@
 
   function scheduleMessagesInboxBoot() {
     if (GC.detectPage() !== "messages") return;
-    GC.setSafeTimeout(() => {
+    const repairInboxIfNeeded = () => {
       if (GC.detectPage() !== "messages") return;
-      if (typeof GC.bootMessagesInbox === "function") {
-        GC.bootMessagesInbox({ force: true });
+      if (typeof GC.bootMessagesInbox !== "function") return;
+      GC.bootMessagesInbox({ force: false, pjax: true });
+    };
+    const defer =
+      typeof requestAnimationFrame === "function"
+        ? (fn) => requestAnimationFrame(() => requestAnimationFrame(fn))
+        : (fn) => queueMicrotask(fn);
+    defer(repairInboxIfNeeded);
+  }
+
+  function runMessagesPageModule(retry = 0) {
+    const mod = GC.modules?.messages;
+    if (typeof mod !== "function" && typeof GC.initMessagesPage !== "function") {
+      if (retry < 60) {
+        const next =
+          typeof requestAnimationFrame === "function" ? requestAnimationFrame : (fn) => setTimeout(fn, 16);
+        next(() => runMessagesPageModule(retry + 1));
+        return;
       }
-    }, 500);
+      console.warn("[GC] messages module not loaded yet");
+      return;
+    }
+    if (typeof mod === "function") {
+      try {
+        mod({ pjax: true });
+      } catch (err) {
+        console.error("[GC] page module error", "messages", err);
+      }
+    } else if (typeof GC.initMessagesPage === "function") {
+      try {
+        GC.initMessagesPage({ pjax: true });
+      } catch (err) {
+        console.error("[GC] messages init fallback error", err);
+      }
+    }
+    scheduleMessagesInboxBoot();
   }
 
   GC.initPage = function initPage(opts) {
@@ -1380,26 +1550,28 @@
     }
 
     const mod = GC.modules[page];
-    if (typeof mod === "function") {
+    if (page === "messages") {
+      if (force) {
+        const defer =
+          typeof requestAnimationFrame === "function"
+            ? (fn) => requestAnimationFrame(() => requestAnimationFrame(fn))
+            : (fn) => queueMicrotask(fn);
+        defer(runMessagesPageModule);
+      } else {
+        runMessagesPageModule();
+      }
+    } else if (typeof mod === "function") {
       try {
         mod();
       } catch (err) {
         console.error("[GC] page module error", page, err);
       }
-    } else if (page === "messages" && typeof GC.initMessagesPage === "function") {
-      try {
-        GC.initMessagesPage();
-      } catch (err) {
-        console.error("[GC] messages init fallback error", err);
-      }
-    }
-
-    if (page === "messages") {
-      scheduleMessagesInboxBoot();
     }
 
     initFlashAutohide();
     initMotdBanner();
+    bootstrapScoreStateFromDom();
+    bindFormattedNumberInputs(document.getElementById("main-content") || document);
 
     if (shouldRunGameLoop() && !skipHydrate) {
       hydratePageFromLastState({ skipMessagesUnread: page === "messages" });
@@ -1425,7 +1597,10 @@
       GC.startProgressTicker();
       if (typeof GC.initChat === "function") GC.initChat();
       if (GC.detectPage() === "messages" && typeof GC.bootMessagesInbox === "function") {
-        GC.bootMessagesInbox({ force: true });
+        const st = GC.messagesPageState;
+        if (!st || !st.listLoaded) {
+          GC.bootMessagesInbox({ force: false, pjax: true });
+        }
       }
     };
 
@@ -2619,13 +2794,32 @@
   const _numAnim = new Map();      // el -> state
   const _lastNum = new WeakMap();  // el -> lastTarget
 
+  function setScoreDisplayInstant(el, value) {
+    if (!el) return;
+    const v = Math.max(0, parseIntNumber(value));
+    const st = _numAnim.get(el);
+    if (st?.raf) cancelAnimationFrame(st.raf);
+    _numAnim.delete(el);
+    el.textContent = formatScore(v);
+    el.title = formatNumber(v);
+    el.dataset.numValue = String(v);
+    _lastNum.set(el, v);
+  }
+
   function animateNumber(el, target, opts = {}) {
     if (!el) return;
 
     const tgt = Math.max(0, Math.floor(Number(target || 0)));
-    const fmt = opts.fmt || fmtNumber;
+    const displayFmt = opts.fmt || fmtNumber;
+    // Compact score labels must not tween (9.999.999 ↔ 10 Mio. flickers the HUD).
+    const tweenFmt = displayFmt === formatScore ? formatNumber : displayFmt;
+    const syncTitle = (val) => {
+      if (displayFmt === formatScore) el.title = formatNumber(val);
+    };
     if (_prefersReducedMotion || !shouldRunVisualLoops()) {
-      el.textContent = fmt(tgt);
+      el.textContent = displayFmt(tgt);
+      el.dataset.numValue = String(tgt);
+      syncTitle(tgt);
       _lastNum.set(el, tgt);
       return;
     }
@@ -2636,16 +2830,17 @@
     const { duration = 650, minStep = 1 } = opts;
     const now = performance.now();
 
-    const currentText = (el.textContent || "").replace(/\./g, "").replace(/,/g, "");
-    let cur = Number(currentText);
-    if (!Number.isFinite(cur)) cur = 0;
+    let cur = Number(el.dataset.numValue);
+    if (!Number.isFinite(cur)) cur = parseIntNumber(el.getAttribute("title") || el.textContent);
     cur = Math.max(0, Math.floor(cur));
 
     const st = _numAnim.get(el);
     if (st && st.target === tgt) return;
 
     if (Math.abs(tgt - cur) <= minStep) {
-      el.textContent = fmt(tgt);
+      el.textContent = displayFmt(tgt);
+      el.dataset.numValue = String(tgt);
+      syncTitle(tgt);
       _numAnim.delete(el);
       return;
     }
@@ -2668,13 +2863,16 @@
       const v = Math.round(state.start + (state.target - state.start) * eased);
 
       state.value = v;
-      el.textContent = fmt(v);
+      el.textContent = p < 1 ? tweenFmt(v) : displayFmt(v);
+      el.dataset.numValue = String(v);
 
       if (p < 1) {
         state.raf = GC.requestFrame(tick);
         _numAnim.set(el, state);
       } else {
-        el.textContent = fmt(state.target);
+        el.textContent = displayFmt(state.target);
+        el.dataset.numValue = String(state.target);
+        syncTitle(state.target);
         _numAnim.delete(el);
       }
     }
@@ -2691,6 +2889,18 @@
     lastAnimatedTotal: null,
     lastDeltaEventTotal: null,
   };
+
+  function bootstrapScoreStateFromDom() {
+    const hud = document.getElementById("hud-score-total");
+    if (!hud) return;
+    let domTotal = Number(hud.dataset.numValue);
+    if (!Number.isFinite(domTotal)) {
+      domTotal = parseIntNumber(hud.getAttribute("title") || hud.textContent);
+    }
+    if (!Number.isFinite(domTotal) || domTotal < 0) return;
+    if (_scoreState.lastServerTotal === null) _scoreState.lastServerTotal = domTotal;
+    if (_scoreState.lastAnimatedTotal === null) _scoreState.lastAnimatedTotal = domTotal;
+  }
 
   const SCORE_DELTA_ANIM_MS = 980;
   const SCORE_DELTA_REMOVE_FALLBACK_MS = 1400;
@@ -2769,7 +2979,7 @@
     deltaEl.className = "gc-score-delta";
     deltaEl.setAttribute("aria-hidden", "true");
     const sign = d > 0 ? "+" : "";
-    deltaEl.textContent = `${sign}${fmtNumber(d)}`;
+    deltaEl.textContent = `${sign}${formatScore(d)}`;
     anchorEl.appendChild(deltaEl);
     _scoreDeltaEl = deltaEl;
 
@@ -3121,7 +3331,102 @@
     if (kind === "max_level" || kind === "scan" || kind === "level") {
       return `${metricPrefix}${fmtNumber(val)}`;
     }
+    if (kind === "yard_production") {
+      const capCompact = formatNumberCompact(val);
+      const reduction = Number(row.build_time_reduction_percent || 0);
+      if (reduction > 0) {
+        return tf(
+          "buildings_technical_yard_compact_with_reduction",
+          { capacity: capCompact, percent: fmtNumber(reduction) },
+          `${capCompact} · -${fmtNumber(reduction)}%`
+        );
+      }
+      return tf(
+        "buildings_technical_yard_capacity_compact",
+        { capacity: capCompact },
+        capCompact
+      );
+    }
+    if (kind === "defense_unlock") {
+      return "";
+    }
+    if (kind === "yard_reference") {
+      return tf(
+        "buildings_technical_yard_ref_compact",
+        { capacity: formatNumberCompact(val) },
+        formatNumberCompact(val)
+      );
+    }
     return `${metricPrefix}${fmtNumber(val)}`;
+  }
+
+  function formatTechnicalOutputTitle(row) {
+    if (!row || typeof row !== "object") return "";
+    const kind = String(row.effect_kind || "");
+    if (kind === "yard_production") {
+      const capFull = fmtNumber(row.effect_value ?? row.yard_batch_capacity ?? 0);
+      const parts = [
+        tf("buildings_technical_yard_capacity_row", { capacity: capFull }, `Werftkapazität ${capFull}`),
+      ];
+      const reduction = Number(row.build_time_reduction_percent || 0);
+      if (reduction > 0) {
+        parts.push(
+          tf(
+            "buildings_technical_build_time_reduction",
+            { percent: fmtNumber(reduction) },
+            `-${fmtNumber(reduction)}% Zyklus`
+          )
+        );
+      }
+      const light = row.parallel_light;
+      const medium = row.parallel_medium;
+      const heavy = row.parallel_heavy;
+      if (light != null && medium != null && heavy != null) {
+        parts.push(
+          tf(
+            "buildings_technical_parallel_examples",
+            {
+              light: fmtNumber(light),
+              medium: fmtNumber(medium),
+              heavy: fmtNumber(heavy),
+            },
+            `Parallel z. B. ${fmtNumber(light)} / ${fmtNumber(medium)} / ${fmtNumber(heavy)}`
+          )
+        );
+      }
+      return parts.join(" · ");
+    }
+    if (kind === "defense_unlock") {
+      const parts = [
+        tf(
+          "buildings_technical_defense_unlock_row",
+          { level: fmtNumber(row.effect_value ?? 0) },
+          `Freischaltung Stufe ${fmtNumber(row.effect_value ?? 0)}`
+        ),
+      ];
+      if (row.secondary_effect) {
+        const secTitle = formatTechnicalOutputTitle(row.secondary_effect);
+        if (secTitle) parts.push(secTitle);
+      }
+      return parts.join(" · ");
+    }
+    if (kind === "yard_reference") {
+      const yardLevel = row.yard_level != null ? fmtNumber(row.yard_level) : "";
+      const capFull = fmtNumber(row.effect_value ?? 0);
+      if (yardLevel) {
+        return tf(
+          "buildings_technical_yard_reference",
+          { level: yardLevel, capacity: capFull },
+          `Orbitalwerft Stufe ${yardLevel}: Kapazität ${capFull}`
+        );
+      }
+      return tf(
+        "buildings_technical_yard_capacity_row",
+        { capacity: capFull },
+        `Werftkapazität ${capFull}`
+      );
+    }
+    return "";
   }
 
   function formatTechnicalOutput(row) {
@@ -3179,16 +3484,24 @@
     BUILDING_TECH.tbody.innerHTML = levels
       .map((row) => {
         const cls = row.is_current ? "gc-building-tech-row gc-building-tech-row--current" : "gc-building-tech-row";
+        const levelNum = fmtNumber(row.level);
         const levelCell = row.is_current
-          ? `<span class="gc-building-tech-current-badge">${currentLabel}</span> ${fmtNumber(row.level)}`
-          : fmtNumber(row.level);
+          ? `<span class="gc-building-tech-level">` +
+            `<span class="gc-building-tech-current-badge">${currentLabel}</span>` +
+            `<span class="gc-building-tech-level-num">${levelNum}</span></span>`
+          : `<span class="gc-building-tech-level"><span class="gc-building-tech-level-num">${levelNum}</span></span>`;
         const energyCell = showEnergy
           ? `<td class="gc-mono">${escapeHtml(formatTechnicalEnergy(row))}</td>`
           : "";
+        const outputText = formatTechnicalOutput(row);
+        const outputTitle = formatTechnicalOutputTitle(row);
+        const outputCell = outputTitle
+          ? `<td class="gc-mono gc-num-compact gc-building-tech-col-output" title="${escapeHtml(outputTitle)}">${escapeHtml(outputText)}</td>`
+          : `<td class="gc-mono gc-num-compact gc-building-tech-col-output">${escapeHtml(outputText)}</td>`;
         return (
           `<tr class="${cls}">` +
-          `<td class="gc-mono">${levelCell}</td>` +
-          `<td class="gc-mono">${escapeHtml(formatTechnicalOutput(row))}</td>` +
+          `<td class="gc-mono gc-building-tech-col-level">${levelCell}</td>` +
+          outputCell +
           `<td class="gc-mono">${fmtNumber(row.cost_metal || 0)}</td>` +
           `<td class="gc-mono">${fmtNumber(row.cost_crystal || 0)}</td>` +
           `<td class="gc-mono">${escapeHtml(formatDuration(row.time_seconds || 0))}</td>` +
@@ -5509,7 +5822,7 @@
           const unitKey = `${defenseActive.dataset.queueJobId || ""}:${nextUnitFinish}`;
           if (_defenseUnitFinishKey !== unitKey) {
             _defenseUnitFinishKey = unitKey;
-            requestProductionCompletionSync({ gameState: true });
+            requestProductionCompletionSync({ gameState: true, defense: true });
           }
         } else if (isQueueTimerComplete(orderRemaining, orderFinish, serverNowTs)) {
           const jobId = Math.floor(Number(defenseActive.dataset.queueJobId || 0));
@@ -5974,7 +6287,7 @@
         const hudRankEl = document.getElementById("hud-score-rank");
 
         if (hudScoreEl && _scoreState.lastAnimatedTotal !== serverTotal) {
-          animateNumber(hudScoreEl, serverTotal, { duration: 700 });
+          setScoreDisplayInstant(hudScoreEl, serverTotal);
           if (delta !== 0) showScoreDelta(delta, serverTotal);
           _scoreState.lastAnimatedTotal = serverTotal;
         }
@@ -6033,13 +6346,13 @@
     const ovScoreRes = document.getElementById("overview-score-research");
 
     if (ovScoreVal) {
-      animateNumber(ovScoreVal, serverTotal, { duration: 750 });
+      setScoreDisplayInstant(ovScoreVal, serverTotal);
     }
     if (ovScoreRank) {
       ovScoreRank.textContent = (rank >= 1 && totalPlayers > 0) ? `#${rank}/${totalPlayers}` : "#–/–";
     }
-    if (ovScoreBuild) animateNumber(ovScoreBuild, scoreBuildings, { duration: 650 });
-    if (ovScoreRes) animateNumber(ovScoreRes, scoreResearch, { duration: 650 });
+    if (ovScoreBuild) animateNumber(ovScoreBuild, scoreBuildings, { duration: 650, fmt: formatScore });
+    if (ovScoreRes) animateNumber(ovScoreRes, scoreResearch, { duration: 650, fmt: formatScore });
   }
 
   // =========================
@@ -6060,6 +6373,17 @@
       SHIPYARDQ.active.totalSeconds = 0;
       refreshShipyardStateCoalesced(page);
       return;
+    }
+    const slice = data?.shipyard;
+    if (slice && typeof slice === "object") {
+      const inner = slice.ships && typeof slice.ships === "object" ? slice.ships : null;
+      if (inner && inner.ready !== false) {
+        applyShipyardState(page, {
+          ...inner,
+          shipyard_queue: slice.queue || inner.shipyard_queue,
+        });
+        return;
+      }
     }
     if (data?.shipyard_queue) {
       renderShipyardQueue(page, data.shipyard_queue);
@@ -6096,7 +6420,7 @@
       || reasonStr === "shipyard_cancel"
       || reasonStr === "defense_build"
       || reasonStr === "defense_cancel";
-    if (onShipyard && completionReason && !data?.shipyard_queue) {
+    if (onShipyard && completionReason && !data?.shipyard && !data?.shipyard_queue) {
       const syPage = document.getElementById("shipyard-page");
       if (syPage) refreshShipyardStateCoalesced(syPage);
     }
@@ -6262,12 +6586,16 @@
       const researchQueue = Array.isArray(research.queue) ? research.queue : (activeResearch ? [activeResearch] : []);
       _syncResearchQueueLiveState(researchQueue);
 
-      if (data.shipyard_queue) {
+      if (data.shipyard?.queue) {
+        const syJobs = Array.isArray(data.shipyard.queue.queue) ? data.shipyard.queue.queue : [];
+        _syncShipyardQueueLiveState(syJobs);
+      } else if (data.shipyard_queue) {
         const syJobs = Array.isArray(data.shipyard_queue.queue) ? data.shipyard_queue.queue : [];
         _syncShipyardQueueLiveState(syJobs);
       }
       if (data.defense) {
-        const defQ = data.defense.queue || data.defense.defense_queue || [];
+        const defSlice = data.defense.queue || data.defense.defense_queue;
+        const defQ = defSlice?.queue ?? defSlice;
         if (Array.isArray(defQ)) _syncDefenseQueueLiveState(defQ);
       }
 
@@ -6853,7 +7181,7 @@
       return tf(
         "inv_effect_resource_fmt",
         {
-          amount: (params.amount || effect.amount || 0).toLocaleString(),
+          amount: formatNumber(params.amount || effect.amount || 0),
           resource: label,
         },
         "+%(amount)s %(resource)s erhalten"
@@ -7114,7 +7442,7 @@
     const craftProgress = (item.craft_progress || [])
       .map(
         (cp) =>
-          `<span class="inventory-craft-progress gc-mono">${amount.toLocaleString()} / ${parseInt(cp.required, 10) || 0} ${escapeHtml(t(cp.name_key, cp.output_key))}</span>`
+          `<span class="inventory-craft-progress gc-mono">${formatNumber(amount)} / ${formatNumber(cp.required || 0)} ${escapeHtml(t(cp.name_key, cp.output_key))}</span>`
       )
       .join("");
     const exchangeProgress = (item.exchange_progress || [])
@@ -7158,7 +7486,7 @@
           `<button type="button" class="gc-btn gc-btn-secondary gc-btn-xs inventory-exchange-btn" data-inventory-exchange="${escapeHtml(ep.recipe_key)}">${escapeHtml(t("inv_upgrade_btn", "Upgrade"))}</button>`
       )
       .join("");
-    return `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span><div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}${exchangeProgress}${endgameHint}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${amount.toLocaleString()}</span>${useBtn}${craftBtns}${exchangeBtns}`;
+    return `<span class="inventory-item-icon" aria-hidden="true">${item.icon || "📦"}</span><div class="inventory-item-body"><span class="inventory-item-name">${escapeHtml(name)}</span>${craftProgress}${exchangeProgress}${endgameHint}</div><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>${collectibleBadge}<span class="inventory-item-amount gc-mono" data-inventory-item-amount="${escapeHtml(item.item_key)}">×${formatNumber(amount)}</span>${useBtn}${craftBtns}${exchangeBtns}`;
   }
 
   let _lootModalState = null;
@@ -7175,13 +7503,13 @@
   function lootTileAmountLabel(tile) {
     const amt = parseInt(tile.amount, 10) || 0;
     const type = String(tile.type || "");
-    if (type === "resource") return `+${amt.toLocaleString()}`;
+    if (type === "resource") return `+${formatNumber(amt)}`;
     if (type === "booster" && String(tile.key || "").includes("booster")) {
       const sec = parseInt(tile.booster_seconds, 10) || 0;
       if (sec >= 3600) return `${Math.round(sec / 3600)} h`;
       if (sec >= 60) return `${Math.round(sec / 60)} Min`;
     }
-    return `×${amt.toLocaleString()}`;
+    return `×${formatNumber(amt)}`;
   }
 
   function lootTileName(tile) {
@@ -7220,7 +7548,7 @@
         <span class="gc-loot-result-icon" aria-hidden="true">${reward.icon || "📦"}</span>
         <div class="gc-loot-result-body">
           <span class="gc-loot-result-name">${escapeHtml(label)}</span>
-          <span class="gc-loot-result-amount gc-mono">+${amt.toLocaleString()}</span>
+          <span class="gc-loot-result-amount gc-mono">+${formatNumber(amt)}</span>
         </div>
         <span class="gc-loot-result-rarity">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>
       </div>`;
@@ -7231,7 +7559,7 @@
       <span class="gc-loot-result-icon" aria-hidden="true">${icon}</span>
       <div class="gc-loot-result-body">
         <span class="gc-loot-result-name">${escapeHtml(name)}</span>
-        <span class="gc-loot-result-amount gc-mono">×${amt.toLocaleString()}</span>
+        <span class="gc-loot-result-amount gc-mono">×${formatNumber(amt)}</span>
       </div>
       <span class="gc-loot-result-rarity">${escapeHtml(t(`inv_rarity_${rarity}`, rarity))}</span>
     </div>`;
@@ -7526,17 +7854,17 @@
         const amt = parseInt(r.amount, 10) || 0;
         if (r.reward_type === "resource") {
           const label = inventoryResourceLabel(r.reward_key);
-          return `<li class="inventory-reward-row inventory-reward-row--resource"><span class="inventory-reward-label">${escapeHtml(label)}</span><span class="inventory-reward-amount gc-mono">+${amt.toLocaleString()}</span></li>`;
+          return `<li class="inventory-reward-row inventory-reward-row--resource"><span class="inventory-reward-label">${escapeHtml(label)}</span><span class="inventory-reward-amount gc-mono">+${formatNumber(amt)}</span></li>`;
         }
         if (r.reward_type === "ship" || r.reward_type === "defense") {
           const name = t(r.name_key || `${r.reward_type}_${r.reward_key}`, r.reward_key);
           const icon = r.reward_type === "ship" ? "🛰️" : "🛡️";
-          return `<li class="inventory-reward-row inventory-reward-row--${escapeHtml(r.reward_type)}"><span class="inventory-reward-icon" aria-hidden="true">${icon}</span><span class="inventory-reward-label">${escapeHtml(name)}</span><span class="inventory-reward-amount gc-mono">+${amt.toLocaleString()}</span></li>`;
+          return `<li class="inventory-reward-row inventory-reward-row--${escapeHtml(r.reward_type)}"><span class="inventory-reward-icon" aria-hidden="true">${icon}</span><span class="inventory-reward-label">${escapeHtml(name)}</span><span class="inventory-reward-amount gc-mono">+${formatNumber(amt)}</span></li>`;
         }
         const name = t(r.name_key || `inv_item_${r.reward_key}`, r.reward_key);
         const rarity = t(`inv_rarity_${r.rarity || "common"}`, r.rarity || "common");
         const icon = r.icon || "📦";
-        return `<li class="inventory-reward-row inventory-reward-row--item" data-rarity="${escapeHtml(r.rarity || "common")}"><span class="inventory-reward-icon" aria-hidden="true">${icon}</span><span class="inventory-reward-label">${escapeHtml(name)}</span><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(r.rarity || "common")}">${escapeHtml(rarity)}</span><span class="inventory-reward-amount gc-mono">×${amt.toLocaleString()}</span></li>`;
+        return `<li class="inventory-reward-row inventory-reward-row--item" data-rarity="${escapeHtml(r.rarity || "common")}"><span class="inventory-reward-icon" aria-hidden="true">${icon}</span><span class="inventory-reward-label">${escapeHtml(name)}</span><span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(r.rarity || "common")}">${escapeHtml(rarity)}</span><span class="inventory-reward-amount gc-mono">×${formatNumber(amt)}</span></li>`;
       })
       .join("");
     panel.hidden = false;
@@ -7946,8 +8274,8 @@
         const minVal = String(a.min_next_bid || 1);
         input.min = minVal;
         input.placeholder = fmtNumber(a.min_next_bid || 1);
-        if (!input.matches(":focus") && (!input.value || Number(input.value) < Number(minVal))) {
-          input.value = minVal;
+        if (!input.matches(":focus") && (!input.value || readNumberInput(input) < parseIntNumber(minVal))) {
+          setNumberInputValue(input, minVal);
         }
       }
       const card = page.querySelector(`[data-auction-card="${id}"]`);
@@ -8157,7 +8485,7 @@
         ).trim();
         const input = form.querySelector("[data-auction-bid-input], [name='amount']");
         const btn = form.querySelector("[data-auction-bid-submit], [type='submit']");
-        const amount = parseInt(String(input?.value || "0"), 10);
+        const amount = readNumberInput(input);
         const minBid = parseInt(String(card?.dataset.minBid || input?.min || "0"), 10);
 
         setAuctionFormError(listingId, "");
@@ -8238,7 +8566,7 @@
           showNotify(tt("auction_bid_ok", "Bid placed."), "success");
           if (input && ahPayload?.auctions) {
             const row = ahPayload.auctions.find((a) => Number(a.id) === listingId);
-            if (row?.min_next_bid) input.value = String(row.min_next_bid);
+            if (row?.min_next_bid) setNumberInputValue(input, row.min_next_bid);
             else input.value = "";
           } else if (input) {
             input.value = "";
@@ -8670,16 +8998,16 @@
       const ships = {};
       page.querySelectorAll("[data-ship-input]").forEach((inp) => {
         const key = inp.getAttribute("data-ship-input");
-        const val = parseInt(inp.value || "0", 10);
+        const val = readNumberInput(inp);
         if (key && val > 0) ships[key] = val;
       });
       return ships;
     };
 
     const getResourcesSelection = (page) => ({
-      metal: parseInt(page.querySelector("[data-fleet-res-metal]")?.value || "0", 10) || 0,
-      crystal: parseInt(page.querySelector("[data-fleet-res-crystal]")?.value || "0", 10) || 0,
-      fuel_cells: parseInt(page.querySelector("[data-fleet-res-fuel-cells]")?.value || "0", 10) || 0,
+      metal: readNumberInput(page.querySelector("[data-fleet-res-metal]")),
+      crystal: readNumberInput(page.querySelector("[data-fleet-res-crystal]")),
+      fuel_cells: readNumberInput(page.querySelector("[data-fleet-res-fuel-cells]")),
     });
 
     const getTargetCoords = (page) => {
@@ -9288,7 +9616,7 @@
     };
 
     const renderShipChips = (ships) => Object.entries(ships || {})
-      .map(([key, qty]) => `<span class="fleet-ship-chip">${tt(`fleet_ship_${key}`, key)} × ${Number(qty).toLocaleString()}</span>`)
+      .map(([key, qty]) => `<span class="fleet-ship-chip">${tt(`fleet_ship_${key}`, key)} × ${formatNumber(qty)}</span>`)
       .join("");
 
     const fleetLegKey = (mv, phase) => mv.status_label || mv.leg_label_key || (
@@ -9377,9 +9705,9 @@
         const mission = String(mv.mission_type || "custom");
         const countdown = fleetCountdownHtml(mv);
         const cargo = [];
-        if (mv.resources?.metal) cargo.push(`${tt("resource_metal")}: ${Number(mv.resources.metal).toLocaleString()}`);
-        if (mv.resources?.crystal) cargo.push(`${tt("resource_crystal")}: ${Number(mv.resources.crystal).toLocaleString()}`);
-        if (mv.resources?.fuel_cells) cargo.push(`${tt("resource_fuel_cells")}: ${Number(mv.resources.fuel_cells).toLocaleString()}`);
+        if (mv.resources?.metal) cargo.push(`${tt("resource_metal")}: ${formatNumber(mv.resources.metal)}`);
+        if (mv.resources?.crystal) cargo.push(`${tt("resource_crystal")}: ${formatNumber(mv.resources.crystal)}`);
+        if (mv.resources?.fuel_cells) cargo.push(`${tt("resource_fuel_cells")}: ${formatNumber(mv.resources.fuel_cells)}`);
         return `<article class="fleet-active-card fleet-active-card--${mission}" data-fleet-id="${mv.id}" data-status="${mv.status}" data-mission="${mission}" data-leg="${phase}">
           <div class="fleet-active-row">
             <span class="fleet-active-mission fleet-active-mission--${mission}">${tt(`fleet_mission_${mv.mission_type}`, mv.mission_type)}</span>
@@ -9471,7 +9799,7 @@
         rt.data.resources = state.resources;
         ["metal", "crystal", "fuel_cells"].forEach((res) => {
           page.querySelectorAll(`[data-res="${res}"]`).forEach((el) => {
-            el.textContent = Number(state.resources[res] || 0).toLocaleString();
+            el.textContent = formatNumber(state.resources[res] || 0);
           });
         });
       }
@@ -9498,7 +9826,7 @@
               inp.disabled = true;
             } else {
               inp.disabled = false;
-              if (parseInt(inp.value || "0", 10) > have) inp.value = String(have);
+              if (readNumberInput(inp) > have) setNumberInputValue(inp, have);
             }
           }
           const maxBtn = row.querySelector("[data-ship-max]");
@@ -9846,7 +10174,7 @@
         const row = maxShip.closest("[data-ship-key]");
         const have = parseInt(row?.getAttribute("data-ship-have") || "0", 10);
         const inp = form?.querySelector(`[data-ship-input="${key}"]`);
-        if (inp) inp.value = String(have);
+        if (inp) setNumberInputValue(inp, have);
         schedulePreview(page);
         return;
       }
@@ -9860,7 +10188,7 @@
         const bal = rt.data.resources?.[res] || 0;
         let val = Math.min(bal, cargoFree > 0 ? cargoFree : bal);
         const inp = page.querySelector(`[data-fleet-res-${res}]`);
-        if (inp) inp.value = String(Math.max(0, val));
+        if (inp) setNumberInputValue(inp, Math.max(0, val));
         schedulePreview(page);
         return;
       }
@@ -10157,11 +10485,11 @@
 
   function clampLogisticsShipInput(inp) {
     if (!inp) return;
-    const max = parseInt(inp.max || "0", 10);
-    let v = parseInt(inp.value || "0", 10);
+    const max = parseIntNumber(inp.getAttribute("max") || "0");
+    let v = readNumberInput(inp);
     if (!Number.isFinite(v) || v < 0) v = 0;
     if (Number.isFinite(max) && max >= 0 && v > max) v = max;
-    inp.value = String(v);
+    setNumberInputValue(inp, v);
   }
 
   function logisticsSubmitEnabled(page, mode) {
@@ -10272,7 +10600,7 @@
     if (!grid) return ships;
     grid.querySelectorAll("[data-logistics-ship-input]").forEach((inp) => {
       const key = inp.getAttribute("data-logistics-ship-input");
-      const qty = parseInt(inp.value || "0", 10);
+      const qty = readNumberInput(inp);
       if (key && qty > 0) ships[key] = qty;
     });
     return ships;
@@ -10283,7 +10611,7 @@
     page.querySelectorAll("[data-logistics-resource]").forEach((inp) => {
       const key = inp.getAttribute("data-logistics-resource");
       if (!key) return;
-      resources[key] = Math.max(0, parseInt(inp.value || "0", 10) || 0);
+      resources[key] = Math.max(0, readNumberInput(inp));
     });
     return resources;
   }
@@ -10312,7 +10640,7 @@
         const inp = row.querySelector("[data-logistics-ship-input]");
         if (inp) {
           inp.max = String(have);
-          if (parseInt(inp.value || "0", 10) > have) inp.value = String(have);
+          if (readNumberInput(inp) > have) setNumberInputValue(inp, have);
         }
       });
     });
@@ -10628,7 +10956,7 @@
       const row = grid?.querySelector(`[data-ship-key="${key}"]`);
       const inp = row?.querySelector("[data-logistics-ship-input]");
       if (inp) {
-        inp.value = String(parseInt(row.dataset.shipHave || inp.max || "0", 10) || 0);
+        inp.value = formatNumber(parseInt(row.dataset.shipHave || inp.getAttribute("max") || "0", 10) || 0);
         clampLogisticsShipInput(inp);
         syncLogisticsColonySelected(page);
         updateLogisticsSubmitButtons(page);
@@ -11010,10 +11338,31 @@
     );
   }
 
+  function clearAllProductionCardQueues(page) {
+    if (!page) return;
+    page.querySelectorAll("[data-ship-card], [data-defense-card]").forEach((card) => {
+      clearProductionCardQueueState(card);
+    });
+  }
+
+  function clearProductionCardQueueState(card) {
+    if (!card) return;
+    delete card.dataset.queueHeadJobId;
+    delete card.dataset.queuePending;
+    GC.clearCardQueueBlock(card);
+    card.classList.remove(
+      "gc-ship-card--in-queue",
+      "gc-ship-card--queue-active",
+      "gc-ship-card--queue-pending"
+    );
+  }
+
   function patchShipyardCardQueues(page, queueData) {
     if (!page) return;
-    const byOwner = queueData?.card_jobs_by_owner;
-    if (!byOwner || typeof byOwner !== "object") return;
+    const byOwner =
+      queueData?.card_jobs_by_owner && typeof queueData.card_jobs_by_owner === "object"
+        ? queueData.card_jobs_by_owner
+        : {};
     patchCardQueuesFromOwnerMap(
       page,
       byOwner,
@@ -11069,8 +11418,12 @@
       _lastShipyardQueueSignature = sig;
       _productionZeroHandled.shipyard = "";
       _finishRefreshArmed.shipyard = false;
+      _shipyardUnitFinishKey = "";
+      SHIPYARDQ.active.finishTime = 0;
+      SHIPYARDQ.active.totalSeconds = 0;
       _updateShipyardQueueCompact(0);
-      patchShipyardCardQueues(page, qd);
+      clearAllProductionCardQueues(page);
+      patchShipyardCardQueues(page, { queue: [], summary: { count: 0 }, card_jobs_by_owner: {} });
       GC.startProgressTicker();
       return;
     }
@@ -11264,6 +11617,32 @@
     return parts.join("");
   }
 
+  function patchProductionStatChips(card, cycleSeconds, batchCapacity, tt) {
+    const grid = card?.querySelector("[data-production-stats]");
+    if (!grid) return;
+    const sec = Math.max(0, Math.round(Number(cycleSeconds) || 0));
+    const cap = Math.max(1, Math.round(Number(batchCapacity) || 1));
+    const cycleEl = grid.querySelector("[data-prod-cycle-seconds]");
+    if (cycleEl) {
+      const cycleText = `${fmtNumber(sec)}s`;
+      if (cycleEl.textContent !== cycleText) cycleEl.textContent = cycleText;
+    }
+    const capEl = grid.querySelector("[data-prod-batch-capacity]");
+    if (capEl) {
+      const capParts = fmtIntParts(cap);
+      if (capEl.textContent !== capParts.display) capEl.textContent = capParts.display;
+      if (capParts.display !== capParts.full) capEl.title = capParts.full;
+      else capEl.removeAttribute("title");
+    }
+    if (tt) {
+      const ariaTpl = tt("prod_stat_aria", "Zyklus %(cycle)s Sekunden, parallel %(capacity)s");
+      const aria = ariaTpl
+        .replace("%(cycle)s", fmtNumber(sec))
+        .replace("%(capacity)s", fmtIntParts(cap).full);
+      if (grid.getAttribute("aria-label") !== aria) grid.setAttribute("aria-label", aria);
+    }
+  }
+
   function applyShipyardShipCard(card, ship, resources, syLevel, tt) {
     if (!card || !ship) return;
     const unlocked = card.dataset.unlocked === "1";
@@ -11294,6 +11673,15 @@
       blockersEl.hidden = true;
     }
 
+    if (ship.build_seconds != null) {
+      const page = card.closest("#shipyard-page");
+      const unitCap =
+        Number(ship.effective_batch_capacity) > 0
+          ? Number(ship.effective_batch_capacity)
+          : Number(page?.dataset.shipyardBatchCapacity || 1) || 1;
+      patchProductionStatChips(card, ship.build_seconds, unitCap, tt);
+    }
+
     if (!unlocked) return;
     const btn = card.querySelector("[data-shipyard-build]");
     const maxBtn = card.querySelector("[data-shipyard-max]");
@@ -11313,12 +11701,12 @@
       }
     }
     if (maxBtn) maxBtn.dataset.maxQty = String(ship.max_build || 0);
-    const buildTimeEl = card.querySelector(".shipyard-ship-build-time");
-    if (buildTimeEl && ship.build_seconds != null) {
-      const tpl = tt("shipyard_build_time_per_unit", "Build time: %(seconds)s s per ship");
-      buildTimeEl.textContent = tpl.replace("%(seconds)s", fmtNumber(Number(ship.build_seconds) || 0));
+    const qtyInp = card.querySelector(`[data-shipyard-qty="${ship.ship_key}"]`);
+    if (qtyInp) {
+      const cap = Number(ship.max_build) || 0;
+      if (cap > 0) qtyInp.dataset.inputMax = String(cap);
+      else qtyInp.removeAttribute("data-input-max");
     }
-
     const stockEl = card.querySelector("[data-shipyard-stock]");
     if (stockEl && ship.owned_count != null) {
       const text = fmtNumber(Number(ship.owned_count) || 0);
@@ -11343,6 +11731,16 @@
       if (lvlEl) {
         const lvlText = tt("shipyard_level_value", "Level %(level)s");
         lvlEl.textContent = lvlText.replace("%(level)s", fmtNumber(data.orbital_shipyard_level));
+      }
+    }
+    if (data.production_batch_capacity != null) {
+      page.dataset.shipyardBatchCapacity = String(data.production_batch_capacity);
+      const capEl = page.querySelector("[data-shipyard-batch-capacity]");
+      if (capEl) {
+        capEl.textContent = tt(
+          "shipyard_parallel_capacity",
+          "Parallel production: %(capacity)s units per cycle"
+        ).replace("%(capacity)s", fmtNumber(data.production_batch_capacity));
       }
     }
 
@@ -11384,11 +11782,13 @@
     (data.buildable_ships || []).forEach((ship) => {
       const card = page.querySelector(`[data-ship-key="${ship.ship_key}"][data-unlocked="1"]`);
       applyShipyardShipCard(card, ship, resources, syLevel, tt);
+      if (card && !ship.queue_job) clearProductionCardQueueState(card);
     });
 
     (data.locked_ships || []).forEach((ship) => {
       const card = page.querySelector(`[data-ship-key="${ship.ship_key}"][data-unlocked="0"]`);
       applyShipyardShipCard(card, ship, resources, syLevel, tt);
+      if (card && !ship.queue_job) clearProductionCardQueueState(card);
     });
   }
 
@@ -11434,8 +11834,8 @@
         e.preventDefault();
         const shipKey = maxBtn.getAttribute("data-shipyard-max");
         const qtyInp = page.querySelector(`[data-shipyard-qty="${shipKey}"]`);
-        const maxQty = parseInt(maxBtn.dataset.maxQty || "0", 10);
-        if (qtyInp && maxQty > 0) qtyInp.value = String(maxQty);
+        const maxQty = parseIntNumber(maxBtn.dataset.maxQty || "0");
+        if (qtyInp && maxQty > 0) setNumberInputValue(qtyInp, maxQty);
         return;
       }
 
@@ -11512,7 +11912,7 @@
       e.preventDefault();
       const shipKey = buildBtn.getAttribute("data-shipyard-build");
       const qtyInp = page.querySelector(`[data-shipyard-qty="${shipKey}"]`);
-      const amount = parseInt(qtyInp?.value || "1", 10) || 1;
+      const amount = readNumberInput(qtyInp) || 1;
       const planetId = parseInt(page.dataset.planetId || "0", 10);
       buildBtn.dataset.building = "1";
       buildBtn.disabled = true;
@@ -11639,8 +12039,10 @@
 
   function patchDefenseCardQueues(page, queueData) {
     if (!page) return;
-    const byOwner = queueData?.card_jobs_by_owner;
-    if (!byOwner || typeof byOwner !== "object") return;
+    const byOwner =
+      queueData?.card_jobs_by_owner && typeof queueData.card_jobs_by_owner === "object"
+        ? queueData.card_jobs_by_owner
+        : {};
     patchCardQueuesFromOwnerMap(
       page,
       byOwner,
@@ -11690,8 +12092,12 @@
       _lastDefenseQueueSignature = sig;
       _productionZeroHandled.defense = "";
       _finishRefreshArmed.defense = false;
+      _defenseUnitFinishKey = "";
+      DEFENSEQ.active.finishTime = 0;
+      DEFENSEQ.active.totalSeconds = 0;
       _updateDefenseQueueCompact(0);
-      patchDefenseCardQueues(page, qd);
+      clearAllProductionCardQueues(page);
+      patchDefenseCardQueues(page, { queue: [], summary: { count: 0 }, card_jobs_by_owner: {} });
       GC.startProgressTicker();
       return;
     }
@@ -11737,6 +12143,16 @@
         );
       }
     }
+    if (data.production_batch_capacity != null) {
+      page.dataset.defenseBatchCapacity = String(data.production_batch_capacity);
+      const capEl = page.querySelector("[data-defense-batch-capacity]");
+      if (capEl) {
+        capEl.textContent = tt(
+          "defense_production_capacity",
+          "Production via orbital shipyard capacity: %(capacity)s per cycle"
+        ).replace("%(capacity)s", fmtNumber(data.production_batch_capacity));
+      }
+    }
     if (data.planet_name) {
       const scopeEl = page.querySelector("[data-defense-planet-scope]");
       if (scopeEl) {
@@ -11769,10 +12185,14 @@
     if (data.current_defense) updateDefenseStockBadges(page, data.current_defense);
     if (data.defense_queue) renderDefenseQueue(page, data.defense_queue);
     (data.buildable_defense || []).forEach((unit) => {
+      const card = page.querySelector(`[data-defense-card="${unit.defense_key}"]`);
       applyDefenseUnitCard(page, unit, data.resources || {}, tt);
+      if (card && !unit.queue_job) clearProductionCardQueueState(card);
     });
     (data.locked_defense || []).forEach((unit) => {
+      const card = page.querySelector(`[data-defense-card="${unit.defense_key}"]`);
       applyDefenseUnitCard(page, unit, data.resources || {}, tt, { locked: true });
+      if (card && !unit.queue_job) clearProductionCardQueueState(card);
     });
   }
 
@@ -11809,6 +12229,12 @@
 
     const maxBtn = card.querySelector(`[data-defense-max="${unit.defense_key}"]`);
     if (maxBtn) maxBtn.dataset.maxQty = String(unit.max_build || 0);
+    const qtyInp = card.querySelector(`[data-defense-qty="${unit.defense_key}"]`);
+    if (qtyInp) {
+      const cap = Number(unit.max_build) || 0;
+      if (cap > 0) qtyInp.dataset.inputMax = String(cap);
+      else qtyInp.removeAttribute("data-input-max");
+    }
     const btn = card.querySelector(`[data-defense-build="${unit.defense_key}"]`);
     if (btn) {
       btn.dataset.canBuild = unit.can_build ? "1" : "0";
@@ -11824,12 +12250,12 @@
         btn.removeAttribute("title");
       }
     }
-    const buildTimeEl = card.querySelector(".shipyard-ship-build-time");
-    if (buildTimeEl && unit.build_seconds != null) {
-      buildTimeEl.textContent = tt("defense_build_time_per_unit", "Build time: %(seconds)s s per unit").replace(
-        "%(seconds)s",
-        fmtNumber(unit.build_seconds)
-      );
+    if (unit.build_seconds != null) {
+      const unitCap =
+        Number(unit.effective_batch_capacity) > 0
+          ? Number(unit.effective_batch_capacity)
+          : Number(page?.dataset.defenseBatchCapacity || 1) || 1;
+      patchProductionStatChips(card, unit.build_seconds, unitCap, tt);
     }
   }
 
@@ -11905,8 +12331,8 @@
         e.preventDefault();
         const dk = maxBtn.getAttribute("data-defense-max");
         const qtyInp = page.querySelector(`[data-defense-qty="${dk}"]`);
-        const maxQty = parseInt(maxBtn.dataset.maxQty || "0", 10);
-        if (qtyInp && maxQty > 0) qtyInp.value = String(maxQty);
+        const maxQty = parseIntNumber(maxBtn.dataset.maxQty || "0");
+        if (qtyInp && maxQty > 0) setNumberInputValue(qtyInp, maxQty);
         return;
       }
 
@@ -11945,7 +12371,7 @@
       e.preventDefault();
       const defenseKey = buildBtn.getAttribute("data-defense-build");
       const qtyInp = page.querySelector(`[data-defense-qty="${defenseKey}"]`);
-      const amount = parseInt(qtyInp?.value || "1", 10) || 1;
+      const amount = readNumberInput(qtyInp) || 1;
       const planetId = parseInt(page.dataset.planetId || "0", 10);
       buildBtn.dataset.building = "1";
       buildBtn.disabled = true;
@@ -12143,8 +12569,8 @@
       panel.dataset.routeMin = String(minNow);
       amountInput.min = String(minNow);
       amountInput.dataset.exchangeMin = String(minNow);
-      if (!amountInput.value || parseInt(amountInput.value, 10) < minNow) {
-        amountInput.value = String(minNow);
+      if (!amountInput.value || readNumberInput(amountInput) < minNow) {
+        setNumberInputValue(amountInput, minNow);
       }
       updatePreview();
     };
@@ -12164,7 +12590,7 @@
     };
 
     const updatePreview = () => {
-      const raw = parseInt(amountInput.value || "0", 10);
+      const raw = readNumberInput(amountInput);
       const minNow = parseInt(panel.dataset.routeMin || String(minForRoute(selectedDirection())), 10);
       const dir = selectedDirection();
       const { to } = routeParts(dir);
@@ -12175,9 +12601,9 @@
       }
       const receive = computeReceive(dir, raw);
       const receiveLabel = resourceLabels[to]();
-      previewEl.textContent = receive.toLocaleString();
+      previewEl.textContent = formatNumber(receive);
       if (receiveSummaryEl) {
-        receiveSummaryEl.textContent = `${receive.toLocaleString()} ${receiveLabel}`;
+        receiveSummaryEl.textContent = `${formatNumber(receive)} ${receiveLabel}`;
       }
     };
 
@@ -12256,7 +12682,7 @@
           errorEl.textContent = "";
         }
 
-        const amount = parseInt(amountInput.value || "0", 10);
+        const amount = readNumberInput(amountInput);
         const dir = selectedDirection();
         const minNow = minForRoute(dir);
         if (!amount || amount < minNow) {
@@ -12273,9 +12699,9 @@
           "exchange_confirm_prompt",
           "Exchange %(amount)s %(give)s for ~%(receive)s %(get)s?"
         )
-          .replace("%(amount)s", String(amount))
+          .replace("%(amount)s", formatNumber(amount))
           .replace("%(give)s", resourceLabels[from]())
-          .replace("%(receive)s", String(receive))
+          .replace("%(receive)s", formatNumber(receive))
           .replace("%(get)s", resourceLabels[to]());
 
         if (!window.confirm(confirmMsg)) return;
@@ -12329,7 +12755,7 @@
       const maxM = Number(row.preview_refund_max?.metal || 0);
       const minC = Number(row.preview_refund_min?.crystal || 0);
       const maxC = Number(row.preview_refund_max?.crystal || 0);
-      const haveLabel = tt("scrapyard_have", "Available: %(count)s").replace("%(count)s", amount.toLocaleString());
+      const haveLabel = tt("scrapyard_have", "Available: %(count)s").replace("%(count)s", formatNumber(amount));
       const refundLabel = tt("scrapyard_refund_range", "Refund");
       const metalLabel = tt("resource_metal", "Ferronit");
       const crystalLabel = tt("resource_crystal", "Crytite");
@@ -12346,13 +12772,13 @@
               <span class="gc-scrapyard-have fleet-ship-stock gc-mono">${haveLabel}</span>
               <span class="gc-trader-scrap-refund hint gc-mono">
                 ${tt("scrapyard_refund_estimate", "Refund (approx.)")}:
-                ${minM.toLocaleString()}–${maxM.toLocaleString()} ${metalLabel},
-                ${minC.toLocaleString()}–${maxC.toLocaleString()} ${crystalLabel}
+                ${formatNumber(minM)}–${formatNumber(maxM)} ${metalLabel},
+                ${formatNumber(minC)}–${formatNumber(maxC)} ${crystalLabel}
               </span>
             </div>
           </div>
           <div class="fleet-ship-row-controls gc-trader-scrap-actions">
-            <input type="number" class="gc-trader-input fleet-ship-input gc-scrapyard-qty" min="1" max="${amount}" value="1"
+            <input type="text" inputmode="numeric" class="gc-trader-input fleet-ship-input gc-scrapyard-qty gc-num-input" min="1" max="${amount}" value="1"
                    data-scrap-qty="${key}" aria-label="${amountLabel}">
             <button type="button" class="gc-btn gc-btn-secondary gc-trader-scrap-btn" data-scrap-recycle="${key}">
               ${recycleLabel.toUpperCase()}
@@ -12367,6 +12793,7 @@
     if (!panel || panel.dataset.disabled === "1") return;
     if (panel.dataset.scrapyardBound) return;
     panel.dataset.scrapyardBound = "1";
+    bindFormattedNumberInputs(panel);
 
     const tt = (key, fallback) => t(key, fallback);
     const errorEl = panel.querySelector("[data-scrapyard-error]");
@@ -12378,7 +12805,7 @@
       const shipKey = btn.getAttribute("data-scrap-recycle");
       const row = btn.closest("[data-scrap-ship]");
       const qtyInp = row?.querySelector(`[data-scrap-qty="${shipKey}"]`);
-      const amount = parseInt(qtyInp?.value || "0", 10);
+      const amount = readNumberInput(qtyInp);
       const max = parseInt(row?.getAttribute("data-scrap-max") || "0", 10);
       if (!amount || amount > max) return;
       if (!window.confirm(tt("scrapyard_confirm", "Recycle ships for partial refund?"))) return;
@@ -12425,6 +12852,7 @@
     const list = panel.querySelector("[data-scrapyard-list]");
     if (!list || !Array.isArray(scrapyard.ships)) return;
     list.innerHTML = renderScrapyardRows(scrapyard.ships);
+    bindFormattedNumberInputs(list);
   }
 
   function patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, fuelCells, storageFuelCells) {

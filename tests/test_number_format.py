@@ -13,6 +13,10 @@ def test_fmt_int_full_grouping():
 def test_parse_int_number_accepts_de_grouped_strings():
     assert parse_int_number("149.539.413.840") == 149539413840
     assert parse_int_number(149539413840) == 149539413840
+    assert parse_int_number("999.999") == 999999
+    assert parse_int_number("1.000") == 1000
+    assert parse_int_number("10.000.000") == 10_000_000
+    assert parse_int_number("1000000") == 1_000_000
 
 
 def test_fmt_int_compact_billions_one_decimal():

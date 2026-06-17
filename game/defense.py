@@ -75,19 +75,37 @@ def defense_factory_level_for_planet(planet_id: int, *, conn=None) -> int:
     return max(0, int(buildings.get("defense_factory") or 0))
 
 
-def _effective_build_seconds(defense_key: str, factory_level: int, *, conn=None) -> int:
+def _effective_build_seconds(defense_key: str, shipyard_level: int, *, conn=None) -> int:
+    """Per-unit build time — scaled by Orbital Shipyard level (shared with shipyard)."""
     spec = get_defense(defense_key)
     if not spec:
         return 0
     base = max(1, int(spec.get("build_seconds") or 1))
-    lvl = max(1, int(factory_level or 1))
+    lvl = max(1, int(shipyard_level or 1))
     seconds = max(1, int(math.ceil(base * (BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)))))
     speed = _defense_speed_multiplier(conn=conn)
     return max(1, int(math.ceil(seconds / speed)))
 
 
-def unit_build_seconds(defense_key: str, factory_level: int, *, conn=None) -> int:
-    return _effective_build_seconds(defense_key, factory_level, conn=conn)
+def unit_build_seconds(defense_key: str, shipyard_level: int, *, conn=None) -> int:
+    return _effective_build_seconds(defense_key, shipyard_level, conn=conn)
+
+
+def base_unit_seconds_for_defense(defense_key: str) -> int:
+    spec = get_defense(defense_key) or {}
+    return max(1, int(spec.get("build_seconds") or 1))
+
+
+def _batch_capacity_for_defense(defense_key: str, shipyard_level: int) -> int:
+    from .shipyard import unit_batch_capacity
+
+    return unit_batch_capacity(shipyard_level, base_unit_seconds_for_defense(defense_key))
+
+
+def _production_shipyard_level(planet_id: int, *, conn) -> int:
+    from .shipyard import shipyard_level_for_planet
+
+    return max(1, int(shipyard_level_for_planet(int(planet_id), conn=conn) or 1))
 
 
 def _check_defense_requirements(
@@ -135,10 +153,15 @@ def defense_unlocked(
 
 
 def _job_duration_seconds(
-    defense_key: str, amount: int, factory_level: int, *, conn=None
+    defense_key: str, amount: int, shipyard_level: int, *, conn=None
 ) -> int:
-    unit = unit_build_seconds(defense_key, factory_level, conn=conn)
-    return max(1, unit * max(1, int(amount)))
+    from .shipyard import production_job_duration_seconds
+
+    unit = unit_build_seconds(defense_key, shipyard_level, conn=conn)
+    cap = _batch_capacity_for_defense(defense_key, shipyard_level)
+    return production_job_duration_seconds(
+        unit_seconds=unit, amount=int(amount), batch_capacity=cap
+    )
 
 
 def _job_scheduled_duration_seconds(row: Mapping[str, Any]) -> int:
@@ -147,54 +170,49 @@ def _job_scheduled_duration_seconds(row: Mapping[str, Any]) -> int:
     return max(1, int(finish - started))
 
 
-def _job_total_units(row: Mapping[str, Any], factory_level: int, *, conn) -> int:
+def _job_total_units(row: Mapping[str, Any], shipyard_level: int, *, conn) -> int:
+    from .shipyard import production_infer_total_units
+
     dk = str(row["defense_key"])
     remaining = max(0, int(row.get("amount") or 0))
-    unit_sec = unit_build_seconds(dk, factory_level, conn=conn)
-    scheduled = max(1, int(round(_job_scheduled_duration_seconds(row) / unit_sec)))
-    return max(remaining, scheduled)
-
-
-def _units_elapsed_for_job(
-    row: Mapping[str, Any],
-    factory_level: int,
-    *,
-    now: float,
-    conn,
-) -> int:
-    from .queue_poll import DUE_TIME_EPSILON_SEC
-
-    dk = str(row["defense_key"])
-    started = float(row.get("started_at") or 0)
-    unit_sec = unit_build_seconds(dk, factory_level, conn=conn)
-    total = _job_total_units(row, factory_level, conn=conn)
-    elapsed = float(now) + float(DUE_TIME_EPSILON_SEC) - started
-    if elapsed < unit_sec:
-        return 0
-    return min(total, int(elapsed // unit_sec))
+    unit_sec = unit_build_seconds(dk, shipyard_level, conn=conn)
+    cap = _batch_capacity_for_defense(dk, shipyard_level)
+    return production_infer_total_units(
+        remaining=remaining,
+        scheduled_duration=_job_scheduled_duration_seconds(row),
+        unit_seconds=unit_sec,
+        batch_capacity=cap,
+    )
 
 
 def progressive_units_to_deliver(
     row: Mapping[str, Any],
-    factory_level: int,
+    shipyard_level: int,
     *,
     now: float,
     conn,
 ) -> int:
+    from .queue_poll import DUE_TIME_EPSILON_SEC
+    from .shipyard import production_progressive_units_to_deliver
+
     remaining = max(0, int(row.get("amount") or 0))
     if remaining <= 0:
         return 0
 
-    from .queue_poll import DUE_TIME_EPSILON_SEC
-
-    finish = float(row.get("finish_at") or 0)
-    if float(now) + float(DUE_TIME_EPSILON_SEC) >= finish:
-        return remaining
-
-    total = _job_total_units(row, factory_level, conn=conn)
-    already_delivered = total - remaining
-    units_elapsed = _units_elapsed_for_job(row, factory_level, now=now, conn=conn)
-    return max(0, min(remaining, units_elapsed - already_delivered))
+    dk = str(row["defense_key"])
+    unit_sec = unit_build_seconds(dk, shipyard_level, conn=conn)
+    cap = _batch_capacity_for_defense(dk, shipyard_level)
+    total = _job_total_units(row, shipyard_level, conn=conn)
+    return production_progressive_units_to_deliver(
+        remaining=remaining,
+        total_units=total,
+        started_at=float(row.get("started_at") or 0),
+        finish_at=float(row.get("finish_at") or 0),
+        unit_seconds=unit_sec,
+        batch_capacity=cap,
+        now=float(now),
+        epsilon=float(DUE_TIME_EPSILON_SEC),
+    )
 
 
 def list_defense_queue_rows(planet_id: int, *, conn) -> List[Dict[str, Any]]:
@@ -223,11 +241,11 @@ def _renumber_positions(conn, planet_id: int) -> None:
 
 def recalculate_queue_finish_times(
     planet_id: int,
-    factory_level: int,
     *,
     conn,
     now: Optional[float] = None,
 ) -> None:
+    sy_level = _production_shipyard_level(planet_id, conn=conn)
     ts = float(now if now is not None else _now())
     rows = list_defense_queue_rows(planet_id, conn=conn)
     cursor = conn.cursor()
@@ -235,7 +253,7 @@ def recalculate_queue_finish_times(
     for row in rows:
         dk = str(row["defense_key"])
         amt = int(row["amount"] or 1)
-        duration = _job_duration_seconds(dk, amt, factory_level, conn=conn)
+        duration = _job_duration_seconds(dk, amt, sy_level, conn=conn)
         started = schedule_at
         finish = schedule_at + duration
         cursor.execute(
@@ -268,7 +286,6 @@ def enqueue_defense_build(
     planet_id: int,
     defense_key: str,
     amount: int,
-    factory_level: int,
     cost: Mapping[str, int],
     conn,
 ) -> Tuple[bool, str, int | None]:
@@ -314,7 +331,7 @@ def enqueue_defense_build(
         ),
     )
     job_id = int(cur.lastrowid)
-    recalculate_queue_finish_times(planet_id, factory_level, conn=conn, now=now)
+    recalculate_queue_finish_times(planet_id, conn=conn, now=now)
     return True, "", job_id
 
 
@@ -348,13 +365,23 @@ def _finish_due_defense_jobs_impl(
     if not rows:
         return 0
 
-    factory_level = defense_factory_level_for_planet(planet_id, conn=conn)
+    sy_level = _production_shipyard_level(planet_id, conn=conn)
     completed_jobs = 0
     cur = conn.cursor()
 
     while rows:
         head = rows[0]
-        to_deliver = progressive_units_to_deliver(head, factory_level, now=ts, conn=conn)
+        remaining_amt = max(0, int(head.get("amount") or 0))
+        if remaining_amt <= 0:
+            cur.execute("DELETE FROM defense_queue WHERE id = ?;", (int(head["id"]),))
+            completed_jobs += 1
+            rows = list_defense_queue_rows(planet_id, conn=conn)
+            continue
+
+        to_deliver = progressive_units_to_deliver(head, sy_level, now=ts, conn=conn)
+        finish_at = float(head.get("finish_at") or 0)
+        if to_deliver <= 0 and remaining_amt > 0 and finish_at > 0 and ts + 0.001 >= finish_at:
+            to_deliver = remaining_amt
         if to_deliver <= 0:
             break
 
@@ -387,7 +414,7 @@ def _finish_due_defense_jobs_impl(
 
     if completed_jobs:
         _renumber_positions(conn, planet_id)
-        recalculate_queue_finish_times(planet_id, factory_level, conn=conn, now=ts)
+        recalculate_queue_finish_times(planet_id, conn=conn, now=ts)
 
     return completed_jobs
 
@@ -471,10 +498,9 @@ def can_build_defense(
     dk = str(defense_key or "").strip()
     if not is_known_defense_key(dk) or dk not in DEFENSES:
         return False, "unknown_defense"
-    try:
-        qty = int(amount)
-    except (TypeError, ValueError):
-        return False, "invalid_amount"
+    from .number_format import parse_int_number
+
+    qty = parse_int_number(amount, default=0)
     if qty <= 0:
         return False, "invalid_amount"
 
@@ -537,7 +563,11 @@ def build_defense(
     if not ok_check:
         return False, reason, None
 
-    qty = int(amount)
+    from .number_format import parse_int_number
+
+    qty = parse_int_number(amount, default=0)
+    if qty <= 0:
+        return False, "invalid_amount", None
     unit = unit_build_cost(dk)
     total_m = unit["metal"] * qty
     total_c = unit["crystal"] * qty
@@ -568,7 +598,6 @@ def build_defense(
             planet_id=int(planet_id),
             defense_key=dk,
             amount=qty,
-            factory_level=factory_level,
             cost={"metal": total_m, "crystal": total_c},
             conn=conn,
         )
@@ -596,22 +625,30 @@ def build_defense(
 
 
 def _next_unit_finish_at(
-    row: Mapping[str, Any], factory_level: int, *, conn
+    row: Mapping[str, Any], shipyard_level: int, *, conn
 ) -> float:
+    from .shipyard import production_next_batch_finish_at
+
     dk = str(row["defense_key"])
     started = float(row.get("started_at") or 0)
-    unit_sec = unit_build_seconds(dk, factory_level, conn=conn)
-    total = _job_total_units(row, factory_level, conn=conn)
+    unit_sec = unit_build_seconds(dk, shipyard_level, conn=conn)
+    cap = _batch_capacity_for_defense(dk, shipyard_level)
+    total = _job_total_units(row, shipyard_level, conn=conn)
     remaining = max(0, int(row.get("amount") or 0))
     delivered = max(0, total - remaining)
-    return started + (delivered + 1) * unit_sec
+    return production_next_batch_finish_at(
+        started_at=started,
+        delivered=delivered,
+        unit_seconds=unit_sec,
+        batch_capacity=cap,
+    )
 
 
 def _defense_job_row_for_client(
     row: Mapping[str, Any],
     *,
     idx: int,
-    factory_level: int,
+    shipyard_level: int,
     now: float,
     conn,
 ) -> Dict[str, Any]:
@@ -619,14 +656,14 @@ def _defense_job_row_for_client(
 
     dk = str(row["defense_key"])
     amount_remaining = max(0, int(row.get("amount") or 0))
-    total_units = _job_total_units(row, factory_level, conn=conn)
+    total_units = _job_total_units(row, shipyard_level, conn=conn)
     units_delivered = max(0, total_units - amount_remaining)
-    unit_sec = unit_build_seconds(dk, factory_level, conn=conn)
+    unit_sec = unit_build_seconds(dk, shipyard_level, conn=conn)
     finish_at = float(row.get("finish_at") or 0)
     order_total_seconds = _job_scheduled_duration_seconds(row)
     is_active = idx == 0
     order_remaining = max(0, int(finish_at - now))
-    next_finish_at = _next_unit_finish_at(row, factory_level, conn=conn) if is_active else finish_at
+    next_finish_at = _next_unit_finish_at(row, shipyard_level, conn=conn) if is_active else finish_at
     started_at = float(row.get("started_at") or 0)
     start_at = started_at if is_active and started_at > 0 else max(0.0, finish_at - order_total_seconds)
 
@@ -657,11 +694,11 @@ def _defense_job_row_for_client(
 def defense_queue_for_client(
     player_id: int,
     planet_id: int,
-    factory_level: int,
     *,
     conn,
     now: Optional[float] = None,
 ) -> Dict[str, Any]:
+    sy_level = _production_shipyard_level(planet_id, conn=conn)
     ts = float(now if now is not None else _now())
     if defense_queue_table_ready(conn):
         finish_due_defense_jobs_for_planet(conn, int(planet_id), int(player_id), now=ts)
@@ -673,7 +710,7 @@ def defense_queue_for_client(
             _defense_job_row_for_client(
                 row,
                 idx=idx,
-                factory_level=factory_level,
+                shipyard_level=sy_level,
                 now=ts,
                 conn=conn,
             )
@@ -697,6 +734,7 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
         conn = db()
     try:
         factory_level = get_defense_factory_level(player_id, planet_id, conn=conn)
+        sy_level = _production_shipyard_level(planet_id, conn=conn)
         metal, crystal = _planet_resources(planet_id, conn=conn)
         stock = get_planet_defense(int(planet_id), conn=conn)
         buildable: List[Dict[str, Any]] = []
@@ -738,7 +776,8 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
                     ),
                     "cost_metal": cost["metal"],
                     "cost_crystal": cost["crystal"],
-                    "build_seconds": unit_build_seconds(key, factory_level, conn=conn),
+                    "build_seconds": unit_build_seconds(key, sy_level, conn=conn),
+                    "effective_batch_capacity": _batch_capacity_for_defense(key, sy_level),
                     "max_build": max_qty,
                     "stock": int(stock.get(key, 0) or 0),
                     "can_build": can_build,
@@ -746,7 +785,7 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
                 }
             )
         queue = defense_queue_for_client(
-            player_id, planet_id, factory_level, conn=conn
+            player_id, planet_id, conn=conn
         )
         from .queue_card import (
             group_card_jobs_by_owner_key,
@@ -757,8 +796,12 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
         by_owner = group_card_jobs_by_owner_key(card_jobs)
         queue["card_jobs_by_owner"] = by_owner
         _attach_queue_jobs_to_defense_rows(buildable, by_owner)
+        from .shipyard import orbital_production_batch_capacity
+
         return {
             "defense_factory_level": factory_level,
+            "orbital_shipyard_level": sy_level,
+            "production_batch_capacity": orbital_production_batch_capacity(sy_level),
             "buildable_defense": buildable,
             "current_defense": get_planet_defense(planet_id, conn=conn),
             "defense_queue": queue,

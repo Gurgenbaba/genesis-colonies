@@ -2,7 +2,11 @@
 (() => {
   "use strict";
 
-  const GC = (window.GC = window.GC || {});
+  const GC = window.GC;
+  if (!GC || typeof GC !== "object") {
+    console.error("[messages] GC namespace missing — load main.js before messages.js");
+    return;
+  }
 
   /** Monotonic page init counter – invalidates in-flight loads after re-init. */
   let _messagesInitSeq = 0;
@@ -121,13 +125,10 @@
   }
 
   function formatInt(n) {
+    if (typeof GC.formatNumber === "function") return GC.formatNumber(n);
     const v = Number(n);
     if (!Number.isFinite(v)) return "0";
-    try {
-      return Math.trunc(v).toLocaleString();
-    } catch (_) {
-      return String(Math.trunc(v));
-    }
+    return String(Math.trunc(v));
   }
 
   function keyFallbackLabel(raw) {
@@ -1641,23 +1642,70 @@
     if (dlg?.open) dlg.close();
   }
 
+  function isActiveMessagesState(state) {
+    return Boolean(state && state === GC.messagesPageState && document.getElementById("messages-page"));
+  }
+
   function isCurrentInit(state, initSeq) {
-    return (
-      state === GC.messagesPageState &&
-      state?.initSeq === initSeq &&
-      initSeq === _messagesInitSeq &&
-      !!getMessagesDom()
-    );
+    return isActiveMessagesState(state) && state.initSeq === initSeq;
   }
 
   function isCurrentRequest(state, initSeq, requestId) {
     return isCurrentInit(state, initSeq) && state.requestSeq === requestId;
   }
 
+  function clearInboxLoadingUi() {
+    getMessagesDom()?.list?.classList.remove("is-loading");
+  }
+
+  function recoverStuckInbox(st) {
+    if (!st || !document.getElementById("messages-page")) return false;
+    let recovered = false;
+    if (st.loading && !st.listInflight) {
+      st.loading = false;
+      clearInboxLoadingUi();
+      recovered = true;
+      msgDebug("[messages] recovered stuck loading flag");
+    }
+    if (!messagesDomMatchesState(st) && !messagesDomNeedsFreshInit()) {
+      syncMessagesDomInit(st.initSeq);
+      recovered = true;
+    }
+    return recovered;
+  }
+
+  function ensureInboxFetching(st, opts = {}) {
+    if (!isActiveMessagesState(st) || typeof st.loadList !== "function") return null;
+    recoverStuckInbox(st);
+    if (st.loading && st.listInflight) {
+      attachInboxLoadPaint(st);
+      return st.listInflight;
+    }
+    if (st.listInflight && st.inflightFilter === st.filter && !opts.force) {
+      attachInboxLoadPaint(st);
+      return st.listInflight;
+    }
+    if (st.listLoaded && inboxPaintIsHealthy(st)) return null;
+    if (st.listLoaded && inboxNeedsRepaint(st)) {
+      repairInboxPaint(st);
+      if (inboxPaintIsHealthy(st)) return null;
+    }
+    const force = Boolean(opts.force) || inboxNeedsRepaint(st) || recoverStuckInbox(st);
+    const run = st.listInflight || st.loadList(true, { force }) || null;
+    if (run) attachInboxLoadPaint(st);
+    return run;
+  }
+
   function ensureMessagesState() {
     if (!document.getElementById("messages-page")) return null;
-    if (inboxNeedsReload(GC.messagesPageState)) {
-      bootMessagesInbox();
+    let st = GC.messagesPageState;
+    if (!st || messagesDomNeedsFreshInit() || !messagesDomMatchesState(st)) {
+      initMessagesPage();
+      st = GC.messagesPageState;
+    }
+    if (!st) return null;
+    if (!st.listLoaded || !inboxPaintIsHealthy(st) || inboxNeedsRepaint(st)) {
+      reconcileInboxPaint(st, "ensure");
     }
     return GC.messagesPageState || null;
   }
@@ -1817,6 +1865,7 @@
 
       const tabBtn = e.target.closest("#messages-tabs .tab-btn[data-filter]");
       if (tabBtn) {
+        if (!e.isTrusted) return;
         e.preventDefault();
         e.stopPropagation();
         const tabsEl = document.getElementById("messages-tabs");
@@ -1893,6 +1942,43 @@
     });
   }
 
+  function whenMessagesDomReady(fn) {
+    if (typeof fn !== "function") return;
+    if (document.getElementById("messages-page") && document.getElementById("messages-list")) {
+      fn();
+      return;
+    }
+    let attempts = 0;
+    const tick = () => {
+      if (!document.getElementById("messages-page")) {
+        if (++attempts > 120) {
+          msgDebug("[messages] dom wait timeout");
+          return;
+        }
+        const next =
+          typeof requestAnimationFrame === "function" ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
+        next(tick);
+        return;
+      }
+      if (!document.getElementById("messages-list")) {
+        if (++attempts > 120) {
+          msgDebug("[messages] dom wait timeout (list)");
+          return;
+        }
+        const next =
+          typeof requestAnimationFrame === "function" ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
+        next(tick);
+        return;
+      }
+      fn();
+    };
+    tick();
+  }
+
+  function countInboxItemsInDocument() {
+    return document.querySelectorAll("#messages-list .gc-messages-item").length;
+  }
+
   function readActiveFilterFromDom() {
     const activeTab = document.querySelector("#messages-tabs .tab-btn.active[data-filter]");
     return activeTab?.dataset.filter || "all";
@@ -1910,41 +1996,179 @@
     return Number(page.dataset.messagesInit || 0) === Number(st.initSeq || 0);
   }
 
+  function inboxHasRenderedItems() {
+    return countInboxItemsInDocument() > 0;
+  }
+
+  /** True when the list still shows the server PJAX "loading" shell. */
+  function inboxShowsLoadingShell() {
+    const list = document.getElementById("messages-list");
+    if (!list || inboxHasRenderedItems()) return false;
+    const empty = list.querySelector(".gc-messages-empty");
+    if (!empty) return false;
+    if (empty.dataset.messagesShell === "loading") return true;
+    const text = String(empty.textContent || "").trim();
+    const loadingLabel = t("messages.loading", "Loading...");
+    return text === loadingLabel || text.includes(loadingLabel);
+  }
+
+  /** True when the list is still the server PJAX shell (loading/empty), not rendered rows. */
+  function inboxShowsPlaceholderOnly() {
+    const list = document.getElementById("messages-list");
+    if (!list) return false;
+    if (inboxHasRenderedItems()) return false;
+    return !!list.querySelector(".gc-messages-empty");
+  }
+
+  function messagesDomNeedsFreshInit() {
+    const page = document.getElementById("messages-page");
+    return Boolean(page && !page.dataset.messagesInit);
+  }
+
+  function inboxNeedsRepaint(st) {
+    if (!st || !st.listLoaded || st.loading) return false;
+    if (!document.getElementById("messages-page")) return false;
+    if (!messagesDomMatchesState(st)) return true;
+    const msgCount = Array.isArray(st.messages) ? st.messages.length : 0;
+    if (msgCount > 0) return !inboxHasRenderedItems();
+    return inboxShowsLoadingShell();
+  }
+
+  function flushInboxLayout() {
+    const wrap = document.querySelector(".gc-messages-list-wrap");
+    const list = document.getElementById("messages-list");
+    const layout = document.querySelector(".gc-messages-layout");
+    if (layout) void layout.offsetHeight;
+    if (wrap) void wrap.offsetHeight;
+    if (list) {
+      list.classList.remove("is-loading");
+      void list.offsetHeight;
+    }
+  }
+
+  function repairInboxPaint(st) {
+    if (!st || !document.getElementById("messages-page")) return false;
+    if (!messagesDomMatchesState(st) && !messagesDomNeedsFreshInit()) {
+      syncMessagesDomInit(st.initSeq);
+    }
+    if (typeof st.commitInboxRender === "function") {
+      st.commitInboxRender();
+    } else if (typeof st.repaintList === "function") {
+      st.repaintList();
+    }
+    flushInboxLayout();
+    return inboxPaintIsHealthy(st);
+  }
+
+  let _inboxPaintRepairToken = 0;
+
+  /** Ensure inbox rows are painted without waiting for user interaction. */
+  function scheduleInboxPaintRepair(st, reason) {
+    if (!st || !document.getElementById("messages-page")) return;
+    const token = ++_inboxPaintRepairToken;
+    const runPass = (pass) => {
+      if (token !== _inboxPaintRepairToken) return;
+      const cur = GC.messagesPageState;
+      if (!cur || cur.initSeq !== st.initSeq) return;
+      if (inboxPaintIsHealthy(cur)) return;
+      repairInboxPaint(cur);
+      msgDebug("[messages] paint repair", { pass, reason, initSeq: cur.initSeq });
+      if (!inboxPaintIsHealthy(cur) && pass < 3) {
+        const raf = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (fn) => queueMicrotask(fn);
+        if (pass === 0) queueMicrotask(() => runPass(pass + 1));
+        else if (pass === 1) raf(() => runPass(pass + 2));
+        else setTimeout(() => runPass(pass + 3), 80);
+      }
+    };
+    runPass(0);
+  }
+
+  function attachInboxLoadPaint(st) {
+    if (!st?.listInflight || typeof st.listInflight.then !== "function") return;
+    void st.listInflight
+      .then(() => {
+        const cur = GC.messagesPageState;
+        if (!cur || cur.initSeq !== st.initSeq) return;
+        if (!inboxPaintIsHealthy(cur)) scheduleInboxPaintRepair(cur, "load_settled");
+      })
+      .catch(() => {});
+  }
+
   function inboxNeedsReload(st) {
+    if (!document.getElementById("messages-page")) return false;
     if (!st) return true;
     if (!messagesDomMatchesState(st)) return true;
     if (st.loading && st.listInflight) return false;
     if (!st.listLoaded) return true;
     if (st.loading && !st.listInflight) return true;
-    const hasItems = !!document.querySelector("#messages-list .gc-messages-item");
-    const msgCount = Array.isArray(st.messages) ? st.messages.length : 0;
-    if (msgCount > 0 && !hasItems) return true;
     return false;
   }
 
-  /** PJAX-safe inbox boot — ensure state matches DOM and start list fetch. */
-  function bootMessagesInbox(opts = {}) {
-    if (!document.getElementById("messages-page")) return null;
-    const force = Boolean(opts && opts.force);
-    const st = GC.messagesPageState;
+  function inboxPaintIsHealthy(st) {
+    if (!st || st.loading) return false;
+    if (!document.getElementById("messages-page")) return false;
+    if (inboxShowsLoadingShell()) return false;
+    if (!messagesDomMatchesState(st)) return false;
+    if (!st.listLoaded) return false;
+    const msgCount = Array.isArray(st.messages) ? st.messages.length : 0;
+    if (msgCount > 0) return inboxHasRenderedItems();
+    return !inboxHasRenderedItems();
+  }
 
-    if (inboxNeedsReload(st)) {
-      initMessagesPage({ boot: true });
-      const fresh = GC.messagesPageState;
-      return fresh?.listInflight || fresh?.loadList?.(true, { force: false }) || null;
+  function reconcileInboxPaint(st, reason, opts = {}) {
+    if (!st || !isActiveMessagesState(st)) return;
+    recoverStuckInbox(st);
+    if (inboxNeedsRepaint(st)) {
+      repairInboxPaint(st);
     }
+    if (!st.listLoaded || !inboxPaintIsHealthy(st)) {
+      ensureInboxFetching(st, {
+        force: Boolean(opts.force) || !st.listLoaded || inboxNeedsRepaint(st),
+      });
+      return;
+    }
+    const verify = () => {
+      const cur = GC.messagesPageState;
+      if (!cur || cur.initSeq !== st.initSeq) return;
+      if (!inboxPaintIsHealthy(cur)) scheduleInboxPaintRepair(cur, reason || "reconcile");
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => requestAnimationFrame(verify));
+    } else {
+      queueMicrotask(verify);
+    }
+  }
 
-    if (!st || typeof st.loadList !== "function") return null;
-    if (st.loading && st.listInflight) return st.listInflight;
-    if (st.listLoaded && !force) return null;
-    return st.loadList(true, { force });
+  function startMessagesInboxLoad(st, opts = {}) {
+    return ensureInboxFetching(st, opts);
+  }
+
+  /** PJAX-safe inbox boot — continue or repair load; never re-init over mod(). */
+  function bootMessagesInbox(opts = {}) {
+    if (!document.getElementById("messages-page")) {
+      whenMessagesDomReady(() => bootMessagesInbox(opts));
+      return null;
+    }
+    let st = GC.messagesPageState;
+    if (!st || messagesDomNeedsFreshInit() || !messagesDomMatchesState(st)) {
+      initMessagesPage({ pjax: Boolean(opts && opts.pjax) });
+      st = GC.messagesPageState;
+    }
+    if (!st) return null;
+    if (st.listLoaded && inboxPaintIsHealthy(st) && !opts.force) {
+      return st.listInflight || null;
+    }
+    if (!st.listLoaded || !inboxPaintIsHealthy(st) || inboxNeedsRepaint(st)) {
+      reconcileInboxPaint(st, "boot", opts);
+    }
+    return st.listInflight || null;
   }
 
   function initMessagesPage(options) {
     bindMessagesUiOnce();
 
     if (!document.getElementById("messages-page")) {
-      resetMessagesPageState();
+      whenMessagesDomReady(() => initMessagesPage(options || {}));
       return;
     }
 
@@ -1953,14 +2177,17 @@
 
     syncMessagesDomInit(initSeq);
 
+    const domFilter = readActiveFilterFromDom();
+
     const tabsEl = document.getElementById("messages-tabs");
     tabsEl?.querySelectorAll(".tab-btn[data-filter]").forEach((btn) => {
-      const isAll = (btn.dataset.filter || "") === "all";
-      btn.classList.toggle("active", isAll);
-      btn.setAttribute("aria-selected", isAll ? "true" : "false");
+      const f = btn.dataset.filter || "all";
+      const active = f === domFilter;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-selected", active ? "true" : "false");
     });
 
-    const filter = "all";
+    const filter = domFilter;
     console.debug("[messages] init", { initSeq, filter });
     msgDebug("[messages] init detail", { pjax: Boolean(options && options.pjax) });
 
@@ -2093,7 +2320,9 @@
       const dom = getMessagesDom();
       if (!state.listLoaded) {
         state.listLoaded = false;
-        showListMessage(`<div class="gc-messages-empty">${esc(t("messages.loading"))}</div>`);
+        showListMessage(
+          `<div class="gc-messages-empty" data-messages-shell="loading">${esc(t("messages.loading"))}</div>`
+        );
       } else if (dom?.list) {
         dom.list.classList.add("is-loading");
       }
@@ -2132,14 +2361,16 @@
 
     function renderList() {
       const dom = getMessagesDom();
-      if (!dom?.list) return;
+      if (!dom?.list) return 0;
       dom.list.classList.remove("is-loading");
 
       if (state.loading || !state.listLoaded) {
         if (!state.listLoaded) {
-          showListMessage(`<div class="gc-messages-empty">${esc(t("messages.loading"))}</div>`);
+          showListMessage(
+            `<div class="gc-messages-empty" data-messages-shell="loading">${esc(t("messages.loading"))}</div>`
+          );
         }
-        return;
+        return 0;
       }
 
       if (!state.messages.length) {
@@ -2149,7 +2380,7 @@
         state.checkedIds.clear();
         setDetailVisible(false);
         syncSelectionUi();
-        return;
+        return 0;
       }
 
       dom.list.innerHTML = state.messages
@@ -2179,6 +2410,28 @@
         })
         .join("");
       syncSelectionUi();
+      flushInboxLayout();
+      return countInboxItemsInDocument();
+    }
+
+    function commitInboxRender() {
+      if (state !== GC.messagesPageState || !document.getElementById("messages-page")) return false;
+      state.loading = false;
+      getMessagesDom()?.list?.classList.remove("is-loading");
+      const painted = renderList();
+      const expected = Array.isArray(state.messages) ? state.messages.length : 0;
+      const domCount = countInboxItemsInDocument();
+      console.debug("[messages] rendered", {
+        expected,
+        dom: domCount,
+        painted,
+        filter: state.filter,
+        initSeq,
+      });
+      if (expected > 0 && domCount === 0) {
+        scheduleInboxPaintRepair(state, "commit_retry");
+      }
+      return domCount > 0 || expected === 0;
     }
 
     function renderDetail(msg) {
@@ -2304,6 +2557,7 @@
         });
 
         if (!isCurrentRequest(state, initSeq, requestId)) {
+          if (state === GC.messagesPageState) state.loading = false;
           clearLoadingIfStale(requestId);
           return;
         }
@@ -2334,7 +2588,8 @@
         state.listLoaded = true;
         state.unreadSyncedFromApi = true;
         syncUnreadFromResponse(data);
-        renderList();
+        commitInboxRender();
+        scheduleInboxPaintRepair(state, "load");
         console.debug("[messages] inbox loaded", {
           count: state.messages.length,
           unread: data.data?.unread_count,
@@ -2356,6 +2611,7 @@
           return;
         }
         if (!isCurrentRequest(state, initSeq, requestId)) {
+          if (state === GC.messagesPageState) state.loading = false;
           clearLoadingIfStale(requestId);
           return;
         }
@@ -2370,7 +2626,11 @@
     }
 
     async function loadList(retryNotReady = true, opts = {}) {
-      if (!isCurrentInit(state, initSeq)) return;
+      if (!isCurrentInit(state, initSeq)) {
+        msgDebug("[messages] loadList ignored (stale init)", { initSeq });
+        return;
+      }
+      recoverStuckInbox(state);
       const force = Boolean(opts && opts.force);
 
       if (state.listInflight) {
@@ -2452,7 +2712,7 @@
     }
 
     async function handleAction(action, msg) {
-      if (!msg) return;
+      if (!msg || !isActiveMessagesState(state)) return;
       if (action === "read") await postAction(`/api/messages/${msg.id}/read`);
       else if (action === "archive") await postAction(`/api/messages/${msg.id}/archive`);
       else if (action === "delete") {
@@ -2473,11 +2733,19 @@
         navigateFleetAttack(msg.metadata?.target_coords);
         return;
       }
-      await loadList();
+      await loadList(true, { force: true });
       if (state.selectedId && action !== "delete") await openMessage(state.selectedId);
     }
 
     state.loadList = loadList;
+    state.repaintList = () => {
+      if (!isCurrentInit(state, initSeq)) return;
+      renderList();
+    };
+    state.commitInboxRender = () => {
+      if (state !== GC.messagesPageState) return false;
+      return commitInboxRender();
+    };
     state.openMessage = openMessage;
     state.handleAction = handleAction;
     state.setDetailVisible = setDetailVisible;
@@ -2496,13 +2764,15 @@
     setDetailVisible(false);
     syncSelectionUi();
 
-    void loadList(true, { force: false });
+    attachInboxLoadPaint(state);
+    ensureInboxFetching(state, { force: false });
   }
 
   GC.modules = GC.modules || {};
   GC.modules.messages = initMessagesPage;
   GC.initMessagesPage = initMessagesPage;
   GC.bootMessagesInbox = bootMessagesInbox;
+  GC.scheduleInboxPaintRepair = scheduleInboxPaintRepair;
   GC.openMessagesCompose = openCompose;
   GC.ensureMessagesState = ensureMessagesState;
   GC.openInboxReportModal = openInboxReportModal;

@@ -93,23 +93,23 @@
     </div>
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("playercard_total_score") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_total') or 0)|fmt_int }}</span>
+      <span class="gc-player-card-stat-value gc-mono gc-num-compact" title="{{ (card.get('score_total') or 0)|fmt_int }}">{{ (card.get('score_total') or 0)|fmt_int_compact }}</span>
     </div>
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("playercard_building_score") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_buildings') or 0)|fmt_int }}</span>
+      <span class="gc-player-card-stat-value gc-mono gc-num-compact" title="{{ (card.get('score_buildings') or 0)|fmt_int }}">{{ (card.get('score_buildings') or 0)|fmt_int_compact }}</span>
     </div>
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("playercard_research_score") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_research') or 0)|fmt_int }}</span>
+      <span class="gc-player-card-stat-value gc-mono gc-num-compact" title="{{ (card.get('score_research') or 0)|fmt_int }}">{{ (card.get('score_research') or 0)|fmt_int_compact }}</span>
     </div>
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("playercard_fleet_score") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_fleet') or 0)|fmt_int }}</span>
+      <span class="gc-player-card-stat-value gc-mono gc-num-compact" title="{{ (card.get('score_fleet') or 0)|fmt_int }}">{{ (card.get('score_fleet') or 0)|fmt_int_compact }}</span>
     </div>
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("playercard_defense_score") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_defense') or 0)|fmt_int }}</span>
+      <span class="gc-player-card-stat-value gc-mono gc-num-compact" title="{{ (card.get('score_defense') or 0)|fmt_int }}">{{ (card.get('score_defense') or 0)|fmt_int_compact }}</span>
     </div>
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("playercard_home_planet") }}</span>
