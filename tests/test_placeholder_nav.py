@@ -62,7 +62,20 @@ def test_sidebar_has_military_and_trading_hub_nav():
     assert "url_for('trader_hub_view')" in sidebar
     assert "auction_house_view" in sidebar
     assert "url_for('alliance_view')" in sidebar
+    assert "url_for('hall_of_fame_view')" in sidebar
+    assert 'data-nav-module="hall_of_fame"' in sidebar
     assert "gc-nav-wip-section" not in sidebar
+
+
+def test_base_mobile_drawer_has_hall_of_fame_near_ranking():
+    base = _read("templates/base.html")
+    ranking_idx = base.find('data-nav-module="ranking"')
+    hof_idx = base.find('data-nav-module="hall_of_fame"')
+    assert ranking_idx >= 0
+    assert hof_idx >= 0
+    assert hof_idx > ranking_idx
+    assert "url_for('hall_of_fame_view')" in base
+    assert "gc-nav-drawer-link" in base.split("hall_of_fame", 1)[0]
 
 
 def test_main_js_syncs_military_subnav():

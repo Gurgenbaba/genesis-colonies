@@ -2144,7 +2144,7 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
             else None
         )
         origin_coords, origin_planet_name = _movement_origin_snapshot(movement, conn=conn)
-        publish_attack_combat_report(
+        report_out = publish_attack_combat_report(
             attacker_id=player_id,
             defender_id=defender_id,
             coords=coords,
@@ -2166,6 +2166,36 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
             attacker_locale=sender_locale,
             defender_locale=defender_locale,
         )
+        if combat_result is not None:
+            try:
+                from .combat import calculate_combat_debris
+                from .combat_hof import record_hof_battle
+
+                debris_m, debris_c = calculate_combat_debris(
+                    combat_result.attacker_losses,
+                    combat_result.defender_losses,
+                )
+                record_hof_battle(
+                    fleet_id=movement_id,
+                    attacker_player_id=player_id,
+                    defender_player_id=defender_id,
+                    attacker_name=attacker_name,
+                    defender_name=defender_name,
+                    target_planet_id=int(target_id) if target_id else None,
+                    target_name=str(snapshot.get("planet_name") or ""),
+                    target_coords=coords,
+                    winner=str(combat_result.winner or ""),
+                    rounds=len(combat_result.rounds),
+                    attacker_losses=combat_result.attacker_losses,
+                    defender_losses=combat_result.defender_losses,
+                    loot=loot_taken,
+                    debris={"metal": int(debris_m), "crystal": int(debris_c)},
+                    report_metadata=report_out.get("metadata") or {},
+                    created_at=int(now),
+                    conn=conn,
+                )
+            except Exception:
+                logger.exception("combat hall of fame record failed movement_id=%s", movement_id)
         return True
     except Exception:
         logger.exception(

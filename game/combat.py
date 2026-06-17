@@ -1217,7 +1217,7 @@ def publish_attack_combat_report(
         metadata["fleet_id"] = int(fleet_id)
     from .messages import dispatch_combat_reports
 
-    return dispatch_combat_reports(
+    out = dispatch_combat_reports(
         attacker_id=int(attacker_id),
         defender_id=int(defender_id),
         coords=coords,
@@ -1227,6 +1227,8 @@ def publish_attack_combat_report(
         attacker_locale=attacker_locale,
         defender_locale=defender_locale,
     )
+    out["metadata"] = dict(metadata)
+    return out
 
 
 def remaining_stock(

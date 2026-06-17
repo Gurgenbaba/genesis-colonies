@@ -93,7 +93,7 @@ def test_homeworld_no_overflow_duplicates():
 def test_homeworld_verwaltung_only_utility_modules():
     nav = resolve_sidebar_nav(empire_role_key="homeworld", is_homeworld=True)
     admin_modules = [m for m in visible_sidebar_modules(nav) if module_in_section(nav, m, "administration")]
-    assert set(admin_modules) == {"alliance", "ranking", "options"}
+    assert set(admin_modules) == {"alliance", "ranking", "hall_of_fame", "options"}
 
 
 def test_homeworld_messages_standalone_shortcut():
@@ -167,6 +167,7 @@ def test_homeworld_overview_html_has_no_admin_duplicates(gc591d_db, monkeypatch)
     assert len(visible_overview) == 1
     assert len(_visible_module_lines(sidebar_chunk, "research")) == 1
     assert len(_visible_module_lines(sidebar_chunk, "ranking")) == 1
+    assert len(_visible_module_lines(sidebar_chunk, "hall_of_fame")) == 1
 
 
 def test_mining_colony_research_once_in_infrastructure(gc591d_db, monkeypatch):

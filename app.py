@@ -2664,6 +2664,50 @@ def api_ranking():
         return jsonify({"ok": False, "error": "ranking_unavailable"}), 500
 
 
+@app.route("/hall-of-fame")
+@require_login
+def hall_of_fame_view():
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    if player_view is None:
+        return redirect(url_for("login"))
+
+    from game.combat_hof import build_hof_api_payload
+
+    conn = db()
+    try:
+        hof_payload = build_hof_api_payload(limit=100, conn=conn)
+    finally:
+        conn.close()
+
+    return render_template(
+        "hall_of_fame.html",
+        player=player_view,
+        buildings=buildings,
+        energy_total=energy_total,
+        energy_used=energy_used,
+        storage_caps=storage_caps,
+        hof_payload=hof_payload,
+    )
+
+
+@app.route("/api/hall-of-fame")
+@require_login
+def api_hall_of_fame():
+    if _current_player_id() is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    try:
+        from game.combat_hof import build_hof_api_payload
+
+        conn = db()
+        try:
+            payload = build_hof_api_payload(limit=100, conn=conn)
+        finally:
+            conn.close()
+        return jsonify(payload)
+    except Exception:
+        return jsonify({"ok": False, "error": "hall_of_fame_unavailable"}), 500
+
+
 @app.route("/api/admin/rankings/recalculate", methods=["POST"])
 @require_admin_api
 def api_admin_recalculate_rankings():

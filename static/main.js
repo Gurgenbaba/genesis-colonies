@@ -1286,6 +1286,7 @@
     if (path.endsWith("/empire")) return "empire";
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
+    if (path.endsWith("/hall-of-fame")) return "hall_of_fame";
     if (path.endsWith("/messages")) return "messages";
     if (path.endsWith("/options")) return "options";
     if (path.endsWith("/galaxy")) return "galaxy";
@@ -18452,6 +18453,25 @@
   GC.modules.galaxy = initGalaxy;
   GC.modules.ranking = function initRankingPage() {
     GC.initRanking();
+  };
+  GC.modules.hall_of_fame = function initHallOfFamePage() {
+    const root = document.getElementById("hall-of-fame-page");
+    if (!root) return;
+    root.querySelectorAll("[data-hof-report]").forEach((btn) => {
+      if (btn.dataset.hofBound === "1") return;
+      btn.dataset.hofBound = "1";
+      btn.addEventListener("click", () => {
+        let meta = {};
+        try {
+          meta = JSON.parse(btn.getAttribute("data-hof-report") || "{}");
+        } catch (_err) {
+          meta = {};
+        }
+        if (!meta || typeof meta !== "object") return;
+        if (typeof GC.openCombatReportModal !== "function") return;
+        GC.openCombatReportModal({ category: "combat", metadata: meta });
+      });
+    });
   };
   const TECHTREE_STORAGE_KEY = "gc_techtree_collapsed";
   let techtreeMediaZoomOpen = false;

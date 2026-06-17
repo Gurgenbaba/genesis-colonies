@@ -514,6 +514,12 @@
            {% if not mobile_drawer_shows_module(_sn, 'ranking', bottom_modules=_mb) %}hidden{% endif %}>
           {{ T("nav_ranking", "Ranking") }}
         </a>
+        <a href="{{ url_for('hall_of_fame_view') }}"
+           data-nav-module="hall_of_fame"
+           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'hall_of_fame') }} {% if request.endpoint == 'hall_of_fame_view' %}active{% endif %}"
+           {% if not mobile_drawer_shows_module(_sn, 'hall_of_fame', bottom_modules=_mb) %}hidden{% endif %}>
+          {{ T("nav_hall_of_fame", "Hall of Fame") }}
+        </a>
         <a href="{{ url_for('options_view') }}"
            data-nav-module="options"
            class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'options') }} {% if request.endpoint == 'options_view' %}active{% endif %}"

@@ -10824,6 +10824,106 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   transform: translateY(-1px);
 }
 
+/* ── Hall of Fame (GC-700A) ─────────────────────────────────────────────── */
+
+.gc-hof-page{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gc-hof-header .gc-hof-tab-label{
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-primary-2);
+}
+
+.gc-hof-panel-head{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.gc-hof-body{
+  padding: 0 0 4px;
+}
+
+.gc-hof-empty{
+  margin: 0;
+  padding: 18px 4px;
+  color: var(--gc-text-soft);
+}
+
+.gc-hof-table-scroll{
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.gc-hof-table{
+  width: 100%;
+  min-width: 980px;
+}
+
+.gc-hof-table thead th{
+  white-space: nowrap;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gc-text-soft);
+}
+
+.gc-hof-row td{
+  vertical-align: middle;
+  font-size: 0.9rem;
+}
+
+.gc-hof-col-rank,
+.gc-hof-col-rounds{
+  width: 56px;
+  text-align: center;
+}
+
+.gc-hof-col-score{
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--gc-primary-2);
+}
+
+.gc-hof-target{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+
+.gc-hof-target-coords{
+  font-size: 0.82rem;
+  color: var(--gc-text-soft);
+}
+
+.gc-hof-commander{
+  min-width: 110px;
+}
+
+.gc-hof-col-action{
+  width: 1%;
+  white-space: nowrap;
+}
+
+.gc-hof-report-btn{
+  white-space: nowrap;
+}
+
+@media (max-width: 900px){
+  .gc-hof-table{
+    min-width: 860px;
+  }
+}
+
 .gc-ranking-row.is-me td{
   background: rgba(0, 220, 255, 0.06);
   box-shadow: inset 0 0 0 1px rgba(0, 220, 255, 0.22);
