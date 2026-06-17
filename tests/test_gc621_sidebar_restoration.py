@@ -48,7 +48,7 @@ def test_sidebar_verwaltung_has_no_support_or_overflow():
     assert 'data-nav-module="support"' not in sidebar
     assert 'data-special-open-window="support"' not in sidebar
     admin = sidebar.split('data-nav-section="administration"', 1)[1].split("</div>", 1)[0]
-    for module in ("alliance", "ranking", "hall_of_fame", "options"):
+    for module in ("alliance", "ranking", "hall_of_fame", "records", "options"):
         assert f'data-nav-module="{module}"' in admin
 
 

@@ -12,15 +12,17 @@ from game import db as gdb
 from game.db import db
 from game.combat_hof import (
     COMBAT_HOF_RETENTION_LIMIT,
+    backfill_combat_hof,
     combat_qualifies_for_hof,
     hof_schema_ready,
     list_top_battles,
     prune_hof_entries_beyond_top,
     record_hof_battle,
 )
+from game.combat import COMBAT_REPORT_VERSION
 from game.fleet import add_planet_ships, process_fleet_tick, send_fleet
 from game.fleet_defs import EXPEDITION_POSITION
-from game.messages import list_messages
+from game.messages import create_message, list_messages, notify_combat, notify_expedition
 from game.models import (
     add_planet_defense,
     create_user,
@@ -413,6 +415,183 @@ def test_prune_hof_noop_when_under_retention_limit(hof_db):
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) AS c FROM combat_hall_of_fame;")
         assert int(cur.fetchone()["c"]) == 1
+    finally:
+        conn.close()
+
+
+def _combat_report_metadata(
+    *,
+    fleet_id: int,
+    perspective: str = "attacker",
+    attacker_id: int = 1,
+    defender_id: int = 2,
+    attacker_losses: dict | None = None,
+    defender_losses: dict | None = None,
+) -> dict:
+    return {
+        "report_version": COMBAT_REPORT_VERSION,
+        "fleet_id": int(fleet_id),
+        "perspective": perspective,
+        "mission_type": "attack",
+        "attacker_id": int(attacker_id),
+        "defender_id": int(defender_id),
+        "attacker_name": "Alpha",
+        "defender_name": "Beta",
+        "target_coords": "[1:2:3]",
+        "target_planet_name": "Colony",
+        "winner": "attacker",
+        "result": "attacker",
+        "attacker_losses": dict(attacker_losses or {"ironclad_frigate": 1}),
+        "defender_losses": dict(defender_losses or {"sentinel_turret": 4}),
+        "loot": {"metal": 500, "crystal": 200},
+        "rounds": [],
+        "rounds_fought": 2,
+    }
+
+
+def _seed_combat_inbox(
+    *,
+    attacker_id: int,
+    defender_id: int,
+    fleet_id: int,
+    conn,
+    include_defender_copy: bool = True,
+):
+    meta = _combat_report_metadata(
+        fleet_id=fleet_id,
+        perspective="attacker",
+        attacker_id=attacker_id,
+        defender_id=defender_id,
+    )
+    notify_combat(attacker_id, "Combat report", "Body attacker", metadata=meta, conn=conn)
+    if include_defender_copy:
+        def_meta = {**meta, "perspective": "defender"}
+        notify_combat(defender_id, "Attack report", "Body defender", metadata=def_meta, conn=conn)
+
+
+def test_backfill_combat_hof_creates_entries_from_old_reports(hof_db):
+    atk = _player()
+    defn = _player()
+    conn = db()
+    try:
+        _seed_combat_inbox(attacker_id=atk, defender_id=defn, fleet_id=501, conn=conn)
+        conn.commit()
+
+        result = backfill_combat_hof(conn=conn)
+        conn.commit()
+        assert result["ok"] is True
+        assert result["inserted"] == 1
+
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) AS c FROM combat_hall_of_fame WHERE fleet_id = 501;")
+        assert int(cur.fetchone()["c"]) == 1
+        cur.execute(
+            """
+            SELECT attacker_name, defender_name, total_destroyed_score, winner, rounds
+            FROM combat_hall_of_fame WHERE fleet_id = 501 LIMIT 1;
+            """
+        )
+        row = cur.fetchone()
+        assert row["attacker_name"] == "Alpha"
+        assert row["defender_name"] == "Beta"
+        assert int(row["total_destroyed_score"]) > 0
+        assert row["winner"] == "attacker"
+        assert int(row["rounds"]) == 2
+    finally:
+        conn.close()
+
+
+def test_backfill_combat_hof_deduplicates_attacker_defender_reports(hof_db):
+    atk = _player()
+    defn = _player()
+    conn = db()
+    try:
+        _seed_combat_inbox(attacker_id=atk, defender_id=defn, fleet_id=502, conn=conn)
+        conn.commit()
+
+        result = backfill_combat_hof(conn=conn)
+        conn.commit()
+        assert result["inserted"] == 1
+
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) AS c FROM combat_hall_of_fame WHERE fleet_id = 502;")
+        assert int(cur.fetchone()["c"]) == 1
+    finally:
+        conn.close()
+
+
+def test_backfill_combat_hof_ignores_non_combat_messages(hof_db):
+    pid = _player()
+    conn = db()
+    try:
+        create_message(pid, "System note", "Hello", category="system", conn=conn)
+        notify_expedition(
+            pid,
+            "Expedition",
+            "Nothing found",
+            metadata={"fleet_id": 503, "mission_type": "expedition"},
+            conn=conn,
+        )
+        create_message(
+            pid,
+            "Transport",
+            "Arrived",
+            category="system",
+            metadata={
+                "fleet_id": 504,
+                "mission_type": "transport",
+                "report_phase": "arrival",
+            },
+            conn=conn,
+        )
+        conn.commit()
+
+        result = backfill_combat_hof(conn=conn)
+        conn.commit()
+        assert result["ok"] is True
+        assert result["inserted"] == 0
+
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) AS c FROM combat_hall_of_fame;")
+        assert int(cur.fetchone()["c"]) == 0
+    finally:
+        conn.close()
+
+
+def test_backfill_combat_hof_skips_existing_fleet_ids(hof_db):
+    atk = _player()
+    defn = _player()
+    conn = db()
+    try:
+        record_hof_battle(
+            fleet_id=505,
+            attacker_player_id=atk,
+            defender_player_id=defn,
+            attacker_name="Existing",
+            defender_name="Row",
+            target_planet_id=None,
+            target_name="P",
+            target_coords="[1:1:1]",
+            winner="attacker",
+            rounds=1,
+            attacker_losses={},
+            defender_losses={"sentinel_turret": 1},
+            loot={},
+            debris={},
+            report_metadata={},
+            conn=conn,
+        )
+        _seed_combat_inbox(attacker_id=atk, defender_id=defn, fleet_id=505, conn=conn)
+        conn.commit()
+
+        result = backfill_combat_hof(conn=conn)
+        conn.commit()
+        assert result["inserted"] == 0
+        assert result["skipped_existing"] == 1
+
+        cur = conn.cursor()
+        cur.execute("SELECT attacker_name FROM combat_hall_of_fame WHERE fleet_id = 505 LIMIT 1;")
+        assert cur.fetchone()["attacker_name"] == "Existing"
     finally:
         conn.close()
 

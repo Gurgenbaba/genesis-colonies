@@ -111,6 +111,7 @@ def test_mining_secondary_modules_stay_in_canonical_sections():
     assert not module_in_section(nav, "research", "administration")
     assert module_in_section(nav, "ranking", "administration")
     assert module_in_section(nav, "hall_of_fame", "administration")
+    assert module_in_section(nav, "records", "administration")
 
 
 def test_sidebar_template_group_accordion_markers():

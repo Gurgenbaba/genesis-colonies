@@ -24,78 +24,75 @@
       {% elif not battles %}
       <p class="gc-hof-empty">{{ T("hof_empty", "Noch keine Schlachten verzeichnet. Die ersten großen Kämpfe erscheinen hier.") }}</p>
       {% else %}
-      <div class="gc-table-scroll gc-hof-table-scroll">
-        <table class="table-std gc-hof-table">
-          <thead>
-            <tr>
-              <th class="gc-hof-col-rank">{{ T("hof_col_rank", "Rang") }}</th>
-              <th>{{ T("hof_col_date", "Datum") }}</th>
-              <th>{{ T("hof_col_attacker", "Angreifer") }}</th>
-              <th>{{ T("hof_col_defender", "Verteidiger") }}</th>
-              <th>{{ T("hof_col_target", "Ziel") }}</th>
-              <th>{{ T("hof_col_winner", "Gewinner") }}</th>
-              <th class="gc-hof-col-rounds">{{ T("hof_col_rounds", "Runden") }}</th>
-              <th class="gc-hof-col-score">{{ T("hof_col_destroyed", "Zerstörter Wert") }}</th>
-              <th>{{ T("hof_col_loot", "Beute") }}</th>
-              <th>{{ T("hof_col_debris", "Trümmerfeld") }}</th>
-              <th class="gc-hof-col-action">{{ T("hof_col_report", "Bericht") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for battle in battles %}
-            {% set loot = battle.loot if battle.loot is defined else {} %}
-            {% set debris = battle.debris if battle.debris is defined else {} %}
-            {% set loot_total = (loot.metal|default(0)|int) + (loot.crystal|default(0)|int) + (loot.fuel_cells|default(0)|int) %}
-            {% set debris_total = (debris.metal|default(0)|int) + (debris.crystal|default(0)|int) %}
-            <tr class="gc-hof-row">
-              <td class="gc-hof-col-rank gc-mono">#{{ battle.rank }}</td>
-              <td class="gc-hof-date gc-mono">{{ battle.created_at_fmt }}</td>
-              <td class="gc-hof-commander">{{ battle.attacker_name or "—" }}</td>
-              <td class="gc-hof-commander">{{ battle.defender_name or "—" }}</td>
-              <td class="gc-hof-target">
-                {% if battle.target_name %}
-                <span class="gc-hof-target-name">{{ battle.target_name }}</span>
-                {% endif %}
-                {% if battle.target_coords %}
-                <span class="gc-hof-target-coords gc-mono">{{ battle.target_coords }}</span>
-                {% endif %}
-              </td>
-              <td class="gc-hof-winner">
-                {{ T("combat_report_winner_" ~ battle.winner, battle.winner) }}
-              </td>
-              <td class="gc-hof-col-rounds gc-mono">{{ battle.rounds }}</td>
-              <td class="gc-hof-col-score gc-mono" title="{{ battle.total_destroyed_score_fmt }}">
+      <div class="gc-hof-list" role="list">
+        {% for battle in battles %}
+        {% set loot = battle.loot if battle.loot is defined else {} %}
+        {% set debris = battle.debris if battle.debris is defined else {} %}
+        {% set loot_total = (loot.metal|default(0)|int) + (loot.crystal|default(0)|int) + (loot.fuel_cells|default(0)|int) %}
+        {% set debris_total = (debris.metal|default(0)|int) + (debris.crystal|default(0)|int) %}
+        {% set rank_cls = "gc-hof-card--top-" ~ battle.rank if battle.rank <= 3 else "" %}
+        <article class="gc-hof-card {{ rank_cls }}" role="listitem">
+          <header class="gc-hof-card-head">
+            <span class="gc-hof-card-rank gc-mono" aria-label="{{ T('hof_col_rank', 'Rang') }}">#{{ battle.rank }}</span>
+            <time class="gc-hof-card-date gc-mono">{{ battle.created_at_fmt }}</time>
+            {% if battle.report_metadata %}
+            <button type="button"
+                    class="gc-btn gc-btn-ghost gc-btn-xs gc-hof-report-btn"
+                    data-hof-report='{{ battle.report_metadata | tojson }}'>
+              {{ T("hof_view_report_short", "Bericht") }}
+            </button>
+            {% endif %}
+          </header>
+
+          <div class="gc-hof-card-matchup">
+            <span class="gc-hof-card-commander gc-hof-card-commander--atk" title="{{ T('hof_col_attacker', 'Angreifer') }}">
+              {{ battle.attacker_name or "—" }}
+            </span>
+            <span class="gc-hof-card-vs" aria-hidden="true">vs</span>
+            <span class="gc-hof-card-commander gc-hof-card-commander--def" title="{{ T('hof_col_defender', 'Verteidiger') }}">
+              {{ battle.defender_name or "—" }}
+            </span>
+          </div>
+
+          <div class="gc-hof-card-meta">
+            <span class="gc-hof-card-target">
+              {% if battle.target_name %}
+              <span class="gc-hof-target-name">{{ battle.target_name }}</span>
+              {% endif %}
+              {% if battle.target_coords %}
+              <span class="gc-hof-target-coords gc-mono">{{ battle.target_coords }}</span>
+              {% endif %}
+            </span>
+            <span class="gc-hof-winner-pill gc-hof-winner-pill--{{ battle.winner }}">
+              {{ T("hof_winner_short_" ~ battle.winner, T("combat_report_winner_" ~ battle.winner, battle.winner)) }}
+            </span>
+            <span class="gc-hof-card-rounds gc-mono">
+              {{ battle.rounds }} {{ T("hof_rounds_short", "Rdn.") }}
+            </span>
+          </div>
+
+          <dl class="gc-hof-card-stats">
+            <div class="gc-hof-stat gc-hof-stat--primary">
+              <dt>{{ T("hof_stat_destroyed_short", "Zerstört") }}</dt>
+              <dd class="gc-mono" title="{{ battle.total_destroyed_score_fmt }}">
                 {{ battle.total_destroyed_score_compact }}
-              </td>
-              <td class="gc-hof-loot gc-mono">
-                {% if loot_total > 0 %}
-                {{ loot_total | fmt_int_compact }}
-                {% else %}
-                —
-                {% endif %}
-              </td>
-              <td class="gc-hof-debris gc-mono">
-                {% if debris_total > 0 %}
-                {{ debris_total | fmt_int_compact }}
-                {% else %}
-                —
-                {% endif %}
-              </td>
-              <td class="gc-hof-col-action">
-                {% if battle.report_metadata %}
-                <button type="button"
-                        class="gc-btn gc-btn-ghost gc-btn-xs gc-hof-report-btn"
-                        data-hof-report='{{ battle.report_metadata | tojson }}'>
-                  {{ T("hof_view_report", "Kampfbericht ansehen") }}
-                </button>
-                {% else %}
-                —
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+              </dd>
+            </div>
+            <div class="gc-hof-stat">
+              <dt>{{ T("hof_stat_loot_short", "Beute") }}</dt>
+              <dd class="gc-mono">
+                {% if loot_total > 0 %}{{ loot_total | fmt_int_compact }}{% else %}—{% endif %}
+              </dd>
+            </div>
+            <div class="gc-hof-stat">
+              <dt>{{ T("hof_stat_debris_short", "Trümmer") }}</dt>
+              <dd class="gc-mono">
+                {% if debris_total > 0 %}{{ debris_total | fmt_int_compact }}{% else %}—{% endif %}
+              </dd>
+            </div>
+          </dl>
+        </article>
+        {% endfor %}
       </div>
       {% endif %}
     </div>

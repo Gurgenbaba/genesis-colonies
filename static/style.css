@@ -10830,6 +10830,8 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   display: flex;
   flex-direction: column;
   gap: 16px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .gc-hof-header .gc-hof-tab-label{
@@ -10838,6 +10840,11 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--gc-primary-2);
+}
+
+.gc-hof-panel{
+  max-width: 100%;
+  min-width: 0;
 }
 
 .gc-hof-panel-head{
@@ -10850,6 +10857,9 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-hof-body{
   padding: 0 0 4px;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .gc-hof-empty{
@@ -10858,70 +10868,395 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   color: var(--gc-text-soft);
 }
 
-.gc-hof-table-scroll{
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.gc-hof-table{
-  width: 100%;
-  min-width: 980px;
-}
-
-.gc-hof-table thead th{
-  white-space: nowrap;
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--gc-text-soft);
-}
-
-.gc-hof-row td{
-  vertical-align: middle;
-  font-size: 0.9rem;
-}
-
-.gc-hof-col-rank,
-.gc-hof-col-rounds{
-  width: 56px;
-  text-align: center;
-}
-
-.gc-hof-col-score{
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--gc-primary-2);
-}
-
-.gc-hof-target{
+.gc-hof-list{
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-width: 120px;
+  gap: 10px;
+  max-width: 100%;
+  min-width: 0;
 }
 
-.gc-hof-target-coords{
+.gc-hof-card{
+  padding: 14px 16px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.16);
+  background: rgba(5, 10, 22, 0.58);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.gc-hof-card:hover{
+  border-color: rgba(120, 190, 255, 0.28);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
+  transform: translateY(-1px);
+}
+
+.gc-hof-card--top-1{
+  border-color: rgba(255, 216, 106, 0.42);
+  background: linear-gradient(135deg, rgba(255, 216, 106, 0.08), rgba(5, 10, 22, 0.62));
+}
+
+.gc-hof-card--top-1 .gc-hof-card-rank{
+  color: #ffd86a;
+  text-shadow: 0 0 12px rgba(255, 216, 106, 0.35);
+}
+
+.gc-hof-card--top-2{
+  border-color: rgba(216, 228, 255, 0.34);
+}
+
+.gc-hof-card--top-2 .gc-hof-card-rank{
+  color: #d8e4ff;
+}
+
+.gc-hof-card--top-3{
+  border-color: rgba(232, 168, 124, 0.34);
+}
+
+.gc-hof-card--top-3 .gc-hof-card-rank{
+  color: #e8a87c;
+}
+
+.gc-hof-card-head{
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.gc-hof-card-rank{
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--gc-primary-2);
+  flex-shrink: 0;
+}
+
+.gc-hof-card-date{
+  font-size: 0.8rem;
+  color: var(--gc-text-soft);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.gc-hof-report-btn{
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.gc-hof-card-matchup{
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.gc-hof-card-commander{
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc-hof-card-commander--atk{
+  color: #ff9b7a;
+}
+
+.gc-hof-card-commander--def{
+  color: #8ec8ff;
+}
+
+.gc-hof-card-vs{
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+  flex-shrink: 0;
+}
+
+.gc-hof-card-meta{
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-bottom: 12px;
   font-size: 0.82rem;
   color: var(--gc-text-soft);
 }
 
-.gc-hof-commander{
-  min-width: 110px;
+.gc-hof-card-target{
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
 }
 
-.gc-hof-col-action{
-  width: 1%;
+.gc-hof-target-name{
+  color: var(--gc-text);
+  font-weight: 500;
+}
+
+.gc-hof-target-coords{
+  font-size: 0.8rem;
+  color: var(--gc-text-dim);
+}
+
+.gc-hof-winner-pill{
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
   white-space: nowrap;
 }
 
-.gc-hof-report-btn{
+.gc-hof-winner-pill--attacker{
+  color: #ffb49a;
+  background: rgba(255, 120, 80, 0.12);
+  border-color: rgba(255, 120, 80, 0.28);
+}
+
+.gc-hof-winner-pill--defender{
+  color: #9fd0ff;
+  background: rgba(80, 160, 255, 0.12);
+  border-color: rgba(80, 160, 255, 0.28);
+}
+
+.gc-hof-winner-pill--draw,
+.gc-hof-winner-pill--undecided{
+  color: var(--gc-text-soft);
+  background: rgba(140, 150, 170, 0.12);
+  border-color: rgba(140, 150, 170, 0.24);
+}
+
+.gc-hof-card-rounds{
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--gc-text-dim);
+}
+
+.gc-hof-card-stats{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid rgba(120, 190, 255, 0.12);
+}
+
+.gc-hof-stat{
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.gc-hof-stat dt{
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+  font-weight: 600;
+}
+
+.gc-hof-stat dd{
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--gc-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-@media (max-width: 900px){
-  .gc-hof-table{
-    min-width: 860px;
+.gc-hof-stat--primary dd{
+  color: var(--gc-primary-2);
+  font-size: 1rem;
+}
+
+@media (max-width: 520px){
+  .gc-hof-card{
+    padding: 12px 14px;
   }
+
+  .gc-hof-card-matchup{
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .gc-hof-card-vs{
+    display: none;
+  }
+
+  .gc-hof-card-rounds{
+    margin-left: 0;
+  }
+
+  .gc-hof-card-stats{
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .gc-hof-stat{
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .gc-hof-stat dd{
+    text-align: right;
+  }
+}
+
+/* ── Universe Records (GC-701) ─────────────────────────────────────────── */
+
+.gc-records-page{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.gc-records-header .section-hint{
+  margin-bottom: 0;
+}
+
+.gc-records-panel{
+  max-width: 100%;
+  min-width: 0;
+}
+
+.gc-records-panel-head{
+  margin-bottom: 4px;
+}
+
+.gc-records-empty{
+  margin: 0;
+  padding: 18px 4px;
+  color: var(--gc-text-soft);
+}
+
+.gc-records-list{
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.gc-records-row{
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1.4fr) 72px minmax(0, 1.6fr);
+  gap: 10px 14px;
+  align-items: center;
+  padding: 12px 4px;
+  border-bottom: 1px solid rgba(120, 190, 255, 0.1);
+}
+
+.gc-records-row-icon{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gc-records-icon{
+  width: 32px;
+  height: 32px;
+}
+
+.gc-records-row:last-child{
+  border-bottom: none;
+}
+
+.gc-records-row:hover{
+  background: rgba(8, 16, 34, 0.42);
+}
+
+.gc-records-row--empty .gc-records-row-value{
+  color: var(--gc-text-dim);
+}
+
+.gc-records-row-label{
+  font-size: 0.88rem;
+  color: var(--gc-text);
+  min-width: 0;
+}
+
+.gc-records-row-value{
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-align: right;
+  color: var(--gc-primary-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.gc-records-row-holder{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 0.84rem;
+}
+
+.gc-records-player{
+  font-weight: 600;
+  color: var(--gc-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc-records-planet{
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  color: var(--gc-text-soft);
+}
+
+.gc-records-planet-name{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc-records-coords{
+  font-size: 0.8rem;
+  color: var(--gc-text-dim);
+}
+
+.gc-records-none{
+  color: var(--gc-text-dim);
+  font-style: italic;
+}
+
+@media (max-width: 720px){
+  .gc-records-row{
+    grid-template-columns: 36px 1fr auto;
+    grid-template-areas:
+      "icon label value"
+      "holder holder holder";
+  }
+
+  .gc-records-row-icon{ grid-area: icon; }
+  .gc-records-row-label{ grid-area: label; }
+  .gc-records-row-value{ grid-area: value; }
+  .gc-records-row-holder{ grid-area: holder; }
 }
 
 .gc-ranking-row.is-me td{

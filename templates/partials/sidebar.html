@@ -6,7 +6,7 @@
   'trader_hub_view', 'inventory_view', 'auction_house_view',
   'vote_center_view', 'galactic_politics_view', 'skilltree_view', 'premium_view', 'empire_view'
 ) %}
-{% set _admin_open = request.endpoint in ('alliance_view', 'ranking_view', 'hall_of_fame_view', 'options_view') %}
+{% set _admin_open = request.endpoint in ('alliance_view', 'ranking_view', 'hall_of_fame_view', 'records_view', 'options_view') %}
 <nav class="gc-sidebar gc-sidebar-desktop{% if _sn.full_nav %} gc-sidebar--full-nav{% else %} gc-sidebar--role-nav{% endif %}"
      id="gc-sidebar-nav"
      aria-label="Hauptnavigation"
@@ -283,6 +283,12 @@
          class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'hall_of_fame') }} {% if request.endpoint == 'hall_of_fame_view' %}active{% endif %}"
          {% if not module_in_section(_sn, 'hall_of_fame', 'administration') %}hidden{% endif %}>
         {{ T("nav_hall_of_fame", "Hall of Fame") }}
+      </a>
+      <a href="{{ url_for('records_view') }}"
+         data-nav-module="records"
+         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'records') }} {% if request.endpoint == 'records_view' %}active{% endif %}"
+         {% if not module_in_section(_sn, 'records', 'administration') %}hidden{% endif %}>
+        {{ T("nav_records", "Rekorde") }}
       </a>
       <a href="{{ url_for('options_view') }}"
          data-nav-module="options"

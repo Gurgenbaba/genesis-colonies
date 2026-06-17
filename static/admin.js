@@ -446,6 +446,23 @@
     return res;
   }
 
+  async function backfillCombatHof() {
+    const res = await adminPost("/api/admin/combat-hof/backfill", {});
+    if (res.ok) {
+      const inserted = res.inserted ?? 0;
+      notify(
+        t("admin_hof_backfill_ok", "Hall of Fame aus Kampfberichten aufgebaut.") + ` (${inserted})`,
+        "success"
+      );
+      setBalanceStatus(
+        `${t("admin_hof_backfill_ok", "Hall of Fame aus Kampfberichten aufgebaut.")} — ${inserted} ${t("admin_hof_backfill_entries", "Einträge")}`
+      );
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
   function setServerStatus(msg) {
     const host = qs("#admin-server-status");
     if (host) host.textContent = msg || "";
@@ -1752,6 +1769,7 @@
     if (act === "balance-save") return saveAdminBalance();
     if (act === "balance-preset-b") return applyBalancePresetB();
     if (act === "balance-recalculate") return recalculateAdminRankings();
+    if (act === "combat-hof-backfill") return backfillCombatHof();
     if (act === "server-save") return saveAdminServer();
     if (act === "server-resources") return applyAdminResources();
     if (act === "server-wipe") return wipeAdminUniverse();

@@ -1287,6 +1287,7 @@
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
     if (path.endsWith("/hall-of-fame")) return "hall_of_fame";
+    if (path.endsWith("/records")) return "records";
     if (path.endsWith("/messages")) return "messages";
     if (path.endsWith("/options")) return "options";
     if (path.endsWith("/galaxy")) return "galaxy";
@@ -18472,6 +18473,10 @@
         GC.openCombatReportModal({ category: "combat", metadata: meta });
       });
     });
+  };
+  GC.modules.records = function initRecordsPage() {
+    const root = document.getElementById("records-page");
+    if (!root) return;
   };
   const TECHTREE_STORAGE_KEY = "gc_techtree_collapsed";
   let techtreeMediaZoomOpen = false;

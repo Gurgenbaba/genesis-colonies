@@ -64,6 +64,8 @@ def test_sidebar_has_military_and_trading_hub_nav():
     assert "url_for('alliance_view')" in sidebar
     assert "url_for('hall_of_fame_view')" in sidebar
     assert 'data-nav-module="hall_of_fame"' in sidebar
+    assert "url_for('records_view')" in sidebar
+    assert 'data-nav-module="records"' in sidebar
     assert "gc-nav-wip-section" not in sidebar
 
 

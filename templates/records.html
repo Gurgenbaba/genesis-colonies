@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set payload = records_payload if records_payload is defined and records_payload else {'ok': false, 'groups': []} %}
+{% set groups = payload.groups if payload.groups is defined else [] %}
+
+<div class="gc-page gc-records-page" id="records-page">
+
+  <header class="section-header gc-records-header">
+    <h1 class="section-title">{{ T("records_title", "Rekorde") }}</h1>
+    <p class="section-hint hint">{{ T("records_subtitle", "Aktuelle Spitzenreiter des Universums") }}</p>
+  </header>
+
+  {% if not payload.ok %}
+  <section class="gc-panel gc-records-panel">
+    <p class="gc-records-empty">{{ T("records_unavailable", "Rekorde sind derzeit nicht verfügbar.") }}</p>
+  </section>
+  {% else %}
+  {% for group in groups %}
+  <section class="gc-panel gc-records-panel" aria-labelledby="records-group-{{ group.key }}">
+    <div class="gc-panel-header gc-records-panel-head">
+      <span class="gc-panel-title" id="records-group-{{ group.key }}">
+        {{ T(group.label_key, group.key) }}
+      </span>
+    </div>
+
+    <div class="gc-records-list" role="list">
+      {% for record in group.records %}
+      {% set _rec_icon = url_for('static', filename=record.icon) if record.icon else url_for('static', filename='img/buildings/default.png') %}
+      <article class="gc-records-row{% if not record.has_holder %} gc-records-row--empty{% endif %}" role="listitem">
+        <div class="gc-records-row-icon" aria-hidden="true">
+          <img class="gc-prog-icon gc-records-icon"
+               src="{{ _rec_icon }}"
+               alt=""
+               loading="lazy"
+               onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/buildings/default.png') }}';">
+        </div>
+        <div class="gc-records-row-label">
+          {{ T(record.label_key, record.key) }}
+        </div>
+        <div class="gc-records-row-value gc-mono" title="{{ record.value_fmt }}">
+          {{ record.value_fmt }}
+        </div>
+        <div class="gc-records-row-holder">
+          {% if record.has_holder %}
+          <span class="gc-records-player">{{ record.player_name or "—" }}</span>
+          {% if record.planet_name or record.coords %}
+          <span class="gc-records-planet">
+            {% if record.planet_name %}<span class="gc-records-planet-name">{{ record.planet_name }}</span>{% endif %}
+            {% if record.coords %}<span class="gc-records-coords gc-mono">{{ record.coords }}</span>{% endif %}
+          </span>
+          {% endif %}
+          {% else %}
+          <span class="gc-records-none">{{ T("records_no_holder", "Noch kein Rekord") }}</span>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+  {% endif %}
+
+</div>
+
+{% if payload is defined and payload %}
+<script id="records-initial-data" type="application/json">{{ payload | tojson }}</script>
+{% endif %}
+
+{% endblock %}

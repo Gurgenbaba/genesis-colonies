@@ -520,6 +520,12 @@
            {% if not mobile_drawer_shows_module(_sn, 'hall_of_fame', bottom_modules=_mb) %}hidden{% endif %}>
           {{ T("nav_hall_of_fame", "Hall of Fame") }}
         </a>
+        <a href="{{ url_for('records_view') }}"
+           data-nav-module="records"
+           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'records') }} {% if request.endpoint == 'records_view' %}active{% endif %}"
+           {% if not mobile_drawer_shows_module(_sn, 'records', bottom_modules=_mb) %}hidden{% endif %}>
+          {{ T("nav_records", "Rekorde") }}
+        </a>
         <a href="{{ url_for('options_view') }}"
            data-nav-module="options"
            class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'options') }} {% if request.endpoint == 'options_view' %}active{% endif %}"

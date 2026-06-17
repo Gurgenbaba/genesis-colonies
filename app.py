@@ -2664,6 +2664,50 @@ def api_ranking():
         return jsonify({"ok": False, "error": "ranking_unavailable"}), 500
 
 
+@app.route("/records")
+@require_login
+def records_view():
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    if player_view is None:
+        return redirect(url_for("login"))
+
+    from game.records import build_records_payload
+
+    conn = db()
+    try:
+        records_payload = build_records_payload(conn=conn)
+    finally:
+        conn.close()
+
+    return render_template(
+        "records.html",
+        player=player_view,
+        buildings=buildings,
+        energy_total=energy_total,
+        energy_used=energy_used,
+        storage_caps=storage_caps,
+        records_payload=records_payload,
+    )
+
+
+@app.route("/api/records")
+@require_login
+def api_records():
+    if _current_player_id() is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    try:
+        from game.records import build_records_payload
+
+        conn = db()
+        try:
+            payload = build_records_payload(conn=conn)
+        finally:
+            conn.close()
+        return jsonify(payload)
+    except Exception:
+        return jsonify({"ok": False, "error": "records_unavailable"}), 500
+
+
 @app.route("/hall-of-fame")
 @require_login
 def hall_of_fame_view():
@@ -2706,6 +2750,52 @@ def api_hall_of_fame():
         return jsonify(payload)
     except Exception:
         return jsonify({"ok": False, "error": "hall_of_fame_unavailable"}), 500
+
+
+@app.route("/api/admin/combat-hof/backfill", methods=["POST"])
+@require_admin_api
+def api_admin_backfill_combat_hof():
+    admin = get_current_user()
+    admin_id = int(admin["id"]) if admin else 0
+    body = request.get_json(silent=True) or {}
+    raw_limit = body.get("limit")
+    limit = None
+    if raw_limit is not None and str(raw_limit).strip() != "":
+        try:
+            limit = max(1, int(raw_limit))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "invalid_limit"}), 400
+    try:
+        from game.combat_hof import backfill_combat_hof
+
+        conn = db()
+        try:
+            result = backfill_combat_hof(limit=limit, conn=conn)
+            conn.commit()
+        finally:
+            conn.close()
+        if admin_id and result.get("ok"):
+            try:
+                from game.admin_audit import write_admin_audit
+
+                write_admin_audit(
+                    admin_id,
+                    "backfill_combat_hof",
+                    target_type="system",
+                    payload={
+                        "inserted": result.get("inserted"),
+                        "skipped_existing": result.get("skipped_existing"),
+                        "skipped_invalid": result.get("skipped_invalid"),
+                        "pruned": result.get("pruned"),
+                        "limit": limit,
+                    },
+                )
+            except Exception:
+                pass
+        status = 200 if result.get("ok") else 500
+        return jsonify(result), status
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @app.route("/api/admin/rankings/recalculate", methods=["POST"])

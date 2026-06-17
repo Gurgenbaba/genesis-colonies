@@ -82,6 +82,155 @@ def prune_hof_entries_beyond_top(*, keep: int = COMBAT_HOF_RETENTION_LIMIT, conn
     return int(cur.rowcount or 0)
 
 
+def _is_backfill_combat_metadata(meta: Mapping[str, Any]) -> bool:
+    """True for attack combat inbox metadata (not logistics fleet reports)."""
+    if not meta:
+        return False
+    if meta.get("report_phase"):
+        return False
+    fleet_id = meta.get("fleet_id")
+    try:
+        if fleet_id is None or int(fleet_id) <= 0:
+            return False
+    except (TypeError, ValueError):
+        return False
+    if meta.get("report_version"):
+        return True
+    if meta.get("attacker_losses") or meta.get("defender_losses"):
+        return True
+    mission = str(meta.get("mission_type") or "").strip().lower()
+    if mission == "attack":
+        return bool(meta.get("winner") or meta.get("result") or meta.get("rounds_fought"))
+    return False
+
+
+def _hof_payload_from_combat_metadata(meta: Mapping[str, Any]) -> Dict[str, Any] | None:
+    """Map stored combat report metadata to ``record_hof_battle`` kwargs (no combat re-sim)."""
+    from .combat import calculate_combat_debris
+    from .messages import normalize_combat_metadata
+
+    norm = normalize_combat_metadata(dict(meta))
+    if not _is_backfill_combat_metadata(norm):
+        return None
+
+    atk_losses = dict(norm.get("attacker_losses") or {})
+    def_losses = dict(norm.get("defender_losses") or {})
+    debris_m, debris_c = calculate_combat_debris(atk_losses, def_losses)
+    winner = str(norm.get("winner") or norm.get("result") or "")
+    rounds = int(norm.get("rounds_fought") or len(norm.get("rounds") or []))
+
+    target_planet_id = norm.get("defender_planet_id") or norm.get("target_planet_id")
+    try:
+        target_planet_id = int(target_planet_id) if target_planet_id else None
+    except (TypeError, ValueError):
+        target_planet_id = None
+
+    return {
+        "fleet_id": int(norm["fleet_id"]),
+        "attacker_player_id": int(norm.get("attacker_id") or 0),
+        "defender_player_id": int(norm.get("defender_id") or 0),
+        "attacker_name": str(norm.get("attacker_name") or ""),
+        "defender_name": str(norm.get("defender_name") or ""),
+        "target_planet_id": target_planet_id,
+        "target_name": str(norm.get("target_planet_name") or ""),
+        "target_coords": str(norm.get("target_coords") or ""),
+        "winner": winner,
+        "rounds": rounds,
+        "attacker_losses": atk_losses,
+        "defender_losses": def_losses,
+        "loot": dict(norm.get("loot") or {}),
+        "debris": {"metal": int(debris_m), "crystal": int(debris_c)},
+        "report_metadata": norm,
+    }
+
+
+def backfill_combat_hof(*, limit: int | None = None, conn) -> Dict[str, Any]:
+    """
+    Import historical attack combat reports from ``player_messages`` into HoF storage.
+
+    Uses inbox ``metadata_json`` only — no combat resolver re-run. One row per ``fleet_id``
+    (attacker perspective preferred when duplicate inbox copies exist). Prunes to top 250 after.
+    """
+    from .messages import _table_ready as messages_ready
+
+    if not hof_schema_ready(conn):
+        return {"ok": False, "error": "hof_schema_missing", "inserted": 0}
+    if not messages_ready(conn):
+        return {"ok": False, "error": "messages_schema_missing", "inserted": 0}
+
+    cur = conn.cursor()
+    cur.execute(f"SELECT fleet_id FROM {COMBAT_HOF_TABLE};")
+    existing_fleet_ids = {int(row["fleet_id"]) for row in cur.fetchall()}
+
+    cur.execute(
+        """
+        SELECT id, metadata_json, created_at
+        FROM player_messages
+        WHERE category = 'combat'
+          AND (deleted_at IS NULL OR deleted_at = 0)
+          AND json_extract(metadata_json, '$.fleet_id') IS NOT NULL
+          AND json_extract(metadata_json, '$.report_phase') IS NULL
+        ORDER BY
+          CAST(json_extract(metadata_json, '$.fleet_id') AS INTEGER) ASC,
+          CASE WHEN json_extract(metadata_json, '$.perspective') = 'attacker' THEN 0 ELSE 1 END ASC,
+          created_at ASC,
+          id ASC;
+        """
+    )
+
+    seen_fleet_ids: set[int] = set()
+    inserted = 0
+    skipped_existing = 0
+    skipped_invalid = 0
+    scanned = 0
+    max_candidates = int(limit) if limit is not None else None
+
+    for row in cur.fetchall():
+        if max_candidates is not None and len(seen_fleet_ids) >= max_candidates:
+            break
+        scanned += 1
+        meta = _json_loads(row["metadata_json"])
+        fleet_raw = meta.get("fleet_id")
+        try:
+            fleet_id = int(fleet_raw)
+        except (TypeError, ValueError):
+            skipped_invalid += 1
+            continue
+        if fleet_id in seen_fleet_ids:
+            continue
+        seen_fleet_ids.add(fleet_id)
+
+        if fleet_id in existing_fleet_ids:
+            skipped_existing += 1
+            continue
+
+        payload = _hof_payload_from_combat_metadata(meta)
+        if payload is None:
+            skipped_invalid += 1
+            continue
+
+        created_at = int(row["created_at"] or 0) or None
+        if record_hof_battle(
+            **payload,
+            created_at=created_at,
+            conn=conn,
+            prune=False,
+        ):
+            inserted += 1
+            existing_fleet_ids.add(fleet_id)
+
+    pruned = prune_hof_entries_beyond_top(conn=conn) if inserted else 0
+    return {
+        "ok": True,
+        "inserted": inserted,
+        "skipped_existing": skipped_existing,
+        "skipped_invalid": skipped_invalid,
+        "scanned": scanned,
+        "candidates": len(seen_fleet_ids),
+        "pruned": pruned,
+    }
+
+
 def record_hof_battle(
     *,
     fleet_id: int,
@@ -100,6 +249,7 @@ def record_hof_battle(
     debris: Mapping[str, int] | None = None,
     report_metadata: Mapping[str, Any] | None = None,
     created_at: int | None = None,
+    prune: bool = True,
     conn,
 ) -> bool:
     """
@@ -160,7 +310,7 @@ def record_hof_battle(
         ),
     )
     inserted = cur.rowcount > 0
-    if inserted:
+    if inserted and prune:
         prune_hof_entries_beyond_top(conn=conn)
     return inserted
 

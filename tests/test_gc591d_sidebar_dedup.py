@@ -93,7 +93,7 @@ def test_homeworld_no_overflow_duplicates():
 def test_homeworld_verwaltung_only_utility_modules():
     nav = resolve_sidebar_nav(empire_role_key="homeworld", is_homeworld=True)
     admin_modules = [m for m in visible_sidebar_modules(nav) if module_in_section(nav, m, "administration")]
-    assert set(admin_modules) == {"alliance", "ranking", "hall_of_fame", "options"}
+    assert set(admin_modules) == {"alliance", "ranking", "hall_of_fame", "records", "options"}
 
 
 def test_homeworld_messages_standalone_shortcut():
