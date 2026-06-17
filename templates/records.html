@@ -44,10 +44,9 @@
         <div class="gc-records-row-holder">
           {% if record.has_holder %}
           <span class="gc-records-player">{{ record.player_name or "—" }}</span>
-          {% if record.planet_name or record.coords %}
+          {% if record.planet_name %}
           <span class="gc-records-planet">
-            {% if record.planet_name %}<span class="gc-records-planet-name">{{ record.planet_name }}</span>{% endif %}
-            {% if record.coords %}<span class="gc-records-coords gc-mono">{{ record.coords }}</span>{% endif %}
+            <span class="gc-records-planet-name">{{ record.planet_name }}</span>
           </span>
           {% endif %}
           {% else %}
