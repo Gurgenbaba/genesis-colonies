@@ -4,38 +4,25 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from .buildings import BUILDING_ORDER
 from .db import table_exists
 from .galaxy import format_coordinates
 from .models import BUILDING_KEYS
 from .number_format import fmt_int
 from .research import RESEARCH_TECHS
 
-RECORD_BUILDING_KEYS: Tuple[str, ...] = (
-    "metal_mine",
-    "crystal_mine",
-    "research_lab",
-    "orbital_shipyard",
-    "defense_factory",
-)
+RECORD_BUILDING_KEYS: Tuple[str, ...] = tuple(BUILDING_ORDER)
 
 EMPIRE_RECORD_KEYS: Tuple[Tuple[str, str], ...] = (
     ("planet_level", "records_empire_planet_level"),
     ("colonies", "records_empire_colonies"),
 )
 
-MILITARY_RECORD_KEYS: Tuple[Tuple[str, str], ...] = (
-    ("defense_units", "records_military_defense_units"),
-)
-
 RECORD_ICON_DEFAULT = "img/buildings/default.png"
 
 RECORD_EMPIRE_ICONS: Dict[str, str] = {
     "planet_level": "img/evo/specialization.png",
-    "colonies": "img/ships/seed_ark.png",
-}
-
-RECORD_MILITARY_ICONS: Dict[str, str] = {
-    "defense_units": "img/defense/sentinel_turret.png",
+    "colonies": "img/buildings/command_center.png",
 }
 
 
@@ -50,8 +37,6 @@ def record_icon(*, group: str, key: str) -> str:
         return f"img/research/{icon_file}"
     if group == "empire":
         return RECORD_EMPIRE_ICONS.get(key, RECORD_ICON_DEFAULT)
-    if group == "military":
-        return RECORD_MILITARY_ICONS.get(key, RECORD_ICON_DEFAULT)
     return RECORD_ICON_DEFAULT
 
 
@@ -288,52 +273,6 @@ def _top_colonies_record(conn) -> Dict[str, Any]:
     )
 
 
-def _top_defense_units_record(conn) -> Dict[str, Any]:
-    if not table_exists(conn, "planet_defense"):
-        return _empty_record(
-            key="defense_units",
-            label_key="records_military_defense_units",
-            group="military",
-        )
-
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT
-            pd.planet_id,
-            SUM(pd.amount) AS value,
-            p.name AS planet_name,
-            p.galaxy,
-            p.system,
-            p.position,
-            p.player_id,
-            pl.name AS player_name
-        FROM planet_defense pd
-        INNER JOIN planets p ON p.id = pd.planet_id
-        INNER JOIN players pl ON pl.id = p.player_id
-        GROUP BY pd.planet_id
-        HAVING value = (
-            SELECT MAX(stock_total) FROM (
-                SELECT SUM(amount) AS stock_total
-                FROM planet_defense
-                GROUP BY planet_id
-            )
-        )
-        ORDER BY value DESC, pd.planet_id ASC
-        LIMIT 1;
-        """
-    )
-    row = cur.fetchone()
-    value = int(row["value"] or 0) if row else 0
-    return _record_from_planet_row(
-        key="defense_units",
-        label_key="records_military_defense_units",
-        group="military",
-        row=row,
-        value=value,
-    )
-
-
 def _group_payload(
     *,
     key: str,
@@ -358,7 +297,6 @@ def build_records_payload(*, conn) -> Dict[str, Any]:
         _top_planet_level_record(conn),
         _top_colonies_record(conn),
     ]
-    military_records = [_top_defense_units_record(conn)]
 
     groups = [
         _group_payload(
@@ -375,11 +313,6 @@ def build_records_payload(*, conn) -> Dict[str, Any]:
             key="empire",
             label_key="records_group_empire",
             records=empire_records,
-        ),
-        _group_payload(
-            key="military",
-            label_key="records_group_military",
-            records=military_records,
         ),
     ]
     return {

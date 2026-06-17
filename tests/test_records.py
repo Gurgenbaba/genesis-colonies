@@ -9,7 +9,6 @@ import pytest
 from game import db as gdb
 from game.db import db
 from game.models import (
-    add_planet_defense,
     create_user,
     ensure_player_and_homeworld,
     get_planets_by_player,
@@ -17,6 +16,7 @@ from game.models import (
     save_planet_buildings,
     save_research_level,
 )
+from game.research import RESEARCH_TECHS
 from game.records import (
     RECORD_BUILDING_KEYS,
     build_records_payload,
@@ -63,13 +63,13 @@ def test_build_records_payload_structure(records_db):
     try:
         payload = build_records_payload(conn=conn)
         assert payload["ok"] is True
-        assert payload["group_count"] == 4
+        assert payload["group_count"] == 3
         keys = [g["key"] for g in payload["groups"]]
-        assert keys == ["buildings", "research", "empire", "military"]
+        assert keys == ["buildings", "research", "empire"]
         building_group = payload["groups"][0]
         assert len(building_group["records"]) == len(RECORD_BUILDING_KEYS)
         research_group = payload["groups"][1]
-        assert len(research_group["records"]) >= 10
+        assert len(research_group["records"]) == len(RESEARCH_TECHS)
     finally:
         conn.close()
 
@@ -175,25 +175,6 @@ def test_empire_colonies_record(records_db):
         assert rec["has_holder"] is True
         assert rec["value"] == 3
         assert rec["player_id"] == uid
-    finally:
-        conn.close()
-
-
-def test_military_defense_units_record(records_db):
-    uid_a, pid_a = _player("def_a")
-    uid_b, pid_b = _player("def_b")
-    conn = db()
-    try:
-        add_planet_defense(pid_a, {"sentinel_turret": 4}, conn=conn)
-        add_planet_defense(pid_b, {"sentinel_turret": 12}, conn=conn)
-        conn.commit()
-
-        payload = build_records_payload(conn=conn)
-        rec = _record_by_key(payload, "military", "defense_units")
-        assert rec["has_holder"] is True
-        assert rec["value"] == 12
-        assert rec["player_id"] == uid_b
-        assert rec["planet_id"] == pid_b
     finally:
         conn.close()
 
