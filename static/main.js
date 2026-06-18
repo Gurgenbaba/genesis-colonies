@@ -20066,12 +20066,23 @@
     const toggle = banner.querySelector("[data-motd-toggle]");
     const dismiss = banner.querySelector("[data-motd-dismiss]");
     const textEl = banner.querySelector(".motd-banner-text");
+    const titleEl = banner.querySelector(".motd-banner-title");
     if (!toggle || !textEl) return;
+
+    const bannerId = String(banner.dataset.motdId || "").trim();
+    const dismissKey = bannerId ? `gc_motd_dismiss_${bannerId}` : "gc_motd_dismiss";
+    try {
+      if (localStorage.getItem(dismissKey) === "1") {
+        banner.hidden = true;
+        return;
+      }
+    } catch (_) {}
 
     const syncExpandable = () => {
       const raw = (textEl.textContent || "").trim();
+      const titleRaw = (titleEl?.textContent || "").trim();
       const truncated = textEl.scrollWidth > textEl.clientWidth + 1;
-      const expandable = truncated || raw.includes("\n") || raw.length > 72;
+      const expandable = truncated || raw.includes("\n") || raw.length > 72 || !!titleRaw;
       banner.classList.toggle("motd-banner--expandable", expandable);
       if (!expandable) {
         banner.classList.remove("motd-banner--expanded");
@@ -20094,6 +20105,9 @@
     const onDismiss = (event) => {
       event.stopPropagation();
       banner.hidden = true;
+      try {
+        localStorage.setItem(dismissKey, "1");
+      } catch (_) {}
     };
 
     const onResize = () => syncExpandable();

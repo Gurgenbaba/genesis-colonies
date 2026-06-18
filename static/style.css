@@ -1647,6 +1647,124 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
   flex: 0 0 auto;
   padding: 6px 10px;
 }
+.motd-banner-actions{
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.motd-banner-archive{
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.motd-banner-head{
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.motd-banner-title{
+  color: #ffe58a;
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.motd-banner--collapsed .motd-banner-head .motd-banner-text{
+  display: none;
+}
+.motd-banner--expanded .motd-banner-head .motd-banner-title{
+  white-space: normal;
+}
+
+.gc-news-page .gc-news-list{
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.gc-news-entry{
+  padding: 16px 18px;
+}
+.gc-news-entry--banner{
+  border-color: rgba(255, 196, 0, 0.45);
+  box-shadow: 0 0 0 1px rgba(255,196,0,0.12), 0 0 24px rgba(255,196,0,0.08);
+}
+.gc-news-entry-head{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.gc-news-entry-meta{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.gc-news-entry-pill{
+  padding: 3px 8px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(255, 196, 0, 0.75);
+  color: #ffe58a;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.gc-news-entry-date{
+  color: var(--gc-text-muted);
+  font-size: 0.82rem;
+}
+.gc-news-entry-title{
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--gc-text);
+}
+.gc-news-entry-body{
+  color: var(--gc-text-soft);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  white-space: pre-line;
+}
+.gc-news-empty{
+  margin: 0;
+  color: var(--gc-text-muted);
+}
+
+.admin-news-list{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0 16px;
+}
+.admin-news-row{
+  padding: 12px 14px;
+  border: 1px solid rgba(70, 229, 255, 0.14);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(4, 10, 24, 0.55);
+}
+.admin-news-row-head{
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.admin-news-row-body{
+  color: var(--gc-text-soft);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin-bottom: 10px;
+}
+.admin-news-badge{
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(255, 196, 0, 0.65);
+  color: #ffe58a;
+  font-size: 0.72rem;
+}
 
 /* =========================
    9) Grids

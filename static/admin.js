@@ -178,6 +178,10 @@
     return adminApi(url, { method: "POST", body: body || {} });
   }
 
+  function adminDelete(url) {
+    return adminApi(url, { method: "DELETE" });
+  }
+
   function setBusy(btn, busy) {
     if (!btn) return;
     btn.disabled = !!busy;
@@ -474,11 +478,98 @@
     if (un) un.value = settings.universe_name || "";
     const gc = qs("#galaxy_count");
     if (gc) gc.value = settings.galaxy_count != null ? settings.galaxy_count : 1;
-    const motd = qs("#motd_text");
-    if (motd) motd.value = settings.motd_text || "";
     const motdOn = qs("#motd_enabled");
     if (motdOn) motdOn.checked = !!settings.motd_enabled;
     updateAdminHeaderKpis(settings);
+  }
+
+  function renderAdminNewsList(entries) {
+    const host = qs("#admin-news-list");
+    if (!host) return;
+    const rows = Array.isArray(entries) ? entries : [];
+    if (!rows.length) {
+      host.innerHTML = `<p class="admin-small-hint">${esc(t("admin_news_empty", "Noch keine News-Einträge."))}</p>`;
+      return;
+    }
+    host.innerHTML = rows.map((entry) => {
+      const bannerBadge = entry.is_banner
+        ? `<span class="admin-news-badge">${esc(t("news_live_badge", "Aktuell"))}</span>`
+        : "";
+      const preview = esc(String(entry.body || "").slice(0, 140)).replace(/\n/g, "<br>");
+      return `
+        <article class="admin-news-row" data-news-id="${Number(entry.id)}">
+          <div class="admin-news-row-head">
+            <div>
+              <strong>${esc(entry.title || "Update")}</strong>
+              ${bannerBadge}
+            </div>
+            <span class="admin-small-hint gc-mono">${esc(entry.published_label || "")}</span>
+          </div>
+          <div class="admin-news-row-body">${preview}${String(entry.body || "").length > 140 ? "…" : ""}</div>
+          <div class="admin-btn-row">
+            <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-set-banner" data-news-id="${Number(entry.id)}">
+              ${esc(t("admin_news_set_banner", "Als Banner setzen"))}
+            </button>
+            <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="news-delete" data-news-id="${Number(entry.id)}">
+              ${esc(t("admin_news_delete", "Löschen"))}
+            </button>
+          </div>
+        </article>`;
+    }).join("");
+  }
+
+  async function loadAdminNews() {
+    const data = await adminGet("/api/admin/universe-news");
+    if (!data.ok) {
+      showAlert(data.message || data.error, "error");
+      return data;
+    }
+    renderAdminNewsList(data.entries || []);
+    return data;
+  }
+
+  async function publishAdminNews() {
+    const title = (qs("#admin_news_title")?.value || "").trim();
+    const body = (qs("#admin_news_body")?.value || "").trim();
+    if (!body) {
+      showAlert(t("admin_news_body_required", "Bitte News-Text eingeben."), "error");
+      return { ok: false };
+    }
+    const res = await adminPost("/api/admin/universe-news", {
+      title,
+      body,
+      set_banner: 1,
+    });
+    if (res.ok) {
+      notify(t("admin_news_published", "News veröffentlicht."), "success");
+      if (qs("#admin_news_body")) qs("#admin_news_body").value = "";
+      await loadAdminNews();
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  async function setAdminNewsBanner(newsId) {
+    const res = await adminPost(`/api/admin/universe-news/${Number(newsId)}/banner`, {});
+    if (res.ok) {
+      notify(t("admin_news_banner_set", "Banner aktualisiert."), "success");
+      await loadAdminNews();
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  async function deleteAdminNews(newsId) {
+    const res = await adminDelete(`/api/admin/universe-news/${Number(newsId)}`);
+    if (res.ok) {
+      notify(t("admin_news_deleted", "News gelöscht."), "success");
+      await loadAdminNews();
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
   }
 
   function updateAdminHeaderKpis(settings) {
@@ -503,7 +594,6 @@
     return {
       universe_name: (qs("#universe_name")?.value || "").trim(),
       galaxy_count: parseInt(qs("#galaxy_count")?.value, 10) || 1,
-      motd_text: (qs("#motd_text")?.value || "").trim(),
       motd_enabled: qs("#motd_enabled")?.checked ? 1 : 0,
     };
   }
@@ -516,6 +606,7 @@
       return data;
     }
     populateServerForm(data.settings || {});
+    await loadAdminNews();
     return data;
   }
 
@@ -1771,6 +1862,9 @@
     if (act === "balance-recalculate") return recalculateAdminRankings();
     if (act === "combat-hof-backfill") return backfillCombatHof();
     if (act === "server-save") return saveAdminServer();
+    if (act === "news-publish") return publishAdminNews();
+    if (act === "news-set-banner") return setAdminNewsBanner(btn.dataset.newsId);
+    if (act === "news-delete") return deleteAdminNews(btn.dataset.newsId);
     if (act === "server-resources") return applyAdminResources();
     if (act === "server-wipe") return wipeAdminUniverse();
     if (act === "run-queue-tick") return runQueueTick(btn);

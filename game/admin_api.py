@@ -1266,6 +1266,59 @@ def api_apply_balance_preset_b(admin_id: int) -> Dict[str, Any]:
 # Server settings, resources, wipe, bans (Admin → Server tab)
 # ---------------------------------------------------------------------------
 
+def api_get_universe_news() -> Dict[str, Any]:
+    from game.universe_news import list_news
+
+    return _ok(entries=list_news(limit=100))
+
+
+def api_create_universe_news(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.universe_news import create_news
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+    title = str(body.get("title") or "").strip()
+    text = str(body.get("body") or "").strip()
+    if not text:
+        return _err("body_required", "News body is required")
+    set_banner = body.get("set_banner") not in (False, 0, "0", "false")
+    try:
+        entry = create_news(title=title, body=text, set_banner=set_banner, created_by=int(admin_id))
+    except ValueError:
+        return _err("body_required", "News body is required")
+    audit(
+        int(admin_id),
+        "universe_news_create",
+        target_type="system",
+        payload={"news_id": entry["id"], "title": entry["title"]},
+    )
+    return _ok(entry=entry)
+
+
+def api_set_universe_news_banner(admin_id: int, news_id: int) -> Dict[str, Any]:
+    from game.universe_news import set_banner
+
+    entry = set_banner(int(news_id))
+    if not entry:
+        return _err("not_found", "News entry not found")
+    audit(
+        int(admin_id),
+        "universe_news_banner",
+        target_type="system",
+        payload={"news_id": entry["id"]},
+    )
+    return _ok(entry=entry)
+
+
+def api_delete_universe_news(admin_id: int, news_id: int) -> Dict[str, Any]:
+    from game.universe_news import delete_news
+
+    if not delete_news(int(news_id)):
+        return _err("not_found", "News entry not found")
+    audit(int(admin_id), "universe_news_delete", target_type="system", payload={"news_id": int(news_id)})
+    return _ok(deleted=True)
+
+
 def api_get_server_settings() -> Dict[str, Any]:
     from game.admin import get_admin_settings
 

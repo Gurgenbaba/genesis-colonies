@@ -285,6 +285,7 @@ def inject_globals():
     settings: dict[str, Any] = {}
     motd_enabled = False
     motd_text = ""
+    motd_banner: dict[str, Any] | None = None
 
     player_stats: dict[str, int] = {}
 
@@ -309,14 +310,21 @@ def inject_globals():
     except Exception:
         settings = {}
 
-    # motd (safe)
+    # motd / universe news (safe)
     try:
         raw_motd_enabled = settings.get("motd_enabled", "0")
         motd_enabled = str(raw_motd_enabled) in ("1", "true", "True", "yes", "on")
-        motd_text = (settings.get("motd_text", "") or "").strip()
+        from game.universe_news import get_banner_entry
+
+        motd_banner = get_banner_entry()
+        if motd_banner:
+            motd_text = motd_banner.get("body") or ""
+        else:
+            motd_text = (settings.get("motd_text", "") or "").strip()
     except Exception:
         motd_enabled = False
         motd_text = ""
+        motd_banner = None
 
     # stats (safe)
     try:
@@ -415,6 +423,7 @@ def inject_globals():
         GAME_SETTINGS=settings,
         motd_enabled=motd_enabled,
         motd_text=motd_text,
+        motd_banner=motd_banner,
 
         PLAYER_STATS=player_stats,
 
@@ -2877,6 +2886,41 @@ def records_view():
     )
 
 
+@app.route("/news")
+@require_login
+def news_view():
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    if player_view is None:
+        return redirect(url_for("login"))
+
+    from game.universe_news import news_page_payload
+
+    news_payload = news_page_payload()
+
+    return render_template(
+        "news.html",
+        player=player_view,
+        buildings=buildings,
+        energy_total=energy_total,
+        energy_used=energy_used,
+        storage_caps=storage_caps,
+        news_payload=news_payload,
+    )
+
+
+@app.route("/api/news")
+@require_login
+def api_news():
+    if _current_player_id() is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    try:
+        from game.universe_news import news_page_payload
+
+        return jsonify(news_page_payload())
+    except Exception:
+        return jsonify({"ok": False, "error": "news_unavailable"}), 500
+
+
 @app.route("/api/records")
 @require_login
 def api_records():
@@ -3041,6 +3085,30 @@ def api_admin_server_get():
 @require_admin_api
 def api_admin_server_save():
     return _admin_json(admin_api_logic.api_save_server_settings(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/universe-news", methods=["GET"])
+@require_admin_api
+def api_admin_universe_news_list():
+    return _admin_json(admin_api_logic.api_get_universe_news())
+
+
+@app.route("/api/admin/universe-news", methods=["POST"])
+@require_admin_api
+def api_admin_universe_news_create():
+    return _admin_json(admin_api_logic.api_create_universe_news(_admin_actor_id(), _admin_body()))
+
+
+@app.route("/api/admin/universe-news/<int:news_id>/banner", methods=["POST"])
+@require_admin_api
+def api_admin_universe_news_banner(news_id: int):
+    return _admin_json(admin_api_logic.api_set_universe_news_banner(_admin_actor_id(), news_id))
+
+
+@app.route("/api/admin/universe-news/<int:news_id>", methods=["DELETE"])
+@require_admin_api
+def api_admin_universe_news_delete(news_id: int):
+    return _admin_json(admin_api_logic.api_delete_universe_news(_admin_actor_id(), news_id))
 
 
 @app.route("/api/admin/resources", methods=["POST"])

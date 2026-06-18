@@ -21,6 +21,7 @@
 {% set WIP_ENDPOINTS = ['alliance_view'] %}
 {% set _motd_enabled = (motd_enabled if motd_enabled is defined else False) %}
 {% set _motd_text = (motd_text if motd_text is defined else "") %}
+{% set _motd_banner = motd_banner if motd_banner is defined else none %}
 {% set _player_stats = (PLAYER_STATS if PLAYER_STATS is defined and PLAYER_STATS else {}) %}
 
 <body class="gc-body gc-theme-dark gc-perf-idle {{ body_bg|default('') }} {% if SIMPLE_LAYOUT %}gc-body-simple{% else %}gc-body-ingame{% endif %}{% if current_planet_landscape_url %} gc-has-planet-landscape{% endif %}"
@@ -264,10 +265,11 @@
         </div>
       {% endif %}
 
-      {% if not SIMPLE_LAYOUT and request.endpoint != 'admin_panel' and _motd_enabled and _motd_text %}
+      {% if not SIMPLE_LAYOUT and request.endpoint != 'admin_panel' and _motd_enabled and (_motd_banner or _motd_text) %}
         <div class="motd-banner motd-banner--collapsed"
              id="gc-motd"
              data-motd-banner
+             {% if _motd_banner %}data-motd-id="{{ _motd_banner.id }}"{% endif %}
              role="region"
              aria-label="{{ T('motd', 'Meldung') }}">
           <button type="button"
@@ -276,16 +278,28 @@
                   aria-expanded="false"
                   aria-controls="gc-motd-text">
             <span class="motd-banner-pill" aria-hidden="true">NEWS</span>
-            <span class="motd-banner-text" id="gc-motd-text">{{ _motd_text | e }}</span>
+            <span class="motd-banner-head">
+              {% if _motd_banner and _motd_banner.title %}
+              <span class="motd-banner-title">{{ _motd_banner.title | e }}</span>
+              {% endif %}
+              <span class="motd-banner-text" id="gc-motd-text">{{ (_motd_banner.body if _motd_banner else _motd_text) | e }}</span>
+            </span>
             <span class="motd-banner-chevron" aria-hidden="true"></span>
           </button>
 
-          <button class="gc-btn gc-btn-ghost motd-banner-close"
-                  type="button"
-                  data-motd-dismiss
-                  aria-label="{{ T('motd_dismiss', 'Meldung ausblenden') }}">
-            ✕
-          </button>
+          <div class="motd-banner-actions">
+            <a href="{{ url_for('news_view') }}"
+               class="gc-btn gc-btn-ghost motd-banner-archive"
+               data-pjax-link>
+              {{ T("news_archive_link", "Archiv") }}
+            </a>
+            <button class="gc-btn gc-btn-ghost motd-banner-close"
+                    type="button"
+                    data-motd-dismiss
+                    aria-label="{{ T('motd_dismiss', 'Meldung ausblenden') }}">
+              ✕
+            </button>
+          </div>
         </div>
       {% endif %}
 

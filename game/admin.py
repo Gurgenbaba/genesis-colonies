@@ -185,11 +185,9 @@ def update_admin_settings(form: Dict[str, Any]) -> None:
     if gal_count is not None and gal_count > 0:
         new_settings["galaxy_count"] = gal_count
 
-    motd_text = str(form.get("motd_text") or "").strip()
     motd_enabled_raw = form.get("motd_enabled")
-    motd_enabled = motd_enabled_raw in (True, 1, "1", "true", "on") and bool(motd_text)
+    motd_enabled = motd_enabled_raw in (True, 1, "1", "true", "on")
 
-    new_settings["motd_text"] = motd_text
     new_settings["motd_enabled"] = 1 if motd_enabled else 0
 
     save_game_settings(new_settings)

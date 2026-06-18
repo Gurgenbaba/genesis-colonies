@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set payload = news_payload if news_payload is defined and news_payload else {'ok': false, 'entries': []} %}
+{% set entries = payload.entries if payload.entries is defined else [] %}
+
+<div class="gc-page gc-news-page" id="news-page">
+
+  <header class="section-header gc-news-header">
+    <h1 class="section-title">{{ T("news_title", "Universums-News") }}</h1>
+    <p class="section-hint hint">{{ T("news_subtitle", "Patchnotes, Updates und Ankündigungen") }}</p>
+  </header>
+
+  {% if not payload.ok or not entries %}
+  <section class="gc-panel gc-news-panel">
+    <p class="gc-news-empty">{{ T("news_empty", "Noch keine News veröffentlicht.") }}</p>
+  </section>
+  {% else %}
+  <div class="gc-news-list">
+    {% for entry in entries %}
+    <article class="gc-panel gc-news-entry{% if entry.is_banner %} gc-news-entry--banner{% endif %}"
+             id="news-entry-{{ entry.id }}">
+      <header class="gc-news-entry-head">
+        <div class="gc-news-entry-meta">
+          {% if entry.is_banner %}
+          <span class="gc-news-entry-pill">{{ T("news_live_badge", "Aktuell") }}</span>
+          {% endif %}
+          <time class="gc-news-entry-date gc-mono" datetime="{{ entry.published_at }}">
+            {{ entry.published_label }}
+          </time>
+        </div>
+        <h2 class="gc-news-entry-title">{{ entry.title }}</h2>
+      </header>
+      <div class="gc-news-entry-body">{{ entry.body }}</div>
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

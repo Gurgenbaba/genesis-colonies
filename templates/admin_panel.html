@@ -621,20 +621,35 @@
         <span class="admin-section-title-text">{{ T("admin_section_motd", "Universums-Meldung (MOTD)") }}</span>
       </div>
       <section class="admin-section">
-        <div class="admin-row">
-          <div class="admin-field admin-field-wide">
-            <label class="admin-label" for="motd_text">{{ T("admin_motd_label", "Anzeige-Text im Spiel") }}</label>
-            <span class="admin-small-hint">{{ T("admin_motd_hint") }}</span>
-            <textarea class="admin-textarea" id="motd_text"
-                      placeholder="Kurze Info, z. B. Server-News, Wartung, Events...">{{ (settings.motd_text if settings and settings.motd_text is defined else "") }}</textarea>
-          </div>
-        </div>
         <div class="admin-row-full">
           <label class="admin-checkbox-row" for="motd_enabled">
             <input type="checkbox" id="motd_enabled" value="1"
                    {% if settings and settings.motd_enabled is defined and settings.motd_enabled %}checked{% endif %}>
             <span>{{ T("admin_motd_enabled_label", "MOTD aktuell aktiv anzeigen") }}</span>
           </label>
+        </div>
+        <p class="admin-small-hint">{{ T("admin_news_hint", "News-Einträge bleiben im Archiv sichtbar. Nur ein Eintrag ist gleichzeitig Live-Banner.") }}</p>
+
+        <div id="admin-news-list" class="admin-news-list" aria-live="polite"></div>
+
+        <div class="admin-row admin-news-form">
+          <div class="admin-field admin-field-wide">
+            <label class="admin-label" for="admin_news_title">{{ T("admin_news_title_label", "Titel") }}</label>
+            <input class="admin-input" id="admin_news_title" type="text"
+                   maxlength="200"
+                   placeholder="{{ T('admin_news_title_placeholder', 'Update 18.06.2026 — Patchnotes') }}">
+          </div>
+          <div class="admin-field admin-field-wide">
+            <label class="admin-label" for="admin_news_body">{{ T("admin_motd_label", "Anzeige-Text") }}</label>
+            <span class="admin-small-hint">{{ T("admin_motd_hint") }}</span>
+            <textarea class="admin-textarea" id="admin_news_body" rows="8"
+                      placeholder="Kurze Info, z. B. Server-News, Wartung, Events..."></textarea>
+          </div>
+        </div>
+        <div class="admin-btn-row">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="news-publish">
+            {{ T("admin_news_publish", "Veröffentlichen & als Banner setzen") }}
+          </button>
         </div>
       </section>
 
