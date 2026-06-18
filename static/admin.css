@@ -702,6 +702,49 @@
   margin-bottom: 10px;
 }
 
+.admin-shell .admin-messages-broadcast {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.admin-shell .admin-messages-broadcast .admin-input,
+.admin-shell .admin-messages-broadcast .admin-textarea {
+  margin-bottom: 0;
+  width: 100%;
+}
+
+.admin-shell .admin-messages-broadcast .admin-row-full {
+  margin: 0;
+}
+
+.admin-shell .admin-messages-broadcast .admin-btn-row {
+  margin-top: 2px;
+}
+
+.admin-shell .admin-messages-collapse {
+  margin-top: 10px;
+  border-top: 1px solid rgba(120, 190, 255, 0.18);
+  padding-top: 10px;
+}
+
+.admin-shell .admin-messages-collapse-btn {
+  width: 100%;
+  justify-content: center;
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+}
+
+.admin-shell .admin-messages-collapse-body {
+  margin-top: 8px;
+}
+
+.admin-shell .admin-messages-collapse-body[hidden] {
+  display: none !important;
+}
+
 .admin-shell .admin-support-detail,
 .admin-shell .admin-detail {
   min-height: 200px;

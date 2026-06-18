@@ -17,6 +17,7 @@ from game.galactic_diplomacy import (
     EMERGENCY_KEYS,
     PERSONALITY_KEYS,
     RESOLUTION_KEYS,
+    build_galactic_diplomacy_banner,
     clear_active_emergency,
     clear_active_resolution,
     clear_alliance_bloc,
@@ -533,3 +534,65 @@ def test_get_galaxy_diplomacy_mechanics_invalid_galaxy_no_crash(gdp_db):
     assert payload["galaxy"] == 0
     assert payload["mechanics"] == {}
     assert payload["sources"] == []
+
+
+def test_build_galactic_diplomacy_banner_empty_when_no_layers(gdp_db):
+    banner = build_galactic_diplomacy_banner(1)
+    assert banner["visible"] is False
+
+
+def test_build_galactic_diplomacy_banner_personality_only(gdp_db):
+    conn = db()
+    try:
+        set_galaxy_personality(1, "academia_prime", conn=conn)
+        banner = build_galactic_diplomacy_banner(1, conn=conn)
+        assert banner["visible"] is True
+        assert banner["galaxy"] == 1
+        assert banner["personality"]["key"] == "academia_prime"
+        assert banner["personality"]["label_key"] == "gdp_trait_academia_prime_title"
+        assert banner["resolution"] is None
+        assert banner["emergency"] is None
+        assert len(banner["chips"]) == 1
+        assert banner["description_key"] == "gdp_trait_academia_prime_desc"
+    finally:
+        conn.close()
+
+
+def test_build_galactic_diplomacy_banner_all_layers(gdp_db):
+    conn = db()
+    try:
+        set_galaxy_personality(1, "forge_of_war", conn=conn)
+        set_active_resolution(1, "gate_control", conn=conn)
+        set_active_emergency(1, "galaxy_war", conn=conn)
+
+        banner = build_galactic_diplomacy_banner(1, conn=conn)
+        assert banner["visible"] is True
+        assert banner["personality"]["key"] == "forge_of_war"
+        assert banner["resolution"]["key"] == "gate_control"
+        assert banner["emergency"]["key"] == "galaxy_war"
+        assert [c["type"] for c in banner["chips"]] == [
+            "personality",
+            "resolution",
+            "emergency",
+        ]
+        assert banner["description_key"] == "gdp_emergency_galaxy_war_desc"
+    finally:
+        conn.close()
+
+
+def test_build_galactic_diplomacy_banner_emergency_only(gdp_db):
+    conn = db()
+    try:
+        set_active_emergency(2, "hyperstorm", conn=conn)
+        banner = build_galactic_diplomacy_banner(2, conn=conn)
+        assert banner["visible"] is True
+        assert banner["emergency"]["key"] == "hyperstorm"
+        assert banner["personality"] is None
+        assert banner["resolution"] is None
+    finally:
+        conn.close()
+
+
+def test_build_galactic_diplomacy_banner_invalid_galaxy(gdp_db):
+    assert build_galactic_diplomacy_banner(0)["visible"] is False
+    assert build_galactic_diplomacy_banner(99)["visible"] is False

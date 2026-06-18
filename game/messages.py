@@ -1323,3 +1323,49 @@ def admin_send_message(
         )
     finally:
         conn.close()
+
+
+SYSTEM_BROADCAST_SENDER = "Genesis Command"
+
+
+def admin_broadcast_system_message(subject: str, body: str) -> dict[str, Any]:
+    """Deliver one unread system inbox message to every player."""
+    subject_n = _norm_text(subject, SUBJECT_MAX)
+    body_n = _norm_text(body, BODY_MAX)
+    if len(subject_n) < SUBJECT_MIN or len(body_n) < BODY_MIN:
+        return _err("validation")
+
+    conn = db()
+    try:
+        if not _table_ready(conn):
+            return _err("messages_not_ready")
+
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM players ORDER BY id ASC;")
+        player_ids = [int(row["id"]) for row in cur.fetchall()]
+        if not player_ids:
+            return _err("no_players")
+
+        meta_json = json.dumps({"system_broadcast": True}, ensure_ascii=False)
+        now = _now()
+        begin_write_transaction(conn)
+        delivered = 0
+        for pid in player_ids:
+            cur.execute(
+                """
+                INSERT INTO player_messages (
+                    recipient_player_id, sender_player_id, sender_name,
+                    category, subject, body, is_read, is_archived,
+                    metadata_json, created_at
+                ) VALUES (?, NULL, ?, 'system', ?, ?, 0, 0, ?, ?);
+                """,
+                (pid, SYSTEM_BROADCAST_SENDER, subject_n, body_n, meta_json, now),
+            )
+            delivered += 1
+        commit(conn)
+        return _ok({"delivered_count": delivered})
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()

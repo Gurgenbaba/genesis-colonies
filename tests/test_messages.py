@@ -17,6 +17,7 @@ import game.db as dbmod
 import game.models as models
 from game.db import db, table_exists
 from game.messages import (
+    admin_broadcast_system_message,
     archive_message,
     bulk_update_messages,
     create_message,
@@ -34,6 +35,7 @@ from game.messages import (
     notify_player,
     notify_system,
     send_player_message,
+    SYSTEM_BROADCAST_SENDER,
     unread_count,
 )
 import json
@@ -504,6 +506,60 @@ def test_admin_messages_api(app_client, temp_db):
         sess["user_id"] = target_id
     inbox = client.get("/api/messages?category=admin").get_json()
     assert any(m["category"] == "admin" for m in inbox["data"]["messages"])
+
+
+def test_admin_broadcast_system_message(app_client, temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    admin_id = _create_player("broadcast_admin")
+    player_a = _create_player("broadcast_a")
+    player_b = _create_player("broadcast_b")
+    conn = db()
+    try:
+        conn.execute("UPDATE users SET is_admin = 1 WHERE id = ?;", (admin_id,))
+        conn.execute("UPDATE players SET is_admin = 1 WHERE id = ?;", (admin_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    _close_db()
+
+    res = admin_broadcast_system_message("Server Update", "Maintenance complete.")
+    assert res["ok"]
+    delivered = int(res["data"]["delivered_count"])
+    assert delivered >= 3
+
+    for pid in (admin_id, player_a, player_b):
+        listed = list_messages(pid, category="system")
+        assert listed["ok"]
+        msgs = listed["data"]["messages"]
+        hit = next(m for m in msgs if m["subject"] == "Server Update")
+        assert hit["category"] == "system"
+        assert hit["sender_name"] == SYSTEM_BROADCAST_SENDER
+        assert hit["is_read"] is False
+        assert unread_count(pid) >= 1
+
+    client = app_client
+    with client.session_transaction() as sess:
+        sess["user_id"] = admin_id
+    api = client.post(
+        "/api/admin/messages/broadcast",
+        json={
+            "subject": "API Broadcast",
+            "body": "Hello universe",
+            "confirm": "SEND SYSTEM BROADCAST",
+        },
+    )
+    assert api.status_code == 200
+    payload = api.get_json()
+    assert payload["ok"]
+    assert int(payload["delivered_count"]) == delivered
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = player_a
+    inbox = client.get("/api/messages?category=system").get_json()
+    assert any(m["subject"] == "API Broadcast" for m in inbox["data"]["messages"])
 
 
 def test_notify_helpers_category_and_metadata(temp_db):

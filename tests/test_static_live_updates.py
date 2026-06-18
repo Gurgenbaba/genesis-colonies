@@ -815,6 +815,7 @@ def test_main_js_gc546e_stale_poll_unread_guard():
     assert "MESSAGES_UNREAD_LOCAL_GUARD_MS" in src
     coerce = src.split("function coercePollUnreadForHud(data, reason)")[1].split("function updateMessagesUnreadBadges")[0]
     assert "incomingUnread" in coerce
+    assert "incomingUnread > _lastMessagesUnreadPoll" in coerce
     assert 'reason || "") !== "poll"' not in coerce
     assert 'reason || "") !== "poll"' not in coerce
     merge = src.split("GC.mergeLastState = function mergeLastState")[1].split("function patchOverviewScoreFromState")[0]

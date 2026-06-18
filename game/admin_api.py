@@ -45,6 +45,7 @@ CONFIRM_PHRASES: Dict[str, str] = {
     "remove_admin": "REMOVE ADMIN",
     "ban_player": "BAN PLAYER",
     "run_migrations": "RUN MIGRATIONS",
+    "broadcast_messages": "SEND SYSTEM BROADCAST",
 }
 
 
@@ -1457,6 +1458,34 @@ def api_apply_resource_tools(admin_id: int, body: Dict[str, Any], actor_user_id:
         },
     )
     return _ok(applied=True)
+
+
+def api_broadcast_system_messages(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.messages import admin_broadcast_system_message
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+    confirm = body.get("confirm") or body.get("confirm_text")
+    if not validate_confirm("broadcast_messages", confirm):
+        return _err("confirm_required", "Type SEND SYSTEM BROADCAST to confirm.")
+    result = admin_broadcast_system_message(
+        str(body.get("subject") or ""),
+        str(body.get("body") or ""),
+    )
+    if not result.get("ok"):
+        err = str(result.get("error") or "error")
+        return _err(err, err)
+    delivered = int((result.get("data") or {}).get("delivered_count") or 0)
+    audit(
+        int(admin_id),
+        "messages_broadcast",
+        target_type="system",
+        payload={
+            "subject": str(body.get("subject") or "")[:120],
+            "delivered_count": delivered,
+        },
+    )
+    return _ok(delivered_count=delivered)
 
 
 def api_wipe_universe(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:

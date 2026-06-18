@@ -234,9 +234,16 @@
     return isChatPanelVisible() && Number(roomId) === Number(CHAT.activeRoomId);
   }
 
+  function isOwnChatMessage(msg) {
+    const sid = Number(msg?.sender_id || 0);
+    return CHAT.viewerId > 0 && sid > 0 && sid === CHAT.viewerId;
+  }
+
   function filterFreshMessages(roomId, messages) {
     const prevLast = Number(CHAT.lastMsgIdByRoom[roomId] || 0);
-    return (messages || []).filter((m) => Number(m.id) > prevLast);
+    return (messages || []).filter(
+      (m) => Number(m.id) > prevLast && !isOwnChatMessage(m)
+    );
   }
 
   function bumpLastMsgId(roomId, messages) {
@@ -250,10 +257,15 @@
   }
 
   function applyIncomingPollMessages(roomId, messages) {
-    const fresh = filterFreshMessages(roomId, messages);
+    if (!messages?.length) return;
+
+    const prevLast = Number(CHAT.lastMsgIdByRoom[roomId] || 0);
+    bumpLastMsgId(roomId, messages);
+    const fresh = (messages || []).filter(
+      (m) => Number(m.id) > prevLast && !isOwnChatMessage(m)
+    );
     if (!fresh.length) return;
 
-    bumpLastMsgId(roomId, fresh);
     const rid = String(roomId);
 
     if (isActivelyViewingRoom(roomId)) {
@@ -293,17 +305,34 @@
   }
 
   function updateFabBadge() {
-    if (!CHAT.fabBadge) return;
     const n = totalUnread();
-    if (n > 0) {
-      CHAT.fabBadge.textContent = n > 99 ? "99+" : String(n);
-      CHAT.fabBadge.hidden = false;
-      CHAT.fabBadge.removeAttribute("hidden");
-    } else {
-      CHAT.fabBadge.hidden = true;
-      CHAT.fabBadge.setAttribute("hidden", "");
-      CHAT.fabBadge.textContent = "";
+    if (CHAT.fabBadge) {
+      if (n > 0) {
+        CHAT.fabBadge.textContent = n > 99 ? "99+" : String(n);
+        CHAT.fabBadge.hidden = false;
+        CHAT.fabBadge.removeAttribute("hidden");
+      } else {
+        CHAT.fabBadge.hidden = true;
+        CHAT.fabBadge.setAttribute("hidden", "");
+        CHAT.fabBadge.textContent = "";
+      }
     }
+    document.querySelectorAll("[data-chat-launcher-badge]").forEach((badge) => {
+      const btn = badge.closest("[data-special-open-window='chat'], .gc-special-bar-btn");
+      if (n > 0) {
+        badge.textContent = n > 99 ? "99+" : String(n);
+        badge.hidden = false;
+        badge.removeAttribute("hidden");
+        badge.setAttribute("aria-hidden", "false");
+        if (btn) btn.classList.add("has-chat-unread");
+      } else {
+        badge.hidden = true;
+        badge.setAttribute("hidden", "");
+        badge.textContent = "";
+        badge.setAttribute("aria-hidden", "true");
+        if (btn) btn.classList.remove("has-chat-unread");
+      }
+    });
   }
 
   function updateNewMsgsBtn() {
@@ -915,6 +944,17 @@
     }
 
     const panelVisible = isChatPanelVisible();
+
+    if (!panelVisible) {
+      try {
+        await refreshBootstrap();
+      } catch (e) {
+        if (e?.name !== "AbortError") chatDebug("[chat] poll unread sync", e);
+      } finally {
+        schedulePoll();
+      }
+      return;
+    }
 
     const roomId = CHAT.activeRoomId;
     const after = CHAT.lastMsgIdByRoom[roomId] || 0;

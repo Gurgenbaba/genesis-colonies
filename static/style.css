@@ -11395,15 +11395,44 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   position: relative;
   z-index: 1;
 }
+.fleet-page .fleet-mission-control-panel,
+.fleet-page .fleet-send-panel.fleet-ogame-top,
+.fleet-page .fleet-target-block,
+.fleet-page .fleet-ogame-mission-row,
+.fleet-page .fleet-submit-panel,
+.logistics-page .logistics-shell{
+  overflow: visible;
+}
+.fleet-target-block{
+  position: relative;
+  z-index: 2;
+}
+.fleet-ogame-mission-row{
+  position: relative;
+  z-index: 3;
+}
+.fleet-target-inline-error{
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+}
+.fleet-target-inline-error.is-blocked{
+  color: #ff8a80;
+}
+.logistics-page--embedded .logistics-tabs{
+  display: none;
+}
+.fleet-submit-panel{
+  padding: 10px 12px;
+}
 .fleet-page .gc-hud-select.is-open{
-  z-index: 40;
+  z-index: 120;
 }
 .logistics-page .gc-hud-select.is-open{
-  z-index: 40;
+  z-index: 120;
 }
 .fleet-page .gc-hud-select-menu,
 .logistics-page .gc-hud-select-menu{
-  z-index: 50;
+  z-index: 200;
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.22);
   background: linear-gradient(180deg, rgba(8, 14, 28, 0.98), rgba(6, 10, 22, 0.96));
@@ -13474,6 +13503,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 .gc-special-bar-btn{
+  position: relative;
   min-width: 72px;
   min-height: 44px;
   padding: 6px 8px;
@@ -13490,6 +13520,35 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   letter-spacing: 0.03em;
   text-transform: uppercase;
   cursor: pointer;
+}
+
+.gc-special-bar-btn.has-chat-unread{
+  border-color: rgba(70, 229, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(70, 229, 255, 0.22), 0 0 14px rgba(70, 229, 255, 0.18);
+}
+
+.gc-chat-launcher-badge{
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  border: 1px solid rgba(70, 229, 255, 0.65);
+  background: rgba(8, 28, 48, 0.96);
+  color: #46e5ff;
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.gc-chat-launcher-badge[hidden]{
+  display: none !important;
 }
 
 .gc-special-bar-btn svg{
@@ -16572,6 +16631,87 @@ body.gc-combat-report-open { overflow: hidden; }
 .gd-chip--expansion{ border-color: rgba(127, 255, 180, 0.45); }
 .gd-banner--exploration,
 .gd-chip--exploration{ border-color: rgba(180, 140, 255, 0.45); }
+
+/* --- Galactic Diplomacy banner (GC-721I) --- */
+.gc-gdp-banner{
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--gc-panel-border-strong);
+  background: linear-gradient(
+    135deg,
+    rgba(180, 140, 255, 0.07) 0%,
+    rgba(4, 10, 22, 0.92) 55%
+  );
+}
+.gc-gdp-banner-head{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+.gc-gdp-banner-kicker{
+  margin: 0 0 0.2rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.gc-gdp-banner-title{
+  margin: 0 0 0.45rem;
+  font-size: 1rem;
+  color: rgba(180, 140, 255, 0.95);
+}
+.gc-gdp-banner-chips{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.45rem;
+}
+.gc-gdp-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(180, 140, 255, 0.28);
+  background: rgba(3, 8, 18, 0.65);
+  font-size: 0.78rem;
+}
+.gc-gdp-chip-label{
+  color: var(--gc-text-dim);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gc-gdp-chip-value{
+  font-weight: 700;
+  color: var(--gc-primary-2);
+}
+.gc-gdp-banner-desc{
+  margin: 0;
+  max-width: 42rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.gc-gdp-banner-cta{
+  flex: 0 0 auto;
+  align-self: center;
+}
+.gc-gdp-chip--personality,
+.gdp-banner--personality{ border-color: rgba(140, 180, 255, 0.45); }
+.gc-gdp-chip--resolution,
+.gdp-banner--resolution{ border-color: rgba(255, 214, 96, 0.45); }
+.gc-gdp-chip--emergency,
+.gdp-banner--emergency{
+  border-color: rgba(255, 96, 96, 0.5);
+  background: rgba(48, 8, 12, 0.55);
+}
+.gdp-banner--galaxy_war,
+.gdp-chip--emergency--galaxy_war{ border-color: rgba(255, 72, 72, 0.55); }
+.gdp-banner--alien_invasion,
+.gdp-chip--emergency--alien_invasion{ border-color: rgba(255, 120, 72, 0.55); }
+.gdp-banner--hyperstorm,
+.gdp-chip--emergency--hyperstorm{ border-color: rgba(96, 180, 255, 0.55); }
 
 /* --- Planet Evolution --- */
 .planet-evolution-page .pe-intro{

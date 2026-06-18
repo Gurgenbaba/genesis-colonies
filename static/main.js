@@ -6132,6 +6132,12 @@
     if (typeof localUnread !== "number") return data;
     const incomingUnread = data.unread_messages_count;
     if (incomingUnread <= localUnread) return data;
+    if (
+      _lastMessagesUnreadPoll !== null
+      && incomingUnread > _lastMessagesUnreadPoll
+    ) {
+      return data;
+    }
     if (_messagesUnreadLocalAt && Date.now() - _messagesUnreadLocalAt < MESSAGES_UNREAD_LOCAL_GUARD_MS) {
       return { ...data, unread_messages_count: localUnread };
     }
@@ -6781,6 +6787,19 @@
           prevUnread !== null && hudUnread > prevUnread;
         if (!skipMessagesUnread) {
           _lastMessagesUnreadPoll = hudUnread;
+
+          if (
+            unreadIncreased
+            && !onMessagesPage
+            && typeof GC.showNotify === "function"
+          ) {
+            let notifyLabel = "Neue Nachricht.";
+            try {
+              const dict = window.GC_LOCALE || {};
+              if (dict.messages_notify_new) notifyLabel = String(dict.messages_notify_new);
+            } catch (_) {}
+            GC.showNotify(notifyLabel, "info");
+          }
 
           // Inbox list load is owned by messages.js (init/tab). Only refresh when unread
           // count rises after the inbox has already loaded — never on empty filtered tabs.
@@ -9875,23 +9894,39 @@
     const syncMissionAllowlistFromTarget = (page, target) => {
       const sel = page.querySelector("[data-fleet-mission]");
       if (!sel || !target) return;
+      const rt = getFleetRuntime(page);
       const urlMission = String(page.dataset.fleetUrlMission || refreshFleetUrlMissionLock(page) || "").trim().toLowerCase();
       const locked = isFleetUrlPrefillLocked(page);
       const prevValue = sel.value;
       const allowed = new Set(target.allowed_missions || []);
-      Array.from(sel.options).forEach((opt) => {
-        if (urlMission && opt.value === urlMission) {
-          opt.disabled = false;
-          return;
-        }
-        const ok = allowed.size === 0 || allowed.has(opt.value);
-        opt.disabled = !ok;
+      if (!rt.missionOptionLabels) {
+        rt.missionOptionLabels = {};
+        Array.from(sel.options).forEach((opt) => {
+          rt.missionOptionLabels[opt.value] = opt.textContent.trim();
+        });
+      }
+      const allMissions = Array.isArray(rt.data.missions) && rt.data.missions.length
+        ? rt.data.missions.slice()
+        : Object.keys(rt.missionOptionLabels);
+      sel.innerHTML = "";
+      allMissions.forEach((missionKey) => {
+        const show = allowed.size === 0 || allowed.has(missionKey) || (urlMission && missionKey === urlMission);
+        if (!show) return;
+        const opt = document.createElement("option");
+        opt.value = missionKey;
+        opt.textContent = rt.missionOptionLabels[missionKey]
+          || tt(`fleet_mission_${missionKey}`, missionKey);
+        sel.appendChild(opt);
       });
       if (urlMission && Array.from(sel.options).some((opt) => opt.value === urlMission)) {
         sel.value = urlMission;
       } else if (!locked && allowed.size > 0 && !allowed.has(sel.value)) {
-        const first = Array.from(sel.options).find((o) => !o.disabled);
+        const first = Array.from(sel.options)[0];
         if (first) sel.value = first.value;
+      } else if (prevValue && Array.from(sel.options).some((opt) => opt.value === prevValue)) {
+        sel.value = prevValue;
+      } else if (sel.options.length && !Array.from(sel.options).some((opt) => opt.value === sel.value)) {
+        sel.value = sel.options[0].value;
       }
       if (typeof GC.rebuildHudSelect === "function") GC.rebuildHudSelect(sel);
       else if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(sel);
@@ -9902,6 +9937,61 @@
       if (sel.value !== prevValue && !urlMission) {
         sel.dispatchEvent(new Event("change", { bubbles: true }));
       }
+    };
+
+    const updateFleetTargetInlineError = (page, target) => {
+      const el = page.querySelector("[data-fleet-target-inline-error]");
+      if (!el) return;
+      const reason = String(
+        target?.mission_block_reason || target?.reason_if_blocked || ""
+      ).trim();
+      if (reason) {
+        el.textContent = reasonText(reason);
+        el.hidden = false;
+        el.classList.add("is-blocked");
+        return;
+      }
+      el.textContent = "";
+      el.hidden = true;
+      el.classList.remove("is-blocked");
+    };
+
+    const runTargetResolve = async (page) => {
+      const form = getForm(page);
+      if (!form) return null;
+      const wk = getFleetWorldKey(page);
+      if (wk) {
+        updateFleetTargetInlineError(page, null);
+        return null;
+      }
+      const coords = getTargetCoords(page);
+      const mission = form.querySelector("[data-fleet-mission]")?.value || "transport";
+      try {
+        const q = new URLSearchParams({
+          target_galaxy: String(coords.target_galaxy),
+          target_system: String(coords.target_system),
+          target_position: String(coords.target_position),
+          mission_type: mission,
+        });
+        const res = await GC.fetchJSON(`/api/fleet/resolve-target?${q.toString()}`, { cache: "no-store" });
+        const target = fleetPayload(res).target || res.target;
+        if (res?.ok && target) {
+          syncMissionAllowlistFromTarget(page, target);
+          updateFleetTargetInlineError(page, target);
+          syncExpeditionMissionTarget(page);
+          return target;
+        }
+        updateFleetTargetInlineError(page, { reason_if_blocked: apiError(res) });
+      } catch (_) {
+        updateFleetTargetInlineError(page, null);
+      }
+      return null;
+    };
+
+    const scheduleTargetResolve = (page) => {
+      const rt = getFleetRuntime(page);
+      if (rt.targetResolveTimer) clearTimeout(rt.targetResolveTimer);
+      rt.targetResolveTimer = setTimeout(() => runTargetResolve(page), 250);
     };
 
     const formatDebrisPreview = (debris) => {
@@ -10437,10 +10527,14 @@
             previewHud.classList.toggle("is-blocked", !p.can_send);
           }
           updateMissionFeedback(page, p, lockedMission, ships);
-          if (previewCargo) previewCargo.textContent = `${p.cargo_used || 0} / ${p.cargo_total || 0}`;
-          if (previewCargoFree) previewCargoFree.textContent = String(p.cargo_free || 0);
-          if (previewFuel) previewFuel.textContent = String(p.fuel_cost || 0);
-          if (previewFuelAvail) previewFuelAvail.textContent = String(p.fuel_available ?? rt.data.resources?.fuel_cells ?? "–");
+          if (previewCargo) {
+            previewCargo.textContent = `${formatNumber(p.cargo_used || 0)} / ${formatNumber(p.cargo_total || 0)}`;
+          }
+          if (previewCargoFree) previewCargoFree.textContent = formatNumber(p.cargo_free || 0);
+          if (previewFuel) previewFuel.textContent = formatNumber(p.fuel_cost || 0);
+          if (previewFuelAvail) {
+            previewFuelAvail.textContent = formatNumber(p.fuel_available ?? rt.data.resources?.fuel_cells ?? 0);
+          }
           if (previewFlight) {
             previewFlight.textContent = formatCountdownRemain(p.duration_seconds ?? p.flight_seconds ?? 0);
           }
@@ -10462,6 +10556,12 @@
             }
           }
           if (sendBtn) sendBtn.disabled = !p.can_send;
+          if (!p.can_send) {
+            const blockReason = p.block_reason || p.mission_block_reason || target.mission_block_reason;
+            if (blockReason) updateFleetTargetInlineError(page, { mission_block_reason: blockReason });
+          } else {
+            updateFleetTargetInlineError(page, target);
+          }
         } else {
           resetPreview();
         }
@@ -10475,6 +10575,7 @@
       const rt = getFleetRuntime(page);
       if (rt.previewTimer) clearTimeout(rt.previewTimer);
       rt.previewTimer = setTimeout(() => runPreview(page), 300);
+      scheduleTargetResolve(page);
     };
 
     const loadPresetById = (page, presetId) => {
@@ -10594,6 +10695,8 @@
     };
 
     GC.scheduleFleetPreview = schedulePreview;
+    GC.scheduleFleetTargetResolve = scheduleTargetResolve;
+    GC.runFleetTargetResolve = runTargetResolve;
     GC.syncColonyChipsFromCoords = syncColonyChipsFromCoords;
     GC.syncExpeditionMissionTarget = syncExpeditionMissionTarget;
     GC.updateFleetFormMode = updateFleetFormMode;
@@ -10755,6 +10858,7 @@
         updateFleetFormMode(page);
         const wk = getFleetWorldKey(page);
         if (wk) loadFleetWorldTargetPreview(page, wk);
+        scheduleTargetResolve(page);
         schedulePreview(page);
       }
       if (e.target.matches('[name="target_galaxy"], [name="target_system"], [name="target_position"]')) {
@@ -10763,6 +10867,7 @@
           clearFleetWorldKey(page);
         }
         syncExpeditionMissionTarget(page);
+        scheduleTargetResolve(page);
       }
       if (e.target.closest("#fleet-send-form")) schedulePreview(page);
     });
@@ -10776,6 +10881,7 @@
           clearFleetWorldKey(page);
         }
         syncExpeditionMissionTarget(page);
+        scheduleTargetResolve(page);
       }
       if (e.target.closest("#fleet-send-form")) schedulePreview(page);
     });
@@ -11266,14 +11372,14 @@
       flightEl.textContent = formatCountdownRemain(preview.max_flight_seconds || 0);
     }
     if (cargoEl) {
-      cargoEl.textContent = `${preview.cargo_used || 0} / ${preview.cargo_total || 0}`;
+      cargoEl.textContent = `${formatNumber(preview.cargo_used || 0)} / ${formatNumber(preview.cargo_total || 0)}`;
     }
     if (slotsEl) {
       const fs = preview.fleet_slots || {};
-      slotsEl.textContent = `${preview.slots_needed || 0} ${tt("logistics_preview_slots_of")} ${fs.free ?? 0} ${tt("logistics_slots_free")}`;
+      slotsEl.textContent = `${formatNumber(preview.slots_needed || 0)} ${tt("logistics_preview_slots_of")} ${formatNumber(fs.free ?? 0)} ${tt("logistics_slots_free")}`;
     }
     if (fuelEl) {
-      fuelEl.textContent = String(preview.total_fuel_cost || 0);
+      fuelEl.textContent = formatNumber(preview.total_fuel_cost || 0);
     }
     if (targetsWrap && targetsList) {
       const legs = preview.legs || [];
@@ -11283,7 +11389,7 @@
           .map((leg) => {
             const res = leg.resources;
             const cargoTxt = res
-              ? ` — ${(res.metal || 0)}/${(res.crystal || 0)}/${(res.fuel_cells || 0)}`
+              ? ` — ${formatNumber(res.metal || 0)}/${formatNumber(res.crystal || 0)}/${formatNumber(res.fuel_cells || 0)}`
               : "";
             return `<li class="logistics-preview-target-item"><span class="logistics-preview-target-name">${escapeHtml(leg.name || "")}</span> <span class="gc-mono logistics-preview-target-coords">${escapeHtml(leg.coordinates || "")}</span><span class="logistics-preview-target-meta gc-mono">${formatCountdownRemain(leg.flight_seconds || 0)}${cargoTxt}</span></li>`;
           })
@@ -11766,6 +11872,9 @@
     if (typeof GC.syncFleetMissionLockUi === "function") GC.syncFleetMissionLockUi(page);
     if (typeof GC.runFleetPreview === "function") {
       GC.runFleetPreview(page);
+    }
+    if (typeof GC.runFleetTargetResolve === "function") {
+      GC.runFleetTargetResolve(page);
     }
   }
 

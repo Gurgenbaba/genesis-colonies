@@ -1191,6 +1191,7 @@ def galaxy_view():
     conn = db()
     command_map: dict[str, Any] = {"nodes": [], "edges": []}
     galactic_directive_banner: dict[str, Any] = {"visible": False}
+    galactic_diplomacy_banner: dict[str, Any] = {"visible": False}
     try:
         hold_mission_enabled = _hold_mission_enabled(conn=conn)
         if view == "command_map":
@@ -1198,8 +1199,10 @@ def galaxy_view():
 
             command_map = build_command_map_payload(user_id, conn=conn)
         from game.galactic_directives.banner import build_galactic_directive_banner
+        from game.galactic_diplomacy.banner import build_galactic_diplomacy_banner
 
         galactic_directive_banner = build_galactic_directive_banner(galaxy, conn=conn)
+        galactic_diplomacy_banner = build_galactic_diplomacy_banner(galaxy, conn=conn)
     finally:
         conn.close()
 
@@ -1237,6 +1240,7 @@ def galaxy_view():
         galaxy_view=view,
         command_map=command_map,
         galactic_directive_banner=galactic_directive_banner,
+        galactic_diplomacy_banner=galactic_diplomacy_banner,
     )
 
 
@@ -3779,6 +3783,14 @@ def api_admin_messages_send():
             category=str(payload.get("category") or "admin"),
             sender_name=payload.get("sender_name"),
         )
+    )
+
+
+@app.route("/api/admin/messages/broadcast", methods=["POST"])
+@require_admin_api
+def api_admin_messages_broadcast():
+    return _admin_json(
+        admin_api_logic.api_broadcast_system_messages(_admin_actor_id(), _admin_body())
     )
 
 

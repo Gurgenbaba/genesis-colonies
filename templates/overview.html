@@ -39,6 +39,8 @@
 
   {% set galactic_directive_banner = os.galactic_directive_banner if os.galactic_directive_banner is defined else {} %}
   {% include "partials/galactic_directive_banner.html" %}
+  {% set galactic_diplomacy_banner = os.galactic_diplomacy_banner if os.galactic_diplomacy_banner is defined else {} %}
+  {% include "partials/galactic_diplomacy_banner.html" %}
 
   <section class="gc-panel overview-hero" aria-label="{{ T('overview_label_planet', 'Kolonie') }}">
     <div class="overview-hero-top">

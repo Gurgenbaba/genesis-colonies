@@ -11,6 +11,8 @@
   let _adminPanelBootstrapped = false;
   let _selectedSupportTicketId = null;
   let _selectedAdminMessageId = null;
+  let _adminMessagesExpanded = false;
+  const ADMIN_MESSAGES_PREVIEW = 5;
   let _selectedPlayerId = null;
   let _selectedPlanetId = null;
   let _lootboxAdminState = null;
@@ -1819,10 +1821,56 @@
       </div>`;
   }
 
+  function renderAdminMessageRows(messages) {
+    return messages.map(
+      (m) => `<tr class="admin-support-ticket-row${_selectedAdminMessageId === m.id ? " is-active" : ""}"
+              data-admin-message-id="${m.id}">
+            <td class="col-id">${m.id}</td>
+            <td class="col-name">${playerNameLink(m.recipient_player_id, m.recipient_name || `#${m.recipient_player_id}`)}</td>
+            <td class="col-subject">${esc(m.subject)}</td>
+            <td class="col-cat">${esc(t(`messages.category.${m.category}`, m.category))}</td>
+            <td class="col-date">${esc(fmtTs(m.created_at))}</td>
+          </tr>`
+    );
+  }
+
+  function renderAdminMessagesTable(messages) {
+    const columns = [
+      { label: "ID", className: "col-id" },
+      { label: t("admin_messages_col_recipient", "Empfaenger"), className: "col-name" },
+      { label: t("admin_messages_col_subject", "Betreff"), className: "col-subject" },
+      { label: t("messages.category.system", "Kat."), className: "col-cat" },
+      { label: t("admin_messages_col_date", "Datum"), className: "col-date" },
+    ];
+    const preview = messages.slice(0, ADMIN_MESSAGES_PREVIEW);
+    const extra = messages.slice(ADMIN_MESSAGES_PREVIEW);
+    let html = renderTable(columns, renderAdminMessageRows(preview), { inline: true });
+
+    if (extra.length) {
+      const collapseLabel = _adminMessagesExpanded
+        ? t("admin_messages_show_less", "Weniger anzeigen")
+        : t("admin_messages_show_all", "Alle Nachrichten anzeigen");
+      html += `
+        <div class="admin-messages-collapse">
+          <button type="button"
+                  class="gc-btn gc-btn-outline gc-btn-sm admin-messages-collapse-btn"
+                  data-admin-action="messages-toggle-all"
+                  aria-expanded="${_adminMessagesExpanded ? "true" : "false"}">
+            ${esc(collapseLabel)} (${extra.length})
+          </button>
+          <div class="admin-messages-collapse-body"${_adminMessagesExpanded ? "" : " hidden"}>
+            ${renderTable(columns, renderAdminMessageRows(extra), { inline: true })}
+          </div>
+        </div>`;
+    }
+    return html;
+  }
+
   async function loadAdminMessages() {
     const listOut = qs("#admin-messages-list");
     if (!listOut) return null;
     listOut.innerHTML = loadingHtml();
+    _adminMessagesExpanded = false;
 
     const playerRaw = (qs("#admin-messages-player-filter")?.value || "").trim();
     const category = (qs("#admin-messages-category-filter")?.value || "").trim();
@@ -1845,26 +1893,7 @@
       return data;
     }
 
-    listOut.innerHTML = renderTable(
-      [
-        { label: "ID", className: "col-id" },
-        { label: t("admin_messages_col_recipient", "Empfaenger"), className: "col-name" },
-        { label: t("admin_messages_col_subject", "Betreff"), className: "col-subject" },
-        { label: t("messages.category.system", "Kat."), className: "col-cat" },
-        { label: t("admin_messages_col_date", "Datum"), className: "col-date" },
-      ],
-      messages.map(
-        (m) => `<tr class="admin-support-ticket-row${_selectedAdminMessageId === m.id ? " is-active" : ""}"
-                data-admin-message-id="${m.id}">
-              <td class="col-id">${m.id}</td>
-              <td class="col-name">${playerNameLink(m.recipient_player_id, m.recipient_name || `#${m.recipient_player_id}`)}</td>
-              <td class="col-subject">${esc(m.subject)}</td>
-              <td class="col-cat">${esc(t(`messages.category.${m.category}`, m.category))}</td>
-              <td class="col-date">${esc(fmtTs(m.created_at))}</td>
-            </tr>`
-      ),
-      { inline: true }
-    );
+    listOut.innerHTML = renderAdminMessagesTable(messages);
 
     if (_selectedAdminMessageId) {
       const hit = messages.find((m) => m.id === _selectedAdminMessageId);
@@ -1908,6 +1937,57 @@
       showAlert(res.error || res.message || t("admin_action_failed", "Fehler"), "error");
     }
     return res;
+  }
+
+  async function adminMessagesBroadcast() {
+    const subject = (qs("#admin-messages-broadcast-subject")?.value || "").trim();
+    const body = (qs("#admin-messages-broadcast-body")?.value || "").trim();
+    const confirmed = qs("#admin-messages-broadcast-confirm")?.checked === true;
+    if (!subject || !body) {
+      showAlert(t("messages.error_validation", "Eingabe ungueltig."), "error");
+      return null;
+    }
+    if (!confirmed) {
+      showAlert(t("admin_messages_broadcast_confirm_required", "Bestaetigung per Haekchen erforderlich."), "error");
+      return null;
+    }
+    const res = await adminPost("/api/admin/messages/broadcast", {
+      subject,
+      body,
+      confirm: "SEND SYSTEM BROADCAST",
+    });
+    if (res.ok) {
+      const count = res.delivered_count ?? res.data?.delivered_count ?? "?";
+      notify(
+        t("admin_messages_broadcast_ok", "System-Broadcast gesendet (%(count)s Spieler).").replace("%(count)s", String(count)),
+        "success"
+      );
+      if (qs("#admin-messages-broadcast-subject")) qs("#admin-messages-broadcast-subject").value = "";
+      if (qs("#admin-messages-broadcast-body")) qs("#admin-messages-broadcast-body").value = "";
+      const confirmEl = qs("#admin-messages-broadcast-confirm");
+      if (confirmEl) confirmEl.checked = false;
+      await loadAdminMessages();
+    } else {
+      showAlert(res.message || res.error || t("admin_action_failed", "Fehler"), "error");
+    }
+    return res;
+  }
+
+  function toggleAdminMessagesCollapse() {
+    _adminMessagesExpanded = !_adminMessagesExpanded;
+    const listOut = qs("#admin-messages-list");
+    if (!listOut) return;
+    const body = listOut.querySelector(".admin-messages-collapse-body");
+    const btn = listOut.querySelector("[data-admin-action='messages-toggle-all']");
+    if (body) body.hidden = !_adminMessagesExpanded;
+    if (btn) {
+      btn.setAttribute("aria-expanded", _adminMessagesExpanded ? "true" : "false");
+      const extraCount = btn.textContent.match(/\((\d+)\)/)?.[1] || "";
+      const label = _adminMessagesExpanded
+        ? t("admin_messages_show_less", "Weniger anzeigen")
+        : t("admin_messages_show_all", "Alle Nachrichten anzeigen");
+      btn.textContent = extraCount ? `${label} (${extraCount})` : label;
+    }
   }
 
   async function adminSupportReply(ticketId) {
@@ -2001,6 +2081,8 @@
     if (act === "support-refresh") return loadAdminSupport();
     if (act === "messages-refresh") return loadAdminMessages();
     if (act === "messages-send") return adminMessagesSend();
+    if (act === "messages-broadcast") return adminMessagesBroadcast();
+    if (act === "messages-toggle-all") return toggleAdminMessagesCollapse();
     if (act === "support-reply") {
       const tid = parseInt(btn.dataset.ticketId, 10);
       if (!Number.isFinite(tid)) return null;

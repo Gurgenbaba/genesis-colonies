@@ -7,6 +7,7 @@ from .blocs import (
     normalize_galaxy,
     set_alliance_bloc,
 )
+from .banner import build_galactic_diplomacy_banner
 from .mechanics import (
     get_galaxy_diplomacy_mechanics,
     merge_diplomacy_mechanics,
@@ -58,6 +59,7 @@ __all__ = [
     "EMERGENCY_KEYS",
     "PERSONALITY_KEYS",
     "RESOLUTION_KEYS",
+    "build_galactic_diplomacy_banner",
     "clear_active_emergency",
     "clear_active_resolution",
     "clear_alliance_bloc",

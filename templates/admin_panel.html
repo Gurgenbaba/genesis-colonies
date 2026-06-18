@@ -368,6 +368,27 @@
         </button>
         </div>
       </section>
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_messages_broadcast_title", "System-Broadcast an alle Spieler") }}</span>
+      </div>
+      <section class="admin-section admin-card admin-messages-broadcast">
+        <p class="admin-small-hint">{{ T("admin_messages_broadcast_hint", "Erscheint im Posteingang unter Kategorie System (nicht MOTD).") }}</p>
+        <input type="text" class="admin-input" id="admin-messages-broadcast-subject"
+               placeholder="{{ T('messages.subject', 'Betreff') }}" maxlength="120">
+        <textarea class="admin-input" id="admin-messages-broadcast-body" rows="4" maxlength="5000"
+                  placeholder="{{ T('messages.body', 'Nachricht') }}"></textarea>
+        <div class="admin-row-full">
+          <label class="admin-checkbox-row" for="admin-messages-broadcast-confirm">
+            <input type="checkbox" id="admin-messages-broadcast-confirm">
+            <span>{{ T("admin_messages_broadcast_confirm", "System-Broadcast an alle Spieler senden") }}</span>
+          </label>
+        </div>
+        <div class="admin-btn-row">
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="messages-broadcast">
+            {{ T("admin_messages_broadcast_btn", "Broadcast senden") }}
+          </button>
+        </div>
+      </section>
     </section>
 
     <section id="admin-tab-runtime" class="admin-panel admin-tab-panel" data-admin-panel="runtime" role="tabpanel" hidden>

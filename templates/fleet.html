@@ -5,9 +5,6 @@
 {% set fleet_ctx = fleet if fleet is defined and fleet else {'ready': false} %}
 {% set log_ctx = logistics if logistics is defined and logistics else {'ready': false} %}
 {% set player_obj = player if player is defined and player else None %}
-{% set p_metal = (player_obj.metal if player_obj and player_obj.metal is defined else 0) | int %}
-{% set p_crystal = (player_obj.crystal if player_obj and player_obj.crystal is defined else 0) | int %}
-{% set p_fuel = (fleet_ctx.resources.fuel_cells if fleet_ctx.resources is defined and fleet_ctx.resources.fuel_cells is defined else (player_obj.fuel_cells if player_obj and player_obj.fuel_cells is defined else 0)) | int %}
 {% set _ship_placeholder = url_for('static', filename='img/ships/seed_ark.png') %}
 {% set fleet_mode_raw = request.args.get('mode', 'send')|lower %}
 {% set fleet_mode = fleet_mode_raw if fleet_mode_raw in ('send', 'collect', 'distribute') else 'send' %}
@@ -92,24 +89,6 @@
       <form id="fleet-send-form" class="fleet-send-form" method="post" action="#" data-no-pjax novalidate>
 
         <section class="gc-panel fleet-panel fleet-mission-control-panel fleet-send-panel fleet-ogame-top" aria-labelledby="fleet-mission-control-title">
-          <div class="fleet-resource-summary gc-mono fleet-ogame-resources" aria-live="polite">
-            <span class="gc-resource-summary-item">
-              {{ render_resource_icon('metal') }}
-              <span>{{ T("resource_metal") }}:</span>
-              <strong data-res="metal">{{ p_metal|fmt_int }}</strong>
-            </span>
-            <span class="gc-resource-summary-item">
-              {{ render_resource_icon('crystal') }}
-              <span>{{ T("resource_crystal") }}:</span>
-              <strong data-res="crystal">{{ p_crystal|fmt_int }}</strong>
-            </span>
-            <span class="gc-resource-summary-item">
-              {{ render_resource_icon('fuel_cells') }}
-              <span>{{ T("resource_fuel_cells") }}:</span>
-              <strong data-res="fuel_cells">{{ p_fuel|fmt_int }}</strong>
-            </span>
-          </div>
-
           <div class="fleet-target-block fleet-ogame-targets" data-fleet-target-block>
             <div class="fleet-form-row fleet-target-row fleet-ogame-quick-row">
               <label class="fleet-form-label" for="fleet-quick-target-select">{{ T("fleet_quick_targets") }}</label>
@@ -195,6 +174,7 @@
                   </select>
                 </div>
               </div>
+              <p class="fleet-target-inline-error fleet-form-error" data-fleet-target-inline-error hidden role="alert"></p>
             </div>
 
             <div class="fleet-world-target-panel gc-panel fleet-world-target-panel--compact" data-fleet-world-target hidden aria-live="polite">
@@ -393,12 +373,6 @@
           <div class="fleet-mission-feedback" data-fleet-mission-feedback hidden aria-live="polite">
             <p class="fleet-mission-feedback-text" data-fleet-mission-feedback-text></p>
           </div>
-
-          <p class="fleet-form-error" data-fleet-error hidden></p>
-          <button type="submit" class="gc-btn gc-btn-primary fleet-send-submit fleet-launch-btn" data-fleet-send-btn disabled>
-            <span class="fleet-send-submit-icon" aria-hidden="true">▶</span>
-            {{ T("fleet_send_submit") }}
-          </button>
         </section>
 
         <section class="gc-panel fleet-panel fleet-ogame-footer">
@@ -454,6 +428,14 @@
               </form>
             </div>
           </div>
+        </section>
+
+        <section class="gc-panel fleet-panel fleet-submit-panel" aria-label="{{ T('fleet_send_submit') }}">
+          <p class="fleet-form-error" data-fleet-error hidden role="alert"></p>
+          <button type="submit" class="gc-btn gc-btn-primary fleet-send-submit fleet-launch-btn" data-fleet-send-btn disabled>
+            <span class="fleet-send-submit-icon" aria-hidden="true">▶</span>
+            {{ T("fleet_send_submit") }}
+          </button>
         </section>
 
       </form>

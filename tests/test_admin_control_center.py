@@ -509,3 +509,48 @@ def test_admin_page_smoke_html(app_client):
     assert "admin-btn-queue-tick" in html
     assert "GC_ASSET_VERSION" not in html
     assert "?v=" in html
+    assert "admin-messages-broadcast" in html
+    assert 'data-admin-action="messages-broadcast"' in html
+    assert 'id="admin-messages-broadcast-confirm"' in html
+    assert "admin-checkbox-row" in html
+
+
+def test_admin_messages_broadcast_requires_confirm(app_client):
+    client, admin_id, user_id = app_client
+    with client.session_transaction() as sess:
+        sess["user_id"] = admin_id
+    r = client.post(
+        "/api/admin/messages/broadcast",
+        json={"subject": "Test", "body": "Body text", "confirm": "WRONG"},
+    )
+    assert r.status_code == 400
+    assert r.get_json()["ok"] is False
+    assert r.get_json()["error"] == "confirm_required"
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = user_id
+    inbox = client.get("/api/messages?category=system").get_json()
+    assert inbox["ok"]
+    assert not any(m.get("subject") == "Test" for m in inbox["data"]["messages"])
+
+
+def test_admin_messages_broadcast_audit(app_client):
+    client, admin_id, user_id = app_client
+    with client.session_transaction() as sess:
+        sess["user_id"] = admin_id
+    r = client.post(
+        "/api/admin/messages/broadcast",
+        json={
+            "subject": "Audit ping",
+            "body": "Broadcast audit trail",
+            "confirm": "SEND SYSTEM BROADCAST",
+        },
+    )
+    assert r.status_code == 200
+    assert r.get_json()["ok"]
+    assert r.get_json()["delivered_count"] >= 2
+
+    audit = client.get("/api/admin/audit-log?action=messages_broadcast")
+    assert audit.status_code == 200
+    entries = audit.get_json()["entries"]
+    assert any(row.get("action") == "messages_broadcast" for row in entries)
