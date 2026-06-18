@@ -322,6 +322,10 @@
   {% endif %}
 
   {% if not SIMPLE_LAYOUT and AUTH_USER and AUTH_USER.id %}
+  {% include "partials/whats_new_modal.html" %}
+  {% endif %}
+
+  {% if not SIMPLE_LAYOUT and AUTH_USER and AUTH_USER.id %}
   {% include "partials/chat.html" %}
   {% include "partials/player_card_modal.html" %}
   {% include "partials/ship_detail_modal.html" %}

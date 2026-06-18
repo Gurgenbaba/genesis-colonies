@@ -3099,6 +3099,31 @@ def api_admin_universe_news_create():
     return _admin_json(admin_api_logic.api_create_universe_news(_admin_actor_id(), _admin_body()))
 
 
+@app.route("/api/news/whats-new")
+@require_login
+def api_news_whats_new():
+    if _current_player_id() is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    try:
+        from game.universe_news import whats_new_payload
+
+        return jsonify(whats_new_payload())
+    except Exception:
+        return jsonify({"ok": False, "error": "news_unavailable"}), 500
+
+
+@app.route("/api/admin/universe-news/import-changelog", methods=["POST"])
+@require_admin_api
+def api_admin_universe_news_import_changelog():
+    return _admin_json(admin_api_logic.api_import_changelog(_admin_actor_id()))
+
+
+@app.route("/api/admin/universe-news/<int:news_id>", methods=["PATCH"])
+@require_admin_api
+def api_admin_universe_news_update(news_id: int):
+    return _admin_json(admin_api_logic.api_update_universe_news(_admin_actor_id(), news_id, _admin_body()))
+
+
 @app.route("/api/admin/universe-news/<int:news_id>/banner", methods=["POST"])
 @require_admin_api
 def api_admin_universe_news_banner(news_id: int):

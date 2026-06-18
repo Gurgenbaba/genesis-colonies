@@ -1,38 +1,89 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% set payload = news_payload if news_payload is defined and news_payload else {'ok': false, 'entries': []} %}
-{% set entries = payload.entries if payload.entries is defined else [] %}
+{% set payload = news_payload if news_payload is defined and news_payload else {'ok': false, 'timeline': []} %}
+{% set timeline = payload.timeline if payload.timeline is defined else [] %}
 
 <div class="gc-page gc-news-page" id="news-page">
 
   <header class="section-header gc-news-header">
-    <h1 class="section-title">{{ T("news_title", "Universums-News") }}</h1>
-    <p class="section-hint hint">{{ T("news_subtitle", "Patchnotes, Updates und Ankündigungen") }}</p>
+    <h1 class="section-title">{{ T("news_title", "Genesis Timeline") }}</h1>
+    <p class="section-hint hint">{{ T("news_subtitle_timeline", "Entwicklungsgeschichte von Genesis Colonies — Version für Version.") }}</p>
   </header>
 
-  {% if not payload.ok or not entries %}
+  {% if not payload.ok or not timeline %}
   <section class="gc-panel gc-news-panel">
     <p class="gc-news-empty">{{ T("news_empty", "Noch keine News veröffentlicht.") }}</p>
   </section>
   {% else %}
-  <div class="gc-news-list">
-    {% for entry in entries %}
-    <article class="gc-panel gc-news-entry{% if entry.is_banner %} gc-news-entry--banner{% endif %}"
-             id="news-entry-{{ entry.id }}">
-      <header class="gc-news-entry-head">
-        <div class="gc-news-entry-meta">
-          {% if entry.is_banner %}
-          <span class="gc-news-entry-pill">{{ T("news_live_badge", "Aktuell") }}</span>
+  <div class="gc-news-timeline">
+    {% for year_block in timeline %}
+    <section class="gc-news-year" aria-labelledby="news-year-{{ year_block.year }}">
+      <h2 class="gc-news-year-label gc-mono" id="news-year-{{ year_block.year }}">{{ year_block.year }}</h2>
+
+      {% for version in year_block.versions %}
+      <article class="gc-news-version{% if version.is_major_release %} gc-news-version--major{% endif %}"
+               id="{{ version.anchor_id }}">
+        <header class="gc-news-version-head">
+          <div class="gc-news-version-title-row">
+            {% if version.version_tag %}
+            <h3 class="gc-news-version-title">
+              <span class="gc-news-version-tag gc-mono">{{ version.version_tag | upper }}</span>
+              {% if version.version_label %}
+              <span class="gc-news-version-name">{{ version.version_label }}</span>
+              {% endif %}
+            </h3>
+            {% else %}
+            <h3 class="gc-news-version-title">{{ T("news_general_updates", "Updates") }}</h3>
+            {% endif %}
+            {% if version.badge %}
+            <span class="gc-news-badge gc-news-badge--{{ version.badge | lower }}">{{ version.badge }}</span>
+            {% elif version.is_major_release %}
+            <span class="gc-news-badge gc-news-badge--alpha">{{ T("news_major_release", "Major Release") }}</span>
+            {% endif %}
+          </div>
+        </header>
+
+        <ul class="gc-news-version-list">
+          {% for entry in version.entries %}
+          {% if not entry.is_major_release %}
+          <li class="gc-news-timeline-item{% if entry.is_banner %} gc-news-timeline-item--live{% endif %}"
+              id="news-entry-{{ entry.id }}">
+            <div class="gc-news-timeline-item-head">
+              <span class="gc-news-timeline-dot" aria-hidden="true"></span>
+              <div class="gc-news-timeline-item-meta">
+                {% if entry.category %}
+                <span class="gc-news-cat gc-news-cat--{{ entry.category | lower }}">{{ entry.category }}</span>
+                {% endif %}
+                {% if entry.badge %}
+                <span class="gc-news-badge gc-news-badge--{{ entry.badge | lower }}">{{ entry.badge }}</span>
+                {% endif %}
+                {% if entry.is_banner %}
+                <span class="gc-news-entry-pill">{{ T("news_live_badge", "Aktuell") }}</span>
+                {% endif %}
+                <time class="gc-news-entry-date gc-mono" datetime="{{ entry.published_at }}">{{ entry.published_label }}</time>
+              </div>
+            </div>
+            <div class="gc-news-timeline-item-body">
+              <strong class="gc-news-timeline-item-title">{{ entry.title }}</strong>
+              {% if entry.body and entry.body != entry.title %}
+              <div class="gc-news-entry-body">{{ entry.body }}</div>
+              {% endif %}
+              {% if entry.image_url %}
+              <img class="gc-news-entry-image" src="{{ entry.image_url }}" alt="" loading="lazy">
+              {% endif %}
+            </div>
+          </li>
+          {% elif entry.body and entry.body != entry.title %}
+          <li class="gc-news-timeline-item gc-news-timeline-item--major-summary">
+            <div class="gc-news-entry-body">{{ entry.body }}</div>
+          </li>
           {% endif %}
-          <time class="gc-news-entry-date gc-mono" datetime="{{ entry.published_at }}">
-            {{ entry.published_label }}
-          </time>
-        </div>
-        <h2 class="gc-news-entry-title">{{ entry.title }}</h2>
-      </header>
-      <div class="gc-news-entry-body">{{ entry.body }}</div>
-    </article>
+          {% endfor %}
+        </ul>
+      </article>
+      {% endfor %}
+    </section>
     {% endfor %}
   </div>
   {% endif %}

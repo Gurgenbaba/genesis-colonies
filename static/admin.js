@@ -182,6 +182,10 @@
     return adminApi(url, { method: "DELETE" });
   }
 
+  function adminPatch(url, body) {
+    return adminApi(url, { method: "PATCH", body: body || {} });
+  }
+
   function setBusy(btn, busy) {
     if (!btn) return;
     btn.disabled = !!busy;
@@ -483,6 +487,22 @@
     updateAdminHeaderKpis(settings);
   }
 
+  function collectNewsPayload(options) {
+    const opts = options || {};
+    return {
+      title: (qs("#admin_news_title")?.value || "").trim(),
+      body: (qs("#admin_news_body")?.value || "").trim(),
+      version_tag: (qs("#admin_news_version")?.value || "").trim(),
+      category: (qs("#admin_news_category")?.value || "").trim(),
+      badge: (qs("#admin_news_badge")?.value || "").trim(),
+      image_url: (qs("#admin_news_image")?.value || "").trim(),
+      is_major_release: qs("#admin_news_major")?.checked ? 1 : 0,
+      set_banner: opts.setBanner ? 1 : 0,
+      is_draft: opts.isDraft ? 1 : 0,
+      publish: opts.publish ? 1 : 0,
+    };
+  }
+
   function renderAdminNewsList(entries) {
     const host = qs("#admin-news-list");
     if (!host) return;
@@ -492,16 +512,20 @@
       return;
     }
     host.innerHTML = rows.map((entry) => {
-      const bannerBadge = entry.is_banner
-        ? `<span class="admin-news-badge">${esc(t("news_live_badge", "Aktuell"))}</span>`
-        : "";
+      const flags = [
+        entry.is_banner ? `<span class="admin-news-badge">${esc(t("news_live_badge", "Aktuell"))}</span>` : "",
+        entry.is_draft ? `<span class="admin-news-badge admin-news-badge--draft">${esc(t("admin_news_draft_badge", "Entwurf"))}</span>` : "",
+        entry.version_tag ? `<span class="admin-news-badge gc-mono">${esc(entry.version_tag)}</span>` : "",
+        entry.category ? `<span class="admin-news-badge">${esc(entry.category)}</span>` : "",
+        entry.badge ? `<span class="admin-news-badge">${esc(entry.badge)}</span>` : "",
+      ].filter(Boolean).join("");
       const preview = esc(String(entry.body || "").slice(0, 140)).replace(/\n/g, "<br>");
       return `
         <article class="admin-news-row" data-news-id="${Number(entry.id)}">
           <div class="admin-news-row-head">
             <div>
               <strong>${esc(entry.title || "Update")}</strong>
-              ${bannerBadge}
+              ${flags}
             </div>
             <span class="admin-small-hint gc-mono">${esc(entry.published_label || "")}</span>
           </div>
@@ -528,21 +552,46 @@
     return data;
   }
 
-  async function publishAdminNews() {
-    const title = (qs("#admin_news_title")?.value || "").trim();
-    const body = (qs("#admin_news_body")?.value || "").trim();
-    if (!body) {
+  async function publishAdminNews(setBanner) {
+    const payload = collectNewsPayload({ setBanner: !!setBanner, isDraft: false, publish: true });
+    if (!payload.body) {
       showAlert(t("admin_news_body_required", "Bitte News-Text eingeben."), "error");
       return { ok: false };
     }
-    const res = await adminPost("/api/admin/universe-news", {
-      title,
-      body,
-      set_banner: 1,
-    });
+    const res = await adminPost("/api/admin/universe-news", payload);
     if (res.ok) {
       notify(t("admin_news_published", "News veröffentlicht."), "success");
       if (qs("#admin_news_body")) qs("#admin_news_body").value = "";
+      await loadAdminNews();
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  async function saveAdminNewsDraft() {
+    const payload = collectNewsPayload({ isDraft: true, setBanner: false, publish: false });
+    if (!payload.title && !payload.body) {
+      showAlert(t("admin_news_body_required", "Bitte Titel oder Text eingeben."), "error");
+      return { ok: false };
+    }
+    const res = await adminPost("/api/admin/universe-news", payload);
+    if (res.ok) {
+      notify(t("admin_news_draft_saved", "Entwurf gespeichert."), "success");
+      await loadAdminNews();
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  async function importAdminChangelog() {
+    const res = await adminPost("/api/admin/universe-news/import-changelog", {});
+    if (res.ok) {
+      notify(
+        `${t("admin_news_import_ok", "CHANGELOG importiert.")} (+${res.inserted || 0})`,
+        "success"
+      );
       await loadAdminNews();
     } else {
       showAlert(res.message || res.error, "error");
@@ -1862,7 +1911,10 @@
     if (act === "balance-recalculate") return recalculateAdminRankings();
     if (act === "combat-hof-backfill") return backfillCombatHof();
     if (act === "server-save") return saveAdminServer();
-    if (act === "news-publish") return publishAdminNews();
+    if (act === "news-publish") return publishAdminNews(true);
+    if (act === "news-publish-only") return publishAdminNews(false);
+    if (act === "news-save-draft") return saveAdminNewsDraft();
+    if (act === "news-import-changelog") return importAdminChangelog();
     if (act === "news-set-banner") return setAdminNewsBanner(btn.dataset.newsId);
     if (act === "news-delete") return deleteAdminNews(btn.dataset.newsId);
     if (act === "server-resources") return applyAdminResources();

@@ -1574,6 +1574,7 @@
 
     initFlashAutohide();
     initMotdBanner();
+    initWhatsNew();
     bootstrapScoreStateFromDom();
     bindFormattedNumberInputs(document.getElementById("main-content") || document);
 
@@ -20122,6 +20123,77 @@
       if (dismiss) dismiss.removeEventListener("click", onDismiss);
       window.removeEventListener("resize", onResize);
     });
+  }
+
+  function initWhatsNew() {
+    if (GC._whatsNewBound) return;
+    GC._whatsNewBound = true;
+
+    const root = document.getElementById("gc-whats-new");
+    if (!root) return;
+
+    const titleEl = root.querySelector("#gc-whats-new-title");
+    const listEl = root.querySelector("#gc-whats-new-list");
+    const moreEl = root.querySelector("[data-whats-new-more]");
+
+    const hide = () => {
+      root.hidden = true;
+      root.classList.add("hidden");
+    };
+
+    let activeStorageKey = "gc_whats_new_seen";
+
+    root.addEventListener("click", (event) => {
+      if (event.target.closest("[data-whats-new-dismiss]")) {
+        event.preventDefault();
+        hide();
+        try {
+          localStorage.setItem(activeStorageKey, "1");
+        } catch (_) {}
+      }
+    });
+
+    const show = (payload) => {
+      if (!payload || !payload.show) return;
+      const versionTag = String(payload.version_tag || "").trim();
+      activeStorageKey = versionTag ? `gc_whats_new_seen_${versionTag}` : "gc_whats_new_seen";
+      try {
+        if (localStorage.getItem(activeStorageKey) === "1") return;
+      } catch (_) {}
+
+      const label = String(payload.version_label || "").trim();
+      const tag = versionTag ? versionTag.toUpperCase() : "";
+      if (titleEl) {
+        titleEl.textContent = tag && label ? `${tag} ${label}` : (label || tag || "Genesis Colonies");
+      }
+      if (listEl) {
+        listEl.innerHTML = "";
+        (payload.highlights || []).forEach((item) => {
+          const li = document.createElement("li");
+          li.textContent = String(item.title || item.body || "").trim();
+          listEl.appendChild(li);
+        });
+      }
+      if (moreEl && payload.anchor_id) {
+        moreEl.href = `/news#${payload.anchor_id}`;
+      }
+
+      root.hidden = false;
+      root.classList.remove("hidden");
+    };
+
+    const loadWhatsNew = () => {
+      if (!shouldRunGameLoop()) return;
+      fetch("/api/news/whats-new", { credentials: "same-origin", headers: { Accept: "application/json" } })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.ok) show(data);
+        })
+        .catch(() => {});
+    };
+
+    loadWhatsNew();
+    GC.registerCleanup(() => {});
   }
 
   // =========================

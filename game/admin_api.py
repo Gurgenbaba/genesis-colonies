@@ -1267,9 +1267,23 @@ def api_apply_balance_preset_b(admin_id: int) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def api_get_universe_news() -> Dict[str, Any]:
-    from game.universe_news import list_news
+    from game.universe_news import list_news, news_metadata
 
-    return _ok(entries=list_news(limit=100))
+    return _ok(entries=list_news(limit=200, include_drafts=True), meta=news_metadata())
+
+
+def _news_fields_from_body(body: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "title": str(body.get("title") or "").strip(),
+        "body": str(body.get("body") or "").strip(),
+        "set_banner": body.get("set_banner") in (True, 1, "1", "true", "on"),
+        "is_draft": body.get("is_draft") in (True, 1, "1", "true", "on"),
+        "version_tag": str(body.get("version_tag") or "").strip(),
+        "category": str(body.get("category") or "").strip(),
+        "badge": str(body.get("badge") or "").strip(),
+        "image_url": str(body.get("image_url") or "").strip(),
+        "is_major_release": body.get("is_major_release") in (True, 1, "1", "true", "on"),
+    }
 
 
 def api_create_universe_news(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
@@ -1277,22 +1291,59 @@ def api_create_universe_news(admin_id: int, body: Dict[str, Any]) -> Dict[str, A
 
     if not isinstance(body, dict):
         return _err("invalid_payload", "Expected JSON object")
-    title = str(body.get("title") or "").strip()
-    text = str(body.get("body") or "").strip()
-    if not text:
+    fields = _news_fields_from_body(body)
+    if not fields["body"] and not fields["is_draft"]:
         return _err("body_required", "News body is required")
-    set_banner = body.get("set_banner") not in (False, 0, "0", "false")
     try:
-        entry = create_news(title=title, body=text, set_banner=set_banner, created_by=int(admin_id))
+        entry = create_news(created_by=int(admin_id), **fields)
     except ValueError:
         return _err("body_required", "News body is required")
     audit(
         int(admin_id),
         "universe_news_create",
         target_type="system",
-        payload={"news_id": entry["id"], "title": entry["title"]},
+        payload={"news_id": entry["id"], "title": entry["title"], "version_tag": entry.get("version_tag")},
     )
     return _ok(entry=entry)
+
+
+def api_update_universe_news(admin_id: int, news_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.universe_news import update_news
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+    fields = _news_fields_from_body(body)
+    publish = body.get("publish") in (True, 1, "1", "true", "on")
+    entry = update_news(
+        int(news_id),
+        title=fields["title"] or None,
+        body=fields["body"] if "body" in body else None,
+        set_banner=fields["set_banner"] if body.get("set_banner") is not None else None,
+        is_draft=fields["is_draft"] if body.get("is_draft") is not None else None,
+        version_tag=fields["version_tag"] if "version_tag" in body else None,
+        category=fields["category"] if "category" in body else None,
+        badge=fields["badge"] if "badge" in body else None,
+        image_url=fields["image_url"] if "image_url" in body else None,
+        is_major_release=fields["is_major_release"] if "is_major_release" in body else None,
+        publish=publish,
+    )
+    if not entry:
+        return _err("not_found", "News entry not found")
+    audit(int(admin_id), "universe_news_update", target_type="system", payload={"news_id": entry["id"]})
+    return _ok(entry=entry)
+
+
+def api_import_changelog(admin_id: int) -> Dict[str, Any]:
+    from game.universe_news import import_changelog_markdown
+
+    result = import_changelog_markdown(created_by=int(admin_id))
+    audit(
+        int(admin_id),
+        "universe_news_import_changelog",
+        target_type="system",
+        payload={"inserted": result.get("inserted"), "skipped_versions": result.get("skipped_versions")},
+    )
+    return _ok(**result)
 
 
 def api_set_universe_news_banner(admin_id: int, news_id: int) -> Dict[str, Any]:
