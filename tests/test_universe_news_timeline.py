@@ -20,6 +20,7 @@ from game.universe_news import (
     _changelog_release_dates,
     _format_published,
     _is_player_visible_entry,
+    _latest_changelog_version,
     _sanitize_player_text,
     build_player_timeline,
     build_timeline,
@@ -293,11 +294,18 @@ def test_sync_release_dates_updates_rows(timeline_db):
     assert entry["published_label"] == "10.06.2026"
 
 
+def test_latest_changelog_version_picks_highest_not_last_in_file(timeline_db):
+    assert _latest_changelog_version() == "v0.8"
+
+
 def test_repository_history_audit(timeline_db):
     audit = repository_history_audit()
     assert audit["ok"] is True
     assert audit["commit_count"] > 0
     assert audit["first_commit_date"] == "2026-05-25"
+    assert audit["current_release"] == "v0.8"
+    assert audit["current_release_date"] == "10.06.2026"
+    assert audit["development_commits_since_release"] < audit["commit_count"]
     nav = sidebar_release_nav()
     assert nav["label"].startswith("v")
     assert nav["url"] == "/news"

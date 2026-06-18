@@ -1213,7 +1213,9 @@ def _latest_changelog_version(path: Path | None = None) -> str:
     if not changelog_path.exists():
         return ""
     tags = _parse_changelog_version_tags(changelog_path.read_text(encoding="utf-8"))
-    return tags[-1] if tags else ""
+    if not tags:
+        return ""
+    return max(tags, key=_version_sort_key)
 
 
 def _release_cutoff_ts(

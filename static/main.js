@@ -20141,15 +20141,31 @@
       root.classList.add("hidden");
     };
 
+    const persistDismiss = () => {
+      try {
+        localStorage.setItem(activeStorageKey, "1");
+      } catch (_) {}
+    };
+
     let activeStorageKey = "gc_whats_new_seen";
 
     root.addEventListener("click", (event) => {
       if (event.target.closest("[data-whats-new-dismiss]")) {
         event.preventDefault();
+        persistDismiss();
         hide();
-        try {
-          localStorage.setItem(activeStorageKey, "1");
-        } catch (_) {}
+        return;
+      }
+      const moreLink = event.target.closest("[data-whats-new-more]");
+      if (!moreLink) return;
+      event.preventDefault();
+      persistDismiss();
+      hide();
+      const href = moreLink.getAttribute("href") || "/news";
+      if (typeof GC.navigateTo === "function") {
+        GC.navigateTo(href, { push: true });
+      } else {
+        window.location.assign(href);
       }
     });
 
