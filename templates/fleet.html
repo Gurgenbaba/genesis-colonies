@@ -375,6 +375,14 @@
           </div>
         </section>
 
+        <section class="gc-panel fleet-panel fleet-submit-panel" aria-label="{{ T('fleet_send_submit') }}">
+          <p class="fleet-form-error" data-fleet-error hidden role="alert"></p>
+          <button type="submit" class="gc-btn gc-btn-primary fleet-send-submit fleet-launch-btn" data-fleet-send-btn disabled>
+            <span class="fleet-send-submit-icon" aria-hidden="true">▶</span>
+            {{ T("fleet_send_submit") }}
+          </button>
+        </section>
+
         <section class="gc-panel fleet-panel fleet-ogame-footer">
           <div class="fleet-ogame-footer-grid">
             <div class="fleet-ogame-footer-col">
@@ -424,18 +432,10 @@
                   <input type="number" id="fleet-mass-waves" class="gc-input" min="1" max="99" value="1" data-fleet-mass-waves>
                 </div>
                 <p class="fleet-mass-result" data-fleet-mass-result hidden></p>
-                <button type="submit" class="gc-btn gc-btn-secondary">{{ T("fleet_mass_expo_start") }}</button>
+                <button type="button" class="gc-btn gc-btn-secondary" data-fleet-mass-expo-submit>{{ T("fleet_mass_expo_start") }}</button>
               </form>
             </div>
           </div>
-        </section>
-
-        <section class="gc-panel fleet-panel fleet-submit-panel" aria-label="{{ T('fleet_send_submit') }}">
-          <p class="fleet-form-error" data-fleet-error hidden role="alert"></p>
-          <button type="submit" class="gc-btn gc-btn-primary fleet-send-submit fleet-launch-btn" data-fleet-send-btn disabled>
-            <span class="fleet-send-submit-icon" aria-hidden="true">▶</span>
-            {{ T("fleet_send_submit") }}
-          </button>
         </section>
 
       </form>

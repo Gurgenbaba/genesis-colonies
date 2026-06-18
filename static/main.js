@@ -9918,9 +9918,18 @@
           || tt(`fleet_mission_${missionKey}`, missionKey);
         sel.appendChild(opt);
       });
+      if (!sel.options.length && allMissions.length) {
+        allMissions.forEach((missionKey) => {
+          const opt = document.createElement("option");
+          opt.value = missionKey;
+          opt.textContent = rt.missionOptionLabels[missionKey]
+            || tt(`fleet_mission_${missionKey}`, missionKey);
+          sel.appendChild(opt);
+        });
+      }
       if (urlMission && Array.from(sel.options).some((opt) => opt.value === urlMission)) {
         sel.value = urlMission;
-      } else if (!locked && allowed.size > 0 && !allowed.has(sel.value)) {
+      } else if (!locked && allowed.size > 0 && !allowed.has(prevValue)) {
         const first = Array.from(sel.options)[0];
         if (first) sel.value = first.value;
       } else if (prevValue && Array.from(sel.options).some((opt) => opt.value === prevValue)) {
@@ -9935,7 +9944,8 @@
         return;
       }
       if (sel.value !== prevValue && !urlMission) {
-        sel.dispatchEvent(new Event("change", { bubbles: true }));
+        updateFleetFormMode(page);
+        setColonizeRowVisible(page, sel.value);
       }
     };
 
@@ -9964,6 +9974,7 @@
         updateFleetTargetInlineError(page, null);
         return null;
       }
+      syncExpeditionMissionTarget(page);
       const coords = getTargetCoords(page);
       const mission = form.querySelector("[data-fleet-mission]")?.value || "transport";
       try {
@@ -9978,7 +9989,6 @@
         if (res?.ok && target) {
           syncMissionAllowlistFromTarget(page, target);
           updateFleetTargetInlineError(page, target);
-          syncExpeditionMissionTarget(page);
           return target;
         }
         updateFleetTargetInlineError(page, { reason_if_blocked: apiError(res) });
@@ -10575,7 +10585,6 @@
       const rt = getFleetRuntime(page);
       if (rt.previewTimer) clearTimeout(rt.previewTimer);
       rt.previewTimer = setTimeout(() => runPreview(page), 300);
-      scheduleTargetResolve(page);
     };
 
     const loadPresetById = (page, presetId) => {
@@ -10606,6 +10615,7 @@
       if (preset.target_system != null) form.querySelector('[name="target_system"]').value = String(preset.target_system);
       if (preset.target_position != null) form.querySelector('[name="target_position"]').value = String(preset.target_position);
       syncExpeditionMissionTarget(page);
+      scheduleTargetResolve(page);
       schedulePreview(page);
     };
 
@@ -10691,6 +10701,7 @@
         if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(quickSel);
       }
       syncExpeditionMissionTarget(page);
+      scheduleTargetResolve(page);
       schedulePreview(page);
     };
 
@@ -10836,6 +10847,16 @@
           }
         } catch (_) {
           showNotify(reasonText("generic"), "error");
+        }
+        return;
+      }
+
+      const massExpoBtn = e.target.closest("[data-fleet-mass-expo-submit]");
+      if (massExpoBtn && page.contains(massExpoBtn)) {
+        e.preventDefault();
+        const massForm = page.querySelector("#fleet-mass-expo-form");
+        if (massForm) {
+          massForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
         }
         return;
       }
@@ -10988,7 +11009,8 @@
         e.preventDefault();
         if (massForm.dataset.submitting === "1") return;
         massForm.dataset.submitting = "1";
-        const massBtn = massForm.querySelector('button[type="submit"]');
+        const massBtn = massForm.querySelector("[data-fleet-mass-expo-submit]")
+          || massForm.querySelector('button[type="submit"]');
         const massResult = page.querySelector("[data-fleet-mass-result]");
         if (massBtn) massBtn.disabled = true;
         if (massResult) { massResult.hidden = true; massResult.textContent = ""; }
