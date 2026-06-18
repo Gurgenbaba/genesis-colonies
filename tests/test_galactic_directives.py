@@ -102,6 +102,11 @@ def test_ensure_galaxy_state_idempotent(gd_db):
 
 
 def test_get_active_directives_fallback_on_missing_state(gd_db):
+    conn = db()
+    try:
+        before = conn.execute("SELECT COUNT(*) AS c FROM gd_galaxy_state;").fetchone()["c"]
+    finally:
+        conn.close()
     payload = get_active_directives_for_galaxy(1)
     assert payload is not None
     assert payload["galaxy"] == 1
@@ -111,6 +116,12 @@ def test_get_active_directives_fallback_on_missing_state(gd_db):
     assert payload["primary_definition"] is not None
     assert payload["primary_definition"]["directive_key"] == FALLBACK_PRIMARY
     assert payload["secondary_definition"] is None
+    conn = db()
+    try:
+        after = conn.execute("SELECT COUNT(*) AS c FROM gd_galaxy_state;").fetchone()["c"]
+        assert int(after) == int(before)
+    finally:
+        conn.close()
 
 
 def test_get_active_directives_reads_persisted_state(gd_db):

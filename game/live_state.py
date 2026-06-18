@@ -88,7 +88,7 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     uid = int(user_id)
     vote_count = count_voteable_providers(uid, conn=conn)
     gov_count = count_pending_government_votes(uid, conn=conn)
-    referral_count = count_claimable_referral_rewards(uid, conn=conn)
+    referral_count = count_claimable_referral_rewards(uid, conn=conn, read_only=True)
     return {
         "vote_center": _nav_badge_entry(
             active=vote_count > 0,

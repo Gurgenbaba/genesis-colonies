@@ -138,7 +138,10 @@ def get_active_directives_for_galaxy(
     galaxy: Any,
     conn: Optional[sqlite3.Connection] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Active primary/secondary directives for one galaxy, or None if galaxy invalid."""
+    """Active primary/secondary directives for one galaxy, or None if galaxy invalid.
+
+    Read-only on the hot path — does not bootstrap ``gd_galaxy_state`` rows.
+    """
     galaxy_id = normalize_galaxy(galaxy, conn=conn)
     if galaxy_id is None:
         return None
@@ -156,15 +159,18 @@ def get_active_directives_for_galaxy(
                 conn=conn,
             )
 
-        had_row = _fetch_state_row(galaxy_id, conn) is not None
-        state = ensure_galaxy_state(galaxy_id, conn=conn)
-        primary, secondary, used_fallback = _resolve_active_keys(state)
+        row = _fetch_state_row(galaxy_id, conn)
+        if row is None:
+            return _build_active_payload(
+                galaxy_id,
+                FALLBACK_PRIMARY,
+                None,
+                source="fallback",
+                conn=conn,
+            )
 
-        if not had_row or used_fallback:
-            source = "fallback"
-        else:
-            source = "state"
-
+        primary, secondary, used_fallback = _resolve_active_keys(row)
+        source = "fallback" if used_fallback else "state"
         return _build_active_payload(
             galaxy_id,
             primary,

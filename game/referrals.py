@@ -565,9 +565,37 @@ def get_referral_state(
     return out
 
 
-def count_claimable_referral_rewards(player_id: int, *, conn, now: Optional[int] = None) -> int:
+def count_claimable_referral_rewards(
+    player_id: int,
+    *,
+    conn,
+    now: Optional[int] = None,
+    read_only: bool = False,
+) -> int:
+    """Nav-badge helper: set read_only=True to avoid writes during game-state polls."""
+    if read_only:
+        return _count_claimable_referral_rewards_readonly(int(player_id), conn=conn)
     state = get_referral_state(int(player_id), conn=conn, now=now)
     return int(state.get("claimable_count") or 0)
+
+
+def _count_claimable_referral_rewards_readonly(player_id: int, *, conn) -> int:
+    if not referrals_schema_ready(conn):
+        return 0
+    uid = int(player_id)
+    successful = count_successful_referrals(uid, conn=conn)
+    claimed_referrer = _claimed_reward_keys(uid, "referrer", conn=conn)
+    claimable = sum(
+        1
+        for tier in REFERRER_TIER_REWARDS
+        if successful >= int(tier["required_count"])
+        and str(tier["reward_key"]) not in claimed_referrer
+    )
+    if _get_referral_link_row(uid, conn=conn):
+        claimed_referred = _claimed_reward_keys(uid, "referred", conn=conn)
+        if str(REFERRED_LINK_REWARD["reward_key"]) not in claimed_referred:
+            claimable += 1
+    return claimable
 
 
 def _grant_referral_box(

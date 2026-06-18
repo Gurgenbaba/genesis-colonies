@@ -186,11 +186,13 @@ class EffectResolver:
         player_id: Optional[int] = None,
         planet_id: Optional[int] = None,
         galaxy_id: Optional[int] = None,
+        conn=None,
     ) -> None:
         self.buildings = {k: _bld(buildings, k) for k in buildings}
         self.research = dict(research or {})
         self.player_id = int(player_id) if player_id is not None else None
         self.planet_id = int(planet_id) if planet_id is not None else None
+        self._conn = conn
         if galaxy_id is not None:
             try:
                 self.galaxy_id = int(galaxy_id)
@@ -220,6 +222,7 @@ class EffectResolver:
             player_id=int(player_id),
             planet_id=int(planet["id"]),
             galaxy_id=galaxy_id,
+            conn=conn,
         )
 
     def _settings_dict(self) -> Dict[str, Any]:
@@ -292,7 +295,7 @@ class EffectResolver:
                 get_galaxy_directive_mechanics,
             )
 
-            payload = get_galaxy_directive_mechanics(self.galaxy_id)
+            payload = get_galaxy_directive_mechanics(self.galaxy_id, conn=self._conn)
         except Exception as exc:
             if EFFECT_DEBUG:
                 logger.warning(
@@ -854,6 +857,7 @@ def get_effect_resolver(
             player_id=int(player_id),
             planet_id=planet_id,
             galaxy_id=galaxy_id,
+            conn=conn,
         )
 
     return EffectResolver.for_player(int(player_id), conn=conn)
