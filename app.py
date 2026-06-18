@@ -711,15 +711,37 @@ def register():
             elif len(password) < 4:
                 error = T("msg_register_password_short") or "Passwort muss mindestens 4 Zeichen lang sein."
             else:
+                referral_code = (request.form.get("referral_code") or "").strip()
                 ok, err, user = account_email_logic.register_user_with_email(username, password, email)
                 if not ok:
                     error = T(err) if err and T(err) != err else (err or T("msg_register_failed"))
                 else:
+                    uid = int(user["id"])
+                    reg_ip = client_ip(request)
+                    conn = db()
+                    try:
+                        from game.referrals import (
+                            apply_referral_code,
+                            referrals_schema_ready,
+                            set_user_registration_meta,
+                        )
+
+                        begin_write_transaction(conn)
+                        set_user_registration_meta(uid, registration_ip=reg_ip, conn=conn)
+                        if referral_code and referrals_schema_ready(conn):
+                            apply_referral_code(uid, referral_code, reg_ip, conn=conn)
+                        commit(conn)
+                    except Exception:
+                        rollback(conn)
+                        logger.exception("referral apply on register failed user_id=%s", uid)
+                    finally:
+                        conn.close()
                     login_user(user)
                     flash(T("msg_register_success_verify") or T("msg_register_success"), "success")
                     return redirect(url_for("overview"))
 
-    return render_template("register.html", error=error)
+    prefilled_referral = (request.args.get("ref") or "").strip()
+    return render_template("register.html", error=error, prefilled_referral=prefilled_referral)
 
 
 @app.route("/verify-email/<token>")
@@ -1150,12 +1172,16 @@ def galaxy_view():
 
     conn = db()
     command_map: dict[str, Any] = {"nodes": [], "edges": []}
+    galactic_directive_banner: dict[str, Any] = {"visible": False}
     try:
         hold_mission_enabled = _hold_mission_enabled(conn=conn)
         if view == "command_map":
             from game.planet_evolution.command_map import build_command_map_payload
 
             command_map = build_command_map_payload(user_id, conn=conn)
+        from game.galactic_directives.banner import build_galactic_directive_banner
+
+        galactic_directive_banner = build_galactic_directive_banner(galaxy, conn=conn)
     finally:
         conn.close()
 
@@ -1192,6 +1218,7 @@ def galaxy_view():
         hold_mission_enabled=hold_mission_enabled,
         galaxy_view=view,
         command_map=command_map,
+        galactic_directive_banner=galactic_directive_banner,
     )
 
 
@@ -2629,6 +2656,177 @@ def premium_view():
 
 
 # --------------------------------------------------------------------------
+# REFERRALS (GC-703)
+# --------------------------------------------------------------------------
+
+@app.route("/referrals")
+@require_login
+def referrals_view():
+    ctx = _load_page_live_context(finish_source="referrals")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.referrals import get_referral_state
+
+    referral_state = {"ready": False}
+    conn = db()
+    try:
+        base = request.url_root.rstrip("/") + url_for("register")
+        referral_state = get_referral_state(
+            int(session["user_id"]),
+            conn=conn,
+            referral_link_base=base,
+        )
+    finally:
+        conn.close()
+
+    return render_template(
+        "referrals.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        referral_state=referral_state,
+    )
+
+
+@app.route("/api/referrals/state", methods=["GET"])
+@require_login
+def api_referrals_state():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    from game.referrals import get_referral_state
+
+    conn = db()
+    try:
+        base = request.url_root.rstrip("/") + url_for("register")
+        referral_state = get_referral_state(user_id, conn=conn, referral_link_base=base)
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "referrals": referral_state})
+
+
+@app.route("/api/referrals/apply", methods=["POST"])
+@require_login
+def api_referrals_apply():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    code = str(data.get("referral_code") or data.get("code") or "").strip()
+    from game.referrals import apply_referral_code, get_referral_state
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason = apply_referral_code(
+            user_id,
+            code,
+            client_ip(request),
+            conn=conn,
+        )
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("referral apply failed user_id=%s", user_id)
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_referrals_apply")
+        return jsonify({"ok": False, "reason": "server_error", "state": state}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_referrals_apply")
+    base = request.url_root.rstrip("/") + url_for("register")
+    conn2 = db()
+    try:
+        referrals = get_referral_state(user_id, conn=conn2, referral_link_base=base)
+    finally:
+        conn2.close()
+
+    resp: Dict[str, Any] = {
+        "ok": bool(ok),
+        "reason": reason,
+        "state": state,
+        "referrals": referrals,
+    }
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
+@app.route("/api/referrals/claim", methods=["POST"])
+@require_login
+def api_referrals_claim():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    reward_scope = str(data.get("reward_scope") or "").strip().lower()
+    reward_key = str(data.get("reward_key") or "").strip()
+    from game.referrals import claim_referral_reward, get_referral_state
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, claim_result = claim_referral_reward(
+            user_id,
+            reward_scope,
+            reward_key,
+            conn=conn,
+        )
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception(
+            "referral claim failed user_id=%s scope=%s key=%s",
+            user_id,
+            reward_scope,
+            reward_key,
+        )
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_referrals_claim")
+        return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_referrals_claim")
+    base = request.url_root.rstrip("/") + url_for("register")
+    conn2 = db()
+    try:
+        referrals = get_referral_state(user_id, conn=conn2, referral_link_base=base)
+    finally:
+        conn2.close()
+
+    resp: Dict[str, Any] = {
+        "ok": bool(ok),
+        "reason": reason,
+        "state": state,
+        "referrals": referrals,
+    }
+    if ok and claim_result:
+        resp["claim"] = claim_result
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
 # RANKING PAGE
 # --------------------------------------------------------------------------
 
@@ -4076,6 +4274,17 @@ def _payload_from_live_context(
         )
     except Exception:
         payload["unread_messages_count"] = 0
+
+    try:
+        from game.live_state import nav_badges_for_game_state
+
+        payload["nav_badges"] = nav_badges_for_game_state(user_id, conn=conn)
+    except Exception:
+        payload["nav_badges"] = {
+            "vote_center": {"active": False, "count": 0, "label": ""},
+            "government": {"active": False, "count": 0, "label": ""},
+            "referrals": {"active": False, "count": 0, "label": ""},
+        }
 
     try:
         from game.models import get_player_stats

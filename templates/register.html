@@ -6,6 +6,7 @@
 
 {% set err = (error if error is defined and error else "") %}
 {% set v_user = (request.form.get('username') or '') if request.method == 'POST' else '' %}
+{% set v_ref = (request.form.get('referral_code') or prefilled_referral or '') if prefilled_referral is defined else ((request.form.get('referral_code') or '') if request.method == 'POST' else '') %}
 
 {% set aria = T('register_aria') %}
 {% if aria == 'register_aria' %}{% set aria = 'Registrierung' %}{% endif %}
@@ -135,6 +136,18 @@
             required
             minlength="8"
             {% if err %}aria-invalid="true"{% endif %}
+          >
+
+          <label class="auth-label" for="referral_code">{{ T("register_label_referral", "Referral-Code (optional)") }}</label>
+          <input
+            id="referral_code"
+            type="text"
+            name="referral_code"
+            class="auth-input gc-mono"
+            placeholder="{{ T('register_placeholder_referral', 'ABCDEFGH') }}"
+            autocomplete="off"
+            maxlength="32"
+            value="{{ v_ref }}"
           >
         </div>
 

@@ -511,4 +511,13 @@ def build_overview_page_context(
         ctx.get("buildings") or {},
         build_queue=ctx.get("build_queue"),
     )
+    galaxy_id = _safe_int((status.get("planet") or {}).get("coordinates", {}).get("galaxy"))
+    if galaxy_id <= 0:
+        galaxy_id = _safe_int(planet.get("galaxy"))
+    from .galactic_directives.banner import build_galactic_directive_banner
+
+    status["galactic_directive_banner"] = build_galactic_directive_banner(
+        galaxy_id,
+        conn=conn,
+    )
     return status

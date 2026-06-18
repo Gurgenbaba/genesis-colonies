@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% set _loot_fallback = url_for('static', filename='img/lootboxes/Generic_Supply_Container.png') %}
+
+{% block content %}
+{% set rs = referral_state if referral_state is defined and referral_state else {'ready': false} %}
+{% set tiers = rs.referrer_tiers if rs.referrer_tiers is defined else [] %}
+{% set referred = rs.referred_reward if rs.referred_reward is defined else none %}
+
+<div class="gc-page referral-page" id="referrals-page"
+     data-referrals
+     data-ready="{{ '1' if rs.ready else '0' }}">
+
+  {% if rs.ready %}
+  <script type="application/json" id="referrals-page-state">{{ rs | tojson }}</script>
+  {% endif %}
+
+  <header class="gc-page-header section-header referral-header">
+    <p class="referral-eyebrow">{{ T("referral_eyebrow", "EMPFEHLUNGEN") }}</p>
+    <h1 class="section-title">{{ T("referral_title", "Referral") }}</h1>
+    <p class="section-hint hint referral-hint">
+      {{ T("referral_hint", "Lade neue Commander ein und hole Staffel-Belohnungen ab, sobald sie aktiv werden.") }}
+    </p>
+  </header>
+
+  {% if not rs.ready %}
+  <section class="gc-panel referral-panel">
+    <p class="referral-empty">{{ T("referral_unavailable", "Referral-System ist derzeit nicht verfügbar.") }}</p>
+  </section>
+  {% else %}
+
+  <section class="gc-panel referral-panel referral-link-panel">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("referral_your_link_title", "Dein Referral-Link") }}</span>
+    </div>
+    <div class="referral-link-card">
+      <div class="referral-code-row">
+        <span class="referral-code-label">{{ T("referral_code_label", "Code") }}</span>
+        <code class="referral-code-value gc-mono" data-referral-code>{{ rs.code }}</code>
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" data-referral-copy="code">
+          {{ T("referral_copy_code", "Code kopieren") }}
+        </button>
+      </div>
+      <div class="referral-link-row">
+        <div class="gc-referral-input-wrap gc-referral-input-wrap--readonly">
+          <span class="gc-referral-input-accent" aria-hidden="true"></span>
+          <input type="text"
+                 class="gc-referral-input"
+                 readonly
+                 value="{{ rs.referral_url }}"
+                 data-referral-url-input
+                 aria-label="{{ T('referral_link_label', 'Referral-Link') }}">
+        </div>
+        <button type="button" class="gc-btn gc-btn-secondary gc-btn-sm referral-action-btn" data-referral-copy="link">
+          {{ T("referral_copy_link", "Link kopieren") }}
+        </button>
+      </div>
+      <p class="referral-progress gc-mono" data-referral-progress>
+        {{ T("referral_progress", "Erfolgreiche Empfehlungen") }}:
+        <strong>{{ rs.successful_count }}</strong>
+        {% if rs.pending_count %}
+        <span class="referral-progress-pending">({{ rs.pending_count }} {{ T("referral_pending_short", "ausstehend") }})</span>
+        {% endif %}
+      </p>
+    </div>
+  </section>
+
+  {% if rs.can_apply_code %}
+  <section class="gc-panel referral-panel referral-apply-panel">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("referral_apply_title", "Referral-Code eintragen") }}</span>
+    </div>
+    <form class="referral-apply-form" data-referral-apply-form>
+      <label class="referral-apply-label" for="referral-code-input">{{ T("referral_apply_label", "Code eines Freundes") }}</label>
+      <div class="referral-apply-row">
+        <div class="gc-referral-input-wrap">
+          <span class="gc-referral-input-accent" aria-hidden="true"></span>
+          <input id="referral-code-input"
+                 type="text"
+                 class="gc-referral-input"
+                 name="referral_code"
+                 maxlength="32"
+                 autocomplete="off"
+                 spellcheck="false"
+                 autocapitalize="characters"
+                 placeholder="{{ T('referral_apply_placeholder', 'ABCDEFGH') }}"
+                 data-referral-apply-input>
+        </div>
+        <button type="submit" class="gc-btn gc-btn-primary gc-btn-sm referral-action-btn">
+          {{ T("referral_apply_btn", "Code einlösen") }}
+        </button>
+      </div>
+      <p class="referral-apply-hint hint">{{ T("referral_apply_hint", "Nur einmalig möglich, solange noch kein Referrer gesetzt ist.") }}</p>
+    </form>
+  </section>
+  {% elif rs.has_referrer %}
+  <section class="gc-panel referral-panel referral-linked-panel">
+    <p class="referral-linked-note">
+      {{ T("referral_linked_note", "Du wurdest über Code") }}
+      <code class="gc-mono">{{ rs.referrer_code }}</code>
+      {{ T("referral_linked_note_suffix", "empfohlen.") }}
+      {% if rs.same_ip_flag %}
+      <span class="referral-same-ip-flag">{{ T("referral_same_ip_note", "Gleiche IP — zählt nicht für Staffel-Belohnungen.") }}</span>
+      {% endif %}
+    </p>
+  </section>
+  {% endif %}
+
+  {% if referred %}
+  <section class="gc-panel referral-panel">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("referral_referred_rewards_title", "Deine Willkommens-Belohnung") }}</span>
+    </div>
+    <div class="referral-tier-list" data-referral-referred-list>
+      <article class="referral-tier-card {% if referred.claimable %}referral-tier-card--claimable{% elif referred.claimed %}referral-tier-card--claimed{% endif %}"
+               data-referral-tier
+               data-reward-scope="referred"
+               data-reward-key="{{ referred.reward_key }}">
+        <div class="referral-tier-visual">
+          <img src="{{ referred.display.image if referred.display is defined else _loot_fallback }}"
+               alt=""
+               width="64" height="64" loading="lazy">
+        </div>
+        <div class="referral-tier-info">
+          <h3 class="referral-tier-title">{{ T(referred.label_key, "Starter Supply Container") }}</h3>
+          <p class="referral-tier-desc">{{ T(referred.desc_key, "Nach Verknüpfung mit einem Referral-Code.") }}</p>
+        </div>
+        {% if referred.claimable %}
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" data-referral-claim>
+          {{ T("referral_claim_btn", "Abholen") }}
+        </button>
+        {% elif referred.claimed %}
+        <span class="referral-tier-claimed">{{ T("referral_claimed_badge", "Abgeholt") }}</span>
+        {% endif %}
+      </article>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="gc-panel referral-panel">
+    <div class="gc-panel-header">
+      <span class="gc-panel-title">{{ T("referral_tiers_title", "Staffel-Belohnungen") }}</span>
+    </div>
+    <p class="referral-criteria hint">
+      {{ T("referral_criteria_hint", "Erfolgreich zählt ein Referral erst nach 24h Account-Alter und Planet Stufe 3 — ohne Bann und ohne gleiche IP.") }}
+    </p>
+    <div class="referral-tier-list" data-referral-tier-list>
+      {% for tier in tiers %}
+      <article class="referral-tier-card {% if tier.claimable %}referral-tier-card--claimable{% elif tier.claimed %}referral-tier-card--claimed{% elif not tier.unlocked %}referral-tier-card--locked{% endif %}"
+               data-referral-tier
+               data-reward-scope="referrer"
+               data-reward-key="{{ tier.reward_key }}"
+               data-required="{{ tier.required_count }}">
+        <div class="referral-tier-visual">
+          <img src="{{ tier.display.image if tier.display is defined else _loot_fallback }}"
+               alt=""
+               width="64" height="64" loading="lazy">
+        </div>
+        <div class="referral-tier-info">
+          <h3 class="referral-tier-title">{{ T(tier.label_key, tier.reward_key) }}</h3>
+          {% if tier.desc_key %}
+          <p class="referral-tier-desc">{{ T(tier.desc_key, "") }}</p>
+          {% endif %}
+          <p class="referral-tier-progress gc-mono" data-referral-tier-progress="{{ tier.reward_key }}">
+            {{ tier.progress_label }} {{ T("referral_tier_progress_suffix", "erfolgreiche Empfehlungen") }}
+          </p>
+        </div>
+        {% if tier.claimable %}
+        <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" data-referral-claim>
+          {{ T("referral_claim_btn", "Abholen") }}
+        </button>
+        {% elif tier.claimed %}
+        <span class="referral-tier-claimed">{{ T("referral_claimed_badge", "Abgeholt") }}</span>
+        {% else %}
+        <span class="referral-tier-locked gc-mono" aria-hidden="true"></span>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% endif %}
+</div>
+{% endblock %}

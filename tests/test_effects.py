@@ -739,3 +739,90 @@ class TestResearchEffectRealityAudit:
         assert 0.60 <= crystal_ph / metal_ph <= 0.68
         assert 0.34 <= fuel_ph / metal_ph <= 0.42
         assert 0.52 <= fuel_ph / crystal_ph <= 0.68
+
+
+class TestGalacticDirectiveEffectResolver:
+    def _set_galaxy_directive(
+        self,
+        galaxy: int,
+        primary: str,
+        secondary: str | None = None,
+    ) -> None:
+        conn = db()
+        try:
+            conn.execute(
+                """
+                INSERT INTO gd_galaxy_state (
+                    galaxy, primary_directive, secondary_directive,
+                    consecutive_primary_wins, updated_at
+                ) VALUES (?, ?, ?, 0, 0)
+                ON CONFLICT(galaxy) DO UPDATE SET
+                    primary_directive = excluded.primary_directive,
+                    secondary_directive = excluded.secondary_directive,
+                    updated_at = excluded.updated_at;
+                """,
+                (int(galaxy), str(primary), secondary),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_industrial_boosts_resource_production(self):
+        pid = _create_player("gd_industrial")
+        self._set_galaxy_directive(1, "industrial")
+        b = _set_buildings(pid, {"metal_mine": 10, "crystal_mine": 10, "fuel_cell_plant": 5})
+        er = EffectResolver.for_player(pid)
+        mods = er.get_modifiers()
+        assert mods["metal_prod_factor"] == pytest.approx(1.20)
+        assert mods["crystal_prod_factor"] == pytest.approx(1.15)
+        assert mods["fuel_prod_factor"] == pytest.approx(1.25)
+
+        boosted_metal, _ = er.production_rates_per_sec()
+        baseline = EffectResolver(b, {}, galaxy_id=None).production_rates_per_sec()[0]
+        assert boosted_metal == pytest.approx(baseline * 1.20)
+
+        fuel_ph = er.fuel_cells_production_per_hour()
+        fuel_base = EffectResolver(
+            b, {}, settings={"fuel_production_per_hour": 2.0}, galaxy_id=None
+        ).fuel_cells_production_per_hour()
+        assert fuel_ph == pytest.approx(fuel_base * 1.25)
+
+    def test_scientific_affects_research_and_build_speed(self):
+        pid = _create_player("gd_scientific")
+        self._set_galaxy_directive(1, "scientific")
+        _set_buildings(pid, {"research_lab": 1})
+        er = EffectResolver.for_player(pid)
+        mods = er.get_modifiers()
+        assert mods["research_time_speed"] == pytest.approx(1.25)
+        assert mods["build_time_speed"] == pytest.approx(1.0)
+        assert mods.get("weapon_bonus", 0.0) == pytest.approx(0.0)
+
+        sci_time = er.get_research_time_seconds("energy_tech", 2)
+        self._set_galaxy_directive(1, "defensive")
+        clear_effect_resolver_cache(pid)
+        def_time = EffectResolver.for_player(pid).get_research_time_seconds("energy_tech", 2)
+        assert sci_time < def_time
+
+    def test_missing_state_falls_back_to_defensive(self):
+        pid = _create_player("gd_fallback")
+        er = EffectResolver.for_player(pid)
+        mods = er.get_modifiers()
+        assert mods["metal_prod_factor"] == pytest.approx(1.0)
+        assert mods["research_time_speed"] == pytest.approx(1.0)
+
+    def test_invalid_directive_keys_do_not_crash(self):
+        pid = _create_player("gd_invalid")
+        self._set_galaxy_directive(1, "not_a_real_directive")
+        er = EffectResolver.for_player(pid)
+        mods = er.get_modifiers()
+        assert mods["metal_prod_factor"] == pytest.approx(1.0)
+
+    def test_logistics_fleet_modifiers_not_applied(self):
+        pid = _create_player("gd_logistics")
+        self._set_galaxy_directive(1, "logistics")
+        _set_buildings(pid, {"metal_mine": 5})
+        mods = EffectResolver.for_player(pid).get_modifiers()
+        assert mods["fleet_speed_multiplier"] == pytest.approx(1.0)
+        assert mods["cargo_multiplier"] == pytest.approx(1.0)
+        assert mods["fuel_efficiency_factor"] == pytest.approx(1.0)
+        assert mods["solar_output_factor"] == pytest.approx(0.95)

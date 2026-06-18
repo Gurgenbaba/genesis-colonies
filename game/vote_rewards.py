@@ -638,6 +638,19 @@ def _provider_vote_stats(
     }
 
 
+def count_voteable_providers(user_id: int, *, conn, now: Optional[int] = None) -> int:
+    """Nav-badge helper: providers the player can vote on right now (server cooldown truth)."""
+    if not vote_system_ready(conn):
+        return 0
+    ts = int(now if now is not None else time.time())
+    total = 0
+    for provider in list_enabled_providers(conn=conn):
+        cd = get_provider_cooldown_status(int(user_id), provider, conn=conn, now=ts)
+        if cd["can_vote"]:
+            total += 1
+    return total
+
+
 def get_vote_center_state(user_id: int, *, conn) -> Dict[str, Any]:
     uid = int(user_id)
     now = int(time.time())

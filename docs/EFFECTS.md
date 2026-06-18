@@ -7,7 +7,7 @@ Consumers (`resources`, `buildings`, `research`) delegate to `EffectResolver`; t
 
 | Area | Status | Notes |
 |------|--------|--------|
-| Economy (production, energy, storage) | **Fixed** | Applied on every resource tick / derived sync |
+| Economy (production, energy, storage) | **Fixed** | Applied on every resource tick / derived sync; includes galactic directives (GC-720E) |
 | Time (build, research, lab, academy, nanofactory) | **Fixed** | `get_build_time_seconds`, `get_research_time_seconds` |
 | Building caps (core nexus, geothermal, terraform) | **Fixed** | Max levels, storage, solar bonus |
 | Combat (`weapon_tech`, `armor_tech`, `shield_tech`) | **Fixed** | Applied in `simulate_battle()` via `EffectResolver.get_combat_modifiers()` — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
@@ -23,6 +23,16 @@ Prepared modifiers may appear in:
 - Future UI tooltips / tech tree “planned” hints
 
 Combat and fleet modifiers are **active** where documented in [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) and [FLEET_SYSTEM.md](FLEET_SYSTEM.md). Radar (`scan_range`) remains prepared until a scan engine consumes it.
+
+### Galactic directives (GC-720E)
+
+`EffectResolver` loads merged directive mechanics via `get_galaxy_directive_mechanics(planet.galaxy)` — no per-consumer `if directive` branches.
+
+**Active in EffectResolver (phase 1):** `metal_prod_factor`, `crystal_prod_factor`, `fuel_prod_factor`, `mine_energy_factor`, `solar_output_factor`, `storage_factor`, `build_time_speed`, `research_time_speed`.
+
+**Deferred (GC-720E2+):** fleet, combat, expedition, command-map flags — present in directive JSON but ignored by `EffectResolver` until wired.
+
+Owner: `game/galactic_directives/` · [GALACTIC_DIRECTIVES.md](GALACTIC_DIRECTIVES.md)
 
 Use labels like **“prepared / not active”** in admin copy when showing `weapon_bonus`, `scan_range`, etc.
 

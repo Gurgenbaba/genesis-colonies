@@ -65,6 +65,49 @@ def defense_panel_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, An
     }
 
 
+def _inactive_nav_badge() -> Dict[str, Any]:
+    return {"active": False, "count": 0, "label": ""}
+
+
+def _nav_badge_entry(*, active: bool, count: int = 0, label: str = "") -> Dict[str, Any]:
+    if not active:
+        return _inactive_nav_badge()
+    return {
+        "active": True,
+        "count": max(0, int(count)),
+        "label": str(label),
+    }
+
+
+def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
+    """Action hints for left-menu navigation (GC-702)."""
+    from game.galactic_directives.state import count_pending_government_votes
+    from game.referrals import count_claimable_referral_rewards
+    from game.vote_rewards import count_voteable_providers
+
+    uid = int(user_id)
+    vote_count = count_voteable_providers(uid, conn=conn)
+    gov_count = count_pending_government_votes(uid, conn=conn)
+    referral_count = count_claimable_referral_rewards(uid, conn=conn)
+    return {
+        "vote_center": _nav_badge_entry(
+            active=vote_count > 0,
+            count=vote_count,
+            label=str(vote_count) if vote_count > 0 else "",
+        ),
+        "government": _nav_badge_entry(
+            active=gov_count > 0,
+            count=gov_count,
+            label="!" if gov_count > 0 else "",
+        ),
+        "referrals": _nav_badge_entry(
+            active=referral_count > 0,
+            count=referral_count,
+            label="!" if referral_count > 0 else "",
+        ),
+    }
+
+
 def shipyard_panel_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
     """Shipyard queue + stock slice for /api/game-state include_panel (GC-630)."""
     from game.fleet import fleet_schema_ready

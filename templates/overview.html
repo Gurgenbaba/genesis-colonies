@@ -37,6 +37,9 @@
     </p>
   </header>
 
+  {% set galactic_directive_banner = os.galactic_directive_banner if os.galactic_directive_banner is defined else {} %}
+  {% include "partials/galactic_directive_banner.html" %}
+
   <section class="gc-panel overview-hero" aria-label="{{ T('overview_label_planet', 'Kolonie') }}">
     <div class="overview-hero-top">
       <div class="overview-hero-identity">

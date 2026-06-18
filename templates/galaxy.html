@@ -44,6 +44,8 @@
     </a>
   </nav>
 
+  {% include "partials/galactic_directive_banner.html" %}
+
   {% if is_command_map and COMMAND_MAP_DEV_MODE %}
   <aside class="gc-command-map-dev-banner" role="note" aria-label="{{ T('command_map_dev_preview_title') }}">
     <span class="gc-dev-preview-badge gc-dev-preview-badge--banner">{{ T("command_map_dev_badge", "DEV") }} {{ T("command_map_dev_preview_label", "PREVIEW") }}</span>

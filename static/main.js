@@ -22,7 +22,8 @@
         if (val !== null && val !== undefined && String(val).length > 0) return String(val);
       }
     } catch (_) {}
-    return fallback || key;
+    if (arguments.length > 1) return fallback == null ? "" : String(fallback);
+    return String(key || "");
   }
 
   // supports "%(var)s" and "{var}" — single pass, unknown placeholders left intact
@@ -1277,6 +1278,7 @@
     if (path.endsWith("/inventory")) return "inventory";
     if (path.endsWith("/auction-house")) return "auction_house";
     if (path.endsWith("/vote-center")) return "vote_center";
+    if (path.endsWith("/referrals")) return "referrals";
     if (path.endsWith("/galactic-politics")) return "galactic_politics";
     if (path.endsWith("/skilltree")) return "skilltree";
     if (path.endsWith("/premium")) return "premium";
@@ -6157,6 +6159,51 @@
     _lastMessagesUnreadPoll = Math.max(0, Number(count) || 0);
   };
 
+  function updateNavBadges(navBadges) {
+    const badges = navBadges && typeof navBadges === "object" ? navBadges : {};
+    document.querySelectorAll("[data-nav-badge]").forEach((el) => {
+      const key = el.getAttribute("data-nav-badge");
+      if (!key) return;
+      const entry = badges[key];
+      if (!entry || !entry.active) {
+        el.textContent = "";
+        el.hidden = true;
+        el.classList.add("hidden");
+        el.setAttribute("aria-hidden", "true");
+        el.removeAttribute("aria-label");
+        return;
+      }
+      const count = Math.max(0, Number(entry.count) || 0);
+      const label = entry.label != null && String(entry.label) !== ""
+        ? String(entry.label)
+        : (count > 0 ? String(count > 99 ? "99+" : count) : "!");
+      el.textContent = label;
+      el.hidden = false;
+      el.classList.remove("hidden");
+      el.setAttribute("aria-hidden", "false");
+      const ariaKey = key === "vote_center"
+        ? "nav_badge_vote_center_aria"
+        : key === "government"
+          ? "nav_badge_government_aria"
+          : key === "referrals"
+            ? "nav_badge_referrals_aria"
+            : key === "community"
+              ? "nav_badge_community_aria"
+              : "";
+      if (ariaKey) {
+        el.setAttribute(
+          "aria-label",
+          t(ariaKey, key === "vote_center"
+            ? "Vote verfügbar"
+            : key === "referrals"
+              ? "Referral-Belohnung verfügbar"
+              : "Abstimmung offen")
+        );
+      }
+    });
+  }
+  GC.updateNavBadges = updateNavBadges;
+
   let _lastHudOnline = null;
 
   /** Single write path for shell HUD (header score/rank/online/messages + resource bar). */
@@ -6314,6 +6361,10 @@
 
     if (typeof data.unread_messages_count === "number" && !(opts && opts.skipMessagesUnread)) {
       updateMessagesUnreadBadges(data.unread_messages_count);
+    }
+
+    if (data.nav_badges) {
+      updateNavBadges(data.nav_badges);
     }
   }
 
@@ -8932,6 +8983,190 @@
         page._voteFocusBound = false;
       });
     }
+  }
+
+  function parseReferralsPageState() {
+    const el = document.getElementById("referrals-page-state");
+    if (el && el.textContent) {
+      try { return JSON.parse(el.textContent); } catch (_) {}
+    }
+    return null;
+  }
+
+  function _referralTierCardHtml(tier, scope) {
+    const display = tier.display || {};
+    const img = escapeHtml(String(display.image || "/static/img/lootboxes/Generic_Supply_Container.png"));
+    const title = escapeHtml(t(tier.label_key, tier.reward_key || ""));
+    const desc = tier.desc_key ? escapeHtml(t(tier.desc_key, "")) : "";
+    const progress = escapeHtml(String(tier.progress_label || ""));
+    const claimable = Boolean(tier.claimable);
+    const claimed = Boolean(tier.claimed);
+    const unlocked = tier.unlocked !== false;
+    let stateClass = "";
+    if (claimable) stateClass = "referral-tier-card--claimable";
+    else if (claimed) stateClass = "referral-tier-card--claimed";
+    else if (!unlocked) stateClass = "referral-tier-card--locked";
+    const action = claimable
+      ? `<button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" data-referral-claim>${escapeHtml(t("referral_claim_btn", "Abholen"))}</button>`
+      : claimed
+        ? `<span class="referral-tier-claimed">${escapeHtml(t("referral_claimed_badge", "Abgeholt"))}</span>`
+        : scope === "referrer"
+          ? `<span class="referral-tier-locked gc-mono" aria-hidden="true"></span>`
+          : "";
+    const progressLine = scope === "referrer"
+      ? `<p class="referral-tier-progress gc-mono">${progress} ${escapeHtml(t("referral_tier_progress_suffix", "erfolgreiche Empfehlungen"))}</p>`
+      : "";
+    return `
+      <article class="referral-tier-card ${stateClass}"
+               data-referral-tier
+               data-reward-scope="${escapeHtml(scope)}"
+               data-reward-key="${escapeHtml(String(tier.reward_key || ""))}"
+               data-required="${Number(tier.required_count) || 0}">
+        <div class="referral-tier-visual">
+          <img src="${img}" alt="" width="64" height="64" loading="lazy">
+        </div>
+        <div class="referral-tier-info">
+          <h3 class="referral-tier-title">${title}</h3>
+          ${desc ? `<p class="referral-tier-desc">${desc}</p>` : ""}
+          ${progressLine}
+        </div>
+        ${action}
+      </article>
+    `;
+  }
+
+  function patchReferralsDom(state) {
+    if (!state || typeof state !== "object") return;
+    const page = document.getElementById("referrals-page");
+    if (!page) return;
+
+    const codeEl = page.querySelector("[data-referral-code]");
+    if (codeEl && state.code) codeEl.textContent = String(state.code);
+
+    const urlInput = page.querySelector("[data-referral-url-input]");
+    if (urlInput && state.referral_url) urlInput.value = String(state.referral_url);
+
+    const progressEl = page.querySelector("[data-referral-progress]");
+    if (progressEl) {
+      const pending = Math.max(0, Number(state.pending_count) || 0);
+      const successful = Math.max(0, Number(state.successful_count) || 0);
+      let html = `${escapeHtml(t("referral_progress", "Erfolgreiche Empfehlungen"))}: <strong>${fmtNumber(successful)}</strong>`;
+      if (pending > 0) {
+        html += ` <span class="referral-progress-pending">(${pending} ${escapeHtml(t("referral_pending_short", "ausstehend"))})</span>`;
+      }
+      progressEl.innerHTML = html;
+    }
+
+    const tierList = page.querySelector("[data-referral-tier-list]");
+    if (tierList && Array.isArray(state.referrer_tiers)) {
+      tierList.innerHTML = state.referrer_tiers.map((tier) => _referralTierCardHtml(tier, "referrer")).join("");
+    }
+
+    const referredList = page.querySelector("[data-referral-referred-list]");
+    if (referredList) {
+      if (state.referred_reward) {
+        referredList.innerHTML = _referralTierCardHtml(state.referred_reward, "referred");
+      } else {
+        referredList.innerHTML = "";
+      }
+    }
+  }
+
+  let _referralsBound = false;
+
+  function bindReferralsOnce() {
+    if (_referralsBound) return;
+    _referralsBound = true;
+
+    document.addEventListener("click", async (ev) => {
+      const copyBtn = ev.target.closest("[data-referral-copy]");
+      if (copyBtn) {
+        const page = document.getElementById("referrals-page");
+        if (!page) return;
+        const mode = String(copyBtn.dataset.referralCopy || "");
+        let text = "";
+        if (mode === "code") {
+          text = page.querySelector("[data-referral-code]")?.textContent?.trim() || "";
+        } else if (mode === "link") {
+          text = page.querySelector("[data-referral-url-input]")?.value?.trim() || "";
+        }
+        if (!text) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          showNotify(t("referral_copy_ok", "In Zwischenablage kopiert."), "success");
+        } catch (_) {
+          showNotify(t("referral_copy_fail", "Kopieren fehlgeschlagen."), "error");
+        }
+        return;
+      }
+
+      const claimBtn = ev.target.closest("[data-referral-claim]");
+      if (claimBtn) {
+        const card = claimBtn.closest("[data-referral-tier]");
+        if (!card) return;
+        const scope = String(card.dataset.rewardScope || "").trim();
+        const rewardKey = String(card.dataset.rewardKey || "").trim();
+        if (!scope || !rewardKey) return;
+        const res = await GC.fetchGameAction("/api/referrals/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reward_scope: scope,
+            reward_key: rewardKey,
+            request_id: newRequestId(),
+          }),
+        });
+        if (res?.state) applyActionState(res, "referral_claim");
+        if (res?.referrals) patchReferralsDom(res.referrals);
+        if (res?.ok) {
+          showNotify(t("referral_claim_ok", "Belohnung ins Inventar gutgeschrieben."), "success");
+        } else {
+          showNotify(t("referral_claim_fail", "Belohnung konnte nicht abgeholt werden."), "error");
+        }
+      }
+    });
+
+    document.addEventListener("submit", async (ev) => {
+      const form = ev.target.closest("[data-referral-apply-form]");
+      if (!form) return;
+      ev.preventDefault();
+      const input = form.querySelector("[data-referral-apply-input]");
+      const code = String(input?.value || "").trim();
+      if (!code) {
+        showNotify(t("referral_apply_missing", "Bitte einen Code eingeben."), "error");
+        return;
+      }
+      const res = await GC.fetchGameAction("/api/referrals/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ referral_code: code, request_id: newRequestId() }),
+      });
+      if (res?.state) applyActionState(res, "referral_apply");
+      if (res?.referrals) patchReferralsDom(res.referrals);
+      if (res?.ok) {
+        showNotify(t("referral_apply_ok", "Referral-Code verknüpft."), "success");
+        const applyPanel = document.querySelector(".referral-apply-panel");
+        if (applyPanel) applyPanel.remove();
+      } else {
+        const reason = String(res?.reason || "");
+        const msg = reason === "referral_self_not_allowed"
+          ? t("referral_err_self", "Du kannst deinen eigenen Code nicht verwenden.")
+          : reason === "referral_already_linked"
+            ? t("referral_err_already_linked", "Du hast bereits einen Referrer.")
+            : reason === "referral_code_not_found"
+              ? t("referral_err_not_found", "Code nicht gefunden.")
+              : t("referral_apply_fail", "Code konnte nicht eingelöst werden.");
+        showNotify(msg, "error");
+      }
+    });
+  }
+
+  function initReferrals() {
+    bindReferralsOnce();
+    const page = document.getElementById("referrals-page");
+    if (!page || page.dataset.ready !== "1") return;
+    const state = parseReferralsPageState();
+    if (state) patchReferralsDom(state);
   }
 
   function initTraderHub() {
@@ -18442,6 +18677,7 @@
   GC.modules.inventory = initInventory;
   GC.modules.auction_house = initAuctionHouse;
   GC.modules.vote_center = initVoteCenter;
+  GC.modules.referrals = initReferrals;
   GC.modules.trader_hub = initTraderHub;
   GC.modules.fleet = initFleet;
   GC.modules.logistics = initLogistics;
@@ -19777,9 +20013,82 @@
 
   function openSpecialWindow(target) {
     const root = document.querySelector("[data-special-root]");
-    if (!root) return;
+    if (!root || !target) return;
     const btn = root.querySelector(`[data-special-open-window="${target}"]`);
-    if (btn) btn.click();
+    if (btn) {
+      btn.click();
+      return;
+    }
+
+    const windows = root.querySelectorAll("[data-special-window]");
+    const barButtons = root.querySelectorAll(".gc-special-bar [data-special-open-window]");
+    let found = false;
+    windows.forEach((win) => {
+      const active = (win.dataset.specialWindow || "") === target;
+      win.hidden = !active;
+      if (active) found = true;
+    });
+    if (!found) return;
+    root.classList.add("is-open");
+    barButtons.forEach((b) => b.classList.remove("is-active"));
+  }
+  GC.openSpecialWindow = openSpecialWindow;
+
+  function initCommunityHub() {
+    const hub = document.querySelector("[data-community-hub]");
+    if (!hub || hub.dataset.bound === "1") return;
+    hub.dataset.bound = "1";
+
+    const menu = hub.querySelector("[data-community-menu]");
+    const toggle = hub.querySelector("[data-community-menu-toggle]");
+    const discordLink = hub.querySelector("[data-community-discord-link]");
+    const openItems = hub.querySelectorAll("[data-community-open]");
+
+    const closeMenu = () => {
+      if (!menu || !toggle) return;
+      menu.hidden = true;
+      hub.classList.remove("is-open");
+      toggle.setAttribute("aria-expanded", "false");
+    };
+
+    const openMenu = () => {
+      if (!menu || !toggle) return;
+      menu.hidden = false;
+      hub.classList.add("is-open");
+      toggle.setAttribute("aria-expanded", "true");
+    };
+
+    if (toggle && menu) {
+      toggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (menu.hidden) openMenu();
+        else closeMenu();
+      });
+    }
+
+    if (discordLink) {
+      discordLink.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        openMenu();
+      });
+    }
+
+    openItems.forEach((item) => {
+      item.addEventListener("click", () => {
+        const target = item.dataset.communityOpen || "";
+        closeMenu();
+        if (!target) return;
+        openSpecialWindow(target);
+      });
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!hub.contains(e.target)) closeMenu();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeMenu();
+    });
   }
 
   function initSupportModule() {
@@ -21174,6 +21483,7 @@
     syncPerfBodyClasses();
     initMobileNav();
     initSpecialPanel();
+    initCommunityHub();
     initSupportModule();
     initStickyResourceBar();
     initSidebarSticky();

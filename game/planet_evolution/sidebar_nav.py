@@ -20,6 +20,7 @@ ALL_NAV_MODULES: List[str] = [
     "galaxy",
     "ranking",
     "hall_of_fame",
+    "referrals",
     "records",
     "messages",
     "options",
@@ -35,7 +36,7 @@ NAV_SECTION_MODULES: Dict[str, Tuple[str, ...]] = {
     "infrastructure": ("buildings", "research", "techtree"),
     "military": ("shipyard", "fleet", "defense", "logistics"),
     "economy": ("trading", "empire"),
-    "administration": ("alliance", "ranking", "hall_of_fame", "records", "options", "support"),
+    "administration": ("alliance", "ranking", "hall_of_fame", "referrals", "records", "options", "support"),
 }
 
 UTILITY_MODULES = frozenset(NAV_SECTION_MODULES["administration"])
@@ -67,6 +68,7 @@ MOBILE_BOTTOM_PRIORITY: List[str] = [
     "trading",
     "ranking",
     "hall_of_fame",
+    "referrals",
     "records",
 ]
 MOBILE_BOTTOM_MAX = 4

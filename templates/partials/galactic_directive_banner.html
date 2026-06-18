@@ -1,0 +1,38 @@
+{# Read-only galactic directive banner — GC-720F #}
+{% set gdb = galactic_directive_banner if galactic_directive_banner is defined and galactic_directive_banner else {} %}
+{% if gdb.visible %}
+<aside class="gc-gd-banner gc-panel gd-banner--{{ gdb.primary.key }}"
+       role="status"
+       aria-label="{{ T('gd_banner_aria', 'Galaktische Direktive') }}">
+  <div class="gc-gd-banner-head">
+    <div class="gc-gd-banner-copy">
+      <p class="gc-gd-banner-kicker hint">
+        {{ T('gd_banner_kicker', 'Galaxie %(galaxy)s', galaxy=gdb.galaxy) }}
+      </p>
+      <h3 class="gc-gd-banner-title">
+        {{ T('gd_banner_title', 'Galaktische Direktive') }}
+      </h3>
+      <div class="gc-gd-banner-chips" aria-label="{{ T('gd_banner_chips_aria', 'Aktive Direktiven') }}">
+        <span class="gc-gd-chip gc-gd-chip--primary gd-chip--{{ gdb.primary.key }}">
+          <span class="gc-gd-chip-label">{{ T('gd_banner_primary_label', 'Primär') }}</span>
+          <span class="gc-gd-chip-value">{{ T(gdb.primary.label_key, gdb.primary.key) }}</span>
+        </span>
+        {% if gdb.secondary %}
+        <span class="gc-gd-chip gc-gd-chip--secondary gd-chip--{{ gdb.secondary.key }}">
+          <span class="gc-gd-chip-label">{{ T('gd_banner_secondary_label', 'Sekundär') }}</span>
+          <span class="gc-gd-chip-value">{{ T(gdb.secondary.label_key, gdb.secondary.key) }}</span>
+        </span>
+        {% endif %}
+      </div>
+      <p class="gc-gd-banner-desc hint">
+        {{ T(gdb.primary.description_key, '') }}
+      </p>
+    </div>
+    <a href="{{ url_for('galactic_politics_view') }}"
+       class="gc-btn gc-btn-ghost gc-btn-sm gc-gd-banner-cta gc-nav-link"
+       data-pjax-link>
+      {{ T('gd_banner_cta', 'Galaktische Politik') }}
+    </a>
+  </div>
+</aside>
+{% endif %}
