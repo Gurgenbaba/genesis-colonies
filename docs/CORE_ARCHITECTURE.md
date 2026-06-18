@@ -230,6 +230,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Command Center panel (own colony snapshot) | `game/planet_evolution/command_center.py` | [GC-592_COMMAND_CENTER_PANEL.md](GC-592_COMMAND_CENTER_PANEL.md) |
 | Planet Evolution | `game/planet_evolution/` | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
 | Galactic Directives | `game/galactic_directives/` | [GALACTIC_DIRECTIVES.md](GALACTIC_DIRECTIVES.md) |
+| Galactic Diplomacy | `game/galactic_diplomacy/` | [GALACTIC_DIPLOMACY.md](GALACTIC_DIPLOMACY.md) |
 | Referrals | `game/referrals.py` | GC-703 |
 
 **Ticket-Check:** Domäne identifizieren → nur Owner-Modul (+ Routes/`app.py`) ändern → kein zweites Modul für dieselbe Wahrheit.

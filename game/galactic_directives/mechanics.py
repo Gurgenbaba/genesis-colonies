@@ -16,7 +16,7 @@ from .state import get_active_directives_for_galaxy
 
 SECONDARY_SCALE = 0.4
 
-# GC-720E — keys consumed by EffectResolver (no fleet/combat/expedition in this phase).
+# GC-720E/E2 — keys consumed by EffectResolver.
 GD_EFFECT_RESOLVER_ACTIVE_KEYS = frozenset({
     "metal_prod_factor",
     "crystal_prod_factor",
@@ -26,6 +26,20 @@ GD_EFFECT_RESOLVER_ACTIVE_KEYS = frozenset({
     "build_time_speed",
     "research_time_speed",
     "storage_factor",
+    "weapon_bonus",
+    "armor_bonus",
+    "shield_bonus",
+    "fleet_speed_multiplier",
+    "cargo_multiplier",
+    "fuel_efficiency_factor",
+    "shipyard_time_speed",
+    "defense_time_speed",
+})
+
+GD_EFFECT_RESOLVER_ADDITIVE_KEYS = frozenset({
+    "weapon_bonus",
+    "armor_bonus",
+    "shield_bonus",
 })
 
 _ADDITIVE_KEYS = frozenset({
@@ -195,3 +209,49 @@ def get_galaxy_directive_mechanics(
         "mechanics": merged,
         "sources": sources,
     }
+
+
+def get_directive_flags_for_galaxy(
+    galaxy: Any,
+    conn: Optional[sqlite3.Connection] = None,
+) -> Dict[str, Any]:
+    """Numeric/bool flags from merged directive mechanics (expedition, colonize, …)."""
+    payload = get_galaxy_directive_mechanics(galaxy, conn=conn)
+    if not payload:
+        return {}
+    mechanics = payload.get("mechanics") or {}
+    flags = mechanics.get("flags") or {}
+    if not isinstance(flags, dict):
+        return {}
+    out: Dict[str, Any] = {}
+    for key, raw in flags.items():
+        if isinstance(raw, (int, float, bool)):
+            out[str(key)] = raw
+    return out
+
+
+def get_planet_directive_er_modifiers(
+    planet_id: Any,
+    *,
+    conn: Optional[sqlite3.Connection] = None,
+) -> Dict[str, float]:
+    """EffectResolver keys for the galaxy that owns ``planet_id``."""
+    own_conn = conn is None
+    if own_conn:
+        from ..db import db
+
+        conn = db()
+    try:
+        row = conn.execute(
+            "SELECT galaxy FROM planets WHERE id = ? LIMIT 1;",
+            (int(planet_id),),
+        ).fetchone()
+        if not row or row["galaxy"] is None:
+            return {}
+        payload = get_galaxy_directive_mechanics(int(row["galaxy"]), conn=conn)
+        if not payload:
+            return {}
+        return extract_active_effect_resolver_modifiers(payload.get("mechanics"))
+    finally:
+        if own_conn:
+            conn.close()

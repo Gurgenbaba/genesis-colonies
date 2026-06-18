@@ -500,25 +500,53 @@ def deduct_planet_ships(
     return True, ""
 
 
-def _fleet_speed_multiplier(player_id: int, conn) -> float:
+def _fleet_galactic_modifiers(
+    player_id: int,
+    conn,
+    *,
+    galaxy: int | None = None,
+) -> Dict[str, float]:
+    """Fleet-related EffectResolver modifiers scoped to origin galaxy (GC-720E2)."""
     try:
         from .effects.effect_resolver import EffectResolver
 
-        buildings = {}
         research = get_research_levels(user_id=int(player_id), conn=conn)
-        resolver = EffectResolver(buildings=buildings, research=research)
-        mods = resolver.resolve()
-        return float(mods.get("fleet_speed_multiplier", 1.0) or 1.0)
+        galaxy_id = int(galaxy) if galaxy is not None else None
+        resolver = EffectResolver(
+            buildings={},
+            research=research,
+            player_id=int(player_id),
+            galaxy_id=galaxy_id,
+            conn=conn,
+        )
+        mods = resolver.get_modifiers()
+        return {
+            "fleet_speed_multiplier": float(mods.get("fleet_speed_multiplier", 1.0) or 1.0),
+            "fuel_efficiency_factor": float(mods.get("fuel_efficiency_factor", 1.0) or 1.0),
+        }
     except Exception:
-        return 1.0
+        return {
+            "fleet_speed_multiplier": 1.0,
+            "fuel_efficiency_factor": 1.0,
+        }
 
 
-def _fuel_efficiency_level(player_id: int, conn) -> int:
-    try:
-        research = get_research_levels(user_id=int(player_id), conn=conn)
-        return max(0, int(research.get("fuel_efficiency") or 0))
-    except Exception:
-        return 0
+def _fleet_speed_multiplier(
+    player_id: int,
+    conn,
+    *,
+    galaxy: int | None = None,
+) -> float:
+    return _fleet_galactic_modifiers(player_id, conn, galaxy=galaxy)["fleet_speed_multiplier"]
+
+
+def _fuel_efficiency_factor_for_fleet(
+    player_id: int,
+    conn,
+    *,
+    galaxy: int | None = None,
+) -> float:
+    return _fleet_galactic_modifiers(player_id, conn, galaxy=galaxy)["fuel_efficiency_factor"]
 
 
 def _validate_target_coords(
@@ -1274,12 +1302,18 @@ def preview_fleet_flight(
         origin = _origin_coords(origin_planet)
         target = (int(target_galaxy), int(target_system), int(target_position))
         distance = calculate_distance(origin, target)
-        speed_mult = _fleet_speed_multiplier(player_id, conn)
+        origin_galaxy = int(origin_planet.get("galaxy") or origin[0] or 0) or None
+        speed_mult = _fleet_speed_multiplier(player_id, conn, galaxy=origin_galaxy)
         fleet_speed = calculate_fleet_speed(ships, speed_multiplier=speed_mult)
         flight_seconds = calculate_flight_seconds(distance, fleet_speed, speed_percent)
-        fuel_eff = _fuel_efficiency_level(player_id, conn)
+        fuel_eff_factor = _fuel_efficiency_factor_for_fleet(
+            player_id, conn, galaxy=origin_galaxy
+        )
         fuel_cost = calculate_fuel_cost(
-            ships, distance, speed_percent, fuel_efficiency_level=fuel_eff
+            ships,
+            distance,
+            speed_percent,
+            fuel_efficiency_factor_override=fuel_eff_factor,
         )
         cargo_total = calculate_total_cargo(ships)
         fuel_cells_have = float(origin_planet.get("fuel_cells") or 0)
@@ -3061,12 +3095,31 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
                 world_context = None
         cargo_total = calculate_expedition_loot_cap(ships)
         flight_seconds_base = int(movement.get("flight_seconds") or 1)
+        origin_galaxy = int(movement.get("origin_galaxy") or movement.get("galaxy") or 0) or None
+        if origin_galaxy is None:
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT galaxy FROM planets WHERE id = ? LIMIT 1;",
+                    (int(movement.get("origin_planet_id") or 0),),
+                )
+                grow = cur.fetchone()
+                if grow and grow["galaxy"] is not None:
+                    origin_galaxy = int(grow["galaxy"])
+            except Exception:
+                origin_galaxy = None
+        directive_flags: Dict[str, Any] = {}
+        if origin_galaxy:
+            from .galactic_directives.mechanics import get_directive_flags_for_galaxy
+
+            directive_flags = get_directive_flags_for_galaxy(origin_galaxy, conn=conn)
         outcome = resolve_expedition_outcome(
             movement_id,
             cargo_total=cargo_total,
             expedition_ship_count=count_expedition_ships(ships),
             flight_seconds=flight_seconds_base,
             world_type=str(world_context.get("world_type") or "") if world_context else None,
+            directive_flags=directive_flags,
         )
         rewards = outcome["rewards"]
         delay_extra = int(outcome.get("delay_extra") or 0)

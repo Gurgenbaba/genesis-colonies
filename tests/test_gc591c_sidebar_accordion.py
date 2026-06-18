@@ -138,6 +138,34 @@ def test_main_js_section_accordion_contract():
     assert "shouldShowSidebarNavLink" in src
 
 
+def test_sidebar_economy_section_not_role_group_wrapper():
+    sidebar = _read("templates/partials/sidebar.html")
+    eco = sidebar.split('data-nav-section="economy"', 1)[1].split('data-nav-section="administration"', 1)[0]
+    eco_open = eco.split(">", 1)[0]
+    assert 'data-nav-group="trading"' not in eco_open
+    assert 'data-nav-group-modules="trading"' not in eco_open
+    assert 'data-nav-group-key="trading"' in eco
+
+
+def test_research_colony_economy_section_visible(gc591c_db, monkeypatch):
+    player_id, uname = _create_player()
+    ok, reason, data = colonize_planet(player_id, name="Lab World")
+    assert ok, reason
+    colony_id = int(data["planet_id"])
+    save_planet_buildings(colony_id, {"research_lab": 12, "academy": 5})
+    set_active_planet(player_id, colony_id)
+
+    client = _app_client(monkeypatch)
+    assert client.post("/login", data={"username": uname, "password": "test-pass-123"}).status_code in (200, 302)
+    html = client.get("/overview").get_data(as_text=True)
+    sidebar = html.split('id="gc-sidebar-nav"', 1)[1].split("</nav>", 1)[0]
+    assert 'data-nav-section="economy"' in sidebar
+    eco = sidebar.split('data-nav-section="economy"', 1)[1].split('data-nav-section="administration"', 1)[0]
+    assert "Wirtschaft" in eco
+    assert len(_visible_module_lines(sidebar, "trading")) == 1
+    assert len(_visible_module_lines(sidebar, "empire")) == 1
+
+
 def test_homeworld_overview_renders_grouped_sidebar(gc591c_db, monkeypatch):
     player_id, uname = _create_player()
     client = _app_client(monkeypatch)

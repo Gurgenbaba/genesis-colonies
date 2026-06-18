@@ -795,7 +795,7 @@ class TestGalacticDirectiveEffectResolver:
         mods = er.get_modifiers()
         assert mods["research_time_speed"] == pytest.approx(1.25)
         assert mods["build_time_speed"] == pytest.approx(1.0)
-        assert mods.get("weapon_bonus", 0.0) == pytest.approx(0.0)
+        assert mods.get("weapon_bonus", 0.0) == pytest.approx(-0.15)
 
         sci_time = er.get_research_time_seconds("energy_tech", 2)
         self._set_galaxy_directive(1, "defensive")
@@ -817,12 +817,129 @@ class TestGalacticDirectiveEffectResolver:
         mods = er.get_modifiers()
         assert mods["metal_prod_factor"] == pytest.approx(1.0)
 
-    def test_logistics_fleet_modifiers_not_applied(self):
+    def test_logistics_fleet_modifiers_applied(self):
         pid = _create_player("gd_logistics")
         self._set_galaxy_directive(1, "logistics")
         _set_buildings(pid, {"metal_mine": 5})
         mods = EffectResolver.for_player(pid).get_modifiers()
-        assert mods["fleet_speed_multiplier"] == pytest.approx(1.0)
-        assert mods["cargo_multiplier"] == pytest.approx(1.0)
-        assert mods["fuel_efficiency_factor"] == pytest.approx(1.0)
+        assert mods["fleet_speed_multiplier"] == pytest.approx(1.20)
+        assert mods["cargo_multiplier"] == pytest.approx(1.50)
+        assert mods["fuel_efficiency_factor"] == pytest.approx(0.75)
         assert mods["solar_output_factor"] == pytest.approx(0.95)
+
+    def test_military_combat_and_shipyard_modifiers(self):
+        pid = _create_player("gd_military")
+        self._set_galaxy_directive(1, "military")
+        mods = EffectResolver.for_player(pid).get_modifiers()
+        assert mods["weapon_bonus"] == pytest.approx(0.20)
+        assert mods["shield_bonus"] == pytest.approx(0.15)
+        assert mods["armor_bonus"] == pytest.approx(0.10)
+        assert mods["shipyard_time_speed"] == pytest.approx(1.25)
+        assert mods["research_time_speed"] == pytest.approx(0.80)
+
+
+class TestGalacticDiplomacyEffectResolver:
+    def _set_galaxy_directive(
+        self,
+        galaxy: int,
+        primary: str,
+        secondary: str | None = None,
+    ) -> None:
+        conn = db()
+        try:
+            conn.execute(
+                """
+                INSERT INTO gd_galaxy_state (
+                    galaxy, primary_directive, secondary_directive,
+                    consecutive_primary_wins, updated_at
+                ) VALUES (?, ?, ?, 0, 0)
+                ON CONFLICT(galaxy) DO UPDATE SET
+                    primary_directive = excluded.primary_directive,
+                    secondary_directive = excluded.secondary_directive,
+                    updated_at = excluded.updated_at;
+                """,
+                (int(galaxy), str(primary), secondary),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_personality_boosts_research_speed(self):
+        from game.galactic_diplomacy import set_galaxy_personality
+
+        pid = _create_player("gdp_academia")
+        conn = db()
+        try:
+            set_galaxy_personality(1, "academia_prime", conn=conn)
+        finally:
+            conn.close()
+        clear_effect_resolver_cache(pid)
+        mods = EffectResolver.for_player(pid).get_modifiers()
+        assert mods["research_time_speed"] == pytest.approx(1.10)
+
+    def test_directive_and_diplomacy_stack_multiplicatively(self):
+        from game.galactic_diplomacy import set_galaxy_personality
+
+        pid = _create_player("gdp_stack")
+        conn = db()
+        try:
+            self._set_galaxy_directive(1, "scientific")
+            set_galaxy_personality(1, "academia_prime", conn=conn)
+        finally:
+            conn.close()
+        clear_effect_resolver_cache(pid)
+        mods = EffectResolver.for_player(pid).get_modifiers()
+        assert mods["research_time_speed"] == pytest.approx(1.25 * 1.10)
+
+    def test_emergency_combat_modifiers_applied(self):
+        from game.galactic_diplomacy import set_active_emergency
+
+        pid = _create_player("gdp_emergency")
+        conn = db()
+        try:
+            self._set_galaxy_directive(1, "logistics")
+            set_active_emergency(1, "alien_invasion", conn=conn)
+        finally:
+            conn.close()
+        clear_effect_resolver_cache(pid)
+        mods = EffectResolver.for_player(pid).get_modifiers()
+        assert mods["weapon_bonus"] == pytest.approx(0.25)
+        assert mods["shield_bonus"] == pytest.approx(0.20)
+        assert mods["defense_time_speed"] == pytest.approx(1.15)
+
+    def test_resolution_and_directive_both_apply(self):
+        from game.galactic_diplomacy import set_active_resolution
+
+        pid = _create_player("gdp_resolution")
+        conn = db()
+        try:
+            self._set_galaxy_directive(1, "defensive")
+            set_active_resolution(1, "gate_control", conn=conn)
+        finally:
+            conn.close()
+        clear_effect_resolver_cache(pid)
+        mods = EffectResolver.for_player(pid).get_modifiers()
+        assert mods["research_time_speed"] == pytest.approx(1.05)
+        assert mods["metal_prod_factor"] == pytest.approx(1.0)
+
+    def test_missing_diplomacy_state_does_not_crash(self):
+        pid = _create_player("gdp_missing")
+        mods = EffectResolver.for_player(pid).get_modifiers()
+        assert mods["research_time_speed"] == pytest.approx(1.0)
+        assert mods["weapon_bonus"] == pytest.approx(0.0)
+
+    def test_directives_remain_active_with_diplomacy(self):
+        from game.galactic_diplomacy import set_galaxy_personality
+
+        pid = _create_player("gdp_directive_active")
+        conn = db()
+        try:
+            self._set_galaxy_directive(1, "industrial")
+            set_galaxy_personality(1, "forge_of_war", conn=conn)
+        finally:
+            conn.close()
+        clear_effect_resolver_cache(pid)
+        mods = EffectResolver.for_player(pid).get_modifiers()
+        assert mods["metal_prod_factor"] == pytest.approx(1.20)
+        assert mods["weapon_bonus"] == pytest.approx(0.05)
+        assert mods["shipyard_time_speed"] == pytest.approx(1.05)

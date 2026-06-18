@@ -10,10 +10,13 @@ from .definitions import (
     schema_ready,
 )
 from .mechanics import (
+    GD_EFFECT_RESOLVER_ADDITIVE_KEYS,
     GD_EFFECT_RESOLVER_ACTIVE_KEYS,
     SECONDARY_SCALE,
     extract_active_effect_resolver_modifiers,
     get_galaxy_directive_mechanics,
+    get_directive_flags_for_galaxy,
+    get_planet_directive_er_modifiers,
     merge_mechanics,
     scale_numeric_mechanics,
 )
@@ -28,6 +31,7 @@ from .state import (
 __all__ = [
     "DIRECTIVE_KEYS",
     "FALLBACK_PRIMARY",
+    "GD_EFFECT_RESOLVER_ADDITIVE_KEYS",
     "GD_EFFECT_RESOLVER_ACTIVE_KEYS",
     "SECONDARY_SCALE",
     "build_galactic_directive_banner",
@@ -35,7 +39,9 @@ __all__ = [
     "ensure_galaxy_state",
     "get_active_directives_for_galaxy",
     "get_directive_definition",
+    "get_directive_flags_for_galaxy",
     "get_galaxy_directive_mechanics",
+    "get_planet_directive_er_modifiers",
     "list_active_directives_for_galaxies",
     "list_directive_definitions",
     "merge_mechanics",

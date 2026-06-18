@@ -1,7 +1,7 @@
 {% set _sn = SIDEBAR_NAV or {'full_nav': true, 'modules': {}} %}
 {% set _cmd_open = request.endpoint in ('overview', 'galaxy_view', 'planet_evolution_view') %}
 {% set _infra_open = request.endpoint in ('buildings_view', 'research_view', 'techtree_view') %}
-{% set _mil_open = request.endpoint in ('shipyard_view', 'defense_view', 'fleet_view', 'logistics_view') %}
+{% set _mil_open = request.endpoint in ('shipyard_view', 'defense_view', 'fleet_view') %}
 {% set _eco_open = request.endpoint in (
   'trader_hub_view', 'inventory_view', 'auction_house_view',
   'vote_center_view', 'galactic_politics_view', 'skilltree_view', 'premium_view', 'empire_view'
@@ -161,19 +161,11 @@
          {% if not module_in_section(_sn, 'defense', 'military') %}hidden{% endif %}>
         {{ T("nav_defense") }}
       </a>
-      <a href="{{ url_for('logistics_view') }}"
-         data-nav-module="logistics"
-         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'logistics') }} {% if request.endpoint == 'logistics_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'logistics', 'military') %}hidden{% endif %}>
-        {{ T("nav_logistics", "Logistics") }}
-      </a>
     </div>
   </div>
 
   <div class="gc-nav-section gc-nav-submenu-group{% if _eco_open %} is-expanded{% endif %}"
        data-nav-section="economy"
-       data-nav-group="trading"
-       data-nav-group-modules="trading"
        {% if not sidebar_section_visible(_sn, 'economy') %}hidden{% endif %}>
     <button type="button"
             class="gc-nav-link gc-nav-section-toggle gc-nav-link--has-sub"

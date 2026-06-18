@@ -56,7 +56,8 @@ def test_sidebar_has_military_and_trading_hub_nav():
     assert 'data-nav-module="shipyard"' in sidebar
     assert 'data-nav-module="defense"' in sidebar
     assert 'data-nav-module="fleet"' in sidebar
-    assert 'data-nav-module="logistics"' in sidebar
+    assert 'data-nav-module="logistics"' not in sidebar
+    assert "nav_logistics" not in sidebar
     assert 'data-nav-section="economy"' in sidebar
     assert 'data-nav-module="trading"' in sidebar
     assert "url_for('trader_hub_view')" in sidebar

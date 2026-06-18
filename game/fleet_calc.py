@@ -173,6 +173,7 @@ def calculate_fuel_cost(
     speed_percent: int,
     *,
     fuel_efficiency_level: int = 0,
+    fuel_efficiency_factor_override: float | None = None,
 ) -> int:
     if distance <= 0:
         return 0
@@ -192,7 +193,11 @@ def calculate_fuel_cost(
         fuel_per = float(spec.get("fuel") or 0)
         total += fuel_per * qty * float(distance) / FUEL_DISTANCE_DIVISOR * consumption_factor
     base = max(0, int(math.ceil(total)))
-    return max(0, int(math.ceil(base * fuel_efficiency_factor(fuel_efficiency_level))))
+    if fuel_efficiency_factor_override is not None:
+        factor = max(0.0, float(fuel_efficiency_factor_override))
+    else:
+        factor = fuel_efficiency_factor(fuel_efficiency_level)
+    return max(0, int(math.ceil(base * factor)))
 
 
 def calculate_total_cargo(ships: Mapping[str, int]) -> int:

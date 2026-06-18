@@ -391,7 +391,9 @@ def test_main_js_gc540_unified_page_timers():
     assert "data-timer-target" in overview
     assert "data-refresh-on-zero" in overview
     fleet = _read("templates/fleet.html")
-    assert "data-timer-target" in fleet
+    base = _read("templates/base.html")
+    assert "data-timer-kind" in fleet or "data-fleet-preview" in fleet
+    assert "data-timer-target" in base or "data-countdown-scope" in base
     shipyard = _read("templates/shipyard.html")
     card_queue_macros = _read("templates/partials/card_queue_macros.html")
     assert "render_card_queue_timer(qj, 'shipyard', 'shipyard')" in shipyard
@@ -604,6 +606,133 @@ def test_main_js_gc630_shipyard_game_state_panel_patch():
     shipyard_py = _read("game/shipyard.py")
     assert "orbital_production_batch_capacity" in shipyard_py
     assert "production_job_duration_seconds" in shipyard_py
+
+
+def test_main_js_gc640_global_fleet_hud():
+    """GC-640A: active fleets in shell HUD via game-state, not fleet page panel."""
+    src = _read("static/main.js")
+    assert "function renderGlobalFleetHud(fleets)" in src
+    assert "GC.renderGlobalFleetHud = renderGlobalFleetHud" in src
+    hud = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
+    assert "renderGlobalFleetHud(data.active_fleets)" in hud
+    base = _read("templates/base.html")
+    assert "data-fleet-global-hud" in base
+    assert "data-fleet-nav-badge" in base
+    fleet = _read("templates/fleet.html")
+    assert "data-fleet-active-list" not in fleet
+    assert "fleet-active-panel" not in fleet
+    live = _read("game/live_state.py")
+    assert "fleet_hud_for_game_state" in live
+    app_py = _read("app.py")
+    assert "fleet_hud_for_game_state" in app_py
+    css = _read("static/style.css")
+    assert ".gc-fleet-global-hud" in css
+    assert ".gc-fleet-nav-badge" in css
+
+
+def test_main_js_gc640b_fleet_page_visual_redesign():
+    """GC-640B/640E: fleet command layout evolved to OGame-like table + integrated logistics."""
+    tpl = _read("templates/fleet.html")
+    css = _read("static/style.css")
+    js = _read("static/main.js")
+    assert "fleet-ogame-stack" in tpl
+    assert "fleet-ship-table" in tpl
+    assert "data-fleet-mode-tab" in tpl
+    assert "data-fleet-mode-panel" in tpl
+    assert 'id="logistics-page"' in tpl
+    assert "data-ship-max-image" in tpl
+    assert "fleet-ship-group-row" in tpl
+    assert "fleet-shipyard-link-panel" not in tpl
+    assert "fleet-logistics-cta" not in tpl
+    assert ".fleet-ship-table" in css
+    assert ".fleet-ogame-stack" in css
+    assert "data-ship-max-image" in js
+    assert "function applyFleetPageMode(page)" in js
+    assert "function renderGlobalFleetHud(fleets)" in js
+
+
+def test_main_js_gc640c_fleet_dense_ship_cards():
+    """GC-640C/640F: compact ship list — horizontal table rows, no inner scroll."""
+    css = _read("static/style.css")
+    tpl = _read("templates/fleet.html")
+    assert ".fleet-ship-table" in css
+    assert "fleet-ship-thumb" in css
+    assert "width: 32px" in css
+    assert "overflow: visible" in css.split(".fleet-ship-table-wrap")[1].split(".fleet-ship-table")[0]
+    assert "max-height: none" in css.split(".fleet-ship-table-wrap")[1].split(".fleet-ship-table")[0]
+    assert "fleet-ship-table" in tpl
+
+
+def test_main_js_gc640f_fleet_no_scroll_ship_selector():
+    """GC-640F: ship table stays horizontal on desktop; logistics rows stay scoped."""
+    css = _read("static/style.css")
+    assert ".fleet-ships-grid > .fleet-ship-row:not(.fleet-ship-card)" in css
+    assert "display: table-row" in css
+    assert "table-layout: fixed" in css
+    assert "height: 40px" in css.split(".fleet-ship-table tbody tr.fleet-ship-row")[1].split(".fleet-ship-table tbody td")[0]
+    assert ".fleet-ship-row:not(.fleet-ship-card)" not in css.replace(".fleet-ships-grid > .fleet-ship-row:not(.fleet-ship-card)", "")
+
+
+def test_main_js_gc640g_fleet_mode_tabs_compact():
+    """GC-640G: mode tabs are compact inline pills, not full-width nav bars."""
+    tpl = _read("templates/fleet.html")
+    css = _read("static/style.css")
+    js = _read("static/main.js")
+    assert "fleet-mode-tab gc-nav-link" not in tpl
+    assert 'class="fleet-mode-tab' in tpl
+    tabs_css = css.split(".fleet-mode-tabs")[1].split(".fleet-mode-tab{")[0]
+    assert "display: flex" in tabs_css
+    assert "width: auto" in css.split(".fleet-mode-tab{")[1].split(".fleet-mode-tab:hover")[0]
+    assert "min-height: 34px" in css.split(".fleet-mode-tab{")[1].split(".fleet-mode-tab:hover")[0]
+    assert "a.fleet-mode-tab" in js
+
+
+def test_main_js_gc640h_fleet_mode_tabs_visual_polish():
+    """GC-640H/J: mode tab bar is opaque; active uses outline/glow not cyan fill."""
+    css = _read("static/style.css")
+    tabs_bar = css.split(".fleet-mode-tabs{")[1].split(".fleet-mode-tab{")[0]
+    tab_base = css.split(".fleet-mode-tab{")[1].split(".fleet-mode-tab:hover")[0]
+    tab_active = css.split(".fleet-mode-tab.active,")[1].split("@media (max-width: 640px)")[0]
+    assert "rgba(3, 12, 18, 0.96)" in tabs_bar
+    assert "backdrop-filter: none" in tabs_bar
+    assert "linear-gradient(180deg, #081824, #040b12)" in tab_base
+    assert "linear-gradient(180deg, #0d3442, #061823)" in tab_active
+    assert "#2ff3ff" in tab_active
+    assert "linear-gradient(180deg, #35f2ff, #079fbd)" not in tab_active
+
+
+def test_main_js_gc640j_fleet_button_consistency():
+    """GC-640J: mode tabs and quicktargets share dezente dark outline control styling."""
+    tpl = _read("templates/fleet.html")
+    css = _read("static/style.css")
+    assert "data-fleet-colony-chips" in tpl
+    assert 'data-fleet-colony-chips hidden' not in tpl
+    assert "fleet-colony-chips--compact" in tpl
+    chip_css = css.split(".fleet-colony-chips--compact .fleet-colony-chip{")[1].split(".fleet-colony-chips--compact .fleet-colony-chip::after")[0]
+    assert "linear-gradient(180deg, #081824, #040b12)" in chip_css
+    assert "min-height: 32px" in chip_css
+    tab_active = css.split(".fleet-mode-tab.active,")[1].split("@media (max-width: 640px)")[0]
+    selected_css = css.split(".fleet-colony-chips--compact .fleet-colony-chip.is-selected{")[1].split(".fleet-colony-chips--compact .fleet-colony-chip.is-selected .fleet-chip-label")[0]
+    assert "linear-gradient(180deg, #0d3442, #061823)" in tab_active
+    assert "linear-gradient(180deg, #0d3442, #061823)" in selected_css
+    assert "linear-gradient(180deg, #35f2ff, #079fbd)" not in selected_css
+    expo_css = css.split(".fleet-colony-chips--compact .fleet-colony-chip--expedition.is-selected{")[1].split(".fleet-colony-chips--compact .fleet-colony-chip--expedition.is-selected .fleet-chip-label")[0]
+    assert "linear-gradient(180deg, #3d2e0c, #241806)" in expo_css
+    assert "linear-gradient(180deg, #ffd45a, #c68a00)" not in expo_css
+
+
+def test_main_js_gc640e_fleet_logistics_merge():
+    """GC-640E: logistics embedded on /fleet; /logistics redirects; sidebar has no logistics nav."""
+    tpl = _read("templates/fleet.html")
+    sidebar = _read("templates/partials/sidebar.html")
+    app_py = _read("app.py")
+    assert "partials/fleet_logistics_body.html" in tpl
+    assert 'data-nav-module="logistics"' not in sidebar
+    assert "nav_logistics" not in sidebar
+    assert "build_logistics_page_context" in app_py
+    logistics_view = app_py.split("def logistics_view")[1].split("def fleet_view")[0]
+    assert "redirect" in logistics_view
+    assert "mode=" in logistics_view
 
 
 def test_main_js_gc546d_production_completion_poll_storm_guards():

@@ -7,7 +7,7 @@ Consumers (`resources`, `buildings`, `research`) delegate to `EffectResolver`; t
 
 | Area | Status | Notes |
 |------|--------|--------|
-| Economy (production, energy, storage) | **Fixed** | Applied on every resource tick / derived sync; includes galactic directives (GC-720E) |
+| Economy (production, energy, storage) | **Fixed** | Applied on every resource tick / derived sync; includes galactic directives + diplomacy (GC-720E, GC-721H) |
 | Time (build, research, lab, academy, nanofactory) | **Fixed** | `get_build_time_seconds`, `get_research_time_seconds` |
 | Building caps (core nexus, geothermal, terraform) | **Fixed** | Max levels, storage, solar bonus |
 | Combat (`weapon_tech`, `armor_tech`, `shield_tech`) | **Fixed** | Applied in `simulate_battle()` via `EffectResolver.get_combat_modifiers()` — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
@@ -24,17 +24,31 @@ Prepared modifiers may appear in:
 
 Combat and fleet modifiers are **active** where documented in [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) and [FLEET_SYSTEM.md](FLEET_SYSTEM.md). Radar (`scan_range`) remains prepared until a scan engine consumes it.
 
-### Galactic directives (GC-720E)
+### Galactic directives (GC-720E / GC-720E2)
 
 `EffectResolver` loads merged directive mechanics via `get_galaxy_directive_mechanics(planet.galaxy)` — no per-consumer `if directive` branches.
 
-**Active in EffectResolver (phase 1):** `metal_prod_factor`, `crystal_prod_factor`, `fuel_prod_factor`, `mine_energy_factor`, `solar_output_factor`, `storage_factor`, `build_time_speed`, `research_time_speed`.
+**EffectResolver keys:** economy/time (GC-720E); combat additive bonuses; fleet multipliers; `shipyard_time_speed` / `defense_time_speed`.
 
-**Deferred (GC-720E2+):** fleet, combat, expedition, command-map flags — present in directive JSON but ignored by `EffectResolver` until wired.
+**Expedition flags:** `get_directive_flags_for_galaxy()` → `expedition_events.resolve_expedition_outcome()`.
+
+**Still deferred:** colonize/trader/command-map unlock flags, `expedition_slot_bonus`, `expedition_legendary_bonus`.
 
 Owner: `game/galactic_directives/` · [GALACTIC_DIRECTIVES.md](GALACTIC_DIRECTIVES.md)
 
-Use labels like **“prepared / not active”** in admin copy when showing `weapon_bonus`, `scan_range`, etc.
+### Galactic diplomacy (GC-721G / GC-721H)
+
+After buildings/research/planet mechanics and **galactic directives**, `EffectResolver` applies merged diplomacy mechanics via `get_galaxy_diplomacy_mechanics(planet.galaxy)` (personality → resolution → emergency bundle from GC-721G).
+
+**Merge order in `get_modifiers()`:** Research/Buildings → Galactic Directives → Galactic Diplomacy.
+
+**Keys:** same `GD_EFFECT_RESOLVER_ACTIVE_KEYS` whitelist as directives (`extract_active_effect_resolver_modifiers`); additive keys (`weapon_bonus`, `armor_bonus`, `shield_bonus`) sum, multiplicative keys multiply onto the directive-adjusted base.
+
+**Source labels:** `gdp:<personality_key>+<resolution_key>+<emergency_key>` (omitted segments when inactive).
+
+Owner: `game/galactic_diplomacy/` · [GALACTIC_DIPLOMACY.md](GALACTIC_DIPLOMACY.md)
+
+Use labels like **“prepared / not active”** in admin copy when showing `scan_range` and other deferred flags.
 
 ## Offline queue finish → derived state
 

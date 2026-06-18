@@ -52,11 +52,7 @@ def test_galaxy_view_tabs_marked_for_pjax():
 
 def test_fleet_internal_links_marked_for_pjax():
     tpl = _read("templates/fleet.html")
-    for needle in (
-        'href="{{ url_for(\'logistics_view\') }}" class="gc-nav-link',
-        'href="{{ url_for(\'shipyard_view\') }}" class="gc-nav-link',
-    ):
-        assert needle in tpl
+    assert 'href="{{ url_for(\'shipyard_view\') }}" class="fleet-shipyard-head-link gc-nav-link"' in tpl
 
 
 def test_sidebar_module_links_are_pjax_eligible_markup():

@@ -74,6 +74,8 @@ MOBILE_BOTTOM_PRIORITY: List[str] = [
 MOBILE_BOTTOM_MAX = 4
 
 _HOMEWORLD_ROLE_KEYS = frozenset({"homeworld", "genesis_ark"})
+# Empire-wide core modules — always visible on every colony (GC-641 / GC-641B).
+_ALWAYS_PROMINENT_MODULES = frozenset({"trading", "empire", "ranking", "records", "referrals"})
 
 _ROLE_PROMINENT: Dict[str, Iterable[str]] = {
     "mining": (
@@ -140,7 +142,10 @@ def resolve_sidebar_nav(
 
     modules: Dict[str, str] = {}
     for key in ALL_NAV_MODULES:
-        modules[key] = "prominent" if key in prominent else "secondary"
+        if key in _ALWAYS_PROMINENT_MODULES:
+            modules[key] = "prominent"
+        else:
+            modules[key] = "prominent" if key in prominent else "secondary"
 
     return {
         "empire_role_key": role,
@@ -267,6 +272,7 @@ def client_sidebar_nav_config() -> Dict[str, Any]:
         "all_modules": list(ALL_NAV_MODULES),
         "prominent_by_role": {key: list(modules) for key, modules in _ROLE_PROMINENT.items()},
         "homeworld_roles": sorted(_HOMEWORLD_ROLE_KEYS),
+        "always_prominent_modules": sorted(_ALWAYS_PROMINENT_MODULES),
         "mobile_bottom_priority": list(MOBILE_BOTTOM_PRIORITY),
         "mobile_bottom_max": MOBILE_BOTTOM_MAX,
         "mobile_always_bottom": list(MOBILE_ALWAYS_BOTTOM),

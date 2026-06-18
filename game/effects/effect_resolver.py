@@ -49,8 +49,6 @@ COMBAT_MODIFIER_KEYS = frozenset({
 # Modifier keys computed but not consumed by any live gameplay engine yet.
 PREPARED_MODIFIER_KEYS = frozenset({
     "scan_range",
-    "fleet_speed_multiplier",
-    "cargo_multiplier",
 })
 
 ACTIVE_MODIFIER_KEYS = frozenset({
@@ -63,6 +61,10 @@ ACTIVE_MODIFIER_KEYS = frozenset({
     "research_time_speed",
     "solar_output_factor",
     "fuel_efficiency_factor",
+    "fleet_speed_multiplier",
+    "cargo_multiplier",
+    "shipyard_time_speed",
+    "defense_time_speed",
 }) | COMBAT_MODIFIER_KEYS
 
 
@@ -263,6 +265,108 @@ class EffectResolver:
             label += f"+{secondary}"
         return label
 
+    @staticmethod
+    def _galactic_diplomacy_source_label(payload: Dict[str, Any]) -> str:
+        sources = payload.get("sources") or []
+        if not sources:
+            return "galactic_diplomacy"
+        parts: List[str] = []
+        for entry in sources:
+            if not isinstance(entry, dict):
+                continue
+            key = str(entry.get("key") or "").strip()
+            if key:
+                parts.append(key)
+        if not parts:
+            return "galactic_diplomacy"
+        return "gdp:" + "+".join(parts)
+
+    def _apply_gd_er_mods(
+        self,
+        values: Dict[str, float],
+        sources: List[Dict[str, Any]],
+    ) -> Dict[str, float]:
+        """Apply galaxy-scoped directive effect_resolver modifiers (GC-720E/E2)."""
+        if self.galaxy_id is None:
+            return values
+
+        try:
+            from ..galactic_directives.mechanics import (
+                GD_EFFECT_RESOLVER_ADDITIVE_KEYS,
+                extract_active_effect_resolver_modifiers,
+                get_galaxy_directive_mechanics,
+            )
+
+            payload = get_galaxy_directive_mechanics(self.galaxy_id, conn=self._conn)
+        except Exception as exc:
+            if EFFECT_DEBUG:
+                logger.warning(
+                    "galactic_directive_modifiers_failed galaxy=%s err=%s",
+                    self.galaxy_id,
+                    exc,
+                )
+            return values
+
+        if not payload:
+            return values
+
+        gd_mods = extract_active_effect_resolver_modifiers(payload.get("mechanics"))
+        if not gd_mods:
+            return values
+
+        label = self._galactic_directive_source_label(payload)
+        out = dict(values)
+        for gd_key, raw in gd_mods.items():
+            if gd_key in GD_EFFECT_RESOLVER_ADDITIVE_KEYS:
+                out[gd_key] = float(out.get(gd_key, 0.0)) + float(raw)
+            else:
+                out[gd_key] = float(out.get(gd_key, 1.0)) * float(raw)
+            sources.append(self._source_entry(gd_key, label, float(raw), 0))
+        return out
+
+    def _apply_gdp_er_mods(
+        self,
+        values: Dict[str, float],
+        sources: List[Dict[str, Any]],
+    ) -> Dict[str, float]:
+        """Apply merged galactic diplomacy effect_resolver modifiers (GC-721H)."""
+        if self.galaxy_id is None:
+            return values
+
+        try:
+            from ..galactic_directives.mechanics import (
+                GD_EFFECT_RESOLVER_ADDITIVE_KEYS,
+                extract_active_effect_resolver_modifiers,
+            )
+            from ..galactic_diplomacy.mechanics import get_galaxy_diplomacy_mechanics
+
+            payload = get_galaxy_diplomacy_mechanics(self.galaxy_id, conn=self._conn)
+        except Exception as exc:
+            if EFFECT_DEBUG:
+                logger.warning(
+                    "galactic_diplomacy_modifiers_failed galaxy=%s err=%s",
+                    self.galaxy_id,
+                    exc,
+                )
+            return values
+
+        if not payload:
+            return values
+
+        gdp_mods = extract_active_effect_resolver_modifiers(payload.get("mechanics"))
+        if not gdp_mods:
+            return values
+
+        label = self._galactic_diplomacy_source_label(payload)
+        out = dict(values)
+        for gdp_key, raw in gdp_mods.items():
+            if gdp_key in GD_EFFECT_RESOLVER_ADDITIVE_KEYS:
+                out[gdp_key] = float(out.get(gdp_key, 0.0)) + float(raw)
+            else:
+                out[gdp_key] = float(out.get(gdp_key, 1.0)) * float(raw)
+            sources.append(self._source_entry(gdp_key, label, float(raw), 0))
+        return out
+
     def _apply_galactic_directive_modifiers(
         self,
         *,
@@ -276,9 +380,9 @@ class EffectResolver:
         solar_output_factor: float,
         sources: List[Dict[str, Any]],
     ) -> Dict[str, float]:
-        """Apply galaxy-scoped directive modifiers (GC-720E)."""
-        if self.galaxy_id is None:
-            return {
+        """Backward-compatible economy-only wrapper (GC-720E)."""
+        applied = self._apply_gd_er_mods(
+            {
                 "mine_energy_factor": mine_energy_factor,
                 "metal_prod_factor": metal_prod_factor,
                 "crystal_prod_factor": crystal_prod_factor,
@@ -287,79 +391,19 @@ class EffectResolver:
                 "build_time_speed": build_time_speed,
                 "research_time_speed": research_time_speed,
                 "solar_output_factor": solar_output_factor,
-            }
-
-        try:
-            from ..galactic_directives.mechanics import (
-                extract_active_effect_resolver_modifiers,
-                get_galaxy_directive_mechanics,
-            )
-
-            payload = get_galaxy_directive_mechanics(self.galaxy_id, conn=self._conn)
-        except Exception as exc:
-            if EFFECT_DEBUG:
-                logger.warning(
-                    "galactic_directive_modifiers_failed galaxy=%s err=%s",
-                    self.galaxy_id,
-                    exc,
-                )
-            payload = None
-
-        if not payload:
-            return {
-                "mine_energy_factor": mine_energy_factor,
-                "metal_prod_factor": metal_prod_factor,
-                "crystal_prod_factor": crystal_prod_factor,
-                "fuel_prod_factor": fuel_prod_factor,
-                "storage_factor": storage_factor,
-                "build_time_speed": build_time_speed,
-                "research_time_speed": research_time_speed,
-                "solar_output_factor": solar_output_factor,
-            }
-
-        gd_mods = extract_active_effect_resolver_modifiers(payload.get("mechanics"))
-        if not gd_mods:
-            return {
-                "mine_energy_factor": mine_energy_factor,
-                "metal_prod_factor": metal_prod_factor,
-                "crystal_prod_factor": crystal_prod_factor,
-                "fuel_prod_factor": fuel_prod_factor,
-                "storage_factor": storage_factor,
-                "build_time_speed": build_time_speed,
-                "research_time_speed": research_time_speed,
-                "solar_output_factor": solar_output_factor,
-            }
-
-        label = self._galactic_directive_source_label(payload)
-        apply_map = {
-            "mine_energy_factor": "mine_energy_factor",
-            "metal_prod_factor": "metal_prod_factor",
-            "crystal_prod_factor": "crystal_prod_factor",
-            "fuel_prod_factor": "fuel_prod_factor",
-            "storage_factor": "storage_factor",
-            "build_time_speed": "build_time_speed",
-            "research_time_speed": "research_time_speed",
-            "solar_output_factor": "solar_output_factor",
+            },
+            sources,
+        )
+        return {
+            "mine_energy_factor": applied["mine_energy_factor"],
+            "metal_prod_factor": applied["metal_prod_factor"],
+            "crystal_prod_factor": applied["crystal_prod_factor"],
+            "fuel_prod_factor": applied["fuel_prod_factor"],
+            "storage_factor": applied["storage_factor"],
+            "build_time_speed": applied["build_time_speed"],
+            "research_time_speed": applied["research_time_speed"],
+            "solar_output_factor": applied["solar_output_factor"],
         }
-        locals_out = {
-            "mine_energy_factor": mine_energy_factor,
-            "metal_prod_factor": metal_prod_factor,
-            "crystal_prod_factor": crystal_prod_factor,
-            "fuel_prod_factor": fuel_prod_factor,
-            "storage_factor": storage_factor,
-            "build_time_speed": build_time_speed,
-            "research_time_speed": research_time_speed,
-            "solar_output_factor": solar_output_factor,
-        }
-
-        for gd_key, mult in gd_mods.items():
-            target = apply_map.get(gd_key)
-            if not target:
-                continue
-            locals_out[target] = float(locals_out[target]) * float(mult)
-            sources.append(self._source_entry(target, label, float(mult), 0))
-
-        return locals_out
 
     def get_modifiers(self) -> Dict[str, float]:
         if self._mods is not None:
@@ -386,6 +430,8 @@ class EffectResolver:
         fleet_speed_multiplier = 1.0
         cargo_multiplier = 1.0
         fuel_efficiency_factor = 1.0
+        shipyard_time_speed = 1.0
+        defense_time_speed = 1.0
 
         # --- Research: energy_tech (-5% mine draw per level; mines only, not solar) ---
         le = _lvl(r, "energy_tech")
@@ -484,25 +530,44 @@ class EffectResolver:
             scan_range += 2 * radar
             sources.append(self._source_entry("scan_range", "radar_array", scan_range, radar, prepared=True))
 
-        gd_applied = self._apply_galactic_directive_modifiers(
-            mine_energy_factor=mine_energy_factor,
-            metal_prod_factor=metal_prod_factor,
-            crystal_prod_factor=crystal_prod_factor,
-            fuel_prod_factor=fuel_prod_factor,
-            storage_factor=storage_factor,
-            build_time_speed=build_time_speed,
-            research_time_speed=research_time_speed,
-            solar_output_factor=solar_output_factor,
-            sources=sources,
+        gd_state = self._apply_gd_er_mods(
+            {
+                "mine_energy_factor": mine_energy_factor,
+                "metal_prod_factor": metal_prod_factor,
+                "crystal_prod_factor": crystal_prod_factor,
+                "fuel_prod_factor": fuel_prod_factor,
+                "storage_factor": storage_factor,
+                "build_time_speed": build_time_speed,
+                "research_time_speed": research_time_speed,
+                "solar_output_factor": solar_output_factor,
+                "weapon_bonus": weapon_bonus,
+                "armor_bonus": armor_bonus,
+                "shield_bonus": shield_bonus,
+                "fleet_speed_multiplier": fleet_speed_multiplier,
+                "cargo_multiplier": cargo_multiplier,
+                "fuel_efficiency_factor": fuel_efficiency_factor,
+                "shipyard_time_speed": shipyard_time_speed,
+                "defense_time_speed": defense_time_speed,
+            },
+            sources,
         )
-        mine_energy_factor = gd_applied["mine_energy_factor"]
-        metal_prod_factor = gd_applied["metal_prod_factor"]
-        crystal_prod_factor = gd_applied["crystal_prod_factor"]
-        fuel_prod_factor = gd_applied["fuel_prod_factor"]
-        storage_factor = gd_applied["storage_factor"]
-        build_time_speed = gd_applied["build_time_speed"]
-        research_time_speed = gd_applied["research_time_speed"]
-        solar_output_factor = gd_applied["solar_output_factor"]
+        gd_state = self._apply_gdp_er_mods(gd_state, sources)
+        mine_energy_factor = gd_state["mine_energy_factor"]
+        metal_prod_factor = gd_state["metal_prod_factor"]
+        crystal_prod_factor = gd_state["crystal_prod_factor"]
+        fuel_prod_factor = gd_state["fuel_prod_factor"]
+        storage_factor = gd_state["storage_factor"]
+        build_time_speed = gd_state["build_time_speed"]
+        research_time_speed = gd_state["research_time_speed"]
+        solar_output_factor = gd_state["solar_output_factor"]
+        weapon_bonus = gd_state["weapon_bonus"]
+        armor_bonus = gd_state["armor_bonus"]
+        shield_bonus = gd_state["shield_bonus"]
+        fleet_speed_multiplier = gd_state["fleet_speed_multiplier"]
+        cargo_multiplier = gd_state["cargo_multiplier"]
+        fuel_efficiency_factor = gd_state["fuel_efficiency_factor"]
+        shipyard_time_speed = gd_state["shipyard_time_speed"]
+        defense_time_speed = gd_state["defense_time_speed"]
 
         self._mods = {
             "mine_energy_factor": float(mine_energy_factor),
@@ -520,6 +585,8 @@ class EffectResolver:
             "fleet_speed_multiplier": float(fleet_speed_multiplier),
             "cargo_multiplier": float(cargo_multiplier),
             "fuel_efficiency_factor": float(fuel_efficiency_factor),
+            "shipyard_time_speed": float(shipyard_time_speed),
+            "defense_time_speed": float(defense_time_speed),
             # Legacy aliases (deprecated; kept one release for external callers)
             "prod_multiplier": float(metal_prod_factor),
             "storage_multiplier": float(storage_factor),

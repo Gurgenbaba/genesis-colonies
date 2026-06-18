@@ -339,6 +339,44 @@ def test_build_galactic_directive_banner_with_secondary(gd_db):
         conn.close()
 
 
+def test_get_directive_flags_for_galaxy_exploration(gd_db):
+    conn = db()
+    try:
+        ensure_galaxy_state(1, conn=conn)
+        conn.execute(
+            "UPDATE gd_galaxy_state SET primary_directive = 'exploration' WHERE galaxy = 1;"
+        )
+        conn.commit()
+        from game.galactic_directives.mechanics import get_directive_flags_for_galaxy
+
+        flags = get_directive_flags_for_galaxy(1, conn=conn)
+        assert flags["expedition_loot_mult"] == pytest.approx(2.0)
+        assert flags["expedition_event_bonus"] == pytest.approx(0.30)
+    finally:
+        conn.close()
+
+
+def test_resolve_expedition_outcome_applies_loot_mult(gd_db):
+    from game.expedition_events import resolve_expedition_outcome
+
+    base = resolve_expedition_outcome(
+        42,
+        cargo_total=1_000_000,
+        expedition_ship_count=3,
+        flight_seconds=120,
+        directive_flags={"expedition_loot_mult": 1.0},
+    )
+    boosted = resolve_expedition_outcome(
+        42,
+        cargo_total=1_000_000,
+        expedition_ship_count=3,
+        flight_seconds=120,
+        directive_flags={"expedition_loot_mult": 2.0},
+    )
+    if int(base.get("reward_total") or 0) > 0:
+        assert int(boosted.get("reward_total") or 0) == int(base["reward_total"]) * 2
+
+
 def test_build_galactic_directive_banner_invalid_galaxy(gd_db):
     assert build_galactic_directive_banner(0)["visible"] is False
     assert build_galactic_directive_banner(99)["visible"] is False

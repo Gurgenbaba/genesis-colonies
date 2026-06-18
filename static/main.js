@@ -6205,6 +6205,170 @@
   GC.updateNavBadges = updateNavBadges;
 
   let _lastHudOnline = null;
+  let _globalFleetHudSig = "";
+
+  function pickPrimaryFleetMovement(fleets) {
+    const list = Array.isArray(fleets) ? fleets : [];
+    if (!list.length) return null;
+    return list.slice().sort((a, b) => {
+      const ca = Number(a?.countdown_at || 0) || Number.POSITIVE_INFINITY;
+      const cb = Number(b?.countdown_at || 0) || Number.POSITIVE_INFINITY;
+      return ca - cb;
+    })[0];
+  }
+
+  function formatGlobalFleetHudTarget(mv) {
+    if (!mv || typeof mv !== "object") return "–";
+    const wt = mv.world_target;
+    if (wt?.target_name_key) return t(wt.target_name_key, wt.target_name_key);
+    if (wt?.target_name) return String(wt.target_name);
+    const origin = String(mv.origin_name || "").trim();
+    const target = String(mv.target_coords || "").trim();
+    if (origin && target) return `${origin} → ${target}`;
+    return target || origin || "–";
+  }
+
+  function globalFleetLegKey(mv, phase) {
+    return mv?.status_label || mv?.leg_label_key || (
+      phase === "returning"
+        ? "fleet_leg_returning"
+        : phase === "holding"
+          ? "fleet_leg_holding"
+          : "fleet_leg_outbound"
+    );
+  }
+
+  function updateFleetNavBadge(count) {
+    const n = Math.max(0, Number(count) || 0);
+    const label = n > 9 ? "9+" : String(n);
+    document.querySelectorAll("[data-fleet-nav-badge]").forEach((el) => {
+      const navItem = el.closest("[data-nav-module='fleet']");
+      if (n > 0) {
+        el.textContent = label;
+        el.hidden = false;
+        el.classList.remove("hidden");
+        el.setAttribute("aria-hidden", "false");
+        navItem?.classList.add("gc-bottom-nav-item--fleet-active");
+      } else {
+        el.textContent = "";
+        el.hidden = true;
+        el.classList.add("hidden");
+        el.setAttribute("aria-hidden", "true");
+        navItem?.classList.remove("gc-bottom-nav-item--fleet-active");
+      }
+    });
+  }
+  GC.updateFleetNavBadge = updateFleetNavBadge;
+
+  function patchGlobalFleetHudCountdown(hud, mv) {
+    const cdEl = hud.querySelector("[data-fleet-hud-countdown]");
+    const legLabelEl = hud.querySelector("[data-fleet-hud-leg-label]");
+    if (!cdEl || !mv) return;
+    const countdownAt = Number(mv.countdown_at || 0);
+    const phase = mv.phase || mv.leg_phase || mv.status || "";
+    const legKey = globalFleetLegKey(mv, phase);
+    if (legLabelEl) {
+      _setIfChanged(legLabelEl, t(legKey, legKey));
+    }
+    if (!countdownAt) {
+      cdEl.textContent = "–";
+      cdEl.removeAttribute("data-timer-target");
+      cdEl.removeAttribute("data-countdown-at");
+      cdEl.removeAttribute("data-countdown-key");
+      delete cdEl.dataset.serverRemaining;
+      return;
+    }
+    const countdownKey = `${mv.id}:${phase}:${countdownAt}`;
+    const srvRem = Number(mv.remaining_seconds);
+    const legChanged = !cdEl.dataset.countdownAt
+      || Number(cdEl.dataset.countdownAt || 0) !== countdownAt
+      || String(cdEl.dataset.countdownKey || "") !== countdownKey;
+    applyQueueJobTimerAttrs(
+      cdEl,
+      countdownAt,
+      "fleet",
+      "fleet",
+      Number.isFinite(srvRem) && srvRem >= 0 ? Math.ceil(srvRem) : undefined
+    );
+    cdEl.dataset.countdownScope = "fleet";
+    cdEl.dataset.countdownKey = countdownKey;
+    cdEl.classList.add("fleet-active-countdown");
+    if (legChanged) {
+      delete cdEl.dataset.refreshFiredAt;
+    } else if (Number.isFinite(srvRem) && srvRem >= 0) {
+      assignMonotonicServerRemaining(cdEl, Math.ceil(srvRem), countdownAt);
+    }
+    _setIfChanged(
+      cdEl,
+      formatCountdownRemain(movementRemainingSeconds(countdownAt, getTimerServerNow(), mv.remaining_seconds))
+    );
+  }
+
+  function renderGlobalFleetHud(fleets) {
+    const hud = document.querySelector("[data-fleet-global-hud]");
+    if (!hud) return;
+    const list = Array.isArray(fleets) ? fleets : [];
+
+    if (!list.length) {
+      _globalFleetHudSig = "";
+      hud.hidden = true;
+      hud.classList.add("is-empty");
+      updateFleetNavBadge(0);
+      return;
+    }
+
+    const signature = list.map((mv) => (
+      `${mv.id}:${mv.status}:${mv.phase || mv.leg_phase || ""}:${mv.countdown_at || 0}:${mv.mission_type || ""}`
+    )).join("|");
+    const primary = pickPrimaryFleetMovement(list);
+    const count = list.length;
+
+    hud.hidden = false;
+    hud.classList.remove("is-empty");
+    updateFleetNavBadge(count);
+
+    const countEl = hud.querySelector("[data-fleet-hud-count]");
+    if (countEl) _setIfChanged(countEl, String(count));
+
+    if (primary) {
+      const mission = String(primary.mission_type || "custom");
+      const missionEl = hud.querySelector("[data-fleet-hud-mission]");
+      if (missionEl) {
+        missionEl.className = `gc-fleet-hud-mission gc-fleet-hud-mission--${mission}`;
+        _setIfChanged(missionEl, t(`fleet_mission_${mission}`, mission));
+      }
+      const statusEl = hud.querySelector("[data-fleet-hud-status]");
+      if (statusEl) {
+        _setIfChanged(statusEl, t(`fleet_status_${primary.status}`, primary.status));
+      }
+      const targetEl = hud.querySelector("[data-fleet-hud-target]");
+      if (targetEl) _setIfChanged(targetEl, formatGlobalFleetHudTarget(primary));
+      patchGlobalFleetHudCountdown(hud, primary);
+      hud.dataset.fleetHudMission = mission;
+      hud.dataset.fleetHudStatus = String(primary.status || "");
+    }
+
+    const moreEl = hud.querySelector("[data-fleet-hud-more]");
+    if (moreEl) {
+      if (count > 1) {
+        const moreText = t("fleet_hud_more", "+%(count)s", { count: count - 1 });
+        _setIfChanged(moreEl, moreText);
+        moreEl.hidden = false;
+        moreEl.classList.remove("hidden");
+      } else {
+        moreEl.textContent = "";
+        moreEl.hidden = true;
+        moreEl.classList.add("hidden");
+      }
+    }
+
+    if (signature !== _globalFleetHudSig) {
+      _globalFleetHudSig = signature;
+      _clearMovementCountdownExpiryState();
+    }
+    GC.startProgressTicker();
+  }
+  GC.renderGlobalFleetHud = renderGlobalFleetHud;
 
   /** Single write path for shell HUD (header score/rank/online/messages + resource bar). */
   function patchShellHudFromState(data, opts) {
@@ -6365,6 +6529,10 @@
 
     if (data.nav_badges) {
       updateNavBadges(data.nav_badges);
+    }
+
+    if (Array.isArray(data.active_fleets)) {
+      renderGlobalFleetHud(data.active_fleets);
     }
   }
 
@@ -9663,6 +9831,25 @@
         chip.classList.toggle("is-selected", selected);
       });
 
+      const quickSel = page.querySelector("[data-fleet-quick-target-select]");
+      if (quickSel) {
+        let matched = "";
+        Array.from(quickSel.options).forEach((opt) => {
+          if (!opt.value) return;
+          const og = parseInt(opt.getAttribute("data-galaxy") || "0", 10);
+          const os = parseInt(opt.getAttribute("data-system") || "0", 10);
+          const op = parseInt(opt.getAttribute("data-position") || "0", 10);
+          const optMission = opt.getAttribute("data-mission") || "";
+          const coordMatch = og === g && os === s && op === pos;
+          const isMatch = optMission === "expedition"
+            ? coordMatch && mission === "expedition"
+            : coordMatch && !optMission;
+          if (isMatch) matched = opt.value;
+        });
+        quickSel.value = matched;
+        if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(quickSel);
+      }
+
       if (hint) {
         if (isExpoSlot) {
           hint.textContent = tt("fleet_expedition_coords_hint", "Deep-space expedition slot — position 16 only.");
@@ -10045,16 +10232,19 @@
         const totalShips = Object.values(state.ships).reduce((a, b) => a + (Number(b) || 0), 0);
         rt.data.has_ships = totalShips > 0;
         const noShipsPanel = page.querySelector(".fleet-no-ships-panel");
-        const sendPanel = page.querySelector(".fleet-send-panel");
+        const sendForm = page.querySelector("#fleet-send-form");
         if (noShipsPanel) noShipsPanel.hidden = totalShips > 0;
-        if (sendPanel) sendPanel.hidden = totalShips <= 0;
+        if (sendForm) sendForm.hidden = totalShips <= 0;
         page.querySelectorAll(".fleet-ship-row").forEach((row) => {
           const key = row.getAttribute("data-ship-key");
           if (!key) return;
           const have = state.ships[key] || 0;
           row.setAttribute("data-ship-have", String(have));
+          row.classList.toggle("is-empty", have <= 0);
           row.classList.toggle("fleet-ship-row-empty", have <= 0);
           row.hidden = false;
+          const stockEl = row.querySelector(".fleet-ship-card-stock, .fleet-ship-stock, .fleet-ship-tbl-stock");
+          if (stockEl) _setIfChanged(stockEl, `×${formatNumber(have)}`);
           const inp = row.querySelector("[data-ship-input]");
           if (inp) {
             inp.max = String(have);
@@ -10068,6 +10258,8 @@
           }
           const maxBtn = row.querySelector("[data-ship-max]");
           if (maxBtn) maxBtn.disabled = have <= 0;
+          const maxImage = row.querySelector("[data-ship-max-image]");
+          if (maxImage) maxImage.disabled = have <= 0;
         });
       }
       const slotsEl = page.querySelector("[data-fleet-slots]");
@@ -10076,7 +10268,9 @@
       }
       if (Array.isArray(state.active_fleets)) {
         rt.data.active_fleets = state.active_fleets;
-        renderActiveFleets(page, state.active_fleets);
+        if (typeof GC.renderGlobalFleetHud === "function") {
+          GC.renderGlobalFleetHud(state.active_fleets);
+        }
       }
       if (state.presets) {
         rt.data.presets = state.presets;
@@ -10374,7 +10568,26 @@
         clearFleetWorldKey(page);
       }
       page.querySelectorAll(".fleet-colony-chip").forEach((c) => c.classList.remove("is-selected"));
-      chip.classList.add("is-selected");
+      if (chip.classList) chip.classList.add("is-selected");
+      const quickSel = page.querySelector("[data-fleet-quick-target-select]");
+      if (quickSel && chip.tagName === "OPTION") {
+        quickSel.value = chip.value || "";
+        if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(quickSel);
+      } else if (quickSel) {
+        let matched = "";
+        Array.from(quickSel.options).forEach((opt) => {
+          if (!opt.value) return;
+          const og = parseInt(opt.getAttribute("data-galaxy") || "0", 10);
+          const os = parseInt(opt.getAttribute("data-system") || "0", 10);
+          const op = parseInt(opt.getAttribute("data-position") || "0", 10);
+          const cg = parseInt(chip.getAttribute("data-galaxy") || chip.dataset.galaxy || "0", 10);
+          const cs = parseInt(chip.getAttribute("data-system") || chip.dataset.system || "0", 10);
+          const cp = parseInt(chip.getAttribute("data-position") || chip.dataset.position || "0", 10);
+          if (og === cg && os === cs && op === cp) matched = opt.value;
+        });
+        quickSel.value = matched;
+        if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(quickSel);
+      }
       syncExpeditionMissionTarget(page);
       schedulePreview(page);
     };
@@ -10416,6 +10629,18 @@
         return;
       }
 
+      const maxShipImage = e.target.closest("[data-ship-max-image]");
+      if (maxShipImage && page.contains(maxShipImage)) {
+        e.preventDefault();
+        const key = maxShipImage.getAttribute("data-ship-max-image");
+        const row = maxShipImage.closest("[data-ship-key]");
+        const have = parseInt(row?.getAttribute("data-ship-have") || "0", 10);
+        const inp = form?.querySelector(`[data-ship-input="${key}"]`);
+        if (inp && have > 0) setNumberInputValue(inp, have);
+        schedulePreview(page);
+        return;
+      }
+
       const resMax = e.target.closest("[data-fleet-res-max]");
       if (resMax && page.contains(resMax)) {
         e.preventDefault();
@@ -10434,6 +10659,13 @@
       if (chip && page.contains(chip)) {
         e.preventDefault();
         applyQuickTarget(page, chip);
+        return;
+      }
+
+      const quickTargetSel = e.target.closest("[data-fleet-quick-target-select]");
+      if (quickTargetSel && page.contains(quickTargetSel)) {
+        const opt = quickTargetSel.options[quickTargetSel.selectedIndex];
+        if (opt && opt.value) applyQuickTarget(page, opt);
         return;
       }
 
@@ -11361,6 +11593,39 @@
     });
   }
 
+  function getFleetPageMode(page) {
+    const fromDataset = String(page?.dataset?.fleetPageMode || "").trim().toLowerCase();
+    if (fromDataset === "collect" || fromDataset === "distribute") return fromDataset;
+    const fromUrl = (new URLSearchParams(window.location.search).get("mode") || "send").trim().toLowerCase();
+    if (fromUrl === "collect" || fromUrl === "distribute") return fromUrl;
+    return "send";
+  }
+
+  function applyFleetPageMode(page) {
+    if (!page) return "send";
+    const mode = getFleetPageMode(page);
+    page.dataset.fleetPageMode = mode;
+    const isLogistics = mode === "collect" || mode === "distribute";
+    page.querySelectorAll("[data-fleet-mode-tab]").forEach((tab) => {
+      const tabMode = tab.getAttribute("data-fleet-mode-tab") || "";
+      const active = isLogistics ? tabMode === mode : tabMode === "send";
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    const sendPanel = page.querySelector('[data-fleet-mode-panel="send"]');
+    const logPanel = page.querySelector('[data-fleet-mode-panel="logistics"]');
+    if (sendPanel) sendPanel.hidden = isLogistics;
+    if (logPanel) logPanel.hidden = !isLogistics;
+    if (isLogistics) {
+      const logPage = document.getElementById("logistics-page");
+      if (logPage && logPage.dataset.ready === "1") {
+        setLogisticsMode(logPage, mode);
+        initLogistics();
+      }
+    }
+    return mode;
+  }
+
   function initFleet() {
     bindFleetOnce();
     const page = document.getElementById("fleet-page");
@@ -11406,6 +11671,7 @@
     GC.startProgressTicker();
     if (typeof GC.refreshFleetState === "function") GC.refreshFleetState(page);
     if (typeof GC.syncFleetMissionLockUi === "function") GC.syncFleetMissionLockUi(page);
+    applyFleetPageMode(page);
   }
 
   function applyFleetUrlPrefill(page) {
@@ -13450,9 +13716,14 @@
       };
     }
     const prominentSet = new Set(prominent);
+    const alwaysProminent = new Set(
+      Array.isArray(cfg.always_prominent_modules)
+        ? cfg.always_prominent_modules
+        : ["trading", "empire", "ranking", "records", "referrals"]
+    );
     const modules = {};
     allModules.forEach((key) => {
-      modules[key] = prominentSet.has(key) ? "prominent" : "secondary";
+      modules[key] = alwaysProminent.has(key) || prominentSet.has(key) ? "prominent" : "secondary";
     });
     return {
       empire_role_key: role,
@@ -19095,7 +19366,7 @@
     "a.gc-nav-link, a.gc-nav-sub-link, a.gc-bottom-nav-item, a.gc-nav-drawer-link, a.gc-hud-panel-messages, " +
     "a.gc-hud-panel-score, a.galaxy-view-tab, a.galaxy-nav-step, a.galaxy-range-item, " +
     "a.gc-command-center-action-btn, a.gc-command-center-fleet-link, a.gc-command-center-news-link, a.gc-command-center-activity-link, " +
-    "a[data-gc-nav], a[data-command-action], " +
+    "a.fleet-mode-tab, a[data-gc-nav], a[data-command-action], " +
     "#gc-sidebar-nav a[href], " +
     "#gc-nav-trading-sub a.gc-nav-sub-link, #gc-nav-military-sub a.gc-nav-sub-link, #gc-nav-fleet-sub a.gc-nav-sub-link";
 
@@ -21430,7 +21701,9 @@
     }
 
     const fleetPage = document.getElementById("fleet-page");
-    const fleets = fleetPage?._fleetRt?.data?.active_fleets || [];
+    const fleets = Array.isArray(GC.lastState?.active_fleets)
+      ? GC.lastState.active_fleets
+      : (fleetPage?._fleetRt?.data?.active_fleets || []);
     if (fleets.length) {
       lines.push("FLEET");
       fleets.slice(0, 6).forEach((mv) => {

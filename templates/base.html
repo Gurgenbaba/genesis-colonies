@@ -16,6 +16,8 @@
 </head>
 
 {% set SIMPLE_LAYOUT = request.endpoint in ['landing', 'login', 'register', 'forgot_password', 'reset_password', 'verify_email'] %}
+{% set _fleet_mode = request.args.get('mode', 'send')|lower %}
+{% set _fleet_logistics_active = request.endpoint == 'fleet_view' and _fleet_mode in ('collect', 'distribute') %}
 {% set WIP_ENDPOINTS = ['alliance_view'] %}
 {% set _motd_enabled = (motd_enabled if motd_enabled is defined else False) %}
 {% set _motd_text = (motd_text if motd_text is defined else "") %}
@@ -200,6 +202,30 @@
 
           </div>
         </div>
+        <a href="{{ url_for('fleet_view') }}"
+           class="gc-fleet-global-hud gc-nav-link is-empty"
+           id="gc-fleet-global-hud"
+           data-fleet-global-hud
+           hidden
+           aria-live="polite"
+           aria-label="{{ T('fleet_hud_aria', 'Aktive Flotten') }}">
+          <span class="gc-fleet-hud-tag">{{ T('fleet_hud_tag', 'Flotte') }}</span>
+          <span class="gc-fleet-hud-count gc-mono" data-fleet-hud-count aria-hidden="true">0</span>
+          <span class="gc-fleet-hud-body">
+            <span class="gc-fleet-hud-mission" data-fleet-hud-mission></span>
+            <span class="gc-fleet-hud-status" data-fleet-hud-status></span>
+            <span class="gc-fleet-hud-target" data-fleet-hud-target></span>
+            <span class="gc-fleet-hud-leg">
+              <span class="gc-fleet-hud-leg-label" data-fleet-hud-leg-label></span>
+              <time class="gc-fleet-hud-countdown gc-mono fleet-active-countdown"
+                    data-fleet-hud-countdown
+                    data-timer-kind="fleet"
+                    data-refresh-on-zero="fleet"
+                    data-countdown-scope="fleet">–</time>
+            </span>
+          </span>
+          <span class="gc-fleet-hud-more hidden" data-fleet-hud-more hidden></span>
+        </a>
       </div>
       {% endif %}
 
@@ -332,10 +358,11 @@
     </a>
     <a href="{{ url_for('fleet_view') }}"
        data-nav-module="fleet"
-       class="gc-bottom-nav-item gc-nav-module--{{ nav_module_tier(_sn, 'fleet') }} {% if request.endpoint == 'fleet_view' %}active{% endif %}"
+       class="gc-bottom-nav-item gc-nav-module--{{ nav_module_tier(_sn, 'fleet') }} {% if request.endpoint == 'fleet_view' and not _fleet_logistics_active %}active{% endif %}"
        {% if 'fleet' not in _mb %}hidden{% endif %}>
       <span class="gc-bottom-nav-icon" aria-hidden="true">🚀</span>
       <span class="gc-bottom-nav-label">{{ T("nav_fleet") }}</span>
+      <span class="gc-fleet-nav-badge hidden" data-fleet-nav-badge hidden aria-hidden="true"></span>
     </a>
     <a href="{{ url_for('defense_view') }}"
        data-nav-module="defense"
@@ -344,9 +371,9 @@
       <span class="gc-bottom-nav-icon" aria-hidden="true">🛡</span>
       <span class="gc-bottom-nav-label">{{ T("nav_defense") }}</span>
     </a>
-    <a href="{{ url_for('logistics_view') }}"
+    <a href="{{ url_for('fleet_view') }}?mode=collect"
        data-nav-module="logistics"
-       class="gc-bottom-nav-item gc-nav-module--{{ nav_module_tier(_sn, 'logistics') }} {% if request.endpoint == 'logistics_view' %}active{% endif %}"
+       class="gc-bottom-nav-item gc-nav-module--{{ nav_module_tier(_sn, 'logistics') }} {% if _fleet_logistics_active %}active{% endif %}"
        {% if 'logistics' not in _mb %}hidden{% endif %}>
       <span class="gc-bottom-nav-icon" aria-hidden="true">📦</span>
       <span class="gc-bottom-nav-label">{{ T("nav_logistics", "Logistics") }}</span>
@@ -444,13 +471,13 @@
           <span class="gc-nav-drawer-group-label">{{ T("nav_fleet_hub", "Flotte & Logistik") }}</span>
           <a href="{{ url_for('fleet_view') }}"
              data-nav-module="fleet"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-module--{{ nav_module_tier(_sn, 'fleet') }} {% if request.endpoint == 'fleet_view' %}active{% endif %}"
+             class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-module--{{ nav_module_tier(_sn, 'fleet') }} {% if request.endpoint == 'fleet_view' and not _fleet_logistics_active %}active{% endif %}"
              {% if not mobile_drawer_shows_module(_sn, 'fleet', bottom_modules=_mb) %}hidden{% endif %}>
             {{ T("nav_fleet") }}
           </a>
-          <a href="{{ url_for('logistics_view') }}"
+          <a href="{{ url_for('fleet_view') }}?mode=collect"
              data-nav-module="logistics"
-             class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-module--{{ nav_module_tier(_sn, 'logistics') }} {% if request.endpoint == 'logistics_view' %}active{% endif %}"
+             class="gc-nav-drawer-link gc-nav-drawer-sublink gc-nav-module--{{ nav_module_tier(_sn, 'logistics') }} {% if _fleet_logistics_active %}active{% endif %}"
              {% if not mobile_drawer_shows_module(_sn, 'logistics', bottom_modules=_mb) %}hidden{% endif %}>
             {{ T("nav_logistics", "Logistics") }}
           </a>

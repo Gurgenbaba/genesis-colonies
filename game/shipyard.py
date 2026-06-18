@@ -228,20 +228,53 @@ def production_next_batch_finish_at(
     return float(started_at) + next_batch * unit
 
 
-def _effective_build_seconds(ship_key: str, shipyard_level: int, *, conn=None) -> int:
+def _directive_time_speed(
+    planet_id: int | None,
+    speed_key: str,
+    *,
+    conn=None,
+) -> float:
+    if not planet_id or not conn:
+        return 1.0
+    try:
+        from .galactic_directives.mechanics import get_planet_directive_er_modifiers
+
+        mods = get_planet_directive_er_modifiers(int(planet_id), conn=conn)
+        return float(mods.get(speed_key, 1.0) or 1.0)
+    except Exception:
+        return 1.0
+
+
+def _effective_build_seconds(
+    ship_key: str,
+    shipyard_level: int,
+    *,
+    conn=None,
+    planet_id: int | None = None,
+) -> int:
     spec = get_ship(ship_key)
     if not spec:
         return 0
     base = max(1, int(spec.get("build_seconds") or 1))
     lvl = max(1, int(shipyard_level or 1))
     seconds = max(1, int(math.ceil(base * (BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)))))
-    speed = _shipyard_speed_multiplier(conn=conn)
+    speed = _shipyard_speed_multiplier(conn=conn) * _directive_time_speed(
+        planet_id, "shipyard_time_speed", conn=conn
+    )
     return max(1, int(math.ceil(seconds / speed)))
 
 
-def unit_build_seconds(ship_key: str, shipyard_level: int, *, conn=None) -> int:
+def unit_build_seconds(
+    ship_key: str,
+    shipyard_level: int,
+    *,
+    conn=None,
+    planet_id: int | None = None,
+) -> int:
     """Per-ship build time for one unit (progressive shipyard delivery)."""
-    return _effective_build_seconds(ship_key, shipyard_level, conn=conn)
+    return _effective_build_seconds(
+        ship_key, shipyard_level, conn=conn, planet_id=planet_id
+    )
 
 
 def _unit_build_cost(ship_key: str) -> Dict[str, int]:

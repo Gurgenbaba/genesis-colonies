@@ -42,10 +42,19 @@ def _now() -> float:
     return time.time()
 
 
-def _unit_build_seconds(ship_key: str, shipyard_level: int, *, conn=None) -> int:
+def _unit_build_seconds(
+    ship_key: str,
+    shipyard_level: int,
+    *,
+    conn=None,
+    planet_id: int | None = None,
+) -> int:
     from .shipyard import unit_build_seconds
 
-    return max(1, unit_build_seconds(ship_key, shipyard_level, conn=conn))
+    return max(
+        1,
+        unit_build_seconds(ship_key, shipyard_level, conn=conn, planet_id=planet_id),
+    )
 
 
 def _batch_capacity_for_ship(ship_key: str, shipyard_level: int) -> int:
@@ -55,11 +64,16 @@ def _batch_capacity_for_ship(ship_key: str, shipyard_level: int) -> int:
 
 
 def _job_duration_seconds(
-    ship_key: str, amount: int, shipyard_level: int, *, conn=None
+    ship_key: str,
+    amount: int,
+    shipyard_level: int,
+    *,
+    conn=None,
+    planet_id: int | None = None,
 ) -> int:
     from .shipyard import production_job_duration_seconds
 
-    unit = _unit_build_seconds(ship_key, shipyard_level, conn=conn)
+    unit = _unit_build_seconds(ship_key, shipyard_level, conn=conn, planet_id=planet_id)
     cap = _batch_capacity_for_ship(ship_key, shipyard_level)
     return production_job_duration_seconds(
         unit_seconds=unit, amount=int(amount), batch_capacity=cap
@@ -244,7 +258,9 @@ def recalculate_queue_finish_times(
     for row in rows:
         sk = canonical_ship_key(str(row["ship_key"]))
         amt = int(row["amount"] or 1)
-        duration = _job_duration_seconds(sk, amt, shipyard_level, conn=conn)
+        duration = _job_duration_seconds(
+            sk, amt, shipyard_level, conn=conn, planet_id=int(planet_id)
+        )
         started = schedule_at
         finish = schedule_at + duration
         cursor.execute(

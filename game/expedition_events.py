@@ -126,9 +126,15 @@ def calculate_expedition_loot_cap(ships: Mapping[str, int]) -> int:
     return max(0, expedition_cargo * EXPEDITION_LOOT_CARGO_MULTIPLIER)
 
 
-def _pick_event_key(rng: random.Random, expedition_ship_count: int, *, salvage: bool = False) -> str:
+def _pick_event_key(
+    rng: random.Random,
+    expedition_ship_count: int,
+    *,
+    salvage: bool = False,
+    event_bonus: float = 0.0,
+) -> str:
     """Pick event; extra expedition hulls shift weight away from empty outcomes."""
-    bonus = min(0.12, max(0, int(expedition_ship_count)) * 0.03)
+    bonus = min(0.12, max(0, int(expedition_ship_count)) * 0.03) + max(0.0, float(event_bonus))
     empty_keys = {"void_scan", "sensor_glitch"}
     adjusted: list[tuple[str, float]] = []
     for event in _EXPEDITION_EVENTS:
@@ -177,6 +183,22 @@ def _scale_rewards_to_cargo(rewards: MutableMapping[str, int], cargo_total: int)
         rewards[key] = int(int(rewards.get(key) or 0) * scale)
 
 
+def _apply_directive_reward_modifiers(
+    rewards: MutableMapping[str, int],
+    *,
+    loot_mult: float = 1.0,
+    wreckage_bonus: float = 0.0,
+    salvage: bool = False,
+) -> None:
+    mult = max(0.0, float(loot_mult))
+    if salvage and wreckage_bonus:
+        mult *= 1.0 + max(0.0, float(wreckage_bonus))
+    if mult == 1.0:
+        return
+    for key in VALID_RESOURCE_KEYS:
+        rewards[key] = int(int(rewards.get(key) or 0) * mult)
+
+
 def resolve_expedition_outcome(
     movement_id: int,
     *,
@@ -184,13 +206,30 @@ def resolve_expedition_outcome(
     expedition_ship_count: int,
     flight_seconds: int,
     world_type: str | None = None,
+    directive_flags: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Idempotent expedition resolution keyed by movement id."""
-    rng = random.Random(int(movement_id) * 7919 + 104729)
+    flags = dict(directive_flags or {})
     salvage = str(world_type or "") == "wreckage_field"
-    event_key = _pick_event_key(rng, expedition_ship_count, salvage=salvage)
+    event_bonus = float(flags.get("expedition_event_bonus") or 0.0)
+    loot_mult = float(flags.get("expedition_loot_mult") or 1.0)
+    wreckage_bonus = float(flags.get("expedition_wreckage_bonus") or 0.0)
+
+    rng = random.Random(int(movement_id) * 7919 + 104729)
+    event_key = _pick_event_key(
+        rng,
+        expedition_ship_count,
+        salvage=salvage,
+        event_bonus=event_bonus,
+    )
     event = _EVENT_BY_KEY[event_key]
     rewards = _roll_rewards(rng, event.get("rewards") or {})
+    _apply_directive_reward_modifiers(
+        rewards,
+        loot_mult=loot_mult,
+        wreckage_bonus=wreckage_bonus,
+        salvage=salvage,
+    )
     _scale_rewards_to_cargo(rewards, int(cargo_total))
 
     delay_extra = 0

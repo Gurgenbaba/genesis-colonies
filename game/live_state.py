@@ -108,6 +108,29 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     }
 
 
+def fleet_hud_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
+    """Player-wide active fleet slice for /api/game-state (GC-640A)."""
+    from game.fleet import (
+        fleet_schema_ready,
+        get_fleet_slot_status,
+        list_active_movements,
+        process_fleet_tick,
+    )
+    from game.queue_poll import player_fleet_is_dirty
+
+    if not fleet_schema_ready(conn):
+        return None
+
+    uid = int(user_id)
+    if player_fleet_is_dirty(uid, conn=conn):
+        process_fleet_tick(player_id=uid, conn=conn)
+
+    return {
+        "active_fleets": list_active_movements(uid, conn=conn),
+        "fleet_slots": get_fleet_slot_status(uid, conn=conn),
+    }
+
+
 def shipyard_panel_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
     """Shipyard queue + stock slice for /api/game-state include_panel (GC-630)."""
     from game.fleet import fleet_schema_ready

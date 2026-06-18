@@ -286,6 +286,10 @@ def test_api_game_state_poll_is_lightweight(game_client):
     assert "scrapyard" not in body
     assert "planet_teaser" not in body
     assert body.get("overview", {}).get("status") is None
+    assert "active_fleets" in body
+    assert isinstance(body["active_fleets"], list)
+    assert "fleet_slots" in body
+    assert isinstance(body["fleet_slots"], dict)
 
 
 def test_api_game_state_include_panel_has_buildings_panel(game_client):

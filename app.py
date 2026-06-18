@@ -1498,35 +1498,13 @@ def defense_view():
 @app.route("/logistics")
 @require_login
 def logistics_view():
-    player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
-    if player_view is None:
+    if _load_player_view_with_resources()[0] is None:
         return redirect(url_for("login"))
 
-    from game.fleet import build_logistics_page_context, fleet_schema_ready
-    from game.planet_evolution.repository import get_context_planet
-
-    logistics_ctx: Dict[str, Any] = {"ready": False}
-    conn = db()
-    try:
-        planet = get_context_planet(int(player_view["id"]), conn=conn)
-        if fleet_schema_ready(conn):
-            logistics_ctx = build_logistics_page_context(
-                player_id=int(player_view["id"]),
-                planet_id=int(planet["id"]),
-                planet=dict(planet),
-                conn=conn,
-            )
-    finally:
-        conn.close()
-
-    return render_template(
-        "logistics.html",
-        player=player_view,
-        energy_total=energy_total,
-        energy_used=energy_used,
-        storage_caps=storage_caps,
-        logistics=logistics_ctx,
-    )
+    mode = (request.args.get("mode") or "collect").strip().lower()
+    if mode not in ("collect", "distribute"):
+        mode = "collect"
+    return redirect(f"{url_for('fleet_view')}?mode={mode}")
 
 
 @app.route("/fleet")
@@ -1536,18 +1514,26 @@ def fleet_view():
     if player_view is None:
         return redirect(url_for("login"))
 
-    from game.fleet import build_fleet_page_context, fleet_schema_ready
+    from game.fleet import build_fleet_page_context, build_logistics_page_context, fleet_schema_ready
     from game.planet_evolution.repository import get_context_planet
 
     fleet_ctx: Dict[str, Any] = {"ready": False}
+    logistics_ctx: Dict[str, Any] = {"ready": False}
     conn = db()
     try:
         planet = get_context_planet(int(player_view["id"]), conn=conn)
         if fleet_schema_ready(conn):
+            planet_dict = dict(planet)
             fleet_ctx = build_fleet_page_context(
                 player_id=int(player_view["id"]),
                 planet_id=int(planet["id"]),
-                planet=dict(planet),
+                planet=planet_dict,
+                conn=conn,
+            )
+            logistics_ctx = build_logistics_page_context(
+                player_id=int(player_view["id"]),
+                planet_id=int(planet["id"]),
+                planet=planet_dict,
                 conn=conn,
             )
     finally:
@@ -1560,6 +1546,7 @@ def fleet_view():
         energy_used=energy_used,
         storage_caps=storage_caps,
         fleet=fleet_ctx,
+        logistics=logistics_ctx,
     )
 
 
@@ -4285,6 +4272,20 @@ def _payload_from_live_context(
             "government": {"active": False, "count": 0, "label": ""},
             "referrals": {"active": False, "count": 0, "label": ""},
         }
+
+    try:
+        from game.live_state import fleet_hud_for_game_state
+
+        fleet_hud = fleet_hud_for_game_state(user_id, conn=conn)
+        if fleet_hud is not None:
+            payload["active_fleets"] = fleet_hud.get("active_fleets") or []
+            payload["fleet_slots"] = fleet_hud.get("fleet_slots") or {}
+        else:
+            payload["active_fleets"] = []
+            payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
+    except Exception:
+        payload["active_fleets"] = []
+        payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
 
     try:
         from game.models import get_player_stats

@@ -367,6 +367,39 @@ def test_game_state_includes_landscape_url(switcher_db, monkeypatch):
     assert expected_fn in ap["landscape_url"]
 
 
+def test_gc641_economy_nav_visible_on_colony(switcher_db, monkeypatch):
+    """GC-641 — Wirtschaft / Trader Hub / Empire visible on every colony."""
+    from game.planet_evolution.sidebar_nav import nav_module_tier, sidebar_section_visible
+
+    player_id, uname = _create_player()
+    colony_id = _second_planet(player_id)
+    save_planet_buildings(colony_id, {"research_lab": 12, "academy": 5})
+    set_active_planet(player_id, colony_id)
+
+    client = _app_client(monkeypatch)
+    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+
+    gs = client.get("/api/game-state").get_json()
+    nav = gs["active_planet"]["sidebar_nav"]
+    assert nav["full_nav"] is False
+    assert sidebar_section_visible(nav, "economy") is True
+    assert nav_module_tier(nav, "trading") == "prominent"
+    assert nav_module_tier(nav, "empire") == "prominent"
+
+    html = client.get("/overview").get_data(as_text=True)
+    sidebar = html.split('id="gc-sidebar-nav"', 1)[1].split("</nav>", 1)[0]
+    eco_idx = sidebar.find('data-nav-section="economy"')
+    assert eco_idx >= 0
+    eco_open = sidebar[eco_idx - 80 : sidebar.find(">", eco_idx) + 1]
+    assert " hidden" not in eco_open
+    assert 'data-nav-group="trading"' not in eco_open
+    assert "Wirtschaft" in sidebar.split('data-nav-section="economy"', 1)[1].split('data-nav-section=', 1)[0]
+    assert 'data-nav-module="trading"' in sidebar
+    assert 'data-nav-module="empire"' in sidebar
+    assert 'gc-nav-module--secondary' not in sidebar.split('data-nav-module="trading"', 1)[1][:120]
+    assert 'gc-nav-module--secondary' not in sidebar.split('data-nav-module="empire"', 1)[1][:120]
+
+
 def test_trader_hub_and_shipyard_render_active_planet_id(switcher_db, monkeypatch):
     player_id, uname = _create_player()
     hw_id = int(get_homeworld(player_id=player_id)["id"])

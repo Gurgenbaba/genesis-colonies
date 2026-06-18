@@ -75,7 +75,13 @@ def defense_factory_level_for_planet(planet_id: int, *, conn=None) -> int:
     return max(0, int(buildings.get("defense_factory") or 0))
 
 
-def _effective_build_seconds(defense_key: str, shipyard_level: int, *, conn=None) -> int:
+def _effective_build_seconds(
+    defense_key: str,
+    shipyard_level: int,
+    *,
+    conn=None,
+    planet_id: int | None = None,
+) -> int:
     """Per-unit build time — scaled by Orbital Shipyard level (shared with shipyard)."""
     spec = get_defense(defense_key)
     if not spec:
@@ -84,11 +90,23 @@ def _effective_build_seconds(defense_key: str, shipyard_level: int, *, conn=None
     lvl = max(1, int(shipyard_level or 1))
     seconds = max(1, int(math.ceil(base * (BUILD_TIME_LEVEL_FACTOR ** (lvl - 1)))))
     speed = _defense_speed_multiplier(conn=conn)
+    if planet_id and conn:
+        from .shipyard import _directive_time_speed
+
+        speed *= _directive_time_speed(planet_id, "defense_time_speed", conn=conn)
     return max(1, int(math.ceil(seconds / speed)))
 
 
-def unit_build_seconds(defense_key: str, shipyard_level: int, *, conn=None) -> int:
-    return _effective_build_seconds(defense_key, shipyard_level, conn=conn)
+def unit_build_seconds(
+    defense_key: str,
+    shipyard_level: int,
+    *,
+    conn=None,
+    planet_id: int | None = None,
+) -> int:
+    return _effective_build_seconds(
+        defense_key, shipyard_level, conn=conn, planet_id=planet_id
+    )
 
 
 def base_unit_seconds_for_defense(defense_key: str) -> int:
@@ -153,11 +171,18 @@ def defense_unlocked(
 
 
 def _job_duration_seconds(
-    defense_key: str, amount: int, shipyard_level: int, *, conn=None
+    defense_key: str,
+    amount: int,
+    shipyard_level: int,
+    *,
+    conn=None,
+    planet_id: int | None = None,
 ) -> int:
     from .shipyard import production_job_duration_seconds
 
-    unit = unit_build_seconds(defense_key, shipyard_level, conn=conn)
+    unit = unit_build_seconds(
+        defense_key, shipyard_level, conn=conn, planet_id=planet_id
+    )
     cap = _batch_capacity_for_defense(defense_key, shipyard_level)
     return production_job_duration_seconds(
         unit_seconds=unit, amount=int(amount), batch_capacity=cap
@@ -253,7 +278,9 @@ def recalculate_queue_finish_times(
     for row in rows:
         dk = str(row["defense_key"])
         amt = int(row["amount"] or 1)
-        duration = _job_duration_seconds(dk, amt, sy_level, conn=conn)
+        duration = _job_duration_seconds(
+            dk, amt, sy_level, conn=conn, planet_id=int(planet_id)
+        )
         started = schedule_at
         finish = schedule_at + duration
         cursor.execute(

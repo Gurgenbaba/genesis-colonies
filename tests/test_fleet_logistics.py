@@ -427,14 +427,19 @@ def test_logistics_page_renders_collect_form(logistics_db, monkeypatch):
     with client.session_transaction() as sess:
         sess["user_id"] = uid
 
-    res = client.get("/logistics")
+    res = client.get("/logistics", follow_redirects=False)
+    assert res.status_code == 302
+    assert "/fleet" in (res.location or "")
+    assert "mode=collect" in (res.location or "")
+
+    res = client.get("/logistics", follow_redirects=True)
     assert res.status_code == 200
     html = res.get_data(as_text=True)
+    assert "fleet-page" in html
     assert "logistics-page" in html
     assert "logistics-collect-form" in html
     assert "logistics-tab-distribute" in html
-    assert "logistics-collect-form" in html
-    assert 'data-logistics-hub' in html
+    assert "data-logistics-hub" in html
 
 
 def test_collect_logistics_api_returns_state(logistics_db):

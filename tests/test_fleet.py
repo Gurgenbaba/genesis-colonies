@@ -4581,6 +4581,7 @@ def test_fleet_ui_active_buttons_have_handlers():
         "bindFleetOnce",
         "applyQuickTarget",
         "[data-ship-max]",
+        "[data-ship-max-image]",
         "[data-fleet-res-max]",
         ".fleet-colony-chip",
         "[data-fleet-save-preset]",
@@ -4635,7 +4636,8 @@ def test_quick_target_template_sets_coord_inputs():
     assert "data-preview-mission-badge" in tpl
     assert "data-fleet-send-btn" in tpl
     assert "data-gc-hud-select" in tpl
-    assert "fleet-ship-role-pill--" in tpl
+    assert "data-ship-max-image" in tpl
+    assert "fleet-ship-group-row" in tpl
 
 
 def test_fuel_efficiency_reduces_cost():

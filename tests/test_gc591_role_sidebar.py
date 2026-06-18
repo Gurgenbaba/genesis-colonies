@@ -97,7 +97,8 @@ def test_research_role_nav_filter():
     assert nav_module_tier(nav, "research") == "prominent"
     assert nav_module_tier(nav, "techtree") == "prominent"
     assert nav_module_tier(nav, "planet_evolution") == "prominent"
-    assert nav_module_tier(nav, "trading") == "secondary"
+    assert nav_module_tier(nav, "trading") == "prominent"
+    assert nav_module_tier(nav, "empire") == "prominent"
     assert nav_module_tier(nav, "shipyard") == "secondary"
 
 

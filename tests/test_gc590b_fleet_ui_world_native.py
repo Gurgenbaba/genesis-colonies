@@ -77,8 +77,6 @@ def test_fleet_template_world_native_panel_markers():
         "data-preview-target-name",
         "data-preview-target-native-type",
         "data-preview-target-coords",
-        "fleet-active-target-name",
-        "fleet-active-coords-secondary",
     ):
         assert needle in tpl, f"missing fleet template marker: {needle}"
 
