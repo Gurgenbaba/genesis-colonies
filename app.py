@@ -3185,6 +3185,12 @@ def api_admin_universe_news_banner(news_id: int):
     return _admin_json(admin_api_logic.api_set_universe_news_banner(_admin_actor_id(), news_id))
 
 
+@app.route("/api/admin/universe-news/<int:news_id>/delete", methods=["POST"])
+@require_admin_api
+def api_admin_universe_news_delete_post(news_id: int):
+    return _admin_json(admin_api_logic.api_delete_universe_news(_admin_actor_id(), news_id))
+
+
 @app.route("/api/admin/universe-news/<int:news_id>", methods=["DELETE"])
 @require_admin_api
 def api_admin_universe_news_delete(news_id: int):

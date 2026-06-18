@@ -1121,6 +1121,8 @@
   "admin_news_published": "News veröffentlicht.",
   "admin_news_banner_set": "Banner aktualisiert.",
   "admin_news_deleted": "News gelöscht.",
+  "admin_news_delete_confirm": "News-Eintrag wirklich löschen?",
+  "admin_news_delete_invalid": "Ungültige News-ID.",
   "admin_news_body_required": "Bitte News-Text eingeben.",
   "news_title": "Universums-News",
   "news_subtitle": "Patchnotes, Updates und Ankündigungen",

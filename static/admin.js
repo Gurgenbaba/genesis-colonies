@@ -788,12 +788,21 @@
   }
 
   async function deleteAdminNews(newsId) {
-    const res = await adminDelete(`/api/admin/universe-news/${Number(newsId)}`);
+    const id = parseInt(newsId, 10);
+    if (!Number.isFinite(id) || id <= 0) {
+      showAlert(t("admin_news_delete_invalid", "Ungültige News-ID."), "error");
+      return { ok: false };
+    }
+    if (!window.confirm(t("admin_news_delete_confirm", "News-Eintrag wirklich löschen?"))) {
+      return { ok: false, cancelled: true };
+    }
+    const res = await adminPost(`/api/admin/universe-news/${id}/delete`, {});
     if (res.ok) {
       notify(t("admin_news_deleted", "News gelöscht."), "success");
+      if (getAdminNewsEditId() === id) resetAdminNewsForm();
       await loadAdminNews();
     } else {
-      showAlert(res.message || res.error, "error");
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
     }
     return res;
   }

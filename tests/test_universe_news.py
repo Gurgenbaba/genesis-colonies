@@ -19,6 +19,7 @@ from game.universe_news import (
     delete_news,
     ensure_legacy_motd_migrated,
     get_banner_entry,
+    get_news_entry,
     list_news,
     set_banner,
     update_news,
@@ -99,6 +100,21 @@ def test_set_banner_and_delete_news(news_db):
     assert get_banner_entry()["id"] == b["id"]
     assert delete_news(b["id"]) is True
     assert len(list_news()) == 1
+
+
+def test_delete_news_via_admin_api(news_db, monkeypatch):
+    ok, _, admin = create_user("news_del_admin", "adminpass123", is_admin=1)
+    assert ok and admin
+    entry = create_news(title="Delete me", body="Body", set_banner=False)
+
+    client = _app_client(monkeypatch)
+    client.post("/login", data={"username": "news_del_admin", "password": "adminpass123"})
+    res = client.post(f"/api/admin/universe-news/{entry['id']}/delete", json={})
+    data = res.get_json()
+    assert res.status_code == 200
+    assert data["ok"] is True
+    assert data.get("deleted") is True
+    assert get_news_entry(entry["id"]) is None
 
 
 def test_update_news_via_admin_api(news_db, monkeypatch):

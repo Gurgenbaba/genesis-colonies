@@ -2967,6 +2967,8 @@
   "admin_news_published": "News published.",
   "admin_news_banner_set": "Banner updated.",
   "admin_news_deleted": "News deleted.",
+  "admin_news_delete_confirm": "Delete this news entry?",
+  "admin_news_delete_invalid": "Invalid news ID.",
   "admin_news_body_required": "Please enter news text.",
   "msg_action_forbidden": "Action not allowed.",
   "msg_admin_ban": "Spieler gebannt.",
