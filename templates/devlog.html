@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set payload = devlog_payload if devlog_payload is defined and devlog_payload else {'ok': false, 'timeline': []} %}
+{% set timeline = payload.timeline if payload.timeline is defined else [] %}
+
+<div class="gc-page gc-devlog-page" id="devlog-page">
+
+  <header class="section-header gc-devlog-header">
+    <div class="gc-news-header-top">
+      <div class="gc-news-header-text">
+        <h1 class="section-title">{{ T("devlog_title", "Entwickler-Devlog") }}</h1>
+        <p class="section-hint hint">{{ T("devlog_subtitle", "Technische Timeline — Commits, Tickets und Systemänderungen.") }}</p>
+      </div>
+    </div>
+    <p class="hint gc-devlog-back">
+      <a href="{{ url_for('news_view') }}" class="gc-link-muted" data-pjax-link>← {{ T("devlog_back_news", "Zurück zu Patchnotes") }}</a>
+    </p>
+  </header>
+
+  {% if not payload.ok or not timeline %}
+  <section class="gc-panel gc-devlog-panel">
+    <p class="gc-news-empty">{{ T("devlog_empty", "Noch keine Dev-Einträge.") }}</p>
+  </section>
+  {% else %}
+  <div class="gc-news-timeline gc-devlog-timeline">
+    {% for year_block in timeline %}
+    <section class="gc-news-year" aria-labelledby="devlog-year-{{ year_block.year }}">
+      <div class="gc-news-year-marker">
+        <span class="gc-news-year-chip gc-chip-angular gc-mono" id="devlog-year-{{ year_block.year }}">{{ year_block.year }}</span>
+        <span class="gc-news-year-spine" aria-hidden="true"></span>
+      </div>
+
+      <div class="gc-news-year-stack">
+        {% for version in year_block.versions %}
+        {% set _vt = (version.version_tag or '') | lower %}
+        {% set _is_dev = _vt in ['development', 'dev', 'ongoing'] %}
+        <article class="gc-panel gc-news-version gc-devlog-version{% if _is_dev %} gc-news-version--dev{% endif %}"
+                 id="{{ version.anchor_id }}">
+          <header class="gc-panel-header gc-news-version-head">
+            <div class="gc-panel-head-left">
+              <div class="gc-news-version-title-row">
+                {% if version.version_tag %}
+                <span class="gc-news-version-tag gc-mono">{{ version.version_tag | upper }}</span>
+                {% endif %}
+                {% if version.version_label %}
+                <h2 class="gc-panel-title gc-news-version-name">{{ version.version_label }}</h2>
+                {% endif %}
+              </div>
+            </div>
+            <div class="gc-panel-head-right">
+              <span class="gc-news-badge gc-chip-angular gc-news-badge--dev">DEV</span>
+            </div>
+          </header>
+
+          <ul class="gc-news-version-list">
+            {% for entry in version.entries %}
+            {% if not entry.is_major_release %}
+            <li class="gc-news-timeline-item gc-news-entry-row" id="devlog-entry-{{ entry.id }}">
+              <div class="gc-news-entry-rail" aria-hidden="true">
+                <span class="gc-news-timeline-dot"></span>
+              </div>
+              <div class="gc-news-entry-main">
+                <div class="gc-news-entry-meta">
+                  {% if entry.category %}
+                  <span class="gc-news-cat gc-chip-angular gc-news-cat--{{ entry.category | lower }}">{{ entry.category }}</span>
+                  {% endif %}
+                  {% if entry.source_ref %}
+                  <span class="gc-news-dev-ref gc-mono">{{ entry.source_ref }}</span>
+                  {% endif %}
+                  <time class="gc-news-entry-date gc-mono" datetime="{{ entry.published_at }}">{{ entry.published_label }}</time>
+                </div>
+                <strong class="gc-news-entry-title">{{ entry.title }}</strong>
+                {% if entry.body and entry.body != entry.title %}
+                <div class="gc-news-entry-body">{{ entry.body }}</div>
+                {% endif %}
+              </div>
+            </li>
+            {% endif %}
+            {% endfor %}
+          </ul>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

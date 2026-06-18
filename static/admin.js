@@ -503,6 +503,90 @@
     };
   }
 
+  function getAdminNewsEditId() {
+    const raw = (qs("#admin_news_edit_id")?.value || "").trim();
+    const id = Number(raw);
+    return Number.isFinite(id) && id > 0 ? id : 0;
+  }
+
+  function setAdminNewsEditId(newsId) {
+    const field = qs("#admin_news_edit_id");
+    if (field) field.value = newsId ? String(newsId) : "";
+  }
+
+  function updateAdminNewsFormMode() {
+    const editing = getAdminNewsEditId() > 0;
+    const titleEl = qs("#admin-news-form-title");
+    const btnBanner = qs("#admin_news_btn_banner");
+    const btnPublish = qs("#admin_news_btn_publish");
+    const btnDraft = qs("#admin_news_btn_draft");
+    const btnCancel = qs("#admin_news_btn_cancel");
+    const compose = qs("#admin-news-compose");
+
+    if (titleEl) {
+      titleEl.textContent = editing
+        ? t("admin_news_edit_heading", "Eintrag bearbeiten")
+        : t("admin_news_compose_heading", "Neue Meldung veröffentlichen");
+    }
+    if (btnBanner) {
+      btnBanner.textContent = editing
+        ? t("admin_news_save_banner", "Speichern & als Banner setzen")
+        : t("admin_news_publish", "Veröffentlichen & als Banner setzen");
+    }
+    if (btnPublish) {
+      btnPublish.textContent = editing
+        ? t("admin_news_save", "Änderungen speichern")
+        : t("admin_news_publish_only", "Veröffentlichen");
+    }
+    if (btnDraft) btnDraft.classList.toggle("hidden", editing);
+    if (btnCancel) btnCancel.classList.toggle("hidden", !editing);
+    if (compose) compose.classList.toggle("admin-news-compose--edit", editing);
+  }
+
+  function resetAdminNewsForm() {
+    setAdminNewsEditId(0);
+    ["#admin_news_title", "#admin_news_version", "#admin_news_image", "#admin_news_body"].forEach((sel) => {
+      const el = qs(sel);
+      if (el) el.value = "";
+    });
+    const cat = qs("#admin_news_category");
+    if (cat) cat.value = "";
+    const badge = qs("#admin_news_badge");
+    if (badge) badge.value = "";
+    const major = qs("#admin_news_major");
+    if (major) major.checked = false;
+    updateAdminNewsFormMode();
+  }
+
+  function fillAdminNewsForm(entry) {
+    if (!entry) return;
+    setAdminNewsEditId(entry.id);
+    const title = qs("#admin_news_title");
+    if (title) title.value = entry.title || "";
+    const version = qs("#admin_news_version");
+    if (version) version.value = entry.version_tag || "";
+    const cat = qs("#admin_news_category");
+    if (cat) cat.value = entry.category || "";
+    const badge = qs("#admin_news_badge");
+    if (badge) badge.value = entry.badge || "";
+    const image = qs("#admin_news_image");
+    if (image) image.value = entry.image_url || "";
+    const body = qs("#admin_news_body");
+    if (body) body.value = entry.body || "";
+    const major = qs("#admin_news_major");
+    if (major) major.checked = !!entry.is_major_release;
+    updateAdminNewsFormMode();
+    qs("#admin-news-compose")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function newsPreviewText(body, maxLines) {
+    const lines = String(body || "").split(/\r?\n/).filter((line) => line.trim());
+    const slice = lines.slice(0, maxLines || 3);
+    const text = slice.join("\n");
+    const truncated = lines.length > (maxLines || 3) || String(body || "").length > text.length;
+    return { text, truncated };
+  }
+
   function renderAdminNewsList(entries) {
     const host = qs("#admin-news-list");
     if (!host) return;
@@ -512,28 +596,41 @@
       return;
     }
     host.innerHTML = rows.map((entry) => {
-      const flags = [
-        entry.is_banner ? `<span class="admin-news-badge">${esc(t("news_live_badge", "Aktuell"))}</span>` : "",
-        entry.is_draft ? `<span class="admin-news-badge admin-news-badge--draft">${esc(t("admin_news_draft_badge", "Entwurf"))}</span>` : "",
-        entry.version_tag ? `<span class="admin-news-badge gc-mono">${esc(entry.version_tag)}</span>` : "",
-        entry.category ? `<span class="admin-news-badge">${esc(entry.category)}</span>` : "",
-        entry.badge ? `<span class="admin-news-badge">${esc(entry.badge)}</span>` : "",
+      let statusBadge = `<span class="admin-news-status admin-news-status--archive">${esc(t("admin_news_status_archive", "Archiv"))}</span>`;
+      if (entry.is_banner) {
+        statusBadge = `<span class="admin-news-status admin-news-status--banner">${esc(t("admin_news_status_banner", "Banner aktiv"))}</span>`;
+      } else if (entry.is_draft) {
+        statusBadge = `<span class="admin-news-status admin-news-status--draft">${esc(t("admin_news_draft_badge", "Entwurf"))}</span>`;
+      }
+      const meta = [
+        entry.version_tag ? `<span class="admin-news-meta-tag gc-mono">${esc(entry.version_tag)}</span>` : "",
+        entry.category ? `<span class="admin-news-meta-tag">${esc(entry.category)}</span>` : "",
       ].filter(Boolean).join("");
-      const preview = esc(String(entry.body || "").slice(0, 140)).replace(/\n/g, "<br>");
+      const preview = newsPreviewText(entry.body, 3);
+      const previewHtml = esc(preview.text).replace(/\n/g, "<br>");
+      const bannerBtn = entry.is_draft || entry.is_banner
+        ? ""
+        : `<button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-set-banner" data-news-id="${Number(entry.id)}">
+            ${esc(t("admin_news_set_banner", "Als Banner setzen"))}
+          </button>`;
       return `
-        <article class="admin-news-row" data-news-id="${Number(entry.id)}">
-          <div class="admin-news-row-head">
-            <div>
-              <strong>${esc(entry.title || "Update")}</strong>
-              ${flags}
+        <article class="admin-news-card" data-news-id="${Number(entry.id)}">
+          <div class="admin-news-card-main">
+            <div class="admin-news-card-head">
+              <h4 class="admin-news-card-title">${esc(entry.title || "Update")}</h4>
+              ${statusBadge}
             </div>
-            <span class="admin-small-hint gc-mono">${esc(entry.published_label || "")}</span>
+            <div class="admin-news-card-meta">
+              <span class="admin-news-card-date gc-mono">${esc(entry.published_label || t("admin_news_no_date", "—"))}</span>
+              ${meta}
+            </div>
+            <p class="admin-news-card-preview">${previewHtml}${preview.truncated ? "…" : ""}</p>
           </div>
-          <div class="admin-news-row-body">${preview}${String(entry.body || "").length > 140 ? "…" : ""}</div>
-          <div class="admin-btn-row">
-            <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-set-banner" data-news-id="${Number(entry.id)}">
-              ${esc(t("admin_news_set_banner", "Als Banner setzen"))}
+          <div class="admin-news-card-actions">
+            <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-edit" data-news-id="${Number(entry.id)}">
+              ${esc(t("admin_news_edit", "Bearbeiten"))}
             </button>
+            ${bannerBtn}
             <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="news-delete" data-news-id="${Number(entry.id)}">
               ${esc(t("admin_news_delete", "Löschen"))}
             </button>
@@ -542,26 +639,54 @@
     }).join("");
   }
 
+  let adminNewsCache = [];
+
+  async function loadAdminNewsRepoAudit() {
+    const host = qs("#admin-news-repo-audit");
+    if (!host) return;
+    const data = await adminGet("/api/admin/universe-news/repository-audit");
+    if (!data.ok) return;
+    host.innerHTML = `
+      <strong>${esc(t("admin_news_repo_title", "Repository-Historie"))}</strong>
+      · ${esc(t("admin_news_repo_commits", "Commits"))}: ${Number(data.commit_count || 0)}
+      · ${esc(t("admin_news_repo_branches", "Branches"))}: ${Number(data.branch_count || 0)}
+      · ${esc(t("admin_news_repo_tags", "Tags"))}: ${Number(data.tag_count || 0)}
+      · ${esc(t("admin_news_repo_first_commit", "Erster Commit"))}: ${esc(data.first_commit_date || "—")}
+      · ${esc(t("admin_news_repo_latest_commit", "Letzter Commit"))}: ${esc(data.latest_commit_date || "—")}
+      · ${esc(t("admin_news_repo_current_release", "Aktuelles Release"))}: ${esc(data.current_release || "—")} (${esc(data.current_release_date || "—")})
+      · ${esc(t("admin_news_repo_dev_since", "Commits seit Release"))}: ${Number(data.development_commits_since_release || 0)}`;
+  }
+
   async function loadAdminNews() {
     const data = await adminGet("/api/admin/universe-news");
     if (!data.ok) {
       showAlert(data.message || data.error, "error");
       return data;
     }
-    renderAdminNewsList(data.entries || []);
+    adminNewsCache = data.entries || [];
+    renderAdminNewsList(adminNewsCache);
+    await loadAdminNewsRepoAudit();
     return data;
   }
 
   async function publishAdminNews(setBanner) {
+    const editId = getAdminNewsEditId();
     const payload = collectNewsPayload({ setBanner: !!setBanner, isDraft: false, publish: true });
     if (!payload.body) {
       showAlert(t("admin_news_body_required", "Bitte News-Text eingeben."), "error");
       return { ok: false };
     }
-    const res = await adminPost("/api/admin/universe-news", payload);
+    const res = editId
+      ? await adminPatch(`/api/admin/universe-news/${editId}`, payload)
+      : await adminPost("/api/admin/universe-news", payload);
     if (res.ok) {
-      notify(t("admin_news_published", "News veröffentlicht."), "success");
-      if (qs("#admin_news_body")) qs("#admin_news_body").value = "";
+      notify(
+        editId
+          ? t("admin_news_updated", "News aktualisiert.")
+          : t("admin_news_published", "News veröffentlicht."),
+        "success"
+      );
+      resetAdminNewsForm();
       await loadAdminNews();
     } else {
       showAlert(res.message || res.error, "error");
@@ -570,19 +695,32 @@
   }
 
   async function saveAdminNewsDraft() {
+    const editId = getAdminNewsEditId();
     const payload = collectNewsPayload({ isDraft: true, setBanner: false, publish: false });
     if (!payload.title && !payload.body) {
       showAlert(t("admin_news_body_required", "Bitte Titel oder Text eingeben."), "error");
       return { ok: false };
     }
-    const res = await adminPost("/api/admin/universe-news", payload);
+    const res = editId
+      ? await adminPatch(`/api/admin/universe-news/${editId}`, { ...payload, is_draft: 1 })
+      : await adminPost("/api/admin/universe-news", payload);
     if (res.ok) {
       notify(t("admin_news_draft_saved", "Entwurf gespeichert."), "success");
+      if (!editId) resetAdminNewsForm();
       await loadAdminNews();
     } else {
       showAlert(res.message || res.error, "error");
     }
     return res;
+  }
+
+  function startEditAdminNews(newsId) {
+    const entry = adminNewsCache.find((row) => Number(row.id) === Number(newsId));
+    if (!entry) {
+      showAlert(t("admin_news_not_found", "Eintrag nicht gefunden."), "error");
+      return;
+    }
+    fillAdminNewsForm(entry);
   }
 
   async function importAdminChangelog() {
@@ -592,6 +730,45 @@
         `${t("admin_news_import_ok", "CHANGELOG importiert.")} (+${res.inserted || 0})`,
         "success"
       );
+      await loadAdminNews();
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  async function importAdminGitHistory() {
+    const res = await adminPost("/api/admin/universe-news/import-git-history", {});
+    if (res.ok) {
+      notify(
+        `${t("admin_news_import_git_ok", "Git-Historie importiert.")} (+${res.inserted || 0})`,
+        "success"
+      );
+      await loadAdminNews();
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  async function importAdminFullHistory() {
+    const res = await adminPost("/api/admin/universe-news/import-full-history", {});
+    if (res.ok) {
+      notify(
+        `${t("admin_news_import_full_ok", "Vollständiger Import abgeschlossen.")} (+${res.inserted || 0})`,
+        "success"
+      );
+      await loadAdminNews();
+    } else {
+      showAlert(res.message || res.error, "error");
+    }
+    return res;
+  }
+
+  async function reclassifyAdminNews() {
+    const res = await adminPost("/api/admin/universe-news/reclassify-audience", {});
+    if (res.ok) {
+      notify(t("admin_news_reclassify_ok", "Patchnotes bereinigt."), "success");
       await loadAdminNews();
     } else {
       showAlert(res.message || res.error, "error");
@@ -1915,6 +2092,11 @@
     if (act === "news-publish-only") return publishAdminNews(false);
     if (act === "news-save-draft") return saveAdminNewsDraft();
     if (act === "news-import-changelog") return importAdminChangelog();
+    if (act === "news-import-git") return importAdminGitHistory();
+    if (act === "news-import-full") return importAdminFullHistory();
+    if (act === "news-reclassify") return reclassifyAdminNews();
+    if (act === "news-edit") return startEditAdminNews(btn.dataset.newsId);
+    if (act === "news-cancel-edit") return resetAdminNewsForm();
     if (act === "news-set-banner") return setAdminNewsBanner(btn.dataset.newsId);
     if (act === "news-delete") return deleteAdminNews(btn.dataset.newsId);
     if (act === "server-resources") return applyAdminResources();

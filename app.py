@@ -326,6 +326,14 @@ def inject_globals():
         motd_text = ""
         motd_banner = None
 
+    sidebar_release = {"label": "Genesis", "url": "/news", "href": "/news", "anchor_id": "", "has_dev_stream": False}
+    try:
+        from game.universe_news import sidebar_release_nav
+
+        sidebar_release = sidebar_release_nav()
+    except Exception:
+        pass
+
     # stats (safe)
     try:
         player_stats = get_player_stats() or {}
@@ -424,6 +432,7 @@ def inject_globals():
         motd_enabled=motd_enabled,
         motd_text=motd_text,
         motd_banner=motd_banner,
+        SIDEBAR_RELEASE=sidebar_release,
 
         PLAYER_STATS=player_stats,
 
@@ -2894,8 +2903,9 @@ def news_view():
         return redirect(url_for("login"))
 
     from game.universe_news import news_page_payload
+    from game.i18n import current_locale
 
-    news_payload = news_page_payload()
+    news_payload = news_page_payload(locale=current_locale())
 
     return render_template(
         "news.html",
@@ -2905,6 +2915,27 @@ def news_view():
         energy_used=energy_used,
         storage_caps=storage_caps,
         news_payload=news_payload,
+    )
+
+
+@app.route("/devlog")
+@require_login
+def devlog_view():
+    user = get_current_user()
+    if not user or not int(user.get("is_admin") or 0):
+        return redirect(url_for("news_view"))
+
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    from game.universe_news import devlog_page_payload
+
+    return render_template(
+        "devlog.html",
+        player=player_view,
+        buildings=buildings,
+        energy_total=energy_total,
+        energy_used=energy_used,
+        storage_caps=storage_caps,
+        devlog_payload=devlog_page_payload(),
     )
 
 
@@ -3116,6 +3147,30 @@ def api_news_whats_new():
 @require_admin_api
 def api_admin_universe_news_import_changelog():
     return _admin_json(admin_api_logic.api_import_changelog(_admin_actor_id()))
+
+
+@app.route("/api/admin/universe-news/import-git-history", methods=["POST"])
+@require_admin_api
+def api_admin_universe_news_import_git_history():
+    return _admin_json(admin_api_logic.api_import_git_history(_admin_actor_id()))
+
+
+@app.route("/api/admin/universe-news/import-full-history", methods=["POST"])
+@require_admin_api
+def api_admin_universe_news_import_full_history():
+    return _admin_json(admin_api_logic.api_import_full_history(_admin_actor_id()))
+
+
+@app.route("/api/admin/universe-news/reclassify-audience", methods=["POST"])
+@require_admin_api
+def api_admin_universe_news_reclassify_audience():
+    return _admin_json(admin_api_logic.api_reclassify_news_audience(_admin_actor_id()))
+
+
+@app.route("/api/admin/universe-news/repository-audit", methods=["GET"])
+@require_admin_api
+def api_admin_universe_news_repository_audit():
+    return _admin_json(admin_api_logic.api_repository_history_audit(_admin_actor_id()))
 
 
 @app.route("/api/admin/universe-news/<int:news_id>", methods=["PATCH"])

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .db import table_exists
+from .db import table_exists, with_transaction
 from .models import db, get_game_settings
 
 NEWS_CATEGORIES: Tuple[str, ...] = (
@@ -42,8 +43,346 @@ _CHANGELOG_SECTION_CATEGORY = {
 
 _SELECT_COLS = """
     id, title, body, published_at, is_banner, created_by, created_at,
-    version_tag, category, badge, image_url, is_major_release, is_draft
+    version_tag, category, badge, image_url, is_major_release, is_draft,
+    source_ref, audience, entry_section
 """
+
+AUDIENCE_PLAYER = "player"
+AUDIENCE_DEV = "dev"
+
+_DEVELOPMENT_VERSION_TAGS = frozenset({"development", "dev", "ongoing"})
+_GC_TICKET_RE = re.compile(r"\bGC-\d+[A-Za-z]?\b")
+_DEV_CONTENT_RE = re.compile(
+    r"tests/|test_|docs/|\.py\b|\.md\b|\.sql\b|\.js\b|migration|canonical|regression guard|"
+    r"pytest|GC-000|fleet_calc|pjax|sqlite|compositor|overflow audit|live-state|poll storm|"
+    r"master doc|changed files|root cause|backfill|static live|idempotent api|queue engine|"
+    r"effect resolver|bootstrap|hardcod|refactor|regression guard|viewport-aware|"
+    r"specs?|EPIC-\d|master docs",
+    re.I,
+)
+
+_PLAYER_SECTIONS: Tuple[Tuple[str, str, str], ...] = (
+    ("added", "news_section_new", "Neu"),
+    ("changed", "news_section_improved", "Verbessert"),
+    ("fixed", "news_section_fixed", "Behoben"),
+)
+
+_CHANGELOG_SECTION_TO_ENTRY = {
+    "added": "added",
+    "changed": "changed",
+    "fixed": "fixed",
+    "removed": "changed",
+    "technical": "technical",
+}
+
+
+def _normalize_audience(raw: str | None) -> str:
+    val = str(raw or "").strip().lower()
+    return AUDIENCE_DEV if val == AUDIENCE_DEV else AUDIENCE_PLAYER
+
+
+def _sanitize_player_text(text: str) -> str:
+    s = str(text or "").strip()
+    s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
+    s = re.sub(r"`[^`]+`", "", s)
+    s = re.sub(r"\s*[—–-]\s*GC-[\dA-Za-z./,&\s]+$", "", s)
+    s = re.sub(r"\s*\((GC-[^)]+)\)", "", s)
+    s = re.sub(r"\s*\(GC-[^)]+\)", "", s)
+    s = re.sub(r"\s{2,}", " ", s)
+    return s.strip(" —–-")
+
+
+def _looks_like_dev_content(text: str) -> bool:
+    return bool(_DEV_CONTENT_RE.search(str(text or "")))
+
+
+def _resolve_audience(
+    *,
+    title: str = "",
+    body: str = "",
+    version_tag: str = "",
+    category: str = "",
+    source_ref: str = "",
+    entry_section: str = "",
+    is_major_release: bool = False,
+) -> str:
+    if str(source_ref or "").startswith("git:"):
+        return AUDIENCE_DEV
+    if str(version_tag or "").strip().lower() in _DEVELOPMENT_VERSION_TAGS:
+        return AUDIENCE_DEV
+    if str(entry_section or "").strip().lower() == "technical":
+        return AUDIENCE_DEV
+    if _normalize_category(category) == "DEVBLOG" and not is_major_release:
+        return AUDIENCE_DEV
+    blob = f"{title} {body}"
+    if _looks_like_dev_content(blob):
+        return AUDIENCE_DEV
+    return AUDIENCE_PLAYER
+
+
+def _infer_entry_section(entry: Dict[str, Any]) -> str:
+    explicit = str(entry.get("entry_section") or "").strip().lower()
+    if explicit and explicit != "technical":
+        return explicit
+    cat = _normalize_category(entry.get("category"))
+    if cat == "BUGFIX":
+        return "fixed"
+    if cat in ("BALANCE",):
+        return "changed"
+    return "added"
+
+
+def _major_release_intro(version_label: str, *, locale: str | None = None) -> str:
+    from game.i18n import tr
+
+    label = str(version_label or "").lower()
+    loc = locale
+    if any(x in label for x in ("polish", "hardening", "alpha")):
+        return tr("news_intro_polish", "Genesis Colonies was polished and improved.", locale=loc)
+    if any(x in label for x in ("genesis 2", "command map", "2.0")):
+        return tr("news_intro_genesis2", "The universe of Genesis Colonies was expanded.", locale=loc)
+    if any(x in label for x in ("liveops", "community", "ranking", "wettbewerb")):
+        return tr("news_intro_liveops", "More community features and competition.", locale=loc)
+    if any(x in label for x in ("combat", "defense")):
+        return tr("news_intro_combat", "Combat and planetary defense evolved.", locale=loc)
+    if any(x in label for x in ("galaxy", "fleet")):
+        return tr("news_intro_fleet", "Galaxy travel and fleets took shape.", locale=loc)
+    if any(x in label for x in ("planet scope", "colon", "kolonie")):
+        return tr("news_intro_colonies", "Colonies and planet scope opened up.", locale=loc)
+    if any(x in label for x in ("economy", "foundation", "core")):
+        return tr("news_intro_economy", "The economic foundation of Genesis Colonies grew.", locale=loc)
+    clean = _sanitize_player_text(version_label.split("*")[0])
+    if clean:
+        return tr(
+            "news_intro_generic_named",
+            "A new chapter in Genesis Colonies — %(name)s.",
+            locale=loc,
+            name=clean,
+        )
+    return tr("news_intro_generic", "A new chapter in Genesis Colonies.", locale=loc)
+
+
+def _month_anchor_ts(year: int, month: int, day: int = 1) -> int:
+    try:
+        return int(datetime(year, month, max(1, min(int(day), 28)), tzinfo=timezone.utc).timestamp())
+    except Exception:
+        return _now_ts()
+
+
+def _extract_release_hint_ts(version_label: str) -> int | None:
+    label = str(version_label or "")
+    match = re.search(r"\*\((\d{4}-\d{2}-\d{2})\)\*", label)
+    if match:
+        return _date_to_ts(match.group(1))
+    match = re.search(r"\*\(\s*(\d{4}-\d{2})\s*[—–-]\s*(\d{4}-\d{2})\s*\)\*", label)
+    if match:
+        end = match.group(2)
+        year, month = end.split("-", 1)
+        return _month_anchor_ts(int(year), int(month), 1)
+    match = re.search(r"\*\((\d{4}-\d{2})\)\*", label)
+    if match:
+        year, month = match.group(1).split("-", 1)
+        return _month_anchor_ts(int(year), int(month), 1)
+    return None
+
+
+def _changelog_release_dates(
+    text: str,
+    *,
+    repo_root: Path | None = None,
+) -> Dict[str, int]:
+    """Map version_tag → release timestamp from CHANGELOG hints (monotonic, oldest→newest)."""
+    version_header_re = re.compile(r"^##\s+(v\d+\.\d+)\s*(?:[—–-]\s*(.+))?\s*$", re.I | re.M)
+    versions: List[Tuple[str, str, Tuple[int, int, str]]] = []
+    for match in version_header_re.finditer(text):
+        tag = match.group(1).strip()
+        if not tag.lower().startswith("v"):
+            tag = f"v{tag}"
+        label = str(match.group(2) or "").strip()
+        versions.append((tag, label, _version_sort_key(tag)))
+    versions.sort(key=lambda row: row[2])
+
+    dates: Dict[str, int] = {}
+    prev_ts = 0
+    for idx, (tag, label, _) in enumerate(versions):
+        hinted = _extract_release_hint_ts(label)
+        if hinted:
+            ts = hinted
+        elif prev_ts:
+            ts = prev_ts + 3 * 86400
+        else:
+            ts = _date_to_ts("2026-05-25")
+
+        if prev_ts and ts <= prev_ts:
+            ts = prev_ts + 3 * 86400
+
+        if idx == len(versions) - 1 and re.search(r"\(2026-06\)", label):
+            ts = _date_to_ts("2026-06-10")
+
+        dates[tag] = ts
+        prev_ts = ts
+
+    for tag, tag_ts in _git_tag_dates(repo_root).items():
+        norm = tag if tag.startswith("v") else f"v{tag}"
+        if norm in dates and tag_ts:
+            dates[norm] = tag_ts
+    return dates
+
+
+def _git_tag_dates(repo_root: Path | None = None) -> Dict[str, int]:
+    root = repo_root or _repo_root()
+    try:
+        proc = subprocess.run(
+            ["git", "for-each-ref", "refs/tags", "--format=%(refname:short)|%(creatordate:short)"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return {}
+    out: Dict[str, int] = {}
+    for line in proc.stdout.splitlines():
+        parts = line.split("|", 1)
+        if len(parts) != 2:
+            continue
+        tag, date_str = parts[0].strip(), parts[1].strip()
+        if tag and date_str:
+            out[tag] = _date_to_ts(date_str)
+    return out
+
+
+def sync_release_dates(
+    *,
+    path: Path | None = None,
+    repo_root: Path | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> Dict[str, Any]:
+    """Apply CHANGELOG/git release dates to all rows per version_tag."""
+    changelog_path = path or (_repo_root() / "CHANGELOG.md")
+    text = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else ""
+    date_map = _changelog_release_dates(text, repo_root=repo_root or _repo_root())
+    own = conn is None
+    if own:
+        conn = db()
+    updated = 0
+    try:
+        cur = conn.cursor()
+        for version_tag, ts in date_map.items():
+            cur.execute(
+                """
+                UPDATE universe_news
+                SET published_at = ?, created_at = CASE WHEN created_at > 0 THEN ? ELSE created_at END
+                WHERE version_tag = ? AND is_draft = 0;
+                """,
+                (int(ts), int(ts), version_tag),
+            )
+            updated += int(cur.rowcount or 0)
+        if own:
+            conn.commit()
+    finally:
+        if own:
+            conn.close()
+    return {"ok": True, "updated": updated, "release_dates": date_map}
+
+
+def _git_simple(repo_root: Path, *args: str) -> str:
+    try:
+        proc = subprocess.run(
+            ["git", *args],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        )
+        return proc.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return ""
+
+
+def repository_history_audit(*, repo_root: Path | None = None) -> Dict[str, Any]:
+    """Summarize git repository history for admin diagnostics (GC-653)."""
+    root = repo_root or _repo_root()
+    commits = _collect_git_log(root, all_refs=True)
+    count_raw = _git_simple(root, "rev-list", "--count", "HEAD")
+    try:
+        commit_count = int(count_raw or "0")
+    except ValueError:
+        commit_count = len(commits)
+
+    branches = [b for b in _git_simple(root, "branch", "-a").splitlines() if b.strip()]
+    tags = [t for t in _git_simple(root, "tag", "-l").splitlines() if t.strip()]
+    remotes = [r for r in _git_simple(root, "remote", "-v").splitlines() if r.strip()]
+
+    first = commits[0] if commits else None
+    latest = commits[-1] if commits else None
+    changelog_path = root / "CHANGELOG.md"
+    changelog_text = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else ""
+    release_dates = _changelog_release_dates(changelog_text, repo_root=root)
+    current_release = _latest_changelog_version(changelog_path) if changelog_path.exists() else ""
+    release_ts = int(release_dates.get(current_release) or 0)
+    dev_commits = 0
+    if release_ts:
+        for commit in commits:
+            if _date_to_ts(commit.get("date") or "") > release_ts:
+                dev_commits += 1
+
+    return {
+        "ok": True,
+        "commit_count": commit_count,
+        "branch_count": len(branches),
+        "tag_count": len(tags),
+        "branches": branches[:20],
+        "tags": tags[:20],
+        "remotes": remotes[:10],
+        "first_commit_date": first.get("date") if first else "",
+        "latest_commit_date": latest.get("date") if latest else "",
+        "current_release": current_release,
+        "current_release_date": _format_published(release_ts) if release_ts else "",
+        "development_commits_since_release": dev_commits,
+        "release_dates": {k: _format_published(v) for k, v in release_dates.items()},
+    }
+
+
+def _is_player_dev_highlight(entry: Dict[str, Any]) -> bool:
+    if _normalize_audience(entry.get("audience")) != AUDIENCE_DEV:
+        return False
+    if not str(entry.get("source_ref") or "").startswith("git:"):
+        return False
+    title = str(entry.get("title") or "")
+    if not _GC_TICKET_RE.search(title):
+        return False
+    return not _looks_like_dev_content(title)
+
+
+def _parse_changelog_month_ts(header_tail: str, fallback_ts: int) -> int:
+    hinted = _extract_release_hint_ts(header_tail)
+    return hinted if hinted else fallback_ts
+
+
+def _decorate_player_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(entry)
+    out["display_title"] = _sanitize_player_text(entry.get("title") or "")
+    out["display_body"] = _sanitize_player_text(entry.get("body") or "")
+    if not out["display_title"] and out["display_body"]:
+        out["display_title"] = out["display_body"][:200]
+    return out
+
+
+def _is_player_visible_entry(entry: Dict[str, Any]) -> bool:
+    if entry.get("is_draft"):
+        return False
+    if _normalize_audience(entry.get("audience")) != AUDIENCE_PLAYER:
+        return False
+    if str(entry.get("version_tag") or "").strip().lower() in _DEVELOPMENT_VERSION_TAGS:
+        return False
+    blob = f"{entry.get('title') or ''} {entry.get('body') or ''}"
+    if _looks_like_dev_content(blob):
+        return False
+    title = _sanitize_player_text(entry.get("title") or "")
+    return bool(title)
 
 
 def _now_ts() -> int:
@@ -71,6 +410,8 @@ def _normalize_badge(raw: str | None) -> str:
 
 def _version_sort_key(version_tag: str) -> Tuple[int, int, str]:
     tag = str(version_tag or "").strip().lower()
+    if tag in _DEVELOPMENT_VERSION_TAGS:
+        return (999, 999, tag)
     match = re.match(r"^v?(\d+)\.(\d+)", tag)
     if match:
         return (int(match.group(1)), int(match.group(2)), tag)
@@ -117,6 +458,9 @@ def _row_to_entry(row: sqlite3.Row | Dict[str, Any]) -> Dict[str, Any]:
         "image_url": str(_row_get(row, "image_url") or "").strip(),
         "created_by": int(row["created_by"]) if row["created_by"] is not None else None,
         "created_at": int(row["created_at"] or 0),
+        "source_ref": str(_row_get(row, "source_ref") or "").strip(),
+        "audience": _normalize_audience(_row_get(row, "audience")),
+        "entry_section": str(_row_get(row, "entry_section") or "").strip().lower(),
     }
 
 
@@ -162,6 +506,7 @@ def list_news(
     *,
     limit: int = 200,
     include_drafts: bool = False,
+    audience: str | None = None,
     conn: sqlite3.Connection | None = None,
 ) -> List[Dict[str, Any]]:
     own = conn is None
@@ -170,16 +515,24 @@ def list_news(
     try:
         ensure_legacy_motd_migrated(conn)
         cur = conn.cursor()
-        draft_clause = "" if include_drafts else "WHERE is_draft = 0"
+        clauses: List[str] = []
+        params: List[Any] = []
+        if not include_drafts:
+            clauses.append("is_draft = 0")
+        if audience in (AUDIENCE_PLAYER, AUDIENCE_DEV):
+            clauses.append("audience = ?")
+            params.append(audience)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(max(1, int(limit)))
         cur.execute(
             f"""
             SELECT {_SELECT_COLS}
             FROM universe_news
-            {draft_clause}
+            {where}
             ORDER BY published_at DESC, id DESC
             LIMIT ?;
             """,
-            (max(1, int(limit)),),
+            tuple(params),
         )
         return [_row_to_entry(row) for row in cur.fetchall()]
     finally:
@@ -219,7 +572,7 @@ def get_banner_entry(*, conn: sqlite3.Connection | None = None) -> Optional[Dict
             f"""
             SELECT {_SELECT_COLS}
             FROM universe_news
-            WHERE is_banner = 1 AND is_draft = 0
+            WHERE is_banner = 1 AND is_draft = 0 AND audience = '{AUDIENCE_PLAYER}'
             ORDER BY published_at DESC, id DESC
             LIMIT 1;
             """
@@ -259,6 +612,8 @@ def create_news(
     image_url: str = "",
     is_major_release: bool = False,
     created_by: int | None = None,
+    source_ref: str = "",
+    published_at: int | None = None,
     conn: sqlite3.Connection | None = None,
 ) -> Dict[str, Any]:
     clean_title = str(title or "").strip() or "Update"
@@ -270,7 +625,7 @@ def create_news(
     if own:
         conn = db()
     try:
-        ts = _now_ts() if not is_draft else 0
+        ts = int(published_at) if published_at else (_now_ts() if not is_draft else 0)
         cur = conn.cursor()
         if set_banner and not is_draft:
             _clear_banner(cur)
@@ -278,9 +633,10 @@ def create_news(
             f"""
             INSERT INTO universe_news (
                 title, body, published_at, is_banner, created_by, created_at,
-                version_tag, category, badge, image_url, is_major_release, is_draft
+                version_tag, category, badge, image_url, is_major_release, is_draft,
+                source_ref, audience, entry_section
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
                 clean_title[:200],
@@ -295,6 +651,16 @@ def create_news(
                 str(image_url or "").strip()[:500],
                 1 if is_major_release else 0,
                 1 if is_draft else 0,
+                str(source_ref or "").strip()[:120],
+                _resolve_audience(
+                    title=clean_title,
+                    body=clean_body,
+                    version_tag=version_tag,
+                    category=category,
+                    source_ref=source_ref,
+                    is_major_release=is_major_release,
+                ),
+                "",
             ),
         )
         news_id = int(cur.lastrowid)
@@ -394,6 +760,8 @@ def delete_news(news_id: int, *, conn: sqlite3.Connection | None = None) -> bool
 
 
 def _version_label_from_entries(version_tag: str, entries: List[Dict[str, Any]]) -> str:
+    if str(version_tag or "").strip().lower() in _DEVELOPMENT_VERSION_TAGS:
+        return "Ongoing Development"
     for entry in entries:
         if entry.get("is_major_release") and entry.get("title"):
             title = str(entry["title"])
@@ -447,10 +815,202 @@ def build_timeline(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return timeline
 
 
-def news_page_payload(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
-    entries = list_news(limit=500, conn=conn)
-    timeline = build_timeline(entries)
-    return {"ok": True, "entries": entries, "timeline": timeline}
+def _player_sections_for_version(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    visible = [_decorate_player_entry(e) for e in entries if _is_player_visible_entry(e)]
+    non_major = [e for e in visible if not e.get("is_major_release")]
+    sections: List[Dict[str, Any]] = []
+    for section_key, label_key, default_label in _PLAYER_SECTIONS:
+        rows = [
+            e
+            for e in non_major
+            if (e.get("entry_section") or _infer_entry_section(e)) == section_key
+        ]
+        if rows:
+            sections.append(
+                {
+                    "key": section_key,
+                    "label_key": label_key,
+                    "label": default_label,
+                    "entries": rows,
+                }
+            )
+    return sections
+
+
+def _development_player_block(
+    entries: List[Dict[str, Any]],
+    *,
+    locale: str | None = None,
+) -> Dict[str, Any] | None:
+    from game.i18n import tr
+
+    highlights = [_decorate_player_entry(e) for e in entries if _is_player_dev_highlight(e)]
+    if not highlights:
+        return None
+    by_date: Dict[str, List[Dict[str, Any]]] = {}
+    for row in highlights:
+        day = str(row.get("published_label") or "")
+        by_date.setdefault(day, []).append(row)
+    day_sections: List[Dict[str, Any]] = []
+    sorted_days = sorted(
+        by_date.items(),
+        key=lambda item: max(int(r.get("published_at") or 0) for r in item[1]),
+        reverse=True,
+    )
+    for day, rows in sorted_days:
+        day_sections.append(
+            {
+                "key": f"dev-{day.replace('.', '-')}",
+                "label_key": "",
+                "label": day,
+                "entries": sorted(rows, key=lambda r: -int(r.get("published_at") or 0)),
+                "is_date_group": True,
+            }
+        )
+    return {
+        "version_tag": "development",
+        "version_label": tr("news_dev_stream_label", "Ongoing Development", locale=locale),
+        "is_major_release": False,
+        "badge": "DEV",
+        "anchor_id": "version-development",
+        "intro": tr("news_dev_stream_hint", "Active development since the last release.", locale=locale),
+        "release_date": "",
+        "sections": day_sections,
+        "is_development_stream": True,
+    }
+
+
+def build_player_timeline(
+    entries: List[Dict[str, Any]],
+    *,
+    dev_pool: List[Dict[str, Any]] | None = None,
+    locale: str | None = None,
+) -> List[Dict[str, Any]]:
+    player_entries = [e for e in entries if _is_player_visible_entry(e)]
+    timeline = build_timeline(player_entries)
+    cleaned: List[Dict[str, Any]] = []
+
+    dev_block = _development_player_block(dev_pool or entries, locale=locale)
+    if dev_block:
+        year = datetime.now(tz=timezone.utc).year
+        cleaned.append({"year": year, "versions": [dev_block]})
+
+    for year_block in timeline:
+        versions: List[Dict[str, Any]] = []
+        for version in year_block.get("versions") or []:
+            tag = str(version.get("version_tag") or "").strip().lower()
+            if tag in _DEVELOPMENT_VERSION_TAGS:
+                continue
+            rows = version.get("entries") or []
+            major = next((r for r in rows if r.get("is_major_release")), None)
+            version_label = str(version.get("version_label") or "").strip()
+            clean_label = _sanitize_player_text(version_label.split("*")[0])
+            intro = ""
+            release_date = ""
+            if major:
+                release_date = str(major.get("published_label") or "")
+                intro = _sanitize_player_text(major.get("body") or "")
+                if not intro or intro == _sanitize_player_text(major.get("title") or ""):
+                    intro = _major_release_intro(clean_label or version_label, locale=locale)
+            sections = _player_sections_for_version(rows)
+            if not sections and not major:
+                continue
+            version = dict(version)
+            version["version_label"] = clean_label or version_label
+            version["release_date"] = release_date
+            version["intro"] = intro
+            version["sections"] = sections
+            versions.append(version)
+        if versions:
+            cleaned.append({"year": year_block["year"], "versions": versions})
+    return cleaned
+
+
+def build_dev_timeline(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    dev_entries = [
+        e
+        for e in entries
+        if not e.get("is_draft")
+        and (
+            _normalize_audience(e.get("audience")) == AUDIENCE_DEV
+            or str(e.get("version_tag") or "").lower() in _DEVELOPMENT_VERSION_TAGS
+            or _looks_like_dev_content(f"{e.get('title')} {e.get('body')}")
+        )
+    ]
+    return build_timeline(dev_entries)
+
+
+def reclassify_news_audience(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    """Recompute audience/entry_section for existing rows (idempotent)."""
+    own = conn is None
+    if own:
+        conn = db()
+    updated = 0
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT id, title, body, version_tag, category, source_ref, entry_section, is_major_release
+            FROM universe_news;
+            """
+        )
+        for row in cur.fetchall():
+            entry_section = str(row["entry_section"] or "").strip().lower()
+            if not entry_section or entry_section == "technical":
+                inferred = _infer_entry_section(
+                    {
+                        "entry_section": entry_section,
+                        "category": row["category"],
+                    }
+                )
+            else:
+                inferred = entry_section
+            audience = _resolve_audience(
+                title=str(row["title"] or ""),
+                body=str(row["body"] or ""),
+                version_tag=str(row["version_tag"] or ""),
+                category=str(row["category"] or ""),
+                source_ref=str(row["source_ref"] or ""),
+                entry_section=inferred,
+                is_major_release=bool(int(row["is_major_release"] or 0)),
+            )
+            if inferred == "technical":
+                audience = AUDIENCE_DEV
+            cur.execute(
+                "UPDATE universe_news SET audience = ?, entry_section = ? WHERE id = ?;",
+                (audience, inferred if inferred != "technical" else "technical", int(row["id"])),
+            )
+            updated += 1
+        if own:
+            conn.commit()
+    finally:
+        if own:
+            conn.close()
+    return {"ok": True, "updated": updated}
+
+
+def news_page_payload(*, locale: str | None = None, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    from game.i18n import current_locale, normalize_locale
+
+    loc = normalize_locale(locale or current_locale())
+    all_entries = list_news(limit=800, conn=conn)
+    player_entries = [e for e in all_entries if _normalize_audience(e.get("audience")) == AUDIENCE_PLAYER]
+    timeline = build_player_timeline(player_entries, dev_pool=all_entries, locale=loc)
+    repo_audit = repository_history_audit()
+    return {
+        "ok": True,
+        "entries": player_entries,
+        "timeline": timeline,
+        "audience": AUDIENCE_PLAYER,
+        "locale": loc,
+        "repository": repo_audit,
+    }
+
+
+def devlog_page_payload(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    entries = list_news(limit=800, conn=conn)
+    timeline = build_dev_timeline(entries)
+    return {"ok": True, "entries": entries, "timeline": timeline, "audience": AUDIENCE_DEV}
 
 
 def whats_new_payload(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
@@ -465,13 +1025,18 @@ def whats_new_payload(*, conn: sqlite3.Connection | None = None) -> Dict[str, An
         return {"ok": True, "show": False}
 
     latest = versions[0]
-    highlights = [
-        row
-        for row in (latest.get("entries") or [])
-        if not row.get("is_major_release")
-    ][:6]
+    highlights = []
+    for section in latest.get("sections") or []:
+        highlights.extend(section.get("entries") or [])
+        if len(highlights) >= 6:
+            break
+    highlights = highlights[:6]
     if not highlights:
-        highlights = (latest.get("entries") or [])[:6]
+        highlights = [
+            row
+            for row in (latest.get("entries") or [])
+            if not row.get("is_major_release")
+        ][:6]
     if not highlights:
         return {"ok": True, "show": False}
 
@@ -485,7 +1050,12 @@ def whats_new_payload(*, conn: sqlite3.Connection | None = None) -> Dict[str, An
         "is_major_release": bool(latest.get("is_major_release")),
         "anchor_id": latest.get("anchor_id") or "",
         "highlights": [
-            {"id": row["id"], "title": row["title"], "body": row.get("body") or "", "category": row.get("category") or ""}
+            {
+                "id": row["id"],
+                "title": row.get("display_title") or _sanitize_player_text(row.get("title") or ""),
+                "body": row.get("display_body") or _sanitize_player_text(row.get("body") or ""),
+                "category": row.get("category") or "",
+            }
             for row in highlights
         ],
         "news_url": "/news",
@@ -504,99 +1074,391 @@ def import_changelog_markdown(
     own = conn is None
     if own:
         conn = db()
-    inserted = 0
-    skipped_versions: List[str] = []
+    try:
+        inserted = 0
+        skipped_versions: List[str] = []
 
-    version_header_re = re.compile(r"^##\s+(v\d+\.\d+)\s*(?:[—–-]\s*(.+))?\s*$", re.I | re.M)
-    matches = list(version_header_re.finditer(text))
-    if not matches:
-        return {"ok": True, "inserted": 0, "skipped_versions": []}
+        version_header_re = re.compile(r"^##\s+(v\d+\.\d+)\s*(?:[—–-]\s*(.+))?\s*$", re.I | re.M)
+        matches = list(version_header_re.finditer(text))
+        if not matches:
+            return {"ok": True, "inserted": 0, "skipped_versions": []}
 
-    cur = conn.cursor()
-    for idx, match in enumerate(matches):
-        version_tag = match.group(1).strip()
-        if not version_tag.lower().startswith("v"):
-            version_tag = f"v{version_tag}"
-        version_label = str(match.group(2) or "").strip()
-        start = match.end()
-        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
-        block = text[start:end]
+        cur = conn.cursor()
+        release_dates = _changelog_release_dates(text, repo_root=_repo_root())
+        for idx, match in enumerate(matches):
+            version_tag = match.group(1).strip()
+            if not version_tag.lower().startswith("v"):
+                version_tag = f"v{version_tag}"
+            version_label = str(match.group(2) or "").strip()
+            start = match.end()
+            end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+            block = text[start:end]
 
+            cur.execute(
+                "SELECT COUNT(*) AS c FROM universe_news WHERE version_tag = ? AND is_draft = 0;",
+                (version_tag,),
+            )
+            if int(cur.fetchone()["c"]) > 0:
+                skipped_versions.append(version_tag)
+                continue
+
+            ts = int(release_dates.get(version_tag) or _extract_release_hint_ts(version_label) or _now_ts())
+            clean_label = _sanitize_player_text(version_label.split("*")[0])
+            major_title = f"{version_tag} — {clean_label}".strip(" —")
+            intro = _major_release_intro(clean_label or version_label)
+            badge = "ALPHA" if "alpha" in version_label.lower() else "NEW"
+            cur.execute(
+                f"""
+                INSERT INTO universe_news (
+                    title, body, published_at, is_banner, created_by, created_at,
+                    version_tag, category, badge, image_url, is_major_release, is_draft,
+                    source_ref, audience, entry_section
+                )
+                VALUES (?, ?, ?, 0, ?, ?, ?, 'FEATURE', ?, '', 1, 0, ?, ?, '');
+                """,
+                (
+                    major_title[:200],
+                    intro,
+                    ts,
+                    int(created_by) if created_by is not None else None,
+                    ts,
+                    version_tag,
+                    badge,
+                    f"changelog:{version_tag}",
+                    AUDIENCE_PLAYER,
+                ),
+            )
+            inserted += 1
+
+            section_re = re.compile(r"^###\s+(Added|Changed|Fixed|Removed|Technical)\s*$", re.I | re.M)
+            section_matches = list(section_re.finditer(block))
+            for sidx, sec in enumerate(section_matches):
+                cat_key = sec.group(1).lower()
+                entry_section = _CHANGELOG_SECTION_TO_ENTRY.get(cat_key, "added")
+                if entry_section == "technical":
+                    continue
+                category = _CHANGELOG_SECTION_CATEGORY.get(cat_key, "FEATURE")
+                sec_start = sec.end()
+                sec_end = section_matches[sidx + 1].start() if sidx + 1 < len(section_matches) else len(block)
+                sec_body = block[sec_start:sec_end]
+                for line in sec_body.splitlines():
+                    bullet = line.strip()
+                    if not bullet.startswith("- "):
+                        continue
+                    item = bullet[2:].strip()
+                    if not item:
+                        continue
+                    item = re.sub(r"\*\*(.+?)\*\*", r"\1", item)
+                    title = _sanitize_player_text(item)[:200]
+                    if not title:
+                        continue
+                    audience = _resolve_audience(
+                        title=title,
+                        body=item,
+                        version_tag=version_tag,
+                        category=category,
+                        entry_section=entry_section,
+                    )
+                    if audience != AUDIENCE_PLAYER:
+                        continue
+                    cur.execute(
+                        f"""
+                        INSERT INTO universe_news (
+                            title, body, published_at, is_banner, created_by, created_at,
+                            version_tag, category, badge, image_url, is_major_release, is_draft,
+                            source_ref, audience, entry_section
+                        )
+                        VALUES (?, ?, ?, 0, ?, ?, ?, ?, '', '', 0, 0, ?, ?, ?);
+                        """,
+                        (
+                            title,
+                            title,
+                            ts,
+                            int(created_by) if created_by is not None else None,
+                            ts,
+                            version_tag,
+                            category,
+                            f"changelog:{version_tag}:{title[:80]}",
+                            AUDIENCE_PLAYER,
+                            entry_section,
+                        ),
+                    )
+                    inserted += 1
+
+        if own:
+            conn.commit()
+        return {"ok": True, "inserted": inserted, "skipped_versions": skipped_versions}
+    finally:
+        if own:
+            conn.close()
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def _parse_changelog_version_tags(text: str) -> List[str]:
+    version_header_re = re.compile(r"^##\s+(v\d+\.\d+)\s", re.I | re.M)
+    tags: List[str] = []
+    for match in version_header_re.finditer(text):
+        tag = match.group(1).strip()
+        if not tag.lower().startswith("v"):
+            tag = f"v{tag}"
+        tags.append(tag)
+    return tags
+
+
+def _latest_changelog_version(path: Path | None = None) -> str:
+    changelog_path = path or (_repo_root() / "CHANGELOG.md")
+    if not changelog_path.exists():
+        return ""
+    tags = _parse_changelog_version_tags(changelog_path.read_text(encoding="utf-8"))
+    return tags[-1] if tags else ""
+
+
+def _release_cutoff_ts(
+    version_tag: str,
+    *,
+    conn: sqlite3.Connection,
+) -> int:
+    if version_tag:
+        cur = conn.cursor()
         cur.execute(
-            "SELECT COUNT(*) AS c FROM universe_news WHERE version_tag = ? AND is_draft = 0;",
+            """
+            SELECT MAX(published_at) AS ts
+            FROM universe_news
+            WHERE version_tag = ? AND is_major_release = 1 AND is_draft = 0;
+            """,
             (version_tag,),
         )
-        if int(cur.fetchone()["c"]) > 0:
-            skipped_versions.append(version_tag)
-            continue
+        row = cur.fetchone()
+        if row and row["ts"]:
+            return int(row["ts"])
+    return 0
 
-        ts = _now_ts() - (len(matches) - idx) * 86400
-        major_title = f"{version_tag} — {version_label}".strip(" —")
-        badge = "ALPHA" if "alpha" in version_label.lower() else "NEW"
-        cur.execute(
-            f"""
-            INSERT INTO universe_news (
-                title, body, published_at, is_banner, created_by, created_at,
-                version_tag, category, badge, image_url, is_major_release, is_draft
-            )
-            VALUES (?, ?, ?, 0, ?, ?, ?, 'FEATURE', ?, '', 1, 0);
-            """,
-            (
-                major_title[:200],
-                major_title,
-                ts,
-                int(created_by) if created_by is not None else None,
-                ts,
-                version_tag,
-                badge,
-            ),
+
+def _date_to_ts(date_str: str) -> int:
+    try:
+        dt = datetime.strptime(str(date_str).strip(), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    except Exception:
+        return _now_ts()
+
+
+def _infer_category_from_commit(subject: str) -> str:
+    text = str(subject or "").lower()
+    if any(word in text for word in ("fix", "bug", "regression", "hotfix")):
+        return "BUGFIX"
+    if any(word in text for word in ("balance", "nerf", "buff")):
+        return "BALANCE"
+    if _GC_TICKET_RE.search(subject or ""):
+        return "FEATURE"
+    return "DEVBLOG"
+
+
+def _collect_git_log(repo_root: Path | None = None, *, all_refs: bool = False) -> List[Dict[str, str]]:
+    root = repo_root or _repo_root()
+    cmd = ["git", "log", "--reverse", "--date=short", "--pretty=format:%H|%ad|%s"]
+    if all_refs:
+        cmd.insert(2, "--all")
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=120,
         )
-        inserted += 1
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return []
 
-        section_re = re.compile(r"^###\s+(Added|Changed|Fixed|Removed|Technical)\s*$", re.I | re.M)
-        section_matches = list(section_re.finditer(block))
-        for sidx, sec in enumerate(section_matches):
-            cat_key = sec.group(1).lower()
-            category = _CHANGELOG_SECTION_CATEGORY.get(cat_key, "FEATURE")
-            sec_start = sec.end()
-            sec_end = section_matches[sidx + 1].start() if sidx + 1 < len(section_matches) else len(block)
-            sec_body = block[sec_start:sec_end]
-            for line in sec_body.splitlines():
-                bullet = line.strip()
-                if not bullet.startswith("- "):
-                    continue
-                item = bullet[2:].strip()
-                if not item or item.startswith("**"):
-                    continue
-                item = re.sub(r"\*\*(.+?)\*\*", r"\1", item)
-                title = item[:200]
-                cur.execute(
-                    f"""
-                    INSERT INTO universe_news (
-                        title, body, published_at, is_banner, created_by, created_at,
-                        version_tag, category, badge, image_url, is_major_release, is_draft
-                    )
-                    VALUES (?, ?, ?, 0, ?, ?, ?, ?, '', '', 0, 0);
-                    """,
-                    (
-                        title,
-                        item,
-                        ts,
-                        int(created_by) if created_by is not None else None,
-                        ts,
-                        version_tag,
-                        category,
-                    ),
-                )
-                inserted += 1
+    commits: List[Dict[str, str]] = []
+    for line in proc.stdout.splitlines():
+        parts = line.split("|", 2)
+        if len(parts) != 3:
+            continue
+        commit_hash, date_str, subject = parts
+        subject = subject.strip()
+        if not subject or subject.lower().startswith("merge "):
+            continue
+        commits.append({"hash": commit_hash.strip(), "date": date_str.strip(), "subject": subject})
+    return commits
 
+
+def _existing_source_refs(conn: sqlite3.Connection) -> set[str]:
+    cur = conn.cursor()
+    cur.execute("SELECT source_ref FROM universe_news WHERE source_ref != '';")
+    return {str(row["source_ref"]) for row in cur.fetchall()}
+
+
+def import_git_history(
+    *,
+    repo_root: Path | None = None,
+    commits: List[Dict[str, str]] | None = None,
+    after_version: str | None = None,
+    created_by: int | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> Dict[str, Any]:
+    """Import post-release git commits as development stream entries (idempotent via source_ref)."""
+    root = repo_root or _repo_root()
+    last_release = str(after_version or _latest_changelog_version(root / "CHANGELOG.md")).strip()
+    version_tag = "development"
+    all_commits = commits if commits is not None else _collect_git_log(root)
+
+    own = conn is None
     if own:
-        conn.commit()
-    return {"ok": True, "inserted": inserted, "skipped_versions": skipped_versions}
+        conn = db()
+    try:
+        cutoff_ts = _release_cutoff_ts(last_release, conn=conn) if last_release else 0
+        inserted = 0
+        skipped = 0
+        cur = conn.cursor()
+        known_refs = _existing_source_refs(conn)
+
+        for commit in all_commits:
+            source_ref = f"git:{commit['hash']}"
+            if source_ref in known_refs:
+                skipped += 1
+                continue
+
+            subject = str(commit.get("subject") or "").strip()
+            if not subject:
+                skipped += 1
+                continue
+
+            ts = _date_to_ts(commit.get("date") or "")
+            if cutoff_ts and ts <= cutoff_ts:
+                skipped += 1
+                continue
+            category = _infer_category_from_commit(subject)
+            cur.execute(
+                f"""
+                INSERT INTO universe_news (
+                    title, body, published_at, is_banner, created_by, created_at,
+                    version_tag, category, badge, image_url, is_major_release, is_draft,
+                    source_ref, audience, entry_section
+                )
+                VALUES (?, ?, ?, 0, ?, ?, ?, ?, 'DEV', '', 0, 0, ?, ?, 'technical');
+                """,
+                (
+                    subject[:200],
+                    subject,
+                    ts,
+                    int(created_by) if created_by is not None else None,
+                    ts,
+                    version_tag,
+                    category,
+                    source_ref,
+                    AUDIENCE_DEV,
+                ),
+            )
+            known_refs.add(source_ref)
+            inserted += 1
+
+        if own:
+            conn.commit()
+        return {
+            "ok": True,
+            "inserted": inserted,
+            "skipped": skipped,
+            "after_version": last_release,
+            "version_tag": version_tag,
+        }
+    finally:
+        if own:
+            conn.close()
+
+
+def import_full_history(
+    *,
+    path: Path | None = None,
+    repo_root: Path | None = None,
+    created_by: int | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> Dict[str, Any]:
+    """Import CHANGELOG.md releases plus post-release git commits."""
+    own = conn is None
+    with with_transaction(conn=conn, close=own) as tx:
+        changelog = import_changelog_markdown(path=path, created_by=created_by, conn=tx)
+        git = import_git_history(repo_root=repo_root, created_by=created_by, conn=tx)
+        reclassified = reclassify_news_audience(conn=tx)
+        synced = sync_release_dates(path=path, repo_root=repo_root, conn=tx)
+        return {
+            "ok": True,
+            "changelog": changelog,
+            "git": git,
+            "reclassified": reclassified,
+            "release_dates": synced,
+            "inserted": int(changelog.get("inserted") or 0) + int(git.get("inserted") or 0),
+        }
 
 
 def news_metadata() -> Dict[str, Any]:
     return {
         "categories": list(NEWS_CATEGORIES),
         "badges": list(NEWS_BADGES),
+    }
+
+
+def _format_sidebar_version_label(version_tag: str) -> str:
+    tag = str(version_tag or "").strip()
+    if not tag:
+        return ""
+    lowered = tag.lower()
+    if lowered in _DEVELOPMENT_VERSION_TAGS:
+        return "Dev"
+    if lowered.startswith("v"):
+        return tag
+    return f"v{tag}"
+
+
+def sidebar_release_nav(*, conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    """Label + deep-link for sidebar version chip → Genesis Timeline (/news)."""
+    from game.config import get_app_version
+
+    entries = list_news(limit=500, audience=AUDIENCE_PLAYER, conn=conn)
+    published = [row for row in entries if not row.get("is_draft")]
+    has_dev_stream = False
+
+    major_tags: List[Tuple[Tuple[int, int, str], str]] = []
+    for row in published:
+        version_tag = str(row.get("version_tag") or "").strip()
+        if row.get("is_major_release") and version_tag:
+            major_tags.append((_version_sort_key(version_tag), version_tag))
+
+    label = ""
+    anchor_id = ""
+    version_tag = ""
+
+    if major_tags:
+        major_tags.sort(key=lambda item: item[0], reverse=True)
+        version_tag = major_tags[0][1]
+        label = _format_sidebar_version_label(version_tag)
+        anchor_id = f"version-{version_tag.replace('.', '-')}"
+    elif published:
+        version_tags = sorted(
+            {str(row.get("version_tag") or "").strip() for row in published if row.get("version_tag")},
+            key=_version_sort_key,
+            reverse=True,
+        )
+        if version_tags:
+            version_tag = version_tags[0]
+            label = _format_sidebar_version_label(version_tag)
+            if version_tag:
+                anchor_id = f"version-{version_tag.replace('.', '-')}"
+
+    if not label:
+        app_version = str(get_app_version() or "").strip()
+        label = _format_sidebar_version_label(app_version) if app_version else "Genesis"
+
+    news_url = "/news"
+    href = f"{news_url}#{anchor_id}" if anchor_id else news_url
+    return {
+        "label": label,
+        "version_tag": version_tag,
+        "url": news_url,
+        "href": href,
+        "anchor_id": anchor_id,
+        "has_dev_stream": has_dev_stream,
     }

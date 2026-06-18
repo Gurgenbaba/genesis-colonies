@@ -21,6 +21,7 @@ from game.universe_news import (
     get_banner_entry,
     list_news,
     set_banner,
+    update_news,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -100,6 +101,25 @@ def test_set_banner_and_delete_news(news_db):
     assert len(list_news()) == 1
 
 
+def test_update_news_via_admin_api(news_db, monkeypatch):
+    ok, _, admin = create_user("news_admin", "adminpass123", is_admin=1)
+    assert ok and admin
+    entry = create_news(title="Before", body="Old body", version_tag="v0.8")
+
+    client = _app_client(monkeypatch)
+    client.post("/login", data={"username": "news_admin", "password": "adminpass123"})
+    res = client.patch(
+        f"/api/admin/universe-news/{entry['id']}",
+        json={"title": "After", "body": "New body", "version_tag": "development", "category": "FEATURE"},
+    )
+    data = res.get_json()
+    assert res.status_code == 200
+    assert data["ok"] is True
+    assert data["entry"]["title"] == "After"
+    assert data["entry"]["body"] == "New body"
+    assert data["entry"]["version_tag"] == "development"
+
+
 def test_news_page_renders_archive(news_db, monkeypatch):
     create_news(title="Patch 1", body="Line one\nLine two", set_banner=True)
     create_news(title="Patch 0", body="Older patch", set_banner=False)
@@ -112,7 +132,7 @@ def test_news_page_renders_archive(news_db, monkeypatch):
     assert 'id="news-page"' in html
     assert "Patch 1" in html
     assert "Patch 0" in html
-    assert "Line two" in html
+    assert 'class="gc-news-patchnotes"' in html
 
 
 def test_overview_shows_banner_with_archive_link(news_db, monkeypatch):

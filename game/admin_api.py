@@ -1346,6 +1346,52 @@ def api_import_changelog(admin_id: int) -> Dict[str, Any]:
     return _ok(**result)
 
 
+def api_import_git_history(admin_id: int) -> Dict[str, Any]:
+    from game.universe_news import import_git_history
+
+    result = import_git_history(created_by=int(admin_id))
+    audit(
+        int(admin_id),
+        "universe_news_import_git",
+        target_type="system",
+        payload={"inserted": result.get("inserted"), "skipped": result.get("skipped")},
+    )
+    return _ok(**result)
+
+
+def api_import_full_history(admin_id: int) -> Dict[str, Any]:
+    from game.universe_news import import_full_history
+
+    result = import_full_history(created_by=int(admin_id))
+    audit(
+        int(admin_id),
+        "universe_news_import_full",
+        target_type="system",
+        payload={"inserted": result.get("inserted")},
+    )
+    return _ok(**result)
+
+
+def api_reclassify_news_audience(admin_id: int) -> Dict[str, Any]:
+    from game.universe_news import reclassify_news_audience, sync_release_dates
+
+    result = reclassify_news_audience()
+    dates = sync_release_dates()
+    audit(
+        int(admin_id),
+        "universe_news_reclassify_audience",
+        target_type="system",
+        payload={"updated": result.get("updated"), "dates_updated": dates.get("updated")},
+    )
+    return _ok(**result, release_dates=dates)
+
+
+def api_repository_history_audit(admin_id: int) -> Dict[str, Any]:
+    from game.universe_news import repository_history_audit
+
+    return _ok(**repository_history_audit())
+
+
 def api_set_universe_news_banner(admin_id: int, news_id: int) -> Dict[str, Any]:
     from game.universe_news import set_banner
 

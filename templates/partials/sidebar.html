@@ -13,6 +13,15 @@
      data-nav-role="{{ _sn.empire_role_key | default('general') }}"
      data-nav-full="{{ '1' if _sn.full_nav else '0' }}">
 
+  <div class="gc-sidebar-version">
+    <a href="{{ SIDEBAR_RELEASE.href | default(url_for('news_view')) }}"
+       class="gc-sidebar-version-link gc-mono"
+       data-pjax-link
+       title="{{ T('sidebar_version_title', 'Genesis Timeline & Patchnotes') }}">
+      <span class="gc-sidebar-version-label">{{ SIDEBAR_RELEASE.label | default('Genesis') }}</span>
+    </a>
+  </div>
+
   <div class="gc-nav-section gc-nav-section--standalone"
        data-nav-section="messages"
        {% if not sidebar_section_visible(_sn, 'messages') %}hidden{% endif %}>

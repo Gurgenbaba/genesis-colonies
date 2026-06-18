@@ -630,15 +630,30 @@
         </div>
         <p class="admin-small-hint">{{ T("admin_news_hint", "News-Einträge bleiben im Archiv sichtbar. Nur ein Eintrag ist gleichzeitig Live-Banner.") }}</p>
 
-        <div class="admin-btn-row">
-          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-changelog">
-            {{ T("admin_news_import_changelog", "CHANGELOG.md importieren") }}
-          </button>
+        <div class="admin-news-manage">
+          <h3 class="admin-subsection-title">{{ T("admin_news_published_heading", "Veröffentlichte Einträge") }}</h3>
+          <div class="admin-btn-row">
+            <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-changelog">
+              {{ T("admin_news_import_changelog", "CHANGELOG.md importieren") }}
+            </button>
+            <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-git">
+              {{ T("admin_news_import_git", "Git-Historie importieren") }}
+            </button>
+            <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-full">
+              {{ T("admin_news_import_full", "Vollständiger Import") }}
+            </button>
+            <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-reclassify">
+              {{ T("admin_news_reclassify", "Patchnotes bereinigen") }}
+            </button>
+          </div>
+          <div id="admin-news-repo-audit" class="admin-news-repo-audit admin-small-hint" aria-live="polite"></div>
+          <div id="admin-news-list" class="admin-news-list" aria-live="polite"></div>
         </div>
 
-        <div id="admin-news-list" class="admin-news-list" aria-live="polite"></div>
-
-        <div class="admin-row admin-news-form">
+        <div class="admin-news-compose" id="admin-news-compose">
+          <h3 class="admin-subsection-title" id="admin-news-form-title">{{ T("admin_news_compose_heading", "Neue Meldung veröffentlichen") }}</h3>
+          <input type="hidden" id="admin_news_edit_id" value="">
+          <div class="admin-row admin-news-form">
           <div class="admin-form-grid-2">
             <div class="admin-field">
               <label class="admin-label" for="admin_news_title">{{ T("admin_news_title_label", "Titel") }}</label>
@@ -681,26 +696,30 @@
             </div>
           </div>
           <div class="admin-field admin-field-wide">
-            <label class="admin-label" for="admin_news_body">{{ T("admin_motd_label", "Anzeige-Text") }}</label>
-            <span class="admin-small-hint">{{ T("admin_motd_hint") }}</span>
+            <label class="admin-label" for="admin_news_body">{{ T("admin_news_body_label", "Volltext / Patchnotes") }}</label>
+            <span class="admin-small-hint">{{ T("admin_news_body_hint", "Ausführliche Patchnotes für die Timeline. Der Titel erscheint im Live-Banner.") }}</span>
             <textarea class="admin-textarea" id="admin_news_body" rows="8"
-                      placeholder="Kurze Info, z. B. Server-News, Wartung, Events..."></textarea>
+                      placeholder="{{ T('admin_news_body_placeholder', 'Detaillierte Änderungen, Ticket-Referenzen, Hinweise…') }}"></textarea>
           </div>
           <label class="admin-checkbox-row" for="admin_news_major">
             <input type="checkbox" id="admin_news_major" value="1">
             <span>{{ T("admin_news_major_label", "Major Release") }}</span>
           </label>
         </div>
-        <div class="admin-btn-row">
-          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="news-publish">
+        <div class="admin-btn-row" id="admin-news-form-actions">
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" id="admin_news_btn_banner" data-admin-action="news-publish">
             {{ T("admin_news_publish", "Veröffentlichen & als Banner setzen") }}
           </button>
-          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-publish-only">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" id="admin_news_btn_publish" data-admin-action="news-publish-only">
             {{ T("admin_news_publish_only", "Veröffentlichen") }}
           </button>
-          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-save-draft">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" id="admin_news_btn_draft" data-admin-action="news-save-draft">
             {{ T("admin_news_save_draft", "Entwurf speichern") }}
           </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm admin-news-cancel-edit hidden" id="admin_news_btn_cancel" data-admin-action="news-cancel-edit">
+            {{ T("admin_news_cancel_edit", "Bearbeiten abbrechen") }}
+          </button>
+        </div>
         </div>
       </section>
 
