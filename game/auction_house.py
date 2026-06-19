@@ -35,6 +35,9 @@ BOX_INVENTORY_MAP: Dict[str, str] = {
     "military_cache": "container_military_cache",
     "alien_cache": "container_epic",
     "premium_cache": "container_relic",
+    "mythic_container": "container_mythic",
+    "ancient_relic": "container_ancient_relic",
+    "void_artifact": "container_void_artifact",
     "birthday_gift_container": "container_epic",
 }
 

@@ -59,6 +59,7 @@ from .expedition_events import (
     build_expedition_report,
     calculate_expedition_loot_cap,
     count_expedition_ships,
+    grant_expedition_lootboxes,
     resolve_expedition_outcome,
 )
 from .messages import (
@@ -3113,16 +3114,27 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             from .galactic_directives.mechanics import get_directive_flags_for_galaxy
 
             directive_flags = get_directive_flags_for_galaxy(origin_galaxy, conn=conn)
+        from .empire_page import get_empire_production_aggregate
+
+        empire_prod = get_empire_production_aggregate(player_id, conn=conn)
+        empire_daily_total = int(empire_prod.get("total_per_day") or 0)
         outcome = resolve_expedition_outcome(
             movement_id,
             cargo_total=cargo_total,
             expedition_ship_count=count_expedition_ships(ships),
             flight_seconds=flight_seconds_base,
             ships=ships,
+            empire_daily_total=empire_daily_total,
             world_type=str(world_context.get("world_type") or "") if world_context else None,
             directive_flags=directive_flags,
         )
         rewards = outcome["rewards"]
+        grant_expedition_lootboxes(
+            player_id,
+            outcome.get("lootboxes") or [],
+            movement_id=movement_id,
+            conn=conn,
+        )
         delay_extra = int(outcome.get("delay_extra") or 0)
         timing = _return_timing_from_now(movement, now=now, delay_seconds=delay_extra)
         return_at = timing["return_at"]

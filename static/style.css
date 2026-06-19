@@ -11914,6 +11914,49 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   border-color: rgba(251, 191, 36, 0.24);
   background: rgba(251, 191, 36, 0.07);
 }
+.gc-expedition-lootbox-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+.gc-expedition-lootbox-chip{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  background: rgba(139, 92, 246, 0.08);
+}
+.gc-expedition-lootbox-chip-img{
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.gc-expedition-lootbox-chip-body{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.gc-expedition-lootbox-chip-label{
+  font-size: 0.82rem;
+  color: var(--gc-text-soft);
+}
+.gc-expedition-lootbox-chip-value{
+  font-family: var(--gc-mono);
+  font-size: 0.95rem;
+  color: var(--gc-neon-cyan);
+}
+.gc-expedition-lootbox-chip--jackpot{
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.12);
+  box-shadow: 0 0 18px rgba(251, 191, 36, 0.15);
+}
+.gc-expedition-lootbox-chip--jackpot .gc-expedition-lootbox-chip-value{
+  color: #fcd34d;
+}
 .gc-expedition-loot-label{
   font-size: 0.72rem;
   color: var(--gc-text-soft);
@@ -23510,5 +23553,106 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
 
 .referral-page .gc-panel,
 .referral-page .gc-btn {
+  border-radius: 0;
+}
+
+.galactic-politics-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gc-space-4, 1rem);
+}
+
+.galactic-politics-eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gc-text-muted, #8b97a8);
+}
+
+.galactic-politics-galaxy-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gc-space-4, 1rem);
+}
+
+.galactic-politics-galaxy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.galactic-politics-phase {
+  font-size: 0.82rem;
+  color: var(--gc-accent, #5cc8ff);
+}
+
+.galactic-politics-active {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.galactic-politics-countdown {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.galactic-politics-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.galactic-politics-option {
+  border: 1px solid var(--gc-border, rgba(255, 255, 255, 0.08));
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.galactic-politics-option--selected {
+  border-color: var(--gc-accent, #5cc8ff);
+}
+
+.galactic-politics-option--cooldown {
+  opacity: 0.65;
+}
+
+.galactic-politics-option-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.galactic-politics-option-title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.galactic-politics-option-votes {
+  font-size: 0.82rem;
+  color: var(--gc-text-muted, #8b97a8);
+}
+
+.galactic-politics-option-desc {
+  margin: 0.35rem 0 0.65rem;
+  font-size: 0.82rem;
+}
+
+.galactic-politics-vote-btn {
+  width: 100%;
+}
+
+.galactic-politics-empty,
+.galactic-politics-cooldown-note,
+.galactic-politics-note {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.galactic-politics-page .gc-panel,
+.galactic-politics-page .gc-btn {
   border-radius: 0;
 }

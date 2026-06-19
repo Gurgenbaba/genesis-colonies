@@ -455,6 +455,54 @@
     return `<div class="gc-expedition-loot-grid">${rows.join("")}</div>`;
   }
 
+  const EXPEDITION_LOOTBOX_IMG_FALLBACK = "/static/img/lootboxes/Generic_Supply_Container.png";
+
+  function expeditionLootboxImage(box) {
+    const raw = String(box?.image || "").trim();
+    if (raw) {
+      return raw.startsWith("/") ? raw : `/static/${raw.replace(/^\/+/, "")}`;
+    }
+    const key = String(box?.key || "");
+    const byKey = {
+      generic_supply_container: "/static/img/lootboxes/Generic_Supply_Container.png",
+      resource_cache: "/static/img/lootboxes/Rare_Container.png",
+      research_capsule: "/static/img/lootboxes/Research_Cache.png",
+      wreckage_container: "/static/img/lootboxes/Wreckage_Container.png",
+      military_cache: "/static/img/lootboxes/Military_Cache.png",
+      alien_cache: "/static/img/lootboxes/Epic_Container.png",
+      premium_cache: "/static/img/lootboxes/Relic_Container.png",
+      mythic_container: "/static/img/lootboxes/Epic_Container.png",
+      ancient_relic: "/static/img/lootboxes/Relic_Container.png",
+      void_artifact: "/static/img/lootboxes/Event_Container.png",
+    };
+    return byKey[key] || EXPEDITION_LOOTBOX_IMG_FALLBACK;
+  }
+
+  function renderExpeditionLootboxChips(lootboxes) {
+    const rows = Array.isArray(lootboxes) ? lootboxes.filter((box) => box && box.key) : [];
+    if (!rows.length) return "";
+    return (
+      `<div class="gc-expedition-lootbox-grid">` +
+      rows
+        .map((box) => {
+          const name = box.name || t(box.name_key || "", box.key || "");
+          const amount = Math.max(1, Number(box.amount) || 1);
+          const img = esc(expeditionLootboxImage(box));
+          return (
+            `<div class="gc-expedition-lootbox-chip${box.jackpot ? " gc-expedition-lootbox-chip--jackpot" : ""}">` +
+            `<img class="gc-expedition-lootbox-chip-img" src="${img}" alt="${esc(name)}" loading="lazy" onerror="this.onerror=null;this.src='${EXPEDITION_LOOTBOX_IMG_FALLBACK}';">` +
+            `<div class="gc-expedition-lootbox-chip-body">` +
+            `<span class="gc-expedition-lootbox-chip-label">${esc(name)}</span>` +
+            `<strong class="gc-expedition-lootbox-chip-value">×${esc(formatInt(amount))}</strong>` +
+            `</div>` +
+            `</div>`
+          );
+        })
+        .join("") +
+      `</div>`
+    );
+  }
+
   function renderCombatPanel(title, bodyHtml, extraClass = "") {
     return (
       `<section class="gc-combat-report-panel${extraClass ? ` ${extraClass}` : ""}">` +
@@ -1367,11 +1415,14 @@
     const eventLabel = t(meta.event_label_key || `expedition_event_${eventKey}`, eventKey);
     const visual = expeditionHeroBadge(eventKey);
     const rewards = meta.rewards || {};
+    const lootboxes = Array.isArray(meta.lootboxes) ? meta.lootboxes : [];
     const lootTotal = expeditionLootTotal(rewards);
     const lootHint =
       lootTotal > 0
         ? `${formatInt(rewards.metal || 0)} / ${formatInt(rewards.crystal || 0)} / ${formatInt(rewards.fuel_cells || 0)}`
-        : t("combat_report_loot_none", "No plunder");
+        : lootboxes.length
+          ? t("fleet_expedition_report_lootbox_teaser", "Lootbox secured")
+          : t("combat_report_loot_none", "No plunder");
 
     return (
       `<div class="gc-combat-teaser gc-combat-teaser--${esc(visual.badge)} gc-combat-teaser--expedition${compact ? " gc-combat-teaser--compact" : ""}" data-event="${esc(eventKey)}">` +
@@ -1402,6 +1453,7 @@
     const severity = meta.event_severity || "normal";
     const visual = expeditionHeroBadge(eventKey);
     const rewards = meta.rewards || {};
+    const lootboxes = Array.isArray(meta.lootboxes) ? meta.lootboxes : [];
     const lootTotal = expeditionLootTotal(rewards);
     const cargoTotal = Number(meta.cargo_total || 0);
     const delayExtra = Number(meta.delay_extra || 0);
@@ -1487,6 +1539,16 @@
         `gc-combat-report-panel--loot${lootTotal > 0 ? " gc-combat-report-panel--loot-found" : ""}`
       )
     );
+
+    if (lootboxes.length) {
+      sections.push(
+        renderCombatPanel(
+          t("fleet_expedition_report_section_lootboxes", "Lootboxes"),
+          renderExpeditionLootboxChips(lootboxes),
+          "gc-combat-report-panel--lootboxes"
+        )
+      );
+    }
 
     return (
       `<div class="gc-player-card-shell gc-combat-report-shell gc-combat-report-shell--expedition" data-theme="${esc(visual.theme)}">` +

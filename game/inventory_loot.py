@@ -112,6 +112,26 @@ LOOT_POOLS: Dict[str, List[LootEntry]] = {
         {"weight": 3, "reward_type": "item", "reward_key": "container_relic", "min_amount": 1, "max_amount": 1},
         {"weight": 2, "reward_type": "item", "reward_key": "mythic_ancient_nexus", "min_amount": 1, "max_amount": 1},
     ],
+    # GC-402E — expedition jackpot containers (minimal pools; tune later).
+    "container_mythic": [
+        {"weight": 40, "reward_type": "resource", "reward_key": "metal", "min_amount": 5_000_000, "max_amount": 25_000_000},
+        {"weight": 35, "reward_type": "resource", "reward_key": "crystal", "min_amount": 3_000_000, "max_amount": 15_000_000},
+        {"weight": 15, "reward_type": "item", "reward_key": "fragment_genesis", "min_amount": 1, "max_amount": 2},
+        {"weight": 10, "reward_type": "item", "reward_key": "container_relic", "min_amount": 1, "max_amount": 1},
+    ],
+    "container_ancient_relic": [
+        {"weight": 35, "reward_type": "resource", "reward_key": "metal", "min_amount": 10_000_000, "max_amount": 50_000_000},
+        {"weight": 30, "reward_type": "resource", "reward_key": "crystal", "min_amount": 8_000_000, "max_amount": 40_000_000},
+        {"weight": 20, "reward_type": "item", "reward_key": "artifact_core_fragment", "min_amount": 1, "max_amount": 2},
+        {"weight": 15, "reward_type": "item", "reward_key": "fragment_quantum", "min_amount": 1, "max_amount": 2},
+    ],
+    "container_void_artifact": [
+        {"weight": 30, "reward_type": "resource", "reward_key": "metal", "min_amount": 25_000_000, "max_amount": 100_000_000},
+        {"weight": 25, "reward_type": "resource", "reward_key": "crystal", "min_amount": 20_000_000, "max_amount": 80_000_000},
+        {"weight": 20, "reward_type": "item", "reward_key": "fragment_genesis", "min_amount": 1, "max_amount": 3},
+        {"weight": 15, "reward_type": "item", "reward_key": "mythic_genesis_core", "min_amount": 1, "max_amount": 1},
+        {"weight": 10, "reward_type": "item", "reward_key": "expo_alien_relic", "min_amount": 1, "max_amount": 1},
+    ],
 }
 
 
