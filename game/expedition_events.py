@@ -18,11 +18,18 @@ FLEET_LOOT_EXPONENT = 0.72
 EXPEDITION_LOOT_FACTOR = 12
 _LOOT_VARIANCE_RANGE = (0.75, 1.35)
 
+# Cargo sent on expedition implies economic scale — floor when empire aggregate lags display.
+CARGO_ECONOMY_REFERENCE_MULT = 10
+
+# Rare cargo jackpot when raw loot exceeds cap (deterministic per movement_id).
+_CARGO_JACKPOT_CHANCE = 0.05
+_CARGO_JACKPOT_MULTS: Sequence[int] = (2, 5, 10)
+
 # Per-event multiplier band, economy-day share, and resource split (shares sum to 1.0).
 _EVENT_LOOT_PROFILES: Dict[str, Dict[str, Any]] = {
     "mineral_deposit": {
         "mult_range": (1.00, 1.35),
-        "economy_day_range": (0.0067, 0.0267),
+        "economy_day_range": (0.0050, 0.0200),
         "split": {"metal": 0.62, "crystal": 0.38},
     },
     "fuel_cache": {
@@ -32,17 +39,17 @@ _EVENT_LOOT_PROFILES: Dict[str, Dict[str, Any]] = {
     },
     "debris_salvage": {
         "mult_range": (1.10, 1.60),
-        "economy_day_range": (0.0270, 0.1070),
+        "economy_day_range": (0.0200, 0.0800),
         "split": {"metal": 0.70, "crystal": 0.25, "fuel_cells": 0.05},
     },
     "ancient_stash": {
         "mult_range": (1.80, 3.00),
-        "economy_day_range": (0.1330, 0.4000),
+        "economy_day_range": (0.0500, 0.2000),
         "split": {"metal": 0.50, "crystal": 0.35, "fuel_cells": 0.15},
     },
     "distress_beacon": {
         "mult_range": (0.90, 1.25),
-        "economy_day_range": (0.0200, 0.0800),
+        "economy_day_range": (0.0100, 0.0400),
         "split": {"metal": 0.45, "crystal": 0.30, "fuel_cells": 0.25},
     },
 }
@@ -279,10 +286,11 @@ def _compute_event_loot(
     fleet_value: int,
     *,
     empire_daily_total: int = 0,
-) -> Dict[str, int]:
+    cargo_total: int = 0,
+) -> Tuple[Dict[str, int], Dict[str, int]]:
     profile = _EVENT_LOOT_PROFILES.get(str(event_key))
-    if not profile or fleet_value <= 0 and int(empire_daily_total) <= 0:
-        return _empty_rewards()
+    if not profile or fleet_value <= 0 and int(empire_daily_total) <= 0 and int(cargo_total) <= 0:
+        return _empty_rewards(), {"economy_base": 0, "raw_loot_total": 0}
 
     mult_lo, mult_hi = profile["mult_range"]
     event_mult = rng.uniform(float(mult_lo), float(mult_hi))
@@ -296,12 +304,20 @@ def _compute_event_loot(
     economy_loot = 0
     eco_range = profile.get("economy_day_range")
     daily_total = max(0, int(empire_daily_total))
-    if daily_total > 0 and isinstance(eco_range, (list, tuple)) and len(eco_range) == 2:
+    cargo_reference = max(0, int(cargo_total)) * CARGO_ECONOMY_REFERENCE_MULT
+    economy_base = max(daily_total, cargo_reference)
+    if economy_base > 0 and isinstance(eco_range, (list, tuple)) and len(eco_range) == 2:
         eco_mult = rng.uniform(float(eco_range[0]), float(eco_range[1]))
-        economy_loot = max(0, int(daily_total * eco_mult * event_mult * variance))
+        economy_loot = max(0, int(economy_base * eco_mult * variance))
 
     total_loot = max(fleet_loot, economy_loot)
-    return _split_loot_total(total_loot, profile.get("split") or {})
+    debug = {
+        "economy_base": int(economy_base),
+        "raw_loot_total": int(total_loot),
+        "fleet_loot": int(fleet_loot),
+        "economy_loot": int(economy_loot),
+    }
+    return _split_loot_total(total_loot, profile.get("split") or {}), debug
 
 
 def is_allowed_expedition_lootbox(box_key: str) -> bool:
@@ -410,6 +426,39 @@ def _scale_rewards_to_cargo(rewards: MutableMapping[str, int], cargo_total: int)
         rewards[key] = int(int(rewards.get(key) or 0) * scale)
 
 
+def _apply_cargo_cap_with_jackpot(
+    rewards: MutableMapping[str, int],
+    cargo_total: int,
+    *,
+    movement_id: int,
+) -> Dict[str, Any]:
+    """Cap loot to cargo; 5% jackpot allows 2×/5×/10× cargo when raw loot overshoots."""
+    cargo_cap = max(0, int(cargo_total))
+    loaded = sum(int(rewards.get(k) or 0) for k in VALID_RESOURCE_KEYS)
+    meta: Dict[str, Any] = {
+        "cargo_jackpot": False,
+        "cargo_jackpot_mult": 1,
+        "raw_loot_total": int(loaded),
+    }
+    if cargo_cap <= 0 or loaded <= cargo_cap:
+        return meta
+
+    jackpot_rng = random.Random(int(movement_id) * 12347 + 99991)
+    if jackpot_rng.random() < _CARGO_JACKPOT_CHANCE:
+        mult = int(_CARGO_JACKPOT_MULTS[jackpot_rng.randrange(len(_CARGO_JACKPOT_MULTS))])
+        jackpot_cap = int(cargo_cap * mult)
+        if loaded > jackpot_cap:
+            scale = jackpot_cap / max(1, loaded)
+            for key in VALID_RESOURCE_KEYS:
+                rewards[key] = int(int(rewards.get(key) or 0) * scale)
+        meta["cargo_jackpot"] = True
+        meta["cargo_jackpot_mult"] = mult
+        return meta
+
+    _scale_rewards_to_cargo(rewards, cargo_cap)
+    return meta
+
+
 def _apply_directive_reward_modifiers(
     rewards: MutableMapping[str, int],
     *,
@@ -453,11 +502,12 @@ def resolve_expedition_outcome(
         event_bonus=event_bonus,
     )
     event = _EVENT_BY_KEY[event_key]
-    rewards = _compute_event_loot(
+    rewards, loot_debug = _compute_event_loot(
         rng,
         event_key,
         fleet_value,
         empire_daily_total=int(empire_daily_total),
+        cargo_total=int(cargo_total),
     )
     lootboxes = _roll_expedition_lootboxes(rng, event_key)
     _apply_directive_reward_modifiers(
@@ -466,7 +516,11 @@ def resolve_expedition_outcome(
         wreckage_bonus=wreckage_bonus,
         salvage=salvage,
     )
-    _scale_rewards_to_cargo(rewards, int(cargo_total))
+    cargo_meta = _apply_cargo_cap_with_jackpot(
+        rewards,
+        int(cargo_total),
+        movement_id=int(movement_id),
+    )
 
     delay_extra = 0
     delay_chance = float(event.get("delay_chance") or 0.0)
@@ -488,6 +542,10 @@ def resolve_expedition_outcome(
         "expedition_ship_count": int(expedition_ship_count),
         "fleet_value": int(fleet_value),
         "empire_daily_total": int(empire_daily_total),
+        "economy_base": int(loot_debug.get("economy_base") or 0),
+        "raw_loot_total": int(cargo_meta.get("raw_loot_total") or loot_debug.get("raw_loot_total") or 0),
+        "cargo_jackpot": bool(cargo_meta.get("cargo_jackpot")),
+        "cargo_jackpot_mult": int(cargo_meta.get("cargo_jackpot_mult") or 1),
         "cargo_total": int(cargo_total),
     }
 
@@ -650,6 +708,11 @@ def build_expedition_report(
         "lootboxes": lootboxes,
         "delay_extra": delay_extra,
         "cargo_total": int(outcome.get("cargo_total") or 0),
+        "empire_daily_total": int(outcome.get("empire_daily_total") or 0),
+        "economy_base": int(outcome.get("economy_base") or 0),
+        "raw_loot_total": int(outcome.get("raw_loot_total") or 0),
+        "cargo_jackpot": bool(outcome.get("cargo_jackpot")),
+        "cargo_jackpot_mult": int(outcome.get("cargo_jackpot_mult") or 1),
         "losses": {},
         "losses_total": 0,
     }

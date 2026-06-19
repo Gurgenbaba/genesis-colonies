@@ -48,6 +48,28 @@ def test_calculate_fleet_value_uses_ship_scores():
     assert calculate_fleet_value(_SMALL_FLEET) == 7000
 
 
+def test_large_cargo_floor_when_empire_aggregate_is_low():
+    """10B cargo must not return ~5M when empire aggregate under-reports production."""
+    movement_id = _find_movement_for_event(
+        "mineral_deposit",
+        ships=_LARGE_FLEET,
+        cargo_total=10_000_000_000,
+        empire_daily_total=750_000_000,
+    )
+    outcome = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=10_000_000_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=_LARGE_FLEET,
+        empire_daily_total=750_000_000,
+    )
+    total = int(outcome["reward_total"])
+    assert total > 5_224_703
+    assert total >= 500_000_000
+    assert int(outcome.get("economy_base") or 0) >= 10_000_000_000
+
+
 def test_endgame_economy_floor_beats_flat_early_game_loot():
     movement_id = _find_movement_for_event(
         "mineral_deposit",
@@ -82,25 +104,32 @@ def test_ancient_stash_endgame_can_fill_large_cargo():
         ships=_LARGE_FLEET,
         empire_daily_total=_ENDGAME_DAILY,
     )
-    assert int(outcome["reward_total"]) <= cargo_cap
-    assert int(outcome["reward_total"]) >= int(cargo_cap * 0.999)
+    assert int(outcome["reward_total"]) <= cargo_cap * max(1, int(outcome.get("cargo_jackpot_mult") or 1))
+    assert int(outcome["reward_total"]) >= int(cargo_cap * 0.999) or bool(outcome.get("cargo_jackpot"))
 
 
 def test_large_fleet_produces_much_more_than_small_fleet():
-    movement_id = _find_movement_for_event("mineral_deposit", ships=_LARGE_FLEET)
+    movement_id = _find_movement_for_event(
+        "mineral_deposit",
+        ships=_LARGE_FLEET,
+        cargo_total=500_000,
+        empire_daily_total=0,
+    )
     large = resolve_expedition_outcome(
         movement_id,
-        cargo_total=50_000_000,
+        cargo_total=500_000,
         expedition_ship_count=1,
         flight_seconds=120,
         ships=_LARGE_FLEET,
+        empire_daily_total=0,
     )
     small = resolve_expedition_outcome(
         movement_id,
-        cargo_total=50_000_000,
+        cargo_total=500_000,
         expedition_ship_count=1,
         flight_seconds=120,
         ships=_SMALL_FLEET,
+        empire_daily_total=0,
     )
     assert int(large["reward_total"]) > int(small["reward_total"]) * 5
 
@@ -129,7 +158,8 @@ def test_loot_capped_by_cargo_capacity():
         ships=_LARGE_FLEET,
         empire_daily_total=_ENDGAME_DAILY,
     )
-    assert int(outcome["reward_total"]) <= cargo_cap
+    mult = int(outcome.get("cargo_jackpot_mult") or 1)
+    assert int(outcome["reward_total"]) <= cargo_cap * mult
 
 
 def test_outcome_deterministic_for_same_movement_and_fleet():
