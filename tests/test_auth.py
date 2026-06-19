@@ -258,6 +258,30 @@ def test_discord_welcome_page_after_register(app_client, monkeypatch):
     assert b"auth-welcome-checklist" in resp.data
 
 
+def test_env_value_strips_surrounding_quotes(monkeypatch):
+    monkeypatch.setenv("DISCORD_CLIENT_SECRET", '"quoted-secret"')
+    import importlib
+    import game.discord_auth as da
+    importlib.reload(da)
+    assert da._client_secret() == "quoted-secret"
+
+
+def test_map_discord_token_error_invalid_client():
+    from game.discord_auth import _map_discord_token_error
+
+    assert _map_discord_token_error(401, '{"error":"invalid_client"}') == "discord_token_invalid_client"
+
+
+def test_map_discord_token_error_redirect_mismatch():
+    from game.discord_auth import _map_discord_token_error
+
+    key = _map_discord_token_error(
+        400,
+        '{"error":"invalid_grant","error_description":"Invalid redirect_uri"}',
+    )
+    assert key == "discord_token_redirect_mismatch"
+
+
 def test_complete_discord_callback_exchanges_code(temp_db, discord_env, monkeypatch):
     _run_migrate(temp_db)
     init_db()

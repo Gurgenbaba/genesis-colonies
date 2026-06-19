@@ -36,21 +36,28 @@ def discord_oauth_configured() -> bool:
     return bool(_client_id() and _client_secret() and _redirect_uri())
 
 
+def _env_value(name: str) -> str:
+    """Read env var; strip whitespace and optional surrounding quotes (Railway copy-paste)."""
+    val = str(os.environ.get(name) or "").strip()
+    if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+        val = val[1:-1].strip()
+    return val
+
+
 def _client_id() -> str:
-    return str(os.environ.get("DISCORD_CLIENT_ID") or "").strip()
+    return _env_value("DISCORD_CLIENT_ID")
 
 
 def _client_secret() -> str:
-    return str(os.environ.get("DISCORD_CLIENT_SECRET") or "").strip()
+    return _env_value("DISCORD_CLIENT_SECRET")
 
 
 def _redirect_uri() -> str:
-    explicit = str(os.environ.get("DISCORD_REDIRECT_URI") or "").strip()
+    explicit = _env_value("DISCORD_REDIRECT_URI")
     if explicit:
-        return explicit
-    base = str(
-        os.environ.get("PUBLIC_BASE_URL") or os.environ.get("GC_PUBLIC_URL") or ""
-    ).strip().rstrip("/")
+        return explicit.rstrip("/")
+    base = _env_value("PUBLIC_BASE_URL") or _env_value("GC_PUBLIC_URL")
+    base = base.rstrip("/")
     if base:
         return f"{base}/auth/discord/callback"
     return ""
@@ -118,20 +125,49 @@ def _http_get_json(url: str, access_token: str) -> Tuple[int, Optional[Dict[str,
         return 0, None
 
 
+def _map_discord_token_error(status: int, raw: str) -> str:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        payload = {}
+
+    err = str(payload.get("error") or "").strip().lower()
+    desc = str(payload.get("error_description") or "").strip().lower()
+
+    if err == "invalid_client" or status == 401:
+        return "discord_token_invalid_client"
+    if err == "invalid_grant":
+        if "redirect_uri" in desc:
+            return "discord_token_redirect_mismatch"
+        if "code" in desc:
+            return "discord_token_code_invalid"
+        return "discord_token_invalid_grant"
+    return "discord_token_failed"
+
+
 def exchange_code_for_token(code: str) -> Tuple[bool, Optional[str], str]:
+    redirect_uri = _redirect_uri()
     status, raw = _http_post_form(
         DISCORD_TOKEN_URL,
         {
             "client_id": _client_id(),
             "client_secret": _client_secret(),
             "grant_type": "authorization_code",
-            "code": str(code or ""),
-            "redirect_uri": _redirect_uri(),
+            "code": str(code or "").strip(),
+            "redirect_uri": redirect_uri,
         },
     )
     if status != 200:
-        logger.warning("discord token exchange failed status=%s body=%s", status, raw[:200])
-        return False, None, "discord_token_failed"
+        err_key = _map_discord_token_error(status, raw)
+        logger.warning(
+            "discord token exchange failed status=%s key=%s redirect_uri=%s client_id=%s body=%s",
+            status,
+            err_key,
+            redirect_uri,
+            _client_id(),
+            raw[:400],
+        )
+        return False, None, err_key
 
     try:
         payload = json.loads(raw)
