@@ -73,7 +73,7 @@ def _discord_user_agent() -> str:
     custom = _env_value("DISCORD_USER_AGENT")
     if custom:
         return custom
-    return "GenesisColonies/1.0 (Discord OAuth; +https://www.genesis-colonies.de)"
+    return "Genesis-Colonies/1.0 (+https://www.genesis-colonies.de)"
 
 
 def _discord_api_headers(extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:

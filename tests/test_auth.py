@@ -299,6 +299,7 @@ def test_http_post_form_sends_user_agent(monkeypatch):
 
     def fake_urlopen(req, timeout=15):
         captured["user_agent"] = req.headers.get("User-agent") or req.headers.get("User-Agent")
+        captured["accept"] = req.headers.get("Accept")
         class Resp:
             status = 200
 
@@ -317,7 +318,45 @@ def test_http_post_form_sends_user_agent(monkeypatch):
     status, _ = da._http_post_form("https://discord.com/api/oauth2/token", {"a": "b"})
     assert status == 200
     assert captured.get("user_agent")
-    assert "GenesisColonies" in captured["user_agent"]
+    assert "Genesis-Colonies" in captured["user_agent"]
+    assert captured.get("accept") == "application/json"
+
+
+def test_exchange_code_for_token_sends_discord_api_headers(monkeypatch):
+    import game.discord_auth as da
+
+    captured: dict = {}
+
+    def fake_urlopen(req, timeout=15):
+        captured["user_agent"] = req.headers.get("User-agent") or req.headers.get("User-Agent")
+        captured["accept"] = req.headers.get("Accept")
+        captured["content_type"] = req.headers.get("Content-type") or req.headers.get("Content-Type")
+
+        class Resp:
+            status = 200
+
+            def read(self):
+                return b'{"access_token":"token-abc"}'
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        return Resp()
+
+    monkeypatch.setenv("DISCORD_CLIENT_ID", "cid")
+    monkeypatch.setenv("DISCORD_CLIENT_SECRET", "sec")
+    monkeypatch.setenv("DISCORD_REDIRECT_URI", "https://www.genesis-colonies.de/auth/discord/callback")
+    monkeypatch.setattr(da.urllib.request, "urlopen", fake_urlopen)
+
+    ok, token, err = da.exchange_code_for_token("oauth-code-123")
+    assert ok, err
+    assert token == "token-abc"
+    assert captured["content_type"] == "application/x-www-form-urlencoded"
+    assert captured["accept"] == "application/json"
+    assert "Genesis-Colonies" in captured["user_agent"]
 
 
 def test_complete_discord_callback_exchanges_code(temp_db, discord_env, monkeypatch):
