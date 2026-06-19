@@ -2977,6 +2977,7 @@
   "discord_token_redirect_mismatch": "Discord redirect URI mismatch — portal and DISCORD_REDIRECT_URI must match exactly.",
   "discord_token_code_invalid": "Discord code expired or already used — please sign in again.",
   "discord_token_invalid_grant": "Discord rejected the sign-in — please try again.",
+  "discord_token_cloudflare_blocked": "Discord API blocked the server request — please try again shortly.",
   "discord_profile_failed": "Could not load Discord profile.",
   "discord_register_failed": "Could not create account.",
   "msg_discord_login_success": "Signed in with Discord.",

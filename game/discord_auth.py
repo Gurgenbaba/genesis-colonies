@@ -69,6 +69,35 @@ def discord_invite_url() -> str:
     ).strip()
 
 
+def _discord_user_agent() -> str:
+    custom = _env_value("DISCORD_USER_AGENT")
+    if custom:
+        return custom
+    return "GenesisColonies/1.0 (Discord OAuth; +https://www.genesis-colonies.de)"
+
+
+def _discord_api_headers(extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    headers = {
+        "User-Agent": _discord_user_agent(),
+        "Accept": "application/json",
+    }
+    if extra:
+        headers.update(extra)
+    return headers
+
+
+def _is_cloudflare_block(status: int, raw: str) -> bool:
+    if status != 403:
+        return False
+    text = str(raw or "").lower()
+    return (
+        "cloudflare" in text
+        or "error_code" in text and "1010" in text
+        or "browser_signature" in text
+        or "access denied" in text and "error_name" in text
+    )
+
+
 def generate_oauth_state() -> str:
     return secrets.token_urlsafe(32)
 
@@ -89,11 +118,12 @@ def _http_post_form(url: str, data: Dict[str, str], headers: Optional[Dict[str, 
     req = urllib.request.Request(
         url,
         data=body,
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-            **(headers or {}),
-        },
+        headers=_discord_api_headers(
+            {
+                "Content-Type": "application/x-www-form-urlencoded",
+                **(headers or {}),
+            }
+        ),
         method="POST",
     )
     try:
@@ -107,10 +137,9 @@ def _http_post_form(url: str, data: Dict[str, str], headers: Optional[Dict[str, 
 def _http_get_json(url: str, access_token: str) -> Tuple[int, Optional[Dict[str, Any]]]:
     req = urllib.request.Request(
         url,
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Accept": "application/json",
-        },
+        headers=_discord_api_headers(
+            {"Authorization": f"Bearer {access_token}"}
+        ),
         method="GET",
     )
     try:
@@ -134,7 +163,9 @@ def _map_discord_token_error(status: int, raw: str) -> str:
     err = str(payload.get("error") or "").strip().lower()
     desc = str(payload.get("error_description") or "").strip().lower()
 
-    if err == "invalid_client" or status == 401:
+    if _is_cloudflare_block(status, raw):
+        return "discord_token_cloudflare_blocked"
+    if err == "invalid_client":
         return "discord_token_invalid_client"
     if err == "invalid_grant":
         if "redirect_uri" in desc:

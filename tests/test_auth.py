@@ -282,6 +282,44 @@ def test_map_discord_token_error_redirect_mismatch():
     assert key == "discord_token_redirect_mismatch"
 
 
+def test_map_discord_token_error_cloudflare_block():
+    from game.discord_auth import _map_discord_token_error
+
+    body = (
+        '{"title":"Error 1010: Access denied","status":403,'
+        '"error_code":1010,"error_name":"browser_signature_banned"}'
+    )
+    assert _map_discord_token_error(403, body) == "discord_token_cloudflare_blocked"
+
+
+def test_http_post_form_sends_user_agent(monkeypatch):
+    import game.discord_auth as da
+
+    captured = {}
+
+    def fake_urlopen(req, timeout=15):
+        captured["user_agent"] = req.headers.get("User-agent") or req.headers.get("User-Agent")
+        class Resp:
+            status = 200
+
+            def read(self):
+                return b'{"access_token":"tok"}'
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        return Resp()
+
+    monkeypatch.setattr(da.urllib.request, "urlopen", fake_urlopen)
+    status, _ = da._http_post_form("https://discord.com/api/oauth2/token", {"a": "b"})
+    assert status == 200
+    assert captured.get("user_agent")
+    assert "GenesisColonies" in captured["user_agent"]
+
+
 def test_complete_discord_callback_exchanges_code(temp_db, discord_env, monkeypatch):
     _run_migrate(temp_db)
     init_db()

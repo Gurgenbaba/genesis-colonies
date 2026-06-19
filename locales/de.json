@@ -1068,6 +1068,7 @@
   "discord_token_redirect_mismatch": "Discord Redirect-URI stimmt nicht — Portal und DISCORD_REDIRECT_URI müssen exakt übereinstimmen.",
   "discord_token_code_invalid": "Discord-Code abgelaufen oder bereits verwendet — bitte erneut einloggen.",
   "discord_token_invalid_grant": "Discord hat die Anmeldung abgelehnt — bitte erneut versuchen.",
+  "discord_token_cloudflare_blocked": "Discord-API von Server blockiert — bitte kurz später erneut versuchen.",
   "discord_profile_failed": "Discord-Profil konnte nicht geladen werden.",
   "discord_register_failed": "Account konnte nicht erstellt werden.",
   "msg_discord_login_success": "Erfolgreich mit Discord eingeloggt.",

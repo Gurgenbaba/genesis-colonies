@@ -108,6 +108,14 @@
         </form>
 
         <form class="gc-options-form gc-options-form-password" id="options-form-password" method="post" action="#" novalidate>
+          <input type="text"
+                 class="visually-hidden"
+                 name="username"
+                 autocomplete="username"
+                 tabindex="-1"
+                 aria-hidden="true"
+                 value="{{ od.get('username', '')|e }}"
+                 readonly>
           <div class="gc-options-form-head">
             <span class="gc-options-form-kicker">{{ T("options_password") }}</span>
           </div>
