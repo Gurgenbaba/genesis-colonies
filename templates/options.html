@@ -137,6 +137,76 @@
           </div>
         </form>
 
+        {% if DISCORD_OAUTH_ENABLED %}
+        <div class="gc-options-discord"
+             id="options-discord-block"
+             data-discord-linked="{{ '1' if od.get('discord_linked') else '0' }}"
+             data-can-unlink="{{ '1' if od.get('discord_can_unlink') else '0' }}"
+             data-unlink-needs-password="{{ '1' if od.get('discord_unlink_requires_password') else '0' }}">
+          <div class="gc-options-form-head">
+            <span class="gc-options-form-kicker">{{ T("options_discord_title") if T("options_discord_title") != "options_discord_title" else "Discord" }}</span>
+          </div>
+
+          {% if od.get('discord_linked') %}
+            <div class="gc-options-discord-connected">
+              {% if od.get('discord_avatar_url') %}
+                <img src="{{ od.get('discord_avatar_url') }}"
+                     alt=""
+                     class="gc-options-discord-avatar"
+                     width="48"
+                     height="48"
+                     loading="lazy"
+                     decoding="async">
+              {% endif %}
+              <div class="gc-options-discord-meta">
+                <span class="gc-options-discord-status">
+                  <span class="gc-options-discord-status-dot" aria-hidden="true"></span>
+                  {{ T("options_discord_connected") if T("options_discord_connected") != "options_discord_connected" else "Verbunden als" }}
+                </span>
+                <strong class="gc-options-discord-name">{{ od.get('discord_username') or T('options_not_set') }}</strong>
+                {% if od.get('discord_id') %}
+                  <span class="gc-options-discord-id gc-mono">ID: {{ od.get('discord_id') }}</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="gc-options-discord-actions">
+              {% if od.get('discord_can_unlink') or od.get('discord_unlink_requires_password') %}
+                {% if od.get('discord_unlink_requires_password') %}
+                  <label class="gc-options-field gc-options-discord-unlink-password">
+                    <span class="gc-options-label">{{ T("options_current_password") }}</span>
+                    <input type="password"
+                           class="gc-input gc-options-input"
+                           id="options-discord-unlink-password"
+                           autocomplete="current-password"
+                           placeholder="{{ T('options_placeholder_password_current') }}">
+                  </label>
+                {% endif %}
+                <button type="button"
+                        class="gc-btn gc-btn-outline gc-options-discord-unlink"
+                        id="options-discord-unlink-btn">
+                  {{ T("options_discord_unlink") if T("options_discord_unlink") != "options_discord_unlink" else "Verbindung trennen" }}
+                </button>
+                <p class="gc-options-form-hint gc-options-discord-hint" id="options-discord-hint" role="status" aria-live="polite" hidden></p>
+              {% else %}
+                <p class="gc-options-discord-locked">
+                  {{ T("options_discord_unlink_locked") if T("options_discord_unlink_locked") != "options_discord_unlink_locked" else "Setze zuerst E-Mail oder Passwort, bevor du Discord trennst." }}
+                </p>
+              {% endif %}
+            </div>
+          {% else %}
+            <p class="gc-options-discord-lead">
+              {{ T("options_discord_lead") if T("options_discord_lead") != "options_discord_lead" else "Verbinde Discord für schnelleren Login und Community-Features." }}
+            </p>
+            <a href="{{ url_for('auth_discord_link_start') }}"
+               class="gc-btn gc-btn-lg auth-btn-discord auth-btn-discord--primary gc-options-discord-link"
+               data-no-pjax>
+              {{ T("options_discord_link") if T("options_discord_link") != "options_discord_link" else "Discord verbinden" }}
+            </a>
+          {% endif %}
+        </div>
+        {% endif %}
+
       </div>
     </section>
 

@@ -66,7 +66,7 @@
       <p class="auth-hero-sub">{{ subtitle }}</p>
     </div>
 
-    <section class="auth-panel auth-panel--register" aria-label="{{ aria }}">
+    <section class="auth-panel auth-panel--register{% if DISCORD_OAUTH_ENABLED %} auth-panel--discord-first{% endif %}" aria-label="{{ aria }}">
 
       {% if err %}
         <div class="auth-error auth-terminal-alert" id="form-error" role="alert" aria-live="assertive" tabindex="-1">
@@ -75,9 +75,16 @@
         </div>
       {% endif %}
 
+      {% if DISCORD_OAUTH_ENABLED %}
+        {% set discord_label = T("register_btn_discord") %}
+        {% if discord_label == "register_btn_discord" %}{% set discord_label = "Mit Discord registrieren" %}{% endif %}
+        {% include "partials/auth_discord_oauth.html" %}
+        {% include "partials/auth_discord_divider.html" %}
+      {% endif %}
+
       <form method="POST"
             action="{{ url_for('register') }}"
-            class="auth-form"
+            class="auth-form auth-form--classic"
             novalidate
             data-validate="register">
         {{ csrf_input() }}

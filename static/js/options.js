@@ -209,6 +209,58 @@
     form._gcOptionsSubmit = (ev) => handleOptionsFormSubmit(form, ev);
   }
 
+  function bindDiscordUnlink() {
+    const btn = document.getElementById("options-discord-unlink-btn");
+    const hint = document.getElementById("options-discord-hint");
+    const block = document.getElementById("options-discord-block");
+    const pwd = document.getElementById("options-discord-unlink-password");
+    if (!btn || btn.dataset.gcBound === "1") return;
+    btn.dataset.gcBound = "1";
+
+    btn.addEventListener("click", async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      if (hint) {
+        hint.hidden = true;
+        hint.textContent = "";
+        hint.classList.remove("gc-options-hint-error", "gc-options-hint-success");
+      }
+
+      const payload = {};
+      if (block && block.getAttribute("data-unlink-needs-password") === "1" && pwd) {
+        payload.current_password = String(pwd.value || "");
+      }
+
+      try {
+        const data = await postOptionsJson("/api/account/unlink-discord", payload);
+        if (!data || data.ok !== true) {
+          if (hint) {
+            hint.textContent = msgKey(data && data.error);
+            hint.hidden = false;
+            hint.classList.add("gc-options-hint-error");
+          }
+          return;
+        }
+        if (typeof GC.reloadCurrentPage === "function") {
+          GC.reloadCurrentPage("discord_unlink");
+        } else if (typeof GC.navigateTo === "function") {
+          GC.navigateTo("/options");
+        } else {
+          window.location.href = "/options";
+        }
+      } catch (err) {
+        if (err && err.name === "AuthError") return;
+        if (hint) {
+          hint.textContent = msgKey("discord_unlink_failed");
+          hint.hidden = false;
+          hint.classList.add("gc-options-hint-error");
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
   function initOptionsPage() {
     if (!document.getElementById("options-page")) return;
 
@@ -220,6 +272,7 @@
     });
 
     bindResendVerification();
+    bindDiscordUnlink();
   }
 
   GC.handleOptionsFormSubmit = handleOptionsFormSubmit;

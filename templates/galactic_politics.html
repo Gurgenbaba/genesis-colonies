@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set ps = politics_state if politics_state is defined and politics_state else {'ready': false, 'galaxies': []} %}
+
+<div class="gc-page galactic-politics-page" id="galactic-politics-page"
+     data-galactic-politics
+     data-ready="{{ '1' if ps.ready else '0' }}">
+
+  {% if ps.ready %}
+  <script type="application/json" id="galactic-politics-page-state">{{ ps | tojson }}</script>
+  {% endif %}
+
+  <header class="gc-page-header section-header galactic-politics-header">
+    <p class="galactic-politics-eyebrow">{{ T("gd_politics_eyebrow", "GALAKTISCHE POLITIK") }}</p>
+    <h1 class="section-title">{{ T("gd_politics_title", "Galaktische Politik") }}</h1>
+    <p class="section-hint hint galactic-politics-hint">
+      {{ T("gd_politics_hint", "Stimme monatlich für die Primär- und Sekundärdirektive deiner Galaxien ab.") }}
+    </p>
+  </header>
+
+  {% if not ps.ready %}
+  <section class="gc-panel galactic-politics-panel">
+    <p class="galactic-politics-empty">{{ T("gd_politics_unavailable", "Galaktische Politik ist derzeit nicht verfügbar.") }}</p>
+  </section>
+  {% elif not ps.galaxies %}
+  <section class="gc-panel galactic-politics-panel">
+    <p class="galactic-politics-empty">{{ T("gd_politics_no_colonies", "Du besitzt noch keine Kolonien in einer Galaxie.") }}</p>
+  </section>
+  {% else %}
+
+  <div class="galactic-politics-galaxy-list" data-gd-galaxy-list>
+    {% for entry in ps.galaxies %}
+    <section class="gc-panel galactic-politics-panel galactic-politics-galaxy-card"
+             data-gd-galaxy-card
+             data-galaxy="{{ entry.galaxy }}">
+      <div class="gc-panel-header galactic-politics-galaxy-head">
+        <span class="gc-panel-title">
+          {{ T("gd_politics_galaxy_title", "Galaxie %(galaxy)s", galaxy=entry.galaxy) }}
+        </span>
+        <span class="galactic-politics-phase gc-mono"
+              data-gd-phase-label
+              data-phase="{{ entry.cycle.phase }}">
+          {% if entry.cycle.phase == 'vote_open' %}
+            {{ T("gd_politics_phase_vote", "Abstimmung") }}
+          {% elif entry.cycle.phase == 'active' %}
+            {{ T("gd_politics_phase_active", "Mandat aktiv") }}
+          {% else %}
+            {{ T("gd_politics_phase_resolved", "Abgeschlossen") }}
+          {% endif %}
+        </span>
+      </div>
+
+      <div class="galactic-politics-active" data-gd-active-row>
+        <div class="gc-gd-chip">
+          <span class="gc-gd-chip-label">{{ T("gd_banner_primary_label", "Primär") }}</span>
+          <span class="gc-gd-chip-value" data-gd-active-primary>
+            {% if entry.active.primary_label_key %}{{ T(entry.active.primary_label_key) }}{% else %}—{% endif %}
+          </span>
+        </div>
+        <div class="gc-gd-chip gc-gd-chip--secondary">
+          <span class="gc-gd-chip-label">{{ T("gd_banner_secondary_label", "Sekundär") }}</span>
+          <span class="gc-gd-chip-value" data-gd-active-secondary>
+            {% if entry.active.secondary_label_key %}{{ T(entry.active.secondary_label_key) }}{% else %}—{% endif %}
+          </span>
+        </div>
+      </div>
+
+      <p class="galactic-politics-countdown gc-mono" data-gd-countdown data-seconds="{{ entry.cycle.countdown_seconds }}">
+        {% if entry.cycle.phase == 'vote_open' %}
+          {{ T("gd_politics_countdown_vote", "Abstimmung endet in") }}:
+        {% elif entry.cycle.phase == 'active' %}
+          {{ T("gd_politics_countdown_active", "Mandat endet in") }}:
+        {% else %}
+          {{ T("gd_politics_countdown_resolved", "Zyklus beendet") }}
+        {% endif %}
+        <strong data-gd-countdown-value>—</strong>
+      </p>
+
+      {% if entry.vote_reason == 'no_colony' %}
+      <p class="galactic-politics-note hint">{{ T("gd_politics_no_vote_right", "Kein Stimmrecht in dieser Galaxie.") }}</p>
+      {% elif entry.vote_reason == 'vote_closed' %}
+      <p class="galactic-politics-note hint">{{ T("gd_politics_vote_closed", "Die Abstimmung ist geschlossen.") }}</p>
+      {% endif %}
+
+      <div class="galactic-politics-options" data-gd-options>
+        {% for opt in entry.options %}
+        <article class="galactic-politics-option {% if opt.selected %}galactic-politics-option--selected{% endif %} {% if opt.on_cooldown %}galactic-politics-option--cooldown{% endif %}"
+                 data-gd-option
+                 data-directive-key="{{ opt.key }}"
+                 data-on-cooldown="{{ '1' if opt.on_cooldown else '0' }}">
+          <div class="galactic-politics-option-head">
+            <h3 class="galactic-politics-option-title">{{ T(opt.label_key) }}</h3>
+            <span class="galactic-politics-option-votes gc-mono" data-gd-option-votes>{{ opt.vote_count }}</span>
+          </div>
+          <p class="galactic-politics-option-desc hint">{{ T(opt.description_key) }}</p>
+          {% if opt.on_cooldown %}
+          <p class="galactic-politics-cooldown-note">{{ T("gd_politics_cooldown", "Gesperrt (2× Sieg in Folge)") }}</p>
+          {% elif entry.can_vote %}
+          <button type="button"
+                  class="gc-btn gc-btn-secondary gc-btn-sm galactic-politics-vote-btn"
+                  data-gd-vote-btn
+                  data-galaxy="{{ entry.galaxy }}"
+                  data-directive-key="{{ opt.key }}"
+                  {% if opt.selected %}disabled aria-pressed="true"{% endif %}>
+            {% if opt.selected %}
+              {{ T("gd_politics_voted", "Deine Stimme") }}
+            {% else %}
+              {{ T("gd_politics_vote_btn", "Abstimmen") }}
+            {% endif %}
+          </button>
+          {% endif %}
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}

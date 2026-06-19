@@ -9357,6 +9357,174 @@
     if (state) patchReferralsDom(state);
   }
 
+  function parseGalacticPoliticsPageState() {
+    const el = document.getElementById("galactic-politics-page-state");
+    if (el && el.textContent) {
+      try { return JSON.parse(el.textContent); } catch (_) {}
+    }
+    return null;
+  }
+
+  function _gdPhaseLabel(phase) {
+    if (phase === "vote_open") return t("gd_politics_phase_vote", "Abstimmung");
+    if (phase === "active") return t("gd_politics_phase_active", "Mandat aktiv");
+    return t("gd_politics_phase_resolved", "Abgeschlossen");
+  }
+
+  function _gdCountdownPrefix(phase) {
+    if (phase === "vote_open") return t("gd_politics_countdown_vote", "Abstimmung endet in");
+    if (phase === "active") return t("gd_politics_countdown_active", "Mandat endet in");
+    return t("gd_politics_countdown_resolved", "Zyklus beendet");
+  }
+
+  function _gdOptionCardHtml(entry, opt) {
+    const key = escapeHtml(String(opt.key || ""));
+    const title = escapeHtml(t(opt.label_key, key));
+    const desc = escapeHtml(t(opt.description_key, ""));
+    const votes = fmtNumber(Math.max(0, Number(opt.vote_count) || 0));
+    const selected = Boolean(opt.selected);
+    const onCooldown = Boolean(opt.on_cooldown);
+    const canVote = Boolean(entry.can_vote);
+    let stateClass = "";
+    if (selected) stateClass = "galactic-politics-option--selected";
+    if (onCooldown) stateClass += " galactic-politics-option--cooldown";
+    let action = "";
+    if (onCooldown) {
+      action = `<p class="galactic-politics-cooldown-note">${escapeHtml(t("gd_politics_cooldown", "Gesperrt (2× Sieg in Folge)"))}</p>`;
+    } else if (canVote) {
+      const btnLabel = selected
+        ? t("gd_politics_voted", "Deine Stimme")
+        : t("gd_politics_vote_btn", "Abstimmen");
+      action = `<button type="button"
+        class="gc-btn gc-btn-secondary gc-btn-sm galactic-politics-vote-btn"
+        data-gd-vote-btn
+        data-galaxy="${Number(entry.galaxy) || 0}"
+        data-directive-key="${key}"
+        ${selected ? 'disabled aria-pressed="true"' : ""}>${escapeHtml(btnLabel)}</button>`;
+    }
+    return `
+      <article class="galactic-politics-option ${stateClass.trim()}"
+               data-gd-option
+               data-directive-key="${key}"
+               data-on-cooldown="${onCooldown ? "1" : "0"}">
+        <div class="galactic-politics-option-head">
+          <h3 class="galactic-politics-option-title">${title}</h3>
+          <span class="galactic-politics-option-votes gc-mono" data-gd-option-votes>${votes}</span>
+        </div>
+        <p class="galactic-politics-option-desc hint">${desc}</p>
+        ${action}
+      </article>
+    `;
+  }
+
+  function _gdGalaxyCardHtml(entry) {
+    const galaxy = Number(entry.galaxy) || 0;
+    const phase = String(entry.cycle?.phase || "resolved");
+    const countdown = Math.max(0, Number(entry.cycle?.countdown_seconds) || 0);
+    const primary = escapeHtml(t(entry.active?.primary_label_key, entry.active?.primary || "—"));
+    const secondaryKey = entry.active?.secondary_label_key;
+    const secondary = secondaryKey
+      ? escapeHtml(t(secondaryKey, entry.active?.secondary || "—"))
+      : "—";
+    const options = Array.isArray(entry.options) ? entry.options : [];
+    let note = "";
+    if (entry.vote_reason === "no_colony") {
+      note = `<p class="galactic-politics-note hint">${escapeHtml(t("gd_politics_no_vote_right", "Kein Stimmrecht in dieser Galaxie."))}</p>`;
+    } else if (entry.vote_reason === "vote_closed") {
+      note = `<p class="galactic-politics-note hint">${escapeHtml(t("gd_politics_vote_closed", "Die Abstimmung ist geschlossen."))}</p>`;
+    }
+    const countdownText = phase === "resolved"
+      ? "—"
+      : formatCountdownRemain(countdown);
+    return `
+      <section class="gc-panel galactic-politics-panel galactic-politics-galaxy-card"
+               data-gd-galaxy-card
+               data-galaxy="${galaxy}">
+        <div class="gc-panel-header galactic-politics-galaxy-head">
+          <span class="gc-panel-title">${escapeHtml(t("gd_politics_galaxy_title", "Galaxie %(galaxy)s", { galaxy }))}</span>
+          <span class="galactic-politics-phase gc-mono" data-gd-phase-label data-phase="${escapeHtml(phase)}">${escapeHtml(_gdPhaseLabel(phase))}</span>
+        </div>
+        <div class="galactic-politics-active" data-gd-active-row>
+          <div class="gc-gd-chip">
+            <span class="gc-gd-chip-label">${escapeHtml(t("gd_banner_primary_label", "Primär"))}</span>
+            <span class="gc-gd-chip-value" data-gd-active-primary>${primary}</span>
+          </div>
+          <div class="gc-gd-chip gc-gd-chip--secondary">
+            <span class="gc-gd-chip-label">${escapeHtml(t("gd_banner_secondary_label", "Sekundär"))}</span>
+            <span class="gc-gd-chip-value" data-gd-active-secondary>${secondary}</span>
+          </div>
+        </div>
+        <p class="galactic-politics-countdown gc-mono" data-gd-countdown data-seconds="${countdown}">
+          ${escapeHtml(_gdCountdownPrefix(phase))}:
+          <strong data-gd-countdown-value>${escapeHtml(countdownText)}</strong>
+        </p>
+        ${note}
+        <div class="galactic-politics-options" data-gd-options>
+          ${options.map((opt) => _gdOptionCardHtml(entry, opt)).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function patchGalacticPoliticsDom(state) {
+    if (!state || typeof state !== "object") return;
+    const page = document.getElementById("galactic-politics-page");
+    if (!page) return;
+    const list = page.querySelector("[data-gd-galaxy-list]");
+    if (!list || !Array.isArray(state.galaxies)) return;
+    list.innerHTML = state.galaxies.map((entry) => _gdGalaxyCardHtml(entry)).join("");
+  }
+
+  let _galacticPoliticsBound = false;
+
+  function bindGalacticPoliticsOnce() {
+    if (_galacticPoliticsBound) return;
+    _galacticPoliticsBound = true;
+
+    document.addEventListener("click", async (ev) => {
+      const btn = ev.target.closest("[data-gd-vote-btn]");
+      if (!btn || btn.disabled) return;
+      const page = document.getElementById("galactic-politics-page");
+      if (!page) return;
+      const galaxy = Number(btn.dataset.galaxy) || 0;
+      const directiveKey = String(btn.dataset.directiveKey || "").trim();
+      if (!galaxy || !directiveKey) return;
+      const res = await GC.fetchGameAction("/api/galactic-politics/vote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          galaxy,
+          directive_key: directiveKey,
+          request_id: newRequestId(),
+        }),
+      });
+      if (res?.state) applyActionState(res, "galactic_politics_vote");
+      if (res?.galactic_politics) patchGalacticPoliticsDom(res.galactic_politics);
+      if (res?.ok) {
+        showNotify(t("gd_politics_vote_ok", "Stimme registriert."), "success");
+      } else {
+        const reason = String(res?.reason || "");
+        const msg = reason === "no_colony"
+          ? t("gd_politics_err_no_colony", "Kein Stimmrecht in dieser Galaxie.")
+          : reason === "vote_closed"
+            ? t("gd_politics_err_vote_closed", "Abstimmung ist geschlossen.")
+            : reason === "cooldown"
+              ? t("gd_politics_err_cooldown", "Diese Direktive ist gesperrt.")
+              : t("gd_politics_vote_fail", "Stimme konnte nicht gespeichert werden.");
+        showNotify(msg, "error");
+      }
+    });
+  }
+
+  function initGalacticPolitics() {
+    bindGalacticPoliticsOnce();
+    const page = document.getElementById("galactic-politics-page");
+    if (!page || page.dataset.ready !== "1") return;
+    const state = parseGalacticPoliticsPageState();
+    if (state) patchGalacticPoliticsDom(state);
+    syncTradingSubnav("galactic_politics");
+  }
+
   function initTraderHub() {
     initExchangePanel();
     initScrapyardPanel();
@@ -19177,6 +19345,7 @@
   GC.modules.auction_house = initAuctionHouse;
   GC.modules.vote_center = initVoteCenter;
   GC.modules.referrals = initReferrals;
+  GC.modules.galactic_politics = initGalacticPolitics;
   GC.modules.trader_hub = initTraderHub;
   GC.modules.fleet = initFleet;
   GC.modules.logistics = initLogistics;

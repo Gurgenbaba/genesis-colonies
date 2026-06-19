@@ -54,7 +54,7 @@
       <p class="auth-hero-sub">{{ subtitle }}</p>
     </div>
 
-    <section class="auth-panel auth-panel--login" aria-label="{{ ttl }}">
+    <section class="auth-panel auth-panel--login{% if DISCORD_OAUTH_ENABLED %} auth-panel--discord-first{% endif %}" aria-label="{{ ttl }}">
 
       {% if err %}
         <div class="auth-error auth-terminal-alert" id="form-error" role="alert" aria-live="assertive" tabindex="-1">
@@ -63,9 +63,16 @@
         </div>
       {% endif %}
 
+      {% if DISCORD_OAUTH_ENABLED %}
+        {% set discord_label = T("login_btn_discord") %}
+        {% if discord_label == "login_btn_discord" %}{% set discord_label = "Mit Discord einloggen" %}{% endif %}
+        {% include "partials/auth_discord_oauth.html" %}
+        {% include "partials/auth_discord_divider.html" %}
+      {% endif %}
+
       <form method="POST"
             action="{{ url_for('login') }}"
-            class="auth-form"
+            class="auth-form auth-form--classic"
             novalidate
             data-validate="login">
         {{ csrf_input() }}

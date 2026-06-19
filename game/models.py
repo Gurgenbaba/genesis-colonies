@@ -171,12 +171,26 @@ def init_db() -> None:
         )
     except sqlite3.OperationalError:
         pass
+    try:
+        cur.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_discord_id
+                ON users (discord_id)
+                WHERE discord_id IS NOT NULL;
+            """
+        )
+    except sqlite3.OperationalError:
+        pass
 
     for col, typedef in (
         ("email_verified", "INTEGER NOT NULL DEFAULT 0"),
         ("email_verification_token", "TEXT"),
         ("password_reset_token", "TEXT"),
         ("password_reset_expires_at", "INTEGER"),
+        ("discord_id", "TEXT"),
+        ("discord_username", "TEXT"),
+        ("discord_avatar", "TEXT"),
+        ("discord_email", "TEXT"),
     ):
         try:
             cur.execute(f"ALTER TABLE users ADD COLUMN {col} {typedef};")

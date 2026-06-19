@@ -74,11 +74,13 @@ def test_fresh_init_then_migrate(temp_db):
         assert index_exists(conn, "idx_build_queue_planet_finish")
         assert index_exists(conn, "idx_research_queue_user_finish")
         assert index_exists(conn, "idx_action_idempotency_created")
+        assert index_exists(conn, "idx_users_discord_id")
 
         applied = conn.execute("SELECT name FROM migration_history;").fetchall()
         names = {r["name"] for r in applied}
         assert "008_persistence_hardening.sql" in names
         assert "009_legacy_planets_hardening.sql" in names
+        assert "072_discord_oauth.sql" in names
     finally:
         conn.close()
 

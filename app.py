@@ -85,6 +85,7 @@ from game import support as support_logic
 from game import messages as messages_logic
 from game import options as options_logic
 from game import account_email as account_email_logic
+from game import discord_auth as discord_auth_logic
 
 from game.bootstrap import bootstrap_application
 from game.config import get_secret_key, is_debug_enabled, is_production
@@ -414,6 +415,14 @@ def inject_globals():
     )
 
     active_locale = current_locale()
+    auth_discord_linked = False
+    try:
+        if auth_user and auth_user.get("id"):
+            snap = discord_auth_logic.discord_link_snapshot(int(auth_user["id"]))
+            auth_discord_linked = bool(snap.get("discord_linked"))
+    except Exception:
+        auth_discord_linked = False
+
     return dict(
         T=T,
         T_DATA=get_locale_dict(active_locale),
@@ -460,6 +469,9 @@ def inject_globals():
         current_planet_landscape_url=current_planet_landscape_url,
         current_planet_landscape_webp_url=current_planet_landscape_webp_url,
         SERVER_TIME=int(time.time()),
+        DISCORD_OAUTH_ENABLED=discord_auth_logic.discord_oauth_configured(),
+        DISCORD_INVITE_URL=discord_auth_logic.discord_invite_url(),
+        AUTH_DISCORD_LINKED=auth_discord_linked,
     )
 
 
@@ -698,6 +710,106 @@ def logout():
     logout_user()
     flash(T("msg_logout_success") or "Erfolgreich abgemeldet.", "success")
     return redirect(url_for("landing"))
+
+
+@app.route("/auth/discord")
+def auth_discord_start():
+    if not discord_auth_logic.discord_oauth_configured():
+        flash(T("discord_oauth_unavailable"), "error")
+        return redirect(url_for("login"))
+
+    state = discord_auth_logic.start_oauth_session(session, link=False)
+    return redirect(discord_auth_logic.build_authorize_url(state))
+
+
+@app.route("/auth/discord/link")
+@require_login
+def auth_discord_link_start():
+    if not discord_auth_logic.discord_oauth_configured():
+        flash(T("discord_oauth_unavailable"), "error")
+        return redirect(url_for("options_view"))
+
+    state = discord_auth_logic.start_oauth_session(session, link=True)
+    return redirect(discord_auth_logic.build_authorize_url(state))
+
+
+def _discord_callback_redirect_on_error(is_link: bool):
+    if is_link and session.get("user_id"):
+        return redirect(url_for("options_view"))
+    return redirect(url_for("login"))
+
+
+@app.route("/auth/discord/callback")
+def auth_discord_callback():
+    if not discord_auth_logic.discord_oauth_configured():
+        flash(T("discord_oauth_unavailable"), "error")
+        return redirect(url_for("login"))
+
+    received_state = str(request.args.get("state") or "")
+    valid, is_link = discord_auth_logic.consume_oauth_session(session, received_state)
+    if not valid:
+        flash(T("discord_oauth_state_invalid"), "error")
+        return _discord_callback_redirect_on_error(is_link)
+
+    oauth_error = str(request.args.get("error") or "").strip()
+    if oauth_error:
+        flash(T("discord_oauth_denied"), "error")
+        return _discord_callback_redirect_on_error(is_link)
+
+    code = str(request.args.get("code") or "").strip()
+    if not code:
+        flash(T("discord_oauth_failed"), "error")
+        return _discord_callback_redirect_on_error(is_link)
+
+    if is_link:
+        user_id = session.get("user_id")
+        if not user_id:
+            flash(T("discord_link_requires_login"), "error")
+            return redirect(url_for("login"))
+
+        ok, err_key, _data = discord_auth_logic.complete_discord_link(code, int(user_id))
+        if not ok:
+            msg = T(err_key) if err_key and T(err_key) != err_key else T("discord_link_failed")
+            flash(msg, "error")
+            return redirect(url_for("options_view"))
+
+        if err_key == "discord_already_linked":
+            flash(T("discord_already_linked"), "info")
+        else:
+            flash(T("msg_discord_link_success"), "success")
+        return redirect(url_for("options_view"))
+
+    ok, err_key, user = discord_auth_logic.complete_discord_callback(code)
+    if not ok or not user:
+        msg = T(err_key) if err_key and T(err_key) != err_key else T("discord_oauth_failed")
+        flash(msg, "error")
+        return redirect(url_for("login"))
+
+    login_user(user)
+    if err_key == "discord_register_ok":
+        flash(T("msg_discord_register_success"), "success")
+        return redirect(url_for("discord_welcome"))
+    flash(T("msg_discord_login_success"), "success")
+    return redirect(url_for("overview"))
+
+
+@app.route("/welcome/discord")
+@require_login
+def discord_welcome():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for("login"))
+
+    discord_row = discord_auth_logic.get_user_discord_row(int(user["id"]))
+    if not discord_row or not discord_row.get("discord_id"):
+        return redirect(url_for("overview"))
+
+    commander_name = str(user.get("name") or user.get("username") or "Commander")
+    return render_template(
+        "discord_welcome.html",
+        commander_name=commander_name,
+        discord_display=discord_auth_logic.discord_display_name(discord_row),
+    )
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -2649,7 +2761,96 @@ def api_vote_rewards_claim_all():
 @app.route("/galactic-politics")
 @require_login
 def galactic_politics_view():
-    return _render_placeholder_module("galactic_politics")
+    ctx = _load_page_live_context(finish_source="galactic_politics")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.galactic_directives import get_galactic_politics_state
+
+    politics_state = {"ready": False, "galaxies": []}
+    conn = db()
+    try:
+        politics_state = get_galactic_politics_state(int(session["user_id"]), conn=conn)
+    finally:
+        conn.close()
+
+    return render_template(
+        "galactic_politics.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        politics_state=politics_state,
+    )
+
+
+@app.route("/api/galactic-politics/state", methods=["GET"])
+@require_login
+def api_galactic_politics_state():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+    from game.galactic_directives import get_galactic_politics_state
+
+    conn = db()
+    try:
+        politics = get_galactic_politics_state(user_id, conn=conn)
+    finally:
+        conn.close()
+    return jsonify({"ok": True, "galactic_politics": politics})
+
+
+@app.route("/api/galactic-politics/vote", methods=["POST"])
+@require_login
+def api_galactic_politics_vote():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached:
+            return jsonify(cached)
+
+    galaxy = data.get("galaxy")
+    directive_key = str(data.get("directive_key") or data.get("directive") or "").strip()
+    from game.galactic_directives import get_galactic_politics_state, submit_directive_vote
+
+    conn = db()
+    try:
+        result = submit_directive_vote(user_id, galaxy, directive_key, conn=conn)
+        conn.commit()
+    except Exception:
+        logger.exception("galactic directive vote failed user_id=%s galaxy=%s", user_id, galaxy)
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_vote")
+        return jsonify({"ok": False, "reason": "vote_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    ok = bool(result.get("ok"))
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_galactic_politics_vote")
+    conn2 = db()
+    try:
+        politics = get_galactic_politics_state(user_id, conn=conn2)
+    finally:
+        conn2.close()
+
+    resp: Dict[str, Any] = {
+        "ok": ok,
+        "reason": result.get("reason"),
+        "state": state,
+        "galactic_politics": politics,
+    }
+    if ok:
+        resp["vote"] = {
+            "galaxy": result.get("galaxy"),
+            "directive": result.get("directive"),
+            "cycle_id": result.get("cycle_id"),
+        }
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    status = 200 if ok else 400
+    return jsonify(resp), status
 
 
 @app.route("/skilltree")
@@ -3817,6 +4018,11 @@ def options_view():
 
     pid = _current_player_id()
     options_data = options_logic.get_options_snapshot(int(pid)) if pid else {}
+    if pid:
+        try:
+            options_data.update(discord_auth_logic.discord_link_snapshot(int(pid)))
+        except Exception:
+            pass
 
     return render_template(
         "options.html",
@@ -3965,6 +4171,25 @@ def api_options_resend_verification():
         status = 429 if err == "options_error_verify_resend_rate" else 400
         return _options_api_response(False, err, None, status)
     return _options_api_response(True, err, {"email_verified": False})
+
+
+@app.route("/api/account/unlink-discord", methods=["POST"])
+@require_login_api
+def api_account_unlink_discord():
+    pid = _current_player_id()
+    if not pid:
+        return _options_api_response(False, "not_logged_in", None, 401)
+
+    payload = request.get_json(silent=True) or {}
+    current_password = str(payload.get("current_password") or "")
+
+    ok, err, data = discord_auth_logic.unlink_discord_from_user(
+        int(pid),
+        current_password=current_password or None,
+    )
+    if not ok:
+        return _options_api_response(False, err, data, 400)
+    return _options_api_response(True, err, data)
 
 
 @app.route("/messages")

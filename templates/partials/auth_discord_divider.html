@@ -1,0 +1,5 @@
+{% if DISCORD_OAUTH_ENABLED %}
+  <div class="auth-divider auth-divider--below-discord" role="separator" aria-label="{{ T('login_divider_or') if T('login_divider_or') != 'login_divider_or' else 'oder' }}">
+    <span>{{ T('login_divider_or') if T('login_divider_or') != 'login_divider_or' else 'oder' }}</span>
+  </div>
+{% endif %}

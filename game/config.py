@@ -219,3 +219,15 @@ def init_config() -> None:
     """Load .env and normalize paths. Call once at process start."""
     _load_dotenv()
     _normalize_database_url()
+    if not is_production():
+        try:
+            from game.discord_auth import discord_oauth_configured
+
+            if not discord_oauth_configured():
+                print(
+                    "[GC config] Discord OAuth disabled — set DISCORD_CLIENT_ID and "
+                    "DISCORD_CLIENT_SECRET in .env (optional: DISCORD_REDIRECT_URI or PUBLIC_BASE_URL).",
+                    file=sys.stderr,
+                )
+        except Exception:
+            pass

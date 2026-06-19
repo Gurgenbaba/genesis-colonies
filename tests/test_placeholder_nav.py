@@ -107,12 +107,16 @@ def test_placeholder_routes_render(placeholder_db):
     assert inv.status_code == 200
     assert "inventory-page" in inv.get_data(as_text=True)
 
-    for slug in ("galactic-politics", "skilltree", "premium"):
+    for slug in ("skilltree", "premium"):
         res = client.get(f"/{slug}")
         body = res.get_data(as_text=True)
         assert res.status_code == 200, slug
         assert "gc-placeholder-page" in body
         assert "gc-nav-wip-badge" in body or "gc-placeholder-badge" in body
+
+    politics = client.get("/galactic-politics")
+    assert politics.status_code == 200
+    assert "galactic-politics-page" in politics.get_data(as_text=True)
 
     auction = client.get("/auction-house")
     assert auction.status_code == 200

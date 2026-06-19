@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{% set ttl = T("discord_welcome_title") %}
+{% if ttl == "discord_welcome_title" %}{% set ttl = "Willkommen, Commander!" %}{% else %}{% set ttl = ttl | striptags %}{% endif %}
+
+{% set join_label = T("discord_welcome_join_server") %}
+{% if join_label == "discord_welcome_join_server" %}{% set join_label = "Discord Server beitreten" %}{% endif %}
+
+{% set overview_label = T("discord_welcome_open_overview") %}
+{% if overview_label == "discord_welcome_open_overview" %}{% set overview_label = "Übersicht öffnen" %}{% endif %}
+
+<div class="gc-page auth-page auth-page--discord-welcome">
+
+  <div class="auth-backdrop" aria-hidden="true"></div>
+  <div class="auth-backdrop-form" aria-hidden="true"></div>
+
+  <div class="auth-shell auth-shell--welcome">
+
+    <section class="auth-panel auth-panel--welcome" aria-label="{{ ttl }}">
+      <p class="auth-eyebrow">Genesis Colonies</p>
+      <h1 class="auth-hero-title auth-welcome-title">
+        {% set welcome_tpl = T("discord_welcome_title") %}
+        {% if welcome_tpl == "discord_welcome_title" %}
+          Willkommen, Commander {{ commander_name | e }}!
+        {% else %}
+          {{ welcome_tpl.replace("{name}", commander_name) | safe }}
+        {% endif %}
+      </h1>
+
+      <ul class="auth-welcome-checklist">
+        <li>
+          <span class="auth-welcome-check" aria-hidden="true">✓</span>
+          <span>{{ T("discord_welcome_check_linked") if T("discord_welcome_check_linked") != "discord_welcome_check_linked" else "Discord verbunden" }}</span>
+        </li>
+        <li>
+          <span class="auth-welcome-check" aria-hidden="true">✓</span>
+          <span>{{ T("discord_welcome_check_account") if T("discord_welcome_check_account") != "discord_welcome_check_account" else "Account erstellt" }}</span>
+        </li>
+      </ul>
+
+      {% if discord_display %}
+        <p class="auth-welcome-discord-name">
+          <span class="auth-welcome-discord-icon" aria-hidden="true">🎧</span>
+          {{ discord_display | e }}
+        </p>
+      {% endif %}
+
+      <p class="auth-welcome-lead">
+        {{ T("discord_welcome_community_lead") if T("discord_welcome_community_lead") != "discord_welcome_community_lead" else "Tritt unserer Community bei – Events, Updates und Commander im Tchat." }}
+      </p>
+
+      <div class="auth-welcome-actions">
+        <a href="{{ DISCORD_INVITE_URL }}"
+           class="gc-btn gc-btn-lg auth-btn-discord auth-btn-discord--primary"
+           target="_blank"
+           rel="noopener noreferrer">
+          <svg class="discord-icon" viewBox="0 0 127.14 96.36" aria-hidden="true">
+            <path fill="currentColor"
+                  d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83
+                  97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0
+                  105.89 105.89 0 0 0 19.39 8.09C2.79 32.65-1.71 56.6.54 80.21
+                  a105.73 105.73 0 0 0 32.17 16.15
+                  a77.7 77.7 0 0 0 6.89-11.11
+                  a68.42 68.42 0 0 1-10.85-5.18
+                  c.91-.66 1.8-1.34 2.66-2.04
+                  a75.57 75.57 0 0 0 64.32 0
+                  c.87.71 1.76 1.39 2.66 2.04
+                  a68.68 68.68 0 0 1-10.87 5.19
+                  a77 77 0 0 0 6.89 11.1
+                  A105.25 105.25 0 0 0 126.6 80.22
+                  c2.64-27.38-4.5-51.11-18.9-72.15ZM42.45 65.69
+                  c-6.08 0-11.06-5.55-11.06-12.39
+                  s4.86-12.39 11.06-12.39
+                  c6.2 0 11.17 5.6 11.06 12.39
+                  c0 6.84-4.87 12.39-11.06 12.39Zm42.24 0
+                  c-6.08 0-11.06-5.55-11.06-12.39
+                  s4.86-12.39 11.06-12.39
+                  c6.2 0 11.17 5.6 11.06 12.39
+                  c0 6.84-4.87 12.39-11.06 12.39Z"/>
+          </svg>
+          <span>{{ join_label }}</span>
+        </a>
+
+        <a href="{{ url_for('overview') }}"
+           class="gc-btn gc-btn-primary gc-btn-lg auth-btn-primary auth-welcome-overview-btn">
+          {{ overview_label }}
+        </a>
+      </div>
+    </section>
+  </div>
+</div>
+
+{% endblock %}
