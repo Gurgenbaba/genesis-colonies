@@ -3116,6 +3116,7 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         outcome = resolve_expedition_outcome(
             movement_id,
             cargo_total=cargo_total,
+            ships=ships,
             expedition_ship_count=count_expedition_ships(ships),
             flight_seconds=flight_seconds_base,
             world_type=str(world_context.get("world_type") or "") if world_context else None,

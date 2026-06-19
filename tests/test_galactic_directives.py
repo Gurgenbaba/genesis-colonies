@@ -359,22 +359,24 @@ def test_get_directive_flags_for_galaxy_exploration(gd_db):
 def test_resolve_expedition_outcome_applies_loot_mult(gd_db):
     from game.expedition_events import resolve_expedition_outcome
 
-    base = resolve_expedition_outcome(
+    cargo = 1_000_000
+    full = resolve_expedition_outcome(
         42,
-        cargo_total=1_000_000,
+        cargo_total=cargo,
         expedition_ship_count=3,
         flight_seconds=120,
         directive_flags={"expedition_loot_mult": 1.0},
     )
     boosted = resolve_expedition_outcome(
         42,
-        cargo_total=1_000_000,
+        cargo_total=cargo,
         expedition_ship_count=3,
         flight_seconds=120,
         directive_flags={"expedition_loot_mult": 2.0},
     )
-    if int(base.get("reward_total") or 0) > 0:
-        assert int(boosted.get("reward_total") or 0) == int(base["reward_total"]) * 2
+    if int(full.get("reward_total") or 0) > 0:
+        assert int(full["reward_total"]) == cargo
+        assert int(boosted["reward_total"]) == cargo
 
 
 def test_build_galactic_directive_banner_invalid_galaxy(gd_db):
