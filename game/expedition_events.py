@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import random
 from typing import Any, Dict, Mapping, MutableMapping, Sequence, Tuple
 
@@ -11,6 +12,35 @@ EXPEDITION_REPORT_VERSION = 2
 
 # Expedition loot uses expedition-hull cargo × multiplier (not transport cargo semantics).
 EXPEDITION_LOOT_CARGO_MULTIPLIER = 50
+
+# sqrt(fleet_value) × factor — dampened scaling so full fleets pay off without linear explosion.
+# Calibrated so ~13M fleet value lands ~250k–800k on mineral/debris (before cargo cap).
+EXPEDITION_LOOT_FACTOR = 95
+_LOOT_VARIANCE_RANGE = (0.75, 1.35)
+
+# Per-event multiplier band and resource split (shares sum to 1.0).
+_EVENT_LOOT_PROFILES: Dict[str, Dict[str, Any]] = {
+    "mineral_deposit": {
+        "mult_range": (1.00, 1.35),
+        "split": {"metal": 0.62, "crystal": 0.38},
+    },
+    "fuel_cache": {
+        "mult_range": (0.85, 1.15),
+        "split": {"fuel_cells": 1.0},
+    },
+    "debris_salvage": {
+        "mult_range": (1.10, 1.60),
+        "split": {"metal": 0.70, "crystal": 0.25, "fuel_cells": 0.05},
+    },
+    "ancient_stash": {
+        "mult_range": (1.80, 3.00),
+        "split": {"metal": 0.50, "crystal": 0.35, "fuel_cells": 0.15},
+    },
+    "distress_beacon": {
+        "mult_range": (0.90, 1.25),
+        "split": {"metal": 0.45, "crystal": 0.30, "fuel_cells": 0.25},
+    },
+}
 
 # Weighted event table (sum = 100). Server-authoritative; extend here only.
 _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
@@ -28,7 +58,6 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
         "label_key": "expedition_event_mineral_deposit",
         "desc_key": "expedition_event_mineral_deposit_desc",
         "severity": "normal",
-        "rewards": {"loot": True},
     },
     {
         "key": "fuel_cache",
@@ -36,7 +65,6 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
         "label_key": "expedition_event_fuel_cache",
         "desc_key": "expedition_event_fuel_cache_desc",
         "severity": "normal",
-        "rewards": {"loot": True},
     },
     {
         "key": "debris_salvage",
@@ -44,7 +72,6 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
         "label_key": "expedition_event_debris_salvage",
         "desc_key": "expedition_event_debris_salvage_desc",
         "severity": "minor",
-        "rewards": {"loot": True},
     },
     {
         "key": "nav_interference",
@@ -61,7 +88,6 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
         "label_key": "expedition_event_distress_beacon",
         "desc_key": "expedition_event_distress_beacon_desc",
         "severity": "normal",
-        "rewards": {"loot": True},
         "delay_chance": 0.25,
     },
     {
@@ -78,7 +104,6 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
         "label_key": "expedition_event_ancient_stash",
         "desc_key": "expedition_event_ancient_stash_desc",
         "severity": "major",
-        "rewards": {"loot": True},
     },
 )
 
@@ -88,17 +113,38 @@ _SALVAGE_EVENT_KEYS: frozenset[str] = frozenset(
     {"debris_salvage", "mineral_deposit", "fuel_cache", "distress_beacon"}
 )
 
-_NO_LOOT_EVENT_KEYS: frozenset[str] = frozenset(
-    {"void_scan", "sensor_glitch", "nav_interference"}
-)
-
-_LOOT_EVENT_KEYS: frozenset[str] = frozenset(
-    {"mineral_deposit", "fuel_cache", "debris_salvage", "ancient_stash", "distress_beacon"}
-)
-
 
 def expedition_event_keys() -> frozenset[str]:
     return frozenset(_EVENT_BY_KEY.keys())
+
+
+def _event_has_loot(event_key: str) -> bool:
+    return str(event_key) in _EVENT_LOOT_PROFILES
+
+
+def calculate_fleet_value(ships: Mapping[str, int]) -> int:
+    """Sum of hull count × score_value for all ships on the expedition."""
+    total = 0
+    for key, qty in ships.items():
+        amount = int(qty or 0)
+        if amount <= 0:
+            continue
+        total += amount * ship_score_value(str(key))
+    return max(0, total)
+
+
+def _fleet_value_for_outcome(
+    ships: Mapping[str, int] | None,
+    expedition_ship_count: int,
+) -> int:
+    if ships:
+        value = calculate_fleet_value(ships)
+        if value > 0:
+            return value
+    hulls = max(0, int(expedition_ship_count))
+    if hulls <= 0:
+        return 0
+    return hulls * ship_score_value("solar_skiff")
 
 
 def count_expedition_ships(ships: Mapping[str, int]) -> int:
@@ -111,23 +157,6 @@ def count_expedition_ships(ships: Mapping[str, int]) -> int:
         if spec.get("role") == "expedition":
             total += amount
     return total
-
-
-def calculate_fleet_value(
-    ships: Mapping[str, int],
-    *,
-    expedition_ship_count: int = 0,
-) -> int:
-    """Sum of ship_count × score_value for all hulls in the expedition fleet."""
-    total = 0
-    for key, qty in ships.items():
-        amount = int(qty or 0)
-        if amount <= 0:
-            continue
-        total += amount * ship_score_value(str(key))
-    if total <= 0 and int(expedition_ship_count) > 0:
-        total = int(expedition_ship_count) * ship_score_value("solar_skiff")
-    return max(0, total)
 
 
 def calculate_expedition_loot_cap(ships: Mapping[str, int]) -> int:
@@ -169,7 +198,7 @@ def _pick_event_key(
         weight = float(event["weight"])
         if key in empty_keys:
             weight = max(1.0, weight * (1.0 - bonus))
-        elif event.get("rewards"):
+        elif _event_has_loot(key):
             weight = weight * (1.0 + bonus)
         adjusted.append((key, weight))
     if not adjusted:
@@ -183,106 +212,46 @@ def _pick_event_key(
     return str(_EXPEDITION_EVENTS[-1]["key"])
 
 
-def _allocate_integer_shares(total: int, shares: Mapping[str, float]) -> Dict[str, int]:
-    """Split *total* across resource keys; remainder goes to the last key."""
-    rewards = {key: 0 for key in VALID_RESOURCE_KEYS}
-    amount = max(0, int(total))
-    if amount <= 0:
-        return rewards
-
-    keys = [str(k) for k in shares if str(k) in VALID_RESOURCE_KEYS and float(shares[k]) > 0]
-    if not keys:
-        return rewards
-
-    allocated = 0
-    for key in keys[:-1]:
-        part = int(amount * float(shares[key]))
-        rewards[key] = part
-        allocated += part
-    rewards[keys[-1]] = amount - allocated
-    return rewards
-
-
-def _split_loot_total(
-    rng: random.Random,
-    event_key: str,
-    total: int,
-) -> Dict[str, int]:
-    amount = max(0, int(total))
-    if amount <= 0 or event_key not in _LOOT_EVENT_KEYS:
-        return {key: 0 for key in VALID_RESOURCE_KEYS}
-
-    if event_key == "mineral_deposit":
-        metal_share = rng.uniform(0.45, 0.60)
-        return _allocate_integer_shares(
-            amount,
-            {"metal": metal_share, "crystal": 1.0 - metal_share},
-        )
-
-    if event_key == "fuel_cache":
-        fuel_share = rng.uniform(0.75, 1.0)
-        remainder = max(0.0, 1.0 - fuel_share)
-        if remainder <= 0:
-            return _allocate_integer_shares(amount, {"fuel_cells": 1.0})
-        metal_share = rng.uniform(0.0, 1.0) * remainder
-        return _allocate_integer_shares(
-            amount,
-            {
-                "fuel_cells": fuel_share,
-                "metal": metal_share,
-                "crystal": remainder - metal_share,
-            },
-        )
-
-    if event_key == "debris_salvage":
-        raw = {
-            "fuel_cells": rng.uniform(0.0, 0.10),
-            "metal": rng.uniform(0.50, 0.70),
-            "crystal": rng.uniform(0.25, 0.45),
-        }
-        norm = sum(raw.values()) or 1.0
-        shares = {key: value / norm for key, value in raw.items()}
-        return _allocate_integer_shares(amount, shares)
-
-    if event_key in {"ancient_stash", "distress_beacon"}:
-        cut_a = rng.random()
-        cut_b = rng.random()
-        if cut_a + cut_b >= 1.0:
-            cut_a *= 0.49
-            cut_b *= 0.49
-        metal_share = cut_a
-        crystal_share = cut_b
-        fuel_share = max(0.0, 1.0 - metal_share - crystal_share)
-        return _allocate_integer_shares(
-            amount,
-            {"metal": metal_share, "crystal": crystal_share, "fuel_cells": fuel_share},
-        )
-
+def _empty_rewards() -> Dict[str, int]:
     return {key: 0 for key in VALID_RESOURCE_KEYS}
 
 
-def _effective_loot_total(
-    cargo_total: int,
-    *,
-    loot_mult: float = 1.0,
-    wreckage_bonus: float = 0.0,
-    salvage: bool = False,
-) -> int:
-    cap = max(0, int(cargo_total))
-    mult = max(0.0, float(loot_mult))
-    if salvage and wreckage_bonus:
-        mult *= 1.0 + max(0.0, float(wreckage_bonus))
-    return min(cap, max(0, int(cap * mult)))
+def _split_loot_total(total: int, split: Mapping[str, float]) -> Dict[str, int]:
+    rewards = _empty_rewards()
+    if total <= 0:
+        return rewards
+    ordered = [(str(k), float(v)) for k, v in split.items() if k in VALID_RESOURCE_KEYS and float(v) > 0]
+    if not ordered:
+        return rewards
+    allocated = 0
+    for idx, (resource, share) in enumerate(ordered):
+        if idx == len(ordered) - 1:
+            amount = max(0, total - allocated)
+        else:
+            amount = int(total * share)
+            allocated += amount
+        rewards[resource] = amount
+    return rewards
 
 
-def _compute_event_rewards(
+def _compute_event_loot(
     rng: random.Random,
     event_key: str,
-    loot_total: int,
+    fleet_value: int,
 ) -> Dict[str, int]:
-    if event_key in _NO_LOOT_EVENT_KEYS or loot_total <= 0:
-        return {key: 0 for key in VALID_RESOURCE_KEYS}
-    return _split_loot_total(rng, event_key, loot_total)
+    profile = _EVENT_LOOT_PROFILES.get(str(event_key))
+    if not profile or fleet_value <= 0:
+        return _empty_rewards()
+
+    loot_score = math.sqrt(max(0, int(fleet_value)))
+    base_loot = loot_score * EXPEDITION_LOOT_FACTOR
+
+    mult_lo, mult_hi = profile["mult_range"]
+    event_mult = rng.uniform(float(mult_lo), float(mult_hi))
+    variance = rng.uniform(_LOOT_VARIANCE_RANGE[0], _LOOT_VARIANCE_RANGE[1])
+    total_loot = max(0, int(base_loot * event_mult * variance))
+
+    return _split_loot_total(total_loot, profile.get("split") or {})
 
 
 def _scale_rewards_to_cargo(rewards: MutableMapping[str, int], cargo_total: int) -> None:
@@ -292,6 +261,22 @@ def _scale_rewards_to_cargo(rewards: MutableMapping[str, int], cargo_total: int)
     scale = cargo_total / max(1, loaded)
     for key in VALID_RESOURCE_KEYS:
         rewards[key] = int(int(rewards.get(key) or 0) * scale)
+
+
+def _apply_directive_reward_modifiers(
+    rewards: MutableMapping[str, int],
+    *,
+    loot_mult: float = 1.0,
+    wreckage_bonus: float = 0.0,
+    salvage: bool = False,
+) -> None:
+    mult = max(0.0, float(loot_mult))
+    if salvage and wreckage_bonus:
+        mult *= 1.0 + max(0.0, float(wreckage_bonus))
+    if mult == 1.0:
+        return
+    for key in VALID_RESOURCE_KEYS:
+        rewards[key] = int(int(rewards.get(key) or 0) * mult)
 
 
 def resolve_expedition_outcome(
@@ -310,14 +295,7 @@ def resolve_expedition_outcome(
     event_bonus = float(flags.get("expedition_event_bonus") or 0.0)
     loot_mult = float(flags.get("expedition_loot_mult") or 1.0)
     wreckage_bonus = float(flags.get("expedition_wreckage_bonus") or 0.0)
-
-    fleet_value = calculate_fleet_value(ships or {}, expedition_ship_count=expedition_ship_count)
-    loot_total = _effective_loot_total(
-        int(cargo_total),
-        loot_mult=loot_mult,
-        wreckage_bonus=wreckage_bonus,
-        salvage=salvage,
-    )
+    fleet_value = _fleet_value_for_outcome(ships, expedition_ship_count)
 
     rng = random.Random(int(movement_id) * 7919 + 104729)
     event_key = _pick_event_key(
@@ -327,7 +305,13 @@ def resolve_expedition_outcome(
         event_bonus=event_bonus,
     )
     event = _EVENT_BY_KEY[event_key]
-    rewards = _compute_event_rewards(rng, event_key, loot_total)
+    rewards = _compute_event_loot(rng, event_key, fleet_value)
+    _apply_directive_reward_modifiers(
+        rewards,
+        loot_mult=loot_mult,
+        wreckage_bonus=wreckage_bonus,
+        salvage=salvage,
+    )
     _scale_rewards_to_cargo(rewards, int(cargo_total))
 
     delay_extra = 0
@@ -347,8 +331,8 @@ def resolve_expedition_outcome(
         "reward_total": reward_total,
         "delay_extra": delay_extra,
         "expedition_ship_count": int(expedition_ship_count),
+        "fleet_value": int(fleet_value),
         "cargo_total": int(cargo_total),
-        "fleet_value": fleet_value,
     }
 
 

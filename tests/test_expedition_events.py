@@ -1,220 +1,171 @@
-"""Expedition loot — full cargo fill on positive outcomes, event-driven split."""
+"""Expedition loot scaling — fleet value, cargo cap, determinism."""
 
 from __future__ import annotations
 
 import pytest
 
 from game.expedition_events import (
-    calculate_expedition_loot_cap,
+    EXPEDITION_LOOT_FACTOR,
     calculate_fleet_value,
     resolve_expedition_outcome,
 )
 
+# ~13,024,000 fleet score (matches reported full-fleet expeditions).
+_LARGE_FLEET = {"seed_ark": 163}
+_LARGE_FLEET_VALUE = calculate_fleet_value(_LARGE_FLEET)
 
-def _large_fleet_ships() -> dict[str, int]:
-    return {
-        "seed_ark": 80,
-        "ironclad_frigate": 120,
-        "falcon_interceptor": 200,
-        "solar_skiff": 10,
-    }
+_SMALL_FLEET = {"solar_skiff": 1}
+_SMALL_FLEET_VALUE = calculate_fleet_value(_SMALL_FLEET)
+
+
+def _find_movement_for_event(event_key: str, *, ships: dict, cargo_total: int = 5_000_000) -> int:
+    for movement_id in range(1, 5000):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=cargo_total,
+            expedition_ship_count=1,
+            flight_seconds=120,
+            ships=ships,
+        )
+        if outcome["event_key"] == event_key:
+            return movement_id
+    raise AssertionError(f"no movement_id produced event {event_key!r}")
 
 
 def test_calculate_fleet_value_uses_ship_scores():
-    ships = {"solar_skiff": 2, "falcon_interceptor": 1}
-    expected = 2 * 7000 + 1 * 4000
-    assert calculate_fleet_value(ships) == expected
+    assert _LARGE_FLEET_VALUE == pytest.approx(13_040_000, rel=0.01)
+    assert _SMALL_FLEET_VALUE == 7000
 
 
-def test_calculate_fleet_value_fallback_to_expedition_hull_count():
-    from game.fleet_defs import ship_score_value
+def test_large_fleet_loot_beats_old_flat_ceiling():
+    movement_id = _find_movement_for_event("mineral_deposit", ships=_LARGE_FLEET)
+    outcome = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=5_000_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=_LARGE_FLEET,
+    )
+    assert outcome["event_key"] == "mineral_deposit"
+    assert int(outcome["reward_total"]) > 67_867
+    assert int(outcome["reward_total"]) >= 200_000
 
-    assert calculate_fleet_value({}, expedition_ship_count=3) == 3 * ship_score_value("solar_skiff")
 
-
-def test_positive_loot_fills_entire_cargo_capacity():
-    cargo_cap = 9_900_000
-    ships = _large_fleet_ships()
-
-    for movement_id in range(1, 301):
+def test_large_fleet_mineral_and_debris_in_target_band():
+    for event_key in ("mineral_deposit", "debris_salvage"):
+        movement_id = _find_movement_for_event(event_key, ships=_LARGE_FLEET)
         outcome = resolve_expedition_outcome(
             movement_id,
-            cargo_total=cargo_cap,
-            ships=ships,
-            expedition_ship_count=10,
-            flight_seconds=120,
-        )
-        if outcome["event_key"] == "mineral_deposit":
-            assert int(outcome["reward_total"]) == cargo_cap
-            rewards = outcome["rewards"]
-            assert sum(int(rewards[k]) for k in rewards) == cargo_cap
-            assert int(rewards["metal"]) > 0
-            assert int(rewards["crystal"]) > 0
-            assert int(rewards.get("fuel_cells") or 0) == 0
-            return
-    pytest.fail("no mineral_deposit in sample")
-
-
-def test_exact_cargo_fill_for_small_cap():
-    cargo_cap = 67_867
-    ships = {"solar_skiff": 1}
-
-    for movement_id in range(1, 200):
-        outcome = resolve_expedition_outcome(
-            movement_id,
-            cargo_total=cargo_cap,
-            ships=ships,
+            cargo_total=5_000_000,
             expedition_ship_count=1,
-            flight_seconds=60,
-        )
-        if outcome["event_key"] in {"mineral_deposit", "fuel_cache", "debris_salvage"}:
-            assert int(outcome["reward_total"]) == cargo_cap
-            return
-    pytest.fail("no loot event in sample")
-
-
-def test_loot_never_exceeds_cargo():
-    ships = _large_fleet_ships()
-    cargo_cap = calculate_expedition_loot_cap(ships)
-
-    for movement_id in range(1, 201):
-        outcome = resolve_expedition_outcome(
-            movement_id,
-            cargo_total=cargo_cap,
-            ships=ships,
-            expedition_ship_count=10,
             flight_seconds=120,
+            ships=_LARGE_FLEET,
         )
-        assert int(outcome["reward_total"]) <= cargo_cap
+        total = int(outcome["reward_total"])
+        assert total > 67_867
+        assert 200_000 <= total <= 900_000
 
 
-def test_no_loot_events_return_zero():
-    ships = _large_fleet_ships()
-    for movement_id in range(1, 500):
-        outcome = resolve_expedition_outcome(
-            movement_id,
-            cargo_total=1_000_000,
-            ships=ships,
-            expedition_ship_count=10,
-            flight_seconds=120,
-        )
-        if outcome["event_key"] in {"void_scan", "sensor_glitch", "nav_interference"}:
-            assert int(outcome["reward_total"]) == 0
+def test_ancient_stash_can_exceed_normal_events():
+    movement_id = _find_movement_for_event("ancient_stash", ships=_LARGE_FLEET)
+    ancient = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=5_000_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=_LARGE_FLEET,
+    )
+    mineral_id = _find_movement_for_event("mineral_deposit", ships=_LARGE_FLEET)
+    mineral = resolve_expedition_outcome(
+        mineral_id,
+        cargo_total=5_000_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=_LARGE_FLEET,
+    )
+    assert int(ancient["reward_total"]) > int(mineral["reward_total"])
+
+
+def test_large_fleet_produces_much_more_than_small_fleet():
+    movement_id = _find_movement_for_event("mineral_deposit", ships=_LARGE_FLEET)
+    large = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=500_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=_LARGE_FLEET,
+    )
+    small = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=500_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=_SMALL_FLEET,
+    )
+    assert int(large["reward_total"]) > int(small["reward_total"]) * 10
+
+
+def test_small_fleet_still_produces_modest_loot():
+    movement_id = _find_movement_for_event("mineral_deposit", ships=_SMALL_FLEET)
+    outcome = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=50_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=_SMALL_FLEET,
+    )
+    total = int(outcome["reward_total"])
+    assert 200 <= total <= 25_000
+
+
+def test_loot_capped_by_cargo_capacity():
+    movement_id = _find_movement_for_event("ancient_stash", ships=_LARGE_FLEET)
+    cargo_cap = 12_345
+    outcome = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=cargo_cap,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=_LARGE_FLEET,
+    )
+    assert int(outcome["reward_total"]) <= cargo_cap
 
 
 def test_outcome_deterministic_for_same_movement_and_fleet():
-    ships = _large_fleet_ships()
     kwargs = dict(
-        cargo_total=500_000,
-        ships=ships,
-        expedition_ship_count=10,
-        flight_seconds=120,
+        cargo_total=250_000,
+        expedition_ship_count=2,
+        flight_seconds=90,
+        ships={"solar_skiff": 2, "falcon_interceptor": 10},
     )
-    first = resolve_expedition_outcome(4242, **kwargs)
-    second = resolve_expedition_outcome(4242, **kwargs)
+    first = resolve_expedition_outcome(9001, **kwargs)
+    second = resolve_expedition_outcome(9001, **kwargs)
     assert first == second
 
 
-def test_event_type_controls_distribution_not_total():
-    cargo_cap = 1_000_000
-    ships = {"solar_skiff": 5}
-
-    mineral = fuel = None
-    for movement_id in range(1, 400):
-        outcome = resolve_expedition_outcome(
-            movement_id,
-            cargo_total=cargo_cap,
-            ships=ships,
-            expedition_ship_count=5,
-            flight_seconds=60,
-        )
-        if outcome["event_key"] == "mineral_deposit" and mineral is None:
-            mineral = outcome["rewards"]
-        elif outcome["event_key"] == "fuel_cache" and fuel is None:
-            fuel = outcome["rewards"]
-        if mineral and fuel:
-            break
-
-    assert mineral and fuel
-    assert sum(mineral.values()) == cargo_cap
-    assert sum(fuel.values()) == cargo_cap
-    assert int(fuel["fuel_cells"]) > int(mineral.get("fuel_cells") or 0)
-
-
-def test_resource_split_mineral_mostly_ores():
-    cargo_cap = 500_000
-    for movement_id in range(1, 200):
-        outcome = resolve_expedition_outcome(
-            movement_id,
-            cargo_total=cargo_cap,
-            ships={"solar_skiff": 5},
-            expedition_ship_count=5,
-            flight_seconds=60,
-        )
-        if outcome["event_key"] != "mineral_deposit":
-            continue
-        rewards = outcome["rewards"]
-        metal = int(rewards["metal"])
-        crystal = int(rewards["crystal"])
-        total = metal + crystal
-        assert total == cargo_cap
-        assert 0.45 <= metal / total <= 0.60
-        assert 0.40 <= crystal / total <= 0.55
-        return
-    pytest.fail("no mineral_deposit in sample")
-
-
-def test_resource_split_fuel_cache_mostly_fuel():
-    cargo_cap = 500_000
-    for movement_id in range(1, 200):
-        outcome = resolve_expedition_outcome(
-            movement_id,
-            cargo_total=cargo_cap,
-            ships={"solar_skiff": 5},
-            expedition_ship_count=5,
-            flight_seconds=60,
-        )
-        if outcome["event_key"] != "fuel_cache":
-            continue
-        rewards = outcome["rewards"]
-        total = sum(int(rewards[k]) for k in rewards)
-        assert total == cargo_cap
-        assert int(rewards["fuel_cells"]) / total >= 0.75
-        return
-    pytest.fail("no fuel_cache in sample")
-
-
-def test_zero_cargo_yields_zero_loot_even_on_loot_event():
-    for movement_id in range(1, 100):
-        outcome = resolve_expedition_outcome(
-            movement_id,
-            cargo_total=0,
-            ships={"solar_skiff": 1},
-            expedition_ship_count=1,
-            flight_seconds=60,
-        )
-        if outcome["event_key"] in {"mineral_deposit", "ancient_stash"}:
-            assert int(outcome["reward_total"]) == 0
-            return
-    pytest.fail("no loot event in sample")
-
-
-def test_directive_loot_mult_scales_fill_below_cargo_cap():
-    cargo = 1_000_000
-    full = resolve_expedition_outcome(
-        42,
-        cargo_total=cargo,
-        expedition_ship_count=3,
+def test_event_multiplier_changes_loot_magnitude():
+    movement_id = _find_movement_for_event("mineral_deposit", ships=_LARGE_FLEET)
+    mineral = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=5_000_000,
+        expedition_ship_count=1,
         flight_seconds=120,
-        directive_flags={"expedition_loot_mult": 1.0},
+        ships=_LARGE_FLEET,
     )
-    reduced = resolve_expedition_outcome(
-        42,
-        cargo_total=cargo,
-        expedition_ship_count=3,
+    ancient_id = _find_movement_for_event("ancient_stash", ships=_LARGE_FLEET)
+    ancient = resolve_expedition_outcome(
+        ancient_id,
+        cargo_total=5_000_000,
+        expedition_ship_count=1,
         flight_seconds=120,
-        directive_flags={"expedition_loot_mult": 0.5},
+        ships=_LARGE_FLEET,
     )
-    if int(full.get("reward_total") or 0) > 0:
-        assert int(full["reward_total"]) == cargo
-        assert int(reduced["reward_total"]) == cargo // 2
+    assert int(ancient["reward_total"]) > int(mineral["reward_total"])
+
+
+def test_sqrt_scaling_formula_reference():
+    import math
+
+    loot_score = math.sqrt(_LARGE_FLEET_VALUE)
+    base_loot = loot_score * EXPEDITION_LOOT_FACTOR
+    assert base_loot == pytest.approx(342_527, rel=0.01)
