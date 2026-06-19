@@ -1504,3 +1504,260 @@ def api_get_bans() -> Dict[str, Any]:
     from game.admin import get_ban_list
 
     return _ok(bans=get_ban_list())
+
+
+# ---------------------------------------------------------------------------
+# Galactic diplomacy test controls (GC-721J)
+# ---------------------------------------------------------------------------
+
+def _diplomacy_definition_options(conn: sqlite3.Connection) -> Dict[str, List[Dict[str, str]]]:
+    from game.galactic_diplomacy import (
+        list_emergency_definitions,
+        list_personality_definitions,
+        list_resolution_definitions,
+    )
+
+    return {
+        "personalities": [
+            {
+                "key": str(row.get("personality_key") or ""),
+                "label_key": str(row.get("label_key") or ""),
+            }
+            for row in list_personality_definitions(conn=conn)
+            if row.get("personality_key")
+        ],
+        "resolutions": [
+            {
+                "key": str(row.get("resolution_key") or ""),
+                "label_key": str(row.get("label_key") or ""),
+            }
+            for row in list_resolution_definitions(conn=conn)
+            if row.get("resolution_key")
+        ],
+        "emergencies": [
+            {
+                "key": str(row.get("emergency_key") or ""),
+                "label_key": str(row.get("label_key") or ""),
+            }
+            for row in list_emergency_definitions(conn=conn)
+            if row.get("emergency_key")
+        ],
+    }
+
+
+def _diplomacy_active_chip(
+    *,
+    layer: str,
+    key: str,
+    definition: Optional[Dict[str, Any]],
+    started_at: Any = None,
+    ends_at: Any = None,
+) -> Optional[Dict[str, Any]]:
+    item_key = str(key or "").strip().lower()
+    if not item_key:
+        return None
+    defn = definition if isinstance(definition, dict) else {}
+    return {
+        "type": layer,
+        "key": item_key,
+        "label_key": str(defn.get("label_key") or ""),
+        "started_at": int(started_at) if started_at not in (None, "") else None,
+        "ends_at": int(ends_at) if ends_at not in (None, "") else None,
+    }
+
+
+def api_get_galactic_diplomacy_state(galaxy: Any) -> Dict[str, Any]:
+    from game.galactic_diplomacy import (
+        get_active_emergency,
+        get_active_resolution,
+        get_galaxy_personality,
+        schema_ready,
+    )
+    from game.galactic_diplomacy.blocs import normalize_galaxy
+
+    conn = db()
+    try:
+        galaxy_id = normalize_galaxy(galaxy, conn=conn)
+        if galaxy_id is None:
+            return _err("invalid_galaxy", "invalid_galaxy")
+        if not schema_ready(conn=conn):
+            return _err("schema_not_ready", "schema_not_ready")
+
+        personality_state = get_galaxy_personality(galaxy_id, conn=conn)
+        resolution_state = get_active_resolution(galaxy_id, conn=conn)
+        emergency_state = get_active_emergency(galaxy_id, conn=conn)
+
+        personality = _diplomacy_active_chip(
+            layer="personality",
+            key=str(personality_state.get("personality_key") or ""),
+            definition=personality_state.get("definition"),
+            started_at=personality_state.get("active_since"),
+        )
+        resolution = None
+        if resolution_state:
+            resolution = _diplomacy_active_chip(
+                layer="resolution",
+                key=str(resolution_state.get("resolution_key") or ""),
+                definition=resolution_state.get("definition"),
+                started_at=resolution_state.get("started_at"),
+                ends_at=resolution_state.get("ends_at"),
+            )
+        emergency = None
+        if emergency_state:
+            emergency = _diplomacy_active_chip(
+                layer="emergency",
+                key=str(emergency_state.get("emergency_key") or ""),
+                definition=emergency_state.get("definition"),
+                started_at=emergency_state.get("started_at"),
+                ends_at=emergency_state.get("ends_at"),
+            )
+
+        return _ok(
+            galaxy=int(galaxy_id),
+            personality=personality,
+            resolution=resolution,
+            emergency=emergency,
+            options=_diplomacy_definition_options(conn),
+        )
+    finally:
+        conn.close()
+
+
+def _diplomacy_value_error(exc: ValueError) -> Dict[str, Any]:
+    code = str(exc.args[0] if exc.args else "invalid_request")
+    return _err(code, code)
+
+
+def api_set_galactic_diplomacy_personality(
+    admin_id: int,
+    galaxy: Any,
+    body: Dict[str, Any],
+) -> Dict[str, Any]:
+    from game.galactic_diplomacy import set_galaxy_personality
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+
+    clear = body.get("clear") in (True, 1, "1", "true", "on")
+    personality_key = "" if clear else str(body.get("personality_key") or "").strip()
+
+    conn = db()
+    try:
+        try:
+            result = set_galaxy_personality(
+                galaxy,
+                personality_key,
+                score=int(body.get("score") or 0),
+                conn=conn,
+            )
+        except ValueError as exc:
+            return _diplomacy_value_error(exc)
+
+        audit(
+            int(admin_id),
+            "galactic_diplomacy_clear_personality" if clear else "galactic_diplomacy_set_personality",
+            target_type="galaxy",
+            target_id=int(result["galaxy"]),
+            payload={
+                "galaxy": int(result["galaxy"]),
+                "personality_key": str(result.get("personality_key") or ""),
+                "cleared": clear,
+            },
+        )
+    finally:
+        conn.close()
+
+    return api_get_galactic_diplomacy_state(galaxy)
+
+
+def api_set_galactic_diplomacy_resolution(
+    admin_id: int,
+    galaxy: Any,
+    body: Dict[str, Any],
+) -> Dict[str, Any]:
+    from game.galactic_diplomacy import clear_active_resolution, set_active_resolution
+    from game.galactic_diplomacy.blocs import normalize_galaxy
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+
+    clear = body.get("clear") in (True, 1, "1", "true", "on")
+    resolution_key = str(body.get("resolution_key") or "").strip()
+
+    conn = db()
+    try:
+        galaxy_id = normalize_galaxy(galaxy, conn=conn)
+        if galaxy_id is None:
+            return _err("invalid_galaxy", "invalid_galaxy")
+        try:
+            if clear:
+                clear_active_resolution(galaxy_id, conn=conn)
+                active_key = ""
+            else:
+                active = set_active_resolution(galaxy_id, resolution_key, conn=conn)
+                active_key = str(active.get("resolution_key") or "")
+        except ValueError as exc:
+            return _diplomacy_value_error(exc)
+
+        audit(
+            int(admin_id),
+            "galactic_diplomacy_clear_resolution" if clear else "galactic_diplomacy_set_resolution",
+            target_type="galaxy",
+            target_id=int(galaxy_id),
+            payload={
+                "galaxy": int(galaxy_id),
+                "resolution_key": active_key,
+                "cleared": clear,
+            },
+        )
+    finally:
+        conn.close()
+
+    return api_get_galactic_diplomacy_state(galaxy)
+
+
+def api_set_galactic_diplomacy_emergency(
+    admin_id: int,
+    galaxy: Any,
+    body: Dict[str, Any],
+) -> Dict[str, Any]:
+    from game.galactic_diplomacy import clear_active_emergency, set_active_emergency
+    from game.galactic_diplomacy.blocs import normalize_galaxy
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+
+    clear = body.get("clear") in (True, 1, "1", "true", "on")
+    emergency_key = str(body.get("emergency_key") or "").strip()
+
+    conn = db()
+    try:
+        galaxy_id = normalize_galaxy(galaxy, conn=conn)
+        if galaxy_id is None:
+            return _err("invalid_galaxy", "invalid_galaxy")
+        try:
+            if clear:
+                clear_active_emergency(galaxy_id, conn=conn)
+                active_key = ""
+            else:
+                active = set_active_emergency(galaxy_id, emergency_key, conn=conn)
+                active_key = str(active.get("emergency_key") or "")
+        except ValueError as exc:
+            return _diplomacy_value_error(exc)
+
+        audit(
+            int(admin_id),
+            "galactic_diplomacy_clear_emergency" if clear else "galactic_diplomacy_set_emergency",
+            target_type="galaxy",
+            target_id=int(galaxy_id),
+            payload={
+                "galaxy": int(galaxy_id),
+                "emergency_key": active_key,
+                "cleared": clear,
+            },
+        )
+    finally:
+        conn.close()
+
+    return api_get_galactic_diplomacy_state(galaxy)
+

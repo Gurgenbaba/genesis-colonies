@@ -13542,15 +13542,111 @@
     return String(reason);
   }
 
+  function syncHudSelectOpenState() {
+    const anyOpen = !!document.querySelector(".gc-hud-select.is-open");
+    document.body.classList.toggle("gc-has-open-popover", anyOpen);
+  }
+
+  function ensureHudSelectWrapId(wrap) {
+    if (!wrap.dataset.gcHudSelectId) {
+      wrap.dataset.gcHudSelectId = `gc-hud-select-${Math.random().toString(36).slice(2, 9)}`;
+    }
+    return wrap.dataset.gcHudSelectId;
+  }
+
+  function positionHudSelectMenu(wrap, menu) {
+    if (!wrap || !menu) return;
+    const trigger = wrap.querySelector(".gc-hud-select-trigger");
+    if (!trigger) return;
+
+    const margin = 4;
+    const viewportPad = 8;
+    const rect = trigger.getBoundingClientRect();
+    const width = Math.max(rect.width, 120);
+    const maxLeft = Math.max(viewportPad, window.innerWidth - viewportPad - width);
+
+    menu.style.width = `${width}px`;
+    menu.style.left = `${Math.min(Math.max(viewportPad, rect.left), maxLeft)}px`;
+    menu.style.right = "auto";
+    menu.style.maxHeight = `${Math.min(240, window.innerHeight - viewportPad * 2)}px`;
+
+    const wasHidden = menu.hidden;
+    menu.hidden = false;
+    const menuHeight = menu.getBoundingClientRect().height;
+    let top = rect.bottom + margin;
+    if (top + menuHeight > window.innerHeight - viewportPad) {
+      top = Math.max(viewportPad, rect.top - menuHeight - margin);
+    }
+    menu.style.top = `${top}px`;
+    menu.hidden = wasHidden;
+  }
+
+  function floatHudSelectMenu(wrap, menu) {
+    if (!wrap || !menu) return;
+    ensureHudSelectWrapId(wrap);
+    menu.classList.add("gc-popover-layer");
+    menu.dataset.gcHudSelectWrapId = wrap.dataset.gcHudSelectId;
+    if (menu.parentNode !== document.body) {
+      document.body.appendChild(menu);
+    }
+  }
+
+  function hudSelectParts(wrap) {
+    if (!wrap) return null;
+    const cached = wrap._gcHudSelect;
+    if (cached && cached.menu) return cached;
+    const select = wrap.querySelector("select.gc-hud-select-native");
+    if (!select || !select._gcHudSelect) return null;
+    wrap._gcHudSelect = select._gcHudSelect;
+    return select._gcHudSelect;
+  }
+
+  function closeHudSelectWrap(wrap) {
+    if (!wrap) return;
+    const hud = hudSelectParts(wrap) || {};
+    const menu = hud.menu;
+    const trigger = hud.trigger;
+    if (menu) menu.hidden = true;
+    wrap.classList.remove("is-open");
+    if (trigger) trigger.setAttribute("aria-expanded", "false");
+  }
+
+  function openHudSelectWrap(wrap) {
+    if (!wrap) return;
+    const hud = hudSelectParts(wrap);
+    if (!hud) return;
+    const menu = hud.menu;
+    const trigger = hud.trigger;
+    if (!menu || !trigger || selectDisabled(wrap)) return;
+
+    floatHudSelectMenu(wrap, menu);
+    positionHudSelectMenu(wrap, menu);
+    menu.hidden = false;
+    wrap.classList.add("is-open");
+    trigger.setAttribute("aria-expanded", "true");
+    syncHudSelectOpenState();
+  }
+
+  function selectDisabled(wrap) {
+    const select = wrap && wrap.querySelector("select.gc-hud-select-native");
+    const trigger = wrap && wrap.querySelector(".gc-hud-select-trigger");
+    return !!(select && select.disabled) || !!(trigger && trigger.disabled);
+  }
+
+  function repositionOpenHudSelects() {
+    document.querySelectorAll(".gc-hud-select.is-open").forEach((wrap) => {
+      const hud = hudSelectParts(wrap);
+      const menu = hud && hud.menu;
+      if (menu && !menu.hidden) positionHudSelectMenu(wrap, menu);
+    });
+  }
+
   function closeAllHudSelects(except) {
     document.querySelectorAll(".gc-hud-select.is-open").forEach((wrap) => {
       if (except && wrap === except) return;
-      const menu = wrap.querySelector(".gc-hud-select-menu");
-      const trigger = wrap.querySelector(".gc-hud-select-trigger");
-      if (menu) menu.hidden = true;
-      wrap.classList.remove("is-open");
-      if (trigger) trigger.setAttribute("aria-expanded", "false");
+      closeHudSelectWrap(wrap);
     });
+    syncHudSelectOpenState();
   }
 
   function syncHudSelect(select) {
@@ -13624,19 +13720,16 @@
     wrap.appendChild(menu);
 
     select._gcHudSelect = { wrap, trigger, menu, valueEl };
+    wrap._gcHudSelect = select._gcHudSelect;
 
     rebuildHudSelect(select);
 
     trigger.addEventListener("click", (e) => {
       e.stopPropagation();
       if (select.disabled || trigger.disabled) return;
-      const isOpen = !menu.hidden;
-      closeAllHudSelects(wrap);
-      if (!isOpen) {
-        menu.hidden = false;
-        wrap.classList.add("is-open");
-        trigger.setAttribute("aria-expanded", "true");
-      }
+      const isOpen = wrap.classList.contains("is-open");
+      closeAllHudSelects();
+      if (!isOpen) openHudSelectWrap(wrap);
     });
 
     menu.addEventListener("click", (e) => {
@@ -13649,9 +13742,8 @@
       } else {
         syncHudSelect(select);
       }
-      menu.hidden = true;
-      wrap.classList.remove("is-open");
-      trigger.setAttribute("aria-expanded", "false");
+      closeHudSelectWrap(wrap);
+      syncHudSelectOpenState();
     });
 
     select.addEventListener("change", () => syncHudSelect(select));
@@ -13662,11 +13754,15 @@
       GC._hudSelectBound = true;
       document.addEventListener("click", (e) => {
         if (e.target.closest(".gc-hud-select")) return;
+        if (e.target.closest(".gc-hud-select-menu")) return;
         closeAllHudSelects();
       });
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") closeAllHudSelects();
       });
+      window.addEventListener("resize", repositionOpenHudSelects);
+      window.addEventListener("scroll", repositionOpenHudSelects, true);
+      GC.registerCleanup(() => closeAllHudSelects());
     }
     const scope = root && root.querySelectorAll ? root : document;
     scope.querySelectorAll("select[data-gc-hud-select]").forEach(enhanceHudSelect);

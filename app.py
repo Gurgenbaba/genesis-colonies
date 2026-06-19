@@ -7017,6 +7017,48 @@ def api_admin_queues_clear():
     return _admin_json(admin_api_logic.clear_queues(_admin_actor_id(), _admin_body()))
 
 
+@app.route("/api/admin/galactic-diplomacy/<int:galaxy>", methods=["GET"])
+@require_admin_api
+def api_admin_galactic_diplomacy_get(galaxy: int):
+    return _admin_json(admin_api_logic.api_get_galactic_diplomacy_state(galaxy))
+
+
+@app.route("/api/admin/galactic-diplomacy/<int:galaxy>/personality", methods=["POST"])
+@require_admin_api
+def api_admin_galactic_diplomacy_personality(galaxy: int):
+    return _admin_json(
+        admin_api_logic.api_set_galactic_diplomacy_personality(
+            _admin_actor_id(),
+            galaxy,
+            _admin_body(),
+        )
+    )
+
+
+@app.route("/api/admin/galactic-diplomacy/<int:galaxy>/resolution", methods=["POST"])
+@require_admin_api
+def api_admin_galactic_diplomacy_resolution(galaxy: int):
+    return _admin_json(
+        admin_api_logic.api_set_galactic_diplomacy_resolution(
+            _admin_actor_id(),
+            galaxy,
+            _admin_body(),
+        )
+    )
+
+
+@app.route("/api/admin/galactic-diplomacy/<int:galaxy>/emergency", methods=["POST"])
+@require_admin_api
+def api_admin_galactic_diplomacy_emergency(galaxy: int):
+    return _admin_json(
+        admin_api_logic.api_set_galactic_diplomacy_emergency(
+            _admin_actor_id(),
+            galaxy,
+            _admin_body(),
+        )
+    )
+
+
 @app.route("/api/admin/audit-log", methods=["GET"])
 @require_admin_api
 def api_admin_audit_log():

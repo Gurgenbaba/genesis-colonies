@@ -58,11 +58,28 @@ def app_client(admin_env, monkeypatch):
 
 
 def _login(client, username, password):
+    from game.models import db, verify_user
+
+    user = verify_user(str(username), str(password))
+    if user:
+        with client.session_transaction() as sess:
+            sess["user_id"] = int(user["id"])
+        return user
+
     return client.post(
         "/login",
         data={"username": username, "password": password},
         follow_redirects=False,
     )
+
+
+def _as_user(client, user_id: int) -> None:
+    with client.session_transaction() as sess:
+        sess["user_id"] = int(user_id)
+
+
+def _as_admin(client, admin_id: int) -> None:
+    _as_user(client, admin_id)
 
 
 def test_api_admin_requires_login(app_client):
@@ -554,3 +571,117 @@ def test_admin_messages_broadcast_audit(app_client):
     assert audit.status_code == 200
     entries = audit.get_json()["entries"]
     assert any(row.get("action") == "messages_broadcast" for row in entries)
+
+
+def test_admin_galactic_diplomacy_forbidden_for_normal_user(app_client):
+    client, admin_id, user_id = app_client
+    _as_user(client, user_id)
+    r = client.get("/api/admin/galactic-diplomacy/1")
+    assert r.status_code == 403
+    assert r.get_json()["error"] == "forbidden"
+
+
+def test_admin_galactic_diplomacy_get_and_set_layers(app_client):
+    client, admin_id, user_id = app_client
+    _as_admin(client, admin_id)
+
+    empty = client.get("/api/admin/galactic-diplomacy/1").get_json()
+    assert empty["ok"] is True
+    assert empty["galaxy"] == 1
+    assert empty["personality"] is None
+    assert empty["resolution"] is None
+    assert empty["emergency"] is None
+    assert len(empty["options"]["personalities"]) >= 5
+    assert len(empty["options"]["emergencies"]) >= 5
+
+    r = client.post(
+        "/api/admin/galactic-diplomacy/1/personality",
+        json={"personality_key": "academia_prime"},
+    )
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert data["personality"]["key"] == "academia_prime"
+
+    r = client.post(
+        "/api/admin/galactic-diplomacy/1/resolution",
+        json={"resolution_key": "gate_control"},
+    )
+    assert r.status_code == 200
+    assert r.get_json()["resolution"]["key"] == "gate_control"
+
+    r = client.post(
+        "/api/admin/galactic-diplomacy/1/emergency",
+        json={"emergency_key": "hyperstorm"},
+    )
+    assert r.status_code == 200
+    assert r.get_json()["emergency"]["key"] == "hyperstorm"
+
+    state = client.get("/api/admin/galactic-diplomacy/1").get_json()
+    assert state["personality"]["key"] == "academia_prime"
+    assert state["resolution"]["key"] == "gate_control"
+    assert state["emergency"]["key"] == "hyperstorm"
+
+
+def test_admin_galactic_diplomacy_clear_layers(app_client):
+    client, admin_id, user_id = app_client
+    _as_admin(client, admin_id)
+
+    client.post(
+        "/api/admin/galactic-diplomacy/1/emergency",
+        json={"emergency_key": "galaxy_war"},
+    )
+    r = client.post(
+        "/api/admin/galactic-diplomacy/1/emergency",
+        json={"clear": True},
+    )
+    assert r.status_code == 200
+    assert r.get_json()["emergency"] is None
+
+    client.post(
+        "/api/admin/galactic-diplomacy/1/personality",
+        json={"clear": True},
+    )
+    state = client.get("/api/admin/galactic-diplomacy/1").get_json()
+    assert state["personality"] is None
+
+
+def test_admin_galactic_diplomacy_invalid_inputs(app_client):
+    client, admin_id, user_id = app_client
+    _as_admin(client, admin_id)
+
+    r = client.get("/api/admin/galactic-diplomacy/99")
+    assert r.status_code == 400
+    assert r.get_json()["error"] == "invalid_galaxy"
+
+    r = client.post(
+        "/api/admin/galactic-diplomacy/1/emergency",
+        json={"emergency_key": "not_real"},
+    )
+    assert r.status_code == 400
+    assert r.get_json()["error"] == "invalid_emergency_key"
+
+
+def test_admin_galactic_diplomacy_writes_audit(app_client):
+    client, admin_id, user_id = app_client
+    _as_admin(client, admin_id)
+
+    client.post(
+        "/api/admin/galactic-diplomacy/1/personality",
+        json={"personality_key": "forge_of_war"},
+    )
+    audit = client.get("/api/admin/audit-log?action=galactic_diplomacy_set_personality")
+    assert audit.status_code == 200
+    entries = audit.get_json()["entries"]
+    assert any(row.get("action") == "galactic_diplomacy_set_personality" for row in entries)
+
+
+def test_admin_panel_includes_diplomacy_tab(app_client):
+    client, admin_id, user_id = app_client
+    _as_admin(client, admin_id)
+    r = client.get("/admin")
+    assert r.status_code == 200
+    html = r.get_data(as_text=True)
+    assert 'data-admin-tab="diplomacy"' in html
+    assert 'data-admin-action="diplomacy-load"' in html
+    assert "admin-diplomacy-output" in html

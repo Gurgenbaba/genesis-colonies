@@ -96,6 +96,13 @@ button, input, textarea { font: inherit; }
   --gc-border-glow: 0 0 0 1px rgba(70, 229, 255, 0.22);
   --gc-border-glow-strong: 0 0 0 1px rgba(70, 229, 255, 0.45), 0 0 8px rgba(70, 229, 255, 0.12);
 
+  /* Layer stack — dropdowns/menus must escape panel overflow (GC-721J-FIX) */
+  --gc-z-sticky: 200;
+  --gc-z-dropdown: 12000;
+  --gc-z-popover: 12050;
+  --gc-z-modal: 13000;
+  --gc-z-toast: 14000;
+
   --gc-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --gc-font-level: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Segoe UI", sans-serif;
 
@@ -515,6 +522,20 @@ body.gc-body-simple .auth-error {
   z-index: 9999;
 }
 .gc-skip-link:focus { left: 10px; }
+
+/* Popover / dropdown layer — menus portaled to body must not clip in panels (GC-721J-FIX) */
+.gc-overflow-visible{
+  overflow: visible !important;
+}
+.gc-popover-layer{
+  position: fixed;
+  z-index: var(--gc-z-dropdown);
+}
+body.gc-has-open-popover .gc-panel:has(.gc-hud-select.is-open),
+body.gc-has-open-popover .admin-section:has(.gc-hud-select.is-open),
+body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
+  overflow: visible;
+}
 
 /* =========================
    4) Header / Layout / Sidebar
@@ -7054,7 +7075,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
 
 .gc-popover{
   position: fixed;
-  z-index: 12050;
+  z-index: var(--gc-z-popover);
   max-width: min(320px, calc(100vw - 24px));
   padding: 0.55rem 0.7rem;
   border-radius: var(--gc-radius-sm);
@@ -11425,14 +11446,14 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   padding: 10px 12px;
 }
 .fleet-page .gc-hud-select.is-open{
-  z-index: 120;
+  z-index: var(--gc-z-dropdown);
 }
 .logistics-page .gc-hud-select.is-open{
-  z-index: 120;
+  z-index: var(--gc-z-dropdown);
 }
 .fleet-page .gc-hud-select-menu,
 .logistics-page .gc-hud-select-menu{
-  z-index: 200;
+  z-index: var(--gc-z-dropdown);
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.22);
   background: linear-gradient(180deg, rgba(8, 14, 28, 0.98), rgba(6, 10, 22, 0.96));
@@ -18221,7 +18242,7 @@ body.gc-combat-report-open { overflow: hidden; }
   min-width: 0;
 }
 .gc-hud-select.is-open{
-  z-index: 120;
+  z-index: var(--gc-z-dropdown);
 }
 .gc-hud-select-native{
   position: absolute;
@@ -18267,7 +18288,7 @@ body.gc-combat-report-open { overflow: hidden; }
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  z-index: 200;
+  z-index: var(--gc-z-dropdown);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -18278,6 +18299,14 @@ body.gc-combat-report-open { overflow: hidden; }
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
   max-height: min(240px, 45vh);
   overflow-y: auto;
+}
+.gc-hud-select-menu.gc-popover-layer{
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: auto;
+  width: auto;
+  max-height: min(240px, calc(100vh - 16px));
 }
 .gc-hud-select-menu[hidden]{
   display: none !important;

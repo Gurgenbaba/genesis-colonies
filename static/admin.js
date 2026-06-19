@@ -17,6 +17,7 @@
   let _selectedPlanetId = null;
   let _lootboxAdminState = null;
   let _lootboxSelectedContainer = null;
+  let _diplomacyOptions = null;
 
   function t(key, fallback) {
     return LOCALE[key] || fallback || key;
@@ -284,6 +285,9 @@
         break;
       case "server":
         result = await loadAdminServer();
+        break;
+      case "diplomacy":
+        result = await loadAdminDiplomacy();
         break;
       default:
         result = null;
@@ -856,6 +860,142 @@
       showAlert(res.message || res.error, "error");
       setServerStatus("");
     }
+    return res;
+  }
+
+  function diplomacyGalaxyId() {
+    const raw = parseInt(qs("#admin-diplomacy-galaxy")?.value, 10);
+    return Number.isFinite(raw) && raw > 0 ? raw : 1;
+  }
+
+  function setDiplomacyStatus(msg) {
+    const el = qs("#admin-diplomacy-status");
+    if (el) el.textContent = msg || "";
+  }
+
+  function diplomacyLabel(key, fallback) {
+    return t(key, fallback || key);
+  }
+
+  function populateDiplomacySelect(selectId, items, selectedKey) {
+    const sel = qs(selectId);
+    if (!sel) return;
+    const placeholder = t("admin_diplomacy_select_placeholder", "— auswählen —");
+    const rows = Array.isArray(items) ? items : [];
+    sel.innerHTML =
+      `<option value="">${esc(placeholder)}</option>` +
+      rows
+        .map((row) => {
+          const key = String(row.key || "");
+          const label = diplomacyLabel(row.label_key, key);
+          const selected = key === selectedKey ? " selected" : "";
+          return `<option value="${esc(key)}"${selected}>${esc(label)} (${esc(key)})</option>`;
+        })
+        .join("");
+    syncAdminHudSelects(sel.parentElement || adminRoot());
+  }
+
+  function renderDiplomacyState(data) {
+    const out = qs("#admin-diplomacy-output");
+    if (!out) return;
+    if (!data || !data.ok) {
+      out.innerHTML = errorCard(data || { error: "unknown" });
+      return;
+    }
+
+    const chip = (label, row) => {
+      if (!row || !row.key) {
+        return `<tr><th>${esc(label)}</th><td>—</td></tr>`;
+      }
+      const title = diplomacyLabel(row.label_key, row.key);
+      const timing = [];
+      if (row.started_at) timing.push(`${t("admin_diplomacy_started", "Start")}: ${fmtTs(row.started_at)}`);
+      if (row.ends_at) timing.push(`${t("admin_diplomacy_ends", "Ende")}: ${fmtTs(row.ends_at)}`);
+      const meta = timing.length ? `<div class="admin-small-hint">${esc(timing.join(" · "))}</div>` : "";
+      return `<tr><th>${esc(label)}</th><td><strong>${esc(title)}</strong> <span class="admin-small-hint">(${esc(row.key)})</span>${meta}</td></tr>`;
+    };
+
+    out.innerHTML = `
+      <div class="admin-card">
+        <h3 class="admin-card-title">${esc(t("admin_diplomacy_state_title", "Aktiver Diplomatie-Status"))}</h3>
+        <table class="admin-table admin-table-compact">
+          <tbody>
+            ${chip(t("admin_diplomacy_section_personality", "Galaxy Personality"), data.personality)}
+            ${chip(t("admin_diplomacy_section_resolution", "Aktive Resolution"), data.resolution)}
+            ${chip(t("admin_diplomacy_section_emergency", "Aktive Emergency"), data.emergency)}
+          </tbody>
+        </table>
+      </div>`;
+
+    const options = data.options || {};
+    _diplomacyOptions = options;
+    populateDiplomacySelect("#admin-diplomacy-personality-key", options.personalities, data.personality?.key || "");
+    populateDiplomacySelect("#admin-diplomacy-resolution-key", options.resolutions, data.resolution?.key || "");
+    populateDiplomacySelect("#admin-diplomacy-emergency-key", options.emergencies, data.emergency?.key || "");
+  }
+
+  async function loadAdminDiplomacy() {
+    setDiplomacyStatus(t("admin_diplomacy_loading", "Lade Diplomatie-Status…"));
+    const galaxy = diplomacyGalaxyId();
+    const data = await adminGet(`/api/admin/galactic-diplomacy/${galaxy}`);
+    if (!data.ok) {
+      showAlert(data.message || data.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      renderDiplomacyState(data);
+      setDiplomacyStatus("");
+      return data;
+    }
+    renderDiplomacyState(data);
+    setDiplomacyStatus(`${t("admin_diplomacy_loaded", "Galaxie geladen.")} G${data.galaxy || galaxy}`);
+    return data;
+  }
+
+  async function applyAdminDiplomacyLayer(layer, clear) {
+    const galaxy = diplomacyGalaxyId();
+    const endpoints = {
+      personality: "personality",
+      resolution: "resolution",
+      emergency: "emergency",
+    };
+    const endpoint = endpoints[layer];
+    if (!endpoint) return null;
+
+    const payload = { clear: clear ? 1 : 0 };
+    if (!clear) {
+      const selectId =
+        layer === "personality"
+          ? "#admin-diplomacy-personality-key"
+          : layer === "resolution"
+            ? "#admin-diplomacy-resolution-key"
+            : "#admin-diplomacy-emergency-key";
+      const key = (qs(selectId)?.value || "").trim();
+      if (!key) {
+        showAlert(t("admin_diplomacy_key_required", "Bitte zuerst einen Eintrag auswählen."), "error");
+        return null;
+      }
+      if (layer === "personality") payload.personality_key = key;
+      if (layer === "resolution") payload.resolution_key = key;
+      if (layer === "emergency") payload.emergency_key = key;
+    }
+
+    setDiplomacyStatus(t("admin_diplomacy_saving", "Speichere…"));
+    const res = await adminPost(`/api/admin/galactic-diplomacy/${galaxy}/${endpoint}`, payload);
+    if (!res.ok) {
+      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      setDiplomacyStatus("");
+      return res;
+    }
+    renderDiplomacyState(res);
+    notify(
+      clear
+        ? t("admin_diplomacy_cleared", "Diplomatie-Ebene gelöscht.")
+        : t("admin_diplomacy_saved", "Diplomatie-Ebene gesetzt."),
+      "success",
+    );
+    setDiplomacyStatus(
+      clear
+        ? t("admin_diplomacy_cleared", "Diplomatie-Ebene gelöscht.")
+        : t("admin_diplomacy_saved", "Diplomatie-Ebene gesetzt."),
+    );
     return res;
   }
 
@@ -2188,6 +2328,13 @@
     if (act === "news-set-banner") return setAdminNewsBanner(btn.dataset.newsId);
     if (act === "news-delete") return deleteAdminNews(btn.dataset.newsId);
     if (act === "server-resources") return applyAdminResources();
+    if (act === "diplomacy-load") return loadAdminDiplomacy();
+    if (act === "diplomacy-set-personality") return applyAdminDiplomacyLayer("personality", false);
+    if (act === "diplomacy-clear-personality") return applyAdminDiplomacyLayer("personality", true);
+    if (act === "diplomacy-set-resolution") return applyAdminDiplomacyLayer("resolution", false);
+    if (act === "diplomacy-clear-resolution") return applyAdminDiplomacyLayer("resolution", true);
+    if (act === "diplomacy-set-emergency") return applyAdminDiplomacyLayer("emergency", false);
+    if (act === "diplomacy-clear-emergency") return applyAdminDiplomacyLayer("emergency", true);
     if (act === "server-wipe") return wipeAdminUniverse();
     if (act === "run-queue-tick") return runQueueTick(btn);
     if (act === "queue-cancel") return cancelQueueJob(btn.dataset.queueType, btn.dataset.jobId);

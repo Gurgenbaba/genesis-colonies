@@ -111,6 +111,7 @@
       <button type="button" class="admin-tab-btn" data-admin-tab="runtime" role="tab">{{ T("admin_runtime_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="balance" role="tab">{{ T("admin_balance_title", "Balance") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="server" role="tab">{{ T("admin_server_title", "Server") }}</button>
+      <button type="button" class="admin-tab-btn" data-admin-tab="diplomacy" role="tab">{{ T("admin_diplomacy_title", "Galaktische Diplomatie") }}</button>
     </nav>
 
     <section id="admin-tab-health" class="admin-panel admin-tab-panel is-active" data-admin-panel="health" role="tabpanel">
@@ -814,6 +815,73 @@
         <div class="admin-btn-row">
           <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="server-wipe">
             {{ T("admin_wipe_execute", "Wipe ausführen") }}
+          </button>
+        </div>
+      </section>
+    </section>
+
+    <section id="admin-tab-diplomacy" class="admin-panel admin-tab-panel gc-overflow-visible" data-admin-panel="diplomacy" role="tabpanel" hidden>
+      <div class="admin-action-row">
+        <h2 class="admin-panel-title">{{ T("admin_diplomacy_title", "Galaktische Diplomatie") }}</h2>
+        <div class="admin-toolbar">
+          <input type="number" class="admin-input admin-input-sm" id="admin-diplomacy-galaxy" min="1" step="1" value="1"
+                 placeholder="{{ T('admin_diplomacy_galaxy', 'Galaxie') }}">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="diplomacy-load">
+            {{ T("admin_diplomacy_btn_load", "Laden") }}
+          </button>
+        </div>
+      </div>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_diplomacy_hint", "Test-Controls für Personality, Resolution und Emergency — ohne Voting oder Auto-Events.") }}</p>
+      <div id="admin-diplomacy-status" class="admin-small-hint" aria-live="polite"></div>
+      <div id="admin-diplomacy-output" class="admin-panel-body" aria-live="polite"></div>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_diplomacy_section_personality", "Galaxy Personality") }}</span>
+      </div>
+      <section class="admin-section admin-card">
+        <div class="admin-toolbar admin-action-row-wrap">
+          <select class="admin-input admin-select" data-gc-hud-select id="admin-diplomacy-personality-key">
+            <option value="">{{ T("admin_diplomacy_select_placeholder", "— auswählen —") }}</option>
+          </select>
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="diplomacy-set-personality">
+            {{ T("admin_diplomacy_btn_set", "Setzen") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="diplomacy-clear-personality">
+            {{ T("admin_diplomacy_btn_clear", "Löschen") }}
+          </button>
+        </div>
+      </section>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_diplomacy_section_resolution", "Aktive Resolution") }}</span>
+      </div>
+      <section class="admin-section admin-card">
+        <div class="admin-toolbar admin-action-row-wrap">
+          <select class="admin-input admin-select" data-gc-hud-select id="admin-diplomacy-resolution-key">
+            <option value="">{{ T("admin_diplomacy_select_placeholder", "— auswählen —") }}</option>
+          </select>
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="diplomacy-set-resolution">
+            {{ T("admin_diplomacy_btn_set", "Setzen") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="diplomacy-clear-resolution">
+            {{ T("admin_diplomacy_btn_clear", "Löschen") }}
+          </button>
+        </div>
+      </section>
+
+      <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_diplomacy_section_emergency", "Aktive Emergency") }}</span>
+      </div>
+      <section class="admin-section admin-card">
+        <div class="admin-toolbar admin-action-row-wrap">
+          <select class="admin-input admin-select" data-gc-hud-select id="admin-diplomacy-emergency-key">
+            <option value="">{{ T("admin_diplomacy_select_placeholder", "— auswählen —") }}</option>
+          </select>
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="diplomacy-set-emergency">
+            {{ T("admin_diplomacy_btn_set", "Setzen") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="diplomacy-clear-emergency">
+            {{ T("admin_diplomacy_btn_clear", "Löschen") }}
           </button>
         </div>
       </section>

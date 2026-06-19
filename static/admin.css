@@ -867,11 +867,14 @@
   width: 100%;
 }
 .admin-shell .admin-tool-panel,
-.admin-shell .admin-field-row {
+.admin-shell .admin-field-row,
+.admin-shell .admin-section:has(.gc-hud-select),
+.admin-shell .admin-section.admin-card:has(.gc-hud-select),
+.admin-shell .admin-tab-panel:has(.gc-hud-select) {
   overflow: visible;
 }
 .admin-shell .gc-hud-select.is-open {
-  z-index: 40;
+  z-index: var(--gc-z-dropdown);
 }
 .admin-shell .admin-toolbar .gc-hud-select {
   flex: 1 1 200px;
