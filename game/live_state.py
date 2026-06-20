@@ -152,3 +152,98 @@ def shipyard_panel_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, A
         "queue": queue,
         "ships": {"ready": True, **payload},
     }
+
+
+def _head_card_jobs(card_jobs, *, max_queued: int = 0):
+    """Active job first; optional queued slots (position 2..N) for one domain."""
+    if not card_jobs:
+        return []
+    active = next((dict(j) for j in card_jobs if str(j.get("status") or "") == "active"), None)
+    out: list = []
+    if active:
+        out.append(active)
+    if max_queued > 0:
+        for j in card_jobs:
+            pos = int(j.get("queue_position") or 0)
+            if pos >= 2 and pos <= max_queued + 1:
+                out.append(dict(j))
+    if not out and card_jobs:
+        out.append(dict(card_jobs[0]))
+    return out
+
+
+def global_queue_hud_for_game_state(
+    user_id: int,
+    *,
+    buildings: Optional[Dict[str, int]] = None,
+    conn,
+) -> Dict[str, Any]:
+    """
+    GC-643 — unified queue HUD slice for lightweight /api/game-state polls.
+    Head jobs only (building: active + queue #2; others: active).
+    """
+    import time
+
+    from game.buildings import get_build_queue_status_for_planet
+    from game.planet_evolution.repository import get_context_planet
+    from game.queue_card import (
+        map_build_queue_to_card_jobs,
+        map_defense_queue_to_card_jobs,
+        map_research_queue_to_card_jobs,
+        map_shipyard_queue_to_card_jobs,
+    )
+    from game.research import get_research_status
+
+    planet = get_context_planet(user_id, conn=conn)
+    if not planet:
+        return {"jobs": [], "planet_id": 0, "planet_name": ""}
+
+    pid = int(planet["id"])
+    now = time.time()
+    hud_jobs: list = []
+
+    bq = get_build_queue_status_for_planet(pid, conn=conn, skip_finish=True)
+    hud_jobs.extend(
+        _head_card_jobs(map_build_queue_to_card_jobs(bq, now=now), max_queued=1)
+    )
+
+    bld = buildings if isinstance(buildings, dict) else None
+    if bld is None:
+        from game.models import get_planet_buildings
+
+        bld = get_planet_buildings(pid, conn=conn)
+
+    research = get_research_status(
+        user_id=int(user_id),
+        buildings=bld,
+        skip_finish=True,
+        conn=conn,
+    )
+    hud_jobs.extend(_head_card_jobs(map_research_queue_to_card_jobs(research, now=now)))
+
+    try:
+        from game.fleet import fleet_schema_ready
+        from game.shipyard_queue import shipyard_queue_for_client, shipyard_queue_table_ready
+
+        if fleet_schema_ready(conn) and shipyard_queue_table_ready(conn):
+            sy_level = int((bld or {}).get("orbital_shipyard") or 0)
+            sy_q = shipyard_queue_for_client(int(user_id), pid, sy_level, conn=conn)
+            hud_jobs.extend(_head_card_jobs(map_shipyard_queue_to_card_jobs(sy_q, now=now)))
+    except Exception:
+        pass
+
+    try:
+        from game.defense import defense_queue_for_client, defense_queue_table_ready
+        from game.models import defense_schema_ready
+
+        if defense_schema_ready(conn) and defense_queue_table_ready(conn):
+            def_q = defense_queue_for_client(int(user_id), pid, conn=conn)
+            hud_jobs.extend(_head_card_jobs(map_defense_queue_to_card_jobs(def_q, now=now)))
+    except Exception:
+        pass
+
+    return {
+        "jobs": hud_jobs,
+        "planet_id": pid,
+        "planet_name": str(planet.get("name") or ""),
+    }

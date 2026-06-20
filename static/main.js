@@ -776,7 +776,7 @@
       document.querySelector(".overview-wrapper[data-planet-id]"),
       document.querySelector(".buildings-wrapper[data-planet-id]"),
       document.querySelector(".research-page[data-planet-id]"),
-      document.getElementById("build-queue-compact"),
+      document.getElementById("global-queue-hud"),
       document.getElementById("research-queue-compact"),
       document.getElementById("shipyard-page"),
       document.getElementById("defense-page"),
@@ -802,7 +802,7 @@
       "shipyard-page",
       "defense-page",
       "trader-hub-page",
-      "build-queue-compact",
+      "global-queue-hud",
       "research-queue-compact",
     ].forEach((id) => {
       const el = document.getElementById(id);
@@ -3169,20 +3169,511 @@
     }
   }
 
-  function _updateBuildQueueCompact(count) {
-    const labelEl = document.getElementById("build-queue-compact-label");
-    if (!labelEl) return;
+  function _collectBuildQueueCardJobs(buildQueueRaw) {
+    const byOwner = buildQueueRaw?.card_jobs_by_owner;
+    if (byOwner && typeof byOwner === "object") {
+      const jobs = [];
+      Object.values(byOwner).forEach((rows) => {
+        if (Array.isArray(rows)) rows.forEach((j) => jobs.push(j));
+      });
+      jobs.sort((a, b) => (Number(a.queue_position) || 0) - (Number(b.queue_position) || 0));
+      if (jobs.length) return jobs;
+    }
+    const queueList = Array.isArray(buildQueueRaw?.queue)
+      ? buildQueueRaw.queue
+      : Array.isArray(buildQueueRaw)
+        ? buildQueueRaw
+        : [];
+    return queueList.map((raw, idx) => {
+      const finishAt = resolveQueueJobFinishTime(raw);
+      const total = Math.max(1, Math.floor(Number(raw.total || raw.total_seconds || 1)));
+      const remainingRaw = resolveQueueJobRemaining(raw);
+      const remaining = Number.isFinite(remainingRaw)
+        ? Math.max(0, Math.floor(remainingRaw))
+        : Math.max(0, Math.floor(Number(raw.remaining_seconds ?? raw.remaining ?? 0)));
+      const isActive = idx === 0;
+      const elapsed = isActive ? Math.max(0, total - remaining) : 0;
+      const progressPct = isActive ? Math.max(0, Math.min(100, Math.round((100 * elapsed) / total))) : 0;
+      const ownerKey = String(raw.building_type || "");
+      return {
+        owner_type: "building",
+        owner_key: ownerKey,
+        job_id: Math.floor(Number(raw.id || 0)),
+        status: isActive ? "active" : "queued",
+        queue_position: idx + 1,
+        finish_at: finishAt,
+        duration_seconds: total,
+        remaining_seconds: remaining,
+        target_level: Math.floor(Number(raw.target_level || 0)),
+        label_key: String(raw.label_key || `building_${ownerKey}`),
+        progress_pct: progressPct,
+      };
+    });
+  }
 
-    const n = Math.max(0, Math.floor(Number(count || 0)));
-    if (!n) {
-      _setIfChanged(labelEl, t("build_queue_compact_idle", "Keine Bauaufträge"));
+  function _buildQueueCompactSignature(buildQueueRaw) {
+    try {
+      const jobs = _collectBuildQueueCardJobs(buildQueueRaw);
+      const count = buildQueueRaw?.summary?.count ?? jobs.length;
+      const pid = Number(buildQueueRaw?.planet_id || 0);
+      const items = jobs
+        .map((j) => cardQueueJobSignature(j))
+        .join("|");
+      return `${pid}|${count}|${items}`;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function _globalQueueHudDomain(job) {
+    return _cardQueueDomain(job);
+  }
+
+  function _globalQueueHudNavPath(job) {
+    const domain = _globalQueueHudDomain(job);
+    if (domain === "research") return "/research";
+    if (domain === "shipyard") return "/shipyard";
+    if (domain === "defense") return "/defense";
+    return "/buildings";
+  }
+
+  function _globalQueueHudGlyph(job) {
+    const domain = _globalQueueHudDomain(job);
+    if (domain === "research") return "🔬";
+    if (domain === "shipyard") return "🚀";
+    if (domain === "defense") return "🛡";
+    return "🏗";
+  }
+
+  function _globalQueueHudLabel(job) {
+    const domain = _globalQueueHudDomain(job);
+    const ownerKey = String(job.owner_key || "");
+    const labelKey = String(job.label_key || job.label || "");
+    if (domain === "shipyard" || domain === "defense") {
+      const amount = Math.floor(Number(job.target_amount || 0));
+      const itemLabel =
+        domain === "defense"
+          ? t(job.defense_label_key || `defense_${ownerKey}`, ownerKey)
+          : t(job.ship_label_key || `fleet_ship_${ownerKey}`, ownerKey);
+      return amount > 1 ? `${itemLabel} ×${fmtNumber(amount)}` : itemLabel;
+    }
+    return t(labelKey || `building_${ownerKey}`, ownerKey);
+  }
+
+  function _globalQueueHudSignature(payload) {
+    try {
+      const jobs = Array.isArray(payload?.jobs) ? payload.jobs : [];
+      const pid = Number(payload?.planet_id || 0);
+      return `${pid}|${jobs.map((j) => cardQueueJobSignature(j)).join("|")}`;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function _globalQueueHudPayloadFromState(data) {
+    if (data?.global_queue_hud && typeof data.global_queue_hud === "object") {
+      return data.global_queue_hud;
+    }
+    const jobs = [];
+    const buildJobs = _collectBuildQueueCardJobs(data?.build_queue);
+    buildJobs.forEach((j) => {
+      const pos = Number(j.queue_position || 0);
+      if (pos === 1 || pos === 2) jobs.push(j);
+    });
+    const researchJobs = _collectResearchQueueCardJobs(data?.research);
+    const activeResearch = researchJobs.find((j) => String(j.status || "") === "active");
+    if (activeResearch) jobs.push(activeResearch);
+    return {
+      jobs,
+      planet_id: Number(data?.active_planet_id || data?.build_queue?.planet_id || 0),
+      planet_name: String(data?.active_planet_name || ""),
+    };
+  }
+
+  function _collectResearchQueueCardJobs(researchRaw) {
+    const byOwner = researchRaw?.card_jobs_by_owner;
+    if (byOwner && typeof byOwner === "object") {
+      const jobs = [];
+      Object.values(byOwner).forEach((rows) => {
+        if (Array.isArray(rows)) rows.forEach((j) => jobs.push(j));
+      });
+      jobs.sort((a, b) => (Number(a.queue_position) || 0) - (Number(b.queue_position) || 0));
+      return jobs;
+    }
+    const queueList = Array.isArray(researchRaw?.queue) ? researchRaw.queue : [];
+    return queueList.map((raw, idx) => ({
+      owner_type: "research",
+      owner_key: raw.tech_key || raw.key,
+      job_id: raw.id,
+      status: idx === 0 ? "active" : "queued",
+      queue_position: idx + 1,
+      finish_at: resolveQueueJobFinishTime(raw),
+      remaining_seconds: resolveQueueJobRemaining(raw),
+      target_level: raw.target_level,
+      label_key: raw.label_key || `research_${raw.tech_key || raw.key}`,
+    }));
+  }
+
+  function _globalQueueHudDomainTitle(job) {
+    const domain = _globalQueueHudDomain(job);
+    if (domain === "research") return t("nav_research", "Forschung");
+    if (domain === "shipyard") return t("location_action_shipyard", "Orbitalwerft");
+    if (domain === "defense") return t("nav_defense", "Verteidigung");
+    return t("nav_buildings", "Gebäude");
+  }
+
+  function _globalQueueHudSubtitle(job) {
+    const domain = _globalQueueHudDomain(job);
+    const isActive = String(job.status || "") === "active";
+    const targetLevel = Math.floor(Number(job.target_level || 0));
+    const position = Math.max(1, Math.floor(Number(job.queue_position || 1)));
+
+    if (domain === "shipyard" || domain === "defense") {
+      const prefix = tf("global_queue_hud_next_job", {}, "Nächster Auftrag:");
+      return `${prefix} ${_globalQueueHudLabel(job)}`;
+    }
+    if (targetLevel > 0) {
+      return tf("build_queue_compact_level", { level: targetLevel }, `Level ${targetLevel}`);
+    }
+    if (!isActive && domain === "building") {
+      return tf("queue_card_status_queued", { n: position }, `Queue #${position}`);
+    }
+    return _globalQueueHudLabel(job);
+  }
+
+  function _syncGlobalQueueHudRowVisibility() {
+    const row = document.getElementById("gc-header-row-queues");
+    if (!row) return;
+    const hud = document.querySelector("[data-global-queue-hud]");
+    const fleet = document.querySelector("[data-fleet-global-hud]");
+    const queueVisible = hud && !hud.hidden && !hud.classList.contains("is-empty");
+    const fleetVisible = fleet && !fleet.hidden && !fleet.classList.contains("is-empty");
+    row.hidden = !queueVisible && !fleetVisible;
+  }
+
+  function _createGlobalQueueHudRow(job) {
+    if (!job || typeof job !== "object") return null;
+    const domain = _globalQueueHudDomain(job);
+    const isActive = String(job.status || "") === "active";
+    const jobId = Math.floor(Number(job.job_id || 0));
+    const finishAt = Math.floor(Number(job.finish_at || 0));
+    const totalSeconds = Math.max(1, Math.floor(Number(job.duration_seconds || 1)));
+    const remaining = Math.max(0, Math.floor(Number(job.remaining_seconds || 0)));
+    const progressPct = Math.max(0, Math.min(100, Math.floor(Number(job.progress_pct || 0))));
+
+    const chip = document.createElement("article");
+    chip.className = `gc-global-queue-hud-chip gc-global-queue-hud-chip--${domain}${isActive ? " is-active" : " is-queued"}`;
+    chip.dataset.globalQueueHudChip = "1";
+    chip.dataset.globalQueueHudRow = "1";
+    chip.dataset.navPath = _globalQueueHudNavPath(job);
+
+    const wrap = document.createElement("div");
+    wrap.className = "gc-global-queue-hud-item";
+    wrap.dataset.gcCardQueue = "1";
+    wrap.dataset.queueActive = isActive ? "1" : "0";
+    wrap.dataset.timerDomain = domain;
+    wrap.dataset.queuePosition = String(Math.max(1, Math.floor(Number(job.queue_position || 1))));
+    wrap.dataset.queueSig = cardQueueJobSignature(job);
+    if (jobId > 0) wrap.dataset.jobId = String(jobId);
+    if (finishAt > 0) wrap.dataset.finishAt = String(finishAt);
+    wrap.dataset.totalSeconds = String(totalSeconds);
+    if (Number.isFinite(remaining)) {
+      assignMonotonicServerRemaining(wrap, remaining, finishAt);
+    }
+    wrap.appendChild(chip);
+
+    const head = document.createElement("div");
+    head.className = "gc-global-queue-hud-chip-head";
+    const glyph = document.createElement("span");
+    glyph.className = "gc-global-queue-hud-glyph";
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = _globalQueueHudGlyph(job);
+    head.appendChild(glyph);
+    const domainEl = document.createElement("span");
+    domainEl.className = "gc-global-queue-hud-chip-domain";
+    domainEl.textContent = _globalQueueHudDomainTitle(job);
+    head.appendChild(domainEl);
+    chip.appendChild(head);
+
+    const titleEl = document.createElement("div");
+    titleEl.className = "gc-global-queue-hud-chip-title";
+    if (domain === "shipyard" || domain === "defense") {
+      titleEl.textContent = _globalQueueHudDomainTitle(job);
+    } else {
+      titleEl.textContent = _globalQueueHudLabel(job);
+    }
+    chip.appendChild(titleEl);
+
+    if (isActive) {
+      const bar = document.createElement("div");
+      bar.className = "gc-card-queue-bar gc-global-queue-hud-bar";
+      bar.setAttribute("role", "progressbar");
+      bar.setAttribute("aria-valuemin", "0");
+      bar.setAttribute("aria-valuemax", "100");
+      bar.setAttribute("aria-valuenow", String(progressPct));
+      const fill = document.createElement("div");
+      fill.className = "gc-card-queue-bar-fill gc-progress-smooth";
+      fill.style.width = `${progressPct}%`;
+      bar.appendChild(fill);
+      chip.appendChild(bar);
+    }
+
+    const subtitleEl = document.createElement("div");
+    subtitleEl.className = "gc-global-queue-hud-chip-subtitle";
+    subtitleEl.textContent = _globalQueueHudSubtitle(job);
+    chip.appendChild(subtitleEl);
+
+    const foot = document.createElement("div");
+    foot.className = "gc-global-queue-hud-chip-foot";
+
+    const timerEl = document.createElement("span");
+    timerEl.className = "gc-card-queue-timer gc-global-queue-hud-timer gc-mono";
+    const waitTarget = cardQueueTimerTarget(job, isActive);
+    const timerKind =
+      domain === "research"
+        ? "research"
+        : domain === "shipyard"
+          ? "shipyard"
+          : domain === "defense"
+            ? "defense"
+            : "build";
+    if (waitTarget > 0) {
+      const displayRemaining = queueJobRemainingSeconds(
+        waitTarget,
+        getTimerServerNow(),
+        resolveQueueJobRemaining(job)
+      );
+      applyQueueJobTimerAttrs(timerEl, waitTarget, timerKind, "game-state", displayRemaining);
+      timerEl.textContent = formatEta(queueTimerDisplaySeconds(displayRemaining));
+    } else if (!isActive) {
+      timerEl.textContent = formatEta(Math.max(0, Math.floor(Number(job.remaining_seconds || 0))));
+    }
+    foot.appendChild(timerEl);
+
+    if (jobId > 0) {
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "gc-global-queue-hud-cancel gc-btn gc-btn-ghost gc-btn-xs";
+      cancelBtn.setAttribute("aria-label", t("action_cancel", "Abbrechen"));
+      cancelBtn.title = t("action_cancel", "Abbrechen");
+      cancelBtn.textContent = "✕";
+      if (domain === "research") cancelBtn.dataset.researchCancelId = String(jobId);
+      else if (domain === "shipyard") cancelBtn.dataset.shipyardQueueCancel = String(jobId);
+      else if (domain === "defense") cancelBtn.dataset.defenseQueueCancel = String(jobId);
+      else cancelBtn.dataset.buildCancelId = String(jobId);
+      foot.appendChild(cancelBtn);
+    }
+    chip.appendChild(foot);
+
+    return wrap;
+  }
+
+  function _syncGlobalQueueHudLiveState(jobs) {
+    const buildJobs = (jobs || []).filter((j) => _globalQueueHudDomain(j) === "building");
+    _syncBuildQueueLiveState(
+      buildJobs.map((j) => ({
+        id: j.job_id,
+        building_type: j.owner_key,
+        finish_time: j.finish_at,
+        total: j.duration_seconds,
+        remaining: j.remaining_seconds,
+        remaining_seconds: j.remaining_seconds,
+      }))
+    );
+    const researchJobs = (jobs || []).filter((j) => _globalQueueHudDomain(j) === "research");
+    if (researchJobs.length) _syncResearchQueueLiveState(researchJobs);
+    const shipJobs = (jobs || []).filter((j) => _globalQueueHudDomain(j) === "shipyard");
+    if (shipJobs.length) _syncShipyardQueueLiveState(shipJobs);
+    const defJobs = (jobs || []).filter((j) => _globalQueueHudDomain(j) === "defense");
+    if (defJobs.length) _syncDefenseQueueLiveState(defJobs);
+  }
+
+  function _globalQueueHudJobsForPage(jobs) {
+    const list = Array.isArray(jobs) ? jobs : [];
+    if (!document.querySelector("[data-buildings-page]")) return list;
+    return list.filter((j) => _globalQueueHudDomain(j) !== "building");
+  }
+
+  function _renderGlobalQueueHud(payload) {
+    const hud = document.querySelector("[data-global-queue-hud]");
+    if (!hud) return;
+
+    const bodyEl = hud.querySelector("[data-global-queue-hud-body]");
+    if (!bodyEl) return;
+
+    const allJobs = Array.isArray(payload?.jobs) ? payload.jobs : [];
+    const jobs = _globalQueueHudJobsForPage(allJobs);
+    const planetId = Number(payload?.planet_id || 0);
+    if (planetId > 0) hud.dataset.planetId = String(planetId);
+
+    _syncGlobalQueueHudLiveState(allJobs);
+
+    if (!jobs.length) {
+      hud.classList.add("is-empty");
+      hud.hidden = true;
+      delete bodyEl.dataset.hudSig;
+      bodyEl.replaceChildren();
+      _syncGlobalQueueHudRowVisibility();
       return;
     }
-    _setIfChanged(
-      labelEl,
-      tf("build_queue_compact_active", { count: n }, `${n} Bauaufträge aktiv`)
-    );
+
+    hud.classList.remove("is-empty");
+    hud.hidden = false;
+
+    const sig = _globalQueueHudSignature({ ...payload, jobs });
+    if (sig === bodyEl.dataset.hudSig) {
+      _syncGlobalQueueHudRowVisibility();
+      return;
+    }
+    bodyEl.dataset.hudSig = sig;
+    bodyEl.replaceChildren();
+
+    jobs.forEach((job) => {
+      const item = _createGlobalQueueHudRow(job);
+      if (item) bodyEl.appendChild(item);
+    });
+
+    _syncGlobalQueueHudRowVisibility();
   }
+
+  function renderGlobalQueueHud(payloadOrState) {
+    const payload =
+      payloadOrState?.jobs !== undefined
+        ? payloadOrState
+        : _globalQueueHudPayloadFromState(payloadOrState || GC.lastState || {});
+    _renderGlobalQueueHud(payload);
+    GC.startProgressTicker();
+  }
+  GC.renderGlobalQueueHud = renderGlobalQueueHud;
+  GC.renderGlobalBuildQueueHud = renderGlobalQueueHud;
+
+  async function _handleGlobalQueueHudCancel(btn) {
+    if (!btn || btn.dataset.busy === "1") return;
+    const planetId = Number(
+      btn.closest("[data-global-queue-hud]")?.dataset.planetId
+      || GC.lastState?.global_queue_hud?.planet_id
+      || GC.lastState?.active_planet_id
+      || 0
+    );
+
+    if (btn.dataset.buildCancelId) {
+      if (GC.actionLocks.build) return;
+      btn.dataset.busy = "1";
+      GC.actionLocks.build = true;
+      try {
+        const json = await GC.fetchGameAction("/api/buildings/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ job_id: Number(btn.dataset.buildCancelId || 0) }),
+        });
+        applyActionState(json, json.ok ? "build_cancel_success" : "build_cancel_error");
+        if (!json.ok) showNotify(mapActionError(json.reason, json.payload), "error");
+      } catch (err) {
+        console.error("Global build cancel failed:", err);
+        showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+      } finally {
+        btn.dataset.busy = "0";
+        GC.actionLocks.build = false;
+      }
+      return;
+    }
+
+    if (btn.dataset.researchCancelId) {
+      if (GC.actionLocks.research) return;
+      btn.dataset.busy = "1";
+      GC.actionLocks.research = true;
+      try {
+        const json = await GC.fetchGameAction("/api/research/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ job_id: Number(btn.dataset.researchCancelId || 0) }),
+        });
+        applyActionState(json, json.ok ? "research_cancel_success" : "research_cancel_error");
+        if (!json.ok) showNotify(mapActionError(json.reason, json.payload), "error");
+      } catch (err) {
+        console.error("Global research cancel failed:", err);
+        showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+      } finally {
+        btn.dataset.busy = "0";
+        GC.actionLocks.research = false;
+      }
+      return;
+    }
+
+    if (btn.dataset.shipyardQueueCancel) {
+      btn.dataset.busy = "1";
+      try {
+        const res = await GC.fetchGameAction("/api/shipyard/queue/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            job_id: Number(btn.dataset.shipyardQueueCancel || 0),
+            planet_id: planetId || undefined,
+          }),
+        });
+        if (res?.ok) {
+          if (res.state) applyActionState(res, "shipyard_cancel");
+          else if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_cancel");
+        } else {
+          showNotify(reasonText(res?.error || apiError(res)), "error");
+        }
+      } catch (_) {
+        showNotify(reasonText("generic"), "error");
+      } finally {
+        btn.dataset.busy = "0";
+      }
+      return;
+    }
+
+    if (btn.dataset.defenseQueueCancel) {
+      btn.dataset.busy = "1";
+      try {
+        const res = await GC.fetchGameAction("/api/defense/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            job_id: Number(btn.dataset.defenseQueueCancel || 0),
+            planet_id: planetId || undefined,
+          }),
+        });
+        if (res?.ok) {
+          applyActionState(res, "defense_cancel");
+        } else {
+          showNotify(reasonText(res?.error || apiError(res)), "error");
+        }
+      } catch (_) {
+        showNotify(reasonText("generic"), "error");
+      } finally {
+        btn.dataset.busy = "0";
+      }
+    }
+  }
+
+  function initGlobalQueueHud() {
+    const hud = document.querySelector("[data-global-queue-hud]");
+    if (!hud || hud.dataset.bound === "1") return;
+    hud.dataset.bound = "1";
+
+    hud.addEventListener("click", async (e) => {
+      const cancelBtn = e.target.closest(
+        ".gc-global-queue-hud-cancel, [data-build-cancel-id], [data-research-cancel-id], [data-shipyard-queue-cancel], [data-defense-queue-cancel]"
+      );
+      if (cancelBtn && hud.contains(cancelBtn)) {
+        e.preventDefault();
+        e.stopPropagation();
+        await _handleGlobalQueueHudCancel(cancelBtn);
+        return;
+      }
+      const row = e.target.closest("[data-global-queue-hud-chip], [data-global-queue-hud-row]");
+      if (!row || !hud.contains(row)) return;
+      const path = String(row.dataset.navPath || "").trim();
+      if (path && typeof GC.navigateTo === "function") {
+        e.preventDefault();
+        GC.navigateTo(path, { push: true });
+      }
+    });
+  }
+  GC.initGlobalQueueHud = initGlobalQueueHud;
 
   function _getActiveBuildingTab() {
     const pageRoot = document.querySelector("[data-buildings-page]");
@@ -4732,32 +5223,167 @@
     }
   }
 
-  function renderBuildQueue(buildQueueRaw) {
+  function _buildQueueCompactSignature(buildQueueRaw) {
+    try {
+      const jobs = _collectBuildQueueCardJobs(buildQueueRaw);
+      return jobs.map((j) => cardQueueJobSignature(j)).join("|");
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function _buildQueueCompactJobLabel(job) {
+    const ownerKey = String(job.owner_key || "");
+    const labelKey = String(job.label_key || `building_${ownerKey}`);
+    const name = t(labelKey, ownerKey);
+    const level = Math.floor(Number(job.target_level || 0));
+    const levelStr =
+      level > 0 ? tf("build_queue_compact_level", { level }, `Lv.${level}`) : "";
+    return { name, levelStr, level, labelKey, ownerKey };
+  }
+
+  function _appendBuildQueueCompactTimer(parent, job, isActive) {
+    parent.appendChild(document.createTextNode(" · "));
+    const timerEl = document.createElement("span");
+    timerEl.className = "gc-card-queue-timer gc-mono build-queue-compact-timer";
+    const waitTarget = cardQueueTimerTarget(job, isActive);
+    if (waitTarget > 0) {
+      const displayRemaining = queueJobRemainingSeconds(
+        waitTarget,
+        getTimerServerNow(),
+        resolveQueueJobRemaining(job)
+      );
+      applyQueueJobTimerAttrs(timerEl, waitTarget, "build", "game-state", displayRemaining);
+      timerEl.textContent = formatEta(queueTimerDisplaySeconds(displayRemaining));
+    } else {
+      timerEl.textContent = formatEta(Math.max(0, Math.floor(Number(job.remaining_seconds || 0))));
+    }
+    parent.appendChild(timerEl);
+  }
+
+  function _updateBuildQueueCompact(buildQueueRaw) {
     const compact = document.getElementById("build-queue-compact");
     if (!compact) return;
 
-    let queueList = [];
-    let summary = null;
-    let queuePlanetId = Number(buildQueueRaw?.planet_id || compact.dataset.planetId || 0);
+    const bodyEl =
+      document.getElementById("build-queue-compact-body")
+      || compact.querySelector("[data-build-queue-compact-body]");
+    if (!bodyEl) return;
 
+    const jobs = _collectBuildQueueCardJobs(buildQueueRaw);
+    const sig = _buildQueueCompactSignature(buildQueueRaw);
+    if (sig === compact.dataset.compactSig) return;
+    compact.dataset.compactSig = sig;
+
+    const planetName = String(
+      buildQueueRaw?.planet_name
+      || GC.lastState?.active_planet_name
+      || ""
+    ).trim();
+    const planetEl = document.getElementById("build-planet-label");
+    if (planetEl && planetName) {
+      _setIfChanged(planetEl, `· ${planetName}`);
+    }
+
+    let cancelBtn = compact.querySelector("[data-build-queue-compact-cancel]");
+    bodyEl.replaceChildren();
+
+    if (!jobs.length) {
+      const idleEl = document.createElement("span");
+      idleEl.className = "build-queue-compact-label";
+      idleEl.id = "build-queue-compact-label";
+      idleEl.textContent = t("build_queue_compact_idle", "Keine Bauaufträge");
+      bodyEl.appendChild(idleEl);
+      if (cancelBtn) cancelBtn.hidden = true;
+      return;
+    }
+
+    const active = jobs[0];
+    const next = jobs.length > 1 ? jobs[1] : null;
+    const isActive = String(active.status || "") === "active";
+    const activePart = _buildQueueCompactJobLabel(active);
+
+    const activeEl = document.createElement("span");
+    activeEl.className = "build-queue-compact-active";
+    activeEl.id = "build-queue-compact-label";
+
+    if (jobs.length === 1) {
+      activeEl.appendChild(
+        document.createTextNode(
+          tf(
+            "build_queue_compact_building",
+            { name: activePart.name },
+            `${activePart.name} wird gebaut`
+          )
+        )
+      );
+    } else {
+      activeEl.appendChild(document.createTextNode(activePart.name));
+    }
+
+    if (activePart.levelStr) {
+      activeEl.appendChild(document.createTextNode(" · "));
+      const lvlEl = document.createElement("span");
+      lvlEl.className = "gc-mono";
+      lvlEl.textContent = activePart.levelStr;
+      activeEl.appendChild(lvlEl);
+    }
+
+    _appendBuildQueueCompactTimer(activeEl, active, isActive);
+    bodyEl.appendChild(activeEl);
+
+    if (next) {
+      const sepEl = document.createElement("span");
+      sepEl.className = "build-queue-compact-sep";
+      sepEl.setAttribute("aria-hidden", "true");
+      sepEl.textContent = "|";
+      bodyEl.appendChild(sepEl);
+
+      const nextPart = _buildQueueCompactJobLabel(next);
+      const nextEl = document.createElement("span");
+      nextEl.className = "build-queue-compact-next";
+      nextEl.id = "build-queue-compact-next";
+      nextEl.textContent = tf(
+        "build_queue_compact_next",
+        { name: nextPart.name, level: nextPart.level },
+        `Nächster: ${nextPart.name} · ${nextPart.levelStr}`
+      );
+      bodyEl.appendChild(nextEl);
+    }
+
+    const activeJobId = Math.floor(Number(active.job_id || 0));
+    if (activeJobId > 0) {
+      if (!cancelBtn) {
+        cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "build-queue-compact-cancel";
+        cancelBtn.dataset.buildQueueCompactCancel = "1";
+        cancelBtn.innerHTML = '<span aria-hidden="true">×</span>';
+        cancelBtn.setAttribute("aria-label", t("action_cancel", "Abbrechen"));
+        cancelBtn.title = t("action_cancel", "Abbrechen");
+        const anchor = planetEl || null;
+        if (anchor) compact.insertBefore(cancelBtn, anchor);
+        else compact.appendChild(cancelBtn);
+      }
+      cancelBtn.dataset.buildCancelId = String(activeJobId);
+      cancelBtn.hidden = false;
+    } else if (cancelBtn) {
+      cancelBtn.hidden = true;
+    }
+  }
+
+  function renderBuildQueue(buildQueueRaw) {
+    let queueList = [];
     if (!buildQueueRaw) {
       queueList = [];
     } else if (Array.isArray(buildQueueRaw)) {
       queueList = buildQueueRaw;
     } else if (Array.isArray(buildQueueRaw.queue)) {
       queueList = buildQueueRaw.queue;
-      summary = buildQueueRaw.summary || null;
-      queuePlanetId = Number(buildQueueRaw.planet_id || queuePlanetId || 0);
     }
 
-    if (queuePlanetId > 0) {
-      compact.dataset.planetId = String(queuePlanetId);
-    }
-
-    _syncBuildQueueLiveState(queueList);
-
-    const sig = _queueSignature(queueList, summary, queuePlanetId);
-    const count = summary?.count ?? queueList.length;
+    const sig = _queueSignature(queueList, buildQueueRaw?.summary || null, buildQueueRaw?.planet_id || 0);
+    const count = buildQueueRaw?.summary?.count ?? queueList.length;
 
     if (sig === _lastQueueSignature) {
       const first = queueList[0];
@@ -4766,7 +5392,6 @@
         resolveQueueJobFinishTime(first) &&
         resolveQueueJobFinishTime(first) <= getTimerServerNow();
       if (!overdue) {
-        _updateBuildQueueCompact(count);
         GC.startProgressTicker();
         return;
       }
@@ -4774,9 +5399,11 @@
     _lastQueueSignature = sig;
     _buildZeroHandled = "";
 
-    _updateBuildQueueCompact(count);
     if (!queueList.length) _finishRefreshArmed.buildings = false;
     else clearFinishRefreshArmed("buildings", queueList);
+
+    _syncBuildQueueLiveState(queueList);
+    _updateBuildQueueCompact(buildQueueRaw);
 
     GC.startProgressTicker();
   }
@@ -6321,6 +6948,7 @@
       hud.hidden = true;
       hud.classList.add("is-empty");
       updateFleetNavBadge(0);
+      _syncGlobalQueueHudRowVisibility();
       return;
     }
 
@@ -6373,6 +7001,7 @@
       _globalFleetHudSig = signature;
       _clearMovementCountdownExpiryState();
     }
+    _syncGlobalQueueHudRowVisibility();
     GC.startProgressTicker();
   }
   GC.renderGlobalFleetHud = renderGlobalFleetHud;
@@ -6540,6 +7169,10 @@
 
     if (Array.isArray(data.active_fleets)) {
       renderGlobalFleetHud(data.active_fleets);
+    }
+
+    if (data.global_queue_hud !== undefined || data.build_queue !== undefined) {
+      renderGlobalQueueHud(data.global_queue_hud || data);
     }
   }
 
@@ -6855,6 +7488,8 @@
       lastHadActiveResearch = hasActiveResearchNow;
       lastHadActiveShipyard = SHIPYARDQ.active.finishTime > getTimerServerNow();
 
+      renderBuildQueue(buildQueueRaw);
+
       if (shouldPatchGameStateModule("overview")) {
         patchOverviewScoreFromState(data);
 
@@ -6958,7 +7593,6 @@
         }
       });
 
-      renderBuildQueue(buildQueueRaw);
       updateBuildQueueActions(buildQueueRaw);
 
       if (data.buildings_panel) {
@@ -7237,10 +7871,10 @@
         nameInput &&
         (isPlanetManageModalOpen() || document.activeElement === nameInput);
       if (nameInput && !inputActive) nameInput.value = label;
-      ["build-queue-planet-label", "research-planet-label"].forEach((id) => {
+      ["research-planet-label"].forEach((id) => {
         const chip = document.getElementById(id);
         if (!chip) return;
-        chip.textContent = id === "build-queue-planet-label" ? `· ${label}` : label;
+        _setIfChanged(chip, label);
       });
     }
 
@@ -14665,10 +15299,10 @@
             GC.updateHeaderPlanetSwitcherFromState(res.state);
           }
           const name = item.dataset.planetName || "";
-          ["build-queue-planet-label", "research-planet-label"].forEach((id) => {
+          ["research-planet-label"].forEach((id) => {
             const el = document.getElementById(id);
             if (!el || !name) return;
-            el.textContent = id === "build-queue-planet-label" ? `· ${name}` : name;
+            el.textContent = name;
           });
           await GC.reloadCurrentPage({ force: true, skipHydrate: true, skipGameState: true });
           syncScopedPlanetIds(planetId);
@@ -22241,6 +22875,7 @@
     initOptionsFormsCapture();
     initSkipLink();
     initGameActions();
+    initGlobalQueueHud();
     bindPlanetEvolutionOnce();
     bindFleetOnce();
     initHeaderPlanetSwitcher();

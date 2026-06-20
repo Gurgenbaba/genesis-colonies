@@ -1,5 +1,8 @@
 {% set hp_planets = HEADER_PLANETS if HEADER_PLANETS is defined else [] %}
 {% set hp_active = HEADER_ACTIVE_PLANET if HEADER_ACTIVE_PLANET is defined else none %}
+{% set hp_pl_current = (hp_planets|length) if hp_planets else 1 %}
+{% set hp_gs_pl = (GAME_SETTINGS if GAME_SETTINGS is defined and GAME_SETTINGS else {}) %}
+{% set hp_pl_max = (hp_gs_pl.max_colonies_per_player|default(9))|int %}
 {% if hp_active %}
 {% set hp_multi = (hp_planets|length > 1) %}
 {% set hp_identity_key = hp_active.identity_title_key or hp_active.empire_subtitle_key or hp_active.empire_role_label_key %}
@@ -16,19 +19,20 @@
        {% if hp_multi %}aria-controls="gc-planet-switcher-menu"{% endif %}
        {% if not hp_multi %}aria-disabled="true"{% endif %}
        title="{{ T('header_planet_switcher_title') }}">
-    <span class="gc-hud-panel-tag">{{ T('header_planet_label') }}</span>
+    <span class="gc-hud-panel-tag gc-sr-only">{{ T('header_planet_label') }}</span>
     <span class="gc-planet-switcher-body">
       <span class="gc-planet-switcher-name-row">
         {% if hp_active.empire_role_icon %}
         <span class="gc-planet-switcher-icon" data-planet-switcher-icon aria-hidden="true">{{ hp_active.empire_role_icon }}</span>
         {% endif %}
         <span class="gc-planet-switcher-name" data-planet-switcher-name>{{ hp_active.name }}</span>
+        <span class="gc-planet-switcher-limit gc-mono" data-planet-limit-value title="{{ T('header_planet_limit', 'Planeten') }}">{{ hp_pl_current|fmt_int }}/{{ hp_pl_max|fmt_int }}</span>
       </span>
-      {% if hp_identity_key %}
-      <span class="gc-planet-switcher-role" data-planet-switcher-role>{{ T(hp_identity_key) }}</span>
-      {% endif %}
       {% if hp_active.coordinates_formatted %}
       <span class="gc-planet-switcher-coord gc-mono" data-planet-switcher-coord>{{ galaxy_coord_link(hp_active.coordinates_formatted) }}</span>
+      {% endif %}
+      {% if hp_identity_key %}
+      <span class="gc-planet-switcher-role" data-planet-switcher-role>{{ T(hp_identity_key) }}</span>
       {% endif %}
     </span>
     {% if hp_multi %}

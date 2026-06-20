@@ -1172,6 +1172,7 @@ def get_build_queue_status_for_planet(
                 "label_key": get_building_label_key(b_type),
                 "target_level": int(target_level),
                 "remaining": int(remaining),
+                "remaining_seconds": int(remaining),
                 "total": int(total),
                 "finish_time": finish_time,
             })

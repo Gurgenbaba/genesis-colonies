@@ -198,10 +198,10 @@ body.gc-body-ingame.gc-has-planet-landscape {
 body.gc-body-ingame.gc-has-planet-landscape .gc-bg {
   opacity: 1;
   background-image:
-    linear-gradient(rgba(0, 8, 18, 0.34), rgba(0, 8, 18, 0.50)),
+    linear-gradient(rgba(0, 12, 28, 0.62), rgba(0, 10, 22, 0.78)),
     var(--planet-landscape);
   background-image:
-    linear-gradient(rgba(0, 8, 18, 0.34), rgba(0, 8, 18, 0.50)),
+    linear-gradient(rgba(0, 12, 28, 0.62), rgba(0, 10, 22, 0.78)),
     image-set(
       var(--planet-landscape-webp) type("image/webp"),
       var(--planet-landscape) type("image/jpeg")
@@ -209,20 +209,21 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-bg {
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
+  filter: saturate(0.55) hue-rotate(12deg);
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-bg::after {
   background:
-    radial-gradient(circle at center, transparent 42%, rgba(0, 0, 0, 0.22) 100%),
-    radial-gradient(circle at 50% 15%, rgba(0, 255, 255, 0.05), transparent 42%),
+    radial-gradient(circle at center, transparent 38%, rgba(0, 0, 0, 0.38) 100%),
+    radial-gradient(circle at 50% 12%, rgba(70, 229, 255, 0.08), transparent 46%),
     linear-gradient(
       90deg,
-      rgba(0, 0, 0, 0.34),
-      rgba(0, 0, 0, 0.08) 24%,
-      rgba(0, 0, 0, 0.08) 76%,
-      rgba(0, 0, 0, 0.34)
+      rgba(0, 8, 18, 0.52),
+      rgba(0, 8, 18, 0.18) 24%,
+      rgba(0, 8, 18, 0.18) 76%,
+      rgba(0, 8, 18, 0.52)
     );
-  opacity: 0.92;
+  opacity: 0.96;
 }
 
 body.gc-body-ingame.gc-has-planet-landscape .gc-sidebar {
@@ -6539,22 +6540,99 @@ a.gc-bld-head-action-btn--go:focus-visible{
   max-width: 100%;
 }
 
-/* GC-536B — building card queue block */
+/* GC-536B / GC-644C — building compact queue header */
 .build-queue-compact{
-  /* extends .gc-queue-compact */
+  gap: 8px 10px;
+  padding: 8px 12px;
+  min-height: 38px;
 }
 
 .build-queue-compact-icon{
+  flex: 0 0 auto;
   font-size: 1rem;
   line-height: 1;
   opacity: 0.92;
 }
 
-.build-queue-compact-label{
+.build-queue-compact-body{
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.build-queue-compact-label,
+.build-queue-compact-active{
+  min-width: 0;
   font-size: 0.82rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  line-height: 1.35;
+  color: var(--gc-text-soft);
+}
+
+.build-queue-compact-active{
+  color: var(--gc-text);
+}
+
+.build-queue-compact-active .gc-card-queue-timer,
+.build-queue-compact-timer{
+  color: var(--gc-primary-2);
+}
+
+.build-queue-compact-sep{
+  flex: 0 0 auto;
+  color: rgba(127, 255, 217, 0.28);
+  font-size: 0.78rem;
+}
+
+.build-queue-compact-next{
+  min-width: 0;
+  font-size: 0.78rem;
   color: var(--gc-text-dim);
+}
+
+.build-queue-compact-cancel{
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  margin: 0;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 90, 90, 0.45);
+  background: rgba(255, 60, 60, 0.12);
+  color: rgba(255, 130, 130, 0.95);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.build-queue-compact-cancel:hover,
+.build-queue-compact-cancel:focus-visible{
+  color: #ffd0d0;
+  border-color: rgba(255, 120, 120, 0.65);
+  background: rgba(255, 70, 70, 0.22);
+}
+
+.build-queue-compact-cancel[hidden]{
+  display: none !important;
+}
+
+.build-queue-planet-chip{
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: rgba(127, 255, 217, 0.48);
+  white-space: nowrap;
+}
+
+.buildings-divider.gc-prog-divider{
+  margin: 6px 0 10px;
 }
 
 .gc-building-card--in-queue{
@@ -14739,6 +14817,209 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   flex-wrap: wrap;
 }
 
+/* GC-642 / GC-643 — queue row under resources (full width) */
+.gc-header-row-queues{
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
+}
+
+.gc-header-row-queues[hidden]{
+  display: none !important;
+}
+
+.gc-header-queues-shell{
+  width: 100%;
+  min-width: 0;
+  padding: 6px 10px 8px;
+  border-color: rgba(127, 255, 217, 0.12);
+}
+
+.gc-header-queues-head{
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(127, 255, 217, 0.08);
+}
+
+.gc-header-queues-label{
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(127, 255, 217, 0.55);
+  font-weight: 600;
+}
+
+.gc-header-queues-body{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* GC-642 / GC-643 — universal global queue HUD (horizontal chips) */
+.gc-global-queue-hud{
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--gc-text-soft);
+  overflow: visible;
+}
+
+.gc-global-queue-hud.is-empty,
+.gc-global-queue-hud[hidden]{
+  display: none !important;
+}
+
+.gc-global-queue-hud-body{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+}
+
+.gc-global-queue-hud-item{
+  flex: 1 1 180px;
+  min-width: min(100%, 180px);
+  max-width: 100%;
+}
+
+.gc-global-queue-hud-chip{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  height: 100%;
+  padding: 8px 10px;
+  border-radius: var(--gc-radius-sm);
+  background: linear-gradient(180deg, rgba(8, 14, 28, 0.94), rgba(6, 10, 22, 0.82));
+  border: 1px solid rgba(127, 255, 217, 0.14);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.28) inset,
+    0 6px 14px rgba(0, 0, 0, 0.24);
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.gc-global-queue-hud-chip:hover{
+  border-color: rgba(70, 229, 255, 0.28);
+  box-shadow: var(--gc-border-glow), 0 8px 18px rgba(0, 0, 0, 0.28);
+}
+
+.gc-global-queue-hud-chip.is-queued{
+  opacity: 0.88;
+}
+
+.gc-global-queue-hud-chip-head{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.gc-global-queue-hud-glyph{
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+  line-height: 1;
+  opacity: 0.92;
+}
+
+.gc-global-queue-hud-chip-domain{
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(127, 255, 217, 0.62);
+  font-weight: 700;
+}
+
+.gc-global-queue-hud-chip-title{
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--gc-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc-global-queue-hud-chip-subtitle{
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--gc-text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc-global-queue-hud-chip-foot{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.gc-global-queue-hud-timer{
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.72rem;
+  color: var(--gc-primary-2);
+}
+
+.gc-global-queue-hud-cancel{
+  flex: 0 0 auto;
+  min-width: 1.35rem;
+  min-height: 1.35rem;
+  padding: 0;
+  line-height: 1;
+  font-size: 0.72rem;
+  color: rgba(255, 120, 120, 0.88);
+  border-color: rgba(255, 120, 120, 0.22);
+  cursor: pointer;
+}
+
+.gc-global-queue-hud-cancel:hover,
+.gc-global-queue-hud-cancel:focus-visible{
+  color: #ffb4b4;
+  border-color: rgba(255, 120, 120, 0.45);
+  background: rgba(255, 80, 80, 0.1);
+}
+
+.gc-global-queue-hud-bar{
+  height: 6px;
+  margin: 0;
+  border-color: rgba(127, 255, 217, 0.22);
+}
+
+.gc-global-queue-hud-bar .gc-card-queue-bar-fill{
+  background: linear-gradient(90deg, rgba(70, 229, 255, 0.65), rgba(127, 255, 217, 0.95));
+}
+
+.gc-header-queues-body .gc-fleet-global-hud{
+  flex: 1 1 260px;
+  min-width: min(100%, 260px);
+  max-width: 100%;
+  margin-left: 0;
+}
+
 /* GC-640A — global active fleet HUD (shell, player-wide) */
 .gc-fleet-global-hud{
   display: inline-flex;
@@ -18385,19 +18666,30 @@ body.gc-combat-report-open { overflow: hidden; }
   line-height: 1;
 }
 .gc-planet-switcher-name{
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: rgba(215, 246, 255, 0.94);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: rgba(215, 246, 255, 0.96);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
   flex: 1 1 auto;
 }
+.gc-planet-switcher-limit{
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(120, 200, 255, 0.78);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(120, 200, 255, 0.22);
+  background: rgba(120, 200, 255, 0.06);
+}
 .gc-planet-switcher-role{
-  font-size: 0.74rem;
+  font-size: 0.62rem;
   font-weight: 500;
-  color: rgba(127, 255, 217, 0.88);
+  color: rgba(127, 255, 217, 0.55);
   letter-spacing: 0.02em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -18405,8 +18697,8 @@ body.gc-combat-report-open { overflow: hidden; }
   max-width: 100%;
 }
 .gc-planet-switcher-coord{
-  font-size: 0.68rem;
-  color: rgba(127, 255, 217, 0.45);
+  font-size: 0.62rem;
+  color: rgba(127, 255, 217, 0.42);
 }
 .gc-planet-switcher-chevron{
   flex: 0 0 auto;

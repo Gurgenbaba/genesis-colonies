@@ -316,10 +316,11 @@ def test_game_state_includes_planet_limit(switcher_db, monkeypatch):
 
 
 def test_base_template_shows_planet_limit_panel():
-    tpl = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
-    assert "hud-res-planet-limit" in tpl
-    assert "data-planet-limit-value" in tpl
-    assert "resource-bar-with-planet-limit" in tpl
+    base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+    switcher = (ROOT / "templates" / "partials" / "header_planet_switcher.html").read_text(encoding="utf-8")
+    assert "hud-res-planet-limit" not in base
+    assert "data-planet-limit-value" in switcher
+    assert "gc-planet-switcher-limit" in switcher
 
 
 def test_main_js_patches_planet_limit_from_state():

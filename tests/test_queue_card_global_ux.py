@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 QUEUE_PAGES = {
     "buildings": {
         "template": "templates/buildings.html",
-        "compact_id": "build-queue-compact",
-        "compact_label": "build-queue-compact-label",
+        "skip_compact": True,
+        "global_hud_marker": "data-global-queue-hud",
         "card_attr": "data-building-card",
         "card_queue": "render_hero_queue",
     },
@@ -76,6 +76,8 @@ def _compact_sections(html: str, compact_id: str) -> str:
 
 def test_all_queue_pages_have_compact_status():
     for page, cfg in QUEUE_PAGES.items():
+        if cfg.get("skip_compact"):
+            continue
         html = _read(cfg["template"])
         compact_ids = cfg.get("compact_ids") or [cfg["compact_id"]]
         for compact_id in compact_ids:
@@ -85,8 +87,21 @@ def test_all_queue_pages_have_compact_status():
             )
 
 
+def test_buildings_uses_global_hud_and_compact_header():
+    html = _read("templates/buildings.html")
+    assert "build-queue-compact" in html
+    assert "build-queue-root" not in html
+    assert "gc-page-queue-panel" not in html
+    base = _read("templates/base.html")
+    assert "data-global-queue-hud" in base
+    assert "gc-header-row-queues" in base
+    assert "data-build-queue-global-hud" not in base
+
+
 def test_compact_headers_have_no_timers():
     for page, cfg in QUEUE_PAGES.items():
+        if cfg.get("skip_compact"):
+            continue
         html = _read(cfg["template"])
         compact_ids = cfg.get("compact_ids") or [cfg["compact_id"]]
         for compact_id in compact_ids:
@@ -110,6 +125,15 @@ def test_all_queue_pages_use_card_queue_blocks():
         card_attrs = cfg.get("card_attrs") or [cfg["card_attr"]]
         for attr in card_attrs:
             assert attr in html, f"{page}: missing {attr}"
+
+
+def test_main_js_global_queue_hud_actions():
+    js = _read("static/main.js")
+    assert "initGlobalQueueHud" in js
+    assert "renderGlobalQueueHud" in js
+    assert "_handleGlobalQueueHudCancel" in js
+    assert "data-global-queue-hud-chip" in js
+    assert "global_queue_hud" in js
 
 
 def test_main_js_uses_render_card_queue_block_for_all_domains():

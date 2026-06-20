@@ -143,5 +143,25 @@ def test_buildings_template_card_queue_markers():
     assert "data-building-card" in html
     assert "data-building-type" in html
     assert "build-queue-compact" in html
+    assert "build-queue-compact-body" in html
+    assert "build-queue-compact-next" in html
+    assert "build-queue-compact-cancel" in html
+    assert "build-queue-planet-chip" in html
     assert "gc-card-queue-block" in html
     assert "build-queue-root" not in html
+    assert "gc-page-queue-panel" not in html
+
+
+def test_main_js_updates_build_queue_compact():
+    js = (ROOT / "static/main.js").read_text(encoding="utf-8")
+    assert "_updateBuildQueueCompact" in js
+    assert "build-queue-compact" in js
+    assert "build_queue_compact_next" in js
+    assert "build_queue_compact_building" in js
+
+
+def test_main_js_hides_building_queue_in_global_hud_on_buildings_page():
+    js = (ROOT / "static/main.js").read_text(encoding="utf-8")
+    assert "_globalQueueHudJobsForPage" in js
+    assert 'document.querySelector("[data-buildings-page]")' in js
+    assert '_globalQueueHudDomain(j) !== "building"' in js

@@ -395,6 +395,62 @@ def test_logic_normalize_queue_job_timer_fields():
     assert fields["next_countdown_at"] == int(ts) + 30
 
 
+def test_build_queue_payload_includes_remaining_seconds():
+    """GC-642: queue items expose canonical remaining_seconds for live header timers."""
+    from game.buildings import get_build_queue_status_for_planet
+    from game.models import create_user, get_homeworld, add_build_job, init_db
+
+    init_db()
+    uname = f"bq642_{uuid.uuid4().hex[:8]}"
+    ok, _, user = create_user(uname, "test-pass-123")
+    assert ok and user
+    planet = get_homeworld(player_id=int(user["id"]))
+    planet_id = int(planet["id"])
+    now = time.time()
+    add_build_job(planet_id, "metal_mine", now - 10, now + 45.7)
+
+    payload = get_build_queue_status_for_planet(planet_id, skip_finish=True)
+    queue = payload.get("queue") or []
+    assert queue
+    head = queue[0]
+    assert int(head.get("remaining_seconds") or 0) > 0
+    assert head.get("remaining_seconds") == head.get("remaining")
+    assert int(head.get("target_level") or 0) >= 1
+    assert head.get("label_key")
+    assert isinstance(payload.get("card_jobs_by_owner"), dict)
+
+
+def test_global_queue_hud_payload_includes_jobs():
+    """GC-643: lightweight game-state exposes unified queue HUD slice."""
+    from game.live_state import global_queue_hud_for_game_state
+    from game.models import create_user, get_homeworld, add_build_job, init_db
+
+    init_db()
+    uname = f"gqh643_{uuid.uuid4().hex[:8]}"
+    ok, _, user = create_user(uname, "test-pass-123")
+    assert ok and user
+    planet = get_homeworld(player_id=int(user["id"]))
+    planet_id = int(planet["id"])
+    now = time.time()
+    add_build_job(planet_id, "metal_mine", now - 10, now + 45.7)
+
+    from game.models import db
+
+    conn = db()
+    try:
+        payload = global_queue_hud_for_game_state(int(user["id"]), conn=conn)
+    finally:
+        conn.close()
+
+    assert isinstance(payload.get("jobs"), list)
+    assert payload["jobs"]
+    head = payload["jobs"][0]
+    assert head.get("owner_type") == "building"
+    assert int(head.get("job_id") or 0) > 0
+    assert int(head.get("remaining_seconds") or 0) > 0
+    assert int(payload.get("planet_id") or 0) == planet_id
+
+
 def test_api_game_state_research_queue_timer_fields(game_client):
     client, pid = game_client
     from game.models import save_planet_buildings, get_homeworld

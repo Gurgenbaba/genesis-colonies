@@ -85,9 +85,8 @@ Antwort: `{ ok, reason, job?, state }` — immer frischer game-state.
 ## UI
 
 - Template: `templates/buildings.html` — 4 Tabs
-- **Queue-UX (GC-536B):** Status in jeder Gebäude-Card (`queue_job` via `game/queue_card.py` + `_attach_queue_jobs_to_panel_rows`)
-- Kompakt-Header: `#build-queue-compact` — nur Zähler (`🏗 N Bauaufträge aktiv`), keine Job-Liste
-- Planet-Chip: active planet name
+- **Queue-UX (GC-536B / GC-642):** Status in jeder Gebäude-Card (`queue_job` via `game/queue_card.py` + `_attach_queue_jobs_to_panel_rows`); kein separates Queue-Panel auf der Seite
+- **Globaler HUD:** `#global-queue-hud` / `data-global-queue-hud` in `base.html` — alle Domains (Gebäude, Forschung, Werft, Verteidigung); Zeile → Seite, `[✕]` → Cancel via `applyActionState`
 - Buttons: `.btn-upgrade` → intercepted → POST API
 - Card-Queue: `GC.renderCardQueueBlock` / `.gc-card-queue-block` (Timer + Progress aus Poll)
 

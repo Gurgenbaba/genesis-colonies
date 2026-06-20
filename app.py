@@ -4679,6 +4679,21 @@ def _payload_from_live_context(
         payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
 
     try:
+        from game.live_state import global_queue_hud_for_game_state
+
+        payload["global_queue_hud"] = global_queue_hud_for_game_state(
+            user_id,
+            buildings=buildings,
+            conn=conn,
+        )
+    except Exception:
+        payload["global_queue_hud"] = {
+            "jobs": [],
+            "planet_id": int(payload.get("active_planet_id") or 0),
+            "planet_name": str(payload.get("active_planet_name") or ""),
+        }
+
+    try:
         from game.models import get_player_stats
 
         ps = get_player_stats() or {}
