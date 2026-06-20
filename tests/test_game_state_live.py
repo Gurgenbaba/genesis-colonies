@@ -293,6 +293,8 @@ def test_api_game_state_poll_is_lightweight(game_client):
     assert "items" in body["active_fleets"]
     assert isinstance(body["active_fleets"]["items"], list)
     assert "count" in body["active_fleets"]
+    assert "visible_limit" in body["active_fleets"]
+    assert "next_remaining_seconds" in body["active_fleets"]
     assert "fleet_slots" in body
     assert isinstance(body["fleet_slots"], dict)
 

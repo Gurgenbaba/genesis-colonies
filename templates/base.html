@@ -246,14 +246,12 @@
                     aria-controls="global-fleet-drawer-panel">
               <span class="gc-fleet-drawer-chevron" data-fleet-drawer-chevron aria-hidden="true">▸</span>
               <span class="gc-fleet-drawer-toggle-summary" data-fleet-drawer-summary>{{ T('fleet_drawer_empty', 'Keine aktiven Flotten') }}</span>
-              <span class="gc-fleet-drawer-toggle-actions">
-                <a href="{{ url_for('fleet_view') }}"
-                   class="gc-fleet-drawer-fleet-link"
-                   data-pjax-link
-                   data-fleet-drawer-fleet-link>{{ T('fleet_drawer_show_all', 'Alle anzeigen') }}</a>
-                <span class="gc-fleet-drawer-arrow" data-fleet-drawer-arrow aria-hidden="true"></span>
-              </span>
             </button>
+            <div id="gc-fleet-drawer-tooltip"
+                 class="gc-fleet-drawer-tooltip"
+                 data-fleet-drawer-tooltip
+                 hidden
+                 role="tooltip"></div>
             <div id="global-fleet-drawer-panel"
                  class="gc-fleet-drawer-panel"
                  data-fleet-drawer-panel

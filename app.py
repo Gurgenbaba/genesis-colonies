@@ -4669,13 +4669,28 @@ def _payload_from_live_context(
 
         fleet_hud = fleet_hud_for_game_state(user_id, conn=conn)
         if fleet_hud is not None:
-            payload["active_fleets"] = fleet_hud.get("active_fleets") or []
+            payload["active_fleets"] = fleet_hud.get("active_fleets") or {
+                "count": 0,
+                "visible_limit": 5,
+                "next_remaining_seconds": 0,
+                "items": [],
+            }
             payload["fleet_slots"] = fleet_hud.get("fleet_slots") or {}
         else:
-            payload["active_fleets"] = []
+            payload["active_fleets"] = {
+                "count": 0,
+                "visible_limit": 5,
+                "next_remaining_seconds": 0,
+                "items": [],
+            }
             payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
     except Exception:
-        payload["active_fleets"] = []
+        payload["active_fleets"] = {
+            "count": 0,
+            "visible_limit": 5,
+            "next_remaining_seconds": 0,
+            "items": [],
+        }
         payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
 
     try:

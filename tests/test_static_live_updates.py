@@ -626,6 +626,7 @@ def test_main_js_gc640_global_fleet_hud():
     assert "global-fleet-drawer-root" in base
     assert "data-global-fleet-drawer" in base
     assert "data-fleet-global-hud" not in base
+    assert "data-fleet-drawer-fleet-link" not in base
     assert "data-fleet-nav-badge" in base
     live = _read("game/live_state.py")
     assert "fleet_hud_for_game_state" in live
@@ -642,6 +643,27 @@ def test_main_js_gc640_global_fleet_hud():
     fleet_py = _read("game/fleet.py")
     assert "build_active_fleets_payload" in fleet_py
     assert "recall_fleet_movement" in fleet_py
+
+
+def test_main_js_gc654b_fleet_drawer_visual_polish():
+    """GC-654B: drawer flight route, mission tooltip, no notch."""
+    src = _read("static/main.js")
+    css = _read("static/style.css")
+    base = _read("templates/base.html")
+    fleet_py = _read("game/fleet.py")
+    assert "syncFleetDrawerList" in src
+    assert "fleetDrawerRowCanAct" in src
+    assert "patchFleetDrawerRowFlight" in src
+    assert "data-fleet-flight-route" in src
+    assert "gc-fleet-flight-dot" in css
+    assert "gc-fleet-flight-stage" in css
+    assert "gc-fleet-flight-timer" in css
+    assert "gc-fleet-drawer-tooltip" in css
+    assert ".gc-fleet-drawer-root::before" not in css
+    assert "data-fleet-drawer-fleet-link" not in base
+    assert "data-fleet-drawer-tooltip" in base
+    assert "_movement_progress_pct" in fleet_py
+    assert "ships_breakdown" in fleet_py
 
 
 def test_main_js_gc640b_fleet_page_visual_redesign():

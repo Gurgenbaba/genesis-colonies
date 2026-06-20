@@ -7081,7 +7081,6 @@
   GC.updateNavBadges = updateNavBadges;
 
   let _lastHudOnline = null;
-  let _globalFleetHudSig = "";
   let _globalFleetDrawerBound = false;
   const FLEET_DRAWER_LS_EXPANDED = "gc:fleetDrawer:expanded";
   const FLEET_DRAWER_LS_SHOW_ALL = "gc:fleetDrawer:showAll";
@@ -7143,108 +7142,344 @@
     return `${origin} → ${target}`;
   }
 
-  function patchFleetDrawerRowCountdown(row, mv) {
-    const cdEl = row.querySelector("[data-fleet-drawer-countdown]");
-    const statusEl = row.querySelector("[data-fleet-drawer-status]");
-    if (!cdEl || !mv) return;
-    const phase = mv.phase || mv.leg_phase || mv.status || "";
-    const legKey = globalFleetLegKey(mv, phase);
-    if (statusEl) {
-      const statusKey = mv.status_label || legKey;
-      _setIfChanged(statusEl, t(statusKey, statusKey));
+  const _fleetDrawerMovementById = new Map();
+  let _fleetDrawerTooltipEl = null;
+  let _fleetDrawerTooltipTrigger = null;
+
+  function rememberFleetDrawerMovements(items) {
+    _fleetDrawerMovementById.clear();
+    (items || []).forEach((mv) => {
+      const id = Number(mv.movement_id || mv.id || 0);
+      if (id) _fleetDrawerMovementById.set(id, mv);
+    });
+  }
+
+  function fleetDrawerHoverTooltipsEnabled() {
+    return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  }
+
+  function buildFleetDrawerTooltipHtml(mv) {
+    if (!mv || typeof mv !== "object") return "";
+    const mission = String(mv.mission || mv.mission_type || "custom");
+    const missionKey = mv.mission_label_key || `fleet_mission_${mission}`;
+    const status = String(mv.status || mv.phase || "");
+    const legKey = globalFleetLegKey(mv, status);
+    const targetLabel = `${String(mv.target_name || "").trim()} ${String(mv.target_coords || "").trim()}`.trim()
+      || formatGlobalFleetHudTarget(mv);
+    const ships = Array.isArray(mv.ships_breakdown) ? mv.ships_breakdown : [];
+    const shipLines = ships.length
+      ? ships.map((s) => `${t(s.label_key || `fleet_ship_${s.key}`, s.key)} × ${fmtNumber(s.count)}`).join("<br>")
+      : tf("fleet_drawer_tooltip_no_ships", {}, "Keine Schiffe");
+    const res = mv.loaded_resources || mv.resources || {};
+    const metal = Number(res.metal || 0);
+    const crystal = Number(res.crystal || 0);
+    const fuel = Number(res.fuel_cells || 0);
+    const countdownAt = Number(mv.countdown_at || 0);
+    const rem = countdownAt
+      ? formatCountdownRemain(movementRemainingSeconds(countdownAt, getTimerServerNow(), mv.remaining_seconds))
+      : "–";
+    const rows = [
+      `<div class="gc-fleet-drawer-tooltip-title">${t(missionKey, mission)}</div>`,
+      `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${t("fleet_drawer_tooltip_ships", "Schiffe")}</span>${shipLines}</div>`,
+      `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${t("fleet_drawer_tooltip_cargo", "Fracht")}</span>`,
+      `${t("resource_metal", "Ferronit")}: ${fmtNumber(metal)}<br>`,
+      `${t("resource_crystal", "Crytite")}: ${fmtNumber(crystal)}<br>`,
+      `${t("resource_fuel_cells", "Brennzellen")}: ${fmtNumber(fuel)}</div>`,
+      `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${t("fleet_mission_label", "Mission")}</span>${t(missionKey, mission)}</div>`,
+      `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${t("fleet_drawer_tooltip_status", "Status")}</span>${t(legKey, legKey)}</div>`,
+      `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${t("fleet_drawer_tooltip_target", "Ziel")}</span>${targetLabel.replace(/</g, "&lt;")}</div>`,
+      `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${t("fleet_drawer_arrival_in", "Ankunft in:")}</span>${rem}</div>`,
+    ];
+    return rows.join("");
+  }
+
+  function positionFleetDrawerTooltip(tooltip, trigger) {
+    if (!tooltip || !trigger) return;
+    const margin = 8;
+    tooltip.hidden = false;
+    tooltip.style.visibility = "hidden";
+    tooltip.style.display = "block";
+    const rect = trigger.getBoundingClientRect();
+    const tipRect = tooltip.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.bottom + margin;
+    if (left + tipRect.width > window.innerWidth - margin) {
+      left = Math.max(margin, window.innerWidth - tipRect.width - margin);
     }
+    if (top + tipRect.height > window.innerHeight - margin) {
+      top = Math.max(margin, rect.top - tipRect.height - margin);
+    }
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+    tooltip.style.visibility = "visible";
+  }
+
+  function hideFleetDrawerTooltip() {
+    if (_fleetDrawerTooltipEl) {
+      _fleetDrawerTooltipEl.hidden = true;
+      _fleetDrawerTooltipEl.innerHTML = "";
+    }
+    if (_fleetDrawerTooltipTrigger) {
+      _fleetDrawerTooltipTrigger.removeAttribute("aria-describedby");
+      _fleetDrawerTooltipTrigger = null;
+    }
+  }
+
+  function showFleetDrawerTooltip(trigger, mv) {
+    if (!fleetDrawerHoverTooltipsEnabled() || !trigger || !mv) return;
+    const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
+    const tooltip = root?.querySelector("[data-fleet-drawer-tooltip]") || document.getElementById("gc-fleet-drawer-tooltip");
+    if (!tooltip) return;
+    _fleetDrawerTooltipEl = tooltip;
+    _fleetDrawerTooltipTrigger = trigger;
+    tooltip.innerHTML = buildFleetDrawerTooltipHtml(mv);
+    tooltip.hidden = false;
+    trigger.setAttribute("aria-describedby", "gc-fleet-drawer-tooltip");
+    positionFleetDrawerTooltip(tooltip, trigger);
+  }
+
+  function fleetDrawerFlightProgress(mv) {
+    const pct = Number(mv?.progress_pct);
+    if (Number.isFinite(pct)) return Math.max(0, Math.min(100, pct));
+    const total = Math.max(1, Number(mv?.total_seconds || mv?.duration_seconds || mv?.flight_seconds || 0));
+    const rem = Math.max(0, Number(mv?.remaining_seconds || 0));
+    return Math.max(0, Math.min(100, Math.round(((total - rem) / total) * 100)));
+  }
+
+  function fleetDrawerRowCanAct(mv) {
+    const status = String(mv?.status || mv?.phase || mv?.leg_phase || "").toLowerCase();
+    return status === "outbound" || status === "holding";
+  }
+
+  function syncFleetDrawerRowAction(row, mv) {
+    const wrap = row.querySelector(".gc-fleet-drawer-row-action-wrap");
+    if (!wrap || !mv) return;
+    const movementId = String(mv.movement_id || mv.id || "");
+    const status = String(mv.status || mv.phase || mv.leg_phase || "").toLowerCase();
+    const canAct = fleetDrawerRowCanAct(mv);
+    let btn = wrap.querySelector("[data-fleet-drawer-recall]");
+    if (canAct) {
+      const actionKey = status === "holding"
+        ? (mv.action_label_key || "fleet_drawer_action_recall")
+        : (mv.action_label_key || "fleet_drawer_action_cancel");
+      if (!btn) {
+        btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "gc-fleet-drawer-row-action gc-btn gc-btn-ghost gc-btn-xs";
+        btn.dataset.fleetDrawerRecall = "1";
+        wrap.appendChild(btn);
+      }
+      btn.dataset.movementId = movementId;
+      _setIfChanged(btn, t(actionKey, actionKey));
+      if (mv.cancel_reason) {
+        btn.title = t(mv.cancel_reason, mv.cancel_reason);
+      } else {
+        btn.removeAttribute("title");
+      }
+    } else if (btn) {
+      btn.remove();
+    }
+  }
+
+  function patchFleetDrawerRow(row, mv) {
+    if (!row || !mv) return;
+    const mission = String(mv.mission || mv.mission_type || "custom");
+    const missionKey = mv.mission_label_key || `fleet_mission_${mission}`;
+    const missionEl = row.querySelector("[data-fleet-drawer-mission]");
+    if (missionEl) {
+      missionEl.className = `gc-fleet-drawer-row-mission gc-fleet-hud-mission--${mission}`;
+      missionEl.dataset.movementId = String(mv.movement_id || mv.id || "");
+      _setIfChanged(missionEl, t(missionKey, mission));
+    }
+    const routeEl = row.querySelector(".gc-fleet-drawer-row-route");
+    if (routeEl) _setIfChanged(routeEl, formatFleetDrawerRoute(mv));
+    const shipsChip = row.querySelector(".gc-fleet-drawer-chip--ships");
+    if (shipsChip) {
+      _setIfChanged(
+        shipsChip,
+        tf("fleet_drawer_ships_chip", { count: Number(mv.ship_count || 0) }, `${Number(mv.ship_count || 0)} Schiffe`)
+      );
+    }
+    patchFleetDrawerRowCountdown(row, mv);
+    patchFleetDrawerRowFlight(row, mv);
+    syncFleetDrawerRowAction(row, mv);
+  }
+
+  function syncFleetDrawerList(listEl, visibleItems) {
+    if (!listEl) return;
+    const items = Array.isArray(visibleItems) ? visibleItems : [];
+    const wantedIds = new Set(items.map((mv) => String(mv.movement_id || mv.id || "")).filter(Boolean));
+
+    listEl.querySelectorAll("[data-fleet-drawer-row]").forEach((row) => {
+      const id = String(row.dataset.movementId || "");
+      if (id && !wantedIds.has(id)) row.remove();
+    });
+
+    items.forEach((mv) => {
+      const id = String(mv.movement_id || mv.id || "");
+      if (!id) return;
+      let row = listEl.querySelector(`[data-fleet-drawer-row][data-movement-id="${id}"]`);
+      if (!row) {
+        row = createFleetDrawerRow(mv);
+      } else {
+        patchFleetDrawerRow(row, mv);
+      }
+      listEl.appendChild(row);
+    });
+  }
+
+  function patchFleetDrawerRowFlight(row, mv) {
+    const flight = row.querySelector("[data-fleet-flight-route]");
+    if (!flight || !mv) return;
+    const status = String(mv.status || mv.phase || mv.leg_phase || "outbound").toLowerCase();
+    flight.dataset.fleetFlightStatus = status;
+    const progress = status === "holding" ? 50 : fleetDrawerFlightProgress(mv);
+    const visual = status === "returning" ? (100 - progress) / 100 : progress / 100;
+    flight.style.setProperty("--fleet-progress", String(Math.max(0, Math.min(1, visual))));
+    const labelEl = flight.querySelector("[data-fleet-flight-label]");
+    if (labelEl) {
+      const legKey = globalFleetLegKey(mv, status);
+      _setIfChanged(labelEl, t(legKey, legKey));
+    }
+  }
+
+  function patchFleetDrawerRowCountdown(row, mv) {
+    const cdChip = row.querySelector("[data-fleet-drawer-countdown]");
+    if (!cdChip || !mv) return;
+    const phase = mv.phase || mv.leg_phase || mv.status || "";
     const countdownAt = Number(mv.countdown_at || 0);
     if (!countdownAt) {
-      cdEl.textContent = "–";
-      cdEl.removeAttribute("data-timer-target");
-      cdEl.removeAttribute("data-countdown-at");
-      cdEl.removeAttribute("data-countdown-key");
-      delete cdEl.dataset.serverRemaining;
+      cdChip.textContent = "–";
+      cdChip.removeAttribute("data-timer-target");
+      cdChip.removeAttribute("data-countdown-at");
+      cdChip.removeAttribute("data-countdown-key");
+      delete cdChip.dataset.serverRemaining;
+      patchFleetDrawerRowFlight(row, mv);
       return;
     }
     const countdownKey = `${mv.movement_id || mv.id}:${phase}:${countdownAt}`;
     const srvRem = Number(mv.remaining_seconds);
     applyQueueJobTimerAttrs(
-      cdEl,
+      cdChip,
       countdownAt,
       "fleet",
       "fleet",
       Number.isFinite(srvRem) && srvRem >= 0 ? Math.ceil(srvRem) : undefined
     );
-    cdEl.dataset.countdownScope = "fleet";
-    cdEl.dataset.countdownKey = countdownKey;
-    cdEl.classList.add("fleet-active-countdown");
+    cdChip.dataset.countdownScope = "fleet";
+    cdChip.dataset.countdownKey = countdownKey;
+    cdChip.classList.add("fleet-active-countdown");
     if (Number.isFinite(srvRem) && srvRem >= 0) {
-      assignMonotonicServerRemaining(cdEl, Math.ceil(srvRem), countdownAt);
+      assignMonotonicServerRemaining(cdChip, Math.ceil(srvRem), countdownAt);
     }
     _setIfChanged(
-      cdEl,
+      cdChip,
       formatCountdownRemain(movementRemainingSeconds(countdownAt, getTimerServerNow(), mv.remaining_seconds))
     );
+    patchFleetDrawerRowFlight(row, mv);
+  }
+
+  function createFleetDrawerFlightRoute(mv) {
+    const flight = document.createElement("div");
+    flight.className = "gc-fleet-drawer-row-flight";
+    flight.dataset.fleetFlightRoute = "1";
+
+    const stage = document.createElement("div");
+    stage.className = "gc-fleet-flight-stage";
+
+    const originNode = document.createElement("span");
+    originNode.className = "gc-fleet-flight-node gc-fleet-flight-node--origin";
+    originNode.setAttribute("aria-hidden", "true");
+    stage.appendChild(originNode);
+
+    const trackWrap = document.createElement("div");
+    trackWrap.className = "gc-fleet-flight-core";
+
+    const track = document.createElement("span");
+    track.className = "gc-fleet-flight-track";
+    const line = document.createElement("span");
+    line.className = "gc-fleet-flight-line";
+    line.setAttribute("aria-hidden", "true");
+    const dot = document.createElement("span");
+    dot.className = "gc-fleet-flight-dot";
+    dot.setAttribute("aria-hidden", "true");
+    track.appendChild(line);
+    track.appendChild(dot);
+    trackWrap.appendChild(track);
+
+    const meta = document.createElement("div");
+    meta.className = "gc-fleet-flight-meta";
+
+    const labelEl = document.createElement("span");
+    labelEl.className = "gc-fleet-flight-label";
+    labelEl.dataset.fleetFlightLabel = "1";
+    meta.appendChild(labelEl);
+
+    const cdEl = document.createElement("span");
+    cdEl.className = "gc-fleet-flight-timer gc-mono";
+    cdEl.dataset.fleetDrawerCountdown = "1";
+    meta.appendChild(cdEl);
+    trackWrap.appendChild(meta);
+    stage.appendChild(trackWrap);
+
+    const targetNode = document.createElement("span");
+    targetNode.className = "gc-fleet-flight-node gc-fleet-flight-node--target";
+    targetNode.setAttribute("aria-hidden", "true");
+    stage.appendChild(targetNode);
+
+    flight.appendChild(stage);
+    return flight;
   }
 
   function createFleetDrawerRow(mv) {
     const row = document.createElement("article");
     row.className = "gc-fleet-drawer-row";
     row.dataset.fleetDrawerRow = "1";
+    row.dataset.movementId = String(mv.movement_id || mv.id || "");
     row.setAttribute("role", "listitem");
 
     const mission = String(mv.mission || mv.mission_type || "custom");
     const missionKey = mv.mission_label_key || `fleet_mission_${mission}`;
+    const movementId = String(mv.movement_id || mv.id || "");
 
-    const head = document.createElement("div");
-    head.className = "gc-fleet-drawer-row-head";
-    const missionEl = document.createElement("span");
+    const left = document.createElement("div");
+    left.className = "gc-fleet-drawer-row-left";
+
+    const missionEl = document.createElement("button");
+    missionEl.type = "button";
     missionEl.className = `gc-fleet-drawer-row-mission gc-fleet-hud-mission--${mission}`;
+    missionEl.dataset.fleetDrawerMission = "1";
+    missionEl.dataset.movementId = movementId;
     missionEl.textContent = t(missionKey, mission);
-    head.appendChild(missionEl);
-    row.appendChild(head);
+    left.appendChild(missionEl);
 
     const routeEl = document.createElement("div");
     routeEl.className = "gc-fleet-drawer-row-route";
     routeEl.textContent = formatFleetDrawerRoute(mv);
-    row.appendChild(routeEl);
+    left.appendChild(routeEl);
 
-    const meta = document.createElement("div");
-    meta.className = "gc-fleet-drawer-row-meta";
-    const statusEl = document.createElement("span");
-    statusEl.className = "gc-fleet-drawer-row-status";
-    statusEl.dataset.fleetDrawerStatus = "1";
-    meta.appendChild(statusEl);
+    const chips = document.createElement("div");
+    chips.className = "gc-fleet-drawer-row-chips";
 
-    const arrivalLabel = document.createElement("span");
-    arrivalLabel.className = "gc-fleet-drawer-row-arrival-label";
-    arrivalLabel.textContent = t("fleet_drawer_arrival_in", "Ankunft in:");
-    meta.appendChild(arrivalLabel);
+    const shipsChip = document.createElement("span");
+    shipsChip.className = "gc-fleet-drawer-chip gc-fleet-drawer-chip--ships";
+    shipsChip.textContent = tf(
+      "fleet_drawer_ships_chip",
+      { count: Number(mv.ship_count || 0) },
+      `${Number(mv.ship_count || 0)} Schiffe`
+    );
+    chips.appendChild(shipsChip);
+    left.appendChild(chips);
+    row.appendChild(left);
 
-    const cdEl = document.createElement("span");
-    cdEl.className = "gc-fleet-drawer-row-countdown gc-mono";
-    cdEl.dataset.fleetDrawerCountdown = "1";
-    meta.appendChild(cdEl);
+    const flight = createFleetDrawerFlightRoute(mv);
+    row.appendChild(flight);
+    patchFleetDrawerRowFlight(row, mv);
 
-    const shipsEl = document.createElement("span");
-    shipsEl.className = "gc-fleet-drawer-row-ships";
-    shipsEl.textContent = tf("fleet_drawer_ships", { count: Number(mv.ship_count || 0) }, `Schiffe: ${Number(mv.ship_count || 0)}`);
-    meta.appendChild(shipsEl);
-    row.appendChild(meta);
-
-    patchFleetDrawerRowCountdown(row, mv);
-
-    const canAct = Boolean(mv.can_recall || mv.can_cancel);
-    if (canAct) {
-      const actionBtn = document.createElement("button");
-      actionBtn.type = "button";
-      actionBtn.className = "gc-fleet-drawer-row-action gc-btn gc-btn-ghost gc-btn-xs";
-      actionBtn.dataset.fleetDrawerRecall = "1";
-      actionBtn.dataset.movementId = String(mv.movement_id || mv.id || "");
-      const actionKey = mv.action_label_key || (mv.status === "holding" ? "fleet_drawer_action_recall" : "fleet_drawer_action_cancel");
-      actionBtn.textContent = t(actionKey, actionKey);
-      if (mv.cancel_reason) {
-        actionBtn.title = t(mv.cancel_reason, mv.cancel_reason);
-      }
-      row.appendChild(actionBtn);
-    }
-
+    const actionWrap = document.createElement("div");
+    actionWrap.className = "gc-fleet-drawer-row-action-wrap";
+    row.appendChild(actionWrap);
+    patchFleetDrawerRow(row, mv);
     return row;
   }
 
@@ -7267,7 +7502,6 @@
     updateFleetNavBadge(count);
 
     if (!root) {
-      if (!count) _globalFleetHudSig = "";
       GC.startProgressTicker();
       return;
     }
@@ -7281,8 +7515,6 @@
     syncFleetDrawerExpandedUi(root, expanded);
 
     const summaryEl = root.querySelector("[data-fleet-drawer-summary]");
-    const fleetLink = root.querySelector("[data-fleet-drawer-fleet-link]");
-    if (fleetLink) fleetLink.hidden = count === 0;
 
     if (summaryEl) {
       if (!count) {
@@ -7305,25 +7537,15 @@
 
     const listEl = root.querySelector("[data-fleet-drawer-list]");
     const moreBtn = root.querySelector("[data-fleet-drawer-more]");
+    rememberFleetDrawerMovements(list);
     if (listEl) {
-      const signature = `${showAll ? "all" : "lim"}:${list.map((mv) => (
-        `${mv.movement_id || mv.id}:${mv.status}:${mv.phase || mv.leg_phase || ""}:${mv.countdown_at || 0}:${mv.mission || mv.mission_type || ""}:${mv.can_recall}:${mv.can_cancel}`
-      )).join("|")}`;
       const visibleItems = showAll || count <= visibleLimit ? list : list.slice(0, visibleLimit);
-
-      if (signature !== _globalFleetHudSig) {
-        _globalFleetHudSig = signature;
+      const prevCount = Number(listEl.dataset.fleetDrawerCount || 0);
+      if (prevCount !== count) {
         _clearMovementCountdownExpiryState();
-        listEl.replaceChildren();
-        visibleItems.forEach((mv) => {
-          listEl.appendChild(createFleetDrawerRow(mv));
-        });
-      } else {
-        listEl.querySelectorAll("[data-fleet-drawer-row]").forEach((row, idx) => {
-          const mv = visibleItems[idx];
-          if (mv) patchFleetDrawerRowCountdown(row, mv);
-        });
+        listEl.dataset.fleetDrawerCount = String(count);
       }
+      syncFleetDrawerList(listEl, visibleItems);
 
       if (moreBtn) {
         if (count > visibleLimit) {
@@ -7390,6 +7612,11 @@
     _globalFleetDrawerBound = true;
 
     root.addEventListener("click", (e) => {
+      if (e.target.closest("[data-fleet-drawer-mission]")) {
+        e.stopPropagation();
+        return;
+      }
+
       const recallBtn = e.target.closest("[data-fleet-drawer-recall]");
       if (recallBtn) {
         e.preventDefault();
@@ -7409,11 +7636,10 @@
         return;
       }
 
-      if (e.target.closest("[data-fleet-drawer-fleet-link]")) return;
-
       const toggle = e.target.closest("[data-fleet-drawer-toggle]");
       if (toggle) {
         e.preventDefault();
+        hideFleetDrawerTooltip();
         const next = !isFleetDrawerExpanded();
         setFleetDrawerExpanded(next);
         syncFleetDrawerExpandedUi(root, next);
@@ -7422,6 +7648,26 @@
         }
       }
     });
+
+    if (fleetDrawerHoverTooltipsEnabled()) {
+      root.addEventListener("mouseover", (e) => {
+        const trigger = e.target.closest("[data-fleet-drawer-mission]");
+        if (!trigger || !root.contains(trigger)) return;
+        const movementId = parseInt(trigger.dataset.movementId || "0", 10);
+        const mv = _fleetDrawerMovementById.get(movementId);
+        if (mv) showFleetDrawerTooltip(trigger, mv);
+      });
+      root.addEventListener("mouseout", (e) => {
+        const trigger = e.target.closest("[data-fleet-drawer-mission]");
+        if (!trigger) return;
+        const related = e.relatedTarget;
+        if (related && (trigger.contains(related) || _fleetDrawerTooltipEl?.contains(related))) return;
+        hideFleetDrawerTooltip();
+      });
+    }
+
+    document.addEventListener("scroll", hideFleetDrawerTooltip, true);
+    window.addEventListener("resize", hideFleetDrawerTooltip);
 
     syncFleetDrawerExpandedUi(root, isFleetDrawerExpanded());
     if (GC.lastState?.active_fleets) {

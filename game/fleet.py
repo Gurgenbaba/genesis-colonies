@@ -1458,6 +1458,43 @@ def _movement_ship_count(movement: Mapping[str, Any]) -> int:
     return sum(max(0, int(v or 0)) for v in (movement.get("ships") or {}).values())
 
 
+def _movement_ships_breakdown(movement: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for key, qty in sorted((movement.get("ships") or {}).items(), key=lambda kv: str(kv[0])):
+        count = max(0, int(qty or 0))
+        if count <= 0:
+            continue
+        ship_key = str(key)
+        out.append(
+            {
+                "key": ship_key,
+                "label_key": f"fleet_ship_{ship_key}",
+                "count": count,
+            }
+        )
+    return out
+
+
+def _movement_loaded_resources(movement: Mapping[str, Any]) -> Dict[str, int]:
+    res = movement.get("resources") or {}
+    return {
+        "metal": max(0, int(res.get("metal") or 0)),
+        "crystal": max(0, int(res.get("crystal") or 0)),
+        "fuel_cells": max(0, int(res.get("fuel_cells") or 0)),
+    }
+
+
+def _movement_progress_pct(movement: Mapping[str, Any]) -> int:
+    """Display-only leg progress for drawer flight animation (GC-654B)."""
+    status = str(movement.get("status") or "").strip().lower()
+    if status == "holding":
+        return 50
+    remaining = max(0, int(movement.get("remaining_seconds") or 0))
+    total = max(1, int(movement.get("duration_seconds") or movement.get("flight_seconds") or 0))
+    elapsed = max(0, total - remaining)
+    return max(0, min(100, int(round(elapsed * 100 / total))))
+
+
 def _movement_target_display_name(movement: Mapping[str, Any]) -> str:
     wt = movement.get("world_target") or {}
     if wt.get("target_name"):
@@ -1498,6 +1535,10 @@ def format_movement_drawer_item(movement: Mapping[str, Any]) -> Dict[str, Any]:
         "target_name": _movement_target_display_name(mv),
         "target_coords": str(mv.get("target_coords") or ""),
         "ship_count": _movement_ship_count(mv),
+        "ships_breakdown": _movement_ships_breakdown(mv),
+        "loaded_resources": _movement_loaded_resources(mv),
+        "total_seconds": max(0, int(mv.get("duration_seconds") or mv.get("flight_seconds") or 0)),
+        "progress_pct": _movement_progress_pct(mv),
         "remaining_seconds": max(0, int(mv.get("remaining_seconds") or 0)),
         "arrival_at": mv.get("arrival_at"),
         "return_at": mv.get("return_at"),
