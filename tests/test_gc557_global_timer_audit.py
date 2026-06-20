@@ -35,13 +35,13 @@ def test_gc557_fleet_origin_resolves_context_planet():
     assert "resolveFleetOriginPlanetId(page)" in init
 
 
-def test_gc557_fleet_preview_uses_server_arrival_timestamp():
+def test_gc557_fleet_preview_static_arrival_not_live_countdown():
     src = _read("static/main.js")
     preview_block = src.split("const runPreview = async (page) =>")[1].split("const schedulePreview = (page) =>")[0]
-    assert "parseTimerTarget(p.countdown_at || p.arrival_at" in preview_block
-    assert "getTimerServerNow()" in preview_block
-    assert "queueJobRemainingSeconds" in preview_block
-    assert "dataset.timerTarget" in preview_block
+    assert "p.duration_seconds ?? p.flight_seconds" in preview_block
+    assert "delete previewArrival.dataset.countdownAt" in preview_block
+    assert "previewArrival.dataset.countdownAt = String(arrivalAt)" not in preview_block
+    assert "GC.startProgressTicker();" not in preview_block.split("if (previewArrival)")[1].split("if (sendBtn)")[0]
 
 
 def test_gc557_fleet_send_always_refreshes_state():

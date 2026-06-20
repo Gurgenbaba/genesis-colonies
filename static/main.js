@@ -12172,7 +12172,12 @@
         if (previewFuel) previewFuel.textContent = "–";
         if (previewFuelAvail) previewFuelAvail.textContent = "–";
         if (previewFlight) previewFlight.textContent = "–";
-        if (previewArrival) previewArrival.textContent = "–";
+        if (previewArrival) {
+          delete previewArrival.dataset.timerTarget;
+          delete previewArrival.dataset.countdownAt;
+          delete previewArrival.dataset.timerKind;
+          previewArrival.textContent = "–";
+        }
         if (missionFeedback) {
           missionFeedback.hidden = true;
           missionFeedback.className = "fleet-mission-feedback";
@@ -12282,21 +12287,11 @@
             previewFlight.textContent = formatCountdownRemain(p.duration_seconds ?? p.flight_seconds ?? 0);
           }
           if (previewArrival) {
-            const arrivalAt = parseTimerTarget(p.countdown_at || p.arrival_at || 0);
-            if (arrivalAt > 0) {
-              previewArrival.dataset.timerTarget = String(arrivalAt);
-              previewArrival.dataset.countdownAt = String(arrivalAt);
-              previewArrival.dataset.timerKind = "fleet";
-              const nowSec = getTimerServerNow();
-              const rem = queueJobRemainingSeconds(arrivalAt, nowSec);
-              previewArrival.textContent = formatCountdownRemain(rem);
-              GC.startProgressTicker();
-            } else {
-              delete previewArrival.dataset.timerTarget;
-              delete previewArrival.dataset.countdownAt;
-              delete previewArrival.dataset.timerKind;
-              previewArrival.textContent = "–";
-            }
+            delete previewArrival.dataset.timerTarget;
+            delete previewArrival.dataset.countdownAt;
+            delete previewArrival.dataset.timerKind;
+            const flightSec = p.duration_seconds ?? p.flight_seconds ?? 0;
+            previewArrival.textContent = flightSec > 0 ? formatCountdownRemain(flightSec) : "–";
           }
           if (sendBtn) sendBtn.disabled = !p.can_send;
           if (!p.can_send) {
