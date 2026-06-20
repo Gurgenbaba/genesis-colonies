@@ -986,7 +986,7 @@
   "building_terraformer": "Terraformer",
   "desc_terraformer": "Der Terraformer schafft sichere Infrastrukturflächen — keine extra Gebäudeplätze, sondern nutzbare Industrie- und Lagerzonen. Erhöht Metall- und Crytite-Lagerkapazität um 5 % pro Stufe. Stapelt mit Lagern und Lagertechnik.",
   "building_nanofactory": "Nano-Assemblierungsanlage",
-  "desc_nanofactory": "Verkürzt Bauzeiten aller Gebäude multiplikativ um 30 % pro Stufe (× 0,70^Stufe). Stapelt multiplikativ mit Bauoptimierung und Labor.",
+  "desc_nanofactory": "Verkürzt Bauzeiten aller Gebäude um 30 % pro Stufe. Stapelt mit Bauoptimierung und Labor.",
   "building_geothermal_nexus": "Geothermie-Nexus",
   "desc_geothermal_nexus": "+3 % Aetherion der Solarkollektoren pro Stufe. +2 Max-Stufe für Minen, Solar und Lager je Geothermie-Stufe.",
   "building_planet_core_nexus": "Planetenkern-Nexus",

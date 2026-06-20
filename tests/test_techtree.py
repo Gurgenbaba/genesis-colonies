@@ -190,6 +190,9 @@ def test_build_time_nodes_have_description_and_effect_preview(techtree_db):
     cc = by_building["command_center"]
     assert cc["effect_preview"]["effect_value"] == 50  # level 2 × 25 %
 
+    nano = by_building["nanofactory"]
+    assert nano["effect_preview"]["effect_value"] == 90  # level 3 × 30 %
+
     buildtime = by_research["buildtime_tech"]
     assert buildtime.get("description_key") == "desc_buildtime_tech"
     bt_preview = buildtime.get("effect_preview") or {}

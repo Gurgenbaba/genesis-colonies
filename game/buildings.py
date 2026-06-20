@@ -428,14 +428,19 @@ def _panel_energy_ratio(buildings: Dict[str, int], research_levels: Dict[str, in
     return float(EffectResolver.energy_ratio(energy_total, energy_used))
 
 
-# Reference building for nanofactory build-time display (excludes command_center nanofactory-only boost).
-NANOFACTORY_BUILD_TIME_REFERENCE = "metal_mine"
+# Flat UI modifiers for build-time buildings (cards/technical data). Gameplay uses EffectResolver.
 COMMAND_CENTER_NANOFACTORY_BUILD_BONUS_PER_LEVEL = 25
+NANOFACTORY_BUILD_BONUS_PER_LEVEL = 30
 
 
 def command_center_nanofactory_build_bonus_pct(level: int) -> int:
     """Flat UI modifier for Command Center cards/technical data (level × 25 %)."""
     return int(COMMAND_CENTER_NANOFACTORY_BUILD_BONUS_PER_LEVEL * max(0, int(level or 0)))
+
+
+def nanofactory_build_bonus_pct(level: int) -> int:
+    """Flat UI modifier for Nanofactory cards/technical data (level × 30 %)."""
+    return int(NANOFACTORY_BUILD_BONUS_PER_LEVEL * max(0, int(level or 0)))
 
 
 def _command_center_panel_snapshot(
@@ -463,45 +468,29 @@ def _command_center_effect_payload(level: int) -> Dict[str, Any]:
     }
 
 
-def _build_time_effect_payload(
-    resolver: EffectResolver,
-    *,
-    reference_building_type: str,
+def _nanofactory_panel_snapshot(
+    buildings: Dict[str, int],
+    target_level: int,
 ) -> Dict[str, Any]:
-    pct = resolver.get_build_time_speed_bonus_pct(reference_building_type)
-    factor = resolver.get_build_time_duration_factor(reference_building_type)
+    cur = int(buildings.get("nanofactory", 0) or 0)
+    nxt = int(target_level)
+    return _panel_effect_snapshot(
+        effect_kind="bonus_percent",
+        effect_current=nanofactory_build_bonus_pct(cur),
+        effect_next=nanofactory_build_bonus_pct(nxt),
+        effect_resource="build",
+        effect_unit="%",
+    )
+
+
+def _nanofactory_effect_payload(level: int) -> Dict[str, Any]:
+    pct = nanofactory_build_bonus_pct(level)
     return {
         "effect_kind": "bonus_percent",
         "effect_value": pct,
         "effect_unit": "%",
         "effect_resource": "build",
-        "build_time_factor": round(factor, 4),
-        "build_time_speed_bonus_percent": pct,
     }
-
-
-def _build_time_panel_snapshot(
-    r_now: EffectResolver,
-    r_next: EffectResolver,
-    *,
-    reference_building_type: str,
-) -> Dict[str, Any]:
-    cur_pct = r_now.get_build_time_speed_bonus_pct(reference_building_type)
-    nxt_pct = r_next.get_build_time_speed_bonus_pct(reference_building_type)
-    out = _panel_effect_snapshot(
-        effect_kind="bonus_percent",
-        effect_current=cur_pct,
-        effect_next=nxt_pct,
-        effect_resource="build",
-        effect_unit="%",
-    )
-    out["build_time_factor_current"] = round(
-        r_now.get_build_time_duration_factor(reference_building_type), 4
-    )
-    out["build_time_factor_next"] = round(
-        r_next.get_build_time_duration_factor(reference_building_type), 4
-    )
-    return out
 
 
 def _panel_effect_snapshot(
@@ -668,11 +657,7 @@ def _panel_upgrade_effect_fields(
         )
 
     if building_type == "nanofactory":
-        return _build_time_panel_snapshot(
-            r_now,
-            r_next,
-            reference_building_type=NANOFACTORY_BUILD_TIME_REFERENCE,
-        )
+        return _nanofactory_panel_snapshot(buildings, target_level)
 
     if building_type == "command_center":
         return _command_center_panel_snapshot(buildings, target_level)
@@ -832,12 +817,7 @@ def _technical_effects_at_level(
         return out
 
     if building_type == "nanofactory":
-        out.update(
-            _build_time_effect_payload(
-                r,
-                reference_building_type=NANOFACTORY_BUILD_TIME_REFERENCE,
-            )
-        )
+        out.update(_nanofactory_effect_payload(int(level)))
         return out
 
     if building_type == "command_center":

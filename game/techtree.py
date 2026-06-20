@@ -215,8 +215,8 @@ def _techtree_build_time_effect_preview(
 ) -> Optional[Dict[str, Any]]:
     """Authoritative build-time effect line for tech-tree cards (EffectResolver)."""
     from .buildings import (
-        NANOFACTORY_BUILD_TIME_REFERENCE,
         command_center_nanofactory_build_bonus_pct,
+        nanofactory_build_bonus_pct,
     )
     from .effects import EffectResolver
     from .research import get_research_effect_preview
@@ -258,32 +258,24 @@ def _techtree_build_time_effect_preview(
             "effect_level": display_level,
         }
 
+    if kind == "building" and key == "nanofactory":
+        lvl = max(0, int(level or 0))
+        display_level = lvl if lvl > 0 else 1
+        scope_key = "techtree_effect_current_total" if lvl > 0 else "techtree_effect_per_level_example"
+        return {
+            "effect_kind": "bonus_percent",
+            "effect_value": nanofactory_build_bonus_pct(display_level),
+            "effect_unit": "%",
+            "effect_resource": "build",
+            "effect_metric_key": "buildings_effect_build_speed",
+            "effect_scope_key": scope_key,
+            "effect_level": display_level,
+        }
+
     if kind != "building" or key not in BUILD_TIME_TECHTREE_BUILDINGS:
         return None
 
-    ref = NANOFACTORY_BUILD_TIME_REFERENCE
-    metric_key = "buildings_effect_build_speed"
-    lvl = max(0, int(level or 0))
-    if lvl <= 0:
-        bumped = dict(buildings)
-        bumped[key] = 1
-        resolver = EffectResolver(bumped, research or {})
-        scope_key = "techtree_effect_per_level_example"
-        display_level = 1
-    else:
-        resolver = EffectResolver(buildings, research or {})
-        scope_key = "techtree_effect_current_total"
-        display_level = lvl
-
-    return {
-        "effect_kind": "bonus_percent",
-        "effect_value": int(resolver.get_build_time_speed_bonus_pct(ref)),
-        "effect_unit": "%",
-        "effect_resource": "build",
-        "effect_metric_key": metric_key,
-        "effect_scope_key": scope_key,
-        "effect_level": display_level,
-    }
+    return None
 
 
 def _progressive_status(

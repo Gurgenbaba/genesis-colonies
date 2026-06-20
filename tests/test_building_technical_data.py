@@ -184,12 +184,12 @@ def test_technical_data_api_route(tech_db, monkeypatch):
     assert r404.status_code == 404
 
 
-def test_technical_data_nanofactory_build_time_reduction(tech_db):
+def test_technical_data_nanofactory_flat_per_level_bonus(tech_db):
     uid, _ = _create_player()
     planet = get_homeworld(player_id=uid)
     save_planet_buildings(
         int(planet["id"]),
-        {"nanofactory": 2, "solar_plant": 1, "metal_mine": 1},
+        {"nanofactory": 7, "solar_plant": 1, "metal_mine": 1},
     )
 
     conn = db()
@@ -199,14 +199,10 @@ def test_technical_data_nanofactory_build_time_reduction(tech_db):
     assert err is None
     row = data["levels"][0]
     assert row["effect_kind"] == "bonus_percent"
-    assert row["build_time_speed_bonus_percent"] == row["effect_value"]
-    buildings = {"nanofactory": 2, "solar_plant": 1, "metal_mine": 1}
-    r = EffectResolver(buildings, get_research_levels(uid))
-    assert row["build_time_speed_bonus_percent"] == r.get_build_time_speed_bonus_pct("metal_mine")
-    assert row["build_time_factor"] == pytest.approx(
-        r.get_build_time_duration_factor("metal_mine"), rel=1e-3
-    )
-    assert row["time_seconds"] == get_build_time("nanofactory", 2, user_id=uid)
+    assert row["effect_value"] == 210
+    assert data["levels"][1]["effect_value"] == 240
+    assert data["levels"][1]["effect_value"] - row["effect_value"] == 30
+    assert row["time_seconds"] == get_build_time("nanofactory", 7, user_id=uid)
 
 
 def test_technical_data_command_center_flat_per_level_bonus(tech_db):

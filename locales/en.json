@@ -1558,7 +1558,7 @@
   "building_terraformer": "Terraformer",
   "desc_terraformer": "The Terraformer creates safe infrastructure zones — not extra building slots, but usable industrial and storage capacity. Increases Ferronit and Crytite storage by 5% per level. Stacks with storage buildings and Storage Technology.",
   "nanofactory": "Nano-Assembly Complex",
-  "desc_nanofactory": "Reduces all building build times multiplicatively by 30% per level (× 0.70^level). Stacks multiplicatively with Construction Optimization and Research Lab.",
+  "desc_nanofactory": "Reduces all building build times by 30% per level. Stacks with Construction Optimization and Research Lab.",
   "building_geothermal_nexus": "Geothermal Nexus",
   "geothermal_nexus": "Geothermal Nexus",
   "desc_geothermal_nexus": "A deep geothermal control complex that taps mantle energy and unlocks higher maximum levels for mines, solar collectors and storage structures. A key endgame facility for planetary stability and economic scaling.",
