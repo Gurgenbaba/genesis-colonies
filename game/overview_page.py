@@ -488,9 +488,7 @@ def build_overview_page_context(
     planet: Dict[str, Any],
     conn=None,
 ) -> Dict[str, Any]:
-    """Full template context for overview.html."""
-    from .buildings import get_overview_building_rows
-
+    """Full template context for overview.html (SSR/PJAX — no dead API-only slices)."""
     player_view = ctx["player_view"]
     status = build_overview_status(
         user_id=int(user_id),
@@ -503,13 +501,8 @@ def build_overview_page_context(
         build_queue=ctx.get("build_queue") or {},
         research=ctx.get("research") or {},
         planet=planet,
-        include_log=True,
+        include_log=False,
         conn=conn,
-    )
-    status["building_upgrades"] = get_overview_building_rows(
-        planet,
-        ctx.get("buildings") or {},
-        build_queue=ctx.get("build_queue"),
     )
     galaxy_id = _safe_int((status.get("planet") or {}).get("coordinates", {}).get("galaxy"))
     if galaxy_id <= 0:

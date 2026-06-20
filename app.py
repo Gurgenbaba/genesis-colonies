@@ -1022,33 +1022,22 @@ def landing():
 @app.route("/overview")
 @require_login
 def overview():
-    ctx = _load_page_live_context(finish_source="overview")
-    if ctx is None:
-        return redirect(url_for("login"))
-
-    from game.planet_evolution.teaser import get_overview_planet_teaser
-    from game.overview_page import build_overview_page_context
-    from game.live_state import get_request_context_planet
-
-    planet_teaser = {"visible": False}
-    overview_status: Dict[str, Any] = {}
     conn = db()
     try:
-        planet = ctx.get("planet") or get_request_context_planet(int(session["user_id"]), conn=conn)
-        try:
-            planet_teaser = get_overview_planet_teaser(
-                int(session["user_id"]),
-                metal=float(ctx["player_view"]["metal"]),
-                crystal=float(ctx["player_view"]["crystal"]),
-                conn=conn,
-            )
-        except sqlite3.OperationalError:
-            logger.warning(
-                "overview planet teaser skipped (database locked) user_id=%s",
-                session.get("user_id"),
-                exc_info=True,
-            )
-        overview_status = build_overview_page_context(int(session["user_id"]), ctx, planet=planet, conn=conn)
+        ctx = _load_page_live_context(finish_source="overview", conn=conn, close_conn=False)
+        if ctx is None:
+            return redirect(url_for("login"))
+
+        from game.overview_page import build_overview_page_context
+
+        planet = ctx.get("planet")
+        if not planet:
+            from game.live_state import get_request_context_planet
+
+            planet = get_request_context_planet(int(session["user_id"]), conn=conn)
+        overview_status = build_overview_page_context(
+            int(session["user_id"]), ctx, planet=planet, conn=conn
+        )
     finally:
         conn.close()
 
@@ -1060,7 +1049,6 @@ def overview():
         energy_used=ctx["energy_used"],
         storage_caps=ctx["storage_caps"],
         prod_per_hour=ctx["prod_per_hour"],
-        planet_teaser=planet_teaser,
         overview_status=overview_status,
     )
 
@@ -1131,9 +1119,11 @@ def buildings_view():
     if ctx is None:
         return redirect(url_for("login"))
 
-    from game.planet_evolution.repository import get_context_planet
+    planet = ctx.get("planet")
+    if not planet:
+        from game.planet_evolution.repository import get_context_planet
 
-    planet = get_context_planet(int(ctx["player_view"]["id"]))
+        planet = get_context_planet(int(session["user_id"]))
     rows_by_tab = get_buildings_panel_rows(
         planet,
         ctx["buildings"],
@@ -1204,9 +1194,11 @@ def research_view():
     if ctx is None:
         return redirect(url_for("login"))
 
-    from game.planet_evolution.repository import get_context_planet
+    planet = ctx.get("planet")
+    if not planet:
+        from game.planet_evolution.repository import get_context_planet
 
-    planet = get_context_planet(int(session["user_id"]))
+        planet = get_context_planet(int(session["user_id"]))
 
     return render_template(
         "research.html",
@@ -1701,18 +1693,23 @@ def logistics_view():
 @app.route("/fleet")
 @require_login
 def fleet_view():
-    player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
-    if player_view is None:
-        return redirect(url_for("login"))
-
-    from game.fleet import build_fleet_page_context, build_logistics_page_context, fleet_schema_ready
-    from game.live_state import get_request_context_planet
-
-    fleet_ctx: Dict[str, Any] = {"ready": False}
-    logistics_ctx: Dict[str, Any] = {"ready": False}
     conn = db()
     try:
-        planet = get_request_context_planet(int(player_view["id"]), conn=conn)
+        ctx = _load_page_live_context(finish_source="fleet", conn=conn, close_conn=False)
+        if ctx is None:
+            return redirect(url_for("login"))
+
+        from game.fleet import build_fleet_page_context, build_logistics_page_context, fleet_schema_ready
+
+        player_view = ctx["player_view"]
+        planet = ctx.get("planet")
+        if not planet:
+            from game.live_state import get_request_context_planet
+
+            planet = get_request_context_planet(int(player_view["id"]), conn=conn)
+
+        fleet_ctx: Dict[str, Any] = {"ready": False}
+        logistics_ctx: Dict[str, Any] = {"ready": False}
         if fleet_schema_ready(conn):
             planet_dict = dict(planet)
             fleet_ctx = build_fleet_page_context(
@@ -1733,9 +1730,9 @@ def fleet_view():
     return render_template(
         "fleet.html",
         player=player_view,
-        energy_total=energy_total,
-        energy_used=energy_used,
-        storage_caps=storage_caps,
+        energy_total=ctx["energy_total"],
+        energy_used=ctx["energy_used"],
+        storage_caps=ctx["storage_caps"],
         fleet=fleet_ctx,
         logistics=logistics_ctx,
     )

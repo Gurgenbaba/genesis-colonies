@@ -352,6 +352,30 @@ def test_app_gc745_pjax_server_fastpath():
     assert "_is_lightweight_layout_request()" in inject
 
 
+def test_gc746_overview_ssr_slim_context():
+    """GC-746: overview SSR skips dead slices and reuses one DB conn."""
+    overview_py = _read("game/overview_page.py")
+    page_ctx = overview_py.split("def build_overview_page_context(")[1].split("def ", 1)[0]
+    assert "get_overview_building_rows" not in page_ctx
+    assert "include_log=False" in page_ctx
+    assert "get_overview_planet_teaser" not in _read("app.py").split("def overview()")[1].split("@app.route", 1)[0]
+    app_overview = _read("app.py").split("def overview()")[1].split("def empire_view")[0]
+    assert "close_conn=False" in app_overview
+    assert "ctx.get(\"planet\")" in app_overview
+
+
+def test_gc746_routes_reuse_ctx_planet():
+    """GC-746: buildings/research/fleet reuse planet from page live context."""
+    app_py = _read("app.py")
+    buildings = app_py.split("def buildings_view()")[1].split("def upgrade")[0]
+    research = app_py.split("def research_view()")[1].split("def research_start")[0]
+    fleet = app_py.split("def fleet_view()")[1].split("@app.route(\"/alliance\")")[0]
+    assert "ctx.get(\"planet\")" in buildings
+    assert "ctx.get(\"planet\")" in research
+    assert "ctx.get(\"planet\")" in fleet
+    assert "_load_page_live_context(finish_source=\"fleet\"" in fleet
+
+
 def test_gc744_resource_icons_use_webp_picture():
     """GC-744: HUD/overview resource icons prefer WebP with eager above-fold load."""
     macro = _read("templates/partials/progression_cards.html")
