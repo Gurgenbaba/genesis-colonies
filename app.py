@@ -278,6 +278,28 @@ def choose_background():
 # CONTEXT / GLOBALS
 # --------------------------------------------------------------------------
 
+_SIMPLE_LAYOUT_ENDPOINTS = frozenset(
+    {
+        "landing",
+        "login",
+        "register",
+        "forgot_password",
+        "reset_password",
+        "verify_email",
+        "logout",
+        "auth_discord_start",
+        "auth_discord_callback",
+        "discord_welcome",
+    }
+)
+
+
+def _is_simple_layout_request() -> bool:
+    from flask import request
+
+    return str(request.endpoint or "") in _SIMPLE_LAYOUT_ENDPOINTS
+
+
 @app.context_processor
 def inject_globals():
     auth_user = None
@@ -311,17 +333,19 @@ def inject_globals():
     except Exception:
         settings = {}
 
-    # motd / universe news (safe)
+    # motd / universe news (safe) — skip on auth/simple pages (GC-741)
+    simple_layout = _is_simple_layout_request()
     try:
-        raw_motd_enabled = settings.get("motd_enabled", "0")
-        motd_enabled = str(raw_motd_enabled) in ("1", "true", "True", "yes", "on")
-        from game.universe_news import get_banner_entry
+        if not simple_layout:
+            raw_motd_enabled = settings.get("motd_enabled", "0")
+            motd_enabled = str(raw_motd_enabled) in ("1", "true", "True", "yes", "on")
+            from game.universe_news import get_banner_entry
 
-        motd_banner = get_banner_entry()
-        if motd_banner:
-            motd_text = motd_banner.get("body") or ""
-        else:
-            motd_text = (settings.get("motd_text", "") or "").strip()
+            motd_banner = get_banner_entry()
+            if motd_banner:
+                motd_text = motd_banner.get("body") or ""
+            else:
+                motd_text = (settings.get("motd_text", "") or "").strip()
     except Exception:
         motd_enabled = False
         motd_text = ""
@@ -329,15 +353,17 @@ def inject_globals():
 
     sidebar_release = {"label": "Genesis", "url": "/news", "href": "/news", "anchor_id": "", "has_dev_stream": False}
     try:
-        from game.universe_news import sidebar_release_nav
+        if not simple_layout:
+            from game.universe_news import sidebar_release_nav
 
-        sidebar_release = sidebar_release_nav()
+            sidebar_release = sidebar_release_nav()
     except Exception:
         pass
 
-    # stats (safe)
+    # stats (safe) — global counts not needed on login/register
     try:
-        player_stats = get_player_stats() or {}
+        if not simple_layout:
+            player_stats = get_player_stats() or {}
     except Exception:
         player_stats = {}
 
@@ -423,16 +449,16 @@ def inject_globals():
     discord_oauth_enabled = False
     discord_invite_url = ""
     try:
-        if auth_user and auth_user.get("id"):
-            snap = discord_auth_logic.discord_link_snapshot(int(auth_user["id"]))
-            auth_discord_linked = bool(snap.get("discord_linked"))
-    except Exception:
-        auth_discord_linked = False
-    try:
         discord_oauth_enabled = discord_auth_logic.discord_oauth_configured()
         discord_invite_url = discord_auth_logic.discord_invite_url()
     except Exception:
         pass
+    try:
+        if auth_user and auth_user.get("id") and not simple_layout:
+            snap = discord_auth_logic.discord_link_snapshot(int(auth_user["id"]))
+            auth_discord_linked = bool(snap.get("discord_linked"))
+    except Exception:
+        auth_discord_linked = False
 
     return dict(
         T=T,
@@ -591,11 +617,6 @@ def _load_page_live_context(
     own_conn = conn is None
     if own_conn:
         conn = db()
-    if not load_player(user_id, conn=conn):
-        if own_conn and close_conn:
-            conn.close()
-        return None
-
     src = str(finish_source or "page_load")
     use_poll_live_path = src == "game_state"
     try:
@@ -613,7 +634,15 @@ def _load_page_live_context(
                     finish_source=src,
                 )
                 commit(conn)
-            build_queue = get_build_queue_status(user_id=user_id, skip_finish=True, conn=conn)
+            from game.live_state import get_request_context_planet
+            from game.buildings import get_build_queue_status_for_planet
+
+            planet = get_request_context_planet(user_id, conn=conn)
+            build_queue = get_build_queue_status_for_planet(
+                int(planet["id"]),
+                conn=conn,
+                skip_finish=True,
+            )
             research = get_research_status(
                 user_id=user_id,
                 buildings=buildings,
@@ -625,6 +654,8 @@ def _load_page_live_context(
                 ratio=ratio,
                 user_id=user_id,
             )
+        except RuntimeError:
+            return None
         except sqlite3.OperationalError:
             rollback(conn)
             if not use_poll_live_path:
@@ -636,17 +667,21 @@ def _load_page_live_context(
                 exc_info=True,
             )
             from game.logic import _read_player_live_state_no_writes
+            from game.live_state import get_request_context_planet
+            from game.buildings import get_build_queue_status_for_planet
 
             player = load_player(user_id, conn=conn)
             if not player:
                 return None
-            from game.planet_evolution.repository import get_context_planet
-
-            planet = get_context_planet(user_id, conn=conn)
+            planet = get_request_context_planet(user_id, conn=conn)
             player_view, buildings, ratio, energy_total, energy_used, storage_caps = (
                 _read_player_live_state_no_writes(user_id, conn, player, planet)
             )
-            build_queue = get_build_queue_status(user_id=user_id, skip_finish=True, conn=conn)
+            build_queue = get_build_queue_status_for_planet(
+                int(planet["id"]),
+                conn=conn,
+                skip_finish=True,
+            )
             research = get_research_status(
                 user_id=user_id,
                 buildings=buildings,
@@ -676,6 +711,7 @@ def _load_page_live_context(
         "research": research,
         "prod_per_hour": prod_per_hour,
         "include_panel": include_panel,
+        "planet": planet,
     }
 
 
@@ -980,10 +1016,14 @@ def overview():
         return redirect(url_for("login"))
 
     from game.planet_evolution.teaser import get_overview_planet_teaser
+    from game.overview_page import build_overview_page_context
+    from game.live_state import get_request_context_planet
 
     planet_teaser = {"visible": False}
+    overview_status: Dict[str, Any] = {}
     conn = db()
     try:
+        planet = ctx.get("planet") or get_request_context_planet(int(session["user_id"]), conn=conn)
         try:
             planet_teaser = get_overview_planet_teaser(
                 int(session["user_id"]),
@@ -997,14 +1037,9 @@ def overview():
                 session.get("user_id"),
                 exc_info=True,
             )
+        overview_status = build_overview_page_context(int(session["user_id"]), ctx, planet=planet, conn=conn)
     finally:
         conn.close()
-
-    from game.overview_page import build_overview_page_context
-    from game.planet_evolution.repository import get_context_planet
-
-    planet = get_context_planet(int(session["user_id"]))
-    overview_status = build_overview_page_context(int(session["user_id"]), ctx, planet=planet)
 
     return render_template(
         "overview.html",
@@ -1660,13 +1695,13 @@ def fleet_view():
         return redirect(url_for("login"))
 
     from game.fleet import build_fleet_page_context, build_logistics_page_context, fleet_schema_ready
-    from game.planet_evolution.repository import get_context_planet
+    from game.live_state import get_request_context_planet
 
     fleet_ctx: Dict[str, Any] = {"ready": False}
     logistics_ctx: Dict[str, Any] = {"ready": False}
     conn = db()
     try:
-        planet = get_context_planet(int(player_view["id"]), conn=conn)
+        planet = get_request_context_planet(int(player_view["id"]), conn=conn)
         if fleet_schema_ready(conn):
             planet_dict = dict(planet)
             fleet_ctx = build_fleet_page_context(
@@ -4486,6 +4521,7 @@ def _payload_from_live_context(
     build_queue = ctx["build_queue"]
     research = ctx["research"]
     prod_per_hour = ctx["prod_per_hour"]
+    planet = ctx.get("planet")
 
     own_conn = conn is None
     if own_conn:
@@ -4494,9 +4530,10 @@ def _payload_from_live_context(
     energy_efficiency_pct = int(round(float(ratio) * 100))
     mods = get_research_modifiers(user_id)
 
-    from game.planet_evolution.repository import get_active_planet_id, get_context_planet
+    from game.live_state import get_request_context_planet
 
-    planet = get_context_planet(user_id, conn=conn)
+    if not isinstance(planet, dict):
+        planet = get_request_context_planet(user_id, conn=conn)
     energy_hint = (
         "zero"
         if int(energy_total) <= 0
@@ -4576,8 +4613,8 @@ def _payload_from_live_context(
             conn=conn,
         )
 
-    active_planet_id = get_active_planet_id(user_id)
-    payload["active_planet_id"] = int(active_planet_id)
+    active_planet_id = int(planet.get("id") or 0)
+    payload["active_planet_id"] = active_planet_id
     payload["active_planet_name"] = str(planet.get("name") or "")
     try:
         from game.galaxy import get_planet_coordinates
@@ -4715,6 +4752,9 @@ def _payload_from_live_context(
                 user_id,
                 buildings=buildings,
                 conn=conn,
+                planet=planet,
+                build_queue=build_queue,
+                research=research,
             )
         except Exception:
             payload["global_queue_hud"] = {

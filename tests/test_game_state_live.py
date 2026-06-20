@@ -462,6 +462,45 @@ def test_global_queue_hud_payload_includes_jobs():
 
     assert isinstance(payload.get("jobs"), list)
     assert payload["jobs"]
+
+
+def test_global_queue_hud_reuses_preloaded_queue(game_client, monkeypatch):
+    """GC-741: panel HUD must not re-query build/research when caller already has them."""
+    from game.buildings import get_build_queue_status_for_planet
+    from game.live_state import global_queue_hud_for_game_state
+    from game.models import db, get_homeworld, add_build_job
+    from game.research import get_research_status
+
+    client, pid = game_client
+    planet = get_homeworld(player_id=pid)
+    planet_id = int(planet["id"])
+    now = time.time()
+    add_build_job(planet_id, "metal_mine", now - 10, now + 45.7)
+    conn = db()
+    try:
+        build_queue = get_build_queue_status_for_planet(planet_id, conn=conn, skip_finish=True)
+        research = get_research_status(user_id=pid, buildings={}, skip_finish=True, conn=conn)
+
+        def fail_bq(*_args, **_kwargs):
+            raise AssertionError("get_build_queue_status_for_planet should not run when build_queue is preloaded")
+
+        def fail_rs(*_args, **_kwargs):
+            raise AssertionError("get_research_status should not run when research is preloaded")
+
+        monkeypatch.setattr("game.buildings.get_build_queue_status_for_planet", fail_bq)
+        monkeypatch.setattr("game.research.get_research_status", fail_rs)
+        payload = global_queue_hud_for_game_state(
+            pid,
+            conn=conn,
+            planet=dict(planet),
+            build_queue=build_queue,
+            research=research,
+            buildings={"metal_mine": 1, "crystal_mine": 1, "solar_plant": 1},
+        )
+    finally:
+        conn.close()
+
+    assert isinstance(payload.get("jobs"), list)
     head = payload["jobs"][0]
     assert head.get("owner_type") == "building"
     assert int(head.get("job_id") or 0) > 0

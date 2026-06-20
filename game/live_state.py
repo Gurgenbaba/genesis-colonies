@@ -7,6 +7,35 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 
+def get_request_context_planet(user_id: int, *, conn) -> Dict[str, Any]:
+    """Request-scoped memo for get_context_planet (GC-741)."""
+    uid = int(user_id)
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context():
+            cache = getattr(g, "gc_context_planet_by_user", None)
+            if cache is None:
+                cache = {}
+                g.gc_context_planet_by_user = cache
+            if uid in cache:
+                return cache[uid]
+    except ImportError:
+        pass
+
+    from game.planet_evolution.repository import get_context_planet
+
+    planet = get_context_planet(uid, conn=conn)
+    try:
+        from flask import g, has_request_context
+
+        if has_request_context():
+            g.gc_context_planet_by_user[uid] = planet
+    except ImportError:
+        pass
+    return planet
+
+
 def mark_request_live_refreshed() -> None:
     """Mark that finish + derived sync already ran this HTTP request."""
     try:
@@ -177,15 +206,17 @@ def global_queue_hud_for_game_state(
     *,
     buildings: Optional[Dict[str, int]] = None,
     conn,
+    planet: Optional[Dict[str, Any]] = None,
+    build_queue: Optional[Dict[str, Any]] = None,
+    research: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    GC-643 — unified queue HUD slice for lightweight /api/game-state polls.
+    GC-643 — unified queue HUD slice for /api/game-state panel polls.
     Head jobs only (building: active + queue #2; others: active).
     """
     import time
 
     from game.buildings import get_build_queue_status_for_planet
-    from game.planet_evolution.repository import get_context_planet
     from game.queue_card import (
         map_build_queue_to_card_jobs,
         map_defense_queue_to_card_jobs,
@@ -194,7 +225,8 @@ def global_queue_hud_for_game_state(
     )
     from game.research import get_research_status
 
-    planet = get_context_planet(user_id, conn=conn)
+    if planet is None:
+        planet = get_request_context_planet(int(user_id), conn=conn)
     if not planet:
         return {"jobs": [], "planet_id": 0, "planet_name": ""}
 
@@ -202,7 +234,9 @@ def global_queue_hud_for_game_state(
     now = time.time()
     hud_jobs: list = []
 
-    bq = get_build_queue_status_for_planet(pid, conn=conn, skip_finish=True)
+    bq = build_queue if isinstance(build_queue, dict) else None
+    if bq is None:
+        bq = get_build_queue_status_for_planet(pid, conn=conn, skip_finish=True)
     hud_jobs.extend(
         _head_card_jobs(map_build_queue_to_card_jobs(bq, now=now), max_queued=1)
     )
@@ -213,13 +247,15 @@ def global_queue_hud_for_game_state(
 
         bld = get_planet_buildings(pid, conn=conn)
 
-    research = get_research_status(
-        user_id=int(user_id),
-        buildings=bld,
-        skip_finish=True,
-        conn=conn,
-    )
-    hud_jobs.extend(_head_card_jobs(map_research_queue_to_card_jobs(research, now=now)))
+    research_status = research if isinstance(research, dict) else None
+    if research_status is None:
+        research_status = get_research_status(
+            user_id=int(user_id),
+            buildings=bld,
+            skip_finish=True,
+            conn=conn,
+        )
+    hud_jobs.extend(_head_card_jobs(map_research_queue_to_card_jobs(research_status, now=now)))
 
     try:
         from game.fleet import fleet_schema_ready
