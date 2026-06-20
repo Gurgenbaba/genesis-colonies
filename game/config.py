@@ -124,6 +124,51 @@ def is_command_map_dev_mode() -> bool:
     return str(val).strip().lower() in ("1", "true", "yes", "on")
 
 
+def _env_str(name: str) -> str:
+    val = str(os.environ.get(name) or "").strip()
+    if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+        val = val[1:-1].strip()
+    return val
+
+
+def get_discord_support_webhook_url() -> str:
+    """Optional webhook for #ticket-feed (GC-656). Never commit the URL."""
+    return _env_str("DISCORD_SUPPORT_WEBHOOK_URL")
+
+
+def get_discord_bot_token() -> str:
+    """Bot token for Discord API (forum threads). Never commit."""
+    return _env_str("DISCORD_BOT_TOKEN")
+
+
+def get_discord_support_forum_channel_id() -> str:
+    """Forum channel ID for ingame support tickets (#tickets)."""
+    return _env_str("DISCORD_SUPPORT_FORUM_CHANNEL_ID")
+
+
+def get_discord_user_agent() -> str:
+    custom = _env_str("DISCORD_USER_AGENT")
+    if custom:
+        return custom
+    return "Genesis-Colonies/1.0 (+https://www.genesis-colonies.de)"
+
+
+def get_discord_support_forum_tag_id(tag_key: str) -> str:
+    """
+    Forum tag snowflake by logical key: cheater, payments, anything, in_progress, done.
+    Env: DISCORD_SUPPORT_TAG_CHEATER, DISCORD_SUPPORT_TAG_PAYMENTS, etc.
+    """
+    key = str(tag_key or "").strip().lower().replace("-", "_")
+    env_name = f"DISCORD_SUPPORT_TAG_{key.upper()}"
+    return _env_str(env_name)
+
+
+def get_public_base_url() -> str:
+    """Public site URL for outbound links (emails, Discord embeds)."""
+    base = str(os.environ.get("PUBLIC_BASE_URL") or os.environ.get("GC_PUBLIC_URL") or "").strip()
+    return base.rstrip("/")
+
+
 def get_client_runtime_config() -> dict[str, int | bool]:
     """
     Client poll intervals (ms) injected into templates as GC_CLIENT_CONFIG.

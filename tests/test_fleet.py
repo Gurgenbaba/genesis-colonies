@@ -4504,6 +4504,7 @@ def test_get_fleet_live_state_non_active_planet_still_ticks(fleet_db):
     assert int(state["server_now"]) > 0
     cur.execute("SELECT status FROM fleet_movements WHERE id = ?;", (fleet_id,))
     assert cur.fetchone()["status"] == "completed"
+    assert state["fleet_slots"]["active"] == 0
     conn.close()
 
 

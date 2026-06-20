@@ -4741,9 +4741,9 @@ def build_fleet_page_context(
             )
 
         ships = get_planet_ships(planet_id, conn=conn)
-        slots = get_fleet_slot_status(player_id, conn=conn)
         presets = list_presets(player_id, conn=conn)
         process_fleet_tick(player_id=int(player_id), conn=conn)
+        slots = get_fleet_slot_status(player_id, conn=conn)
         movements = list_active_movements(player_id, conn=conn)
 
         from .models import get_planet_buildings

@@ -7730,6 +7730,29 @@
   GC.updateFleetNavBadge = updateFleetNavBadge;
 
   /** Single write path for shell HUD (header score/rank/online/messages + resource bar). */
+  function syncFleetSlotsBadgeFromState(slots) {
+    if (!slots || typeof slots !== "object") return;
+    const active = parseInt(slots.active, 10) || 0;
+    const max = parseInt(slots.max, 10) || 0;
+    const text = `${active} / ${max}`;
+    document.querySelectorAll("[data-fleet-slots]").forEach((el) => {
+      _setIfChanged(el, text);
+    });
+    document.querySelectorAll("[data-logistics-fleet-slots]").forEach((el) => {
+      _setIfChanged(el, text);
+    });
+    const freeEl = document.querySelector(".logistics-slots-free");
+    if (freeEl && slots.free !== undefined) {
+      const freeLabel = tt("logistics_slots_free");
+      _setIfChanged(freeEl, `${freeLabel}: ${fmtNumber(parseInt(slots.free, 10) || 0)}`);
+    }
+    const fleetPage = document.getElementById("fleet-page");
+    if (fleetPage?._fleetRt?.data) {
+      fleetPage._fleetRt.data.fleet_slots = slots;
+    }
+  }
+  GC.syncFleetSlotsBadgeFromState = syncFleetSlotsBadgeFromState;
+
   function patchShellHudFromState(data, opts) {
     if (!data || data.ok === false) return;
     const forceResourceBar = Boolean(opts && opts.forceResourceBar);
@@ -7892,6 +7915,10 @@
 
     if (data.active_fleets !== undefined) {
       renderGlobalFleetHud(data.active_fleets);
+    }
+
+    if (data.fleet_slots) {
+      syncFleetSlotsBadgeFromState(data.fleet_slots);
     }
 
     if (data.global_queue_hud !== undefined || data.build_queue !== undefined) {

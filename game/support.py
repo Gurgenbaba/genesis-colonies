@@ -75,6 +75,57 @@ def _table_ready(conn) -> bool:
     return table_exists(conn, "support_tickets") and table_exists(conn, "support_messages")
 
 
+def notify_discord_new_ticket(
+    *,
+    ticket_id: int,
+    player_id: int,
+    player_name: str,
+    subject: str,
+    category: str,
+    message: str,
+    created_at: int,
+) -> str | None:
+    from .discord_support import notify_discord_support_ticket
+
+    return notify_discord_support_ticket(
+        ticket_id=int(ticket_id),
+        player_id=int(player_id),
+        player_name=player_name,
+        subject=subject,
+        category=category,
+        message=message,
+        created_at=int(created_at),
+    )
+
+
+def _persist_discord_thread_id(ticket_id: int, thread_id: str) -> None:
+    tid = str(thread_id or "").strip()
+    if not tid:
+        return
+    conn = db()
+    try:
+        conn.execute(
+            "UPDATE support_tickets SET discord_thread_id = ? WHERE id = ?;",
+            (tid, int(ticket_id)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _sync_discord_ticket_tags(*, discord_thread_id: str | None, category: str, status: str) -> None:
+    from .discord_support import sync_discord_thread_tags
+
+    thread_id = str(discord_thread_id or "").strip()
+    if not thread_id:
+        return
+    sync_discord_thread_tags(
+        thread_id=thread_id,
+        category=str(category or "general"),
+        status=str(status or "open"),
+    )
+
+
 def create_ticket(player_id: int, payload: dict[str, Any]) -> dict[str, Any]:
     subject = _norm_text(payload.get("subject"), 120)
     message = _norm_text(payload.get("message"), 1200)
@@ -89,20 +140,30 @@ def create_ticket(player_id: int, payload: dict[str, Any]) -> dict[str, Any]:
     if priority not in {"low", "normal", "high"}:
         priority = "normal"
 
+    ticket_id = 0
+    created_at = 0
+    player_name = f"Spieler #{int(player_id)}"
     conn = db()
     try:
         if not _table_ready(conn):
             return _err("support_not_ready")
         begin_write_transaction(conn)
-        now = _now()
+        created_at = _now()
         cur = conn.cursor()
+        cur.execute(
+            "SELECT name FROM players WHERE id = ? LIMIT 1;",
+            (int(player_id),),
+        )
+        prow = cur.fetchone()
+        if prow and prow["name"]:
+            player_name = str(prow["name"])
         cur.execute(
             """
             INSERT INTO support_tickets
               (player_id, subject, category, priority, status, created_at, updated_at, last_message_at)
             VALUES (?, ?, ?, ?, 'open', ?, ?, ?);
             """,
-            (int(player_id), subject, category, priority, now, now, now),
+            (int(player_id), subject, category, priority, created_at, created_at, created_at),
         )
         ticket_id = int(cur.lastrowid)
         conn.execute(
@@ -110,7 +171,7 @@ def create_ticket(player_id: int, payload: dict[str, Any]) -> dict[str, Any]:
             INSERT INTO support_messages (ticket_id, sender_id, sender_role, message, created_at)
             VALUES (?, ?, 'player', ?, ?);
             """,
-            (ticket_id, int(player_id), message, now),
+            (ticket_id, int(player_id), message, created_at),
         )
         commit(conn)
     except Exception:
@@ -118,6 +179,19 @@ def create_ticket(player_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         raise
     finally:
         conn.close()
+
+    if ticket_id > 0:
+        thread_id = notify_discord_new_ticket(
+            ticket_id=ticket_id,
+            player_id=int(player_id),
+            player_name=player_name,
+            subject=subject,
+            category=category,
+            message=message,
+            created_at=created_at,
+        )
+        if thread_id:
+            _persist_discord_thread_id(ticket_id, thread_id)
 
     return _ok({"ticket_id": ticket_id})
 
@@ -317,7 +391,7 @@ def admin_reply_ticket(admin_id: int, ticket_id: int, message: str) -> dict[str,
             return _err("forbidden")
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, status FROM support_tickets WHERE id = ? LIMIT 1;",
+            "SELECT id, status, category, discord_thread_id FROM support_tickets WHERE id = ? LIMIT 1;",
             (int(ticket_id),),
         )
         row = cur.fetchone()
@@ -342,6 +416,17 @@ def admin_reply_ticket(admin_id: int, ticket_id: int, message: str) -> dict[str,
             (now, now, int(ticket_id)),
         )
         commit(conn)
+        cur.execute(
+            "SELECT status, category, discord_thread_id FROM support_tickets WHERE id = ? LIMIT 1;",
+            (int(ticket_id),),
+        )
+        updated = cur.fetchone()
+        if updated:
+            _sync_discord_ticket_tags(
+                discord_thread_id=str(updated["discord_thread_id"] or ""),
+                category=str(updated["category"] or "general"),
+                status=str(updated["status"] or "open"),
+            )
         return _ok({"ticket_id": int(ticket_id)})
     except Exception:
         rollback(conn)
@@ -360,7 +445,10 @@ def change_ticket_status(player_id: int, ticket_id: int, status: str) -> dict[st
             return _err("support_not_ready")
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, player_id FROM support_tickets WHERE id = ? LIMIT 1;",
+            """
+            SELECT id, player_id, category, discord_thread_id
+            FROM support_tickets WHERE id = ? LIMIT 1;
+            """,
             (int(ticket_id),),
         )
         row = cur.fetchone()
@@ -396,6 +484,11 @@ def change_ticket_status(player_id: int, ticket_id: int, status: str) -> dict[st
                 ),
             )
         commit(conn)
+        _sync_discord_ticket_tags(
+            discord_thread_id=str(row["discord_thread_id"] or ""),
+            category=str(row["category"] or "general"),
+            status=next_status,
+        )
         return _ok({"ticket_id": int(ticket_id), "status": next_status})
     except Exception:
         rollback(conn)
