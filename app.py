@@ -409,19 +409,30 @@ def inject_globals():
         visible_sidebar_modules,
     )
 
-    sidebar_nav = resolve_sidebar_nav(
-        empire_role_key=str((header_active_planet or {}).get("empire_role_key") or "general"),
-        is_homeworld=bool((header_active_planet or {}).get("is_homeworld")),
-    )
+    sidebar_nav = {"full_nav": True, "modules": {}, "empire_role_key": "general"}
+    try:
+        sidebar_nav = resolve_sidebar_nav(
+            empire_role_key=str((header_active_planet or {}).get("empire_role_key") or "general"),
+            is_homeworld=bool((header_active_planet or {}).get("is_homeworld")),
+        )
+    except Exception:
+        pass
 
     active_locale = current_locale()
     auth_discord_linked = False
+    discord_oauth_enabled = False
+    discord_invite_url = ""
     try:
         if auth_user and auth_user.get("id"):
             snap = discord_auth_logic.discord_link_snapshot(int(auth_user["id"]))
             auth_discord_linked = bool(snap.get("discord_linked"))
     except Exception:
         auth_discord_linked = False
+    try:
+        discord_oauth_enabled = discord_auth_logic.discord_oauth_configured()
+        discord_invite_url = discord_auth_logic.discord_invite_url()
+    except Exception:
+        pass
 
     return dict(
         T=T,
@@ -469,8 +480,8 @@ def inject_globals():
         current_planet_landscape_url=current_planet_landscape_url,
         current_planet_landscape_webp_url=current_planet_landscape_webp_url,
         SERVER_TIME=int(time.time()),
-        DISCORD_OAUTH_ENABLED=discord_auth_logic.discord_oauth_configured(),
-        DISCORD_INVITE_URL=discord_auth_logic.discord_invite_url(),
+        DISCORD_OAUTH_ENABLED=discord_oauth_enabled,
+        DISCORD_INVITE_URL=discord_invite_url,
         AUTH_DISCORD_LINKED=auth_discord_linked,
     )
 

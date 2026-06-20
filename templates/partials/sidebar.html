@@ -1,4 +1,9 @@
 {% set _sn = SIDEBAR_NAV or {'full_nav': true, 'modules': {}} %}
+{% if SIDEBAR_RELEASE is defined and SIDEBAR_RELEASE %}
+  {% set _release = SIDEBAR_RELEASE %}
+{% else %}
+  {% set _release = {'label': 'Genesis', 'href': url_for('news_view')} %}
+{% endif %}
 {% set _cmd_open = request.endpoint in ('overview', 'galaxy_view', 'planet_evolution_view') %}
 {% set _infra_open = request.endpoint in ('buildings_view', 'research_view', 'techtree_view') %}
 {% set _mil_open = request.endpoint in ('shipyard_view', 'defense_view', 'fleet_view') %}
@@ -14,11 +19,11 @@
      data-nav-full="{{ '1' if _sn.full_nav else '0' }}">
 
   <div class="gc-sidebar-version">
-    <a href="{{ SIDEBAR_RELEASE.href | default(url_for('news_view')) }}"
+    <a href="{{ _release.href | default(url_for('news_view')) }}"
        class="gc-sidebar-version-link gc-mono"
        data-pjax-link
        title="{{ T('sidebar_version_title', 'Genesis Timeline & Patchnotes') }}">
-      <span class="gc-sidebar-version-label">{{ SIDEBAR_RELEASE.label | default('Genesis') }}</span>
+      <span class="gc-sidebar-version-label">{{ _release.label | default('Genesis') }}</span>
     </a>
   </div>
 

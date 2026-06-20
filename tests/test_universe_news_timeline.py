@@ -319,3 +319,12 @@ def test_import_full_history_commits_and_releases_lock(timeline_db):
     assert result["ok"] is True
     write_admin_audit(1, "test_after_import", payload={"inserted": result.get("inserted")})
     assert list_news(limit=500)
+
+
+def test_sidebar_template_has_release_fallback():
+    html = (Path(__file__).resolve().parents[1] / "templates/partials/sidebar.html").read_text(
+        encoding="utf-8"
+    )
+    assert "SIDEBAR_RELEASE is defined" in html
+    assert "_release.href" in html
+    assert "SIDEBAR_RELEASE.href" not in html
