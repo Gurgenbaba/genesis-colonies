@@ -4494,12 +4494,17 @@ def _payload_from_live_context(
     energy_efficiency_pct = int(round(float(ratio) * 100))
     mods = get_research_modifiers(user_id)
 
-    from game.buildings import get_overview_building_rows
     from game.planet_evolution.repository import get_active_planet_id, get_context_planet
 
     planet = get_context_planet(user_id, conn=conn)
-    overview_building_rows = get_overview_building_rows(
-        planet, buildings, build_queue=build_queue
+    energy_hint = (
+        "zero"
+        if int(energy_total) <= 0
+        else (
+            "ok"
+            if float(ratio) >= 1.0
+            else ("low" if float(ratio) >= 0.5 else "critical")
+        )
     )
 
     payload: Dict[str, Any] = {
@@ -4542,18 +4547,16 @@ def _payload_from_live_context(
             "mine_energy_factor": float(mods.get("mine_energy_factor", 1.0) or 1.0),
         },
         "overview": {
-            "rows": overview_building_rows,
-            "energy_hint": (
-                "zero"
-                if int(energy_total) <= 0
-                else (
-                    "ok"
-                    if float(ratio) >= 1.0
-                    else ("low" if float(ratio) >= 0.5 else "critical")
-                )
-            ),
+            "energy_hint": energy_hint,
         },
     }
+
+    if include_panel:
+        from game.buildings import get_overview_building_rows
+
+        payload["overview"]["rows"] = get_overview_building_rows(
+            planet, buildings, build_queue=build_queue
+        )
 
     from game.overview_page import build_overview_status
 
@@ -4675,19 +4678,28 @@ def _payload_from_live_context(
             "referrals": {"active": False, "count": 0, "label": ""},
         }
 
-    try:
-        from game.live_state import fleet_hud_for_game_state
+    if include_panel:
+        try:
+            from game.live_state import fleet_hud_for_game_state
 
-        fleet_hud = fleet_hud_for_game_state(user_id, conn=conn)
-        if fleet_hud is not None:
-            payload["active_fleets"] = fleet_hud.get("active_fleets") or {
-                "count": 0,
-                "visible_limit": 5,
-                "next_remaining_seconds": 0,
-                "items": [],
-            }
-            payload["fleet_slots"] = fleet_hud.get("fleet_slots") or {}
-        else:
+            fleet_hud = fleet_hud_for_game_state(user_id, conn=conn)
+            if fleet_hud is not None:
+                payload["active_fleets"] = fleet_hud.get("active_fleets") or {
+                    "count": 0,
+                    "visible_limit": 5,
+                    "next_remaining_seconds": 0,
+                    "items": [],
+                }
+                payload["fleet_slots"] = fleet_hud.get("fleet_slots") or {}
+            else:
+                payload["active_fleets"] = {
+                    "count": 0,
+                    "visible_limit": 5,
+                    "next_remaining_seconds": 0,
+                    "items": [],
+                }
+                payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
+        except Exception:
             payload["active_fleets"] = {
                 "count": 0,
                 "visible_limit": 5,
@@ -4695,29 +4707,21 @@ def _payload_from_live_context(
                 "items": [],
             }
             payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
-    except Exception:
-        payload["active_fleets"] = {
-            "count": 0,
-            "visible_limit": 5,
-            "next_remaining_seconds": 0,
-            "items": [],
-        }
-        payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
 
-    try:
-        from game.live_state import global_queue_hud_for_game_state
+        try:
+            from game.live_state import global_queue_hud_for_game_state
 
-        payload["global_queue_hud"] = global_queue_hud_for_game_state(
-            user_id,
-            buildings=buildings,
-            conn=conn,
-        )
-    except Exception:
-        payload["global_queue_hud"] = {
-            "jobs": [],
-            "planet_id": int(payload.get("active_planet_id") or 0),
-            "planet_name": str(payload.get("active_planet_name") or ""),
-        }
+            payload["global_queue_hud"] = global_queue_hud_for_game_state(
+                user_id,
+                buildings=buildings,
+                conn=conn,
+            )
+        except Exception:
+            payload["global_queue_hud"] = {
+                "jobs": [],
+                "planet_id": int(payload.get("active_planet_id") or 0),
+                "planet_name": str(payload.get("active_planet_name") or ""),
+            }
 
     try:
         from game.models import get_player_stats

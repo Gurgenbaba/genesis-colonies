@@ -130,8 +130,7 @@ def test_api_game_state_energy_after_energy_tech_finish(game_client):
     assert float(data["energy"]["mine_energy_factor"]) == pytest.approx(0.95, rel=0.01)
     assert int(data["energy"]["used"]) < used_before
     assert data["overview"]["energy_hint"] in ("ok", "low", "zero")
-    metal_row = next(r for r in data["overview"]["rows"] if r["key"] == "metal_mine")
-    assert int(metal_row["level"]) >= 6
+    assert int(data["buildings"]["metal_mine"]) >= 6
 
 
 def test_api_game_state_overview_production_after_mining_tech(game_client):
@@ -142,8 +141,7 @@ def test_api_game_state_overview_production_after_mining_tech(game_client):
     r0 = client.get("/api/game-state")
     assert r0.status_code == 200
     before = r0.get_json()
-    metal_before = next(r for r in before["overview"]["rows"] if r["key"] == "metal_mine")
-    prod_before = int(metal_before["production_per_hour"])
+    prod_before = int(before["production_per_hour"]["metal_mine"])
 
     conn = db()
     now = time.time()
@@ -159,8 +157,7 @@ def test_api_game_state_overview_production_after_mining_tech(game_client):
     r1 = client.get("/api/game-state")
     assert r1.status_code == 200
     data = r1.get_json()
-    metal_after = next(r for r in data["overview"]["rows"] if r["key"] == "metal_mine")
-    prod_after = int(metal_after["production_per_hour"])
+    prod_after = int(data["production_per_hour"]["metal_mine"])
     assert prod_after > prod_before
     assert int(data["production_per_hour"]["metal_mine"]) == prod_after
 
@@ -176,7 +173,7 @@ def test_api_status_alias_matches_game_state(game_client):
     assert state["ok"] is True
     assert status["ok"] is True
     assert status["energy"]["used"] == state["energy"]["used"]
-    assert status["overview"]["rows"] == state["overview"]["rows"]
+    assert status["production_per_hour"] == state["production_per_hour"]
 
 
 def test_api_game_state_single_finish_via_coerce(game_client):
@@ -288,15 +285,29 @@ def test_api_game_state_poll_is_lightweight(game_client):
     assert "scrapyard" not in body
     assert "planet_teaser" not in body
     assert body.get("overview", {}).get("status") is None
+    assert "overview" in body
+    assert "energy_hint" in body["overview"]
+    assert "rows" not in body.get("overview", {})
+    assert "active_fleets" not in body
+    assert "fleet_slots" not in body
+    assert "global_queue_hud" not in body
+
+
+def test_api_game_state_include_panel_has_heavy_hud_slices(game_client):
+    """GC-740B: panel polls include fleet HUD, global queue HUD, and overview rows."""
+    client, _pid = game_client
+    r = client.get("/api/game-state?include_panel=1")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body.get("ok") is True
+    assert isinstance(body.get("overview", {}).get("rows"), list)
+    assert len(body["overview"]["rows"]) > 0
     assert "active_fleets" in body
     assert isinstance(body["active_fleets"], dict)
     assert "items" in body["active_fleets"]
-    assert isinstance(body["active_fleets"]["items"], list)
-    assert "count" in body["active_fleets"]
-    assert "visible_limit" in body["active_fleets"]
-    assert "next_remaining_seconds" in body["active_fleets"]
     assert "fleet_slots" in body
-    assert isinstance(body["fleet_slots"], dict)
+    assert "global_queue_hud" in body
+    assert isinstance(body["global_queue_hud"], dict)
 
 
 def test_api_game_state_include_panel_has_buildings_panel(game_client):

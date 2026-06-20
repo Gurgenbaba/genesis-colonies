@@ -8588,8 +8588,6 @@
       || page === "shipyard"
       || page === "defense"
       || page === "trader_hub"
-      || page === "overview"
-      || page === "fleet"
       || page === "logistics"
     );
   }
