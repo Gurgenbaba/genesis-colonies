@@ -793,6 +793,59 @@
     return 0;
   }
 
+  /** GC-742 — ingame SSR shell already has live resource bar + server clock. */
+  function pageHasSsrLiveBoot() {
+    const body = document.body;
+    if (!body || body.dataset.authPage === "1") return false;
+    if (!body.classList.contains("gc-body-ingame")) return false;
+    if (!body.dataset.serverTime) return false;
+    if (!document.getElementById("resource-bar")) return false;
+    return !!document.querySelector("#resource-bar .res-value.metal");
+  }
+
+  const _SSR_SKIP_INIT_GAME_STATE_PAGES = new Set([
+    "overview",
+    "messages",
+    "fleet",
+    "empire",
+    "galaxy",
+    "options",
+    "vote_center",
+    "referrals",
+    "records",
+    "news",
+  ]);
+
+  function shouldSkipInitGameStateAfterSsr(page, opts) {
+    if (opts && opts.skipGameState) return true;
+    if (opts && opts.force) return false;
+    if (!_SSR_SKIP_INIT_GAME_STATE_PAGES.has(String(page || ""))) return false;
+    return pageHasSsrLiveBoot();
+  }
+
+  function bootstrapResourceLiveFromDom() {
+    const planetId = getDomPlanetId();
+    if (!planetId) return false;
+    const readVal = (selector) => {
+      const el = document.querySelector(selector);
+      if (!el) return 0;
+      return parseIntNumber(el.textContent);
+    };
+    syncResourceLiveBaseline({
+      planetId,
+      metal: readVal("#resource-bar .res-value.metal"),
+      crystal: readVal("#resource-bar .res-value.crystal"),
+      fuelCells: readVal("#resource-bar .res-value.fuel_cells"),
+      storageMetal: readVal("#resource-bar .res-cap.metal"),
+      storageCrystal: readVal("#resource-bar .res-cap.crystal"),
+      storageFuelCells: readVal("#resource-bar .res-cap.fuel_cells"),
+      prodMetal: 0,
+      prodCrystal: 0,
+      prodFuelCells: 0,
+    });
+    return true;
+  }
+
   function syncScopedPlanetIds(planetId) {
     const pid = Number(planetId || 0);
     if (!pid) return;
@@ -1600,9 +1653,15 @@
 
     const afterInit = async () => {
       resyncServerTimeFromDom(true);
-      if (!skipGameState && typeof GC.refreshGameState === "function") {
+      const skipInitFetch = shouldSkipInitGameStateAfterSsr(page, opts) || skipGameState;
+      if (!skipInitFetch && typeof GC.refreshGameState === "function") {
         await GC.refreshGameState("page_init");
-      } else if (skipGameState) {
+      } else {
+        if (shouldSkipInitGameStateAfterSsr(page, opts)) {
+          console.debug("[GC] initPage skip game-state (SSR fresh)", page);
+          bootstrapResourceLiveFromDom();
+          _bootstrapPageQueueCompactLiveFromDom();
+        }
         GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
       }
       GC.startProgressTicker();

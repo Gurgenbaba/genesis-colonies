@@ -321,6 +321,18 @@ def test_main_js_gc802_planet_switch_state_sync():
     assert 'overview-wrapper" data-planet-id="{{ planet.planet_id or 0 }}"' in overview
 
 
+def test_main_js_gc742_ssr_skip_init_game_state():
+    """GC-742: overview SSR must not immediately re-fetch game-state."""
+    src = _read("static/main.js")
+    assert "function pageHasSsrLiveBoot()" in src
+    assert "function shouldSkipInitGameStateAfterSsr(page, opts)" in src
+    assert "initPage skip game-state (SSR fresh)" in src
+    assert '"overview"' in src.split("_SSR_SKIP_INIT_GAME_STATE_PAGES")[1].split("function shouldSkipInitGameStateAfterSsr")[0]
+    init_body = src.split("const afterInit = async () => {")[1].split("if (page === \"messages\")")[0]
+    assert "shouldSkipInitGameStateAfterSsr(page, opts)" in init_body
+    assert "bootstrapResourceLiveFromDom()" in init_body
+
+
 def test_main_js_gc802_fleet_timer_and_url_prefill():
     src = _read("static/main.js")
     assert "function movementRemainingSeconds(countdownAt, serverNow, serverRemaining)" in src
