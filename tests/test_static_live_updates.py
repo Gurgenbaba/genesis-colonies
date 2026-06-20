@@ -333,6 +333,17 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     assert "bootstrapResourceLiveFromDom()" in init_body
 
 
+def test_main_js_gc743_deferred_chat_and_news_boot():
+    """GC-743: chat bootstrap and what's-new load after initial paint."""
+    src = _read("static/main.js")
+    assert "GC_DEFER_CHAT_BOOT_MS = 500" in src
+    assert "GC_DEFER_WHATS_NEW_MS = 800" in src
+    assert "function scheduleDeferredChatBoot()" in src
+    assert "scheduleDeferredChatBoot()" in src.split("const afterInit = async () => {")[1].split("if (page === \"messages\")")[0]
+    whats_new = src.split("function initWhatsNew()")[1].split("function initVisibilityPolling")[0]
+    assert "GC.setSafeTimeout(loadWhatsNew, GC_DEFER_WHATS_NEW_MS)" in whats_new
+
+
 def test_main_js_gc802_fleet_timer_and_url_prefill():
     src = _read("static/main.js")
     assert "function movementRemainingSeconds(countdownAt, serverNow, serverRemaining)" in src

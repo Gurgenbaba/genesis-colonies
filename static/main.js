@@ -846,6 +846,16 @@
     return true;
   }
 
+  const GC_DEFER_CHAT_BOOT_MS = 500;
+  const GC_DEFER_WHATS_NEW_MS = 800;
+
+  function scheduleDeferredChatBoot() {
+    GC.setSafeTimeout(() => {
+      if (!shouldRunGameLoop() || _authLoopAborted) return;
+      if (typeof GC.initChat === "function") GC.initChat();
+    }, GC_DEFER_CHAT_BOOT_MS);
+  }
+
   function syncScopedPlanetIds(planetId) {
     const pid = Number(planetId || 0);
     if (!pid) return;
@@ -1665,7 +1675,7 @@
         GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
       }
       GC.startProgressTicker();
-      if (typeof GC.initChat === "function") GC.initChat();
+      scheduleDeferredChatBoot();
       if (GC.detectPage() === "messages" && typeof GC.bootMessagesInbox === "function") {
         const st = GC.messagesPageState;
         if (!st || !st.listLoaded) {
@@ -22191,7 +22201,7 @@
         .catch(() => {});
     };
 
-    loadWhatsNew();
+    GC.setSafeTimeout(loadWhatsNew, GC_DEFER_WHATS_NEW_MS);
     GC.registerCleanup(() => {});
   }
 
