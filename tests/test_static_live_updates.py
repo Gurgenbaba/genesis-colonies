@@ -376,6 +376,15 @@ def test_gc746_routes_reuse_ctx_planet():
     assert "_load_page_live_context(finish_source=\"fleet\"" in fleet
 
 
+def test_gc747_game_state_poll_diet():
+    src = _read("static/main.js")
+    assert "function mergePollStatePreserveHeavy(prev, next)" in src
+    assert "function commitGameStateCache(data, reason, opts)" in src
+    live = _read("game/live_state.py")
+    assert "def apply_lightweight_game_state_diet(payload" in live
+    assert "def research_poll_slice(research" in live
+
+
 def test_gc744_resource_icons_use_webp_picture():
     """GC-744: HUD/overview resource icons prefer WebP with eager above-fold load."""
     macro = _read("templates/partials/progression_cards.html")

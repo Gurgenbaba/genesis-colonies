@@ -4880,6 +4880,11 @@ def _payload_from_live_context(
     if own_conn and conn is not None:
         conn.close()
 
+    if lightweight:
+        from game.live_state import apply_lightweight_game_state_diet
+
+        payload = apply_lightweight_game_state_diet(payload)
+
     from game.logic import attach_canonical_server_time
 
     return attach_canonical_server_time(payload)

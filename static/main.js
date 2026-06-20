@@ -8295,6 +8295,28 @@
     }
   }
 
+  function mergePollStatePreserveHeavy(prev, next) {
+    if (!prev || prev.ok !== true || !next) return next;
+    const merged = { ...prev, ...next };
+    ["buildings", "planets", "production_per_hour", "buildings_panel", "player_stats", "planet_limit"].forEach((key) => {
+      if (!(key in next) && prev[key] !== undefined) merged[key] = prev[key];
+    });
+    if (next.research && !Array.isArray(next.research.techs) && Array.isArray(prev.research?.techs)) {
+      merged.research = { ...prev.research, ...next.research };
+    }
+    return merged;
+  }
+
+  function commitGameStateCache(data, reason, opts) {
+    const nextState = coercePollUnreadForHud(data, reason);
+    const reasonStr = String(reason || "");
+    if (reasonStr === "poll" || reasonStr === "admin_hud") {
+      GC.lastState = mergePollStatePreserveHeavy(GC.lastState, nextState);
+      return;
+    }
+    GC.lastState = nextState;
+  }
+
   // Status polling / GC.refreshGameState
   // =========================
   function applyGameStateData(data, _reason, opts) {
@@ -8409,14 +8431,14 @@
       });
 
       if (hudOnly) {
-        GC.lastState = GC.lastState && GC.lastState.ok === true ? { ...GC.lastState, ...data } : data;
+        GC.lastState = mergePollStatePreserveHeavy(GC.lastState, coercePollUnreadForHud(data, reason));
         return false;
       }
 
       if (skipScopedPanels) {
         const stApplied = Number(data.server_time || 0);
         if (stApplied) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stApplied);
-        GC.lastState = coercePollUnreadForHud(data, reason);
+        commitGameStateCache(data, reason, opts);
         return false;
       }
 
@@ -8642,7 +8664,7 @@
       const stApplied = Number(data.server_time || 0);
       if (stApplied) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stApplied);
 
-      GC.lastState = coercePollUnreadForHud(data, reason);
+      commitGameStateCache(data, reason, opts);
       GC.startProgressTicker();
       _maybeRefreshStaleMovementCountdowns();
       if (shouldPatchGameStateModule("shipyard") || shouldPatchGameStateModule("defense")) {

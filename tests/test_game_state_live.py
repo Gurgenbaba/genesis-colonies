@@ -276,9 +276,6 @@ def test_api_game_state_poll_is_lightweight(game_client):
     assert "player" in body
     assert "build_queue" in body
     assert "unread_messages_count" in body
-    assert "player_stats" in body
-    assert "online_now" in body["player_stats"]
-    assert "total_players" in body["player_stats"]
     assert "buildings_panel" not in body
     assert "exchange" not in body
     assert "fuel_exchange" not in body
@@ -291,6 +288,38 @@ def test_api_game_state_poll_is_lightweight(game_client):
     assert "active_fleets" not in body
     assert "fleet_slots" not in body
     assert "global_queue_hud" not in body
+
+
+def test_api_game_state_poll_is_diet_gc747(game_client):
+    """GC-747: normal polls must not ship page-catalog slices."""
+    client, _pid = game_client
+    body = client.get("/api/game-state").get_json()
+    assert body.get("ok") is True
+    research = body.get("research") or {}
+    assert "techs" not in research
+    assert "queue" in research
+    assert "summary" in research
+    assert "buildings" in body
+    assert "production_per_hour" in body
+    assert "planets" not in body
+    assert "player_stats" not in body
+    assert "building_queue" not in body
+    assert "research_queue" not in body
+    assert "score" in body
+    ap = body.get("active_planet") or {}
+    assert "sidebar_nav" not in ap
+    raw = client.get("/api/game-state").get_data(as_text=True)
+    assert len(raw) < 12000
+
+
+def test_api_game_state_include_panel_has_full_research_catalog(game_client):
+    """Panel polls still include research.techs for live research/buildings pages."""
+    client, _pid = game_client
+    body = client.get("/api/game-state?include_panel=1").get_json()
+    assert body.get("ok") is True
+    research = body.get("research") or {}
+    assert isinstance(research.get("techs"), list)
+    assert len(research["techs"]) > 0
 
 
 def test_api_game_state_include_panel_has_heavy_hud_slices(game_client):

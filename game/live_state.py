@@ -283,3 +283,39 @@ def global_queue_hud_for_game_state(
         "planet_id": pid,
         "planet_name": str(planet.get("name") or ""),
     }
+
+
+def research_poll_slice(research: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """GC-747: queue timers + summary only — no full tech catalog on poll."""
+    if not isinstance(research, dict):
+        return {"active": None, "queue": [], "summary": {"count": 0, "limit": 3}}
+    out: Dict[str, Any] = {
+        "active": research.get("active"),
+        "queue": list(research.get("queue") or []),
+        "summary": dict(research.get("summary") or {}),
+    }
+    card_jobs = research.get("card_jobs")
+    if card_jobs is not None:
+        out["card_jobs"] = card_jobs
+    return out
+
+
+def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """GC-747: strip page-catalog slices from normal /api/game-state polls."""
+    for key in (
+        "planets",
+        "player_stats",
+        "planet_limit",
+        "building_queue",
+        "research_queue",
+        "planet_teaser",
+    ):
+        payload.pop(key, None)
+    if "research" in payload:
+        payload["research"] = research_poll_slice(payload.get("research"))
+    ap = payload.get("active_planet")
+    if isinstance(ap, dict):
+        slim_ap = dict(ap)
+        slim_ap.pop("sidebar_nav", None)
+        payload["active_planet"] = slim_ap
+    return payload
