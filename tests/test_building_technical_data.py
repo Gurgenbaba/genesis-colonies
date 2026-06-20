@@ -9,10 +9,11 @@ import pytest
 
 import game.db as dbmod
 import game.models as models
-from game.buildings import build_building_technical_data
+from game.buildings import build_building_technical_data, get_build_time
 from game.research import build_research_technical_data
 from game.db import db
-from game.models import create_user, ensure_player_and_homeworld, get_homeworld, init_db, save_planet_buildings
+from game.effects import EffectResolver
+from game.models import create_user, ensure_player_and_homeworld, get_homeworld, get_research_levels, init_db, save_planet_buildings
 
 
 @pytest.fixture
@@ -181,3 +182,45 @@ def test_technical_data_api_route(tech_db, monkeypatch):
 
     r404 = client.get("/api/buildings/not_a_building/technical-data")
     assert r404.status_code == 404
+
+
+def test_technical_data_nanofactory_build_time_reduction(tech_db):
+    uid, _ = _create_player()
+    planet = get_homeworld(player_id=uid)
+    save_planet_buildings(
+        int(planet["id"]),
+        {"nanofactory": 2, "solar_plant": 1, "metal_mine": 1},
+    )
+
+    conn = db()
+    data, err = build_building_technical_data("nanofactory", user_id=uid, conn=conn)
+    conn.close()
+
+    assert err is None
+    row = data["levels"][0]
+    assert row["effect_kind"] == "bonus_percent"
+    assert row["build_time_speed_bonus_percent"] == row["effect_value"]
+    buildings = {"nanofactory": 2, "solar_plant": 1, "metal_mine": 1}
+    r = EffectResolver(buildings, get_research_levels(uid))
+    assert row["build_time_speed_bonus_percent"] == r.get_build_time_speed_bonus_pct("metal_mine")
+    assert row["build_time_factor"] == pytest.approx(
+        r.get_build_time_duration_factor("metal_mine"), rel=1e-3
+    )
+    assert row["time_seconds"] == get_build_time("nanofactory", 2, user_id=uid)
+
+
+def test_technical_data_command_center_flat_per_level_bonus(tech_db):
+    uid, _ = _create_player()
+    planet = get_homeworld(player_id=uid)
+    save_planet_buildings(int(planet["id"]), {"command_center": 17, "solar_plant": 1})
+
+    conn = db()
+    data, err = build_building_technical_data("command_center", user_id=uid, conn=conn)
+    conn.close()
+
+    assert err is None
+    row = data["levels"][0]
+    assert row["effect_kind"] == "bonus_percent"
+    assert row["effect_value"] == 425
+    assert data["levels"][1]["effect_value"] == 450
+    assert data["levels"][1]["effect_value"] - row["effect_value"] == 25

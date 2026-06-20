@@ -67,6 +67,35 @@ def test_game_state_includes_trader_panels(trader_hub_db, monkeypatch):
     assert data["scrapyard"].get("ready") is True
 
 
+def test_game_state_exchange_limit_scales_without_hardcap(trader_hub_db, monkeypatch):
+    client, uid = _login_client(trader_hub_db, monkeypatch)
+
+    def _prod(_player_id, *, conn=None):
+        return {
+            "metal_per_day": 82_000_000_000,
+            "crystal_per_day": 0,
+            "fuel_cells_per_day": 0,
+            "total_per_day": 82_000_000_000,
+        }
+
+    monkeypatch.setattr("game.empire_page.get_empire_production_aggregate", _prod)
+
+    conn = db()
+    conn.execute(
+        "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('exchange_daily_limit_min', '0');"
+    )
+    conn.commit()
+    conn.close()
+
+    res = client.get("/api/game-state?include_panel=1")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["ok"] is True
+    assert data["exchange"]["daily_limit"] == 65_600_000_000
+    assert "daily_limit_admin_cap" not in data["exchange"]
+    assert "daily_limit_max" not in data["exchange"]
+
+
 def test_trader_hub_uses_active_planet_resources(trader_hub_db, monkeypatch):
     client, uid = _login_client(trader_hub_db, monkeypatch)
     conn = db()

@@ -1,0 +1,90 @@
+{# GC-644C — unified page queue compact header (buildings / research / shipyard / defense) #}
+{% from "partials/card_queue_macros.html" import render_card_queue_timer with context %}
+
+{% macro _page_queue_job_name(domain, job) %}
+  {% if domain == 'shipyard' %}
+    {{ T('fleet_ship_' ~ job.ship_key, job.ship_key) }}
+  {% elif domain == 'defense' %}
+    {{ T('defense_' ~ job.defense_key, job.defense_key) }}
+  {% elif domain == 'research' %}
+    {% set tk = job.tech_key|default(job.key|default('')) %}
+    {% set lk = job.label_key|default(job.label|default(tk)) %}
+    {% set name = T(lk) %}
+    {% if name == lk and tk %}{% set name = T(tk) %}{% endif %}
+    {{ name }}
+  {% else %}
+    {% set bk = job.building_type|default(job.owner_key|default('')) %}
+    {% set lk = job.label_key|default(job.label|default('building_' ~ bk)) %}
+    {% set name = T(lk) %}
+    {% if name == lk and bk %}{% set name = T(bk) %}{% endif %}
+    {{ name }}
+  {% endif %}
+{% endmacro %}
+
+{% macro _page_queue_job_amount(job) %}
+  {% set amt = (job.target_amount if job.target_amount is defined else (job.amount if job.amount is defined else 0))|int %}
+  {% if amt > 1 %} ×{{ amt|fmt_int }}{% endif %}
+{% endmacro %}
+
+{% macro render_page_queue_compact(compact_id, domain, icon, jobs, idle_text, planet_name, timer_kind, cancel_data_attr) %}
+  {% set job_list = jobs if jobs else [] %}
+  <div class="gc-queue-compact gc-page-queue-compact {{ domain }}-queue-compact gc-panel-header"
+       id="{{ compact_id }}"
+       aria-live="polite">
+    <span class="gc-page-queue-compact-icon {{ domain }}-queue-compact-icon" aria-hidden="true">{{ icon }}</span>
+    <div class="gc-page-queue-compact-body" id="{{ compact_id }}-body" data-page-queue-compact-body>
+      {% if job_list|length %}
+        {% set aj = job_list[0] %}
+        {% set nj = job_list[1] if job_list|length > 1 else none %}
+        {% set aj_name = _page_queue_job_name(domain, aj) %}
+        {% set aj_rem = (aj.remaining_seconds if aj.remaining_seconds is defined else aj.remaining|default(aj.order_remaining|default(0)))|int %}
+        {% set aj_finish = aj.finish_at if aj.finish_at is defined else aj.finish_time %}
+        <span class="gc-page-queue-compact-active" id="{{ compact_id }}-label">
+          {% if job_list|length == 1 %}
+            {% if domain == 'research' %}
+              {{ T('research_queue_compact_building', '%(name)s wird erforscht', name=aj_name) }}
+            {% elif domain == 'shipyard' %}
+              {{ T('shipyard_queue_compact_building', '%(name)s in Produktion', name=aj_name ~ _page_queue_job_amount(aj)) }}
+            {% elif domain == 'defense' %}
+              {{ T('defense_queue_compact_building', '%(name)s in Produktion', name=aj_name ~ _page_queue_job_amount(aj)) }}
+            {% else %}
+              {{ T('build_queue_compact_building', '%(name)s wird gebaut', name=aj_name) }}
+            {% endif %}
+          {% else %}
+            {{ aj_name }}{% if domain in ['shipyard', 'defense'] %}{{ _page_queue_job_amount(aj) }}{% endif %}
+          {% endif %}
+          {% if domain not in ['shipyard', 'defense'] and aj.target_level is defined and aj.target_level %}
+          · <span class="gc-mono">{{ T('build_queue_compact_level', 'Lv.%(level)s', level=aj.target_level|int) }}</span>
+          {% elif domain in ['shipyard', 'defense'] and (aj.amount|default(0)|int) > 1 %}
+          · <span class="gc-mono">×{{ aj.amount|fmt_int }}</span>
+          {% endif %}
+          · {{ render_card_queue_timer({'finish_at': aj_finish, 'remaining_seconds': aj_rem, 'start_at': none}, timer_kind, 'game-state', 'span') }}
+        </span>
+        {% if nj %}
+        <span class="gc-page-queue-compact-sep" aria-hidden="true">|</span>
+        <span class="gc-page-queue-compact-next" id="{{ compact_id }}-next">
+          {% set nj_name = _page_queue_job_name(domain, nj) %}
+          {% if domain in ['shipyard', 'defense'] %}
+            {{ T('queue_compact_next_amount', 'Nächster: %(name)s%(amount)s', name=nj_name, amount=_page_queue_job_amount(nj)) }}
+          {% else %}
+            {{ T('build_queue_compact_next', 'Nächster: %(name)s · Lv.%(level)s', name=nj_name, level=nj.target_level|int) }}
+          {% endif %}
+        </span>
+        {% endif %}
+      {% else %}
+        <span class="gc-page-queue-compact-label" id="{{ compact_id }}-label">{{ idle_text }}</span>
+      {% endif %}
+    </div>
+    {% if job_list|length %}
+    <button type="button"
+            class="gc-page-queue-compact-cancel"
+            data-page-queue-compact-cancel
+            {{ cancel_data_attr }}="{{ job_list[0].id|int }}"
+            title="{{ T('action_cancel', 'Abbrechen') }}"
+            aria-label="{{ T('action_cancel', 'Abbrechen') }}"><span aria-hidden="true">×</span></button>
+    {% endif %}
+    {% if planet_name %}
+    <span class="build-queue-planet-chip gc-page-queue-compact-planet" id="{{ compact_id }}-planet" title="{{ T('pe_planet_switcher', 'Kolonie wählen') }}">· {{ planet_name }}</span>
+    {% endif %}
+  </div>
+{% endmacro %}

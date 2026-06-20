@@ -160,6 +160,18 @@
                     <p class="tech-card-desc">{{ T(item.description_key) }}</p>
                   {% endif %}
 
+                  {% if item.effect_preview is defined and item.effect_preview %}
+                    {% set ep = item.effect_preview %}
+                    {% set ep_metric = T(ep.effect_metric_key, T("buildings_effect_bonus", "Bonus")) %}
+                    {% set ep_scope = T(ep.effect_scope_key, "") %}
+                    <div class="tech-card-effect">
+                      <span class="tech-card-reqs-label">{{ ep_metric }}{% if ep_scope %} · {{ ep_scope }}{% endif %}</span>
+                      <span class="tech-card-effect-val gc-mono">
+                        {% if ep.effect_kind == 'bonus_percent' %}+{{ (ep.effect_value or 0)|fmt_int }}%{% else %}{{ (ep.effect_value or 0)|fmt_int }}{% endif %}
+                      </span>
+                    </div>
+                  {% endif %}
+
                   {% set reqs = item.requirements if item.requirements is defined and item.requirements else [] %}
                   {% if reqs and reqs|length > 0 %}
                     <div class="tech-card-reqs">

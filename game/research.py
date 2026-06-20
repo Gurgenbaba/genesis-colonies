@@ -284,10 +284,10 @@ def _mine_energy_reduction_pct(level: int) -> int:
     return EffectResolver.mine_energy_reduction_pct(level)
 
 
-def _buildtime_reduction_pct(level: int) -> int:
+def _buildtime_speed_bonus_pct(level: int) -> int:
     from .effects import EffectResolver
 
-    return EffectResolver.buildtime_reduction_pct(level)
+    return EffectResolver.buildtime_speed_bonus_pct(level)
 
 
 def _metal_prod_bonus_pct(level: int) -> int:
@@ -356,9 +356,9 @@ def get_research_effect_preview(tech_key: str, current_level: int, next_level: i
         )
     if tech_key == "buildtime_tech":
         return _research_effect_snapshot(
-            effect_kind="reduction_percent",
-            effect_current=_buildtime_reduction_pct(cur),
-            effect_next=_buildtime_reduction_pct(nxt),
+            effect_kind="bonus_percent",
+            effect_current=_buildtime_speed_bonus_pct(cur),
+            effect_next=_buildtime_speed_bonus_pct(nxt),
             effect_resource="build",
             effect_metric_key="research_effect_build_time",
         )

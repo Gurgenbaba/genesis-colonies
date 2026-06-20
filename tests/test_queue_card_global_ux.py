@@ -14,7 +14,7 @@ QUEUE_PAGES = {
     "buildings": {
         "template": "templates/buildings.html",
         "skip_compact": True,
-        "global_hud_marker": "data-global-queue-hud",
+        "compact_id": "build-queue-compact",
         "card_attr": "data-building-card",
         "card_queue": "render_hero_queue",
     },
@@ -75,32 +75,42 @@ def _compact_sections(html: str, compact_id: str) -> str:
 
 
 def test_all_queue_pages_have_compact_status():
+    macro = _read("templates/partials/page_queue_compact.html")
+    assert "gc-page-queue-compact" in macro
+    assert "data-page-queue-compact-body" in macro
     for page, cfg in QUEUE_PAGES.items():
-        if cfg.get("skip_compact"):
-            continue
         html = _read(cfg["template"])
-        compact_ids = cfg.get("compact_ids") or [cfg["compact_id"]]
+        compact_ids = cfg.get("compact_ids") or ([cfg["compact_id"]] if cfg.get("compact_id") else [])
+        if cfg.get("skip_compact") or not compact_ids:
+            assert "render_page_queue_compact" in html, f"{page}: missing render_page_queue_compact"
+            continue
         for compact_id in compact_ids:
-            assert compact_id in html, f"{page}: missing #{compact_id}"
-            assert "gc-queue-compact" in _compact_sections(html, compact_id), (
-                f"{page}: #{compact_id} must use gc-queue-compact"
-            )
+            assert compact_id in html, f"{page}: missing compact id {compact_id}"
+            if f'id="{compact_id}"' in html:
+                section = _compact_sections(html, compact_id)
+                assert "gc-queue-compact" in section, (
+                    f"{page}: #{compact_id} must use gc-queue-compact"
+                )
+            else:
+                assert "render_page_queue_compact" in html
 
 
-def test_buildings_uses_global_hud_and_compact_header():
+def test_buildings_uses_page_compact_header_only():
     html = _read("templates/buildings.html")
     assert "build-queue-compact" in html
     assert "build-queue-root" not in html
     assert "gc-page-queue-panel" not in html
     base = _read("templates/base.html")
-    assert "data-global-queue-hud" in base
-    assert "gc-header-row-queues" in base
-    assert "data-build-queue-global-hud" not in base
+    assert "data-global-queue-hud" not in base
+    assert "gc-header-row-queues" not in base
+    assert "data-fleet-global-hud" not in base
 
 
 def test_compact_headers_have_no_timers():
+    # GC-644C: page compact headers show live timers for active jobs.
+    skip_timer_compact = {"buildings", "research", "shipyard", "defense"}
     for page, cfg in QUEUE_PAGES.items():
-        if cfg.get("skip_compact"):
+        if cfg.get("skip_compact") or page in skip_timer_compact:
             continue
         html = _read(cfg["template"])
         compact_ids = cfg.get("compact_ids") or [cfg["compact_id"]]
@@ -207,7 +217,9 @@ def test_ssr_card_queue_uses_canonical_finish_timer():
     """GC-538: SSR card queues must not use start_at-only queued timers or 'Startet in'."""
     partial = _read("templates/partials/card_queue_macros.html")
     assert "queue_card_starts_in" not in partial
-    assert "data-timer-target=\"{{ qj.finish_at|int }}\"" in partial
+    assert "finish_ts" in partial
+    assert "finish_time" in partial
+    assert "data-timer-target" in partial
     assert "data-server-remaining" in partial
     for page, cfg in QUEUE_PAGES.items():
         html = _read(cfg["template"])

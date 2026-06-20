@@ -53,6 +53,10 @@ RESEARCH_PREPARED_EFFECT_KEYS = frozenset({"navigation_tech", "engine_tech"})
 # Buildings whose primary effect is prepared until scan engine consumes it.
 BUILDING_PREPARED_EFFECT_KEYS = frozenset({"radar_array"})
 
+# Build-time nodes — effect preview from EffectResolver (GC-731D).
+BUILD_TIME_TECHTREE_BUILDINGS = frozenset({"command_center", "nanofactory"})
+BUILD_TIME_TECHTREE_RESEARCH = frozenset({"buildtime_tech"})
+
 SHIP_ROLE_LABEL_KEYS: Dict[str, str] = {
     "scout": "techtree_role_scout",
     "cargo": "techtree_role_cargo",
@@ -201,6 +205,87 @@ def _check_requirements(
     return True
 
 
+def _techtree_build_time_effect_preview(
+    kind: str,
+    key: str,
+    *,
+    buildings: Dict[str, int],
+    research: Dict[str, int],
+    level: int,
+) -> Optional[Dict[str, Any]]:
+    """Authoritative build-time effect line for tech-tree cards (EffectResolver)."""
+    from .buildings import (
+        NANOFACTORY_BUILD_TIME_REFERENCE,
+        command_center_nanofactory_build_bonus_pct,
+    )
+    from .effects import EffectResolver
+    from .research import get_research_effect_preview
+
+    if kind == "research" and key == "buildtime_tech":
+        lvl = max(0, int(level or 0))
+        if lvl > 0:
+            preview = get_research_effect_preview(key, lvl, lvl + 1)
+            return {
+                "effect_kind": str(preview.get("effect_kind") or "bonus_percent"),
+                "effect_value": int(preview.get("effect_current") or 0),
+                "effect_unit": str(preview.get("effect_unit") or "%"),
+                "effect_resource": str(preview.get("effect_resource") or "build"),
+                "effect_metric_key": str(preview.get("effect_metric_key") or "research_effect_build_time"),
+                "effect_scope_key": "techtree_effect_current_total",
+                "effect_level": lvl,
+            }
+        return {
+            "effect_kind": "bonus_percent",
+            "effect_value": int(EffectResolver.buildtime_speed_bonus_pct(1)),
+            "effect_unit": "%",
+            "effect_resource": "build",
+            "effect_metric_key": "research_effect_build_time",
+            "effect_scope_key": "techtree_effect_per_level_example",
+            "effect_level": 1,
+        }
+
+    if kind == "building" and key == "command_center":
+        lvl = max(0, int(level or 0))
+        display_level = lvl if lvl > 0 else 1
+        scope_key = "techtree_effect_current_total" if lvl > 0 else "techtree_effect_per_level_example"
+        return {
+            "effect_kind": "bonus_percent",
+            "effect_value": command_center_nanofactory_build_bonus_pct(display_level),
+            "effect_unit": "%",
+            "effect_resource": "build",
+            "effect_metric_key": "buildings_effect_nanofactory_build",
+            "effect_scope_key": scope_key,
+            "effect_level": display_level,
+        }
+
+    if kind != "building" or key not in BUILD_TIME_TECHTREE_BUILDINGS:
+        return None
+
+    ref = NANOFACTORY_BUILD_TIME_REFERENCE
+    metric_key = "buildings_effect_build_speed"
+    lvl = max(0, int(level or 0))
+    if lvl <= 0:
+        bumped = dict(buildings)
+        bumped[key] = 1
+        resolver = EffectResolver(bumped, research or {})
+        scope_key = "techtree_effect_per_level_example"
+        display_level = 1
+    else:
+        resolver = EffectResolver(buildings, research or {})
+        scope_key = "techtree_effect_current_total"
+        display_level = lvl
+
+    return {
+        "effect_kind": "bonus_percent",
+        "effect_value": int(resolver.get_build_time_speed_bonus_pct(ref)),
+        "effect_unit": "%",
+        "effect_resource": "build",
+        "effect_metric_key": metric_key,
+        "effect_scope_key": scope_key,
+        "effect_level": display_level,
+    }
+
+
 def _progressive_status(
     *,
     level: int = 0,
@@ -271,6 +356,7 @@ def _build_building_items(buildings: Dict[str, int], research: Dict[str, int]) -
                 "key": key,
                 "kind": "building",
                 "label_key": f"building_{key}",
+                "description_key": f"desc_{key}",
                 "category": tab,
                 "category_label_key": BUILDING_TAB_LABEL_KEYS.get(tab, "techtree_cat_infrastructure"),
                 "level": level,
@@ -279,6 +365,15 @@ def _build_building_items(buildings: Dict[str, int], research: Dict[str, int]) -
                 "requirements_met": reqs_met,
                 "status": _progressive_status(level=level, requirements_met=reqs_met),
                 "effect_status": "prepared" if prepared else "active",
+                "effect_preview": _techtree_build_time_effect_preview(
+                    "building",
+                    key,
+                    buildings=buildings,
+                    research=research,
+                    level=level,
+                )
+                if key in BUILD_TIME_TECHTREE_BUILDINGS
+                else None,
             }
         )
     return items
@@ -308,6 +403,15 @@ def _build_research_items(buildings: Dict[str, int], research: Dict[str, int]) -
                 "requirements_met": reqs_met,
                 "status": _progressive_status(level=lvl, requirements_met=reqs_met),
                 "effect_status": "prepared" if prepared else "active",
+                "effect_preview": _techtree_build_time_effect_preview(
+                    "research",
+                    key,
+                    buildings=buildings,
+                    research=research,
+                    level=lvl,
+                )
+                if key in BUILD_TIME_TECHTREE_RESEARCH
+                else None,
             }
         )
     return items

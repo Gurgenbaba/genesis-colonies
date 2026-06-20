@@ -2,6 +2,7 @@
 {% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip, render_shipyard_resource_blocker, render_shipyard_unlock_blockers, render_raster_picture, render_production_stat_chips with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
+{% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
 
 {% macro render_ship_card_stock(ship_key, owned) %}
   <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero gc-card-level gc-card-stock-badge"
@@ -95,7 +96,8 @@
 
   {% set planet_ships = sy.current_ships if sy.current_ships is defined else {} %}
 
-  <section class="gc-panel shipyard-panel shipyard-status-panel">
+  <div class="shipyard-shell gc-panel">
+  <section class="shipyard-status-panel">
     <div class="gc-panel-header">
       <span class="gc-panel-title">{{ T("shipyard_level_title") }}</span>
       <span class="gc-panel-subtitle gc-mono" data-shipyard-level-label>{{ T("shipyard_level_value", level=sy.orbital_shipyard_level) }}</span>
@@ -122,26 +124,22 @@
     </div>
   </section>
 
-  <div class="gc-queue-compact shipyard-queue-compact gc-panel-header"
-       id="shipyard-queue-compact"
-       aria-live="polite">
-    <span class="shipyard-queue-compact-icon" aria-hidden="true">🚀</span>
-    <span class="gc-panel-title shipyard-queue-compact-label" id="shipyard-queue-compact-label">
-      {% set qsum = sy.shipyard_queue.summary if sy.shipyard_queue is defined and sy.shipyard_queue.summary is defined else {} %}
-      {% if qsum and qsum.count %}
-        {{ T('shipyard_queue_compact_active', '%(count)s Werftaufträge aktiv', count=(qsum.count|default(0)|int)) }}
-      {% else %}
-        {{ T('shipyard_queue_compact_idle', 'Keine Werftaufträge') }}
-      {% endif %}
-    </span>
-    <span class="gc-panel-subtitle gc-mono shipyard-queue-compact-hint">
-      {{ T('shipyard_queue_hint', refund=qsum.refund_percent|default(60)) }}
-    </span>
-  </div>
+  {% set sy_q = sy.shipyard_queue if sy.shipyard_queue is defined and sy.shipyard_queue else {} %}
+  {% set sy_q_jobs = sy_q.queue if sy_q.queue is defined and sy_q.queue else [] %}
+  {{ render_page_queue_compact(
+    'shipyard-queue-compact',
+    'shipyard',
+    '🚀',
+    sy_q_jobs,
+    T('shipyard_queue_compact_idle', 'Keine Werftaufträge'),
+    sy.planet_name if sy.planet_name is defined else '',
+    'shipyard',
+    'data-shipyard-queue-cancel'
+  ) }}
 
   <hr class="shipyard-divider gc-prog-divider">
 
-  <section class="gc-panel shipyard-panel" aria-labelledby="shipyard-buildable-title">
+  <section class="shipyard-buildable-section" aria-labelledby="shipyard-buildable-title">
     <div class="gc-panel-header">
       <span class="gc-panel-title" id="shipyard-buildable-title">{{ T("shipyard_buildable_title") }}</span>
       <span class="gc-panel-subtitle">{{ T("shipyard_buildable_subtitle") }}</span>
@@ -287,6 +285,7 @@
       {% endfor %}
     </div>
   </section>
+  </div>
   {% endif %}
 
   {% endif %}

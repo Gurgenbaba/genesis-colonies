@@ -215,7 +215,7 @@ class TestBuildingEffects:
         clear_effect_resolver_cache(pid)
         t1 = get_build_time("metal_mine", 4, user_id=pid)
         assert t1 < t0
-        assert t1 <= int(t0 / 1.29)
+        assert t1 <= int(t0 * 0.71)
 
     def test_command_center_reduces_nanofactory_build_time_only(self):
         pid = _create_player("cmd")
@@ -234,7 +234,48 @@ class TestBuildingEffects:
         clear_effect_resolver_cache(pid)
         nano_cc4 = get_build_time("nanofactory", 1, user_id=pid)
         assert nano_cc4 < nano_cc2
-        assert abs(nano_cc4 - int(nano_cc2 * 1.5 / 2.0)) <= 1
+        assert abs(nano_cc4 - int(nano_cc2 * (0.75 ** 2))) <= 1
+
+    def test_nanofactory_speed_bonus_matches_get_build_time_seconds(self):
+        pid = _create_player("nano_pct")
+        b = _set_buildings(pid, {"metal_mine": 1, "nanofactory": 2})
+        r = EffectResolver(b, {}, player_id=pid)
+        pct = r.get_build_time_speed_bonus_pct("metal_mine")
+        t_mod = get_build_time("metal_mine", 4, user_id=pid)
+        _set_buildings(pid, {"metal_mine": 1})
+        t_base = get_build_time("metal_mine", 4, user_id=pid)
+        expected_pct = int(round((t_base / max(t_mod, 1) - 1.0) * 100))
+        assert abs(pct - expected_pct) <= 2
+
+    def test_command_center_speed_bonus_matches_nanofactory_build_time(self):
+        pid = _create_player("cc_pct")
+        b = _set_buildings(pid, {"command_center": 4})
+        r = EffectResolver(b, {}, player_id=pid)
+        pct = r.get_build_time_speed_bonus_pct("nanofactory")
+        t_mod = get_build_time("nanofactory", 1, user_id=pid)
+        _set_buildings(pid, {})
+        t_base = get_build_time("nanofactory", 1, user_id=pid)
+        expected_pct = int(round((t_base / max(t_mod, 1) - 1.0) * 100))
+        assert abs(pct - expected_pct) <= 2
+
+    def test_nanofactory_stacked_speed_bonus_not_additive(self):
+        pid = _create_player("stack")
+        b = _set_buildings(pid, {"metal_mine": 1, "nanofactory": 2})
+        _set_research(pid, {"buildtime_tech": 5})
+        r = EffectResolver(b, get_research_levels(pid), player_id=pid)
+        pct = r.get_build_time_speed_bonus_pct("metal_mine")
+        t_mod = get_build_time("metal_mine", 4, user_id=pid)
+        _set_buildings(pid, {"metal_mine": 1})
+        _set_research(pid, {})
+        t_base = get_build_time("metal_mine", 4, user_id=pid)
+        expected_pct = int(round((t_base / max(t_mod, 1) - 1.0) * 100))
+        assert abs(pct - expected_pct) <= 2
+        from game.effects.effect_resolver import BUILDTIME_TECH_DURATION, NANOFACTORY_DURATION_PER_LEVEL
+
+        expected_speed = (1.0 / (BUILDTIME_TECH_DURATION ** 5)) / (NANOFACTORY_DURATION_PER_LEVEL ** 2)
+        assert r.get_build_time_player_speed("metal_mine") == pytest.approx(expected_speed, rel=1e-4)
+        wrong_linear_bonus = EffectResolver.buildtime_speed_bonus_pct(5) + 60
+        assert pct != wrong_linear_bonus
 
     def test_academy_speeds_research(self):
         pid = _create_player("academy")
@@ -563,11 +604,13 @@ class TestResearchEffectRealityAudit:
         er = EffectResolver(b, r)
         mods = er.get_modifiers()
 
-        # factor = max(SAFETY_MIN_FACTOR, 1 - 0.03 * level)
-        # => level 24: 1 - 0.03*24 = 0.28 => reduction = 72%
-        assert EffectResolver.buildtime_reduction_pct(level) == 72
-        assert mods["build_time_multiplier"] == pytest.approx(0.28)
-        assert mods["build_time_speed"] == pytest.approx(1 / 0.28)
+        duration_factor = float(0.97 ** level)
+        assert EffectResolver.buildtime_duration_factor_for_level(level) == pytest.approx(duration_factor)
+        assert EffectResolver.buildtime_speed_bonus_pct(level) == int(
+            round((1.0 / duration_factor - 1.0) * 100)
+        )
+        assert mods["build_time_multiplier"] == pytest.approx(duration_factor)
+        assert mods["build_time_speed"] == pytest.approx(1 / duration_factor)
 
         base_seconds = 600
         actual = er.get_build_time_seconds("planet_core_nexus", 1)
@@ -620,7 +663,7 @@ class TestResearchEffectRealityAudit:
 
         cases = {
             "energy_tech": (35, EffectResolver.mine_energy_reduction_pct),
-            "buildtime_tech": (24, EffectResolver.buildtime_reduction_pct),
+            "buildtime_tech": (24, EffectResolver.buildtime_speed_bonus_pct),
             "fuel_efficiency": (17, EffectResolver.fuel_efficiency_reduction_pct),
             "mining_tech": (6, EffectResolver.metal_prod_bonus_pct),
             "storage_tech": (4, EffectResolver.storage_bonus_pct),
@@ -647,8 +690,8 @@ class TestResearchEffectRealityAudit:
         preview = __import__("game.research", fromlist=["get_research_effect_preview"]).get_research_effect_preview(
             "buildtime_tech", 24, 25
         )
-        assert preview["effect_current"] == 72
-        assert preview["effect_kind"] == "reduction_percent"
+        assert preview["effect_current"] == EffectResolver.buildtime_speed_bonus_pct(24)
+        assert preview["effect_kind"] == "bonus_percent"
 
     def test_research_effects_scale_without_hard_stop(self):
         """GC-622C — infinite scaling display; gameplay clamps at 0 draw / 1s time."""
@@ -676,18 +719,19 @@ class TestResearchEffectRealityAudit:
         base = 600  # BUILD_TIME_BASE["planet_core_nexus"]
         for lvl in levels:
             assert "buildtime_tech" in RESEARCH_TECHS
-            duration_factor = max(0.0, 1.0 - 0.03 * lvl)
-            expected_reduction = int(round(0.03 * lvl * 100))
+            duration_factor = float(0.97 ** lvl)
+            expected_bonus = EffectResolver.buildtime_speed_bonus_pct(lvl)
 
             er = EffectResolver({}, {"buildtime_tech": lvl}, settings={"build_speed": 1.0})
             mods = er.get_modifiers()
             assert mods["build_time_multiplier"] == pytest.approx(duration_factor)
             assert er.get_build_time_seconds("planet_core_nexus", 1) >= 1
-            if duration_factor > 0:
-                assert er.get_build_time_seconds("planet_core_nexus", 1) == int(base * duration_factor)
+            expected_seconds = max(1, int(base * duration_factor))
+            assert er.get_build_time_seconds("planet_core_nexus", 1) == expected_seconds
 
             preview = get_research_effect_preview("buildtime_tech", lvl, lvl + 1)
-            assert preview["effect_current"] == expected_reduction
+            assert preview["effect_current"] == expected_bonus
+            assert preview["effect_kind"] == "bonus_percent"
 
         for lvl in levels:
             assert "fuel_efficiency" in RESEARCH_TECHS

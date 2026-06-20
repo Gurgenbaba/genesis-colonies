@@ -559,20 +559,14 @@
             <input class="admin-input" id="admin-balance-exchange-min" type="number" min="0" step="1" data-balance-key="exchange_min_amount">
           </div>
           <div class="admin-field">
-            <label class="admin-label" for="admin-balance-exchange-daily">{{ T("admin_balance_exchange_daily", "Tageslimit") }}</label>
-            <input class="admin-input" id="admin-balance-exchange-daily" type="number" min="0" step="1" data-balance-key="exchange_daily_limit">
-          </div>
-          <div class="admin-field">
-            <label class="admin-label" for="admin-balance-exchange-daily-pct">{{ T("admin_balance_exchange_daily_pct", "Tageslimit % Lager") }}</label>
+            <label class="admin-label" for="admin-balance-exchange-daily-pct">{{ T("admin_balance_exchange_daily_pct", "Tageslimit % Empire-Produktion") }}</label>
             <input class="admin-input" id="admin-balance-exchange-daily-pct" type="number" min="0" max="100" step="1" data-balance-key="exchange_daily_limit_pct">
+            <p class="admin-hint">{{ T("admin_balance_exchange_daily_pct_hint", "Tageslimit = Empire-Tagesproduktion × dieser Prozentsatz (kein Hardcap).") }}</p>
           </div>
           <div class="admin-field">
             <label class="admin-label" for="admin-balance-exchange-daily-min">{{ T("admin_balance_exchange_daily_min", "Tageslimit Minimum") }}</label>
             <input class="admin-input" id="admin-balance-exchange-daily-min" type="number" min="0" step="1" data-balance-key="exchange_daily_limit_min">
-          </div>
-          <div class="admin-field">
-            <label class="admin-label" for="admin-balance-exchange-daily-max">{{ T("admin_balance_exchange_daily_max", "Tageslimit Maximum") }}</label>
-            <input class="admin-input" id="admin-balance-exchange-daily-max" type="number" min="0" step="1" data-balance-key="exchange_daily_limit_max">
+            <p class="admin-hint">{{ T("admin_balance_exchange_daily_min_hint", "Untergrenze für neue/kleine Imperien (Early Game).") }}</p>
           </div>
           <div class="admin-field">
             <label class="admin-label" for="admin-balance-rate-m2c">{{ T("exchange_rate_metal_to_crystal", "Ferronit → Crytite") }}</label>

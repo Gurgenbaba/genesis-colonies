@@ -29,6 +29,9 @@ EFFECT_DEBUG = os.environ.get("GC_EFFECT_DEBUG", "").strip().lower() in ("1", "t
 MINE_ENERGY_PER_LEVEL = 0.05
 MINE_ENERGY_MIN_DRAW_FACTOR = 0.01  # gameplay floor: never 0 draw for active consumers
 BUILDTIME_PER_LEVEL = 0.03
+BUILDTIME_TECH_DURATION = 0.97  # multiplicative: duration × 0.97 ** level
+NANOFACTORY_DURATION_PER_LEVEL = 0.70  # duration × 0.70 ** nanofactory_level
+COMMAND_CENTER_NANOFACTORY_DURATION = 0.75  # nanofactory build: × 0.75 ** cc_level
 FUEL_EFFICIENCY_PER_LEVEL = 0.03
 _DIVISION_EPS = 1e-12  # avoid div-by-zero only; not a balance cap
 
@@ -140,11 +143,21 @@ class EffectResolver:
 
     @staticmethod
     def buildtime_duration_factor_for_level(level: int) -> float:
-        return EffectResolver._reduction_factor(level, BUILDTIME_PER_LEVEL)
+        lvl = max(0, int(level or 0))
+        if lvl <= 0:
+            return 1.0
+        return float(BUILDTIME_TECH_DURATION ** lvl)
 
     @staticmethod
     def buildtime_reduction_pct(level: int) -> int:
-        return EffectResolver._reduction_pct(level, BUILDTIME_PER_LEVEL)
+        factor = EffectResolver.buildtime_duration_factor_for_level(level)
+        return int(round((1.0 - factor) * 100))
+
+    @staticmethod
+    def buildtime_speed_bonus_pct(level: int) -> int:
+        factor = EffectResolver.buildtime_duration_factor_for_level(level)
+        speed = 1.0 / max(factor, _DIVISION_EPS)
+        return int(round((speed - 1.0) * 100))
 
     @staticmethod
     def fuel_efficiency_factor_for_level(level: int) -> float:
@@ -460,10 +473,10 @@ class EffectResolver:
             storage_factor *= 1.0 + 0.25 * ls
             sources.append(self._source_entry("storage_factor", "storage_tech", storage_factor, ls))
 
-        # --- Research: buildtime_tech (-3% build+research time per level) ---
+        # --- Research: buildtime_tech (duration × 0.97 ** level) ---
         lb = _lvl(r, "buildtime_tech")
         if lb > 0:
-            duration_factor = self.buildtime_duration_factor_for_level(lb)
+            duration_factor = float(BUILDTIME_TECH_DURATION ** lb)
             speed_boost = 1.0 / max(duration_factor, _DIVISION_EPS)
             build_time_speed *= speed_boost
             research_time_speed *= speed_boost
@@ -504,13 +517,20 @@ class EffectResolver:
             cargo_multiplier *= 1.0 + 0.02 * leng
             sources.append(self._source_entry("fleet_speed_multiplier", "engine_tech", fleet_speed_multiplier, leng, prepared=True))
 
-        # --- Buildings: nanofactory (+30% build speed per level, all buildings) ---
+        # --- Buildings: nanofactory (duration × 0.70 ** level — applied per building in get_build_time_duration_multiplier) ---
         nano = _bld(b, "nanofactory")
         if nano > 0:
-            build_time_speed *= 1.0 + 0.30 * nano
-            sources.append(self._source_entry("build_time_speed", "nanofactory", build_time_speed, nano))
+            nano_duration = float(NANOFACTORY_DURATION_PER_LEVEL ** nano)
+            sources.append(
+                self._source_entry(
+                    "build_time_speed",
+                    "nanofactory",
+                    1.0 / max(nano_duration, _DIVISION_EPS),
+                    nano,
+                )
+            )
 
-        # command_center nanofactory-only build boost applied in get_build_time_seconds()
+        # command_center nanofactory-only boost in get_build_time_duration_multiplier()
 
         # --- Buildings: academy (+5% research speed per level) ---
         academy = _bld(b, "academy")
@@ -846,6 +866,43 @@ class EffectResolver:
             return base_max + geo * 2
         return base_max
 
+    def get_build_time_duration_multiplier(self, building_type: str) -> float:
+        """Building-specific duration multiplier (< 1 = faster). Excludes buildtime_tech + GD."""
+        mult = 1.0
+        nano = _bld(self.buildings, "nanofactory")
+        if nano > 0:
+            mult *= float(NANOFACTORY_DURATION_PER_LEVEL ** nano)
+        if str(building_type) == "nanofactory":
+            cc = _bld(self.buildings, "command_center")
+            if cc > 0:
+                mult *= float(COMMAND_CENTER_NANOFACTORY_DURATION ** cc)
+        return mult
+
+    def get_build_time_player_speed(self, building_type: str) -> float:
+        """Player-owned build speed multiplier (excludes admin build_speed setting)."""
+        mods = self.get_modifiers()
+        base_speed = _mod_float(mods, "build_time_speed")
+        building_duration = max(self.get_build_time_duration_multiplier(building_type), _DIVISION_EPS)
+        return max(0.1, base_speed / building_duration)
+
+    def get_build_time_effective_speed(self, building_type: str) -> float:
+        """Authoritative build-time speed multiplier (higher = faster builds)."""
+        return max(0.1, self.get_build_time_player_speed(building_type) * self.build_speed_setting())
+
+    def get_build_time_duration_factor(self, building_type: str) -> float:
+        """Actual build duration / unmodified duration (player bonuses only)."""
+        return 1.0 / self.get_build_time_player_speed(building_type)
+
+    def get_build_time_speed_bonus_pct(self, building_type: str) -> int:
+        """Card/technical speed bonus display: (speed − 1) × 100."""
+        speed = self.get_build_time_player_speed(building_type)
+        return int(round(max(0.0, speed - 1.0) * 100))
+
+    def get_build_time_reduction_pct(self, building_type: str) -> int:
+        """Legacy reduction display derived from the same player speed."""
+        factor = self.get_build_time_duration_factor(building_type)
+        return int(round(max(0.0, (1.0 - factor) * 100)))
+
     def get_build_time_seconds(self, building_type: str, target_level: int) -> int:
         from ..buildings import BUILD_TIME_BASE, BUILD_TIME_FACTOR, DEFAULT_BUILD_TIME_LEVEL_1
 
@@ -853,15 +910,7 @@ class EffectResolver:
         factor = BUILD_TIME_FACTOR.get(building_type, 1.5)
         lvl_factor = factor ** max(int(target_level) - 1, 0)
         seconds = float(base_time * lvl_factor)
-
-        mods = self.get_modifiers()
-        build_time_speed = _mod_float(mods, "build_time_speed")
-        if str(building_type) == "nanofactory":
-            command_center = _bld(self.buildings, "command_center")
-            if command_center > 0:
-                build_time_speed *= 1.0 + 0.25 * command_center
-        effective_speed = max(0.1, build_time_speed * self.build_speed_setting())
-        seconds /= effective_speed
+        seconds /= self.get_build_time_effective_speed(building_type)
         return max(int(seconds), 1)
 
     def get_research_time_seconds(self, tech_key: str, target_level: int) -> int:

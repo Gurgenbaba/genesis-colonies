@@ -30,10 +30,8 @@ BALANCE_SETTING_KEYS: Tuple[str, ...] = (
     "exchange_enabled",
     "exchange_rate_metal_to_crystal",
     "exchange_rate_crystal_to_metal",
-    "exchange_daily_limit",
     "exchange_daily_limit_pct",
     "exchange_daily_limit_min",
-    "exchange_daily_limit_max",
     "exchange_min_amount",
     "fuel_exchange_enabled",
     "fuel_exchange_metal_per_unit",
@@ -45,13 +43,11 @@ BALANCE_SETTING_KEYS: Tuple[str, ...] = (
 _INT_NONNEG = frozenset({
     "start_metal",
     "start_crystal",
-    "exchange_daily_limit",
     "exchange_min_amount",
     "fuel_exchange_min_units",
     "fuel_production_per_hour",
     "exchange_daily_limit_pct",
     "exchange_daily_limit_min",
-    "exchange_daily_limit_max",
 })
 _INT_POS = frozenset({"queue_limit", "research_queue_limit", "shipyard_queue_limit"})
 _FLOAT_POS = frozenset(
@@ -97,10 +93,8 @@ PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
     "exchange_enabled": True,
     "exchange_rate_metal_to_crystal": float(DEFAULT_GAME_SETTINGS["exchange_rate_metal_to_crystal"]),
     "exchange_rate_crystal_to_metal": float(DEFAULT_GAME_SETTINGS["exchange_rate_crystal_to_metal"]),
-    "exchange_daily_limit": int(DEFAULT_GAME_SETTINGS["exchange_daily_limit"]),
     "exchange_daily_limit_pct": int(float(DEFAULT_GAME_SETTINGS.get("exchange_daily_limit_pct", 80))),
     "exchange_daily_limit_min": int(DEFAULT_GAME_SETTINGS.get("exchange_daily_limit_min", 0)),
-    "exchange_daily_limit_max": int(DEFAULT_GAME_SETTINGS["exchange_daily_limit_max"]),
     "exchange_min_amount": int(DEFAULT_GAME_SETTINGS["exchange_min_amount"]),
     "fuel_exchange_enabled": True,
     "fuel_exchange_metal_per_unit": float(DEFAULT_GAME_SETTINGS["fuel_exchange_metal_per_unit"]),

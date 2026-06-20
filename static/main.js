@@ -1578,8 +1578,14 @@
     bootstrapScoreStateFromDom();
     bindFormattedNumberInputs(document.getElementById("main-content") || document);
 
-    if (shouldRunGameLoop() && !skipHydrate) {
-      hydratePageFromLastState({ skipMessagesUnread: page === "messages" });
+    const hydrated =
+      shouldRunGameLoop() && !skipHydrate
+        ? hydratePageFromLastState({ skipMessagesUnread: page === "messages" })
+        : false;
+
+    if (shouldRunGameLoop()) {
+      if (!hydrated) _hydratePageQueueCompactsFromState();
+      else _bootstrapPageQueueCompactLiveFromDom();
     }
 
     if (!shouldRunGameLoop()) {
@@ -1748,6 +1754,13 @@
       if (resKey === "storage") return t("buildings_effect_storage_bonus", "Lagerbonus");
       return t("buildings_effect_bonus", "Bonus");
     }
+    if (kind === "reduction_percent") {
+      if (resKey === "build" && buildingKey === "command_center") {
+        return t("buildings_effect_nanofactory_build", "Nanofabrik-Bau");
+      }
+      if (resKey === "build") return t("buildings_effect_build_time_reduction", "Bauzeitverkürzung");
+      return t("buildings_effect_reduction", "Verkürzung");
+    }
     return t("buildings_effect_level", "Stufe");
   }
 
@@ -1823,7 +1836,7 @@
       "";
     const unit =
       effectRow.effect_unit ||
-      (kind === "production" ? "/h" : kind === "bonus_percent" ? "%" : "");
+      (kind === "production" ? "/h" : kind === "bonus_percent" || kind === "reduction_percent" ? "%" : "");
     const cur = Math.floor(
       Number(effectRow.effect_current ?? effectRow.production_per_hour ?? effectRow.level) || 0
     );
@@ -3205,7 +3218,7 @@
         duration_seconds: total,
         remaining_seconds: remaining,
         target_level: Math.floor(Number(raw.target_level || 0)),
-        label_key: String(raw.label_key || `building_${ownerKey}`),
+        label_key: String(raw.label_key || raw.label || `building_${ownerKey}`),
         progress_pct: progressPct,
       };
     });
@@ -3248,7 +3261,6 @@
   function _globalQueueHudLabel(job) {
     const domain = _globalQueueHudDomain(job);
     const ownerKey = String(job.owner_key || "");
-    const labelKey = String(job.label_key || job.label || "");
     if (domain === "shipyard" || domain === "defense") {
       const amount = Math.floor(Number(job.target_amount || 0));
       const itemLabel =
@@ -3257,7 +3269,7 @@
           : t(job.ship_label_key || `fleet_ship_${ownerKey}`, ownerKey);
       return amount > 1 ? `${itemLabel} ×${fmtNumber(amount)}` : itemLabel;
     }
-    return t(labelKey || `building_${ownerKey}`, ownerKey);
+    return _resolveQueueJobDisplayName(job, domain);
   }
 
   function _globalQueueHudSignature(payload) {
@@ -3310,7 +3322,7 @@
       finish_at: resolveQueueJobFinishTime(raw),
       remaining_seconds: resolveQueueJobRemaining(raw),
       target_level: raw.target_level,
-      label_key: raw.label_key || `research_${raw.tech_key || raw.key}`,
+      label_key: raw.label_key || raw.label || raw.tech_key || raw.key,
     }));
   }
 
@@ -3488,12 +3500,6 @@
     if (defJobs.length) _syncDefenseQueueLiveState(defJobs);
   }
 
-  function _globalQueueHudJobsForPage(jobs) {
-    const list = Array.isArray(jobs) ? jobs : [];
-    if (!document.querySelector("[data-buildings-page]")) return list;
-    return list.filter((j) => _globalQueueHudDomain(j) !== "building");
-  }
-
   function _renderGlobalQueueHud(payload) {
     const hud = document.querySelector("[data-global-queue-hud]");
     if (!hud) return;
@@ -3502,7 +3508,7 @@
     if (!bodyEl) return;
 
     const allJobs = Array.isArray(payload?.jobs) ? payload.jobs : [];
-    const jobs = _globalQueueHudJobsForPage(allJobs);
+    const jobs = allJobs.filter((j) => _globalQueueHudDomain(j) !== "building");
     const planetId = Number(payload?.planet_id || 0);
     if (planetId > 0) hud.dataset.planetId = String(planetId);
 
@@ -3859,6 +3865,48 @@
   function formatTechnicalOutputTitle(row) {
     if (!row || typeof row !== "object") return "";
     const kind = String(row.effect_kind || "");
+    if (kind === "reduction_percent") {
+      const pct = fmtNumber(row.effect_value ?? row.build_time_reduction_percent ?? 0);
+      const factor = row.build_time_factor;
+      const parts = [
+        tf(
+          "buildings_technical_build_time_reduction_building",
+          { percent: pct },
+          `-${pct}% Bauzeit`
+        ),
+      ];
+      if (factor != null && factor !== "") {
+        parts.push(
+          tf(
+            "buildings_technical_build_time_factor",
+            { factor: String(factor) },
+            `Faktor ${factor}`
+          )
+        );
+      }
+      return parts.join(" · ");
+    }
+    if (kind === "bonus_percent" && row.effect_resource === "build") {
+      const pct = fmtNumber(row.effect_value ?? row.build_time_speed_bonus_percent ?? 0);
+      const factor = row.build_time_factor;
+      const parts = [
+        tf(
+          "buildings_technical_build_speed_bonus",
+          { percent: pct },
+          `+${pct}% Baugeschwindigkeit`
+        ),
+      ];
+      if (factor != null && factor !== "") {
+        parts.push(
+          tf(
+            "buildings_technical_build_time_factor",
+            { factor: String(factor) },
+            `Faktor ${factor}`
+          )
+        );
+      }
+      return parts.join(" · ");
+    }
     if (kind === "yard_production") {
       const capFull = fmtNumber(row.effect_value ?? row.yard_batch_capacity ?? 0);
       const parts = [
@@ -5223,29 +5271,106 @@
     }
   }
 
-  function _buildQueueCompactSignature(buildQueueRaw) {
-    try {
-      const jobs = _collectBuildQueueCardJobs(buildQueueRaw);
-      return jobs.map((j) => cardQueueJobSignature(j)).join("|");
-    } catch (_) {
-      return "";
+  function _collectCardJobsFromOwnerMap(queueRaw, mapRawFn) {
+    const byOwner = queueRaw?.card_jobs_by_owner;
+    if (byOwner && typeof byOwner === "object") {
+      const jobs = [];
+      Object.values(byOwner).forEach((rows) => {
+        if (Array.isArray(rows)) rows.forEach((j) => jobs.push(j));
+      });
+      jobs.sort((a, b) => (Number(a.queue_position) || 0) - (Number(b.queue_position) || 0));
+      return jobs;
     }
+    return typeof mapRawFn === "function" ? mapRawFn(queueRaw) : [];
   }
 
-  function _buildQueueCompactJobLabel(job) {
-    const ownerKey = String(job.owner_key || "");
-    const labelKey = String(job.label_key || `building_${ownerKey}`);
-    const name = t(labelKey, ownerKey);
+  function _collectShipyardQueueCardJobs(queueRaw) {
+    return _collectCardJobsFromOwnerMap(queueRaw, (raw) => {
+      const list = Array.isArray(raw?.queue) ? raw.queue : [];
+      return list.map((job, idx) => ({
+        owner_type: "shipyard",
+        owner_key: job.ship_key,
+        job_id: job.id,
+        status: idx === 0 ? "active" : "queued",
+        queue_position: idx + 1,
+        finish_at: resolveQueueJobFinishTime(job),
+        remaining_seconds: resolveQueueJobRemaining(job),
+        target_amount: job.amount || job.amount_total,
+        ship_label_key: `fleet_ship_${job.ship_key}`,
+      }));
+    });
+  }
+
+  function _collectDefenseQueueCardJobs(queueRaw) {
+    return _collectCardJobsFromOwnerMap(queueRaw, (raw) => {
+      const list = Array.isArray(raw?.queue) ? raw.queue : [];
+      return list.map((job, idx) => ({
+        owner_type: "defense",
+        owner_key: job.defense_key,
+        job_id: job.id,
+        status: idx === 0 ? "active" : "queued",
+        queue_position: idx + 1,
+        finish_at: resolveQueueJobFinishTime(job),
+        remaining_seconds: resolveQueueJobRemaining(job),
+        target_amount: job.amount || job.amount_total,
+        defense_label_key: `defense_${job.defense_key}`,
+      }));
+    });
+  }
+
+  function _resolveQueueJobDisplayName(job, domain) {
+    const ownerKey = String(
+      job?.owner_key || job?.tech_key || job?.key || job?.building_type
+      || job?.ship_key || job?.defense_key || ""
+    );
+    if (domain === "shipyard") {
+      return t(job.ship_label_key || `fleet_ship_${ownerKey}`, ownerKey);
+    }
+    if (domain === "defense") {
+      return t(job.defense_label_key || `defense_${ownerKey}`, ownerKey);
+    }
+    const candidates = [];
+    if (job?.label_key) candidates.push(job.label_key);
+    if (job?.label && job.label !== job.label_key) candidates.push(job.label);
+    if (domain === "research") {
+      candidates.push(ownerKey);
+    } else {
+      candidates.push(`building_${ownerKey}`, ownerKey);
+    }
+    for (const key of candidates) {
+      const k = String(key || "").trim();
+      if (!k) continue;
+      const val = t(k, "");
+      if (val && val !== k) return val;
+    }
+    return ownerKey;
+  }
+
+  function _pageQueueCompactJobLabel(job, domain) {
+    const ownerKey = String(job.owner_key || job.ship_key || job.defense_key || job.tech_key || job.key || "");
+    if (domain === "shipyard") {
+      const name = _resolveQueueJobDisplayName(job, domain);
+      const amount = Math.floor(Number(job.target_amount || job.amount || 0));
+      const levelStr = amount > 1 ? `×${fmtNumber(amount)}` : "";
+      return { name, levelStr, level: amount, usesAmount: true };
+    }
+    if (domain === "defense") {
+      const name = _resolveQueueJobDisplayName(job, domain);
+      const amount = Math.floor(Number(job.target_amount || job.amount || 0));
+      const levelStr = amount > 1 ? `×${fmtNumber(amount)}` : "";
+      return { name, levelStr, level: amount, usesAmount: true };
+    }
+    const name = _resolveQueueJobDisplayName(job, domain);
     const level = Math.floor(Number(job.target_level || 0));
     const levelStr =
       level > 0 ? tf("build_queue_compact_level", { level }, `Lv.${level}`) : "";
-    return { name, levelStr, level, labelKey, ownerKey };
+    return { name, levelStr, level, usesAmount: false };
   }
 
-  function _appendBuildQueueCompactTimer(parent, job, isActive) {
+  function _appendPageQueueCompactTimer(parent, job, isActive, timerKind) {
     parent.appendChild(document.createTextNode(" · "));
     const timerEl = document.createElement("span");
-    timerEl.className = "gc-card-queue-timer gc-mono build-queue-compact-timer";
+    timerEl.className = "gc-card-queue-timer gc-mono gc-page-queue-compact-timer";
     const waitTarget = cardQueueTimerTarget(job, isActive);
     if (waitTarget > 0) {
       const displayRemaining = queueJobRemainingSeconds(
@@ -5253,7 +5378,7 @@
         getTimerServerNow(),
         resolveQueueJobRemaining(job)
       );
-      applyQueueJobTimerAttrs(timerEl, waitTarget, "build", "game-state", displayRemaining);
+      applyQueueJobTimerAttrs(timerEl, waitTarget, timerKind, "game-state", displayRemaining);
       timerEl.textContent = formatEta(queueTimerDisplaySeconds(displayRemaining));
     } else {
       timerEl.textContent = formatEta(Math.max(0, Math.floor(Number(job.remaining_seconds || 0))));
@@ -5261,38 +5386,36 @@
     parent.appendChild(timerEl);
   }
 
-  function _updateBuildQueueCompact(buildQueueRaw) {
-    const compact = document.getElementById("build-queue-compact");
+  function _updatePageQueueCompact(cfg) {
+    const compact = document.getElementById(cfg.compactId);
     if (!compact) return;
 
-    const bodyEl =
-      document.getElementById("build-queue-compact-body")
-      || compact.querySelector("[data-build-queue-compact-body]");
+    const bodyEl = compact.querySelector("[data-page-queue-compact-body]");
     if (!bodyEl) return;
 
-    const jobs = _collectBuildQueueCardJobs(buildQueueRaw);
-    const sig = _buildQueueCompactSignature(buildQueueRaw);
+    const jobs = cfg.collectJobs(cfg.queueRaw);
+    const sig = jobs.map((j) => cardQueueJobSignature(j)).join("|");
     if (sig === compact.dataset.compactSig) return;
     compact.dataset.compactSig = sig;
 
     const planetName = String(
-      buildQueueRaw?.planet_name
+      cfg.queueRaw?.planet_name
       || GC.lastState?.active_planet_name
       || ""
     ).trim();
-    const planetEl = document.getElementById("build-planet-label");
+    const planetEl = document.getElementById(`${cfg.compactId}-planet`);
     if (planetEl && planetName) {
       _setIfChanged(planetEl, `· ${planetName}`);
     }
 
-    let cancelBtn = compact.querySelector("[data-build-queue-compact-cancel]");
+    let cancelBtn = compact.querySelector("[data-page-queue-compact-cancel]");
     bodyEl.replaceChildren();
 
     if (!jobs.length) {
       const idleEl = document.createElement("span");
-      idleEl.className = "build-queue-compact-label";
-      idleEl.id = "build-queue-compact-label";
-      idleEl.textContent = t("build_queue_compact_idle", "Keine Bauaufträge");
+      idleEl.className = "gc-page-queue-compact-label";
+      idleEl.id = `${cfg.compactId}-label`;
+      idleEl.textContent = t(cfg.idleKey, cfg.idleFallback);
       bodyEl.appendChild(idleEl);
       if (cancelBtn) cancelBtn.hidden = true;
       return;
@@ -5301,63 +5424,74 @@
     const active = jobs[0];
     const next = jobs.length > 1 ? jobs[1] : null;
     const isActive = String(active.status || "") === "active";
-    const activePart = _buildQueueCompactJobLabel(active);
+    const activePart = _pageQueueCompactJobLabel(active, cfg.domain);
 
     const activeEl = document.createElement("span");
-    activeEl.className = "build-queue-compact-active";
-    activeEl.id = "build-queue-compact-label";
+    activeEl.className = "gc-page-queue-compact-active";
+    activeEl.id = `${cfg.compactId}-label`;
 
     if (jobs.length === 1) {
+      const verbName = `${activePart.name}${activePart.usesAmount ? activePart.levelStr : ""}`;
       activeEl.appendChild(
         document.createTextNode(
-          tf(
-            "build_queue_compact_building",
-            { name: activePart.name },
-            `${activePart.name} wird gebaut`
-          )
+          tf(cfg.activeVerbKey, { name: verbName }, cfg.activeVerbFallback)
         )
       );
     } else {
-      activeEl.appendChild(document.createTextNode(activePart.name));
+      activeEl.appendChild(document.createTextNode(`${activePart.name}${activePart.usesAmount ? activePart.levelStr : ""}`));
     }
 
-    if (activePart.levelStr) {
+    if (!activePart.usesAmount && activePart.levelStr) {
       activeEl.appendChild(document.createTextNode(" · "));
       const lvlEl = document.createElement("span");
       lvlEl.className = "gc-mono";
       lvlEl.textContent = activePart.levelStr;
       activeEl.appendChild(lvlEl);
+    } else if (activePart.usesAmount && activePart.levelStr && jobs.length > 1) {
+      activeEl.appendChild(document.createTextNode(" · "));
+      const amtEl = document.createElement("span");
+      amtEl.className = "gc-mono";
+      amtEl.textContent = activePart.levelStr;
+      activeEl.appendChild(amtEl);
     }
 
-    _appendBuildQueueCompactTimer(activeEl, active, isActive);
+    _appendPageQueueCompactTimer(activeEl, active, isActive, cfg.timerKind);
     bodyEl.appendChild(activeEl);
 
     if (next) {
       const sepEl = document.createElement("span");
-      sepEl.className = "build-queue-compact-sep";
+      sepEl.className = "gc-page-queue-compact-sep";
       sepEl.setAttribute("aria-hidden", "true");
       sepEl.textContent = "|";
       bodyEl.appendChild(sepEl);
 
-      const nextPart = _buildQueueCompactJobLabel(next);
+      const nextPart = _pageQueueCompactJobLabel(next, cfg.domain);
       const nextEl = document.createElement("span");
-      nextEl.className = "build-queue-compact-next";
-      nextEl.id = "build-queue-compact-next";
-      nextEl.textContent = tf(
-        "build_queue_compact_next",
-        { name: nextPart.name, level: nextPart.level },
-        `Nächster: ${nextPart.name} · ${nextPart.levelStr}`
-      );
+      nextEl.className = "gc-page-queue-compact-next";
+      nextEl.id = `${cfg.compactId}-next`;
+      if (nextPart.usesAmount) {
+        nextEl.textContent = tf(
+          "queue_compact_next_amount",
+          { name: nextPart.name, amount: nextPart.levelStr },
+          `Nächster: ${nextPart.name}${nextPart.levelStr}`
+        );
+      } else {
+        nextEl.textContent = tf(
+          cfg.nextKey,
+          { name: nextPart.name, level: nextPart.level },
+          `Nächster: ${nextPart.name} · ${nextPart.levelStr}`
+        );
+      }
       bodyEl.appendChild(nextEl);
     }
 
-    const activeJobId = Math.floor(Number(active.job_id || 0));
+    const activeJobId = Math.floor(Number(active.job_id || active.id || 0));
     if (activeJobId > 0) {
       if (!cancelBtn) {
         cancelBtn = document.createElement("button");
         cancelBtn.type = "button";
-        cancelBtn.className = "build-queue-compact-cancel";
-        cancelBtn.dataset.buildQueueCompactCancel = "1";
+        cancelBtn.className = "gc-page-queue-compact-cancel";
+        cancelBtn.dataset.pageQueueCompactCancel = "1";
         cancelBtn.innerHTML = '<span aria-hidden="true">×</span>';
         cancelBtn.setAttribute("aria-label", t("action_cancel", "Abbrechen"));
         cancelBtn.title = t("action_cancel", "Abbrechen");
@@ -5365,11 +5499,132 @@
         if (anchor) compact.insertBefore(cancelBtn, anchor);
         else compact.appendChild(cancelBtn);
       }
-      cancelBtn.dataset.buildCancelId = String(activeJobId);
+      delete cancelBtn.dataset.buildCancelId;
+      delete cancelBtn.dataset.researchCancelId;
+      delete cancelBtn.dataset.shipyardQueueCancel;
+      delete cancelBtn.dataset.defenseQueueCancel;
+      cancelBtn.dataset[cfg.cancelDataset] = String(activeJobId);
       cancelBtn.hidden = false;
     } else if (cancelBtn) {
       cancelBtn.hidden = true;
     }
+  }
+
+  function _bootstrapPageQueueCompactLiveFromDom() {
+    const boots = [
+      { compactId: "build-queue-compact", live: BUILDQ },
+      { compactId: "research-queue-compact", live: RESEARCHQ },
+      { compactId: "shipyard-queue-compact", live: SHIPYARDQ },
+      { compactId: "defense-queue-compact", live: DEFENSEQ },
+    ];
+    const now = getTimerServerNow();
+    boots.forEach(({ compactId, live }) => {
+      const root = document.getElementById(compactId);
+      if (!root) return;
+      const timerEl = root.querySelector(
+        ".gc-page-queue-compact-timer[data-countdown-at], .gc-page-queue-compact-active [data-countdown-at]"
+      );
+      if (!timerEl) return;
+      syncTimerElement(timerEl);
+      const finish = parseTimerTarget(timerEl.dataset.timerTarget || timerEl.dataset.countdownAt || 0);
+      if (!finish || finish <= now) return;
+      const srvRem = timerRemainingSeconds(timerEl, now);
+      live.active.finishTime = finish;
+      live.active.totalSeconds = Math.max(1, srvRem + 1);
+    });
+  }
+
+  function _hydratePageQueueCompactsFromState() {
+    const state = GC.lastState;
+    if (!state || state.ok !== true) {
+      _bootstrapPageQueueCompactLiveFromDom();
+      GC.startProgressTicker();
+      return;
+    }
+    const updaters = [
+      ["build-queue-compact", () => _updateBuildQueueCompact(state.build_queue)],
+      ["research-queue-compact", () => _updateResearchQueueCompact(state.research)],
+      ["shipyard-queue-compact", () => {
+        const sy = state.shipyard?.queue || state.shipyard_queue;
+        if (sy) _updateShipyardQueueCompact(sy);
+      }],
+      ["defense-queue-compact", () => {
+        const df = state.defense?.defense_queue || state.defense?.queue || state.defense_queue;
+        if (df) _updateDefenseQueueCompact(df);
+      }],
+    ];
+    updaters.forEach(([id, fn]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      delete el.dataset.compactSig;
+      fn();
+    });
+    _bootstrapPageQueueCompactLiveFromDom();
+    GC.startProgressTicker();
+  }
+
+  function _updateBuildQueueCompact(buildQueueRaw) {
+    _updatePageQueueCompact({
+      compactId: "build-queue-compact",
+      domain: "building",
+      timerKind: "build",
+      cancelDataset: "buildCancelId",
+      idleKey: "build_queue_compact_idle",
+      idleFallback: "Keine Bauaufträge",
+      activeVerbKey: "build_queue_compact_building",
+      activeVerbFallback: "%(name)s wird gebaut",
+      nextKey: "build_queue_compact_next",
+      collectJobs: _collectBuildQueueCardJobs,
+      queueRaw: buildQueueRaw,
+    });
+  }
+
+  function _updateResearchQueueCompact(researchRaw) {
+    _updatePageQueueCompact({
+      compactId: "research-queue-compact",
+      domain: "research",
+      timerKind: "research",
+      cancelDataset: "researchCancelId",
+      idleKey: "research_queue_compact_idle",
+      idleFallback: "Keine Forschungen aktiv",
+      activeVerbKey: "research_queue_compact_building",
+      activeVerbFallback: "%(name)s wird erforscht",
+      nextKey: "build_queue_compact_next",
+      collectJobs: _collectResearchQueueCardJobs,
+      queueRaw: researchRaw,
+    });
+  }
+
+  function _updateShipyardQueueCompact(queueRaw) {
+    _updatePageQueueCompact({
+      compactId: "shipyard-queue-compact",
+      domain: "shipyard",
+      timerKind: "shipyard",
+      cancelDataset: "shipyardQueueCancel",
+      idleKey: "shipyard_queue_compact_idle",
+      idleFallback: "Keine Werftaufträge",
+      activeVerbKey: "shipyard_queue_compact_building",
+      activeVerbFallback: "%(name)s in Produktion",
+      nextKey: "build_queue_compact_next",
+      collectJobs: _collectShipyardQueueCardJobs,
+      queueRaw,
+    });
+  }
+
+  function _updateDefenseQueueCompact(queueRaw) {
+    _updatePageQueueCompact({
+      compactId: "defense-queue-compact",
+      domain: "defense",
+      timerKind: "defense",
+      cancelDataset: "defenseQueueCancel",
+      idleKey: "defense_queue_compact_idle",
+      idleFallback: "Keine Verteidigungsaufträge",
+      activeVerbKey: "defense_queue_compact_building",
+      activeVerbFallback: "%(name)s in Produktion",
+      nextKey: "build_queue_compact_next",
+      collectJobs: _collectDefenseQueueCardJobs,
+      queueRaw,
+    });
   }
 
   function renderBuildQueue(buildQueueRaw) {
@@ -5392,6 +5647,8 @@
         resolveQueueJobFinishTime(first) &&
         resolveQueueJobFinishTime(first) <= getTimerServerNow();
       if (!overdue) {
+        _syncBuildQueueLiveState(queueList);
+        _updateBuildQueueCompact(buildQueueRaw);
         GC.startProgressTicker();
         return;
       }
@@ -5423,21 +5680,6 @@
     } catch (_) {
       return "";
     }
-  }
-
-  function _updateResearchQueueCompact(count) {
-    const labelEl = document.getElementById("research-queue-compact-label");
-    if (!labelEl) return;
-
-    const n = Math.max(0, Math.floor(Number(count || 0)));
-    if (!n) {
-      _setIfChanged(labelEl, t("research_queue_compact_idle", "Keine Forschungen aktiv"));
-      return;
-    }
-    _setIfChanged(
-      labelEl,
-      tf("research_queue_compact_active", { count: n }, `${n} Forschungen aktiv`)
-    );
   }
 
   function _syncResearchQueueLiveState(queueList) {
@@ -5488,14 +5730,14 @@
       const finishTime = first ? resolveQueueJobFinishTime(first) : 0;
       const overdue = finishTime > 0 && finishTime <= getTimerServerNow();
       if (!overdue) {
-        _updateResearchQueueCompact(count);
+        _updateResearchQueueCompact(researchRaw);
         GC.startProgressTicker();
         return;
       }
     }
     _lastResearchQueueSignature = sig;
 
-    _updateResearchQueueCompact(count);
+    _updateResearchQueueCompact(researchRaw);
     if (!queueList.length) _finishRefreshArmed.research = false;
     else clearFinishRefreshArmed("research", queueList);
 
@@ -6940,15 +7182,21 @@
 
   function renderGlobalFleetHud(fleets) {
     const hud = document.querySelector("[data-fleet-global-hud]");
-    if (!hud) return;
     const list = Array.isArray(fleets) ? fleets : [];
+    const count = list.length;
+
+    updateFleetNavBadge(count);
+
+    if (!hud) {
+      if (!count) _globalFleetHudSig = "";
+      GC.startProgressTicker();
+      return;
+    }
 
     if (!list.length) {
       _globalFleetHudSig = "";
       hud.hidden = true;
       hud.classList.add("is-empty");
-      updateFleetNavBadge(0);
-      _syncGlobalQueueHudRowVisibility();
       return;
     }
 
@@ -6956,11 +7204,9 @@
       `${mv.id}:${mv.status}:${mv.phase || mv.leg_phase || ""}:${mv.countdown_at || 0}:${mv.mission_type || ""}`
     )).join("|");
     const primary = pickPrimaryFleetMovement(list);
-    const count = list.length;
 
     hud.hidden = false;
     hud.classList.remove("is-empty");
-    updateFleetNavBadge(count);
 
     const countEl = hud.querySelector("[data-fleet-hud-count]");
     if (countEl) _setIfChanged(countEl, String(count));
@@ -7001,7 +7247,6 @@
       _globalFleetHudSig = signature;
       _clearMovementCountdownExpiryState();
     }
-    _syncGlobalQueueHudRowVisibility();
     GC.startProgressTicker();
   }
   GC.renderGlobalFleetHud = renderGlobalFleetHud;
@@ -12760,19 +13005,26 @@
     }
   }
 
-  function _updateShipyardQueueCompact(count) {
-    const labelEl = document.getElementById("shipyard-queue-compact-label");
-    if (!labelEl) return;
-
-    const n = Math.max(0, Math.floor(Number(count || 0)));
-    if (!n) {
-      _setIfChanged(labelEl, t("shipyard_queue_compact_idle", "Keine Werftaufträge"));
-      return;
+  function _syncShipyardQueueLiveState(queueList) {
+    const first = queueList && queueList.length ? queueList[0] : null;
+    if (first) {
+      const finishTime = resolveQueueJobFinishTime(first);
+      const isActiveHead = Boolean(first.is_active !== false);
+      if (isActiveHead && finishTime) {
+        const now = getTimerServerNow();
+        const remaining = queueJobRemainingSeconds(finishTime, now, resolveQueueJobRemaining(first));
+        const totalRaw = Number(first.order_total_seconds || first.total_seconds || 0);
+        const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
+        SHIPYARDQ.active.finishTime = finishTime;
+        SHIPYARDQ.active.totalSeconds = total;
+      } else {
+        SHIPYARDQ.active.finishTime = 0;
+        SHIPYARDQ.active.totalSeconds = 0;
+      }
+    } else {
+      SHIPYARDQ.active.finishTime = 0;
+      SHIPYARDQ.active.totalSeconds = 0;
     }
-    _setIfChanged(
-      labelEl,
-      tf("shipyard_queue_compact_active", { count: n }, `${n} Werftaufträge aktiv`)
-    );
   }
 
   function clearAllProductionCardQueues(page) {
@@ -12815,28 +13067,6 @@
   }
   GC.shipyardIconUrl = shipyardIconUrl;
 
-  function _syncShipyardQueueLiveState(queueList) {
-    const first = queueList && queueList.length ? queueList[0] : null;
-    if (first) {
-      const finishTime = resolveQueueJobFinishTime(first);
-      const isActiveHead = Boolean(first.is_active !== false);
-      if (isActiveHead && finishTime) {
-        const now = getTimerServerNow();
-        const remaining = queueJobRemainingSeconds(finishTime, now, resolveQueueJobRemaining(first));
-        const totalRaw = Number(first.order_total_seconds || first.total_seconds || 0);
-        const total = totalRaw > 0 ? Math.floor(totalRaw) : Math.max(1, remaining + 1);
-        SHIPYARDQ.active.finishTime = finishTime;
-        SHIPYARDQ.active.totalSeconds = total;
-      } else {
-        SHIPYARDQ.active.finishTime = 0;
-        SHIPYARDQ.active.totalSeconds = 0;
-      }
-    } else {
-      SHIPYARDQ.active.finishTime = 0;
-      SHIPYARDQ.active.totalSeconds = 0;
-    }
-  }
-
   function renderShipyardQueue(page, queueData) {
     const compact = document.getElementById("shipyard-queue-compact");
     if (!compact) return;
@@ -12844,7 +13074,6 @@
     const qd = queueData || { queue: [], summary: { count: 0, limit: 3, refund_percent: 60 } };
     const jobs = qd.queue || [];
     const summary = qd.summary || {};
-    const count = summary.count ?? jobs.length;
     const first = jobs.length ? jobs[0] : null;
 
     _syncShipyardQueueLiveState(jobs);
@@ -12858,7 +13087,7 @@
       _shipyardUnitFinishKey = "";
       SHIPYARDQ.active.finishTime = 0;
       SHIPYARDQ.active.totalSeconds = 0;
-      _updateShipyardQueueCompact(0);
+      _updateShipyardQueueCompact(qd);
       clearAllProductionCardQueues(page);
       patchShipyardCardQueues(page, { queue: [], summary: { count: 0 }, card_jobs_by_owner: {} });
       GC.startProgressTicker();
@@ -12875,7 +13104,7 @@
         (finishTime > 0 && finishTime <= now) ||
         (nextUnitFinish > 0 && nextUnitFinish <= now);
       if (!overdue) {
-        _updateShipyardQueueCompact(count);
+        _updateShipyardQueueCompact(qd);
         patchShipyardCardQueues(page, qd);
         GC.startProgressTicker();
         return;
@@ -12884,7 +13113,7 @@
     _lastShipyardQueueSignature = sig;
     _productionZeroHandled.shipyard = "";
 
-    _updateShipyardQueueCompact(count);
+    _updateShipyardQueueCompact(qd);
     if (!jobs.length) _finishRefreshArmed.shipyard = false;
     else clearFinishRefreshArmed("shipyard", jobs);
 
@@ -13460,20 +13689,6 @@
     }
   }
 
-  function _updateDefenseQueueCompact(count) {
-    const labelEl = document.getElementById("defense-queue-compact-label");
-    if (!labelEl) return;
-    const n = Math.max(0, Math.floor(Number(count || 0)));
-    if (!n) {
-      _setIfChanged(labelEl, t("defense_queue_compact_idle", "Keine Verteidigungsaufträge"));
-      return;
-    }
-    _setIfChanged(
-      labelEl,
-      tf("defense_queue_compact_active", { count: n }, `${n} Verteidigungsaufträge aktiv`)
-    );
-  }
-
   function patchDefenseCardQueues(page, queueData) {
     if (!page) return;
     const byOwner =
@@ -13532,7 +13747,7 @@
       _defenseUnitFinishKey = "";
       DEFENSEQ.active.finishTime = 0;
       DEFENSEQ.active.totalSeconds = 0;
-      _updateDefenseQueueCompact(0);
+      _updateDefenseQueueCompact(qd);
       clearAllProductionCardQueues(page);
       patchDefenseCardQueues(page, { queue: [], summary: { count: 0 }, card_jobs_by_owner: {} });
       GC.startProgressTicker();
@@ -13549,7 +13764,7 @@
         (finishTime > 0 && finishTime <= now) ||
         (nextUnitFinish > 0 && nextUnitFinish <= now);
       if (!overdue) {
-        _updateDefenseQueueCompact(count);
+        _updateDefenseQueueCompact(qd);
         patchDefenseCardQueues(page, qd);
         GC.startProgressTicker();
         return;
@@ -13558,7 +13773,7 @@
     _lastDefenseQueueSignature = sig;
     _productionZeroHandled.defense = "";
 
-    _updateDefenseQueueCompact(count);
+    _updateDefenseQueueCompact(qd);
     if (!jobs.length) _finishRefreshArmed.defense = false;
     else clearFinishRefreshArmed("defense", jobs);
 

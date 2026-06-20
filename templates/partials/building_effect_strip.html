@@ -21,6 +21,8 @@
   {% set compact_val = val|fmt_int_compact %}
   {% if kind == 'bonus_percent' %}
     <span class="gc-mono gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>+{{ compact_val }}{{ unit }}</span>
+  {% elif kind == 'reduction_percent' %}
+    <span class="gc-mono gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>-{{ compact_val }}{{ unit }}</span>
   {% elif kind == 'level' %}
     <span class="gc-mono gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>{{ compact_val }}</span>
   {% elif kind == 'max_level' or kind == 'scan' %}
@@ -52,6 +54,14 @@
     {% else %}
       {{ T("buildings_effect_bonus", "Bonus") }}
     {% endif %}
+  {% elif kind == 'reduction_percent' %}
+    {% if res_key == 'build' and building_key == 'command_center' %}
+      {{ T("buildings_effect_nanofactory_build", "Nanofabrik-Bau") }}
+    {% elif res_key == 'build' %}
+      {{ T("buildings_effect_build_time_reduction", "Bauzeitverkürzung") }}
+    {% else %}
+      {{ T("buildings_effect_reduction", "Verkürzung") }}
+    {% endif %}
   {% elif kind == 'max_level' %}
     {{ T("buildings_effect_max_mine", "Max. Minenstufe") }}
   {% elif kind == 'scan' %}
@@ -73,6 +83,8 @@
   {% if kind == 'production' %}
     {% set delta_suffix = "/h" %}
   {% elif kind == 'bonus_percent' %}
+    {% set delta_suffix = "%" %}
+  {% elif kind == 'reduction_percent' %}
     {% set delta_suffix = "%" %}
   {% else %}
     {% set delta_suffix = "" %}
@@ -104,7 +116,7 @@
       <div class="gc-bld-prod-delta bcell-prod-delta {{ delta_class }}" id="prod-delta-{{ building_key }}-{{ kind }}">
         <span class="gc-bld-prod-delta-label">{{ delta_label }}</span>
         <span class="gc-bld-prod-delta-val gc-mono gc-num-compact"{% if (delta|fmt_int_compact) != (delta|fmt_int) %} title="+{{ delta|fmt_int }}{{ delta_suffix }}"{% endif %}>
-          {% if kind == 'bonus_percent' %}+{{ delta|fmt_int_compact }}%{% elif kind == 'level' %}+{{ delta|fmt_int_compact }}{% else %}+{{ delta|fmt_int_compact }}{{ delta_suffix }}{% endif %}
+          {% if kind == 'bonus_percent' %}+{{ delta|fmt_int_compact }}%{% elif kind == 'reduction_percent' %}-{{ delta|fmt_int_compact }}%{% elif kind == 'level' %}+{{ delta|fmt_int_compact }}{% else %}+{{ delta|fmt_int_compact }}{{ delta_suffix }}{% endif %}
         </span>
       </div>
     {% endif %}

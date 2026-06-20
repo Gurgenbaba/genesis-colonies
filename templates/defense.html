@@ -2,6 +2,7 @@
 {% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip, render_shipyard_resource_blocker, render_raster_picture, render_production_stat_chips with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
+{% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
 
 {% macro render_defense_stock_chip(defense_key, owned) %}
   <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero gc-card-level gc-card-stock-badge"
@@ -94,7 +95,8 @@
 
   {% set planet_defense = df.current_defense if df.current_defense is defined else {} %}
 
-  <section class="gc-panel shipyard-panel shipyard-status-panel">
+  <div class="defense-shell gc-panel">
+  <section class="defense-status-panel">
     <div class="gc-panel-header">
       <span class="gc-panel-title">{{ T("defense_factory_title") }}</span>
       <span class="gc-panel-subtitle gc-mono" data-defense-factory-label>
@@ -118,26 +120,22 @@
     </div>
   </section>
 
-  <div class="gc-queue-compact defense-queue-compact gc-panel-header"
-       id="defense-queue-compact"
-       aria-live="polite">
-    <span class="defense-queue-compact-icon" aria-hidden="true">🛡</span>
-    <span class="gc-panel-title defense-queue-compact-label" id="defense-queue-compact-label">
-      {% set qsum = df.defense_queue.summary if df.defense_queue is defined and df.defense_queue.summary is defined else {} %}
-      {% if qsum and qsum.count %}
-        {{ T('defense_queue_compact_active', '%(count)s Verteidigungsaufträge aktiv', count=(qsum.count|default(0)|int)) }}
-      {% else %}
-        {{ T('defense_queue_compact_idle', 'Keine Verteidigungsaufträge') }}
-      {% endif %}
-    </span>
-    <span class="gc-panel-subtitle gc-mono defense-queue-compact-hint">
-      {{ T('defense_queue_hint', refund=qsum.refund_percent|default(60)) }}
-    </span>
-  </div>
+  {% set df_q = df.defense_queue if df.defense_queue is defined and df.defense_queue else {} %}
+  {% set df_q_jobs = df_q.queue if df_q.queue is defined and df_q.queue else [] %}
+  {{ render_page_queue_compact(
+    'defense-queue-compact',
+    'defense',
+    '🛡',
+    df_q_jobs,
+    T('defense_queue_compact_idle', 'Keine Verteidigungsaufträge'),
+    df.planet_name if df.planet_name is defined else '',
+    'defense',
+    'data-defense-queue-cancel'
+  ) }}
 
   <hr class="defense-divider gc-prog-divider">
 
-  <section class="gc-panel shipyard-panel" aria-labelledby="defense-buildable-title">
+  <section class="defense-buildable-section" aria-labelledby="defense-buildable-title">
     <div class="gc-panel-header">
       <span class="gc-panel-title" id="defense-buildable-title">{{ T("defense_buildable_title") }}</span>
       <span class="gc-panel-subtitle">{{ T("defense_buildable_subtitle") }}</span>
@@ -273,6 +271,7 @@
       {% endfor %}
     </div>
   </section>
+  </div>
   {% endif %}
 
   {% endif %}

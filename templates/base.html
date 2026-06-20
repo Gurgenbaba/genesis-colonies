@@ -204,48 +204,6 @@
         </div>
       </div>
 
-      <!-- Zeile 3: Aktive Queues + Flotte (volle Breite, unter Ressourcen) -->
-      <div class="gc-header-row gc-header-row-queues" id="gc-header-row-queues" hidden>
-        <div class="gc-header-queues-shell gc-panel">
-          <div class="gc-header-queues-head">
-            <span class="gc-header-queues-label">{{ T('global_queue_hud_label', 'Aktive Queues') }}</span>
-          </div>
-          <div class="gc-header-queues-body">
-            <div class="gc-global-queue-hud is-empty"
-                 id="global-queue-hud"
-                 data-global-queue-hud
-                 hidden
-                 aria-live="polite"
-                 aria-label="{{ T('global_queue_hud_aria', 'Aktive Warteschlangen') }}">
-              <div class="gc-global-queue-hud-body" data-global-queue-hud-body></div>
-            </div>
-            <a href="{{ url_for('fleet_view') }}"
-               class="gc-fleet-global-hud gc-nav-link is-empty"
-               id="gc-fleet-global-hud"
-               data-fleet-global-hud
-               hidden
-               aria-live="polite"
-               aria-label="{{ T('fleet_hud_aria', 'Aktive Flotten') }}">
-              <span class="gc-fleet-hud-tag">{{ T('fleet_hud_tag', 'Flotte') }}</span>
-              <span class="gc-fleet-hud-count gc-mono" data-fleet-hud-count aria-hidden="true">0</span>
-              <span class="gc-fleet-hud-body">
-                <span class="gc-fleet-hud-mission" data-fleet-hud-mission></span>
-                <span class="gc-fleet-hud-status" data-fleet-hud-status></span>
-                <span class="gc-fleet-hud-target" data-fleet-hud-target></span>
-                <span class="gc-fleet-hud-leg">
-                  <span class="gc-fleet-hud-leg-label" data-fleet-hud-leg-label></span>
-                  <time class="gc-fleet-hud-countdown gc-mono fleet-active-countdown"
-                        data-fleet-hud-countdown
-                        data-timer-kind="fleet"
-                        data-refresh-on-zero="fleet"
-                        data-countdown-scope="fleet">–</time>
-                </span>
-              </span>
-              <span class="gc-fleet-hud-more hidden" data-fleet-hud-more hidden></span>
-            </a>
-          </div>
-        </div>
-      </div>
       {% endif %}
 
     </div>

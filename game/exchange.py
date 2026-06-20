@@ -18,10 +18,8 @@ _EXCHANGE_SETTING_DEFAULTS = {
     "exchange_enabled": "1",
     "exchange_rate_metal_to_crystal": "0.85",
     "exchange_rate_crystal_to_metal": "0.85",
-    "exchange_daily_limit": "50000000000",
     "exchange_daily_limit_pct": "80",
     "exchange_daily_limit_min": "25000000",
-    "exchange_daily_limit_max": "50000000000",
     "exchange_min_amount": "100",
     "fuel_exchange_enabled": "1",
     "fuel_exchange_metal_per_unit": "20",
@@ -74,10 +72,8 @@ def get_exchange_config(conn=None) -> Dict[str, Any]:
             "fuel_enabled": fuel_enabled,
             "rate_metal_to_crystal": _float_setting(settings, "exchange_rate_metal_to_crystal", "0.85"),
             "rate_crystal_to_metal": _float_setting(settings, "exchange_rate_crystal_to_metal", "0.85"),
-            "daily_limit_admin": _int_setting(settings, "exchange_daily_limit", "50000000000"),
             "daily_limit_pct": _float_setting(settings, "exchange_daily_limit_pct", "80"),
             "daily_limit_min": _int_setting(settings, "exchange_daily_limit_min", "25000000"),
-            "daily_limit_max": _int_setting(settings, "exchange_daily_limit_max", "50000000000"),
             "min_amount": _int_setting(settings, "exchange_min_amount", "100"),
             "fuel_metal_per_unit": _float_setting(settings, "fuel_exchange_metal_per_unit", "45"),
             "fuel_crystal_per_unit": _float_setting(settings, "fuel_exchange_crystal_per_unit", "28"),
@@ -205,7 +201,7 @@ def _storage_caps(planet_id: int, player_id: int, conn) -> Dict[str, int]:
 
 
 def resolve_exchange_daily_limit(player_id: int, *, conn=None) -> Dict[str, Any]:
-    """GC-557D — Trader limit from empire 24h production × pct, clamped min/max/admin."""
+    """GC-732 — Trader limit = empire 24h production × pct (optional min floor)."""
     from .empire_page import get_empire_production_aggregate
 
     own = conn is None
@@ -216,16 +212,12 @@ def resolve_exchange_daily_limit(player_id: int, *, conn=None) -> Dict[str, Any]
         prod = get_empire_production_aggregate(int(player_id), conn=conn)
         pct = float(cfg["daily_limit_pct"])
         min_lim = int(cfg["daily_limit_min"])
-        max_lim = int(cfg["daily_limit_max"])
-        admin_cap = int(cfg["daily_limit_admin"])
         empire_day_total = int(prod["total_per_day"])
         scaled = int(empire_day_total * pct / 100.0)
-        clamped = max(min_lim, min(max_lim, scaled))
-        final = min(clamped, admin_cap) if admin_cap > 0 else clamped
+        final = max(min_lim, scaled) if min_lim > 0 else scaled
         return {
             "daily_limit": int(final),
             "daily_limit_scaled": int(scaled),
-            "daily_limit_clamped": int(clamped),
             "empire_production_day_total": empire_day_total,
             "empire_production_day": {
                 "metal": int(prod["metal_per_day"]),
@@ -234,8 +226,6 @@ def resolve_exchange_daily_limit(player_id: int, *, conn=None) -> Dict[str, Any]
             },
             "limit_pct": pct,
             "limit_min": min_lim,
-            "limit_max": max_lim,
-            "admin_cap": admin_cap,
         }
     finally:
         if own:
@@ -291,8 +281,6 @@ def get_exchange_status(
             "daily_remaining": remaining,
             "daily_limit_pct": limit_block["limit_pct"],
             "daily_limit_min": limit_block["limit_min"],
-            "daily_limit_max": limit_block["limit_max"],
-            "daily_limit_admin_cap": limit_block["admin_cap"],
             "empire_production_day_total": limit_block["empire_production_day_total"],
             "empire_production_day": limit_block["empire_production_day"],
             "min_amount": cfg["min_amount"],

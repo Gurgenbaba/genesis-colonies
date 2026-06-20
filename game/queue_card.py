@@ -119,6 +119,9 @@ def normalize_card_queue_job(
         "progress_pct": progress_pct,
         "label": str(label or owner_key),
     }
+    label_str = str(label or owner_key)
+    if label_str:
+        job["label_key"] = label_str
     if target_level is not None:
         job["target_level"] = int(target_level)
     if target_amount is not None:

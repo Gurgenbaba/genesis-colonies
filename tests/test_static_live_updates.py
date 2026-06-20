@@ -609,14 +609,15 @@ def test_main_js_gc630_shipyard_game_state_panel_patch():
 
 
 def test_main_js_gc640_global_fleet_hud():
-    """GC-640A: active fleets in shell HUD via game-state, not fleet page panel."""
+    """GC-640A: active fleets via game-state poll; sidebar badge only (no header row)."""
     src = _read("static/main.js")
     assert "function renderGlobalFleetHud(fleets)" in src
     assert "GC.renderGlobalFleetHud = renderGlobalFleetHud" in src
     hud = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
     assert "renderGlobalFleetHud(data.active_fleets)" in hud
+    assert "updateFleetNavBadge(count)" in src
     base = _read("templates/base.html")
-    assert "data-fleet-global-hud" in base
+    assert "data-fleet-global-hud" not in base
     assert "data-fleet-nav-badge" in base
     fleet = _read("templates/fleet.html")
     assert "data-fleet-active-list" not in fleet

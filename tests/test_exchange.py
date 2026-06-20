@@ -55,10 +55,8 @@ def test_exchange_config_defaults(exchange_db):
     assert cfg["enabled"] is True
     assert cfg["rate_metal_to_crystal"] == 0.85
     assert cfg["rate_crystal_to_metal"] == 0.85
-    assert cfg["daily_limit_admin"] == 50000000000
     assert cfg["daily_limit_pct"] == 80.0
     assert cfg["daily_limit_min"] == 25000000
-    assert cfg["daily_limit_max"] == 50000000000
     assert cfg["min_amount"] == 100
     assert cfg["fuel_metal_per_unit"] == 20
     assert cfg["fuel_crystal_per_unit"] == 14
@@ -306,22 +304,31 @@ def test_exchange_below_minimum(exchange_db):
     conn.close()
 
 
-def test_exchange_daily_limit(exchange_db):
+def test_exchange_daily_limit(exchange_db, monkeypatch):
     conn = db()
     uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('exchange_daily_limit', '50000');"
+    conn.execute(
+        "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('exchange_daily_limit_min', '0');"
     )
-    cur.execute("UPDATE planets SET metal = 200000, crystal = 0 WHERE id = ?;", (pid,))
+    conn.execute("UPDATE planets SET metal = 200000, crystal = 0 WHERE id = ?;", (pid,))
     conn.commit()
+
+    def _prod(_player_id, *, conn=None):
+        return {
+            "metal_per_day": 100_000,
+            "crystal_per_day": 0,
+            "fuel_cells_per_day": 0,
+            "total_per_day": 100_000,
+        }
+
+    monkeypatch.setattr("game.empire_page.get_empire_production_aggregate", _prod)
 
     ok1, _, _ = execute_exchange(
         player_id=uid,
         planet_id=pid,
         from_resource="metal",
-        amount=50000,
+        amount=80000,
         conn=conn,
     )
     assert ok1
@@ -513,19 +520,73 @@ def test_exchange_daily_limit_scales_with_production(exchange_db):
     assert block["empire_production_day_total"] > 100_000
     assert block["daily_limit_scaled"] == int(block["empire_production_day_total"] * 80 / 100)
     assert block["daily_limit"] >= 25_000_000
-    assert block["daily_limit"] <= 50_000_000_000
+    assert block["daily_limit"] == block["daily_limit_scaled"] or block["daily_limit"] == 25_000_000
 
 
-def test_exchange_daily_limit_respects_admin_cap(exchange_db):
+def _mock_empire_day_total(total_per_day: int):
+    def _prod(_player_id, *, conn=None):
+        return {
+            "metal_per_day": total_per_day,
+            "crystal_per_day": 0,
+            "fuel_cells_per_day": 0,
+            "total_per_day": total_per_day,
+        }
+
+    return _prod
+
+
+def test_exchange_daily_limit_scales_to_82_billion(exchange_db, monkeypatch):
+    conn = db()
+    uid = _player(conn=conn)
+    conn.execute(
+        "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('exchange_daily_limit_min', '0');"
+    )
+    conn.commit()
+    monkeypatch.setattr(
+        "game.empire_page.get_empire_production_aggregate",
+        _mock_empire_day_total(82_000_000_000),
+    )
+    block = resolve_exchange_daily_limit(uid, conn=conn)
+    conn.close()
+    assert block["daily_limit"] == 65_600_000_000
+
+
+def test_exchange_daily_limit_scales_to_1_billion(exchange_db, monkeypatch):
+    conn = db()
+    uid = _player(conn=conn)
+    conn.execute(
+        "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('exchange_daily_limit_min', '0');"
+    )
+    conn.commit()
+    monkeypatch.setattr(
+        "game.empire_page.get_empire_production_aggregate",
+        _mock_empire_day_total(1_000_000_000),
+    )
+    block = resolve_exchange_daily_limit(uid, conn=conn)
+    conn.close()
+    assert block["daily_limit"] == 800_000_000
+
+
+def test_exchange_daily_limit_ignores_legacy_admin_cap(exchange_db, monkeypatch):
     conn = db()
     uid = _player(conn=conn)
     conn.execute(
         "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('exchange_daily_limit', '75000');"
     )
+    conn.execute(
+        "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('exchange_daily_limit_max', '75000');"
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('exchange_daily_limit_min', '0');"
+    )
     conn.commit()
+    monkeypatch.setattr(
+        "game.empire_page.get_empire_production_aggregate",
+        _mock_empire_day_total(82_000_000_000),
+    )
     block = resolve_exchange_daily_limit(uid, conn=conn)
     conn.close()
-    assert block["daily_limit"] == 75_000
+    assert block["daily_limit"] == 65_600_000_000
 
 
 def test_trader_hub_shows_limit_breakdown(exchange_db, tmp_path, monkeypatch):

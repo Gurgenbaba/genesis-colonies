@@ -2,6 +2,7 @@
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_raster_picture with context %}
 {% from "partials/building_effect_strip.html" import render_building_effect_bundle with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
+{% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
 
 {# ===================================================================
    Genesis building cards (Resources / Research / Military / Infrastructure)
@@ -226,50 +227,16 @@
   <div class="buildings-shell gc-panel">
 
     {% set bq_jobs = (bq.queue if bq and bq.queue is defined and bq.queue else []) %}
-    <div class="gc-queue-compact build-queue-compact gc-panel-header"
-         id="build-queue-compact"
-         aria-live="polite"
-         data-planet-id="{{ (active_planet_id if active_planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else 0))|int }}">
-      <span class="build-queue-compact-icon" aria-hidden="true">🏗</span>
-      <div class="build-queue-compact-body" id="build-queue-compact-body" data-build-queue-compact-body>
-        {% if bq_jobs|length %}
-          {% set aj = bq_jobs[0] %}
-          {% set nj = bq_jobs[1] if bq_jobs|length > 1 else none %}
-          {% set aj_label = aj.label_key|default('building_' ~ aj.building_type) %}
-          {% set aj_rem = (aj.remaining_seconds if aj.remaining_seconds is defined else aj.remaining|default(0))|int %}
-          <span class="build-queue-compact-active" id="build-queue-compact-label">
-            {% if bq_jobs|length == 1 %}
-              {{ T('build_queue_compact_building', '%(name)s wird gebaut', name=T(aj_label)) }}
-            {% else %}
-              {{ T(aj_label) }}
-            {% endif %}
-            {% if aj.target_level is defined and aj.target_level %}
-            · <span class="gc-mono">{{ T('build_queue_compact_level', 'Lv.%(level)s', level=aj.target_level|int) }}</span>
-            {% endif %}
-            · {{ render_card_queue_timer({'finish_at': aj.finish_time, 'remaining_seconds': aj_rem, 'start_at': none}, 'build', 'game-state') }}
-          </span>
-          {% if nj %}
-          <span class="build-queue-compact-sep" aria-hidden="true">|</span>
-          <span class="build-queue-compact-next" id="build-queue-compact-next">
-            {{ T('build_queue_compact_next', 'Nächster: %(name)s · Lv.%(level)s', name=T(nj.label_key|default('building_' ~ nj.building_type)), level=nj.target_level|int) }}
-          </span>
-          {% endif %}
-        {% else %}
-          <span class="build-queue-compact-label" id="build-queue-compact-label">{{ T('build_queue_compact_idle', 'Keine Bauaufträge') }}</span>
-        {% endif %}
-      </div>
-      {% if bq_jobs|length %}
-      <button type="button"
-              class="build-queue-compact-cancel"
-              data-build-queue-compact-cancel
-              data-build-cancel-id="{{ bq_jobs[0].id|int }}"
-              title="{{ T('action_cancel', 'Abbrechen') }}"
-              aria-label="{{ T('action_cancel', 'Abbrechen') }}"><span aria-hidden="true">×</span></button>
-      {% endif %}
-      {% if active_planet_name is defined and active_planet_name %}
-      <span class="build-queue-planet-chip" id="build-planet-label" title="{{ T('pe_planet_switcher', 'Kolonie wählen') }}">· {{ active_planet_name }}</span>
-      {% endif %}
-    </div>
+    {{ render_page_queue_compact(
+      'build-queue-compact',
+      'build',
+      '🏗',
+      bq_jobs,
+      T('build_queue_compact_idle', 'Keine Bauaufträge'),
+      active_planet_name if active_planet_name is defined else '',
+      'build',
+      'data-build-cancel-id'
+    ) }}
 
     <hr class="buildings-divider gc-prog-divider">
 

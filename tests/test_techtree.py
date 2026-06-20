@@ -156,3 +156,50 @@ def test_section_progress_fields(techtree_db):
         assert "progress_unlocked" in section
         assert "progress_total" in section
         assert section["progress_total"] == len(section["nodes"])
+
+
+def test_build_time_nodes_have_description_and_effect_preview(techtree_db):
+    from game.effects import EffectResolver
+    from game.models import save_planet_buildings, get_homeworld
+
+    player_id = _create_player()
+    planet_id = int(get_homeworld(player_id=player_id)["id"])
+    save_planet_buildings(
+        planet_id,
+        {
+            "command_center": 2,
+            "nanofactory": 3,
+            "research_lab": 5,
+            "solar_plant": 1,
+        },
+    )
+
+    ctx = get_techtree_page_context(user_id=player_id)
+    buildings_section = next(s for s in ctx["sections"] if s["key"] == "buildings")
+    research_section = next(s for s in ctx["sections"] if s["key"] == "research")
+    by_building = {item["key"]: item for item in buildings_section["nodes"]}
+    by_research = {item["key"]: item for item in research_section["nodes"]}
+
+    for key in ("command_center", "nanofactory"):
+        item = by_building[key]
+        assert item.get("description_key") == f"desc_{key}"
+        preview = item.get("effect_preview") or {}
+        assert preview.get("effect_kind") == "bonus_percent"
+        assert int(preview.get("effect_value") or 0) >= 0
+
+    cc = by_building["command_center"]
+    assert cc["effect_preview"]["effect_value"] == 50  # level 2 × 25 %
+
+    buildtime = by_research["buildtime_tech"]
+    assert buildtime.get("description_key") == "desc_buildtime_tech"
+    bt_preview = buildtime.get("effect_preview") or {}
+    assert bt_preview.get("effect_value") == EffectResolver.buildtime_speed_bonus_pct(1)
+
+    ctx_leveled = get_techtree_page_context(user_id=player_id)
+    from game.models import save_research_level
+
+    save_research_level("buildtime_tech", 5, player_id)
+    ctx_leveled = get_techtree_page_context(user_id=player_id)
+    research_nodes = next(s for s in ctx_leveled["sections"] if s["key"] == "research")["nodes"]
+    bt5 = next(i for i in research_nodes if i["key"] == "buildtime_tech")
+    assert (bt5.get("effect_preview") or {}).get("effect_value") == EffectResolver.buildtime_speed_bonus_pct(5)

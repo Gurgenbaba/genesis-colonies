@@ -2,6 +2,7 @@
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_shipyard_resource_blocker, render_raster_picture with context %}
 {% from "partials/building_effect_strip.html" import render_building_effect_value, building_effect_metric_label with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
+{% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
 
 {# ===================================================================
    Genesis research cards — mirrors buildings card layout
@@ -392,6 +393,7 @@
 {% set techs = (rs.techs if rs and rs.techs is defined and rs.techs else []) %}
 {% set lab_level = (rs.lab_level if rs and rs.lab_level is defined else 0) %}
 {% set rq_limit = (rq_summary.limit if rq_summary.limit is defined else 3) %}
+{% set rq_jobs = (rs.queue if rs and rs.queue is defined and rs.queue else []) %}
 {% set queue_full = (rq_summary.count or 0)|int >= rq_limit|int %}
 
 <div class="gc-page research-page" data-planet-id="{{ (active_planet_id if active_planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else 0))|int }}">
@@ -412,24 +414,16 @@
 
   <section class="gc-panel research-shell">
 
-    <div class="gc-queue-compact research-queue-compact gc-panel-header research-queue-head"
-         id="research-queue-compact"
-         aria-live="polite"
-         data-planet-id="{{ (active_planet_id if active_planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else 0))|int }}">
-      <span class="research-queue-compact-icon" aria-hidden="true">🔬</span>
-      <span class="gc-panel-title research-queue-compact-label" id="research-queue-compact-label">
-        {% if rq_summary and rq_summary.count %}
-          {{ T('research_queue_compact_active', '%(count)s Forschungen aktiv', count=(rq_summary.count or 0)|int) }}
-        {% else %}
-          {{ T('research_queue_compact_idle', 'Keine Forschungen aktiv') }}
-        {% endif %}
-      </span>
-      {% if active_planet_name is defined and active_planet_name %}
-      <span class="build-queue-planet-chip" id="research-planet-label" title="{{ T('pe_planet_switcher', 'Kolonie wählen') }}">
-        · {{ active_planet_name }}
-      </span>
-      {% endif %}
-    </div>
+    {{ render_page_queue_compact(
+      'research-queue-compact',
+      'research',
+      '🔬',
+      rq_jobs,
+      T('research_queue_compact_idle', 'Keine Forschungen aktiv'),
+      active_planet_name if active_planet_name is defined else '',
+      'research',
+      'data-research-cancel-id'
+    ) }}
 
     <hr class="research-divider gc-prog-divider">
 
