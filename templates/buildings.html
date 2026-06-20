@@ -241,36 +241,11 @@
     <hr class="buildings-divider gc-prog-divider">
 
     <div class="buildings-tab-panels" data-buildings-tab-panels>
-    <div class="tab-content {{ 'active' if active_tab == 'resources' else '' }}"
-         data-tab="resources"
+    <div class="tab-content active"
+         data-tab="{{ active_tab }}"
          role="tabpanel"
-         id="panel-resources"
-         {% if active_tab != 'resources' %}hidden{% endif %}>
-      {{ render_building_table(rows_by_tab.get('resources', []), 'resources', bq_summary, bq_queue_full) }}
-    </div>
-
-    <div class="tab-content {{ 'active' if active_tab == 'research' else '' }}"
-         data-tab="research"
-         role="tabpanel"
-         id="panel-research"
-         {% if active_tab != 'research' %}hidden{% endif %}>
-      {{ render_building_table(rows_by_tab.get('research', []), 'research', bq_summary, bq_queue_full) }}
-    </div>
-
-    <div class="tab-content {{ 'active' if active_tab == 'military' else '' }}"
-         data-tab="military"
-         role="tabpanel"
-         id="panel-military"
-         {% if active_tab != 'military' %}hidden{% endif %}>
-      {{ render_building_table(rows_by_tab.get('military', []), 'military', bq_summary, bq_queue_full) }}
-    </div>
-
-    <div class="tab-content {{ 'active' if active_tab == 'infrastructure' else '' }}"
-         data-tab="infrastructure"
-         role="tabpanel"
-         id="panel-infrastructure"
-         {% if active_tab != 'infrastructure' %}hidden{% endif %}>
-      {{ render_building_table(rows_by_tab.get('infrastructure', []), 'infrastructure', bq_summary, bq_queue_full) }}
+         id="panel-{{ active_tab }}">
+      {{ render_building_table(rows_by_tab.get(active_tab, []), active_tab, bq_summary, bq_queue_full) }}
     </div>
     </div>
 

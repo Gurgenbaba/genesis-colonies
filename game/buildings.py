@@ -1025,6 +1025,8 @@ def get_buildings_panel_rows(
     planet: dict,
     buildings: Dict[str, int],
     build_queue: Optional[Dict[str, Any]] = None,
+    *,
+    active_tab: Optional[str] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     user_id = planet.get("player_id")
     if user_id is None:
@@ -1040,14 +1042,20 @@ def get_buildings_panel_rows(
             if bt:
                 queue_counts[bt] = queue_counts.get(bt, 0) + 1
 
-    rows_by_tab: Dict[str, List[Dict[str, Any]]] = {
-        "resources": [],
-        "research": [],
-        "military": [],
-        "infrastructure": [],
-    }
+    tab_filter = str(active_tab or "").strip() or None
+    if tab_filter:
+        rows_by_tab: Dict[str, List[Dict[str, Any]]] = {tab_filter: []}
+        building_keys = [k for k in BUILDING_ORDER if BUILDING_TAB.get(k) == tab_filter]
+    else:
+        rows_by_tab = {
+            "resources": [],
+            "research": [],
+            "military": [],
+            "infrastructure": [],
+        }
+        building_keys = BUILDING_ORDER
 
-    for key in BUILDING_ORDER:
+    for key in building_keys:
         row = _make_panel_row(
             planet,
             buildings,

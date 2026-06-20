@@ -3822,18 +3822,24 @@
       if (subBtn) {
         e.preventDefault();
         const tab = subBtn.dataset.buildingTab || "resources";
-        if (GC.detectPage() !== "buildings") {
-          GC.navigateTo(`/buildings?tab=${encodeURIComponent(tab)}`);
+        if (GC.detectPage() === "buildings" && _getActiveBuildingTab() === tab) {
           return;
         }
-        activateBuildingTabByName(tab, subBtn);
+        GC.navigateTo(`/buildings?tab=${encodeURIComponent(tab)}`);
         return;
       }
 
       const btn = e.target.closest(".building-tabs .tab-btn");
       if (!btn || btn.closest("#messages-tabs")) return;
       if (btn.tagName === "A") e.preventDefault();
-      activateBuildingTabByName(btn.dataset.tab, btn);
+      const tabBtn = btn.dataset.tab;
+      if (GC.detectPage() === "buildings" && tabBtn) {
+        if (_getActiveBuildingTab() !== tabBtn) {
+          GC.navigateTo(`/buildings?tab=${encodeURIComponent(tabBtn)}`);
+        }
+        return;
+      }
+      activateBuildingTabByName(tabBtn, btn);
     });
   }
 
@@ -8682,8 +8688,7 @@
   function gameStateIncludePanel() {
     const page = typeof GC.detectPage === "function" ? GC.detectPage() : "";
     return (
-      page === "buildings"
-      || page === "research"
+      page === "research"
       || page === "shipyard"
       || page === "defense"
       || page === "trader_hub"

@@ -1114,21 +1114,28 @@ def trader_hub_view():
 @require_login
 def buildings_view():
     active_tab = request.args.get("tab") or "resources"
+    if active_tab not in ("resources", "research", "military", "infrastructure"):
+        active_tab = "resources"
 
-    ctx = _load_page_live_context(finish_source="buildings")
-    if ctx is None:
-        return redirect(url_for("login"))
+    conn = db()
+    try:
+        ctx = _load_page_live_context(finish_source="buildings", conn=conn, close_conn=False)
+        if ctx is None:
+            return redirect(url_for("login"))
 
-    planet = ctx.get("planet")
-    if not planet:
-        from game.planet_evolution.repository import get_context_planet
+        planet = ctx.get("planet")
+        if not planet:
+            from game.live_state import get_request_context_planet
 
-        planet = get_context_planet(int(session["user_id"]))
-    rows_by_tab = get_buildings_panel_rows(
-        planet,
-        ctx["buildings"],
-        build_queue=ctx["build_queue"],
-    )
+            planet = get_request_context_planet(int(session["user_id"]), conn=conn)
+        rows_by_tab = get_buildings_panel_rows(
+            planet,
+            ctx["buildings"],
+            build_queue=ctx["build_queue"],
+            active_tab=active_tab,
+        )
+    finally:
+        conn.close()
 
     return render_template(
         "buildings.html",

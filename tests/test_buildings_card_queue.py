@@ -22,6 +22,38 @@ def _panel_row(rows_by_tab: dict, building_type: str) -> dict | None:
     return None
 
 
+def test_gc747b_buildings_tab_performance_contract():
+    """GC-747B: buildings SSR/poll slimdown + CSS webp resource icons."""
+    src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    panel_fn = src.split("function gameStateIncludePanel()")[1].split("function gameStateWantPanelPoll")[0]
+    assert 'page === "buildings"' not in panel_fn
+    bind_tabs = src.split("function bindBuildingTabsOnce()")[1].split("function initBuildings()")[0]
+    subnav_block = bind_tabs.split("#gc-nav-buildings-sub")[1].split('.building-tabs .tab-btn')[0]
+    assert "GC.navigateTo(`/buildings?tab=" in subnav_block
+    assert "activateBuildingTabByName(tab, subBtn)" not in subnav_block
+    buildings_html = (ROOT / "templates" / "buildings.html").read_text(encoding="utf-8")
+    assert "panel-resources" not in buildings_html
+    assert 'render_building_table(rows_by_tab.get(active_tab' in buildings_html
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    assert "Ferronit.webp" in css
+    assert "Ferronit.png" not in css
+    app_py = (ROOT / "app.py").read_text(encoding="utf-8")
+    bv = app_py.split("def buildings_view()")[1].split("def upgrade")[0]
+    assert "active_tab=active_tab" in bv
+    assert "close_conn=False" in bv
+
+
+def test_get_buildings_panel_rows_active_tab_only():
+    """GC-747B: SSR loads one buildings tab, not all four."""
+    planet = {"player_id": 1, "metal": 1000, "crystal": 1000}
+    buildings = {"metal_mine": 1, "research_lab": 1, "orbital_shipyard": 1}
+    rows = get_buildings_panel_rows(planet, buildings, active_tab="resources")
+    assert list(rows.keys()) == ["resources"]
+    assert len(rows["resources"]) >= 1
+    assert all(r.get("tab") == "resources" for r in rows["resources"])
+    assert "military" not in rows
+
+
 def test_active_building_row_has_queue_job():
     planet = {"player_id": 1, "metal": 99999, "crystal": 99999}
     buildings = {"metal_mine": 3, "crystal_mine": 2}

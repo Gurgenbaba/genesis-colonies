@@ -7669,12 +7669,12 @@ a.gc-bld-head-action-btn--go:focus-visible{
   color: rgba(215,246,255,0.72);
 }
 
-/* Canonical resource icons (Ferronit, Crytite, Brennzellen) — PNGs match HUD resource bar */
+/* Canonical resource icons — WebP (GC-747B) */
 :root{
-  --gc-icon-ferronit: url("/static/img/res/Ferronit.png");
-  --gc-icon-crytite: url("/static/img/res/Crytite.png");
-  --gc-icon-fuel-cells: url("/static/img/res/Brennzellen.png");
-  --gc-icon-energy: url("/static/img/res/Energie.png");
+  --gc-icon-ferronit: url("/static/img/res/Ferronit.webp");
+  --gc-icon-crytite: url("/static/img/res/Crytite.webp");
+  --gc-icon-fuel-cells: url("/static/img/res/Brennzellen.webp");
+  --gc-icon-energy: url("/static/img/res/Energie.webp");
 }
 
 .gc-res-icon{
