@@ -150,10 +150,11 @@
       {% set owned = (unit.stock if unit.stock is defined else planet_defense.get(unit.defense_key, 0))|int %}
       {% set _def_img = unit.icon|default('/static/img/defense/' ~ unit.defense_key ~ '.png') %}
       {% set _def_img_fallback = url_for('static', filename='img/defense/sentinel_turret.png') %}
+      {% set _card_lazy = loop.index0 >= 3 %}
       <article class="gc-ship-card gc-prog-card {{ row_class }}{% if unit.queue_job is defined and unit.queue_job %} gc-ship-card--in-queue{% if unit.queue_job.status == 'active' %} gc-ship-card--queue-active{% else %} gc-ship-card--queue-pending{% endif %}{% endif %}"
                data-defense-card="{{ unit.defense_key }}" data-unlocked="1" role="listitem">
         <div class="gc-bld-card-hero">
-          {{ render_raster_picture(_def_img, '', 'gc-bld-card-hero-img', true, true, "this.onerror=null;this.src='" ~ _def_img_fallback ~ "';") }}
+          {{ render_raster_picture(_def_img, '', 'gc-bld-card-hero-img', _card_lazy, _card_lazy, "this.onerror=null;this.src='" ~ _def_img_fallback ~ "';") }}
           <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
           {{ render_defense_stock_chip(unit.defense_key, owned) }}
           <div class="gc-bld-card-hero-title">

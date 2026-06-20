@@ -22,7 +22,34 @@ def _panel_row(rows_by_tab: dict, building_type: str) -> dict | None:
     return None
 
 
-def test_gc747b_buildings_tab_performance_contract():
+def test_gc748_card_asset_lazyload_contract():
+    """GC-748: card hero images lazy-load below first row with stable dimensions."""
+    progression = (ROOT / "templates" / "partials" / "progression_cards.html").read_text(encoding="utf-8")
+    macro = progression.split("{% macro render_raster_picture")[1].split("{% endmacro %}")[0]
+    assert 'width="{{ width|int }}"' in macro
+    assert 'height="{{ height|int }}"' in macro
+    assert 'decoding="async"' in macro
+    assert 'loading="lazy"' in macro
+    assert 'fetchpriority="high"' in macro
+
+    for rel in (
+        "templates/buildings.html",
+        "templates/research.html",
+        "templates/shipyard.html",
+        "templates/defense.html",
+    ):
+        html = (ROOT / rel).read_text(encoding="utf-8")
+        assert "loop.index0 >= 3" in html, rel
+
+    css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+    hero_img = css.split(".gc-bld-card-hero-img{")[1].split("}", 1)[0]
+    assert "aspect-ratio: 16 / 9" in hero_img
+
+    fleet = (ROOT / "templates" / "fleet.html").read_text(encoding="utf-8")
+    assert "fleet-ship-tbl-img" in fleet
+    assert 'decoding="async"' in fleet
+
+
     """GC-747B: buildings SSR/poll slimdown + CSS webp resource icons."""
     src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
     panel_fn = src.split("function gameStateIncludePanel()")[1].split("function gameStateWantPanelPoll")[0]

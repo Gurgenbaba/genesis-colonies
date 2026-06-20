@@ -2,17 +2,20 @@
 
 {# Shared compact progression row helpers (Buildings + Research) #}
 
-{# GC-555 — WebP + PNG fallback for large card artwork #}
-{% macro render_raster_picture(src, alt='', class='', lazy=true, low_priority=true, onerror='') %}
+{# GC-555 — WebP + PNG fallback for large card artwork; GC-748 — lazy below first row #}
+{% macro render_raster_picture(src, alt='', class='', lazy=true, low_priority=none, onerror='', width=320, height=180) %}
+  {% set _low_pri = low_priority if low_priority is not none else lazy %}
   {% set _webp = src|webp_static %}
   <picture>
     <source srcset="{{ _webp }}" type="image/webp">
     <img src="{{ src }}"
          alt="{{ alt }}"
          class="{{ class }}"
-         {% if lazy %}loading="lazy"{% endif %}
+         width="{{ width|int }}"
+         height="{{ height|int }}"
+         {% if lazy %}loading="lazy"{% else %}loading="eager"{% endif %}
          decoding="async"
-         {% if low_priority %}fetchpriority="low"{% endif %}
+         {% if not lazy %}fetchpriority="high"{% elif _low_pri %}fetchpriority="low"{% endif %}
          {% if onerror %}onerror="{{ onerror }}"{% endif %}>
   </picture>
 {% endmacro %}

@@ -154,12 +154,13 @@
       {% set owned = (ship.owned_count if ship.owned_count is defined else planet_ships.get(ship.ship_key, 0))|int %}
       {% set _ship_img = ship.icon if ship.icon else url_for('static', filename='img/ships/seed_ark.png') %}
       {% set _ship_img_fallback = url_for('static', filename='img/ships/seed_ark.png') %}
+      {% set _card_lazy = loop.index0 >= 3 %}
       <article class="gc-ship-card gc-prog-card {{ row_class }}{% if ship.queue_job is defined and ship.queue_job %} gc-ship-card--in-queue{% if ship.queue_job.status == 'active' %} gc-ship-card--queue-active{% else %} gc-ship-card--queue-pending{% endif %}{% endif %}"
                data-ship-card
                data-ship-key="{{ ship.ship_key }}"
                data-unlocked="1" role="listitem">
         <div class="gc-bld-card-hero">
-          {{ render_raster_picture(_ship_img, '', 'gc-bld-card-hero-img', true, true, "this.onerror=null;this.src='" ~ _ship_img_fallback ~ "';") }}
+          {{ render_raster_picture(_ship_img, '', 'gc-bld-card-hero-img', _card_lazy, _card_lazy, "this.onerror=null;this.src='" ~ _ship_img_fallback ~ "';") }}
           <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
           {{ render_ship_card_stock(ship.ship_key, owned) }}
           <div class="gc-bld-card-hero-title">

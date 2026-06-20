@@ -186,15 +186,16 @@
   {% endif %}
 {% endmacro %}
 
-{% macro render_hero_img_stack(src, fallback, qj) %}
+{% macro render_hero_img_stack(src, fallback, qj, hero_lazy=true) %}
   {% set _active = qj is defined and qj and qj.status == 'active' %}
+  {% set _onerr = "this.onerror=null;this.src='" ~ fallback ~ "';" %}
   <div class="gc-bld-hero-img-stack{% if _active %} gc-bld-hero-img-stack--progress{% endif %}"
        {% if _active %}style="--hero-progress-pct: {{ qj.progress_pct|default(0)|int }}%;"{% endif %}>
     {% if _active %}
-      {{ render_raster_picture(src, '', 'gc-bld-card-hero-img gc-bld-card-hero-img--muted', true, true, "this.onerror=null;this.src='" ~ fallback ~ "';") }}
-      {{ render_raster_picture(src, '', 'gc-bld-card-hero-img gc-bld-card-hero-img--color', true, true, "this.onerror=null;this.src='" ~ fallback ~ "';") }}
+      {{ render_raster_picture(src, '', 'gc-bld-card-hero-img gc-bld-card-hero-img--muted', hero_lazy, hero_lazy, _onerr) }}
+      {{ render_raster_picture(src, '', 'gc-bld-card-hero-img gc-bld-card-hero-img--color', hero_lazy, hero_lazy, _onerr) }}
     {% else %}
-      {{ render_raster_picture(src, '', 'gc-bld-card-hero-img', true, true, "this.onerror=null;this.src='" ~ fallback ~ "';") }}
+      {{ render_raster_picture(src, '', 'gc-bld-card-hero-img', hero_lazy, hero_lazy, _onerr) }}
     {% endif %}
   </div>
 {% endmacro %}
@@ -298,7 +299,7 @@
   </div>
 {% endmacro %}
 
-{% macro render_research_card(tech, rq_summary, queue_full) %}
+{% macro render_research_card(tech, rq_summary, queue_full, hero_lazy=true) %}
   {% set locked = not tech.requirements_met %}
   {% set curr_lvl = (tech.level or 0)|int %}
   {% set target_lvl = (tech.target_level if tech.target_level is defined else (curr_lvl + 1)) %}
@@ -334,7 +335,7 @@
            role="listitem">
 
     <div class="gc-bld-card-hero">
-      {{ render_hero_img_stack(_research_img, _research_img_fallback, tech.queue_job if tech.queue_job is defined else none) }}
+      {{ render_hero_img_stack(_research_img, _research_img_fallback, tech.queue_job if tech.queue_job is defined else none, hero_lazy) }}
       {% if tech.queue_job is defined and tech.queue_job %}
       {{ render_hero_queue(tech.queue_job, 'research', 'research') }}
       {% endif %}
@@ -380,7 +381,8 @@
   {% else %}
     <div class="gc-building-grid research-prog-list research-tech-grid" role="list">
       {% for tech in rows %}
-        {{ render_research_card(tech, rq_summary, queue_full) }}
+        {% set _card_lazy = loop.index0 >= 3 %}
+        {{ render_research_card(tech, rq_summary, queue_full, _card_lazy) }}
       {% endfor %}
     </div>
   {% endif %}

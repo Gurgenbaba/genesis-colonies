@@ -5608,6 +5608,7 @@ body:not(.gc-perf-idle) .research-bar-fill{
   height: 100%;
   object-fit: cover;
   object-position: center 35%;
+  aspect-ratio: 16 / 9;
 }
 
 /* GC-555 — picture wrapper fills hero slots */
