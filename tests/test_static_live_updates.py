@@ -330,6 +330,7 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     assert '"overview"' in src.split("_SSR_SKIP_INIT_GAME_STATE_PAGES")[1].split("function shouldSkipInitGameStateAfterSsr")[0]
     skip_fn = src.split("function shouldSkipInitGameStateAfterSsr(page, opts)")[1].split("function bootstrapResourceLiveFromDom")[0]
     assert "opts.forceGameState" in skip_fn
+    assert "opts && opts.pjax && pageHasSsrLiveBoot()" in skip_fn
     assert "opts && opts.force) return false" not in skip_fn
     init_body = src.split("const afterInit = async () => {")[1].split("if (page === \"messages\")")[0]
     assert "shouldSkipInitGameStateAfterSsr(page, opts)" in init_body
@@ -337,6 +338,18 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     pjax = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
     assert "skipHydrate: opts.skipHydrate !== false" in pjax
     assert "pjax: true" in pjax
+    cleanup = src.split("GC.cleanupPage = function cleanupPage()")[1].split("GC.abortGameLoop")[0]
+    assert "abortInFlightGameStateFetches()" in cleanup
+
+
+def test_app_gc745_pjax_server_fastpath():
+    """GC-745: PJAX requests skip heavy shell globals and use poll live path."""
+    app_py = _read("app.py")
+    assert "def _is_pjax_request()" in app_py
+    assert "def _is_lightweight_layout_request()" in app_py
+    assert "_is_pjax_request()" in app_py.split("use_poll_live_path =")[1].split("try:")[0]
+    inject = app_py.split("def inject_globals()")[1].split("@app.route", 1)[0]
+    assert "_is_lightweight_layout_request()" in inject
 
 
 def test_gc744_resource_icons_use_webp_picture():
@@ -358,6 +371,8 @@ def test_main_js_gc743_deferred_chat_and_news_boot():
     assert "GC_DEFER_CHAT_BOOT_MS = 500" in src
     assert "GC_DEFER_WHATS_NEW_MS = 800" in src
     assert "function scheduleDeferredChatBoot()" in src
+    chat_boot = src.split("function scheduleDeferredChatBoot()")[1].split("function syncScopedPlanetIds")[0]
+    assert "GC._chatBootScheduled || GC._chatBootstrapDone" in chat_boot
     assert "scheduleDeferredChatBoot()" in src.split("const afterInit = async () => {")[1].split("if (page === \"messages\")")[0]
     whats_new = src.split("function initWhatsNew()")[1].split("function initVisibilityPolling")[0]
     assert "GC.setSafeTimeout(loadWhatsNew, GC_DEFER_WHATS_NEW_MS)" in whats_new

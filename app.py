@@ -294,10 +294,21 @@ _SIMPLE_LAYOUT_ENDPOINTS = frozenset(
 )
 
 
+def _is_pjax_request() -> bool:
+    from flask import request
+
+    return str(request.headers.get("X-PJAX", "")).strip().lower() in ("1", "true", "yes")
+
+
 def _is_simple_layout_request() -> bool:
     from flask import request
 
     return str(request.endpoint or "") in _SIMPLE_LAYOUT_ENDPOINTS
+
+
+def _is_lightweight_layout_request() -> bool:
+    """Auth/landing pages and PJAX fragment fetches — shell globals are unused client-side."""
+    return _is_simple_layout_request() or _is_pjax_request()
 
 
 @app.context_processor
@@ -333,8 +344,8 @@ def inject_globals():
     except Exception:
         settings = {}
 
-    # motd / universe news (safe) — skip on auth/simple pages (GC-741)
-    simple_layout = _is_simple_layout_request()
+    # motd / universe news (safe) — skip on auth/simple pages and PJAX (GC-741, GC-745)
+    simple_layout = _is_lightweight_layout_request()
     try:
         if not simple_layout:
             raw_motd_enabled = settings.get("motd_enabled", "0")
@@ -618,7 +629,7 @@ def _load_page_live_context(
     if own_conn:
         conn = db()
     src = str(finish_source or "page_load")
-    use_poll_live_path = src == "game_state"
+    use_poll_live_path = src == "game_state" or _is_pjax_request()
     try:
         try:
             if use_poll_live_path:

@@ -819,6 +819,7 @@
   function shouldSkipInitGameStateAfterSsr(page, opts) {
     if (opts && opts.skipGameState) return true;
     if (opts && opts.forceGameState) return false;
+    if (opts && opts.pjax && pageHasSsrLiveBoot()) return true;
     if (!_SSR_SKIP_INIT_GAME_STATE_PAGES.has(String(page || ""))) return false;
     return pageHasSsrLiveBoot();
   }
@@ -850,6 +851,8 @@
   const GC_DEFER_WHATS_NEW_MS = 800;
 
   function scheduleDeferredChatBoot() {
+    if (GC._chatBootScheduled || GC._chatBootstrapDone) return;
+    GC._chatBootScheduled = true;
     GC.setSafeTimeout(() => {
       if (!shouldRunGameLoop() || _authLoopAborted) return;
       if (typeof GC.initChat === "function") GC.initChat();
@@ -1172,6 +1175,7 @@
 
   GC.cleanupPage = function cleanupPage() {
     console.debug("[GC] cleanupPage");
+    abortInFlightGameStateFetches();
     _clearMovementCountdownExpiryState();
     if (_movementCountdownRefreshTimer) {
       clearTimeout(_movementCountdownRefreshTimer);
@@ -1671,8 +1675,8 @@
       if (!skipInitFetch && typeof GC.refreshGameState === "function") {
         await GC.refreshGameState("page_init");
       } else {
-        if (shouldSkipInitGameStateAfterSsr(page, opts)) {
-          console.debug("[GC] initPage skip game-state (SSR fresh)", page);
+        if (skipInitFetch) {
+          console.debug("[GC] initPage skip game-state (SSR fresh)", page, opts && opts.pjax ? "pjax" : "");
           bootstrapResourceLiveFromDom();
           _bootstrapPageQueueCompactLiveFromDom();
         }
