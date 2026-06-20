@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% from "partials/progression_cards.html" import render_resource_icon with context %}
 <html lang="{{ GC_LOCALE }}">
 <head>
   <meta charset="UTF-8">
@@ -170,7 +171,7 @@
               <span class="hud-res-label">{{ T('resource_metal') }}</span>
               <div class="hud-res-body res-block res-block-metal">
                 <span class="hud-res-badge" aria-hidden="true">{{ T('resource_metal_short', 'FN') }}</span>
-                <img src="{{ url_for('static', filename='img/res/Ferronit.png') }}" class="res-icon res-icon--hud" alt="{{ T('resource_metal') }}">
+                {{ render_resource_icon('metal', hud=true, lazy=false, priority='high', alt=T('resource_metal')) }}
                 <span class="hud-res-amount">
                   <span class="res-value metal">{{ (player.metal if player is defined else 0)|fmt_int }}</span>
                   <span class="hud-res-cap-line">
@@ -186,7 +187,7 @@
               <span class="hud-res-label">{{ T('resource_crystal') }}</span>
               <div class="hud-res-body res-block res-block-crystal">
                 <span class="hud-res-badge" aria-hidden="true">{{ T('resource_crystal_short', 'CT') }}</span>
-                <img src="{{ url_for('static', filename='img/res/Crytite.png') }}" class="res-icon res-icon--hud" alt="{{ T('resource_crystal') }}">
+                {{ render_resource_icon('crystal', hud=true, lazy=false, priority='high', alt=T('resource_crystal')) }}
                 <span class="hud-res-amount">
                   <span class="res-value crystal">{{ (player.crystal if player is defined else 0)|fmt_int }}</span>
                   <span class="hud-res-cap-line">
@@ -204,7 +205,7 @@
               <span class="hud-res-label">{{ T('resource_fuel_cells') }}</span>
               <div class="hud-res-body res-block res-block-fuel-cells">
                 <span class="hud-res-badge" aria-hidden="true">{{ T('resource_fuel_cells_short', 'BZ') }}</span>
-                <img src="{{ url_for('static', filename='img/res/Brennzellen.png') }}" class="res-icon res-icon--hud" alt="{{ T('resource_fuel_cells') }}">
+                {{ render_resource_icon('fuel_cells', hud=true, lazy=false, priority='high', alt=T('resource_fuel_cells')) }}
                 <span class="hud-res-amount">
                   <span class="res-value fuel_cells">{{ fc_have|fmt_int }}</span>
                   <span class="hud-res-cap-line">
@@ -228,7 +229,7 @@
                  title="{{ T('energy', 'Energie') }}">
               <span class="hud-res-label">{{ T('energy', 'Energie') }}</span>
               <div class="hud-res-body res-block res-block-energy">
-                <img src="{{ url_for('static', filename='img/res/Energie.png') }}" class="res-icon" alt="{{ T('energy', 'Energie') }}">
+                {{ render_resource_icon('energy', hud=true, lazy=false, priority='high', alt=T('energy', 'Energie')) }}
                 <span id="res-energy">{{ eu|fmt_int }}/{{ et|fmt_int }}</span>
               </div>
               <span class="res-rate energy" data-res-rate="energy" aria-hidden="true" style="visibility:hidden"></span>

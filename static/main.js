@@ -818,7 +818,7 @@
 
   function shouldSkipInitGameStateAfterSsr(page, opts) {
     if (opts && opts.skipGameState) return true;
-    if (opts && opts.force) return false;
+    if (opts && opts.forceGameState) return false;
     if (!_SSR_SKIP_INIT_GAME_STATE_PAGES.has(String(page || ""))) return false;
     return pageHasSsrLiveBoot();
   }
@@ -1641,14 +1641,18 @@
     bootstrapScoreStateFromDom();
     bindFormattedNumberInputs(document.getElementById("main-content") || document);
 
+    const skipFreshServerHtml = skipHydrate || shouldSkipInitGameStateAfterSsr(page, opts);
     const hydrated =
       shouldRunGameLoop() && !skipHydrate
         ? hydratePageFromLastState({ skipMessagesUnread: page === "messages" })
         : false;
 
     if (shouldRunGameLoop()) {
-      if (!hydrated) _hydratePageQueueCompactsFromState();
-      else _bootstrapPageQueueCompactLiveFromDom();
+      if (skipFreshServerHtml || hydrated) {
+        _bootstrapPageQueueCompactLiveFromDom();
+      } else {
+        _hydratePageQueueCompactsFromState();
+      }
     }
 
     if (!shouldRunGameLoop()) {
@@ -21649,7 +21653,8 @@
 
         await GC.initPage({
           force: true,
-          skipHydrate: Boolean(opts.skipHydrate),
+          pjax: true,
+          skipHydrate: opts.skipHydrate !== false,
           skipGameState: Boolean(opts.skipGameState),
         });
         if (document.querySelector(".galaxy-page")) prefetchGalaxyAdjacent();

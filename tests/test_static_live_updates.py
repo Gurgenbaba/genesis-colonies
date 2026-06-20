@@ -328,9 +328,28 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     assert "function shouldSkipInitGameStateAfterSsr(page, opts)" in src
     assert "initPage skip game-state (SSR fresh)" in src
     assert '"overview"' in src.split("_SSR_SKIP_INIT_GAME_STATE_PAGES")[1].split("function shouldSkipInitGameStateAfterSsr")[0]
+    skip_fn = src.split("function shouldSkipInitGameStateAfterSsr(page, opts)")[1].split("function bootstrapResourceLiveFromDom")[0]
+    assert "opts.forceGameState" in skip_fn
+    assert "opts && opts.force) return false" not in skip_fn
     init_body = src.split("const afterInit = async () => {")[1].split("if (page === \"messages\")")[0]
     assert "shouldSkipInitGameStateAfterSsr(page, opts)" in init_body
     assert "bootstrapResourceLiveFromDom()" in init_body
+    pjax = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
+    assert "skipHydrate: opts.skipHydrate !== false" in pjax
+    assert "pjax: true" in pjax
+
+
+def test_gc744_resource_icons_use_webp_picture():
+    """GC-744: HUD/overview resource icons prefer WebP with eager above-fold load."""
+    macro = _read("templates/partials/progression_cards.html")
+    assert "render_resource_icon(res_key, size='', lazy=true, priority='', hud=false, alt='')" in macro
+    assert "icon_url|webp_static" in macro
+    assert "loading=\"lazy\"" in macro
+    assert "loading=\"eager\"" in macro
+    overview = _read("templates/overview.html")
+    assert "render_resource_icon('metal', 'xl', lazy=false, priority='high')" in overview
+    base = _read("templates/base.html")
+    assert "render_resource_icon('metal', hud=true, lazy=false, priority='high'" in base
 
 
 def test_main_js_gc743_deferred_chat_and_news_boot():

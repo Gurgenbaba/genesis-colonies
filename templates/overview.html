@@ -92,7 +92,7 @@
 
     <article class="overview-res-dash-card overview-res-dash-card--metal" id="overview-metal-val">
       <div class="overview-res-dash-hero">
-        {{ render_resource_icon('metal', 'xl') }}
+        {{ render_resource_icon('metal', 'xl', lazy=false, priority='high') }}
         <div class="overview-res-dash-hero-overlay" aria-hidden="true"></div>
         <div class="overview-res-dash-hero-title">
           <span class="overview-res-dash-title">{{ T('resource_metal', 'Ferronit') }}</span>
@@ -120,7 +120,7 @@
 
     <article class="overview-res-dash-card overview-res-dash-card--crystal" id="overview-crystal-val">
       <div class="overview-res-dash-hero">
-        {{ render_resource_icon('crystal', 'xl') }}
+        {{ render_resource_icon('crystal', 'xl', lazy=false, priority='high') }}
         <div class="overview-res-dash-hero-overlay" aria-hidden="true"></div>
         <div class="overview-res-dash-hero-title">
           <span class="overview-res-dash-title">{{ T('resource_crystal', 'Crytite') }}</span>
@@ -149,7 +149,7 @@
     <article class="overview-res-dash-card overview-res-dash-card--energy{% if energy_total == 0 %} overview-energy-zero{% elif (nrg.ratio or 1) >= 1 %} overview-energy-ok{% elif (nrg.ratio or 1) >= 0.5 %} overview-energy-low{% else %} overview-energy-critical{% endif %}"
              id="overview-energy-card">
       <div class="overview-res-dash-hero">
-        {{ render_resource_icon('energy', 'xl') }}
+        {{ render_resource_icon('energy', 'xl', lazy=false, priority='high') }}
         <div class="overview-res-dash-hero-overlay" aria-hidden="true"></div>
         <div class="overview-res-dash-hero-title">
           <span class="overview-res-dash-title">{{ T('overview_card_energy', 'Energie') }}</span>
@@ -189,7 +189,7 @@
 
     <article class="overview-res-dash-card overview-res-dash-card--fuel" id="overview-fuel-val">
       <div class="overview-res-dash-hero">
-        {{ render_resource_icon('fuel_cells', 'xl') }}
+        {{ render_resource_icon('fuel_cells', 'xl', lazy=false, priority='high') }}
         <div class="overview-res-dash-hero-overlay" aria-hidden="true"></div>
         <div class="overview-res-dash-hero-title">
           <span class="overview-res-dash-title">{{ T('resource_fuel_cells', 'Brennzellen') }}</span>

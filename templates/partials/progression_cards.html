@@ -18,7 +18,7 @@
 {% endmacro %}
 
 {# Canonical resource artwork — static/img/res/ (HUD, overview, cards, trader) #}
-{% macro render_resource_icon(res_key, size='') %}
+{% macro render_resource_icon(res_key, size='', lazy=true, priority='', hud=false, alt='') %}
   {% if res_key == 'metal' %}
     {% set icon_file = 'img/res/Ferronit.png' %}
     {% set mod = 'gc-res-metal' %}
@@ -36,12 +36,17 @@
     {% set mod = '' %}
   {% endif %}
   {% if icon_file %}
-    <img src="{{ url_for('static', filename=icon_file) }}"
-         alt=""
-         class="gc-res-icon {{ mod }}{% if size %} gc-res-icon--{{ size }}{% endif %}"
-         loading="lazy"
-         decoding="async"
-         aria-hidden="true">
+    {% set icon_url = url_for('static', filename=icon_file) %}
+    <picture>
+      <source srcset="{{ icon_url|webp_static }}" type="image/webp">
+      <img src="{{ icon_url }}"
+           alt="{{ alt }}"
+           class="{% if hud %}res-icon{% if res_key != 'energy' %} res-icon--hud{% endif %}{% else %}gc-res-icon {{ mod }}{% if size %} gc-res-icon--{{ size }}{% endif %}{% endif %}"
+           {% if lazy %}loading="lazy"{% else %}loading="eager"{% endif %}
+           decoding="async"
+           {% if priority %}fetchpriority="{{ priority }}"{% endif %}
+           {% if not alt %}aria-hidden="true"{% endif %}>
+    </picture>
   {% endif %}
 {% endmacro %}
 
