@@ -62,6 +62,7 @@ def game_client(tmp_path, monkeypatch):
     import app as app_module
 
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
 
     uname = f"live_{uuid.uuid4().hex[:8]}"
     ok, _, user = create_user(uname, "test-pass-123")
@@ -69,7 +70,8 @@ def game_client(tmp_path, monkeypatch):
     pid = int(user["id"])
 
     client = app_module.app.test_client()
-    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    with client.session_transaction() as sess:
+        sess["user_id"] = pid
     return client, pid
 
 
@@ -287,7 +289,10 @@ def test_api_game_state_poll_is_lightweight(game_client):
     assert "planet_teaser" not in body
     assert body.get("overview", {}).get("status") is None
     assert "active_fleets" in body
-    assert isinstance(body["active_fleets"], list)
+    assert isinstance(body["active_fleets"], dict)
+    assert "items" in body["active_fleets"]
+    assert isinstance(body["active_fleets"]["items"], list)
+    assert "count" in body["active_fleets"]
     assert "fleet_slots" in body
     assert isinstance(body["fleet_slots"], dict)
 

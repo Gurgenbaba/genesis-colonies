@@ -360,15 +360,15 @@ def test_resolve_expedition_outcome_applies_loot_mult(gd_db):
     from game.expedition_events import resolve_expedition_outcome
 
     base = resolve_expedition_outcome(
-        42,
-        cargo_total=1_000_000,
+        1,
+        cargo_total=500_000,
         expedition_ship_count=3,
         flight_seconds=120,
         directive_flags={"expedition_loot_mult": 1.0},
     )
     boosted = resolve_expedition_outcome(
-        42,
-        cargo_total=1_000_000,
+        1,
+        cargo_total=500_000,
         expedition_ship_count=3,
         flight_seconds=120,
         directive_flags={"expedition_loot_mult": 2.0},

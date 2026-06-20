@@ -620,8 +620,10 @@ body.gc-has-open-popover .admin-card:has(.gc-hud-select.is-open){
 .gc-hud-user{
   display:flex;
   align-items:center;
-  gap: 10px;
-  flex: 0 0 auto;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
   white-space: nowrap;
 }
 
@@ -3904,22 +3906,59 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   letter-spacing: 0.06em;
 }
 
-.gc-discord-connected-badge{
+.gc-commander-identity{
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: 6px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  border: 1px solid rgba(88, 101, 242, 0.45);
-  background: rgba(88, 101, 242, 0.12);
-  color: #c8d0ff;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1.2;
-  vertical-align: middle;
-  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.gc-commander-discord-status{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.gc-commander-discord-status--linked{
+  color: rgba(127, 255, 217, 0.95);
+  background: rgba(127, 255, 217, 0.1);
+  border: 1px solid rgba(127, 255, 217, 0.32);
+  cursor: default;
+}
+
+.gc-commander-discord-check{
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.gc-commander-discord-status--unlinked{
+  color: rgba(150, 162, 185, 0.62);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(150, 162, 185, 0.18);
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.gc-commander-discord-status--unlinked:hover,
+.gc-commander-discord-status--unlinked:focus-visible{
+  color: rgba(190, 198, 220, 0.88);
+  border-color: rgba(88, 101, 242, 0.42);
+  background: rgba(88, 101, 242, 0.1);
+  outline: none;
+}
+
+.gc-commander-discord-icon{
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
 }
 
 .gc-options-discord{
@@ -15011,7 +15050,199 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   margin-left: 0;
 }
 
-/* GC-640A — global active fleet HUD (shell, player-wide) */
+/* GC-654 — global fleet drawer under resource bar */
+.gc-fleet-drawer-root{
+  width: 100%;
+  margin-top: 0;
+  border-top: 1px solid rgba(70, 229, 255, 0.35);
+  border-bottom: 1px solid rgba(70, 229, 255, 0.22);
+  background: linear-gradient(180deg, rgba(6, 12, 24, 0.98), rgba(4, 8, 18, 0.96));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.38);
+  position: relative;
+  z-index: calc(var(--gc-z-sticky, 40) - 1);
+}
+
+.gc-fleet-drawer-root::before{
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 6px;
+  background: rgba(70, 229, 255, 0.45);
+  clip-path: polygon(50% 0, 0 100%, 100% 100%);
+  pointer-events: none;
+}
+
+.gc-fleet-drawer-toggle{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--gc-text-soft);
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gc-fleet-drawer-toggle:hover,
+.gc-fleet-drawer-toggle:focus-visible{
+  color: var(--gc-primary-2);
+  outline: none;
+}
+
+.gc-fleet-drawer-chevron{
+  flex: 0 0 auto;
+  color: rgba(127, 255, 217, 0.75);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.gc-fleet-drawer-toggle-summary{
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc-fleet-drawer-toggle-actions{
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.gc-fleet-drawer-fleet-link{
+  font-size: 0.72rem;
+  color: rgba(127, 255, 217, 0.72);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.gc-fleet-drawer-fleet-link:hover,
+.gc-fleet-drawer-fleet-link:focus-visible{
+  color: var(--gc-primary-2);
+  text-decoration: underline;
+}
+
+.gc-fleet-drawer-arrow{
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid rgba(127, 255, 217, 0.55);
+  transition: transform 0.16s ease;
+}
+
+.gc-fleet-drawer-root.is-expanded .gc-fleet-drawer-arrow{
+  transform: rotate(180deg);
+}
+
+.gc-fleet-drawer-panel{
+  border-top: 1px solid rgba(70, 229, 255, 0.14);
+  padding: 0 12px 10px;
+}
+
+.gc-fleet-drawer-panel[hidden]{
+  display: none !important;
+}
+
+.gc-fleet-drawer-list{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: 8px;
+}
+
+.gc-fleet-drawer-row{
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  padding: 8px 10px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.14);
+  background: rgba(8, 14, 28, 0.72);
+}
+
+.gc-fleet-drawer-row-head{
+  grid-column: 1 / -1;
+}
+
+.gc-fleet-drawer-row-mission{
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gc-primary-2);
+}
+
+.gc-fleet-drawer-row-route{
+  grid-column: 1 / 2;
+  font-size: 0.76rem;
+  color: var(--gc-text-soft);
+  word-break: break-word;
+}
+
+.gc-fleet-drawer-row-meta{
+  grid-column: 1 / 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 0.72rem;
+  color: rgba(180, 210, 240, 0.78);
+}
+
+.gc-fleet-drawer-row-countdown{
+  color: rgba(127, 255, 217, 0.92);
+  font-weight: 600;
+}
+
+.gc-fleet-drawer-row-action{
+  grid-column: 2 / 3;
+  grid-row: 2 / 4;
+  align-self: center;
+  white-space: nowrap;
+}
+
+.gc-fleet-drawer-more{
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.gc-fleet-drawer-root.is-empty .gc-fleet-drawer-toggle{
+  opacity: 0.82;
+}
+
+@media (max-width: 720px){
+  .gc-fleet-drawer-row{
+    grid-template-columns: 1fr;
+  }
+
+  .gc-fleet-drawer-row-action{
+    grid-column: 1 / -1;
+    grid-row: auto;
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .gc-fleet-drawer-toggle-summary{
+    white-space: normal;
+  }
+}
+
+/* GC-640A — legacy fleet HUD chip styles (fleet page / badges) */
 .gc-fleet-global-hud{
   display: inline-flex;
   align-items: center;
@@ -15275,7 +15506,13 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 .gc-hud-panel-user{
-  max-width: min(240px, 42vw);
+  flex: 1 1 auto;
+  min-width: 148px;
+  max-width: min(320px, 38vw);
+}
+
+.gc-hud-panel-user .gc-commander-identity{
+  min-width: 0;
 }
 
 .gc-hud-panel-user .gc-user-name{
@@ -15283,6 +15520,12 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.82rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.gc-hud-panel-user .gc-admin-badge{
+  flex: 0 0 auto;
 }
 
 .gc-header-cmd .gc-logo{
@@ -15761,7 +16004,15 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
     justify-content: flex-end;
   }
 
-  .gc-hud-panel-user{ max-width: min(200px, 55vw); }
+  .gc-hud-panel-user{
+    min-width: 120px;
+    max-width: min(240px, 62vw);
+  }
+
+  .gc-hud-user .logout-btn{
+    padding: 6px 10px !important;
+    font-size: 0.72rem;
+  }
 
   .gc-header-cmd .resource-bar.resource-bar-cmd{
     grid-template-columns: repeat(3, minmax(0, 1fr));

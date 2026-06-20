@@ -240,3 +240,15 @@ def fleet_live_state_response(state: Dict[str, Any]) -> Dict[str, Any]:
     payload.setdefault("server_time", float(ts))
     payload.setdefault("server_now", ts)
     return fleet_ok(payload, message_key="fleet_state_ok")
+
+
+def fleet_recall_movement(
+    player_id: int,
+    movement_id: int,
+    *,
+    conn=None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Recall/cancel an active fleet movement (GC-654)."""
+    from .fleet import recall_fleet_movement
+
+    return recall_fleet_movement(int(player_id), int(movement_id), conn=conn)

@@ -7082,6 +7082,353 @@
 
   let _lastHudOnline = null;
   let _globalFleetHudSig = "";
+  let _globalFleetDrawerBound = false;
+  const FLEET_DRAWER_LS_EXPANDED = "gc:fleetDrawer:expanded";
+  const FLEET_DRAWER_LS_SHOW_ALL = "gc:fleetDrawer:showAll";
+
+  function normalizeActiveFleetsPayload(raw) {
+    if (!raw) {
+      return { count: 0, visible_limit: 5, next_remaining_seconds: 0, items: [] };
+    }
+    if (Array.isArray(raw)) {
+      const items = raw;
+      const primary = items.length ? pickPrimaryFleetMovement(items) : null;
+      return {
+        count: items.length,
+        visible_limit: 5,
+        next_remaining_seconds: Number(primary?.remaining_seconds || 0),
+        items,
+      };
+    }
+    const items = Array.isArray(raw.items) ? raw.items : [];
+    return {
+      count: Number(raw.count) || items.length,
+      visible_limit: Number(raw.visible_limit) || 5,
+      next_remaining_seconds: Number(raw.next_remaining_seconds) || 0,
+      items,
+    };
+  }
+  GC.normalizeActiveFleetsPayload = normalizeActiveFleetsPayload;
+
+  function activeFleetsItems(raw) {
+    return normalizeActiveFleetsPayload(raw).items;
+  }
+
+  function isFleetDrawerExpanded() {
+    return localStorage.getItem(FLEET_DRAWER_LS_EXPANDED) === "1";
+  }
+
+  function setFleetDrawerExpanded(expanded) {
+    localStorage.setItem(FLEET_DRAWER_LS_EXPANDED, expanded ? "1" : "0");
+  }
+
+  function isFleetDrawerShowAll() {
+    return localStorage.getItem(FLEET_DRAWER_LS_SHOW_ALL) === "1";
+  }
+
+  function setFleetDrawerShowAll(showAll) {
+    localStorage.setItem(FLEET_DRAWER_LS_SHOW_ALL, showAll ? "1" : "0");
+  }
+
+  function formatFleetDrawerRoute(mv) {
+    if (!mv || typeof mv !== "object") return "–";
+    const originName = String(mv.origin_name || "").trim();
+    const originCoords = String(mv.origin_coords || "").trim();
+    const targetName = String(mv.target_name || formatGlobalFleetHudTarget(mv) || "").trim();
+    const targetCoords = String(mv.target_coords || "").trim();
+    const origin = originName && originCoords ? `${originName} ${originCoords}` : (originCoords || originName || "–");
+    const target = targetName && targetCoords && targetName !== targetCoords
+      ? `${targetName} ${targetCoords}`
+      : (targetCoords || targetName || "–");
+    return `${origin} → ${target}`;
+  }
+
+  function patchFleetDrawerRowCountdown(row, mv) {
+    const cdEl = row.querySelector("[data-fleet-drawer-countdown]");
+    const statusEl = row.querySelector("[data-fleet-drawer-status]");
+    if (!cdEl || !mv) return;
+    const phase = mv.phase || mv.leg_phase || mv.status || "";
+    const legKey = globalFleetLegKey(mv, phase);
+    if (statusEl) {
+      const statusKey = mv.status_label || legKey;
+      _setIfChanged(statusEl, t(statusKey, statusKey));
+    }
+    const countdownAt = Number(mv.countdown_at || 0);
+    if (!countdownAt) {
+      cdEl.textContent = "–";
+      cdEl.removeAttribute("data-timer-target");
+      cdEl.removeAttribute("data-countdown-at");
+      cdEl.removeAttribute("data-countdown-key");
+      delete cdEl.dataset.serverRemaining;
+      return;
+    }
+    const countdownKey = `${mv.movement_id || mv.id}:${phase}:${countdownAt}`;
+    const srvRem = Number(mv.remaining_seconds);
+    applyQueueJobTimerAttrs(
+      cdEl,
+      countdownAt,
+      "fleet",
+      "fleet",
+      Number.isFinite(srvRem) && srvRem >= 0 ? Math.ceil(srvRem) : undefined
+    );
+    cdEl.dataset.countdownScope = "fleet";
+    cdEl.dataset.countdownKey = countdownKey;
+    cdEl.classList.add("fleet-active-countdown");
+    if (Number.isFinite(srvRem) && srvRem >= 0) {
+      assignMonotonicServerRemaining(cdEl, Math.ceil(srvRem), countdownAt);
+    }
+    _setIfChanged(
+      cdEl,
+      formatCountdownRemain(movementRemainingSeconds(countdownAt, getTimerServerNow(), mv.remaining_seconds))
+    );
+  }
+
+  function createFleetDrawerRow(mv) {
+    const row = document.createElement("article");
+    row.className = "gc-fleet-drawer-row";
+    row.dataset.fleetDrawerRow = "1";
+    row.setAttribute("role", "listitem");
+
+    const mission = String(mv.mission || mv.mission_type || "custom");
+    const missionKey = mv.mission_label_key || `fleet_mission_${mission}`;
+
+    const head = document.createElement("div");
+    head.className = "gc-fleet-drawer-row-head";
+    const missionEl = document.createElement("span");
+    missionEl.className = `gc-fleet-drawer-row-mission gc-fleet-hud-mission--${mission}`;
+    missionEl.textContent = t(missionKey, mission);
+    head.appendChild(missionEl);
+    row.appendChild(head);
+
+    const routeEl = document.createElement("div");
+    routeEl.className = "gc-fleet-drawer-row-route";
+    routeEl.textContent = formatFleetDrawerRoute(mv);
+    row.appendChild(routeEl);
+
+    const meta = document.createElement("div");
+    meta.className = "gc-fleet-drawer-row-meta";
+    const statusEl = document.createElement("span");
+    statusEl.className = "gc-fleet-drawer-row-status";
+    statusEl.dataset.fleetDrawerStatus = "1";
+    meta.appendChild(statusEl);
+
+    const arrivalLabel = document.createElement("span");
+    arrivalLabel.className = "gc-fleet-drawer-row-arrival-label";
+    arrivalLabel.textContent = t("fleet_drawer_arrival_in", "Ankunft in:");
+    meta.appendChild(arrivalLabel);
+
+    const cdEl = document.createElement("span");
+    cdEl.className = "gc-fleet-drawer-row-countdown gc-mono";
+    cdEl.dataset.fleetDrawerCountdown = "1";
+    meta.appendChild(cdEl);
+
+    const shipsEl = document.createElement("span");
+    shipsEl.className = "gc-fleet-drawer-row-ships";
+    shipsEl.textContent = tf("fleet_drawer_ships", { count: Number(mv.ship_count || 0) }, `Schiffe: ${Number(mv.ship_count || 0)}`);
+    meta.appendChild(shipsEl);
+    row.appendChild(meta);
+
+    patchFleetDrawerRowCountdown(row, mv);
+
+    const canAct = Boolean(mv.can_recall || mv.can_cancel);
+    if (canAct) {
+      const actionBtn = document.createElement("button");
+      actionBtn.type = "button";
+      actionBtn.className = "gc-fleet-drawer-row-action gc-btn gc-btn-ghost gc-btn-xs";
+      actionBtn.dataset.fleetDrawerRecall = "1";
+      actionBtn.dataset.movementId = String(mv.movement_id || mv.id || "");
+      const actionKey = mv.action_label_key || (mv.status === "holding" ? "fleet_drawer_action_recall" : "fleet_drawer_action_cancel");
+      actionBtn.textContent = t(actionKey, actionKey);
+      if (mv.cancel_reason) {
+        actionBtn.title = t(mv.cancel_reason, mv.cancel_reason);
+      }
+      row.appendChild(actionBtn);
+    }
+
+    return row;
+  }
+
+  function syncFleetDrawerExpandedUi(root, expanded) {
+    const toggle = root.querySelector("[data-fleet-drawer-toggle]");
+    const panel = root.querySelector("[data-fleet-drawer-panel]");
+    const chevron = root.querySelector("[data-fleet-drawer-chevron]");
+    if (toggle) toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    if (panel) panel.hidden = !expanded;
+    if (chevron) chevron.textContent = expanded ? "▾" : "▸";
+    root.classList.toggle("is-expanded", expanded);
+  }
+
+  function renderGlobalFleetHud(fleetsRaw) {
+    const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
+    const payload = normalizeActiveFleetsPayload(fleetsRaw);
+    const list = payload.items;
+    const count = payload.count;
+
+    updateFleetNavBadge(count);
+
+    if (!root) {
+      if (!count) _globalFleetHudSig = "";
+      GC.startProgressTicker();
+      return;
+    }
+
+    root.hidden = false;
+    root.classList.toggle("is-empty", count === 0);
+
+    const expanded = isFleetDrawerExpanded();
+    const showAll = isFleetDrawerShowAll();
+    const visibleLimit = Math.max(1, Number(payload.visible_limit) || 5);
+    syncFleetDrawerExpandedUi(root, expanded);
+
+    const summaryEl = root.querySelector("[data-fleet-drawer-summary]");
+    const fleetLink = root.querySelector("[data-fleet-drawer-fleet-link]");
+    if (fleetLink) fleetLink.hidden = count === 0;
+
+    if (summaryEl) {
+      if (!count) {
+        _setIfChanged(summaryEl, t("fleet_drawer_empty", "Keine aktiven Flotten"));
+      } else {
+        const nextRem = Number(payload.next_remaining_seconds || 0);
+        const nextText = nextRem > 0
+          ? formatCountdownRemain(nextRem)
+          : "–";
+        _setIfChanged(
+          summaryEl,
+          tf(
+            "fleet_drawer_summary",
+            { count, next: nextText },
+            `Aktive Flotten · ${count} unterwegs · nächste Ankunft ${nextText}`
+          )
+        );
+      }
+    }
+
+    const listEl = root.querySelector("[data-fleet-drawer-list]");
+    const moreBtn = root.querySelector("[data-fleet-drawer-more]");
+    if (listEl) {
+      const signature = `${showAll ? "all" : "lim"}:${list.map((mv) => (
+        `${mv.movement_id || mv.id}:${mv.status}:${mv.phase || mv.leg_phase || ""}:${mv.countdown_at || 0}:${mv.mission || mv.mission_type || ""}:${mv.can_recall}:${mv.can_cancel}`
+      )).join("|")}`;
+      const visibleItems = showAll || count <= visibleLimit ? list : list.slice(0, visibleLimit);
+
+      if (signature !== _globalFleetHudSig) {
+        _globalFleetHudSig = signature;
+        _clearMovementCountdownExpiryState();
+        listEl.replaceChildren();
+        visibleItems.forEach((mv) => {
+          listEl.appendChild(createFleetDrawerRow(mv));
+        });
+      } else {
+        listEl.querySelectorAll("[data-fleet-drawer-row]").forEach((row, idx) => {
+          const mv = visibleItems[idx];
+          if (mv) patchFleetDrawerRowCountdown(row, mv);
+        });
+      }
+
+      if (moreBtn) {
+        if (count > visibleLimit) {
+          moreBtn.hidden = false;
+          if (showAll) {
+            _setIfChanged(moreBtn, t("fleet_drawer_show_less", "Weniger anzeigen"));
+          } else {
+            _setIfChanged(
+              moreBtn,
+              tf("fleet_drawer_show_more", { count: count - visibleLimit }, `Weitere anzeigen (${count - visibleLimit})`)
+            );
+          }
+        } else {
+          moreBtn.hidden = true;
+          moreBtn.textContent = "";
+        }
+      }
+    }
+
+    GC.startProgressTicker();
+  }
+  GC.renderGlobalFleetHud = renderGlobalFleetHud;
+
+  async function handleFleetDrawerRecall(btn) {
+    const movementId = parseInt(btn.dataset.movementId || "0", 10);
+    if (!movementId || btn.disabled) return;
+    btn.disabled = true;
+    btn.classList.add("is-loading");
+    try {
+      const res = await GC.fetchGameAction("/api/fleet/recall", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          movement_id: movementId,
+          request_id: (typeof crypto !== "undefined" && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : `fleet-recall-${Date.now()}`,
+        }),
+      });
+      if (res.state) {
+        applyActionState(res, res.ok ? "fleet_recall" : "fleet_recall_error");
+      } else if (typeof GC.refreshGameState === "function") {
+        await GC.refreshGameState("fleet_recall");
+      }
+      if (res.ok) {
+        showNotify(t("fleet_recall_success", "Flotte wurde zurückgerufen."), "success");
+      } else {
+        const errKey = res.message_key || res.error || "fleet_recall_failed";
+        showNotify(t(errKey, res.message || errKey), "error");
+      }
+    } catch (err) {
+      showNotify(t("fleet_recall_failed", "Rückruf fehlgeschlagen."), "error");
+      console.warn("[GC] fleet recall failed", err);
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove("is-loading");
+    }
+  }
+
+  function initGlobalFleetDrawer() {
+    if (_globalFleetDrawerBound) return;
+    const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
+    if (!root) return;
+    _globalFleetDrawerBound = true;
+
+    root.addEventListener("click", (e) => {
+      const recallBtn = e.target.closest("[data-fleet-drawer-recall]");
+      if (recallBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleFleetDrawerRecall(recallBtn);
+        return;
+      }
+
+      const moreBtn = e.target.closest("[data-fleet-drawer-more]");
+      if (moreBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        setFleetDrawerShowAll(!isFleetDrawerShowAll());
+        if (GC.lastState?.active_fleets) {
+          renderGlobalFleetHud(GC.lastState.active_fleets);
+        }
+        return;
+      }
+
+      if (e.target.closest("[data-fleet-drawer-fleet-link]")) return;
+
+      const toggle = e.target.closest("[data-fleet-drawer-toggle]");
+      if (toggle) {
+        e.preventDefault();
+        const next = !isFleetDrawerExpanded();
+        setFleetDrawerExpanded(next);
+        syncFleetDrawerExpandedUi(root, next);
+        if (next && GC.lastState?.active_fleets) {
+          renderGlobalFleetHud(GC.lastState.active_fleets);
+        }
+      }
+    });
+
+    syncFleetDrawerExpandedUi(root, isFleetDrawerExpanded());
+    if (GC.lastState?.active_fleets) {
+      renderGlobalFleetHud(GC.lastState.active_fleets);
+    }
+  }
+  GC.initGlobalFleetDrawer = initGlobalFleetDrawer;
 
   function pickPrimaryFleetMovement(fleets) {
     const list = Array.isArray(fleets) ? fleets : [];
@@ -7135,121 +7482,6 @@
     });
   }
   GC.updateFleetNavBadge = updateFleetNavBadge;
-
-  function patchGlobalFleetHudCountdown(hud, mv) {
-    const cdEl = hud.querySelector("[data-fleet-hud-countdown]");
-    const legLabelEl = hud.querySelector("[data-fleet-hud-leg-label]");
-    if (!cdEl || !mv) return;
-    const countdownAt = Number(mv.countdown_at || 0);
-    const phase = mv.phase || mv.leg_phase || mv.status || "";
-    const legKey = globalFleetLegKey(mv, phase);
-    if (legLabelEl) {
-      _setIfChanged(legLabelEl, t(legKey, legKey));
-    }
-    if (!countdownAt) {
-      cdEl.textContent = "–";
-      cdEl.removeAttribute("data-timer-target");
-      cdEl.removeAttribute("data-countdown-at");
-      cdEl.removeAttribute("data-countdown-key");
-      delete cdEl.dataset.serverRemaining;
-      return;
-    }
-    const countdownKey = `${mv.id}:${phase}:${countdownAt}`;
-    const srvRem = Number(mv.remaining_seconds);
-    const legChanged = !cdEl.dataset.countdownAt
-      || Number(cdEl.dataset.countdownAt || 0) !== countdownAt
-      || String(cdEl.dataset.countdownKey || "") !== countdownKey;
-    applyQueueJobTimerAttrs(
-      cdEl,
-      countdownAt,
-      "fleet",
-      "fleet",
-      Number.isFinite(srvRem) && srvRem >= 0 ? Math.ceil(srvRem) : undefined
-    );
-    cdEl.dataset.countdownScope = "fleet";
-    cdEl.dataset.countdownKey = countdownKey;
-    cdEl.classList.add("fleet-active-countdown");
-    if (legChanged) {
-      delete cdEl.dataset.refreshFiredAt;
-    } else if (Number.isFinite(srvRem) && srvRem >= 0) {
-      assignMonotonicServerRemaining(cdEl, Math.ceil(srvRem), countdownAt);
-    }
-    _setIfChanged(
-      cdEl,
-      formatCountdownRemain(movementRemainingSeconds(countdownAt, getTimerServerNow(), mv.remaining_seconds))
-    );
-  }
-
-  function renderGlobalFleetHud(fleets) {
-    const hud = document.querySelector("[data-fleet-global-hud]");
-    const list = Array.isArray(fleets) ? fleets : [];
-    const count = list.length;
-
-    updateFleetNavBadge(count);
-
-    if (!hud) {
-      if (!count) _globalFleetHudSig = "";
-      GC.startProgressTicker();
-      return;
-    }
-
-    if (!list.length) {
-      _globalFleetHudSig = "";
-      hud.hidden = true;
-      hud.classList.add("is-empty");
-      return;
-    }
-
-    const signature = list.map((mv) => (
-      `${mv.id}:${mv.status}:${mv.phase || mv.leg_phase || ""}:${mv.countdown_at || 0}:${mv.mission_type || ""}`
-    )).join("|");
-    const primary = pickPrimaryFleetMovement(list);
-
-    hud.hidden = false;
-    hud.classList.remove("is-empty");
-
-    const countEl = hud.querySelector("[data-fleet-hud-count]");
-    if (countEl) _setIfChanged(countEl, String(count));
-
-    if (primary) {
-      const mission = String(primary.mission_type || "custom");
-      const missionEl = hud.querySelector("[data-fleet-hud-mission]");
-      if (missionEl) {
-        missionEl.className = `gc-fleet-hud-mission gc-fleet-hud-mission--${mission}`;
-        _setIfChanged(missionEl, t(`fleet_mission_${mission}`, mission));
-      }
-      const statusEl = hud.querySelector("[data-fleet-hud-status]");
-      if (statusEl) {
-        _setIfChanged(statusEl, t(`fleet_status_${primary.status}`, primary.status));
-      }
-      const targetEl = hud.querySelector("[data-fleet-hud-target]");
-      if (targetEl) _setIfChanged(targetEl, formatGlobalFleetHudTarget(primary));
-      patchGlobalFleetHudCountdown(hud, primary);
-      hud.dataset.fleetHudMission = mission;
-      hud.dataset.fleetHudStatus = String(primary.status || "");
-    }
-
-    const moreEl = hud.querySelector("[data-fleet-hud-more]");
-    if (moreEl) {
-      if (count > 1) {
-        const moreText = t("fleet_hud_more", "+%(count)s", { count: count - 1 });
-        _setIfChanged(moreEl, moreText);
-        moreEl.hidden = false;
-        moreEl.classList.remove("hidden");
-      } else {
-        moreEl.textContent = "";
-        moreEl.hidden = true;
-        moreEl.classList.add("hidden");
-      }
-    }
-
-    if (signature !== _globalFleetHudSig) {
-      _globalFleetHudSig = signature;
-      _clearMovementCountdownExpiryState();
-    }
-    GC.startProgressTicker();
-  }
-  GC.renderGlobalFleetHud = renderGlobalFleetHud;
 
   /** Single write path for shell HUD (header score/rank/online/messages + resource bar). */
   function patchShellHudFromState(data, opts) {
@@ -7412,7 +7644,7 @@
       updateNavBadges(data.nav_badges);
     }
 
-    if (Array.isArray(data.active_fleets)) {
+    if (data.active_fleets !== undefined) {
       renderGlobalFleetHud(data.active_fleets);
     }
 
@@ -11414,8 +11646,8 @@
       if (state.fleet_slots && slotsEl) {
         slotsEl.textContent = `${state.fleet_slots.active} / ${state.fleet_slots.max}`;
       }
-      if (Array.isArray(state.active_fleets)) {
-        rt.data.active_fleets = state.active_fleets;
+      if (state.active_fleets !== undefined) {
+        rt.data.active_fleets = activeFleetsItems(state.active_fleets);
         if (typeof GC.renderGlobalFleetHud === "function") {
           GC.renderGlobalFleetHud(state.active_fleets);
         }
@@ -23048,8 +23280,9 @@
     }
 
     const fleetPage = document.getElementById("fleet-page");
-    const fleets = Array.isArray(GC.lastState?.active_fleets)
-      ? GC.lastState.active_fleets
+    const fleetPayload = GC.lastState?.active_fleets;
+    const fleets = fleetPayload
+      ? activeFleetsItems(fleetPayload)
       : (fleetPage?._fleetRt?.data?.active_fleets || []);
     if (fleets.length) {
       lines.push("FLEET");
@@ -23091,6 +23324,7 @@
     initSkipLink();
     initGameActions();
     initGlobalQueueHud();
+    initGlobalFleetDrawer();
     bindPlanetEvolutionOnce();
     bindFleetOnce();
     initHeaderPlanetSwitcher();

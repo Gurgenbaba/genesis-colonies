@@ -4722,3 +4722,98 @@ def test_shipyard_build_without_resources_fails(fleet_db):
     assert not ok
     assert reason == "not_enough_resources"
     conn.close()
+
+
+def test_recall_fleet_movement_outbound(fleet_db):
+    from game.fleet import build_active_fleets_payload, recall_fleet_movement
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000 WHERE id = ?;", (pid,))
+    _seed_ships(pid, uid, {"mule_courier": 2}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = int(result["fleet"]["id"])
+
+    ok_recall, reason, _payload = recall_fleet_movement(uid, fleet_id, conn=conn)
+    assert ok_recall, reason
+    row = cur.execute(
+        "SELECT status, return_at FROM fleet_movements WHERE id = ?;",
+        (fleet_id,),
+    ).fetchone()
+    assert row["status"] == "returning"
+    assert int(row["return_at"] or 0) > int(time.time())
+
+    payload = build_active_fleets_payload(uid, conn=conn)
+    assert payload["count"] == 1
+    item = payload["items"][0]
+    assert item["movement_id"] == fleet_id
+    assert item["can_recall"] is False
+    assert item["status"] == "returning"
+    conn.close()
+
+
+def test_api_fleet_recall_returns_state(fleet_db, monkeypatch):
+    import importlib
+
+    import app as app_module
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000 WHERE id = ?;", (pid,))
+    _seed_ships(pid, uid, {"mule_courier": 2}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = int(result["fleet"]["id"])
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    r = client.post(
+        "/api/fleet/recall",
+        json={"movement_id": fleet_id, "request_id": uuid.uuid4().hex},
+        headers={"Content-Type": "application/json"},
+    )
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body.get("ok") is True
+    assert isinstance(body.get("state"), dict)
+    active = body["state"].get("active_fleets") or {}
+    assert isinstance(active, dict)
+    assert active.get("count") == 1
+    assert active["items"][0]["status"] == "returning"

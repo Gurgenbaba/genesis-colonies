@@ -609,26 +609,39 @@ def test_main_js_gc630_shipyard_game_state_panel_patch():
 
 
 def test_main_js_gc640_global_fleet_hud():
-    """GC-640A: active fleets via game-state poll; sidebar badge only (no header row)."""
+    """GC-654: global fleet drawer under resource bar via game-state poll."""
     src = _read("static/main.js")
-    assert "function renderGlobalFleetHud(fleets)" in src
+    assert "function renderGlobalFleetHud(fleetsRaw)" in src
     assert "GC.renderGlobalFleetHud = renderGlobalFleetHud" in src
+    assert "function initGlobalFleetDrawer()" in src
+    assert "GC.initGlobalFleetDrawer = initGlobalFleetDrawer" in src
+    assert "normalizeActiveFleetsPayload" in src
+    assert "FLEET_DRAWER_LS_EXPANDED" in src
+    assert "FLEET_DRAWER_LS_SHOW_ALL" in src
+    assert "/api/fleet/recall" in src
     hud = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
     assert "renderGlobalFleetHud(data.active_fleets)" in hud
     assert "updateFleetNavBadge(count)" in src
     base = _read("templates/base.html")
+    assert "global-fleet-drawer-root" in base
+    assert "data-global-fleet-drawer" in base
     assert "data-fleet-global-hud" not in base
     assert "data-fleet-nav-badge" in base
-    fleet = _read("templates/fleet.html")
-    assert "data-fleet-active-list" not in fleet
-    assert "fleet-active-panel" not in fleet
     live = _read("game/live_state.py")
     assert "fleet_hud_for_game_state" in live
+    assert "build_active_fleets_payload" in live
     app_py = _read("app.py")
     assert "fleet_hud_for_game_state" in app_py
+    assert "/api/fleet/recall" in app_py
     css = _read("static/style.css")
-    assert ".gc-fleet-global-hud" in css
+    assert ".gc-fleet-drawer-root" in css
+    assert ".gc-fleet-drawer-toggle" in css
+    assert ".gc-fleet-drawer-panel" in css
+    assert ".gc-fleet-drawer-row" in css
     assert ".gc-fleet-nav-badge" in css
+    fleet_py = _read("game/fleet.py")
+    assert "build_active_fleets_payload" in fleet_py
+    assert "recall_fleet_movement" in fleet_py
 
 
 def test_main_js_gc640b_fleet_page_visual_redesign():
@@ -649,7 +662,7 @@ def test_main_js_gc640b_fleet_page_visual_redesign():
     assert ".fleet-ogame-stack" in css
     assert "data-ship-max-image" in js
     assert "function applyFleetPageMode(page)" in js
-    assert "function renderGlobalFleetHud(fleets)" in js
+    assert "function renderGlobalFleetHud(fleetsRaw)" in js
 
 
 def test_main_js_gc640c_fleet_dense_ship_cards():
@@ -1246,6 +1259,25 @@ def test_main_js_lootbox_roll_accuracy_and_sound():
     assert "computeLootRollTarget" in src
     assert "translate3d" in src.split("function animateLootRoll")[1].split("function showLootOpeningModal")[0]
     assert (ROOT / "static/sounds/lootboxes/lootbox_sound.mp3").is_file()
+
+
+def test_gc655_header_discord_status_compact():
+    """GC-655: Discord in header is a compact status icon beside commander name."""
+    base_html = _read("templates/base.html")
+    css = _read("static/style.css")
+    de = _read("locales/de.json")
+    en = _read("locales/en.json")
+
+    assert "gc-commander-discord-status" in base_html
+    assert "gc-commander-identity" in base_html
+    assert "auth_discord_link_start" in base_html
+    assert "gc-discord-connected-badge" not in base_html
+    assert ".gc-commander-discord-status--linked" in css
+    assert ".gc-commander-identity{" in css
+    assert '"header_discord_connected": "Mit Discord verbunden"' in de
+    assert '"header_discord_connect": "Discord verbinden"' in de
+    assert '"header_discord_connected": "Connected with Discord"' in en
+    assert '"header_discord_connect": "Connect Discord"' in en
 
 
 def test_gc557g_unified_card_level_badge():

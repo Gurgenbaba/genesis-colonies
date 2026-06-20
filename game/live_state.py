@@ -111,9 +111,9 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
 def fleet_hud_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
     """Player-wide active fleet slice for /api/game-state (GC-640A)."""
     from game.fleet import (
+        build_active_fleets_payload,
         fleet_schema_ready,
         get_fleet_slot_status,
-        list_active_movements,
         process_fleet_tick,
     )
     from game.queue_poll import player_fleet_is_dirty
@@ -126,7 +126,7 @@ def fleet_hud_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
         process_fleet_tick(player_id=uid, conn=conn)
 
     return {
-        "active_fleets": list_active_movements(uid, conn=conn),
+        "active_fleets": build_active_fleets_payload(uid, conn=conn),
         "fleet_slots": get_fleet_slot_status(uid, conn=conn),
     }
 

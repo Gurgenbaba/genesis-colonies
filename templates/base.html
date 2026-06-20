@@ -98,13 +98,47 @@
           {% if AUTH_USER and AUTH_USER.id %}
             <div class="gc-hud-panel gc-hud-panel-user" aria-label="{{ T('logged_in_as', 'Eingeloggt als') }}">
               <span class="gc-hud-panel-tag">{{ T("commander") }}</span>
-              <span class="gc-user-name">{{ player_name_link(AUTH_USER.id, AUTH_USER.player_name or AUTH_USER.name or AUTH_USER.username) }}</span>
-              {% if AUTH_DISCORD_LINKED %}
-                <span class="gc-discord-connected-badge" title="{{ T('header_discord_connected', 'Discord verbunden') }}">
-                  <span aria-hidden="true">🎧</span>
-                  <span class="gc-discord-connected-badge-text">{{ T('header_discord_connected_short', 'Discord') }}</span>
-                </span>
-              {% endif %}
+              <span class="gc-commander-identity">
+                <span class="gc-user-name">{{ player_name_link(AUTH_USER.id, AUTH_USER.player_name or AUTH_USER.name or AUTH_USER.username) }}</span>
+                {% if AUTH_DISCORD_LINKED %}
+                  <span class="gc-commander-discord-status gc-commander-discord-status--linked"
+                        title="{{ T('header_discord_connected', 'Mit Discord verbunden') }}"
+                        aria-label="{{ T('header_discord_connected', 'Mit Discord verbunden') }}">
+                    <span class="gc-commander-discord-check" aria-hidden="true">✓</span>
+                  </span>
+                {% elif DISCORD_OAUTH_ENABLED %}
+                  <a href="{{ url_for('auth_discord_link_start') }}"
+                     class="gc-commander-discord-status gc-commander-discord-status--unlinked"
+                     title="{{ T('header_discord_connect', 'Discord verbinden') }}"
+                     aria-label="{{ T('header_discord_connect', 'Discord verbinden') }}"
+                     data-no-pjax>
+                    <svg class="gc-commander-discord-icon" viewBox="0 0 127.14 96.36" aria-hidden="true">
+                      <path fill="currentColor"
+                            d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83
+                            97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0
+                            105.89 105.89 0 0 0 19.39 8.09C2.79 32.65-1.71 56.6.54 80.21
+                            a105.73 105.73 0 0 0 32.17 16.15
+                            a77.7 77.7 0 0 0 6.89-11.11
+                            a68.42 68.42 0 0 1-10.85-5.18
+                            c.91-.66 1.8-1.34 2.66-2.04
+                            a75.57 75.57 0 0 0 64.32 0
+                            c.87.71 1.76 1.39 2.66 2.04
+                            a68.68 68.68 0 0 1-10.87 5.19
+                            a77 77 0 0 0 6.89 11.1
+                            A105.25 105.25 0 0 0 126.6 80.22
+                            c2.64-27.38-4.5-51.11-18.9-72.15ZM42.45 65.69
+                            c-6.08 0-11.06-5.55-11.06-12.39
+                            s4.86-12.39 11.06-12.39
+                            c6.2 0 11.17 5.6 11.06 12.39
+                            c0 6.84-4.87 12.39-11.06 12.39Zm42.24 0
+                            c-6.08 0-11.06-5.55-11.06-12.39
+                            s4.86-12.39 11.06-12.39
+                            c6.2 0 11.17 5.6 11.06 12.39
+                            c0 6.84-4.87 12.39-11.06 12.39Z"/>
+                    </svg>
+                  </a>
+                {% endif %}
+              </span>
               {% if AUTH_ADMIN %}
                 <span class="gc-admin-badge" aria-label="Administrator">ADMIN</span>
               {% endif %}
@@ -200,6 +234,36 @@
               <span class="res-rate energy" data-res-rate="energy" aria-hidden="true" style="visibility:hidden"></span>
             </div>
 
+          </div>
+          <div id="global-fleet-drawer-root"
+               class="gc-fleet-drawer-root"
+               data-global-fleet-drawer
+               aria-label="{{ T('fleet_drawer_aria', 'Aktive Flotten') }}">
+            <button type="button"
+                    class="gc-fleet-drawer-toggle"
+                    data-fleet-drawer-toggle
+                    aria-expanded="false"
+                    aria-controls="global-fleet-drawer-panel">
+              <span class="gc-fleet-drawer-chevron" data-fleet-drawer-chevron aria-hidden="true">▸</span>
+              <span class="gc-fleet-drawer-toggle-summary" data-fleet-drawer-summary>{{ T('fleet_drawer_empty', 'Keine aktiven Flotten') }}</span>
+              <span class="gc-fleet-drawer-toggle-actions">
+                <a href="{{ url_for('fleet_view') }}"
+                   class="gc-fleet-drawer-fleet-link"
+                   data-pjax-link
+                   data-fleet-drawer-fleet-link>{{ T('fleet_drawer_show_all', 'Alle anzeigen') }}</a>
+                <span class="gc-fleet-drawer-arrow" data-fleet-drawer-arrow aria-hidden="true"></span>
+              </span>
+            </button>
+            <div id="global-fleet-drawer-panel"
+                 class="gc-fleet-drawer-panel"
+                 data-fleet-drawer-panel
+                 hidden>
+              <div class="gc-fleet-drawer-list" data-fleet-drawer-list role="list"></div>
+              <button type="button"
+                      class="gc-fleet-drawer-more gc-btn gc-btn-ghost gc-btn-xs"
+                      data-fleet-drawer-more
+                      hidden></button>
+            </div>
           </div>
         </div>
       </div>

@@ -5390,6 +5390,39 @@ def api_fleet_send():
     return jsonify(fleet_err(reason or "generic", data={"state": state})), 400
 
 
+@app.route("/api/fleet/recall", methods=["POST"])
+@require_login
+def api_fleet_recall():
+    from game.fleet import fleet_schema_ready
+    from game.fleet_api import fleet_err, fleet_ok, fleet_recall_movement
+
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify(fleet_err("not_logged_in")), 401
+    if not fleet_schema_ready(db()):
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_recall")
+        return jsonify(fleet_err("fleet_unavailable", data={"state": state})), 503
+
+    data = request.get_json(silent=True) or {}
+    try:
+        movement_id = int(data.get("movement_id") or 0)
+    except (TypeError, ValueError):
+        movement_id = 0
+    if movement_id <= 0:
+        return jsonify(fleet_err("fleet_not_found")), 400
+
+    def _recall(conn):
+        return fleet_recall_movement(user_id, movement_id, conn=conn)
+
+    ok, reason, result = _fleet_write_transaction(_recall)
+    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_recall")
+    if ok:
+        body = fleet_ok(result or {}, message_key="fleet_recall_success")
+        body["state"] = state
+        return jsonify(body)
+    return jsonify(fleet_err(reason or "fleet_recall_failed", data={"state": state})), 400
+
+
 @app.route("/api/fleet/presets", methods=["GET"])
 @require_login
 def api_fleet_presets_list():

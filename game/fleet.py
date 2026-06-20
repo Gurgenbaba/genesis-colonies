@@ -1451,6 +1451,121 @@ def list_active_movements(player_id: int, *, conn=None) -> List[Dict[str, Any]]:
             conn.close()
 
 
+FLEET_DRAWER_VISIBLE_LIMIT = 5
+
+
+def _movement_ship_count(movement: Mapping[str, Any]) -> int:
+    return sum(max(0, int(v or 0)) for v in (movement.get("ships") or {}).values())
+
+
+def _movement_target_display_name(movement: Mapping[str, Any]) -> str:
+    wt = movement.get("world_target") or {}
+    if wt.get("target_name"):
+        return str(wt["target_name"])
+    name_key = str(wt.get("target_name_key") or "").strip()
+    if name_key:
+        from .i18n import tr
+
+        return tr(name_key, name_key)
+    return str(movement.get("target_coords") or "")
+
+
+def format_movement_drawer_item(movement: Mapping[str, Any]) -> Dict[str, Any]:
+    """Compact fleet drawer row for /api/game-state active_fleets.items (GC-654)."""
+    mv = dict(movement)
+    status = str(mv.get("status") or "").strip().lower()
+    mission = str(mv.get("mission_type") or "transport").strip().lower()
+    can_recall = status in ("outbound", "holding")
+    can_cancel = status == "outbound"
+    if status == "outbound":
+        action_label_key = "fleet_drawer_action_cancel"
+    elif status == "holding":
+        action_label_key = "fleet_drawer_action_recall"
+    else:
+        action_label_key = ""
+    cancel_reason = ""
+    if status == "returning":
+        cancel_reason = "fleet_recall_not_allowed"
+    item = {
+        **mv,
+        "movement_id": int(mv.get("id") or 0),
+        "mission": mission,
+        "mission_label_key": f"fleet_mission_{mission}",
+        "status": status,
+        "status_label": str(mv.get("status_label") or mv.get("leg_label_key") or ""),
+        "origin_name": str(mv.get("origin_name") or ""),
+        "origin_coords": str(mv.get("origin_coords") or ""),
+        "target_name": _movement_target_display_name(mv),
+        "target_coords": str(mv.get("target_coords") or ""),
+        "ship_count": _movement_ship_count(mv),
+        "remaining_seconds": max(0, int(mv.get("remaining_seconds") or 0)),
+        "arrival_at": mv.get("arrival_at"),
+        "return_at": mv.get("return_at"),
+        "can_recall": can_recall,
+        "can_cancel": can_cancel,
+        "action_label_key": action_label_key,
+        "cancel_reason": cancel_reason,
+    }
+    return item
+
+
+def build_active_fleets_payload(
+    player_id: int,
+    *,
+    conn=None,
+    visible_limit: int = FLEET_DRAWER_VISIBLE_LIMIT,
+) -> Dict[str, Any]:
+    """Player-wide active fleet block for global drawer (GC-654)."""
+    movements = list_active_movements(int(player_id), conn=conn)
+    items = [format_movement_drawer_item(mv) for mv in movements]
+    next_remaining = 0
+    if items:
+        next_remaining = min(int(i.get("remaining_seconds") or 0) for i in items)
+    return {
+        "count": len(items),
+        "visible_limit": max(1, int(visible_limit)),
+        "next_remaining_seconds": next_remaining,
+        "items": items,
+    }
+
+
+def recall_fleet_movement(
+    player_id: int,
+    movement_id: int,
+    *,
+    conn=None,
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    """Recall or cancel an active fleet movement (outbound/holding → returning)."""
+    own = conn is None
+    if own:
+        conn = db()
+    try:
+        if not fleet_schema_ready(conn):
+            return False, "fleet_unavailable", None
+        uid = int(player_id)
+        mid = int(movement_id)
+        process_fleet_tick(player_id=uid, conn=conn)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM fleet_movements WHERE id = ? AND player_id = ? LIMIT 1;",
+            (mid, uid),
+        )
+        row = cur.fetchone()
+        if not row:
+            return False, "fleet_not_found", None
+        mv = _row_to_movement(row)
+        status = str(mv.get("status") or "").strip().lower()
+        if status not in ("outbound", "holding"):
+            return False, "fleet_recall_not_allowed", None
+        now = _now()
+        if not _start_return(mv, conn=conn, now=now):
+            return False, "fleet_recall_failed", None
+        return True, "fleet_recall_ok", {"movement_id": mid, "status": "returning"}
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
 def list_presets(player_id: int, *, conn=None) -> List[Dict[str, Any]]:
     own = conn is None
     if own:
