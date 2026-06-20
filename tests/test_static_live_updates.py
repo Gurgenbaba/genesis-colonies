@@ -645,6 +645,26 @@ def test_main_js_gc640_global_fleet_hud():
     assert "recall_fleet_movement" in fleet_py
 
 
+def test_main_js_gc657_fleet_drawer_timer_selection_separation():
+    """GC-657: fleet drawer selection is UI-only; timers stay on arrival_at."""
+    src = _read("static/main.js")
+    css = _read("static/style.css")
+    assert "fleetDrawerCountdownAt" in src
+    assert "_fleetDrawerSelectedId" in src
+    assert "updateFleetDrawerRowTimers" in src
+    assert "formatFleetDrawerRemaining" in src
+    assert "fleet_drawer_arrival_chip" in src
+    assert "syncFleetDrawerRowLayout" in src
+    assert "data-fleet-drawer-arrival-compact" in src
+    assert "data-fleet-drawer-detail" in src
+    assert "fleet_drawer_remaining" in _read("locales/de.json")
+    assert ".gc-fleet-drawer-row.is-selected" in css
+    assert "gc-fleet-drawer-timer-pulse" in css
+    countdown = src.split("function patchFleetDrawerRowCountdown(row, mv)")[1].split("function createFleetDrawerFlightRoute")[0]
+    assert "fleetDrawerCountdownAt(mv)" in countdown
+    assert "prevKey !== countdownKey" in countdown
+
+
 def test_main_js_gc654b_fleet_drawer_visual_polish():
     """GC-654B: drawer flight route, mission tooltip, no notch."""
     src = _read("static/main.js")

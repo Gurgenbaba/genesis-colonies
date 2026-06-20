@@ -6323,6 +6323,9 @@
 
     queryTimerElements().forEach((el) => {
       syncTimerElement(el);
+      if (el.closest("[data-fleet-drawer-row]") && el.hasAttribute("data-fleet-drawer-countdown")) {
+        return;
+      }
       const target = parseTimerTarget(el.dataset.timerTarget || el.dataset.countdownAt || 0);
       if (!target) return;
       const kind = el.dataset.timerKind || inferTimerKind(el);
@@ -6394,6 +6397,7 @@
 
     if (fleetExpired) requestMovementCountdownRefresh("fleet");
     if (overviewExpired) requestMovementCountdownRefresh("overview");
+    updateFleetDrawerRowTimers(now);
   }
 
   function updateMovementCountdowns(serverNow) {
@@ -7145,6 +7149,136 @@
   const _fleetDrawerMovementById = new Map();
   let _fleetDrawerTooltipEl = null;
   let _fleetDrawerTooltipTrigger = null;
+  let _fleetDrawerSelectedId = null;
+
+  function fleetDrawerCountdownAt(mv) {
+    return Number(mv?.countdown_at || mv?.arrival_at || mv?.return_at || 0);
+  }
+
+  function fleetDrawerRemainingSeconds(mv, serverNow) {
+    const countdownAt = fleetDrawerCountdownAt(mv);
+    if (!countdownAt) return 0;
+    const srvRem = Number(mv?.remaining_seconds);
+    return movementRemainingSeconds(
+      countdownAt,
+      serverNow ?? getTimerServerNow(),
+      Number.isFinite(srvRem) && srvRem >= 0 ? srvRem : NaN
+    );
+  }
+
+  function formatFleetDrawerRemaining(seconds) {
+    const s = Math.max(0, Math.floor(Number(seconds) || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  }
+
+  function formatFleetDrawerArrivalCompact(seconds) {
+    const rem = formatCountdownRemain(seconds);
+    return tf("fleet_drawer_arrival_chip", { time: rem }, `Ankunft in ${rem}`);
+  }
+
+  function syncFleetDrawerRowLayout(row, selected) {
+    if (!row) return;
+    row.classList.toggle("is-selected", !!selected);
+    row.setAttribute("aria-expanded", selected ? "true" : "false");
+    const flight = row.querySelector("[data-fleet-flight-route]");
+    const detail = row.querySelector("[data-fleet-drawer-detail]");
+    const compact = row.querySelector("[data-fleet-drawer-arrival-compact]");
+    const headerAction = row.querySelector(".gc-fleet-drawer-row-action-wrap--header");
+    const detailAction = row.querySelector(".gc-fleet-drawer-row-action-wrap--detail");
+    if (flight) flight.hidden = !selected;
+    if (detail) detail.hidden = !selected;
+    if (compact) compact.hidden = !!selected;
+    if (headerAction) headerAction.hidden = !!selected;
+    if (detailAction) detailAction.hidden = !selected;
+    const labelEl = row.querySelector("[data-fleet-flight-label]");
+    if (labelEl && selected) {
+      _setIfChanged(labelEl, t("fleet_drawer_remaining", "Restflugzeit"));
+    }
+  }
+
+  function setFleetDrawerSelected(movementId) {
+    const next = movementId ? String(movementId) : "";
+    _fleetDrawerSelectedId = next || null;
+    const listEl = document.querySelector("[data-fleet-drawer-list]");
+    if (!listEl) return;
+    listEl.querySelectorAll("[data-fleet-drawer-row]").forEach((row) => {
+      const selected = next && String(row.dataset.movementId || "") === next;
+      syncFleetDrawerRowLayout(row, selected);
+    });
+    updateFleetDrawerRowTimers(getTimerServerNow());
+  }
+
+  function toggleFleetDrawerSelection(movementId) {
+    const id = String(movementId || "");
+    if (!id) return;
+    setFleetDrawerSelected(_fleetDrawerSelectedId === id ? null : id);
+  }
+
+  function buildFleetDrawerDetailLists(mv) {
+    const ships = Array.isArray(mv?.ships_breakdown) ? mv.ships_breakdown : [];
+    const shipItems = ships.length
+      ? ships.map((s) => {
+        const label = t(s.label_key || `fleet_ship_${s.key}`, s.key);
+        return `<li>${label} × ${fmtNumber(s.count)}</li>`;
+      }).join("")
+      : `<li>${t("fleet_drawer_tooltip_no_ships", "Keine Schiffe")}</li>`;
+    const res = mv?.loaded_resources || mv?.resources || {};
+    const cargoParts = [];
+    if (Number(res.metal || 0) > 0) {
+      cargoParts.push(`<li>${t("resource_metal", "Ferronit")} ${fmtNumber(res.metal)}</li>`);
+    }
+    if (Number(res.crystal || 0) > 0) {
+      cargoParts.push(`<li>${t("resource_crystal", "Crytite")} ${fmtNumber(res.crystal)}</li>`);
+    }
+    if (Number(res.fuel_cells || 0) > 0) {
+      cargoParts.push(`<li>${t("resource_fuel_cells", "Brennzellen")} ${fmtNumber(res.fuel_cells)}</li>`);
+    }
+    const cargoItems = cargoParts.length
+      ? cargoParts.join("")
+      : `<li>${t("fleet_drawer_detail_no_cargo", "Keine Fracht")}</li>`;
+    return { shipItems, cargoItems };
+  }
+
+  function updateFleetDrawerRowTimers(serverNow) {
+    const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
+    document.querySelectorAll("[data-fleet-drawer-row]").forEach((row) => {
+      const cdEl = row.querySelector("[data-fleet-drawer-countdown]");
+      if (!cdEl) return;
+      const target = parseTimerTarget(cdEl.dataset.timerTarget || cdEl.dataset.countdownAt || 0);
+      if (!target) return;
+      const srvRem = cdEl.dataset.serverRemaining;
+      const remaining = movementRemainingSeconds(
+        target,
+        now,
+        srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
+      );
+      const selected = row.classList.contains("is-selected");
+      const compactEl = row.querySelector("[data-fleet-drawer-arrival-compact]");
+      if (compactEl && !selected) {
+        if (remaining <= 0) {
+          _setIfChanged(compactEl, t("fleet_arrival_at", "Ankunft"));
+          compactEl.classList.add("is-arrived");
+        } else {
+          _setIfChanged(compactEl, formatFleetDrawerArrivalCompact(remaining));
+          compactEl.classList.remove("is-arrived");
+        }
+        compactEl.classList.toggle("is-urgent", remaining > 0 && remaining < 10);
+      }
+      if (selected) {
+        if (remaining <= 0) {
+          _setIfChanged(cdEl, t("fleet_arrival_at", "ANKUNFT"));
+          row.classList.add("is-arrived");
+        } else {
+          _setIfChanged(cdEl, formatFleetDrawerRemaining(remaining));
+          row.classList.remove("is-arrived");
+        }
+        row.classList.toggle("is-urgent", remaining > 0 && remaining < 10);
+      }
+    });
+  }
 
   function rememberFleetDrawerMovements(items) {
     _fleetDrawerMovementById.clear();
@@ -7174,9 +7308,9 @@
     const metal = Number(res.metal || 0);
     const crystal = Number(res.crystal || 0);
     const fuel = Number(res.fuel_cells || 0);
-    const countdownAt = Number(mv.countdown_at || 0);
+    const countdownAt = fleetDrawerCountdownAt(mv);
     const rem = countdownAt
-      ? formatCountdownRemain(movementRemainingSeconds(countdownAt, getTimerServerNow(), mv.remaining_seconds))
+      ? formatCountdownRemain(fleetDrawerRemainingSeconds(mv, getTimerServerNow()))
       : "–";
     const rows = [
       `<div class="gc-fleet-drawer-tooltip-title">${t(missionKey, mission)}</div>`,
@@ -7227,6 +7361,8 @@
 
   function showFleetDrawerTooltip(trigger, mv) {
     if (!fleetDrawerHoverTooltipsEnabled() || !trigger || !mv) return;
+    const row = trigger.closest("[data-fleet-drawer-row]");
+    if (row?.classList.contains("is-selected")) return;
     const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
     const tooltip = root?.querySelector("[data-fleet-drawer-tooltip]") || document.getElementById("gc-fleet-drawer-tooltip");
     if (!tooltip) return;
@@ -7252,7 +7388,8 @@
   }
 
   function syncFleetDrawerRowAction(row, mv) {
-    const wrap = row.querySelector(".gc-fleet-drawer-row-action-wrap");
+    const wrap = row.querySelector(".gc-fleet-drawer-row-action-wrap--detail")
+      || row.querySelector(".gc-fleet-drawer-row-action-wrap");
     if (!wrap || !mv) return;
     const movementId = String(mv.movement_id || mv.id || "");
     const status = String(mv.status || mv.phase || mv.leg_phase || "").toLowerCase();
@@ -7293,16 +7430,15 @@
     }
     const routeEl = row.querySelector(".gc-fleet-drawer-row-route");
     if (routeEl) _setIfChanged(routeEl, formatFleetDrawerRoute(mv));
-    const shipsChip = row.querySelector(".gc-fleet-drawer-chip--ships");
-    if (shipsChip) {
-      _setIfChanged(
-        shipsChip,
-        tf("fleet_drawer_ships_chip", { count: Number(mv.ship_count || 0) }, `${Number(mv.ship_count || 0)} Schiffe`)
-      );
+    const compactEl = row.querySelector("[data-fleet-drawer-arrival-compact]");
+    if (compactEl && !row.classList.contains("is-selected")) {
+      const rem = fleetDrawerRemainingSeconds(mv, getTimerServerNow());
+      _setIfChanged(compactEl, rem <= 0 ? t("fleet_arrival_at", "Ankunft") : formatFleetDrawerArrivalCompact(rem));
     }
     patchFleetDrawerRowCountdown(row, mv);
     patchFleetDrawerRowFlight(row, mv);
     syncFleetDrawerRowAction(row, mv);
+    syncFleetDrawerRowLayout(row, String(row.dataset.movementId || "") === String(_fleetDrawerSelectedId || ""));
   }
 
   function syncFleetDrawerList(listEl, visibleItems) {
@@ -7326,6 +7462,15 @@
       }
       listEl.appendChild(row);
     });
+
+    if (_fleetDrawerSelectedId && !wantedIds.has(String(_fleetDrawerSelectedId))) {
+      _fleetDrawerSelectedId = null;
+    }
+    if (_fleetDrawerSelectedId) {
+      setFleetDrawerSelected(_fleetDrawerSelectedId);
+    } else {
+      updateFleetDrawerRowTimers(getTimerServerNow());
+    }
   }
 
   function patchFleetDrawerRowFlight(row, mv) {
@@ -7337,7 +7482,9 @@
     const visual = status === "returning" ? (100 - progress) / 100 : progress / 100;
     flight.style.setProperty("--fleet-progress", String(Math.max(0, Math.min(1, visual))));
     const labelEl = flight.querySelector("[data-fleet-flight-label]");
-    if (labelEl) {
+    if (labelEl && row?.classList.contains("is-selected")) {
+      _setIfChanged(labelEl, t("fleet_drawer_remaining", "Restflugzeit"));
+    } else if (labelEl) {
       const legKey = globalFleetLegKey(mv, status);
       _setIfChanged(labelEl, t(legKey, legKey));
     }
@@ -7347,7 +7494,7 @@
     const cdChip = row.querySelector("[data-fleet-drawer-countdown]");
     if (!cdChip || !mv) return;
     const phase = mv.phase || mv.leg_phase || mv.status || "";
-    const countdownAt = Number(mv.countdown_at || 0);
+    const countdownAt = fleetDrawerCountdownAt(mv);
     if (!countdownAt) {
       cdChip.textContent = "–";
       cdChip.removeAttribute("data-timer-target");
@@ -7359,23 +7506,23 @@
     }
     const countdownKey = `${mv.movement_id || mv.id}:${phase}:${countdownAt}`;
     const srvRem = Number(mv.remaining_seconds);
-    applyQueueJobTimerAttrs(
-      cdChip,
-      countdownAt,
-      "fleet",
-      "fleet",
-      Number.isFinite(srvRem) && srvRem >= 0 ? Math.ceil(srvRem) : undefined
-    );
-    cdChip.dataset.countdownScope = "fleet";
-    cdChip.dataset.countdownKey = countdownKey;
-    cdChip.classList.add("fleet-active-countdown");
-    if (Number.isFinite(srvRem) && srvRem >= 0) {
+    const prevKey = cdChip.dataset.countdownKey || "";
+    const prevTarget = Number(cdChip.dataset.countdownAt || 0);
+    if (prevKey !== countdownKey || prevTarget !== countdownAt) {
+      applyQueueJobTimerAttrs(
+        cdChip,
+        countdownAt,
+        "fleet",
+        "fleet",
+        Number.isFinite(srvRem) && srvRem >= 0 ? Math.ceil(srvRem) : undefined
+      );
+      cdChip.dataset.countdownScope = "fleet";
+      cdChip.dataset.countdownKey = countdownKey;
+      cdChip.classList.add("fleet-active-countdown");
+    } else if (Number.isFinite(srvRem) && srvRem >= 0) {
       assignMonotonicServerRemaining(cdChip, Math.ceil(srvRem), countdownAt);
     }
-    _setIfChanged(
-      cdChip,
-      formatCountdownRemain(movementRemainingSeconds(countdownAt, getTimerServerNow(), mv.remaining_seconds))
-    );
+    updateFleetDrawerRowTimers(getTimerServerNow());
     patchFleetDrawerRowFlight(row, mv);
   }
 
@@ -7437,6 +7584,7 @@
     row.dataset.fleetDrawerRow = "1";
     row.dataset.movementId = String(mv.movement_id || mv.id || "");
     row.setAttribute("role", "listitem");
+    row.setAttribute("aria-expanded", "false");
 
     const mission = String(mv.mission || mv.mission_type || "custom");
     const missionKey = mv.mission_label_key || `fleet_mission_${mission}`;
@@ -7461,25 +7609,46 @@
     const chips = document.createElement("div");
     chips.className = "gc-fleet-drawer-row-chips";
 
-    const shipsChip = document.createElement("span");
-    shipsChip.className = "gc-fleet-drawer-chip gc-fleet-drawer-chip--ships";
-    shipsChip.textContent = tf(
-      "fleet_drawer_ships_chip",
-      { count: Number(mv.ship_count || 0) },
-      `${Number(mv.ship_count || 0)} Schiffe`
-    );
-    chips.appendChild(shipsChip);
+    const arrivalChip = document.createElement("span");
+    arrivalChip.className = "gc-fleet-drawer-chip gc-fleet-drawer-chip--arrival gc-mono";
+    arrivalChip.dataset.fleetDrawerArrivalCompact = "1";
+    arrivalChip.textContent = formatFleetDrawerArrivalCompact(fleetDrawerRemainingSeconds(mv, getTimerServerNow()));
+    chips.appendChild(arrivalChip);
     left.appendChild(chips);
     row.appendChild(left);
 
     const flight = createFleetDrawerFlightRoute(mv);
+    flight.hidden = true;
     row.appendChild(flight);
     patchFleetDrawerRowFlight(row, mv);
 
-    const actionWrap = document.createElement("div");
-    actionWrap.className = "gc-fleet-drawer-row-action-wrap";
-    row.appendChild(actionWrap);
+    const { shipItems, cargoItems } = buildFleetDrawerDetailLists(mv);
+    const detail = document.createElement("div");
+    detail.className = "gc-fleet-drawer-row-detail";
+    detail.dataset.fleetDrawerDetail = "1";
+    detail.hidden = true;
+    detail.innerHTML =
+      `<div class="gc-fleet-drawer-detail-block">` +
+      `<div class="gc-fleet-drawer-detail-label">${t("fleet_drawer_detail_ships", "Schiffe")}</div>` +
+      `<ul class="gc-fleet-drawer-detail-list">${shipItems}</ul>` +
+      `</div>` +
+      `<div class="gc-fleet-drawer-detail-block">` +
+      `<div class="gc-fleet-drawer-detail-label">${t("fleet_drawer_detail_cargo", "Ressourcen")}</div>` +
+      `<ul class="gc-fleet-drawer-detail-list">${cargoItems}</ul>` +
+      `</div>`;
+    const detailActionWrap = document.createElement("div");
+    detailActionWrap.className = "gc-fleet-drawer-row-action-wrap gc-fleet-drawer-row-action-wrap--detail";
+    detailActionWrap.hidden = true;
+    detail.appendChild(detailActionWrap);
+    row.appendChild(detail);
+
+    const headerActionWrap = document.createElement("div");
+    headerActionWrap.className = "gc-fleet-drawer-row-action-wrap gc-fleet-drawer-row-action-wrap--header";
+    headerActionWrap.hidden = true;
+    row.appendChild(headerActionWrap);
+
     patchFleetDrawerRow(row, mv);
+    syncFleetDrawerRowLayout(row, String(_fleetDrawerSelectedId || "") === movementId);
     return row;
   }
 
@@ -7612,16 +7781,28 @@
     _globalFleetDrawerBound = true;
 
     root.addEventListener("click", (e) => {
-      if (e.target.closest("[data-fleet-drawer-mission]")) {
-        e.stopPropagation();
-        return;
-      }
-
       const recallBtn = e.target.closest("[data-fleet-drawer-recall]");
       if (recallBtn) {
         e.preventDefault();
         e.stopPropagation();
         handleFleetDrawerRecall(recallBtn);
+        return;
+      }
+
+      const selectTrigger = e.target.closest("[data-fleet-drawer-mission], [data-fleet-drawer-select]");
+      if (selectTrigger) {
+        e.preventDefault();
+        e.stopPropagation();
+        hideFleetDrawerTooltip();
+        toggleFleetDrawerSelection(selectTrigger.dataset.movementId);
+        return;
+      }
+
+      const row = e.target.closest("[data-fleet-drawer-row]");
+      if (row && e.target.closest(".gc-fleet-drawer-row-left")) {
+        e.preventDefault();
+        hideFleetDrawerTooltip();
+        toggleFleetDrawerSelection(row.dataset.movementId);
         return;
       }
 
