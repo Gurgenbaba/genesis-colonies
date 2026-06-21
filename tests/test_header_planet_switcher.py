@@ -328,6 +328,8 @@ def test_main_js_patches_planet_limit_from_state():
     assert "patchHeaderPlanetLimitFromState" in src
     assert "data-planet-limit-value" in src
     assert "planet_limit" in src
+    fn = src.split("function patchHeaderPlanetLimitFromState(data, force)")[1].split("GC.patchHeaderPlanetLimitFromState")[0]
+    assert "if (!force) return" in fn
 
 
 def test_game_state_includes_planets_list(switcher_db, monkeypatch):

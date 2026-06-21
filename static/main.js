@@ -7033,6 +7033,7 @@
       current = planets.length;
     }
     if (!Number.isFinite(current) || current < 0) {
+      if (!force) return;
       current = 0;
     }
     let max = Number(block && block.max);
