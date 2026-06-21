@@ -2569,170 +2569,76 @@
     container.classList.toggle("energy-warning", t > 0 && u > t);
   }
 
-  function patchOverviewEnergyHint(overview, data) {
-    const card = document.getElementById("overview-energy-card");
-    if (!card) return;
-
-    const hintKey = overview?.energy_hint ?? overview?.status?.energy?.hint;
-    const total = Math.floor(
-      Number(
-        data?.energy?.total ??
-          overview?.status?.energy?.total ??
-          data?.player?.energy_total ??
-          data?.resources?.energy_total ??
-          0
-      )
-    );
-    const used = Math.floor(
-      Number(
-        data?.energy?.used ??
-          overview?.status?.energy?.used ??
-          data?.player?.energy_used ??
-          data?.resources?.energy_used ??
-          0
-      )
-    );
-    const ratio = Number(
-      data?.energy?.ratio ?? overview?.status?.energy?.ratio ?? data?.energy_ratio ?? 1
-    );
-
-    let state = hintKey;
-    if (!state) {
-      if (total <= 0) state = "zero";
-      else if (ratio >= 1) state = "ok";
-      else if (ratio >= 0.5) state = "low";
-      else state = "critical";
-    }
-
-    const stateClasses = [
-      "overview-energy-zero",
-      "overview-energy-ok",
-      "overview-energy-low",
-      "overview-energy-critical",
-    ];
-    card.classList.remove(...stateClasses);
-    if (state === "zero") card.classList.add("overview-energy-zero");
-    else if (state === "ok") card.classList.add("overview-energy-ok");
-    else if (state === "low") card.classList.add("overview-energy-low");
-    else if (state === "critical") card.classList.add("overview-energy-critical");
-
-    const surplus = total - used;
-    const balEl = document.getElementById("overview-energy-balance");
-    if (balEl) {
-      const sign = surplus >= 0 ? "+" : "";
-      _setIfChanged(balEl, `${sign}${fmtNumber(surplus)}`);
-      balEl.classList.toggle("overview-res-dash-balance--pos", surplus >= 0);
-      balEl.classList.toggle("overview-res-dash-balance--neg", surplus < 0);
-    }
-
-    const statusEl = document.getElementById("overview-energy-status");
-    if (statusEl) {
-      const labels = statusEl.dataset;
-      let label = labels.labelSurplus || "Überschuss";
-      if (total <= 0) label = labels.labelNone || "Keine Energie";
-      else if (surplus < 0) label = labels.labelDeficit || "Defizit";
-      _setIfChanged(statusEl, label);
-    }
-
-    const fillEl = card.querySelector('[data-res-fill="energy"]');
-    if (fillEl && total > 0) {
-      const pct = Math.min(100, Math.max(0, (used / total) * 100));
-      fillEl.style.width = `${pct}%`;
-    }
-
-    const pctEl = card.querySelector('[data-res-pct="energy"]');
-    if (pctEl && total > 0) {
-      const pct = Math.min(100, Math.max(0, Math.round((used / total) * 100)));
-      _setIfChanged(pctEl, `${pct}%`);
-    }
-  }
-
-  function patchOverviewWarnings(warnings) {
-    const panel = document.getElementById("overview-warnings-panel");
-    const list = document.getElementById("overview-warnings");
-    if (!panel || !list) return;
-
-    const items = Array.isArray(warnings) ? warnings : [];
-    const sig = items.map((w) => `${w.key}:${w.severity || "info"}:${w.label_key || ""}`).join("|");
-    if (list.dataset.warnSig === sig) return;
-
-    list.dataset.warnSig = sig;
-    list.replaceChildren();
-    if (!items.length) {
-      panel.hidden = true;
-      panel.classList.add("is-empty");
-      return;
-    }
-
-    panel.hidden = false;
-    panel.classList.remove("is-empty");
-    const hrefFor = (key) => {
-      const map = {
-        vacation_mode: "/options",
-        fleet_active: "/fleet",
-        vote_available: "/vote-center",
-      };
-      return map[key] || "";
-    };
-
-    items.forEach((warn) => {
-      const li = document.createElement("li");
-      li.className = `overview-warning overview-warning-${warn.severity || "info"}`;
-      li.dataset.warningKey = warn.key || "";
-      const href = warn.href_key
-        ? ({ options_view: "/options", fleet_view: "/fleet", vote_center_view: "/vote-center" }[warn.href_key] || hrefFor(warn.key))
-        : hrefFor(warn.key);
-      if (href) {
-        const link = document.createElement("a");
-        link.className = "overview-warning-link";
-        link.href = href;
-        link.textContent = t(warn.label_key, warn.label_key);
-        li.appendChild(link);
-      } else {
-        const span = document.createElement("span");
-        span.className = "overview-warning-text";
-        span.textContent = t(warn.label_key, warn.label_key);
-        li.appendChild(span);
-      }
-      list.appendChild(li);
-    });
-  }
-
-  function patchOverviewResourceBars(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells) {
+  function patchHudStorageWarnings(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells) {
+    const STORAGE_WARN_RATIO = 0.92;
     const pairs = [
       ["metal", metal, storageMetal],
       ["crystal", crystal, storageCrystal],
       ["fuel_cells", fuelCells, storageFuelCells],
     ];
     pairs.forEach(([key, val, cap]) => {
-      const fillEl = document.querySelector(`[data-res-fill="${key}"]`);
-      const pctEl = document.querySelector(`[data-res-pct="${key}"]`);
-      if (fillEl && cap > 0) {
-        const pct = Math.min(100, Math.max(0, (Number(val) / Number(cap)) * 100));
-        fillEl.style.width = `${pct}%`;
-        if (pctEl) _setIfChanged(pctEl, `${Math.round(pct)}%`);
-      } else if (pctEl) {
-        _setIfChanged(pctEl, "0%");
+      const panel = document.querySelector(`[data-hud-res="${key}"]`);
+      const warnEl = panel?.querySelector(`[data-hud-res-warn="${key}"]`);
+      if (!panel || !warnEl) return;
+      const v = Number(val) || 0;
+      const c = Number(cap) || 0;
+      let level = "";
+      if (c > 0 && v >= c) level = "full";
+      else if (c > 0 && v >= c * STORAGE_WARN_RATIO) level = "warn";
+      panel.classList.toggle("hud-res-panel--storage-warn", level === "warn");
+      panel.classList.toggle("hud-res-panel--storage-full", level === "full");
+      if (level) {
+        warnEl.hidden = false;
+        warnEl.textContent = t(
+          level === "full" ? "hud_storage_full" : "hud_storage_almost_full",
+          level === "full" ? "Lager voll" : "Lager fast voll"
+        );
+      } else {
+        warnEl.hidden = true;
+        warnEl.textContent = "";
       }
     });
   }
+
+  function syncHeaderVacationBanner(accountSafety) {
+    const banner = document.querySelector("[data-header-vacation-banner]");
+    if (!banner) return;
+    const timerEl = banner.querySelector("[data-header-vacation-timer]");
+    const safety = accountSafety && typeof accountSafety === "object" ? accountSafety : {};
+    const active = !!safety.vacation_active;
+    banner.hidden = !active;
+    if (!active) {
+      if (timerEl) {
+        timerEl.hidden = true;
+        timerEl.removeAttribute("data-until");
+        timerEl.textContent = "";
+      }
+      return;
+    }
+    if (!timerEl) return;
+    const lockedUntil = Math.floor(Number(safety.vacation_locked_until || 0));
+    const now = Math.floor(getTimerServerNow());
+    if (lockedUntil > now) {
+      timerEl.hidden = false;
+      timerEl.setAttribute("data-until", String(lockedUntil));
+      timerEl.textContent = tf(
+        "header_vacation_until",
+        { time: formatCountdownRemain(lockedUntil - now) },
+        `Urlaub bis ${formatCountdownRemain(lockedUntil - now)}`
+      );
+      GC.startProgressTicker();
+    } else {
+      timerEl.hidden = true;
+      timerEl.removeAttribute("data-until");
+      timerEl.textContent = "";
+    }
+  }
+  GC.syncHeaderVacationBanner = syncHeaderVacationBanner;
 
   function patchOverviewStatus(overview, data, buildings, prod) {
     const status = overview?.status;
     applyPlanetHeroThemeFromState({ active_planet: data?.active_planet, overview });
 
-    patchOverviewEnergyHint(overview, data);
-    patchOverviewWarnings(status?.warnings);
-    if (status?.resources) {
-      patchOverviewResourceBars(
-        Number(status.resources.metal || 0),
-        Number(status.resources.crystal || 0),
-        Number(status.resources.fuel_cells || 0),
-        Number(status.resources.metal_cap || 0),
-        Number(status.resources.crystal_cap || 0),
-        Number(status.resources.fuel_cells_cap || 0)
-      );
-    }
     patchOverviewTable(overview, buildings, prod, data?.active_planet_id || 0);
 
     if (status?.planet?.name && typeof GC.applyOverviewPlanetName === "function") {
@@ -3299,6 +3205,7 @@
   function updateSafetyCountdownTimers() {
     const safety = GC.lastState?.account_safety;
     syncFleetVacationNotice(safety || {});
+    syncHeaderVacationBanner(safety || {});
     if (typeof GC.syncSafetyCountdownTimers === "function") {
       GC.syncSafetyCountdownTimers(safety || {});
     }
@@ -8338,6 +8245,7 @@
         _last.energyTotal = total;
       }
       patchResourceBarEnergyWarning(used, total);
+      patchHudStorageWarnings(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells);
     }
 
     patchHeaderPlanetLimitFromState(data, forceResourceBar);
@@ -8399,6 +8307,7 @@
 
     if (data.account_safety !== undefined) {
       syncFleetVacationNotice(data.account_safety);
+      syncHeaderVacationBanner(data.account_safety);
     }
 
     if (data.fleet_slots) {
@@ -8894,53 +8803,6 @@
 
       if (shouldPatchGameStateModule("overview")) {
         patchOverviewScoreFromState(data);
-
-        const ovMetalVal = document.querySelector('#overview-metal-val .gc-val[data-res="metal"]');
-        if (ovMetalVal) _setIfChanged(ovMetalVal, fmtNumber(metal));
-
-        const ovCryVal = document.querySelector('#overview-crystal-val .gc-val[data-res="crystal"]');
-        if (ovCryVal) _setIfChanged(ovCryVal, fmtNumber(crystal));
-
-        const ovFuelVal = document.querySelector('#overview-fuel-val .gc-val[data-res="fuel_cells"]');
-        if (ovFuelVal) _setIfChanged(ovFuelVal, fmtNumber(fuelCells));
-
-        patchOverviewResourceBars(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells);
-
-        const ovEnergyUsed = document.querySelector('#overview-energy-card .gc-val[data-energy-used]');
-        const ovEnergyTotal = document.querySelector('#overview-energy-card [data-energy-total]');
-        if (ovEnergyUsed) _setIfChanged(ovEnergyUsed, fmtNumber(used));
-        if (ovEnergyTotal) _setIfChanged(ovEnergyTotal, fmtNumber(total));
-
-        const ovEff = document.getElementById("overview-efficiency");
-        if (ovEff) {
-          const pct = Number.isFinite(Number(data.energy_efficiency_pct))
-            ? Math.round(Number(data.energy_efficiency_pct))
-            : 100;
-          _setIfChanged(ovEff, pct);
-        }
-
-        if (activeResearch) {
-          const totalSec = Math.max(
-            1,
-            parseInt(activeResearch.total_seconds, 10) ||
-              parseInt(activeResearch.total, 10) ||
-              (resolveQueueJobRemaining(activeResearch) || 0) + 1
-          );
-          const finishAt = resolveQueueJobFinishTime(activeResearch);
-
-          const ovBox = document.getElementById("overview-research-active");
-          if (ovBox) {
-            ovBox.dataset.total = String(totalSec);
-            if (finishAt > 0) ovBox.dataset.finishAt = String(finishAt);
-            const rem = resolveQueueJobRemaining(activeResearch);
-            if (Number.isFinite(rem) && rem >= 0) {
-              assignMonotonicServerRemaining(ovBox, rem, finishAt);
-            } else {
-              delete ovBox.dataset.serverRemaining;
-            }
-          }
-        }
-
         patchOverviewResearch(research);
         patchOverviewStatus(data.overview, data, buildings, prod);
         if (data.planet_teaser) patchPlanetTeaser(data.planet_teaser);

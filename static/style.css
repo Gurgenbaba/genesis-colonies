@@ -16931,6 +16931,68 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.gc-header-cmd .hud-res-warn{
+  display: block;
+  margin-top: 2px;
+  padding-left: 2px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 196, 0, 0.92);
+  line-height: 1.2;
+}
+.gc-header-cmd .hud-res-panel--storage-warn{
+  border-color: color-mix(in srgb, rgba(255, 196, 0, 0.75) 45%, var(--hud-res-accent) 55%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.24) inset,
+    0 0 16px rgba(255, 196, 0, 0.14),
+    0 6px 14px rgba(0, 0, 0, 0.22);
+}
+.gc-header-cmd .hud-res-panel--storage-full .hud-res-warn{
+  color: rgba(255, 120, 80, 0.96);
+}
+.gc-header-cmd .hud-res-panel--storage-full{
+  border-color: color-mix(in srgb, rgba(255, 120, 80, 0.8) 50%, var(--hud-res-accent) 50%);
+}
+.gc-header-vacation-banner{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(255, 196, 0, 0.35);
+  background: rgba(255, 196, 0, 0.08);
+  color: var(--gc-text-soft);
+  font-size: 0.84rem;
+}
+.gc-header-vacation-icon{
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+.gc-header-vacation-text{
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 220, 120, 0.95);
+}
+.gc-header-vacation-timer{
+  color: var(--gc-text-dim);
+  font-size: 0.82rem;
+}
+.gc-header-vacation-link{
+  margin-left: auto;
+  color: var(--gc-primary-2);
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+.gc-header-vacation-link:hover{
+  text-decoration: underline;
+}
+
 .gc-header-cmd .hud-res-panel{
   --hud-res-accent: rgba(127, 255, 217, 0.72);
   --hud-res-glow: rgba(127, 255, 217, 0.24);

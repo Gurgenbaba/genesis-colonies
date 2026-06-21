@@ -397,7 +397,8 @@ def test_gc744_resource_icons_use_webp_picture():
     assert "loading=\"lazy\"" in macro
     assert "loading=\"eager\"" in macro
     overview = _read("templates/overview.html")
-    assert "render_resource_icon('metal', 'sm', lazy=false, priority='high')" in overview
+    assert "overview-planet-hero" in overview
+    assert "render_resource_icon('metal'" not in overview
     base = _read("templates/base.html")
     assert "render_resource_icon('metal', hud=true, lazy=false, priority='high'" in base
 
@@ -1311,7 +1312,6 @@ def test_gc551a_fuel_cell_icon_and_hero_level_badge():
     assert "rgba(5, 14, 24" in hero_badge or "rgb(6, 12, 26)" in hero_badge
     assert ".hud-res-fuel-cells .res-icon" in css
     assert "gc-res-fuel-cells" in css
-    assert "render_resource_icon('fuel_cells', 'sm'" in _read("templates/overview.html")
     assert "render_resource_icon" in _read("templates/base.html")
     assert Path("static/img/buildings/academy.png").stat().st_size > 100_000
 

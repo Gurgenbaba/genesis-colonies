@@ -1,29 +1,14 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_resource_icon with context %}
 
 {% block content %}
 
 {% set os = (overview_status if overview_status is defined and overview_status else {}) %}
 {% set planet = (os.planet if os.planet is defined else {}) %}
 {% set commander = (os.commander if os.commander is defined else {}) %}
-{% set res = (os.resources if os.resources is defined else {}) %}
-{% set nrg = (os.energy if os.energy is defined else {}) %}
 {% set activities = (os.activities if os.activities is defined and os.activities else []) %}
-{% set warnings = (os.warnings if os.warnings is defined and os.warnings else []) %}
 {% set player_obj = (player if player is defined and player else None) %}
 {% set cmd_id = commander.id if commander.id is defined else (player_obj.id if player_obj and player_obj.id is defined else None) %}
 {% set cmd_name = commander.name if commander.name is defined and commander.name else "Commander" %}
-
-{% set metal_cap = res.metal_cap or 0 %}
-{% set crystal_cap = res.crystal_cap or 0 %}
-{% set fuel_cap = res.fuel_cells_cap or 0 %}
-{% set metal_pct = ([(res.metal or 0) / metal_cap * 100, 100]|min|int) if metal_cap else 0 %}
-{% set crystal_pct = ([(res.crystal or 0) / crystal_cap * 100, 100]|min|int) if crystal_cap else 0 %}
-{% set fuel_pct = ([(res.fuel_cells or 0) / fuel_cap * 100, 100]|min|int) if fuel_cap else 0 %}
-{% set energy_used = nrg.used or 0 %}
-{% set energy_total = nrg.total or 0 %}
-{% set energy_surplus = energy_total - energy_used %}
-{% set energy_pct = ([energy_used / energy_total * 100, 100]|min|int) if energy_total else 0 %}
 {% set theme = (planet.theme if planet.theme is defined else {}) %}
 {% set hero_accent = theme.accent_color or '#46e5ff' %}
 {% set hero_secondary = theme.secondary_color or '#7fffd9' %}
@@ -38,14 +23,9 @@
       </h1>
     </div>
     <p class="section-hint hint">
-      {{ T("overview_command_hint", "Timer, Warnungen und Kolonie-Status auf einen Blick.") }}
+      {{ T("overview_command_hint", "Planet-Status und laufende Aktionen auf einen Blick.") }}
     </p>
   </header>
-
-  {% set galactic_directive_banner = os.galactic_directive_banner if os.galactic_directive_banner is defined else {} %}
-  {% include "partials/galactic_directive_banner.html" %}
-  {% set galactic_diplomacy_banner = os.galactic_diplomacy_banner if os.galactic_diplomacy_banner is defined else {} %}
-  {% include "partials/galactic_diplomacy_banner.html" %}
 
   <section class="gc-panel overview-hero overview-hero--themed overview-hero--effect-{{ hero_effect }}"
            id="overview-planet-hero"
@@ -88,99 +68,7 @@
       </div>
     </dl>
 
-    <div class="overview-resources-strip" id="overview-resources-strip" aria-label="{{ T('overview_label_resources', 'Ressourcen') }}">
-
-      <div class="overview-res-chip overview-res-chip--metal{% if metal_cap > 0 and metal_pct >= 92 %} overview-res-chip--warn{% endif %}"
-           id="overview-metal-val">
-        {{ render_resource_icon('metal', 'sm', lazy=false, priority='high') }}
-        <span class="overview-res-chip-label">{{ T('resource_metal', 'Ferronit') }}</span>
-        <span class="overview-res-chip-main gc-mono">
-          <span class="gc-val" data-res="metal">{{ (res.metal or 0)|fmt_int }}</span>
-        </span>
-        {% if metal_cap %}
-        <span class="overview-res-chip-bar" aria-hidden="true">
-          <span class="overview-res-chip-bar-fill" data-res-fill="metal" style="width: {{ metal_pct }}%;"></span>
-        </span>
-        {% endif %}
-      </div>
-
-      <div class="overview-res-chip overview-res-chip--crystal{% if crystal_cap > 0 and crystal_pct >= 92 %} overview-res-chip--warn{% endif %}"
-           id="overview-crystal-val">
-        {{ render_resource_icon('crystal', 'sm', lazy=false, priority='high') }}
-        <span class="overview-res-chip-label">{{ T('resource_crystal', 'Crytite') }}</span>
-        <span class="overview-res-chip-main gc-mono">
-          <span class="gc-val" data-res="crystal">{{ (res.crystal or 0)|fmt_int }}</span>
-        </span>
-        {% if crystal_cap %}
-        <span class="overview-res-chip-bar" aria-hidden="true">
-          <span class="overview-res-chip-bar-fill" data-res-fill="crystal" style="width: {{ crystal_pct }}%;"></span>
-        </span>
-        {% endif %}
-      </div>
-
-      <div class="overview-res-chip overview-res-chip--fuel{% if fuel_cap > 0 and fuel_pct >= 92 %} overview-res-chip--warn{% endif %}"
-           id="overview-fuel-val">
-        {{ render_resource_icon('fuel_cells', 'sm', lazy=false, priority='high') }}
-        <span class="overview-res-chip-label">{{ T('resource_fuel_cells', 'Brennzellen') }}</span>
-        <span class="overview-res-chip-main gc-mono">
-          <span class="gc-val" data-res="fuel_cells">{{ (res.fuel_cells or 0)|fmt_int }}</span>
-        </span>
-        {% if fuel_cap %}
-        <span class="overview-res-chip-bar" aria-hidden="true">
-          <span class="overview-res-chip-bar-fill" data-res-fill="fuel_cells" style="width: {{ fuel_pct }}%;"></span>
-        </span>
-        {% endif %}
-      </div>
-
-      <div class="overview-res-chip overview-res-chip--energy{% if energy_total == 0 %} overview-energy-zero{% elif (nrg.ratio or 1) >= 1 %} overview-energy-ok{% elif (nrg.ratio or 1) >= 0.5 %} overview-energy-low{% else %} overview-energy-critical{% endif %}"
-           id="overview-energy-card">
-        {{ render_resource_icon('energy', 'sm', lazy=false, priority='high') }}
-        <span class="overview-res-chip-label">{{ T('overview_card_energy', 'Energie') }}</span>
-        <span class="overview-res-chip-main gc-mono overview-res-chip-main--energy">
-          <span class="gc-val" data-energy-used id="overview-energy-current">{{ energy_used|fmt_int }}</span><span class="gc-cap"> / <span data-energy-total>{{ energy_total|fmt_int }}</span></span>
-          <span class="overview-res-chip-balance overview-res-dash-balance{% if energy_surplus >= 0 %} overview-res-dash-balance--pos{% else %} overview-res-dash-balance--neg{% endif %}"
-                id="overview-energy-balance">{{ '+' if energy_surplus >= 0 else '' }}{{ energy_surplus|fmt_int }}</span>
-        </span>
-        <span class="overview-res-chip-status"
-              id="overview-energy-status"
-              data-label-none="{{ T('overview_energy_none', 'Keine Energie') }}"
-              data-label-surplus="{{ T('overview_energy_surplus', 'Überschuss') }}"
-              data-label-deficit="{{ T('overview_energy_deficit', 'Defizit') }}">
-          {% if energy_total == 0 %}
-            {{ T('overview_energy_none', 'Keine Energie') }}
-          {% elif energy_surplus >= 0 %}
-            {{ T('overview_energy_surplus', 'Überschuss') }}
-          {% else %}
-            {{ T('overview_energy_deficit', 'Defizit') }}
-          {% endif %}
-        </span>
-        {% if energy_total %}
-        <span class="overview-res-chip-bar overview-res-chip-bar--energy" id="overview-energy-bar" aria-hidden="true">
-          <span class="overview-res-chip-bar-fill" data-res-fill="energy" style="width: {{ energy_pct }}%;"></span>
-        </span>
-        {% endif %}
-      </div>
-
-    </div>
     <div class="overview-hero-fx" aria-hidden="true"></div>
-  </section>
-
-  <section class="overview-warnings-panel gc-panel{% if not warnings %} is-empty{% endif %}"
-           id="overview-warnings-panel"
-           aria-label="{{ T('overview_label_warnings', 'Hinweise') }}"
-           {% if not warnings %}hidden{% endif %}>
-    <ul class="overview-warnings" id="overview-warnings">
-      {% for warn in warnings %}
-      <li class="overview-warning overview-warning-{{ warn.severity or 'info' }}"
-          data-warning-key="{{ warn.key }}">
-        {% if warn.href_key is defined and warn.href_key %}
-        <a class="overview-warning-link" href="{{ url_for(warn.href_key) }}">{{ T(warn.label_key, warn.label_key) }}</a>
-        {% else %}
-        <span class="overview-warning-text">{{ T(warn.label_key, warn.label_key) }}</span>
-        {% endif %}
-      </li>
-      {% endfor %}
-    </ul>
   </section>
 
   <section class="gc-panel overview-activities-panel overview-activities-panel--primary" aria-label="{{ T('overview_label_activities', 'Aktivitäten') }}">
@@ -225,6 +113,11 @@
       {% endfor %}
     </ul>
   </section>
+
+  {% set galactic_directive_banner = os.galactic_directive_banner if os.galactic_directive_banner is defined else {} %}
+  {% include "partials/galactic_directive_banner.html" %}
+  {% set galactic_diplomacy_banner = os.galactic_diplomacy_banner if os.galactic_diplomacy_banner is defined else {} %}
+  {% include "partials/galactic_diplomacy_banner.html" %}
 
 </div>
 

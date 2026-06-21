@@ -164,6 +164,18 @@
       </div>
 
       {% if not SIMPLE_LAYOUT %}
+      <!-- Urlaubsmodus — global sichtbar -->
+      <div class="gc-header-vacation-banner"
+           data-header-vacation-banner
+           role="status"
+           aria-live="polite"
+           hidden>
+        <span class="gc-header-vacation-icon" aria-hidden="true">🛌</span>
+        <span class="gc-header-vacation-text" data-header-vacation-text>{{ T('header_vacation_active', 'Urlaubsmodus aktiv') }}</span>
+        <span class="gc-header-vacation-timer gc-mono" data-header-vacation-timer hidden></span>
+        <a href="{{ url_for('options_view') }}" class="gc-header-vacation-link">{{ T('header_vacation_options', 'Optionen') }}</a>
+      </div>
+
       <!-- Zeile 2: Ressourcen-HUD -->
       <div class="gc-header-row gc-header-row-resources">
         <div class="gc-resource-sticky">
@@ -182,6 +194,7 @@
                   </span>
                 </span>
               </div>
+              <span class="hud-res-warn" data-hud-res-warn="metal" hidden aria-live="polite"></span>
               <span class="res-rate metal" data-res-rate="metal" aria-hidden="true" style="visibility:hidden"></span>
             </div>
 
@@ -198,6 +211,7 @@
                   </span>
                 </span>
               </div>
+              <span class="hud-res-warn" data-hud-res-warn="crystal" hidden aria-live="polite"></span>
               <span class="res-rate crystal" data-res-rate="crystal" aria-hidden="true" style="visibility:hidden"></span>
             </div>
 
@@ -216,6 +230,7 @@
                   </span>
                 </span>
               </div>
+              <span class="hud-res-warn" data-hud-res-warn="fuel_cells" hidden aria-live="polite"></span>
               <span class="res-rate fuel_cells" data-res-rate="fuel_cells" aria-hidden="true" style="visibility:hidden"></span>
             </div>
 
