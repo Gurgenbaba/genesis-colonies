@@ -52,9 +52,26 @@
     },
   };
 
-  function t(key) {
+  function t(key, fallback) {
+    if (typeof GC.t === "function") return GC.t(key, fallback);
     const loc = window.GC_LOCALE || {};
-    return Object.prototype.hasOwnProperty.call(loc, key) ? loc[key] : key;
+    if (Object.prototype.hasOwnProperty.call(loc, key)) return loc[key];
+    return arguments.length > 1 ? String(fallback ?? "") : key;
+  }
+
+  function tf(key, vars, fallback) {
+    if (typeof GC.tf === "function") return GC.tf(key, vars, fallback);
+    let s = t(key, fallback || key);
+    if (typeof s !== "string") return fallback || "";
+    s = String(s);
+    const v = vars && typeof vars === "object" ? vars : {};
+    s = s.replace(/%\(([^)]+)\)s/g, (_, k) => (
+      Object.prototype.hasOwnProperty.call(v, k) ? String(v[k] ?? "") : `%(${k})s`
+    ));
+    s = s.replace(/\{([^}]+)\}/g, (_, k) => (
+      Object.prototype.hasOwnProperty.call(v, k) ? String(v[k] ?? "") : `{${k}}`
+    ));
+    return s;
   }
 
   function msgKey(err) {
@@ -276,7 +293,10 @@
 
     bindResendVerification();
     bindDiscordUnlink();
-    syncSafetyCountdownTimers(readOptionsSafetyFromPage(page));
+    const safetyFromPage = readOptionsSafetyFromPage(page);
+    syncSafetyCountdownTimers(safetyFromPage);
+    publishAccountSafetyToShell(safetyFromPage);
+    syncVacationRepairVisibility();
     if (typeof GC.registerCleanup === "function") {
       GC.registerCleanup(() => {
         if (page) delete page.dataset.gcSafetyBound;
@@ -290,6 +310,8 @@
   GC.handleOptionsFormSubmit = handleOptionsFormSubmit;
   GC.initOptionsPage = initOptionsPage;
   GC.syncSafetyCountdownTimers = syncSafetyCountdownTimers;
+
+  GC.syncVacationRepairVisibility = syncVacationRepairVisibility;
 
   const SAFETY_ACTIONS = {
     vacation_enable: {
@@ -437,6 +459,23 @@
     };
   }
 
+  function publishAccountSafetyToShell(safety) {
+    if (!safety || typeof safety !== "object") return;
+    if (typeof GC.mergeLastState === "function") {
+      GC.mergeLastState({ account_safety: safety }, "options_account_safety");
+      return;
+    }
+    if (GC.lastState && typeof GC.lastState === "object") {
+      GC.lastState.account_safety = { ...(GC.lastState.account_safety || {}), ...safety };
+    }
+    if (typeof GC.syncHeaderVacationBanner === "function") {
+      GC.syncHeaderVacationBanner(safety);
+    }
+    if (typeof GC.syncFleetVacationNotice === "function") {
+      GC.syncFleetVacationNotice(safety);
+    }
+  }
+
   function syncSafetyCountdownTimers(safety) {
     const now = safetyServerNowSec();
     const vacTimer = document.getElementById("options-vacation-timer");
@@ -505,6 +544,51 @@
     }
     renderSafetyBlockers(safety.blocker_details);
     syncSafetyCountdownTimers(safety);
+    publishAccountSafetyToShell(safety);
+    syncVacationRepairVisibility();
+  }
+
+  function syncVacationRepairVisibility() {
+    const btn = document.getElementById("options-vacation-repair-btn");
+    const page = document.getElementById("options-page");
+    if (!btn || !page) return;
+    const pageInactive = page.getAttribute("data-vacation-active") !== "1";
+    const notice = document.querySelector("[data-fleet-vacation-notice]");
+    const shellActive = !!(notice && !notice.hidden);
+    const stateActive = !!(GC.lastState?.account_safety?.vacation_active);
+    const showRepair = pageInactive && (shellActive || stateActive);
+    btn.hidden = !showRepair;
+    const lead = document.getElementById("options-vacation-repair-lead");
+    if (lead) lead.hidden = !showRepair;
+  }
+
+  async function runVacationRepair() {
+    const btn = document.getElementById("options-vacation-repair-btn");
+    if (btn) btn.disabled = true;
+    try {
+      const data = await postOptionsJson("/api/options/account-safety/repair", {});
+      if (!data || data.ok !== true) {
+        setSafetyHint("options-vacation-hint", msgKey(data && data.error), true);
+        return;
+      }
+      const safety = (data.data && data.data.account_safety) || null;
+      if (safety) applySafetySnapshot(safety);
+      if (data.data && data.data.state && typeof GC.applyActionState === "function") {
+        GC.applyActionState({ ok: true, state: data.data.state }, "options_vacation_repair");
+      } else if (safety) {
+        publishAccountSafetyToShell(safety);
+      }
+      setSafetyHint(
+        "options-vacation-hint",
+        msgKey(data.message || "options_vacation_repaired"),
+        false
+      );
+      syncVacationRepairVisibility();
+    } catch (err) {
+      if (err && err.name === "AuthError") return;
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   function bindOptionsAccountSafety() {
@@ -571,6 +655,10 @@
       btn.addEventListener("click", () => {
         const action = btn.getAttribute("data-action");
         if (!action) return;
+        if (action === "vacation_repair") {
+          void runVacationRepair();
+          return;
+        }
         openModal(action);
       });
     });

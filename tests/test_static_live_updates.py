@@ -398,6 +398,8 @@ def test_gc744_resource_icons_use_webp_picture():
     assert "loading=\"eager\"" in macro
     overview = _read("templates/overview.html")
     assert "overview-planet-hero" in overview
+    assert "data-overview-hero-bg" in overview
+    assert "planet_slot_" in overview or "hero_label_key" in overview
     assert "render_resource_icon('metal'" not in overview
     base = _read("templates/base.html")
     assert "render_resource_icon('metal', hud=true, lazy=false, priority='high'" in base

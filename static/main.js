@@ -769,6 +769,9 @@
     const accent = String(ap.accent_color || theme.accent_color || "").trim();
     const secondary = String(ap.secondary_color || theme.secondary_color || "").trim();
     const effect = String(ap.planet_effect || theme.effect || "").trim();
+    const labelKey = String(ap.slot_label_key || theme.label_key || "").trim();
+    const herocardUrl = String(ap.herocard_url || "").trim();
+    const herocardWebp = String(ap.herocard_webp_url || "").trim();
 
     if (accent) hero.style.setProperty("--planet-accent", accent);
     else hero.style.removeProperty("--planet-accent");
@@ -783,6 +786,34 @@
       hero.dataset.planetEffect = effect;
     } else {
       delete hero.dataset.planetEffect;
+    }
+
+    const bgWrap = hero.querySelector("[data-overview-hero-bg]");
+    if (bgWrap && herocardUrl) {
+      const picture = bgWrap.querySelector("picture");
+      const img = bgWrap.querySelector("img");
+      const source = picture?.querySelector("source");
+      const currentSrc = img?.currentSrc || img?.src || "";
+      const sameImage = currentSrc && (currentSrc === herocardUrl || currentSrc.endsWith(herocardUrl));
+      if (img && !sameImage) {
+        img.style.opacity = "0";
+        const onLoad = () => {
+          img.style.opacity = "1";
+          img.removeEventListener("load", onLoad);
+        };
+        img.addEventListener("load", onLoad);
+        if (source && herocardWebp) source.srcset = herocardWebp;
+        img.src = herocardUrl;
+      } else if (img) {
+        if (source && herocardWebp) source.srcset = herocardWebp;
+        img.src = herocardUrl;
+      }
+    }
+
+    const slotBadge = document.getElementById("overview-planet-slot-badge");
+    if (slotBadge && labelKey) {
+      slotBadge.textContent = t(labelKey, labelKey);
+      hero.dataset.slotLabelKey = labelKey;
     }
   }
 
@@ -944,6 +975,7 @@
 
   // Bumped on every POST action state apply — stale in-flight polls must not overwrite.
   let _clientStateGen = 0;
+  let _sessionPlayerId = 0;
   let _lastAppliedServerTime = 0;
   let _fleetRefreshSeq = 0;
 
@@ -1077,6 +1109,30 @@
   initFormattedNumberInputDelegation();
   GC.t = t;
   GC.tf = tf;
+
+  function readDomPlayerId() {
+    const fromBody = Math.floor(Number(document.body?.dataset?.playerId || 0));
+    if (fromBody > 0) return fromBody;
+    const optionsPage = document.getElementById("options-page");
+    return Math.floor(Number(optionsPage?.getAttribute("data-player-id") || 0));
+  }
+
+  function resetClientStateForAccountChange(nextPlayerId, reason) {
+    const pid = Math.floor(Number(nextPlayerId) || 0);
+    if (pid > 0 && _sessionPlayerId > 0 && pid !== _sessionPlayerId) {
+      GC.lastState = null;
+      _clientStateGen += 1;
+      if (typeof syncFleetVacationNotice === "function") {
+        syncFleetVacationNotice({});
+      }
+      if (typeof syncHeaderVacationBanner === "function") {
+        syncHeaderVacationBanner({});
+      }
+      console.debug("[GC] client state reset (account switch)", _sessionPlayerId, "->", pid, reason || "");
+    }
+    if (pid > 0) _sessionPlayerId = pid;
+  }
+  GC.resetClientStateForAccountChange = resetClientStateForAccountChange;
 
   (function applyClientRuntimeConfig() {
     const cfg = typeof window !== "undefined" ? window.GC_CLIENT_CONFIG : null;
@@ -1437,6 +1493,7 @@
 
   let _progressTickerActive = false;
   let _progressTickerTimerId = null;
+  let _progressTickerInTick = false;
 
   GC.stopProgressTicker = function stopProgressTicker() {
     _progressTickerActive = false;
@@ -1477,7 +1534,7 @@
     }
     _progressTickerActive = true;
     _pageTimerLoopRunning = true;
-    if (_progressTickerTimerId != null) return;
+    if (_progressTickerTimerId != null || _progressTickerInTick) return;
     const tick = () => {
       _progressTickerTimerId = null;
       if (!_progressTickerActive || !shouldRunVisualLoops() || _authLoopAborted) {
@@ -1492,10 +1549,15 @@
         syncPerfBodyClasses();
         return;
       }
-      const serverNow = getTimerServerNow();
-      updateAllProgressBars(serverNow);
-      syncPerfBodyClasses();
-      _progressTickerTimerId = setTimeout(tick, _progressTickerDelayMs(serverNow));
+      _progressTickerInTick = true;
+      try {
+        const serverNow = getTimerServerNow();
+        updateAllProgressBars(serverNow);
+        syncPerfBodyClasses();
+      } finally {
+        _progressTickerInTick = false;
+      }
+      _progressTickerTimerId = setTimeout(tick, _progressTickerDelayMs(getTimerServerNow()));
     };
     tick();
   };
@@ -1698,6 +1760,7 @@
 
     _authLoopAborted = false;
     _statusPollErrorLogged = false;
+    resetClientStateForAccountChange(readDomPlayerId(), "page_init");
 
     const afterInit = async () => {
       resyncServerTimeFromDom(true);
@@ -8452,6 +8515,8 @@
     "global_queue_hud",
     "active_fleets",
     "fleet_slots",
+    "account_safety",
+    "player_id",
     "energy_efficiency_pct",
     "energy_ratio",
     "buildings",
@@ -8601,6 +8666,10 @@
   function applyGameStateData(data, _reason, opts) {
       if (!data || data.ok === false) return false;
       const reason = String(_reason || "");
+      resetClientStateForAccountChange(
+        data.player_id || readDomPlayerId(),
+        reason || "game_state"
+      );
       const skipMessagesUnread = Boolean(opts && opts.skipMessagesUnread);
       const hudOnly = Boolean(opts && opts.hudOnly) || isHudOnlyGameStateReason(reason);
       if (hudOnly) {
@@ -21409,10 +21478,9 @@
   function rankingVacationBadgeHtml(row) {
     if (!row?.vacation_active) return "";
     const label = rankingEscapeHtml(rankingT("ranking_vacation_mode", "Vacation mode"));
-    const short = rankingEscapeHtml(rankingT("ranking_vacation_badge", "U"));
+    const short = rankingEscapeHtml(rankingT("ranking_vacation_badge", "Urlaub"));
     return (
       `<span class="gc-ranking-status-badge gc-ranking-status-badge--vacation" title="${label}" aria-label="${label}">` +
-      `<span class="gc-ranking-status-badge-icon" aria-hidden="true">⛱</span>` +
       `<span class="gc-ranking-status-badge-text">${short}</span>` +
       `</span>`
     );
@@ -21421,10 +21489,9 @@
   function rankingInactiveBadgeHtml(row) {
     if (!row?.inactive) return "";
     const label = rankingEscapeHtml(rankingT("ranking_inactive_mode", "Inactive — not online for 3+ days"));
-    const short = rankingEscapeHtml(rankingT("ranking_inactive_badge", "3d"));
+    const short = rankingEscapeHtml(rankingT("ranking_inactive_badge", "Inaktiv"));
     return (
       `<span class="gc-ranking-status-badge gc-ranking-status-badge--inactive" title="${label}" aria-label="${label}">` +
-      `<span class="gc-ranking-status-badge-icon" aria-hidden="true">◌</span>` +
       `<span class="gc-ranking-status-badge-text">${short}</span>` +
       `</span>`
     );

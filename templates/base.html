@@ -29,6 +29,7 @@
       data-theme="dark"
       data-endpoint="{{ request.endpoint or '' }}"
       data-auth-page="{{ '1' if SIMPLE_LAYOUT else '0' }}"
+      {% if not SIMPLE_LAYOUT and CURRENT_PLAYER_ID %}data-player-id="{{ CURRENT_PLAYER_ID }}"{% endif %}
       {% if not SIMPLE_LAYOUT %}data-server-time="{{ SERVER_TIME }}"{% endif %}
       {% if current_planet_landscape_url %}style="--planet-landscape: url('{{ current_planet_landscape_url }}');{% if current_planet_landscape_webp_url is defined and current_planet_landscape_webp_url %} --planet-landscape-webp: url('{{ current_planet_landscape_webp_url }}');{% endif %}"{% endif %}>
 
@@ -164,18 +165,6 @@
       </div>
 
       {% if not SIMPLE_LAYOUT %}
-      <!-- Urlaubsmodus — global sichtbar -->
-      <div class="gc-header-vacation-banner"
-           data-header-vacation-banner
-           role="status"
-           aria-live="polite"
-           hidden>
-        <span class="gc-header-vacation-icon" aria-hidden="true">🛌</span>
-        <span class="gc-header-vacation-text" data-header-vacation-text>{{ T('header_vacation_active', 'Urlaubsmodus aktiv') }}</span>
-        <span class="gc-header-vacation-timer gc-mono" data-header-vacation-timer hidden></span>
-        <a href="{{ url_for('options_view') }}" class="gc-header-vacation-link">{{ T('header_vacation_options', 'Optionen') }}</a>
-      </div>
-
       <!-- Zeile 2: Ressourcen-HUD -->
       <div class="gc-header-row gc-header-row-resources">
         <div class="gc-resource-sticky">

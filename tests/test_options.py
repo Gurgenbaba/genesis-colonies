@@ -26,9 +26,11 @@ from game.options import (
     ensure_account_options_schema,
     ensure_account_safety_schema,
     get_account_safety_snapshot,
+    get_account_safety_state,
     get_destructive_action_blocker_details,
     get_destructive_action_blockers,
     get_options_snapshot,
+    repair_account_safety_state,
     reset_sensitive_rate_limits,
     update_active_planet_name,
     update_email,
@@ -534,6 +536,115 @@ def test_account_safety_snapshot(temp_db):
     assert "confirm_phrases" in snap
     assert "blocker_details" in snap
     assert isinstance(snap["blocker_details"], dict)
+
+
+def test_account_safety_hud_matches_snapshot_vacation_fields(temp_db):
+    from game.live_state import account_safety_hud_for_game_state
+
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+    pid, _, _ = _create_player()
+    conn = models.db()
+    try:
+        now = int(time.time())
+        conn.execute(
+            "UPDATE players SET vacation_mode_active = 1, vacation_locked_until = ? WHERE id = ?;",
+            (now + 3600, pid),
+        )
+        conn.commit()
+        snap = get_account_safety_snapshot(pid, conn=conn)
+        hud = account_safety_hud_for_game_state(pid, conn=conn)
+        assert hud["vacation_active"] == snap["vacation_active"]
+        assert hud["vacation_locked_until"] == snap["vacation_locked_until"]
+        assert hud["vacation_can_disable"] == snap["vacation_can_disable"]
+    finally:
+        conn.close()
+
+
+def test_repair_account_safety_clears_orphan_vacation_flag(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+    pid, _, _ = _create_player()
+    conn = models.db()
+    try:
+        conn.execute(
+            "UPDATE players SET vacation_mode_active = 1, vacation_locked_until = NULL WHERE id = ?;",
+            (pid,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    repaired, hud = repair_account_safety_state(pid)
+    assert repaired is True
+    assert hud["vacation_active"] is False
+
+    snap = get_account_safety_state(pid, self_heal=False)
+    assert snap["vacation_active"] is False
+
+
+def test_vacation_banner_is_scoped_to_current_account(app_client, temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+
+    pid_a, uname_a, _ = _create_player()
+    pid_b, uname_b, _ = _create_player()
+    conn = models.db()
+    try:
+        now = int(time.time())
+        conn.execute(
+            "UPDATE players SET vacation_mode_active = 1, vacation_locked_until = ? WHERE id = ?;",
+            (now + 3600, pid_a),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    _login(app_client, uname_b)
+    res = app_client.get("/api/game-state", headers={"Accept": "application/json"})
+    assert res.status_code == 200
+    body = res.get_json()
+    assert int(body.get("player_id") or 0) == pid_b
+    safety = body.get("account_safety") or {}
+    assert safety.get("vacation_active") is False
+
+    _login(app_client, uname_a)
+    res_a = app_client.get("/api/game-state", headers={"Accept": "application/json"})
+    assert res_a.status_code == 200
+    safety_a = res_a.get_json().get("account_safety") or {}
+    assert safety_a.get("vacation_active") is True
+
+
+def test_account_safety_repair_api(app_client, temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+    pid, uname, _ = _create_player()
+    conn = models.db()
+    try:
+        conn.execute(
+            "UPDATE players SET vacation_mode_active = 1, vacation_locked_until = NULL WHERE id = ?;",
+            (pid,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    _login(app_client, uname)
+    res = app_client.post(
+        "/api/options/account-safety/repair",
+        json={},
+        headers={"Accept": "application/json"},
+    )
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["ok"] is True
+    assert body["data"]["repaired"] is True
+    assert body["data"]["account_safety"]["vacation_active"] is False
+    assert body["data"]["state"]["account_safety"]["vacation_active"] is False
 
 
 def test_orphan_fleet_movements_do_not_block_account_safety(temp_db):

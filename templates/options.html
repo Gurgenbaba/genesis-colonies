@@ -301,6 +301,16 @@
             </button>
           {% endif %}
         </div>
+        <button type="button"
+                class="gc-btn gc-btn-ghost gc-options-safety-btn gc-options-vacation-repair-btn"
+                id="options-vacation-repair-btn"
+                data-action="vacation_repair"
+                hidden>
+          {{ T("options_vacation_repair") }}
+        </button>
+        <p class="gc-options-safety-lead gc-options-vacation-repair-lead"
+           id="options-vacation-repair-lead"
+           hidden>{{ T("options_vacation_repair_lead") }}</p>
         <p class="gc-options-form-hint gc-options-safety-hint" id="options-vacation-hint" role="status" aria-live="polite" hidden></p>
       </div>
 

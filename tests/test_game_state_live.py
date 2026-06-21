@@ -574,6 +574,27 @@ def test_api_game_state_research_queue_timer_fields(game_client):
     assert int(head.get("remaining_seconds") or 0) > 0
 
 
+def test_game_state_account_safety_self_heals_expired_vacation(game_client):
+    client, pid = game_client
+    conn = db()
+    try:
+        past = int(time.time()) - 60
+        conn.execute(
+            "UPDATE players SET vacation_mode_active = 1, vacation_locked_until = ? WHERE id = ?;",
+            (past, pid),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    r = client.get("/api/game-state")
+    assert r.status_code == 200
+    body = r.get_json()
+    safety = body.get("account_safety") or {}
+    assert safety.get("vacation_active") is False
+    assert int(body.get("player_id") or 0) == pid
+
+
 def test_main_js_gc541_server_time_fallback_chain():
     src = open("static/main.js", encoding="utf-8").read()
     timer_now = src.split("function getTimerServerNow()")[1].split("function queryTimerElements")[0]

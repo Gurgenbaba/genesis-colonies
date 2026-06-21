@@ -126,6 +126,7 @@ GC_LOCALE = "de"
 from game.i18n import (
     DEFAULT_LOCALE,
     current_locale,
+    format_i18n,
     get_locale_dict,
     get_player_locale,
     normalize_locale,
@@ -152,14 +153,10 @@ def T(key: str, *fmt_args, **fmt_kwargs) -> str:
         txt = key
     if not fmt_args and not fmt_kwargs:
         return txt
-    try:
-        if fmt_kwargs:
-            txt = txt % fmt_kwargs
-        elif fmt_args:
-            txt = txt % fmt_args
-    except Exception:
-        return txt
-    return txt
+    if fmt_kwargs:
+        return format_i18n(txt, **fmt_kwargs)
+    positional = {str(i): arg for i, arg in enumerate(fmt_args)}
+    return format_i18n(txt, **positional)
 
 
 from game.number_format import fmt_int as _fmt_int_canonical, fmt_int_compact as _fmt_int_compact_canonical
@@ -4308,6 +4305,31 @@ def api_options_vacation_disable():
     return _options_api_response(True, err, data)
 
 
+@app.route("/api/options/account-safety/repair", methods=["POST"])
+@require_login_api
+def api_options_account_safety_repair():
+    pid = _current_player_id()
+    assert pid is not None
+    meta = _options_request_meta()
+    repaired, hud = options_logic.repair_account_safety_state(
+        int(pid),
+        ip=meta["ip"],
+        user_agent=meta["user_agent"],
+    )
+    safety = options_logic.get_account_safety_state(int(pid), self_heal=False)
+    state = {
+        "ok": True,
+        "server_time": time.time(),
+        "player_id": int(pid),
+        "account_safety": hud,
+    }
+    return _options_api_response(
+        True,
+        "options_vacation_repaired",
+        {"account_safety": safety, "repaired": repaired, "state": state},
+    )
+
+
 @app.route("/api/options/account-deletion/request", methods=["POST"])
 @require_login_api
 def api_options_account_deletion_request():
@@ -4695,6 +4717,7 @@ def _payload_from_live_context(
     payload: Dict[str, Any] = {
         "ok": True,
         "server_time": time.time(),
+        "player_id": int(user_id),
         "energy_ratio": float(ratio),
         "energy_efficiency_pct": energy_efficiency_pct,
         "player": {
@@ -4769,12 +4792,18 @@ def _payload_from_live_context(
         from game.planet_evolution.dna import effective_planet_class
         from game.planet_evolution.ux_copy import planet_class_label_key
 
-        from game.planet_visuals import get_landscape_for_position, get_planet_identity_for_position, raster_webp_relpath
+        from game.planet_visuals import (
+            get_landscape_for_position,
+            get_planet_identity_for_position,
+            herocard_static_relpath,
+            raster_webp_relpath,
+        )
 
         coords = get_planet_coordinates(planet)
         position = int(coords.get("position") or 0)
         landscape_fn = get_landscape_for_position(position)
         landscape_rel = f"img/landscapes/{landscape_fn}"
+        herocard_rel = herocard_static_relpath(position)
         planet_class = effective_planet_class(planet)
         theme = get_planet_identity_for_position(position)
         from game.planet_evolution.empire_identity import empire_identity_for_planet
@@ -4791,9 +4820,12 @@ def _payload_from_live_context(
             "position": position,
             "landscape_url": url_for("static", filename=landscape_rel),
             "landscape_webp_url": url_for("static", filename=raster_webp_relpath(landscape_rel)),
+            "herocard_url": url_for("static", filename=herocard_rel),
+            "herocard_webp_url": url_for("static", filename=raster_webp_relpath(herocard_rel)),
             "accent_color": theme["accent_color"],
             "secondary_color": theme["secondary_color"],
             "planet_effect": theme["effect"],
+            "slot_label_key": theme["label_key"],
             **identity,
             "sidebar_nav": resolve_sidebar_nav(
                 empire_role_key=identity["empire_role_key"],
@@ -4801,9 +4833,15 @@ def _payload_from_live_context(
             ),
         }
     except Exception:
-        from game.planet_visuals import DEFAULT_LANDSCAPE, get_planet_identity_for_position, raster_webp_relpath
+        from game.planet_visuals import (
+            DEFAULT_HEROCARD,
+            DEFAULT_LANDSCAPE,
+            get_planet_identity_for_position,
+            raster_webp_relpath,
+        )
 
         fallback_rel = f"img/landscapes/{DEFAULT_LANDSCAPE}"
+        fallback_herocard_rel = f"img/herocards/{DEFAULT_HEROCARD}"
         fallback_theme = get_planet_identity_for_position(0)
         from game.planet_evolution.empire_identity import empire_identity_for_planet
         from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
@@ -4819,9 +4857,12 @@ def _payload_from_live_context(
             "position": None,
             "landscape_url": url_for("static", filename=fallback_rel),
             "landscape_webp_url": url_for("static", filename=raster_webp_relpath(fallback_rel)),
+            "herocard_url": url_for("static", filename=fallback_herocard_rel),
+            "herocard_webp_url": url_for("static", filename=raster_webp_relpath(fallback_herocard_rel)),
             "accent_color": fallback_theme["accent_color"],
             "secondary_color": fallback_theme["secondary_color"],
             "planet_effect": fallback_theme["effect"],
+            "slot_label_key": fallback_theme["label_key"],
             **identity,
             "sidebar_nav": resolve_sidebar_nav(
                 empire_role_key=identity["empire_role_key"],

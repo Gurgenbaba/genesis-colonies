@@ -246,20 +246,216 @@ def validate_account_safety_confirm(action_key: str, confirm_text: Any) -> bool:
     return str(confirm_text or "").strip() == expected
 
 
+def resolve_authenticated_player_id(user_id: int, *, conn=None) -> Optional[int]:
+    """Map session user_id to players.id; None when no player row exists."""
+    uid = int(user_id or 0)
+    if uid <= 0:
+        return None
+    own = conn is None
+    c = conn or db()
+    try:
+        row = c.execute("SELECT id FROM players WHERE id = ? LIMIT 1;", (uid,)).fetchone()
+        return int(row["id"]) if row else None
+    finally:
+        if own:
+            c.close()
+
+
+def _player_safety_select_sql(conn) -> str:
+    cols = [
+        "vacation_mode_active",
+        "vacation_locked_until",
+        "account_deletion_requested_at",
+        "account_deletion_due_at",
+        "account_deleted_at",
+    ]
+    for legacy in ("vacation_mode", "vacation_until", "vacation_started_at"):
+        if column_exists(conn, "players", legacy):
+            cols.append(legacy)
+    return ", ".join(cols)
+
+
 def _player_safety_row(player_id: int, conn) -> Dict[str, Any]:
     ensure_account_safety_schema(conn)
+    pid = resolve_authenticated_player_id(int(player_id), conn=conn)
+    if pid is None:
+        return {}
     cur = conn.cursor()
     cur.execute(
-        """
-        SELECT vacation_mode_active, vacation_locked_until,
-               account_deletion_requested_at, account_deletion_due_at,
-               account_deleted_at
+        f"""
+        SELECT {_player_safety_select_sql(conn)}
         FROM players WHERE id = ? LIMIT 1;
         """,
-        (int(player_id),),
+        (int(pid),),
     )
     row = cur.fetchone()
     return dict(row) if row else {}
+
+
+def _vacation_state_needs_repair(row: Dict[str, Any], now: int) -> bool:
+    active = bool(int(row.get("vacation_mode_active") or 0))
+    locked_until = row.get("vacation_locked_until")
+    if active:
+        if locked_until is None:
+            return True
+        if int(locked_until) <= now:
+            return True
+    elif locked_until is not None:
+        return True
+    for legacy_col in ("vacation_mode", "vacation_until", "vacation_started_at"):
+        if legacy_col in row and row.get(legacy_col) not in (None, "", 0):
+            return True
+    return False
+
+
+def _vacation_hud_from_row(row: Dict[str, Any], now: int) -> Dict[str, Any]:
+    locked_until = row.get("vacation_locked_until")
+    deletion_due = row.get("account_deletion_due_at")
+    vacation_active = bool(int(row.get("vacation_mode_active") or 0))
+    deletion_pending = deletion_due is not None and int(deletion_due or 0) > now
+    return {
+        "vacation_active": vacation_active,
+        "vacation_locked_until": int(locked_until) if locked_until else None,
+        "vacation_can_disable": vacation_active
+        and (locked_until is None or int(locked_until) <= now),
+        "deletion_pending": deletion_pending,
+        "deletion_due_at": int(deletion_due) if deletion_due else None,
+        "deletion_seconds_remaining": max(0, int(deletion_due or 0) - now)
+        if deletion_due and int(deletion_due) > now
+        else 0,
+    }
+
+
+def repair_account_safety_state(
+    player_id: int,
+    *,
+    conn=None,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> Tuple[bool, Dict[str, Any]]:
+    """Clear inconsistent vacation flags for the authenticated player only."""
+    own = conn is None
+    c = conn or db()
+    try:
+        pid = resolve_authenticated_player_id(int(player_id), conn=c)
+        if pid is None:
+            return False, _vacation_hud_from_row({}, _now_ts())
+
+        row = _player_safety_row(int(pid), c)
+        now = _now_ts()
+        if not _vacation_state_needs_repair(row, now):
+            return False, _vacation_hud_from_row(row, now)
+
+        active = bool(int(row.get("vacation_mode_active") or 0))
+        locked_until = row.get("vacation_locked_until")
+        set_active = active
+        set_locked = locked_until
+        if active and (locked_until is None or int(locked_until) <= now):
+            set_active = 0
+            set_locked = None
+        elif not active and locked_until is not None:
+            set_locked = None
+
+        begin_write_transaction(c)
+        c.execute(
+            """
+            UPDATE players
+            SET vacation_mode_active = ?, vacation_locked_until = ?
+            WHERE id = ?;
+            """,
+            (int(set_active), set_locked, int(pid)),
+        )
+        for legacy_col, clear_val in (
+            ("vacation_mode", 0),
+            ("vacation_until", None),
+            ("vacation_started_at", None),
+        ):
+            if column_exists(c, "players", legacy_col):
+                c.execute(
+                    f"UPDATE players SET {legacy_col} = ? WHERE id = ?;",
+                    (clear_val, int(pid)),
+                )
+        write_account_audit(
+            int(pid),
+            "account_safety_repaired",
+            payload={
+                "before": {
+                    "vacation_mode_active": active,
+                    "vacation_locked_until": int(locked_until) if locked_until else None,
+                },
+                "after": {
+                    "vacation_mode_active": bool(int(set_active)),
+                    "vacation_locked_until": int(set_locked) if set_locked else None,
+                },
+            },
+            ip=ip,
+            user_agent=user_agent,
+            conn=c,
+        )
+        commit(c)
+        row = _player_safety_row(int(pid), c)
+        return True, _vacation_hud_from_row(row, now)
+    except Exception:
+        if own:
+            rollback(c)
+        return False, _vacation_hud_from_row({}, _now_ts())
+    finally:
+        if own:
+            c.close()
+
+
+def get_account_safety_hud_state(
+    player_id: int,
+    *,
+    conn=None,
+    self_heal: bool = True,
+) -> Dict[str, Any]:
+    """Player-scoped vacation/deletion slice for shell HUD (no global cache)."""
+    own = conn is None
+    c = conn or db()
+    try:
+        pid = resolve_authenticated_player_id(int(player_id), conn=c)
+        if pid is None:
+            return _vacation_hud_from_row({}, _now_ts())
+        if self_heal:
+            repair_account_safety_state(int(pid), conn=c)
+        row = _player_safety_row(int(pid), c)
+        return _vacation_hud_from_row(row, _now_ts())
+    finally:
+        if own:
+            c.close()
+
+
+def get_account_safety_state(
+    player_id: int,
+    *,
+    conn=None,
+    self_heal: bool = True,
+) -> Dict[str, Any]:
+    """Canonical account safety snapshot for options + APIs."""
+    own = conn is None
+    c = conn or db()
+    try:
+        pid = resolve_authenticated_player_id(int(player_id), conn=c)
+        if pid is None:
+            return {
+                "vacation_active": False,
+                "vacation_locked_until": None,
+                "vacation_can_disable": False,
+                "deletion_pending": False,
+                "deletion_requested_at": None,
+                "deletion_due_at": None,
+                "deletion_seconds_remaining": 0,
+                "blockers": [],
+                "blocker_details": {},
+                "confirm_phrases": dict(ACCOUNT_SAFETY_CONFIRM_PHRASES),
+            }
+        if self_heal:
+            repair_account_safety_state(int(pid), conn=c)
+        return get_account_safety_snapshot(int(pid), conn=c, self_heal=False)
+    finally:
+        if own:
+            c.close()
 
 
 def is_account_deleted(player_id: int, *, conn=None) -> bool:
@@ -456,30 +652,42 @@ def _destructive_action_blocker_payload(player_id: int, *, conn) -> Optional[Dic
     return {"blockers": blockers, "blocker_details": details}
 
 
-def get_account_safety_snapshot(player_id: int, *, conn=None) -> Dict[str, Any]:
+def get_account_safety_snapshot(
+    player_id: int,
+    *,
+    conn=None,
+    self_heal: bool = False,
+) -> Dict[str, Any]:
     own = conn is None
     c = conn or db()
     try:
-        process_due_account_deletion(int(player_id), conn=c)
-        row = _player_safety_row(int(player_id), c)
+        pid = resolve_authenticated_player_id(int(player_id), conn=c)
+        if pid is None:
+            return {
+                "vacation_active": False,
+                "vacation_locked_until": None,
+                "vacation_can_disable": False,
+                "deletion_pending": False,
+                "deletion_requested_at": None,
+                "deletion_due_at": None,
+                "deletion_seconds_remaining": 0,
+                "blockers": [],
+                "blocker_details": {},
+                "confirm_phrases": dict(ACCOUNT_SAFETY_CONFIRM_PHRASES),
+            }
+        if self_heal:
+            repair_account_safety_state(int(pid), conn=c)
+        process_due_account_deletion(int(pid), conn=c)
+        row = _player_safety_row(int(pid), c)
         now = _now_ts()
-        locked_until = row.get("vacation_locked_until")
-        deletion_due = row.get("account_deletion_due_at")
-        deletion_requested = row.get("account_deletion_requested_at")
-        vacation_active = bool(int(row.get("vacation_mode_active") or 0))
-        blocker_details = get_destructive_action_blocker_details(int(player_id), conn=c)
+        hud = _vacation_hud_from_row(row, now)
+        blocker_details = get_destructive_action_blocker_details(int(pid), conn=c)
         blockers = _blockers_from_details(blocker_details)
         return {
-            "vacation_active": vacation_active,
-            "vacation_locked_until": int(locked_until) if locked_until else None,
-            "vacation_can_disable": vacation_active
-            and (locked_until is None or int(locked_until) <= now),
-            "deletion_pending": deletion_due is not None and int(deletion_due or 0) > now,
-            "deletion_requested_at": int(deletion_requested) if deletion_requested else None,
-            "deletion_due_at": int(deletion_due) if deletion_due else None,
-            "deletion_seconds_remaining": max(0, int(deletion_due or 0) - now)
-            if deletion_due and int(deletion_due) > now
-            else 0,
+            **hud,
+            "deletion_requested_at": int(row["account_deletion_requested_at"])
+            if row.get("account_deletion_requested_at")
+            else None,
             "blockers": blockers,
             "blocker_details": blocker_details,
             "confirm_phrases": dict(ACCOUNT_SAFETY_CONFIRM_PHRASES),
@@ -527,7 +735,7 @@ def get_options_snapshot(player_id: int, conn=None) -> Dict[str, Any]:
             # Backward-compatible keys for older clients
             "homeworld_id": int(planet["id"]) if planet and planet.get("id") else None,
             "homeworld_name": str(planet.get("name") or "") if planet else "",
-            "account_safety": get_account_safety_snapshot(int(player_id), conn=c),
+            "account_safety": get_account_safety_state(int(player_id), conn=c),
         }
     finally:
         if own:

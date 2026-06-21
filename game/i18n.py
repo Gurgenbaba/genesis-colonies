@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import contextvars
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+_I18N_PCT_RE = re.compile(r"%\(([^)]+)\)s")
+_I18N_BRACE_RE = re.compile(r"\{([^}]+)\}")
 
 from .db import column_exists, db
 
@@ -36,7 +40,14 @@ def normalize_locale(locale: str | None) -> str:
 
 
 def get_locale_dict(locale: str | None = None) -> dict[str, str]:
-    return _load_locale(normalize_locale(locale))
+    loc = normalize_locale(locale)
+    primary = _load_locale(loc)
+    if loc == DEFAULT_LOCALE:
+        return primary
+    fallback = _load_locale(DEFAULT_LOCALE)
+    merged = dict(fallback)
+    merged.update(primary)
+    return merged
 
 
 def current_locale() -> str:
@@ -100,18 +111,47 @@ def set_player_locale(player_id: int, locale: str, *, conn=None) -> str:
     return loc
 
 
-def tr(key: str, default: str | None = None, *, locale: str | None = None, **fmt: object) -> str:
-    """Translate key from locale JSON; optional %(name)s formatting."""
-    loc = normalize_locale(locale) if locale is not None else current_locale()
-    text = _load_locale(loc).get(key)
-    if text is None:
-        text = default if default is not None else key
+def format_i18n(text: str, **fmt: object) -> str:
+    """Interpolate %(name)s and {name} placeholders (mirrors client tf())."""
     if not fmt:
         return text
-    try:
-        return text % fmt
-    except Exception:
-        return text
+
+    def _pct_sub(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in fmt:
+            return match.group(0)
+        val = fmt[key]
+        return "" if val is None else str(val)
+
+    def _brace_sub(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in fmt:
+            return match.group(0)
+        val = fmt[key]
+        return "" if val is None else str(val)
+
+    if _I18N_PCT_RE.search(text):
+        try:
+            return text % fmt
+        except (KeyError, TypeError, ValueError):
+            text = _I18N_PCT_RE.sub(_pct_sub, text)
+
+    if _I18N_BRACE_RE.search(text):
+        try:
+            return text.format(**{k: ("" if v is None else v) for k, v in fmt.items()})
+        except (KeyError, ValueError):
+            text = _I18N_BRACE_RE.sub(_brace_sub, text)
+
+    return text
+
+
+def tr(key: str, default: str | None = None, *, locale: str | None = None, **fmt: object) -> str:
+    """Translate key from locale JSON; optional %(name)s / {name} formatting."""
+    loc = normalize_locale(locale) if locale is not None else current_locale()
+    text = get_locale_dict(loc).get(key)
+    if text is None:
+        text = default if default is not None else key
+    return format_i18n(text, **fmt)
 
 
 def fmt_int(value: object, *, locale: str | None = None) -> str:

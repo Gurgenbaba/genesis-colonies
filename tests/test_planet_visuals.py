@@ -52,13 +52,16 @@ def test_landscape_filename_for_planet() -> None:
 
 
 def test_planet_identity_ice_world_accent() -> None:
-    from game.planet_visuals import get_planet_identity_for_position
+    from game.planet_visuals import get_planet_identity_for_position, herocard_static_relpath
 
     ident = get_planet_identity_for_position(15)
     assert ident["landscape"] == "eisplanet09-h.jpg"
+    assert ident["herocard"] == "herocard_15.png"
+    assert herocard_static_relpath(15) == "img/herocards/herocard_15.png"
     assert ident["accent_color"] == "#3ff8ff"
     assert ident["secondary_color"] == "#6ccfff"
     assert ident["effect"] == "ice"
+    assert ident["label_key"] == "planet_slot_15"
 
 
 def test_planet_theme_matches_landscape_position() -> None:
@@ -67,5 +70,7 @@ def test_planet_theme_matches_landscape_position() -> None:
     for pos in range(1, 16):
         ident = get_planet_identity_for_position(pos)
         assert ident["landscape"] == get_landscape_for_position(pos)
+        assert ident["herocard"] == f"herocard_{pos:02d}.png"
+        assert ident["label_key"] == f"planet_slot_{pos:02d}"
         assert ident["accent_color"].startswith("#")
         assert ident["effect"]

@@ -13,6 +13,9 @@
 {% set hero_accent = theme.accent_color or '#46e5ff' %}
 {% set hero_secondary = theme.secondary_color or '#7fffd9' %}
 {% set hero_effect = theme.effect or 'temperate' %}
+{% set hero_label_key = theme.label_key or 'planet_slot_08' %}
+{% set herocard_rel = theme.herocard_relpath or 'img/herocards/herocard_08.png' %}
+{% set herocard_webp_rel = theme.herocard_webp_relpath or 'img/herocards/herocard_08.webp' %}
 
 <div class="gc-page overview-wrapper overview-command" data-planet-id="{{ planet.planet_id or 0 }}">
 
@@ -31,7 +34,21 @@
            id="overview-planet-hero"
            aria-label="{{ T('overview_label_planet', 'Kolonie') }}"
            style="--planet-accent: {{ hero_accent }}; --planet-accent-secondary: {{ hero_secondary }};"
-           data-planet-effect="{{ hero_effect }}">
+           data-planet-effect="{{ hero_effect }}"
+           data-slot-label-key="{{ hero_label_key }}">
+    <div class="overview-hero-bg" data-overview-hero-bg aria-hidden="true">
+      <picture>
+        <source type="image/webp"
+                srcset="{{ url_for('static', filename=herocard_webp_rel) }}">
+        <img src="{{ url_for('static', filename=herocard_rel) }}"
+             alt=""
+             loading="eager"
+             fetchpriority="high"
+             decoding="async"
+             width="1400"
+             height="933">
+      </picture>
+    </div>
     <div class="overview-hero-top">
       <div class="overview-hero-identity">
         <div class="overview-hero-name-wrap">
@@ -50,8 +67,8 @@
         </div>
         <p class="overview-hero-coords gc-mono" id="overview-planet-coords">{{ galaxy_coord_link(planet.coordinates.display) }}</p>
       </div>
-      <span class="overview-hero-class gc-chip-angular">
-        {{ T(planet.planet_class_label_key, planet.planet_class or 'terrestrial') }}
+      <span class="overview-hero-class gc-chip-angular overview-hero-slot-badge" id="overview-planet-slot-badge">
+        {{ T(hero_label_key, hero_label_key) }}
       </span>
     </div>
 

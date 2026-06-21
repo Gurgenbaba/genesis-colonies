@@ -11,7 +11,7 @@ import pytest
 import game.db as dbmod
 import game.models as models
 from game.db import db
-from game.i18n import get_player_locale, set_player_locale, tr
+from game.i18n import format_i18n, get_player_locale, set_player_locale, tr
 from game.messages import notify_transport
 from game.models import create_user, init_db, load_player
 
@@ -55,6 +55,47 @@ def _create_player(username: str) -> int:
     player = load_player(int(user["id"]))
     assert player
     return int(player["id"])
+
+
+def test_format_i18n_brace_placeholders():
+    assert format_i18n("{count} aktives Gebot", count=3) == "3 aktives Gebot"
+    assert format_i18n("Deaktivierung in {time}", time="2h 5m") == "Deaktivierung in 2h 5m"
+
+
+def test_format_i18n_percent_placeholders():
+    assert format_i18n("Urlaub bis %(time)s", time="1h") == "Urlaub bis 1h"
+
+
+def test_tr_brace_count_placeholder():
+    text = tr("options_blocker_auction_bids", locale="de", count=2)
+    assert "{count}" not in text
+    assert "2" in text
+
+
+def test_en_locale_falls_back_to_de_for_missing_keys():
+    import json
+    from pathlib import Path
+
+    from game.i18n import get_locale_dict
+
+    root = Path(__file__).resolve().parent.parent
+    de_raw = json.loads((root / "locales" / "de.json").read_text(encoding="utf-8"))
+    en_raw = json.loads((root / "locales" / "en.json").read_text(encoding="utf-8"))
+    sample_key = "build_queue_title"
+    assert sample_key in de_raw
+    assert sample_key not in en_raw
+    merged = get_locale_dict("en")
+    assert merged[sample_key] == de_raw[sample_key]
+
+
+def test_T_interpolates_brace_placeholders():
+    from app import T
+    from game.i18n import set_request_locale
+
+    set_request_locale("de")
+    text = T("options_blocker_auction_bids", count=2)
+    assert "{count}" not in text
+    assert "2" in text
 
 
 def test_tr_respects_explicit_locale():
