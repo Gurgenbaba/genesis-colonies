@@ -15,7 +15,7 @@ from .models import (
     get_research_levels,
     load_player,
 )
-from .overview_page import build_planet_meta, temperature_range_for_class
+from .overview_page import build_planet_meta
 from .planet_evolution.scoring import compute_single_planet_score
 from .player_display import commander_display_name
 from .ranking import get_player_score_cached
@@ -271,14 +271,16 @@ def _aggregate_matrix_totals(
 
 def _build_colony_matrix_header(colony: Dict[str, Any]) -> Dict[str, Any]:
     coords = colony.get("coordinates") if isinstance(colony.get("coordinates"), dict) else {}
-    planet_class = str(colony.get("planet_class") or "terrestrial")
-    temp = temperature_range_for_class(planet_class)
+    position = int(coords.get("position") or 0)
+    from .planet_visuals import temperature_range_for_position
+
+    temp = temperature_range_for_position(position)
     return {
         "planet_id": _safe_int(colony.get("planet_id")),
         "name": str(colony.get("name") or ""),
         "coordinates_display": str(coords.get("display") or ""),
         "planet_class_label_key": str(colony.get("planet_class_label_key") or ""),
-        "planet_class": planet_class,
+        "planet_class": str(colony.get("planet_class") or "terrestrial"),
         "temperature_display": str(temp.get("display") or ""),
         "is_homeworld": bool(colony.get("is_homeworld")),
     }

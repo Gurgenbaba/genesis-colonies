@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from .fleet_calc import enrich_movement_timing
 from .planet_evolution.ux_copy import planet_class_label_key
 
-# TODO: Persist planet surface temperature in DB; until then derive from planet_class.
+# TODO: Persist planet surface temperature in DB; until then derive from galaxy slot (1–15).
 _TEMPERATURE_BY_CLASS: Dict[str, tuple[int, int]] = {
     "terrestrial": (5, 35),
     "oceanic": (10, 28),
@@ -69,12 +69,12 @@ def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
     from .planet_evolution.dna import effective_planet_class
 
     planet_class = effective_planet_class(planet)
-    temp = temperature_range_for_class(planet_class)
-    is_homeworld = bool(int(planet.get("is_homeworld") or 0))
     coords = get_planet_coordinates(planet)
     position = int(coords.get("position") or 0)
-    from .planet_visuals import planet_theme_for_planet
+    from .planet_visuals import planet_theme_for_planet, temperature_range_for_position
 
+    temp = temperature_range_for_position(position)
+    is_homeworld = bool(int(planet.get("is_homeworld") or 0))
     theme = planet_theme_for_planet({**planet, "position": position})
     return {
         "planet_id": _safe_int(planet.get("id")),

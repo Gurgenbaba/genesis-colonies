@@ -351,12 +351,14 @@ def _slot_planet_meta(
     conn: sqlite3.Connection,
 ) -> Dict[str, Any]:
     from .planet_evolution.dna import effective_planet_class
-    from .overview_page import temperature_range_for_class
+    from .planet_visuals import temperature_range_for_position
     from .planet_evolution.scoring import compute_single_planet_score
     from .planet_evolution.ux_copy import planet_class_label_key
 
     planet_class = effective_planet_class(planet_row)
-    temp = temperature_range_for_class(planet_class)
+    coords = get_planet_coordinates(planet_row)
+    position = int(coords.get("position") or planet_row.get("position") or 0)
+    temp = temperature_range_for_position(position)
     planet_id = int(planet_row.get("planet_id") or planet_row.get("id") or 0)
     score = compute_single_planet_score(planet_id, conn) if planet_id else 0
     return {
@@ -641,6 +643,8 @@ def list_system(
 
     debris_by_position = get_debris_for_system(int(galaxy), int(system), conn)
 
+    from .planet_visuals import temperature_range_for_position
+
     slots: List[Dict[str, Any]] = []
     for pos in range(POSITION_MIN, POSITION_MAX + 1):
         if pos in by_position:
@@ -666,7 +670,7 @@ def list_system(
                 "coordinates_formatted": format_coordinates(galaxy, system, pos),
                 "planet_class": None,
                 "planet_class_label_key": None,
-                "temperature_display": None,
+                "temperature_display": temperature_range_for_position(pos)["display"],
                 "planet_score": None,
                 "is_own_planet": False,
                 "is_ally_planet": False,

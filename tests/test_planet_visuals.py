@@ -74,3 +74,30 @@ def test_planet_theme_matches_landscape_position() -> None:
         assert ident["label_key"] == f"planet_slot_{pos:02d}"
         assert ident["accent_color"].startswith("#")
         assert ident["effect"]
+
+
+def test_temperature_range_monotonic_by_position() -> None:
+    from game.planet_visuals import temperature_range_for_position
+
+    prev_max = None
+    for pos in range(1, 16):
+        temp = temperature_range_for_position(pos)
+        assert temp["min_c"] < temp["max_c"]
+        assert "°C" in temp["display"]
+        if prev_max is not None:
+            assert temp["max_c"] < prev_max
+            assert temp["min_c"] < prev_max
+        prev_max = temp["max_c"]
+
+    hottest = temperature_range_for_position(1)
+    coldest = temperature_range_for_position(15)
+    assert hottest["min_c"] > 300
+    assert coldest["max_c"] < -100
+
+
+def test_temperature_range_invalid_position_uses_temperate_default() -> None:
+    from game.planet_visuals import temperature_range_for_position
+
+    temp = temperature_range_for_position(99)
+    assert temp["display"] == "5°C … 35°C"
+    assert temp["position"] == 0

@@ -27,6 +27,26 @@ _DEFAULT_IDENTITY: PlanetIdentity = {
     "effect": "temperate",
 }
 
+# Position 1 = warmest galaxy slot, 15 = coldest — aligned with landscapes + hero cards.
+_TEMPERATURE_BY_POSITION: Dict[int, tuple[int, int]] = {
+    1: (350, 520),
+    2: (260, 400),
+    3: (190, 310),
+    4: (130, 230),
+    5: (85, 170),
+    6: (55, 115),
+    7: (35, 75),
+    8: (5, 35),
+    9: (-8, 22),
+    10: (-15, 15),
+    11: (-28, 5),
+    12: (-60, -15),
+    13: (-100, -45),
+    14: (-165, -90),
+    15: (-240, -175),
+}
+_DEFAULT_TEMPERATURE = _TEMPERATURE_BY_POSITION[8]
+
 # Position 1 = warmest galaxy slot, 15 = coldest — same order as landscapes + hero cards.
 _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
     1: {
@@ -176,6 +196,18 @@ def get_planet_identity_for_position(position: Any) -> PlanetIdentity:
 def get_landscape_for_position(position: int) -> str:
     """Return landscape filename for galaxy slot 1–15; fallback for invalid values."""
     return get_planet_identity_for_position(position)["landscape"]
+
+
+def temperature_range_for_position(position: Any) -> Dict[str, Any]:
+    """Surface temperature band keyed by galaxy slot (1 = hottest, 15 = coldest)."""
+    pos = _normalize_position(position)
+    lo, hi = _TEMPERATURE_BY_POSITION.get(pos, _DEFAULT_TEMPERATURE) if pos else _DEFAULT_TEMPERATURE
+    return {
+        "min_c": lo,
+        "max_c": hi,
+        "display": f"{lo}°C … {hi}°C",
+        "position": pos or 0,
+    }
 
 
 def herocard_static_relpath(position: int) -> str:
