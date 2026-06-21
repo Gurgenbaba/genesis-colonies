@@ -11380,7 +11380,7 @@ body.gc-techtree-media-zoom-open{
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   gap: 10px;
-  align-items: end;
+  align-items: start;
 }
 .fleet-coords-row--compact,
 .fleet-mission-speed-row--compact{

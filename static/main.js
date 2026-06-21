@@ -11447,7 +11447,6 @@
 
     const buildFleetShipPickTooltipHtml = (card) => {
       const name = card.getAttribute("data-ship-tooltip-name") || "";
-      const role = card.getAttribute("data-ship-tooltip-role") || "";
       const have = parseInt(card.getAttribute("data-ship-have") || "0", 10) || 0;
       const speed = card.getAttribute("data-ship-tooltip-speed") || "0";
       const cargo = card.getAttribute("data-ship-tooltip-cargo") || "0";
@@ -11457,7 +11456,6 @@
         `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_ship_stock", "Bestand")}</span>× ${formatNumber(have)}</div>`,
         `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_table_speed", "Speed")}</span>${esc(speed)}</div>`,
         `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_table_cargo", "Cargo")}</span>${esc(cargo)}</div>`,
-        `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_ship_type", "Typ")}</span>${esc(role)}</div>`,
       ].join("");
     };
 
@@ -11918,7 +11916,7 @@
       }
 
       const quickSel = page.querySelector("[data-fleet-quick-target-select]");
-      if (quickSel) {
+      if (quickSel && !isFleetQuickTargetManual(page)) {
         let matched = "";
         Array.from(quickSel.options).forEach((opt) => {
           if (!opt.value) return;
@@ -12741,9 +12739,22 @@
       if (expo) applyQuickTarget(page, expo);
     };
 
+    const isFleetQuickTargetManual = (page) => page?.dataset?.fleetQuickManual === "1";
+
+    const clearQuickTargetToManual = (page) => {
+      if (!page) return;
+      page.dataset.fleetQuickManual = "1";
+      const quickSel = page.querySelector("[data-fleet-quick-target-select]");
+      if (quickSel) {
+        quickSel.value = "";
+        if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(quickSel);
+      }
+    };
+
     const applyQuickTarget = (page, target) => {
       const form = getForm(page);
       if (!form || !target) return;
+      delete page.dataset.fleetQuickManual;
       const readAttr = (key) => target.getAttribute(key) || target.dataset?.[key] || "";
       const g = form.querySelector('[name="target_galaxy"]');
       const s = form.querySelector('[name="target_system"]');
@@ -13010,7 +13021,12 @@
       if (e.target.matches("[data-fleet-quick-target-select]")) {
         const opt = e.target.options[e.target.selectedIndex];
         if (opt && opt.value) applyQuickTarget(page, opt);
-        else syncExpeditionMissionTarget(page);
+        else {
+          clearQuickTargetToManual(page);
+          syncExpeditionMissionTarget(page);
+          scheduleTargetResolve(page);
+          schedulePreview(page);
+        }
         return;
       }
       if (e.target.matches('[name="target_galaxy"], [name="target_system"], [name="target_position"]')) {
@@ -13018,6 +13034,7 @@
           delete page.dataset.fleetUrlMission;
           clearFleetWorldKey(page);
         }
+        clearQuickTargetToManual(page);
         syncExpeditionMissionTarget(page);
         scheduleTargetResolve(page);
       }
@@ -13049,6 +13066,7 @@
           delete page.dataset.fleetUrlMission;
           clearFleetWorldKey(page);
         }
+        clearQuickTargetToManual(page);
         syncExpeditionMissionTarget(page);
         scheduleTargetResolve(page);
       }
