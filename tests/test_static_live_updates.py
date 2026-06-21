@@ -792,6 +792,8 @@ def test_main_js_gc640b_fleet_page_visual_redesign():
     assert 'id="logistics-page"' in tpl
     assert "data-ship-max-image" in tpl
     assert "fleet-ship-card-role-badge" in tpl
+    assert "fleet-ship-card-stock-badge" in tpl
+    assert "data-fleet-ship-stock" in tpl
     assert "fleet-shipyard-link-panel" not in tpl
     assert "fleet-logistics-cta" not in tpl
     assert ".fleet-ship-card" in css

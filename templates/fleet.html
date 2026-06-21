@@ -86,38 +86,40 @@
                           {% if col.is_active %}data-active="1"{% endif %}>{{ col.name }} — {{ col.coordinates }}</option>
                   {% endfor %}
                 </select>
-                <button type="button"
-                        class="gc-btn gc-btn-ghost gc-btn-xs fleet-expedition-shortcut"
-                        data-fleet-expedition-shortcut
-                        data-galaxy="{{ fleet_ctx.coordinates.galaxy }}"
-                        data-system="{{ fleet_ctx.coordinates.system }}"
-                        data-position="{{ fleet_ctx.expedition_position }}"
-                        data-mission="expedition"
-                        title="{{ T('galaxy_expedition_slot_hint') }}">
-                  {{ T("galaxy_expedition_slot_title") }}
-                  <span class="gc-mono fleet-expedition-shortcut-coords">{{ fleet_ctx.coordinates.galaxy }}:{{ fleet_ctx.coordinates.system }}:{{ fleet_ctx.expedition_position }}</span>
-                </button>
               </div>
             </div>
 
             <div class="fleet-ogame-mission-row">
               <div class="fleet-form-row fleet-coords-row fleet-coords-row--compact" data-fleet-coords-row>
                 <label class="fleet-form-label" for="fleet-coord-galaxy">{{ T("fleet_target_coords") }}</label>
-                <div class="fleet-coords-strip" data-fleet-coords-strip>
-                  <span class="fleet-coords-bracket" aria-hidden="true">[</span>
-                  <input type="number" id="fleet-coord-galaxy" name="target_galaxy"
-                         class="fleet-coord-input gc-mono" min="1"
-                         value="{{ fleet_ctx.coordinates.galaxy }}" aria-label="Galaxy">
-                  <span class="fleet-coords-sep" aria-hidden="true">:</span>
-                  <input type="number" id="fleet-coord-system" name="target_system"
-                         class="fleet-coord-input gc-mono" min="1" max="499"
-                         value="{{ fleet_ctx.coordinates.system }}" aria-label="System">
-                  <span class="fleet-coords-sep" aria-hidden="true">:</span>
-                  <input type="number" id="fleet-coord-position" name="target_position"
-                         class="fleet-coord-input gc-mono fleet-coord-input--position" min="1" max="16"
-                         value="{{ fleet_ctx.coordinates.position }}" aria-label="Position"
-                         data-fleet-coord-position>
-                  <span class="fleet-coords-bracket" aria-hidden="true">]</span>
+                <div class="fleet-coords-line">
+                  <div class="fleet-coords-strip" data-fleet-coords-strip>
+                    <span class="fleet-coords-bracket" aria-hidden="true">[</span>
+                    <input type="number" id="fleet-coord-galaxy" name="target_galaxy"
+                           class="fleet-coord-input gc-mono" min="1"
+                           value="{{ fleet_ctx.coordinates.galaxy }}" aria-label="Galaxy">
+                    <span class="fleet-coords-sep" aria-hidden="true">:</span>
+                    <input type="number" id="fleet-coord-system" name="target_system"
+                           class="fleet-coord-input gc-mono" min="1" max="499"
+                           value="{{ fleet_ctx.coordinates.system }}" aria-label="System">
+                    <span class="fleet-coords-sep" aria-hidden="true">:</span>
+                    <input type="number" id="fleet-coord-position" name="target_position"
+                           class="fleet-coord-input gc-mono fleet-coord-input--position" min="1" max="16"
+                           value="{{ fleet_ctx.coordinates.position }}" aria-label="Position"
+                           data-fleet-coord-position>
+                    <span class="fleet-coords-bracket" aria-hidden="true">]</span>
+                  </div>
+                  <button type="button"
+                          class="gc-btn gc-btn-ghost gc-btn-xs fleet-expedition-shortcut"
+                          data-fleet-expedition-shortcut
+                          data-galaxy="{{ fleet_ctx.coordinates.galaxy }}"
+                          data-system="{{ fleet_ctx.coordinates.system }}"
+                          data-position="{{ fleet_ctx.expedition_position }}"
+                          data-mission="expedition"
+                          title="{{ T('galaxy_expedition_slot_hint') }}">
+                    {{ T("galaxy_expedition_slot_title") }}
+                    <span class="gc-mono fleet-expedition-shortcut-coords">{{ fleet_ctx.coordinates.galaxy }}:{{ fleet_ctx.coordinates.system }}:{{ fleet_ctx.expedition_position }}</span>
+                  </button>
                 </div>
                 <p class="fleet-coords-hint hint" data-fleet-coords-hint hidden></p>
               </div>
@@ -231,6 +233,7 @@
                              onerror="this.onerror=null;this.src='{{ _ship_placeholder }}';">
                       </picture>
                     </button>
+                    <span class="gc-hero-stat-badge fleet-ship-card-stock-badge fleet-ship-card-stock gc-mono" data-fleet-ship-stock>×{{ have|fmt_int }}</span>
                     <span class="gc-hero-stat-badge fleet-ship-card-role-badge">{{ T("shipyard_role_" ~ ship.role) }}</span>
                   </div>
                   <div class="fleet-ship-pick-value">
@@ -334,6 +337,8 @@
           </button>
         </section>
 
+      </form>
+
         <section class="gc-panel fleet-panel fleet-ogame-footer">
           <div class="fleet-ogame-footer-grid">
             <div class="fleet-ogame-footer-col">
@@ -368,7 +373,7 @@
             </div>
             <div class="fleet-ogame-footer-col">
               <h3 class="fleet-ogame-footer-title" id="fleet-mass-expo-title">{{ T("fleet_mass_expo_title") }}</h3>
-              <form id="fleet-mass-expo-form" class="fleet-mass-expo-form fleet-mass-expo-form--compact" method="post" action="#" data-no-pjax>
+              <div id="fleet-mass-expo-form" class="fleet-mass-expo-form fleet-mass-expo-form--compact" data-fleet-mass-expo-panel>
                 <div class="fleet-form-row">
                   <label for="fleet-mass-preset">{{ T("fleet_mass_expo_preset") }}</label>
                   <select id="fleet-mass-preset" class="fleet-preset-select" data-fleet-mass-preset data-gc-hud-select required>
@@ -384,12 +389,11 @@
                 </div>
                 <p class="fleet-mass-result" data-fleet-mass-result hidden></p>
                 <button type="button" class="gc-btn gc-btn-secondary" data-fleet-mass-expo-submit>{{ T("fleet_mass_expo_start") }}</button>
-              </form>
+              </div>
             </div>
           </div>
         </section>
 
-      </form>
       {% endif %}
     </div>
 

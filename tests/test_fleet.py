@@ -4733,6 +4733,7 @@ def test_fleet_ui_active_buttons_have_handlers():
         "/api/shipyard/build",
         "/api/fleet/preview",
         "/api/fleet/send",
+        "/api/fleet/mass-expedition",
         "/api/fleet/state",
         "rt.sending",
         "data-fleet-send-btn",
@@ -4746,6 +4747,8 @@ def test_fleet_ui_active_buttons_have_handlers():
         "shouldShowExpeditionHours",
         "data-preview-mission-badge",
         "data-fleet-expedition-shortcut",
+        "submitMassExpedition",
+        "data-fleet-mass-expo-submit",
         "initHudSelects",
         "data-gc-hud-select",
         "tickFleetCountdowns",
@@ -4772,6 +4775,11 @@ def test_quick_target_template_sets_coord_inputs():
     assert 'name="target_position"' in tpl
     assert "data-galaxy" in tpl and "data-fleet-quick-target-select" in tpl
     assert "data-fleet-expedition-shortcut" in tpl
+    assert 'id="fleet-mass-expo-form"' in tpl
+    assert "<form id=\"fleet-mass-expo-form\"" not in tpl
+    send_close = tpl.index("</form>", tpl.index('id="fleet-send-form"'))
+    footer_idx = tpl.index("fleet-ogame-footer")
+    assert send_close < footer_idx
     mission_idx = tpl.index("data-fleet-mission")
     expo_idx = tpl.index("data-fleet-expedition-hours-row")
     speed_idx = tpl.index("data-fleet-speed")
@@ -4785,6 +4793,10 @@ def test_quick_target_template_sets_coord_inputs():
     slots_partial = (Path(__file__).resolve().parent.parent / "templates" / "partials" / "fleet_slots_badge.html").read_text(encoding="utf-8")
     assert "modifier == 'strip'" in slots_partial or "fleet-slots-line" in slots_partial
     assert "fleet-coords-strip" in tpl
+    assert "fleet-coords-line" in tpl
+    expo_idx = tpl.index("data-fleet-expedition-shortcut")
+    coords_line_idx = tpl.index("fleet-coords-line")
+    assert coords_line_idx < expo_idx
     assert "fleet-preview-hud" in tpl
     assert "data-preview-mission-badge" in tpl
     assert "data-fleet-send-btn" in tpl
@@ -4795,6 +4807,8 @@ def test_quick_target_template_sets_coord_inputs():
     assert "fleet-ship-pick-value" in tpl
     assert "gc-fleet-drawer-tooltip" in tpl
     assert "shipyard_role_" in tpl
+    assert "fleet-ship-card-stock" in tpl
+    assert "data-fleet-ship-stock" in tpl
 
 
 def test_fuel_efficiency_reduces_cost():

@@ -12834,6 +12834,62 @@
     GC.syncFleetMissionLockUi = syncFleetMissionLockUi;
     GC.resolveFleetWorldTargetPresentation = resolveFleetWorldTargetPresentation;
 
+    const submitMassExpedition = async (page) => {
+      const massForm = page?.querySelector("#fleet-mass-expo-form");
+      if (!massForm || massForm.dataset.submitting === "1") return;
+      massForm.dataset.submitting = "1";
+      const massBtn = massForm.querySelector("[data-fleet-mass-expo-submit]");
+      const massResult = page.querySelector("[data-fleet-mass-result]");
+      if (massBtn) massBtn.disabled = true;
+      if (massResult) { massResult.hidden = true; massResult.textContent = ""; }
+      const presetId = page.querySelector("[data-fleet-mass-preset]")?.value;
+      const waves = parseInt(page.querySelector("[data-fleet-mass-waves]")?.value || "1", 10);
+      if (!presetId) {
+        showNotify(tt("fleet_preset_none", "No preset selected."), "error");
+        massForm.dataset.submitting = "0";
+        if (massBtn) massBtn.disabled = false;
+        return;
+      }
+      try {
+        const originId = resolveFleetOriginPlanetId(page);
+        const res = await GC.fetchGameAction("/api/fleet/mass-expedition", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            origin_planet_id: originId,
+            preset_id: parseInt(presetId, 10),
+            waves,
+          }),
+        });
+        if (res?.ok) {
+          const data = fleetPayload(res);
+          const started = (data.started || []).length;
+          const skipped = (data.skipped || []).length;
+          if (massResult) {
+            massResult.textContent = tt("fleet_mass_expo_result", "Started %(started)s, skipped %(skipped)s.")
+              .replace("%(started)s", String(started)).replace("%(skipped)s", String(skipped));
+            massResult.hidden = false;
+          }
+          if (started <= 0 && skipped > 0) {
+            const firstReason = String(data.skipped?.[0]?.reason || "generic");
+            showNotify(reasonText(firstReason), "error");
+          } else {
+            showNotify(tt("fleet_mass_expo_success", "Mass expedition launched."), "success");
+          }
+          if (res.state) applyActionState(res, "fleet_mass_expo_success");
+          await refreshFleetState(page);
+          schedulePreview(page);
+        } else {
+          showNotify(reasonText(apiError(res)), "error");
+        }
+      } catch (_) {
+        showNotify(reasonText("generic"), "error");
+      } finally {
+        massForm.dataset.submitting = "0";
+        if (massBtn) massBtn.disabled = false;
+      }
+    };
+
     document.addEventListener("mouseover", (e) => {
       const page = getPage();
       if (!page || isCoarsePointer()) return;
@@ -13000,10 +13056,7 @@
       const massExpoBtn = e.target.closest("[data-fleet-mass-expo-submit]");
       if (massExpoBtn && page.contains(massExpoBtn)) {
         e.preventDefault();
-        const massForm = page.querySelector("#fleet-mass-expo-form");
-        if (massForm) {
-          massForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-        }
+        submitMassExpedition(page);
         return;
       }
 
@@ -13090,8 +13143,13 @@
     });
 
     document.addEventListener("submit", async (e) => {
-      const sendForm = e.target.closest ? e.target.closest("#fleet-send-form") : null;
       const page = getPage();
+      if (e.target?.closest?.("#fleet-mass-expo-form")) {
+        e.preventDefault();
+        if (page) submitMassExpedition(page);
+        return;
+      }
+      const sendForm = e.target.closest ? e.target.closest("#fleet-send-form") : null;
       if (sendForm && page && page.contains(sendForm)) {
         e.preventDefault();
         e.stopPropagation();
@@ -13184,59 +13242,6 @@
       }
 
       if (!page) return;
-      const rt = getFleetRuntime(page);
-      const form = getForm(page);
-
-      const massForm = e.target.closest("#fleet-mass-expo-form");
-      if (massForm && page.contains(massForm)) {
-        e.preventDefault();
-        if (massForm.dataset.submitting === "1") return;
-        massForm.dataset.submitting = "1";
-        const massBtn = massForm.querySelector("[data-fleet-mass-expo-submit]")
-          || massForm.querySelector('button[type="submit"]');
-        const massResult = page.querySelector("[data-fleet-mass-result]");
-        if (massBtn) massBtn.disabled = true;
-        if (massResult) { massResult.hidden = true; massResult.textContent = ""; }
-        const presetId = page.querySelector("[data-fleet-mass-preset]")?.value;
-        const waves = parseInt(page.querySelector("[data-fleet-mass-waves]")?.value || "1", 10);
-        if (!presetId) {
-          massForm.dataset.submitting = "0";
-          if (massBtn) massBtn.disabled = false;
-          return;
-        }
-        try {
-          const originId = resolveFleetOriginPlanetId(page);
-          const res = await GC.fetchGameAction("/api/fleet/mass-expedition", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              origin_planet_id: originId,
-              preset_id: parseInt(presetId, 10),
-              waves,
-            }),
-          });
-          if (res?.ok) {
-            const data = fleetPayload(res);
-            const started = (data.started || []).length;
-            const skipped = (data.skipped || []).length;
-            if (massResult) {
-              massResult.textContent = tt("fleet_mass_expo_result", "Started %(started)s, skipped %(skipped)s.")
-                .replace("%(started)s", String(started)).replace("%(skipped)s", String(skipped));
-              massResult.hidden = false;
-            }
-            showNotify(tt("fleet_mass_expo_success", "Mass expedition launched."), "success");
-            await refreshFleetState(page);
-            schedulePreview(page);
-          } else {
-            showNotify(reasonText(apiError(res)), "error");
-          }
-        } catch (_) {
-          showNotify(reasonText("generic"), "error");
-        } finally {
-          massForm.dataset.submitting = "0";
-          if (massBtn) massBtn.disabled = false;
-        }
-      }
     });
   }
 

@@ -11270,9 +11270,20 @@ body.gc-techtree-media-zoom-open{
   min-width: 0;
 }
 .fleet-quick-target-select{
-  flex: 1 1 220px;
+  flex: 1 1 100%;
   min-width: 0;
-  max-width: 520px;
+  max-width: none;
+}
+.fleet-coords-line{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.fleet-coords-line .fleet-expedition-shortcut{
+  flex: 0 0 auto;
+  max-width: 100%;
 }
 .fleet-expedition-shortcut{
   flex: 0 0 auto;
@@ -11767,6 +11778,27 @@ body.gc-techtree-media-zoom-open{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.fleet-ship-card-art-wrap .fleet-ship-card-stock-badge{
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: auto;
+  z-index: 2;
+  min-width: 0;
+  min-height: 16px;
+  padding: 0 4px;
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  pointer-events: none;
+  max-width: calc(100% - 8px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
 }
 .fleet-ship-pick-value{
   padding: 0 3px 3px;
