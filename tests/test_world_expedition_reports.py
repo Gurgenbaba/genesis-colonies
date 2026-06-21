@@ -152,6 +152,14 @@ def test_fleet_world_expedition_report_metadata(world_report_db):
         process_fleet_tick(player_id=player_id, conn=conn)
         conn.commit()
 
+        conn.execute(
+            "UPDATE fleet_movements SET holding_until = ? WHERE id = ?;",
+            (time.time() - 1, fleet_id),
+        )
+        conn.commit()
+        process_fleet_tick(player_id=player_id, conn=conn)
+        conn.commit()
+
         msg = conn.execute(
             """
             SELECT subject, metadata_json FROM player_messages

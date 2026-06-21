@@ -4730,28 +4730,19 @@ def _payload_from_live_context(
             "referrals": {"active": False, "count": 0, "label": ""},
         }
 
-    if include_panel:
-        try:
-            from game.live_state import fleet_hud_for_game_state
+    try:
+        from game.live_state import fleet_hud_for_game_state
 
-            fleet_hud = fleet_hud_for_game_state(user_id, conn=conn)
-            if fleet_hud is not None:
-                payload["active_fleets"] = fleet_hud.get("active_fleets") or {
-                    "count": 0,
-                    "visible_limit": 5,
-                    "next_remaining_seconds": 0,
-                    "items": [],
-                }
-                payload["fleet_slots"] = fleet_hud.get("fleet_slots") or {}
-            else:
-                payload["active_fleets"] = {
-                    "count": 0,
-                    "visible_limit": 5,
-                    "next_remaining_seconds": 0,
-                    "items": [],
-                }
-                payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
-        except Exception:
+        fleet_hud = fleet_hud_for_game_state(user_id, conn=conn)
+        if fleet_hud is not None:
+            payload["active_fleets"] = fleet_hud.get("active_fleets") or {
+                "count": 0,
+                "visible_limit": 5,
+                "next_remaining_seconds": 0,
+                "items": [],
+            }
+            payload["fleet_slots"] = fleet_hud.get("fleet_slots") or {}
+        else:
             payload["active_fleets"] = {
                 "count": 0,
                 "visible_limit": 5,
@@ -4759,7 +4750,16 @@ def _payload_from_live_context(
                 "items": [],
             }
             payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
+    except Exception:
+        payload["active_fleets"] = {
+            "count": 0,
+            "visible_limit": 5,
+            "next_remaining_seconds": 0,
+            "items": [],
+        }
+        payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
 
+    if include_panel:
         try:
             from game.live_state import global_queue_hud_for_game_state
 
@@ -5259,6 +5259,7 @@ def api_fleet_preview():
             target_planet_id=target_req.get("target_planet_id"),
             target_world_x=target_req.get("target_world_x"),
             target_world_y=target_req.get("target_world_y"),
+            expedition_hours=int(data["expedition_hours"]) if data.get("expedition_hours") not in (None, "") else None,
         )
         return jsonify(fleet_ok({"preview": preview}, message_key="fleet_preview_ok"))
     finally:
@@ -5458,6 +5459,7 @@ def api_fleet_send():
             target_planet_id=target_req.get("target_planet_id"),
             target_world_x=target_req.get("target_world_x"),
             target_world_y=target_req.get("target_world_y"),
+            expedition_hours=int(data["expedition_hours"]) if data.get("expedition_hours") not in (None, "") else None,
             conn=conn,
         )
 

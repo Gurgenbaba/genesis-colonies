@@ -8,7 +8,7 @@ import time
 from typing import Any, Dict, List, Mapping, Optional
 
 RECENT_REPORT_SECONDS = 48 * 3600
-_EXPEDITION_ACTIVE_STATUSES = frozenset({"outbound", "returning"})
+_EXPEDITION_ACTIVE_STATUSES = frozenset({"outbound", "holding", "returning"})
 
 
 def _json_loads(raw: Any, default: Any = None) -> Any:
@@ -48,11 +48,11 @@ def build_world_expedition_activity_map(
 
     rows = conn.execute(
         """
-        SELECT id, status, resources_json, arrival_at, return_at
+        SELECT id, status, resources_json, arrival_at, return_at, holding_until
         FROM fleet_movements
         WHERE player_id = ?
           AND mission_type = 'expedition'
-          AND status IN ('outbound', 'returning')
+          AND status IN ('outbound', 'holding', 'returning')
         ORDER BY id DESC;
         """,
         (int(player_id),),
@@ -69,6 +69,13 @@ def build_world_expedition_activity_map(
                 "expedition_fleet_id": int(row["id"]),
                 "expedition_eta_at": float(row["arrival_at"] or 0),
                 "expedition_phase": "outbound",
+            }
+        elif status == "holding":
+            activity[wk] = {
+                "expedition_status": "expedition_active",
+                "expedition_fleet_id": int(row["id"]),
+                "expedition_eta_at": float(row["holding_until"] or 0),
+                "expedition_phase": "holding",
             }
         elif status == "returning":
             activity[wk] = {

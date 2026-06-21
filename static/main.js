@@ -1550,10 +1550,11 @@
     GC.stopPolling();
 
     p.running = true;
+    const firstPollDelay = p.started ? next : 0;
     p.started = true;
     p.lastInterval = next;
-    console.debug("[GC] polling started", next, "ms");
-    scheduleGameStatePoll(next);
+    console.debug("[GC] polling started", next, "ms", firstPollDelay ? "" : "(immediate first tick)");
+    scheduleGameStatePoll(firstPollDelay);
   };
 
   function scheduleMessagesInboxBoot() {
@@ -1679,6 +1680,9 @@
           console.debug("[GC] initPage skip game-state (SSR fresh)", page, opts && opts.pjax ? "pjax" : "");
           bootstrapResourceLiveFromDom();
           _bootstrapPageQueueCompactLiveFromDom();
+          if (typeof GC.refreshGameState === "function") {
+            void GC.refreshGameState("page_init");
+          }
         }
         if (!skipPolling) {
           GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
@@ -7283,6 +7287,12 @@
     }
   }
 
+  function notifyFleetDrawerLayoutChange() {
+    if (typeof GC.syncSidebarSticky === "function") {
+      requestAnimationFrame(() => GC.syncSidebarSticky());
+    }
+  }
+
   function setFleetDrawerSelected(movementId) {
     const next = movementId ? String(movementId) : "";
     _fleetDrawerSelectedId = next || null;
@@ -7293,6 +7303,7 @@
       syncFleetDrawerRowLayout(row, selected);
     });
     updateFleetDrawerRowTimers(getTimerServerNow());
+    notifyFleetDrawerLayoutChange();
   }
 
   function toggleFleetDrawerSelection(movementId) {
@@ -7744,6 +7755,12 @@
     if (panel) panel.hidden = !expanded;
     if (chevron) chevron.textContent = expanded ? "▾" : "▸";
     root.classList.toggle("is-expanded", expanded);
+    if (!expanded) {
+      hideFleetDrawerTooltip();
+      setFleetDrawerSelected(null);
+    } else {
+      notifyFleetDrawerLayoutChange();
+    }
   }
 
   function renderGlobalFleetHud(fleetsRaw) {
@@ -7934,9 +7951,17 @@
     document.addEventListener("scroll", hideFleetDrawerTooltip, true);
     window.addEventListener("resize", hideFleetDrawerTooltip);
 
+    document.addEventListener("click", (e) => {
+      if (!_fleetDrawerSelectedId) return;
+      if (root.contains(e.target)) return;
+      setFleetDrawerSelected(null);
+    });
+
     syncFleetDrawerExpandedUi(root, isFleetDrawerExpanded());
     if (GC.lastState?.active_fleets) {
       renderGlobalFleetHud(GC.lastState.active_fleets);
+    } else if (typeof GC.refreshGameState === "function" && shouldRunGameLoop()) {
+      void GC.refreshGameState("fleet_drawer_boot");
     }
   }
   GC.initGlobalFleetDrawer = initGlobalFleetDrawer;
@@ -8322,6 +8347,8 @@
     "build_queue",
     "research",
     "global_queue_hud",
+    "active_fleets",
+    "fleet_slots",
     "energy_efficiency_pct",
     "energy_ratio",
     "buildings",
@@ -8336,6 +8363,7 @@
       || r === "admin_hud"
       || r === "pjax_nav"
       || r === "fleet_countdown_expired"
+      || r === "fleet_drawer_boot"
     );
   }
 
@@ -11405,6 +11433,15 @@
       fuel_cells: readNumberInput(page.querySelector("[data-fleet-res-fuel-cells]")),
     });
 
+    const getExpeditionHoursSelection = (page) => {
+      const form = getForm(page);
+      const mission = form?.querySelector("[data-fleet-mission]")?.value || "transport";
+      if (mission !== "expedition") return undefined;
+      const raw = form?.querySelector("[data-fleet-expedition-hours]")?.value || "1";
+      const hours = parseInt(raw, 10);
+      return Number.isFinite(hours) && hours >= 1 && hours <= 4 ? hours : 1;
+    };
+
     const getTargetCoords = (page) => {
       const form = getForm(page);
       return {
@@ -11809,17 +11846,13 @@
         if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(missionSel);
       }
 
-      page.querySelectorAll(".fleet-colony-chip").forEach((chip) => {
-        const cg = parseInt(chip.getAttribute("data-galaxy") || chip.dataset.galaxy || "0", 10);
-        const cs = parseInt(chip.getAttribute("data-system") || chip.dataset.system || "0", 10);
-        const cp = parseInt(chip.getAttribute("data-position") || chip.dataset.position || "0", 10);
-        const chipMission = chip.getAttribute("data-mission") || chip.dataset.mission || "";
-        const coordMatch = cg === g && cs === s && cp === pos;
-        const selected = chip.classList.contains("fleet-colony-chip--expedition")
-          ? coordMatch && mission === "expedition"
-          : coordMatch && !chipMission;
-        chip.classList.toggle("is-selected", selected);
-      });
+      const expoBtn = page.querySelector("[data-fleet-expedition-shortcut]");
+      if (expoBtn) {
+        const eg = parseInt(expoBtn.getAttribute("data-galaxy") || "0", 10);
+        const es = parseInt(expoBtn.getAttribute("data-system") || "0", 10);
+        const ep = parseInt(expoBtn.getAttribute("data-position") || "0", 10);
+        expoBtn.classList.toggle("is-selected", eg === g && es === s && ep === pos && mission === "expedition");
+      }
 
       const quickSel = page.querySelector("[data-fleet-quick-target-select]");
       if (quickSel) {
@@ -11994,6 +12027,8 @@
       const resFieldset = page.querySelector("[data-fleet-resources-fieldset]");
       const showResources = ["transport", "deploy", "colonize", "collect"].includes(mission);
       if (resFieldset) resFieldset.hidden = !showResources;
+      const expoHoursRow = page.querySelector("[data-fleet-expedition-hours-row]");
+      if (expoHoursRow) expoHoursRow.hidden = mission !== "expedition";
       setColonizeRowVisible(page, mission);
       page.querySelectorAll(".fleet-ship-row[data-ship-role='recycle']").forEach((row) => {
         row.classList.toggle("fleet-ship-row--mission-focus", mission === "recycle");
@@ -12124,13 +12159,24 @@
 
     const fleetCountdownHtml = (mv) => {
       const countdownAt = Number(mv.countdown_at || 0);
+      const homeAt = Number(mv.home_at || 0);
       const phase = mv.phase || mv.leg_phase || mv.status || "";
       const legLabel = tt(fleetLegKey(mv, phase), fleetLegKey(mv, phase));
-      const countdownKey = `${mv.id}:${phase}:${countdownAt}`;
-      const srvRem = Number(mv.remaining_seconds);
-      const srvAttr = Number.isFinite(srvRem) && srvRem >= 0 ? ` data-server-remaining="${Math.ceil(srvRem)}"` : "";
-      if (!countdownAt) return "";
-      return `<span class="fleet-active-leg">${legLabel}: <time class="fleet-active-countdown gc-mono" data-timer-target="${countdownAt}" data-timer-kind="fleet" data-refresh-on-zero="fleet" data-countdown-at="${countdownAt}" data-countdown-scope="fleet" data-countdown-key="${countdownKey}"${srvAttr}>–</time></span>`;
+      const buildTime = (at, scope, keySuffix, srvRem) => {
+        const srvAttr = Number.isFinite(srvRem) && srvRem >= 0 ? ` data-server-remaining="${Math.ceil(srvRem)}"` : "";
+        return `<time class="fleet-active-countdown gc-mono" data-timer-target="${at}" data-timer-kind="fleet" data-refresh-on-zero="fleet" data-countdown-at="${at}" data-countdown-scope="${scope}" data-countdown-key="${mv.id}:${keySuffix}:${at}"${srvAttr}>–</time>`;
+      };
+      if (!countdownAt && !homeAt) return "";
+      const parts = [];
+      if (countdownAt) {
+        const srvRem = Number(mv.remaining_seconds);
+        parts.push(`<span class="fleet-active-leg">${legLabel}: ${buildTime(countdownAt, "fleet", phase, srvRem)}</span>`);
+      }
+      if (homeAt > 0 && homeAt !== countdownAt) {
+        const homeSrvRem = Number(mv.home_remaining_seconds);
+        parts.push(`<span class="fleet-active-home">${tt("fleet_return_at", "Rückkehr")}: ${buildTime(homeAt, "fleet-home", "home", homeSrvRem)}</span>`);
+      }
+      return parts.join("");
     };
 
     const patchActiveFleetCards = (page, list) => {
@@ -12153,25 +12199,43 @@
         const timesEl = card.querySelector(".fleet-active-times");
         if (!timesEl) return;
         const countdownAt = Number(mv.countdown_at || 0);
-        const cdEl = timesEl.querySelector("[data-countdown-at]");
+        const homeAt = Number(mv.home_at || 0);
+        const cdEl = timesEl.querySelector("[data-countdown-scope='fleet']");
+        const homeEl = timesEl.querySelector("[data-countdown-scope='fleet-home']");
         const legKey = fleetLegKey(mv, phase);
         const legChanged = !cdEl
           || card.dataset.leg !== phase
           || Number(cdEl.dataset.countdownAt || 0) !== countdownAt
-          || String(cdEl.dataset.countdownKey || "") !== `${mv.id}:${phase}:${countdownAt}`;
+          || String(cdEl.dataset.countdownKey || "") !== `${mv.id}:${phase}:${countdownAt}`
+          || (homeAt > 0 && homeAt !== countdownAt && !homeEl)
+          || (homeEl && Number(homeEl.dataset.countdownAt || 0) !== homeAt);
         if (legChanged) {
           timesEl.innerHTML = fleetCountdownHtml(mv);
-        } else if (cdEl) {
-          const srvRem = Number(mv.remaining_seconds);
-          if (Number.isFinite(srvRem) && srvRem >= 0) {
-            assignMonotonicServerRemaining(cdEl, Math.ceil(srvRem), countdownAt);
-          } else {
-            delete cdEl.dataset.serverRemaining;
+        } else {
+          if (cdEl) {
+            const srvRem = Number(mv.remaining_seconds);
+            if (Number.isFinite(srvRem) && srvRem >= 0) {
+              assignMonotonicServerRemaining(cdEl, Math.ceil(srvRem), countdownAt);
+            } else {
+              delete cdEl.dataset.serverRemaining;
+            }
+            _setIfChanged(
+              cdEl,
+              formatCountdownRemain(movementRemainingSeconds(countdownAt, getTimerServerNow(), mv.remaining_seconds))
+            );
           }
-          _setIfChanged(
-            cdEl,
-            formatCountdownRemain(movementRemainingSeconds(countdownAt, getTimerServerNow(), mv.remaining_seconds))
-          );
+          if (homeEl) {
+            const homeSrvRem = Number(mv.home_remaining_seconds);
+            if (Number.isFinite(homeSrvRem) && homeSrvRem >= 0) {
+              assignMonotonicServerRemaining(homeEl, Math.ceil(homeSrvRem), homeAt);
+            } else {
+              delete homeEl.dataset.serverRemaining;
+            }
+            _setIfChanged(
+              homeEl,
+              formatCountdownRemain(movementRemainingSeconds(homeAt, getTimerServerNow(), mv.home_remaining_seconds))
+            );
+          }
         }
       });
     };
@@ -12188,7 +12252,7 @@
       }
 
       const signature = list.map((mv) => (
-        `${mv.id}:${mv.status}:${mv.phase || mv.leg_phase || ""}:${mv.countdown_at || 0}`
+        `${mv.id}:${mv.status}:${mv.phase || mv.leg_phase || ""}:${mv.countdown_at || 0}:${mv.home_at || 0}`
       )).join("|");
       const sigChanged = activeListEl.dataset.fleetSig !== signature;
       if (sigChanged) {
@@ -12257,21 +12321,7 @@
     };
 
     const syncColonyChipsFromCoords = (page) => {
-      const form = getForm(page);
-      if (!form) return;
-      const g = parseInt(form.querySelector('[name="target_galaxy"]')?.value || "0", 10);
-      const s = parseInt(form.querySelector('[name="target_system"]')?.value || "0", 10);
-      const p = parseInt(form.querySelector('[name="target_position"]')?.value || "0", 10);
-      const mission = form.querySelector("[data-fleet-mission]")?.value || "";
-      page.querySelectorAll(".fleet-colony-chip").forEach((chip) => {
-        const cg = parseInt(chip.getAttribute("data-galaxy") || chip.dataset.galaxy || "0", 10);
-        const cs = parseInt(chip.getAttribute("data-system") || chip.dataset.system || "0", 10);
-        const cp = parseInt(chip.getAttribute("data-position") || chip.dataset.position || "0", 10);
-        const chipMission = chip.getAttribute("data-mission") || chip.dataset.mission || "";
-        const coordMatch = cg === g && cs === s && cp === p;
-        const missionMatch = !chipMission || !mission || chipMission === mission;
-        chip.classList.toggle("is-selected", coordMatch && missionMatch);
-      });
+      syncExpeditionMissionTarget(page);
     };
 
     const applyLiveState = (page, state, opts) => {
@@ -12443,6 +12493,7 @@
             resources: getResourcesSelection(page),
             speed_percent: parseInt(form.querySelector("[data-fleet-speed]")?.value || "100", 10),
             mission_type: missionType,
+            expedition_hours: getExpeditionHoursSelection(page),
             ...getTargetCoords(page),
             ...buildFleetTargetPayload(page),
           }),
@@ -12521,7 +12572,11 @@
             previewFuelAvail.textContent = formatNumber(p.fuel_available ?? rt.data.resources?.fuel_cells ?? 0);
           }
           if (previewFlight) {
-            previewFlight.textContent = formatCountdownRemain(p.duration_seconds ?? p.flight_seconds ?? 0);
+            const legSec = p.duration_seconds ?? p.flight_seconds ?? 0;
+            const totalSec = lockedMission === "expedition" && p.expedition_total_seconds
+              ? p.expedition_total_seconds
+              : legSec;
+            previewFlight.textContent = formatCountdownRemain(totalSec);
           }
           if (previewArrival) {
             delete previewArrival.dataset.timerTarget;
@@ -12609,27 +12664,29 @@
       ) {
         return;
       }
-      const altColony = page.querySelector(
-        ".fleet-colony-chip:not(.fleet-colony-chip--expedition):not(.is-active)"
-      );
-      if (altColony) {
-        applyQuickTarget(page, altColony);
+      const quickSel = page.querySelector("[data-fleet-quick-target-select]");
+      const altOption = quickSel
+        ? Array.from(quickSel.options).find((opt) => opt.value && !opt.getAttribute("data-active"))
+        : null;
+      if (altOption) {
+        applyQuickTarget(page, altOption);
         return;
       }
-      const expo = page.querySelector(".fleet-colony-chip--expedition");
+      const expo = page.querySelector("[data-fleet-expedition-shortcut]");
       if (expo) applyQuickTarget(page, expo);
     };
 
-    const applyQuickTarget = (page, chip) => {
+    const applyQuickTarget = (page, target) => {
       const form = getForm(page);
-      if (!form || !chip) return;
+      if (!form || !target) return;
+      const readAttr = (key) => target.getAttribute(key) || target.dataset?.[key] || "";
       const g = form.querySelector('[name="target_galaxy"]');
       const s = form.querySelector('[name="target_system"]');
       const p = form.querySelector('[name="target_position"]');
-      if (g) g.value = chip.getAttribute("data-galaxy") || chip.dataset.galaxy || "";
-      if (s) s.value = chip.getAttribute("data-system") || chip.dataset.system || "";
-      if (p) p.value = chip.getAttribute("data-position") || chip.dataset.position || "";
-      const mission = chip.getAttribute("data-mission") || chip.dataset.mission;
+      if (g) g.value = readAttr("data-galaxy");
+      if (s) s.value = readAttr("data-system");
+      if (p) p.value = readAttr("data-position");
+      const mission = readAttr("data-mission");
       const ms = form.querySelector("[data-fleet-mission]");
       if (mission && ms && !isFleetUrlPrefillLocked(page)) {
         ms.value = mission;
@@ -12644,25 +12701,26 @@
         delete page.dataset.fleetUrlMission;
         clearFleetWorldKey(page);
       }
-      page.querySelectorAll(".fleet-colony-chip").forEach((c) => c.classList.remove("is-selected"));
-      if (chip.classList) chip.classList.add("is-selected");
       const quickSel = page.querySelector("[data-fleet-quick-target-select]");
-      if (quickSel && chip.tagName === "OPTION") {
-        quickSel.value = chip.value || "";
+      if (quickSel && target.tagName === "OPTION") {
+        quickSel.value = target.value || "";
         if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(quickSel);
-      } else if (quickSel) {
+      } else if (quickSel && !mission) {
         let matched = "";
+        const cg = parseInt(readAttr("data-galaxy") || "0", 10);
+        const cs = parseInt(readAttr("data-system") || "0", 10);
+        const cp = parseInt(readAttr("data-position") || "0", 10);
         Array.from(quickSel.options).forEach((opt) => {
           if (!opt.value) return;
           const og = parseInt(opt.getAttribute("data-galaxy") || "0", 10);
           const os = parseInt(opt.getAttribute("data-system") || "0", 10);
           const op = parseInt(opt.getAttribute("data-position") || "0", 10);
-          const cg = parseInt(chip.getAttribute("data-galaxy") || chip.dataset.galaxy || "0", 10);
-          const cs = parseInt(chip.getAttribute("data-system") || chip.dataset.system || "0", 10);
-          const cp = parseInt(chip.getAttribute("data-position") || chip.dataset.position || "0", 10);
           if (og === cg && os === cs && op === cp) matched = opt.value;
         });
         quickSel.value = matched;
+        if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(quickSel);
+      } else if (quickSel && mission) {
+        quickSel.value = "";
         if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(quickSel);
       }
       syncExpeditionMissionTarget(page);
@@ -12735,17 +12793,10 @@
         return;
       }
 
-      const chip = e.target.closest(".fleet-colony-chip");
-      if (chip && page.contains(chip)) {
+      const expoShortcut = e.target.closest("[data-fleet-expedition-shortcut]");
+      if (expoShortcut && page.contains(expoShortcut)) {
         e.preventDefault();
-        applyQuickTarget(page, chip);
-        return;
-      }
-
-      const quickTargetSel = e.target.closest("[data-fleet-quick-target-select]");
-      if (quickTargetSel && page.contains(quickTargetSel)) {
-        const opt = quickTargetSel.options[quickTargetSel.selectedIndex];
-        if (opt && opt.value) applyQuickTarget(page, opt);
+        applyQuickTarget(page, expoShortcut);
         return;
       }
 
@@ -12847,6 +12898,12 @@
         scheduleTargetResolve(page);
         schedulePreview(page);
       }
+      if (e.target.matches("[data-fleet-quick-target-select]")) {
+        const opt = e.target.options[e.target.selectedIndex];
+        if (opt && opt.value) applyQuickTarget(page, opt);
+        else syncExpeditionMissionTarget(page);
+        return;
+      }
       if (e.target.matches('[name="target_galaxy"], [name="target_system"], [name="target_position"]')) {
         if (!isFleetUrlPrefillLocked(page)) {
           delete page.dataset.fleetUrlMission;
@@ -12914,6 +12971,7 @@
               resources: getResourcesSelection(page),
               speed_percent: parseInt(form.querySelector("[data-fleet-speed]")?.value || "100", 10),
               mission_type: form.querySelector("[data-fleet-mission]")?.value,
+              expedition_hours: getExpeditionHoursSelection(page),
               colony_name: form.querySelector("[data-fleet-colony-name]")?.value || undefined,
               ...getTargetCoords(page),
               ...buildFleetTargetPayload(page),

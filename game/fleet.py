@@ -36,11 +36,17 @@ from .fleet_defs import (
     ACTIVE_FLEET_STATUSES,
     BATCH_STATUSES,
     BATCH_TYPES,
+    DEFAULT_EXPEDITION_STAY_HOURS,
     DEFAULT_HOLD_SECONDS,
     DEV_SEED_SHIPS,
     EXPEDITION_POSITION,
+    EXPEDITION_STAY_HOUR_SECONDS,
+    EXPEDITION_STAY_HOURS_MAX,
+    EXPEDITION_STAY_HOURS_MIN,
     FLEET_FUEL_RESOURCE,
     FLEET_MISSION_ORDER,
+    FLEET_SPEED_HOLD_MISSIONS,
+    FLEET_SPEED_WAR_MISSIONS,
     MISSION_TYPES,
     PRESET_TYPES,
     all_ship_keys,
@@ -541,6 +547,43 @@ def _fleet_speed_multiplier(
     return _fleet_galactic_modifiers(player_id, conn, galaxy=galaxy)["fleet_speed_multiplier"]
 
 
+def admin_fleet_speed_multiplier(mission_type: str) -> float:
+    """Admin balance knob: higher multiplier = shorter flight legs."""
+    from .models import get_game_settings
+
+    mission = str(mission_type or "").strip().lower()
+    if mission in FLEET_SPEED_WAR_MISSIONS:
+        key = "fleet_speed_war"
+    elif mission in FLEET_SPEED_HOLD_MISSIONS:
+        key = "fleet_speed_holding"
+    else:
+        key = "fleet_speed_peaceful"
+    settings = get_game_settings() or {}
+    try:
+        return max(0.01, float(settings.get(key, 1.0) or 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def normalize_expedition_hours(raw: Any) -> int:
+    try:
+        hours = int(raw or 0)
+    except (TypeError, ValueError):
+        hours = DEFAULT_EXPEDITION_STAY_HOURS
+    if hours <= 0:
+        hours = DEFAULT_EXPEDITION_STAY_HOURS
+    return max(EXPEDITION_STAY_HOURS_MIN, min(EXPEDITION_STAY_HOURS_MAX, hours))
+
+
+def expedition_stay_seconds(hours: int | None = None) -> int:
+    return normalize_expedition_hours(hours) * EXPEDITION_STAY_HOUR_SECONDS
+
+
+def _expedition_hours_from_movement(movement: Mapping[str, Any]) -> int:
+    resources = movement.get("resources") or {}
+    return normalize_expedition_hours(resources.get("expedition_hours"))
+
+
 def _fuel_efficiency_factor_for_fleet(
     player_id: int,
     conn,
@@ -1003,6 +1046,7 @@ def validate_fleet_send(
         resources=resources_n,
         speed_percent=pct,
         player_id=player_id,
+        mission_type=mission,
         conn=conn,
     )
     fuel_cost = int(preview["fuel_cost"])
@@ -1048,6 +1092,7 @@ def build_fleet_send_preview(
     target_planet_id: int | None = None,
     target_world_x: float | None = None,
     target_world_y: float | None = None,
+    expedition_hours: int | None = None,
 ) -> Dict[str, Any]:
     """Flight preview enriched with target resolution and send eligibility."""
     own = conn is None
@@ -1138,10 +1183,13 @@ def build_fleet_send_preview(
             resources=resources_n,
             speed_percent=int(speed_percent),
             player_id=player_id,
+            mission_type=mission,
             conn=conn,
         )
         now = _now()
         flight_seconds = int(flight.get("flight_seconds") or 0)
+        expo_hours = normalize_expedition_hours(expedition_hours) if mission == "expedition" else 0
+        expo_stay_seconds = expedition_stay_seconds(expo_hours) if mission == "expedition" else 0
         outbound = build_outbound_timing(departure_at=now, duration_seconds=flight_seconds)
         arrival_at = outbound["arrival_at"] if ships_n else None
 
@@ -1186,6 +1234,11 @@ def build_fleet_send_preview(
             "arrival_at": arrival_at,
             "countdown_at": arrival_at,
             "duration_seconds": outbound["duration_seconds"] if ships_n else 0,
+            "expedition_hours": expo_hours if mission == "expedition" else None,
+            "expedition_stay_seconds": expo_stay_seconds if mission == "expedition" else None,
+            "expedition_total_seconds": (
+                (flight_seconds * 2) + expo_stay_seconds if mission == "expedition" and ships_n else None
+            ),
         }
     finally:
         if own and conn is not None:
@@ -1294,6 +1347,7 @@ def preview_fleet_flight(
     resources: Mapping[str, Any] | None,
     speed_percent: int,
     player_id: int,
+    mission_type: str = "transport",
     conn=None,
 ) -> Dict[str, Any]:
     own = conn is None
@@ -1306,7 +1360,13 @@ def preview_fleet_flight(
         origin_galaxy = int(origin_planet.get("galaxy") or origin[0] or 0) or None
         speed_mult = _fleet_speed_multiplier(player_id, conn, galaxy=origin_galaxy)
         fleet_speed = calculate_fleet_speed(ships, speed_multiplier=speed_mult)
-        flight_seconds = calculate_flight_seconds(distance, fleet_speed, speed_percent)
+        admin_speed = admin_fleet_speed_multiplier(mission_type)
+        flight_seconds = calculate_flight_seconds(
+            distance,
+            fleet_speed,
+            speed_percent,
+            admin_speed_multiplier=admin_speed,
+        )
         fuel_eff_factor = _fuel_efficiency_factor_for_fleet(
             player_id, conn, galaxy=origin_galaxy
         )
@@ -1840,6 +1900,7 @@ def send_fleet(
     target_planet_id: int | None = None,
     target_world_x: float | None = None,
     target_world_y: float | None = None,
+    expedition_hours: int | None = None,
     conn=None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     mission = str(mission_type or "").strip().lower()
@@ -1994,6 +2055,8 @@ def send_fleet(
                 resources_store["world_key"] = wk
         if mission == "expedition" and wk:
             resources_store["world_key"] = wk
+        if mission == "expedition":
+            resources_store["expedition_hours"] = normalize_expedition_hours(expedition_hours)
 
         now = _now()
         flight_seconds = int(preview["flight_seconds"])
@@ -3238,118 +3301,18 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
         return True
 
     if mission == "expedition":
-        raw_res = movement.get("resources") or {}
-        world_key = str(raw_res.get("world_key") or "").strip()
-        report_coords = world_key or coords
-        world_context = None
-        if world_key:
-            from .planet_evolution.strategic_worlds import build_strategic_world_presentation_from_key
-            from .planet_evolution.world_colonization import WorldKeyError, is_expedition_world_type
-
-            try:
-                world_context = build_strategic_world_presentation_from_key(world_key)
-            except WorldKeyError:
-                world_context = None
-        cargo_total = calculate_expedition_loot_cap(ships)
-        flight_seconds_base = int(movement.get("flight_seconds") or 1)
-        origin_galaxy = int(movement.get("origin_galaxy") or movement.get("galaxy") or 0) or None
-        if origin_galaxy is None:
-            try:
-                cur = conn.cursor()
-                cur.execute(
-                    "SELECT galaxy FROM planets WHERE id = ? LIMIT 1;",
-                    (int(movement.get("origin_planet_id") or 0),),
-                )
-                grow = cur.fetchone()
-                if grow and grow["galaxy"] is not None:
-                    origin_galaxy = int(grow["galaxy"])
-            except Exception:
-                origin_galaxy = None
-        directive_flags: Dict[str, Any] = {}
-        if origin_galaxy:
-            from .galactic_directives.mechanics import get_directive_flags_for_galaxy
-
-            directive_flags = get_directive_flags_for_galaxy(origin_galaxy, conn=conn)
-        from .empire_page import get_empire_production_aggregate
-
-        empire_prod = get_empire_production_aggregate(player_id, conn=conn)
-        empire_daily_total = int(empire_prod.get("total_per_day") or 0)
-        outcome = resolve_expedition_outcome(
-            movement_id,
-            cargo_total=cargo_total,
-            expedition_ship_count=count_expedition_ships(ships),
-            flight_seconds=flight_seconds_base,
-            ships=ships,
-            empire_daily_total=empire_daily_total,
-            world_type=str(world_context.get("world_type") or "") if world_context else None,
-            directive_flags=directive_flags,
-        )
-        rewards = outcome["rewards"]
-        grant_expedition_lootboxes(
-            player_id,
-            outcome.get("lootboxes") or [],
-            movement_id=movement_id,
-            conn=conn,
-        )
-        delay_extra = int(outcome.get("delay_extra") or 0)
-        timing = _return_timing_from_now(movement, now=now, delay_seconds=delay_extra)
-        return_at = timing["return_at"]
+        stay_seconds = expedition_stay_seconds(_expedition_hours_from_movement(movement))
+        holding_until = int(now) + stay_seconds
         claimed = _claim_movement_status(
             conn,
             movement_id,
             ("outbound",),
-            "returning",
+            "holding",
             now,
-            extra_sql=", return_at = ?, resources_json = ?",
-            extra_params=(return_at, _json_dumps(rewards)),
+            extra_sql=", holding_until = ?",
+            extra_params=(holding_until,),
         )
-        if not claimed:
-            return False
-        if world_key and world_context and is_expedition_world_type(str(world_context.get("world_type") or "")):
-            from .planet_evolution.world_progress import record_world_expedition_progress
-
-            record_world_expedition_progress(player_id, world_key, conn=conn)
-        body, meta = build_expedition_report(
-            report_coords,
-            ships,
-            outcome,
-            locale=sender_locale,
-            world_context=world_context,
-        )
-        meta["fleet_id"] = movement_id
-        if world_key:
-            meta["world_key"] = world_key
-
-        if world_context and world_context.get("name_key"):
-            is_salvage = str(world_context.get("world_type") or "") == "wreckage_field"
-            notify_expedition(
-                player_id,
-                tr(
-                    "fleet_report_salvage_subject_world" if is_salvage else "fleet_report_expedition_subject_world",
-                    "Salvage report — %(world)s" if is_salvage else "Expedition report — %(world)s",
-                    locale=sender_locale,
-                    world=tr(str(world_context["name_key"]), str(world_context["name_key"]), locale=sender_locale),
-                ),
-                body,
-                metadata=meta,
-                locale=sender_locale,
-                conn=conn,
-            )
-        else:
-            notify_expedition(
-                player_id,
-                tr(
-                    "fleet_report_expedition_subject_coords",
-                    "Expedition report — %(coords)s",
-                    locale=sender_locale,
-                    coords=report_coords,
-                ),
-                body,
-                metadata=meta,
-                locale=sender_locale,
-                conn=conn,
-            )
-        return True
+        return bool(claimed)
 
     if mission == "colonize":
         from .planet_evolution.service import colonize_planet
@@ -3585,7 +3548,136 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
     return False
 
 
+def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float) -> bool:
+    """Resolve expedition loot after the stay phase, notify, then start return flight."""
+    from .i18n import get_player_locale, tr
+
+    movement_id = int(movement["id"])
+    player_id = int(movement["player_id"])
+    sender_locale = get_player_locale(player_id, conn=conn)
+    ships = movement.get("ships") or {}
+    coords = movement.get("target_coords") or ""
+    raw_res = movement.get("resources") or {}
+    world_key = str(raw_res.get("world_key") or "").strip()
+    report_coords = world_key or coords
+    world_context = None
+    if world_key:
+        from .planet_evolution.strategic_worlds import build_strategic_world_presentation_from_key
+        from .planet_evolution.world_colonization import WorldKeyError, is_expedition_world_type
+
+        try:
+            world_context = build_strategic_world_presentation_from_key(world_key)
+        except WorldKeyError:
+            world_context = None
+    cargo_total = calculate_expedition_loot_cap(ships)
+    flight_seconds_base = int(movement.get("flight_seconds") or 1)
+    origin_galaxy = int(movement.get("origin_galaxy") or movement.get("galaxy") or 0) or None
+    if origin_galaxy is None:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT galaxy FROM planets WHERE id = ? LIMIT 1;",
+                (int(movement.get("origin_planet_id") or 0),),
+            )
+            grow = cur.fetchone()
+            if grow and grow["galaxy"] is not None:
+                origin_galaxy = int(grow["galaxy"])
+        except Exception:
+            origin_galaxy = None
+    directive_flags: Dict[str, Any] = {}
+    if origin_galaxy:
+        from .galactic_directives.mechanics import get_directive_flags_for_galaxy
+
+        directive_flags = get_directive_flags_for_galaxy(origin_galaxy, conn=conn)
+    from .empire_page import get_empire_production_aggregate
+
+    empire_prod = get_empire_production_aggregate(player_id, conn=conn)
+    empire_daily_total = int(empire_prod.get("total_per_day") or 0)
+    outcome = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=cargo_total,
+        expedition_ship_count=count_expedition_ships(ships),
+        flight_seconds=flight_seconds_base,
+        ships=ships,
+        empire_daily_total=empire_daily_total,
+        world_type=str(world_context.get("world_type") or "") if world_context else None,
+        directive_flags=directive_flags,
+    )
+    rewards = dict(outcome["rewards"])
+    if world_key:
+        rewards["world_key"] = world_key
+    rewards["expedition_hours"] = _expedition_hours_from_movement(movement)
+    grant_expedition_lootboxes(
+        player_id,
+        outcome.get("lootboxes") or [],
+        movement_id=movement_id,
+        conn=conn,
+    )
+    delay_extra = int(outcome.get("delay_extra") or 0)
+    timing = _return_timing_from_now(movement, now=now, delay_seconds=delay_extra)
+    return_at = timing["return_at"]
+    claimed = _claim_movement_status(
+        conn,
+        movement_id,
+        ("holding",),
+        "returning",
+        now,
+        extra_sql=", return_at = ?, resources_json = ?",
+        extra_params=(return_at, _json_dumps(rewards)),
+    )
+    if not claimed:
+        return False
+    if world_key and world_context and is_expedition_world_type(str(world_context.get("world_type") or "")):
+        from .planet_evolution.world_progress import record_world_expedition_progress
+
+        record_world_expedition_progress(player_id, world_key, conn=conn)
+    body, meta = build_expedition_report(
+        report_coords,
+        ships,
+        outcome,
+        locale=sender_locale,
+        world_context=world_context,
+    )
+    meta["fleet_id"] = movement_id
+    if world_key:
+        meta["world_key"] = world_key
+
+    if world_context and world_context.get("name_key"):
+        is_salvage = str(world_context.get("world_type") or "") == "wreckage_field"
+        notify_expedition(
+            player_id,
+            tr(
+                "fleet_report_salvage_subject_world" if is_salvage else "fleet_report_expedition_subject_world",
+                "Salvage report — %(world)s" if is_salvage else "Expedition report — %(world)s",
+                locale=sender_locale,
+                world=tr(str(world_context["name_key"]), str(world_context["name_key"]), locale=sender_locale),
+            ),
+            body,
+            metadata=meta,
+            locale=sender_locale,
+            conn=conn,
+        )
+    else:
+        notify_expedition(
+            player_id,
+            tr(
+                "fleet_report_expedition_subject_coords",
+                "Expedition report — %(coords)s",
+                locale=sender_locale,
+                coords=report_coords,
+            ),
+            body,
+            metadata=meta,
+            locale=sender_locale,
+            conn=conn,
+        )
+    return True
+
+
 def _handle_holding_end(movement: Dict[str, Any], *, conn, now: float) -> bool:
+    mission = str(movement.get("mission_type") or "")
+    if mission == "expedition":
+        return _handle_expedition_holding_end(movement, conn=conn, now=now)
     return _start_return(movement, conn=conn, now=now)
 
 

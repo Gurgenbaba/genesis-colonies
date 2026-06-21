@@ -304,7 +304,8 @@ def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]
     """
     GC-747 / GC-802: normal poll diet — keep shell HUD slices, drop page-catalog blocks.
 
-    Keeps: planet_limit, planets (switcher), active_planet (+ sidebar_nav for role nav).
+    Keeps: planet_limit, planets (switcher), active_planet (+ sidebar_nav for role nav),
+    active_fleets, fleet_slots (global header drawer).
     Drops: player_stats, building_queue, research_queue, planet_teaser, research.techs.
     """
     for key in (

@@ -11178,18 +11178,33 @@ body.gc-techtree-media-zoom-open{
   margin-bottom: 8px;
 }
 .fleet-quick-targets-strip{
-  max-height: 120px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 4px;
-  background: linear-gradient(180deg, rgba(3, 12, 18, 0.96), rgba(2, 8, 13, 0.98));
-  border: 1px solid rgba(38, 226, 255, 0.22);
-  border-radius: var(--gc-radius-sm);
-  box-shadow: inset 0 0 14px rgba(0, 229, 255, 0.04);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 .fleet-quick-target-select{
-  width: 100%;
+  flex: 1 1 220px;
+  min-width: 0;
   max-width: 520px;
+}
+.fleet-expedition-shortcut{
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--gc-neon-gold, #ffd45a);
+  border-color: rgba(255, 212, 90, 0.28);
+}
+.fleet-expedition-shortcut.is-selected{
+  border-color: rgba(255, 212, 90, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 212, 90, 0.18);
+}
+.fleet-expedition-shortcut-coords{
+  font-size: 0.82em;
+  opacity: 0.88;
 }
 .fleet-colony-chips--compact{
   display: flex;
@@ -12763,6 +12778,13 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .fleet-preview-stat--legacy{ display: none; }
 .fleet-active-mission{ font-weight: 600; color: var(--gc-text); }
 .fleet-active-status{ color: var(--gc-accent); font-size: 0.85rem; }
+.fleet-active-times{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.85rem;
+}
+.fleet-active-home{ color: var(--gc-text-muted, rgba(255,255,255,0.65)); }
 .fleet-ship-chip{
   display: inline-block;
   margin: 2px 4px 2px 0;
@@ -15472,7 +15494,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-fleet-drawer-panel{
   border-top: 1px solid rgba(70, 229, 255, 0.14);
-  padding: 0 10px 8px;
+  padding: 0 8px 6px;
 }
 
 .gc-fleet-drawer-panel[hidden]{
@@ -15482,52 +15504,57 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .gc-fleet-drawer-list{
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: min(52vh, 420px);
+  gap: 4px;
+  max-height: min(28vh, 168px);
   overflow-y: auto;
   overflow-x: hidden;
-  padding-top: 6px;
+  padding-top: 4px;
+  overscroll-behavior: contain;
 }
 
 .gc-fleet-drawer-row{
-  --gc-fleet-drawer-action-w: 96px;
+  --gc-fleet-drawer-action-w: 76px;
   display: grid;
   grid-template-columns: 1fr;
-  gap: 6px;
+  gap: 3px;
   align-items: start;
-  padding: 7px 10px;
+  padding: 4px 8px 5px;
   border-radius: 2px;
-  border: 1px solid rgba(120, 190, 255, 0.16);
-  background: rgba(8, 14, 28, 0.78);
+  border: 1px solid rgba(120, 190, 255, 0.14);
+  background: rgba(8, 14, 28, 0.72);
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .gc-fleet-drawer-row.is-selected{
-  border-color: rgba(70, 229, 255, 0.38);
-  box-shadow: inset 0 0 0 1px rgba(70, 229, 255, 0.12), 0 0 14px rgba(70, 229, 255, 0.08);
+  border-color: rgba(70, 229, 255, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(70, 229, 255, 0.1);
+  padding-bottom: 4px;
 }
 
 .gc-fleet-drawer-row-left{
   grid-column: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
   cursor: pointer;
 }
 
 .gc-fleet-drawer-row-mission{
-  align-self: flex-start;
+  align-self: center;
+  flex: 0 0 auto;
   padding: 0;
   border: 0;
   background: transparent;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--gc-primary-2);
   cursor: pointer;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .gc-fleet-drawer-row-mission:hover,
@@ -15538,30 +15565,36 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 .gc-fleet-drawer-row-route{
-  font-size: 0.68rem;
-  color: rgba(180, 210, 240, 0.72);
-  word-break: break-word;
-  line-height: 1.3;
+  flex: 1 1 120px;
+  min-width: 0;
+  font-size: 0.66rem;
+  color: rgba(180, 210, 240, 0.68);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .gc-fleet-drawer-row-chips{
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
-  margin-top: 2px;
+  margin-top: 0;
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .gc-fleet-drawer-chip{
   display: inline-flex;
   align-items: center;
-  padding: 1px 6px;
-  border: 1px solid rgba(70, 229, 255, 0.22);
+  padding: 0 5px;
+  border: 1px solid rgba(70, 229, 255, 0.2);
   border-radius: 2px;
-  background: rgba(6, 12, 24, 0.72);
-  font-size: 0.64rem;
+  background: rgba(6, 12, 24, 0.55);
+  font-size: 0.62rem;
   color: rgba(190, 220, 245, 0.88);
-  line-height: 1.35;
+  line-height: 1.3;
   white-space: nowrap;
 }
 
@@ -15590,37 +15623,54 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .gc-fleet-drawer-row-detail{
   grid-column: 1;
   display: grid;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid rgba(70, 229, 255, 0.16);
-  background: rgba(4, 10, 22, 0.72);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 8px;
+  padding: 3px 0 0;
+  margin-top: 1px;
+  border: 0;
+  background: transparent;
+  border-top: 1px solid rgba(70, 229, 255, 0.1);
 }
 
 .gc-fleet-drawer-detail-block{
   display: grid;
-  gap: 4px;
+  gap: 1px;
+  min-width: 0;
 }
 
 .gc-fleet-drawer-detail-label{
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
+  font-size: 0.56rem;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: rgba(127, 255, 217, 0.58);
+  color: rgba(127, 255, 217, 0.5);
   font-weight: 700;
 }
 
 .gc-fleet-drawer-detail-list{
   margin: 0;
-  padding: 0 0 0 14px;
-  font-size: 0.72rem;
-  color: rgba(215, 246, 255, 0.92);
-  line-height: 1.45;
+  padding: 0 0 0 10px;
+  font-size: 0.66rem;
+  color: rgba(215, 246, 255, 0.86);
+  line-height: 1.3;
+}
+
+.gc-fleet-drawer-detail-list li:only-child{
+  list-style: none;
+  margin-left: -10px;
+  color: rgba(180, 210, 240, 0.55);
 }
 
 .gc-fleet-drawer-row-action-wrap--detail{
   display: flex;
-  justify-content: flex-start;
-  padding-top: 2px;
+  justify-content: flex-end;
+  align-items: center;
+  align-self: center;
+  padding-top: 0;
+  width: var(--gc-fleet-drawer-action-w, 76px);
+  min-width: var(--gc-fleet-drawer-action-w, 76px);
+  max-width: var(--gc-fleet-drawer-action-w, 76px);
+  flex-shrink: 0;
 }
 
 .gc-fleet-drawer-row-flight{
@@ -15631,19 +15681,19 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-fleet-flight-stage{
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 6px;
   width: 100%;
-  min-height: 44px;
-  padding: 7px 12px;
-  border: 1px solid rgba(70, 229, 255, 0.2);
-  border-radius: 2px;
-  background:
-    linear-gradient(180deg, rgba(4, 10, 22, 0.88), rgba(6, 14, 28, 0.62)),
-    radial-gradient(ellipse 80% 120% at 50% 0%, rgba(70, 229, 255, 0.07), transparent 70%);
-  box-shadow:
-    inset 0 0 14px rgba(0, 0, 0, 0.38),
-    0 0 12px rgba(70, 229, 255, 0.04);
+  min-height: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.gc-fleet-drawer-row.is-selected .gc-fleet-flight-stage{
+  padding-top: 1px;
 }
 
 .gc-fleet-flight-core{
@@ -15651,30 +15701,14 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-}
-
-.gc-fleet-flight-node{
-  flex: 0 0 auto;
-  width: 9px;
-  height: 9px;
-  margin-top: 5px;
-  border: 1px solid rgba(70, 229, 255, 0.65);
-  background: rgba(6, 12, 24, 0.95);
-  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
-  box-shadow: 0 0 8px rgba(70, 229, 255, 0.28);
-}
-
-.gc-fleet-flight-node--target{
-  border-color: rgba(127, 255, 217, 0.75);
-  box-shadow: 0 0 10px rgba(127, 255, 217, 0.32);
+  gap: 2px;
 }
 
 .gc-fleet-flight-track{
   position: relative;
   width: 100%;
-  height: 20px;
+  height: 8px;
+  flex: 0 0 auto;
 }
 
 .gc-fleet-flight-line{
@@ -15752,17 +15786,17 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .gc-fleet-flight-label{
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
+  font-size: 0.56rem;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: rgba(127, 255, 217, 0.58);
+  color: rgba(127, 255, 217, 0.52);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -15770,28 +15804,50 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-fleet-flight-timer{
   flex: 0 0 auto;
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  color: rgba(127, 255, 217, 0.98);
-  text-shadow: 0 0 10px rgba(70, 229, 255, 0.35);
+  letter-spacing: 0.03em;
+  color: rgba(127, 255, 217, 0.96);
+  text-shadow: 0 0 8px rgba(70, 229, 255, 0.28);
   font-variant-numeric: tabular-nums lining-nums;
+  white-space: nowrap;
 }
 
-.gc-fleet-drawer-row-action-wrap{
-  grid-column: 3;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
+.gc-fleet-flight-node{
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 0;
+  border: 1px solid rgba(70, 229, 255, 0.55);
+  background: rgba(6, 12, 24, 0.95);
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  box-shadow: 0 0 6px rgba(70, 229, 255, 0.22);
+}
+
+.gc-fleet-flight-node--target{
+  border-color: rgba(127, 255, 217, 0.65);
+  box-shadow: 0 0 8px rgba(127, 255, 217, 0.24);
+}
+
+/* Row-level action slots must not spawn extra grid columns */
+.gc-fleet-drawer-row > .gc-fleet-drawer-row-action-wrap{
+  grid-column: 1;
+  width: auto;
+  min-width: 0;
+  max-width: none;
   align-self: stretch;
-  width: var(--gc-fleet-drawer-action-w);
-  min-width: var(--gc-fleet-drawer-action-w);
-  max-width: var(--gc-fleet-drawer-action-w);
-  flex-shrink: 0;
+}
+
+.gc-fleet-drawer-row > .gc-fleet-drawer-row-action-wrap[hidden]{
+  display: none !important;
 }
 
 .gc-fleet-drawer-row-action{
   white-space: nowrap;
+  min-height: 22px;
+  padding: 1px 7px;
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
 }
 
 .gc-fleet-drawer-more{
@@ -15849,17 +15905,26 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 @media (max-width: 900px){
-  .gc-fleet-flight-stage{
-    padding: 6px 8px;
-    gap: 8px;
-  }
-
   .gc-fleet-flight-timer{
-    font-size: 0.76rem;
+    font-size: 0.68rem;
   }
 }
 
 @media (max-width: 720px){
+  .gc-fleet-drawer-row-left{
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .gc-fleet-drawer-row-route{
+    white-space: normal;
+  }
+
+  .gc-fleet-drawer-row-chips{
+    margin-left: 0;
+  }
+
   .gc-fleet-drawer-row-left,
   .gc-fleet-drawer-row-flight,
   .gc-fleet-drawer-row-detail,
@@ -15870,12 +15935,14 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
     max-width: none;
   }
 
-  .gc-fleet-flight-stage{
-    min-height: 40px;
+  .gc-fleet-drawer-row-detail{
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 
   .gc-fleet-drawer-row-action-wrap--detail{
     justify-content: stretch;
+    align-self: stretch;
   }
 
   .gc-fleet-drawer-row-action{

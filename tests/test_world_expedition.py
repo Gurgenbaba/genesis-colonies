@@ -228,6 +228,20 @@ def test_fleet_world_key_expedition_sends_and_reports(world_expedition_db):
             "SELECT status FROM fleet_movements WHERE id = ?;",
             (fleet_id,),
         ).fetchone()["status"]
+        assert status == "holding"
+
+        conn.execute(
+            "UPDATE fleet_movements SET holding_until = ? WHERE id = ?;",
+            (time.time() - 1, fleet_id),
+        )
+        conn.commit()
+        process_fleet_tick(player_id=player_id, conn=conn)
+        conn.commit()
+
+        status = conn.execute(
+            "SELECT status FROM fleet_movements WHERE id = ?;",
+            (fleet_id,),
+        ).fetchone()["status"]
         assert status == "returning"
 
         msg = conn.execute(

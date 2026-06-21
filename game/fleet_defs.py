@@ -41,6 +41,15 @@ EXPEDITION_POSITION = 16
 
 DEFAULT_HOLD_SECONDS = 3600
 
+EXPEDITION_STAY_HOURS_MIN = 1
+EXPEDITION_STAY_HOURS_MAX = 4
+EXPEDITION_STAY_HOUR_SECONDS = 3600
+DEFAULT_EXPEDITION_STAY_HOURS = 1
+
+# Admin game_settings keys per mission category (higher = shorter flight legs).
+FLEET_SPEED_WAR_MISSIONS = frozenset({"attack", "spy"})
+FLEET_SPEED_HOLD_MISSIONS = frozenset({"hold"})
+
 FLEET_FUEL_RESOURCE = "fuel_cells"
 
 VALID_RESOURCE_KEYS = frozenset({"metal", "crystal", "fuel_cells"})

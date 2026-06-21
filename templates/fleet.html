@@ -93,13 +93,8 @@
             <div class="fleet-form-row fleet-target-row fleet-ogame-quick-row">
               <label class="fleet-form-label" for="fleet-quick-target-select">{{ T("fleet_quick_targets") }}</label>
               <div class="fleet-quick-targets-strip">
-                <select id="fleet-quick-target-select" class="fleet-quick-target-select fleet-control" data-fleet-quick-target-select data-gc-hud-select aria-label="{{ T('fleet_quick_targets') }}" hidden tabindex="-1">
+                <select id="fleet-quick-target-select" class="fleet-quick-target-select fleet-control" data-fleet-quick-target-select data-gc-hud-select aria-label="{{ T('fleet_quick_targets') }}">
                   <option value="">{{ T("fleet_quick_target_manual") }}</option>
-                  <option value="expedition"
-                          data-galaxy="{{ fleet_ctx.coordinates.galaxy }}"
-                          data-system="{{ fleet_ctx.coordinates.system }}"
-                          data-position="{{ fleet_ctx.expedition_position }}"
-                          data-mission="expedition">{{ T("galaxy_expedition_slot_title") }} — {{ fleet_ctx.coordinates.galaxy }}:{{ fleet_ctx.coordinates.system }}:{{ fleet_ctx.expedition_position }}</option>
                   {% for col in fleet_ctx.colonies %}
                   <option value="colony-{{ col.planet_id }}"
                           data-galaxy="{{ col.galaxy }}"
@@ -108,29 +103,17 @@
                           {% if col.is_active %}data-active="1"{% endif %}>{{ col.name }} — {{ col.coordinates }}</option>
                   {% endfor %}
                 </select>
-                <div class="fleet-colony-chips fleet-colony-chips--compact" data-fleet-colony-chips>
-                  <button type="button"
-                          class="fleet-colony-chip fleet-colony-chip--expedition"
-                          data-galaxy="{{ fleet_ctx.coordinates.galaxy }}"
-                          data-system="{{ fleet_ctx.coordinates.system }}"
-                          data-position="{{ fleet_ctx.expedition_position }}"
-                          data-mission="expedition"
-                          title="{{ T('galaxy_expedition_slot_hint') }}">
-                    <span class="fleet-chip-label">{{ T("galaxy_expedition_slot_title") }}</span>
-                    <span class="fleet-chip-coords gc-mono">{{ fleet_ctx.coordinates.galaxy }}:{{ fleet_ctx.coordinates.system }}:{{ fleet_ctx.expedition_position }}</span>
-                  </button>
-                  {% for col in fleet_ctx.colonies %}
-                  <button type="button"
-                          class="fleet-colony-chip{% if col.is_active %} is-active{% endif %}"
-                          data-galaxy="{{ col.galaxy }}"
-                          data-system="{{ col.system }}"
-                          data-position="{{ col.position }}"
-                          {% if col.is_active %}aria-current="true"{% endif %}>
-                    <span class="fleet-chip-label">{{ col.name }}</span>
-                    <span class="fleet-chip-coords gc-mono">{{ col.coordinates }}</span>
-                  </button>
-                  {% endfor %}
-                </div>
+                <button type="button"
+                        class="gc-btn gc-btn-ghost gc-btn-xs fleet-expedition-shortcut"
+                        data-fleet-expedition-shortcut
+                        data-galaxy="{{ fleet_ctx.coordinates.galaxy }}"
+                        data-system="{{ fleet_ctx.coordinates.system }}"
+                        data-position="{{ fleet_ctx.expedition_position }}"
+                        data-mission="expedition"
+                        title="{{ T('galaxy_expedition_slot_hint') }}">
+                  {{ T("galaxy_expedition_slot_title") }}
+                  <span class="gc-mono fleet-expedition-shortcut-coords">{{ fleet_ctx.coordinates.galaxy }}:{{ fleet_ctx.coordinates.system }}:{{ fleet_ctx.expedition_position }}</span>
+                </button>
               </div>
             </div>
 
@@ -171,6 +154,15 @@
                     {% for sp in fleet_ctx.speed_options %}
                     <option value="{{ sp }}" {% if sp == 100 %}selected{% endif %}>{{ sp }}%</option>
                     {% endfor %}
+                  </select>
+                </div>
+                <div class="fleet-form-row fleet-form-row--inline" data-fleet-expedition-hours-row hidden>
+                  <label class="fleet-form-label" for="fleet-expedition-hours">{{ T("fleet_expedition_hours_label", "Expeditionsdauer") }}</label>
+                  <select id="fleet-expedition-hours" name="expedition_hours" class="fleet-control" data-fleet-expedition-hours data-gc-hud-select>
+                    <option value="1" selected>1 h</option>
+                    <option value="2">2 h</option>
+                    <option value="3">3 h</option>
+                    <option value="4">4 h</option>
                   </select>
                 </div>
               </div>

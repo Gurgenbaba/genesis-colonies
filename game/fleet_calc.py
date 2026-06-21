@@ -6,7 +6,17 @@ import math
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, TypedDict
 
-from .fleet_defs import FLEET_FUEL_RESOURCE, canonical_ship_key, get_ship, is_known_ship_key
+from .fleet_defs import (
+    DEFAULT_EXPEDITION_STAY_HOURS,
+    DEFAULT_HOLD_SECONDS,
+    EXPEDITION_STAY_HOURS_MAX,
+    EXPEDITION_STAY_HOURS_MIN,
+    EXPEDITION_STAY_HOUR_SECONDS,
+    FLEET_FUEL_RESOURCE,
+    canonical_ship_key,
+    get_ship,
+    is_known_ship_key,
+)
 from .effects.effect_resolver import FUEL_EFFICIENCY_PER_LEVEL, EffectResolver
 
 # OGame-style flight-time divisor (seconds scale with distance and slowest hull speed).
@@ -65,6 +75,8 @@ def calculate_flight_seconds(
     distance: int,
     slowest_ship_speed: int,
     speed_percent: int,
+    *,
+    admin_speed_multiplier: float = 1.0,
 ) -> int:
     """OGame-style leg duration: (35000 / speed) * sqrt(distance / 10) adjusted by speed %."""
     if distance <= 0 or slowest_ship_speed <= 0:
@@ -73,8 +85,60 @@ def calculate_flight_seconds(
     speed_factor = pct / 100.0
     dist = max(1.0, float(distance))
     base = (FLIGHT_TIME_DIVISOR / float(slowest_ship_speed)) * math.sqrt(dist / 10.0)
-    seconds = base / speed_factor
+    admin_mult = max(0.01, float(admin_speed_multiplier or 1.0))
+    seconds = base / speed_factor / admin_mult
     return max(1, int(math.ceil(seconds)))
+
+
+def _movement_return_leg_seconds(movement: Mapping[str, Any]) -> int:
+    return max(1, int(movement.get("flight_seconds") or movement.get("duration_seconds") or 0))
+
+
+def _normalize_expedition_hours(raw: Any) -> int:
+    try:
+        hours = int(raw)
+    except (TypeError, ValueError):
+        hours = DEFAULT_EXPEDITION_STAY_HOURS
+    return max(EXPEDITION_STAY_HOURS_MIN, min(EXPEDITION_STAY_HOURS_MAX, hours))
+
+
+def _target_stay_seconds(movement: Mapping[str, Any]) -> int:
+    mission = str(movement.get("mission_type") or "").strip().lower()
+    if mission == "hold":
+        return DEFAULT_HOLD_SECONDS
+    if mission == "expedition":
+        resources = movement.get("resources") or {}
+        hours = _normalize_expedition_hours(resources.get("expedition_hours"))
+        return hours * EXPEDITION_STAY_HOUR_SECONDS
+    return 0
+
+
+def movement_home_at(movement: Mapping[str, Any]) -> int:
+    """Absolute unix timestamp when the fleet is back at origin (0 if not applicable)."""
+    mission = str(movement.get("mission_type") or "").strip().lower()
+    if mission == "deploy":
+        return 0
+
+    status = str(movement.get("status") or "").strip().lower()
+    return_leg = _movement_return_leg_seconds(movement)
+    persisted = max(0, int(movement.get("return_at") or movement.get("return_arrival_at") or 0))
+
+    if status == "returning":
+        return persisted
+
+    if status == "holding":
+        holding_until = max(0, int(movement.get("holding_until") or 0))
+        if holding_until > 0:
+            return holding_until + return_leg
+        return persisted
+
+    if status == "outbound":
+        arrival_at = max(0, int(movement.get("arrival_at") or 0))
+        if arrival_at <= 0:
+            return 0
+        return arrival_at + _target_stay_seconds(movement) + return_leg
+
+    return persisted
 
 
 def movement_countdown_end_at(movement: Mapping[str, Any]) -> int:
@@ -106,6 +170,8 @@ def enrich_movement_timing(
 
     countdown_at = movement_countdown_end_at(out)
     remaining_seconds = max(0, int(math.ceil(countdown_at - ts))) if countdown_at > 0 else 0
+    home_at = movement_home_at(out)
+    home_remaining_seconds = max(0, int(math.ceil(home_at - ts))) if home_at > 0 else 0
 
     leg_phase = status if status in ("outbound", "returning", "holding") else ""
     leg_label_key = {
@@ -137,6 +203,8 @@ def enrich_movement_timing(
             "leg_label_key": leg_label_key,
             "return_started_at": return_started_at,
             "return_arrival_at": return_arrival_at,
+            "home_at": home_at,
+            "home_remaining_seconds": home_remaining_seconds,
         }
     )
     return out

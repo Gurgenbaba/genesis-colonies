@@ -285,8 +285,10 @@ def test_api_game_state_poll_is_lightweight(game_client):
     assert "overview" in body
     assert "energy_hint" in body["overview"]
     assert "rows" not in body.get("overview", {})
-    assert "active_fleets" not in body
-    assert "fleet_slots" not in body
+    assert "active_fleets" in body
+    assert "fleet_slots" in body
+    assert isinstance(body["active_fleets"], dict)
+    assert "items" in body["active_fleets"]
     assert "global_queue_hud" not in body
 
 

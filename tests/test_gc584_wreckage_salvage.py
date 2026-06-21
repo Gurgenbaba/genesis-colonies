@@ -178,6 +178,20 @@ def test_fleet_world_key_salvage_sends_and_reports(gc584_db):
         process_fleet_tick(player_id=player_id, conn=conn)
         conn.commit()
 
+        status = conn.execute(
+            "SELECT status FROM fleet_movements WHERE id = ?;",
+            (fleet_id,),
+        ).fetchone()["status"]
+        assert status == "holding"
+
+        conn.execute(
+            "UPDATE fleet_movements SET holding_until = ? WHERE id = ?;",
+            (time_mod.time() - 1, fleet_id),
+        )
+        conn.commit()
+        process_fleet_tick(player_id=player_id, conn=conn)
+        conn.commit()
+
         msg = conn.execute(
             """
             SELECT subject, metadata_json FROM player_messages

@@ -852,23 +852,16 @@ def test_main_js_gc640h_fleet_mode_tabs_visual_polish():
 
 
 def test_main_js_gc640j_fleet_button_consistency():
-    """GC-640J: mode tabs and quicktargets share dezente dark outline control styling."""
+    """GC-640J: mode tabs and quicktargets use dezente dark outline control styling."""
     tpl = _read("templates/fleet.html")
     css = _read("static/style.css")
-    assert "data-fleet-colony-chips" in tpl
-    assert 'data-fleet-colony-chips hidden' not in tpl
-    assert "fleet-colony-chips--compact" in tpl
-    chip_css = css.split(".fleet-colony-chips--compact .fleet-colony-chip{")[1].split(".fleet-colony-chips--compact .fleet-colony-chip::after")[0]
-    assert "linear-gradient(180deg, #081824, #040b12)" in chip_css
-    assert "min-height: 32px" in chip_css
+    assert "data-fleet-quick-target-select" in tpl
+    assert "data-fleet-expedition-shortcut" in tpl
+    assert "fleet-colony-chips" not in tpl
+    assert "data-gc-hud-select" in tpl
+    assert ".fleet-expedition-shortcut" in css
     tab_active = css.split(".fleet-mode-tab.active,")[1].split("@media (max-width: 640px)")[0]
-    selected_css = css.split(".fleet-colony-chips--compact .fleet-colony-chip.is-selected{")[1].split(".fleet-colony-chips--compact .fleet-colony-chip.is-selected .fleet-chip-label")[0]
     assert "linear-gradient(180deg, #0d3442, #061823)" in tab_active
-    assert "linear-gradient(180deg, #0d3442, #061823)" in selected_css
-    assert "linear-gradient(180deg, #35f2ff, #079fbd)" not in selected_css
-    expo_css = css.split(".fleet-colony-chips--compact .fleet-colony-chip--expedition.is-selected{")[1].split(".fleet-colony-chips--compact .fleet-colony-chip--expedition.is-selected .fleet-chip-label")[0]
-    assert "linear-gradient(180deg, #3d2e0c, #241806)" in expo_css
-    assert "linear-gradient(180deg, #ffd45a, #c68a00)" not in expo_css
 
 
 def test_main_js_gc640e_fleet_logistics_merge():

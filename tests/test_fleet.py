@@ -255,6 +255,24 @@ def _force_outbound_arrival(conn, fleet_id: int) -> None:
     conn.commit()
 
 
+def _force_expedition_stay_end(conn, fleet_id: int) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE fleet_movements SET holding_until = ? WHERE id = ? AND status = 'holding';",
+        (time.time() - 1, int(fleet_id)),
+    )
+    conn.commit()
+
+
+def _complete_expedition_to_returning(conn, fleet_id: int, *, player_id: int) -> None:
+    _force_outbound_arrival(conn, fleet_id)
+    process_fleet_tick(player_id=player_id, conn=conn)
+    conn.commit()
+    _force_expedition_stay_end(conn, fleet_id)
+    process_fleet_tick(player_id=player_id, conn=conn)
+    conn.commit()
+
+
 # --- Calculation tests ---
 
 
@@ -278,6 +296,91 @@ def test_speed_percent_validation_range():
     sec_fast = calculate_flight_seconds(1000, 5000, 100)
     sec_slow = calculate_flight_seconds(1000, 5000, 10)
     assert sec_slow >= sec_fast
+
+
+def test_calculate_flight_seconds_admin_speed_multiplier():
+    base = calculate_flight_seconds(1000, 5000, 100)
+    fast = calculate_flight_seconds(1000, 5000, 100, admin_speed_multiplier=10.0)
+    assert fast < base
+    assert fast >= 1
+
+
+def test_admin_fleet_speed_peaceful_applied_in_preview(fleet_db, monkeypatch):
+    from game.models import save_game_settings
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    g, s, p = _planet_coords(pid, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    cur.execute("SELECT * FROM planets WHERE id = ?;", (pid,))
+    origin = dict(cur.fetchone())
+    conn.commit()
+
+    save_game_settings({"fleet_speed_peaceful": 1.0})
+    slow = preview_fleet_flight(
+        origin_planet=origin,
+        target_galaxy=g,
+        target_system=s,
+        target_position=EXPEDITION_POSITION,
+        ships={"solar_skiff": 1},
+        resources={},
+        speed_percent=100,
+        player_id=uid,
+        mission_type="expedition",
+        conn=conn,
+    )
+    save_game_settings({"fleet_speed_peaceful": 10.0})
+    fast = preview_fleet_flight(
+        origin_planet=origin,
+        target_galaxy=g,
+        target_system=s,
+        target_position=EXPEDITION_POSITION,
+        ships={"solar_skiff": 1},
+        resources={},
+        speed_percent=100,
+        player_id=uid,
+        mission_type="expedition",
+        conn=conn,
+    )
+    assert int(fast["flight_seconds"]) < int(slow["flight_seconds"])
+    save_game_settings({"fleet_speed_peaceful": 1.0})
+    conn.close()
+
+
+def test_expedition_holding_duration_from_hours(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    g, s, _ = _planet_coords(pid, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"solar_skiff": 2}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=EXPEDITION_POSITION,
+        mission_type="expedition",
+        ships={"solar_skiff": 1},
+        expedition_hours=3,
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    before = time.time()
+    _force_outbound_arrival(conn, fleet_id)
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute("SELECT status, holding_until FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    row = dict(cur.fetchone())
+    assert row["status"] == "holding"
+    assert int(row["holding_until"]) >= int(before) + (3 * 3600) - 5
+    conn.close()
 
 
 def test_calculate_flight_seconds_ogame_scale():
@@ -306,6 +409,7 @@ def test_enrich_movement_timing_outbound_returning_and_holding():
     assert outbound["leg_label_key"] == "fleet_leg_outbound"
     assert outbound["phase"] == "outbound"
     assert outbound["status_label"] == "fleet_leg_outbound"
+    assert outbound["home_at"] == int(now) + 600
 
     returning = enrich_movement_timing(
         {
@@ -325,6 +429,8 @@ def test_enrich_movement_timing_outbound_returning_and_holding():
     assert returning["leg_label_key"] == "fleet_leg_returning"
     assert returning["phase"] == "returning"
     assert returning["status_label"] == "fleet_leg_returning"
+    assert returning["home_at"] == int(now) + 500
+    assert returning["home_remaining_seconds"] == 150
 
     holding = enrich_movement_timing(
         {
@@ -340,6 +446,36 @@ def test_enrich_movement_timing_outbound_returning_and_holding():
     assert holding["remaining_seconds"] == 3520
     assert holding["phase"] == "holding"
     assert holding["status_label"] == "fleet_leg_holding"
+    assert holding["home_at"] == int(now) + 3720 + 120
+    assert holding["home_remaining_seconds"] == 3640
+
+
+def test_movement_home_at_outbound_hold_and_expedition():
+    from game.fleet_calc import movement_home_at
+
+    now = 1_700_000_000
+    transport = movement_home_at(
+        {
+            "mission_type": "transport",
+            "status": "outbound",
+            "arrival_at": now + 300,
+            "flight_seconds": 300,
+        }
+    )
+    assert transport == now + 600
+
+    hold = movement_home_at(
+        {
+            "mission_type": "hold",
+            "status": "outbound",
+            "arrival_at": now + 120,
+            "flight_seconds": 120,
+        }
+    )
+    assert hold == now + 120 + 3600 + 120
+
+    deploy = movement_home_at({"mission_type": "deploy", "status": "outbound", "arrival_at": now + 60})
+    assert deploy == 0
 
 
 def test_preview_send_flight_timing_parity(fleet_db):
@@ -1611,16 +1747,24 @@ def test_expedition_arrival_and_return_double_tick_idempotent_loot(fleet_db):
     tick_arr1 = process_fleet_tick(player_id=uid, conn=conn)
     conn.commit()
     cur.execute("SELECT status, resources_json FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    row_holding = dict(cur.fetchone())
+    assert row_holding["status"] == "holding"
+
+    _force_expedition_stay_end(conn, fleet_id)
+    tick_arr2 = process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    cur.execute("SELECT status, resources_json FROM fleet_movements WHERE id = ?;", (fleet_id,))
     row_once = dict(cur.fetchone())
     rewards_once = json.loads(row_once["resources_json"] or "{}")
 
-    tick_arr2 = process_fleet_tick(player_id=uid, conn=conn)
+    tick_arr3 = process_fleet_tick(player_id=uid, conn=conn)
     conn.commit()
     cur.execute("SELECT resources_json FROM fleet_movements WHERE id = ?;", (fleet_id,))
     rewards_twice = json.loads(dict(cur.fetchone())["resources_json"] or "{}")
 
     assert int(tick_arr1.get("processed_arrivals") or 0) == 1
-    assert int(tick_arr2.get("processed_arrivals") or 0) == 0
+    assert int(tick_arr2.get("processed_holding") or 0) == 1
+    assert int(tick_arr3.get("processed_holding") or 0) == 0
     assert row_once["status"] == "returning"
     assert rewards_twice == rewards_once
 
@@ -2210,10 +2354,7 @@ def test_expedition_event_engine_report(fleet_db):
     )
     assert ok
     fleet_id = result["fleet"]["id"]
-    cur.execute("UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;", (time.time() - 1, fleet_id))
-    conn.commit()
-    process_fleet_tick(player_id=uid, conn=conn)
-    conn.commit()
+    _complete_expedition_to_returning(conn, fleet_id, player_id=uid)
 
     msgs = list_messages(uid, category="expedition")
     assert len(msgs["data"]["messages"]) >= 1
@@ -4584,7 +4725,8 @@ def test_fleet_ui_active_buttons_have_handlers():
         "[data-ship-max]",
         "[data-ship-max-image]",
         "[data-fleet-res-max]",
-        ".fleet-colony-chip",
+        "[data-fleet-expedition-shortcut]",
+        "[data-fleet-quick-target-select]",
         "[data-fleet-save-preset]",
         "[data-preset-load]",
         "[data-preset-delete]",
@@ -4602,7 +4744,7 @@ def test_fleet_ui_active_buttons_have_handlers():
         "syncExpeditionMissionTarget",
         "updateFleetFormMode",
         "data-preview-mission-badge",
-        "fleet-colony-chip--expedition",
+        "data-fleet-expedition-shortcut",
         "initHudSelects",
         "data-gc-hud-select",
         "tickFleetCountdowns",
@@ -4627,11 +4769,9 @@ def test_quick_target_template_sets_coord_inputs():
     assert 'name="target_galaxy"' in tpl
     assert 'name="target_system"' in tpl
     assert 'name="target_position"' in tpl
-    assert "data-galaxy" in tpl and "fleet-colony-chip" in tpl
-    assert "data-preview-target-type" in tpl
-    assert "data-fleet-mission-feedback" in tpl
-    assert "data-expedition-position" in tpl
-    assert "fleet-colony-chip--expedition" in tpl
+    assert "data-galaxy" in tpl and "data-fleet-quick-target-select" in tpl
+    assert "data-fleet-expedition-shortcut" in tpl
+    assert "fleet-colony-chip" not in tpl
     assert "fleet-coords-strip" in tpl
     assert "fleet-preview-hud" in tpl
     assert "data-preview-mission-badge" in tpl
