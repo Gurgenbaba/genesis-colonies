@@ -11989,10 +11989,7 @@
       }
 
       if (hint) {
-        if (isExpoSlot) {
-          hint.textContent = tt("fleet_expedition_coords_hint", "Deep-space expedition slot — position 16 only.");
-          hint.hidden = false;
-        } else if (missionSel?.value === "expedition") {
+        if (missionSel?.value === "expedition" && !isExpoSlot) {
           hint.textContent = formatMissionHint("fleet_expedition_coords_hint_required", { position: expPos });
           hint.hidden = false;
         } else {

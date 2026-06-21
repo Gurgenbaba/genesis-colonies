@@ -109,21 +109,18 @@
                            data-fleet-coord-position>
                     <span class="fleet-coords-bracket" aria-hidden="true">]</span>
                   </div>
+                  <button type="button"
+                          class="gc-btn gc-btn-ghost gc-btn-xs fleet-expedition-shortcut"
+                          data-fleet-expedition-shortcut
+                          data-galaxy="{{ fleet_ctx.coordinates.galaxy }}"
+                          data-system="{{ fleet_ctx.coordinates.system }}"
+                          data-position="{{ fleet_ctx.expedition_position }}"
+                          data-mission="expedition"
+                          title="{{ T('galaxy_expedition_slot_hint') }}">
+                    {{ T("fleet_mission_expedition", "Expedition") }}
+                  </button>
                 </div>
                 <p class="fleet-coords-hint hint" data-fleet-coords-hint hidden></p>
-              </div>
-
-              <div class="fleet-expedition-shortcut-wrap">
-                <button type="button"
-                        class="gc-btn gc-btn-ghost gc-btn-xs fleet-expedition-shortcut"
-                        data-fleet-expedition-shortcut
-                        data-galaxy="{{ fleet_ctx.coordinates.galaxy }}"
-                        data-system="{{ fleet_ctx.coordinates.system }}"
-                        data-position="{{ fleet_ctx.expedition_position }}"
-                        data-mission="expedition"
-                        title="{{ T('galaxy_expedition_slot_hint') }}">
-                  {{ T("fleet_mission_expedition", "Expedition") }}
-                </button>
               </div>
 
               <div class="fleet-mission-speed-row fleet-mission-speed-row--compact">

@@ -4795,10 +4795,12 @@ def test_quick_target_template_sets_coord_inputs():
     assert "modifier == 'strip'" in slots_partial or "fleet-slots-line" in slots_partial
     assert "fleet-coords-strip" in tpl
     assert "fleet-coords-line" in tpl
-    coords_row_idx = tpl.index("data-fleet-coords-row")
+    assert "fleet-expedition-shortcut-wrap" not in tpl
+    coords_strip_idx = tpl.index("data-fleet-coords-strip")
+    coords_line_idx = tpl.index("fleet-coords-line")
     expo_idx = tpl.index("data-fleet-expedition-shortcut")
     mission_idx = tpl.index("data-fleet-mission")
-    assert coords_row_idx < expo_idx < mission_idx
+    assert coords_line_idx < coords_strip_idx < expo_idx < mission_idx
     assert "fleet-expedition-shortcut-coords" not in tpl
     assert "fleet-preview-hud" in tpl
     assert "fleet-send-compact-grid" in tpl

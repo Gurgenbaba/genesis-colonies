@@ -11281,6 +11281,14 @@ body.gc-techtree-media-zoom-open{
   flex-wrap: wrap;
   min-width: 0;
 }
+.fleet-coords-line .fleet-expedition-shortcut{
+  flex: 0 0 auto;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  min-height: 100%;
+  padding: 8px 12px;
+}
 .fleet-expedition-shortcut{
   flex: 0 0 auto;
   display: inline-flex;
@@ -11381,16 +11389,9 @@ body.gc-techtree-media-zoom-open{
 }
 .fleet-ogame-mission-row{
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   gap: 10px;
-  align-items: stretch;
-}
-.fleet-expedition-shortcut-wrap{
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-self: stretch;
-  min-width: 0;
+  align-items: start;
 }
 .fleet-coords-row--compact,
 .fleet-mission-speed-row--compact{
