@@ -110,6 +110,7 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 | GC-513 Race Tests | ✅ |
 | GC-600 Defense Phase 1 validation | ✅ |
 | GC-601 Project Inventory | ✅ |
+| **GC-806 Navigation Shell** (804–806D: dual sidebar, bottom dock, docs) | ✅ CLOSED |
 | GC-700 Combat | 📋 Readiness oben — kein Greenfield |
 | GC-800 Recycler | ✅ — [GC-800_RECYCLER.md](GC-800_RECYCLER.md); GC-800C UX optional |
 | GC-900A Logistics spec | ✅ — [GC-900_LOGISTICS.md](GC-900_LOGISTICS.md) |

@@ -50,6 +50,26 @@ Pflicht-APIs: `GC.navigateTo()`, `GC.reloadCurrentPage()`, `GC.fetchGameAction()
 
 `templates/base.html` bleibt permanent. Nur `#main-content` wird ersetzt.
 
+### Navigation Shell (GC-806)
+
+Ingame-Desktop-Shell — Layout **immer**:
+
+```text
+Left Sidebar (Gameplay) | Main (#main-content) | Right Sidebar (Meta)
+```
+
+Zusätzlich: Header, Resource Bar, Bottom Utility Dock (Support, Tickets, legal, Discord, Wiki, Tchat, Version).
+
+| Verboten | Erlaubt |
+|----------|---------|
+| Route-basierter Wide-Mode (rechte Sidebar auf Fleet/Galaxy/Ranking ausblenden) | Content passt sich an (`min-width: 0`, internes Scrollen in Panels/Tabellen) |
+| Sidebars pro Seite togglen, um Content-Breite zu erzwingen | Tablet 992–1279px: rechte Sidebar als Drawer |
+| Paralleles Layout-System neben `.gc-layout--dual` | Ein Shell-Grid in `base.html`; PJAX tauscht nur `#main-content` |
+
+**Regel:** Navigation niemals auf Desktop verstecken — breite Module passen sich an, nicht die Shell.
+
+Details: [ARCHITECTURE.md](ARCHITECTURE.md) — Navigation Shell (GC-806).
+
 Diese Routen dürfen **niemals** die komplette Anwendung neu laden:
 
 `Overview` · `Buildings` · `Research` · `Galaxy` · `Fleet` · `Defense` · `Trader Hub` · `Messages` · `Alliance` · `Planet Evolution`

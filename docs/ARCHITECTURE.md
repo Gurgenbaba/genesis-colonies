@@ -52,7 +52,7 @@ Technische Architektur-Dokumentation (Stand: **v1.5.3**). Ergänzt die [README](
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │ Client (Browser)                                                  │
-│  templates/base.html     — Shell (nav, resource bar, planet switch)│
+│  templates/base.html     — Shell (dual sidebars, header, bottom dock)│
 │  static/main.js          — GC: PJAX, poll, actions, fleet, scope  │
 │  static/js/chat.js       — Genesis TChat (eigenes Polling)        │
 │  static/js/messages.js   — Inbox                                  │
@@ -159,6 +159,44 @@ Client (`static/main.js`): Singleton-Polling, `applyGameStateData()`, rAF-Ticker
 | Idle | ~4000 ms |
 | Tab hidden | ~12000 ms |
 | Fehler | Exponential backoff bis 60 s |
+
+---
+
+## Navigation Shell (GC-806)
+
+Seit **GC-804–806C** nutzt die Ingame-Shell in `templates/base.html` ein festes **Dual-Sidebar-Layout** plus **Bottom Utility Dock**. PJAX ersetzt weiterhin nur `#main-content`; Sidebars und Dock bleiben in der Shell erhalten ([AJAX_PJAX_CONTRACT.md](AJAX_PJAX_CONTRACT.md)).
+
+```
+Header (Brand, HUD, Planet Switcher, Account)
+├─ Resource Bar (sticky)
+├─ .gc-layout--dual  (max-width: --gc-shell-max-width, default 1360px)
+│   ├─ Left Sidebar — Gameplay   (#gc-sidebar-nav, sidebar.html)
+│   │     Kommando · Infrastruktur · Militär
+│   ├─ Main Content              (#main-content)
+│   └─ Right Sidebar — Meta      (#gc-sidebar-nav-right, sidebar_right.html)
+│         Nachrichten · Wirtschaft · Community · System
+└─ Bottom Utility Dock           (bottom_utility_bar.html)
+      Support · Tickets · Impressum · Regeln · Discord · Wiki · Tchat · Version
+```
+
+| Partial | Rolle |
+|---------|--------|
+| `templates/partials/sidebar.html` | Linke Gameplay-Navigation |
+| `templates/partials/sidebar_right.html` | Rechte Meta-/Community-Navigation |
+| `templates/partials/bottom_utility_bar.html` | Utility-Links + Versions-Chip |
+| `templates/partials/special_panel.html` | Support/Wiki/Tchat-Fenster (vom Dock geöffnet) |
+
+**Responsive:**
+
+| Viewport | Verhalten |
+|----------|-----------|
+| Desktop ≥1280px | Beide Sidebars immer sichtbar — **kein Wide-Mode** |
+| Tablet 992–1279px | Rechte Sidebar als Drawer (Meta-Toggle im Bottom Dock) |
+| Mobile <768px | Bottom Dock aus; bestehende Bottom-Nav + Drawer unverändert |
+
+**Client-UI-State (kein Game-State):** Accordion-Sektionen in `localStorage` (`gc_sidebar_state`, `gc_sidebar_right_state`); Role-Sync aus `active_planet.sidebar_nav` via `GC.syncRoleBasedSidebar()`.
+
+**Content-Regel:** Breite Seiten (Fleet, Galaxy, Ranking, Buildings) scrollen **intern** (`min-width: 0`, Tabellen-/Card-Wrapper). Navigation wird auf Desktop nicht ausgeblendet, um Breite zu gewinnen — siehe [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) §3.
 
 ---
 

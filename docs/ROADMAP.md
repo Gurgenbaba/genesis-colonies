@@ -118,7 +118,7 @@ Docs: [FLEET_SYSTEM.md](FLEET_SYSTEM.md), [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md)
 Empfohlene Reihenfolge (verbleibend — nach [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md)):
 
 ```
-GC-803 ✅ → GC-900A–900E / GC-526–531 Logistics ✅ → GC-700 Combat polish
+GC-803 ✅ → GC-900A–900E / GC-526–531 Logistics ✅ → GC-806 Navigation Shell ✅ → GC-700 Combat polish
 ```
 
 ---
@@ -303,6 +303,9 @@ Vor neuen Features: **vorhandene Kernsysteme auf 100 %** — messbar via [GC-6
 | **GC-801** — Resource bar + buildings panel action-state sync | ✅ |
 | **GC-802** — Fleet timer, galaxy prefill, planet-switch lifecycle | ✅ |
 | **GC-803** — Fleet preset & mass expedition test stabilization (`IntegrityError`) | ✅ |
+| **GC-804** — Sidebar accordion state persistence (PJAX) | ✅ |
+| **GC-805** — Desktop sidebar sticky scroll | ✅ |
+| **GC-806** — Navigation Shell dual-sidebar + bottom dock (806A–806D) | ✅ | [ARCHITECTURE.md](ARCHITECTURE.md) § Navigation Shell |
 | **GC-900A** — Logistics spec + Option A ([GC-900_LOGISTICS.md](GC-900_LOGISTICS.md)) | ✅ |
 | **GC-900B** — Collect backend (`collect` mission + batch orchestration) | ✅ |
 | **GC-900C** — Collect UI | ✅ |
