@@ -6,11 +6,17 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from .db import begin_write_transaction, column_exists, commit, db, rollback
-from .models import hash_password, verify_user
+from .db import begin_write_transaction, column_exists, commit, db, rollback, table_exists
+from .models import (
+    ensure_player_and_homeworld,
+    hash_password,
+    recompute_and_upsert_score,
+    verify_user,
+)
 from .planet_evolution.repository import get_context_planet
 from .playercard import _strip_control, sanitize_text_field
 from .i18n import get_player_locale, normalize_locale, set_player_locale, ensure_locale_schema
@@ -19,6 +25,16 @@ NAME_MIN = 2
 NAME_MAX = 40
 PASSWORD_MIN = 4
 EMAIL_MAX = 254
+
+VACATION_MIN_DURATION_SEC = 48 * 3600
+ACCOUNT_DELETION_GRACE_SEC = 7 * 24 * 3600
+
+ACCOUNT_SAFETY_CONFIRM_PHRASES: Dict[str, str] = {
+    "vacation_enable": "ENABLE VACATION",
+    "vacation_disable": "DISABLE VACATION",
+    "account_delete": "DELETE ACCOUNT",
+    "account_reset": "RESET ACCOUNT",
+}
 
 SENSITIVE_RATE_WINDOW_SEC = 60.0
 SENSITIVE_RATE_MAX = 5
@@ -92,6 +108,7 @@ def ensure_account_options_schema(conn=None) -> None:
             "CREATE INDEX IF NOT EXISTS idx_account_audit_player "
             "ON account_audit_log (player_id, created_at DESC);"
         )
+        ensure_account_safety_schema(c)
         if own:
             c.commit()
     finally:
@@ -192,6 +209,189 @@ def write_account_audit(
             c.close()
 
 
+def ensure_account_safety_schema(conn=None) -> None:
+    """Idempotent schema for account safety columns (GC-807)."""
+    own = conn is None
+    c = conn or db()
+    cur = c.cursor()
+    try:
+        cols = {row[1] for row in cur.execute("PRAGMA table_info(players);").fetchall()}
+        for col, typedef in (
+            ("vacation_mode_active", "INTEGER NOT NULL DEFAULT 0"),
+            ("vacation_locked_until", "INTEGER"),
+            ("account_deletion_requested_at", "INTEGER"),
+            ("account_deletion_due_at", "INTEGER"),
+            ("account_deleted_at", "INTEGER"),
+        ):
+            if col not in cols:
+                cur.execute(f"ALTER TABLE players ADD COLUMN {col} {typedef};")
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_players_account_deletion_due
+                ON players (account_deletion_due_at)
+                WHERE account_deletion_due_at IS NOT NULL AND account_deleted_at IS NULL;
+            """
+        )
+        if own:
+            c.commit()
+    finally:
+        if own:
+            c.close()
+
+
+def validate_account_safety_confirm(action_key: str, confirm_text: Any) -> bool:
+    expected = ACCOUNT_SAFETY_CONFIRM_PHRASES.get(str(action_key or ""))
+    if not expected:
+        return False
+    return str(confirm_text or "").strip() == expected
+
+
+def _player_safety_row(player_id: int, conn) -> Dict[str, Any]:
+    ensure_account_safety_schema(conn)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT vacation_mode_active, vacation_locked_until,
+               account_deletion_requested_at, account_deletion_due_at,
+               account_deleted_at
+        FROM players WHERE id = ? LIMIT 1;
+        """,
+        (int(player_id),),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else {}
+
+
+def is_account_deleted(player_id: int, *, conn=None) -> bool:
+    own = conn is None
+    c = conn or db()
+    try:
+        row = _player_safety_row(int(player_id), c)
+        deleted_at = row.get("account_deleted_at")
+        return deleted_at is not None and int(deleted_at or 0) > 0
+    finally:
+        if own:
+            c.close()
+
+
+def is_vacation_mode_active(player_id: int, *, conn=None) -> bool:
+    own = conn is None
+    c = conn or db()
+    try:
+        row = _player_safety_row(int(player_id), c)
+        return bool(int(row.get("vacation_mode_active") or 0))
+    finally:
+        if own:
+            c.close()
+
+
+def vacation_blocks_outbound(player_id: int, *, conn=None) -> Tuple[bool, str]:
+    if is_vacation_mode_active(int(player_id), conn=conn):
+        return False, "options_error_vacation_active"
+    return True, ""
+
+
+def vacation_blocks_incoming_attack(target_player_id: int, *, conn=None) -> bool:
+    return is_vacation_mode_active(int(target_player_id), conn=conn)
+
+
+def get_destructive_action_blockers(player_id: int, *, conn=None) -> List[str]:
+    """Return blocker codes when reset/deletion/vacation-enable is unsafe."""
+    own = conn is None
+    c = conn or db()
+    blockers: List[str] = []
+    try:
+        pid = int(player_id)
+        from .fleet import count_active_fleet_slots, fleet_schema_ready
+
+        if fleet_schema_ready(c) and count_active_fleet_slots(pid, conn=c) > 0:
+            blockers.append("active_fleets")
+
+        if table_exists(c, "auction_house_listings"):
+            cur = c.cursor()
+            now_i = _now_ts()
+            cur.execute(
+                """
+                SELECT COUNT(*) AS c FROM auction_house_listings
+                WHERE status = 'active' AND ends_at > ?
+                  AND current_bidder_id = ? AND current_bid > 0;
+                """,
+                (now_i, pid),
+            )
+            if int(cur.fetchone()["c"] or 0) > 0:
+                blockers.append("active_auctions")
+
+        cur = c.cursor()
+        cur.execute("SELECT id FROM planets WHERE player_id = ?;", (pid,))
+        planet_ids = [int(r["id"]) for r in cur.fetchall()]
+        if not planet_ids:
+            return blockers
+
+        ph = ",".join("?" for _ in planet_ids)
+
+        if table_exists(c, "build_queue"):
+            cur.execute(
+                f"SELECT COUNT(*) AS c FROM build_queue WHERE planet_id IN ({ph});",
+                planet_ids,
+            )
+            if int(cur.fetchone()["c"] or 0) > 0:
+                blockers.append("active_queues")
+
+        if table_exists(c, "research_queue"):
+            cur.execute(
+                "SELECT COUNT(*) AS c FROM research_queue WHERE user_id = ?;",
+                (pid,),
+            )
+            if int(cur.fetchone()["c"] or 0) > 0:
+                blockers.append("active_queues")
+
+        for qtable in ("shipyard_queue", "defense_queue", "planet_evolution_queue"):
+            if table_exists(c, qtable):
+                cur.execute(
+                    f"SELECT COUNT(*) AS c FROM {qtable} WHERE planet_id IN ({ph});",
+                    planet_ids,
+                )
+                if int(cur.fetchone()["c"] or 0) > 0:
+                    blockers.append("active_queues")
+                    break
+
+        return blockers
+    finally:
+        if own:
+            c.close()
+
+
+def get_account_safety_snapshot(player_id: int, *, conn=None) -> Dict[str, Any]:
+    own = conn is None
+    c = conn or db()
+    try:
+        process_due_account_deletion(int(player_id), conn=c)
+        row = _player_safety_row(int(player_id), c)
+        now = _now_ts()
+        locked_until = row.get("vacation_locked_until")
+        deletion_due = row.get("account_deletion_due_at")
+        deletion_requested = row.get("account_deletion_requested_at")
+        vacation_active = bool(int(row.get("vacation_mode_active") or 0))
+        blockers = get_destructive_action_blockers(int(player_id), conn=c)
+        return {
+            "vacation_active": vacation_active,
+            "vacation_locked_until": int(locked_until) if locked_until else None,
+            "vacation_can_disable": vacation_active
+            and (locked_until is None or int(locked_until) <= now),
+            "deletion_pending": deletion_due is not None and int(deletion_due or 0) > now,
+            "deletion_requested_at": int(deletion_requested) if deletion_requested else None,
+            "deletion_due_at": int(deletion_due) if deletion_due else None,
+            "deletion_seconds_remaining": max(0, int(deletion_due or 0) - now)
+            if deletion_due and int(deletion_due) > now
+            else 0,
+            "blockers": blockers,
+            "confirm_phrases": dict(ACCOUNT_SAFETY_CONFIRM_PHRASES),
+        }
+    finally:
+        if own:
+            c.close()
+
+
 def get_options_snapshot(player_id: int, conn=None) -> Dict[str, Any]:
     own = conn is None
     c = conn or db()
@@ -230,6 +430,7 @@ def get_options_snapshot(player_id: int, conn=None) -> Dict[str, Any]:
             # Backward-compatible keys for older clients
             "homeworld_id": int(planet["id"]) if planet and planet.get("id") else None,
             "homeworld_name": str(planet.get("name") or "") if planet else "",
+            "account_safety": get_account_safety_snapshot(int(player_id), conn=c),
         }
     finally:
         if own:
@@ -560,3 +761,361 @@ def update_locale(
     finally:
         if own:
             c.close()
+
+
+def _wipe_player_game_progress(player_id: int, *, conn) -> None:
+    """Remove colonies, fleets, queues and progress; recreate homeworld. Keeps users row."""
+    pid = int(player_id)
+    cur = conn.cursor()
+    cur.execute("SELECT id, name, is_admin FROM players WHERE id = ? LIMIT 1;", (pid,))
+    prow = cur.fetchone()
+    if not prow:
+        raise ValueError("player_not_found")
+    pname = str(prow["name"] or f"Player-{pid}")
+    is_admin = int(prow["is_admin"] or 0)
+
+    cur.execute("SELECT id FROM planets WHERE player_id = ?;", (pid,))
+    planet_ids = [int(r["id"]) for r in cur.fetchall()]
+    if planet_ids:
+        ph = ",".join("?" for _ in planet_ids)
+        for table, col in (
+            ("build_queue", "planet_id"),
+            ("shipyard_queue", "planet_id"),
+            ("defense_queue", "planet_id"),
+            ("planet_evolution_queue", "planet_id"),
+            ("planet_ships", "planet_id"),
+            ("planet_buildings", "planet_id"),
+        ):
+            if table_exists(conn, table):
+                cur.execute(f"DELETE FROM {table} WHERE {col} IN ({ph});", planet_ids)
+
+    if table_exists(conn, "fleet_movements"):
+        cur.execute("DELETE FROM fleet_movements WHERE player_id = ?;", (pid,))
+    if table_exists(conn, "research_queue"):
+        cur.execute("DELETE FROM research_queue WHERE user_id = ?;", (pid,))
+    if table_exists(conn, "research_levels"):
+        cur.execute("DELETE FROM research_levels WHERE user_id = ?;", (pid,))
+    if table_exists(conn, "player_scores"):
+        cur.execute("DELETE FROM player_scores WHERE player_id = ?;", (pid,))
+    if table_exists(conn, "player_messages"):
+        cur.execute("DELETE FROM player_messages WHERE recipient_player_id = ?;", (pid,))
+
+    if table_exists(conn, "planets"):
+        cur.execute("DELETE FROM planets WHERE player_id = ?;", (pid,))
+
+    from .planet_evolution.repository import set_active_planet_id
+
+    ensure_player_and_homeworld(player_id=pid, player_name=pname, is_admin=is_admin, conn=conn)
+    cur.execute(
+        "SELECT id FROM planets WHERE player_id = ? AND is_homeworld = 1 LIMIT 1;",
+        (pid,),
+    )
+    hw = cur.fetchone()
+    if hw:
+        set_active_planet_id(pid, int(hw["id"]), conn)
+    recompute_and_upsert_score(pid, conn=conn)
+
+
+def execute_account_deletion(player_id: int, *, conn) -> None:
+    """Anonymize login and wipe game data after grace period."""
+    pid = int(player_id)
+    _wipe_player_game_progress(pid, conn=conn)
+    token = secrets.token_hex(8)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE users
+        SET username = ?, email = NULL, email_verified = 0,
+            email_verification_token = NULL, password_reset_token = NULL,
+            password_reset_expires_at = NULL,
+            discord_id = NULL, discord_username = NULL, discord_avatar = NULL,
+            discord_email = NULL,
+            password_hash = ?
+        WHERE id = ?;
+        """,
+        (f"deleted_{pid}_{token}", hash_password(secrets.token_urlsafe(24)), pid),
+    )
+    cur.execute(
+        """
+        UPDATE players
+        SET name = ?, vacation_mode_active = 0, vacation_locked_until = NULL,
+            account_deletion_requested_at = NULL, account_deletion_due_at = NULL,
+            account_deleted_at = ?
+        WHERE id = ?;
+        """,
+        (f"Deleted-{pid}", _now_ts(), pid),
+    )
+
+
+def process_due_account_deletion(player_id: int, *, conn=None) -> bool:
+    """Execute scheduled deletion when grace period elapsed. Returns True if executed."""
+    own = conn is None
+    c = conn or db()
+    try:
+        row = _player_safety_row(int(player_id), c)
+        due = row.get("account_deletion_due_at")
+        deleted_at = row.get("account_deleted_at")
+        if deleted_at is not None and int(deleted_at or 0) > 0:
+            return False
+        if due is None or int(due) > _now_ts():
+            return False
+        own_tx = own
+        if own_tx:
+            begin_write_transaction(c)
+        execute_account_deletion(int(player_id), conn=c)
+        write_account_audit(
+            int(player_id),
+            "account_deletion_executed",
+            payload={"due_at": int(due)},
+            conn=c,
+        )
+        if own_tx:
+            commit(c)
+        return True
+    except Exception:
+        if own:
+            rollback(c)
+        raise
+    finally:
+        if own:
+            c.close()
+
+
+def enable_vacation_mode(
+    player_id: int,
+    confirm_text: str,
+    *,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    if not validate_account_safety_confirm("vacation_enable", confirm_text):
+        return False, "options_error_confirm_required", {}
+
+    conn = db()
+    try:
+        blockers = get_destructive_action_blockers(int(player_id), conn=conn)
+        if blockers:
+            return False, "options_error_safety_blockers", {"blockers": blockers}
+
+        row = _player_safety_row(int(player_id), conn)
+        if bool(int(row.get("vacation_mode_active") or 0)):
+            return True, "options_vacation_already_active", get_account_safety_snapshot(int(player_id), conn=conn)
+
+        now = _now_ts()
+        locked_until = now + VACATION_MIN_DURATION_SEC
+        begin_write_transaction(conn)
+        conn.execute(
+            """
+            UPDATE players
+            SET vacation_mode_active = 1, vacation_locked_until = ?
+            WHERE id = ?;
+            """,
+            (locked_until, int(player_id)),
+        )
+        write_account_audit(
+            int(player_id),
+            "vacation_mode_enabled",
+            payload={"locked_until": locked_until},
+            ip=ip,
+            user_agent=user_agent,
+            conn=conn,
+        )
+        commit(conn)
+        return True, "options_vacation_enabled", get_account_safety_snapshot(int(player_id), conn=conn)
+    except Exception:
+        rollback(conn)
+        return False, "options_error_vacation_failed", {}
+    finally:
+        conn.close()
+
+
+def disable_vacation_mode(
+    player_id: int,
+    confirm_text: str,
+    *,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    if not validate_account_safety_confirm("vacation_disable", confirm_text):
+        return False, "options_error_confirm_required", {}
+
+    conn = db()
+    try:
+        row = _player_safety_row(int(player_id), conn)
+        if not bool(int(row.get("vacation_mode_active") or 0)):
+            return False, "options_error_vacation_not_active", {}
+
+        locked_until = row.get("vacation_locked_until")
+        now = _now_ts()
+        if locked_until is not None and int(locked_until) > now:
+            return False, "options_error_vacation_locked", {
+                "vacation_locked_until": int(locked_until),
+            }
+
+        begin_write_transaction(conn)
+        conn.execute(
+            """
+            UPDATE players
+            SET vacation_mode_active = 0, vacation_locked_until = NULL
+            WHERE id = ?;
+            """,
+            (int(player_id),),
+        )
+        write_account_audit(
+            int(player_id),
+            "vacation_mode_disabled",
+            payload={},
+            ip=ip,
+            user_agent=user_agent,
+            conn=conn,
+        )
+        commit(conn)
+        return True, "options_vacation_disabled", get_account_safety_snapshot(int(player_id), conn=conn)
+    except Exception:
+        rollback(conn)
+        return False, "options_error_vacation_failed", {}
+    finally:
+        conn.close()
+
+
+def request_account_deletion(
+    player_id: int,
+    confirm_text: str,
+    *,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    if not validate_account_safety_confirm("account_delete", confirm_text):
+        return False, "options_error_confirm_required", {}
+
+    conn = db()
+    try:
+        blockers = get_destructive_action_blockers(int(player_id), conn=conn)
+        if blockers:
+            return False, "options_error_safety_blockers", {"blockers": blockers}
+
+        row = _player_safety_row(int(player_id), conn)
+        if row.get("account_deletion_due_at") and int(row["account_deletion_due_at"]) > _now_ts():
+            return True, "options_deletion_already_pending", get_account_safety_snapshot(int(player_id), conn=conn)
+
+        now = _now_ts()
+        due = now + ACCOUNT_DELETION_GRACE_SEC
+        begin_write_transaction(conn)
+        conn.execute(
+            """
+            UPDATE players
+            SET account_deletion_requested_at = ?, account_deletion_due_at = ?
+            WHERE id = ?;
+            """,
+            (now, due, int(player_id)),
+        )
+        write_account_audit(
+            int(player_id),
+            "account_deletion_requested",
+            payload={"due_at": due},
+            ip=ip,
+            user_agent=user_agent,
+            conn=conn,
+        )
+        commit(conn)
+        return True, "options_deletion_requested", get_account_safety_snapshot(int(player_id), conn=conn)
+    except Exception:
+        rollback(conn)
+        return False, "options_error_deletion_failed", {}
+    finally:
+        conn.close()
+
+
+def cancel_account_deletion(
+    player_id: int,
+    *,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    conn = db()
+    try:
+        row = _player_safety_row(int(player_id), conn)
+        if not row.get("account_deletion_due_at"):
+            return False, "options_error_deletion_not_pending", {}
+
+        begin_write_transaction(conn)
+        conn.execute(
+            """
+            UPDATE players
+            SET account_deletion_requested_at = NULL, account_deletion_due_at = NULL
+            WHERE id = ?;
+            """,
+            (int(player_id),),
+        )
+        write_account_audit(
+            int(player_id),
+            "account_deletion_cancelled",
+            payload={},
+            ip=ip,
+            user_agent=user_agent,
+            conn=conn,
+        )
+        commit(conn)
+        return True, "options_deletion_cancelled", get_account_safety_snapshot(int(player_id), conn=conn)
+    except Exception:
+        rollback(conn)
+        return False, "options_error_deletion_failed", {}
+    finally:
+        conn.close()
+
+
+def execute_account_reset(
+    player_id: int,
+    username: str,
+    current_password: str,
+    confirm_text: str,
+    *,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> Tuple[bool, str, Dict[str, Any]]:
+    if not validate_account_safety_confirm("account_reset", confirm_text):
+        return False, "options_error_confirm_required", {}
+
+    if not verify_user(username, current_password):
+        write_account_audit(
+            int(player_id),
+            "account_reset_denied",
+            payload={"reason": "wrong_password"},
+            ip=ip,
+            user_agent=user_agent,
+        )
+        return False, "options_error_password_wrong", {}
+
+    conn = db()
+    try:
+        blockers = get_destructive_action_blockers(int(player_id), conn=conn)
+        if blockers:
+            return False, "options_error_safety_blockers", {"blockers": blockers}
+
+        begin_write_transaction(conn)
+        _wipe_player_game_progress(int(player_id), conn=conn)
+        conn.execute(
+            """
+            UPDATE players
+            SET vacation_mode_active = 0, vacation_locked_until = NULL,
+                account_deletion_requested_at = NULL, account_deletion_due_at = NULL
+            WHERE id = ?;
+            """,
+            (int(player_id),),
+        )
+        write_account_audit(
+            int(player_id),
+            "account_reset_executed",
+            payload={},
+            ip=ip,
+            user_agent=user_agent,
+            conn=conn,
+        )
+        commit(conn)
+        snap = get_options_snapshot(int(player_id), conn=conn)
+        return True, "options_reset_executed", snap
+    except Exception:
+        rollback(conn)
+        return False, "options_error_reset_failed", {}
+    finally:
+        conn.close()

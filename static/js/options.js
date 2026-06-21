@@ -273,10 +273,229 @@
 
     bindResendVerification();
     bindDiscordUnlink();
+    if (typeof GC.initOptionsAccountSafety === "function") {
+      GC.initOptionsAccountSafety();
+    }
   }
 
   GC.handleOptionsFormSubmit = handleOptionsFormSubmit;
   GC.initOptionsPage = initOptionsPage;
-  GC.modules = GC.modules || {};
-  GC.modules.options = initOptionsPage;
+
+  const SAFETY_ACTIONS = {
+    vacation_enable: {
+      url: "/api/options/vacation/enable",
+      phraseKey: "vacation_enable",
+      titleKey: "options_vacation_modal_title",
+      leadKey: "options_vacation_modal_lead",
+      needsPassword: false,
+      reloadOnSuccess: false,
+    },
+    vacation_disable: {
+      url: "/api/options/vacation/disable",
+      phraseKey: "vacation_disable",
+      titleKey: "options_vacation_disable_modal_title",
+      leadKey: "options_vacation_disable_modal_lead",
+      needsPassword: false,
+      reloadOnSuccess: true,
+    },
+    deletion_request: {
+      url: "/api/options/account-deletion/request",
+      phraseKey: "account_delete",
+      titleKey: "options_deletion_modal_title",
+      leadKey: "options_deletion_modal_lead",
+      needsPassword: false,
+      reloadOnSuccess: true,
+    },
+    deletion_cancel: {
+      url: "/api/options/account-deletion/cancel",
+      phraseKey: null,
+      titleKey: "options_deletion_cancel_modal_title",
+      leadKey: "options_deletion_cancel_modal_lead",
+      needsPassword: false,
+      reloadOnSuccess: true,
+      skipPhrase: true,
+    },
+    account_reset: {
+      url: "/api/options/account-reset",
+      phraseKey: "account_reset",
+      titleKey: "options_reset_modal_title",
+      leadKey: "options_reset_modal_lead",
+      needsPassword: true,
+      reloadOnSuccess: true,
+    },
+  };
+
+  const CONFIRM_PHRASES = {
+    vacation_enable: "ENABLE VACATION",
+    vacation_disable: "DISABLE VACATION",
+    account_delete: "DELETE ACCOUNT",
+    account_reset: "RESET ACCOUNT",
+  };
+
+  function setSafetyHint(id, text, isError) {
+    const hint = document.getElementById(id);
+    if (!hint) return;
+    hint.textContent = text || "";
+    hint.hidden = !text;
+    hint.classList.toggle("gc-options-hint-error", Boolean(isError));
+    hint.classList.toggle("gc-options-hint-success", Boolean(text) && !isError);
+  }
+
+  function applySafetySnapshot(safety) {
+    const page = document.getElementById("options-page");
+    if (!page || !safety) return;
+    page.setAttribute("data-vacation-active", safety.vacation_active ? "1" : "0");
+    page.setAttribute("data-deletion-pending", safety.deletion_pending ? "1" : "0");
+    page.setAttribute(
+      "data-vacation-locked-until",
+      safety.vacation_locked_until ? String(safety.vacation_locked_until) : ""
+    );
+    page.setAttribute(
+      "data-deletion-due",
+      safety.deletion_due_at ? String(safety.deletion_due_at) : ""
+    );
+
+    const vacStatus = document.getElementById("options-vacation-status");
+    if (vacStatus) {
+      vacStatus.textContent = safety.vacation_active
+        ? t("options_vacation_status_active")
+        : t("options_vacation_status_inactive");
+    }
+    const delStatus = document.getElementById("options-deletion-status");
+    if (delStatus) {
+      delStatus.textContent = safety.deletion_pending
+        ? t("options_deletion_status_pending")
+        : t("options_deletion_status_none");
+    }
+  }
+
+  function bindOptionsAccountSafety() {
+    const modal = document.getElementById("options-safety-modal");
+    const form = document.getElementById("options-safety-modal-form");
+    const titleEl = document.getElementById("options-safety-modal-title");
+    const leadEl = document.getElementById("options-safety-modal-lead");
+    const phraseLabel = document.getElementById("options-safety-modal-phrase-label");
+    const confirmInput = document.getElementById("options-safety-modal-confirm");
+    const pwdWrap = document.getElementById("options-safety-modal-password-wrap");
+    const pwdInput = document.getElementById("options-safety-modal-password");
+    const cancelBtn = document.getElementById("options-safety-modal-cancel");
+    const submitBtn = document.getElementById("options-safety-modal-submit");
+    if (!modal || modal.dataset.gcBound === "1") return;
+    modal.dataset.gcBound = "1";
+
+    let pendingAction = null;
+
+    function closeModal() {
+      pendingAction = null;
+      modal.hidden = true;
+      modal.close();
+      if (confirmInput) confirmInput.value = "";
+      if (pwdInput) pwdInput.value = "";
+      if (pwdWrap) pwdWrap.hidden = true;
+    }
+
+    function openModal(actionKey) {
+      const cfg = SAFETY_ACTIONS[actionKey];
+      if (!cfg) return;
+      pendingAction = actionKey;
+      if (titleEl) titleEl.textContent = t(cfg.titleKey);
+      if (leadEl) leadEl.textContent = t(cfg.leadKey);
+      if (phraseLabel) {
+        if (cfg.skipPhrase) {
+          phraseLabel.textContent = "";
+          phraseLabel.hidden = true;
+        } else {
+          phraseLabel.hidden = false;
+          const phrase = CONFIRM_PHRASES[cfg.phraseKey] || "";
+          phraseLabel.textContent = t("options_safety_phrase_label", "Tippe {phrase} zur Bestätigung").replace(
+            "{phrase}",
+            phrase
+          );
+        }
+      }
+      if (confirmInput) {
+        confirmInput.hidden = Boolean(cfg.skipPhrase);
+        confirmInput.value = "";
+        confirmInput.placeholder = cfg.skipPhrase ? "" : CONFIRM_PHRASES[cfg.phraseKey] || "";
+      }
+      if (pwdWrap) pwdWrap.hidden = !cfg.needsPassword;
+      modal.hidden = false;
+      if (typeof modal.showModal === "function") modal.showModal();
+      else modal.setAttribute("open", "");
+      if (confirmInput && !cfg.skipPhrase) confirmInput.focus();
+      else if (submitBtn) submitBtn.focus();
+    }
+
+    document.querySelectorAll(".gc-options-safety-btn[data-action]").forEach((btn) => {
+      if (btn.dataset.gcSafetyBound === "1") return;
+      btn.dataset.gcSafetyBound = "1";
+      btn.addEventListener("click", () => {
+        const action = btn.getAttribute("data-action");
+        if (!action) return;
+        openModal(action);
+      });
+    });
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        closeModal();
+      });
+    }
+
+    if (form) {
+      form.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        if (!pendingAction) return;
+        const cfg = SAFETY_ACTIONS[pendingAction];
+        if (!cfg) return;
+
+        const payload = {};
+        if (!cfg.skipPhrase) {
+          payload.confirm_text = confirmInput ? String(confirmInput.value || "").trim() : "";
+        }
+        if (cfg.needsPassword) {
+          const inlinePwd = document.getElementById("options-reset-password");
+          payload.current_password = String(
+            (pwdInput && pwdInput.value) || (inlinePwd && inlinePwd.value) || ""
+          );
+        }
+
+        if (submitBtn) submitBtn.disabled = true;
+        try {
+          const data = await postOptionsJson(cfg.url, payload);
+          const hintMap = {
+            vacation_enable: "options-vacation-hint",
+            vacation_disable: "options-vacation-hint",
+            deletion_request: "options-deletion-hint",
+            deletion_cancel: "options-deletion-hint",
+            account_reset: "options-reset-hint",
+          };
+          const hintId = hintMap[pendingAction];
+          if (!data || data.ok !== true) {
+            if (hintId) setSafetyHint(hintId, msgKey(data && data.error), true);
+            return;
+          }
+          if (data.data && data.data.account_safety) {
+            applySafetySnapshot(data.data.account_safety);
+          } else if (data.data && data.data.vacation_active !== undefined) {
+            applySafetySnapshot(data.data);
+          }
+          if (hintId) setSafetyHint(hintId, msgKey(data.message || data.error), false);
+          closeModal();
+          if (cfg.reloadOnSuccess && typeof GC.reloadCurrentPage === "function") {
+            GC.reloadCurrentPage("options_account_safety");
+          } else if (typeof GC.refreshGameState === "function") {
+            GC.refreshGameState("options_account_safety");
+          }
+        } catch (err) {
+          if (err && err.name === "AuthError") return;
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      });
+    }
+  }
+
+  GC.initOptionsAccountSafety = bindOptionsAccountSafety;
 })();

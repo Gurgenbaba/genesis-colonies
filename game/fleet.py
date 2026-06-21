@@ -972,6 +972,12 @@ def validate_fleet_send(
     if pct < 10 or pct > 100:
         return False, "invalid_speed_percent", None
 
+    from .options import vacation_blocks_incoming_attack, vacation_blocks_outbound
+
+    ok_vacation, vac_reason = vacation_blocks_outbound(int(player_id), conn=conn)
+    if not ok_vacation:
+        return False, vac_reason, None
+
     cur = conn.cursor()
     cur.execute(
         "SELECT * FROM planets WHERE id = ? AND player_id = ? LIMIT 1;",
@@ -1024,6 +1030,11 @@ def validate_fleet_send(
         )
         if not ok_target:
             return False, t_reason, {"target": target_info}
+
+    if mission in ("attack", "spy") and target_info:
+        target_pid = target_info.get("target_player_id")
+        if target_pid and vacation_blocks_incoming_attack(int(target_pid), conn=conn):
+            return False, "vacation_target_protected", {"target": target_info}
 
     if mission == "expedition":
         target = (int(target_galaxy), int(target_system), EXPEDITION_POSITION)

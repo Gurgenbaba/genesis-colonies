@@ -21968,6 +21968,9 @@
     } else {
       console.warn("[GC] options.js not loaded – Options forms inactive");
     }
+    if (typeof GC.initOptionsAccountSafety === "function") {
+      GC.initOptionsAccountSafety();
+    }
   };
 
   const OPTIONS_FORM_ROUTES = {

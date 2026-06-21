@@ -4234,6 +4234,104 @@ def api_options_resend_verification():
     return _options_api_response(True, err, {"email_verified": False})
 
 
+@app.route("/api/options/vacation/enable", methods=["POST"])
+@require_login_api
+def api_options_vacation_enable():
+    pid = _current_player_id()
+    assert pid is not None
+    payload = request.get_json(silent=True) or {}
+    meta = _options_request_meta()
+    ok, err, data = options_logic.enable_vacation_mode(
+        int(pid),
+        str(payload.get("confirm_text") or ""),
+        ip=meta["ip"],
+        user_agent=meta["user_agent"],
+    )
+    if not ok:
+        status = 400
+        if err == "options_error_safety_blockers":
+            status = 409
+        return _options_api_response(False, err, data, status)
+    return _options_api_response(True, err, data)
+
+
+@app.route("/api/options/vacation/disable", methods=["POST"])
+@require_login_api
+def api_options_vacation_disable():
+    pid = _current_player_id()
+    assert pid is not None
+    payload = request.get_json(silent=True) or {}
+    meta = _options_request_meta()
+    ok, err, data = options_logic.disable_vacation_mode(
+        int(pid),
+        str(payload.get("confirm_text") or ""),
+        ip=meta["ip"],
+        user_agent=meta["user_agent"],
+    )
+    if not ok:
+        return _options_api_response(False, err, data, 400)
+    return _options_api_response(True, err, data)
+
+
+@app.route("/api/options/account-deletion/request", methods=["POST"])
+@require_login_api
+def api_options_account_deletion_request():
+    pid = _current_player_id()
+    assert pid is not None
+    payload = request.get_json(silent=True) or {}
+    meta = _options_request_meta()
+    ok, err, data = options_logic.request_account_deletion(
+        int(pid),
+        str(payload.get("confirm_text") or ""),
+        ip=meta["ip"],
+        user_agent=meta["user_agent"],
+    )
+    if not ok:
+        status = 409 if err == "options_error_safety_blockers" else 400
+        return _options_api_response(False, err, data, status)
+    return _options_api_response(True, err, data)
+
+
+@app.route("/api/options/account-deletion/cancel", methods=["POST"])
+@require_login_api
+def api_options_account_deletion_cancel():
+    pid = _current_player_id()
+    assert pid is not None
+    meta = _options_request_meta()
+    ok, err, data = options_logic.cancel_account_deletion(
+        int(pid),
+        ip=meta["ip"],
+        user_agent=meta["user_agent"],
+    )
+    if not ok:
+        return _options_api_response(False, err, data, 400)
+    return _options_api_response(True, err, data)
+
+
+@app.route("/api/options/account-reset", methods=["POST"])
+@require_login_api
+def api_options_account_reset():
+    pid = _current_player_id()
+    assert pid is not None
+    user = get_current_user()
+    if not user:
+        return _options_api_response(False, "not_logged_in", None, 401)
+    payload = request.get_json(silent=True) or {}
+    meta = _options_request_meta()
+    ok, err, data = options_logic.execute_account_reset(
+        int(pid),
+        str(user.get("username") or ""),
+        str(payload.get("current_password") or ""),
+        str(payload.get("confirm_text") or ""),
+        ip=meta["ip"],
+        user_agent=meta["user_agent"],
+    )
+    if not ok:
+        status = 409 if err == "options_error_safety_blockers" else 400
+        return _options_api_response(False, err, data, status)
+    return _options_api_response(True, err, data)
+
+
 @app.route("/api/account/unlink-discord", methods=["POST"])
 @require_login_api
 def api_account_unlink_discord():

@@ -81,6 +81,7 @@ def test_fresh_init_then_migrate(temp_db):
         assert "008_persistence_hardening.sql" in names
         assert "009_legacy_planets_hardening.sql" in names
         assert "072_discord_oauth.sql" in names
+        assert "074_account_safety_options.sql" in names
     finally:
         conn.close()
 

@@ -3,13 +3,18 @@
 {% block content %}
 
 {% set od = options_data if options_data is defined and options_data else {} %}
+{% set safety = od.get('account_safety', {}) if od else {} %}
 
 <div class="gc-page gc-options-page" id="options-page"
      data-player-id="{{ CURRENT_PLAYER_ID or '' }}"
      data-player-name="{{ od.get('player_name', '')|e }}"
      data-active-planet-name="{{ od.get('active_planet_name', od.get('homeworld_name', ''))|e }}"
      data-email="{{ od.get('email', '')|e }}"
-     data-email-verified="{{ '1' if od.get('email_verified') else '0' }}">
+     data-email-verified="{{ '1' if od.get('email_verified') else '0' }}"
+     data-vacation-active="{{ '1' if safety.get('vacation_active') else '0' }}"
+     data-deletion-pending="{{ '1' if safety.get('deletion_pending') else '0' }}"
+     data-deletion-due="{{ safety.get('deletion_due_at') or '' }}"
+     data-vacation-locked-until="{{ safety.get('vacation_locked_until') or '' }}">
 
   <header class="section-header gc-options-header">
     <h1 class="section-title">{{ T("options_title") }}</h1>
@@ -220,21 +225,150 @@
 
   </div>
 
-  <section class="gc-panel gc-options-panel gc-options-security" aria-labelledby="options-security-title">
-    <div class="gc-options-security-card" role="note">
-      <div class="gc-options-security-head">
-        <span class="gc-options-security-icon" aria-hidden="true">⛨</span>
-        <div class="gc-options-security-head-text">
-          <span class="gc-options-security-title" id="options-security-title">{{ T("options_security_title") }}</span>
-          <p class="gc-options-security-lead">{{ T("options_security_hint") }}</p>
-        </div>
+  <section class="gc-panel gc-options-panel gc-options-account-safety" aria-labelledby="options-account-safety-title">
+    <div class="gc-panel-header gc-options-panel-head">
+      <div class="gc-panel-head-left">
+        <span class="gc-panel-title" id="options-account-safety-title">{{ T("options_account_safety_title") }}</span>
+        <span class="gc-panel-subtitle">{{ T("options_account_safety_subtitle") }}</span>
       </div>
-      <ul class="gc-options-security-list">
-        <li>{{ T("options_security_item_confirm") }}</li>
-        <li>{{ T("options_security_item_password") }}</li>
-      </ul>
+      <span class="gc-panel-tag">{{ T("options_tag_safety") }}</span>
+    </div>
+    <div class="gc-panel-body gc-options-panel-body gc-options-safety-body">
+
+      <div class="gc-options-safety-block" id="options-safety-vacation">
+        <div class="gc-options-form-head">
+          <span class="gc-options-form-kicker">{{ T("options_vacation_title") }}</span>
+        </div>
+        <p class="gc-options-safety-lead">{{ T("options_vacation_lead") }}</p>
+        <p class="gc-options-safety-status" id="options-vacation-status" role="status">
+          {% if safety.get('vacation_active') %}
+            {{ T("options_vacation_status_active") }}
+          {% else %}
+            {{ T("options_vacation_status_inactive") }}
+          {% endif %}
+        </p>
+        <div class="gc-options-safety-actions">
+          {% if safety.get('vacation_active') %}
+            <button type="button"
+                    class="gc-btn gc-btn-outline gc-options-safety-btn"
+                    id="options-vacation-disable-btn"
+                    data-action="vacation_disable"
+                    {% if not safety.get('vacation_can_disable') %}disabled{% endif %}>
+              {{ T("options_vacation_disable") }}
+            </button>
+          {% else %}
+            <button type="button"
+                    class="gc-btn gc-btn-outline gc-options-safety-btn"
+                    id="options-vacation-enable-btn"
+                    data-action="vacation_enable">
+              {{ T("options_vacation_enable") }}
+            </button>
+          {% endif %}
+        </div>
+        <p class="gc-options-form-hint gc-options-safety-hint" id="options-vacation-hint" role="status" aria-live="polite" hidden></p>
+      </div>
+
+      <div class="gc-options-safety-block" id="options-safety-deletion">
+        <div class="gc-options-form-head">
+          <span class="gc-options-form-kicker">{{ T("options_deletion_title") }}</span>
+        </div>
+        <p class="gc-options-safety-lead">{{ T("options_deletion_lead") }}</p>
+        <p class="gc-options-safety-status" id="options-deletion-status" role="status">
+          {% if safety.get('deletion_pending') %}
+            {{ T("options_deletion_status_pending") }}
+          {% else %}
+            {{ T("options_deletion_status_none") }}
+          {% endif %}
+        </p>
+        <div class="gc-options-safety-actions">
+          {% if safety.get('deletion_pending') %}
+            <button type="button"
+                    class="gc-btn gc-btn-outline gc-options-safety-btn"
+                    id="options-deletion-cancel-btn"
+                    data-action="deletion_cancel">
+              {{ T("options_deletion_cancel") }}
+            </button>
+          {% else %}
+            <button type="button"
+                    class="gc-btn gc-btn-danger gc-options-safety-btn"
+                    id="options-deletion-request-btn"
+                    data-action="deletion_request">
+              {{ T("options_deletion_request") }}
+            </button>
+          {% endif %}
+        </div>
+        <p class="gc-options-form-hint gc-options-safety-hint" id="options-deletion-hint" role="status" aria-live="polite" hidden></p>
+      </div>
+
+      <div class="gc-options-safety-block" id="options-safety-reset">
+        <div class="gc-options-form-head">
+          <span class="gc-options-form-kicker">{{ T("options_reset_title") }}</span>
+        </div>
+        <p class="gc-options-safety-lead">{{ T("options_reset_lead") }}</p>
+        <label class="gc-options-field gc-options-safety-password">
+          <span class="gc-options-label">{{ T("options_current_password") }}</span>
+          <input type="password"
+                 class="gc-input gc-options-input"
+                 id="options-reset-password"
+                 autocomplete="current-password"
+                 placeholder="{{ T('options_placeholder_password_current') }}">
+        </label>
+        <div class="gc-options-safety-actions">
+          <button type="button"
+                  class="gc-btn gc-btn-danger gc-options-safety-btn"
+                  id="options-reset-request-btn"
+                  data-action="account_reset">
+            {{ T("options_reset_request") }}
+          </button>
+        </div>
+        <p class="gc-options-form-hint gc-options-safety-hint" id="options-reset-hint" role="status" aria-live="polite" hidden></p>
+      </div>
+
+      <div class="gc-options-security-card" role="note">
+        <div class="gc-options-security-head">
+          <span class="gc-options-security-icon" aria-hidden="true">⛨</span>
+          <div class="gc-options-security-head-text">
+            <span class="gc-options-security-title">{{ T("options_security_title") }}</span>
+            <p class="gc-options-security-lead">{{ T("options_security_hint") }}</p>
+          </div>
+        </div>
+        <ul class="gc-options-security-list">
+          <li>{{ T("options_security_item_confirm") }}</li>
+          <li>{{ T("options_security_item_password") }}</li>
+          <li>{{ T("options_security_item_audit") }}</li>
+        </ul>
+      </div>
+
     </div>
   </section>
+
+  <dialog class="gc-modal gc-options-safety-modal" id="options-safety-modal" hidden>
+    <form method="dialog" class="gc-modal-panel" id="options-safety-modal-form">
+      <header class="gc-modal-header">
+        <h2 class="gc-modal-title" id="options-safety-modal-title">{{ T("options_safety_modal_title") }}</h2>
+      </header>
+      <div class="gc-modal-body">
+        <p class="gc-options-safety-modal-lead" id="options-safety-modal-lead"></p>
+        <p class="gc-options-safety-modal-phrase-label" id="options-safety-modal-phrase-label"></p>
+        <input type="text"
+               class="gc-input gc-options-input"
+               id="options-safety-modal-confirm"
+               autocomplete="off"
+               spellcheck="false">
+        <label class="gc-options-field gc-options-safety-modal-password" id="options-safety-modal-password-wrap" hidden>
+          <span class="gc-options-label">{{ T("options_current_password") }}</span>
+          <input type="password"
+                 class="gc-input gc-options-input"
+                 id="options-safety-modal-password"
+                 autocomplete="current-password">
+        </label>
+      </div>
+      <footer class="gc-modal-footer">
+        <button type="button" class="gc-btn gc-btn-outline" id="options-safety-modal-cancel">{{ T("close") }}</button>
+        <button type="submit" class="gc-btn gc-btn-danger" id="options-safety-modal-submit">{{ T("options_safety_modal_confirm") }}</button>
+      </footer>
+    </form>
+  </dialog>
 
 </div>
 

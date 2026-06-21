@@ -22017,6 +22017,52 @@ a.gc-galaxy-coord-link:focus-visible {
   color: rgba(255, 154, 26, 0.75);
 }
 
+.gc-options-account-safety .gc-options-safety-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.gc-options-safety-block {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 154, 26, 0.16);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(4, 10, 22, 0.35);
+}
+
+.gc-options-safety-lead,
+.gc-options-safety-status {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--gc-text-soft);
+}
+
+.gc-options-safety-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gc-options-safety-password {
+  margin-bottom: 8px;
+}
+
+.gc-options-safety-hint {
+  margin-top: 8px;
+}
+
+.gc-options-safety-modal .gc-modal-panel {
+  max-width: 420px;
+}
+
+.gc-options-safety-modal-lead,
+.gc-options-safety-modal-phrase-label {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--gc-text-soft);
+}
+
 @media (max-width: 980px) {
   .gc-options-grid {
     grid-template-columns: 1fr;

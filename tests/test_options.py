@@ -20,8 +20,13 @@ import game.models as models
 from game.models import create_user, init_db, verify_password
 from game.options import reset_sensitive_rate_limits
 from game.options import (
+    ACCOUNT_SAFETY_CONFIRM_PHRASES,
+    cancel_account_deletion,
     ensure_account_options_schema,
+    ensure_account_safety_schema,
+    get_account_safety_snapshot,
     get_options_snapshot,
+    reset_sensitive_rate_limits,
     update_active_planet_name,
     update_email,
     update_homeworld_name,
@@ -31,6 +36,7 @@ from game.options import (
 )
 from game.planet_evolution.repository import set_active_planet_id
 from game.planet_evolution.service import colonize_planet
+from game.security import reset_auth_rate_limits
 
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATE_SCRIPT = ROOT / "migrate.py"
@@ -78,6 +84,7 @@ def _create_player(username: str | None = None) -> tuple[int, str, str]:
 @pytest.fixture()
 def app_client(temp_db, monkeypatch):
     reset_sensitive_rate_limits()
+    reset_auth_rate_limits()
     _run_migrate(temp_db)
     init_db()
     ensure_account_options_schema()
@@ -195,7 +202,7 @@ def test_player_name_validation(app_client):
     pid, uname, _ = _create_player()
     _login(app_client, uname)
 
-    for bad in ("", "x", "<script>", "a" * 40):
+    for bad in ("", "x", "<script>", "a" * 41):
         res = app_client.post(
             "/api/options/player-name",
             json={"player_name": bad},
@@ -427,3 +434,98 @@ def test_api_options_locale_logged_in(app_client):
     assert data["ok"] is True
     assert data["data"]["locale"] == "en"
     assert get_player_locale(pid) == "en"
+
+
+def test_options_page_account_safety_card(app_client):
+    pid, uname, _ = _create_player()
+    _login(app_client, uname)
+    res = app_client.get("/options")
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+    assert "options-account-safety" in html
+    assert "options-safety-vacation" in html
+    assert "options-safety-deletion" in html
+    assert "options-safety-reset" in html
+
+
+def test_vacation_enable_requires_confirm(app_client):
+    pid, uname, _ = _create_player()
+    _login(app_client, uname)
+    res = app_client.post(
+        "/api/options/vacation/enable",
+        json={"confirm_text": "wrong"},
+        headers={"Accept": "application/json"},
+    )
+    assert res.status_code == 400
+    assert res.get_json()["error"] == "options_error_confirm_required"
+
+
+def test_vacation_enable_and_disable(app_client):
+    pid, uname, _ = _create_player()
+    _login(app_client, uname)
+    res_on = app_client.post(
+        "/api/options/vacation/enable",
+        json={"confirm_text": ACCOUNT_SAFETY_CONFIRM_PHRASES["vacation_enable"]},
+        headers={"Accept": "application/json"},
+    )
+    assert res_on.status_code == 200, res_on.get_json()
+    assert res_on.get_json()["data"]["vacation_active"] is True
+
+    res_off = app_client.post(
+        "/api/options/vacation/disable",
+        json={"confirm_text": "DISABLE VACATION"},
+        headers={"Accept": "application/json"},
+    )
+    assert res_off.status_code == 400
+    assert res_off.get_json()["error"] == "options_error_vacation_locked"
+
+
+def test_account_deletion_request_and_cancel(app_client, temp_db):
+    pid, uname, _ = _create_player()
+    _login(app_client, uname)
+    res_req = app_client.post(
+        "/api/options/account-deletion/request",
+        json={"confirm_text": ACCOUNT_SAFETY_CONFIRM_PHRASES["account_delete"]},
+        headers={"Accept": "application/json"},
+    )
+    assert res_req.status_code == 200
+    assert res_req.get_json()["data"]["deletion_pending"] is True
+
+    res_cancel = app_client.post(
+        "/api/options/account-deletion/cancel",
+        json={},
+        headers={"Accept": "application/json"},
+    )
+    assert res_cancel.status_code == 200
+    assert res_cancel.get_json()["data"]["deletion_pending"] is False
+
+
+def test_account_reset_wipes_colonies(app_client):
+    pid, uname, password = _create_player()
+    ok, reason, extra = colonize_planet(pid, name="Colony Beta", galaxy=1, system=401, position=4)
+    assert ok, reason
+    _login(app_client, uname)
+    res = app_client.post(
+        "/api/options/account-reset",
+        json={
+            "confirm_text": ACCOUNT_SAFETY_CONFIRM_PHRASES["account_reset"],
+            "current_password": password,
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert res.status_code == 200, res.get_json()
+    conn = models.db()
+    count = conn.execute("SELECT COUNT(*) AS c FROM planets WHERE player_id = ?;", (pid,)).fetchone()["c"]
+    conn.close()
+    assert int(count) == 1
+
+
+def test_account_safety_snapshot(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+    pid, _, _ = _create_player()
+    snap = get_account_safety_snapshot(pid)
+    assert snap["vacation_active"] is False
+    assert snap["deletion_pending"] is False
+    assert "confirm_phrases" in snap

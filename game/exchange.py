@@ -326,6 +326,12 @@ def execute_exchange(
         if not exchange_schema_ready(conn):
             return False, "exchange_unavailable", None
 
+        from .options import vacation_blocks_outbound
+
+        ok_vacation, vac_reason = vacation_blocks_outbound(int(player_id), conn=conn)
+        if not ok_vacation:
+            return False, vac_reason, None
+
         cfg = get_exchange_config(conn=conn)
         limit_block = resolve_exchange_daily_limit(int(player_id), conn=conn)
         daily_limit = int(limit_block["daily_limit"])
