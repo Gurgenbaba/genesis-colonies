@@ -181,7 +181,7 @@ def test_main_js_progress_ticker_uses_server_time_and_interval():
     assert "Math.floor(Date.now() / 1000)" in server_now
     ticker_section = src.split("GC.startProgressTicker = function startProgressTicker()")[1].split("GC.stopPolling")[0]
     assert "_progressTickerDelayMs" in ticker_section
-    assert "setTimeout(tick, _progressTickerDelayMs(serverNow))" in ticker_section
+    assert "setTimeout(tick, _progressTickerDelayMs(getTimerServerNow()))" in ticker_section
     assert "requestAnimationFrame(tick)" not in ticker_section
     update_all = src.split("function updateAllProgressBars(serverNow)")[1].split("function updateBuildQueueLive")[0]
     assert "[data-gc-card-queue][data-queue-active='1']" in update_all
@@ -520,7 +520,7 @@ def test_main_js_gc541_queue_timer_hotfix():
     assert ".build-job-active[data-finish-time]" in query
     ticker = src.split("GC.startProgressTicker = function startProgressTicker()")[1].split("GC.stopPolling")[0]
     assert "_pageTimerLoopRunning && _progressTickerActive && _progressTickerTimerId" not in ticker
-    assert "if (_progressTickerTimerId != null) return;" in ticker
+    assert "if (_progressTickerTimerId != null || _progressTickerInTick) return;" in ticker
     movement = src.split("function movementRemainingSeconds(countdownAt, serverNow, serverRemaining)")[1].split("function bootstrapServerTimeFromDom")[0]
     assert "queueJobRemainingSeconds" in movement
     remain = src.split("function timerRemainingSeconds(el, serverNow)")[1].split("function formatTimerDisplay")[0]
