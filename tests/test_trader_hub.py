@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import importlib
 import os
+import subprocess
+import sys
+import uuid
+from pathlib import Path
 
 import pytest
 
-from game import db as gdb
+import game.db as dbmod
+import game.models as models
 from game.db import db
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, init_db
+
+ROOT = Path(__file__).resolve().parent.parent
+MIGRATE_SCRIPT = ROOT / "migrate.py"
 
 
 @pytest.fixture
@@ -18,32 +26,41 @@ def trader_hub_db(tmp_path, monkeypatch):
     monkeypatch.setenv("GC_DB_PATH", str(db_path))
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-not-default-value-32chars")
-    gdb._DB_PATH = None
-    init_db()
-    import migrate
+    monkeypatch.setattr(dbmod, "DB_PATH", db_path)
+    monkeypatch.setattr(models, "DB_PATH", db_path)
 
-    migrate.main()
-    yield
-    gdb._DB_PATH = None
+    env = os.environ.copy()
+    env["GC_DB_PATH"] = str(db_path)
+    result = subprocess.run(
+        [sys.executable, str(MIGRATE_SCRIPT)],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    init_db()
+
+    from game.bootstrap import bootstrap_application
+
+    bootstrap_application(skip_migration_check=True)
+    yield db_path
 
 
 def _login_client(trader_hub_db, monkeypatch):
-    import game.db as dbmod
-    import game.models as models
-
-    db_path = os.environ.get("GC_DB_PATH")
-    dbmod.DB_PATH = db_path
-    models.DB_PATH = db_path
     import app as app_module
 
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
+    app_module.app.config["WTF_CSRF_ENABLED"] = False
 
     conn = db()
-    ok, err, user = create_user(f"th_{os.getpid()}", "test-pass-123")
+    uname = f"th_{uuid.uuid4().hex[:8]}"
+    ok, err, user = create_user(uname, "test-pass-123")
     assert ok, err
     uid = int(user["id"])
     ensure_player_and_homeworld(uid, conn=conn)
-    uname = conn.execute("SELECT username FROM users WHERE id = ?;", (uid,)).fetchone()["username"]
     conn.close()
 
     client = app_module.app.test_client()

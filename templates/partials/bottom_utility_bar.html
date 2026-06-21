@@ -1,0 +1,51 @@
+{% if SIDEBAR_RELEASE is defined and SIDEBAR_RELEASE %}
+  {% set _release = SIDEBAR_RELEASE %}
+{% else %}
+  {% set _release = {'label': 'Genesis', 'href': url_for('news_view')} %}
+{% endif %}
+<footer class="gc-bottom-utility-bar" aria-label="{{ T('special_nav', 'Special Navigation') }}">
+  <div class="gc-bottom-util-inner">
+    <nav class="gc-bottom-util-nav" aria-label="{{ T('special_nav', 'Special Navigation') }}">
+      <button type="button" class="gc-bottom-util-link" data-special-open-window="support">{{ T("support_short", "Support") }}</button>
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <button type="button" class="gc-bottom-util-link" data-special-open-window="my-tickets">{{ T("nav_tickets", "Tickets") }}</button>
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <button type="button" class="gc-bottom-util-link" data-special-open-window="imprint">{{ T("imprint_short", "Impressum") }}</button>
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <button type="button" class="gc-bottom-util-link" data-special-open-window="rules">{{ T("rules_short", "Regeln") }}</button>
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <a href="https://discord.gg/CYP8qWE7VM"
+         class="gc-bottom-util-link gc-bottom-util-link--discord"
+         target="_blank"
+         rel="noopener noreferrer"
+         data-no-pjax
+         data-community-discord-link>{{ T('community_discord_short', 'Discord') }}</a>
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <button type="button" class="gc-bottom-util-link" data-special-open-window="wiki">{{ T("wiki_short", "Wiki") }}</button>
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <button type="button" class="gc-bottom-util-link gc-bottom-util-link--chat" data-special-open-window="chat">
+        {{ T("chat_short", "Tchat") }}
+        <span class="gc-chat-launcher-badge" data-chat-launcher-badge hidden aria-hidden="true"></span>
+      </button>
+    </nav>
+    <div class="gc-bottom-util-end">
+      <button type="button"
+              class="gc-bottom-util-link gc-bottom-util-link--meta-nav"
+              id="gc-sidebar-right-toggle"
+              aria-expanded="false"
+              aria-controls="gc-sidebar-nav-right"
+              aria-label="{{ T('nav_meta', 'Meta-Navigation') }}"
+              title="{{ T('nav_meta', 'Meta-Navigation') }}">
+        {{ T("nav_meta_short", "Meta") }}
+      </button>
+      <a href="{{ _release.href | default(url_for('news_view')) }}"
+         class="gc-bottom-util-version gc-mono gc-nav-link"
+         data-pjax-link
+         title="{{ T('sidebar_version_title', 'Genesis Timeline & Patchnotes') }}">
+        <span class="gc-bottom-util-version-label">{{ _release.label | default('Genesis') }}</span>
+        <span class="gc-bottom-util-version-sep" aria-hidden="true">•</span>
+        <span class="gc-bottom-util-version-stage">{{ T("release_stage_alpha", "Alpha") }}</span>
+      </a>
+    </div>
+  </div>
+</footer>

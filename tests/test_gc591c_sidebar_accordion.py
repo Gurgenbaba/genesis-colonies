@@ -116,16 +116,18 @@ def test_mining_secondary_modules_stay_in_canonical_sections():
 
 def test_sidebar_template_group_accordion_markers():
     sidebar = _read("templates/partials/sidebar.html")
+    sidebar_right = _read("templates/partials/sidebar_right.html")
     assert 'data-nav-section="command"' in sidebar
     assert 'data-nav-section="infrastructure"' in sidebar
     assert 'data-nav-section="military"' in sidebar
-    assert 'data-nav-section="economy"' in sidebar
-    assert 'data-nav-section="administration"' in sidebar
+    assert 'data-nav-section="economy"' in sidebar_right
+    assert 'data-nav-section="community"' in sidebar_right
+    assert 'data-nav-section="system"' in sidebar_right
     assert "gc-nav-section-toggle" in sidebar
     assert "module_in_section(_sn," in sidebar
     assert 'id="gc-nav-more-toggle"' not in sidebar
-    assert 'data-nav-module="messages"' in sidebar
-    assert 'data-nav-module="support"' not in sidebar
+    assert 'data-nav-module="messages"' in sidebar_right
+    assert 'data-nav-module="support"' not in sidebar_right
 
 
 def test_main_js_section_accordion_contract():
@@ -139,12 +141,12 @@ def test_main_js_section_accordion_contract():
 
 
 def test_sidebar_economy_section_not_role_group_wrapper():
-    sidebar = _read("templates/partials/sidebar.html")
-    eco = sidebar.split('data-nav-section="economy"', 1)[1].split('data-nav-section="administration"', 1)[0]
+    sidebar_right = _read("templates/partials/sidebar_right.html")
+    eco = sidebar_right.split('data-nav-section="economy"', 1)[1].split('data-nav-section="community"', 1)[0]
     eco_open = eco.split(">", 1)[0]
     assert 'data-nav-group="trading"' not in eco_open
     assert 'data-nav-group-modules="trading"' not in eco_open
-    assert 'data-nav-group-key="trading"' in eco
+    assert 'data-nav-module="trading"' in eco
 
 
 def test_research_colony_economy_section_visible(gc591c_db, monkeypatch):
@@ -158,9 +160,9 @@ def test_research_colony_economy_section_visible(gc591c_db, monkeypatch):
     client = _app_client(monkeypatch)
     assert client.post("/login", data={"username": uname, "password": "test-pass-123"}).status_code in (200, 302)
     html = client.get("/overview").get_data(as_text=True)
-    sidebar = html.split('id="gc-sidebar-nav"', 1)[1].split("</nav>", 1)[0]
+    sidebar = html.split('id="gc-sidebar-nav-right"', 1)[1].split("</nav>", 1)[0]
     assert 'data-nav-section="economy"' in sidebar
-    eco = sidebar.split('data-nav-section="economy"', 1)[1].split('data-nav-section="administration"', 1)[0]
+    eco = sidebar.split('data-nav-section="economy"', 1)[1].split('data-nav-section="community"', 1)[0]
     assert "Wirtschaft" in eco
     assert len(_visible_module_lines(sidebar, "trading")) == 1
     assert len(_visible_module_lines(sidebar, "empire")) == 1
@@ -178,7 +180,7 @@ def test_homeworld_overview_renders_grouped_sidebar(gc591c_db, monkeypatch):
     assert "nav_section_command" in html or "Kommando" in html
 
 
-def test_mining_colony_renders_administration_overflow(gc591c_db, monkeypatch):
+def test_mining_colony_renders_community_overflow(gc591c_db, monkeypatch):
     player_id, uname = _create_player()
     ok, reason, data = colonize_planet(player_id, name="Ore Hub")
     assert ok, reason
@@ -190,10 +192,12 @@ def test_mining_colony_renders_administration_overflow(gc591c_db, monkeypatch):
     assert client.post("/login", data={"username": uname, "password": "test-pass-123"}).status_code in (200, 302)
     html = client.get("/overview").get_data(as_text=True)
 
-    sidebar = html.split('id="gc-sidebar-nav"', 1)[1].split("</nav>", 1)[0]
+    sidebar_left = html.split('id="gc-sidebar-nav"', 1)[1].split("</nav>", 1)[0]
+    sidebar_right = html.split('id="gc-sidebar-nav-right"', 1)[1].split("</nav>", 1)[0]
     assert 'data-nav-full="0"' in html
-    assert 'data-nav-section="administration"' in html
-    assert len(_visible_module_lines(sidebar, "research")) == 1
+    assert 'data-nav-section="community"' in sidebar_right
+    assert 'data-nav-section="system"' in sidebar_right
+    assert len(_visible_module_lines(sidebar_left, "research")) == 1
 
     switch = client.post("/api/planets/active", json={"planet_id": colony_id}).get_json()
     assert switch["state"]["active_planet"]["sidebar_nav"]["empire_role_key"] == "mining"

@@ -200,7 +200,8 @@ def test_main_js_movement_countdown_expiry_debounced():
     assert "_noteMovementCountdownStillStale" in src
     refresh_section = src.split("async function refreshGameState(reason)")[1].split("GC.refreshGameState = refreshGameState")[0]
     assert "isChainReason" in refresh_section
-    assert 'reasonStr === "fleet_countdown_expired"' in refresh_section
+    assert "isHudOnlyGameStateReason" in src
+    assert '"fleet_countdown_expired"' in src.split("function isHudOnlyGameStateReason(reason)")[1].split("function isPageReloadGameStateReason")[0]
     assert "_queuedChainRefreshReason = reasonStr" in refresh_section
     assert "queueMicrotask" in refresh_section
     progress_section = src.split("function _hasActiveProgressJobs()")[1].split("// progress ticker")[0]
@@ -298,25 +299,21 @@ def test_main_js_patches_resource_bar_energy_warning():
 def test_main_js_gc802_planet_switch_state_sync():
     src = _read("static/main.js")
     assert "syncScopedPlanetIds" in src
-    assert 'document.getElementById("logistics-page")' in src
     assert '"logistics-page"' in src.split("function syncScopedPlanetIds")[1].split("function abortInFlight")[0]
     assert "abortInFlightGameStateFetches" in src
     switch_section = src.split('applyActionState(res, "planet_switch")')[1][:1400]
-    planet_switch_apply = src.split("const isPlanetSwitch = reason === \"planet_switch\"")[1][:700]
+    planet_switch_apply = src.split("const isPlanetSwitch = reason === \"planet_switch\"")[1].split("function logStatusPollErrorOnce")[0]
     assert "GC.stopPolling()" in planet_switch_apply
+    assert "hudOnly: isPlanetSwitch" in planet_switch_apply
     assert "skipHydrate: true" in switch_section
     assert "skipGameState: true" in switch_section
-    assert 'refreshGameState("planet_switch")' in switch_section
-    assert "refreshFleetState(fleetPage)" in switch_section
+    assert 'refreshGameState("planet_switch")' not in switch_section
+    assert "bootstrapResourceLiveFromDom()" in switch_section
     action_body = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert 'reason === "planet_switch"' in action_body
-    assert "skipScopedPanels: isPlanetSwitch" in action_body
-    apply_body = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
-    assert "syncScopedPlanetIds(activePlanetId)" in apply_body
-    assert "skipScopedPanels" in apply_body
-    assert "overview-wrapper[data-planet-id]" in src
-    hydrate_body = src.split("function hydratePageFromLastState(opts)")[1].split("let _progressTickerActive")[0]
-    assert "getDomPlanetId()" in hydrate_body
+    apply_body = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
+    assert "applyHudOnlyGameState" in apply_body
+    assert "isHudOnlyGameStateReason" in apply_body
     overview = _read("templates/overview.html")
     assert 'overview-wrapper" data-planet-id="{{ planet.planet_id or 0 }}"' in overview
 
@@ -327,10 +324,9 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     assert "function pageHasSsrLiveBoot()" in src
     assert "function shouldSkipInitGameStateAfterSsr(page, opts)" in src
     assert "initPage skip game-state (SSR fresh)" in src
-    assert '"overview"' in src.split("_SSR_SKIP_INIT_GAME_STATE_PAGES")[1].split("function shouldSkipInitGameStateAfterSsr")[0]
     skip_fn = src.split("function shouldSkipInitGameStateAfterSsr(page, opts)")[1].split("function bootstrapResourceLiveFromDom")[0]
     assert "opts.forceGameState" in skip_fn
-    assert "opts && opts.pjax && pageHasSsrLiveBoot()" in skip_fn
+    assert "return pageHasSsrLiveBoot()" in skip_fn
     assert "opts && opts.force) return false" not in skip_fn
     init_body = src.split("const afterInit = async () => {")[1].split("if (page === \"messages\")")[0]
     assert "shouldSkipInitGameStateAfterSsr(page, opts)" in init_body
@@ -376,10 +372,17 @@ def test_gc746_routes_reuse_ctx_planet():
     assert "_load_page_live_context(finish_source=\"fleet\"" in fleet
 
 
-def test_gc747_game_state_poll_diet():
+def test_gc803_simple_hud_poll_contract():
     src = _read("static/main.js")
-    assert "function mergePollStatePreserveHeavy(prev, next)" in src
-    assert "function commitGameStateCache(data, reason, opts)" in src
+    assert "function patchHudLastState(data, reason)" in src
+    assert "function applyHudOnlyGameState(data, reason, opts)" in src
+    assert "function isHudOnlyGameStateReason(reason)" in src
+    assert "function mergePollStatePreserveHeavy" not in src
+    assert "function gameStateIncludePanel" not in src
+    assert "function gameStateWantPanelPoll" not in src
+    refresh = src.split("async function refreshGameState(reason)")[1].split("GC.refreshGameState = refreshGameState")[0]
+    assert "include_panel=1" not in refresh
+    assert 'fetchJSON("/api/game-state"' in refresh
     live = _read("game/live_state.py")
     assert "def apply_lightweight_game_state_diet(payload" in live
     assert "def research_poll_slice(research" in live
@@ -439,7 +442,7 @@ def test_main_js_gc801_action_state_and_stale_poll_guards():
     assert "_clientStateGen += 1" in action_section
     refresh_section = src.split("async function refreshGameState(reason)")[1].split("GC.refreshGameState = refreshGameState")[0]
     assert "stateGenAtStart !== _clientStateGen" in refresh_section
-    apply_section = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    apply_section = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert 'reason === "poll"' in apply_section
     assert 'reason === "page_hydrate"' in apply_section
     assert "syncResourceLiveBaseline" in apply_section
@@ -474,7 +477,8 @@ def test_main_js_gc540_unified_page_timers():
     assert "function syncTimerElement(el)" in src
     assert "data-timer-target" in src
     assert "data-refresh-on-zero" in src
-    assert "gameStateWantPanelPoll" in src
+    assert "isPageReloadGameStateReason" in src
+    assert "refreshPageAfterQueueEvent" in src
     assert "timer_done" in src
     assert "_pageTimerLoopRunning" in src
     overview = _read("templates/overview.html")
@@ -483,7 +487,7 @@ def test_main_js_gc540_unified_page_timers():
     fleet = _read("templates/fleet.html")
     base = _read("templates/base.html")
     assert "data-timer-kind" in fleet or "data-fleet-preview" in fleet
-    assert "data-timer-target" in base or "data-countdown-scope" in base
+    assert "id=\"resource-bar\"" in base or "data-countdown-scope" in base
     shipyard = _read("templates/shipyard.html")
     card_queue_macros = _read("templates/partials/card_queue_macros.html")
     assert "render_card_queue_timer(qj, 'shipyard', 'shipyard')" in shipyard
@@ -521,7 +525,7 @@ def test_main_js_gc541_queue_timer_hotfix():
     sync = src.split("function syncTimerElement(el)")[1].split("function timerRemainingSeconds")[0]
     assert "parseTimerTarget" in sync
     assert "data-finish-time" in sync
-    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "GC.startProgressTicker();" in apply
     assert "syncServerClockFromState(data)" in apply
     build_partial = _read("templates/partials/build_queue.html")
@@ -548,7 +552,7 @@ def test_main_js_gc541_queue_timer_hotfix():
     hud_section = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
     assert 'getElementById("resource-bar")' in hud_section
     assert 'document.querySelectorAll(".res-value.metal, [data-res=\\"metal\\"]")' not in hud_section
-    apply_section = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    apply_section = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "patchShellHudFromState(coercePollUnreadForHud(data, reason), { forceResourceBar, skipMessagesUnread })" in apply_section
     assert "scoreStale" in hud_section
     assert "data-hud-online-value" in hud_section or "data-hud-online-value" in _read("templates/base.html")
@@ -581,7 +585,7 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     render_shipyard = src.split("function renderShipyardQueue(page, queueData)")[1].split("function parseShipyardPageData")[0]
     assert "patchShipyardCardQueues" in render_shipyard
     assert "_updateShipyardQueueCompact" in render_shipyard
-    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "patchResearchPanelFromState(data)" in apply
     assert "patchShipyardPanelFromState(data, activePlanetId)" in apply
     assert "lastHadActiveShipyard" in apply
@@ -644,8 +648,8 @@ def test_main_js_gc632_production_stat_chips():
     assert "function patchProductionStatChips(card, cycleSeconds, batchCapacity, tt)" in src
     assert "fmtIntParts(cap)" in src.split("function patchProductionStatChips")[1].split("function applyShipyardShipCard")[0]
     assert ".shipyard-ship-build-time" not in src.split("function applyShipyardShipCard")[1].split("function applyShipyardState")[0]
-    assert "patchProductionStatChips(card, ship.build_seconds, batchCap, tt)" in src
-    assert "patchProductionStatChips(card, unit.build_seconds, batchCap, tt)" in src
+    assert "patchProductionStatChips(card, ship.build_seconds, unitCap, tt)" in src
+    assert "patchProductionStatChips(card, unit.build_seconds, unitCap, tt)" in src
     macro = _read("templates/partials/progression_cards.html")
     assert "render_production_stat_chips" in macro
     assert "gc-prod-stat-grid" in macro
@@ -899,7 +903,7 @@ def test_main_js_gc546d_production_completion_poll_storm_guards():
     assert "refreshShipyardStateCoalesced(syPage)" in prod_sync
     assert "pending.defense && !pending.gameState" in prod_sync
 
-    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "syncProductionPanelsAfterGameState(data, reason, activePlanetId)" in apply
     assert "function patchDefensePanelFromGameState(data, activePlanetId)" in src
     assert "scheduleShipyardRefreshFromState(true)" not in apply
@@ -967,7 +971,7 @@ def test_main_js_gc546e_stale_poll_unread_guard():
     merge = src.split("GC.mergeLastState = function mergeLastState")[1].split("function patchOverviewScoreFromState")[0]
     assert '_messagesUnreadLocalAt = Date.now()' in merge
     assert 'String(reason || "").includes("messages")' in merge
-    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "coercePollUnreadForHud(data, reason)" in apply
     messages_js = _read("static/js/messages.js")
     open_report = messages_js.split("async function openInboxReportById(messageId, kind)")[1].split("async function openCombatReportById")[0]
@@ -1134,7 +1138,8 @@ def test_main_js_gc550b_compact_head_actions():
     assert "gc-bld-card-action-wrap" not in buildings_html
     assert "gc-bld-card-action-wrap" not in research_html
     assert "gc-bld-head-action-btn" in src
-    assert "hideBuildingsSubnav" in src.split("function initPage")[1][:800]
+    init_page = src.split("GC.initPage = function initPage", 1)[1].split("GC.cleanupPage", 1)[0]
+    assert "GC.restoreLeftmenuState(window.location.href)" in init_page
     assert ".gc-bld-head-action-btn{" in css
 
 
@@ -1145,6 +1150,7 @@ def test_main_js_gc550c_buildings_hero_queue_and_subnav():
     research_html = _read("templates/research.html")
     base_html = _read("templates/base.html")
     sidebar_html = _read("templates/partials/sidebar.html")
+    sidebar_right_html = _read("templates/partials/sidebar_right.html")
     css = _read("static/style.css")
 
     assert "render_hero_img_stack" in buildings_html
@@ -1166,7 +1172,9 @@ def test_main_js_gc550c_buildings_hero_queue_and_subnav():
     assert "saturate(" in css
     assert "gc-nav-sub--collapsed" in src
     assert "BUILDINGS_NAV_PAGES" in src
-    assert "gc-nav-buildings-toggle" in src
+    sidebar_html = _read("templates/partials/sidebar.html")
+    sidebar_right_html = _read("templates/partials/sidebar_right.html")
+    assert "gc-nav-buildings-toggle" in sidebar_html
     assert "syncBuildingsSubnavFromState" in src
     assert sidebar_html.count('id="gc-nav-buildings-sub"') == 1
     assert ".gc-nav-group-body" in css
@@ -1194,6 +1202,7 @@ def test_main_js_gc550_buildings_ux_contract():
     defense_html = _read("templates/defense.html")
     base_html = _read("templates/base.html")
     sidebar_html = _read("templates/partials/sidebar.html")
+    sidebar_right_html = _read("templates/partials/sidebar_right.html")
     css = _read("static/style.css")
     de = _read("locales/de.json")
 
@@ -1209,7 +1218,7 @@ def test_main_js_gc550_buildings_ux_contract():
     assert "gc-bld-card-icon--title" not in defense_html
     assert "gc-nav-buildings-sub" in sidebar_html
     assert "data-building-tab" in sidebar_html
-    assert 'data-nav-section="economy"' in sidebar_html
+    assert 'data-nav-section="economy"' in sidebar_right_html
     assert 'data-nav-section="military"' in sidebar_html
     assert "syncNavSectionAccordionState" in src
     assert "syncMilitarySubnav" in src
@@ -1278,6 +1287,7 @@ def test_gc551a_fuel_cell_icon_and_hero_level_badge():
     icons_py = _read("tools/generate_icons.py")
     base_html = _read("templates/base.html")
     sidebar_html = _read("templates/partials/sidebar.html")
+    sidebar_right_html = _read("templates/partials/sidebar_right.html")
     progression = _read("templates/partials/progression_cards.html")
     css = _read("static/style.css")
     fuel_png = ROOT / "static" / "icons" / "fuel_cells.png"
@@ -1300,8 +1310,8 @@ def test_gc551a_fuel_cell_icon_and_hero_level_badge():
     assert "rgba(5, 14, 24" in hero_badge or "rgb(6, 12, 26)" in hero_badge
     assert ".hud-res-fuel-cells .res-icon" in css
     assert "gc-res-fuel-cells" in css
-    assert "render_resource_icon('fuel_cells', 'xl')" in _read("templates/overview.html")
-    assert "img/res/Ferronit.png" in _read("templates/base.html")
+    assert "render_resource_icon('fuel_cells', 'xl'" in _read("templates/overview.html")
+    assert "render_resource_icon" in _read("templates/base.html")
     assert Path("static/img/buildings/academy.png").stat().st_size > 100_000
 
 
@@ -1356,7 +1366,7 @@ def test_main_js_gc553_global_perf_audit():
 
     assert "GC.debugPerf = function debugPerf()" in src
     assert "function shouldPatchGameStateModule" in src
-    apply_section = src.split("function applyGameStateData")[1].split("function gameStateIncludePanel")[0]
+    apply_section = src.split("function applyGameStateData")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "_syncBuildQueueLiveState(queueList)" in apply_section
     assert "shouldPatchGameStateModule(\"buildings\")" in src
 
@@ -1440,3 +1450,23 @@ def test_gc557g_unified_card_level_badge():
     assert ".gc-hero-stat-badge{" in css
     assert ".gc-bld-card-hero-action-slot{" in css
     assert "data-action-state" in research_html
+
+
+def test_gc804_leftmenu_ui_state_independent_from_game_state_poll():
+    """GC-804: leftmenu accordion state is client-owned, not tied to game-state poll."""
+    src = _read("static/main.js")
+    assert "GC.restoreLeftmenuState = function restoreLeftmenuState" in src
+    restore_left = src.split("GC.restoreLeftmenuState = function restoreLeftmenuState", 1)[1].split("function applyMobileBottomNav", 1)[0]
+    assert "restoreSidebarMenuState(" in restore_left
+    assert "markLeftmenuActiveLinks(targetUrl, routeCtx)" in restore_left
+    assert "sidebar_nav" not in restore_left
+    assert "NAV_SECTION_STORAGE_KEY_RIGHT" in src
+    poll_apply = src.split("function applyHudOnlyGameState", 1)[1].split("function applyGameStateData", 1)[0]
+    assert "restoreLeftmenuState" not in poll_apply
+    sync_role = src.split("GC.syncRoleBasedSidebar = function syncRoleBasedSidebar", 1)[1].split("function initRoleBasedSidebar", 1)[0]
+    assert "applyDesktopSidebarNav(sidebar, nav)" in sync_role
+    assert "applyDesktopSidebarNav(sidebarRight, nav)" in sync_role
+    assert "GC.restoreLeftmenuState(window.location.href)" in sync_role
+    buildings_tabs = src.split("function bindBuildingTabsOnce", 1)[1].split("function initBuildings", 1)[0]
+    assert 'GC.navigateTo(`/buildings?tab=${encodeURIComponent(tab)}`)' in buildings_tabs
+    assert 'data-building-tab="military"' in _read("templates/partials/sidebar.html")

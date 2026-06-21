@@ -291,7 +291,7 @@ def test_api_game_state_poll_is_lightweight(game_client):
 
 
 def test_api_game_state_poll_is_diet_gc747(game_client):
-    """GC-747: normal polls must not ship page-catalog slices."""
+    """GC-747/GC-802: normal polls keep shell HUD slices, drop page-catalog blocks."""
     client, _pid = game_client
     body = client.get("/api/game-state").get_json()
     assert body.get("ok") is True
@@ -301,15 +301,24 @@ def test_api_game_state_poll_is_diet_gc747(game_client):
     assert "summary" in research
     assert "buildings" in body
     assert "production_per_hour" in body
-    assert "planets" not in body
+    assert isinstance(body.get("planets"), list)
+    assert len(body["planets"]) >= 1
+    pl = body.get("planet_limit") or {}
+    assert pl.get("current") >= 1
+    assert pl.get("max") >= 1
     assert "player_stats" not in body
     assert "building_queue" not in body
     assert "research_queue" not in body
+    assert "planet_teaser" not in body
+    assert "exchange" not in body
+    assert "scrapyard" not in body
+    assert "buildings_panel" not in body
     assert "score" in body
     ap = body.get("active_planet") or {}
-    assert "sidebar_nav" not in ap
+    assert ap.get("planet_id")
+    assert "sidebar_nav" in ap
     raw = client.get("/api/game-state").get_data(as_text=True)
-    assert len(raw) < 12000
+    assert len(raw) < 16000
 
 
 def test_api_game_state_include_panel_has_full_research_catalog(game_client):
@@ -568,6 +577,6 @@ def test_main_js_gc541_server_time_fallback_chain():
     timer_now = src.split("function getTimerServerNow()")[1].split("function queryTimerElements")[0]
     assert "GC.lastState?.server_time" in timer_now
     assert "GC.lastState?.server_now" in timer_now
-    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "syncServerClockFromState(data)" in apply
 

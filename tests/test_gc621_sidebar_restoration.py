@@ -24,14 +24,12 @@ def test_sidebar_flat_buildings_group_without_nested_box():
 
 
 def test_sidebar_economy_has_trading_subnav():
-    sidebar = _read("templates/partials/sidebar.html")
-    assert 'id="gc-nav-trading-parent"' in sidebar
-    assert 'id="gc-nav-trading-sub"' in sidebar
-    assert 'data-trading-nav="inventory"' in sidebar
-    assert 'data-trading-nav="vote_center"' in sidebar
-    assert 'data-trading-nav="auction_house"' in sidebar
+    sidebar = _read("templates/partials/sidebar_right.html")
     assert 'data-nav-module="trading"' in sidebar
-    assert 'data-nav-module="empire"' in sidebar
+    assert 'data-trading-nav="inventory"' in sidebar
+    assert 'data-trading-nav="auction_house"' in sidebar
+    assert 'data-nav-section="economy"' in sidebar
+    assert 'id="gc-nav-trading-parent"' not in sidebar
 
 
 def test_sidebar_section_bodies_use_css_collapse_not_hidden():
@@ -42,27 +40,29 @@ def test_sidebar_section_bodies_use_css_collapse_not_hidden():
 
 
 def test_sidebar_verwaltung_has_no_support_or_overflow():
-    sidebar = _read("templates/partials/sidebar.html")
+    sidebar = _read("templates/partials/sidebar_right.html")
     assert "secondary_overflow_modules" not in sidebar
     assert 'data-nav-overflow="1"' not in sidebar
     assert 'data-nav-module="support"' not in sidebar
     assert 'data-special-open-window="support"' not in sidebar
-    admin = sidebar.split('data-nav-section="administration"', 1)[1].split("</div>", 1)[0]
-    for module in ("alliance", "ranking", "hall_of_fame", "records", "options"):
-        assert f'data-nav-module="{module}"' in admin
+    community = sidebar.split('data-nav-section="community"', 1)[1].split('data-nav-section="system"', 1)[0]
+    for module in ("alliance", "ranking", "hall_of_fame", "records"):
+        assert f'data-nav-module="{module}"' in community
+    system = sidebar.split('data-nav-section="system"', 1)[1]
+    assert 'data-nav-module="options"' in system
 
 
 def test_sidebar_messages_standalone_shortcut():
-    sidebar = _read("templates/partials/sidebar.html")
+    sidebar = _read("templates/partials/sidebar_right.html")
     assert 'data-nav-section="messages"' in sidebar
     assert 'class="gc-nav-link gc-nav-module--' in sidebar
     assert "gc-nav-icon--mail" not in sidebar
     assert "gc-nav-messages-toggle" not in sidebar
     assert "gc-nav-section-messages-body" not in sidebar
     assert "gc-nav-section--messages" not in sidebar
-    command = sidebar.split('data-nav-section="command"', 1)[1].split('data-nav-section="infrastructure"', 1)[0]
-    assert 'data-nav-module="messages"' not in command
-    messages_block = sidebar.split('data-nav-section="messages"', 1)[1].split('data-nav-section="command"', 1)[0]
+    economy = sidebar.split('data-nav-section="economy"', 1)[1].split('data-nav-section="community"', 1)[0]
+    assert 'data-nav-module="messages"' not in economy
+    messages_block = sidebar.split('data-nav-section="messages"', 1)[1].split('data-nav-section="economy"', 1)[0]
     assert 'data-nav-module="messages"' in messages_block
     assert "data-messages-unread-badge" in messages_block
 
@@ -99,10 +99,16 @@ def test_style_sidebar_command_interface_tokens():
 def test_main_js_persists_sidebar_state_in_local_storage():
     src = _read("static/main.js")
     assert 'const NAV_SECTION_STORAGE_KEY = "gc_sidebar_state"' in src
-    assert "localStorage.getItem(NAV_SECTION_STORAGE_KEY" in src
-    assert "localStorage.setItem(NAV_SECTION_STORAGE_KEY" in src
+    assert 'const NAV_SECTION_STORAGE_KEY_RIGHT = "gc_sidebar_right_state"' in src
+    assert "readNavSectionState(" in src
+    assert "writeNavSectionState(" in src
     assert "resolveNavGroupExpanded" in src
     assert "setNavGroupExpanded" in src
+    assert "GC.restoreLeftmenuState" in src
+    assert "restoreSidebarMenuState" in src
+    assert "resolveLeftmenuRouteContext" in src
+    assert "applyLeftmenuPathRouteHints" in src
+    assert "markLeftmenuActiveLinks" in src
     assert "syncBuildingsSubnavFromState" in src
     assert "_clearSidebarNavActive" in src
     assert "syncBuildingSidebarTab(null)" in src
@@ -111,3 +117,17 @@ def test_main_js_persists_sidebar_state_in_local_storage():
     assert "hasActive" not in accordion
     resolve_group = src.split("function resolveNavGroupExpanded", 1)[1].split("function setNavSectionExpanded", 1)[0]
     assert 'key === "buildings"' in resolve_group
+    apply_desktop = src.split("function applyDesktopSidebarNav", 1)[1].split("function markLeftmenuActiveLinks", 1)[0]
+    assert "syncNavSectionAccordionState" not in apply_desktop
+    sync_role = src.split("GC.syncRoleBasedSidebar = function syncRoleBasedSidebar", 1)[1].split("function initRoleBasedSidebar", 1)[0]
+    assert "GC.restoreLeftmenuState" in sync_role
+    assert "syncNavSectionAccordionState(sidebar)" not in sync_role
+    init_page = src.split("GC.initPage = function initPage", 1)[1].split("GC.cleanupPage", 1)[0]
+    assert "GC.restoreLeftmenuState(window.location.href)" in init_page
+    assert "syncLayoutShellMode" not in init_page
+    assert "initBottomUtilityBar" in src
+    route_ctx = src.split("function resolveLeftmenuRouteContext", 1)[1].split("function resolveNavSectionExpanded", 1)[0]
+    assert 'path.endsWith("/buildings")' in route_ctx
+    assert 'search.get("tab")' in route_ctx
+    assert 'groups.add("buildings")' in route_ctx
+    assert "registerCleanup(hideBuildingsSubnav)" not in src.split("function initBuildings", 1)[1].split("const BUILDING_TECH", 1)[0]

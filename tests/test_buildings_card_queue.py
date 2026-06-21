@@ -50,10 +50,12 @@ def test_gc748_card_asset_lazyload_contract():
     assert 'decoding="async"' in fleet
 
 
-    """GC-747B: buildings SSR/poll slimdown + CSS webp resource icons."""
+def test_gc747b_buildings_ssr_slimdown():
+    """GC-747B/GC-803: buildings SSR single-tab; no client panel-poll on buildings page."""
     src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
-    panel_fn = src.split("function gameStateIncludePanel()")[1].split("function gameStateWantPanelPoll")[0]
-    assert 'page === "buildings"' not in panel_fn
+    assert "function gameStateIncludePanel" not in src
+    refresh_body = src.split("async function refreshGameState(reason)")[1].split("GC.refreshGameState = refreshGameState")[0]
+    assert "include_panel=1" not in refresh_body
     bind_tabs = src.split("function bindBuildingTabsOnce()")[1].split("function initBuildings()")[0]
     subnav_block = bind_tabs.split("#gc-nav-buildings-sub")[1].split('.building-tabs .tab-btn')[0]
     assert "GC.navigateTo(`/buildings?tab=" in subnav_block

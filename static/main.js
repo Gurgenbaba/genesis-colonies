@@ -819,8 +819,6 @@
   function shouldSkipInitGameStateAfterSsr(page, opts) {
     if (opts && opts.skipGameState) return true;
     if (opts && opts.forceGameState) return false;
-    if (opts && opts.pjax && pageHasSsrLiveBoot()) return true;
-    if (!_SSR_SKIP_INIT_GAME_STATE_PAGES.has(String(page || ""))) return false;
     return pageHasSsrLiveBoot();
   }
 
@@ -957,6 +955,7 @@
 
     const anyActive = applyGameStateData(state, reason, {
       forceResourceBar: true,
+      hudOnly: isPlanetSwitch,
       planetSwitch: isPlanetSwitch,
       skipScopedPanels: isPlanetSwitch,
     });
@@ -1615,18 +1614,6 @@
     GC.pageLifecycle.initialized = true;
     console.debug("[GC] initPage", page);
 
-    if (page !== "buildings") {
-      hideBuildingsSubnav();
-    }
-
-    syncTradingSubnav(page);
-    syncMilitarySubnav(page);
-    syncFleetSubnav(page);
-
-    if (typeof normalizePopoverTriggers === "function") {
-      normalizePopoverTriggers(document.getElementById("main-content") || document);
-    }
-
     const mod = GC.modules[page];
     if (page === "messages") {
       if (force) {
@@ -1645,6 +1632,12 @@
         console.error("[GC] page module error", page, err);
       }
     }
+
+    if (typeof normalizePopoverTriggers === "function") {
+      normalizePopoverTriggers(document.getElementById("main-content") || document);
+    }
+
+    GC.restoreLeftmenuState(window.location.href);
 
     initFlashAutohide();
     initMotdBanner();
@@ -2442,15 +2435,14 @@
               ? refreshPlanetEvolutionState(pid)
               : Promise.resolve(null);
             return Promise.resolve(refreshPe).finally(() => {
-              if (typeof GC.refreshGameState === "function") {
-                return Promise.resolve(GC.refreshGameState("planet_evolution_finished")).finally(() => {
-                  releaseFinishRefreshLock(key);
-                });
-              }
               releaseFinishRefreshLock(key);
             });
           }
-          return Promise.resolve(GC.refreshGameState ? GC.refreshGameState(`${key}_finished`) : null).finally(() => {
+          return Promise.resolve(
+            typeof GC.reloadCurrentPage === "function"
+              ? GC.reloadCurrentPage({ force: true, skipGameState: true, skipHydrate: true })
+              : (GC.refreshGameState ? GC.refreshGameState(`${key}_finished`) : null)
+          ).finally(() => {
             releaseFinishRefreshLock(key);
           });
         };
@@ -3781,10 +3773,7 @@
   }
 
   function syncBuildingsSubnavFromState() {
-    const group = document.querySelector(".gc-nav-buildings-group");
-    if (!group) return;
-    const state = readNavSectionState();
-    setNavGroupExpanded(group, resolveNavGroupExpanded(group, state), false);
+    GC.restoreLeftmenuState(window.location.href);
   }
 
   function hideBuildingsSubnav() {
@@ -3855,13 +3844,11 @@
   function initBuildings() {
     bindBuildingTabsOnce();
     initBuildingTechnicalData();
-    syncBuildingsSubnavFromState();
     const pageRoot = document.querySelector("[data-buildings-page]");
     if (!pageRoot) return;
     const initialTab = pageRoot.dataset.activeBuildingTab || "resources";
     activateBuildingTabByName(initialTab, null);
     GC.startProgressTicker();
-    GC.registerCleanup(hideBuildingsSubnav);
   }
 
   const BUILDING_TECH = {
@@ -4348,29 +4335,13 @@
   }
 
   function hideTradingSubnav() {
-    const sub = document.getElementById("gc-nav-trading-sub");
-    if (!sub) return;
-    sub.hidden = true;
-    sub.classList.add("gc-nav-sub--collapsed");
-    sub.setAttribute("aria-hidden", "true");
-    _setSubnavGroupExpanded(
-      document.querySelector(".gc-nav-trading-group"),
-      document.getElementById("gc-nav-trading-parent"),
-      false
-    );
+    const group = document.querySelector(".gc-nav-trading-group");
+    if (group) setNavGroupExpanded(group, false, false);
   }
 
   function showTradingSubnav() {
-    const sub = document.getElementById("gc-nav-trading-sub");
-    if (!sub) return;
-    sub.hidden = false;
-    sub.classList.remove("gc-nav-sub--collapsed");
-    sub.setAttribute("aria-hidden", "false");
-    _setSubnavGroupExpanded(
-      document.querySelector(".gc-nav-trading-group"),
-      document.getElementById("gc-nav-trading-parent"),
-      true
-    );
+    const group = document.querySelector(".gc-nav-trading-group");
+    if (group) setNavGroupExpanded(group, true, false);
   }
 
   function syncTradingSubnav(page) {
@@ -6161,7 +6132,9 @@
       _productionCompletionTimer = null;
       const pending = { ..._productionCompletionPending };
       _productionCompletionPending = { gameState: false, shipyard: false, defense: false };
-      if (pending.gameState && typeof GC.refreshGameState === "function") {
+      if (pending.gameState && typeof GC.reloadCurrentPage === "function") {
+        GC.reloadCurrentPage({ force: true, skipGameState: true, skipHydrate: true });
+      } else if (pending.gameState && typeof GC.refreshGameState === "function") {
         GC.refreshGameState("timer_done");
       }
       if (pending.shipyard) {
@@ -6195,6 +6168,24 @@
       const keysSnapshot = Array.from(_queueTimerZeroRefreshKeys);
       if (typeof GC.refreshGameState !== "function") {
         keysSnapshot.forEach((k) => _queueTimerZeroRefreshKeys.delete(k));
+        return;
+      }
+      if (typeof GC.reloadCurrentPage === "function") {
+        Promise.resolve(
+          GC.reloadCurrentPage({ force: true, skipGameState: true, skipHydrate: true })
+        ).finally(() => {
+          if (domains.has("shipyard")) {
+            const syPage = document.getElementById("shipyard-page");
+            if (syPage?.dataset.ready === "1") refreshShipyardStateCoalesced(syPage);
+          }
+          if (domains.has("defense")) {
+            const defPage = document.getElementById("defense-page");
+            if (defPage?.dataset.ready === "1") refreshDefenseStateCoalesced(defPage);
+          }
+          GC.setSafeTimeout(() => {
+            keysSnapshot.forEach((k) => _queueTimerZeroRefreshKeys.delete(k));
+          }, 1500);
+        });
         return;
       }
       Promise.resolve(GC.refreshGameState("queue_timer_zero")).finally(() => {
@@ -8311,26 +8302,167 @@
     }
   }
 
-  function mergePollStatePreserveHeavy(prev, next) {
-    if (!prev || prev.ok !== true || !next) return next;
-    const merged = { ...prev, ...next };
-    ["buildings", "planets", "production_per_hour", "buildings_panel", "player_stats", "planet_limit"].forEach((key) => {
-      if (!(key in next) && prev[key] !== undefined) merged[key] = prev[key];
-    });
-    if (next.research && !Array.isArray(next.research.techs) && Array.isArray(prev.research?.techs)) {
-      merged.research = { ...prev.research, ...next.research };
+  const _HUD_LAST_STATE_KEYS = [
+    "ok",
+    "server_time",
+    "server_now",
+    "active_planet_id",
+    "active_planet_name",
+    "active_planet",
+    "planets",
+    "planet_limit",
+    "player",
+    "resources",
+    "energy",
+    "storage",
+    "production_per_hour",
+    "score",
+    "unread_messages_count",
+    "nav_badges",
+    "build_queue",
+    "research",
+    "global_queue_hud",
+    "energy_efficiency_pct",
+    "energy_ratio",
+    "buildings",
+  ];
+
+  function isHudOnlyGameStateReason(reason) {
+    const r = String(reason || "");
+    return (
+      r === "poll"
+      || r === "page_init"
+      || r === "tab_visible"
+      || r === "admin_hud"
+      || r === "pjax_nav"
+      || r === "fleet_countdown_expired"
+    );
+  }
+
+  function isPageReloadGameStateReason(reason) {
+    const r = String(reason || "");
+    if (r === "planet_evolution_finished" || r === "fleet_countdown_expired") return false;
+    return r === "timer_done" || r === "queue_timer_zero" || r.endsWith("_finished");
+  }
+
+  function patchHudLastState(data, reason) {
+    if (!data || data.ok === false) return;
+    const next = coercePollUnreadForHud(data, reason);
+    if (!GC.lastState || GC.lastState.ok !== true) {
+      GC.lastState = { ...next };
+      return;
     }
-    return merged;
+    const merged = { ...GC.lastState };
+    _HUD_LAST_STATE_KEYS.forEach((key) => {
+      if (key in next && next[key] !== undefined) merged[key] = next[key];
+    });
+    if (next.research && typeof next.research === "object") {
+      merged.research = { ...(merged.research || {}), ...next.research };
+      if (!Array.isArray(next.research.techs)) delete merged.research.techs;
+    }
+    GC.lastState = merged;
   }
 
   function commitGameStateCache(data, reason, opts) {
-    const nextState = coercePollUnreadForHud(data, reason);
-    const reasonStr = String(reason || "");
-    if (reasonStr === "poll" || reasonStr === "admin_hud") {
-      GC.lastState = mergePollStatePreserveHeavy(GC.lastState, nextState);
+    if (opts && opts.hudOnly) {
+      patchHudLastState(data, reason);
       return;
     }
-    GC.lastState = nextState;
+    if (isHudOnlyGameStateReason(reason)) {
+      patchHudLastState(data, reason);
+      return;
+    }
+    GC.lastState = coercePollUnreadForHud(data, reason);
+  }
+
+  function syncHudQueueLiveStatesFromPoll(data) {
+    const buildQueueRaw = data?.build_queue || null;
+    let queueList = [];
+    if (Array.isArray(buildQueueRaw)) queueList = buildQueueRaw;
+    else if (buildQueueRaw && Array.isArray(buildQueueRaw.queue)) queueList = buildQueueRaw.queue;
+    _syncBuildQueueLiveState(queueList);
+
+    const research = data?.research || {};
+    const activeResearch = research.active || null;
+    const researchQueue = Array.isArray(research.queue)
+      ? research.queue
+      : (activeResearch ? [activeResearch] : []);
+    _syncResearchQueueLiveState(researchQueue);
+
+    const hudJobs = data?.global_queue_hud?.jobs;
+    if (Array.isArray(hudJobs)) {
+      hudJobs.forEach((job) => {
+        const kind = String(job?.kind || job?.domain || "");
+        if (kind === "shipyard" || kind === "shipyard_queue") {
+          _syncShipyardQueueLiveState([job]);
+        } else if (kind === "defense" || kind === "defense_queue") {
+          _syncDefenseQueueLiveState([job]);
+        }
+      });
+    }
+
+    const hasActiveBuild = queueList.length > 0;
+    const bqLimitFinal = buildQueueRaw?.summary?.limit ?? 3;
+    const bqCountFinal = buildQueueRaw?.summary?.count ?? queueList.length;
+    lastBuildQueueCount = bqCountFinal;
+    lastBuildQueueFull = bqCountFinal >= bqLimitFinal;
+    lastHadActiveJob = hasActiveBuild;
+
+    const hasActiveResearchNow = researchQueue.length > 0;
+    const rqLimitFinal = research?.summary?.limit ?? 3;
+    const rqCountFinal = research?.summary?.count ?? researchQueue.length;
+    lastResearchQueueCount = rqCountFinal;
+    lastResearchQueueFull = rqCountFinal >= rqLimitFinal;
+    lastHadActiveResearch = hasActiveResearchNow;
+    lastHadActiveShipyard = SHIPYARDQ.active.finishTime > getTimerServerNow();
+
+    return hasActiveBuild || hasActiveResearchNow || lastHadActiveShipyard;
+  }
+
+  function applyHudOnlyGameState(data, reason, opts) {
+    const forceResourceBar = Boolean(opts && (opts.forceResourceBar || opts.planetSwitch));
+    const skipMessagesUnread = Boolean(opts && opts.skipMessagesUnread);
+    const activePlanetId = Number(data.active_planet_id || data.build_queue?.planet_id || 0);
+
+    if (typeof GC.updateHeaderPlanetSwitcherFromState === "function") {
+      GC.updateHeaderPlanetSwitcherFromState(data);
+    }
+    if (typeof GC.syncRoleBasedSidebar === "function") {
+      GC.syncRoleBasedSidebar(data);
+    }
+    applyPlanetLandscapeFromState(data);
+
+    const p = data.player || {};
+    const energy = data.energy || {};
+    const resources = data.resources || {};
+    const prod = data.production_per_hour || {};
+    const storage = data.storage || {};
+
+    patchShellHudFromState(coercePollUnreadForHud(data, reason), {
+      forceResourceBar,
+      skipMessagesUnread,
+    });
+
+    syncResourceLiveBaseline({
+      planetId: activePlanetId,
+      metal: Math.floor(Number(p.metal ?? resources.metal ?? 0)),
+      crystal: Math.floor(Number(p.crystal ?? resources.crystal ?? 0)),
+      fuelCells: Math.floor(Number(p.fuel_cells ?? resources.fuel_cells ?? 0)),
+      prodMetal: Math.floor(Number(prod.metal_mine ?? prod.metal ?? 0)),
+      prodCrystal: Math.floor(Number(prod.crystal_mine ?? prod.crystal ?? 0)),
+      prodFuelCells: Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0)),
+      storageMetal: Math.floor(Number(storage.metal || 0)),
+      storageCrystal: Math.floor(Number(storage.crystal || 0)),
+      storageFuelCells: Math.floor(Number(storage.fuel_cells || 0)),
+    });
+
+    const anyActive = syncHudQueueLiveStatesFromPoll(data);
+    const stApplied = Number(data.server_time || 0);
+    if (stApplied) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stApplied);
+    patchHudLastState(data, reason);
+    GC.startProgressTicker();
+    syncPerfBodyClasses();
+    return anyActive;
   }
 
   // Status polling / GC.refreshGameState
@@ -8339,8 +8471,15 @@
       if (!data || data.ok === false) return false;
       const reason = String(_reason || "");
       const skipMessagesUnread = Boolean(opts && opts.skipMessagesUnread);
-      const hudOnly = Boolean(opts && opts.hudOnly);
-      const forceResourceBar = Boolean(opts && (opts.forceResourceBar || hudOnly || opts.planetSwitch));
+      const hudOnly = Boolean(opts && opts.hudOnly) || isHudOnlyGameStateReason(reason);
+      if (hudOnly) {
+        return applyHudOnlyGameState(data, reason, {
+          ...opts,
+          skipMessagesUnread,
+          hudOnly: true,
+        });
+      }
+      const forceResourceBar = Boolean(opts && (opts.forceResourceBar || opts.planetSwitch));
       const planetSwitch = Boolean(opts && opts.planetSwitch);
       const planetSwitchReload = Boolean(opts && opts.planetSwitchReload);
       const skipScopedPanels = Boolean(
@@ -8445,11 +8584,6 @@
         storageCrystal,
         storageFuelCells,
       });
-
-      if (hudOnly) {
-        GC.lastState = mergePollStatePreserveHeavy(GC.lastState, coercePollUnreadForHud(data, reason));
-        return false;
-      }
 
       if (skipScopedPanels) {
         const stApplied = Number(data.server_time || 0);
@@ -8695,27 +8829,15 @@
       return hasActiveBuild || hasActiveResearchNow || lastHadActiveShipyard;
   }
 
-  function gameStateIncludePanel() {
-    const page = typeof GC.detectPage === "function" ? GC.detectPage() : "";
-    return (
-      page === "research"
-      || page === "shipyard"
-      || page === "defense"
-      || page === "trader_hub"
-      || page === "logistics"
-    );
-  }
-
-  function gameStateWantPanelPoll(reason) {
-    const reasonStr = String(reason || "");
-    if (gameStateIncludePanel()) return true;
-    return (
-      reasonStr === "planet_switch"
-      || reasonStr.endsWith("_finished")
-      || reasonStr === "fleet_countdown_expired"
-      || reasonStr === "timer_done"
-      || reasonStr === "queue_timer_zero"
-    );
+  function refreshPageAfterQueueEvent(reason) {
+    if (typeof GC.reloadCurrentPage === "function") {
+      return GC.reloadCurrentPage({
+        force: true,
+        skipGameState: true,
+        skipHydrate: true,
+      });
+    }
+    return refreshGameState(reason);
   }
 
   /** Lightweight HUD refresh — standalone fetch, no pageLifecycle abort. */
@@ -8756,11 +8878,15 @@
     if (!shouldRunGameLoop() || _authLoopAborted) return null;
 
     const reasonStr = String(reason || "");
-    const isFinishReason = reasonStr.endsWith("_finished");
-    const isChainReason = isFinishReason || reasonStr === "fleet_countdown_expired" || reasonStr === "timer_done";
-    const isPlanetSwitchReason = reasonStr === "planet_switch";
+    if (isPageReloadGameStateReason(reasonStr)) {
+      return refreshPageAfterQueueEvent(reasonStr);
+    }
 
-    if (GC.refreshInFlight && !isPlanetSwitchReason) {
+    const isFinishReason = reasonStr.endsWith("_finished");
+    const isChainReason = isFinishReason || reasonStr === "timer_done";
+    const hudOnly = isHudOnlyGameStateReason(reasonStr);
+
+    if (GC.refreshInFlight) {
       if (isChainReason) {
         if (!_queuedChainRefreshReason) _queuedChainRefreshReason = reasonStr;
       }
@@ -8768,14 +8894,6 @@
     }
 
     const p = GC.polling;
-    if (GC.refreshInFlight && isPlanetSwitchReason) {
-      if (p.abort) {
-        try { p.abort.abort(); } catch (_) {}
-      }
-      GC.refreshInFlight = null;
-      p.inFlight = false;
-      p.abort = null;
-    }
     p.inFlight = true;
     if (p.abort && !isChainReason && reasonStr !== "poll" && reasonStr !== "pjax_nav") {
       try {
@@ -8788,17 +8906,14 @@
     const stateGenAtStart = _clientStateGen;
 
     let resolveFlight;
-    let rejectFlight;
-    const flight = new Promise((resolve, reject) => {
+    const flight = new Promise((resolve) => {
       resolveFlight = resolve;
-      rejectFlight = reject;
     });
     GC.refreshInFlight = flight;
 
     (async () => {
       try {
-        const panelQ = gameStateWantPanelPoll(reason) ? "?include_panel=1" : "";
-        const data = await GC.fetchJSON(`/api/game-state${panelQ}`, { cache: "no-store", signal: ctrl.signal });
+        const data = await GC.fetchJSON("/api/game-state", { cache: "no-store", signal: ctrl.signal });
         if (!data || data.ok === false) {
           if (isAuthStatusFailure(null, data)) handleAuthFailure("game-state-payload");
           resolveFlight(null);
@@ -8815,11 +8930,11 @@
           return null;
         }
 
-        const anyActive = applyGameStateData(data, reason);
+        const anyActive = applyGameStateData(data, reason, { hudOnly });
         const wantPolling = anyActive || lastHadActiveJob || lastHadActiveResearch;
         if (reason === "poll") {
-          const p = GC.polling;
-          if (wantPolling && p.running && p.lastInterval > p.intervalActive + 100) {
+          const pol = GC.polling;
+          if (wantPolling && pol.running && pol.lastInterval > pol.intervalActive + 100) {
             GC.stopPolling();
             GC.startPolling(true);
           }
@@ -15877,11 +15992,22 @@
 
   function shouldShowSidebarNavLink(nav, el) {
     const module = String(el.dataset.navModule || "");
-    if (!module) return false;
+    if (!module) return true;
+    const sectionKey = String(el.closest("[data-nav-section]")?.dataset.navSection || "");
+    if (sectionKey === "messages") return module === "messages";
+    if (sectionKey === "community") {
+      if (module === "vote_center") return true;
+      const display = moduleDisplaySection(nav, module);
+      return display === "administration" && COMMUNITY_ADMIN_MODULES.has(module);
+    }
+    if (sectionKey === "system") {
+      if (module === "admin") return true;
+      const display = moduleDisplaySection(nav, module);
+      return module === "options" && display === "administration";
+    }
     const display = moduleDisplaySection(nav, module);
     if (!display) return false;
-    const section = String(el.closest("[data-nav-section]")?.dataset.navSection || "");
-    return display === section;
+    return display === sectionKey;
   }
 
   function navLinkShows(nav, module, placement) {
@@ -15892,38 +16018,180 @@
   }
 
   const NAV_SECTION_STORAGE_KEY = "gc_sidebar_state";
+  const NAV_SECTION_STORAGE_KEY_RIGHT = "gc_sidebar_right_state";
+  const LEFT_NAV_SECTIONS = new Set(["command", "infrastructure", "military"]);
+  const RIGHT_NAV_SECTIONS = new Set(["messages", "economy", "community", "system"]);
+  const COMMUNITY_ADMIN_MODULES = new Set([
+    "ranking", "hall_of_fame", "vote_center", "referrals", "alliance", "records",
+  ]);
 
-  function readNavSectionState() {
+  function navStorageKeyForSidebar(sidebar) {
+    if (!sidebar) return NAV_SECTION_STORAGE_KEY;
+    if (sidebar.id === "gc-sidebar-nav-right" || sidebar.dataset.navPlacement === "right") {
+      return NAV_SECTION_STORAGE_KEY_RIGHT;
+    }
+    return NAV_SECTION_STORAGE_KEY;
+  }
+
+  function readNavSectionState(storageKey) {
+    const key = storageKey || NAV_SECTION_STORAGE_KEY;
     try {
-      return JSON.parse(localStorage.getItem(NAV_SECTION_STORAGE_KEY) || "{}");
+      return JSON.parse(localStorage.getItem(key) || "{}");
     } catch (_) {
       return {};
     }
   }
 
-  function writeNavSectionState(state) {
+  function writeNavSectionState(state, storageKey) {
+    const key = storageKey || NAV_SECTION_STORAGE_KEY;
     try {
-      localStorage.setItem(NAV_SECTION_STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(key, JSON.stringify(state));
     } catch (_) {}
   }
 
-  function resolveNavSectionExpanded(section, state) {
+  function sidebarAllowsSection(sidebar, sectionKey) {
+    if (!sidebar) return true;
+    if (sidebar.id === "gc-sidebar-nav-right" || sidebar.dataset.navPlacement === "right") {
+      return RIGHT_NAV_SECTIONS.has(sectionKey);
+    }
+    return LEFT_NAV_SECTIONS.has(sectionKey);
+  }
+
+  function pathFromMenuUrl(url) {
+    try {
+      const u = new URL(url, window.location.origin);
+      return {
+        path: u.pathname.replace(/\/$/, "") || "/",
+        search: u.searchParams,
+      };
+    } catch (_) {
+      return { path: "/", search: new URLSearchParams() };
+    }
+  }
+
+  function linkPathMatchesRoute(link, path) {
+    const href = link.getAttribute("href");
+    if (!href || href.startsWith("#")) return false;
+    try {
+      const linkPath = new URL(href, window.location.origin).pathname.replace(/\/$/, "") || "/";
+      return linkPath === path;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function applyLeftmenuPathRouteHints(path, sections, groups) {
+    if (path.endsWith("/messages")) sections.add("messages");
+    if (
+      path.endsWith("/overview")
+      || path.endsWith("/galaxy")
+      || path.endsWith("/planet-evolution")
+    ) {
+      sections.add("command");
+    }
+    if (path.endsWith("/research") || path.endsWith("/techtree")) {
+      sections.add("infrastructure");
+    }
+    if (
+      path.endsWith("/shipyard")
+      || path.endsWith("/defense")
+      || path.endsWith("/fleet")
+      || path.endsWith("/logistics")
+    ) {
+      sections.add("military");
+    }
+    if (
+      path.endsWith("/trader-hub")
+      || path.endsWith("/inventory")
+      || path.endsWith("/auction-house")
+      || path.endsWith("/galactic-politics")
+      || path.endsWith("/skilltree")
+      || path.endsWith("/premium")
+    ) {
+      sections.add("economy");
+    }
+    if (path.endsWith("/empire")) sections.add("economy");
+    if (path.endsWith("/vote-center")) {
+      sections.add("community");
+    }
+    if (
+      path.endsWith("/alliance")
+      || path.endsWith("/ranking")
+      || path.endsWith("/hall-of-fame")
+      || path.endsWith("/records")
+      || path.endsWith("/referrals")
+    ) {
+      sections.add("community");
+    }
+    if (path.endsWith("/options") || path.endsWith("/admin")) {
+      sections.add("system");
+    }
+  }
+
+  function resolveLeftmenuRouteContext(url) {
+    const { path, search } = pathFromMenuUrl(url);
+    const sections = new Set();
+    const groups = new Set();
+    let buildingTab = null;
+
+    if (path.endsWith("/buildings")) {
+      sections.add("infrastructure");
+      groups.add("buildings");
+      buildingTab = search.get("tab") || "resources";
+      return { path, sections, groups, buildingTab };
+    }
+
+    applyLeftmenuPathRouteHints(path, sections, groups);
+
+    const sidebars = [
+      document.getElementById("gc-sidebar-nav"),
+      document.getElementById("gc-sidebar-nav-right"),
+    ].filter(Boolean);
+
+    sidebars.forEach((sidebar) => {
+      sidebar.querySelectorAll("[data-nav-section]").forEach((section) => {
+        if (section.hidden) return;
+        const sectionKey = String(section.dataset.navSection || "");
+        if (!sectionKey || !sidebarAllowsSection(sidebar, sectionKey)) return;
+
+        section.querySelectorAll("a.gc-nav-sub-link[href], a.gc-nav-link[href]").forEach((link) => {
+          if (link.id === "gc-nav-trading-parent") return;
+          if (!linkPathMatchesRoute(link, path)) return;
+          sections.add(sectionKey);
+          const group = link.closest("[data-nav-group-key]");
+          if (group) groups.add(String(group.dataset.navGroupKey || ""));
+        });
+
+        section.querySelectorAll("[data-trading-nav][href]").forEach((link) => {
+          if (!linkPathMatchesRoute(link, path)) return;
+          sections.add(sectionKey);
+        });
+      });
+    });
+
+    applyLeftmenuPathRouteHints(path, sections, groups);
+    return { path, sections, groups, buildingTab };
+  }
+
+  function resolveNavSectionExpanded(section, state, routeCtx) {
     const key = String(section.dataset.navSection || "");
+    if (key && routeCtx?.sections?.has(key)) return true;
     if (key && Object.prototype.hasOwnProperty.call(state, key)) {
       return !!state[key];
     }
     return section.classList.contains("is-expanded");
   }
 
-  function resolveNavGroupExpanded(group, state) {
+  function resolveNavGroupExpanded(group, state, routeCtx) {
     const key = String(group.dataset.navGroupKey || "");
+    if (key && routeCtx?.groups?.has(key)) return true;
     if (key && Object.prototype.hasOwnProperty.call(state, key)) {
       return !!state[key];
     }
     if (key === "buildings") {
       return typeof GC.detectPage === "function" && GC.detectPage() === "buildings";
     }
-    return false;
+    return group.classList.contains("is-expanded");
   }
 
   function setNavSectionExpanded(section, expanded, persist) {
@@ -15931,50 +16199,67 @@
     const toggle = section.querySelector(".gc-nav-section-toggle");
     const body = section.querySelector(".gc-nav-section-body");
     if (!toggle || !body) return;
+    const sidebar = section.closest(".gc-sidebar");
+    const storageKey = navStorageKeyForSidebar(sidebar);
     section.classList.toggle("is-expanded", expanded);
     toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
     if (persist) {
       const key = String(section.dataset.navSection || "");
       if (!key) return;
-      const state = readNavSectionState();
+      const state = readNavSectionState(storageKey);
       state[key] = expanded;
-      writeNavSectionState(state);
+      writeNavSectionState(state, storageKey);
     }
   }
 
   function setNavGroupExpanded(group, expanded, persist) {
     if (!group) return;
-    const toggle = group.querySelector(".gc-nav-group-toggle");
+    const sidebar = group.closest(".gc-sidebar");
+    const storageKey = navStorageKeyForSidebar(sidebar);
+    const toggle = group.querySelector(".gc-nav-group-toggle, a.gc-nav-link--has-sub[data-nav-module]");
     const body = group.querySelector(".gc-nav-group-body");
-    if (!toggle || !body) return;
+    const key = String(group.dataset.navGroupKey || "");
     group.classList.toggle("is-expanded", expanded);
-    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
-    if (persist) {
-      const key = String(group.dataset.navGroupKey || "");
-      if (!key) return;
-      const state = readNavSectionState();
+    if (toggle) toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    if (key === "trading") {
+      const sub = document.getElementById("gc-nav-trading-sub");
+      if (sub) {
+        sub.hidden = !expanded;
+        sub.classList.toggle("gc-nav-sub--collapsed", !expanded);
+        sub.setAttribute("aria-hidden", expanded ? "false" : "true");
+      }
+    } else if (body) {
+      body.hidden = false;
+      body.classList.remove("gc-nav-sub--collapsed");
+      body.setAttribute("aria-hidden", "false");
+    }
+    if (persist && key) {
+      const state = readNavSectionState(storageKey);
       state[key] = expanded;
-      writeNavSectionState(state);
+      writeNavSectionState(state, storageKey);
     }
   }
 
-  function syncNavGroupAccordionState(sidebar, state) {
+  function syncNavGroupAccordionState(sidebar, state, routeCtx, storageKey) {
     if (!sidebar) return;
-    const stored = state || readNavSectionState();
+    const stored = state || readNavSectionState(storageKey || navStorageKeyForSidebar(sidebar));
     sidebar.querySelectorAll("[data-nav-group-key]").forEach((group) => {
       if (group.hidden) return;
-      setNavGroupExpanded(group, resolveNavGroupExpanded(group, stored), false);
+      setNavGroupExpanded(group, resolveNavGroupExpanded(group, stored, routeCtx), false);
     });
   }
 
-  function syncNavSectionAccordionState(sidebar) {
+  function syncNavSectionAccordionState(sidebar, routeCtx) {
     if (!sidebar) return;
-    const state = readNavSectionState();
+    const storageKey = navStorageKeyForSidebar(sidebar);
+    const state = readNavSectionState(storageKey);
     sidebar.querySelectorAll("[data-nav-section]").forEach((section) => {
       if (section.hidden) return;
-      setNavSectionExpanded(section, resolveNavSectionExpanded(section, state), false);
+      const sectionKey = String(section.dataset.navSection || "");
+      if (!sidebarAllowsSection(sidebar, sectionKey)) return;
+      setNavSectionExpanded(section, resolveNavSectionExpanded(section, state, routeCtx), false);
     });
-    syncNavGroupAccordionState(sidebar, state);
+    syncNavGroupAccordionState(sidebar, state, routeCtx, storageKey);
   }
 
   function applyDesktopSidebarNav(sidebar, nav) {
@@ -15988,18 +16273,108 @@
       el.hidden = true;
     });
     sidebar.querySelectorAll("[data-nav-module]").forEach((el) => {
-      if (shouldShowSidebarNavLink(nav, el)) {
-        el.hidden = false;
-      }
+      if (!shouldShowSidebarNavLink(nav, el)) return;
+      const sectionKey = String(el.closest("[data-nav-section]")?.dataset.navSection || "");
+      if (sectionKey && !sidebarAllowsSection(sidebar, sectionKey)) return;
+      el.hidden = false;
     });
 
     sidebar.querySelectorAll("[data-nav-section]").forEach((section) => {
-      const anyVisible = !!section.querySelector("[data-nav-module]:not([hidden])");
+      const sectionKey = String(section.dataset.navSection || "");
+      if (!sidebarAllowsSection(sidebar, sectionKey)) {
+        section.hidden = true;
+        return;
+      }
+      if (sectionKey === "community" || sectionKey === "system") {
+        const links = section.querySelectorAll("[data-nav-module], a.gc-nav-sub-link[href]");
+        let anyVisible = false;
+        links.forEach((el) => {
+          if (!el.hidden) anyVisible = true;
+        });
+        section.hidden = !anyVisible;
+        return;
+      }
+      const anyVisible = !!section.querySelector("[data-nav-module]:not([hidden]), a.gc-nav-sub-link[href]:not([hidden])");
       section.hidden = !anyVisible;
     });
-
-    syncNavSectionAccordionState(sidebar);
   }
+
+  function markLeftmenuActiveLinks(url, routeCtx) {
+    const ctx = routeCtx || resolveLeftmenuRouteContext(url);
+    const path = ctx.path;
+    const onBuildings = path.endsWith("/buildings");
+    const tradingPage = _tradingPageFromPath(path);
+
+    _clearSidebarNavActive();
+
+    if (onBuildings) {
+      const tab = ctx.buildingTab || "resources";
+      syncBuildingSidebarTab(tab);
+    } else {
+      syncBuildingSidebarTab(null);
+    }
+
+    if (tradingPage) {
+      document.querySelectorAll("[data-trading-nav]").forEach((el) => {
+        el.classList.toggle("active", el.dataset.tradingNav === tradingPage);
+      });
+    }
+
+    if (!onBuildings && !tradingPage) {
+      const activeLink = _pickSidebarHrefActive(path);
+      if (activeLink) activeLink.classList.add("active");
+    } else if (tradingPage) {
+      const activeLink = _pickSidebarHrefActive(path);
+      if (activeLink) activeLink.classList.add("active");
+    }
+
+    document.querySelectorAll(
+      ".gc-bottom-nav-item, .gc-nav-drawer-link, a.gc-hud-panel-messages"
+    ).forEach((link) => {
+      const href = link.getAttribute("href");
+      if (!href) return;
+      let linkPath;
+      try {
+        linkPath = new URL(href, window.location.origin).pathname.replace(/\/$/, "") || "/";
+      } catch (_) {
+        return;
+      }
+      link.classList.toggle("active", linkPath === path);
+    });
+  }
+
+  function restoreSidebarMenuState(sidebar, url, routeCtx) {
+    if (!sidebar) return;
+    const storageKey = navStorageKeyForSidebar(sidebar);
+    const state = readNavSectionState(storageKey);
+    let mutated = false;
+
+    routeCtx.sections.forEach((key) => {
+      if (!sidebarAllowsSection(sidebar, key)) return;
+      if (!state[key]) {
+        state[key] = true;
+        mutated = true;
+      }
+    });
+    routeCtx.groups.forEach((key) => {
+      if (!state[key]) {
+        state[key] = true;
+        mutated = true;
+      }
+    });
+    if (mutated) writeNavSectionState(state, storageKey);
+
+    syncNavSectionAccordionState(sidebar, routeCtx);
+  }
+
+  GC.restoreLeftmenuState = function restoreLeftmenuState(url) {
+    const targetUrl = url || window.location.href;
+    const routeCtx = resolveLeftmenuRouteContext(targetUrl);
+
+    restoreSidebarMenuState(document.getElementById("gc-sidebar-nav"), targetUrl, routeCtx);
+    restoreSidebarMenuState(document.getElementById("gc-sidebar-nav-right"), targetUrl, routeCtx);
+    markLeftmenuActiveLinks(targetUrl, routeCtx);
+  };
 
   function applyMobileBottomNav(bottomNav, nav) {
     if (!bottomNav || !nav) return new Set(["overview", "buildings", "research", "messages"]);
@@ -16081,7 +16456,9 @@
     if (!nav) return;
 
     const sidebar = document.getElementById("gc-sidebar-nav");
+    const sidebarRight = document.getElementById("gc-sidebar-nav-right");
     if (sidebar) applyDesktopSidebarNav(sidebar, nav);
+    if (sidebarRight) applyDesktopSidebarNav(sidebarRight, nav);
 
     const bottomNav = document.getElementById("gc-bottom-nav");
     const drawer = document.getElementById("gc-nav-drawer");
@@ -16091,6 +16468,8 @@
         : new Set();
       if (drawer) applyMobileDrawerNav(drawer, nav, bottomModules);
     }
+
+    GC.restoreLeftmenuState(window.location.href);
   };
 
   function initRoleBasedSidebar() {
@@ -16098,9 +16477,12 @@
     GC._roleBasedSidebarBound = true;
 
     initSidebarSectionAccordion();
+    initBottomUtilityBar();
 
     if (GC.lastState && GC.lastState.ok !== false) {
       GC.syncRoleBasedSidebar(GC.lastState);
+    } else {
+      GC.restoreLeftmenuState(window.location.href);
     }
   }
 
@@ -16108,12 +16490,10 @@
     if (GC._sidebarSectionAccordionBound) return;
     GC._sidebarSectionAccordionBound = true;
 
-    const sidebar = document.getElementById("gc-sidebar-nav");
-    if (!sidebar) return;
-
-    sidebar.addEventListener("click", (e) => {
-      const groupToggle = e.target.closest(".gc-nav-group-toggle");
-      if (groupToggle && sidebar.contains(groupToggle)) {
+    document.addEventListener("click", (e) => {
+      const groupToggle = e.target.closest(".gc-nav-group-toggle, #gc-nav-trading-parent");
+      let sidebar = groupToggle?.closest(".gc-sidebar-desktop");
+      if (groupToggle && sidebar) {
         e.preventDefault();
         const group = groupToggle.closest("[data-nav-group-key]");
         if (!group || group.hidden) return;
@@ -16122,14 +16502,70 @@
       }
 
       const toggle = e.target.closest(".gc-nav-section-toggle");
-      if (!toggle || !sidebar.contains(toggle)) return;
+      sidebar = toggle?.closest(".gc-sidebar-desktop");
+      if (!toggle || !sidebar) return;
       e.preventDefault();
       const section = toggle.closest("[data-nav-section]");
       if (!section || section.hidden) return;
       setNavSectionExpanded(section, !section.classList.contains("is-expanded"), true);
     });
 
-    syncNavSectionAccordionState(sidebar);
+    GC.restoreLeftmenuState(window.location.href);
+  }
+
+  function initSidebarRightDrawer() {
+    const toggle = document.getElementById("gc-sidebar-right-toggle");
+    const sidebar = document.getElementById("gc-sidebar-nav-right");
+    if (!toggle || !sidebar || GC._sidebarRightDrawerBound) return;
+    GC._sidebarRightDrawerBound = true;
+
+    toggle.addEventListener("click", () => {
+      const open = sidebar.classList.toggle("is-drawer-open");
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!sidebar.classList.contains("is-drawer-open")) return;
+      if (sidebar.contains(e.target) || toggle.contains(e.target)) return;
+      sidebar.classList.remove("is-drawer-open");
+      toggle.setAttribute("aria-expanded", "false");
+    });
+
+    GC.registerCleanup(() => {
+      sidebar.classList.remove("is-drawer-open");
+      toggle.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function initBottomUtilityBar() {
+    if (GC._bottomUtilityBarBound) return;
+    GC._bottomUtilityBarBound = true;
+
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest(".gc-bottom-utility-bar [data-special-open-window]");
+      if (!btn) return;
+      e.preventDefault();
+      const target = btn.dataset.specialOpenWindow || "";
+      if (!target) return;
+      if (typeof GC.openSpecialWindow === "function") {
+        GC.openSpecialWindow(target);
+      }
+    });
+
+    initSidebarRightDrawer();
+
+    const bar = document.querySelector(".gc-bottom-utility-bar");
+    if (bar && typeof ResizeObserver !== "undefined") {
+      const syncBottomUtilHeight = () => {
+        const h = Math.ceil(bar.getBoundingClientRect().height);
+        document.documentElement.style.setProperty("--gc-bottom-util-h", `${h}px`);
+        if (typeof GC.syncSidebarSticky === "function") GC.syncSidebarSticky();
+      };
+      syncBottomUtilHeight();
+      const ro = new ResizeObserver(syncBottomUtilHeight);
+      ro.observe(bar);
+      GC.registerCleanup(() => ro.disconnect());
+    }
   }
 
   GC.updateHeaderPlanetSwitcherFromState = function updateHeaderPlanetSwitcherFromState(data) {
@@ -16343,9 +16779,8 @@
             skipPolling: true,
           });
           syncScopedPlanetIds(planetId);
-          if (typeof GC.refreshGameState === "function") {
-            await GC.refreshGameState("planet_switch");
-          }
+          bootstrapResourceLiveFromDom();
+          _bootstrapPageQueueCompactLiveFromDom();
           const fleetPage = document.getElementById("fleet-page");
           if (
             fleetPage &&
@@ -21439,7 +21874,7 @@
     "a.gc-hud-panel-score, a.galaxy-view-tab, a.galaxy-nav-step, a.galaxy-range-item, " +
     "a.gc-command-center-action-btn, a.gc-command-center-fleet-link, a.gc-command-center-news-link, a.gc-command-center-activity-link, " +
     "a.fleet-mode-tab, a[data-gc-nav], a[data-command-action], " +
-    "#gc-sidebar-nav a[href], " +
+    "#gc-sidebar-nav a[href], #gc-sidebar-nav-right a[href], " +
     "#gc-nav-trading-sub a.gc-nav-sub-link, #gc-nav-military-sub a.gc-nav-sub-link, #gc-nav-fleet-sub a.gc-nav-sub-link";
 
   function _tradingPageFromPath(path) {
@@ -21552,15 +21987,15 @@
   }
 
   function _clearSidebarNavActive() {
-    const sidebar = document.getElementById("gc-sidebar-nav");
-    if (!sidebar) return;
-    sidebar.querySelectorAll(".active").forEach((el) => el.classList.remove("active"));
+    document.querySelectorAll("#gc-sidebar-nav .active, #gc-sidebar-nav-right .active").forEach((el) => {
+      el.classList.remove("active");
+    });
   }
 
   function _pickSidebarHrefActive(path) {
     let best = null;
     let bestDepth = -1;
-    document.querySelectorAll("#gc-sidebar-nav a.gc-nav-sub-link[href]").forEach((link) => {
+    document.querySelectorAll("#gc-sidebar-nav a.gc-nav-sub-link[href], #gc-sidebar-nav-right a.gc-nav-sub-link[href]").forEach((link) => {
       if (link.id === "gc-nav-trading-parent") return;
       const href = link.getAttribute("href");
       if (!href) return;
@@ -21581,49 +22016,7 @@
   }
 
   function _syncNavActive(url) {
-    let urlObj;
-    try {
-      urlObj = new URL(url, window.location.origin);
-    } catch (_) {
-      return;
-    }
-    const path = urlObj.pathname.replace(/\/$/, "") || "/";
-    const onBuildings = path.endsWith("/buildings");
-    const tradingPage = _tradingPageFromPath(path);
-
-    _clearSidebarNavActive();
-
-    if (onBuildings) {
-      const tab = urlObj.searchParams.get("tab") || "resources";
-      syncBuildingSidebarTab(tab);
-      const buildingsGroup = document.querySelector(".gc-nav-buildings-group");
-      if (buildingsGroup) setNavGroupExpanded(buildingsGroup, true, false);
-    } else {
-      syncBuildingSidebarTab(null);
-    }
-
-    _syncTradingNavFromPath(path);
-
-    if (!onBuildings && !tradingPage) {
-      const activeLink = _pickSidebarHrefActive(path);
-      if (activeLink) activeLink.classList.add("active");
-    }
-
-    syncBuildingsSubnavFromState();
-
-    document.querySelectorAll(
-      ".gc-bottom-nav-item, .gc-nav-drawer-link, a.gc-hud-panel-messages"
-    ).forEach((link) => {
-      const href = link.getAttribute("href");
-      if (!href) return;
-      let linkPath;
-      try {
-        linkPath = new URL(href, window.location.origin).pathname.replace(/\/$/, "") || "/";
-      } catch (_) {
-        return;
-      }
-      link.classList.toggle("active", linkPath === path);
-    });
+    GC.restoreLeftmenuState(url);
   }
 
   const SUBNAV_PARENT_TOGGLE = {
@@ -21721,7 +22114,6 @@
           document.body.style.removeProperty("--planet-landscape-webp");
         }
 
-        _syncNavActive(url);
         if (typeof GC.syncSidebarSticky === "function") GC.syncSidebarSticky();
         if (push) history.pushState({ gcPjax: true }, "", url);
 
@@ -21760,7 +22152,6 @@
       if (e.defaultPrevented) return;
       const link = e.target.closest("a[href]");
       if (!link) return;
-      if (tryHandleSubnavParentClick(link, e)) return;
       if (!isPjaxEligibleLink(link)) return;
       e.preventDefault();
       pjaxNavigateFromLink(link);
@@ -22769,8 +23160,23 @@
     const header = document.querySelector(".gc-header-cmd");
     if (!header) return;
     const headerH = Math.ceil(header.getBoundingClientRect().height);
-    document.documentElement.style.setProperty("--gc-sidebar-top", `${headerH + 8}px`);
+    const topGap = 8;
+    const bottomBar = document.querySelector(".gc-bottom-utility-bar");
+    const bottomBarH =
+      bottomBar && getComputedStyle(bottomBar).display !== "none"
+        ? Math.ceil(bottomBar.getBoundingClientRect().height)
+        : 0;
+    const bottomGap = 12 + bottomBarH;
+    const top = headerH + topGap;
+    document.documentElement.style.setProperty("--gc-sidebar-top", `${top}px`);
+    document.documentElement.style.setProperty(
+      "--gc-sidebar-max-height",
+      `calc(100dvh - ${top}px - ${bottomGap}px)`
+    );
     document.documentElement.style.setProperty("--gc-header-h", `${headerH}px`);
+    if (bottomBarH > 0) {
+      document.documentElement.style.setProperty("--gc-bottom-util-h", `${bottomBarH}px`);
+    }
   }
 
   function initSidebarSticky() {

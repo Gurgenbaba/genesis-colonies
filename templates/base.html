@@ -39,8 +39,10 @@
 
   <div class="gc-bg{% if SIMPLE_LAYOUT %} gc-bg-simple{% endif %}" aria-hidden="true"></div>
 
+  <div class="gc-app-shell{% if SIMPLE_LAYOUT %} gc-app-shell--simple{% endif %}">
+
   <!-- ====================== HEADER (Command Console v1.7) ====================== -->
-  <header class="gc-header gc-header-cmd" role="banner">
+  <header class="gc-header gc-header-cmd gc-topbar" role="banner">
     <div class="gc-header-inner">
 
       <!-- Zeile 1: Brand · Meta · Commander -->
@@ -273,7 +275,7 @@
   </header>
 
   <!-- ====================== LAYOUT ====================== -->
-  <div class="gc-layout">
+  <div class="gc-layout{% if not SIMPLE_LAYOUT %} gc-layout--dual{% endif %}">
 
     {% if not SIMPLE_LAYOUT %}
       {% include "partials/sidebar.html" %}
@@ -345,7 +347,17 @@
       {% block content %}{% endblock %}
     </main>
 
+    {% if not SIMPLE_LAYOUT %}
+      {% include "partials/sidebar_right.html" %}
+    {% endif %}
+
   </div>
+
+  {% if not SIMPLE_LAYOUT %}
+    {% include "partials/bottom_utility_bar.html" %}
+  {% endif %}
+
+  </div>{# /.gc-app-shell #}
 
   {% if request.endpoint in ['landing', 'login', 'register'] %}
   <audio id="gc-ambience"

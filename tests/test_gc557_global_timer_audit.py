@@ -18,7 +18,7 @@ def test_gc557_reset_queue_live_states_on_planet_switch():
     assert "_resetQueueLiveStates()" in switch
     cleanup = src.split("GC.cleanupPage = function cleanupPage()")[1].split("function logStatusPollErrorOnce")[0]
     assert "_resetQueueLiveStates()" in cleanup
-    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function gameStateIncludePanel")[0]
+    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "_resetQueueLiveStates()" in apply
 
 

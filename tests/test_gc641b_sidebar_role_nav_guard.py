@@ -28,7 +28,9 @@ ROOT = Path(__file__).resolve().parent.parent
 MIGRATE_SCRIPT = ROOT / "migrate.py"
 SIDEBAR_PATH = ROOT / "templates" / "partials" / "sidebar.html"
 
-MAIN_SECTIONS = ("command", "infrastructure", "military", "economy", "administration")
+MAIN_SECTIONS = ("command", "infrastructure", "military")
+RIGHT_SIDEBAR_SECTIONS = ("messages", "economy", "community", "system")
+BACKEND_NAV_SECTIONS = ("command", "infrastructure", "military", "economy", "administration")
 
 
 @pytest.fixture()
@@ -74,9 +76,9 @@ def _app_client(monkeypatch):
     return app_mod.app.test_client()
 
 
-def _section_open_tags(sidebar_html: str) -> dict[str, str]:
+def _section_open_tags(sidebar_html: str, sections: tuple[str, ...] = MAIN_SECTIONS) -> dict[str, str]:
     tags: dict[str, str] = {}
-    for section in MAIN_SECTIONS:
+    for section in sections:
         marker = f'data-nav-section="{section}"'
         idx = sidebar_html.find(marker)
         assert idx >= 0, f"missing section {section}"
@@ -124,16 +126,20 @@ def test_all_main_sections_visible_for_research_colony(gc641b_db, monkeypatch):
     set_active_planet(player_id, colony_id)
 
     nav = resolve_sidebar_nav(empire_role_key="research", is_homeworld=False)
-    for section in MAIN_SECTIONS:
+    for section in BACKEND_NAV_SECTIONS:
         assert sidebar_section_visible(nav, section) is True
 
     client = _app_client(monkeypatch)
     assert client.post("/login", data={"username": uname, "password": "test-pass-123"}).status_code in (200, 302)
     html = client.get("/overview").get_data(as_text=True)
-    sidebar = html.split('id="gc-sidebar-nav"', 1)[1].split("</nav>", 1)[0]
+    sidebar_left = html.split('id="gc-sidebar-nav"', 1)[1].split("</nav>", 1)[0]
+    sidebar_right = html.split('id="gc-sidebar-nav-right"', 1)[1].split("</nav>", 1)[0]
 
     for section in MAIN_SECTIONS:
-        open_tag = _section_open_tags(sidebar)[section]
+        open_tag = _section_open_tags(sidebar_left)[section]
+        assert " hidden" not in open_tag, section
+    for section in RIGHT_SIDEBAR_SECTIONS:
+        open_tag = _section_open_tags(sidebar_right, RIGHT_SIDEBAR_SECTIONS)[section]
         assert " hidden" not in open_tag, section
 
     assert 'data-nav-full="0"' in html

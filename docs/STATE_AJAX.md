@@ -19,12 +19,12 @@ Actions use `_player_context_for_action()` (read-only DB) then **one** `refresh_
 
 ## Poll vs. action payload
 
-`GET /api/game-state` uses a **lightweight poll path** (`finish_source=game_state`):
+`GET /api/game-state` uses a **lightweight poll path** (`finish_source=game_state`) — HUD/timer only on the client (GC-803).
 
-- `?include_panel=1` uses `finish_source=game_state_panel` (full `refresh_player_live_state`) so resources and `buildings_panel` stay aligned (GC-801).
-
+- `?include_panel=1` is for explicit action responses / legacy callers only — **not** used by normal client polling.
 - Single SQLite connection per request
-- No `buildings_panel`, exchange/trader/scrapyard/teaser blocks (unless `include_panel=1`)
+- No `buildings_panel`, full exchange/scrapyard panels, or teaser on diet polls
+- Shell HUD on diet polls: `planet_limit`, `planets[]` (switcher), `active_planet` (+ `sidebar_nav`); no `research.techs[]`
 - No `overview.status` (shipyard/fleet activity queries skipped)
 - Inbox unread count read-only (`prepare=False`)
 - Resource persist writes throttled (≥120 s since last planet update)
@@ -47,12 +47,11 @@ _load_page_live_context(finish_source=…)
 
 ## Frontend (`static/main.js`)
 
-- Poll: `GET /api/game-state` only (not `/api/status`)
-- `applyGameStateData()` patches shell resource bar, overview, buildings/research panels
-- `patchShellHudFromState()` is the **only** DOM writer for the shell HUD (header score/rank/online, messages badge, `#resource-bar`). Resource ticker updates use `patchShellHudLiveResources()` scoped to `#resource-bar` only.
-- `applyActionState()` applies `json.state` and restarts polling; `GC.mergeLastState()` merges partial updates (e.g. messages read) then re-renders shell HUD from `GC.lastState`
-- PJAX: `cleanupPage()` → swap `#main-content` → `initPage({ force: true })` → `refreshGameState("page_init")`
-- Chat: `GC.resumeChatPolling()` after PJAX (`static/js/chat.js`)
+- Poll: `GET /api/game-state` only — **HUD/timer path** (`applyHudOnlyGameState`, no `include_panel`)
+- Page content: SSR on PJAX; mutations via `applyActionState()` full state
+- Queue/timer completion: `reloadCurrentPage({ skipGameState: true })` — fresh SSR, no panel poll
+- `patchShellHudFromState()` is the **only** DOM writer for the shell HUD
+- Planet switch: POST → HUD patch → one PJAX reload → light poll resumes
 
 ## Kanonische Queue-Timer (Live-UI)
 

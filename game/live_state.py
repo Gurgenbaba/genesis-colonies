@@ -301,11 +301,14 @@ def research_poll_slice(research: Optional[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """GC-747: strip page-catalog slices from normal /api/game-state polls."""
+    """
+    GC-747 / GC-802: normal poll diet — keep shell HUD slices, drop page-catalog blocks.
+
+    Keeps: planet_limit, planets (switcher), active_planet (+ sidebar_nav for role nav).
+    Drops: player_stats, building_queue, research_queue, planet_teaser, research.techs.
+    """
     for key in (
-        "planets",
         "player_stats",
-        "planet_limit",
         "building_queue",
         "research_queue",
         "planet_teaser",
@@ -313,9 +316,4 @@ def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]
         payload.pop(key, None)
     if "research" in payload:
         payload["research"] = research_poll_slice(payload.get("research"))
-    ap = payload.get("active_planet")
-    if isinstance(ap, dict):
-        slim_ap = dict(ap)
-        slim_ap.pop("sidebar_nav", None)
-        payload["active_planet"] = slim_ap
     return payload

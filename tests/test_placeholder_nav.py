@@ -52,22 +52,24 @@ def test_placeholder_modules_registered():
 
 def test_sidebar_has_military_and_trading_hub_nav():
     sidebar = _read("templates/partials/sidebar.html")
+    sidebar_right = _read("templates/partials/sidebar_right.html")
     assert 'data-nav-section="military"' in sidebar
     assert 'data-nav-module="shipyard"' in sidebar
     assert 'data-nav-module="defense"' in sidebar
     assert 'data-nav-module="fleet"' in sidebar
     assert 'data-nav-module="logistics"' not in sidebar
     assert "nav_logistics" not in sidebar
-    assert 'data-nav-section="economy"' in sidebar
-    assert 'data-nav-module="trading"' in sidebar
-    assert "url_for('trader_hub_view')" in sidebar
-    assert "auction_house_view" in sidebar
-    assert "url_for('alliance_view')" in sidebar
-    assert "url_for('hall_of_fame_view')" in sidebar
-    assert 'data-nav-module="hall_of_fame"' in sidebar
-    assert "url_for('records_view')" in sidebar
-    assert 'data-nav-module="records"' in sidebar
+    assert 'data-nav-section="economy"' in sidebar_right
+    assert 'data-nav-module="trading"' in sidebar_right
+    assert "url_for('trader_hub_view')" in sidebar_right
+    assert "auction_house_view" in sidebar_right
+    assert "url_for('alliance_view')" in sidebar_right
+    assert "url_for('hall_of_fame_view')" in sidebar_right
+    assert 'data-nav-module="hall_of_fame"' in sidebar_right
+    assert "url_for('records_view')" in sidebar_right
+    assert 'data-nav-module="records"' in sidebar_right
     assert "gc-nav-wip-section" not in sidebar
+    assert "gc-nav-wip-section" not in sidebar_right
 
 
 def test_base_mobile_drawer_has_hall_of_fame_near_ranking():

@@ -390,7 +390,7 @@ def test_gc641_economy_nav_visible_on_colony(switcher_db, monkeypatch):
     assert nav_module_tier(nav, "empire") == "prominent"
 
     html = client.get("/overview").get_data(as_text=True)
-    sidebar = html.split('id="gc-sidebar-nav"', 1)[1].split("</nav>", 1)[0]
+    sidebar = html.split('id="gc-sidebar-nav-right"', 1)[1].split("</nav>", 1)[0]
     eco_idx = sidebar.find('data-nav-section="economy"')
     assert eco_idx >= 0
     eco_open = sidebar[eco_idx - 80 : sidebar.find(">", eco_idx) + 1]
@@ -421,19 +421,19 @@ def test_trader_hub_and_shipyard_render_active_planet_id(switcher_db, monkeypatc
 
 
 def test_planet_switch_hotfix_client_contract():
-    """Planet switch must not lose to poll coalescing or stale switcher menu refs."""
+    """GC-803: planet switch is POST + PJAX reload; polls stay HUD-only."""
     src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
-    want_panel = src.split("function gameStateWantPanelPoll(reason)")[1].split("function refreshHudFromGameState")[0]
-    assert 'reasonStr === "planet_switch"' in want_panel
+    refresh = src.split("async function refreshGameState(reason)")[1].split("function refreshHudFromGameState")[0]
+    assert "isPlanetSwitchReason" not in refresh
+    assert "include_panel=1" not in refresh
     switcher = src.split("function initHeaderPlanetSwitcher()")[1].split("function bindPlanetEvolutionOnce()")[0]
     assert "const getMenu = () => document.getElementById" in switcher
     assert "const isMulti = () => root.dataset.multi" in switcher
     assert "skipPolling: true" in switcher
     assert "releaseBusy" in switcher
-    refresh = src.split("async function refreshGameState(reason)")[1].split("function refreshHudFromGameState")[0]
-    assert "isPlanetSwitchReason" in refresh
+    assert 'refreshGameState("planet_switch")' not in switcher
     apply = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "GC.refreshInFlight = null" in apply
+    assert "hudOnly: isPlanetSwitch" in apply
     upd = src.split("GC.updateHeaderPlanetSwitcherFromState = function updateHeaderPlanetSwitcherFromState(data)")[1].split("function initLanguageSwitcher()")[0]
     assert "GC.lastState.planets" in upd
-    assert "updateHeaderPlanetSwitcherFromPlanets([" not in upd
