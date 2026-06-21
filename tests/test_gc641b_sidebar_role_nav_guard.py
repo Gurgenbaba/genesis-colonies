@@ -29,7 +29,7 @@ MIGRATE_SCRIPT = ROOT / "migrate.py"
 SIDEBAR_PATH = ROOT / "templates" / "partials" / "sidebar.html"
 
 MAIN_SECTIONS = ("command", "infrastructure", "military")
-RIGHT_SIDEBAR_SECTIONS = ("messages", "economy", "community", "system")
+RIGHT_SIDEBAR_SECTIONS = ("messages", "economy", "community")
 BACKEND_NAV_SECTIONS = ("command", "infrastructure", "military", "economy", "administration")
 
 

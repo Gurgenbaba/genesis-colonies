@@ -15980,7 +15980,7 @@
     );
     if (standalone.has(module)) return module;
     const primaryMap = cfg.module_primary_section || {};
-    if (module === "support") return null;
+    if (module === "support" || module === "options") return null;
     const utility = new Set(
       Array.isArray(cfg.utility_modules)
         ? cfg.utility_modules
@@ -16000,11 +16000,6 @@
       const display = moduleDisplaySection(nav, module);
       return display === "administration" && COMMUNITY_ADMIN_MODULES.has(module);
     }
-    if (sectionKey === "system") {
-      if (module === "admin") return true;
-      const display = moduleDisplaySection(nav, module);
-      return module === "options" && display === "administration";
-    }
     const display = moduleDisplaySection(nav, module);
     if (!display) return false;
     return display === sectionKey;
@@ -16020,7 +16015,7 @@
   const NAV_SECTION_STORAGE_KEY = "gc_sidebar_state";
   const NAV_SECTION_STORAGE_KEY_RIGHT = "gc_sidebar_right_state";
   const LEFT_NAV_SECTIONS = new Set(["command", "infrastructure", "military"]);
-  const RIGHT_NAV_SECTIONS = new Set(["messages", "economy", "community", "system"]);
+  const RIGHT_NAV_SECTIONS = new Set(["messages", "economy", "community"]);
   const COMMUNITY_ADMIN_MODULES = new Set([
     "ranking", "hall_of_fame", "vote_center", "referrals", "alliance", "records",
   ]);
@@ -16089,7 +16084,7 @@
     ) {
       sections.add("command");
     }
-    if (path.endsWith("/research") || path.endsWith("/techtree")) {
+    if (path.endsWith("/research")) {
       sections.add("infrastructure");
     }
     if (
@@ -16110,7 +16105,7 @@
     ) {
       sections.add("economy");
     }
-    if (path.endsWith("/empire")) sections.add("economy");
+    if (path.endsWith("/empire") || path.endsWith("/techtree")) sections.add("economy");
     if (path.endsWith("/vote-center")) {
       sections.add("community");
     }
@@ -16122,9 +16117,6 @@
       || path.endsWith("/referrals")
     ) {
       sections.add("community");
-    }
-    if (path.endsWith("/options") || path.endsWith("/admin")) {
-      sections.add("system");
     }
   }
 
@@ -16285,7 +16277,7 @@
         section.hidden = true;
         return;
       }
-      if (sectionKey === "community" || sectionKey === "system") {
+      if (sectionKey === "community") {
         const links = section.querySelectorAll("[data-nav-module], a.gc-nav-sub-link[href]");
         let anyVisible = false;
         links.forEach((el) => {

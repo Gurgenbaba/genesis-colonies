@@ -122,7 +122,7 @@ def test_sidebar_template_group_accordion_markers():
     assert 'data-nav-section="military"' in sidebar
     assert 'data-nav-section="economy"' in sidebar_right
     assert 'data-nav-section="community"' in sidebar_right
-    assert 'data-nav-section="system"' in sidebar_right
+    assert 'data-nav-section="system"' not in sidebar_right
     assert "gc-nav-section-toggle" in sidebar
     assert "module_in_section(_sn," in sidebar
     assert 'id="gc-nav-more-toggle"' not in sidebar
@@ -147,6 +147,7 @@ def test_sidebar_economy_section_not_role_group_wrapper():
     assert 'data-nav-group="trading"' not in eco_open
     assert 'data-nav-group-modules="trading"' not in eco_open
     assert 'data-nav-module="trading"' in eco
+    assert 'data-nav-module="techtree"' in eco
 
 
 def test_research_colony_economy_section_visible(gc591c_db, monkeypatch):
@@ -196,7 +197,7 @@ def test_mining_colony_renders_community_overflow(gc591c_db, monkeypatch):
     sidebar_right = html.split('id="gc-sidebar-nav-right"', 1)[1].split("</nav>", 1)[0]
     assert 'data-nav-full="0"' in html
     assert 'data-nav-section="community"' in sidebar_right
-    assert 'data-nav-section="system"' in sidebar_right
+    assert 'data-nav-section="system"' not in sidebar_right
     assert len(_visible_module_lines(sidebar_left, "research")) == 1
 
     switch = client.post("/api/planets/active", json={"planet_id": colony_id}).get_json()

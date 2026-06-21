@@ -1,6 +1,6 @@
 {% set _sn = SIDEBAR_NAV or {'full_nav': true, 'modules': {}} %}
 {% set _cmd_open = request.endpoint in ('overview', 'galaxy_view', 'planet_evolution_view') %}
-{% set _infra_open = request.endpoint in ('buildings_view', 'research_view', 'techtree_view') %}
+{% set _infra_open = request.endpoint in ('buildings_view', 'research_view') %}
 {% set _mil_open = request.endpoint in ('shipyard_view', 'defense_view', 'fleet_view') %}
 <nav class="gc-sidebar gc-sidebar-desktop gc-sidebar--left gc-sidebar-left{% if _sn.full_nav %} gc-sidebar--full-nav{% else %} gc-sidebar--role-nav{% endif %}"
      id="gc-sidebar-nav"
@@ -104,12 +104,6 @@
          class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'research') }} {% if request.endpoint == 'research_view' %}active{% endif %}"
          {% if not module_in_section(_sn, 'research', 'infrastructure') %}hidden{% endif %}>
         {{ T("nav_research") }}
-      </a>
-      <a href="{{ url_for('techtree_view') }}"
-         data-nav-module="techtree"
-         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'techtree') }} {% if request.endpoint == 'techtree_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'techtree', 'infrastructure') %}hidden{% endif %}>
-        {{ T("nav_techtree", "Tech-Tree") }}
       </a>
     </div>
   </div>

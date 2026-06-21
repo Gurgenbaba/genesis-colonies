@@ -1,12 +1,11 @@
 {% set _sn = SIDEBAR_NAV or {'full_nav': true, 'modules': {}} %}
 {% set _eco_open = request.endpoint in (
-  'trader_hub_view', 'inventory_view', 'auction_house_view', 'empire_view'
+  'trader_hub_view', 'inventory_view', 'auction_house_view', 'empire_view', 'techtree_view'
 ) %}
 {% set _comm_open = request.endpoint in (
   'alliance_view', 'ranking_view', 'hall_of_fame_view', 'records_view',
   'referrals_view', 'vote_center_view'
 ) %}
-{% set _sys_open = request.endpoint in ('options_view', 'admin_panel') %}
 <nav class="gc-sidebar gc-sidebar-desktop gc-sidebar--right gc-sidebar-right{% if _sn.full_nav %} gc-sidebar--full-nav{% else %} gc-sidebar--role-nav{% endif %}"
      id="gc-sidebar-nav-right"
      aria-label="{{ T('nav_meta', 'Meta-Navigation') }}"
@@ -61,6 +60,12 @@
          class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'empire') }} {% if request.endpoint == 'empire_view' %}active{% endif %}"
          {% if not module_in_section(_sn, 'empire', 'economy') %}hidden{% endif %}>
         {{ T("nav_empire", "Empire") }}
+      </a>
+      <a href="{{ url_for('techtree_view') }}"
+         data-nav-module="techtree"
+         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'techtree') }} {% if request.endpoint == 'techtree_view' %}active{% endif %}"
+         {% if not module_in_section(_sn, 'techtree', 'economy') %}hidden{% endif %}>
+        {{ T("nav_techtree", "Tech-Tree") }}
       </a>
     </div>
   </div>
@@ -122,33 +127,4 @@
     </div>
   </div>
 
-  <div class="gc-nav-section gc-nav-submenu-group gc-nav-section--system{% if _sys_open %} is-expanded{% endif %}"
-       data-nav-section="system"
-       {% if not sidebar_section_visible(_sn, 'administration') %}hidden{% endif %}>
-    <button type="button"
-            class="gc-nav-link gc-nav-section-toggle gc-nav-link--has-sub"
-            id="gc-nav-section-system-toggle"
-            aria-expanded="{{ 'true' if _sys_open else 'false' }}"
-            aria-controls="gc-nav-section-system">
-      <span class="gc-nav-link-label">{{ T("nav_section_system", "System") }}</span>
-      <span class="gc-nav-chevron" aria-hidden="true"></span>
-    </button>
-    <div class="gc-nav-section-body"
-         id="gc-nav-section-system">
-      <a href="{{ url_for('options_view') }}"
-         data-nav-module="options"
-         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'options') }} {% if request.endpoint == 'options_view' %}active{% endif %}"
-         {% if not module_in_section(_sn, 'options', 'administration') %}hidden{% endif %}>
-        {{ T("nav_options") }}
-      </a>
-      {% if AUTH_ADMIN %}
-      <a href="{{ url_for('admin_panel') }}"
-         data-nav-module="admin"
-         class="gc-nav-sub-link gc-nav-admin {% if request.endpoint == 'admin_panel' %}active{% endif %}"
-         data-no-pjax="1">
-        🛠️ {{ T("nav_admin") }}
-      </a>
-      {% endif %}
-    </div>
-  </div>
 </nav>

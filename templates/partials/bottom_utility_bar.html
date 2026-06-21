@@ -27,6 +27,16 @@
         {{ T("chat_short", "Tchat") }}
         <span class="gc-chat-launcher-badge" data-chat-launcher-badge hidden aria-hidden="true"></span>
       </button>
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <a href="{{ url_for('options_view') }}"
+         class="gc-bottom-util-link{% if request.endpoint == 'options_view' %} is-active{% endif %}"
+         data-pjax-link>{{ T("nav_options") }}</a>
+      {% if AUTH_ADMIN %}
+      <span class="gc-bottom-util-sep" aria-hidden="true">|</span>
+      <a href="{{ url_for('admin_panel') }}"
+         class="gc-bottom-util-link gc-bottom-util-link--admin{% if request.endpoint == 'admin_panel' %} is-active{% endif %}"
+         data-no-pjax="1">{{ T("nav_admin") }}</a>
+      {% endif %}
     </nav>
     <div class="gc-bottom-util-end">
       <button type="button"

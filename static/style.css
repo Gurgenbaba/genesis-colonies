@@ -1447,6 +1447,11 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
   text-shadow: 0 0 10px rgba(70, 229, 255, 0.45);
 }
 
+.gc-bottom-util-link.is-active{
+  color: #fff;
+  text-shadow: 0 0 10px rgba(70, 229, 255, 0.45);
+}
+
 .gc-bottom-util-link--discord{
   color: rgba(180, 200, 255, 0.82);
 }
@@ -1661,6 +1666,46 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
   background: var(--gc-panel-bg);
   border: 1px solid rgba(120, 190, 255, 0.16);
   box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0, 0, 0, 0.42);
+}
+
+/* GC-806E — page title bands removed; side nav carries page context */
+.gc-page > header.section-header,
+.gc-page .admin-wrapper > header.section-header {
+  display: none;
+}
+
+.gc-page > header.section-header:is(
+  :has(.fleet-slots-badge),
+  :has(.research-lab-chip),
+  :has(.trader-hub-daily-panel)
+) {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 0 0 10px;
+  margin: 0 0 10px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.gc-page > header.section-header:has(.research-lab-chip) {
+  justify-content: flex-start;
+}
+
+.gc-page > header.section-header:has(.fleet-slots-badge) .fleet-command-head-main,
+.gc-page > header.section-header:has(.fleet-slots-badge) .fleet-headline-row > div:first-child,
+.gc-page > header.section-header:has(.research-lab-chip) .section-title,
+.gc-page > header.section-header:has(.research-lab-chip) .section-hint,
+.gc-page > header.section-header:has(.trader-hub-daily-panel) .fleet-headline-row > div:first-child {
+  display: none;
+}
+
+.gc-page > header.section-header:has(.research-lab-chip) .section-header-row {
+  width: 100%;
+  margin: 0;
 }
 
 .section-title{

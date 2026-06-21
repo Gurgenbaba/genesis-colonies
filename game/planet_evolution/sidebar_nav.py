@@ -33,10 +33,10 @@ MOBILE_ALWAYS_BOTTOM: Tuple[str, ...] = ("messages",)
 NAV_SECTION_MODULES: Dict[str, Tuple[str, ...]] = {
     "command": ("overview", "galaxy", "planet_evolution"),
     "messages": ("messages",),
-    "infrastructure": ("buildings", "research", "techtree"),
+    "infrastructure": ("buildings", "research"),
     "military": ("shipyard", "fleet", "defense", "logistics"),
-    "economy": ("trading", "empire"),
-    "administration": ("alliance", "ranking", "hall_of_fame", "referrals", "records", "options", "support"),
+    "economy": ("trading", "empire", "techtree"),
+    "administration": ("alliance", "ranking", "hall_of_fame", "referrals", "records", "support"),
 }
 
 UTILITY_MODULES = frozenset(NAV_SECTION_MODULES["administration"])
@@ -177,7 +177,7 @@ def nav_module_tier(sidebar_nav: Dict[str, Any] | None, module: str) -> str:
 
 def module_display_section(sidebar_nav: Dict[str, Any] | None, module: str) -> Optional[str]:
     """Exactly one sidebar section per module, or None if hidden."""
-    if module == "support":
+    if module in ("support", "options"):
         return None
     if module in STANDALONE_NAV_MODULES:
         return "messages"

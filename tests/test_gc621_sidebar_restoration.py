@@ -45,11 +45,16 @@ def test_sidebar_verwaltung_has_no_support_or_overflow():
     assert 'data-nav-overflow="1"' not in sidebar
     assert 'data-nav-module="support"' not in sidebar
     assert 'data-special-open-window="support"' not in sidebar
-    community = sidebar.split('data-nav-section="community"', 1)[1].split('data-nav-section="system"', 1)[0]
+    community = sidebar.split('data-nav-section="community"', 1)[1]
     for module in ("alliance", "ranking", "hall_of_fame", "records"):
         assert f'data-nav-module="{module}"' in community
-    system = sidebar.split('data-nav-section="system"', 1)[1]
-    assert 'data-nav-module="options"' in system
+    assert 'data-nav-section="system"' not in sidebar
+
+
+def test_sidebar_options_in_bottom_utility_bar():
+    utility = _read("templates/partials/bottom_utility_bar.html")
+    assert 'url_for(\'options_view\')' in utility
+    assert 'data-nav-module="options"' not in utility
 
 
 def test_sidebar_messages_standalone_shortcut():
@@ -69,10 +74,13 @@ def test_sidebar_messages_standalone_shortcut():
 
 def test_sidebar_buildings_tabs_distinct_from_research_module():
     sidebar = _read("templates/partials/sidebar.html")
+    sidebar_right = _read("templates/partials/sidebar_right.html")
     infra = sidebar.split('data-nav-section="infrastructure"', 1)[1].split('data-nav-section="military"', 1)[0]
     assert infra.count('data-nav-module="research"') == 1
     assert 'data-building-tab="research"' in infra
-    assert 'data-nav-module="techtree"' in infra
+    assert 'data-nav-module="techtree"' not in infra
+    eco = sidebar_right.split('data-nav-section="economy"', 1)[1].split('data-nav-section="community"', 1)[0]
+    assert 'data-nav-module="techtree"' in eco
 
 
 def test_german_buildings_nav_tab_labels():
