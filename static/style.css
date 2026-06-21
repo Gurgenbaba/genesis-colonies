@@ -1575,7 +1575,17 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 
   .gc-layout--dual .gc-building-grid.buildings-prog-list,
   .gc-layout--dual .gc-building-grid.research-prog-list{
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .gc-layout--dual .gc-building-grid .gc-bld-card-hero{
+    min-height: 72px;
+    max-height: 96px;
+  }
+
+  .gc-layout--dual .gc-building-grid .gc-bld-card-hero-title{
+    font-size: 0.72rem;
   }
 }
 

@@ -41,7 +41,7 @@ def test_gc806_dual_sidebar_layout_contract():
     assert "gc-layout--wide" not in css
     assert "--gc-shell-max-width" in css
     assert "var(--gc-sidebar-rail-w" in css
-    assert "minmax(210px, 1fr)" in css
+    assert "repeat(4, minmax(0, 1fr))" in css
     assert "gc-sidebar--right" in css
     assert "gc-bottom-util-link" in css
     assert "gc-bottom-util-version" in css
