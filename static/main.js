@@ -211,7 +211,7 @@
   }
 
   function readNumberInput(el) {
-    return parseIntNumber(el?.value ?? "0");
+    return clampToNumberInputCap(el, parseIntNumber(el?.value ?? "0"));
   }
 
   function setNumberInputValue(el, n) {
@@ -14686,8 +14686,13 @@
         e.preventDefault();
         const shipKey = maxBtn.getAttribute("data-shipyard-max");
         const qtyInp = page.querySelector(`[data-shipyard-qty="${shipKey}"]`);
-        const maxQty = parseIntNumber(maxBtn.dataset.maxQty || "0");
-        if (qtyInp && maxQty > 0) setNumberInputValue(qtyInp, maxQty);
+        const maxQty = parseIntNumber(
+          maxBtn.dataset.maxQty || maxBtn.getAttribute("data-max-qty") || "0"
+        );
+        if (qtyInp && maxQty > 0) {
+          qtyInp.dataset.inputMax = String(maxQty);
+          setNumberInputValue(qtyInp, maxQty);
+        }
         return;
       }
 
@@ -15169,8 +15174,13 @@
         e.preventDefault();
         const dk = maxBtn.getAttribute("data-defense-max");
         const qtyInp = page.querySelector(`[data-defense-qty="${dk}"]`);
-        const maxQty = parseIntNumber(maxBtn.dataset.maxQty || "0");
-        if (qtyInp && maxQty > 0) setNumberInputValue(qtyInp, maxQty);
+        const maxQty = parseIntNumber(
+          maxBtn.dataset.maxQty || maxBtn.getAttribute("data-max-qty") || "0"
+        );
+        if (qtyInp && maxQty > 0) {
+          qtyInp.dataset.inputMax = String(maxQty);
+          setNumberInputValue(qtyInp, maxQty);
+        }
         return;
       }
 

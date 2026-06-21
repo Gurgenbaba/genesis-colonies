@@ -617,3 +617,29 @@ def test_shipyard_job_force_completes_at_finish_at(shipyard_db):
     assert queue_count(pid, conn=conn) == 0
     assert get_planet_ships(pid, conn=conn).get("mule_courier", 0) >= 1
     conn.close()
+
+
+def test_max_build_ignores_zero_cost_resources(shipyard_db):
+    """Zero fuel cost must not cap max build at the 999999 placeholder."""
+    from game.shipyard import max_build_amount_for_planet
+
+    # mule_courier: metal 2000, crystal 2000, fuel_cells 0
+    target = 1_110_929
+    metal_have = 2000 * target
+    crystal_have = 2000 * target
+    max_qty = max_build_amount_for_planet(
+        metal_have,
+        crystal_have,
+        0,
+        "mule_courier",
+        1,
+    )
+    assert max_qty == target
+    assert max_qty > 999_999
+
+    broken_cap = min(
+        metal_have // 2000,
+        crystal_have // 2000,
+        999_999,
+    )
+    assert max_qty > broken_cap

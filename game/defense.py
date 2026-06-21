@@ -505,13 +505,11 @@ def max_build_amount_for_planet(
     limits: List[int] = []
     if cost["metal"] > 0:
         limits.append(int(metal_have) // cost["metal"])
-    else:
-        limits.append(999999)
     if cost["crystal"] > 0:
         limits.append(int(crystal_have) // cost["crystal"])
-    else:
-        limits.append(999999)
-    return max(0, min(limits) if limits else 0)
+    if not limits:
+        return 0
+    return max(0, min(limits))
 
 
 def can_build_defense(
