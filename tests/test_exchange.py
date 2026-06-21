@@ -478,8 +478,9 @@ def test_overview_excludes_planet_teaser_widget(exchange_db, tmp_path, monkeypat
     assert res.status_code == 200
     html = res.get_data(as_text=True)
     assert "gc-planet-teaser" not in html
-    assert "overview-res-dashboard" in html
-    assert "overview-warnings-panel" not in html
+    assert "overview-resources-strip" in html
+    assert "overview-res-dashboard" not in html
+    assert "overview-warnings-panel" in html
     assert "overview-upgrade-section" not in html
     assert "overview-log-panel" not in html
     assert "img/res/Ferronit.png" in html

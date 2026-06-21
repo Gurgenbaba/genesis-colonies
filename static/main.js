@@ -745,6 +745,7 @@
       document.body.classList.remove("gc-has-planet-landscape");
       document.body.style.removeProperty("--planet-landscape");
       document.body.style.removeProperty("--planet-landscape-webp");
+      applyPlanetHeroThemeFromState(data);
       return;
     }
     const webp = String(ap?.landscape_webp_url || landscapeWebpUrlFromRaster(url) || "").trim();
@@ -754,6 +755,34 @@
       document.body.style.setProperty("--planet-landscape-webp", `url("${webp}")`);
     } else {
       document.body.style.removeProperty("--planet-landscape-webp");
+    }
+    applyPlanetHeroThemeFromState(data);
+  }
+
+  function applyPlanetHeroThemeFromState(data) {
+    const hero = document.getElementById("overview-planet-hero");
+    if (!hero) return;
+
+    const ap = data?.active_planet || {};
+    const statusPlanet = data?.overview?.status?.planet || {};
+    const theme = statusPlanet.theme || {};
+    const accent = String(ap.accent_color || theme.accent_color || "").trim();
+    const secondary = String(ap.secondary_color || theme.secondary_color || "").trim();
+    const effect = String(ap.planet_effect || theme.effect || "").trim();
+
+    if (accent) hero.style.setProperty("--planet-accent", accent);
+    else hero.style.removeProperty("--planet-accent");
+    if (secondary) hero.style.setProperty("--planet-accent-secondary", secondary);
+    else hero.style.removeProperty("--planet-accent-secondary");
+
+    Array.from(hero.classList).forEach((cls) => {
+      if (cls.startsWith("overview-hero--effect-")) hero.classList.remove(cls);
+    });
+    if (effect) {
+      hero.classList.add(`overview-hero--effect-${effect}`);
+      hero.dataset.planetEffect = effect;
+    } else {
+      delete hero.dataset.planetEffect;
     }
   }
 
@@ -2618,6 +2647,57 @@
     }
   }
 
+  function patchOverviewWarnings(warnings) {
+    const panel = document.getElementById("overview-warnings-panel");
+    const list = document.getElementById("overview-warnings");
+    if (!panel || !list) return;
+
+    const items = Array.isArray(warnings) ? warnings : [];
+    const sig = items.map((w) => `${w.key}:${w.severity || "info"}:${w.label_key || ""}`).join("|");
+    if (list.dataset.warnSig === sig) return;
+
+    list.dataset.warnSig = sig;
+    list.replaceChildren();
+    if (!items.length) {
+      panel.hidden = true;
+      panel.classList.add("is-empty");
+      return;
+    }
+
+    panel.hidden = false;
+    panel.classList.remove("is-empty");
+    const hrefFor = (key) => {
+      const map = {
+        vacation_mode: "/options",
+        fleet_active: "/fleet",
+        vote_available: "/vote-center",
+      };
+      return map[key] || "";
+    };
+
+    items.forEach((warn) => {
+      const li = document.createElement("li");
+      li.className = `overview-warning overview-warning-${warn.severity || "info"}`;
+      li.dataset.warningKey = warn.key || "";
+      const href = warn.href_key
+        ? ({ options_view: "/options", fleet_view: "/fleet", vote_center_view: "/vote-center" }[warn.href_key] || hrefFor(warn.key))
+        : hrefFor(warn.key);
+      if (href) {
+        const link = document.createElement("a");
+        link.className = "overview-warning-link";
+        link.href = href;
+        link.textContent = t(warn.label_key, warn.label_key);
+        li.appendChild(link);
+      } else {
+        const span = document.createElement("span");
+        span.className = "overview-warning-text";
+        span.textContent = t(warn.label_key, warn.label_key);
+        li.appendChild(span);
+      }
+      list.appendChild(li);
+    });
+  }
+
   function patchOverviewResourceBars(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells) {
     const pairs = [
       ["metal", metal, storageMetal],
@@ -2639,29 +2719,10 @@
 
   function patchOverviewStatus(overview, data, buildings, prod) {
     const status = overview?.status;
-    if (status?.resources) {
-      const metalPhEl = document.querySelector('[data-ph="metal"]');
-      const crystalPhEl = document.querySelector('[data-ph="crystal"]');
-      const fuelPhEl = document.querySelector('[data-ph="fuel_cells"]');
-      const metalPh = Math.floor(Number(status.resources.metal_per_hour || 0));
-      const crystalPh = Math.floor(Number(status.resources.crystal_per_hour || 0));
-      const fuelPh = Math.floor(Number(status.resources.fuel_cells_per_hour || 0));
-      if (metalPhEl) _setIfChanged(metalPhEl, metalPh > 0 ? `+${fmtNumber(metalPh)}/h` : "–");
-      if (crystalPhEl) _setIfChanged(crystalPhEl, crystalPh > 0 ? `+${fmtNumber(crystalPh)}/h` : "–");
-      if (fuelPhEl) _setIfChanged(fuelPhEl, fuelPh > 0 ? `+${fmtNumber(fuelPh)}/h` : "–");
-    } else if (prod) {
-      const metalPhEl = document.querySelector('[data-ph="metal"]');
-      const crystalPhEl = document.querySelector('[data-ph="crystal"]');
-      const fuelPhEl = document.querySelector('[data-ph="fuel_cells"]');
-      const metalPh = Math.floor(Number(prod.metal_mine || 0));
-      const crystalPh = Math.floor(Number(prod.crystal_mine || 0));
-      const fuelPh = Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0));
-      if (metalPhEl) _setIfChanged(metalPhEl, metalPh > 0 ? `+${fmtNumber(metalPh)}/h` : "–");
-      if (crystalPhEl) _setIfChanged(crystalPhEl, crystalPh > 0 ? `+${fmtNumber(crystalPh)}/h` : "–");
-      if (fuelPhEl) _setIfChanged(fuelPhEl, fuelPh > 0 ? `+${fmtNumber(fuelPh)}/h` : "–");
-    }
+    applyPlanetHeroThemeFromState({ active_planet: data?.active_planet, overview });
 
     patchOverviewEnergyHint(overview, data);
+    patchOverviewWarnings(status?.warnings);
     if (status?.resources) {
       patchOverviewResourceBars(
         Number(status.resources.metal || 0),
@@ -2694,6 +2755,7 @@
         build: "/buildings",
         research: "/research",
         shipyard: "/shipyard",
+        defense: "/defense",
         fleet: "/fleet",
       };
       if (map[key]) return map[key];
@@ -2719,7 +2781,7 @@
       actList.dataset.actSig = activitySignature(activities);
       activities.forEach((act) => {
         const li = document.createElement("li");
-        li.className = `overview-activity-row overview-activity-${act.key} overview-activity-${act.state || "idle"}`;
+        li.className = `overview-activity-card overview-activity-row overview-activity-${act.key} overview-activity-${act.state || "idle"}`;
         li.dataset.activityKey = act.key;
         const endAt = Number(act.countdown_at || act.finish_at || 0);
         if (endAt) li.dataset.finishAt = String(endAt);

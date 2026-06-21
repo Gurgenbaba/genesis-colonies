@@ -72,6 +72,10 @@ def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
     temp = temperature_range_for_class(planet_class)
     is_homeworld = bool(int(planet.get("is_homeworld") or 0))
     coords = get_planet_coordinates(planet)
+    position = int(coords.get("position") or 0)
+    from .planet_visuals import planet_theme_for_planet
+
+    theme = planet_theme_for_planet({**planet, "position": position})
     return {
         "planet_id": _safe_int(planet.get("id")),
         "name": str(planet.get("name") or "Kolonie"),
@@ -86,6 +90,7 @@ def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
             "display": coords["formatted"],
         },
         "temperature": temp,
+        "theme": theme,
     }
 
 
@@ -176,6 +181,7 @@ def build_activity_lines(
     research: Dict[str, Any],
     *,
     shipyard_queue: Optional[Dict[str, Any]] = None,
+    defense_queue: Optional[Dict[str, Any]] = None,
     fleet_movements: Optional[List[Dict[str, Any]]] = None,
     now: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
@@ -272,12 +278,44 @@ def build_activity_lines(
             )
         )
 
+    def_jobs = []
+    if isinstance(defense_queue, dict):
+        raw_def = defense_queue.get("queue")
+        if isinstance(raw_def, list):
+            def_jobs = raw_def
+    if def_jobs:
+        head = def_jobs[0]
+        dk = str(head.get("defense_key") or "")
+        amt = _safe_int(head.get("amount_remaining") or head.get("amount"))
+        lines.append(
+            _build_activity_line(
+                key="defense",
+                state="active",
+                summary=f"×{amt}" if amt else "",
+                remaining=_safe_int(head.get("remaining")),
+                finish_at=_safe_int(head.get("finish_at")),
+                href_key="defense_view",
+                label_key=f"defense_{dk}" if dk else "overview_activity_defense",
+            )
+        )
+    else:
+        lines.append(
+            _build_activity_line(
+                key="defense",
+                state="idle",
+                summary="",
+                href_key="defense_view",
+                label_key="overview_defense_idle",
+            )
+        )
+
     lines.extend(_fleet_movement_activity_lines(fleet_movements or [], now=now))
     return lines
 
 
 def build_overview_warnings(
     *,
+    user_id: int,
     ratio: float,
     energy_total: int,
     metal: float,
@@ -286,6 +324,8 @@ def build_overview_warnings(
     storage_caps: Dict[str, Any],
     build_queue: Dict[str, Any],
     research: Dict[str, Any],
+    fleet_movements: Optional[List[Dict[str, Any]]] = None,
+    conn=None,
 ) -> List[Dict[str, Any]]:
     warnings: List[Dict[str, Any]] = []
 
@@ -319,6 +359,56 @@ def build_overview_warnings(
         limit = _safe_int(rs_summary.get("limit"), 1)
         if limit > 0 and count >= limit:
             warnings.append({"key": "research_queue_full", "severity": "info", "label_key": "overview_warning_queue_full_research"})
+
+    try:
+        from .options import _player_safety_row
+
+        if conn is not None:
+            row = _player_safety_row(int(user_id), conn)
+            if bool(int(row.get("vacation_mode_active") or 0)):
+                warnings.append(
+                    {
+                        "key": "vacation_mode",
+                        "severity": "info",
+                        "label_key": "overview_warning_vacation",
+                        "href_key": "options_view",
+                    }
+                )
+    except Exception:
+        pass
+
+    fleet_active = 0
+    for mv in fleet_movements or []:
+        if not isinstance(mv, dict):
+            continue
+        if str(mv.get("status") or "") in ("outbound", "holding", "returning"):
+            fleet_active += 1
+    if fleet_active > 0:
+        warnings.append(
+            {
+                "key": "fleet_active",
+                "severity": "info",
+                "label_key": "overview_warning_fleet_active",
+                "href_key": "fleet_view",
+                "count": fleet_active,
+            }
+        )
+
+    try:
+        if conn is not None:
+            from .vote_rewards import count_voteable_providers, vote_system_ready
+
+            if vote_system_ready(conn) and count_voteable_providers(int(user_id), conn=conn) > 0:
+                warnings.append(
+                    {
+                        "key": "vote_available",
+                        "severity": "info",
+                        "label_key": "overview_warning_vote_available",
+                        "href_key": "vote_center_view",
+                    }
+                )
+    except Exception:
+        pass
 
     return warnings
 
@@ -360,8 +450,9 @@ def _load_overview_queue_fleet(
     planet_id: int,
     *,
     conn=None,
-) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+) -> tuple[Dict[str, Any], Dict[str, Any], List[Dict[str, Any]]]:
     shipyard_queue: Dict[str, Any] = {}
+    defense_queue: Dict[str, Any] = {}
     fleet_movements: List[Dict[str, Any]] = []
     own = conn is None
     if own:
@@ -384,12 +475,18 @@ def _load_overview_queue_fleet(
             shipyard_queue = shipyard_queue_for_client(
                 int(user_id), int(planet_id), sy_level, conn=conn
             )
+        from .defense import defense_queue_for_client, defense_queue_table_ready
+
+        if defense_queue_table_ready(conn):
+            defense_queue = defense_queue_for_client(
+                int(user_id), int(planet_id), conn=conn
+            )
     except Exception:
         pass
     finally:
         if own and conn is not None:
             conn.close()
-    return shipyard_queue, fleet_movements
+    return shipyard_queue, defense_queue, fleet_movements
 
 
 def build_overview_status(
@@ -407,6 +504,7 @@ def build_overview_status(
     include_log: bool = True,
     conn=None,
     shipyard_queue: Optional[Dict[str, Any]] = None,
+    defense_queue: Optional[Dict[str, Any]] = None,
     fleet_movements: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     metal_ph = _safe_int(prod_per_hour.get("metal_mine") if isinstance(prod_per_hour, dict) else 0)
@@ -423,12 +521,14 @@ def build_overview_status(
         energy_hint = "critical"
 
     planet_id = _safe_int(planet.get("id"))
-    if shipyard_queue is None or fleet_movements is None:
-        loaded_sy, loaded_fleet = _load_overview_queue_fleet(
+    if shipyard_queue is None or defense_queue is None or fleet_movements is None:
+        loaded_sy, loaded_def, loaded_fleet = _load_overview_queue_fleet(
             int(user_id), planet_id, conn=conn
         )
         if shipyard_queue is None:
             shipyard_queue = loaded_sy
+        if defense_queue is None:
+            defense_queue = loaded_def
         if fleet_movements is None:
             fleet_movements = loaded_fleet
 
@@ -461,9 +561,11 @@ def build_overview_status(
             build_queue,
             research,
             shipyard_queue=shipyard_queue,
+            defense_queue=defense_queue,
             fleet_movements=fleet_movements,
         ),
         "warnings": build_overview_warnings(
+            user_id=int(user_id),
             ratio=float(ratio or 1.0),
             energy_total=int(energy_total or 0),
             metal=float(player_view.get("metal") or 0),
@@ -472,6 +574,8 @@ def build_overview_status(
             storage_caps=storage_caps if isinstance(storage_caps, dict) else {},
             build_queue=build_queue if isinstance(build_queue, dict) else {},
             research=research if isinstance(research, dict) else {},
+            fleet_movements=fleet_movements,
+            conn=conn,
         ),
     }
 

@@ -315,7 +315,8 @@ def test_main_js_gc802_planet_switch_state_sync():
     assert "applyHudOnlyGameState" in apply_body
     assert "isHudOnlyGameStateReason" in apply_body
     overview = _read("templates/overview.html")
-    assert 'overview-wrapper" data-planet-id="{{ planet.planet_id or 0 }}"' in overview
+    assert "overview-wrapper" in overview
+    assert 'data-planet-id="{{ planet.planet_id or 0 }}"' in overview
 
 
 def test_main_js_gc742_ssr_skip_init_game_state():
@@ -396,7 +397,7 @@ def test_gc744_resource_icons_use_webp_picture():
     assert "loading=\"lazy\"" in macro
     assert "loading=\"eager\"" in macro
     overview = _read("templates/overview.html")
-    assert "render_resource_icon('metal', 'xl', lazy=false, priority='high')" in overview
+    assert "render_resource_icon('metal', 'sm', lazy=false, priority='high')" in overview
     base = _read("templates/base.html")
     assert "render_resource_icon('metal', hud=true, lazy=false, priority='high'" in base
 
@@ -622,7 +623,8 @@ def test_main_js_gc631_formatted_unit_inputs_and_queue_clear():
     assert "GC.readNumberInput = readNumberInput" in src
     shipyard_bind = src.split("function bindShipyardOnce()")[1].split("function initShipyard")[0]
     assert "readNumberInput(qtyInp)" in shipyard_bind
-    assert "parseIntNumber(maxBtn.dataset.maxQty" in shipyard_bind
+    assert "maxBtn.dataset.maxQty" in shipyard_bind
+    assert "parseIntNumber(" in shipyard_bind
     assert "function clearProductionCardQueueState(card)" in src
     patch_sy = src.split("function patchShipyardCardQueues(page, queueData)")[1].split("function shipyardIconUrl")[0]
     assert "queueData?.card_jobs_by_owner" in patch_sy
@@ -1309,7 +1311,7 @@ def test_gc551a_fuel_cell_icon_and_hero_level_badge():
     assert "rgba(5, 14, 24" in hero_badge or "rgb(6, 12, 26)" in hero_badge
     assert ".hud-res-fuel-cells .res-icon" in css
     assert "gc-res-fuel-cells" in css
-    assert "render_resource_icon('fuel_cells', 'xl'" in _read("templates/overview.html")
+    assert "render_resource_icon('fuel_cells', 'sm'" in _read("templates/overview.html")
     assert "render_resource_icon" in _read("templates/base.html")
     assert Path("static/img/buildings/academy.png").stat().st_size > 100_000
 

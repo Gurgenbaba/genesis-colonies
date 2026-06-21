@@ -4769,13 +4769,14 @@ def _payload_from_live_context(
         from game.planet_evolution.dna import effective_planet_class
         from game.planet_evolution.ux_copy import planet_class_label_key
 
-        from game.planet_visuals import get_landscape_for_position, raster_webp_relpath
+        from game.planet_visuals import get_landscape_for_position, get_planet_identity_for_position, raster_webp_relpath
 
         coords = get_planet_coordinates(planet)
         position = int(coords.get("position") or 0)
         landscape_fn = get_landscape_for_position(position)
         landscape_rel = f"img/landscapes/{landscape_fn}"
         planet_class = effective_planet_class(planet)
+        theme = get_planet_identity_for_position(position)
         from game.planet_evolution.empire_identity import empire_identity_for_planet
         from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
 
@@ -4790,6 +4791,9 @@ def _payload_from_live_context(
             "position": position,
             "landscape_url": url_for("static", filename=landscape_rel),
             "landscape_webp_url": url_for("static", filename=raster_webp_relpath(landscape_rel)),
+            "accent_color": theme["accent_color"],
+            "secondary_color": theme["secondary_color"],
+            "planet_effect": theme["effect"],
             **identity,
             "sidebar_nav": resolve_sidebar_nav(
                 empire_role_key=identity["empire_role_key"],
@@ -4797,9 +4801,10 @@ def _payload_from_live_context(
             ),
         }
     except Exception:
-        from game.planet_visuals import DEFAULT_LANDSCAPE, raster_webp_relpath
+        from game.planet_visuals import DEFAULT_LANDSCAPE, get_planet_identity_for_position, raster_webp_relpath
 
         fallback_rel = f"img/landscapes/{DEFAULT_LANDSCAPE}"
+        fallback_theme = get_planet_identity_for_position(0)
         from game.planet_evolution.empire_identity import empire_identity_for_planet
         from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
 
@@ -4814,6 +4819,9 @@ def _payload_from_live_context(
             "position": None,
             "landscape_url": url_for("static", filename=fallback_rel),
             "landscape_webp_url": url_for("static", filename=raster_webp_relpath(fallback_rel)),
+            "accent_color": fallback_theme["accent_color"],
+            "secondary_color": fallback_theme["secondary_color"],
+            "planet_effect": fallback_theme["effect"],
             **identity,
             "sidebar_nav": resolve_sidebar_nav(
                 empire_role_key=identity["empire_role_key"],
