@@ -788,6 +788,7 @@
   "overview_label_planet": "Kolonie",
   "overview_label_coordinates": "Koordinaten",
   "overview_label_temperature": "Temperatur",
+  "overview_climate_solar": "Solarenergie",
   "overview_label_fields": "Bebaute Felder",
   "overview_label_energy": "Energie-Bilanz",
   "overview_label_capacity": "Kapazität",

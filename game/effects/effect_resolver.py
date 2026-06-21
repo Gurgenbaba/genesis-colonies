@@ -200,6 +200,7 @@ class EffectResolver:
         settings: Optional[Dict[str, Any]] = None,
         player_id: Optional[int] = None,
         planet_id: Optional[int] = None,
+        planet_position: Optional[int] = None,
         galaxy_id: Optional[int] = None,
         conn=None,
     ) -> None:
@@ -207,6 +208,14 @@ class EffectResolver:
         self.research = dict(research or {})
         self.player_id = int(player_id) if player_id is not None else None
         self.planet_id = int(planet_id) if planet_id is not None else None
+        if planet_position is not None:
+            try:
+                pos = int(planet_position)
+                self.planet_position = pos if 1 <= pos <= 15 else None
+            except (TypeError, ValueError):
+                self.planet_position = None
+        else:
+            self.planet_position = None
         self._conn = conn
         if galaxy_id is not None:
             try:
@@ -230,12 +239,15 @@ class EffectResolver:
             settings = get_game_settings()
         galaxy_raw = planet.get("galaxy")
         galaxy_id = int(galaxy_raw) if galaxy_raw is not None else None
+        position_raw = planet.get("position")
+        planet_position = int(position_raw) if position_raw not in (None, "") else None
         return cls(
             buildings,
             research,
             settings=settings,
             player_id=int(player_id),
             planet_id=int(planet["id"]),
+            planet_position=planet_position,
             galaxy_id=galaxy_id,
             conn=conn,
         )
@@ -418,6 +430,29 @@ class EffectResolver:
             "solar_output_factor": applied["solar_output_factor"],
         }
 
+    def _apply_climate_modifiers(
+        self,
+        values: Dict[str, float],
+        sources: List[Dict[str, Any]],
+    ) -> Dict[str, float]:
+        """Galaxy slot climate — hot slots boost solar/metal, cold slots boost crystal (GC-811C)."""
+        pos = self.planet_position
+        if pos is None:
+            return values
+
+        from ..planet_visuals import climate_economy_modifiers_for_position
+
+        climate = climate_economy_modifiers_for_position(pos)
+        label = f"climate:{climate['label_key']}"
+        out = dict(values)
+        for key in ("solar_output_factor", "metal_prod_factor", "crystal_prod_factor", "fuel_prod_factor"):
+            factor = float(climate[key])
+            if abs(factor - 1.0) < 1e-9:
+                continue
+            out[key] = float(out.get(key, 1.0)) * factor
+            sources.append(self._source_entry(key, label, factor, pos))
+        return out
+
     def get_modifiers(self) -> Dict[str, float]:
         if self._mods is not None:
             return self._mods
@@ -549,6 +584,44 @@ class EffectResolver:
         if radar > 0:
             scan_range += 2 * radar
             sources.append(self._source_entry("scan_range", "radar_array", scan_range, radar, prepared=True))
+
+        climate_state = self._apply_climate_modifiers(
+            {
+                "mine_energy_factor": mine_energy_factor,
+                "metal_prod_factor": metal_prod_factor,
+                "crystal_prod_factor": crystal_prod_factor,
+                "fuel_prod_factor": fuel_prod_factor,
+                "storage_factor": storage_factor,
+                "build_time_speed": build_time_speed,
+                "research_time_speed": research_time_speed,
+                "solar_output_factor": solar_output_factor,
+                "weapon_bonus": weapon_bonus,
+                "armor_bonus": armor_bonus,
+                "shield_bonus": shield_bonus,
+                "fleet_speed_multiplier": fleet_speed_multiplier,
+                "cargo_multiplier": cargo_multiplier,
+                "fuel_efficiency_factor": fuel_efficiency_factor,
+                "shipyard_time_speed": shipyard_time_speed,
+                "defense_time_speed": defense_time_speed,
+            },
+            sources,
+        )
+        mine_energy_factor = climate_state["mine_energy_factor"]
+        metal_prod_factor = climate_state["metal_prod_factor"]
+        crystal_prod_factor = climate_state["crystal_prod_factor"]
+        fuel_prod_factor = climate_state["fuel_prod_factor"]
+        storage_factor = climate_state["storage_factor"]
+        build_time_speed = climate_state["build_time_speed"]
+        research_time_speed = climate_state["research_time_speed"]
+        solar_output_factor = climate_state["solar_output_factor"]
+        weapon_bonus = climate_state["weapon_bonus"]
+        armor_bonus = climate_state["armor_bonus"]
+        shield_bonus = climate_state["shield_bonus"]
+        fleet_speed_multiplier = climate_state["fleet_speed_multiplier"]
+        cargo_multiplier = climate_state["cargo_multiplier"]
+        fuel_efficiency_factor = climate_state["fuel_efficiency_factor"]
+        shipyard_time_speed = climate_state["shipyard_time_speed"]
+        defense_time_speed = climate_state["defense_time_speed"]
 
         gd_state = self._apply_gd_er_mods(
             {
@@ -948,22 +1021,38 @@ def get_effect_resolver(
     conn=None,
     settings: Optional[Dict[str, Any]] = None,
     force_refresh: bool = False,
+    planet: Optional[Dict[str, Any]] = None,
 ) -> EffectResolver:
     """
     Build a fresh EffectResolver (no cross-request cache).
     force_refresh kept for API compatibility; always loads current DB state.
+    Pass ``planet`` when resolving a specific colony (not only context planet).
     """
     del force_refresh  # no cache layer — always authoritative from DB inputs
 
     if buildings is not None and research is not None:
         planet_id = None
+        planet_position = None
         galaxy_id = None
-        if conn is not None:
+        planet_row = planet
+        if planet_row is None and conn is not None:
             try:
-                planet = get_context_planet(player_id=int(player_id), conn=conn)
-                planet_id = int(planet["id"])
-                if planet.get("galaxy") is not None:
-                    galaxy_id = int(planet["galaxy"])
+                planet_row = get_context_planet(player_id=int(player_id), conn=conn)
+            except Exception:
+                planet_row = None
+        if planet_row is not None:
+            try:
+                planet_id = int(planet_row["id"])
+            except (TypeError, ValueError, KeyError):
+                planet_id = None
+            try:
+                from ..galaxy import get_planet_coordinates
+
+                coords = get_planet_coordinates(planet_row)
+                if coords.get("position") is not None:
+                    planet_position = int(coords["position"])
+                if coords.get("galaxy") is not None:
+                    galaxy_id = int(coords["galaxy"])
             except Exception:
                 pass
         return EffectResolver(
@@ -972,6 +1061,7 @@ def get_effect_resolver(
             settings=settings,
             player_id=int(player_id),
             planet_id=planet_id,
+            planet_position=planet_position,
             galaxy_id=galaxy_id,
             conn=conn,
         )

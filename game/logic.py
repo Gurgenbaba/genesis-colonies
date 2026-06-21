@@ -77,6 +77,7 @@ def _read_player_live_state_no_writes(
         research=research,
         conn=conn,
         force_refresh=True,
+        planet=planet,
     )
     energy_total, energy_used = resolver.compute_energy()
     ratio = EffectResolver.energy_ratio(energy_total, energy_used)

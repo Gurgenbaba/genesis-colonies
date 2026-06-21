@@ -842,6 +842,28 @@
       slotBadge.textContent = t(labelKey, labelKey);
       hero.dataset.slotLabelKey = labelKey;
     }
+
+    const tempEl = document.getElementById("overview-planet-temp");
+    if (tempEl) {
+      const tempDisplay = String(statusPlanet.temperature?.display || "").trim();
+      const solarPct = Number(statusPlanet.climate?.solar_bonus_pct || 0);
+      tempEl.replaceChildren();
+      if (tempDisplay) tempEl.appendChild(document.createTextNode(tempDisplay));
+      let climateEl = document.getElementById("overview-planet-climate");
+      if (solarPct !== 0) {
+        if (tempDisplay) tempEl.appendChild(document.createTextNode(" · "));
+        if (!climateEl) {
+          climateEl = document.createElement("span");
+          climateEl.id = "overview-planet-climate";
+          climateEl.className = "overview-climate-hint hint gc-mono";
+        }
+        const sign = solarPct > 0 ? "+" : "";
+        climateEl.textContent = `${t("overview_climate_solar", "Solarenergie")} ${sign}${solarPct}%`;
+        tempEl.appendChild(climateEl);
+      } else if (climateEl) {
+        climateEl.remove();
+      }
+    }
   }
 
   /** GC-548 — SSR/PJAX landscape before first game-state poll (perf-idle must not hide it). */

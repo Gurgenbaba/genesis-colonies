@@ -5,6 +5,14 @@ from __future__ import annotations
 from typing import Any, Dict, TypedDict
 
 
+class ClimateEconomyModifiers(TypedDict):
+    solar_output_factor: float
+    metal_prod_factor: float
+    crystal_prod_factor: float
+    fuel_prod_factor: float
+    label_key: str
+
+
 class PlanetIdentity(TypedDict):
     landscape: str
     herocard: str
@@ -52,6 +60,26 @@ _TEMPERATURE_BY_POSITION: Dict[int, tuple[int, int]] = {
     15: (-240, -175),
 }
 _DEFAULT_TEMPERATURE = _TEMPERATURE_BY_POSITION[8]
+
+# Slot 8 = baseline economy; slot 1 = hot (more solar/metal), slot 15 = cold (less solar, more crystal).
+_CLIMATE_ECONOMY_BY_POSITION: Dict[int, ClimateEconomyModifiers] = {
+    1: {"solar_output_factor": 1.42, "metal_prod_factor": 1.14, "crystal_prod_factor": 0.90, "fuel_prod_factor": 1.12, "label_key": "planet_slot_01"},
+    2: {"solar_output_factor": 1.34, "metal_prod_factor": 1.10, "crystal_prod_factor": 0.92, "fuel_prod_factor": 1.08, "label_key": "planet_slot_02"},
+    3: {"solar_output_factor": 1.26, "metal_prod_factor": 1.06, "crystal_prod_factor": 0.94, "fuel_prod_factor": 1.04, "label_key": "planet_slot_03"},
+    4: {"solar_output_factor": 1.18, "metal_prod_factor": 1.08, "crystal_prod_factor": 0.96, "fuel_prod_factor": 1.00, "label_key": "planet_slot_04"},
+    5: {"solar_output_factor": 1.12, "metal_prod_factor": 1.06, "crystal_prod_factor": 0.98, "fuel_prod_factor": 0.98, "label_key": "planet_slot_05"},
+    6: {"solar_output_factor": 1.08, "metal_prod_factor": 1.04, "crystal_prod_factor": 1.00, "fuel_prod_factor": 0.96, "label_key": "planet_slot_06"},
+    7: {"solar_output_factor": 1.04, "metal_prod_factor": 1.02, "crystal_prod_factor": 1.00, "fuel_prod_factor": 0.94, "label_key": "planet_slot_07"},
+    8: {"solar_output_factor": 1.00, "metal_prod_factor": 1.00, "crystal_prod_factor": 1.00, "fuel_prod_factor": 1.00, "label_key": "planet_slot_08"},
+    9: {"solar_output_factor": 0.98, "metal_prod_factor": 1.00, "crystal_prod_factor": 1.02, "fuel_prod_factor": 1.00, "label_key": "planet_slot_09"},
+    10: {"solar_output_factor": 0.96, "metal_prod_factor": 0.98, "crystal_prod_factor": 1.04, "fuel_prod_factor": 1.02, "label_key": "planet_slot_10"},
+    11: {"solar_output_factor": 0.94, "metal_prod_factor": 0.96, "crystal_prod_factor": 1.06, "fuel_prod_factor": 1.04, "label_key": "planet_slot_11"},
+    12: {"solar_output_factor": 0.82, "metal_prod_factor": 0.94, "crystal_prod_factor": 1.08, "fuel_prod_factor": 0.90, "label_key": "planet_slot_12"},
+    13: {"solar_output_factor": 0.72, "metal_prod_factor": 0.90, "crystal_prod_factor": 1.12, "fuel_prod_factor": 0.84, "label_key": "planet_slot_13"},
+    14: {"solar_output_factor": 0.62, "metal_prod_factor": 0.86, "crystal_prod_factor": 1.16, "fuel_prod_factor": 0.78, "label_key": "planet_slot_14"},
+    15: {"solar_output_factor": 0.50, "metal_prod_factor": 0.82, "crystal_prod_factor": 1.20, "fuel_prod_factor": 0.72, "label_key": "planet_slot_15"},
+}
+_DEFAULT_CLIMATE_ECONOMY = _CLIMATE_ECONOMY_BY_POSITION[8]
 
 # Position 1 = warmest galaxy slot, 15 = coldest — same order as landscapes + hero cards.
 _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
@@ -246,6 +274,34 @@ def temperature_range_for_position(position: Any) -> Dict[str, Any]:
     }
 
 
+def climate_economy_modifiers_for_position(position: Any) -> ClimateEconomyModifiers:
+    """Production/energy multipliers keyed by galaxy slot (EffectResolver climate layer)."""
+    pos = _normalize_position(position)
+    if pos is None:
+        return dict(_DEFAULT_CLIMATE_ECONOMY)
+    row = _CLIMATE_ECONOMY_BY_POSITION.get(pos)
+    if not row:
+        return dict(_DEFAULT_CLIMATE_ECONOMY)
+    return dict(row)
+
+
+def climate_economy_display_for_position(position: Any) -> Dict[str, int]:
+    """Rounded bonus percentages for UI (relative to slot-8 baseline)."""
+    mods = climate_economy_modifiers_for_position(position)
+
+    def _pct(factor: float) -> int:
+        return int(round((float(factor) - 1.0) * 100))
+
+    return {
+        "position": _normalize_position(position) or 0,
+        "label_key": mods["label_key"],
+        "solar_bonus_pct": _pct(mods["solar_output_factor"]),
+        "metal_bonus_pct": _pct(mods["metal_prod_factor"]),
+        "crystal_bonus_pct": _pct(mods["crystal_prod_factor"]),
+        "fuel_bonus_pct": _pct(mods["fuel_prod_factor"]),
+    }
+
+
 def herocard_static_relpath(position: int) -> str:
     """Relative static path for overview hero card art (position 1–15)."""
     fn = get_planet_identity_for_position(position)["herocard"]
@@ -316,4 +372,5 @@ def planet_theme_for_planet(planet: dict | None) -> Dict[str, Any]:
         "herocard_relpath": herocard_rel,
         "herocard_webp_relpath": raster_webp_relpath(herocard_rel),
         "label_key": ident["label_key"],
+        "climate": climate_economy_display_for_position(pos),
     }

@@ -49,6 +49,21 @@ Aufgerufen von:
 - **Demand:** `metal_mine`, `crystal_mine`, `fuel_cell_plant`
 - **Skalierung:** `energy_ratio = min(1, total/used)` drosselt alle Produktionsraten
 - **`energy_tech`:** reduziert nur Minen-Verbrauch (`mine_energy_factor`)
+- **Klima (Galaxie-Slot 1–15):** `planet_visuals.climate_economy_modifiers_for_position` → `EffectResolver` multipliziert `solar_output_factor` (Slot 1 ≈ +42 % Solar, Slot 15 ≈ −50 %). Gleiche Quelle wie Temperatur/Hero-Theme.
+
+---
+
+## Klima & Produktion (Galaxie-Slot)
+
+Slot **1** (wärmste Welt) → mehr Solar/Ferronit/Brennzellen; Slot **15** (kälteste) → weniger Solar/Ferronit, mehr Crytite.
+
+| Slot | Solar | Ferronit | Crytite | Brennzellen |
+|------|-------|----------|---------|-------------|
+| 1 | +42 % | +14 % | −10 % | +12 % |
+| 8 | ±0 % | ±0 % | ±0 % | ±0 % |
+| 15 | −50 % | −18 % | +20 % | −28 % |
+
+Owner: `game/planet_visuals.py` (Tabellen) · angewendet in `EffectResolver.get_modifiers()` vor Galactic Directives.
 
 ---
 

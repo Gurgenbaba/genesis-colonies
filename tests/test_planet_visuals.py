@@ -137,3 +137,20 @@ def test_planet_theme_default_keys() -> None:
     theme = planet_theme_for_planet({})
     assert theme["theme_key"] == DEFAULT_THEME_KEY
     assert theme["theme_group"] == DEFAULT_THEME_GROUP
+    assert theme["climate"]["solar_bonus_pct"] == 0
+
+
+def test_climate_economy_monotonic_solar() -> None:
+    from game.planet_visuals import climate_economy_modifiers_for_position
+
+    prev_solar = None
+    for pos in range(1, 16):
+        mods = climate_economy_modifiers_for_position(pos)
+        solar = mods["solar_output_factor"]
+        if prev_solar is not None:
+            assert solar < prev_solar
+        prev_solar = solar
+
+    assert climate_economy_modifiers_for_position(1)["solar_output_factor"] > 1.3
+    assert climate_economy_modifiers_for_position(15)["solar_output_factor"] < 0.55
+    assert climate_economy_modifiers_for_position(8)["solar_output_factor"] == 1.0

@@ -1206,6 +1206,7 @@
   "overview_label_planet": "Colony",
   "overview_label_coordinates": "Coordinates",
   "overview_label_temperature": "Temperature",
+  "overview_climate_solar": "Solar energy",
   "overview_label_fields": "Developed Fields",
   "overview_label_energy": "Energy Balance",
   "overview_label_capacity": "Storage Capacity",

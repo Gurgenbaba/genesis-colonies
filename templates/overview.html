@@ -87,7 +87,16 @@
       </div>
       <div class="overview-meta-item">
         <dt>{{ T("overview_label_temperature", "Temperatur") }}</dt>
-        <dd id="overview-planet-temp">{{ planet.temperature.display if planet.temperature is defined else '–' }}</dd>
+        <dd id="overview-planet-temp">
+          {{ planet.temperature.display if planet.temperature is defined else '–' }}
+          {% set climate = planet.climate if planet.climate is defined else {} %}
+          {% set solar_pct = climate.solar_bonus_pct if climate.solar_bonus_pct is defined else 0 %}
+          {% if solar_pct != 0 %}
+          <span class="overview-climate-hint hint gc-mono" id="overview-planet-climate">
+            · {{ T("overview_climate_solar", "Solarenergie") }} {% if solar_pct > 0 %}+{% endif %}{{ solar_pct }}%
+          </span>
+          {% endif %}
+        </dd>
       </div>
     </dl>
 

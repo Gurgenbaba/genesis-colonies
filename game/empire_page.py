@@ -329,12 +329,20 @@ def _build_colony_snapshot(
 ) -> Dict[str, Any]:
     planet_id = _safe_int(planet.get("id"))
     buildings = get_planet_buildings(planet_id, conn=conn)
+    from .galaxy import get_planet_coordinates
+
+    coords = get_planet_coordinates(planet)
+    position = int(coords.get("position") or 0) or None
+    galaxy_id = int(coords.get("galaxy") or 0) or None
     resolver = EffectResolver(
         buildings,
         research,
         settings=settings,
         player_id=int(player_id),
         planet_id=planet_id,
+        planet_position=position,
+        galaxy_id=galaxy_id,
+        conn=conn,
     )
     energy_total, energy_used = resolver.compute_energy()
     ratio = EffectResolver.energy_ratio(energy_total, energy_used)

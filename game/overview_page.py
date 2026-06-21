@@ -76,6 +76,7 @@ def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
     temp = temperature_range_for_position(position)
     is_homeworld = bool(int(planet.get("is_homeworld") or 0))
     theme = planet_theme_for_planet({**planet, "position": position})
+    climate = theme.get("climate") or {}
     return {
         "planet_id": _safe_int(planet.get("id")),
         "name": str(planet.get("name") or "Kolonie"),
@@ -90,6 +91,7 @@ def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
             "display": coords["formatted"],
         },
         "temperature": temp,
+        "climate": climate,
         "theme": theme,
     }
 

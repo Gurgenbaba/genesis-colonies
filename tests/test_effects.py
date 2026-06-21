@@ -25,6 +25,7 @@ from game.effects import (
     PREPARED_MODIFIER_KEYS,
     EffectResolver,
     clear_effect_resolver_cache,
+    get_effect_resolver,
 )
 from game.models import (
     add_build_job,
@@ -783,6 +784,46 @@ class TestResearchEffectRealityAudit:
         assert 0.60 <= crystal_ph / metal_ph <= 0.68
         assert 0.34 <= fuel_ph / metal_ph <= 0.42
         assert 0.52 <= fuel_ph / crystal_ph <= 0.68
+
+
+class TestClimateEconomyModifiers:
+    def test_hot_slot_boosts_solar_and_metal(self):
+        b = {"solar_plant": 10, "metal_mine": 8, "crystal_mine": 8}
+        baseline = EffectResolver(b, {}, planet_position=8)
+        inferno = EffectResolver(b, {}, planet_position=1)
+        absolute_zero = EffectResolver(b, {}, planet_position=15)
+
+        base_solar, _ = baseline.compute_energy()
+        hot_solar, _ = inferno.compute_energy()
+        cold_solar, _ = absolute_zero.compute_energy()
+        assert hot_solar > base_solar > cold_solar
+
+        base_m, base_c = baseline.production_rates_per_sec()
+        hot_m, hot_c = inferno.production_rates_per_sec()
+        cold_m, cold_c = absolute_zero.production_rates_per_sec()
+        assert hot_m > base_m > cold_m
+        assert cold_c > base_c > hot_c
+
+        hot_mods = inferno.get_modifiers()
+        assert any(s.get("source", "").startswith("climate:") for s in inferno._sources)
+        assert hot_mods["solar_output_factor"] > baseline.get_modifiers()["solar_output_factor"]
+
+    def test_get_effect_resolver_uses_planet_position_not_only_context(self):
+        pid = _create_player("climate_planet")
+        planet = get_homeworld(player_id=pid)
+        from game.galaxy import get_planet_coordinates
+
+        coords = get_planet_coordinates(planet)
+        position = int(coords["position"])
+        b = _set_buildings(pid, {"solar_plant": 5})
+        r = get_research_levels(pid)
+        resolver = get_effect_resolver(pid, buildings=b, research=r, planet=planet)
+        assert resolver.planet_position == position
+        mods = resolver.get_modifiers()
+        from game.planet_visuals import climate_economy_modifiers_for_position
+
+        expected = climate_economy_modifiers_for_position(position)
+        assert mods["solar_output_factor"] == pytest.approx(expected["solar_output_factor"], rel=1e-6)
 
 
 class TestGalacticDirectiveEffectResolver:

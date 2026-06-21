@@ -246,6 +246,7 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
             research=research,
             conn=conn,
             force_refresh=True,
+            planet=planet,
         )
         mods = resolver.get_modifiers()
 
