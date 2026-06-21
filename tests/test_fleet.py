@@ -4743,6 +4743,7 @@ def test_fleet_ui_active_buttons_have_handlers():
         "applyFleetUrlPrefill",
         "syncExpeditionMissionTarget",
         "updateFleetFormMode",
+        "shouldShowExpeditionHours",
         "data-preview-mission-badge",
         "data-fleet-expedition-shortcut",
         "initHudSelects",
@@ -4771,6 +4772,10 @@ def test_quick_target_template_sets_coord_inputs():
     assert 'name="target_position"' in tpl
     assert "data-galaxy" in tpl and "data-fleet-quick-target-select" in tpl
     assert "data-fleet-expedition-shortcut" in tpl
+    mission_idx = tpl.index("data-fleet-mission")
+    expo_idx = tpl.index("data-fleet-expedition-hours-row")
+    speed_idx = tpl.index("data-fleet-speed")
+    assert mission_idx < expo_idx < speed_idx
     assert "fleet-colony-chip" not in tpl
     assert "render_fleet_slots_badge" in tpl
     assert "'strip'" in tpl

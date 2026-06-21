@@ -11391,6 +11391,9 @@ body.gc-techtree-media-zoom-open{
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+.fleet-mission-speed-row--compact:has([data-fleet-expedition-hours-row]:not([hidden])){
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr) minmax(0, 0.75fr);
+}
 .fleet-ogame-ships{
   padding: 0;
   overflow: visible;

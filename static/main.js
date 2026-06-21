@@ -12081,6 +12081,16 @@
       );
     };
 
+    const shouldShowExpeditionHours = (page, mission) => {
+      if (mission === "expedition") return true;
+      const form = getForm(page);
+      if (!form) return false;
+      const rt = getFleetRuntime(page);
+      const expPos = parseInt(rt.data.expedition_position || "16", 10);
+      const pos = parseInt(form.querySelector('[name="target_position"]')?.value || "0", 10);
+      return pos === expPos;
+    };
+
     const updateFleetFormMode = (page) => {
       const form = getForm(page);
       if (!form) return;
@@ -12089,7 +12099,7 @@
       const showResources = ["transport", "deploy", "colonize", "collect"].includes(mission);
       if (resFieldset) resFieldset.hidden = !showResources;
       const expoHoursRow = page.querySelector("[data-fleet-expedition-hours-row]");
-      if (expoHoursRow) expoHoursRow.hidden = mission !== "expedition";
+      if (expoHoursRow) expoHoursRow.hidden = !shouldShowExpeditionHours(page, mission);
       setColonizeRowVisible(page, mission);
       page.querySelectorAll(".fleet-ship-row[data-ship-role='recycle']").forEach((row) => {
         row.classList.toggle("fleet-ship-row--mission-focus", mission === "recycle");

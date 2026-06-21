@@ -131,14 +131,6 @@
                     {% endfor %}
                   </select>
                 </div>
-                <div class="fleet-form-row fleet-form-row--inline">
-                  <label class="fleet-form-label" for="fleet-speed">{{ T("fleet_speed_label") }}</label>
-                  <select id="fleet-speed" name="speed_percent" class="fleet-control" data-fleet-speed data-gc-hud-select>
-                    {% for sp in fleet_ctx.speed_options %}
-                    <option value="{{ sp }}" {% if sp == 100 %}selected{% endif %}>{{ sp }}%</option>
-                    {% endfor %}
-                  </select>
-                </div>
                 <div class="fleet-form-row fleet-form-row--inline" data-fleet-expedition-hours-row hidden>
                   <label class="fleet-form-label" for="fleet-expedition-hours">{{ T("fleet_expedition_hours_label", "Expeditionsdauer") }}</label>
                   <select id="fleet-expedition-hours" name="expedition_hours" class="fleet-control" data-fleet-expedition-hours data-gc-hud-select>
@@ -146,6 +138,14 @@
                     <option value="2">2 h</option>
                     <option value="3">3 h</option>
                     <option value="4">4 h</option>
+                  </select>
+                </div>
+                <div class="fleet-form-row fleet-form-row--inline">
+                  <label class="fleet-form-label" for="fleet-speed">{{ T("fleet_speed_label") }}</label>
+                  <select id="fleet-speed" name="speed_percent" class="fleet-control" data-fleet-speed data-gc-hud-select>
+                    {% for sp in fleet_ctx.speed_options %}
+                    <option value="{{ sp }}" {% if sp == 100 %}selected{% endif %}>{{ sp }}%</option>
+                    {% endfor %}
                   </select>
                 </div>
               </div>
