@@ -6,6 +6,7 @@ import re
 import sqlite3
 import subprocess
 import time
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -305,6 +306,8 @@ def _git_simple(repo_root: Path, *args: str) -> str:
 def repository_history_audit(*, repo_root: Path | None = None) -> Dict[str, Any]:
     """Summarize git repository history for admin diagnostics (GC-653)."""
     root = repo_root or _repo_root()
+    changelog_path = _changelog_path()
+    git_ok = _git_available(root)
     commits = _collect_git_log(root, all_refs=True)
     count_raw = _git_simple(root, "rev-list", "--count", "HEAD")
     try:
@@ -318,10 +321,9 @@ def repository_history_audit(*, repo_root: Path | None = None) -> Dict[str, Any]
 
     first = commits[0] if commits else None
     latest = commits[-1] if commits else None
-    changelog_path = root / "CHANGELOG.md"
-    changelog_text = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else ""
+    changelog_text = changelog_path.read_text(encoding="utf-8") if changelog_path.is_file() else ""
     release_dates = _changelog_release_dates(changelog_text, repo_root=root)
-    current_release = _latest_changelog_version(changelog_path) if changelog_path.exists() else ""
+    current_release = _latest_changelog_version(changelog_path) if changelog_path.is_file() else ""
     release_ts = int(release_dates.get(current_release) or 0)
     dev_commits = 0
     if release_ts:
@@ -331,6 +333,10 @@ def repository_history_audit(*, repo_root: Path | None = None) -> Dict[str, Any]
 
     return {
         "ok": True,
+        "repo_root": str(root),
+        "git_available": git_ok,
+        "changelog_path": str(changelog_path),
+        "changelog_exists": changelog_path.is_file(),
         "commit_count": commit_count,
         "branch_count": len(branches),
         "tag_count": len(tags),
@@ -1069,7 +1075,15 @@ def import_changelog_markdown(
     conn: sqlite3.Connection | None = None,
 ) -> Dict[str, Any]:
     """Parse CHANGELOG.md version sections into universe_news rows (idempotent per version)."""
-    changelog_path = path or (Path(__file__).resolve().parent.parent / "CHANGELOG.md")
+    changelog_path = _changelog_path(path)
+    if not changelog_path.is_file():
+        return {
+            "ok": False,
+            "error": "changelog_not_found",
+            "path": str(changelog_path),
+            "inserted": 0,
+            "skipped_versions": [],
+        }
     text = changelog_path.read_text(encoding="utf-8")
     own = conn is None
     if own:
@@ -1187,14 +1201,57 @@ def import_changelog_markdown(
 
         if own:
             conn.commit()
-        return {"ok": True, "inserted": inserted, "skipped_versions": skipped_versions}
+        return {
+            "ok": True,
+            "inserted": inserted,
+            "skipped_versions": skipped_versions,
+            "changelog_path": str(changelog_path),
+        }
     finally:
         if own:
             conn.close()
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+    """Repository root for CHANGELOG + git history imports (Docker/VPS/git clone safe)."""
+    env = os.environ.get("GC_REPO_ROOT", "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+
+    code_root = Path(__file__).resolve().parent.parent
+    git_top = _git_simple(code_root, "rev-parse", "--show-toplevel")
+    if git_top:
+        return Path(git_top).resolve()
+
+    cur = code_root
+    for _ in range(8):
+        if (cur / ".git").exists():
+            return cur.resolve()
+        parent = cur.parent
+        if parent == cur:
+            break
+        cur = parent
+    return code_root.resolve()
+
+
+def _git_available(repo_root: Path | None = None) -> bool:
+    root = repo_root or _repo_root()
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0 and proc.stdout.strip().lower() == "true"
+
+
+def _changelog_path(path: Path | None = None) -> Path:
+    return path or (_repo_root() / "CHANGELOG.md")
 
 
 def _parse_changelog_version_tags(text: str) -> List[str]:
@@ -1260,6 +1317,8 @@ def _infer_category_from_commit(subject: str) -> str:
 
 def _collect_git_log(repo_root: Path | None = None, *, all_refs: bool = False) -> List[Dict[str, str]]:
     root = repo_root or _repo_root()
+    if not _git_available(root):
+        return []
     cmd = ["git", "log", "--reverse", "--date=short", "--pretty=format:%H|%ad|%s"]
     if all_refs:
         cmd.insert(2, "--all")
@@ -1304,9 +1363,21 @@ def import_git_history(
 ) -> Dict[str, Any]:
     """Import post-release git commits as development stream entries (idempotent via source_ref)."""
     root = repo_root or _repo_root()
-    last_release = str(after_version or _latest_changelog_version(root / "CHANGELOG.md")).strip()
+    last_release = str(after_version or _latest_changelog_version(_changelog_path())).strip()
     version_tag = "development"
+    git_ok = _git_available(root)
     all_commits = commits if commits is not None else _collect_git_log(root)
+    if commits is None and not git_ok:
+        return {
+            "ok": False,
+            "error": "git_unavailable",
+            "inserted": 0,
+            "skipped": 0,
+            "after_version": last_release,
+            "version_tag": version_tag,
+            "repo_root": str(root),
+            "git_available": False,
+        }
 
     own = conn is None
     if own:
@@ -1366,6 +1437,9 @@ def import_git_history(
             "skipped": skipped,
             "after_version": last_release,
             "version_tag": version_tag,
+            "repo_root": str(root),
+            "git_available": git_ok,
+            "commits_seen": len(all_commits),
         }
     finally:
         if own:
@@ -1383,16 +1457,21 @@ def import_full_history(
     own = conn is None
     with with_transaction(conn=conn, close=own) as tx:
         changelog = import_changelog_markdown(path=path, created_by=created_by, conn=tx)
+        if not changelog.get("ok"):
+            return changelog
         git = import_git_history(repo_root=repo_root, created_by=created_by, conn=tx)
         reclassified = reclassify_news_audience(conn=tx)
         synced = sync_release_dates(path=path, repo_root=repo_root, conn=tx)
+        git_inserted = int(git.get("inserted") or 0) if git.get("ok") else 0
         return {
             "ok": True,
             "changelog": changelog,
             "git": git,
             "reclassified": reclassified,
             "release_dates": synced,
-            "inserted": int(changelog.get("inserted") or 0) + int(git.get("inserted") or 0),
+            "inserted": int(changelog.get("inserted") or 0) + git_inserted,
+            "git_available": bool(git.get("git_available")),
+            "git_error": git.get("error") if not git.get("ok") else "",
         }
 
 

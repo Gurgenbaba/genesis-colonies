@@ -301,6 +301,8 @@ def test_latest_changelog_version_picks_highest_not_last_in_file(timeline_db):
 def test_repository_history_audit(timeline_db):
     audit = repository_history_audit()
     assert audit["ok"] is True
+    assert audit["git_available"] is True
+    assert audit["changelog_exists"] is True
     assert audit["commit_count"] > 0
     assert audit["first_commit_date"] == "2026-05-25"
     assert audit["current_release"] == "v0.8"
@@ -319,6 +321,27 @@ def test_import_full_history_commits_and_releases_lock(timeline_db):
     assert result["ok"] is True
     write_admin_audit(1, "test_after_import", payload={"inserted": result.get("inserted")})
     assert list_news(limit=500)
+
+
+def test_import_git_history_requires_git(timeline_db, monkeypatch):
+    monkeypatch.setattr("game.universe_news._git_available", lambda *_a, **_k: False)
+    result = import_git_history(after_version="v0.8", created_by=1)
+    assert result["ok"] is False
+    assert result["error"] == "git_unavailable"
+
+
+def test_import_changelog_missing_file(timeline_db, tmp_path):
+    missing = tmp_path / "missing.md"
+    result = import_changelog_markdown(path=missing, created_by=1)
+    assert result["ok"] is False
+    assert result["error"] == "changelog_not_found"
+
+
+def test_repo_root_honors_gc_repo_root_env(timeline_db, monkeypatch, tmp_path):
+    from game.universe_news import _repo_root
+
+    monkeypatch.setenv("GC_REPO_ROOT", str(tmp_path))
+    assert _repo_root() == tmp_path.resolve()
 
 
 def test_sidebar_template_has_release_fallback():

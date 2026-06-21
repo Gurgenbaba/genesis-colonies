@@ -654,6 +654,7 @@
     if (!data.ok) return;
     host.innerHTML = `
       <strong>${esc(t("admin_news_repo_title", "Repository-Historie"))}</strong>
+      · Git: ${data.git_available ? esc(t("admin_news_repo_git_ok", "verfügbar")) : esc(t("admin_news_repo_git_missing", "nicht verfügbar"))}
       · ${esc(t("admin_news_repo_commits", "Commits"))}: ${Number(data.commit_count || 0)}
       · ${esc(t("admin_news_repo_branches", "Branches"))}: ${Number(data.branch_count || 0)}
       · ${esc(t("admin_news_repo_tags", "Tags"))}: ${Number(data.tag_count || 0)}
@@ -732,13 +733,15 @@
   async function importAdminChangelog() {
     const res = await adminPost("/api/admin/universe-news/import-changelog", {});
     if (res.ok) {
+      const skipped = Array.isArray(res.skipped_versions) ? res.skipped_versions.length : 0;
+      const suffix = skipped ? ` · ${skipped} ${t("admin_news_import_skipped", "Versionen bereits vorhanden")}` : "";
       notify(
-        `${t("admin_news_import_ok", "CHANGELOG importiert.")} (+${res.inserted || 0})`,
+        `${t("admin_news_import_ok", "CHANGELOG importiert.")} (+${res.inserted || 0})${suffix}`,
         "success"
       );
       await loadAdminNews();
     } else {
-      showAlert(res.message || res.error, "error");
+      showAlert(res.message || res.error || t("admin_news_import_failed", "Import fehlgeschlagen."), "error");
     }
     return res;
   }
@@ -752,7 +755,10 @@
       );
       await loadAdminNews();
     } else {
-      showAlert(res.message || res.error, "error");
+      const msg = res.error === "git_unavailable"
+        ? t("admin_news_git_unavailable", "Git ist auf dem Server nicht verfügbar (Binary oder .git fehlt).")
+        : (res.message || res.error);
+      showAlert(msg, "error");
     }
     return res;
   }
@@ -760,13 +766,17 @@
   async function importAdminFullHistory() {
     const res = await adminPost("/api/admin/universe-news/import-full-history", {});
     if (res.ok) {
+      let suffix = "";
+      if (res.git_error === "git_unavailable") {
+        suffix = ` · ${t("admin_news_git_unavailable_short", "Git-Historie übersprungen")}`;
+      }
       notify(
-        `${t("admin_news_import_full_ok", "Vollständiger Import abgeschlossen.")} (+${res.inserted || 0})`,
+        `${t("admin_news_import_full_ok", "Vollständiger Import abgeschlossen.")} (+${res.inserted || 0})${suffix}`,
         "success"
       );
       await loadAdminNews();
     } else {
-      showAlert(res.message || res.error, "error");
+      showAlert(res.message || res.error || t("admin_news_import_failed", "Import fehlgeschlagen."), "error");
     }
     return res;
   }

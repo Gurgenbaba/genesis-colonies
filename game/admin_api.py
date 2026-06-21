@@ -1338,6 +1338,8 @@ def api_import_changelog(admin_id: int) -> Dict[str, Any]:
     from game.universe_news import import_changelog_markdown
 
     result = import_changelog_markdown(created_by=int(admin_id))
+    if not result.get("ok"):
+        return _err(str(result.get("error") or "import_failed"), str(result.get("path") or ""))
     audit(
         int(admin_id),
         "universe_news_import_changelog",
@@ -1351,6 +1353,8 @@ def api_import_git_history(admin_id: int) -> Dict[str, Any]:
     from game.universe_news import import_git_history
 
     result = import_git_history(created_by=int(admin_id))
+    if not result.get("ok"):
+        return _err(str(result.get("error") or "import_failed"), str(result.get("repo_root") or ""))
     audit(
         int(admin_id),
         "universe_news_import_git",
@@ -1364,6 +1368,8 @@ def api_import_full_history(admin_id: int) -> Dict[str, Any]:
     from game.universe_news import import_full_history
 
     result = import_full_history(created_by=int(admin_id))
+    if not result.get("ok"):
+        return _err(str(result.get("error") or "import_failed"), str(result.get("path") or result.get("repo_root") or ""))
     audit(
         int(admin_id),
         "universe_news_import_full",
