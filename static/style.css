@@ -1574,7 +1574,8 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
   }
 
   .gc-layout--dual .gc-building-grid.buildings-prog-list,
-  .gc-layout--dual .gc-building-grid.research-prog-list{
+  .gc-layout--dual .gc-building-grid.research-prog-list,
+  .gc-layout--dual .gc-building-grid.shipyard-ship-grid{
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
   }
@@ -5865,9 +5866,10 @@ body:not(.gc-perf-idle) .research-bar-fill{
   margin-top: 4px;
 }
 
-/* Genesis building/research cards — compact grid */
+/* Genesis building/research/shipyard cards — compact grid */
 .gc-building-grid.buildings-prog-list,
-.gc-building-grid.research-prog-list{
+.gc-building-grid.research-prog-list,
+.gc-building-grid.shipyard-ship-grid{
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(224px, 1fr));
   gap: 10px;
@@ -8177,7 +8179,8 @@ img.gc-res-icon.gc-res-energy{
 /* Mobile: stack card fields, no horizontal scroll */
 @media (max-width: 820px){
   .gc-building-grid.buildings-prog-list,
-  .gc-building-grid.research-prog-list{
+  .gc-building-grid.research-prog-list,
+  .gc-building-grid.shipyard-ship-grid{
     grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
     gap: 8px;
   }
@@ -21747,13 +21750,6 @@ a.gc-galaxy-coord-link:focus-visible {
   flex-wrap: wrap;
   gap: 1rem 1.5rem;
   margin-top: 0.75rem;
-}
-
-.shipyard-ship-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 8px;
-  align-items: stretch;
 }
 
 .gc-ship-card.gc-prog-card {
