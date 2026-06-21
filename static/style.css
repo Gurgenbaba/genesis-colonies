@@ -1575,7 +1575,7 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 
   .gc-layout--dual .gc-building-grid.buildings-prog-list,
   .gc-layout--dual .gc-building-grid.research-prog-list{
-    grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   }
 }
 
