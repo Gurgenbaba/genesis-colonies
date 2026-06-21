@@ -12,10 +12,14 @@
 {% set theme = (planet.theme if planet.theme is defined else {}) %}
 {% set hero_accent = theme.accent_color or '#46e5ff' %}
 {% set hero_secondary = theme.secondary_color or '#7fffd9' %}
+{% set hero_glow = theme.glow_color or hero_accent %}
 {% set hero_effect = theme.effect or 'temperate' %}
+{% set hero_theme_key = theme.theme_key or 'temperate-highlands' %}
+{% set hero_theme_group = theme.theme_group or 'living' %}
 {% set hero_label_key = theme.label_key or 'planet_slot_08' %}
 {% set herocard_rel = theme.herocard_relpath or 'img/herocards/herocard_08.png' %}
 {% set herocard_webp_rel = theme.herocard_webp_relpath or 'img/herocards/herocard_08.webp' %}
+{% set hero_landscape_rel = theme.landscape_relpath or 'img/landscapes/normaltempplanet01-h.jpg' %}
 
 <div class="gc-page overview-wrapper overview-command" data-planet-id="{{ planet.planet_id or 0 }}">
 
@@ -30,11 +34,13 @@
     </p>
   </header>
 
-  <section class="gc-panel overview-hero overview-hero--themed overview-hero--effect-{{ hero_effect }}"
+  <section class="gc-panel overview-hero overview-hero--themed gc-planet-hero gc-planet-theme--{{ hero_theme_key }} gc-planet-theme-group--{{ hero_theme_group }} overview-hero--effect-{{ hero_effect }}"
            id="overview-planet-hero"
            aria-label="{{ T('overview_label_planet', 'Kolonie') }}"
-           style="--planet-accent: {{ hero_accent }}; --planet-accent-secondary: {{ hero_secondary }};"
+           style="--planet-accent: {{ hero_accent }}; --planet-secondary: {{ hero_secondary }}; --planet-accent-secondary: {{ hero_secondary }}; --planet-glow: {{ hero_glow }}; --planet-landscape: url('{{ url_for('static', filename=hero_landscape_rel) }}');"
            data-planet-effect="{{ hero_effect }}"
+           data-planet-theme-key="{{ hero_theme_key }}"
+           data-planet-theme-group="{{ hero_theme_group }}"
            data-slot-label-key="{{ hero_label_key }}">
     <div class="overview-hero-bg" data-overview-hero-bg aria-hidden="true">
       <picture>

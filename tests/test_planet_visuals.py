@@ -95,9 +95,45 @@ def test_temperature_range_monotonic_by_position() -> None:
     assert coldest["max_c"] < -100
 
 
+def test_planet_theme_keys_by_position() -> None:
+    from game.planet_visuals import planet_theme_for_planet
+
+    expected = {
+        1: ("inferno", "hot"),
+        2: ("magma", "hot"),
+        3: ("ash", "hot"),
+        4: ("barren-fireland", "arid"),
+        5: ("crimson-desert", "arid"),
+        6: ("golden-desert", "arid"),
+        7: ("arid-frontier", "arid"),
+        8: ("temperate-highlands", "living"),
+        9: ("forest-world", "living"),
+        10: ("jungle-prime", "living"),
+        11: ("ocean-world", "living"),
+        12: ("tundra-world", "frozen"),
+        13: ("glacier-world", "frozen"),
+        14: ("deep-frost", "frozen"),
+        15: ("absolute-zero", "frozen"),
+    }
+    for pos, (theme_key, theme_group) in expected.items():
+        theme = planet_theme_for_planet({"position": pos})
+        assert theme["theme_key"] == theme_key
+        assert theme["theme_group"] == theme_group
+        assert theme["glow_color"] == theme["accent_color"]
+        assert theme["landscape_relpath"].startswith("img/landscapes/")
+
+
 def test_temperature_range_invalid_position_uses_temperate_default() -> None:
     from game.planet_visuals import temperature_range_for_position
 
     temp = temperature_range_for_position(99)
     assert temp["display"] == "5°C … 35°C"
     assert temp["position"] == 0
+
+
+def test_planet_theme_default_keys() -> None:
+    from game.planet_visuals import DEFAULT_THEME_GROUP, DEFAULT_THEME_KEY, planet_theme_for_planet
+
+    theme = planet_theme_for_planet({})
+    assert theme["theme_key"] == DEFAULT_THEME_KEY
+    assert theme["theme_group"] == DEFAULT_THEME_GROUP

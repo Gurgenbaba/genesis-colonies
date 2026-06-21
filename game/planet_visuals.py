@@ -9,6 +9,8 @@ class PlanetIdentity(TypedDict):
     landscape: str
     herocard: str
     label_key: str
+    theme_key: str
+    theme_group: str
     accent_color: str
     secondary_color: str
     effect: str
@@ -17,11 +19,15 @@ class PlanetIdentity(TypedDict):
 DEFAULT_LANDSCAPE = "normaltempplanet01-h.jpg"
 DEFAULT_HEROCARD = "herocard_08.png"
 DEFAULT_LABEL_KEY = "planet_slot_08"
+DEFAULT_THEME_KEY = "temperate-highlands"
+DEFAULT_THEME_GROUP = "living"
 
 _DEFAULT_IDENTITY: PlanetIdentity = {
     "landscape": DEFAULT_LANDSCAPE,
     "herocard": DEFAULT_HEROCARD,
     "label_key": DEFAULT_LABEL_KEY,
+    "theme_key": DEFAULT_THEME_KEY,
+    "theme_group": DEFAULT_THEME_GROUP,
     "accent_color": "#5fd4a8",
     "secondary_color": "#9ef0cc",
     "effect": "temperate",
@@ -53,6 +59,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "trockenplanet01-h.jpg",
         "herocard": "herocard_01.png",
         "label_key": "planet_slot_01",
+        "theme_key": "inferno",
+        "theme_group": "hot",
         "accent_color": "#ff6830",
         "secondary_color": "#ffaa66",
         "effect": "volcanic",
@@ -61,6 +69,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "trockenplanet04-h.jpg",
         "herocard": "herocard_02.png",
         "label_key": "planet_slot_02",
+        "theme_key": "magma",
+        "theme_group": "hot",
         "accent_color": "#ff8040",
         "secondary_color": "#ffb080",
         "effect": "volcanic",
@@ -69,6 +79,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "trockenplanet06-h.jpg",
         "herocard": "herocard_03.png",
         "label_key": "planet_slot_03",
+        "theme_key": "ash",
+        "theme_group": "hot",
         "accent_color": "#b88870",
         "secondary_color": "#d8b8a0",
         "effect": "ash",
@@ -77,6 +89,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "trockenplanet08-h.jpg",
         "herocard": "herocard_04.png",
         "label_key": "planet_slot_04",
+        "theme_key": "barren-fireland",
+        "theme_group": "arid",
         "accent_color": "#e87840",
         "secondary_color": "#ffa868",
         "effect": "desert",
@@ -85,6 +99,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "normaltempplanet04-h.jpg",
         "herocard": "herocard_05.png",
         "label_key": "planet_slot_05",
+        "theme_key": "crimson-desert",
+        "theme_group": "arid",
         "accent_color": "#e04060",
         "secondary_color": "#ff8090",
         "effect": "desert",
@@ -93,6 +109,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "normaltempplanet03-h.jpg",
         "herocard": "herocard_06.png",
         "label_key": "planet_slot_06",
+        "theme_key": "golden-desert",
+        "theme_group": "arid",
         "accent_color": "#e8b04a",
         "secondary_color": "#ffd878",
         "effect": "desert",
@@ -101,6 +119,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "normaltempplanet01-h.jpg",
         "herocard": "herocard_07.png",
         "label_key": "planet_slot_07",
+        "theme_key": "arid-frontier",
+        "theme_group": "arid",
         "accent_color": "#c4a35a",
         "secondary_color": "#e8d4a0",
         "effect": "desert",
@@ -109,6 +129,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "wasserplanet07-h.jpg",
         "herocard": "herocard_08.png",
         "label_key": "planet_slot_08",
+        "theme_key": "temperate-highlands",
+        "theme_group": "living",
         "accent_color": "#5fd4a8",
         "secondary_color": "#9ef0cc",
         "effect": "temperate",
@@ -117,6 +139,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "wasserplanet08-h.jpg",
         "herocard": "herocard_09.png",
         "label_key": "planet_slot_09",
+        "theme_key": "forest-world",
+        "theme_group": "living",
         "accent_color": "#4ecf7a",
         "secondary_color": "#8ef5a8",
         "effect": "forest",
@@ -125,6 +149,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "dschungelplanet08-h.jpg",
         "herocard": "herocard_10.png",
         "label_key": "planet_slot_10",
+        "theme_key": "jungle-prime",
+        "theme_group": "living",
         "accent_color": "#38c96a",
         "secondary_color": "#7ef5a0",
         "effect": "jungle",
@@ -133,6 +159,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "dschungelplanet07-h.jpg",
         "herocard": "herocard_11.png",
         "label_key": "planet_slot_11",
+        "theme_key": "ocean-world",
+        "theme_group": "living",
         "accent_color": "#3aa8ff",
         "secondary_color": "#7fd4ff",
         "effect": "ocean",
@@ -141,6 +169,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "gasplanet05-h.jpg",
         "herocard": "herocard_12.png",
         "label_key": "planet_slot_12",
+        "theme_key": "tundra-world",
+        "theme_group": "frozen",
         "accent_color": "#9ec8e0",
         "secondary_color": "#cce8f8",
         "effect": "tundra",
@@ -149,6 +179,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "eisplanet04-h.jpg",
         "herocard": "herocard_13.png",
         "label_key": "planet_slot_13",
+        "theme_key": "glacier-world",
+        "theme_group": "frozen",
         "accent_color": "#6ee8ff",
         "secondary_color": "#a8f4ff",
         "effect": "frost",
@@ -157,6 +189,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "eisplanet06-h.jpg",
         "herocard": "herocard_14.png",
         "label_key": "planet_slot_14",
+        "theme_key": "deep-frost",
+        "theme_group": "frozen",
         "accent_color": "#4ad8ff",
         "secondary_color": "#88e8ff",
         "effect": "glacier",
@@ -165,6 +199,8 @@ _PLANET_IDENTITY_BY_POSITION: Dict[int, PlanetIdentity] = {
         "landscape": "eisplanet09-h.jpg",
         "herocard": "herocard_15.png",
         "label_key": "planet_slot_15",
+        "theme_key": "absolute-zero",
+        "theme_group": "frozen",
         "accent_color": "#3ff8ff",
         "secondary_color": "#6ccfff",
         "effect": "ice",
@@ -265,12 +301,17 @@ def planet_theme_for_planet(planet: dict | None) -> Dict[str, Any]:
             ident = get_planet_identity_for_position(pos)
 
     herocard_rel = herocard_static_relpath(pos) if pos else f"img/herocards/{DEFAULT_HEROCARD}"
+    landscape_rel = landscape_static_relpath(pos) if pos else f"img/landscapes/{DEFAULT_LANDSCAPE}"
     return {
         "position": pos,
         "accent_color": ident["accent_color"],
         "secondary_color": ident["secondary_color"],
+        "glow_color": ident["accent_color"],
         "effect": ident["effect"],
+        "theme_key": ident["theme_key"],
+        "theme_group": ident["theme_group"],
         "landscape": ident["landscape"],
+        "landscape_relpath": landscape_rel,
         "herocard": ident["herocard"],
         "herocard_relpath": herocard_rel,
         "herocard_webp_relpath": raster_webp_relpath(herocard_rel),

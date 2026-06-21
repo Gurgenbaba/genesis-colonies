@@ -769,23 +769,50 @@
     const accent = String(ap.accent_color || theme.accent_color || "").trim();
     const secondary = String(ap.secondary_color || theme.secondary_color || "").trim();
     const effect = String(ap.planet_effect || theme.effect || "").trim();
+    const themeKey = String(ap.theme_key || theme.theme_key || "").trim();
+    const themeGroup = String(ap.theme_group || theme.theme_group || "").trim();
+    const glow = String(ap.glow_color || theme.glow_color || ap.accent_color || theme.accent_color || "").trim();
     const labelKey = String(ap.slot_label_key || theme.label_key || "").trim();
     const herocardUrl = String(ap.herocard_url || "").trim();
     const herocardWebp = String(ap.herocard_webp_url || "").trim();
+    const landscapeUrl = String(ap.landscape_url || "").trim();
 
     if (accent) hero.style.setProperty("--planet-accent", accent);
     else hero.style.removeProperty("--planet-accent");
-    if (secondary) hero.style.setProperty("--planet-accent-secondary", secondary);
-    else hero.style.removeProperty("--planet-accent-secondary");
+    if (secondary) {
+      hero.style.setProperty("--planet-secondary", secondary);
+      hero.style.setProperty("--planet-accent-secondary", secondary);
+    } else {
+      hero.style.removeProperty("--planet-secondary");
+      hero.style.removeProperty("--planet-accent-secondary");
+    }
+    if (glow) hero.style.setProperty("--planet-glow", glow);
+    else hero.style.removeProperty("--planet-glow");
+    if (landscapeUrl) hero.style.setProperty("--planet-landscape", `url("${landscapeUrl}")`);
+    else hero.style.removeProperty("--planet-landscape");
 
     Array.from(hero.classList).forEach((cls) => {
       if (cls.startsWith("overview-hero--effect-")) hero.classList.remove(cls);
+      if (cls.startsWith("gc-planet-theme--")) hero.classList.remove(cls);
+      if (cls.startsWith("gc-planet-theme-group--")) hero.classList.remove(cls);
     });
     if (effect) {
       hero.classList.add(`overview-hero--effect-${effect}`);
       hero.dataset.planetEffect = effect;
     } else {
       delete hero.dataset.planetEffect;
+    }
+    if (themeKey) {
+      hero.classList.add(`gc-planet-theme--${themeKey}`);
+      hero.dataset.planetThemeKey = themeKey;
+    } else {
+      delete hero.dataset.planetThemeKey;
+    }
+    if (themeGroup) {
+      hero.classList.add(`gc-planet-theme-group--${themeGroup}`);
+      hero.dataset.planetThemeGroup = themeGroup;
+    } else {
+      delete hero.dataset.planetThemeGroup;
     }
 
     const bgWrap = hero.querySelector("[data-overview-hero-bg]");

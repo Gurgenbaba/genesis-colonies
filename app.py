@@ -4824,7 +4824,10 @@ def _payload_from_live_context(
             "herocard_webp_url": url_for("static", filename=raster_webp_relpath(herocard_rel)),
             "accent_color": theme["accent_color"],
             "secondary_color": theme["secondary_color"],
+            "glow_color": theme["accent_color"],
             "planet_effect": theme["effect"],
+            "theme_key": theme["theme_key"],
+            "theme_group": theme["theme_group"],
             "slot_label_key": theme["label_key"],
             **identity,
             "sidebar_nav": resolve_sidebar_nav(
@@ -4861,7 +4864,10 @@ def _payload_from_live_context(
             "herocard_webp_url": url_for("static", filename=raster_webp_relpath(fallback_herocard_rel)),
             "accent_color": fallback_theme["accent_color"],
             "secondary_color": fallback_theme["secondary_color"],
+            "glow_color": fallback_theme["accent_color"],
             "planet_effect": fallback_theme["effect"],
+            "theme_key": fallback_theme["theme_key"],
+            "theme_group": fallback_theme["theme_group"],
             "slot_label_key": fallback_theme["label_key"],
             **identity,
             "sidebar_nav": resolve_sidebar_nav(

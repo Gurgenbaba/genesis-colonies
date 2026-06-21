@@ -398,11 +398,28 @@ def test_gc744_resource_icons_use_webp_picture():
     assert "loading=\"eager\"" in macro
     overview = _read("templates/overview.html")
     assert "overview-planet-hero" in overview
+    assert "gc-planet-hero" in overview
+    assert "gc-planet-theme--" in overview
     assert "data-overview-hero-bg" in overview
     assert "planet_slot_" in overview or "hero_label_key" in overview
     assert "render_resource_icon('metal'" not in overview
     base = _read("templates/base.html")
     assert "render_resource_icon('metal', hud=true, lazy=false, priority='high'" in base
+
+
+def test_main_js_apply_planet_hero_theme_border_fx():
+    src = _read("static/main.js")
+    hero_fn = src.split("function applyPlanetHeroThemeFromState(data)")[1].split("function bootstrapPlanetLandscapeFromBoot")[0]
+    assert "gc-planet-theme--" in hero_fn
+    assert "gc-planet-theme-group--" in hero_fn
+    assert "--planet-glow" in hero_fn
+    assert "--planet-landscape" in hero_fn
+    css = _read("static/style.css")
+    assert ".gc-planet-hero::before" in css
+    assert ".gc-planet-hero::after" in css
+    assert "prefers-reduced-motion" in css
+    assert ".gc-planet-theme-group--hot" in css
+    assert ".gc-planet-theme-group--frozen" in css
 
 
 def test_main_js_gc743_deferred_chat_and_news_boot():
