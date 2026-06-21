@@ -11393,6 +11393,7 @@ body.gc-techtree-media-zoom-open{
 }
 .fleet-ogame-ships{
   padding: 0;
+  overflow: visible;
 }
 .fleet-ogame-ships-head{
   display: flex;
@@ -11702,46 +11703,55 @@ body.gc-techtree-media-zoom-open{
 }
 .fleet-ship-card-grid{
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-  gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 112px));
+  gap: 6px;
+  overflow: visible;
+  justify-content: start;
 }
 .fleet-ship-card-grid--compact{
-  padding: 0 10px 8px;
+  padding: 0 10px 12px;
 }
 .fleet-ship-card--pick{
   position: relative;
   z-index: 1;
-  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   width: 100%;
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.18);
   background: rgba(3, 8, 18, 0.82);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.42);
-  overflow: hidden;
+  overflow: visible;
   transition: border-color 0.14s ease, box-shadow 0.14s ease, z-index 0s linear 0.14s;
 }
 .fleet-ship-card--pick:hover,
-.fleet-ship-card--pick:focus-within,
-.fleet-ship-card--pick.is-fleet-ship-expanded{
+.fleet-ship-card--pick:focus-within{
   z-index: 5;
-  transition-delay: 0s;
   border-color: rgba(70, 229, 255, 0.42);
   box-shadow:
     var(--gc-border-glow),
     inset 0 0 0 1px rgba(0, 0, 0, 0.48);
 }
-.fleet-ship-card--pick.is-empty,
-.fleet-ship-card--pick.fleet-ship-row-empty{
-  opacity: 0.48;
+.fleet-ship-pick-stack{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
 }
 .fleet-ship-card-art-wrap{
   position: relative;
   width: 100%;
-  height: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--gc-radius-sm) var(--gc-radius-sm) 0 0;
 }
 .fleet-ship-card-art-wrap .fleet-ship-card-role-badge{
-  position: static;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  left: auto;
+  z-index: 2;
   min-width: 0;
   min-height: 16px;
   padding: 0 4px;
@@ -11750,10 +11760,29 @@ body.gc-techtree-media-zoom-open{
   letter-spacing: 0.04em;
   text-transform: uppercase;
   pointer-events: none;
-  max-width: 100%;
+  max-width: calc(100% - 8px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.fleet-ship-pick-value{
+  padding: 0 3px 3px;
+}
+.fleet-ship-card--pick .fleet-ship-pick-value .fleet-ship-input{
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 26px;
+  padding: 3px 6px;
+  font-size: 0.68rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+.fleet-ship-card--pick .fleet-ship-pick-value .fleet-ship-input:focus{
+  text-align: left;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 .fleet-ship-card-art{
   display: block;
@@ -11778,115 +11807,9 @@ body.gc-techtree-media-zoom-open{
   object-fit: cover;
   object-position: center top;
 }
-.fleet-ship-card-overlay{
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 0;
-  background:
-    linear-gradient(180deg, rgba(4, 10, 22, 0.04) 0%, rgba(4, 10, 22, 0.72) 42%, rgba(2, 6, 14, 0.96) 100%);
-  opacity: 0;
-  visibility: hidden;
-  transform: scale(0.985);
-  transition:
-    opacity 0.16s ease,
-    visibility 0.16s ease,
-    transform 0.16s ease;
-  pointer-events: none;
-}
-.fleet-ship-card-overlay-inner{
-  display: grid;
-  gap: 3px;
-  padding: 5px;
-  min-width: 0;
-  border-top: 1px solid rgba(70, 229, 255, 0.16);
-  background: linear-gradient(180deg, rgba(6, 12, 26, 0.88), rgba(4, 8, 18, 0.98));
-  box-shadow: inset 0 1px 0 rgba(70, 229, 255, 0.08);
-}
-.fleet-ship-card-overlay-head{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  min-width: 0;
-}
-@media (hover: hover){
-  .fleet-ship-card--pick:hover .fleet-ship-card-overlay,
-  .fleet-ship-card--pick:focus-within .fleet-ship-card-overlay{
-    opacity: 1;
-    visibility: visible;
-    transform: scale(1);
-    pointer-events: auto;
-  }
-}
-@media (hover: none), (pointer: coarse){
-  .fleet-ship-card--pick.is-fleet-ship-expanded .fleet-ship-card-overlay,
-  .fleet-ship-card--pick:focus-within .fleet-ship-card-overlay{
-    opacity: 1;
-    visibility: visible;
-    transform: scale(1);
-    pointer-events: auto;
-  }
-}
-.fleet-ship-card-name{
-  font-weight: 700;
-  font-size: 0.58rem;
-  line-height: 1.15;
-  color: var(--gc-neon-cyan);
-  background: none;
-  border: none;
-  padding: 0;
-  text-align: left;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.fleet-ship-card-name:hover{ color: #fff; }
-.fleet-ship-card-stock{
-  flex: 0 0 auto;
-  font-size: 0.58rem;
-  color: var(--gc-neon-gold);
-  font-weight: 700;
-}
-.fleet-ship-card-meta{
-  display: flex;
-  gap: 5px;
-  font-size: 0.52rem;
-  color: var(--gc-text-dim);
-  letter-spacing: 0.02em;
-  line-height: 1.1;
-}
-.fleet-ship-card-meta .fleet-ship-card-speed::before{
-  content: "SPD ";
-  opacity: 0.72;
-}
-.fleet-ship-card-meta .fleet-ship-card-cargo::before{
-  content: "CRG ";
-  opacity: 0.72;
-}
-.fleet-ship-card-controls{
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px;
-  align-items: center;
-}
-.fleet-ship-card-controls .fleet-ship-input{
-  width: 100%;
-  min-width: 0;
-  min-height: 22px;
-  padding: 1px 4px;
-  font-size: 0.68rem;
-}
-.fleet-ship-card-controls .fleet-ship-max{
-  min-height: 22px;
-  padding: 1px 5px;
-  font-size: 0.58rem;
-  line-height: 1.2;
+.fleet-ship-card--pick.is-empty,
+.fleet-ship-card--pick.fleet-ship-row-empty{
+  opacity: 0.48;
 }
 .fleet-ship-card--pick.fleet-ship-row--mission-focus{
   outline: none;
@@ -12259,8 +12182,8 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 @media (max-width: 640px){
   .fleet-mission-speed-row{ grid-template-columns: 1fr; }
   .fleet-ship-card-grid{
-    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-    gap: 3px;
+    grid-template-columns: repeat(auto-fill, minmax(88px, 100px));
+    gap: 5px;
   }
   .fleet-page{
     overflow-x: clip;
@@ -12274,7 +12197,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 @media (min-width: 1440px){
   .fleet-ship-card-grid{
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(108px, 120px));
   }
 }
 .fleet-form-row--inline{ margin-bottom: 0; }

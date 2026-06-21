@@ -11429,11 +11429,50 @@
 
     const isCoarsePointer = () => window.matchMedia("(hover: none), (pointer: coarse)").matches;
 
-    const collapseFleetShipPickCards = (page, except) => {
-      page.querySelectorAll(".fleet-ship-card--pick.is-fleet-ship-expanded").forEach((card) => {
-        if (except && card === except) return;
-        card.classList.remove("is-fleet-ship-expanded");
-      });
+    let _fleetShipPickTooltipTrigger = null;
+
+    const hideFleetShipPickTooltip = () => {
+      const page = getPage();
+      const tooltip = page?.querySelector("[data-fleet-ship-pick-tooltip]")
+        || document.getElementById("gc-fleet-ship-pick-tooltip");
+      if (tooltip) {
+        tooltip.hidden = true;
+        tooltip.innerHTML = "";
+      }
+      if (_fleetShipPickTooltipTrigger) {
+        _fleetShipPickTooltipTrigger.removeAttribute("aria-describedby");
+        _fleetShipPickTooltipTrigger = null;
+      }
+    };
+
+    const buildFleetShipPickTooltipHtml = (card) => {
+      const name = card.getAttribute("data-ship-tooltip-name") || "";
+      const role = card.getAttribute("data-ship-tooltip-role") || "";
+      const have = parseInt(card.getAttribute("data-ship-have") || "0", 10) || 0;
+      const speed = card.getAttribute("data-ship-tooltip-speed") || "0";
+      const cargo = card.getAttribute("data-ship-tooltip-cargo") || "0";
+      const esc = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return [
+        `<div class="gc-fleet-drawer-tooltip-title">${esc(name)}</div>`,
+        `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_ship_stock", "Bestand")}</span>× ${formatNumber(have)}</div>`,
+        `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_table_speed", "Speed")}</span>${esc(speed)}</div>`,
+        `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_table_cargo", "Cargo")}</span>${esc(cargo)}</div>`,
+        `<div class="gc-fleet-drawer-tooltip-section"><span class="gc-fleet-drawer-tooltip-label">${tt("fleet_ship_type", "Typ")}</span>${esc(role)}</div>`,
+      ].join("");
+    };
+
+    const showFleetShipPickTooltip = (trigger, card) => {
+      const page = getPage();
+      if (!page || !trigger || !card || !page.contains(card)) return;
+      const tooltip = page.querySelector("[data-fleet-ship-pick-tooltip]")
+        || document.getElementById("gc-fleet-ship-pick-tooltip");
+      if (!tooltip) return;
+      hideFleetShipPickTooltip();
+      _fleetShipPickTooltipTrigger = trigger;
+      tooltip.innerHTML = buildFleetShipPickTooltipHtml(card);
+      tooltip.hidden = false;
+      trigger.setAttribute("aria-describedby", "gc-fleet-ship-pick-tooltip");
+      positionFleetDrawerTooltip(tooltip, trigger);
     };
 
     const syncFleetShipPickQtyMarks = (page) => {
@@ -11441,6 +11480,13 @@
         const inp = card.querySelector("[data-ship-input]");
         const qty = inp ? readNumberInput(inp) : 0;
         card.classList.toggle("has-ship-qty", qty > 0);
+      });
+    };
+
+    const scrollFleetShipInputEnd = (inp) => {
+      if (!inp) return;
+      requestAnimationFrame(() => {
+        inp.scrollLeft = inp.scrollWidth;
       });
     };
 
@@ -12767,6 +12813,30 @@
     GC.syncFleetMissionLockUi = syncFleetMissionLockUi;
     GC.resolveFleetWorldTargetPresentation = resolveFleetWorldTargetPresentation;
 
+    document.addEventListener("mouseover", (e) => {
+      const page = getPage();
+      if (!page || isCoarsePointer()) return;
+      const trigger = e.target.closest("[data-fleet-ship-pick-trigger]");
+      if (!trigger || !page.contains(trigger)) return;
+      const card = trigger.closest(".fleet-ship-card--pick");
+      if (!card) return;
+      showFleetShipPickTooltip(trigger, card);
+    });
+
+    document.addEventListener("mouseout", (e) => {
+      const trigger = e.target.closest("[data-fleet-ship-pick-trigger]");
+      if (!trigger || _fleetShipPickTooltipTrigger !== trigger) return;
+      const to = e.relatedTarget;
+      if (to && trigger.contains(to)) return;
+      hideFleetShipPickTooltip();
+    });
+
+    document.addEventListener("scroll", hideFleetShipPickTooltip, true);
+    window.addEventListener("resize", hideFleetShipPickTooltip);
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(hideFleetShipPickTooltip);
+    }
+
     document.addEventListener("click", async (e) => {
       const page = getPage();
       if (!page) return;
@@ -12774,20 +12844,20 @@
       const form = getForm(page);
       const fuelResource = rt.data.fuel_resource || page.dataset.fuelResource || "fuel_cells";
 
-      const pickArt = e.target.closest(".fleet-ship-card--pick .fleet-ship-card-art");
-      if (pickArt && page.contains(pickArt) && isCoarsePointer()) {
-        const card = pickArt.closest(".fleet-ship-card--pick");
-        if (card) {
-          const wasExpanded = card.classList.contains("is-fleet-ship-expanded");
-          collapseFleetShipPickCards(page);
-          if (!wasExpanded) card.classList.add("is-fleet-ship-expanded");
-          e.preventDefault();
-          return;
+      const pickTrigger = e.target.closest("[data-fleet-ship-pick-trigger]");
+      if (pickTrigger && page.contains(pickTrigger) && isCoarsePointer()) {
+        const card = pickTrigger.closest(".fleet-ship-card--pick");
+        if (_fleetShipPickTooltipTrigger === pickTrigger) {
+          hideFleetShipPickTooltip();
+        } else if (card) {
+          showFleetShipPickTooltip(pickTrigger, card);
         }
+        e.preventDefault();
+        return;
       }
 
-      if (isCoarsePointer() && page.contains(e.target) && !e.target.closest(".fleet-ship-card--pick")) {
-        collapseFleetShipPickCards(page);
+      if (isCoarsePointer() && page.contains(e.target) && !e.target.closest("[data-fleet-ship-pick-trigger]")) {
+        hideFleetShipPickTooltip();
       }
 
       const maxShip = e.target.closest("[data-ship-max]");
@@ -12799,6 +12869,7 @@
         const inp = form?.querySelector(`[data-ship-input="${key}"]`);
         if (inp) setNumberInputValue(inp, have);
         syncFleetShipPickQtyMarks(page);
+        scrollFleetShipInputEnd(inp);
         schedulePreview(page);
         return;
       }
@@ -12812,6 +12883,7 @@
         const inp = form?.querySelector(`[data-ship-input="${key}"]`);
         if (inp && have > 0) setNumberInputValue(inp, have);
         syncFleetShipPickQtyMarks(page);
+        scrollFleetShipInputEnd(inp);
         schedulePreview(page);
         return;
       }
@@ -12950,8 +13022,22 @@
         scheduleTargetResolve(page);
       }
       if (e.target.closest("#fleet-send-form")) {
-        if (e.target.matches("[data-ship-input]")) syncFleetShipPickQtyMarks(page);
+        if (e.target.matches("[data-ship-input]")) {
+          syncFleetShipPickQtyMarks(page);
+          scrollFleetShipInputEnd(e.target);
+        }
         schedulePreview(page);
+      }
+    });
+
+    document.addEventListener("focusin", (e) => {
+      const page = getPage();
+      if (!page || !page.contains(e.target)) return;
+      if (e.target.matches(".fleet-ship-pick-value [data-ship-input]")) {
+        hideFleetShipPickTooltip();
+      }
+      if (e.target.matches(".fleet-ship-card--pick [data-ship-input]")) {
+        scrollFleetShipInputEnd(e.target);
       }
     });
 
@@ -12967,7 +13053,10 @@
         scheduleTargetResolve(page);
       }
       if (e.target.closest("#fleet-send-form")) {
-        if (e.target.matches("[data-ship-input]")) syncFleetShipPickQtyMarks(page);
+        if (e.target.matches("[data-ship-input]")) {
+          syncFleetShipPickQtyMarks(page);
+          scrollFleetShipInputEnd(e.target);
+        }
         schedulePreview(page);
       }
     });

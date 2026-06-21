@@ -194,6 +194,11 @@
             </div>
           </div>
 
+          <div id="gc-fleet-ship-pick-tooltip"
+               class="gc-fleet-drawer-tooltip"
+               data-fleet-ship-pick-tooltip
+               hidden
+               role="tooltip"></div>
           <div class="fleet-ship-card-grid fleet-ship-card-grid--compact" data-fleet-ships-grid>
             {% for roles in fleet_ship_role_groups %}
               {% for ship in fleet_ctx.ship_defs %}
@@ -202,47 +207,36 @@
               <article class="fleet-ship-card fleet-ship-card--pick fleet-ship-row{% if have <= 0 %} is-empty{% endif %}"
                        data-ship-key="{{ ship.key }}"
                        data-ship-have="{{ have }}"
-                       data-ship-role="{{ ship.role }}">
-                <div class="fleet-ship-card-art-wrap">
-                  <button type="button"
-                          class="fleet-ship-card-art"
-                          data-ship-max-image="{{ ship.key }}"
-                          aria-label="{{ T('fleet_ship_image_max', 'Select maximum') }}: {{ T(ship.name_key) }}">
-                    <picture>
-                      <source srcset="{{ url_for('static', filename='img/ships/' ~ ship.key ~ '.webp') }}" type="image/webp">
-                      <img src="{{ url_for('static', filename='img/ships/' ~ ship.key ~ '.png') }}"
-                           alt=""
-                           loading="lazy"
-                           decoding="async"
-                           class="fleet-ship-card-img fleet-ship-thumb"
-                           width="72"
-                           height="72"
-                           data-ship-img="{{ ship.key }}"
-                           onerror="this.onerror=null;this.src='{{ _ship_placeholder }}';">
-                    </picture>
-                  </button>
-                  <div class="fleet-ship-card-overlay">
-                    <div class="fleet-ship-card-overlay-inner">
-                      <div class="fleet-ship-card-overlay-head">
-                        <span class="gc-hero-stat-badge fleet-ship-card-role-badge">{{ T("shipyard_role_" ~ ship.role) }}</span>
-                        <span class="fleet-ship-card-stock gc-mono fleet-ship-stock" title="{{ T('fleet_ship_stock') }}">×{{ have|fmt_int }}</span>
-                      </div>
-                      <button type="button" class="gc-ship-detail-trigger fleet-ship-card-name"
-                              data-ship-detail="{{ ship.key }}"
-                              aria-label="{{ T('ship_detail_open') }}">{{ T(ship.name_key) }}</button>
-                      <div class="fleet-ship-card-meta gc-mono">
-                        <span class="fleet-ship-card-speed">{{ ship.speed|fmt_int }}</span>
-                        <span class="fleet-ship-card-cargo">{{ ship.cargo|fmt_int }}</span>
-                      </div>
-                      <div class="fleet-ship-card-controls">
-                        <input type="text" min="0" max="{{ have }}" value="0" inputmode="numeric"
-                               class="fleet-ship-input gc-mono gc-num-input" data-ship-input="{{ ship.key }}"
-                               aria-label="{{ T(ship.name_key) }}">
-                        <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs fleet-ship-max" data-ship-max="{{ ship.key }}">
-                          {{ T("fleet_btn_max") }}
-                        </button>
-                      </div>
-                    </div>
+                       data-ship-role="{{ ship.role }}"
+                       data-ship-tooltip-name="{{ T(ship.name_key) }}"
+                       data-ship-tooltip-role="{{ T('shipyard_role_' ~ ship.role) }}"
+                       data-ship-tooltip-speed="{{ ship.speed|fmt_int }}"
+                       data-ship-tooltip-cargo="{{ ship.cargo|fmt_int }}">
+                <div class="fleet-ship-pick-stack">
+                  <div class="fleet-ship-card-art-wrap" data-fleet-ship-pick-trigger>
+                    <button type="button"
+                            class="fleet-ship-card-art"
+                            data-ship-max-image="{{ ship.key }}"
+                            aria-label="{{ T('fleet_ship_image_max', 'Select maximum') }}: {{ T(ship.name_key) }}">
+                      <picture>
+                        <source srcset="{{ url_for('static', filename='img/ships/' ~ ship.key ~ '.webp') }}" type="image/webp">
+                        <img src="{{ url_for('static', filename='img/ships/' ~ ship.key ~ '.png') }}"
+                             alt=""
+                             loading="lazy"
+                             decoding="async"
+                             class="fleet-ship-card-img fleet-ship-thumb"
+                             width="96"
+                             height="96"
+                             data-ship-img="{{ ship.key }}"
+                             onerror="this.onerror=null;this.src='{{ _ship_placeholder }}';">
+                      </picture>
+                    </button>
+                    <span class="gc-hero-stat-badge fleet-ship-card-role-badge">{{ T("shipyard_role_" ~ ship.role) }}</span>
+                  </div>
+                  <div class="fleet-ship-pick-value">
+                    <input type="text" min="0" max="{{ have }}" value="0" inputmode="numeric"
+                           class="fleet-ship-input gc-mono gc-num-input" data-ship-input="{{ ship.key }}"
+                           aria-label="{{ T(ship.name_key) }}">
                   </div>
                 </div>
               </article>

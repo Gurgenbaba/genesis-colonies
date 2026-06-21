@@ -815,7 +815,7 @@ def test_main_js_gc640f_fleet_no_scroll_ship_selector():
     """GC-640F: ship cards in responsive grid; logistics rows stay scoped."""
     css = _read("static/style.css")
     assert ".fleet-ships-grid > .fleet-ship-row:not(.fleet-ship-card)" in css
-    assert "grid-template-columns: repeat(auto-fill, minmax(72px, 1fr))" in css
+    assert "grid-template-columns: repeat(auto-fill, minmax(100px, 112px))" in css
     assert ".fleet-ship-card-grid" in css
     assert ".fleet-ship-row:not(.fleet-ship-card)" not in css.replace(".fleet-ships-grid > .fleet-ship-row:not(.fleet-ship-card)", "")
 

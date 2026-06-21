@@ -4785,10 +4785,10 @@ def test_quick_target_template_sets_coord_inputs():
     assert "data-fleet-send-btn" in tpl
     assert "data-gc-hud-select" in tpl
     assert "data-ship-max-image" in tpl
-    assert "fleet-ship-card-role-badge" in tpl
-    assert "fleet-ship-card-overlay" in tpl
-    assert "fleet-ship-card--pick" in tpl
-    assert "gc-hero-stat-badge" in tpl
+    assert "data-fleet-ship-pick-tooltip" in tpl
+    assert "data-fleet-ship-pick-trigger" in tpl
+    assert "fleet-ship-pick-value" in tpl
+    assert "gc-fleet-drawer-tooltip" in tpl
     assert "shipyard_role_" in tpl
 
 
