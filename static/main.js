@@ -933,6 +933,12 @@
       _clearMovementCountdownExpiryState();
       _timerZeroRefreshLastAt.clear();
       _lastShipyardQueueSignature = "";
+      if (GC.polling.abort) {
+        try { GC.polling.abort.abort(); } catch (_) {}
+        GC.polling.abort = null;
+      }
+      GC.polling.inFlight = false;
+      GC.refreshInFlight = null;
     }
 
     _clientStateGen += 1;
@@ -1598,6 +1604,7 @@
     const force = opts && opts.force;
     const skipGameState = Boolean(opts && opts.skipGameState);
     const skipHydrate = Boolean(opts && opts.skipHydrate);
+    const skipPolling = Boolean(opts && opts.skipPolling);
 
     if (GC.pageLifecycle.initialized && GC.currentPage === page && !force) {
       console.debug("[GC] initPage skipped (same page)", page);
@@ -1680,7 +1687,9 @@
           bootstrapResourceLiveFromDom();
           _bootstrapPageQueueCompactLiveFromDom();
         }
-        GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
+        if (!skipPolling) {
+          GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
+        }
       }
       GC.startProgressTicker();
       scheduleDeferredChatBoot();
@@ -8700,7 +8709,8 @@
     const reasonStr = String(reason || "");
     if (gameStateIncludePanel()) return true;
     return (
-      reasonStr.endsWith("_finished")
+      reasonStr === "planet_switch"
+      || reasonStr.endsWith("_finished")
       || reasonStr === "fleet_countdown_expired"
       || reasonStr === "timer_done"
       || reasonStr === "queue_timer_zero"
@@ -8747,8 +8757,9 @@
     const reasonStr = String(reason || "");
     const isFinishReason = reasonStr.endsWith("_finished");
     const isChainReason = isFinishReason || reasonStr === "fleet_countdown_expired" || reasonStr === "timer_done";
+    const isPlanetSwitchReason = reasonStr === "planet_switch";
 
-    if (GC.refreshInFlight) {
+    if (GC.refreshInFlight && !isPlanetSwitchReason) {
       if (isChainReason) {
         if (!_queuedChainRefreshReason) _queuedChainRefreshReason = reasonStr;
       }
@@ -8756,6 +8767,14 @@
     }
 
     const p = GC.polling;
+    if (GC.refreshInFlight && isPlanetSwitchReason) {
+      if (p.abort) {
+        try { p.abort.abort(); } catch (_) {}
+      }
+      GC.refreshInFlight = null;
+      p.inFlight = false;
+      p.abort = null;
+    }
     p.inFlight = true;
     if (p.abort && !isChainReason && reasonStr !== "poll" && reasonStr !== "pjax_nav") {
       try {
@@ -16231,12 +16250,12 @@
     if (!root) return;
 
     const trigger = document.getElementById("gc-planet-switcher-trigger");
-    const menu = document.getElementById("gc-planet-switcher-menu");
-    const multi = root.dataset.multi === "1";
-
     const headerEl = document.querySelector(".gc-header-cmd");
+    const getMenu = () => document.getElementById("gc-planet-switcher-menu");
+    const isMulti = () => root.dataset.multi === "1";
 
     const closeMenu = () => {
+      const menu = getMenu();
       if (!menu) return;
       menu.hidden = true;
       root.classList.remove("is-open");
@@ -16245,17 +16264,20 @@
     };
 
     const openMenu = () => {
-      if (!menu || !multi) return;
+      const menu = getMenu();
+      if (!menu || !isMulti()) return;
       menu.hidden = false;
       root.classList.add("is-open");
       headerEl?.classList.add("gc-header-planet-menu-open");
       if (trigger) trigger.setAttribute("aria-expanded", "true");
     };
 
-    if (trigger && multi) {
+    if (trigger) {
       trigger.addEventListener("click", (e) => {
         if (e.target.closest("a.gc-galaxy-coord-link")) return;
+        if (!isMulti()) return;
         e.stopPropagation();
+        const menu = getMenu();
         if (menu && menu.hidden) openMenu();
         else closeMenu();
       });
@@ -16270,6 +16292,7 @@
 
     root.addEventListener("click", async (e) => {
       if (e.target.closest("a.gc-galaxy-coord-link")) return;
+      if (root.classList.contains("is-busy")) return;
       const item = e.target.closest(".gc-planet-switcher-item");
       if (!item || !root.contains(item)) return;
       if (item.classList.contains("is-active")) {
@@ -16302,7 +16325,12 @@
             if (!el || !name) return;
             el.textContent = name;
           });
-          await GC.reloadCurrentPage({ force: true, skipHydrate: true, skipGameState: true });
+          await GC.reloadCurrentPage({
+            force: true,
+            skipHydrate: true,
+            skipGameState: true,
+            skipPolling: true,
+          });
           syncScopedPlanetIds(planetId);
           if (typeof GC.refreshGameState === "function") {
             await GC.refreshGameState("planet_switch");
@@ -21687,6 +21715,7 @@
           pjax: true,
           skipHydrate: opts.skipHydrate !== false,
           skipGameState: Boolean(opts.skipGameState),
+          skipPolling: Boolean(opts.skipPolling),
         });
         if (document.querySelector(".galaxy-page")) prefetchGalaxyAdjacent();
       } catch (err) {

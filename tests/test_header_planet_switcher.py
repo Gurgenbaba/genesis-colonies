@@ -416,3 +416,18 @@ def test_trader_hub_and_shipyard_render_active_planet_id(switcher_db, monkeypatc
     set_active_planet(player_id, hw_id)
     shipyard = client.get("/shipyard", headers={"X-PJAX": "true"}).get_data(as_text=True)
     assert f'data-planet-id="{hw_id}"' in shipyard
+
+
+def test_planet_switch_hotfix_client_contract():
+    """Planet switch must not lose to poll coalescing or stale switcher menu refs."""
+    src = (ROOT / "static" / "main.js").read_text(encoding="utf-8")
+    want_panel = src.split("function gameStateWantPanelPoll(reason)")[1].split("function refreshHudFromGameState")[0]
+    assert 'reasonStr === "planet_switch"' in want_panel
+    switcher = src.split("function initHeaderPlanetSwitcher()")[1].split("function bindPlanetEvolutionOnce()")[0]
+    assert "const getMenu = () => document.getElementById" in switcher
+    assert "const isMulti = () => root.dataset.multi" in switcher
+    assert "skipPolling: true" in switcher
+    refresh = src.split("async function refreshGameState(reason)")[1].split("function refreshHudFromGameState")[0]
+    assert "isPlanetSwitchReason" in refresh
+    apply = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
+    assert "GC.refreshInFlight = null" in apply
