@@ -746,6 +746,45 @@ def test_ranking_avatar_cache_bust(temp_db):
     assert "?v=" in row["avatar_url"] or "&v=" in row["avatar_url"]
 
 
+def test_ranking_persistent_avatar_url(temp_db):
+    from game.playercard import avatar_api_path, process_avatar_upload
+
+    class _FakeUpload:
+        def __init__(self, data: bytes, mimetype: str = "image/png"):
+            self._data = data
+            self.mimetype = mimetype
+
+        def read(self) -> bytes:
+            return self._data
+
+    def _png_bytes() -> bytes:
+        from PIL import Image
+        import io
+
+        im = Image.new("RGB", (64, 64), (40, 120, 200))
+        buf = io.BytesIO()
+        im.save(buf, "PNG")
+        return buf.getvalue()
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("avatar_persist_rank")
+    _seed_scores(pid, 10, 5)
+    recalculate_ranks()
+    ok, path = process_avatar_upload(pid, _FakeUpload(_png_bytes()))
+    assert ok is True
+    _set_player_card(pid, avatar_url=path, is_public=1)
+    _close_db()
+
+    rows = get_sorted_ranking_entries(limit=50)
+    row = next(r for r in rows if r["player_id"] == pid)
+    assert row["show_avatar"] is True
+    assert f"/api/player-avatar/{pid}" in row["avatar_url"]
+    assert "?v=" in row["avatar_url"] or "&v=" in row["avatar_url"]
+
+
 def test_ranking_uses_component_sum_not_stale_score_total(temp_db):
     _run_migrate(temp_db)
     init_db()

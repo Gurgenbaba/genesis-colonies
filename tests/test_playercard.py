@@ -24,6 +24,7 @@ from game.playercard import (
     AVATAR_UPLOAD_MAX_BYTES,
     SAVE_COOLDOWN_SEC,
     _LAST_SAVE_TS,
+    avatar_api_path,
     avatar_public_path,
     avatar_storage_path,
     badge_image_default_path,
@@ -31,7 +32,9 @@ from game.playercard import (
     build_public_card,
     ensure_player_card,
     ensure_player_card_tables,
+    get_player_avatar_row,
     get_player_card_row,
+    player_avatar_exists,
     player_exists,
     local_avatar_file_usable,
     process_avatar_upload,
@@ -615,26 +618,27 @@ def avatar_storage(tmp_path, monkeypatch):
     return root
 
 
-def test_resolve_avatar_display_requires_local_file(temp_db, avatar_storage, monkeypatch):
+def test_resolve_avatar_display_requires_db_blob(temp_db, monkeypatch):
     monkeypatch.setattr("game.playercard.SAVE_COOLDOWN_SEC", 0)
     init_db()
     _close_db_conn()
     pid, _ = _create_player("avatar_resolve")
 
-    missing_url = avatar_public_path(pid)
+    missing_url = avatar_api_path(pid)
     display, show = resolve_avatar_display(missing_url, 99, player_id=pid)
     assert display == ""
     assert show is False
 
     ok, path = process_avatar_upload(pid, _FakeUpload(_png_bytes()))
     assert ok is True
+    assert path == avatar_api_path(pid)
     display2, show2 = resolve_avatar_display(path, 100, player_id=pid)
     assert show2 is True
-    assert display2.startswith("/static/uploads/avatars/")
-    assert local_avatar_file_usable(path, player_id=pid)
+    assert display2.startswith("/api/player-avatar/")
+    assert player_avatar_exists(pid)
 
 
-def test_save_own_card_preserves_local_avatar_when_form_empty(temp_db, avatar_storage, monkeypatch):
+def test_save_own_card_preserves_avatar_when_form_empty(temp_db, monkeypatch):
     monkeypatch.setattr("game.playercard.SAVE_COOLDOWN_SEC", 0)
     init_db()
     _close_db_conn()
@@ -649,11 +653,11 @@ def test_save_own_card_preserves_local_avatar_when_form_empty(temp_db, avatar_st
     )
     assert ok is True, reason
     row = get_player_card_row(pid)
-    assert row["avatar_url"] == avatar_public_path(pid)
+    assert row["avatar_url"] == avatar_api_path(pid)
     assert view.get("avatar_url_client")
 
 
-def test_validate_local_avatar_path():
+def test_validate_avatar_paths():
     ok, url = validate_avatar_url("/static/uploads/avatars/avatar_42.webp", player_id=42)
     assert ok is True
     assert url.endswith("avatar_42.webp")
@@ -664,29 +668,40 @@ def test_validate_local_avatar_path():
     ok3, _ = validate_avatar_url("/static/uploads/avatars/evil.php", player_id=1)
     assert ok3 is False
 
+    ok4, api_url = validate_avatar_url("/api/player-avatar/42", player_id=42)
+    assert ok4 is True
+    assert api_url == "/api/player-avatar/42"
 
-def test_process_avatar_upload_resizes_and_webp(temp_db, avatar_storage):
+    ok5, _ = validate_avatar_url("/api/player-avatar/42", player_id=99)
+    assert ok5 is False
+
+
+def test_process_avatar_upload_resizes_and_webp(temp_db):
     init_db()
     _close_db_conn()
     pid, _ = _create_player("avatar_proc")
 
     ok, path = process_avatar_upload(pid, _FakeUpload(_png_bytes(1200, 800)))
     assert ok is True
-    assert path == avatar_public_path(pid)
+    assert path == avatar_api_path(pid)
 
-    dest = avatar_storage_path(pid)
-    assert dest.exists()
-    assert dest.suffix == ".webp"
-    assert dest.stat().st_size < 100_000
+    row = get_player_avatar_row(pid)
+    assert row is not None
+    blob = row["image_blob"]
+    assert isinstance(blob, (bytes, memoryview))
+    data = bytes(blob)
+    assert len(data) < 100_000
+    assert row["mime_type"] == "image/webp"
 
     from PIL import Image
+    import io
 
-    with Image.open(dest) as im:
+    with Image.open(io.BytesIO(data)) as im:
         assert im.size == (AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE)
         assert im.format == "WEBP"
 
 
-def test_process_avatar_rejects_invalid_types(temp_db, avatar_storage):
+def test_process_avatar_rejects_invalid_types(temp_db):
     init_db()
     _close_db_conn()
     pid, _ = _create_player("avatar_reject")
@@ -713,7 +728,7 @@ def test_process_avatar_rejects_invalid_types(temp_db, avatar_storage):
     assert reason_svg == "playercard_avatar_invalid_type"
 
 
-def test_upload_own_avatar_updates_db(temp_db, avatar_storage, monkeypatch):
+def test_upload_own_avatar_updates_db(temp_db, monkeypatch):
     monkeypatch.setattr("game.playercard.SAVE_COOLDOWN_SEC", 0)
     init_db()
     _close_db_conn()
@@ -723,15 +738,16 @@ def test_upload_own_avatar_updates_db(temp_db, avatar_storage, monkeypatch):
     assert ok is True
     assert reason == "playercard_avatar_upload_success"
     assert view is not None
-    assert "/static/uploads/avatars/" in view.get("avatar_url_client", "")
+    assert "/api/player-avatar/" in view.get("avatar_url_client", "")
 
     row = get_player_card_row(pid)
     assert row is not None
-    assert row["avatar_url"] == avatar_public_path(pid)
+    assert row["avatar_url"] == avatar_api_path(pid)
+    assert player_avatar_exists(pid)
     assert "?v=" in view["avatar_url"] or "&v=" in view["avatar_url"]
 
 
-def test_api_avatar_upload_route(app_client, avatar_storage):
+def test_api_avatar_upload_route(app_client):
     pid, login_name = _create_player("api_avatar")
     client = app_client
     client.post("/login", data={"username": login_name, "password": "test-pass-123"}, follow_redirects=True)
@@ -744,7 +760,12 @@ def test_api_avatar_upload_route(app_client, avatar_storage):
     payload = res.get_json()
     assert payload["ok"] is True
     assert payload["card"]["show_avatar"] is True
-    assert "/static/uploads/avatars/" in payload["card"]["avatar_url"]
+    assert "/api/player-avatar/" in payload["card"]["avatar_url"]
+
+    avatar_get = client.get(f"/api/player-avatar/{pid}")
+    assert avatar_get.status_code == 200
+    assert avatar_get.mimetype == "image/webp"
+    assert len(avatar_get.data) >= 64
 
     edit = client.get(f"/api/player-card/{pid}/edit")
     assert edit.status_code == 200
@@ -768,12 +789,15 @@ def test_save_own_card_local_avatar_path(temp_db, monkeypatch):
     _close_db_conn()
     pid, _ = _create_player("avatar_save_path")
 
+    ok_up, _, _ = upload_own_avatar(pid, _FakeUpload(_png_bytes()))
+    assert ok_up is True
+
     ok, reason, view = save_own_card(
         pid,
         {
             "title": "Pilot",
             "bio": "",
-            "avatar_url": avatar_public_path(pid),
+            "avatar_url": avatar_api_path(pid),
             "theme": "cyan",
             "is_public": "1",
         },
@@ -781,7 +805,7 @@ def test_save_own_card_local_avatar_path(temp_db, monkeypatch):
     assert ok is True
     assert reason == "playercard_save_success"
     assert view is not None
-    assert "/static/uploads/avatars/" in view.get("avatar_url_client", "")
+    assert "/api/player-avatar/" in view.get("avatar_url_client", "")
 
 
 def test_badge_seed_idempotent_via_service(temp_db):

@@ -19,6 +19,7 @@ from flask import (
     flash,
     session,
     g,
+    Response,
 )
 from markupsafe import Markup, escape
 
@@ -3489,6 +3490,40 @@ def api_admin_bans_list():
 
 def _playercard_viewer_id() -> int | None:
     return _current_player_id()
+
+
+@app.route("/api/player-avatar/<int:player_id>")
+def api_player_avatar(player_id: int):
+    viewer_id = _playercard_viewer_id()
+    if not playercard_logic.can_serve_player_avatar(player_id, viewer_id=viewer_id):
+        abort(404)
+
+    row = playercard_logic.get_player_avatar_row(player_id)
+    if not row:
+        abort(404)
+
+    blob = row.get("image_blob")
+    if not blob:
+        abort(404)
+
+    updated_at = int(row.get("updated_at") or 0)
+    mime = str(row.get("mime_type") or "image/webp").split(";")[0].strip().lower()
+    if mime not in ("image/png", "image/jpeg", "image/webp"):
+        mime = "image/webp"
+
+    etag = f'W/"pa-{int(player_id)}-{updated_at}"'
+    if request.headers.get("If-None-Match") == etag:
+        return Response(status=304, headers={"ETag": etag, "Cache-Control": "private, max-age=3600"})
+
+    resp = Response(blob, mimetype=mime)
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = "private, max-age=3600"
+    if updated_at > 0:
+        resp.headers["Last-Modified"] = time.strftime(
+            "%a, %d %b %Y %H:%M:%S GMT",
+            time.gmtime(updated_at),
+        )
+    return resp
 
 
 @app.route("/api/player-card/<int:player_id>")

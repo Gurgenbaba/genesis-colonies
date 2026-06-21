@@ -31,7 +31,7 @@ from .ranking import get_playercard_ranking_snapshot
 TITLE_MAX = 64
 BIO_MAX = 400
 AVATAR_URL_MAX = 512
-AVATAR_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
+AVATAR_UPLOAD_MAX_BYTES = 2 * 1024 * 1024
 AVATAR_OUTPUT_SIZE = 256
 AVATAR_WEBP_QUALITY = 80
 AVATAR_MIN_FILE_BYTES = 64
@@ -84,8 +84,10 @@ BADGE_KEY_TIER_ORDER: Dict[str, int] = {
 
 _AVATAR_SCHEMES = frozenset({"http", "https"})
 _LOCAL_AVATAR_RE = re.compile(r"^/static/uploads/avatars/avatar_(\d+)\.webp$")
+_PERSISTENT_AVATAR_RE = re.compile(r"^/api/player-avatar/(\d+)$")
 _ALLOWED_AVATAR_MIME = frozenset({"image/png", "image/jpeg", "image/webp"})
 _AVATAR_STORAGE_REL = Path("static") / "uploads" / "avatars"
+_AVATAR_BLOB_MIME = "image/webp"
 
 
 def badge_image_asset_stem(badge_key: str) -> str:
@@ -184,6 +186,17 @@ def ensure_player_card_tables(conn=None) -> None:
         "CREATE INDEX IF NOT EXISTS idx_pc_unlocked_player "
         "ON player_card_unlocked_badges(player_id, unlocked_at DESC);"
     )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS player_avatars (
+            player_id   INTEGER PRIMARY KEY,
+            image_blob  BLOB NOT NULL,
+            mime_type   TEXT NOT NULL,
+            updated_at  INTEGER NOT NULL,
+            FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+        );
+        """
+    )
     _seed_default_badges(cur)
     if own:
         c.close()
@@ -271,7 +284,12 @@ def avatar_storage_dir() -> Path:
 
 
 def avatar_public_path(player_id: int) -> str:
+    """Legacy static path (pre-GC-808). Prefer avatar_api_path for new uploads."""
     return f"/static/uploads/avatars/avatar_{int(player_id)}.webp"
+
+
+def avatar_api_path(player_id: int) -> str:
+    return f"/api/player-avatar/{int(player_id)}"
 
 
 def avatar_storage_path(player_id: int) -> Path:
@@ -299,19 +317,133 @@ def local_avatar_file_usable(url: str, *, player_id: Optional[int] = None) -> bo
         return False
 
 
+def player_avatar_exists(player_id: int, *, conn=None) -> bool:
+    own = conn is None
+    c = conn or db()
+    try:
+        if not table_exists(c, "player_avatars"):
+            return False
+        row = c.execute(
+            "SELECT 1 FROM player_avatars WHERE player_id = ? LIMIT 1;",
+            (int(player_id),),
+        ).fetchone()
+        return row is not None
+    finally:
+        if own:
+            c.close()
+
+
+def get_player_avatar_row(player_id: int, *, conn=None) -> Optional[Dict[str, Any]]:
+    own = conn is None
+    c = conn or db()
+    try:
+        if not table_exists(c, "player_avatars"):
+            return None
+        row = c.execute(
+            """
+            SELECT player_id, image_blob, mime_type, updated_at
+            FROM player_avatars
+            WHERE player_id = ?;
+            """,
+            (int(player_id),),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        if own:
+            c.close()
+
+
+def save_player_avatar_blob(
+    player_id: int,
+    blob: bytes,
+    mime_type: str,
+    *,
+    conn=None,
+    updated_at: Optional[int] = None,
+) -> int:
+    pid = int(player_id)
+    ts = int(updated_at or _now_ts())
+    mime = str(mime_type or _AVATAR_BLOB_MIME).split(";")[0].strip().lower()
+    if mime not in _ALLOWED_AVATAR_MIME and mime != _AVATAR_BLOB_MIME:
+        mime = _AVATAR_BLOB_MIME
+    own = conn is None
+    c = conn or db()
+    try:
+        cur = c.cursor()
+        cur.execute(
+            """
+            INSERT INTO player_avatars (player_id, image_blob, mime_type, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(player_id) DO UPDATE SET
+                image_blob = excluded.image_blob,
+                mime_type = excluded.mime_type,
+                updated_at = excluded.updated_at;
+            """,
+            (pid, blob, mime, ts),
+        )
+        if own:
+            commit(c)
+        return ts
+    finally:
+        if own:
+            c.close()
+
+
+def can_serve_player_avatar(
+    player_id: int,
+    *,
+    viewer_id: Optional[int] = None,
+    conn=None,
+) -> bool:
+    """Avatar bytes are only served for public profiles or the owner."""
+    own = conn is None
+    c = conn or db()
+    try:
+        if viewer_id is not None and int(viewer_id) == int(player_id):
+            return True
+        card = get_player_card_row(player_id, conn=c)
+        if not card:
+            return False
+        return bool(int(card.get("is_public", 1) or 0))
+    finally:
+        if own:
+            c.close()
+
+
 def resolve_avatar_display(
     url: Any,
     version: Any = None,
     *,
     player_id: Optional[int] = None,
+    conn=None,
 ) -> Tuple[str, bool]:
-    """Return client avatar URL only when validation passes and local files exist."""
+    """Return client avatar URL only when validation passes and storage exists."""
     ok, validated = validate_avatar_url(url, player_id=player_id)
     if not ok or not validated:
         return "", False
+
+    pid = player_id
+    if pid is None:
+        m_api = _PERSISTENT_AVATAR_RE.match(validated)
+        m_local = _LOCAL_AVATAR_RE.match(validated)
+        if m_api:
+            pid = int(m_api.group(1))
+        elif m_local:
+            pid = int(m_local.group(1))
+
+    if validated.startswith("/api/player-avatar/"):
+        if pid is None or not player_avatar_exists(pid, conn=conn):
+            return "", False
+        return avatar_url_for_client(validated, version), True
+
     if validated.startswith("/static/uploads/avatars/"):
+        if pid is not None and player_avatar_exists(pid, conn=conn):
+            api_url = avatar_api_path(pid)
+            return avatar_url_for_client(api_url, version), True
         if not local_avatar_file_usable(validated, player_id=player_id):
             return "", False
+        return avatar_url_for_client(validated, version), True
+
     return avatar_url_for_client(validated, version), True
 
 
@@ -352,6 +484,13 @@ def validate_avatar_url(url: Any, *, player_id: Optional[int] = None) -> Tuple[b
         if player_id is not None and int(m.group(1)) != int(player_id):
             return False, "playercard_invalid_avatar"
         return True, s
+    if s.startswith("/api/player-avatar/"):
+        m = _PERSISTENT_AVATAR_RE.match(s)
+        if not m:
+            return False, "playercard_invalid_avatar"
+        if player_id is not None and int(m.group(1)) != int(player_id):
+            return False, "playercard_invalid_avatar"
+        return True, s
     try:
         parsed = urlparse(s)
     except Exception:
@@ -379,8 +518,7 @@ def _process_avatar_image(src: Image.Image) -> Image.Image:
     return im.resize((AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE), Image.Resampling.LANCZOS)
 
 
-def _save_avatar_webp(im: Image.Image, dest: Path) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
+def _avatar_webp_bytes(im: Image.Image) -> bytes:
     buf = io.BytesIO()
     has_alpha = im.mode in ("RGBA", "LA") or "A" in im.getbands()
     if has_alpha:
@@ -390,7 +528,12 @@ def _save_avatar_webp(im: Image.Image, dest: Path) -> None:
     data = buf.getvalue()
     if len(data) < AVATAR_MIN_FILE_BYTES:
         raise ValueError("avatar_output_too_small")
-    dest.write_bytes(data)
+    return data
+
+
+def _save_avatar_webp(im: Image.Image, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(_avatar_webp_bytes(im))
 
 
 def _read_upload_bytes(file_storage: Any) -> Tuple[Optional[bytes], str]:
@@ -412,7 +555,7 @@ def _validate_upload_mime(file_storage: Any) -> Tuple[bool, str]:
 
 
 def process_avatar_upload(player_id: int, file_storage: Any) -> Tuple[bool, str]:
-    """Validate, resize, and persist avatar as deterministic WEBP. Returns (ok, reason)."""
+    """Validate, resize, and persist avatar as WEBP blob. Returns (ok, path_or_reason)."""
     pid = int(player_id)
     raw, err = _read_upload_bytes(file_storage)
     if raw is None:
@@ -433,13 +576,24 @@ def process_avatar_upload(player_id: int, file_storage: Any) -> Tuple[bool, str]
     except Exception:
         return False, "playercard_avatar_invalid_type"
 
-    dest = avatar_storage_path(pid)
     try:
-        _save_avatar_webp(im, dest)
+        blob = _avatar_webp_bytes(im)
     except Exception:
         return False, "playercard_avatar_save_failed"
 
-    return True, avatar_public_path(pid)
+    public_path = avatar_api_path(pid)
+    c = db()
+    try:
+        begin_write_transaction(c)
+        save_player_avatar_blob(pid, blob, _AVATAR_BLOB_MIME, conn=c)
+        commit(c)
+    except Exception:
+        rollback(c)
+        return False, "playercard_avatar_save_failed"
+    finally:
+        c.close()
+
+    return True, public_path
 
 
 def upload_own_avatar(
@@ -873,12 +1027,16 @@ def save_own_card(player_id: int, data: Dict[str, Any]) -> Tuple[bool, str, Opti
     if not avatar_url:
         existing = str(card.get("avatar_url") or "").strip()
         ok_ex, existing_url = validate_avatar_url(existing, player_id=pid)
-        if (
-            ok_ex
-            and existing_url.startswith("/static/uploads/avatars/")
-            and local_avatar_file_usable(existing_url, player_id=pid)
-        ):
-            avatar_url = existing_url
+        if ok_ex and existing_url:
+            if existing_url.startswith("/api/player-avatar/") and player_avatar_exists(pid):
+                avatar_url = existing_url
+            elif existing_url.startswith("/static/uploads/avatars/"):
+                if player_avatar_exists(pid):
+                    avatar_url = avatar_api_path(pid)
+                elif local_avatar_file_usable(existing_url, player_id=pid):
+                    avatar_url = existing_url
+            elif existing_url.startswith(("http://", "https://")):
+                avatar_url = existing_url
 
     theme = validate_theme(data.get("theme"))
     is_public = 1 if str(data.get("is_public", "1")).lower() in ("1", "true", "yes", "on") else 0

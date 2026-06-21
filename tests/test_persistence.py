@@ -82,6 +82,8 @@ def test_fresh_init_then_migrate(temp_db):
         assert "009_legacy_planets_hardening.sql" in names
         assert "072_discord_oauth.sql" in names
         assert "074_account_safety_options.sql" in names
+        assert "075_player_avatar_persistence.sql" in names
+        assert table_exists(conn, "player_avatars")
     finally:
         conn.close()
 
@@ -320,3 +322,70 @@ def test_legacy_planets_migration_idempotent(temp_db):
         assert homeworld is not None
     finally:
         conn.close()
+
+
+def test_player_avatar_blob_survives_db_reopen(temp_db, monkeypatch):
+    from game.models import create_user
+    from game.playercard import (
+        avatar_api_path,
+        get_player_avatar_row,
+        process_avatar_upload,
+        upload_own_avatar,
+    )
+
+    class _FakeUpload:
+        def __init__(self, data: bytes, mimetype: str = "image/png"):
+            self._data = data
+            self.mimetype = mimetype
+
+        def read(self) -> bytes:
+            return self._data
+
+    def _png_bytes() -> bytes:
+        from PIL import Image
+        import io
+
+        im = Image.new("RGB", (48, 48), (200, 80, 40))
+        buf = io.BytesIO()
+        im.save(buf, "PNG")
+        return buf.getvalue()
+
+    monkeypatch.setattr("game.playercard.SAVE_COOLDOWN_SEC", 0)
+    init_db()
+    _run_migrate(temp_db)
+
+    import uuid
+
+    uname = f"avatar_persist_{uuid.uuid4().hex[:8]}"
+    ok_u, err_u, user = create_user(uname, "secret123")
+    assert ok_u and user, err_u
+    pid = int(user["id"])
+    ok, reason, _ = upload_own_avatar(pid, _FakeUpload(_png_bytes()))
+    assert ok is True, reason
+
+    conn = db()
+    try:
+        blob_len = len(bytes(conn.execute(
+            "SELECT image_blob FROM player_avatars WHERE player_id = ?;",
+            (pid,),
+        ).fetchone()["image_blob"]))
+        assert blob_len > 64
+        card_url = conn.execute(
+            "SELECT avatar_url FROM player_cards WHERE player_id = ?;",
+            (pid,),
+        ).fetchone()["avatar_url"]
+        assert card_url == avatar_api_path(pid)
+    finally:
+        conn.close()
+
+    conn2 = db()
+    try:
+        row = get_player_avatar_row(pid, conn=conn2)
+        assert row is not None
+        assert len(bytes(row["image_blob"])) == blob_len
+    finally:
+        conn2.close()
+
+    ok2, path = process_avatar_upload(pid, _FakeUpload(_png_bytes()))
+    assert ok2 is True
+    assert path == avatar_api_path(pid)
