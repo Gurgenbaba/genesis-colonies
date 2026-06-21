@@ -786,15 +786,15 @@ def test_main_js_gc640b_fleet_page_visual_redesign():
     css = _read("static/style.css")
     js = _read("static/main.js")
     assert "fleet-ogame-stack" in tpl
-    assert "fleet-ship-table" in tpl
+    assert "fleet-ship-card-grid" in tpl
     assert "data-fleet-mode-tab" in tpl
     assert "data-fleet-mode-panel" in tpl
     assert 'id="logistics-page"' in tpl
     assert "data-ship-max-image" in tpl
-    assert "fleet-ship-group-row" in tpl
+    assert "fleet-ship-card-role-badge" in tpl
     assert "fleet-shipyard-link-panel" not in tpl
     assert "fleet-logistics-cta" not in tpl
-    assert ".fleet-ship-table" in css
+    assert ".fleet-ship-card" in css
     assert ".fleet-ogame-stack" in css
     assert "data-ship-max-image" in js
     assert "function applyFleetPageMode(page)" in js
@@ -802,24 +802,21 @@ def test_main_js_gc640b_fleet_page_visual_redesign():
 
 
 def test_main_js_gc640c_fleet_dense_ship_cards():
-    """GC-640C/640F: compact ship list — horizontal table rows, no inner scroll."""
+    """GC-640C/640F: compact ship cards — grouped grid, no inner scroll."""
     css = _read("static/style.css")
     tpl = _read("templates/fleet.html")
-    assert ".fleet-ship-table" in css
+    assert ".fleet-ship-card" in css
     assert "fleet-ship-thumb" in css
-    assert "width: 32px" in css
-    assert "overflow: visible" in css.split(".fleet-ship-table-wrap")[1].split(".fleet-ship-table")[0]
-    assert "max-height: none" in css.split(".fleet-ship-table-wrap")[1].split(".fleet-ship-table")[0]
-    assert "fleet-ship-table" in tpl
+    assert "fleet-ship-card-grid" in tpl
+    assert "data-fleet-ships-grid" in tpl
 
 
 def test_main_js_gc640f_fleet_no_scroll_ship_selector():
-    """GC-640F: ship table stays horizontal on desktop; logistics rows stay scoped."""
+    """GC-640F: ship cards in responsive grid; logistics rows stay scoped."""
     css = _read("static/style.css")
     assert ".fleet-ships-grid > .fleet-ship-row:not(.fleet-ship-card)" in css
-    assert "display: table-row" in css
-    assert "table-layout: fixed" in css
-    assert "height: 40px" in css.split(".fleet-ship-table tbody tr.fleet-ship-row")[1].split(".fleet-ship-table tbody td")[0]
+    assert "grid-template-columns: repeat(auto-fill, minmax(72px, 1fr))" in css
+    assert ".fleet-ship-card-grid" in css
     assert ".fleet-ship-row:not(.fleet-ship-card)" not in css.replace(".fleet-ships-grid > .fleet-ship-row:not(.fleet-ship-card)", "")
 
 

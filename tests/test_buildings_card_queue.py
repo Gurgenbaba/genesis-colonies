@@ -46,7 +46,7 @@ def test_gc748_card_asset_lazyload_contract():
     assert "aspect-ratio: 16 / 9" in hero_img
 
     fleet = (ROOT / "templates" / "fleet.html").read_text(encoding="utf-8")
-    assert "fleet-ship-tbl-img" in fleet
+    assert "fleet-ship-card-img" in fleet
     assert 'decoding="async"' in fleet
 
 

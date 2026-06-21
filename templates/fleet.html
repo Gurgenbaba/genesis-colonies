@@ -10,14 +10,14 @@
 {% set fleet_mode_raw = request.args.get('mode', 'send')|lower %}
 {% set fleet_mode = fleet_mode_raw if fleet_mode_raw in ('send', 'collect', 'distribute') else 'send' %}
 {% set fleet_logistics_mode = fleet_mode if fleet_mode in ('collect', 'distribute') else 'collect' %}
-{% set fleet_ship_groups = [
-  ('transport_logistics', ('cargo', 'scout'), 'fleet_group_transport_logistics'),
-  ('combat', ('combat',), 'fleet_group_combat'),
-  ('espionage', ('spy',), 'fleet_group_espionage'),
-  ('expedition', ('expedition',), 'fleet_group_expedition'),
-  ('colonization', ('colony',), 'fleet_group_colonization'),
-  ('recycler', ('recycle',), 'fleet_group_recycler'),
-  ('special', ('utility',), 'fleet_group_special'),
+{% set fleet_ship_role_groups = [
+  ('cargo', 'scout'),
+  ('combat',),
+  ('spy',),
+  ('expedition',),
+  ('colony',),
+  ('recycle',),
+  ('utility',),
 ] %}
 
 <div class="gc-page fleet-page" id="fleet-page"
@@ -194,80 +194,61 @@
             </div>
           </div>
 
-          <div class="fleet-ship-table-wrap" data-fleet-ships-grid>
-            <table class="fleet-ship-table">
-              <thead>
-                <tr>
-                  <th class="fleet-ship-tbl-col-icon" scope="col"><span class="visually-hidden">{{ T("fleet_table_icon") }}</span></th>
-                  <th class="fleet-ship-tbl-col-name" scope="col">{{ T("fleet_table_name") }}</th>
-                  <th class="fleet-ship-tbl-col-stock" scope="col">{{ T("fleet_table_stock") }}</th>
-                  <th class="fleet-ship-tbl-col-speed" scope="col">{{ T("fleet_table_speed") }}</th>
-                  <th class="fleet-ship-tbl-col-cargo" scope="col">{{ T("fleet_table_cargo") }}</th>
-                  <th class="fleet-ship-tbl-col-qty" scope="col">{{ T("fleet_table_amount") }}</th>
-                  <th class="fleet-ship-tbl-col-max" scope="col"><span class="visually-hidden">{{ T("fleet_btn_max") }}</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for group_id, roles, label_key in fleet_ship_groups %}
-                  {% set ns = namespace(count=0) %}
-                  {% for ship in fleet_ctx.ship_defs %}
-                    {% if ship.role in roles %}{% set ns.count = ns.count + 1 %}{% endif %}
-                  {% endfor %}
-                  {% if ns.count > 0 %}
-                  <tr class="fleet-ship-group-row" data-fleet-ship-group="{{ group_id }}">
-                    <th colspan="7" scope="colgroup">{{ T(label_key) }}</th>
-                  </tr>
-                  {% for ship in fleet_ctx.ship_defs %}
-                  {% if ship.role in roles %}
-                  {% set have = fleet_ctx.ships.get(ship.key, 0) if fleet_ctx.ships else 0 %}
-                  <tr class="fleet-ship-row{% if have <= 0 %} is-empty{% endif %}"
-                      data-ship-key="{{ ship.key }}"
-                      data-ship-have="{{ have }}"
-                      data-ship-role="{{ ship.role }}">
-                    <td class="fleet-ship-tbl-icon">
-                      <button type="button"
-                              class="fleet-ship-tbl-icon-btn"
-                              data-ship-max-image="{{ ship.key }}"
-                              aria-label="{{ T('fleet_ship_image_max', 'Select maximum') }}: {{ T(ship.name_key) }}">
-                        <picture>
-                          <source srcset="{{ url_for('static', filename='img/ships/' ~ ship.key ~ '.webp') }}" type="image/webp">
-                          <img src="{{ url_for('static', filename='img/ships/' ~ ship.key ~ '.png') }}"
-                               alt=""
-                               loading="lazy"
-                               decoding="async"
-                               class="fleet-ship-tbl-img fleet-ship-thumb"
-                               width="32"
-                               height="32"
-                               data-ship-img="{{ ship.key }}"
-                               onerror="this.onerror=null;this.src='{{ _ship_placeholder }}';">
-                        </picture>
-                      </button>
-                    </td>
-                    <td class="fleet-ship-tbl-name" data-label="{{ T('fleet_table_name') }}">
-                      <button type="button" class="gc-ship-detail-trigger fleet-ship-tbl-name-btn"
+          <div class="fleet-ship-card-grid fleet-ship-card-grid--compact" data-fleet-ships-grid>
+            {% for roles in fleet_ship_role_groups %}
+              {% for ship in fleet_ctx.ship_defs %}
+              {% if ship.role in roles %}
+              {% set have = fleet_ctx.ships.get(ship.key, 0) if fleet_ctx.ships else 0 %}
+              <article class="fleet-ship-card fleet-ship-card--pick fleet-ship-row{% if have <= 0 %} is-empty{% endif %}"
+                       data-ship-key="{{ ship.key }}"
+                       data-ship-have="{{ have }}"
+                       data-ship-role="{{ ship.role }}">
+                <div class="fleet-ship-card-art-wrap">
+                  <button type="button"
+                          class="fleet-ship-card-art"
+                          data-ship-max-image="{{ ship.key }}"
+                          aria-label="{{ T('fleet_ship_image_max', 'Select maximum') }}: {{ T(ship.name_key) }}">
+                    <picture>
+                      <source srcset="{{ url_for('static', filename='img/ships/' ~ ship.key ~ '.webp') }}" type="image/webp">
+                      <img src="{{ url_for('static', filename='img/ships/' ~ ship.key ~ '.png') }}"
+                           alt=""
+                           loading="lazy"
+                           decoding="async"
+                           class="fleet-ship-card-img fleet-ship-thumb"
+                           width="72"
+                           height="72"
+                           data-ship-img="{{ ship.key }}"
+                           onerror="this.onerror=null;this.src='{{ _ship_placeholder }}';">
+                    </picture>
+                  </button>
+                  <div class="fleet-ship-card-overlay">
+                    <div class="fleet-ship-card-overlay-inner">
+                      <div class="fleet-ship-card-overlay-head">
+                        <span class="gc-hero-stat-badge fleet-ship-card-role-badge">{{ T("shipyard_role_" ~ ship.role) }}</span>
+                        <span class="fleet-ship-card-stock gc-mono fleet-ship-stock" title="{{ T('fleet_ship_stock') }}">×{{ have|fmt_int }}</span>
+                      </div>
+                      <button type="button" class="gc-ship-detail-trigger fleet-ship-card-name"
                               data-ship-detail="{{ ship.key }}"
                               aria-label="{{ T('ship_detail_open') }}">{{ T(ship.name_key) }}</button>
-                    </td>
-                    <td class="fleet-ship-tbl-stock gc-mono fleet-ship-stock fleet-ship-tbl-col-stock" data-label="{{ T('fleet_table_stock') }}" title="{{ T('fleet_ship_stock') }}">{{ have|fmt_int }}</td>
-                    <td class="fleet-ship-tbl-speed gc-mono fleet-ship-tbl-col-speed" data-label="{{ T('fleet_table_speed') }}">{{ ship.speed|fmt_int }}</td>
-                    <td class="fleet-ship-tbl-cargo gc-mono fleet-ship-tbl-col-cargo" data-label="{{ T('fleet_table_cargo') }}">{{ ship.cargo|fmt_int }}</td>
-                    <td class="fleet-ship-tbl-qty fleet-ship-tbl-col-qty" data-label="{{ T('fleet_table_amount') }}">
-                      <input type="text" min="0" max="{{ have }}" value="0" inputmode="numeric"
-                             class="fleet-ship-input gc-mono gc-num-input" data-ship-input="{{ ship.key }}"
-                             aria-label="{{ T(ship.name_key) }}">
-                    </td>
-                    <td class="fleet-ship-tbl-max">
-                      <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs fleet-ship-max" data-ship-max="{{ ship.key }}">
-                        {{ T("fleet_btn_max") }}
-                      </button>
-                    </td>
-                  </tr>
-                  {% endif %}
-                  {% endfor %}
-                  {% endif %}
-                {% endfor %}
-              </tbody>
-            </table>
+                      <div class="fleet-ship-card-meta gc-mono">
+                        <span class="fleet-ship-card-speed">{{ ship.speed|fmt_int }}</span>
+                        <span class="fleet-ship-card-cargo">{{ ship.cargo|fmt_int }}</span>
+                      </div>
+                      <div class="fleet-ship-card-controls">
+                        <input type="text" min="0" max="{{ have }}" value="0" inputmode="numeric"
+                               class="fleet-ship-input gc-mono gc-num-input" data-ship-input="{{ ship.key }}"
+                               aria-label="{{ T(ship.name_key) }}">
+                        <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs fleet-ship-max" data-ship-max="{{ ship.key }}">
+                          {{ T("fleet_btn_max") }}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+              {% endif %}
+              {% endfor %}
+            {% endfor %}
           </div>
         </section>
 

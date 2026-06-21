@@ -11427,6 +11427,23 @@
       return ships;
     };
 
+    const isCoarsePointer = () => window.matchMedia("(hover: none), (pointer: coarse)").matches;
+
+    const collapseFleetShipPickCards = (page, except) => {
+      page.querySelectorAll(".fleet-ship-card--pick.is-fleet-ship-expanded").forEach((card) => {
+        if (except && card === except) return;
+        card.classList.remove("is-fleet-ship-expanded");
+      });
+    };
+
+    const syncFleetShipPickQtyMarks = (page) => {
+      page.querySelectorAll(".fleet-ship-card--pick").forEach((card) => {
+        const inp = card.querySelector("[data-ship-input]");
+        const qty = inp ? readNumberInput(inp) : 0;
+        card.classList.toggle("has-ship-qty", qty > 0);
+      });
+    };
+
     const getResourcesSelection = (page) => ({
       metal: readNumberInput(page.querySelector("[data-fleet-res-metal]")),
       crystal: readNumberInput(page.querySelector("[data-fleet-res-crystal]")),
@@ -12382,6 +12399,7 @@
           const maxImage = row.querySelector("[data-ship-max-image]");
           if (maxImage) maxImage.disabled = have <= 0;
         });
+        syncFleetShipPickQtyMarks(page);
       }
       const slotsEl = page.querySelector("[data-fleet-slots]");
       if (state.fleet_slots && slotsEl) {
@@ -12636,6 +12654,7 @@
       if (preset.target_position != null) form.querySelector('[name="target_position"]').value = String(preset.target_position);
       syncExpeditionMissionTarget(page);
       scheduleTargetResolve(page);
+      syncFleetShipPickQtyMarks(page);
       schedulePreview(page);
     };
 
@@ -12755,6 +12774,22 @@
       const form = getForm(page);
       const fuelResource = rt.data.fuel_resource || page.dataset.fuelResource || "fuel_cells";
 
+      const pickArt = e.target.closest(".fleet-ship-card--pick .fleet-ship-card-art");
+      if (pickArt && page.contains(pickArt) && isCoarsePointer()) {
+        const card = pickArt.closest(".fleet-ship-card--pick");
+        if (card) {
+          const wasExpanded = card.classList.contains("is-fleet-ship-expanded");
+          collapseFleetShipPickCards(page);
+          if (!wasExpanded) card.classList.add("is-fleet-ship-expanded");
+          e.preventDefault();
+          return;
+        }
+      }
+
+      if (isCoarsePointer() && page.contains(e.target) && !e.target.closest(".fleet-ship-card--pick")) {
+        collapseFleetShipPickCards(page);
+      }
+
       const maxShip = e.target.closest("[data-ship-max]");
       if (maxShip && page.contains(maxShip)) {
         e.preventDefault();
@@ -12763,6 +12798,7 @@
         const have = parseInt(row?.getAttribute("data-ship-have") || "0", 10);
         const inp = form?.querySelector(`[data-ship-input="${key}"]`);
         if (inp) setNumberInputValue(inp, have);
+        syncFleetShipPickQtyMarks(page);
         schedulePreview(page);
         return;
       }
@@ -12775,6 +12811,7 @@
         const have = parseInt(row?.getAttribute("data-ship-have") || "0", 10);
         const inp = form?.querySelector(`[data-ship-input="${key}"]`);
         if (inp && have > 0) setNumberInputValue(inp, have);
+        syncFleetShipPickQtyMarks(page);
         schedulePreview(page);
         return;
       }
@@ -12912,7 +12949,10 @@
         syncExpeditionMissionTarget(page);
         scheduleTargetResolve(page);
       }
-      if (e.target.closest("#fleet-send-form")) schedulePreview(page);
+      if (e.target.closest("#fleet-send-form")) {
+        if (e.target.matches("[data-ship-input]")) syncFleetShipPickQtyMarks(page);
+        schedulePreview(page);
+      }
     });
 
     document.addEventListener("input", (e) => {
@@ -12926,7 +12966,10 @@
         syncExpeditionMissionTarget(page);
         scheduleTargetResolve(page);
       }
-      if (e.target.closest("#fleet-send-form")) schedulePreview(page);
+      if (e.target.closest("#fleet-send-form")) {
+        if (e.target.matches("[data-ship-input]")) syncFleetShipPickQtyMarks(page);
+        schedulePreview(page);
+      }
     });
 
     document.addEventListener("submit", async (e) => {
@@ -13824,6 +13867,7 @@
     if (typeof GC.refreshFleetState === "function") GC.refreshFleetState(page);
     if (typeof GC.syncFleetMissionLockUi === "function") GC.syncFleetMissionLockUi(page);
     applyFleetPageMode(page);
+    syncFleetShipPickQtyMarks(page);
   }
 
   function applyFleetUrlPrefill(page) {

@@ -4785,7 +4785,11 @@ def test_quick_target_template_sets_coord_inputs():
     assert "data-fleet-send-btn" in tpl
     assert "data-gc-hud-select" in tpl
     assert "data-ship-max-image" in tpl
-    assert "fleet-ship-group-row" in tpl
+    assert "fleet-ship-card-role-badge" in tpl
+    assert "fleet-ship-card-overlay" in tpl
+    assert "fleet-ship-card--pick" in tpl
+    assert "gc-hero-stat-badge" in tpl
+    assert "shipyard_role_" in tpl
 
 
 def test_fuel_efficiency_reduces_cost():
