@@ -1,0 +1,32 @@
+{# Inline fleet slot counter — used on /fleet send + logistics panels #}
+{% macro render_fleet_slots_badge(slots, modifier='inline') %}
+<div class="fleet-slots-badge fleet-slots-badge--{{ modifier }}" aria-live="polite">
+  {% if modifier == 'strip' %}
+  <span class="fleet-slots-line">
+    <span class="fleet-slots-label">{{ T("fleet_slots_label") }}</span>
+    <span class="fleet-slots-value gc-mono" data-fleet-slots>
+      {{ slots.active if slots is defined and slots.active is defined else 0 }}
+      /
+      {{ slots.max if slots is defined and slots.max is defined else 0 }}
+    </span>
+  </span>
+  {% if slots is defined and slots.next_unlock is defined %}
+  <span class="fleet-slots-hint hint">
+    {{ T("fleet_slots_unlock_hint", research=T("research_navigation_tech"), level=slots.next_unlock.level, slots=slots.next_unlock.slots) }}
+  </span>
+  {% endif %}
+  {% else %}
+  <span class="fleet-slots-label">{{ T("fleet_slots_label") }}</span>
+  <span class="fleet-slots-value gc-mono" data-fleet-slots>
+    {{ slots.active if slots is defined and slots.active is defined else 0 }}
+    /
+    {{ slots.max if slots is defined and slots.max is defined else 0 }}
+  </span>
+  {% if slots is defined and slots.next_unlock is defined %}
+  <span class="fleet-slots-hint hint">
+    {{ T("fleet_slots_unlock_hint", research=T("research_navigation_tech"), level=slots.next_unlock.level, slots=slots.next_unlock.slots) }}
+  </span>
+  {% endif %}
+  {% endif %}
+</div>
+{% endmacro %}

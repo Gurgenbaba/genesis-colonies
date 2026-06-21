@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip with context %}
+{% from "partials/fleet_slots_badge.html" import render_fleet_slots_badge with context %}
 
 {% block content %}
 {% set fleet_ctx = fleet if fleet is defined and fleet else {'ready': false} %}
@@ -29,27 +30,6 @@
   {% if fleet_ctx.ready %}
   <script type="application/json" id="fleet-page-state">{{ fleet_ctx | tojson }}</script>
   {% endif %}
-
-  <header class="fleet-command-head section-header">
-    <div class="fleet-command-head-main">
-      <h2 class="section-title">{{ T("fleet_title") }}</h2>
-      <p class="section-hint hint">{{ T("fleet_hint") }}</p>
-      <a href="{{ url_for('shipyard_view') }}" class="fleet-shipyard-head-link gc-nav-link">{{ T("fleet_shipyard_head_link") }}</a>
-    </div>
-    <div class="fleet-slots-badge fleet-slots-badge--compact" aria-live="polite">
-      <span class="fleet-slots-label">{{ T("fleet_slots_label") }}</span>
-      <span class="fleet-slots-value gc-mono" data-fleet-slots>
-        {{ fleet_ctx.fleet_slots.active if fleet_ctx.fleet_slots is defined else 0 }}
-        /
-        {{ fleet_ctx.fleet_slots.max if fleet_ctx.fleet_slots is defined else 0 }}
-      </span>
-      {% if fleet_ctx.fleet_slots is defined and fleet_ctx.fleet_slots.next_unlock is defined %}
-      <span class="fleet-slots-hint hint">
-        {{ T("fleet_slots_unlock_hint", research=T("research_navigation_tech"), level=fleet_ctx.fleet_slots.next_unlock.level, slots=fleet_ctx.fleet_slots.next_unlock.slots) }}
-      </span>
-      {% endif %}
-    </div>
-  </header>
 
   {% if not fleet_ctx.ready %}
   <section class="gc-panel fleet-panel">
@@ -91,7 +71,10 @@
         <section class="gc-panel fleet-panel fleet-mission-control-panel fleet-send-panel fleet-ogame-top" aria-labelledby="fleet-mission-control-title">
           <div class="fleet-target-block fleet-ogame-targets" data-fleet-target-block>
             <div class="fleet-form-row fleet-target-row fleet-ogame-quick-row">
-              <label class="fleet-form-label" for="fleet-quick-target-select">{{ T("fleet_quick_targets") }}</label>
+              <div class="fleet-quick-row-head">
+                <label class="fleet-form-label" for="fleet-quick-target-select">{{ T("fleet_quick_targets") }}</label>
+                {{ render_fleet_slots_badge(fleet_ctx.fleet_slots if fleet_ctx.fleet_slots is defined else {}, 'strip') }}
+              </div>
               <div class="fleet-quick-targets-strip">
                 <select id="fleet-quick-target-select" class="fleet-quick-target-select fleet-control" data-fleet-quick-target-select data-gc-hud-select aria-label="{{ T('fleet_quick_targets') }}">
                   <option value="">{{ T("fleet_quick_target_manual") }}</option>

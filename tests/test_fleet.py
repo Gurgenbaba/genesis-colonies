@@ -4772,6 +4772,13 @@ def test_quick_target_template_sets_coord_inputs():
     assert "data-galaxy" in tpl and "data-fleet-quick-target-select" in tpl
     assert "data-fleet-expedition-shortcut" in tpl
     assert "fleet-colony-chip" not in tpl
+    assert "render_fleet_slots_badge" in tpl
+    assert "'strip'" in tpl
+    assert "fleet-quick-row-head" in tpl
+    assert "fleet-ogame-ships-head" in tpl
+    assert "fleet-command-head" not in tpl
+    slots_partial = (Path(__file__).resolve().parent.parent / "templates" / "partials" / "fleet_slots_badge.html").read_text(encoding="utf-8")
+    assert "modifier == 'strip'" in slots_partial or "fleet-slots-line" in slots_partial
     assert "fleet-coords-strip" in tpl
     assert "fleet-preview-hud" in tpl
     assert "data-preview-mission-badge" in tpl
