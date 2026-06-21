@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 from unittest.mock import patch
@@ -25,6 +26,7 @@ from game.ranking import (
     enrich_ranking_social_fields,
     get_player_score_row,
     get_sorted_ranking_entries,
+    ranking_inactive_from_last_seen,
     recalculate_all_rankings,
     recalculate_ranks,
     repair_player_score_totals,
@@ -950,3 +952,50 @@ def test_combat_destruction_increases_ranking_scores(temp_db):
     atk_row = next(r for r in entries if r["player_id"] == attacker)
     assert atk_row["destroyed_score"] > 0
     assert atk_row["military_score"] >= atk_row["destroyed_score"]
+
+
+def test_ranking_exposes_vacation_active_flag(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    ok, err, user = create_user(f"vac_rank_{uuid.uuid4().hex[:8]}", "test-pass-123")
+    assert ok and user, err
+    pid = int(user["id"])
+    from game.models import ensure_player_and_homeworld
+
+    conn = db()
+    ensure_player_and_homeworld(pid, player_name="Vacationer", conn=conn)
+    conn.execute(
+        "UPDATE players SET vacation_mode_active = 1, vacation_locked_until = ? WHERE id = ?;",
+        (int(time.time()) + 86400, pid),
+    )
+    conn.commit()
+    conn.close()
+
+    entries = get_sorted_ranking_entries(limit=50)
+    row = next(r for r in entries if int(r["player_id"]) == pid)
+    assert row["vacation_active"] is True
+
+
+def test_ranking_inactive_flag_after_three_days(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    ok, err, user = create_user(f"inactive_{uuid.uuid4().hex[:8]}", "test-pass-123")
+    assert ok and user, err
+    pid = int(user["id"])
+    from game.models import ensure_player_and_homeworld
+
+    now = int(time.time())
+    conn = db()
+    ensure_player_and_homeworld(pid, player_name="InactiveOne", conn=conn)
+    conn.execute("UPDATE players SET last_seen = ? WHERE id = ?;", (now - 4 * 86400, pid))
+    conn.commit()
+    conn.close()
+
+    assert ranking_inactive_from_last_seen(now - 4 * 86400, now=now) is True
+    assert ranking_inactive_from_last_seen(now - 2 * 86400, now=now) is False
+    assert ranking_inactive_from_last_seen(0, now=now) is True
+
+    entries = get_sorted_ranking_entries(limit=50)
+    row = next(r for r in entries if int(r["player_id"]) == pid)
+    assert row["inactive"] is True
+    assert row["vacation_active"] is False

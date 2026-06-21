@@ -4995,3 +4995,74 @@ def test_api_fleet_recall_returns_state(fleet_db, monkeypatch):
     assert isinstance(active, dict)
     assert active.get("count") == 1
     assert active["items"][0]["status"] == "returning"
+
+
+def test_vacation_mode_blocks_attack_send_and_arrival(fleet_db):
+    conn = db()
+    attacker_id = _player(conn=conn)
+    att_pid = int(get_planets_by_player(attacker_id, conn=conn)[0]["id"])
+    _seed_ships(att_pid, attacker_id, {"falcon_interceptor": 5}, conn=conn)
+    conn.commit()
+    conn.close()
+
+    defender_id, def_pid, (dg, ds, dp) = _foreign_planet_standalone()
+
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE players SET vacation_mode_active = 1, vacation_locked_until = ? WHERE id = ?;",
+        (int(time.time()) + 86400, defender_id),
+    )
+    conn.commit()
+
+    ok, reason, _ = send_fleet(
+        player_id=attacker_id,
+        origin_planet_id=att_pid,
+        target_galaxy=dg,
+        target_system=ds,
+        target_position=dp,
+        mission_type="attack",
+        ships={"falcon_interceptor": 1},
+        conn=conn,
+    )
+    assert not ok
+    assert reason == "vacation_target_protected"
+
+    now = int(time.time())
+    cur.execute(
+        """
+        INSERT INTO fleet_movements (
+            player_id, origin_planet_id, target_planet_id,
+            target_galaxy, target_system, target_position,
+            mission_type, status, ships_json, resources_json,
+            fuel_cost, speed_percent, distance, flight_seconds,
+            departure_at, arrival_at, return_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'attack', 'outbound', ?, '{}', 0, 100, 1, 100, ?, ?, NULL, ?, ?);
+        """,
+        (
+            attacker_id,
+            att_pid,
+            def_pid,
+            dg,
+            ds,
+            dp,
+            json.dumps({"falcon_interceptor": 1}),
+            now - 200,
+            now - 1,
+            now,
+            now,
+        ),
+    )
+    fleet_id = int(cur.lastrowid)
+    cur.execute("SELECT metal FROM planets WHERE id = ?;", (def_pid,))
+    metal_before = int(cur.fetchone()["metal"])
+    conn.commit()
+
+    process_fleet_tick(player_id=attacker_id, conn=conn)
+    conn.commit()
+
+    cur.execute("SELECT status FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    assert cur.fetchone()["status"] == "returning"
+    cur.execute("SELECT metal FROM planets WHERE id = ?;", (def_pid,))
+    assert int(cur.fetchone()["metal"]) == metal_before
+    conn.close()

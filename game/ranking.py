@@ -20,6 +20,8 @@ from .db import begin_write_transaction, column_exists, db, table_exists
 
 logger = logging.getLogger(__name__)
 
+RANKING_INACTIVE_AFTER_SEC = 3 * 24 * 3600
+
 # player_id -> (timestamp, normalized score dict)
 _CACHE: Dict[int, Tuple[float, Dict[str, int]]] = {}
 CACHE_TTL_SECONDS: float = 2.0
@@ -610,6 +612,27 @@ def _evolution_score_select(conn) -> str:
     if column_exists(conn, "player_scores", "score_planet_evolution"):
         return "COALESCE(ps.score_planet_evolution, 0) AS score_planet_evolution"
     return "0 AS score_planet_evolution"
+
+
+def _vacation_mode_select(conn) -> str:
+    if column_exists(conn, "players", "vacation_mode_active"):
+        return "COALESCE(p.vacation_mode_active, 0) AS vacation_mode_active"
+    return "0 AS vacation_mode_active"
+
+
+def _last_seen_select(conn) -> str:
+    if column_exists(conn, "players", "last_seen"):
+        return "COALESCE(p.last_seen, 0) AS last_seen"
+    return "0 AS last_seen"
+
+
+def ranking_inactive_from_last_seen(last_seen: int, *, now: Optional[int] = None) -> bool:
+    """True when player has no recent activity (3+ days since last_seen)."""
+    seen = int(last_seen or 0)
+    if seen <= 0:
+        return True
+    now_i = int(now if now is not None else time.time())
+    return (now_i - seen) >= RANKING_INACTIVE_AFTER_SEC
 
 
 def _combat_ranking_select(conn) -> str:
@@ -1203,6 +1226,8 @@ def get_sorted_ranking_entries(
     extra = _fleet_defense_select(conn)
     evo = _evolution_score_select(conn)
     combat_sel = _combat_ranking_select(conn)
+    vacation_sel = _vacation_mode_select(conn)
+    last_seen_sel = _last_seen_select(conn)
     total_expr = _total_score_sql(conn)
     social_select, social_join = _ranking_social_select_and_join(conn)
     rank_select = ""
@@ -1221,6 +1246,8 @@ def get_sorted_ranking_entries(
             {extra},
             {evo},
             {combat_sel},
+            {vacation_sel},
+            {last_seen_sel},
             COALESCE(ps.updated_at, 0) AS score_updated_at{rank_select},
             {social_select}
         FROM players p
@@ -1240,6 +1267,7 @@ def get_sorted_ranking_entries(
 
     out: List[Dict[str, Any]] = []
     base_rank = int(offset)
+    now_i = int(time.time())
     for idx, raw in enumerate(rows, start=1):
         d = dict(raw)
         scores = _normalize_db_row(d)
@@ -1248,6 +1276,7 @@ def get_sorted_ranking_entries(
         from .player_display import commander_display_name, commander_lookup_name
 
         raw_name = d.get("commander_name") or "—"
+        last_seen = int(d.get("last_seen") or 0)
         out.append(
             {
                 "rank": rank,
@@ -1259,6 +1288,9 @@ def get_sorted_ranking_entries(
                 "rank_building": int(d["rank_building"]) if d.get("rank_building") is not None else None,
                 "rank_research": int(d["rank_research"]) if d.get("rank_research") is not None else None,
                 "rank_fleet": int(d["rank_fleet"]) if d.get("rank_fleet") is not None else None,
+                "vacation_active": bool(int(d.get("vacation_mode_active") or 0)),
+                "last_seen": last_seen,
+                "inactive": ranking_inactive_from_last_seen(last_seen, now=now_i),
                 **scores,
                 **social,
             }

@@ -2193,6 +2193,65 @@ def _return_timing_from_now(
     return build_return_timing(return_started_at=started, duration_seconds=_return_leg_seconds(movement))
 
 
+def _bounce_inbound_vacation_protected(
+    movement: Dict[str, Any],
+    *,
+    conn,
+    now: float,
+    sender_locale: str | None = None,
+) -> bool:
+    """Return attack/spy fleets without combat when the target is in vacation mode."""
+    from .options import vacation_blocks_incoming_attack
+
+    movement_id = int(movement["id"])
+    player_id = int(movement["player_id"])
+    target_id = movement.get("target_planet_id")
+    coords = str(movement.get("target_coords") or "")
+    mission = str(movement.get("mission_type") or "").strip().lower()
+    if mission not in ("attack", "spy") or not target_id:
+        return False
+
+    snapshot = _target_planet_snapshot(int(target_id), conn=conn)
+    defender_id = int(snapshot.get("owner_id") or 0)
+    if defender_id <= 0 or not vacation_blocks_incoming_attack(defender_id, conn=conn):
+        return False
+
+    if not _start_return(movement, conn=conn, now=now):
+        return False
+
+    from .i18n import get_player_locale, tr
+
+    locale = sender_locale or get_player_locale(player_id, conn=conn)
+    defender_name = str(snapshot.get("owner_name") or _player_name(defender_id, conn=conn))
+    _notify_player_idempotent_fleet(
+        player_id,
+        tr(
+            "fleet_vacation_bounce_subject",
+            "Fleet recalled — vacation mode",
+            locale=locale,
+            coords=coords,
+        ),
+        tr(
+            "fleet_vacation_bounce_body",
+            "Your %(mission)s fleet at %(coords)s was recalled: %(target)s is in vacation mode and cannot be attacked.",
+            locale=locale,
+            mission=tr(f"fleet_mission_{mission}", mission, locale=locale),
+            coords=coords,
+            target=defender_name,
+        ),
+        metadata={
+            "fleet_id": movement_id,
+            "mission_type": mission,
+            "target_coords": coords,
+            "target_player_id": defender_id,
+            "report_phase": "vacation_bounce",
+            "direction": "outbound",
+        },
+        conn=conn,
+    )
+    return True
+
+
 def _start_return(
     movement: Dict[str, Any],
     *,
@@ -2331,6 +2390,16 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
     try:
         snapshot = _target_planet_snapshot(int(target_id), conn=conn) if target_id else {}
         defender_id = int(snapshot.get("owner_id") or 0)
+        if defender_id > 0:
+            from .options import vacation_blocks_incoming_attack
+
+            if vacation_blocks_incoming_attack(defender_id, conn=conn):
+                return _bounce_inbound_vacation_protected(
+                    movement,
+                    conn=conn,
+                    now=now,
+                    sender_locale=sender_locale,
+                )
         defender_name = str(snapshot.get("owner_name") or "")
         attacker_name = _player_name(player_id, conn=conn)
         defending_ships = dict(snapshot.get("ships") or {})
@@ -2904,6 +2973,15 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
     from .i18n import get_player_locale, tr
 
     sender_locale = get_player_locale(player_id, conn=conn)
+
+    if mission in ("attack", "spy") and target_id:
+        if _bounce_inbound_vacation_protected(
+            movement,
+            conn=conn,
+            now=now,
+            sender_locale=sender_locale,
+        ):
+            return True
 
     if mission == "recycle":
         timing = _return_timing_from_now(movement, now=now)

@@ -14206,6 +14206,70 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   margin-right: 8px;
 }
 
+.gc-ranking-vacation-badge{
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 1px 6px 1px 4px;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(255, 196, 120, 0.95);
+  background: rgba(255, 154, 26, 0.12);
+  border: 1px solid rgba(255, 154, 26, 0.32);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.gc-ranking-status-badges{
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.gc-ranking-status-badge{
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px 1px 4px;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  line-height: 1.1;
+}
+
+.gc-ranking-status-badge--vacation{
+  color: rgba(255, 196, 120, 0.95);
+  background: rgba(255, 154, 26, 0.12);
+  border: 1px solid rgba(255, 154, 26, 0.32);
+}
+
+.gc-ranking-status-badge--inactive{
+  color: rgba(170, 190, 220, 0.82);
+  background: rgba(90, 110, 140, 0.16);
+  border: 1px solid rgba(120, 150, 190, 0.28);
+}
+
+.gc-ranking-status-badge-icon,
+.gc-ranking-vacation-badge-icon{
+  font-size: 0.62rem;
+  line-height: 1;
+}
+
+.gc-ranking-status-badge-text,
+.gc-ranking-vacation-badge-text{
+  line-height: 1.1;
+}
+
 /* =========================
    22) Utilities
    ========================= */

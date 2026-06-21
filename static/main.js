@@ -21482,9 +21482,39 @@
     return `<span class="you-pill" aria-label="${you}">${you}</span>`;
   }
 
+  function rankingVacationBadgeHtml(row) {
+    if (!row?.vacation_active) return "";
+    const label = rankingEscapeHtml(rankingT("ranking_vacation_mode", "Vacation mode"));
+    const short = rankingEscapeHtml(rankingT("ranking_vacation_badge", "U"));
+    return (
+      `<span class="gc-ranking-status-badge gc-ranking-status-badge--vacation" title="${label}" aria-label="${label}">` +
+      `<span class="gc-ranking-status-badge-icon" aria-hidden="true">⛱</span>` +
+      `<span class="gc-ranking-status-badge-text">${short}</span>` +
+      `</span>`
+    );
+  }
+
+  function rankingInactiveBadgeHtml(row) {
+    if (!row?.inactive) return "";
+    const label = rankingEscapeHtml(rankingT("ranking_inactive_mode", "Inactive — not online for 3+ days"));
+    const short = rankingEscapeHtml(rankingT("ranking_inactive_badge", "3d"));
+    return (
+      `<span class="gc-ranking-status-badge gc-ranking-status-badge--inactive" title="${label}" aria-label="${label}">` +
+      `<span class="gc-ranking-status-badge-icon" aria-hidden="true">◌</span>` +
+      `<span class="gc-ranking-status-badge-text">${short}</span>` +
+      `</span>`
+    );
+  }
+
+  function rankingStatusBadgesHtml(row) {
+    const badges = [rankingVacationBadgeHtml(row), rankingInactiveBadgeHtml(row)].filter(Boolean);
+    if (!badges.length) return "";
+    return `<span class="gc-ranking-status-badges">${badges.join("")}</span>`;
+  }
+
   function rankingCommanderNameHtml(row) {
     const name = rankingEscapeHtml(row.commander_display || row.commander_name || "—");
-    return `<span class="gc-ranking-player-name">${name}</span>`;
+    return `<span class="gc-ranking-player-name">${name}</span>${rankingStatusBadgesHtml(row)}`;
   }
 
   function rankingPlayerCell(row, isMe) {
