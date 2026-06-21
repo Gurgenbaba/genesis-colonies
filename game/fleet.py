@@ -4787,7 +4787,7 @@ def get_fleet_live_state(
                 "fuel_cells": int(float(planet.get("fuel_cells") or 0)),
             },
             "fleet_slots": get_fleet_slot_status(player_id, conn=conn),
-            "active_fleets": list_active_movements(player_id, conn=conn),
+            "active_fleets": build_active_fleets_payload(player_id, conn=conn),
             "presets": list_presets(player_id, conn=conn),
             "fuel_resource": FLEET_FUEL_RESOURCE,
         }

@@ -3221,14 +3221,17 @@
     const researchFinish = RESEARCHQ.active.finishTime > now;
     const shipyardFinish = SHIPYARDQ.active.finishTime > now;
     const defenseFinish = DEFENSEQ.active.finishTime > now;
+    const activeFleetCount = normalizeActiveFleetsPayload(GC.lastState?.active_fleets).count;
     return (
       buildFinish ||
       researchFinish ||
       shipyardFinish ||
       defenseFinish ||
+      activeFleetCount > 0 ||
       !!document.querySelector(".build-job.build-job-active") ||
       !!document.querySelector(".research-job.research-job-active") ||
       !!document.querySelector(".shipyard-job.shipyard-job-active") ||
+      !!document.querySelector("[data-fleet-drawer-row]") ||
       _hasVisibleOverviewResearchTimer() ||
       !!document.querySelector(".planet-evolution-page .gc-card-queue-block[data-gc-card-queue='1']") ||
       _hasLiveCountdownAt()
@@ -7177,12 +7180,45 @@
   const FLEET_DRAWER_LS_EXPANDED = "gc:fleetDrawer:expanded";
   const FLEET_DRAWER_LS_SHOW_ALL = "gc:fleetDrawer:showAll";
 
+  function normalizeFleetDrawerItem(mv) {
+    if (!mv || typeof mv !== "object") return mv;
+    const mission = String(mv.mission || mv.mission_type || "transport").trim().toLowerCase();
+    const movementId = Number(mv.movement_id || mv.id || 0);
+    let shipsBreakdown = Array.isArray(mv.ships_breakdown) ? mv.ships_breakdown : null;
+    if (!shipsBreakdown && mv.ships && typeof mv.ships === "object") {
+      shipsBreakdown = Object.entries(mv.ships)
+        .filter(([, qty]) => Number(qty) > 0)
+        .map(([key, qty]) => ({
+          key: String(key),
+          label_key: `fleet_ship_${key}`,
+          count: Number(qty),
+        }));
+    }
+    const res = mv.loaded_resources || mv.resources || {};
+    return {
+      ...mv,
+      movement_id: movementId || Number(mv.movement_id || 0),
+      id: movementId || Number(mv.id || 0),
+      mission,
+      mission_type: mission,
+      mission_label_key: mv.mission_label_key || `fleet_mission_${mission}`,
+      ships_breakdown: shipsBreakdown || [],
+      loaded_resources: {
+        metal: Number(res.metal || 0),
+        crystal: Number(res.crystal || 0),
+        fuel_cells: Number(res.fuel_cells || 0),
+      },
+      remaining_seconds: Math.max(0, Number(mv.remaining_seconds || 0)),
+      countdown_at: Number(mv.countdown_at || mv.arrival_at || mv.return_at || 0) || 0,
+    };
+  }
+
   function normalizeActiveFleetsPayload(raw) {
     if (!raw) {
       return { count: 0, visible_limit: 5, next_remaining_seconds: 0, items: [] };
     }
     if (Array.isArray(raw)) {
-      const items = raw;
+      const items = raw.map(normalizeFleetDrawerItem);
       const primary = items.length ? pickPrimaryFleetMovement(items) : null;
       return {
         count: items.length,
@@ -7191,7 +7227,7 @@
         items,
       };
     }
-    const items = Array.isArray(raw.items) ? raw.items : [];
+    const items = (Array.isArray(raw.items) ? raw.items : []).map(normalizeFleetDrawerItem);
     return {
       count: Number(raw.count) || items.length,
       visible_limit: Number(raw.visible_limit) || 5,
@@ -7273,18 +7309,41 @@
     row.setAttribute("aria-expanded", selected ? "true" : "false");
     const flight = row.querySelector("[data-fleet-flight-route]");
     const detail = row.querySelector("[data-fleet-drawer-detail]");
-    const compact = row.querySelector("[data-fleet-drawer-arrival-compact]");
     const headerAction = row.querySelector(".gc-fleet-drawer-row-action-wrap--header");
     const detailAction = row.querySelector(".gc-fleet-drawer-row-action-wrap--detail");
     if (flight) flight.hidden = !selected;
     if (detail) detail.hidden = !selected;
-    if (compact) compact.hidden = !!selected;
     if (headerAction) headerAction.hidden = !!selected;
     if (detailAction) detailAction.hidden = !selected;
     const labelEl = row.querySelector("[data-fleet-flight-label]");
     if (labelEl && selected) {
       _setIfChanged(labelEl, t("fleet_drawer_remaining", "Restflugzeit"));
     }
+  }
+
+  function syncFleetDrawerSummaryCountdown(serverNow) {
+    const root = document.getElementById("global-fleet-drawer-root")
+      || document.querySelector("[data-global-fleet-drawer]");
+    const summaryEl = root?.querySelector("[data-fleet-drawer-summary]");
+    if (!summaryEl || !root || root.classList.contains("is-empty")) return;
+    const items = Array.from(_fleetDrawerMovementById.values());
+    const count = items.length;
+    if (!count) return;
+    const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
+    let nextRem = Infinity;
+    items.forEach((mv) => {
+      const rem = fleetDrawerRemainingSeconds(mv, now);
+      if (rem > 0 && rem < nextRem) nextRem = rem;
+    });
+    const nextText = nextRem === Infinity || nextRem <= 0 ? "–" : formatCountdownRemain(nextRem);
+    _setIfChanged(
+      summaryEl,
+      tf(
+        "fleet_drawer_summary",
+        { count, next: nextText },
+        `Aktive Flotten · ${count} unterwegs · nächste Ankunft ${nextText}`
+      )
+    );
   }
 
   function notifyFleetDrawerLayoutChange() {
@@ -7340,39 +7399,43 @@
   function updateFleetDrawerRowTimers(serverNow) {
     const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
     document.querySelectorAll("[data-fleet-drawer-row]").forEach((row) => {
+      const movementId = Number(row.dataset.movementId || 0);
+      const mv = movementId ? _fleetDrawerMovementById.get(movementId) : null;
       const cdEl = row.querySelector("[data-fleet-drawer-countdown]");
       if (!cdEl) return;
-      const target = parseTimerTarget(cdEl.dataset.timerTarget || cdEl.dataset.countdownAt || 0);
+      let target = parseTimerTarget(cdEl.dataset.timerTarget || cdEl.dataset.countdownAt || 0);
+      if (!target && mv) {
+        patchFleetDrawerRowCountdown(row, mv);
+        target = parseTimerTarget(cdEl.dataset.timerTarget || cdEl.dataset.countdownAt || 0);
+      }
       if (!target) return;
       const srvRem = cdEl.dataset.serverRemaining;
-      const remaining = movementRemainingSeconds(
+      let remaining = movementRemainingSeconds(
         target,
         now,
         srvRem === undefined || srvRem === "" ? NaN : Number(srvRem)
       );
-      const selected = row.classList.contains("is-selected");
-      const compactEl = row.querySelector("[data-fleet-drawer-arrival-compact]");
-      if (compactEl && !selected) {
-        if (remaining <= 0) {
-          _setIfChanged(compactEl, t("fleet_arrival_at", "Ankunft"));
-          compactEl.classList.add("is-arrived");
-        } else {
-          _setIfChanged(compactEl, formatFleetDrawerArrivalCompact(remaining));
-          compactEl.classList.remove("is-arrived");
-        }
-        compactEl.classList.toggle("is-urgent", remaining > 0 && remaining < 10);
+      if (mv && Number.isFinite(Number(mv.remaining_seconds))) {
+        remaining = movementRemainingSeconds(
+          fleetDrawerCountdownAt(mv),
+          now,
+          Number(mv.remaining_seconds)
+        );
       }
-      if (selected) {
-        if (remaining <= 0) {
-          _setIfChanged(cdEl, t("fleet_arrival_at", "ANKUNFT"));
-          row.classList.add("is-arrived");
-        } else {
-          _setIfChanged(cdEl, formatFleetDrawerRemaining(remaining));
-          row.classList.remove("is-arrived");
-        }
-        row.classList.toggle("is-urgent", remaining > 0 && remaining < 10);
+      if (remaining <= 0) {
+        _setIfChanged(cdEl, t("fleet_arrival_at", "Ankunft"));
+        row.classList.add("is-arrived");
+        cdEl.classList.add("is-arrived");
+      } else {
+        _setIfChanged(cdEl, formatFleetDrawerArrivalCompact(remaining));
+        row.classList.remove("is-arrived");
+        cdEl.classList.remove("is-arrived");
       }
+      const urgent = remaining > 0 && remaining < 10;
+      row.classList.toggle("is-urgent", urgent);
+      cdEl.classList.toggle("is-urgent", urgent);
     });
+    syncFleetDrawerSummaryCountdown(now);
   }
 
   function rememberFleetDrawerMovements(items) {
@@ -7525,11 +7588,6 @@
     }
     const routeEl = row.querySelector(".gc-fleet-drawer-row-route");
     if (routeEl) _setIfChanged(routeEl, formatFleetDrawerRoute(mv));
-    const compactEl = row.querySelector("[data-fleet-drawer-arrival-compact]");
-    if (compactEl && !row.classList.contains("is-selected")) {
-      const rem = fleetDrawerRemainingSeconds(mv, getTimerServerNow());
-      _setIfChanged(compactEl, rem <= 0 ? t("fleet_arrival_at", "Ankunft") : formatFleetDrawerArrivalCompact(rem));
-    }
     patchFleetDrawerRowCountdown(row, mv);
     patchFleetDrawerRowFlight(row, mv);
     syncFleetDrawerRowAction(row, mv);
@@ -7656,11 +7714,6 @@
     labelEl.className = "gc-fleet-flight-label";
     labelEl.dataset.fleetFlightLabel = "1";
     meta.appendChild(labelEl);
-
-    const cdEl = document.createElement("span");
-    cdEl.className = "gc-fleet-flight-timer gc-mono";
-    cdEl.dataset.fleetDrawerCountdown = "1";
-    meta.appendChild(cdEl);
     trackWrap.appendChild(meta);
     stage.appendChild(trackWrap);
 
@@ -7707,6 +7760,7 @@
     const arrivalChip = document.createElement("span");
     arrivalChip.className = "gc-fleet-drawer-chip gc-fleet-drawer-chip--arrival gc-mono";
     arrivalChip.dataset.fleetDrawerArrivalCompact = "1";
+    arrivalChip.dataset.fleetDrawerCountdown = "1";
     arrivalChip.textContent = formatFleetDrawerArrivalCompact(fleetDrawerRemainingSeconds(mv, getTimerServerNow()));
     chips.appendChild(arrivalChip);
     left.appendChild(chips);
@@ -12016,9 +12070,7 @@
     const updateFleetTargetInlineError = (page, target) => {
       const el = page.querySelector("[data-fleet-target-inline-error]");
       if (!el) return;
-      const reason = String(
-        target?.mission_block_reason || target?.reason_if_blocked || ""
-      ).trim();
+      const reason = String(target?.reason_if_blocked || "").trim();
       if (reason) {
         el.textContent = reasonText(reason);
         el.hidden = false;
@@ -12658,12 +12710,7 @@
             previewArrival.textContent = flightSec > 0 ? formatCountdownRemain(flightSec) : "–";
           }
           if (sendBtn) sendBtn.disabled = !p.can_send;
-          if (!p.can_send) {
-            const blockReason = p.block_reason || p.mission_block_reason || target.mission_block_reason;
-            if (blockReason) updateFleetTargetInlineError(page, { mission_block_reason: blockReason });
-          } else {
-            updateFleetTargetInlineError(page, target);
-          }
+          updateFleetTargetInlineError(page, null);
         } else {
           resetPreview();
         }

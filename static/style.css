@@ -11281,10 +11281,6 @@ body.gc-techtree-media-zoom-open{
   flex-wrap: wrap;
   min-width: 0;
 }
-.fleet-coords-line .fleet-expedition-shortcut{
-  flex: 0 0 auto;
-  max-width: 100%;
-}
 .fleet-expedition-shortcut{
   flex: 0 0 auto;
   display: inline-flex;
@@ -11297,10 +11293,6 @@ body.gc-techtree-media-zoom-open{
 .fleet-expedition-shortcut.is-selected{
   border-color: rgba(255, 212, 90, 0.55);
   box-shadow: 0 0 0 1px rgba(255, 212, 90, 0.18);
-}
-.fleet-expedition-shortcut-coords{
-  font-size: 0.82em;
-  opacity: 0.88;
 }
 .fleet-colony-chips--compact{
   display: flex;
@@ -11389,9 +11381,16 @@ body.gc-techtree-media-zoom-open{
 }
 .fleet-ogame-mission-row{
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1fr);
   gap: 10px;
-  align-items: start;
+  align-items: stretch;
+}
+.fleet-expedition-shortcut-wrap{
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-self: stretch;
+  min-width: 0;
 }
 .fleet-coords-row--compact,
 .fleet-mission-speed-row--compact{
@@ -11538,20 +11537,131 @@ body.gc-techtree-media-zoom-open{
 .fleet-ogame-bottom{
   padding: 10px 12px;
 }
+.fleet-send-compact{
+  padding: 8px 10px;
+}
+.fleet-send-compact-grid{
+  display: grid;
+  grid-template-columns: minmax(0, 248px) minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: stretch;
+}
 .fleet-resources-fieldset--compact{
-  margin-bottom: 10px;
+  margin: 0;
+  padding: 6px 8px;
+  height: 100%;
+}
+.fleet-send-compact .fleet-resources-fieldset--compact .gc-fieldset-legend{
+  margin-bottom: 4px;
+  font-size: 0.72rem;
+}
+.fleet-send-compact .fleet-resources-rows{
+  display: grid;
+  gap: 4px;
+}
+.fleet-send-compact .fleet-resource-row{
+  grid-template-columns: minmax(0, 1fr) 72px 42px;
+  gap: 4px;
+  margin-bottom: 0;
+}
+.fleet-send-compact .fleet-resource-label{
+  font-size: 0.72rem;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fleet-send-compact .fleet-resource-input{
+  width: 100%;
+  min-height: 26px;
+  padding: 2px 4px;
+  font-size: 0.72rem;
+}
+.fleet-send-compact .fleet-res-max-btn{
+  min-height: 26px;
+  padding: 2px 5px;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
 }
 .fleet-preview-hud--inline{
-  margin: 8px 0 10px;
-  padding: 8px 10px;
+  margin: 0;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border-radius: var(--gc-radius-sm);
   border: 1px solid rgba(120, 190, 255, 0.14);
   background: rgba(5, 10, 22, 0.72);
 }
+.fleet-send-compact .fleet-preview-hud--inline{
+  margin: 0;
+}
+.fleet-send-compact .fleet-preview-hud-head{
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  gap: 6px;
+}
+.fleet-send-compact .fleet-preview-mission-status{
+  font-size: 0.72rem;
+  text-align: right;
+}
 .fleet-preview-grid--compact{
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 6px 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px 6px;
+  flex: 1 1 auto;
+}
+.fleet-send-compact .fleet-preview-stat{
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 2px 5px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(120, 190, 255, 0.08);
+}
+.fleet-send-compact .fleet-preview-stat-label{
+  font-size: 0.58rem;
+  letter-spacing: 0.03em;
+  line-height: 1.15;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.fleet-send-compact .fleet-preview-stat-value{
+  font-size: 0.72rem;
+  flex: 0 0 auto;
+  text-align: right;
+  white-space: nowrap;
+}
+.fleet-send-actions{
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(120, 190, 255, 0.1);
+}
+.fleet-send-compact .fleet-send-actions .fleet-form-error{
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+}
+.fleet-send-compact .fleet-send-actions .fleet-launch-btn{
+  margin-top: 0;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  min-height: 36px;
+}
+.fleet-send-compact .fleet-mission-feedback{
+  margin-top: 6px;
+}
+@media (min-width: 900px){
+  .fleet-preview-grid--compact{
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px){
+  .fleet-send-compact-grid{
+    grid-template-columns: 1fr;
+  }
 }
 .logistics-preview-hud--compact{
   margin-bottom: 10px;
@@ -12407,6 +12517,20 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   background: var(--gc-panel-bg);
   box-shadow: var(--gc-border-glow), inset 0 0 0 1px rgba(0, 0, 0, 0.45);
   overflow: hidden;
+}
+.fleet-preview-hud.fleet-preview-hud--inline,
+.fleet-send-compact .fleet-preview-hud{
+  margin: 0;
+  padding: 6px 8px;
+  box-shadow: none;
+  border-color: rgba(120, 190, 255, 0.14);
+  background: rgba(5, 10, 22, 0.72);
+}
+.fleet-preview-hud.fleet-preview-hud--inline::before,
+.fleet-preview-hud.fleet-preview-hud--inline::after,
+.fleet-send-compact .fleet-preview-hud::before,
+.fleet-send-compact .fleet-preview-hud::after{
+  display: none;
 }
 .fleet-preview-hud::before{
   content: "";
@@ -15736,12 +15860,12 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 .gc-fleet-drawer-chip--arrival.is-urgent,
-.gc-fleet-drawer-row.is-urgent .gc-fleet-flight-timer{
+.gc-fleet-drawer-row.is-urgent .gc-fleet-drawer-chip--arrival{
   animation: gc-fleet-drawer-timer-pulse 1s ease-in-out infinite;
 }
 
 .gc-fleet-drawer-row.is-arrived .gc-fleet-drawer-chip--arrival,
-.gc-fleet-drawer-row.is-arrived .gc-fleet-flight-timer{
+.gc-fleet-drawer-chip--arrival.is-arrived{
   color: rgba(127, 255, 217, 1);
   text-shadow: 0 0 12px rgba(70, 229, 255, 0.55);
 }

@@ -740,16 +740,17 @@ def test_main_js_gc640_global_fleet_hud():
 
 
 def test_main_js_gc657_fleet_drawer_timer_selection_separation():
-    """GC-657: fleet drawer selection is UI-only; timers stay on arrival_at."""
+    """GC-657: one countdown per fleet row; selection toggles detail only."""
     src = _read("static/main.js")
     css = _read("static/style.css")
     assert "fleetDrawerCountdownAt" in src
     assert "_fleetDrawerSelectedId" in src
     assert "updateFleetDrawerRowTimers" in src
-    assert "formatFleetDrawerRemaining" in src
+    assert "syncFleetDrawerSummaryCountdown" in src
+    assert "formatFleetDrawerArrivalCompact" in src
     assert "fleet_drawer_arrival_chip" in src
     assert "syncFleetDrawerRowLayout" in src
-    assert "data-fleet-drawer-arrival-compact" in src
+    assert "fleetDrawerArrivalCompact" in src
     assert "data-fleet-drawer-detail" in src
     assert "fleet_drawer_remaining" in _read("locales/de.json")
     assert ".gc-fleet-drawer-row.is-selected" in css
@@ -757,6 +758,11 @@ def test_main_js_gc657_fleet_drawer_timer_selection_separation():
     countdown = src.split("function patchFleetDrawerRowCountdown(row, mv)")[1].split("function createFleetDrawerFlightRoute")[0]
     assert "fleetDrawerCountdownAt(mv)" in countdown
     assert "prevKey !== countdownKey" in countdown
+    assert 'row.querySelector("[data-fleet-drawer-countdown]")' in countdown
+    flight_route = src.split("function createFleetDrawerFlightRoute(mv)")[1].split("function createFleetDrawerRow")[0]
+    assert "gc-fleet-flight-timer" not in flight_route
+    row_fn = src.split("function createFleetDrawerRow(mv)")[1].split("function syncFleetDrawerList")[0]
+    assert "fleetDrawerCountdown" in row_fn
 
 
 def test_main_js_gc654b_fleet_drawer_visual_polish():
@@ -800,7 +806,8 @@ def test_main_js_gc640b_fleet_page_visual_redesign():
     assert ".fleet-ogame-stack" in css
     assert "data-ship-max-image" in js
     assert "function applyFleetPageMode(page)" in js
-    assert "function renderGlobalFleetHud(fleetsRaw)" in js
+    assert "normalizeFleetDrawerItem" in js
+    assert "normalizeActiveFleetsPayload" in js
 
 
 def test_main_js_gc640c_fleet_dense_ship_cards():

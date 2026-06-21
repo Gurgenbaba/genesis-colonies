@@ -4217,7 +4217,8 @@ def test_api_fleet_state_processes_due_return(fleet_db, monkeypatch):
     assert r.status_code == 200
     data = r.get_json()
     assert data["ok"] is True
-    assert data["data"]["active_fleets"] == []
+    active = data["data"]["active_fleets"]
+    assert active == [] or active.get("count") == 0
 
     verify = db()
     try:
@@ -4794,10 +4795,14 @@ def test_quick_target_template_sets_coord_inputs():
     assert "modifier == 'strip'" in slots_partial or "fleet-slots-line" in slots_partial
     assert "fleet-coords-strip" in tpl
     assert "fleet-coords-line" in tpl
+    coords_row_idx = tpl.index("data-fleet-coords-row")
     expo_idx = tpl.index("data-fleet-expedition-shortcut")
-    coords_line_idx = tpl.index("fleet-coords-line")
-    assert coords_line_idx < expo_idx
+    mission_idx = tpl.index("data-fleet-mission")
+    assert coords_row_idx < expo_idx < mission_idx
+    assert "fleet-expedition-shortcut-coords" not in tpl
     assert "fleet-preview-hud" in tpl
+    assert "fleet-send-compact-grid" in tpl
+    assert "fleet-send-actions" in tpl
     assert "data-preview-mission-badge" in tpl
     assert "data-fleet-send-btn" in tpl
     assert "data-gc-hud-select" in tpl

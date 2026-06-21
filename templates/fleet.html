@@ -109,19 +109,21 @@
                            data-fleet-coord-position>
                     <span class="fleet-coords-bracket" aria-hidden="true">]</span>
                   </div>
-                  <button type="button"
-                          class="gc-btn gc-btn-ghost gc-btn-xs fleet-expedition-shortcut"
-                          data-fleet-expedition-shortcut
-                          data-galaxy="{{ fleet_ctx.coordinates.galaxy }}"
-                          data-system="{{ fleet_ctx.coordinates.system }}"
-                          data-position="{{ fleet_ctx.expedition_position }}"
-                          data-mission="expedition"
-                          title="{{ T('galaxy_expedition_slot_hint') }}">
-                    {{ T("galaxy_expedition_slot_title") }}
-                    <span class="gc-mono fleet-expedition-shortcut-coords">{{ fleet_ctx.coordinates.galaxy }}:{{ fleet_ctx.coordinates.system }}:{{ fleet_ctx.expedition_position }}</span>
-                  </button>
                 </div>
                 <p class="fleet-coords-hint hint" data-fleet-coords-hint hidden></p>
+              </div>
+
+              <div class="fleet-expedition-shortcut-wrap">
+                <button type="button"
+                        class="gc-btn gc-btn-ghost gc-btn-xs fleet-expedition-shortcut"
+                        data-fleet-expedition-shortcut
+                        data-galaxy="{{ fleet_ctx.coordinates.galaxy }}"
+                        data-system="{{ fleet_ctx.coordinates.system }}"
+                        data-position="{{ fleet_ctx.expedition_position }}"
+                        data-mission="expedition"
+                        title="{{ T('galaxy_expedition_slot_hint') }}">
+                  {{ T("fleet_mission_expedition", "Expedition") }}
+                </button>
               </div>
 
               <div class="fleet-mission-speed-row fleet-mission-speed-row--compact">
@@ -151,7 +153,6 @@
                   </select>
                 </div>
               </div>
-              <p class="fleet-target-inline-error fleet-form-error" data-fleet-target-inline-error hidden role="alert"></p>
             </div>
 
             <div class="fleet-world-target-panel gc-panel fleet-world-target-panel--compact" data-fleet-world-target hidden aria-live="polite">
@@ -249,7 +250,7 @@
           </div>
         </section>
 
-        <section class="gc-panel fleet-panel fleet-load-panel fleet-ogame-bottom" aria-labelledby="fleet-load-title">
+        <section class="gc-panel fleet-panel fleet-load-panel fleet-ogame-bottom fleet-send-compact" aria-labelledby="fleet-load-title">
           <div class="fleet-form-row fleet-colonize-name-row" data-fleet-colonize-row hidden>
             <label class="fleet-form-label" for="fleet-colony-name">{{ T("fleet_colony_name_label") }}</label>
             <input type="text" id="fleet-colony-name" class="gc-input fleet-control" name="colony_name"
@@ -257,25 +258,28 @@
                    placeholder="{{ T('fleet_colony_name_placeholder') }}">
           </div>
 
+          <div class="fleet-send-compact-grid">
           <fieldset class="fleet-resources-fieldset gc-fieldset fleet-resources-fieldset--compact" data-fleet-resources-fieldset>
             <legend class="gc-fieldset-legend">{{ T("fleet_resources_title") }}</legend>
-            <div class="fleet-resource-row fleet-resource-row--metal">
-              <label for="fleet-res-metal" class="fleet-resource-label">{{ render_resource_icon('metal') }}{{ T("resource_metal") }}</label>
-              <input type="text" id="fleet-res-metal" name="metal" min="0" value="0" inputmode="numeric"
-                     class="fleet-resource-input gc-mono gc-num-input" data-fleet-res-metal>
-              <button type="button" class="gc-btn gc-btn-ghost fleet-res-max-btn" data-fleet-res-max="metal">{{ T("fleet_btn_max") }}</button>
-            </div>
-            <div class="fleet-resource-row fleet-resource-row--crystal">
-              <label for="fleet-res-crystal" class="fleet-resource-label">{{ render_resource_icon('crystal') }}{{ T("resource_crystal") }}</label>
-              <input type="text" id="fleet-res-crystal" name="crystal" min="0" value="0" inputmode="numeric"
-                     class="fleet-resource-input gc-mono gc-num-input" data-fleet-res-crystal>
-              <button type="button" class="gc-btn gc-btn-ghost fleet-res-max-btn" data-fleet-res-max="crystal">{{ T("fleet_btn_max") }}</button>
-            </div>
-            <div class="fleet-resource-row fleet-resource-row--fuel">
-              <label for="fleet-res-fuel-cells" class="fleet-resource-label">{{ render_resource_icon('fuel_cells') }}{{ T("resource_fuel_cells") }}</label>
-              <input type="text" id="fleet-res-fuel-cells" name="fuel_cells" min="0" value="0" inputmode="numeric"
-                     class="fleet-resource-input gc-mono gc-num-input" data-fleet-res-fuel-cells>
-              <button type="button" class="gc-btn gc-btn-ghost fleet-res-max-btn" data-fleet-res-max="fuel_cells">{{ T("fleet_btn_max") }}</button>
+            <div class="fleet-resources-rows">
+              <div class="fleet-resource-row fleet-resource-row--metal">
+                <label for="fleet-res-metal" class="fleet-resource-label">{{ render_resource_icon('metal') }}{{ T("resource_metal") }}</label>
+                <input type="text" id="fleet-res-metal" name="metal" min="0" value="0" inputmode="numeric"
+                       class="fleet-resource-input gc-mono gc-num-input" data-fleet-res-metal>
+                <button type="button" class="gc-btn gc-btn-ghost fleet-res-max-btn" data-fleet-res-max="metal">{{ T("fleet_btn_max") }}</button>
+              </div>
+              <div class="fleet-resource-row fleet-resource-row--crystal">
+                <label for="fleet-res-crystal" class="fleet-resource-label">{{ render_resource_icon('crystal') }}{{ T("resource_crystal") }}</label>
+                <input type="text" id="fleet-res-crystal" name="crystal" min="0" value="0" inputmode="numeric"
+                       class="fleet-resource-input gc-mono gc-num-input" data-fleet-res-crystal>
+                <button type="button" class="gc-btn gc-btn-ghost fleet-res-max-btn" data-fleet-res-max="crystal">{{ T("fleet_btn_max") }}</button>
+              </div>
+              <div class="fleet-resource-row fleet-resource-row--fuel">
+                <label for="fleet-res-fuel-cells" class="fleet-resource-label">{{ render_resource_icon('fuel_cells') }}{{ T("resource_fuel_cells") }}</label>
+                <input type="text" id="fleet-res-fuel-cells" name="fuel_cells" min="0" value="0" inputmode="numeric"
+                       class="fleet-resource-input gc-mono gc-num-input" data-fleet-res-fuel-cells>
+                <button type="button" class="gc-btn gc-btn-ghost fleet-res-max-btn" data-fleet-res-max="fuel_cells">{{ T("fleet_btn_max") }}</button>
+              </div>
             </div>
           </fieldset>
 
@@ -323,18 +327,19 @@
               </div>
             </div>
           </div>
+          </div>
 
           <div class="fleet-mission-feedback" data-fleet-mission-feedback hidden aria-live="polite">
             <p class="fleet-mission-feedback-text" data-fleet-mission-feedback-text></p>
           </div>
-        </section>
 
-        <section class="gc-panel fleet-panel fleet-submit-panel" aria-label="{{ T('fleet_send_submit') }}">
-          <p class="fleet-form-error" data-fleet-error hidden role="alert"></p>
-          <button type="submit" class="gc-btn gc-btn-primary fleet-send-submit fleet-launch-btn" data-fleet-send-btn disabled>
-            <span class="fleet-send-submit-icon" aria-hidden="true">▶</span>
-            {{ T("fleet_send_submit") }}
-          </button>
+          <div class="fleet-send-actions">
+            <p class="fleet-form-error" data-fleet-error hidden role="alert"></p>
+            <button type="submit" class="gc-btn gc-btn-primary fleet-send-submit fleet-launch-btn" data-fleet-send-btn disabled>
+              <span class="fleet-send-submit-icon" aria-hidden="true">▶</span>
+              {{ T("fleet_send_submit") }}
+            </button>
+          </div>
         </section>
 
       </form>
