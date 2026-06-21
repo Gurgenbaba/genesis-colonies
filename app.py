@@ -4892,6 +4892,20 @@ def _payload_from_live_context(
         }
         payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
 
+    try:
+        from game.live_state import account_safety_hud_for_game_state
+
+        payload["account_safety"] = account_safety_hud_for_game_state(user_id, conn=conn)
+    except Exception:
+        payload["account_safety"] = {
+            "vacation_active": False,
+            "vacation_locked_until": None,
+            "vacation_can_disable": False,
+            "deletion_pending": False,
+            "deletion_due_at": None,
+            "deletion_seconds_remaining": 0,
+        }
+
     if include_panel:
         try:
             from game.live_state import global_queue_hud_for_game_state
@@ -6292,7 +6306,10 @@ def api_shipyard_queue_cancel():
         conn.close()
 
     if ok:
-        return jsonify(fleet_ok(payload, message_key="shipyard_cancel_ok"))
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_shipyard_queue_cancel")
+        body = fleet_ok(payload, message_key="shipyard_cancel_ok")
+        body["state"] = state
+        return jsonify(body)
     return jsonify(fleet_err(reason)), 400
 
 

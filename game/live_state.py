@@ -300,12 +300,35 @@ def research_poll_slice(research: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return out
 
 
+def account_safety_hud_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
+    """Lightweight vacation/deletion slice for shell HUD (no full blocker reconcile)."""
+    from game.options import _now_ts, _player_safety_row
+
+    row = _player_safety_row(int(user_id), conn)
+    now = _now_ts()
+    locked_until = row.get("vacation_locked_until")
+    deletion_due = row.get("account_deletion_due_at")
+    vacation_active = bool(int(row.get("vacation_mode_active") or 0))
+    deletion_pending = deletion_due is not None and int(deletion_due or 0) > now
+    return {
+        "vacation_active": vacation_active,
+        "vacation_locked_until": int(locked_until) if locked_until else None,
+        "vacation_can_disable": vacation_active
+        and (locked_until is None or int(locked_until) <= now),
+        "deletion_pending": deletion_pending,
+        "deletion_due_at": int(deletion_due) if deletion_due else None,
+        "deletion_seconds_remaining": max(0, int(deletion_due or 0) - now)
+        if deletion_due and int(deletion_due) > now
+        else 0,
+    }
+
+
 def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     GC-747 / GC-802: normal poll diet — keep shell HUD slices, drop page-catalog blocks.
 
     Keeps: planet_limit, planets (switcher), active_planet (+ sidebar_nav for role nav),
-    active_fleets, fleet_slots (global header drawer).
+    active_fleets, fleet_slots, account_safety (vacation HUD).
     Drops: player_stats, building_queue, research_queue, planet_teaser, research.techs.
     """
     for key in (

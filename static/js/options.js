@@ -264,6 +264,9 @@
   function initOptionsPage() {
     if (!document.getElementById("options-page")) return;
 
+    const page = document.getElementById("options-page");
+    if (page) delete page.dataset.gcSafetyBound;
+
     document.querySelectorAll("form.gc-options-form").forEach((form) => {
       delete form.dataset.gcOptionsBound;
       delete form.dataset.gcSubmitting;
@@ -273,6 +276,12 @@
 
     bindResendVerification();
     bindDiscordUnlink();
+    syncSafetyCountdownTimers(readOptionsSafetyFromPage(page));
+    if (typeof GC.registerCleanup === "function") {
+      GC.registerCleanup(() => {
+        if (page) delete page.dataset.gcSafetyBound;
+      });
+    }
     if (typeof GC.initOptionsAccountSafety === "function") {
       GC.initOptionsAccountSafety();
     }
@@ -280,6 +289,7 @@
 
   GC.handleOptionsFormSubmit = handleOptionsFormSubmit;
   GC.initOptionsPage = initOptionsPage;
+  GC.syncSafetyCountdownTimers = syncSafetyCountdownTimers;
 
   const SAFETY_ACTIONS = {
     vacation_enable: {
@@ -341,6 +351,132 @@
     hint.classList.toggle("gc-options-hint-success", Boolean(text) && !isError);
   }
 
+  const BLOCKER_LINKS = {
+    fleet_movements: { href: "/fleet", key: "options_blocker_fleet_movements" },
+    auction_bids: { href: "/auction-house", key: "options_blocker_auction_bids" },
+    build_queue: { href: "/buildings", key: "options_blocker_build_queue" },
+    research_queue: { href: "/research", key: "options_blocker_research_queue" },
+    shipyard_queue: { href: "/shipyard", key: "options_blocker_shipyard_queue" },
+    defense_queue: { href: "/defense", key: "options_blocker_defense_queue" },
+    planet_evolution_queue: { href: "/planet-evolution", key: "options_blocker_planet_evolution_queue" },
+  };
+
+  function blockerLabel(key, count) {
+    const cfg = BLOCKER_LINKS[key];
+    const template = cfg ? t(cfg.key) : key;
+    return String(template || key).replace("{count}", String(count || 0));
+  }
+
+  function renderSafetyBlockers(details) {
+    const wrap = document.getElementById("options-safety-blockers-wrap");
+    const list = document.getElementById("options-safety-blockers");
+    if (!wrap || !list) return;
+    const src = details && typeof details === "object" ? details : {};
+    const items = Object.keys(BLOCKER_LINKS)
+      .map((key) => ({ key, count: Math.floor(Number(src[key] || 0)) }))
+      .filter((row) => row.count > 0);
+    list.replaceChildren();
+    if (!items.length) {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    items.forEach(({ key, count }) => {
+      const cfg = BLOCKER_LINKS[key];
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.href = cfg.href;
+      a.setAttribute("data-pjax-link", "");
+      a.textContent = blockerLabel(key, count);
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+  }
+
+  function formatSafetyBlockerError(data) {
+    const details = (data && data.data && data.data.blocker_details) || (data && data.blocker_details);
+    if (details) renderSafetyBlockers(details);
+    const items = details && typeof details === "object"
+      ? Object.keys(BLOCKER_LINKS)
+          .map((key) => ({ key, count: Math.floor(Number(details[key] || 0)) }))
+          .filter((row) => row.count > 0)
+          .map(({ key, count }) => blockerLabel(key, count))
+      : [];
+    const base = msgKey(data && data.error);
+    return items.length ? `${base} ${items.join(" · ")}` : base;
+  }
+
+  function safetyServerNowSec() {
+    if (typeof GC.getServerNow === "function") return Math.floor(GC.getServerNow());
+    if (typeof GC.serverNow === "function") return Math.floor(GC.serverNow());
+    return Math.floor(Date.now() / 1000);
+  }
+
+  function safetyFormatRemain(seconds) {
+    if (typeof GC.formatCountdownRemain === "function") return GC.formatCountdownRemain(seconds);
+    const s = Math.max(0, Math.floor(Number(seconds) || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const secR = s % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${secR}s`;
+    return `${secR}s`;
+  }
+
+  function readOptionsSafetyFromPage(page) {
+    const now = safetyServerNowSec();
+    const lockedUntil = Math.floor(Number(page?.getAttribute("data-vacation-locked-until") || 0));
+    const deletionDue = Math.floor(Number(page?.getAttribute("data-deletion-due") || 0));
+    const vacationActive = page?.getAttribute("data-vacation-active") === "1";
+    return {
+      vacation_active: vacationActive,
+      vacation_locked_until: lockedUntil || null,
+      vacation_can_disable: !vacationActive || !lockedUntil || lockedUntil <= now,
+      deletion_pending: page?.getAttribute("data-deletion-pending") === "1",
+      deletion_due_at: deletionDue || null,
+    };
+  }
+
+  function syncSafetyCountdownTimers(safety) {
+    const now = safetyServerNowSec();
+    const vacTimer = document.getElementById("options-vacation-timer");
+    if (vacTimer) {
+      const until = Math.floor(Number(safety?.vacation_locked_until || vacTimer.getAttribute("data-until") || 0));
+      const active = !!safety?.vacation_active;
+      const canDisable = safety?.vacation_can_disable !== false;
+      if (active && until > now && !canDisable) {
+        vacTimer.hidden = false;
+        vacTimer.setAttribute("data-until", String(until));
+        vacTimer.textContent = tf(
+          "options_vacation_timer",
+          { time: safetyFormatRemain(until - now) },
+          `Deaktivierung in ${safetyFormatRemain(until - now)}`
+        );
+      } else {
+        vacTimer.hidden = true;
+      }
+    }
+    const delTimer = document.getElementById("options-deletion-timer");
+    if (delTimer) {
+      const until = Math.floor(Number(safety?.deletion_due_at || delTimer.getAttribute("data-until") || 0));
+      const pending = !!safety?.deletion_pending;
+      if (pending && until > now) {
+        delTimer.hidden = false;
+        delTimer.setAttribute("data-until", String(until));
+        delTimer.textContent = tf(
+          "options_deletion_timer",
+          { time: safetyFormatRemain(until - now) },
+          `Löschung in ${safetyFormatRemain(until - now)}`
+        );
+      } else {
+        delTimer.hidden = true;
+      }
+    }
+    if (typeof GC.startProgressTicker === "function" && (vacTimer?.hidden === false || delTimer?.hidden === false)) {
+      GC.startProgressTicker();
+    }
+  }
+
   function applySafetySnapshot(safety) {
     const page = document.getElementById("options-page");
     if (!page || !safety) return;
@@ -367,9 +503,12 @@
         ? t("options_deletion_status_pending")
         : t("options_deletion_status_none");
     }
+    renderSafetyBlockers(safety.blocker_details);
+    syncSafetyCountdownTimers(safety);
   }
 
   function bindOptionsAccountSafety() {
+    const page = document.getElementById("options-page");
     const modal = document.getElementById("options-safety-modal");
     const form = document.getElementById("options-safety-modal-form");
     const titleEl = document.getElementById("options-safety-modal-title");
@@ -380,8 +519,8 @@
     const pwdInput = document.getElementById("options-safety-modal-password");
     const cancelBtn = document.getElementById("options-safety-modal-cancel");
     const submitBtn = document.getElementById("options-safety-modal-submit");
-    if (!modal || modal.dataset.gcBound === "1") return;
-    modal.dataset.gcBound = "1";
+    if (!page || !modal || page.dataset.gcSafetyBound === "1") return;
+    page.dataset.gcSafetyBound = "1";
 
     let pendingAction = null;
 
@@ -473,13 +612,19 @@
           };
           const hintId = hintMap[pendingAction];
           if (!data || data.ok !== true) {
-            if (hintId) setSafetyHint(hintId, msgKey(data && data.error), true);
+            const errText =
+              data && data.error === "options_error_safety_blockers"
+                ? formatSafetyBlockerError(data)
+                : msgKey(data && data.error);
+            if (hintId) setSafetyHint(hintId, errText, true);
             return;
           }
           if (data.data && data.data.account_safety) {
             applySafetySnapshot(data.data.account_safety);
           } else if (data.data && data.data.vacation_active !== undefined) {
             applySafetySnapshot(data.data);
+          } else if (data.data && data.data.blocker_details) {
+            renderSafetyBlockers(data.data.blocker_details);
           }
           if (hintId) setSafetyHint(hintId, msgKey(data.message || data.error), false);
           closeModal();

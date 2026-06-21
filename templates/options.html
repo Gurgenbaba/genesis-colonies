@@ -235,6 +235,37 @@
     </div>
     <div class="gc-panel-body gc-options-panel-body gc-options-safety-body">
 
+      {% set blocker_details = safety.get('blocker_details') or {} %}
+      {% set has_blockers = safety.get('blockers') %}
+      <div class="gc-options-safety-blockers-wrap"
+           id="options-safety-blockers-wrap"
+           {% if not has_blockers %}hidden{% endif %}>
+        <p class="gc-options-safety-blockers-title">{{ T("options_safety_blockers_title") }}</p>
+        <ul class="gc-options-safety-blockers" id="options-safety-blockers" role="list">
+          {% if blocker_details.get('fleet_movements', 0) > 0 %}
+            <li><a href="/fleet" data-pjax-link>{{ T("options_blocker_fleet_movements", count=blocker_details.get('fleet_movements')) }}</a></li>
+          {% endif %}
+          {% if blocker_details.get('auction_bids', 0) > 0 %}
+            <li><a href="/auction-house" data-pjax-link>{{ T("options_blocker_auction_bids", count=blocker_details.get('auction_bids')) }}</a></li>
+          {% endif %}
+          {% if blocker_details.get('build_queue', 0) > 0 %}
+            <li><a href="/buildings" data-pjax-link>{{ T("options_blocker_build_queue", count=blocker_details.get('build_queue')) }}</a></li>
+          {% endif %}
+          {% if blocker_details.get('research_queue', 0) > 0 %}
+            <li><a href="/research" data-pjax-link>{{ T("options_blocker_research_queue", count=blocker_details.get('research_queue')) }}</a></li>
+          {% endif %}
+          {% if blocker_details.get('shipyard_queue', 0) > 0 %}
+            <li><a href="/shipyard" data-pjax-link>{{ T("options_blocker_shipyard_queue", count=blocker_details.get('shipyard_queue')) }}</a></li>
+          {% endif %}
+          {% if blocker_details.get('defense_queue', 0) > 0 %}
+            <li><a href="/defense" data-pjax-link>{{ T("options_blocker_defense_queue", count=blocker_details.get('defense_queue')) }}</a></li>
+          {% endif %}
+          {% if blocker_details.get('planet_evolution_queue', 0) > 0 %}
+            <li><a href="/planet-evolution" data-pjax-link>{{ T("options_blocker_planet_evolution_queue", count=blocker_details.get('planet_evolution_queue')) }}</a></li>
+          {% endif %}
+        </ul>
+      </div>
+
       <div class="gc-options-safety-block" id="options-safety-vacation">
         <div class="gc-options-form-head">
           <span class="gc-options-form-kicker">{{ T("options_vacation_title") }}</span>
@@ -247,6 +278,11 @@
             {{ T("options_vacation_status_inactive") }}
           {% endif %}
         </p>
+        <p class="gc-options-safety-timer gc-mono"
+           id="options-vacation-timer"
+           data-until="{{ safety.get('vacation_locked_until') or '' }}"
+           role="status"
+           {% if not safety.get('vacation_active') or safety.get('vacation_can_disable') %}hidden{% endif %}></p>
         <div class="gc-options-safety-actions">
           {% if safety.get('vacation_active') %}
             <button type="button"
@@ -280,6 +316,11 @@
             {{ T("options_deletion_status_none") }}
           {% endif %}
         </p>
+        <p class="gc-options-safety-timer gc-mono"
+           id="options-deletion-timer"
+           data-until="{{ safety.get('deletion_due_at') or '' }}"
+           role="status"
+           {% if not safety.get('deletion_pending') %}hidden{% endif %}></p>
         <div class="gc-options-safety-actions">
           {% if safety.get('deletion_pending') %}
             <button type="button"

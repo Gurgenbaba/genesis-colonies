@@ -1749,6 +1749,7 @@
     if (m > 0) return `${m}m ${secR}s`;
     return `${secR}s`;
   }
+  GC.formatCountdownRemain = formatCountdownRemain;
 
   function formatMovementCountdown(seconds, format) {
     if (format === "eta") return formatEta(seconds);
@@ -3215,6 +3216,32 @@
     ) > 0;
   }
 
+  function _hasSafetyCountdownTimers() {
+    const now = Math.floor(getTimerServerNow());
+    const safety = GC.lastState?.account_safety;
+    if (safety && typeof safety === "object") {
+      if (safety.vacation_active && Number(safety.vacation_locked_until || 0) > now) return true;
+      if (safety.deletion_pending && Number(safety.deletion_due_at || 0) > now) return true;
+    }
+    const fleetVacTimer = document.querySelector("[data-fleet-vacation-timer]");
+    if (fleetVacTimer && !fleetVacTimer.hidden && Number(fleetVacTimer.getAttribute("data-until") || 0) > now) {
+      return true;
+    }
+    const vacTimer = document.getElementById("options-vacation-timer");
+    if (vacTimer && !vacTimer.hidden && Number(vacTimer.getAttribute("data-until") || 0) > now) return true;
+    const delTimer = document.getElementById("options-deletion-timer");
+    if (delTimer && !delTimer.hidden && Number(delTimer.getAttribute("data-until") || 0) > now) return true;
+    return false;
+  }
+
+  function updateSafetyCountdownTimers() {
+    const safety = GC.lastState?.account_safety;
+    syncFleetVacationNotice(safety || {});
+    if (typeof GC.syncSafetyCountdownTimers === "function") {
+      GC.syncSafetyCountdownTimers(safety || {});
+    }
+  }
+
   function _hasActiveProgressJobs() {
     const now = getTimerServerNow();
     const buildFinish = BUILDQ.active.finishTime > now;
@@ -3228,6 +3255,7 @@
       shipyardFinish ||
       defenseFinish ||
       activeFleetCount > 0 ||
+      _hasSafetyCountdownTimers() ||
       !!document.querySelector(".build-job.build-job-active") ||
       !!document.querySelector(".research-job.research-job-active") ||
       !!document.querySelector(".shipyard-job.shipyard-job-active") ||
@@ -3593,7 +3621,7 @@
     if (!bodyEl) return;
 
     const allJobs = Array.isArray(payload?.jobs) ? payload.jobs : [];
-    const jobs = allJobs.filter((j) => _globalQueueHudDomain(j) !== "building");
+    const jobs = allJobs;
     const planetId = Number(payload?.planet_id || 0);
     if (planetId > 0) hud.dataset.planetId = String(planetId);
 
@@ -3703,8 +3731,10 @@
           }),
         });
         if (res?.ok) {
-          if (res.state) applyActionState(res, "shipyard_cancel");
-          else if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_cancel");
+          applyActionState(res, "shipyard_cancel");
+          if (!res.state && typeof GC.refreshGameState === "function") {
+            await GC.refreshGameState("shipyard_cancel");
+          }
         } else {
           showNotify(reasonText(res?.error || apiError(res)), "error");
         }
@@ -6853,6 +6883,8 @@
         }
       });
     }
+
+    updateSafetyCountdownTimers();
   }
 
   function updateBuildQueueLive() {
@@ -7891,7 +7923,49 @@
 
     GC.startProgressTicker();
   }
+
+  function syncFleetVacationNotice(accountSafety) {
+    const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
+    if (!root) return;
+    const notice = root.querySelector("[data-fleet-vacation-notice]");
+    const textEl = root.querySelector("[data-fleet-vacation-text]");
+    const timerEl = root.querySelector("[data-fleet-vacation-timer]");
+    if (!notice || !textEl) return;
+
+    const safety = accountSafety && typeof accountSafety === "object" ? accountSafety : {};
+    const active = !!safety.vacation_active;
+    if (!active) {
+      notice.hidden = true;
+      if (timerEl) timerEl.hidden = true;
+      return;
+    }
+
+    notice.hidden = false;
+    textEl.textContent = t(
+      "fleet_drawer_vacation_notice",
+      "Urlaubsmodus aktiv — Flotten senden, Handel und Angriffe sind eingeschränkt."
+    );
+
+    if (!timerEl) return;
+    const lockedUntil = Math.floor(Number(safety.vacation_locked_until || 0));
+    const now = Math.floor(getTimerServerNow());
+    if (lockedUntil > now) {
+      timerEl.hidden = false;
+      timerEl.setAttribute("data-until", String(lockedUntil));
+      timerEl.textContent = tf(
+        "options_vacation_timer",
+        { time: formatCountdownRemain(lockedUntil - now) },
+        `Deaktivierung in ${formatCountdownRemain(lockedUntil - now)}`
+      );
+      GC.startProgressTicker();
+    } else {
+      timerEl.hidden = true;
+      timerEl.removeAttribute("data-until");
+      timerEl.textContent = "";
+    }
+  }
   GC.renderGlobalFleetHud = renderGlobalFleetHud;
+  GC.syncFleetVacationNotice = syncFleetVacationNotice;
 
   async function handleFleetDrawerRecall(btn) {
     const movementId = parseInt(btn.dataset.movementId || "0", 10);
@@ -8259,6 +8333,10 @@
 
     if (data.active_fleets !== undefined) {
       renderGlobalFleetHud(data.active_fleets);
+    }
+
+    if (data.account_safety !== undefined) {
+      syncFleetVacationNotice(data.account_safety);
     }
 
     if (data.fleet_slots) {
@@ -14711,8 +14789,13 @@
           });
           if (res?.ok) {
             _lastShipyardQueueSignature = "";
-            if (res.data) applyShipyardState(page, res.data);
-            else await refreshShipyardState(page);
+            if (res.state) {
+              applyActionState(res, "shipyard_cancel");
+            } else if (res.data) {
+              applyShipyardState(page, res.data);
+            } else {
+              await refreshShipyardState(page);
+            }
             if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_cancel");
           } else {
             showNotify(reasonText(res?.error || apiError(res)), "error");

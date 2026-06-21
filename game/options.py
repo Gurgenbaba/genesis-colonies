@@ -295,17 +295,63 @@ def vacation_blocks_incoming_attack(target_player_id: int, *, conn=None) -> bool
     return is_vacation_mode_active(int(target_player_id), conn=conn)
 
 
-def get_destructive_action_blockers(player_id: int, *, conn=None) -> List[str]:
-    """Return blocker codes when reset/deletion/vacation-enable is unsafe."""
+def _cleanup_orphan_fleet_movements(player_id: int, *, conn) -> int:
+    """Remove active movements whose origin planet no longer exists (UI cannot show/recall them)."""
+    from .fleet import fleet_schema_ready
+
+    if not fleet_schema_ready(conn):
+        return 0
+    from game.fleet_defs import ACTIVE_FLEET_STATUSES
+
+    pid = int(player_id)
+    placeholders = ",".join("?" for _ in ACTIVE_FLEET_STATUSES)
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        DELETE FROM fleet_movements
+        WHERE player_id = ?
+          AND status IN ({placeholders})
+          AND NOT EXISTS (
+              SELECT 1 FROM planets p
+              WHERE p.id = fleet_movements.origin_planet_id
+                AND p.player_id = ?
+          );
+        """,
+        (pid, *ACTIVE_FLEET_STATUSES, pid),
+    )
+    return int(cur.rowcount or 0)
+
+
+def get_destructive_action_blocker_details(player_id: int, *, conn=None) -> Dict[str, int]:
+    """Count open fleets, auctions, and queue jobs after finishing due work."""
+    pid = int(player_id)
+    from .fleet import fleet_schema_ready, list_active_movements, process_fleet_tick
+    from .queue_engine import finish_due_work_once
+
+    finish_due_work_once(
+        player_id=pid,
+        source="account_safety_blockers",
+        recalc_ranks=False,
+    )
+
     own = conn is None
     c = conn or db()
-    blockers: List[str] = []
+    details: Dict[str, int] = {
+        "fleet_movements": 0,
+        "auction_bids": 0,
+        "build_queue": 0,
+        "research_queue": 0,
+        "shipyard_queue": 0,
+        "defense_queue": 0,
+        "planet_evolution_queue": 0,
+    }
     try:
-        pid = int(player_id)
-        from .fleet import count_active_fleet_slots, fleet_schema_ready
-
-        if fleet_schema_ready(c) and count_active_fleet_slots(pid, conn=c) > 0:
-            blockers.append("active_fleets")
+        if fleet_schema_ready(c):
+            process_fleet_tick(player_id=pid)
+            removed = _cleanup_orphan_fleet_movements(pid, conn=c)
+            if removed > 0:
+                commit(c)
+            details["fleet_movements"] = len(list_active_movements(pid, conn=c))
 
         if table_exists(c, "auction_house_listings"):
             cur = c.cursor()
@@ -318,14 +364,13 @@ def get_destructive_action_blockers(player_id: int, *, conn=None) -> List[str]:
                 """,
                 (now_i, pid),
             )
-            if int(cur.fetchone()["c"] or 0) > 0:
-                blockers.append("active_auctions")
+            details["auction_bids"] = int(cur.fetchone()["c"] or 0)
 
         cur = c.cursor()
         cur.execute("SELECT id FROM planets WHERE player_id = ?;", (pid,))
         planet_ids = [int(r["id"]) for r in cur.fetchall()]
         if not planet_ids:
-            return blockers
+            return details
 
         ph = ",".join("?" for _ in planet_ids)
 
@@ -334,31 +379,81 @@ def get_destructive_action_blockers(player_id: int, *, conn=None) -> List[str]:
                 f"SELECT COUNT(*) AS c FROM build_queue WHERE planet_id IN ({ph});",
                 planet_ids,
             )
-            if int(cur.fetchone()["c"] or 0) > 0:
-                blockers.append("active_queues")
+            details["build_queue"] = int(cur.fetchone()["c"] or 0)
 
         if table_exists(c, "research_queue"):
             cur.execute(
                 "SELECT COUNT(*) AS c FROM research_queue WHERE user_id = ?;",
                 (pid,),
             )
-            if int(cur.fetchone()["c"] or 0) > 0:
-                blockers.append("active_queues")
+            details["research_queue"] = int(cur.fetchone()["c"] or 0)
 
-        for qtable in ("shipyard_queue", "defense_queue", "planet_evolution_queue"):
-            if table_exists(c, qtable):
-                cur.execute(
-                    f"SELECT COUNT(*) AS c FROM {qtable} WHERE planet_id IN ({ph});",
-                    planet_ids,
-                )
-                if int(cur.fetchone()["c"] or 0) > 0:
-                    blockers.append("active_queues")
-                    break
+        if table_exists(c, "shipyard_queue"):
+            cur.execute(
+                f"""
+                SELECT COUNT(*) AS c FROM shipyard_queue
+                WHERE planet_id IN ({ph}) AND status = 'queued';
+                """,
+                planet_ids,
+            )
+            details["shipyard_queue"] = int(cur.fetchone()["c"] or 0)
 
-        return blockers
+        if table_exists(c, "defense_queue"):
+            cur.execute(
+                f"""
+                SELECT COUNT(*) AS c FROM defense_queue
+                WHERE planet_id IN ({ph}) AND status = 'queued';
+                """,
+                planet_ids,
+            )
+            details["defense_queue"] = int(cur.fetchone()["c"] or 0)
+
+        if table_exists(c, "planet_evolution_queue"):
+            cur.execute(
+                f"SELECT COUNT(*) AS c FROM planet_evolution_queue WHERE planet_id IN ({ph});",
+                planet_ids,
+            )
+            details["planet_evolution_queue"] = int(cur.fetchone()["c"] or 0)
+
+        return details
     finally:
         if own:
             c.close()
+
+
+def _blockers_from_details(details: Dict[str, int]) -> List[str]:
+    blockers: List[str] = []
+    if int(details.get("fleet_movements") or 0) > 0:
+        blockers.append("active_fleets")
+    if int(details.get("auction_bids") or 0) > 0:
+        blockers.append("active_auctions")
+    queue_total = sum(
+        int(details.get(key) or 0)
+        for key in (
+            "build_queue",
+            "research_queue",
+            "shipyard_queue",
+            "defense_queue",
+            "planet_evolution_queue",
+        )
+    )
+    if queue_total > 0:
+        blockers.append("active_queues")
+    return blockers
+
+
+def get_destructive_action_blockers(player_id: int, *, conn=None) -> List[str]:
+    """Return blocker codes when reset/deletion/vacation-enable is unsafe."""
+    details = get_destructive_action_blocker_details(player_id, conn=conn)
+    return _blockers_from_details(details)
+
+
+def _destructive_action_blocker_payload(player_id: int, *, conn) -> Optional[Dict[str, Any]]:
+    details = get_destructive_action_blocker_details(int(player_id), conn=conn)
+    blockers = _blockers_from_details(details)
+    if not blockers:
+        return None
+    return {"blockers": blockers, "blocker_details": details}
 
 
 def get_account_safety_snapshot(player_id: int, *, conn=None) -> Dict[str, Any]:
@@ -372,7 +467,8 @@ def get_account_safety_snapshot(player_id: int, *, conn=None) -> Dict[str, Any]:
         deletion_due = row.get("account_deletion_due_at")
         deletion_requested = row.get("account_deletion_requested_at")
         vacation_active = bool(int(row.get("vacation_mode_active") or 0))
-        blockers = get_destructive_action_blockers(int(player_id), conn=c)
+        blocker_details = get_destructive_action_blocker_details(int(player_id), conn=c)
+        blockers = _blockers_from_details(blocker_details)
         return {
             "vacation_active": vacation_active,
             "vacation_locked_until": int(locked_until) if locked_until else None,
@@ -385,6 +481,7 @@ def get_account_safety_snapshot(player_id: int, *, conn=None) -> Dict[str, Any]:
             if deletion_due and int(deletion_due) > now
             else 0,
             "blockers": blockers,
+            "blocker_details": blocker_details,
             "confirm_phrases": dict(ACCOUNT_SAFETY_CONFIRM_PHRASES),
         }
     finally:
@@ -893,9 +990,9 @@ def enable_vacation_mode(
 
     conn = db()
     try:
-        blockers = get_destructive_action_blockers(int(player_id), conn=conn)
-        if blockers:
-            return False, "options_error_safety_blockers", {"blockers": blockers}
+        blocked = _destructive_action_blocker_payload(int(player_id), conn=conn)
+        if blocked:
+            return False, "options_error_safety_blockers", blocked
 
         row = _player_safety_row(int(player_id), conn)
         if bool(int(row.get("vacation_mode_active") or 0)):
@@ -990,9 +1087,9 @@ def request_account_deletion(
 
     conn = db()
     try:
-        blockers = get_destructive_action_blockers(int(player_id), conn=conn)
-        if blockers:
-            return False, "options_error_safety_blockers", {"blockers": blockers}
+        blocked = _destructive_action_blocker_payload(int(player_id), conn=conn)
+        if blocked:
+            return False, "options_error_safety_blockers", blocked
 
         row = _player_safety_row(int(player_id), conn)
         if row.get("account_deletion_due_at") and int(row["account_deletion_due_at"]) > _now_ts():
@@ -1088,9 +1185,9 @@ def execute_account_reset(
 
     conn = db()
     try:
-        blockers = get_destructive_action_blockers(int(player_id), conn=conn)
-        if blockers:
-            return False, "options_error_safety_blockers", {"blockers": blockers}
+        blocked = _destructive_action_blocker_payload(int(player_id), conn=conn)
+        if blocked:
+            return False, "options_error_safety_blockers", blocked
 
         begin_write_transaction(conn)
         _wipe_player_game_progress(int(player_id), conn=conn)

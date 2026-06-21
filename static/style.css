@@ -15753,6 +15753,28 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   padding: 0 8px 6px;
 }
 
+.gc-fleet-vacation-notice{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 6px 12px 7px;
+  border-top: 1px solid rgba(255, 154, 26, 0.24);
+  background: rgba(255, 154, 26, 0.08);
+  font-size: 0.66rem;
+  line-height: 1.35;
+  color: rgba(255, 196, 120, 0.92);
+}
+
+.gc-fleet-vacation-notice[hidden]{
+  display: none !important;
+}
+
+.gc-fleet-vacation-timer{
+  font-size: 0.64rem;
+  color: rgba(255, 210, 140, 0.88);
+}
+
 .gc-fleet-drawer-panel[hidden]{
   display: none !important;
 }
@@ -22036,6 +22058,18 @@ a.gc-galaxy-coord-link:focus-visible {
   font-size: 0.8rem;
   line-height: 1.35;
   color: var(--gc-text-soft);
+}
+
+.gc-options-safety-timer {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgba(255, 196, 120, 0.92);
+  letter-spacing: 0.02em;
+}
+
+.gc-options-safety-timer[hidden] {
+  display: none !important;
 }
 
 .gc-options-safety-actions {

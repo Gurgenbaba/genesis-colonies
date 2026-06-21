@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -17,7 +18,7 @@ import pytest
 
 import game.db as dbmod
 import game.models as models
-from game.models import create_user, init_db, verify_password
+from game.models import create_user, ensure_player_and_homeworld, init_db, verify_password
 from game.options import reset_sensitive_rate_limits
 from game.options import (
     ACCOUNT_SAFETY_CONFIRM_PHRASES,
@@ -25,6 +26,8 @@ from game.options import (
     ensure_account_options_schema,
     ensure_account_safety_schema,
     get_account_safety_snapshot,
+    get_destructive_action_blocker_details,
+    get_destructive_action_blockers,
     get_options_snapshot,
     reset_sensitive_rate_limits,
     update_active_planet_name,
@@ -529,3 +532,57 @@ def test_account_safety_snapshot(temp_db):
     assert snap["vacation_active"] is False
     assert snap["deletion_pending"] is False
     assert "confirm_phrases" in snap
+    assert "blocker_details" in snap
+    assert isinstance(snap["blocker_details"], dict)
+
+
+def test_orphan_fleet_movements_do_not_block_account_safety(temp_db):
+    """Ghost fleet_movements whose origin planet is not owned by the player must not block reset/vacation."""
+    _run_migrate(temp_db)
+    init_db()
+    ensure_account_safety_schema()
+    pid, _, _ = _create_player()
+    ok, err, other_user = create_user(f"orphan_{uuid.uuid4().hex[:8]}", "test-pass-123")
+    assert ok and other_user, err
+    other_id = int(other_user["id"])
+    conn = models.db()
+    ensure_player_and_homeworld(other_id, player_name="OrphanOrigin", conn=conn)
+    other_origin = conn.execute(
+        "SELECT id FROM planets WHERE player_id = ? ORDER BY is_homeworld DESC LIMIT 1;",
+        (other_id,),
+    ).fetchone()["id"]
+    now = int(time.time())
+    conn.execute(
+        """
+        INSERT INTO fleet_movements (
+            player_id, origin_planet_id, target_planet_id,
+            target_galaxy, target_system, target_position,
+            mission_type, status, ships_json, resources_json,
+            fuel_cost, speed_percent, distance, flight_seconds,
+            departure_at, arrival_at, return_at, created_at, updated_at
+        ) VALUES (?, ?, NULL, 1, 1, 3, 'transport', 'outbound', '{}', '{}', 0, 100, 1, 100, ?, ?, NULL, ?, ?);
+        """,
+        (pid, int(other_origin), now - 10, now + 90, now, now),
+    )
+    conn.commit()
+    ghost_count = conn.execute(
+        "SELECT COUNT(*) AS c FROM fleet_movements WHERE player_id = ?;",
+        (pid,),
+    ).fetchone()["c"]
+    assert int(ghost_count) == 1
+    conn.close()
+
+    details = get_destructive_action_blocker_details(pid)
+    assert details["fleet_movements"] == 0
+    assert get_destructive_action_blockers(pid) == []
+
+    conn = models.db()
+    active_remaining = conn.execute(
+        """
+        SELECT COUNT(*) AS c FROM fleet_movements
+        WHERE player_id = ? AND status IN ('outbound', 'holding', 'returning');
+        """,
+        (pid,),
+    ).fetchone()["c"]
+    conn.close()
+    assert int(active_remaining) == 0
