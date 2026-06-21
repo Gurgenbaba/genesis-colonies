@@ -429,7 +429,11 @@ def test_planet_switch_hotfix_client_contract():
     assert "const getMenu = () => document.getElementById" in switcher
     assert "const isMulti = () => root.dataset.multi" in switcher
     assert "skipPolling: true" in switcher
+    assert "releaseBusy" in switcher
     refresh = src.split("async function refreshGameState(reason)")[1].split("function refreshHudFromGameState")[0]
     assert "isPlanetSwitchReason" in refresh
     apply = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "GC.refreshInFlight = null" in apply
+    upd = src.split("GC.updateHeaderPlanetSwitcherFromState = function updateHeaderPlanetSwitcherFromState(data)")[1].split("function initLanguageSwitcher()")[0]
+    assert "GC.lastState.planets" in upd
+    assert "updateHeaderPlanetSwitcherFromPlanets([" not in upd

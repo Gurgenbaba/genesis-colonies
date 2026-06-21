@@ -16134,31 +16134,32 @@
 
   GC.updateHeaderPlanetSwitcherFromState = function updateHeaderPlanetSwitcherFromState(data) {
     if (!data) return;
-    if (Array.isArray(data.planets) && data.planets.length) {
-      rebuildHeaderPlanetSwitcher(data.planets);
+
+    const activeId = Number(
+      data.active_planet_id || data.active_planet?.planet_id || 0
+    );
+
+    let planets = Array.isArray(data.planets) && data.planets.length ? data.planets : null;
+    if (
+      !planets
+      && GC.lastState
+      && Array.isArray(GC.lastState.planets)
+      && GC.lastState.planets.length
+    ) {
+      planets = GC.lastState.planets;
+    }
+
+    if (planets && planets.length) {
+      if (activeId > 0) {
+        planets = planets.map((p) => ({
+          ...p,
+          is_active: Number(p.planet_id) === activeId,
+        }));
+      }
+      rebuildHeaderPlanetSwitcher(planets);
       return;
     }
-    const ap = data.active_planet;
-    if (ap && ap.planet_id) {
-      updateHeaderPlanetSwitcherFromPlanets([
-        {
-          planet_id: ap.planet_id,
-          name: ap.name,
-          coordinates_formatted: ap.coordinates_formatted,
-          planet_class: ap.planet_class,
-          planet_class_label_key: ap.planet_class_label_key,
-          is_homeworld: ap.is_homeworld,
-          empire_role_key: ap.empire_role_key,
-          empire_role_label_key: ap.empire_role_label_key,
-          empire_role_icon: ap.empire_role_icon,
-          empire_subtitle_key: ap.empire_subtitle_key,
-          identity_title_key: ap.identity_title_key,
-          is_active: true,
-        },
-      ]);
-      return;
-    }
-    const activeId = Number(data.active_planet_id || 0);
+
     if (!activeId) return;
     const root = document.getElementById("gc-planet-switcher");
     if (!root) return;
@@ -16306,6 +16307,15 @@
       root.classList.add("is-busy");
       item.disabled = true;
       closeMenu();
+      const releaseBusy = () => {
+        root.classList.remove("is-busy");
+        root.querySelectorAll(".gc-planet-switcher-item").forEach((btn) => {
+          btn.disabled = false;
+        });
+      };
+      const busyGuard = typeof GC.setSafeTimeout === "function"
+        ? GC.setSafeTimeout(releaseBusy, 45000)
+        : setTimeout(releaseBusy, 45000);
 
       try {
         const res = await GC.fetchGameAction("/api/planets/active", {
@@ -16354,8 +16364,12 @@
           showNotify(t("pe_error_generic", "Aktion fehlgeschlagen."), "error");
         }
       } finally {
-        root.classList.remove("is-busy");
-        item.disabled = false;
+        if (typeof GC.setSafeTimeout === "function") {
+          const idx = GC.pageLifecycle.timeouts.indexOf(busyGuard);
+          if (idx >= 0) GC.pageLifecycle.timeouts.splice(idx, 1);
+        }
+        clearTimeout(busyGuard);
+        releaseBusy();
       }
     });
   }
