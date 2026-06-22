@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Optional
 
-from .fleet_calc import enrich_movement_timing
 from .planet_evolution.ux_copy import planet_class_label_key
 
 # TODO: Persist planet surface temperature in DB; until then derive from galaxy slot (1–15).
@@ -49,19 +48,6 @@ def _format_remaining(seconds: int) -> str:
     if rh > 0:
         return f"{rh}:{rm:02d}:{rs:02d}"
     return f"{rm}:{rs:02d}"
-
-
-def _format_fleet_countdown(seconds: int) -> str:
-    """Match client formatCountdownRemain (fleet page + overview fleet rows)."""
-    sec = max(0, int(seconds or 0))
-    rh = sec // 3600
-    rm = (sec % 3600) // 60
-    rs = sec % 60
-    if rh > 0:
-        return f"{rh}h {rm}m"
-    if rm > 0:
-        return f"{rm}m {rs}s"
-    return f"{rs}s"
 
 
 def build_planet_meta(planet: Dict[str, Any]) -> Dict[str, Any]:
@@ -127,65 +113,12 @@ def _build_activity_line(
     }
 
 
-def _fleet_movement_activity_lines(
-    movements: List[Dict[str, Any]],
-    *,
-    now: Optional[float] = None,
-) -> List[Dict[str, Any]]:
-    ts = float(now if now is not None else time.time())
-    lines: List[Dict[str, Any]] = []
-    for mv in movements or []:
-        if not isinstance(mv, dict):
-            continue
-        status = str(mv.get("status") or "")
-        if status not in ("outbound", "holding", "returning"):
-            continue
-        enriched = enrich_movement_timing(mv, now=ts)
-        end_at = int(enriched.get("countdown_at") or 0)
-        remaining = int(enriched.get("remaining_seconds") or 0)
-        mission = str(mv.get("mission_type") or "transport")
-        target = str(mv.get("target_coords") or "")
-        ship_count = sum(int(v) for v in (mv.get("ships") or {}).values())
-        phase = str(enriched.get("phase") or enriched.get("leg_phase") or "")
-        status_label = str(enriched.get("status_label") or enriched.get("leg_label_key") or "")
-        summary = f"{target} · {ship_count}"
-        lines.append(
-            _build_activity_line(
-                key=f"fleet_{_safe_int(mv.get('id'))}",
-                state="active",
-                summary=summary,
-                remaining=remaining,
-                finish_at=end_at,
-                countdown_at=end_at,
-                phase=phase,
-                status_label=status_label,
-                movement_id=_safe_int(mv.get("id")),
-                href_key="fleet_view",
-                label_key=f"fleet_mission_{mission}",
-            )
-        )
-        lines[-1]["remaining_display"] = _format_fleet_countdown(remaining)
-    if not lines:
-        lines.append(
-            _build_activity_line(
-                key="fleet",
-                state="idle",
-                summary="",
-                href_key="fleet_view",
-                label_key="overview_fleet_idle",
-            )
-        )
-    return lines
-
-
 def build_activity_lines(
     build_queue: Dict[str, Any],
     research: Dict[str, Any],
     *,
     shipyard_queue: Optional[Dict[str, Any]] = None,
     defense_queue: Optional[Dict[str, Any]] = None,
-    fleet_movements: Optional[List[Dict[str, Any]]] = None,
-    now: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     lines: List[Dict[str, Any]] = []
 
@@ -311,7 +244,6 @@ def build_activity_lines(
             )
         )
 
-    lines.extend(_fleet_movement_activity_lines(fleet_movements or [], now=now))
     return lines
 
 
@@ -564,7 +496,6 @@ def build_overview_status(
             research,
             shipyard_queue=shipyard_queue,
             defense_queue=defense_queue,
-            fleet_movements=fleet_movements,
         ),
         "warnings": build_overview_warnings(
             user_id=int(user_id),

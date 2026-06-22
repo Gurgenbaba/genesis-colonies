@@ -611,8 +611,6 @@ def _build_colony_status_block(
         build_queue,
         research,
         shipyard_queue=shipyard_queue,
-        fleet_movements=[],
-        now=now,
     )
     queues = [row for row in activities if str(row.get("key") or "") in ("build", "research", "shipyard")]
 

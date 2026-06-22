@@ -191,6 +191,26 @@ def apply_resource_delta_unbounded(
 #   RESOURCE UPDATE
 # ==========================================================================
 
+def _refresh_planet_resource_balances(planet: dict, *, conn, planet_id: int) -> None:
+    """Re-read balances after finish/tick may have credited cargo (GC-620K)."""
+    from .db import lock_planet_for_update
+
+    lock_planet_for_update(conn, int(planet_id))
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT metal, crystal, fuel_cells, last_update FROM planets WHERE id = ? LIMIT 1;",
+        (int(planet_id),),
+    )
+    row = cur.fetchone()
+    if not row:
+        return
+    planet["metal"] = row["metal"]
+    planet["crystal"] = row["crystal"]
+    planet["fuel_cells"] = row["fuel_cells"] if "fuel_cells" in row.keys() else 0
+    if row["last_update"] is not None:
+        planet["last_update"] = row["last_update"]
+
+
 def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool = False):
     """
     Conn-safe Update:
@@ -200,6 +220,7 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
     skip_queue_finish: True when called from sync_derived_state_after_queue_finish only.
       Must stay True there — otherwise finish_due_work → sync → update_planet_resources would
       call finish_due_work_once again (double queue processing). sync never sets skip_queue_finish=False.
+      Re-reads metal/crystal/fuel from DB first so fleet/combat credits are not overwritten.
     """
     planet = dict(planet)  # ✅ wichtig (sqlite row -> dict)
 
@@ -232,6 +253,9 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
             from .live_state import mark_request_live_refreshed
 
             mark_request_live_refreshed()
+
+        if skip_queue_finish:
+            _refresh_planet_resource_balances(planet, conn=conn, planet_id=planet_id)
 
         now = time.time()
         last_raw = planet.get("last_update")

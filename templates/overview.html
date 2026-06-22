@@ -94,14 +94,13 @@
         </div>
         <ul class="overview-activities overview-activities-grid overview-hero-activities" id="overview-activities">
           {% for act in activities %}
-          {% set act_type_key = 'fleet' if act.key.startswith('fleet_') else act.key %}
           <li class="overview-activity-card overview-activity-row overview-activity-{{ act.key }} overview-activity-{{ act.state }}"
               data-activity-key="{{ act.key }}"
               {% if act.finish_at %}data-finish-at="{{ act.finish_at|int }}"{% endif %}
               {% if act.phase %}data-activity-phase="{{ act.phase }}"{% endif %}
               {% if act.remaining is defined %}data-remaining="{{ act.remaining|int }}"{% endif %}>
             <a class="overview-activity-link" href="{{ url_for(act.href_key) }}">
-              <span class="overview-activity-type">{{ T('overview_activity_' ~ act_type_key, act_type_key) }}</span>
+              <span class="overview-activity-type">{{ T('overview_activity_' ~ act.key, act.key) }}</span>
               <span class="overview-activity-body">
                 {% if act.state == 'active' %}
                   <span class="overview-activity-name">{{ T(act.label_key, act.label_key) }}</span>
@@ -109,14 +108,13 @@
                   <span class="overview-activity-eta gc-mono" data-activity-eta
                     {% if act.countdown_at or act.finish_at %}
                     data-timer-target="{{ (act.countdown_at or act.finish_at)|int }}"
-                    data-timer-kind="{{ 'fleet' if act.key.startswith('fleet_') else 'queue' }}"
-                    data-refresh-on-zero="{{ 'fleet' if act.key.startswith('fleet_') else 'game-state' }}"
+                    data-timer-kind="queue"
+                    data-refresh-on-zero="game-state"
                     data-countdown-at="{{ (act.countdown_at or act.finish_at)|int }}"
                     data-countdown-scope="overview"
-                    data-countdown-format="{{ 'fleet' if act.key.startswith('fleet_') else 'eta' }}"
-                    data-countdown-key="{{ act.movement_id or act.key.replace('fleet_', '') }}:{{ act.phase or act.state }}:{{ (act.countdown_at or act.finish_at)|int }}"
-                    {% if act.key.startswith('fleet_') and act.remaining is defined %}data-server-remaining="{{ act.remaining|int }}"{% endif %}
-                    {% endif %}>{% if act.key.startswith('fleet_') %}–{% else %}{{ act.remaining_display }}{% endif %}</span>
+                    data-countdown-format="eta"
+                    data-countdown-key="{{ act.key }}:{{ act.phase or act.state }}:{{ (act.countdown_at or act.finish_at)|int }}"
+                    {% endif %}>{{ act.remaining_display }}</span>
                 {% else %}
                   <span class="overview-activity-idle">{{ T(act.label_key, 'Bereit') }}</span>
                 {% endif %}

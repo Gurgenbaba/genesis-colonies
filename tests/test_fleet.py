@@ -577,9 +577,9 @@ def test_transport_return_timing_after_arrival(fleet_db):
     conn.close()
 
 
-def test_overview_fleet_timing_matches_active_movement(fleet_db):
-    from game.fleet import list_active_movements
-    from game.overview_page import _fleet_movement_activity_lines, _format_fleet_countdown
+def test_overview_activities_exclude_fleet_movements(fleet_db):
+    from game.fleet import list_active_movements, send_fleet
+    from game.overview_page import build_activity_lines
 
     conn = db()
     uid = _player(conn=conn)
@@ -602,19 +602,12 @@ def test_overview_fleet_timing_matches_active_movement(fleet_db):
         conn=conn,
     )
     assert ok
-    now = time.time()
     movements = list_active_movements(uid, conn=conn)
     assert movements
-    mv = movements[0]
-    lines = _fleet_movement_activity_lines(movements, now=now)
-    fleet_line = next(line for line in lines if line["key"].startswith("fleet_"))
-    assert fleet_line["finish_at"] == mv["countdown_at"]
-    assert fleet_line["countdown_at"] == mv["countdown_at"]
-    assert fleet_line["remaining"] == mv["remaining_seconds"]
-    assert fleet_line["phase"] == mv["phase"]
-    assert fleet_line["status_label"] == mv["status_label"]
-    assert fleet_line["label_key"] == f"fleet_mission_{mv['mission_type']}"
-    assert fleet_line["remaining_display"] == _format_fleet_countdown(mv["remaining_seconds"])
+
+    lines = build_activity_lines({}, {})
+    fleet_rows = [row for row in lines if str(row.get("key") or "").startswith("fleet")]
+    assert fleet_rows == []
     conn.close()
 
 
@@ -1792,6 +1785,173 @@ def test_expedition_arrival_and_return_double_tick_idempotent_loot(fleet_db):
     loot_crystal = int(rewards_once.get("crystal") or 0)
     assert int(origin_after_twice["metal"]) == int(origin_before["metal"]) + loot_metal
     assert int(origin_after_twice["crystal"]) == int(origin_before["crystal"]) + loot_crystal
+    conn.close()
+
+
+def _expedition_returning_with_loot(conn, uid, pid):
+    """Send expedition, resolve holding, return movement id + loot + origin snapshot."""
+    from game.fleet import process_fleet_tick, send_fleet
+
+    g, s, _ = _planet_coords(pid, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"solar_skiff": 2}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=EXPEDITION_POSITION,
+        mission_type="expedition",
+        ships={"solar_skiff": 1},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    _force_outbound_arrival(conn, fleet_id)
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+    _force_expedition_stay_end(conn, fleet_id)
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute("SELECT status, resources_json FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    row = dict(cur.fetchone())
+    assert row["status"] == "returning"
+    rewards = json.loads(row["resources_json"] or "{}")
+
+    cur.execute("SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;", (pid,))
+    origin_before = dict(cur.fetchone())
+    return fleet_id, rewards, origin_before
+
+
+def test_expedition_return_credit_survives_live_state_poll(fleet_db):
+    """GC-620K: poll refresh must not overwrite fleet return credits."""
+    from game.logic import read_player_live_state_for_poll
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    fleet_id, rewards, origin_before = _expedition_returning_with_loot(conn, uid, pid)
+
+    now = time.time()
+    conn.execute(
+        "UPDATE fleet_movements SET return_at = ? WHERE id = ?;",
+        (now - 1, fleet_id),
+    )
+    conn.commit()
+
+    read_player_live_state_for_poll(uid, conn=conn)
+    conn.commit()
+
+    cur = conn.cursor()
+    cur.execute("SELECT status FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    assert cur.fetchone()["status"] == "completed"
+    cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (pid,))
+    origin_after = dict(cur.fetchone())
+    loot_metal = int(rewards.get("metal") or 0)
+    loot_crystal = int(rewards.get("crystal") or 0)
+    assert int(origin_after["metal"]) == int(origin_before["metal"]) + loot_metal
+    assert int(origin_after["crystal"]) == int(origin_before["crystal"]) + loot_crystal
+    conn.close()
+
+
+def test_expedition_return_credit_poll_idempotent(fleet_db):
+    from game.logic import read_player_live_state_for_poll
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    fleet_id, rewards, origin_before = _expedition_returning_with_loot(conn, uid, pid)
+    loot_metal = int(rewards.get("metal") or 0)
+    loot_crystal = int(rewards.get("crystal") or 0)
+    if loot_metal <= 0 and loot_crystal <= 0:
+        rewards = {"metal": 500, "crystal": 200, "fuel_cells": 0, "expedition_hours": 1}
+        loot_metal = 500
+        loot_crystal = 200
+        conn.execute(
+            "UPDATE fleet_movements SET resources_json = ? WHERE id = ?;",
+            (json.dumps(rewards), fleet_id),
+        )
+        conn.commit()
+
+    now = time.time()
+    conn.execute(
+        "UPDATE fleet_movements SET return_at = ? WHERE id = ?;",
+        (now - 1, fleet_id),
+    )
+    conn.commit()
+
+    read_player_live_state_for_poll(uid, conn=conn)
+    conn.commit()
+    read_player_live_state_for_poll(uid, conn=conn)
+    conn.commit()
+
+    cur = conn.cursor()
+    cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (pid,))
+    origin_after = dict(cur.fetchone())
+    assert int(origin_after["metal"]) == int(origin_before["metal"]) + loot_metal
+    assert int(origin_after["crystal"]) == int(origin_before["crystal"]) + loot_crystal
+    conn.close()
+
+
+def test_expedition_return_credit_admin_advance_phases(fleet_db):
+    from game.fleet import admin_advance_fleet_movement, process_fleet_tick, send_fleet
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    g, s, _ = _planet_coords(pid, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"solar_skiff": 2}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=EXPEDITION_POSITION,
+        mission_type="expedition",
+        ships={"solar_skiff": 1},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    _force_outbound_arrival(conn, fleet_id)
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (pid,))
+    origin_before = dict(cur.fetchone())
+
+    adv_holding = admin_advance_fleet_movement(fleet_id, conn=conn, complete=False)
+    conn.commit()
+    assert adv_holding["ok"] is True
+    assert adv_holding["status_after"] == "returning"
+
+    cur.execute("SELECT resources_json FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    rewards = json.loads(dict(cur.fetchone())["resources_json"] or "{}")
+    loot_metal = int(rewards.get("metal") or 0)
+    loot_crystal = int(rewards.get("crystal") or 0)
+
+    cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (pid,))
+    mid = dict(cur.fetchone())
+    assert int(mid["metal"]) == int(origin_before["metal"])
+    assert int(mid["crystal"]) == int(origin_before["crystal"])
+
+    adv_complete = admin_advance_fleet_movement(fleet_id, conn=conn, complete=True)
+    conn.commit()
+    assert adv_complete["ok"] is True
+    assert adv_complete["status_after"] == "completed"
+
+    cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (pid,))
+    origin_after = dict(cur.fetchone())
+    assert int(origin_after["metal"]) == int(origin_before["metal"]) + loot_metal
+    assert int(origin_after["crystal"]) == int(origin_before["crystal"]) + loot_crystal
     conn.close()
 
 
@@ -4325,8 +4485,7 @@ def test_api_game_state_completes_due_fleet_return(fleet_db, monkeypatch):
             a for a in overview_status["activities"]
             if str(a.get("key", "")).startswith("fleet")
         ]
-        if fleet_rows:
-            assert fleet_rows[0].get("state") in ("idle", None)
+        assert fleet_rows == []
 
     verify = db()
     try:
