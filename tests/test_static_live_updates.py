@@ -446,12 +446,13 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert 'getElementById("overview-activities")' in src
     assert "overview-hero-title-plate" in overview
     assert "top: 20%" in css.split(".overview-hero-activity-panel")[1].split(".overview-hero-activity-head")[0]
-    assert "grid-template-columns: 118px" in css
-    assert "--hero-activity-label" in css
-    assert "--hero-activity-status" in css
-    assert "overview-activity-active .overview-activity-link" in css
-    assert "--hero-frame-bottom-value" in css
-    assert "border-bottom: 1px solid var(--hero-activity-line" in css
+    assert "grid-template-columns: 100px" in css
+    assert "--hero-activity-glass" in css
+    assert ".overview-hero--themed.gc-planet-hero:hover .overview-hero-bg::after" in css
+    assert "radial-gradient" in css.split(".overview-hero--themed.gc-planet-hero:hover .overview-hero-bg::after")[1][:800]
+    assert "overview-hero-activity-panel .overview-activity-row::after" in css
+    assert "opacity: 0" in css.split(".overview-hero-activity-panel{")[1].split(".overview-hero-activity-head")[0]
+    assert ".overview-hero--themed.gc-planet-hero:hover .overview-hero-activity-panel" in css
     assert "--hero-frame-top-name" in css
 
 
