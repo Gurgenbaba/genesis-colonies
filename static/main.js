@@ -585,10 +585,10 @@
     body.classList.toggle("gc-reduced-motion", _prefersReducedMotion);
     const perfIdle = isPerfIdle();
     body.classList.toggle("gc-perf-idle", perfIdle);
-    if (perfIdle) {
-      pauseResourceTicker();
-    } else if (shouldRunVisualLoops() && _resourceLive.planetId) {
+    if (shouldRunVisualLoops() && _resourceLive.planetId) {
       startResourceTicker();
+    } else {
+      pauseResourceTicker();
     }
   }
 
@@ -1581,7 +1581,7 @@
 
   GC.startProgressTicker = function startProgressTicker() {
     if (!shouldRunVisualLoops()) return;
-    if (!_hasActiveProgressJobs()) {
+    if (!_hasActiveProgressJobs() && !_hasStaleActiveCardQueue()) {
       syncPerfBodyClasses();
       return;
     }
@@ -1596,12 +1596,6 @@
         syncPerfBodyClasses();
         return;
       }
-      if (!_hasActiveProgressJobs()) {
-        _pageTimerLoopRunning = false;
-        GC.stopProgressTicker();
-        syncPerfBodyClasses();
-        return;
-      }
       _progressTickerInTick = true;
       try {
         const serverNow = getTimerServerNow();
@@ -1609,6 +1603,12 @@
         syncPerfBodyClasses();
       } finally {
         _progressTickerInTick = false;
+      }
+      if (!_hasActiveProgressJobs() && !_hasStaleActiveCardQueue()) {
+        _pageTimerLoopRunning = false;
+        GC.stopProgressTicker();
+        syncPerfBodyClasses();
+        return;
       }
       _progressTickerTimerId = setTimeout(tick, _progressTickerDelayMs(getTimerServerNow()));
     };
@@ -3372,6 +3372,24 @@
     }
   }
 
+  function _hasStaleActiveCardQueue() {
+    const now = getTimerServerNow();
+    let stale = false;
+    document.querySelectorAll("[data-gc-card-queue][data-queue-active='1']").forEach((block) => {
+      const finish = parseTimerTarget(block.dataset.finishAt || 0);
+      if (finish > 0 && finish <= now) stale = true;
+    });
+    document.querySelectorAll(".build-job.build-job-active[data-finish-time]").forEach((job) => {
+      const finish = parseTimerTarget(job.getAttribute("data-finish-time") || 0);
+      if (finish > 0 && finish <= now) stale = true;
+    });
+    document.querySelectorAll(".research-job.research-job-active[data-finish-time]").forEach((job) => {
+      const finish = parseTimerTarget(job.getAttribute("data-finish-time") || 0);
+      if (finish > 0 && finish <= now) stale = true;
+    });
+    return stale;
+  }
+
   function _hasActiveProgressJobs() {
     const now = getTimerServerNow();
     const buildFinish = BUILDQ.active.finishTime > now;
@@ -3392,7 +3410,8 @@
       !!document.querySelector("[data-fleet-drawer-row]") ||
       _hasVisibleOverviewResearchTimer() ||
       !!document.querySelector(".planet-evolution-page .gc-card-queue-block[data-gc-card-queue='1']") ||
-      _hasLiveCountdownAt()
+      _hasLiveCountdownAt() ||
+      _hasStaleActiveCardQueue()
     );
   }
 
@@ -7051,6 +7070,7 @@
   let _resourceTickerPaused = false;
   const RESOURCE_TICKER_MS_ACTIVE = 1000;
   const RESOURCE_TICKER_MS_IDLE = 5000;
+  let _resourceTickerCurrentInterval = RESOURCE_TICKER_MS_IDLE;
   let _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
 
   /** Shell HUD resource values only (#resource-bar) — never fleet/page [data-res] nodes. */
@@ -7140,7 +7160,7 @@
   }
 
   function tickLiveResourceBar() {
-    if (!shouldRunVisualLoops() || _authLoopAborted || !_resourceLive.planetId || isPerfIdle()) return;
+    if (!shouldRunVisualLoops() || _authLoopAborted || !_resourceLive.planetId) return;
     const projected = projectLiveResourceAmounts(getApproxServerNow());
     if (!projected) return;
     patchShellHudLiveResources(projected.metal, projected.crystal, projected.fuelCells);
@@ -7160,11 +7180,17 @@
   }
 
   function startResourceTicker() {
-    if (!shouldRunVisualLoops() || _authLoopAborted || !_resourceLive.planetId || isPerfIdle()) return;
+    if (!shouldRunVisualLoops() || _authLoopAborted || !_resourceLive.planetId) return;
     _resourceTickerPaused = false;
-    if (_resourceTickerId != null) return;
+    const intervalMs = _resourceTickerIntervalMs();
+    if (_resourceTickerId != null && _resourceTickerCurrentInterval === intervalMs) return;
+    if (_resourceTickerId != null) {
+      clearInterval(_resourceTickerId);
+      _resourceTickerId = null;
+    }
+    _resourceTickerCurrentInterval = intervalMs;
     tickLiveResourceBar();
-    _resourceTickerId = setInterval(tickLiveResourceBar, _resourceTickerIntervalMs());
+    _resourceTickerId = setInterval(tickLiveResourceBar, intervalMs);
   }
 
   function stopResourceTicker() {
