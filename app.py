@@ -5715,7 +5715,10 @@ def api_fleet_recall():
     except (TypeError, ValueError):
         movement_id = 0
     if movement_id <= 0:
-        return jsonify(fleet_err("fleet_not_found")), 400
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_recall")
+        body = fleet_err("fleet_not_found", data={"state": state})
+        body["state"] = state
+        return jsonify(body), 400
 
     def _recall(conn):
         return fleet_recall_movement(user_id, movement_id, conn=conn)
@@ -5726,7 +5729,9 @@ def api_fleet_recall():
         body = fleet_ok(result or {}, message_key="fleet_recall_success")
         body["state"] = state
         return jsonify(body)
-    return jsonify(fleet_err(reason or "fleet_recall_failed", data={"state": state})), 400
+    body = fleet_err(reason or "fleet_recall_failed", data={"state": state})
+    body["state"] = state
+    return jsonify(body), 400
 
 
 @app.route("/api/fleet/presets", methods=["GET"])

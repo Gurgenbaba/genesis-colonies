@@ -837,6 +837,11 @@ def test_main_js_gc654b_fleet_drawer_visual_polish():
     fleet_py = _read("game/fleet.py")
     assert "syncFleetDrawerList" in src
     assert "fleetDrawerRowCanAct" in src
+    assert "fleetDrawerResolveMovementId" in src
+    assert "upsertFleetDrawerActionBtn" in src
+    assert "action-wrap--header" in src
+    assert "document.addEventListener(\"click\"" in src.split("function initGlobalFleetDrawer()")[1].split("function patchFleetDrawerRowFlight")[0]
+    assert "res.data?.state" in src.split("async function handleFleetDrawerRecall")[1].split("function initGlobalFleetDrawer")[0]
     assert "patchFleetDrawerRowFlight" in src
     assert "data-fleet-flight-route" in src
     assert "gc-fleet-flight-dot" in css

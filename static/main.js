@@ -7662,39 +7662,77 @@
     return status === "outbound" || status === "holding";
   }
 
-  function syncFleetDrawerRowAction(row, mv) {
-    const wrap = row.querySelector(".gc-fleet-drawer-row-action-wrap--detail")
-      || row.querySelector(".gc-fleet-drawer-row-action-wrap");
-    if (!wrap || !mv) return;
-    const movementId = String(mv.movement_id || mv.id || "");
-    const status = String(mv.status || mv.phase || mv.leg_phase || "").toLowerCase();
-    const canAct = fleetDrawerRowCanAct(mv);
-    let btn = wrap.querySelector("[data-fleet-drawer-recall]");
-    if (canAct) {
-      const actionKey = status === "holding"
-        ? (mv.action_label_key || "fleet_drawer_action_recall")
-        : (mv.action_label_key || "fleet_drawer_action_cancel");
-      if (!btn) {
-        btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "gc-fleet-drawer-row-action gc-btn gc-btn-ghost gc-btn-xs";
-        btn.dataset.fleetDrawerRecall = "1";
-        wrap.appendChild(btn);
-      }
-      btn.dataset.movementId = movementId;
-      _setIfChanged(btn, t(actionKey, actionKey));
-      if (mv.cancel_reason) {
-        btn.title = t(mv.cancel_reason, mv.cancel_reason);
-      } else {
-        btn.removeAttribute("title");
-      }
-    } else if (btn) {
-      btn.remove();
+  function fleetDrawerMovementIdFromMv(mv) {
+    return String(mv?.movement_id || mv?.id || "").trim();
+  }
+
+  function fleetDrawerResolveMovementId(btn) {
+    if (!btn) return 0;
+    let id = parseInt(btn.dataset.movementId || "0", 10);
+    if (id > 0) return id;
+    const row = btn.closest("[data-fleet-drawer-row]");
+    if (row) {
+      id = parseInt(row.dataset.movementId || "0", 10);
+      if (id > 0) return id;
     }
+    if (_fleetDrawerSelectedId) {
+      id = parseInt(String(_fleetDrawerSelectedId), 10);
+      if (id > 0) return id;
+    }
+    return 0;
+  }
+
+  function upsertFleetDrawerActionBtn(wrap, movementId, mv, canAct) {
+    if (!wrap) return;
+    let btn = wrap.querySelector("[data-fleet-drawer-recall]");
+    if (!canAct || !movementId) {
+      if (btn) btn.remove();
+      return;
+    }
+    const status = String(mv.status || mv.phase || mv.leg_phase || "").toLowerCase();
+    const actionKey = status === "holding"
+      ? (mv.action_label_key || "fleet_drawer_action_recall")
+      : (mv.action_label_key || "fleet_drawer_action_cancel");
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "gc-fleet-drawer-row-action gc-btn gc-btn-ghost gc-btn-xs";
+      btn.dataset.fleetDrawerRecall = "1";
+      wrap.appendChild(btn);
+    }
+    btn.dataset.movementId = movementId;
+    _setIfChanged(btn, t(actionKey, actionKey));
+    if (mv.cancel_reason) {
+      btn.title = t(mv.cancel_reason, mv.cancel_reason);
+    } else {
+      btn.removeAttribute("title");
+    }
+  }
+
+  function syncFleetDrawerRowAction(row, mv) {
+    if (!row || !mv) return;
+    const movementId = fleetDrawerMovementIdFromMv(mv);
+    const canAct = !!movementId && (
+      mv.can_recall === true || mv.can_cancel === true || fleetDrawerRowCanAct(mv)
+    );
+    upsertFleetDrawerActionBtn(
+      row.querySelector(".gc-fleet-drawer-row-action-wrap--header"),
+      movementId,
+      mv,
+      canAct
+    );
+    upsertFleetDrawerActionBtn(
+      row.querySelector(".gc-fleet-drawer-row-action-wrap--detail"),
+      movementId,
+      mv,
+      canAct
+    );
   }
 
   function patchFleetDrawerRow(row, mv) {
     if (!row || !mv) return;
+    const rowId = fleetDrawerMovementIdFromMv(mv);
+    if (rowId) row.dataset.movementId = rowId;
     const mission = String(mv.mission || mv.mission_type || "custom");
     const missionKey = mv.mission_label_key || `fleet_mission_${mission}`;
     const missionEl = row.querySelector("[data-fleet-drawer-mission]");
@@ -8053,7 +8091,7 @@
   GC.syncFleetVacationNotice = syncFleetVacationNotice;
 
   async function handleFleetDrawerRecall(btn) {
-    const movementId = parseInt(btn.dataset.movementId || "0", 10);
+    const movementId = fleetDrawerResolveMovementId(btn);
     if (!movementId || btn.disabled) return;
     btn.disabled = true;
     btn.classList.add("is-loading");
@@ -8068,7 +8106,7 @@
             : `fleet-recall-${Date.now()}`,
         }),
       });
-      if (res.state) {
+      if (res && (res.state || res.data?.state)) {
         applyActionState(res, res.ok ? "fleet_recall" : "fleet_recall_error");
       } else if (typeof GC.refreshGameState === "function") {
         await GC.refreshGameState("fleet_recall");
@@ -8090,19 +8128,23 @@
 
   function initGlobalFleetDrawer() {
     if (_globalFleetDrawerBound) return;
-    const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
-    if (!root) return;
     _globalFleetDrawerBound = true;
 
-    root.addEventListener("click", (e) => {
+    document.addEventListener("click", (e) => {
       const recallBtn = e.target.closest("[data-fleet-drawer-recall]");
-      if (recallBtn) {
-        e.preventDefault();
-        e.stopPropagation();
-        handleFleetDrawerRecall(recallBtn);
-        return;
-      }
+      if (!recallBtn) return;
+      const drawerRoot = document.getElementById("global-fleet-drawer-root")
+        || document.querySelector("[data-global-fleet-drawer]");
+      if (!drawerRoot || !drawerRoot.contains(recallBtn)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      handleFleetDrawerRecall(recallBtn);
+    });
 
+    const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
+    if (!root) return;
+
+    root.addEventListener("click", (e) => {
       const selectTrigger = e.target.closest("[data-fleet-drawer-mission], [data-fleet-drawer-select]");
       if (selectTrigger) {
         e.preventDefault();
