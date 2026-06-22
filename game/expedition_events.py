@@ -159,7 +159,7 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
     },
     {
         "key": "mineral_deposit",
-        "weight": 32,
+        "weight": 29,
         "label_key": "expedition_event_mineral_deposit",
         "desc_key": "expedition_event_mineral_deposit_desc",
         "severity": "normal",
@@ -265,9 +265,48 @@ _SALVAGE_EVENT_KEYS: frozenset[str] = frozenset(
     {"debris_salvage", "mineral_deposit", "fuel_cache", "distress_beacon"}
 )
 
+# Category shares for weight audit (GC-620J-0) — table weights only, not sub-rolls.
+_EXPEDITION_EVENT_CATEGORIES: Dict[str, str] = {
+    "void_scan": "neutral",
+    "sensor_glitch": "neutral",
+    "mineral_deposit": "loot",
+    "fuel_cache": "loot",
+    "debris_salvage": "loot",
+    "distress_beacon": "loot",
+    "ancient_stash": "loot",
+    "nav_interference": "delay",
+    "ion_storm": "delay",
+    "pirate_encounter": "combat",
+    "ancient_minefield": "hazard",
+    "lost_container": "treasure",
+    "abandoned_convoy": "treasure",
+    "ancient_derelict": "treasure",
+}
+
 
 def expedition_event_keys() -> frozenset[str]:
     return frozenset(_EVENT_BY_KEY.keys())
+
+
+def expedition_event_weight_audit() -> Dict[str, Any]:
+    """Static weight table summary for balance audit and regression tests."""
+    by_key: Dict[str, float] = {}
+    for event in _EXPEDITION_EVENTS:
+        by_key[str(event["key"])] = float(event.get("weight") or 0.0)
+    total = sum(by_key.values())
+    by_category: Dict[str, float] = {}
+    for key, weight in by_key.items():
+        category = _EXPEDITION_EVENT_CATEGORIES.get(key, "other")
+        by_category[category] = by_category.get(category, 0.0) + weight
+    share_by_category = {
+        category: (weight / total if total > 0 else 0.0) for category, weight in by_category.items()
+    }
+    return {
+        "total_weight": int(total),
+        "weights_by_key": {key: int(weight) for key, weight in by_key.items()},
+        "weight_by_category": {cat: int(weight) for cat, weight in by_category.items()},
+        "share_by_category": share_by_category,
+    }
 
 
 def _event_has_loot(event_key: str) -> bool:

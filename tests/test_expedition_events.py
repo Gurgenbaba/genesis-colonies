@@ -12,6 +12,7 @@ from game.expedition_events import (
     apply_expedition_ship_losses,
     build_expedition_report,
     calculate_fleet_value,
+    expedition_event_weight_audit,
     grant_expedition_lootboxes,
     is_allowed_expedition_lootbox,
     resolve_expedition_outcome,
@@ -569,6 +570,61 @@ def test_ancient_minefield_outcome_no_loot_and_updates_fleet():
     assert remaining <= sent
     if int(outcome.get("losses_total") or 0) > 0:
         assert remaining < sent
+
+
+def test_expedition_weight_audit_gc620j0():
+    audit = expedition_event_weight_audit()
+    shares = audit["share_by_category"]
+
+    assert audit["total_weight"] == 121
+    assert audit["weights_by_key"]["mineral_deposit"] == 29
+    assert audit["weight_by_category"]["loot"] == 74
+    assert shares["loot"] == pytest.approx(74 / 121, abs=0.001)
+    assert 0.58 <= shares["loot"] <= 0.64
+    assert 0.10 <= shares["neutral"] <= 0.16
+    assert 0.09 <= shares["delay"] <= 0.14
+    assert 0.03 <= shares["combat"] <= 0.07
+    assert 0.02 <= shares["hazard"] <= 0.05
+    assert 0.04 <= shares["treasure"] <= 0.08
+
+
+def test_expedition_empirical_category_distribution_gc620j0():
+    category_hits: dict[str, int] = {}
+    key_to_category = {
+        "void_scan": "neutral",
+        "sensor_glitch": "neutral",
+        "mineral_deposit": "loot",
+        "fuel_cache": "loot",
+        "debris_salvage": "loot",
+        "distress_beacon": "loot",
+        "ancient_stash": "loot",
+        "nav_interference": "delay",
+        "ion_storm": "delay",
+        "pirate_encounter": "combat",
+        "ancient_minefield": "hazard",
+        "lost_container": "treasure",
+        "abandoned_convoy": "treasure",
+        "ancient_derelict": "treasure",
+    }
+    rolls = 14999
+    for movement_id in range(1, rolls + 1):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 2, "falcon_interceptor": 20},
+        )
+        category = key_to_category[str(outcome["event_key"])]
+        category_hits[category] = category_hits.get(category, 0) + 1
+
+    empirical = {cat: hits / rolls for cat, hits in category_hits.items()}
+    assert 0.54 <= empirical.get("loot", 0) <= 0.68
+    assert 0.08 <= empirical.get("neutral", 0) <= 0.18
+    assert 0.07 <= empirical.get("delay", 0) <= 0.16
+    assert 0.02 <= empirical.get("combat", 0) <= 0.08
+    assert 0.01 <= empirical.get("hazard", 0) <= 0.06
+    assert 0.03 <= empirical.get("treasure", 0) <= 0.09
 
 
 def test_hazard_events_are_rare_in_weight_table():
