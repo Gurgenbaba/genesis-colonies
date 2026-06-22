@@ -1074,6 +1074,70 @@ def get_queues(filters: Dict[str, Any]) -> Dict[str, Any]:
         conn.close()
 
 
+def get_admin_fleets(filters: Dict[str, Any]) -> Dict[str, Any]:
+    from game.fleet import fleet_schema_ready, list_admin_fleet_movements
+
+    conn = db()
+    try:
+        if not fleet_schema_ready(conn):
+            return _err("fleet_unavailable", "Fleet schema not ready.")
+        player_raw = filters.get("player_id")
+        player_id = int(player_raw) if player_raw not in (None, "") else None
+        try:
+            limit = int(filters.get("limit") or 100)
+        except (TypeError, ValueError):
+            limit = 100
+        movements = list_admin_fleet_movements(
+            player_id=player_id,
+            status=str(filters.get("status") or "all"),
+            limit=limit,
+            conn=conn,
+        )
+        return _ok(movements=movements, count=len(movements))
+    finally:
+        conn.close()
+
+
+def advance_admin_fleet(admin_id: int, movement_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.fleet import admin_advance_fleet_movement, fleet_schema_ready
+
+    complete = bool(body.get("complete"))
+    conn = db()
+    try:
+        if not fleet_schema_ready(conn):
+            return _err("fleet_unavailable", "Fleet schema not ready.")
+        begin_write_transaction(conn)
+        result = admin_advance_fleet_movement(
+            int(movement_id),
+            conn=conn,
+            complete=complete,
+        )
+        if not result.get("ok"):
+            rollback(conn)
+            code = str(result.get("error") or "advance_failed")
+            return _err(code, code)
+        commit(conn)
+    except Exception:
+        rollback(conn)
+        raise
+    finally:
+        conn.close()
+
+    audit(
+        admin_id,
+        "fleet_advance",
+        target_type="fleet_movement",
+        target_id=int(movement_id),
+        payload={
+            "complete": complete,
+            "status_before": result.get("status_before"),
+            "status_after": result.get("status_after"),
+            "steps": result.get("steps"),
+        },
+    )
+    return _ok(**result)
+
+
 def cancel_queue_job(admin_id: int, queue_type: str, job_id: int) -> Dict[str, Any]:
     qtype = str(queue_type or "").lower()
     if qtype == "build":

@@ -104,6 +104,7 @@
       <button type="button" class="admin-tab-btn" data-admin-tab="lootboxes" role="tab">{{ T("admin_lootboxes_title", "Lootboxen") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="planets" role="tab">{{ T("admin_planets_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="queues" role="tab">{{ T("admin_queues_title") }}</button>
+      <button type="button" class="admin-tab-btn" data-admin-tab="fleets" role="tab">{{ T("admin_fleets_title", "Flotten") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="audit" role="tab">{{ T("admin_audit_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="chat" role="tab">{{ T("admin_chat_title") }}</button>
       <button type="button" class="admin-tab-btn" data-admin-tab="support" role="tab">{{ T("admin_support_title", "Support") }}</button>
@@ -230,6 +231,24 @@
         </div>
       </div>
       <div id="admin-queues-output" class="admin-panel-body"></div>
+    </section>
+
+    <section id="admin-tab-fleets" class="admin-panel admin-tab-panel" data-admin-panel="fleets" role="tabpanel" hidden>
+      <div class="admin-action-row">
+        <h2 class="admin-panel-title">{{ T("admin_fleets_title", "Flotten") }}</h2>
+        <div class="admin-toolbar admin-action-row-wrap">
+          <input type="number" class="admin-input admin-input-sm" id="admin-fleet-player-id" placeholder="{{ T('admin_filter_player_id') }}">
+          <select class="admin-input admin-select" data-gc-hud-select id="admin-fleet-status">
+            <option value="all">{{ T("admin_filter_status_all") }}</option>
+            <option value="outbound">{{ T("admin_fleet_status_outbound", "Outbound") }}</option>
+            <option value="holding">{{ T("admin_fleet_status_holding", "Holding") }}</option>
+            <option value="returning">{{ T("admin_fleet_status_returning", "Returning") }}</option>
+          </select>
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="load-fleets">{{ T("admin_btn_load_fleets", "Flotten laden") }}</button>
+        </div>
+      </div>
+      <p class="admin-tab-hint admin-small-hint">{{ T("admin_fleets_hint", "Aktive Flottenbewegungen — eine Phase vorrücken oder Mission abschließen (Dev/QA).") }}</p>
+      <div id="admin-fleets-output" class="admin-panel-body"></div>
     </section>
 
     <section id="admin-tab-audit" class="admin-panel admin-tab-panel" data-admin-panel="audit" role="tabpanel" hidden>

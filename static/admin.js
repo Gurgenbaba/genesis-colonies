@@ -265,6 +265,9 @@
       case "queues":
         result = await loadAdminQueues();
         break;
+      case "fleets":
+        result = await loadAdminFleets();
+        break;
       case "audit":
         result = await loadAuditLog();
         break;
@@ -1594,6 +1597,89 @@
     return data;
   }
 
+  function formatFleetRemaining(sec) {
+    const s = Math.max(0, parseInt(sec, 10) || 0);
+    if (s <= 0) return t("admin_fleet_due_now", "Due now");
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m ${s % 60}s`;
+  }
+
+  async function loadAdminFleets() {
+    const out = qs("#admin-fleets-output");
+    const pid = qs("#admin-fleet-player-id")?.value;
+    const status = qs("#admin-fleet-status")?.value || "all";
+    const params = new URLSearchParams({ status });
+    if (pid) params.set("player_id", pid);
+    if (out) out.innerHTML = loadingHtml();
+    const data = await adminGet(`/api/admin/fleets?${params}`);
+    if (!data.ok) {
+      showAlert(data.message, "error");
+      if (out) out.innerHTML = errorCard(data);
+      return data;
+    }
+    const rows = data.movements || [];
+    const advanceBtn = (id, complete) =>
+      `<button type="button" class="gc-btn gc-btn-${complete ? "primary" : "outline"} gc-btn-xs" data-admin-action="fleet-advance" data-fleet-id="${id}" data-fleet-complete="${complete ? "1" : "0"}">${esc(
+        complete
+          ? t("admin_btn_fleet_complete", "Abschließen")
+          : t("admin_btn_fleet_advance", "Nächste Phase")
+      )}</button>`;
+    if (out) {
+      out.innerHTML =
+        `<div class="admin-card">` +
+        `<h3 class="admin-subtitle">${esc(t("admin_fleets_active_title", "Aktive Flotten"))} (${rows.length})</h3>` +
+        (rows.length
+          ? renderTable(
+              [
+                "ID",
+                t("admin_col_player_name", "Player"),
+                t("admin_col_mission", "Mission"),
+                t("admin_col_status", "Status"),
+                t("admin_col_target", "Ziel"),
+                t("admin_col_eta", "ETA"),
+                "",
+              ],
+              rows.map(
+                (mv) =>
+                  `<tr>` +
+                  `<td>${mv.id}</td>` +
+                  `<td>${playerNameLink(mv.player_id, mv.player_name)}</td>` +
+                  `<td>${esc(mv.mission_type || "")}</td>` +
+                  `<td>${esc(mv.status || "")}</td>` +
+                  `<td class="gc-mono">${esc(mv.target_coords || "—")}</td>` +
+                  `<td class="gc-mono">${esc(formatFleetRemaining(mv.remaining_seconds))}</td>` +
+                  `<td class="admin-table-actions">${advanceBtn(mv.id, false)} ${advanceBtn(mv.id, true)}</td>` +
+                  `</tr>`
+              )
+            )
+          : `<p class="admin-small-hint">${esc(t("admin_fleets_empty", "Keine aktiven Flottenbewegungen."))}</p>`) +
+        `</div>`;
+    }
+    return data;
+  }
+
+  async function advanceAdminFleet(fleetId, complete) {
+    const data = await adminPost(`/api/admin/fleet/${fleetId}/advance`, { complete: !!complete });
+    if (data.ok) {
+      const tpl = t(
+        "admin_fleet_advance_ok",
+        "%(before)s → %(after)s (%(steps)s Schritt(e))"
+      );
+      notify(
+        tpl
+          .replace("%(before)s", String(data.status_before || ""))
+          .replace("%(after)s", String(data.status_after || ""))
+          .replace("%(steps)s", String(data.steps || 0)),
+        "success"
+      );
+      await loadAdminFleets();
+      await syncAfterAdminChange("admin_fleet_advance");
+    } else showAlert(data.message || data.error, "error");
+    return data;
+  }
+
   async function loadAdminQueues() {
     const out = qs("#admin-queues-output");
     const pid = qs("#admin-queue-player-id")?.value;
@@ -2231,6 +2317,7 @@
     if (act === "search-players") return searchAdminPlayers();
     if (act === "search-planets") return searchAdminPlanets();
     if (act === "load-queues") return loadAdminQueues();
+    if (act === "load-fleets") return loadAdminFleets();
     if (act === "finish-due") return finishDueQueues();
     if (act === "load-audit") return loadAuditLog();
     if (act === "chat-search") return searchAdminChatMessages();
@@ -2354,6 +2441,11 @@
     if (act === "server-wipe") return wipeAdminUniverse();
     if (act === "run-queue-tick") return runQueueTick(btn);
     if (act === "queue-cancel") return cancelQueueJob(btn.dataset.queueType, btn.dataset.jobId);
+    if (act === "fleet-advance") {
+      const fleetId = parseInt(btn.dataset.fleetId, 10);
+      if (!Number.isFinite(fleetId)) return null;
+      return advanceAdminFleet(fleetId, btn.dataset.fleetComplete === "1");
+    }
     if (act === "queue-clear") return clearQueues();
 
     if (act === "player-set-admin") {
@@ -2818,6 +2910,7 @@
   GC.loadAdminPlayer = loadAdminPlayer;
   GC.searchAdminPlanets = searchAdminPlanets;
   GC.loadAdminQueues = loadAdminQueues;
+  GC.loadAdminFleets = loadAdminFleets;
   GC.cancelQueueJob = cancelQueueJob;
   GC.loadAuditLog = loadAuditLog;
 

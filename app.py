@@ -7614,6 +7614,25 @@ def api_admin_queues_clear():
     return _admin_json(admin_api_logic.clear_queues(_admin_actor_id(), _admin_body()))
 
 
+@app.route("/api/admin/fleets", methods=["GET"])
+@require_admin_api
+def api_admin_fleets():
+    filters = {
+        "player_id": request.args.get("player_id"),
+        "status": request.args.get("status", "all"),
+        "limit": request.args.get("limit", 100),
+    }
+    return _admin_json(admin_api_logic.get_admin_fleets(filters))
+
+
+@app.route("/api/admin/fleet/<int:movement_id>/advance", methods=["POST"])
+@require_admin_api
+def api_admin_fleet_advance(movement_id: int):
+    return _admin_json(
+        admin_api_logic.advance_admin_fleet(_admin_actor_id(), movement_id, _admin_body())
+    )
+
+
 @app.route("/api/admin/galactic-diplomacy/<int:galaxy>", methods=["GET"])
 @require_admin_api
 def api_admin_galactic_diplomacy_get(galaxy: int):

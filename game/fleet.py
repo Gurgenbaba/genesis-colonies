@@ -1527,6 +1527,151 @@ def list_active_movements(player_id: int, *, conn=None) -> List[Dict[str, Any]]:
             conn.close()
 
 
+def list_admin_fleet_movements(
+    *,
+    player_id: int | None = None,
+    status: str | None = None,
+    limit: int = 100,
+    conn,
+) -> List[Dict[str, Any]]:
+    """Non-completed fleet movements for admin panel (GC-621G)."""
+    if not fleet_schema_ready(conn):
+        return []
+    lim = max(1, min(int(limit or 100), 200))
+    status_filter = str(status or "all").strip().lower()
+    clauses = ["fm.status IN (" + ",".join("?" for _ in ACTIVE_FLEET_STATUSES) + ")"]
+    params: List[Any] = list(ACTIVE_FLEET_STATUSES)
+    if player_id is not None:
+        clauses.append("fm.player_id = ?")
+        params.append(int(player_id))
+    if status_filter and status_filter not in ("all", ""):
+        clauses = ["fm.status = ?"]
+        params = [status_filter]
+        if player_id is not None:
+            clauses.append("fm.player_id = ?")
+            params.append(int(player_id))
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT fm.*, pl.name AS player_name, op.name AS origin_name
+        FROM fleet_movements fm
+        JOIN players pl ON pl.id = fm.player_id
+        JOIN planets op ON op.id = fm.origin_planet_id
+        WHERE {' AND '.join(clauses)}
+        ORDER BY fm.updated_at DESC, fm.id DESC
+        LIMIT ?;
+        """,
+        (*params, lim),
+    )
+    now = _now()
+    out: List[Dict[str, Any]] = []
+    for row in cur.fetchall():
+        mv = _row_to_movement(row)
+        mv["player_name"] = str(row["player_name"] or "")
+        mv["origin_name"] = str(row["origin_name"] or "")
+        mv = enrich_movement_timing(mv, now=now)
+        loaded = _movement_loaded_resources(mv)
+        out.append(
+            {
+                "id": int(mv["id"]),
+                "player_id": int(mv["player_id"]),
+                "player_name": mv["player_name"],
+                "mission_type": str(mv.get("mission_type") or ""),
+                "status": str(mv.get("status") or ""),
+                "target_coords": str(mv.get("target_coords") or ""),
+                "origin_planet_id": int(mv.get("origin_planet_id") or 0),
+                "origin_name": mv["origin_name"],
+                "ship_count": _movement_ship_count(mv),
+                "remaining_seconds": int(mv.get("remaining_seconds") or 0),
+                "resources": loaded,
+                "arrival_at": mv.get("arrival_at"),
+                "holding_until": mv.get("holding_until"),
+                "return_at": mv.get("return_at"),
+            }
+        )
+    return out
+
+
+def admin_advance_fleet_movement(
+    movement_id: int,
+    *,
+    conn,
+    now: float | None = None,
+    complete: bool = False,
+) -> Dict[str, Any]:
+    """Force-advance one fleet movement via due timestamps + process_fleet_tick (GC-621G)."""
+    if not fleet_schema_ready(conn):
+        return {"ok": False, "error": "fleet_unavailable"}
+
+    mid = int(movement_id)
+    ts = float(now if now is not None else _now())
+    max_steps = 8 if complete else 1
+    steps = 0
+    tick_snapshots: List[Dict[str, Any]] = []
+    status_before = ""
+
+    cur = conn.cursor()
+    cur.execute("SELECT status FROM fleet_movements WHERE id = ? LIMIT 1;", (mid,))
+    first = cur.fetchone()
+    if not first:
+        return {"ok": False, "error": "not_found", "movement_id": mid}
+    status_before = str(first["status"] or "")
+
+    for _ in range(max_steps):
+        cur.execute("SELECT * FROM fleet_movements WHERE id = ? LIMIT 1;", (mid,))
+        row = cur.fetchone()
+        if not row:
+            break
+        status = str(row["status"] or "")
+        if status in ("completed", "failed"):
+            break
+
+        player_id = int(row["player_id"])
+        if status == "outbound":
+            cur.execute(
+                "UPDATE fleet_movements SET arrival_at = ? WHERE id = ? AND status = 'outbound';",
+                (ts - 1, mid),
+            )
+        elif status == "holding":
+            cur.execute(
+                "UPDATE fleet_movements SET holding_until = ? WHERE id = ? AND status = 'holding';",
+                (ts - 1, mid),
+            )
+        elif status == "returning":
+            cur.execute(
+                "UPDATE fleet_movements SET return_at = ? WHERE id = ? AND status = 'returning';",
+                (ts - 1, mid),
+            )
+        else:
+            return {
+                "ok": False,
+                "error": "unsupported_status",
+                "status": status,
+                "movement_id": mid,
+            }
+
+        tick_result = process_fleet_tick(player_id=player_id, now=ts, conn=conn)
+        tick_snapshots.append(dict(tick_result))
+        steps += 1
+
+        if not complete:
+            break
+
+    cur.execute("SELECT status FROM fleet_movements WHERE id = ? LIMIT 1;", (mid,))
+    final_row = cur.fetchone()
+    status_after = str(final_row["status"] if final_row else "")
+
+    return {
+        "ok": True,
+        "movement_id": mid,
+        "status_before": status_before,
+        "status_after": status_after,
+        "steps": steps,
+        "complete": bool(complete),
+        "tick": tick_snapshots[-1] if tick_snapshots else {},
+    }
+
+
 FLEET_DRAWER_VISIBLE_LIMIT = 5
 
 
