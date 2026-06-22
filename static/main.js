@@ -2685,6 +2685,51 @@
     container.classList.toggle("energy-warning", t > 0 && u > t);
   }
 
+  function computeHudCapacityState(current, max) {
+    const cur = Math.max(0, Number(current) || 0);
+    const cap = Math.max(0, Number(max) || 0);
+    if (cap <= 0) return { pct: 0, filled: 0, tier: "tier-green" };
+    const pct = Math.min(100, Math.round((cur / cap) * 100));
+    const filled = Math.round((pct / 100) * 10);
+    let tier = "tier-green";
+    if (pct >= 80) tier = "tier-red";
+    else if (pct >= 60) tier = "tier-orange";
+    else if (pct >= 40) tier = "tier-yellow";
+    else if (pct >= 20) tier = "tier-yellow-green";
+    return { pct, filled, tier };
+  }
+
+  function patchHudCapacityBar(resKey, current, max, opts) {
+    const wrap = document.querySelector(`[data-hud-capacity="${resKey}"]`);
+    if (!wrap) return;
+    const { pct, filled, tier } = computeHudCapacityState(current, max);
+    const prevPct = wrap.dataset.capPct || "";
+    const changed = prevPct !== String(pct);
+    wrap.dataset.capPct = String(pct);
+    wrap.className = `hud-res-capacity hud-cap--${tier}`;
+    const pctEl = wrap.querySelector(`[data-hud-cap-pct="${resKey}"]`);
+    if (pctEl) _setIfChanged(pctEl, `${pct}%`);
+    const bar = wrap.querySelector(".hud-cap-bar");
+    if (!bar) return;
+    if (changed && opts && opts.animate) {
+      bar.classList.add("hud-cap-bar--pulse");
+      window.setTimeout(() => bar.classList.remove("hud-cap-bar--pulse"), 420);
+    }
+    bar.querySelectorAll(".hud-cap-seg").forEach((seg, i) => {
+      seg.classList.toggle("is-filled", i < filled);
+      seg.classList.toggle("is-active", filled > 0 && i === filled - 1);
+    });
+  }
+
+  function patchHudCapacityBars(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells, energyUsed, energyTotal, opts) {
+    patchHudCapacityBar("metal", metal, storageMetal, opts);
+    patchHudCapacityBar("crystal", crystal, storageCrystal, opts);
+    patchHudCapacityBar("fuel_cells", fuelCells, storageFuelCells, opts);
+    if (energyUsed != null && energyTotal != null) {
+      patchHudCapacityBar("energy", energyUsed, energyTotal, opts);
+    }
+  }
+
   function patchHudStorageWarnings(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells) {
     const STORAGE_WARN_RATIO = 0.92;
     const pairs = [
@@ -7033,6 +7078,17 @@
       });
       _resourceDisplay.fuelCells = f;
     }
+    patchHudCapacityBars(
+      m,
+      c,
+      f,
+      _resourceLive.capMetal,
+      _resourceLive.capCrystal,
+      _resourceLive.capFuelCells,
+      null,
+      null,
+      { animate: true }
+    );
   }
 
   function syncResourceLiveBaseline(snapshot) {
@@ -8389,19 +8445,22 @@
 
       const energyText = `${fmtNumber(used)}/${fmtNumber(total)}`;
       if (forceResourceBar || _last.energyUsed !== used || _last.energyTotal !== total) {
-        const energyEl = bar.querySelector("#res-energy") || document.getElementById("res-energy");
-        if (energyEl) _setIfChanged(energyEl, energyText);
-        bar.querySelectorAll("[data-energy-used]").forEach((el) => {
+        bar.querySelectorAll(".res-value.energy[data-energy-used], [data-energy-used]").forEach((el) => {
           _setIfChanged(el, fmtNumber(used));
         });
-        bar.querySelectorAll("[data-energy-total]").forEach((el) => {
+        bar.querySelectorAll(".res-cap.energy[data-energy-total], [data-energy-total]").forEach((el) => {
           _setIfChanged(el, fmtNumber(total));
         });
+        const energyEl = bar.querySelector("#res-energy") || document.getElementById("res-energy");
+        if (energyEl) _setIfChanged(energyEl, energyText);
         _last.energyUsed = used;
         _last.energyTotal = total;
       }
       patchResourceBarEnergyWarning(used, total);
       patchHudStorageWarnings(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells);
+      patchHudCapacityBars(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells, used, total, {
+        animate: forceResourceBar,
+      });
     }
 
     patchHeaderPlanetLimitFromState(data, forceResourceBar);

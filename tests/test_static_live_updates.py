@@ -292,8 +292,11 @@ def test_main_js_patches_resource_bar_energy_warning():
     src = _read("static/main.js")
     assert "function patchResourceBarEnergyWarning" in src
     assert 'classList.toggle("energy-warning"' in src
+    assert "function patchHudCapacityBars" in src
+    assert "function computeHudCapacityState" in src
     hud_section = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
     assert "patchResourceBarEnergyWarning(used, total)" in hud_section
+    assert "patchHudCapacityBars(metal, crystal, fuelCells" in hud_section
 
 
 def test_main_js_gc802_planet_switch_state_sync():
@@ -389,11 +392,15 @@ def test_gc803_simple_hud_poll_contract():
     assert "def research_poll_slice(research" in live
 
 
-def test_gc744_resource_icons_use_webp_picture():
-    """GC-744: HUD/overview resource icons prefer WebP with eager above-fold load."""
+def test_gc744_resource_icons_use_webp():
+    """GC-744 / GC-807: resource icons use optimized WebP assets directly."""
     macro = _read("templates/partials/progression_cards.html")
     assert "render_resource_icon(res_key, size='', lazy=true, priority='', hud=false, alt='')" in macro
-    assert "icon_url|webp_static" in macro
+    assert "img/res/Ferronit.webp" in macro
+    assert "img/res/Crytite.webp" in macro
+    assert "img/res/Brennzellen.webp" in macro
+    assert "img/res/Energie.webp" in macro
+    assert "img/res/Ferronit.png" not in macro
     assert "loading=\"lazy\"" in macro
     assert "loading=\"eager\"" in macro
     overview = _read("templates/overview.html")
@@ -1368,7 +1375,7 @@ def test_gc551a_fuel_cell_icon_and_hero_level_badge():
     assert "generate_card_artwork" in icons_py
     assert fuel_png.is_file() and fuel_png.stat().st_size > 700
     assert fuel_svg.is_file()
-    assert "img/res/Brennzellen.png" in progression
+    assert "img/res/Brennzellen.webp" in progression
     fuel_block = base_html.split('class="hud-res-panel hud-res-fuel-cells"')[1].split("</div>", 1)[0]
     assert "onerror" not in fuel_block
     assert "icons/energy.png" not in fuel_block

@@ -153,9 +153,9 @@ REWARD_TYPE_LABEL_KEYS: Dict[str, str] = {
 }
 
 _VOTE_RESOURCE_DISPLAY: Tuple[Tuple[str, str, str], ...] = (
-    ("metal", "resource_metal", "/static/img/res/Ferronit.png"),
-    ("crystal", "resource_crystal", "/static/img/res/Crytite.png"),
-    ("fuel_cells", "resource_fuel_cells", "/static/img/res/Brennzellen.png"),
+    ("metal", "resource_metal", "/static/img/res/Ferronit.webp"),
+    ("crystal", "resource_crystal", "/static/img/res/Crytite.webp"),
+    ("fuel_cells", "resource_fuel_cells", "/static/img/res/Brennzellen.webp"),
 )
 
 

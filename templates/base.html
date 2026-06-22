@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-{% from "partials/progression_cards.html" import render_resource_icon with context %}
+{% from "partials/progression_cards.html" import render_resource_icon, render_hud_capacity_bar with context %}
 <html lang="{{ GC_LOCALE }}">
 <head>
   <meta charset="UTF-8">
@@ -170,16 +170,18 @@
         <div class="gc-resource-sticky">
           <div class="resource-bar resource-bar-cmd" id="resource-bar" data-live-status role="status" aria-live="polite" aria-label="{{ T('resources', 'Ressourcen') }}">
 
-            <div class="hud-res-panel hud-res-metal" data-hud-res="metal" title="{{ T('resource_metal') }}">
-              <span class="hud-res-label">{{ T('resource_metal') }}</span>
+            {% set metal_have = (player.metal if player is defined else 0)|int %}
+            {% set metal_cap_val = (storage_caps.metal if storage_caps is defined else 0)|int %}
+            <div class="hud-res-panel hud-res-metal" data-hud-res="metal" title="{{ T('resource_metal') }}" aria-label="{{ T('resource_metal') }}">
               <div class="hud-res-body res-block res-block-metal">
                 <span class="hud-res-badge" aria-hidden="true">{{ T('resource_metal_short', 'FN') }}</span>
                 {{ render_resource_icon('metal', hud=true, lazy=false, priority='high', alt=T('resource_metal')) }}
                 <span class="hud-res-amount">
-                  <span class="res-value metal">{{ (player.metal if player is defined else 0)|fmt_int }}</span>
+                  <span class="res-value metal">{{ metal_have|fmt_int }}</span>
+                  {{ render_hud_capacity_bar('metal', metal_have, metal_cap_val) }}
                   <span class="hud-res-cap-line">
                     <span class="res-sep" aria-hidden="true">/</span>
-                    <span class="res-cap metal">{{ (storage_caps.metal if storage_caps is defined else 0)|fmt_int }}</span>
+                    <span class="res-cap metal">{{ metal_cap_val|fmt_int }}</span>
                   </span>
                 </span>
               </div>
@@ -187,16 +189,18 @@
               <span class="res-rate metal" data-res-rate="metal" aria-hidden="true" style="visibility:hidden"></span>
             </div>
 
-            <div class="hud-res-panel hud-res-crystal" data-hud-res="crystal" title="{{ T('resource_crystal') }}">
-              <span class="hud-res-label">{{ T('resource_crystal') }}</span>
+            {% set crystal_have = (player.crystal if player is defined else 0)|int %}
+            {% set crystal_cap_val = (storage_caps.crystal if storage_caps is defined else 0)|int %}
+            <div class="hud-res-panel hud-res-crystal" data-hud-res="crystal" title="{{ T('resource_crystal') }}" aria-label="{{ T('resource_crystal') }}">
               <div class="hud-res-body res-block res-block-crystal">
                 <span class="hud-res-badge" aria-hidden="true">{{ T('resource_crystal_short', 'CT') }}</span>
                 {{ render_resource_icon('crystal', hud=true, lazy=false, priority='high', alt=T('resource_crystal')) }}
                 <span class="hud-res-amount">
-                  <span class="res-value crystal">{{ (player.crystal if player is defined else 0)|fmt_int }}</span>
+                  <span class="res-value crystal">{{ crystal_have|fmt_int }}</span>
+                  {{ render_hud_capacity_bar('crystal', crystal_have, crystal_cap_val) }}
                   <span class="hud-res-cap-line">
                     <span class="res-sep" aria-hidden="true">/</span>
-                    <span class="res-cap crystal">{{ (storage_caps.crystal if storage_caps is defined else 0)|fmt_int }}</span>
+                    <span class="res-cap crystal">{{ crystal_cap_val|fmt_int }}</span>
                   </span>
                 </span>
               </div>
@@ -206,13 +210,13 @@
 
             {% set fc_have = (player.fuel_cells if player is defined and player.fuel_cells is defined else 0) | int %}
             {% set fc_cap = (storage_caps.fuel_cells if storage_caps is defined and storage_caps.fuel_cells is defined else 0) | int %}
-            <div class="hud-res-panel hud-res-fuel-cells" data-hud-res="fuel_cells" title="{{ T('resource_fuel_cells') }}">
-              <span class="hud-res-label">{{ T('resource_fuel_cells') }}</span>
+            <div class="hud-res-panel hud-res-fuel-cells" data-hud-res="fuel_cells" title="{{ T('resource_fuel_cells') }}" aria-label="{{ T('resource_fuel_cells') }}">
               <div class="hud-res-body res-block res-block-fuel-cells">
                 <span class="hud-res-badge" aria-hidden="true">{{ T('resource_fuel_cells_short', 'BZ') }}</span>
                 {{ render_resource_icon('fuel_cells', hud=true, lazy=false, priority='high', alt=T('resource_fuel_cells')) }}
                 <span class="hud-res-amount">
                   <span class="res-value fuel_cells">{{ fc_have|fmt_int }}</span>
+                  {{ render_hud_capacity_bar('fuel_cells', fc_have, fc_cap) }}
                   <span class="hud-res-cap-line">
                     <span class="res-sep" aria-hidden="true">/</span>
                     <span class="res-cap fuel_cells">{{ fc_cap|fmt_int }}</span>
@@ -233,10 +237,16 @@
                  class="hud-res-panel hud-res-energy {% if et > 0 and eu > et %}energy-warning{% endif %}"
                  aria-label="{{ T('energy', 'Energie') }}"
                  title="{{ T('energy', 'Energie') }}">
-              <span class="hud-res-label">{{ T('energy', 'Energie') }}</span>
               <div class="hud-res-body res-block res-block-energy">
                 {{ render_resource_icon('energy', hud=true, lazy=false, priority='high', alt=T('energy', 'Energie')) }}
-                <span id="res-energy">{{ eu|fmt_int }}/{{ et|fmt_int }}</span>
+                <span class="hud-res-amount">
+                  <span class="res-value energy" data-energy-used>{{ eu|fmt_int }}</span>
+                  {{ render_hud_capacity_bar('energy', eu, et) }}
+                  <span class="hud-res-cap-line">
+                    <span class="res-sep" aria-hidden="true">/</span>
+                    <span class="res-cap energy" data-energy-total>{{ et|fmt_int }}</span>
+                  </span>
+                </span>
               </div>
               <span class="res-rate energy" data-res-rate="energy" aria-hidden="true" style="visibility:hidden"></span>
             </div>

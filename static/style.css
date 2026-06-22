@@ -17897,6 +17897,89 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .gc-header-cmd .hud-res-panel--storage-full{
   border-color: color-mix(in srgb, rgba(255, 120, 80, 0.8) 50%, var(--hud-res-accent) 50%);
 }
+
+/* GC-807A — segmented storage / usage capacity bar (inline in amount column) */
+.gc-header-cmd .hud-res-amount .hud-res-capacity{
+  width: 100%;
+  margin: 0;
+}
+.gc-header-cmd .hud-res-capacity{
+  display: block;
+  min-width: 0;
+}
+.gc-header-cmd .hud-cap-row{
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.gc-header-cmd .hud-cap-bar{
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 7px;
+  padding: 1px;
+  border: 1px solid rgba(127, 255, 217, 0.32);
+  border-radius: 1px;
+  background: rgba(0, 0, 0, 0.38);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.22) inset;
+}
+.gc-header-cmd .hud-cap-seg{
+  min-width: 0;
+  border-radius: 0;
+  background: rgba(72, 96, 118, 0.42);
+  border: 1px solid rgba(127, 255, 217, 0.08);
+  transition: background-color 0.22s ease, box-shadow 0.22s ease;
+}
+.gc-header-cmd .hud-cap-seg.is-filled{
+  background: var(--hud-cap-fill, rgba(52, 232, 178, 0.92));
+  border-color: color-mix(in srgb, var(--hud-cap-fill, rgba(52, 232, 178, 0.92)) 65%, rgba(127, 255, 217, 0.35));
+  box-shadow: 0 0 5px var(--hud-cap-glow, rgba(52, 232, 178, 0.35));
+}
+.gc-header-cmd .hud-cap-seg.is-active.is-filled{
+  box-shadow: 0 0 8px var(--hud-cap-glow, rgba(52, 232, 178, 0.55));
+}
+.gc-header-cmd .hud-cap-bar--pulse .hud-cap-seg.is-active.is-filled{
+  animation: gc-hud-cap-pulse 0.42s ease;
+}
+@keyframes gc-hud-cap-pulse{
+  0%, 100%{ filter: brightness(1); }
+  50%{ filter: brightness(1.35); }
+}
+.gc-header-cmd .hud-cap-pct{
+  flex: 0 0 auto;
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  color: rgba(170, 210, 230, 0.82);
+  font-variant-numeric: tabular-nums;
+  min-width: 2.1em;
+  text-align: right;
+}
+.gc-header-cmd .hud-cap--tier-green{
+  --hud-cap-fill: rgba(46, 204, 113, 0.95);
+  --hud-cap-glow: rgba(46, 204, 113, 0.42);
+}
+.gc-header-cmd .hud-cap--tier-yellow-green{
+  --hud-cap-fill: rgba(154, 205, 50, 0.95);
+  --hud-cap-glow: rgba(154, 205, 50, 0.4);
+}
+.gc-header-cmd .hud-cap--tier-yellow{
+  --hud-cap-fill: rgba(255, 214, 64, 0.95);
+  --hud-cap-glow: rgba(255, 214, 64, 0.38);
+}
+.gc-header-cmd .hud-cap--tier-orange{
+  --hud-cap-fill: rgba(255, 152, 64, 0.96);
+  --hud-cap-glow: rgba(255, 152, 64, 0.4);
+}
+.gc-header-cmd .hud-cap--tier-red{
+  --hud-cap-fill: rgba(255, 88, 72, 0.96);
+  --hud-cap-glow: rgba(255, 88, 72, 0.45);
+}
+
 .gc-header-vacation-banner{
   display: flex;
   flex-wrap: wrap;
@@ -17945,7 +18028,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   align-items: stretch;
   gap: 4px;
   min-width: 0;
-  min-height: 3.85rem;
+  min-height: 3.35rem;
   height: 100%;
   padding: 6px 8px 6px 10px;
   border-radius: var(--gc-radius-sm);
@@ -18033,7 +18116,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -18041,18 +18124,22 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .gc-header-cmd .hud-res-cap-line{
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 2px;
   line-height: 1;
-  min-height: 0.85rem;
+  min-height: 0;
+  width: 100%;
 }
 
-.gc-header-cmd .hud-res-body .res-value{
+.gc-header-cmd .hud-res-body .res-value,
+.gc-header-cmd .hud-res-body .res-value.energy{
   font-size: clamp(0.88rem, 0.82rem + 0.28vw, 1.02rem);
   font-weight: 700;
   color: rgba(244, 252, 255, 0.98);
-  line-height: 1.15;
+  line-height: 1.1;
   min-width: 4.25ch;
   text-align: right;
+  width: 100%;
 }
 
 .gc-header-cmd .hud-res-body .res-cap,
@@ -18092,22 +18179,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   display: block;
 }
 
-.gc-header-cmd .hud-res-label{
-  order: 1;
-  flex: 0 0 auto;
-  font-size: 0.64rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--hud-res-accent);
-  font-weight: 700;
-  line-height: 1.1;
-  padding-left: 2px;
-  white-space: nowrap;
-  opacity: 0.88;
-}
-
 .gc-header-cmd .hud-res-body{
-  order: 2;
   flex: 1 1 auto;
   display: flex;
   align-items: center;
@@ -18445,13 +18517,21 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
     grid-row: 2;
   }
 
-  .gc-header-cmd .hud-res-label{ display: none; }
-
-  .gc-header-cmd .hud-res-badge{ display: inline-flex; }
+  .gc-header-cmd .hud-res-badge{ display: none; }
 
   .gc-header-cmd .hud-res-panel{
-    min-height: 3.35rem;
+    min-height: 3.1rem;
     padding: 5px 6px 5px 8px;
+  }
+
+  .gc-header-cmd .hud-cap-bar{
+    height: 6px;
+    gap: 1px;
+  }
+
+  .gc-header-cmd .hud-cap-pct{
+    font-size: 0.52rem;
+    min-width: 1.9em;
   }
 
   .gc-header-cmd .hud-res-body .res-icon--hud{

@@ -483,7 +483,7 @@ def test_overview_excludes_planet_teaser_widget(exchange_db, tmp_path, monkeypat
     assert "overview-warnings-panel" not in html
     assert "overview-upgrade-section" not in html
     assert "overview-log-panel" not in html
-    assert "img/res/Ferronit.png" in html
+    assert "img/res/Ferronit.webp" in html
 
 
 def test_exchange_daily_limit_uses_empire_production_floor(exchange_db):
