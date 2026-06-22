@@ -3838,6 +3838,8 @@
   "fleet_spy_report_defense_total": "Verteidigungseinheiten: %(count)s",
   "fuel_efficiency": "Brennzellen-Optimierung",
   "galaxy_debris_field": "Trümmerfeld",
+  "galaxy_debris_total": "Gesamt",
+  "galaxy_debris_ttl_remaining": "Verbleibend",
   "galaxy_legend_debris": "Trümmerfeld",
   "header_planet_limit": "Planeten",
   "imprint": "Impressum",

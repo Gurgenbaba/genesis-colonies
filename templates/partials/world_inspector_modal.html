@@ -1,0 +1,25 @@
+{# Command Map — World Inspector modal shell (GC-597 / GC-700D-B) #}
+<div id="gc-world-inspector-root"
+     class="gc-player-card-modal gc-world-inspector-modal"
+     data-world-inspector-modal
+     hidden
+     aria-hidden="true">
+  <div class="gc-player-card-overlay" data-world-inspector-close tabindex="-1"></div>
+  <div class="gc-player-card-dialog gc-world-inspector-dialog"
+       data-theme="cyan"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="gc-world-inspector-title">
+    <header class="gc-player-card-head">
+      <h2 id="gc-world-inspector-title" class="gc-player-card-head-title"></h2>
+      <button type="button"
+              class="gc-btn gc-btn-ghost gc-btn-xs gc-player-card-close"
+              data-world-inspector-close
+              aria-label="{{ T('world_inspector_close', 'Schließen') }}">×</button>
+    </header>
+    <div class="gc-player-card-body">
+      <div class="gc-player-card-content gc-world-inspector-content" data-world-inspector-content></div>
+      <div class="gc-world-inspector-actions" data-world-inspector-actions></div>
+    </div>
+  </div>
+</div>

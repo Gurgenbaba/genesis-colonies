@@ -945,7 +945,7 @@ def build_colony_command_center(
     header = _colony_header_fields(planet, conn=conn)
     fleet_rows = _build_fleets_block(pid, movements, now=now)
 
-    return {
+    payload = {
         "panel_kind": "colony",
         "planet_id": pid,
         "is_own": True,
@@ -983,6 +983,10 @@ def build_colony_command_center(
         "news": _build_news_block(uid, conn=conn),
         "mission_actions": _build_colony_mission_actions(pid, conn=conn),
     }
+    from game.world_inspector import attach_debris_to_inspector_payload
+
+    attach_debris_to_inspector_payload(payload, conn=conn, planet_id=pid)
+    return payload
 
 
 def _strategic_status_key(node: Mapping[str, Any]) -> str:
@@ -1483,6 +1487,10 @@ def build_foreign_colony_command_center(
 
     for forbidden in _FOREIGN_CC_FORBIDDEN_KEYS:
         payload.pop(forbidden, None)
+
+    from game.world_inspector import attach_debris_to_inspector_payload
+
+    attach_debris_to_inspector_payload(payload, conn=conn, planet_id=int(planet_id or 0))
     return payload
 
 

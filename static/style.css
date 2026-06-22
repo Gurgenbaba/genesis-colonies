@@ -11538,6 +11538,115 @@ body.gc-techtree-media-zoom-open{
   margin-top: 8px;
   align-items: center;
 }
+.galaxy-debris-block{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
+  max-width: 100%;
+}
+.galaxy-debris-badge-wrap{
+  position: relative;
+  max-width: 100%;
+}
+.galaxy-debris-badge{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: help;
+  max-width: 100%;
+}
+.galaxy-debris-icon{
+  font-size: 1rem;
+  line-height: 1;
+}
+.galaxy-orbit-debris-marker{
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  font-size: 0.72rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 4px rgba(255, 180, 60, 0.85));
+  pointer-events: none;
+}
+.galaxy-orbit-rail{
+  position: relative;
+}
+.galaxy-debris-tooltip{
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: var(--gc-z-popover, 1200);
+  min-width: 180px;
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm, 8px);
+  border: 1px solid rgba(255, 186, 72, 0.45);
+  background: rgba(18, 12, 4, 0.96);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.galaxy-debris-badge-wrap.is-open .galaxy-debris-tooltip,
+.galaxy-debris-badge-wrap:focus-within .galaxy-debris-tooltip,
+.galaxy-debris-badge-wrap:hover .galaxy-debris-tooltip{
+  display: block !important;
+}
+.galaxy-debris-tooltip[hidden]{
+  display: none !important;
+}
+.galaxy-debris-badge-wrap.is-open .galaxy-debris-tooltip[hidden],
+.galaxy-debris-badge-wrap:focus-within .galaxy-debris-tooltip[hidden],
+.galaxy-debris-badge-wrap:hover .galaxy-debris-tooltip[hidden]{
+  display: block !important;
+}
+.galaxy-debris-tooltip-title{
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 220, 150, 0.95);
+  margin-bottom: 6px;
+}
+.galaxy-debris-tooltip-stats{
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+.galaxy-debris-tooltip-stats > div{
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.76rem;
+}
+.galaxy-debris-tooltip-stats dt{
+  color: rgba(200, 210, 230, 0.78);
+}
+.galaxy-debris-tooltip-stats dd{
+  margin: 0;
+  color: rgba(255, 220, 150, 0.95);
+  text-align: right;
+}
+.galaxy-debris-recycle-btn{
+  flex-shrink: 0;
+}
+.gc-world-inspector-debris{
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm, 8px);
+  border: 1px solid rgba(255, 186, 72, 0.38);
+  background: rgba(42, 28, 8, 0.42);
+}
+.gc-world-inspector-debris-head{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: rgba(255, 220, 150, 0.95);
+}
+.gc-world-inspector-debris-icon{
+  font-size: 1rem;
+  line-height: 1;
+}
 .galaxy-stat-debris{
   font-size: 0.78rem;
   color: rgba(255, 200, 120, 0.9);
@@ -11586,6 +11695,18 @@ body.gc-techtree-media-zoom-open{
   .galaxy-orbit-body{
     width: 22px;
     height: 22px;
+  }
+  .galaxy-debris-block{
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .galaxy-debris-recycle-btn{
+    width: 100%;
+    max-width: 100%;
+  }
+  .galaxy-debris-tooltip{
+    left: auto;
+    right: 0;
   }
 }
 

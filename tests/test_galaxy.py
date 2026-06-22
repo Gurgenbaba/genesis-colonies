@@ -269,6 +269,11 @@ def test_list_system_shows_debris_field(galaxy_db):
     assert slot["has_debris"] is True
     assert slot["debris"]["metal"] == 12_000
     assert slot["debris"]["crystal"] == 3400
+    assert slot["debris"]["total"] == 15_400
+    assert slot["debris"]["ttl_remaining_seconds"] >= 0
+    assert slot["debris"]["ttl_display"]
+    assert "mission=recycle" in slot["debris"]["recycle_href"]
+    assert f"target_position={coords['position']}" in slot["debris"]["recycle_href"]
 
 
 def test_overview_uses_real_coordinates(galaxy_db):

@@ -19479,6 +19479,10 @@
         if (coords && dds[idx]) dds[idx++].textContent = coords;
         if (isEmpire && cc.colony_count != null && dds[idx]) dds[idx++].textContent = String(cc.colony_count);
       }
+      contentEl.querySelector(".gc-world-inspector-shell--foreign-mission")?.insertAdjacentHTML(
+        "beforeend",
+        worldInspectorDebrisHtml(cc.debris)
+      );
       appendPrimaryAction(cc, btn);
     }
 
@@ -19719,6 +19723,26 @@
       actionsEl.appendChild(cta);
     }
 
+    function worldInspectorDebrisHtml(debris) {
+      if (!debris || typeof debris !== "object") return "";
+      const metal = Math.max(0, parseInt(debris.metal || 0, 10));
+      const crystal = Math.max(0, parseInt(debris.crystal || 0, 10));
+      if (metal + crystal <= 0) return "";
+      const ttl = String(debris.ttl_display || "—");
+      return `
+        <section class="gc-world-inspector-debris">
+          <h4 class="gc-world-inspector-debris-head">
+            <span class="gc-world-inspector-debris-icon" aria-hidden="true">☄</span>
+            ${tf("galaxy_debris_field", "Trümmerfeld")}
+          </h4>
+          <dl class="gc-world-inspector-stats">
+            <div class="gc-world-inspector-stat"><dt>${tf("resource_metal", "Ferronit")}</dt><dd class="gc-mono">${formatNumber(metal)}</dd></div>
+            <div class="gc-world-inspector-stat"><dt>${tf("resource_crystal", "Crytite")}</dt><dd class="gc-mono">${formatNumber(crystal)}</dd></div>
+            <div class="gc-world-inspector-stat"><dt>${tf("galaxy_debris_ttl_remaining", "Verbleibend")}</dt><dd class="gc-mono">${ttl}</dd></div>
+          </dl>
+        </section>`;
+    }
+
     function renderColonyModal(cc, btn) {
       const name = cc.name || btn?.dataset.colonyName || "";
       const roleKey = String(cc.role_label_key || "").trim();
@@ -19743,6 +19767,7 @@
             ${queueLine(cc, "shipyard", "command_map_hover_queue_shipyard")}
             ${fleetCount > 0 ? `<div class="gc-world-inspector-stat"><dt>${tf("world_inspector_fleets", "Flotten")}</dt><dd>${tf("command_map_hover_fleets", { count: fleetCount })}</dd></div>` : ""}
           </dl>
+          ${worldInspectorDebrisHtml(cc.debris)}
         </div>`;
       appendPrimaryAction(cc, btn);
     }
@@ -21353,6 +21378,51 @@
   }
   GC.logCommandMapTelemetry = logCommandMapTelemetry;
 
+  function initGalaxyDebrisUx() {
+    const page = document.querySelector(".galaxy-page");
+    if (!page) return;
+
+    function closeDebrisTooltips(exceptWrap) {
+      page.querySelectorAll(".galaxy-debris-badge-wrap.is-open").forEach((wrap) => {
+        if (exceptWrap && wrap === exceptWrap) return;
+        wrap.classList.remove("is-open");
+        const trigger = wrap.querySelector("[data-galaxy-debris-trigger]");
+        const tooltip = wrap.querySelector("[data-galaxy-debris-tooltip]");
+        if (trigger) trigger.setAttribute("aria-expanded", "false");
+        if (tooltip) tooltip.hidden = true;
+      });
+    }
+
+    function onDebrisTriggerClick(ev) {
+      const trigger = ev.target.closest("[data-galaxy-debris-trigger]");
+      if (!trigger || !page.contains(trigger)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const wrap = trigger.closest(".galaxy-debris-badge-wrap");
+      if (!wrap) return;
+      const tooltip = wrap.querySelector("[data-galaxy-debris-tooltip]");
+      const open = !wrap.classList.contains("is-open");
+      closeDebrisTooltips(open ? wrap : null);
+      wrap.classList.toggle("is-open", open);
+      trigger.setAttribute("aria-expanded", open ? "true" : "false");
+      if (tooltip) tooltip.hidden = !open;
+    }
+
+    function onDocumentClick(ev) {
+      if (ev.target.closest(".galaxy-debris-badge-wrap")) return;
+      closeDebrisTooltips(null);
+    }
+
+    page.addEventListener("click", onDebrisTriggerClick);
+    document.addEventListener("click", onDocumentClick);
+
+    GC.registerCleanup(() => {
+      page.removeEventListener("click", onDebrisTriggerClick);
+      document.removeEventListener("click", onDocumentClick);
+      closeDebrisTooltips(null);
+    });
+  }
+
   function initGalaxy() {
     if (!document.querySelector(".galaxy-page")) return;
     const galaxyRoot = document.getElementById("galaxy-page-root");
@@ -21367,6 +21437,7 @@
     initCommandMapLocationActions();
     initFirstDiscoveryMoment();
     initCommandMapSiteInspector();
+    initGalaxyDebrisUx();
     prefetchGalaxyAdjacent();
   }
 

@@ -1,0 +1,33 @@
+{# GC-700D-B: debris field badge, hover stats, recycler CTA #}
+{% if slot.has_debris and slot.debris and (slot.debris.metal or 0) + (slot.debris.crystal or 0) > 0 %}
+{% set debris = slot.debris %}
+{% set g = slot.coordinates.galaxy if slot.coordinates is defined else (nav.galaxy or 1) %}
+{% set s = slot.coordinates.system if slot.coordinates is defined else (nav.system or 1) %}
+{% set p = slot.coordinates.position if slot.coordinates is defined else slot.position %}
+{% set recycle_href = debris.recycle_href if debris.recycle_href is defined else (url_for('fleet_view') ~ '?mission=recycle&target_galaxy=' ~ g ~ '&target_system=' ~ s ~ '&target_position=' ~ p) %}
+<div class="galaxy-slot-debris galaxy-debris-block" role="group" aria-label="{{ T('galaxy_debris_field', 'Trümmerfeld') }}">
+  <div class="galaxy-debris-badge-wrap">
+    <button type="button"
+            class="galaxy-debris-badge gs-pill gs-pill-debris"
+            data-galaxy-debris-trigger
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-label="{{ T('galaxy_debris_field', 'Trümmerfeld') }}">
+      <span class="galaxy-debris-icon" aria-hidden="true">☄</span>
+      <span>{{ T('galaxy_debris_field', 'Trümmerfeld') }}</span>
+    </button>
+    <div class="galaxy-debris-tooltip" role="tooltip" data-galaxy-debris-tooltip hidden>
+      <div class="galaxy-debris-tooltip-title">{{ T('galaxy_debris_field', 'Trümmerfeld') }}</div>
+      <dl class="galaxy-debris-tooltip-stats">
+        <div><dt>{{ T('resource_metal', 'Ferronit') }}</dt><dd class="gc-mono">{{ (debris.metal or 0)|fmt_int }}</dd></div>
+        <div><dt>{{ T('resource_crystal', 'Crytite') }}</dt><dd class="gc-mono">{{ (debris.crystal or 0)|fmt_int }}</dd></div>
+        <div><dt>{{ T('galaxy_debris_total', 'Gesamt') }}</dt><dd class="gc-mono">{{ (debris.total or 0)|fmt_int }}</dd></div>
+        <div><dt>{{ T('galaxy_debris_ttl_remaining', 'Verbleibend') }}</dt><dd class="gc-mono galaxy-debris-ttl"{% if debris.ttl_expires_at is defined %} data-countdown-at="{{ debris.ttl_expires_at|int }}" data-countdown-format="eta"{% endif %}>{{ debris.ttl_display or '—' }}</dd></div>
+      </dl>
+    </div>
+  </div>
+  <a href="{{ recycle_href }}"
+     class="gc-btn gc-btn-sm gc-btn-primary galaxy-debris-recycle-btn"
+     data-galaxy-debris-recycle>{{ T('combat_report_send_recycler', 'Recycler senden') }}</a>
+</div>
+{% endif %}

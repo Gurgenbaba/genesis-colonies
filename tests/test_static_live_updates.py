@@ -532,6 +532,26 @@ def test_gc700d_combat_debris_recycler_ux():
     assert '"combat_report_send_recycler"' in de
 
 
+def test_gc700db_galaxy_debris_ux():
+    """GC-700D-B: debris visible in galaxy + command map inspector."""
+    html = _read("templates/partials/galaxy_debris_block.html")
+    galaxy = _read("templates/galaxy.html")
+    js = _read("static/main.js")
+    css = _read("static/style.css")
+    de = _read("locales/de.json")
+
+    assert "galaxy-debris-block" in html
+    assert "☄" in html
+    assert "galaxy-debris-recycle-btn" in html
+    assert "mission=recycle" in html
+    assert "galaxy-orbit-debris-marker" in galaxy
+    assert "initGalaxyDebrisUx" in js
+    assert "worldInspectorDebrisHtml" in js
+    assert "gc-world-inspector-debris" in css
+    assert '"galaxy_debris_total"' in de
+    assert '"galaxy_debris_ttl_remaining"' in de
+
+
 def test_gc700b_hall_of_fame_v2():
     """GC-700B: HoF ranking layout — tabs, compact hero strip, table rows."""
     html = _read("templates/hall_of_fame.html")

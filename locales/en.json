@@ -3093,6 +3093,8 @@
   "forgot_password_badge": "🔐 Zugangsprotokoll",
   "fuel_efficiency": "Fuel Cell Optimization",
   "galaxy_debris_field": "Debris field",
+  "galaxy_debris_total": "Total",
+  "galaxy_debris_ttl_remaining": "Remaining",
   "galaxy_legend_debris": "Debris field",
   "header_online": "Online",
   "header_planet_limit": "Planets",

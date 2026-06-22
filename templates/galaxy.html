@@ -196,6 +196,9 @@
             {% else %}
             <span class="galaxy-orbit-body galaxy-orbit-body--empty"></span>
             {% endif %}
+            {% if slot.has_debris %}
+            <span class="galaxy-orbit-debris-marker" aria-hidden="true" title="{{ T('galaxy_debris_field', 'Trümmerfeld') }}">☄</span>
+            {% endif %}
           </div>
         </div>
 
@@ -215,11 +218,7 @@
               <span class="galaxy-stat galaxy-stat-temp gc-mono">{{ slot.temperature_display }}</span>
             </div>
             {% if slot.has_debris %}
-            <div class="galaxy-slot-debris" role="status">
-              <span class="gs-pill gs-pill-debris">{{ T("galaxy_debris_field", "Debris field") }}</span>
-              <span class="galaxy-stat galaxy-stat-debris gc-mono">{{ T("resource_metal", "Ferronit") }} {{ (slot.debris.metal or 0)|fmt_int }}</span>
-              <span class="galaxy-stat galaxy-stat-debris gc-mono">{{ T("resource_crystal", "Crytite") }} {{ (slot.debris.crystal or 0)|fmt_int }}</span>
-            </div>
+            {% include "partials/galaxy_debris_block.html" %}
             {% endif %}
             {% if not slot.is_own_planet %}
             {% include "partials/galaxy_fleet_actions.html" %}
@@ -231,11 +230,7 @@
             </header>
             <p class="galaxy-slot-empty-hint">{{ T("galaxy_colony_target_hint") }}</p>
             {% if slot.has_debris %}
-            <div class="galaxy-slot-debris" role="status">
-              <span class="gs-pill gs-pill-debris">{{ T("galaxy_debris_field", "Debris field") }}</span>
-              <span class="galaxy-stat galaxy-stat-debris gc-mono">{{ T("resource_metal", "Ferronit") }} {{ (slot.debris.metal or 0)|fmt_int }}</span>
-              <span class="galaxy-stat galaxy-stat-debris gc-mono">{{ T("resource_crystal", "Crytite") }} {{ (slot.debris.crystal or 0)|fmt_int }}</span>
-            </div>
+            {% include "partials/galaxy_debris_block.html" %}
             {% endif %}
             {% include "partials/galaxy_fleet_actions.html" %}
           {% endif %}

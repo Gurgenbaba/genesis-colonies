@@ -513,17 +513,17 @@ def get_debris_for_system(
     galaxy: int,
     system: int,
     conn: sqlite3.Connection,
-) -> Dict[int, Dict[str, int]]:
-    """Map position → debris amounts for one system."""
+) -> Dict[int, Dict[str, Any]]:
+    """Map position → debris row for one system (amounts + ``updated_at`` for TTL)."""
     from .combat import debris_schema_ready
 
-    out: Dict[int, Dict[str, int]] = {}
+    out: Dict[int, Dict[str, Any]] = {}
     if not debris_schema_ready(conn):
         return out
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT position, metal, crystal
+        SELECT position, metal, crystal, updated_at
         FROM debris_fields
         WHERE galaxy = ? AND system = ?
           AND position BETWEEN ? AND ?;
@@ -536,16 +536,36 @@ def get_debris_for_system(
         crystal = max(0, int(float(row["crystal"] or 0)))
         if metal <= 0 and crystal <= 0:
             continue
-        out[pos] = {"metal": metal, "crystal": crystal}
+        updated_at = float(row["updated_at"]) if row["updated_at"] is not None else None
+        out[pos] = {"metal": metal, "crystal": crystal, "updated_at": updated_at}
     return out
 
 
-def _attach_debris_to_slot(slot: Dict[str, Any], debris: Mapping[str, int] | None) -> None:
+def _attach_debris_to_slot(
+    slot: Dict[str, Any],
+    debris: Mapping[str, Any] | None,
+    *,
+    galaxy: int,
+    system: int,
+    position: int,
+) -> None:
+    from .world_inspector import build_debris_field_payload
+
     d = dict(debris or {})
-    metal = max(0, int(d.get("metal") or 0))
-    crystal = max(0, int(d.get("crystal") or 0))
-    slot["debris"] = {"metal": metal, "crystal": crystal}
-    slot["has_debris"] = metal > 0 or crystal > 0
+    payload = build_debris_field_payload(
+        int(d.get("metal") or 0),
+        int(d.get("crystal") or 0),
+        updated_at=d.get("updated_at"),
+        galaxy=int(galaxy),
+        system=int(system),
+        position=int(position),
+    )
+    if payload:
+        slot["debris"] = payload
+        slot["has_debris"] = True
+        return
+    slot["debris"] = {"metal": 0, "crystal": 0, "total": 0, "has_debris": False}
+    slot["has_debris"] = False
 
 
 def list_system(
@@ -649,7 +669,13 @@ def list_system(
     for pos in range(POSITION_MIN, POSITION_MAX + 1):
         if pos in by_position:
             slot = by_position[pos]
-            _attach_debris_to_slot(slot, debris_by_position.get(pos))
+            _attach_debris_to_slot(
+                slot,
+                debris_by_position.get(pos),
+                galaxy=int(galaxy),
+                system=int(system),
+                position=pos,
+            )
             slots.append(slot)
         else:
             is_highlighted = (
@@ -678,7 +704,13 @@ def list_system(
                 "is_highlighted": is_highlighted,
                 "colony_target": True,
             }
-            _attach_debris_to_slot(slot, debris_by_position.get(pos))
+            _attach_debris_to_slot(
+                slot,
+                debris_by_position.get(pos),
+                galaxy=int(galaxy),
+                system=int(system),
+                position=pos,
+            )
             slots.append(slot)
 
     result = {
