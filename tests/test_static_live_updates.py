@@ -1067,6 +1067,9 @@ def test_main_js_gc657_fleet_drawer_timer_selection_separation():
     row_fn = src.split("function createFleetDrawerRow(mv)")[1].split("function renderGlobalFleetHud")[0]
     assert "fleetDrawerCountdown" in row_fn
     assert "gc-fleet-hud-route" in row_fn
+    assert "gc-fleet-hud-main" in row_fn
+    assert "gc-fleet-hud-leader" in css
+    assert "gc-fleet-hud-meta" in css
 
 
 def test_main_js_gc654b_fleet_drawer_visual_polish():

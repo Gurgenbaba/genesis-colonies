@@ -7738,6 +7738,8 @@
     }
     const routeEl = row.querySelector(".gc-fleet-hud-route");
     if (routeEl) _setIfChanged(routeEl, formatFleetDrawerRoute(mv));
+    const legEl = row.querySelector("[data-fleet-drawer-leg]");
+    if (legEl) _setIfChanged(legEl, fleetDrawerLegLabel(mv));
     const shipsEl = row.querySelector("[data-fleet-drawer-ships]");
     if (shipsEl) {
       const totalShips = fleetDrawerTotalShips(mv);
@@ -7762,7 +7764,10 @@
       const id = String(mv.movement_id || mv.id || "");
       if (!id) return;
       let row = listEl.querySelector(`[data-fleet-drawer-row][data-movement-id="${id}"]`);
-      if (!row) {
+      if (row && !row.querySelector(".gc-fleet-hud-main")) {
+        row.replaceWith(createFleetDrawerRow(mv));
+        row = listEl.querySelector(`[data-fleet-drawer-row][data-movement-id="${id}"]`);
+      } else if (!row) {
         row = createFleetDrawerRow(mv);
       } else {
         patchFleetDrawerRow(row, mv);
@@ -7872,6 +7877,12 @@
     return flight;
   }
 
+  function fleetDrawerLegLabel(mv) {
+    const status = String(mv?.status || mv?.phase || mv?.leg_phase || "outbound").toLowerCase();
+    const legKey = globalFleetLegKey(mv, status);
+    return t(legKey, legKey);
+  }
+
   function createFleetDrawerRow(mv) {
     const row = document.createElement("article");
     const mission = String(mv.mission || mv.mission_type || "custom");
@@ -7883,17 +7894,33 @@
     row.dataset.movementId = movementId;
     row.setAttribute("role", "listitem");
 
+    const main = document.createElement("div");
+    main.className = "gc-fleet-hud-main";
+
     const missionEl = document.createElement("span");
     missionEl.className = `gc-fleet-hud-mission gc-fleet-hud-mission--${mission}`;
     missionEl.dataset.fleetDrawerMission = "1";
     missionEl.dataset.movementId = movementId;
     missionEl.textContent = t(missionKey, mission);
-    row.appendChild(missionEl);
+    main.appendChild(missionEl);
 
     const routeEl = document.createElement("span");
     routeEl.className = "gc-fleet-hud-route gc-fleet-drawer-row-route";
     routeEl.textContent = formatFleetDrawerRoute(mv);
-    row.appendChild(routeEl);
+    main.appendChild(routeEl);
+
+    const leader = document.createElement("span");
+    leader.className = "gc-fleet-hud-leader";
+    leader.setAttribute("aria-hidden", "true");
+
+    const meta = document.createElement("div");
+    meta.className = "gc-fleet-hud-meta";
+
+    const legEl = document.createElement("span");
+    legEl.className = "gc-fleet-hud-leg";
+    legEl.dataset.fleetDrawerLeg = "1";
+    legEl.textContent = fleetDrawerLegLabel(mv);
+    meta.appendChild(legEl);
 
     const shipsEl = document.createElement("span");
     shipsEl.className = "gc-fleet-hud-ships gc-mono";
@@ -7901,17 +7928,19 @@
     const totalShips = fleetDrawerTotalShips(mv);
     shipsEl.textContent = totalShips > 0 ? fmtNumber(totalShips) : "";
     shipsEl.hidden = totalShips <= 0;
-    row.appendChild(shipsEl);
+    meta.appendChild(shipsEl);
 
     const timeEl = document.createElement("span");
     timeEl.className = "gc-fleet-hud-time gc-mono";
     timeEl.dataset.fleetDrawerCountdown = "1";
     timeEl.textContent = formatCountdownRemain(fleetDrawerRemainingSeconds(mv, getTimerServerNow()));
-    row.appendChild(timeEl);
+    meta.appendChild(timeEl);
 
     const actionWrap = document.createElement("span");
     actionWrap.className = "gc-fleet-hud-action-wrap";
-    row.appendChild(actionWrap);
+    meta.appendChild(actionWrap);
+
+    row.append(main, leader, meta);
 
     patchFleetDrawerRow(row, mv);
     return row;
