@@ -2817,6 +2817,8 @@
   "combat_report_section_losses": "Total losses",
   "combat_report_section_return": "Returning fleet",
   "combat_report_section_loot": "Plundered cargo",
+  "combat_report_section_debris": "Debris field",
+  "combat_report_side_winner": "Victory",
   "combat_report_fleet_empty": "—",
   "combat_report_loot_none": "No plunder",
   "spy_report_modal_title": "Spy report",

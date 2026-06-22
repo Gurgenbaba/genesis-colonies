@@ -3701,6 +3701,8 @@
   "combat_report_section_losses": "Gesamtverluste",
   "combat_report_section_return": "Rückkehrflotte",
   "combat_report_section_loot": "Geplünderte Fracht",
+  "combat_report_section_debris": "Trümmerfeld",
+  "combat_report_side_winner": "Sieg",
   "combat_report_fleet_empty": "—",
   "combat_report_loot_none": "Keine Beute",
   "spy_report_modal_title": "Spionagebericht",

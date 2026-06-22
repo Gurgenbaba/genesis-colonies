@@ -21922,6 +21922,183 @@ body.gc-combat-report-open { overflow: hidden; }
   font-size: 0.92rem;
 }
 
+.gc-combat-report-route-sub {
+  margin-top: 2px;
+  font-size: 0.74rem;
+  color: var(--gc-text-soft);
+  letter-spacing: 0.03em;
+}
+
+.gc-combat-report-shell .gc-player-card-stat--highlight .gc-player-card-stat-value {
+  color: rgba(255, 214, 64, 0.98);
+}
+
+.gc-combat-report-columns--duel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.gc-combat-side-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(70, 229, 255, 0.16);
+  border-radius: var(--gc-radius-sm);
+  background: linear-gradient(180deg, rgba(8, 14, 28, 0.92), rgba(4, 8, 18, 0.88));
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+}
+
+.gc-combat-side-card--attacker {
+  border-left: 3px solid rgba(80, 220, 140, 0.55);
+}
+
+.gc-combat-side-card--defender {
+  border-left: 3px solid rgba(255, 120, 160, 0.55);
+}
+
+.gc-combat-side-card--winner {
+  border-color: rgba(80, 220, 140, 0.42);
+  box-shadow:
+    inset 0 0 0 1px rgba(80, 220, 140, 0.12),
+    0 0 24px rgba(80, 220, 140, 0.08);
+}
+
+.gc-combat-side-card--defender.gc-combat-side-card--winner {
+  border-color: rgba(255, 120, 160, 0.42);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 120, 160, 0.12),
+    0 0 24px rgba(255, 120, 160, 0.08);
+}
+
+.gc-combat-side-card--loser {
+  opacity: 0.88;
+}
+
+.gc-combat-side-card-head {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gc-combat-side-card-head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gc-combat-side-card-role {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gc-text-soft);
+}
+
+.gc-combat-side-card-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(210, 255, 230, 0.98);
+  background: rgba(80, 220, 140, 0.18);
+  border: 1px solid rgba(80, 220, 140, 0.45);
+}
+
+.gc-combat-side-card--defender .gc-combat-side-card-badge {
+  color: rgba(255, 220, 230, 0.98);
+  background: rgba(255, 120, 160, 0.18);
+  border-color: rgba(255, 120, 160, 0.45);
+}
+
+.gc-combat-side-card-name {
+  font-size: 1rem;
+  line-height: 1.2;
+  color: var(--gc-text);
+}
+
+.gc-combat-side-card-planet {
+  font-size: 0.78rem;
+  color: var(--gc-text-soft);
+}
+
+.gc-combat-side-card-coords {
+  font-size: 0.74rem;
+  color: var(--gc-text-dim);
+}
+
+.gc-combat-side-card-total {
+  justify-self: start;
+  font-size: 0.82rem;
+  color: var(--gc-neon-cyan);
+}
+
+.gc-combat-side-card-body {
+  min-width: 0;
+}
+
+.gc-combat-report-panel--loot-found {
+  border-color: rgba(255, 196, 64, 0.42);
+  background: linear-gradient(180deg, rgba(28, 22, 8, 0.55), rgba(8, 10, 18, 0.72));
+  box-shadow: inset 0 0 28px rgba(255, 196, 64, 0.06);
+}
+
+.gc-combat-report-panel--loot-found .gc-combat-report-panel-title {
+  color: rgba(255, 214, 64, 0.96);
+}
+
+.gc-combat-report-panel--debris {
+  border-color: rgba(160, 180, 220, 0.32);
+  background: linear-gradient(180deg, rgba(12, 16, 28, 0.72), rgba(4, 8, 18, 0.82));
+}
+
+.gc-combat-debris-chip {
+  border-style: dashed;
+}
+
+.gc-combat-report-body {
+  overflow-x: clip;
+}
+
+@media (max-width: 640px) {
+  .gc-combat-report-columns--duel {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 390px) {
+  .gc-combat-report-modal .gc-combat-report-dialog {
+    width: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .gc-combat-report-hero {
+    padding: 12px 12px 12px 14px;
+  }
+
+  .gc-combat-report-hero-top {
+    flex-wrap: wrap;
+  }
+
+  .gc-combat-report-result-badge {
+    width: 100%;
+    margin-top: 4px;
+    align-items: flex-start;
+  }
+
+  .gc-combat-report-shell {
+    gap: 12px;
+    padding-inline: 0;
+  }
+}
+
 .gc-combat-report-result-badge {
   flex-shrink: 0;
   display: flex;

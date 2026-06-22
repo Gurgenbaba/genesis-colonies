@@ -485,6 +485,35 @@ def test_gc807b_hud_capacity_polish():
     assert "trader-hub-res-bar" in css
 
 
+def test_gc700a_combat_report_v2_presentation():
+    """GC-700A: battle report layout — duel cards, conditional loot/debris, no combat math."""
+    js = _read("static/js/messages.js")
+    css = _read("static/style.css")
+    modal = _read("templates/partials/combat_report_modal.html")
+
+    full_fn = js.split("function renderCombatReportFull(meta)")[1].split("function cacheReportModalElements")[0]
+    assert "function renderCombatForcesDuel" in js
+    assert "function renderCombatDebrisPanel" in js
+    assert "function combatDebrisPayload" in js
+    assert "renderCombatForcesDuel(safeMeta, defenseStock)" in full_fn
+    assert "renderCombatBattleOverview(meta)" not in full_fn
+    assert "lootTotal > 0" in full_fn
+    assert "renderCombatDebrisPanel(safeMeta)" in full_fn
+    assert "renderCombatResearchPanel(safeMeta)" in full_fn
+    assert 'data-result="${esc(' in full_fn
+    assert "/static/icons/energy.png" not in js.split("function renderCombatReportFull")[1][:8000]
+
+    assert ".gc-combat-side-card--winner" in css
+    assert ".gc-combat-report-panel--loot-found" in css
+    assert ".gc-combat-report-panel--debris" in css
+    assert "gc-combat-report-body" in modal
+
+    en = _read("locales/en.json")
+    de = _read("locales/de.json")
+    assert '"combat_report_section_debris"' in en
+    assert '"combat_report_side_winner"' in de
+
+
 def test_main_js_apply_planet_hero_theme_border_fx():
     src = _read("static/main.js")
     hero_fn = src.split("function applyPlanetHeroThemeFromState(data)")[1].split("function bootstrapPlanetLandscapeFromBoot")[0]

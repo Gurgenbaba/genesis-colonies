@@ -593,6 +593,113 @@
     return coordLink(to || from, to || from);
   }
 
+  function combatWinnerSide(meta) {
+    const winner = String(meta?.result || meta?.winner || "undecided");
+    if (winner === "attacker" || winner === "defender" || winner === "draw") return winner;
+    return "undecided";
+  }
+
+  function combatDebrisPayload(meta) {
+    const raw = meta?.debris ?? meta?.debris_field;
+    if (!raw || typeof raw !== "object") return null;
+    const metal = Math.max(0, Number(raw.metal) || 0);
+    const crystal = Math.max(0, Number(raw.crystal) || 0);
+    if (metal <= 0 && crystal <= 0) return null;
+    return { metal, crystal };
+  }
+
+  function renderCombatDebrisChips(debris) {
+    const rows = [];
+    if (Number(debris?.metal || 0) > 0) {
+      rows.push(
+        `<div class="gc-expedition-loot-chip gc-expedition-loot-chip--metal gc-combat-debris-chip">` +
+          `<span class="gc-expedition-loot-label">${esc(t("resource_metal", "Ferronit"))}</span>` +
+          `<strong class="gc-expedition-loot-value">${esc(formatInt(debris.metal))}</strong>` +
+        `</div>`
+      );
+    }
+    if (Number(debris?.crystal || 0) > 0) {
+      rows.push(
+        `<div class="gc-expedition-loot-chip gc-expedition-loot-chip--crystal gc-combat-debris-chip">` +
+          `<span class="gc-expedition-loot-label">${esc(t("resource_crystal", "Crytite"))}</span>` +
+          `<strong class="gc-expedition-loot-value">${esc(formatInt(debris.crystal))}</strong>` +
+        `</div>`
+      );
+    }
+    return `<div class="gc-expedition-loot-grid gc-combat-debris-grid">${rows.join("")}</div>`;
+  }
+
+  function renderCombatDebrisPanel(meta) {
+    const debris = combatDebrisPayload(meta);
+    if (!debris) return "";
+    return renderCombatPanel(
+      t("combat_report_section_debris", "Debris field"),
+      renderCombatDebrisChips(debris),
+      "gc-combat-report-panel--debris"
+    );
+  }
+
+  function renderCombatSideCard(meta, role, defenseStock) {
+    const isAttacker = role === "attacker";
+    const winner = combatWinnerSide(meta);
+    const winClass = winner === role ? " gc-combat-side-card--winner" : "";
+    const loseClass =
+      winner !== "draw" && winner !== "undecided" && winner !== role ? " gc-combat-side-card--loser" : "";
+    const name = isAttacker ? meta.attacker_name : meta.defender_name;
+    const planet = String((isAttacker ? meta.origin_planet_name : meta.target_planet_name) || "").trim();
+    const coords = isAttacker ? meta.origin_coords : meta.target_coords;
+    const coordsLabelKey = isAttacker ? "combat_report_origin_coords" : "combat_report_target_coords";
+    const coordsFallback = isAttacker ? "Launched from: %(coords)s" : "Target planet: %(coords)s";
+    let unitsHtml;
+    let unitTotal;
+    if (isAttacker) {
+      unitTotal = unitCountTotal(meta.attacking_ships);
+      unitsHtml = renderCombatUnitGrid(meta.attacking_ships, null);
+    } else {
+      unitTotal = unitCountTotal(meta.defending_ships) + unitCountTotal(defenseStock);
+      unitsHtml = renderCombatDefenderForces(meta, defenseStock);
+    }
+    const badgeHtml =
+      winner === role
+        ? `<span class="gc-combat-side-card-badge">${esc(t("combat_report_side_winner", "Victory"))}</span>`
+        : "";
+    return (
+      `<article class="gc-combat-side-card gc-combat-side-card--${role}${winClass}${loseClass}">` +
+        `<header class="gc-combat-side-card-head">` +
+          `<div class="gc-combat-side-card-head-top">` +
+            `<span class="gc-combat-side-card-role">${esc(
+              t(
+                isAttacker ? "combat_report_section_attacker" : "combat_report_section_defender",
+                isAttacker ? "Attacker" : "Defender"
+              )
+            )}</span>` +
+            badgeHtml +
+          `</div>` +
+          `<strong class="gc-combat-side-card-name">${esc(name || "—")}</strong>` +
+          (planet ? `<span class="gc-combat-side-card-planet">${esc(planet)}</span>` : "") +
+          `<span class="gc-combat-side-card-coords gc-mono">${coordLabelLink(
+            coordsLabelKey,
+            coordsFallback,
+            coords || "—"
+          )}</span>` +
+          `<span class="gc-combat-side-card-total gc-mono" title="${esc(
+            t("combat_report_side_ships", "%(count)s ships").replace("%(count)s", formatInt(unitTotal))
+          )}">${esc(formatInt(unitTotal))}</span>` +
+        `</header>` +
+        `<div class="gc-combat-side-card-body">${unitsHtml}</div>` +
+      `</article>`
+    );
+  }
+
+  function renderCombatForcesDuel(meta, defenseStock) {
+    return (
+      `<div class="gc-combat-report-columns gc-combat-report-columns--duel">` +
+        renderCombatSideCard(meta, "attacker", defenseStock) +
+        renderCombatSideCard(meta, "defender", defenseStock) +
+      `</div>`
+    );
+  }
+
   function renderCombatBattleOverview(meta) {
     const targetCoords = meta.target_coords || "—";
     const originCoords = meta.origin_coords || "—";
@@ -694,16 +801,21 @@
   }
 
   function renderCombatReportFull(meta) {
-    const resultKey = meta.result || meta.winner || "undecided";
-    const visual = combatResultVisual(meta);
-    const resultLabel = combatResultLabel(meta);
-    const resultSub = combatResultSubtitle(meta);
-    const defenseStock = meta.defending_defense || {};
-    const roundsCount = meta.rounds_fought || (meta.rounds || []).length || 0;
-    const atkLossTotal = unitCountTotal(meta.attacker_losses);
-    const defLossTotal = unitCountTotal(meta.defender_losses);
-    const loot = meta.loot || {};
+    const safeMeta = meta && typeof meta === "object" ? meta : {};
+    const resultKey = safeMeta.result || safeMeta.winner || "undecided";
+    const visual = combatResultVisual(safeMeta);
+    const resultLabel = combatResultLabel(safeMeta);
+    const resultSub = combatResultSubtitle(safeMeta);
+    const defenseStock = safeMeta.defending_defense || {};
+    const roundsCount = safeMeta.rounds_fought || (safeMeta.rounds || []).length || 0;
+    const atkLossTotal = unitCountTotal(safeMeta.attacker_losses);
+    const defLossTotal = unitCountTotal(safeMeta.defender_losses);
+    const loot = safeMeta.loot || {};
     const lootTotal = expeditionLootTotal(loot);
+    const routeBits = [safeMeta.origin_planet_name, safeMeta.target_planet_name]
+      .map((name) => String(name || "").trim())
+      .filter(Boolean);
+    const routeSub = routeBits.join(" · ");
 
     const sections = [];
 
@@ -712,11 +824,12 @@
         `<div class="gc-combat-report-hero-top">` +
           `<span class="gc-combat-report-hero-icon" aria-hidden="true">${esc(visual.icon)}</span>` +
           `<div class="gc-combat-report-hero-text">` +
-            `<div class="gc-combat-report-coords gc-mono">${combatCoordsRoute(meta)}</div>` +
+            `<div class="gc-combat-report-coords gc-mono">${combatCoordsRoute(safeMeta)}</div>` +
+            (routeSub ? `<div class="gc-combat-report-route-sub">${esc(routeSub)}</div>` : "") +
             `<div class="gc-combat-report-vs">${esc(
               t("combat_report_vs", "%(attacker)s vs %(defender)s")
-                .replace("%(attacker)s", meta.attacker_name || "—")
-                .replace("%(defender)s", meta.defender_name || "—")
+                .replace("%(attacker)s", safeMeta.attacker_name || "—")
+                .replace("%(defender)s", safeMeta.defender_name || "—")
             )}</div>` +
           `</div>` +
           `<span class="gc-combat-report-result-badge">` +
@@ -743,36 +856,19 @@
           `<span class="gc-player-card-stat-label">${esc(t("combat_report_stat_def_lost", "Defender losses"))}</span>` +
           `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(defLossTotal))}</span>` +
         `</div>` +
-        `<div class="gc-player-card-stat">` +
-          `<span class="gc-player-card-stat-label">${esc(t("combat_report_stat_loot", "Plunder"))}</span>` +
-          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(lootTotal))}</span>` +
-        `</div>` +
+        (lootTotal > 0
+          ? `<div class="gc-player-card-stat gc-player-card-stat--highlight">` +
+              `<span class="gc-player-card-stat-label">${esc(t("combat_report_stat_loot", "Plunder"))}</span>` +
+              `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(lootTotal))}</span>` +
+            `</div>`
+          : "") +
       `</div>`
     );
-
-    sections.push(renderCombatBattleOverview(meta));
-
-    const researchPanel = renderCombatResearchPanel(meta);
-    if (researchPanel) sections.push(researchPanel);
 
     sections.push(
       renderCombatPanel(
         t("combat_report_section_forces", "Forces"),
-        `<div class="gc-combat-report-columns gc-combat-report-columns--forces">` +
-          `<div class="gc-combat-report-panel gc-combat-report-panel--attacker gc-combat-report-panel--inline">` +
-            `<h4 class="gc-combat-report-panel-title">${esc(t("combat_report_section_attacker", "Attacker"))}</h4>` +
-            `<div class="gc-combat-report-panel-body">` +
-              `<div class="gc-combat-force-head gc-combat-force-head--solo">` +
-                `<span class="gc-combat-force-count gc-mono">${esc(formatInt(unitCountTotal(meta.attacking_ships)))}</span>` +
-              `</div>` +
-              renderCombatUnitGrid(meta.attacking_ships, null) +
-            `</div>` +
-          `</div>` +
-          `<div class="gc-combat-report-panel gc-combat-report-panel--defender gc-combat-report-panel--inline">` +
-            `<h4 class="gc-combat-report-panel-title">${esc(t("combat_report_section_defender", "Defender"))}</h4>` +
-            `<div class="gc-combat-report-panel-body">${renderCombatDefenderForces(meta, defenseStock)}</div>` +
-          `</div>` +
-        `</div>`,
+        renderCombatForcesDuel(safeMeta, defenseStock),
         "gc-combat-report-panel--forces-wrap"
       )
     );
@@ -780,12 +876,39 @@
     sections.push(
       renderCombatPanel(
         t("combat_report_section_losses", "Total losses"),
-        renderCombatLossesSplit(meta, defenseStock),
+        renderCombatLossesSplit(safeMeta, defenseStock),
         "gc-combat-report-panel--losses"
       )
     );
 
-    const roundList = Array.isArray(meta.rounds) ? meta.rounds : [];
+    if (lootTotal > 0) {
+      sections.push(
+        renderCombatPanel(
+          t("combat_report_section_loot", "Plundered cargo"),
+          renderCombatLootChips(loot),
+          "gc-combat-report-panel--loot gc-combat-report-panel--loot-found"
+        )
+      );
+    }
+
+    const debrisPanel = renderCombatDebrisPanel(safeMeta);
+    if (debrisPanel) sections.push(debrisPanel);
+
+    const researchPanel = renderCombatResearchPanel(safeMeta);
+    if (researchPanel) sections.push(researchPanel);
+
+    const ret = safeMeta.return_ships || {};
+    if (unitCountTotal(ret) > 0) {
+      sections.push(
+        renderCombatPanel(
+          t("combat_report_section_return", "Returning fleet"),
+          renderCombatUnitGrid(ret, null),
+          "gc-combat-report-panel--return"
+        )
+      );
+    }
+
+    const roundList = Array.isArray(safeMeta.rounds) ? safeMeta.rounds : [];
     if (roundList.length) {
       const roundHtml = roundList
         .map((rnd) => {
@@ -814,27 +937,10 @@
       );
     }
 
-    const ret = meta.return_ships || {};
-    if (unitCountTotal(ret) > 0) {
-      sections.push(
-        renderCombatPanel(
-          t("combat_report_section_return", "Returning fleet"),
-          renderCombatUnitGrid(ret, null),
-          "gc-combat-report-panel--return"
-        )
-      );
-    }
-
-    sections.push(
-      renderCombatPanel(
-        t("combat_report_section_loot", "Plundered cargo"),
-        renderCombatLootChips(loot),
-        `gc-combat-report-panel--loot${lootTotal > 0 ? " gc-combat-report-panel--loot-found" : ""}`
-      )
-    );
-
     return (
-      `<div class="gc-player-card-shell gc-combat-report-shell" data-theme="${esc(visual.theme)}">` +
+      `<div class="gc-player-card-shell gc-combat-report-shell" data-theme="${esc(visual.theme)}" data-result="${esc(
+        resultKey
+      )}">` +
       sections.join("") +
       `</div>`
     );
