@@ -845,23 +845,23 @@
 
     const tempEl = document.getElementById("overview-planet-temp");
     if (tempEl) {
-      const tempDisplay = String(statusPlanet.temperature?.display || "").trim();
-      const solarPct = Number(statusPlanet.climate?.solar_bonus_pct || 0);
-      tempEl.replaceChildren();
-      if (tempDisplay) tempEl.appendChild(document.createTextNode(tempDisplay));
-      let climateEl = document.getElementById("overview-planet-climate");
-      if (solarPct !== 0) {
-        if (tempDisplay) tempEl.appendChild(document.createTextNode(" · "));
-        if (!climateEl) {
-          climateEl = document.createElement("span");
+      const tempDisplay = String(
+        statusPlanet.temperature?.display || ap.temperature_display || ""
+      ).trim();
+      const climate = statusPlanet.climate || ap.climate || {};
+      const solarPct = Number(climate.solar_bonus_pct || 0);
+      if (tempDisplay || solarPct !== 0) {
+        tempEl.replaceChildren();
+        if (tempDisplay) tempEl.appendChild(document.createTextNode(tempDisplay));
+        if (solarPct !== 0) {
+          if (tempDisplay) tempEl.appendChild(document.createTextNode(" · "));
+          const climateEl = document.createElement("span");
           climateEl.id = "overview-planet-climate";
           climateEl.className = "overview-climate-hint hint gc-mono";
+          const sign = solarPct > 0 ? "+" : "";
+          climateEl.textContent = `${t("overview_climate_solar", "Solarenergie")} ${sign}${solarPct}%`;
+          tempEl.appendChild(climateEl);
         }
-        const sign = solarPct > 0 ? "+" : "";
-        climateEl.textContent = `${t("overview_climate_solar", "Solarenergie")} ${sign}${solarPct}%`;
-        tempEl.appendChild(climateEl);
-      } else if (climateEl) {
-        climateEl.remove();
       }
     }
   }

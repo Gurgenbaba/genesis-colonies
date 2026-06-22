@@ -5167,151 +5167,169 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   overflow: visible;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.42);
 }
-.gc-planet-hero::before{
-  content: "";
+/* gc-panel uses ::before/::after for scanlines — planet border needs its own layer */
+.gc-planet-hero.gc-panel::before,
+.gc-planet-hero.gc-panel::after{
+  display: none;
+}
+.overview-hero-border{
   position: absolute;
-  inset: -2px;
+  inset: -3px;
   border-radius: inherit;
   pointer-events: none;
-  z-index: 1;
-  border: 1px solid color-mix(in srgb, var(--planet-accent, #46e5ff) 78%, transparent);
+  z-index: 3;
+  border: 1px solid color-mix(in srgb, var(--planet-accent, #46e5ff) 82%, transparent);
   box-shadow:
-    0 0 22px color-mix(in srgb, var(--planet-glow, var(--planet-accent, #46e5ff)) 52%, transparent),
-    0 0 6px color-mix(in srgb, var(--planet-glow, var(--planet-accent, #46e5ff)) 28%, transparent),
-    inset 0 0 14px color-mix(in srgb, var(--planet-glow, var(--planet-accent, #46e5ff)) 12%, transparent);
-  animation: planetBorderPulse 3.2s ease-in-out infinite;
+    0 0 28px color-mix(in srgb, var(--planet-glow, var(--planet-accent, #46e5ff)) 58%, transparent),
+    0 0 10px color-mix(in srgb, var(--planet-glow, var(--planet-accent, #46e5ff)) 34%, transparent),
+    inset 0 0 18px color-mix(in srgb, var(--planet-glow, var(--planet-accent, #46e5ff)) 14%, transparent);
+  animation: planetBorderPulse 2.8s ease-in-out infinite;
   transition:
     border-color 0.45s ease,
     box-shadow 0.45s ease;
 }
-.gc-planet-hero::after{
+.overview-hero-border::before{
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  z-index: 1;
-  opacity: 0.88;
+  opacity: 0.9;
 }
-.gc-planet-hero > *:not(.overview-hero-bg):not(.overview-hero-fx){
+.overview-hero-border::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.85;
+}
+.overview-hero--themed.gc-planet-hero > *:not(.overview-hero-bg):not(.overview-hero-fx):not(.overview-hero-border){
   position: relative;
   z-index: 2;
 }
 /* Hot worlds — inferno, magma, ash */
-.gc-planet-hero.gc-planet-theme-group--hot::before{
-  animation: planetBorderPulse 2.4s ease-in-out infinite, planetBorderFlicker 4.6s ease-in-out infinite;
+.gc-planet-hero.gc-planet-theme-group--hot .overview-hero-border{
+  animation: planetBorderPulse 2s ease-in-out infinite, planetBorderFlicker 3.8s ease-in-out infinite;
 }
-.gc-planet-hero.gc-planet-theme-group--hot::after{
+.gc-planet-hero.gc-planet-theme-group--hot .overview-hero-border::after{
   background:
-    radial-gradient(circle at 6% 94%, rgba(255, 110, 30, 0.34) 0, transparent 26%),
-    radial-gradient(circle at 94% 90%, rgba(255, 70, 20, 0.28) 0, transparent 24%),
-    radial-gradient(circle at 50% 100%, rgba(255, 130, 40, 0.22) 0, transparent 32%),
-    linear-gradient(to top, rgba(255, 85, 25, 0.18), transparent 16%);
-  animation: planetHotEmber 5.5s ease-in-out infinite;
+    radial-gradient(circle at 6% 94%, rgba(255, 110, 30, 0.42) 0, transparent 28%),
+    radial-gradient(circle at 94% 90%, rgba(255, 70, 20, 0.34) 0, transparent 26%),
+    radial-gradient(circle at 50% 100%, rgba(255, 130, 40, 0.28) 0, transparent 34%),
+    linear-gradient(to top, rgba(255, 85, 25, 0.24), transparent 18%);
+  animation: planetHotEmber 4.5s ease-in-out infinite;
 }
-.gc-planet-hero.gc-planet-theme--inferno::before{
+.gc-planet-hero.gc-planet-theme--inferno .overview-hero-border{
   box-shadow:
-    0 0 28px color-mix(in srgb, var(--planet-glow, #ff6830) 62%, transparent),
-    0 0 8px rgba(255, 90, 30, 0.45),
-    inset 0 0 16px rgba(255, 70, 20, 0.14);
+    0 0 36px color-mix(in srgb, var(--planet-glow, #ff6830) 68%, transparent),
+    0 0 12px rgba(255, 90, 30, 0.55),
+    inset 0 0 20px rgba(255, 70, 20, 0.16);
 }
 /* Arid worlds — desert / barren */
-.gc-planet-hero.gc-planet-theme-group--arid::before{
-  animation: planetBorderPulse 3.8s ease-in-out infinite, planetHeatShimmer 7s ease-in-out infinite;
+.gc-planet-hero.gc-planet-theme-group--arid .overview-hero-border{
+  animation: planetBorderPulse 3.2s ease-in-out infinite, planetHeatShimmer 5.5s ease-in-out infinite;
 }
-.gc-planet-hero.gc-planet-theme-group--arid::after{
+.gc-planet-hero.gc-planet-theme-group--arid .overview-hero-border::after{
   background:
-    radial-gradient(circle at 0% 0%, rgba(255, 210, 120, 0.16) 0, transparent 34%),
-    radial-gradient(circle at 100% 0%, rgba(255, 190, 90, 0.14) 0, transparent 32%),
-    linear-gradient(118deg, transparent 42%, rgba(255, 220, 140, 0.07) 50%, transparent 58%);
-  animation: planetDustShimmer 11s linear infinite;
+    radial-gradient(circle at 0% 0%, rgba(255, 210, 120, 0.22) 0, transparent 36%),
+    radial-gradient(circle at 100% 0%, rgba(255, 190, 90, 0.18) 0, transparent 34%),
+    linear-gradient(118deg, transparent 40%, rgba(255, 220, 140, 0.12) 50%, transparent 60%);
+  animation: planetDustShimmer 9s linear infinite;
 }
 /* Living worlds — temperate through ocean */
-.gc-planet-hero.gc-planet-theme-group--living::before{
-  animation: planetBioPulse 4.2s ease-in-out infinite;
+.gc-planet-hero.gc-planet-theme-group--living .overview-hero-border{
+  animation: planetBioPulse 3.6s ease-in-out infinite;
 }
-.gc-planet-hero.gc-planet-theme-group--living::after{
+.gc-planet-hero.gc-planet-theme-group--living .overview-hero-border::after{
   background:
-    radial-gradient(circle at 12% 18%, rgba(120, 255, 200, 0.10) 0, transparent 28%),
-    radial-gradient(circle at 88% 22%, rgba(80, 200, 255, 0.08) 0, transparent 26%),
-    radial-gradient(circle at 72% 78%, rgba(100, 255, 170, 0.07) 0, transparent 22%),
-    radial-gradient(circle at 24% 72%, rgba(70, 220, 255, 0.06) 0, transparent 20%);
-  animation: planetBioMist 14s ease-in-out infinite;
+    radial-gradient(circle at 12% 18%, rgba(120, 255, 200, 0.14) 0, transparent 30%),
+    radial-gradient(circle at 88% 22%, rgba(80, 200, 255, 0.12) 0, transparent 28%),
+    radial-gradient(circle at 72% 78%, rgba(100, 255, 170, 0.10) 0, transparent 24%),
+    radial-gradient(circle at 24% 72%, rgba(70, 220, 255, 0.08) 0, transparent 22%);
+  animation: planetBioMist 12s ease-in-out infinite;
 }
-.gc-planet-hero.gc-planet-theme--ocean-world::after{
+.gc-planet-hero.gc-planet-theme--ocean-world .overview-hero-border::after{
   background:
-    radial-gradient(circle at 10% 20%, rgba(80, 200, 255, 0.12) 0, transparent 30%),
-    radial-gradient(circle at 90% 24%, rgba(60, 160, 255, 0.10) 0, transparent 28%),
-    radial-gradient(circle at 50% 88%, rgba(40, 140, 255, 0.08) 0, transparent 24%);
+    radial-gradient(circle at 10% 20%, rgba(80, 200, 255, 0.16) 0, transparent 32%),
+    radial-gradient(circle at 90% 24%, rgba(60, 160, 255, 0.14) 0, transparent 30%),
+    radial-gradient(circle at 50% 88%, rgba(40, 140, 255, 0.12) 0, transparent 26%);
 }
 /* Frozen worlds — tundra through absolute zero */
-.gc-planet-hero.gc-planet-theme-group--frozen::before{
-  animation: planetFrostPulse 4.8s ease-in-out infinite;
+.gc-planet-hero.gc-planet-theme-group--frozen .overview-hero-border{
+  animation: planetFrostPulse 4.2s ease-in-out infinite;
 }
-.gc-planet-hero.gc-planet-theme-group--frozen::after{
+.gc-planet-hero.gc-planet-theme-group--frozen .overview-hero-border::after{
   background:
-    radial-gradient(circle at 0% 0%, rgba(220, 245, 255, 0.18) 0, transparent 30%),
-    radial-gradient(circle at 100% 0%, rgba(200, 240, 255, 0.16) 0, transparent 28%),
-    radial-gradient(circle at 8% 92%, rgba(255, 255, 255, 0.12) 0, transparent 18%),
-    radial-gradient(circle at 92% 88%, rgba(255, 255, 255, 0.10) 0, transparent 16%),
-    radial-gradient(circle at 50% 0%, rgba(180, 230, 255, 0.08) 0, transparent 36%);
-  animation: planetSnowDrift 16s linear infinite;
+    radial-gradient(circle at 0% 0%, rgba(220, 245, 255, 0.24) 0, transparent 32%),
+    radial-gradient(circle at 100% 0%, rgba(200, 240, 255, 0.20) 0, transparent 30%),
+    radial-gradient(circle at 8% 92%, rgba(255, 255, 255, 0.16) 0, transparent 20%),
+    radial-gradient(circle at 92% 88%, rgba(255, 255, 255, 0.14) 0, transparent 18%),
+    radial-gradient(circle at 50% 0%, rgba(180, 230, 255, 0.12) 0, transparent 38%);
+  animation: planetSnowDrift 14s linear infinite;
 }
-.gc-planet-hero.gc-planet-theme--absolute-zero::before{
+.gc-planet-hero.gc-planet-theme--absolute-zero .overview-hero-border{
   box-shadow:
-    0 0 26px color-mix(in srgb, var(--planet-glow, #3ff8ff) 48%, transparent),
-    0 0 4px rgba(180, 240, 255, 0.35),
-    inset 0 0 18px rgba(120, 220, 255, 0.10);
+    0 0 32px color-mix(in srgb, var(--planet-glow, #3ff8ff) 54%, transparent),
+    0 0 8px rgba(180, 240, 255, 0.42),
+    inset 0 0 22px rgba(120, 220, 255, 0.12);
 }
 @keyframes planetBorderPulse{
-  0%, 100%{ opacity: 0.82; }
-  50%{ opacity: 1; }
+  0%, 100%{ opacity: 0.68; transform: scale(1); }
+  50%{ opacity: 1; transform: scale(1.004); }
 }
 @keyframes planetBorderFlicker{
   0%, 100%{ filter: brightness(1); }
-  18%{ filter: brightness(1.12); }
-  22%{ filter: brightness(0.94); }
-  55%{ filter: brightness(1.08); }
-  58%{ filter: brightness(0.96); }
+  18%{ filter: brightness(1.18); }
+  22%{ filter: brightness(0.9); }
+  55%{ filter: brightness(1.12); }
+  58%{ filter: brightness(0.92); }
 }
 @keyframes planetHeatShimmer{
-  0%, 100%{ opacity: 0.78; transform: translateX(0); }
-  50%{ opacity: 1; transform: translateX(1px); }
+  0%, 100%{ opacity: 0.72; transform: translateX(0); }
+  50%{ opacity: 1; transform: translateX(2px); }
 }
 @keyframes planetHotEmber{
-  0%, 100%{ opacity: 0.72; }
-  50%{ opacity: 0.95; }
+  0%, 100%{ opacity: 0.65; }
+  50%{ opacity: 1; }
 }
 @keyframes planetDustShimmer{
-  0%{ transform: translateX(-3%); }
-  100%{ transform: translateX(3%); }
+  0%{ transform: translateX(-4%); }
+  100%{ transform: translateX(4%); }
 }
 @keyframes planetBioPulse{
-  0%, 100%{ opacity: 0.8; }
+  0%, 100%{ opacity: 0.72; }
   50%{ opacity: 1; }
 }
 @keyframes planetBioMist{
-  0%, 100%{ transform: translateX(0); opacity: 0.72; }
-  50%{ transform: translateX(1.5%); opacity: 0.9; }
+  0%, 100%{ transform: translateX(0); opacity: 0.68; }
+  50%{ transform: translateX(2%); opacity: 0.95; }
 }
 @keyframes planetFrostPulse{
-  0%, 100%{ opacity: 0.76; }
-  50%{ opacity: 0.98; }
+  0%, 100%{ opacity: 0.68; }
+  50%{ opacity: 1; }
 }
 @keyframes planetSnowDrift{
-  0%{ transform: translateY(-2%); opacity: 0.7; }
-  50%{ opacity: 0.92; }
-  100%{ transform: translateY(3%); opacity: 0.7; }
+  0%{ transform: translateY(-3%); opacity: 0.62; }
+  50%{ opacity: 0.95; }
+  100%{ transform: translateY(4%); opacity: 0.62; }
 }
 @media (prefers-reduced-motion: reduce){
-  .gc-planet-hero::before,
-  .gc-planet-hero::after{
+  .overview-hero-border,
+  .overview-hero-border::before,
+  .overview-hero-border::after{
     animation: none !important;
   }
 }
-body.gc-perf-idle .gc-planet-hero::before,
-body.gc-perf-idle .gc-planet-hero::after{
-  animation: none;
+body.gc-reduced-motion .overview-hero-border,
+body.gc-reduced-motion .overview-hero-border::before,
+body.gc-reduced-motion .overview-hero-border::after{
+  animation: none !important;
+}
+.overview-climate-hint{
+  display: inline;
+  margin-left: 2px;
+  white-space: nowrap;
 }
 .overview-hero-bg{
   position: absolute;
@@ -5341,7 +5359,7 @@ body.gc-perf-idle .gc-planet-hero::after{
   position: relative;
   z-index: 1;
 }
-.overview-hero--themed.gc-planet-hero > *:not(.overview-hero-bg):not(.overview-hero-fx){
+.overview-hero--themed.gc-planet-hero > *:not(.overview-hero-bg):not(.overview-hero-fx):not(.overview-hero-border){
   z-index: 2;
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-bg{

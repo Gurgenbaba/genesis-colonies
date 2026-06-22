@@ -415,11 +415,13 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "--planet-glow" in hero_fn
     assert "--planet-landscape" in hero_fn
     css = _read("static/style.css")
-    assert ".gc-planet-hero::before" in css
-    assert ".gc-planet-hero::after" in css
+    assert ".overview-hero-border" in css
+    assert "overview-hero-border::after" in css
     assert "prefers-reduced-motion" in css
     assert ".gc-planet-theme-group--hot" in css
     assert ".gc-planet-theme-group--frozen" in css
+    overview = _read("templates/overview.html")
+    assert "overview-hero-border" in overview
 
 
 def test_main_js_gc743_deferred_chat_and_news_boot():

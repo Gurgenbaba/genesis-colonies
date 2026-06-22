@@ -4806,6 +4806,10 @@ def _payload_from_live_context(
         herocard_rel = herocard_static_relpath(position)
         planet_class = effective_planet_class(planet)
         theme = get_planet_identity_for_position(position)
+        from game.planet_visuals import climate_economy_display_for_position, temperature_range_for_position
+
+        temp = temperature_range_for_position(position)
+        climate = climate_economy_display_for_position(position)
         from game.planet_evolution.empire_identity import empire_identity_for_planet
         from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
 
@@ -4829,6 +4833,8 @@ def _payload_from_live_context(
             "theme_key": theme["theme_key"],
             "theme_group": theme["theme_group"],
             "slot_label_key": theme["label_key"],
+            "temperature_display": temp["display"],
+            "climate": climate,
             **identity,
             "sidebar_nav": resolve_sidebar_nav(
                 empire_role_key=identity["empire_role_key"],
@@ -4839,13 +4845,17 @@ def _payload_from_live_context(
         from game.planet_visuals import (
             DEFAULT_HEROCARD,
             DEFAULT_LANDSCAPE,
+            climate_economy_display_for_position,
             get_planet_identity_for_position,
             raster_webp_relpath,
+            temperature_range_for_position,
         )
 
         fallback_rel = f"img/landscapes/{DEFAULT_LANDSCAPE}"
         fallback_herocard_rel = f"img/herocards/{DEFAULT_HEROCARD}"
         fallback_theme = get_planet_identity_for_position(0)
+        fallback_temp = temperature_range_for_position(0)
+        fallback_climate = climate_economy_display_for_position(0)
         from game.planet_evolution.empire_identity import empire_identity_for_planet
         from game.planet_evolution.sidebar_nav import resolve_sidebar_nav
 
@@ -4869,6 +4879,8 @@ def _payload_from_live_context(
             "theme_key": fallback_theme["theme_key"],
             "theme_group": fallback_theme["theme_group"],
             "slot_label_key": fallback_theme["label_key"],
+            "temperature_display": fallback_temp["display"],
+            "climate": fallback_climate,
             **identity,
             "sidebar_nav": resolve_sidebar_nav(
                 empire_role_key=identity["empire_role_key"],
