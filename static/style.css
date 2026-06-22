@@ -17139,34 +17139,36 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .gc-fleet-hud-row,
 .gc-fleet-drawer-row{
   display: grid;
-  grid-template-columns: minmax(0, max-content) minmax(56px, 1fr) max-content;
-  column-gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 36px 15.5rem;
+  column-gap: 8px;
   align-items: center;
-  min-height: 18px;
-  padding: 1px 0;
+  min-height: 16px;
+  padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   border-bottom: 1px solid rgba(120, 190, 255, 0.06);
-  font-size: 0.71rem;
-  line-height: 1.2;
+  font-size: 0.69rem;
+  line-height: 1.15;
 }
 
 .gc-fleet-hud-main{
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 4.75rem minmax(0, 1fr);
+  column-gap: 6px;
+  align-items: center;
   min-width: 0;
-  max-width: 100%;
+  overflow: hidden;
 }
 
 .gc-fleet-hud-track{
   position: relative;
   display: block;
   align-self: center;
-  width: 100%;
-  min-width: 56px;
-  height: 12px;
+  width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  height: 10px;
 }
 
 .gc-fleet-hud-track-line{
@@ -17269,18 +17271,25 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 .gc-fleet-hud-meta{
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: 3.4rem 3.75rem 2.85rem 5.5rem;
+  column-gap: 4px;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
+  justify-items: end;
+  width: 15.5rem;
+  max-width: 15.5rem;
+  min-width: 15.5rem;
   white-space: nowrap;
 }
 
 .gc-fleet-hud-leg{
-  flex: 0 0 auto;
-  font-size: 0.58rem;
+  justify-self: start;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.56rem;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: rgba(180, 210, 240, 0.42);
 }
@@ -17295,31 +17304,36 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-fleet-hud-mission,
 .gc-fleet-drawer-row-mission{
-  flex: 0 0 auto;
   min-width: 0;
-  font-size: 0.64rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.62rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
 .gc-fleet-hud-route,
 .gc-fleet-drawer-row-route{
-  flex: 0 1 auto;
   min-width: 0;
-  max-width: min(46vw, 520px);
-  font-size: 0.67rem;
+  font-size: 0.65rem;
   color: rgba(190, 220, 245, 0.78);
-  line-height: 1.2;
+  line-height: 1.15;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .gc-fleet-hud-ships{
-  flex: 0 0 auto;
-  font-size: 0.64rem;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
   color: rgba(180, 210, 240, 0.58);
 }
 
@@ -17336,16 +17350,19 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-fleet-hud-time,
 .gc-fleet-drawer-chip--arrival{
-  flex: 0 0 auto;
-  min-width: 3.25rem;
+  width: 100%;
+  min-width: 0;
   text-align: right;
-  font-size: 0.66rem;
+  font-size: 0.64rem;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: rgba(127, 255, 217, 0.9);
   border: 0;
   background: transparent;
   padding: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .gc-fleet-hud-row.is-urgent .gc-fleet-hud-time,
@@ -17365,19 +17382,27 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 
 .gc-fleet-hud-action-wrap{
-  flex: 0 0 auto;
+  width: 100%;
   min-width: 0;
+  max-width: 5.5rem;
+  overflow: hidden;
+  justify-self: end;
 }
 
 .gc-fleet-hud-action,
 .gc-fleet-drawer-row-action{
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border: 0;
   background: transparent;
-  padding: 0 2px;
+  padding: 0;
   min-height: 0;
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   font-weight: 600;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   color: rgba(127, 255, 217, 0.72);
   text-decoration: underline;
@@ -17559,9 +17584,9 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 @media (max-width: 720px){
   .gc-fleet-hud-row,
   .gc-fleet-drawer-row{
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     row-gap: 2px;
-    padding: 3px 0;
+    padding: 2px 0;
   }
 
   .gc-fleet-hud-leader,
@@ -17570,21 +17595,19 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   }
 
   .gc-fleet-hud-main{
-    flex-wrap: wrap;
-    row-gap: 2px;
+    grid-template-columns: 4.25rem minmax(0, 1fr);
   }
 
   .gc-fleet-hud-route,
   .gc-fleet-drawer-row-route{
-    max-width: 100%;
-    white-space: normal;
+    white-space: nowrap;
   }
 
   .gc-fleet-hud-meta{
     width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    gap: 8px;
+    max-width: 100%;
+    min-width: 0;
+    grid-template-columns: 3rem 3.4rem 2.6rem minmax(0, 1fr);
   }
 }
 
