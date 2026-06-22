@@ -50,7 +50,7 @@
   {% endif %}
 {% endmacro %}
 
-{# GC-807A — 10-segment storage / usage capacity bar under HUD resources #}
+{# GC-807A/B — 10-segment storage / usage capacity bar under HUD resources (no % label) #}
 {% macro render_hud_capacity_bar(res_key, current, max_cap) %}
   {% set cur = (current or 0)|int %}
   {% set cap = (max_cap or 0)|int %}
@@ -63,13 +63,10 @@
   {% elif pct >= 20 %}{% set tier = 'tier-yellow-green' %}
   {% endif %}
   <div class="hud-res-capacity hud-cap--{{ tier }}" data-hud-capacity="{{ res_key }}" data-cap-pct="{{ pct }}">
-    <div class="hud-cap-row">
-      <div class="hud-cap-bar" role="presentation" aria-hidden="true">
-        {% for i in range(10) %}
-        <span class="hud-cap-seg{% if i < filled %} is-filled{% endif %}{% if filled > 0 and i == filled - 1 %} is-active{% endif %}" data-cap-seg="{{ i }}"></span>
-        {% endfor %}
-      </div>
-      <span class="hud-cap-pct" data-hud-cap-pct="{{ res_key }}">{{ pct }}%</span>
+    <div class="hud-cap-bar" role="presentation" aria-hidden="true">
+      {% for i in range(10) %}
+      <span class="hud-cap-seg{% if i < filled %} is-filled{% endif %}{% if filled > 0 and i == filled - 1 %} is-active{% endif %}" data-cap-seg="{{ i }}"></span>
+      {% endfor %}
     </div>
   </div>
 {% endmacro %}

@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>{{ T("title") }}</title>
-  <link rel="icon" href="{{ url_for('static', filename='icons/energy.png') }}" type="image/png">
+  <link rel="icon" href="{{ url_for('static', filename='img/res/Energie.webp') }}" type="image/webp">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ GC_ASSET_VERSION }}">
 
@@ -210,17 +210,19 @@
 
             {% set fc_have = (player.fuel_cells if player is defined and player.fuel_cells is defined else 0) | int %}
             {% set fc_cap = (storage_caps.fuel_cells if storage_caps is defined and storage_caps.fuel_cells is defined else 0) | int %}
-            <div class="hud-res-panel hud-res-fuel-cells" data-hud-res="fuel_cells" title="{{ T('resource_fuel_cells') }}" aria-label="{{ T('resource_fuel_cells') }}">
+            <div class="hud-res-panel hud-res-fuel-cells{% if fc_cap <= 0 %} hud-res-no-storage{% endif %}" data-hud-res="fuel_cells" title="{{ T('resource_fuel_cells') }}" aria-label="{{ T('resource_fuel_cells') }}">
               <div class="hud-res-body res-block res-block-fuel-cells">
                 <span class="hud-res-badge" aria-hidden="true">{{ T('resource_fuel_cells_short', 'BZ') }}</span>
                 {{ render_resource_icon('fuel_cells', hud=true, lazy=false, priority='high', alt=T('resource_fuel_cells')) }}
                 <span class="hud-res-amount">
                   <span class="res-value fuel_cells">{{ fc_have|fmt_int }}</span>
                   {{ render_hud_capacity_bar('fuel_cells', fc_have, fc_cap) }}
+                  {% if fc_cap > 0 %}
                   <span class="hud-res-cap-line">
                     <span class="res-sep" aria-hidden="true">/</span>
                     <span class="res-cap fuel_cells">{{ fc_cap|fmt_int }}</span>
                   </span>
+                  {% endif %}
                 </span>
               </div>
               <span class="hud-res-warn" data-hud-res-warn="fuel_cells" hidden aria-live="polite"></span>
@@ -244,7 +246,7 @@
                   {{ render_hud_capacity_bar('energy', eu, et) }}
                   <span class="hud-res-cap-line">
                     <span class="res-sep" aria-hidden="true">/</span>
-                    <span class="res-cap energy" data-energy-total>{{ et|fmt_int }}</span>
+                    <span class="res-cap energy" data-energy-total>{% if et > 0 %}{{ et|fmt_int }}{% else %}—{% endif %}</span>
                   </span>
                 </span>
               </div>

@@ -74,7 +74,8 @@ def test_base_template_shows_fuel_cells_panel():
     assert "res-cap fuel_cells" in html
     assert "render_hud_capacity_bar('fuel_cells'" in html
     assert 'data-hud-capacity="{{ res_key }}"' in (root / "templates" / "partials" / "progression_cards.html").read_text(encoding="utf-8")
-    assert "hud-res-no-storage" not in html
+    assert "hud-res-no-storage" in html
+    assert "fc_cap <= 0" in html
     assert "repeat(4, minmax(0, 1fr))" in css
 
 
@@ -86,6 +87,7 @@ def test_main_js_patches_fuel_cells():
     assert 'bar.querySelectorAll(".res-value.fuel_cells")' in js
     assert 'bar.querySelectorAll(".res-cap.fuel_cells")' in js
     assert "function patchHudCapacityBars" in js
+    assert "function patchHudFuelStorageState" in js
     assert "patchHudCapacityBar(\"metal\"" in js
     assert "prodFuelCells" in js
     assert "buildingIconUrl" in js

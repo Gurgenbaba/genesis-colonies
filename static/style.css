@@ -278,16 +278,6 @@ body.gc-body-ingame.gc-has-planet-landscape .gc-panel::before {
   opacity: 0.1;
 }
 
-body.gc-body-ingame.gc-has-planet-landscape .overview-res-dash-card{
-  background: var(--gc-panel-bg);
-  box-shadow:
-    var(--gc-border-glow),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.55),
-    0 14px 36px rgba(0, 0, 0, 0.48);
-}
-body.gc-body-ingame.gc-has-planet-landscape .overview-res-dash-body{
-  background: var(--gc-panel-bg-2);
-}
 body.gc-body-ingame.gc-has-planet-landscape .overview-activity-row{
   background: var(--gc-panel-bg-2);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
@@ -6129,10 +6119,6 @@ body.gc-reduced-motion .overview-hero-border::after{
 .overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-climate-hint{
   color: var(--hero-frame-bottom-muted);
 }
-.overview-hero--themed .overview-res-chip{
-  border-color: color-mix(in srgb, var(--planet-accent, #46e5ff) 22%, rgba(70, 229, 255, 0.14));
-  background: color-mix(in srgb, rgba(4, 8, 18, 0.82) 88%, var(--planet-accent, #46e5ff) 12%);
-}
 .overview-hero-fx{
   position: absolute;
   inset: 0;
@@ -6382,120 +6368,6 @@ body.gc-perf-idle .overview-hero-fx::before{
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   margin-bottom: 10px;
 }
-.overview-res-chip{
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas:
-    "icon label"
-    "icon main"
-    "bar bar"
-    "status status";
-  align-items: center;
-  gap: 2px 8px;
-  min-width: 0;
-  flex: 1 1 160px;
-  padding: 8px 10px;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(70, 229, 255, 0.18);
-  background: rgba(4, 8, 18, 0.72);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.32);
-}
-.overview-resources-strip{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-  min-width: 0;
-}
-.overview-res-chip .gc-res-icon{
-  grid-area: icon;
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-}
-.overview-res-chip-label{
-  grid-area: label;
-  color: var(--gc-text-dim);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.overview-res-chip-main{
-  grid-area: main;
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-}
-.overview-res-chip-main .gc-val{
-  color: var(--gc-text);
-  font-weight: 700;
-  font-size: 0.92rem;
-}
-.overview-res-chip-rate{
-  color: rgba(127, 255, 217, 0.88);
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-.overview-res-chip-balance{
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-.overview-res-chip-status{
-  grid-area: status;
-  color: var(--gc-text-dim);
-  font-size: 0.66rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.overview-res-chip-bar{
-  grid-area: bar;
-  height: 4px;
-  margin-top: 2px;
-  border-radius: var(--gc-radius-sm);
-  background: rgba(0, 0, 0, 0.52);
-  overflow: hidden;
-}
-.overview-res-chip-bar-fill{
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, rgba(70, 229, 255, 0.55), rgba(127, 255, 217, 0.88));
-  transition: width 0.35s ease;
-}
-.overview-res-chip--warn{
-  border-color: rgba(255, 196, 0, 0.42);
-}
-.overview-res-chip--metal .overview-res-chip-bar-fill{
-  background: linear-gradient(90deg, rgba(180, 200, 220, 0.5), rgba(220, 230, 245, 0.85));
-}
-.overview-res-chip--crystal .overview-res-chip-bar-fill{
-  background: linear-gradient(90deg, rgba(120, 180, 255, 0.5), rgba(160, 210, 255, 0.88));
-}
-.overview-res-chip--fuel .overview-res-chip-bar-fill{
-  background: linear-gradient(90deg, rgba(255, 196, 0, 0.45), rgba(255, 220, 100, 0.88));
-}
-.overview-res-chip--energy.overview-energy-ok .overview-res-chip-bar-fill{
-  background: linear-gradient(90deg, rgba(35, 242, 166, 0.55), rgba(127, 255, 217, 0.9));
-}
-.overview-res-chip--energy.overview-energy-low{
-  border-color: rgba(255, 196, 0, 0.42);
-}
-.overview-res-chip--energy.overview-energy-low .overview-res-chip-bar-fill{
-  background: linear-gradient(90deg, rgba(255, 196, 0, 0.55), rgba(255, 220, 80, 0.88));
-}
-.overview-res-chip--energy.overview-energy-critical,
-.overview-res-chip--energy.overview-energy-zero{
-  border-color: rgba(255, 75, 106, 0.48);
-}
-.overview-res-chip--energy.overview-energy-critical .overview-res-chip-bar-fill,
-.overview-res-chip--energy.overview-energy-zero .overview-res-chip-bar-fill{
-  background: linear-gradient(90deg, rgba(255, 75, 106, 0.55), rgba(255, 120, 140, 0.88));
-}
 .overview-activities-grid{
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
 }
@@ -6532,299 +6404,13 @@ body.gc-perf-idle .overview-hero-fx::before{
 .overview-activities-panel--secondary .gc-panel-subtitle{
   font-size: 0.72rem;
 }
-.overview-res-dashboard{
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: calc(var(--gc-card-gap) + 6px);
-  margin-bottom: calc(var(--gc-card-gap) + 4px);
-}
-.overview-res-dash-card{
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-width: 0;
-  min-height: 228px;
-  padding: 0;
-  overflow: hidden;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(70, 229, 255, 0.36);
-  background: linear-gradient(180deg, rgb(10, 18, 34) 0%, rgb(4, 8, 18) 100%);
-  box-shadow:
-    var(--gc-border-glow),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.52),
-    0 16px 42px rgba(0, 0, 0, 0.58);
-  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
-}
-.overview-res-dash-card:hover{
-  transform: translateY(-3px);
-  border-color: rgba(70, 229, 255, 0.52);
-  box-shadow:
-    0 0 28px rgba(70, 229, 255, 0.12),
-    var(--gc-border-glow),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.52),
-    0 22px 52px rgba(0, 0, 0, 0.62);
-}
-.overview-res-dash-hero{
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 10;
-  min-height: 104px;
-  max-height: 132px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border-bottom: 1px solid rgba(70, 229, 255, 0.2);
-  background: rgb(4, 8, 18);
-}
-.overview-res-dash-card--metal .overview-res-dash-hero{
-  background:
-    radial-gradient(circle at 50% 38%, rgba(190, 210, 230, 0.14), transparent 58%),
-    linear-gradient(180deg, rgb(10, 16, 30) 0%, rgb(4, 8, 18) 100%);
-}
-.overview-res-dash-card--crystal .overview-res-dash-hero{
-  background:
-    radial-gradient(circle at 50% 38%, rgba(100, 170, 255, 0.16), transparent 58%),
-    linear-gradient(180deg, rgb(8, 14, 32) 0%, rgb(4, 8, 18) 100%);
-}
-.overview-res-dash-card--energy .overview-res-dash-hero{
-  background:
-    radial-gradient(circle at 50% 38%, rgba(70, 229, 255, 0.18), transparent 58%),
-    linear-gradient(180deg, rgb(6, 16, 28) 0%, rgb(4, 8, 18) 100%);
-}
-.overview-res-dash-card--fuel .overview-res-dash-hero{
-  background:
-    radial-gradient(circle at 50% 38%, rgba(255, 196, 0, 0.14), transparent 58%),
-    linear-gradient(180deg, rgb(14, 12, 8) 0%, rgb(4, 8, 18) 100%);
-}
-.overview-res-dash-hero .gc-res-icon{
-  position: relative;
-  z-index: 1;
-  width: 80px;
-  height: 80px;
-  object-fit: contain;
-  filter: drop-shadow(0 8px 28px rgba(70, 229, 255, 0.42));
-  transition: transform 0.15s ease, filter 0.15s ease;
-}
-.overview-res-dash-card:hover .overview-res-dash-hero .gc-res-icon{
-  transform: scale(1.04);
-  filter: drop-shadow(0 10px 32px rgba(70, 229, 255, 0.55));
-}
-.overview-res-dash-hero-overlay{
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    rgba(4, 8, 18, 0.02) 0%,
-    rgba(4, 8, 18, 0.18) 52%,
-    rgba(4, 8, 18, 0.88) 100%
-  );
-}
-.overview-res-dash-hero-title{
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 3;
-  padding: 6px 10px 7px;
-  background: linear-gradient(180deg, transparent 0%, rgba(4, 8, 18, 0.72) 100%);
-}
-.overview-res-dash-title{
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(210, 240, 255, 0.96);
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.75);
-}
-.overview-res-dash-body{
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  flex: 1 1 auto;
-  gap: 10px;
-  padding: 14px 14px 15px;
-  background: linear-gradient(180deg, rgb(6, 12, 26) 0%, rgb(4, 8, 18) 100%);
-}
-.overview-res-dash-prod-block{
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  min-width: 0;
-}
-.overview-res-dash-prod-hero{
-  display: block;
-  width: 100%;
-  font-size: clamp(1.35rem, 2.5vw, 1.9rem);
-  font-weight: 800;
-  line-height: 1.08;
-  letter-spacing: 0.01em;
-  color: rgba(127, 255, 217, 0.98);
-  text-shadow: 0 0 28px rgba(70, 229, 255, 0.32);
-}
-.overview-res-dash-prod-block--energy .overview-res-dash-prod-hero{
-  font-size: clamp(1.45rem, 2.6vw, 2rem);
-}
-.overview-res-dash-energy-status{
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--gc-text-dim);
-}
-.overview-res-dash-prod-block--energy .overview-res-dash-balance--pos{
-  color: rgba(127, 255, 217, 0.98);
-  text-shadow: 0 0 28px rgba(35, 242, 166, 0.35);
-}
-.overview-res-dash-prod-block--energy .overview-res-dash-balance--neg{
-  color: var(--gc-danger, #ff4b6a);
-  text-shadow: 0 0 24px rgba(255, 75, 106, 0.35);
-}
-.overview-res-dash-storage-block{
-  display: grid;
-  gap: 7px;
-  min-width: 0;
-}
-.overview-res-bar-wrap{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.overview-res-dash-stock{
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--gc-text-dim);
-}
-.overview-res-dash-stock .gc-val{
-  color: var(--gc-text-soft);
-  font-weight: 700;
-}
-.overview-res-dash-stock .gc-cap{
-  color: var(--gc-text-dim);
-  font-size: 0.84rem;
-  font-weight: 600;
-}
-.overview-res-dash-stat{
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-}
-.overview-res-dash-stat-label{
-  flex-shrink: 0;
-  color: var(--gc-text-dim);
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.overview-res-dash-stat-value{
-  text-align: right;
-  min-width: 0;
-}
-.overview-res-dash-stat-value.overview-res-dash-hero .gc-val{
-  font-size: clamp(1.1rem, 1.9vw, 1.42rem);
-  font-weight: 800;
-  color: var(--gc-primary-2);
-  letter-spacing: 0.02em;
-  text-shadow: 0 0 18px rgba(70, 229, 255, 0.22);
-}
-.overview-res-dash-prod{
-  color: rgba(127, 255, 217, 0.92);
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-.overview-res-dash-cap .gc-val{
-  color: var(--gc-text);
-  font-weight: 700;
-}
-.overview-res-dash-cap .gc-cap{
-  color: var(--gc-text-dim);
-  font-size: 0.84rem;
-}
-.overview-res-dash-balance{
-  font-weight: 800;
-}
-.overview-res-dash-balance--pos{ color: rgba(127, 255, 217, 0.95); }
-.overview-res-dash-balance--neg{ color: var(--gc-danger, #ff4b6a); }
-.overview-res-bar{
-  flex: 1 1 auto;
-  height: 8px;
-  margin-top: 0;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(120, 190, 255, 0.2);
-  background: rgba(0, 0, 0, 0.52);
-  overflow: hidden;
-  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.42);
-}
-.overview-res-bar-pct{
-  flex-shrink: 0;
-  min-width: 2.5em;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  color: var(--gc-text-dim);
-  text-align: right;
-}
-.overview-res-bar-fill{
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, rgba(70, 229, 255, 0.55), rgba(127, 255, 217, 0.88));
-  transition: width 0.35s ease;
-}
-.overview-res-dash-card--energy.overview-energy-ok .overview-res-bar-fill{
-  background: linear-gradient(90deg, rgba(35, 242, 166, 0.55), rgba(127, 255, 217, 0.9));
-}
-.overview-res-dash-card--energy.overview-energy-low{
-  border-color: rgba(255, 196, 0, 0.42);
-}
-.overview-res-dash-card--energy.overview-energy-low .overview-res-bar-fill{
-  background: linear-gradient(90deg, rgba(255, 196, 0, 0.55), rgba(255, 220, 80, 0.88));
-}
-.overview-res-dash-card--energy.overview-energy-critical,
-.overview-res-dash-card--energy.overview-energy-zero{
-  border-color: rgba(255, 75, 106, 0.48);
-}
-.overview-res-dash-card--energy.overview-energy-critical .overview-res-bar-fill,
-.overview-res-dash-card--energy.overview-energy-zero .overview-res-bar-fill{
-  background: linear-gradient(90deg, rgba(255, 75, 106, 0.55), rgba(255, 120, 140, 0.88));
-}
-.overview-res-dash-card--metal .overview-res-bar-fill{
-  background: linear-gradient(90deg, rgba(180, 200, 220, 0.5), rgba(220, 230, 245, 0.85));
-}
-.overview-res-dash-card--crystal .overview-res-bar-fill{
-  background: linear-gradient(90deg, rgba(120, 180, 255, 0.5), rgba(160, 210, 255, 0.88));
-}
-.overview-res-dash-card--fuel .overview-res-bar-fill{
-  background: linear-gradient(90deg, rgba(255, 196, 0, 0.45), rgba(255, 220, 100, 0.88));
-}
 .overview-upgrade-section{
   margin-bottom: var(--gc-card-gap);
 }
 .overview-upgrade-section .overview-upgrade-widgets{
   margin-top: 0;
 }
-@media (max-width: 1024px){
-  .overview-res-dashboard{
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 @media (max-width: 520px){
-  .overview-res-dashboard{
-    grid-template-columns: 1fr;
-  }
-  .overview-resources-strip{
-    flex-direction: column;
-  }
-  .overview-res-chip{
-    flex-basis: auto;
-    width: 100%;
-  }
   .overview-activities-grid{
     grid-template-columns: 1fr;
   }
@@ -6838,42 +6424,6 @@ body.gc-perf-idle .overview-hero-fx::before{
   flex-direction: column;
   height: 100%;
   min-height: 0;
-}
-.overview-resources-compact{
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  margin-bottom: 14px;
-}
-.overview-resources-strip{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 14px;
-  margin-top: 12px;
-}
-.overview-res-inline{
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.overview-resources-strip .gc-res-icon{
-  width: 20px;
-  height: 20px;
-}
-.overview-res-inline-label{
-  color: var(--gc-text-dim);
-  font-size: 0.78rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-.overview-res-inline-main{
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-.overview-res-inline-rate{
-  color: rgba(127, 255, 217, 0.88);
-  font-size: 0.76rem;
 }
 .overview-upgrade-widgets{
   display: grid;
@@ -8891,36 +8441,6 @@ a.gc-bld-head-action-btn--go:focus-visible{
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.14) inset,
     0 8px 22px rgba(0, 0, 0, 0.34);
-}
-
-/* Overview resource cards — never inherit gc-prog-card glass styling */
-.overview-res-dash-card.gc-prog-card,
-.overview-res-dash-card{
-  padding: 0;
-  min-height: 0;
-}
-
-.overview-res-dash-card.gc-prog-card:hover,
-.overview-res-dash-card:hover{
-  transform: translateY(-2px);
-}
-
-.overview-res-dash-card.gc-prog-card{
-  background: linear-gradient(180deg, rgb(8, 14, 28) 0%, rgb(4, 8, 18) 100%);
-  border-color: rgba(70, 229, 255, 0.28);
-  box-shadow:
-    var(--gc-border-glow),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.52),
-    0 14px 36px rgba(0, 0, 0, 0.55);
-}
-
-.overview-res-dash-card.gc-prog-card:hover{
-  background: linear-gradient(180deg, rgb(10, 18, 34) 0%, rgb(6, 12, 24) 100%);
-  border-color: rgba(70, 229, 255, 0.42);
-  box-shadow:
-    var(--gc-border-glow),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.52),
-    0 18px 44px rgba(0, 0, 0, 0.58);
 }
 
 .gc-prog-col{
@@ -17980,17 +17500,11 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   display: block;
   min-width: 0;
 }
-.gc-header-cmd .hud-cap-row{
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
 .gc-header-cmd .hud-cap-bar{
   display: grid;
   grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 2px;
-  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
   height: 7px;
   padding: 1px;
@@ -18020,17 +17534,6 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 @keyframes gc-hud-cap-pulse{
   0%, 100%{ filter: brightness(1); }
   50%{ filter: brightness(1.35); }
-}
-.gc-header-cmd .hud-cap-pct{
-  flex: 0 0 auto;
-  font-size: 0.56rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  line-height: 1;
-  color: rgba(170, 210, 230, 0.82);
-  font-variant-numeric: tabular-nums;
-  min-width: 2.1em;
-  text-align: right;
 }
 .gc-header-cmd .hud-cap--tier-green{
   --hud-cap-fill: rgba(46, 204, 113, 0.95);
@@ -18600,11 +18103,6 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   .gc-header-cmd .hud-cap-bar{
     height: 6px;
     gap: 1px;
-  }
-
-  .gc-header-cmd .hud-cap-pct{
-    font-size: 0.52rem;
-    min-width: 1.9em;
   }
 
   .gc-header-cmd .hud-res-body .res-icon--hud{

@@ -1996,7 +1996,7 @@
   function renderBuildingEffectIcon(resKey) {
     if (resKey === "energy") {
       return (
-        '<img src="/static/icons/energy.png" alt="" class="gc-bld-effect-icon gc-bld-effect-icon-energy" ' +
+        '<img src="/static/img/res/Energie.webp" alt="" class="gc-bld-effect-icon gc-bld-effect-icon-energy" ' +
         'loading="lazy" aria-hidden="true">'
       );
     }
@@ -2707,8 +2707,6 @@
     const changed = prevPct !== String(pct);
     wrap.dataset.capPct = String(pct);
     wrap.className = `hud-res-capacity hud-cap--${tier}`;
-    const pctEl = wrap.querySelector(`[data-hud-cap-pct="${resKey}"]`);
-    if (pctEl) _setIfChanged(pctEl, `${pct}%`);
     const bar = wrap.querySelector(".hud-cap-bar");
     if (!bar) return;
     if (changed && opts && opts.animate) {
@@ -2721,13 +2719,24 @@
     });
   }
 
+  function patchHudFuelStorageState(storageFuelCells) {
+    const fuelPanel = document.querySelector(".hud-res-fuel-cells");
+    if (!fuelPanel) return;
+    const hasCap = Math.floor(Number(storageFuelCells) || 0) > 0;
+    fuelPanel.classList.toggle("hud-res-no-storage", !hasCap);
+    fuelPanel.querySelectorAll(".hud-res-cap-line").forEach((line) => {
+      line.hidden = !hasCap;
+      if (!hasCap) line.setAttribute("aria-hidden", "true");
+      else line.removeAttribute("aria-hidden");
+    });
+  }
+
   function patchHudCapacityBars(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells, energyUsed, energyTotal, opts) {
     patchHudCapacityBar("metal", metal, storageMetal, opts);
     patchHudCapacityBar("crystal", crystal, storageCrystal, opts);
     patchHudCapacityBar("fuel_cells", fuelCells, storageFuelCells, opts);
-    if (energyUsed != null && energyTotal != null) {
-      patchHudCapacityBar("energy", energyUsed, energyTotal, opts);
-    }
+    patchHudFuelStorageState(storageFuelCells);
+    patchHudCapacityBar("energy", energyUsed, energyTotal, opts);
   }
 
   function patchHudStorageWarnings(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells) {
@@ -8469,13 +8478,14 @@
         _last.prodFuelCells = prodFuelCells;
       }
 
-      const energyText = `${fmtNumber(used)}/${fmtNumber(total)}`;
+      const energyCapText = total > 0 ? fmtNumber(total) : "—";
+      const energyText = `${fmtNumber(used)}/${energyCapText}`;
       if (forceResourceBar || _last.energyUsed !== used || _last.energyTotal !== total) {
         bar.querySelectorAll(".res-value.energy[data-energy-used], [data-energy-used]").forEach((el) => {
           _setIfChanged(el, fmtNumber(used));
         });
         bar.querySelectorAll(".res-cap.energy[data-energy-total], [data-energy-total]").forEach((el) => {
-          _setIfChanged(el, fmtNumber(total));
+          _setIfChanged(el, energyCapText);
         });
         const energyEl = bar.querySelector("#res-energy") || document.getElementById("res-energy");
         if (energyEl) _setIfChanged(energyEl, energyText);

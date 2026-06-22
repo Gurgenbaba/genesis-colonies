@@ -447,6 +447,44 @@ def test_gc744_resource_icons_use_webp():
     assert "render_resource_icon('metal', hud=true, lazy=false, priority='high'" in base
 
 
+def test_gc807b_hud_capacity_polish():
+    """GC-807B-R1: compact HUD bars, energy always visible, fuel no-storage, WebP energy icon."""
+    macro = _read("templates/partials/progression_cards.html")
+    base = _read("templates/base.html")
+    js = _read("static/main.js")
+    css = _read("static/style.css")
+
+    assert "hud-cap-pct" not in macro
+    assert "data-hud-cap-pct" not in macro
+    assert 'data-hud-capacity="{{ res_key }}"' in macro
+    assert 'data-cap-seg="{{ i }}"' in macro
+    assert "{% if cap > 0 %}" not in macro.split("render_hud_capacity_bar")[1].split("{% endmacro %}")[0]
+
+    assert "render_hud_capacity_bar('energy', eu, et)" in base
+    assert "{% if et > 0 %}{{ render_hud_capacity_bar('energy'" not in base
+    assert "data-energy-total>{% if et > 0 %}" in base
+    assert "hud-res-no-storage" in base
+    assert "fc_cap <= 0" in base
+    assert "icons/energy.png" not in base
+    assert "img/res/Energie.webp" in base
+
+    bld_icon = js.split("function renderBuildingEffectIcon(resKey)")[1].split("function renderBuildingEffectValue")[0]
+    assert "img/res/Energie.webp" in bld_icon
+    assert "/static/icons/energy.png" not in js
+    assert "function patchHudFuelStorageState" in js
+    assert "function setHudCapacityBarVisible" not in js
+    cap_patch = js.split("function patchHudCapacityBar(resKey")[1].split("function patchHudFuelStorageState")[0]
+    assert "wrap.hidden" not in cap_patch
+    bars_fn = js.split("function patchHudCapacityBars(")[1].split("function patchHudStorageWarnings")[0]
+    assert 'patchHudCapacityBar("energy", energyUsed, energyTotal, opts)' in bars_fn
+    assert "setHudCapacityBarVisible" not in bars_fn
+
+    assert "overview-res-dashboard" not in css
+    assert "overview-res-chip" not in css
+    assert ".overview-res-card{" in css
+    assert "trader-hub-res-bar" in css
+
+
 def test_main_js_apply_planet_hero_theme_border_fx():
     src = _read("static/main.js")
     hero_fn = src.split("function applyPlanetHeroThemeFromState(data)")[1].split("function bootstrapPlanetLandscapeFromBoot")[0]
