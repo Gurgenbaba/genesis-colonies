@@ -685,3 +685,74 @@ def test_admin_panel_includes_diplomacy_tab(app_client):
     assert 'data-admin-tab="diplomacy"' in html
     assert 'data-admin-action="diplomacy-load"' in html
     assert "admin-diplomacy-output" in html
+
+
+def test_delete_player_requires_confirm(app_client):
+    client, admin_id, user_id = app_client
+    _login(client, "admin_cc", "adminpass123")
+    r = client.post(f"/api/admin/player/{user_id}/delete", json={})
+    assert r.status_code == 400
+    assert r.get_json()["error"] == "confirm_required"
+
+
+def test_delete_player_requires_username_match(app_client):
+    client, admin_id, user_id = app_client
+    _login(client, "admin_cc", "adminpass123")
+    r = client.post(
+        f"/api/admin/player/{user_id}/delete",
+        json={"confirm_text": "DELETE PLAYER", "expected_username": "wrong_name"},
+    )
+    assert r.status_code == 400
+    assert r.get_json()["error"] == "username_mismatch"
+
+
+def test_delete_player_cannot_delete_self(app_client):
+    client, admin_id, user_id = app_client
+    _login(client, "admin_cc", "adminpass123")
+    r = client.post(
+        f"/api/admin/player/{admin_id}/delete",
+        json={"confirm_text": "DELETE PLAYER", "expected_username": "admin_cc"},
+    )
+    assert r.status_code == 400
+    assert r.get_json()["error"] == "cannot_delete_self"
+
+
+def test_delete_player_removes_user_and_planets(app_client):
+    client, admin_id, user_id = app_client
+    _login(client, "admin_cc", "adminpass123")
+
+    from game.models import db, get_planets_by_player
+
+    conn = db()
+    try:
+        username = conn.execute(
+            "SELECT username FROM users WHERE id = ?;", (user_id,)
+        ).fetchone()["username"]
+        planet_count = len(get_planets_by_player(user_id, conn=conn))
+        assert planet_count >= 1
+    finally:
+        conn.close()
+
+    r = client.post(
+        f"/api/admin/player/{user_id}/delete",
+        json={"confirm_text": "DELETE PLAYER", "expected_username": username},
+    )
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert data["deleted"]["player_id"] == user_id
+    assert data["deleted"]["username"] == username
+    assert data["deleted"]["planet_count"] >= 1
+
+    conn = db()
+    try:
+        assert conn.execute("SELECT 1 FROM users WHERE id = ?;", (user_id,)).fetchone() is None
+        assert conn.execute("SELECT 1 FROM players WHERE id = ?;", (user_id,)).fetchone() is None
+        assert conn.execute("SELECT 1 FROM planets WHERE player_id = ?;", (user_id,)).fetchone() is None
+    finally:
+        conn.close()
+
+    audit = client.get("/api/admin/audit-log?action=delete_player")
+    assert audit.status_code == 200
+    entries = audit.get_json()["entries"]
+    assert any(int(e.get("target_id") or 0) == user_id for e in entries)

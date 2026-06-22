@@ -1121,6 +1121,75 @@ def _wipe_player_game_progress(player_id: int, *, conn) -> None:
     recompute_and_upsert_score(pid, conn=conn)
 
 
+def hard_delete_player_account(player_id: int, *, conn) -> Dict[str, Any]:
+    """
+    Permanently remove user, player, planets, queues, fleets, and related rows.
+    Admin-only — caller must pre-clean FK blockers and run inside a write transaction.
+    """
+    pid = int(player_id)
+    cur = conn.cursor()
+    cur.execute("SELECT id, username FROM users WHERE id = ? LIMIT 1;", (pid,))
+    user_row = cur.fetchone()
+    if not user_row:
+        raise ValueError("player_not_found")
+
+    cur.execute("SELECT id, name FROM players WHERE id = ? LIMIT 1;", (pid,))
+    player_row = cur.fetchone()
+    planet_ids = [
+        int(r[0])
+        for r in cur.execute("SELECT id FROM planets WHERE player_id = ?;", (pid,)).fetchall()
+    ]
+
+    if table_exists(conn, "gd_votes"):
+        cur.execute("DELETE FROM gd_votes WHERE player_id = ?;", (pid,))
+    if table_exists(conn, "world_progress"):
+        cur.execute("DELETE FROM world_progress WHERE player_id = ?;", (pid,))
+    if table_exists(conn, "world_claims"):
+        cur.execute("DELETE FROM world_claims WHERE player_id = ?;", (pid,))
+    if table_exists(conn, "auction_house_bids"):
+        cur.execute("DELETE FROM auction_house_bids WHERE player_id = ?;", (pid,))
+    if table_exists(conn, "auction_house_listings"):
+        if planet_ids:
+            ph = ",".join("?" for _ in planet_ids)
+            cur.execute(
+                f"""
+                UPDATE auction_house_listings
+                SET current_bidder_id = NULL, current_bid_planet_id = NULL
+                WHERE current_bidder_id = ? OR current_bid_planet_id IN ({ph});
+                """,
+                [pid, *planet_ids],
+            )
+        else:
+            cur.execute(
+                """
+                UPDATE auction_house_listings
+                SET current_bidder_id = NULL, current_bid_planet_id = NULL
+                WHERE current_bidder_id = ?;
+                """,
+                (pid,),
+            )
+    if table_exists(conn, "lootbox_inventory"):
+        cur.execute("DELETE FROM lootbox_inventory WHERE player_id = ?;", (pid,))
+    if table_exists(conn, "combat_hall_of_fame"):
+        cur.execute(
+            """
+            DELETE FROM combat_hall_of_fame
+            WHERE attacker_player_id = ? OR defender_player_id = ?;
+            """,
+            (pid, pid),
+        )
+
+    cur.execute("DELETE FROM users WHERE id = ?;", (pid,))
+
+    return {
+        "player_id": pid,
+        "username": str(user_row["username"] or ""),
+        "player_name": str(player_row["name"] or "") if player_row else "",
+        "planet_count": len(planet_ids),
+        "planet_ids": planet_ids,
+    }
+
+
 def execute_account_deletion(player_id: int, *, conn) -> None:
     """Anonymize login and wipe game data after grace period."""
     pid = int(player_id)

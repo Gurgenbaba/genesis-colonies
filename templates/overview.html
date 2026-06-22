@@ -37,7 +37,7 @@
   <section class="gc-panel overview-hero overview-hero--themed gc-planet-hero gc-planet-theme--{{ hero_theme_key }} gc-planet-theme-group--{{ hero_theme_group }} overview-hero--effect-{{ hero_effect }}"
            id="overview-planet-hero"
            aria-label="{{ T('overview_label_planet', 'Kolonie') }}"
-           style="--planet-accent: {{ hero_accent }}; --planet-secondary: {{ hero_secondary }}; --planet-accent-secondary: {{ hero_secondary }}; --planet-glow: {{ hero_glow }}; --planet-landscape: url('{{ url_for('static', filename=hero_landscape_rel) }}'); --hero-frame-url: url('{{ url_for('static', filename='img/herocardsframe/frame.png') }}');"
+           style="--planet-accent: {{ hero_accent }}; --planet-secondary: {{ hero_secondary }}; --planet-accent-secondary: {{ hero_secondary }}; --planet-glow: {{ hero_glow }}; --planet-landscape: url('{{ url_for('static', filename=hero_landscape_rel) }}'); --hero-frame-url: image-set(url('{{ url_for('static', filename='img/herocardsframe/frame.webp') }}') type('image/webp'), url('{{ url_for('static', filename='img/herocardsframe/frame.png') }}') type('image/png'));"
            data-planet-effect="{{ hero_effect }}"
            data-planet-theme-key="{{ hero_theme_key }}"
            data-planet-theme-group="{{ hero_theme_group }}"

@@ -1494,6 +1494,12 @@
         <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="player-ban" data-player-id="${p.id}">${t("admin_btn_ban", "Bannen")}</button>
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-unban" data-player-id="${p.id}">${t("admin_btn_unban", "Entbannen")}</button>
       </div>
+      <div class="admin-danger-zone">
+        <p class="admin-small-hint">${t("admin_player_delete_hint", "Account unwiderruflich löschen. Tippe DELETE PLAYER und den exakten Spielernamen.")}</p>
+        <input type="text" class="admin-input admin-input-sm" id="admin-player-delete-confirm" placeholder="DELETE PLAYER" autocomplete="off">
+        <input type="text" class="admin-input admin-input-sm" id="admin-player-delete-username" placeholder="${t("admin_player_delete_username", "Spielername")}" autocomplete="off">
+        <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="player-delete" data-player-id="${p.id}" data-player-name="${esc(p.username || "")}">${t("admin_btn_delete_player", "Account löschen")}</button>
+      </div>
       <div class="admin-toolbar admin-toolbar--tight">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-metal" placeholder="${t("metal", "Ferronit")}">
         <input type="number" min="0" class="admin-input admin-input-sm" id="admin-player-crystal" placeholder="${t("crystal", "Crytite")}">
@@ -2410,6 +2416,43 @@
         await loadAdminBans();
         await syncAfterAdminChange("admin_player_unban");
       } else showAlert(res.message, "error");
+      return res;
+    }
+    if (act === "player-delete") {
+      const confirmText = (qs("#admin-player-delete-confirm")?.value || "").trim();
+      const expectedUsername = (qs("#admin-player-delete-username")?.value || "").trim();
+      if (confirmText !== "DELETE PLAYER") {
+        showAlert(t("admin_confirm_delete_player", "Tippe DELETE PLAYER zur Bestätigung."), "error");
+        return null;
+      }
+      if (!expectedUsername) {
+        showAlert(t("admin_player_delete_username_required", "Spielername zur Bestätigung eingeben."), "error");
+        return null;
+      }
+      if (
+        !window.confirm(
+          t(
+            "admin_player_delete_final_confirm",
+            "Account wirklich unwiderruflich löschen? Alle Planeten, Flotten und Daten gehen verloren."
+          )
+        )
+      ) {
+        return null;
+      }
+      const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/delete`, {
+        confirm_text: confirmText,
+        expected_username: expectedUsername,
+      });
+      if (res.ok) {
+        notify(t("admin_player_deleted", "Account gelöscht."), "success");
+        _selectedPlayerId = null;
+        const detail = qs("#admin-player-detail");
+        if (detail) {
+          detail.innerHTML = `<p class="admin-small-hint">${esc(t("admin_player_deleted_hint", "Spieler wurde entfernt."))}</p>`;
+        }
+        await searchAdminPlayers();
+        await syncAfterAdminChange("admin_player_delete");
+      } else showAlert(res.message || res.error, "error");
       return res;
     }
     if (act === "player-effects") {

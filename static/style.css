@@ -5145,6 +5145,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 /* OGame-style overview (colony status) */
 .overview-hero{
   margin-bottom: var(--gc-card-gap);
+}
+.overview-hero:not(.gc-planet-hero){
   background:
     radial-gradient(ellipse at 20% 0%, rgba(70,229,255,0.10), transparent 55%),
     rgba(5, 10, 22, 0.72);
@@ -5153,6 +5155,8 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   position: relative;
   overflow: hidden;
   isolation: isolate;
+}
+.overview-hero--themed:not(.gc-planet-hero){
   border-color: var(--planet-accent, rgba(70, 229, 255, 0.36));
   box-shadow:
     0 0 24px color-mix(in srgb, var(--planet-accent, #46e5ff) 30%, transparent),
@@ -5170,6 +5174,7 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   display: block;
   overflow: hidden;
   border: none;
+  outline: none;
   border-radius: 0;
   box-shadow: none;
   background: transparent;
@@ -5180,27 +5185,42 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   aspect-ratio: 1536 / 1024;
   min-height: 420px;
   height: auto;
-  overflow: visible;
-  /* frame.png inner opening — HUD/content */
-  --hero-inner-top: 6.8%;
-  --hero-inner-right: 6.5%;
-  --hero-inner-bottom: 10.5%;
-  --hero-inner-left: 10.2%;
-  /* herocard image — clearly inside frame rails (anti-bleed buffer) */
-  --hero-bg-top: 7.1%;
-  --hero-bg-right: 7.35%;
-  --hero-bg-bottom: 6.9%;
-  --hero-bg-left: 11.1%;
+  /* frame.png — HUD layout */
+  --hero-hole-top: 11.72%;
+  --hero-hole-right: 7.16%;
+  --hero-hole-bottom: 7.23%;
+  --hero-hole-left: 6.84%;
+  /* herocard — midpoint: hole insets ↔ full-bleed (under frame PNG) */
+  --hero-bg-top: 5.9%;
+  --hero-bg-right: 3.6%;
+  --hero-bg-bottom: 3.6%;
+  --hero-bg-left: 3.4%;
+  /* HUD corners — frame rails (full hero stage) */
+  --hero-corner-tl-top: 5.5%;
+  --hero-corner-tl-left: 8%;
+  --hero-corner-tr-top: 5.5%;
+  --hero-corner-tr-right: 8%;
+  --hero-corner-bl-bottom: 7%;
+  --hero-corner-bl-left: 8%;
+  --hero-corner-br-bottom: 7%;
+  --hero-corner-br-right: 8%;
+  --hero-activity-top: 13%;
+  --hero-activity-bottom: 9%;
+  --hero-activity-left: 7.5%;
+  --hero-activity-right: 7.5%;
 }
 .overview-hero--themed.gc-planet-hero{
   border-color: transparent;
   background: transparent;
 }
 body.gc-body-ingame.gc-has-planet-landscape .gc-planet-hero.gc-panel,
-body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-hero{
+body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-hero,
+body.gc-body-ingame .overview-hero.overview-hero--themed.gc-planet-hero.gc-panel{
   border: none;
+  outline: none;
   box-shadow: none;
   background: transparent;
+  padding: 0;
 }
 /* gc-panel scanlines would steal pseudo-elements — planet HUD uses real layers */
 .gc-planet-hero.gc-panel::before,
@@ -5219,12 +5239,12 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-bg,
 .overview-hero--themed.gc-planet-hero .overview-hero-fx{
-  top: var(--hero-bg-top, 7.1%);
-  right: var(--hero-bg-right, 7.35%);
-  bottom: var(--hero-bg-bottom, 6.9%);
-  left: var(--hero-bg-left, 11.1%);
+  top: var(--hero-bg-top, 5.9%);
+  right: var(--hero-bg-right, 3.6%);
+  bottom: var(--hero-bg-bottom, 3.6%);
+  left: var(--hero-bg-left, 3.4%);
   overflow: hidden;
-  border-radius: 2px;
+  border-radius: 0;
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-atmo{
   display: none;
@@ -5256,14 +5276,14 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
 }
 .overview-hero--themed.gc-planet-hero{
   --hero-line: color-mix(in srgb, var(--planet-accent, #46e5ff) 22%, rgba(255, 255, 255, 0.08));
-  /* frame.png rails — top fire / bottom ice typography */
-  --hero-frame-top-name: #fff0dc;
-  --hero-frame-top-coords: #ffc988;
-  --hero-frame-top-badge: #ffca80;
-  --hero-frame-bottom-label: #9ecfe0;
-  --hero-frame-bottom-value: #e5f8ff;
-  --hero-frame-bottom-temp: #d8f4ff;
-  --hero-frame-bottom-muted: #a8d8ea;
+  /* frame HUD — slot 1–15 palette via planet theme tokens */
+  --hero-frame-top-name: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 90%, #fff 10%);
+  --hero-frame-top-coords: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 72%, var(--gc-text-soft, #a8c8d8) 28%);
+  --hero-frame-top-badge: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 88%, #fff 12%);
+  --hero-frame-bottom-label: color-mix(in srgb, var(--planet-accent, #46e5ff) 46%, #9eb8c8 54%);
+  --hero-frame-bottom-value: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 84%, #fff 16%);
+  --hero-frame-bottom-temp: color-mix(in srgb, var(--planet-accent, #46e5ff) 80%, #fff 20%);
+  --hero-frame-bottom-muted: color-mix(in srgb, var(--planet-accent, #46e5ff) 54%, #a8c0d0 46%);
   /* center HUD — planet-themed activity typography */
   --hero-activity-label: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 78%, #fff 22%);
   --hero-activity-status: #eef6ff;
@@ -5278,13 +5298,19 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
 .overview-hero--themed.gc-planet-hero .overview-hero-hud::before{
   display: none;
 }
+.overview-hero--themed.gc-planet-hero .overview-hero-bg picture{
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 .overview-hero--themed.gc-planet-hero .overview-hero-bg picture,
 .overview-hero--themed.gc-planet-hero .overview-hero-bg img{
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center center;
-  transform: scale(0.94);
+  transform: scale(1.05);
   transform-origin: center center;
 }
 .overview-hero-hud{
@@ -5293,10 +5319,7 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-hud{
   position: absolute;
-  top: var(--hero-inner-top, 6.8%);
-  right: var(--hero-inner-right, 6.5%);
-  bottom: var(--hero-inner-bottom, 10.5%);
-  left: var(--hero-inner-left, 10.2%);
+  inset: 0;
   z-index: 5;
   display: block;
   box-sizing: border-box;
@@ -5315,23 +5338,24 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
   pointer-events: auto;
 }
 .overview-hero-corner--tl{
-  top: 6px;
-  left: 8px;
+  top: var(--hero-corner-tl-top, 5.5%);
+  left: var(--hero-corner-tl-left, 8%);
   text-align: left;
 }
 .overview-hero-corner--tr{
-  top: 8px;
-  right: 8px;
+  top: var(--hero-corner-tr-top, 5.5%);
+  right: var(--hero-corner-tr-right, 8%);
   text-align: right;
+  max-width: min(52%, 320px);
 }
 .overview-hero-corner--bl{
-  bottom: 8px;
-  left: 8px;
+  bottom: var(--hero-corner-bl-bottom, 7%);
+  left: var(--hero-corner-bl-left, 8%);
   text-align: left;
 }
 .overview-hero-corner--br{
-  bottom: 8px;
-  right: 8px;
+  bottom: var(--hero-corner-br-bottom, 7%);
+  right: var(--hero-corner-br-right, 8%);
   text-align: right;
 }
 .overview-hero-corner-meta{
@@ -5384,7 +5408,7 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-slot-badge{
   display: block;
-  max-width: min(100%, 240px);
+  max-width: min(100%, 300px);
   margin: 0;
   padding: 0;
   border: none;
@@ -5392,6 +5416,41 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
   box-shadow: none;
   backdrop-filter: none;
   text-align: right;
+  font-size: clamp(0.84rem, 1.15vw, 1rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-coords,
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-coords a{
+  font-size: clamp(0.84rem, 1vw, 0.96rem);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--bl .overview-meta-item dt,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-meta-item dt{
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--bl .overview-meta-item dd,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--bl .overview-meta-item dd a{
+  font-size: clamp(0.92rem, 1.15vw, 1.06rem);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-temp-value{
+  font-size: clamp(0.96rem, 1.2vw, 1.12rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-climate-hint{
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.92;
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-slot-badge::before,
 .overview-hero--themed.gc-planet-hero .overview-hero-slot-badge::after{
@@ -5403,10 +5462,10 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
 }
 .overview-hero-activity-panel{
   position: absolute;
-  top: 20%;
-  bottom: 16%;
-  left: 11%;
-  right: 11%;
+  top: var(--hero-activity-top, 13%);
+  bottom: var(--hero-activity-bottom, 9%);
+  left: var(--hero-activity-left, 7.5%);
+  right: var(--hero-activity-right, 7.5%);
   z-index: 6;
   display: flex;
   flex-direction: column;
@@ -5735,23 +5794,23 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
   }
   .overview-hero-corner--tl,
   .overview-hero-corner--bl{
-    left: 4px;
+    left: 6.5%;
   }
   .overview-hero-corner--tr,
   .overview-hero-corner--br{
-    right: 4px;
+    right: 6.5%;
   }
-  .overview-hero-corner--tl{ top: 4px; }
-  .overview-hero-corner--tr{ top: 4px; }
+  .overview-hero-corner--tl{ top: 4.8%; }
+  .overview-hero-corner--tr{ top: 4.8%; }
   .overview-hero-corner--bl,
   .overview-hero-corner--br{
-    bottom: 6px;
+    bottom: 6%;
   }
   .overview-hero-activity-panel{
-    top: 22%;
-    bottom: 18%;
-    left: 8%;
-    right: 8%;
+    top: 14%;
+    bottom: 10%;
+    left: 6.5%;
+    right: 6.5%;
     padding: 8px 10px 6px;
   }
   .overview-hero-activity-panel .overview-activity-body{
@@ -5760,8 +5819,10 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
   }
   .overview-hero--themed.gc-planet-hero .overview-hero-slot-badge{
     max-width: 100%;
-    font-size: 0.62rem;
-    line-height: 1.2;
+    font-size: clamp(0.78rem, 2.8vw, 0.92rem);
+    line-height: 1.22;
+    white-space: normal;
+    word-break: break-word;
   }
   .overview-hero-activity-panel .overview-activity-link{
     grid-template-columns: minmax(84px, 100px) minmax(0, 1fr);
@@ -6009,37 +6070,39 @@ body.gc-reduced-motion .overview-hero-border::after{
 .overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name-btn[aria-expanded="true"] .overview-hero-name{
   text-shadow: none;
 }
-/* Frame zone colors — top fire rail / bottom ice rail */
+/* Frame HUD — planet slot palette (1–15 via --planet-accent*) */
 .overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name{
-  color: var(--hero-frame-top-name, #fff0dc);
+  color: var(--hero-frame-top-name);
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name-btn:hover .overview-hero-name,
 .overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name-btn[aria-expanded="true"] .overview-hero-name{
-  color: #fff8f0;
+  color: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 96%, #fff 4%);
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-coords,
 .overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-coords a{
-  color: var(--hero-frame-top-coords, #ffc988);
+  color: var(--hero-frame-top-coords);
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-slot-badge{
-  color: var(--hero-frame-top-badge, #ffca80);
+  color: var(--hero-frame-top-badge);
+  font-size: clamp(0.84rem, 1.15vw, 1rem);
+  font-weight: 700;
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-corner--bl .overview-meta-item dt,
 .overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-meta-item dt{
-  color: var(--hero-frame-bottom-label, #9ecfe0);
+  color: var(--hero-frame-bottom-label);
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-corner--bl .overview-meta-item dd,
 .overview-hero--themed.gc-planet-hero .overview-hero-corner--bl .overview-meta-item dd a,
 .overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-meta-item dd,
 .overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-meta-item dd a,
 .overview-hero--themed.gc-planet-hero .overview-hero-corner--br #overview-planet-temp{
-  color: var(--hero-frame-bottom-value, #e5f8ff);
+  color: var(--hero-frame-bottom-value);
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-temp-value{
-  color: var(--hero-frame-bottom-temp, #d8f4ff);
+  color: var(--hero-frame-bottom-temp);
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-climate-hint{
-  color: var(--hero-frame-bottom-muted, #a8d8ea);
+  color: var(--hero-frame-bottom-muted);
 }
 .overview-hero--themed .overview-res-chip{
   border-color: color-mix(in srgb, var(--planet-accent, #46e5ff) 22%, rgba(70, 229, 255, 0.14));

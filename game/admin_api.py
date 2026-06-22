@@ -44,6 +44,7 @@ CONFIRM_PHRASES: Dict[str, str] = {
     "planet_reset": "RESET PLANET",
     "remove_admin": "REMOVE ADMIN",
     "ban_player": "BAN PLAYER",
+    "delete_player": "DELETE PLAYER",
     "run_migrations": "RUN MIGRATIONS",
     "broadcast_messages": "SEND SYSTEM BROADCAST",
 }
@@ -408,6 +409,63 @@ def unban_player_api(admin_id: int, player_id: int) -> Dict[str, Any]:
 
     audit(admin_id, "unban_player", target_type="player", target_id=player_id)
     return get_player_detail(player_id)
+
+
+def delete_player_api(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    if not validate_confirm("delete_player", body.get("confirm_text")):
+        return _err("confirm_required", "Type DELETE PLAYER to confirm permanent account deletion.")
+
+    pid = int(player_id)
+    if int(admin_id) == pid:
+        return _err("cannot_delete_self", "You cannot delete your own account from the admin panel.")
+
+    conn = db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, username, is_admin FROM users WHERE id = ? LIMIT 1;",
+            (pid,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return _err("not_found", "Player not found.")
+        if int(row["is_admin"] or 0):
+            return _err(
+                "cannot_delete_admin",
+                "Remove admin rights before permanently deleting this account.",
+            )
+
+        expected_username = str(body.get("expected_username") or "").strip()
+        actual_username = str(row["username"] or "").strip()
+        if not expected_username or expected_username != actual_username:
+            return _err(
+                "username_mismatch",
+                f"Type the exact username to confirm ({actual_username}).",
+            )
+
+        begin_write_transaction(conn)
+        from game.options import hard_delete_player_account
+
+        summary = hard_delete_player_account(pid, conn=conn)
+        commit(conn)
+    except ValueError as exc:
+        rollback(conn)
+        code = str(exc) or "delete_failed"
+        return _err(code, code)
+    except Exception as exc:
+        rollback(conn)
+        return _err("delete_failed", str(exc))
+    finally:
+        conn.close()
+
+    audit(
+        admin_id,
+        "delete_player",
+        target_type="player",
+        target_id=pid,
+        payload=summary,
+    )
+    return _ok(deleted=summary)
 
 
 def set_player_resources(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dict[str, Any]:

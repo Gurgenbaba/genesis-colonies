@@ -7461,6 +7461,12 @@ def api_admin_player_unban(player_id: int):
     return _admin_json(admin_api_logic.unban_player_api(_admin_actor_id(), player_id))
 
 
+@app.route("/api/admin/player/<int:player_id>/delete", methods=["POST"])
+@require_admin_api
+def api_admin_player_delete(player_id: int):
+    return _admin_json(admin_api_logic.delete_player_api(_admin_actor_id(), player_id, _admin_body()))
+
+
 @app.route("/api/admin/player/<int:player_id>/resources", methods=["POST"])
 @require_admin_api
 def api_admin_player_resources(player_id: int):

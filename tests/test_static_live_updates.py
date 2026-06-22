@@ -428,8 +428,11 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "overview-hero-hud-frame" in overview
     assert "overview-hero-frame-glow" not in overview
     assert "width: 100%" in css.split(".overview-hero.gc-planet-hero")[1].split("aspect-ratio")[0]
-    assert "--hero-inner-left: 10.2%" in css
-    assert "--hero-bg-left: 11.1%" in css
+    assert "--hero-hole-left: 6.84%" in css
+    assert "--hero-bg-left: 3.4%" in css
+    hero_bg = css.split(".overview-hero--themed.gc-planet-hero .overview-hero-bg,")[1].split(".overview-hero--themed.gc-planet-hero .overview-hero-atmo")[0]
+    assert "var(--hero-bg-top" in hero_bg
+    assert "herocardsframe/frame.webp" in overview
     assert "background: transparent" in css.split(".overview-hero.gc-planet-hero")[1].split("body.gc-body-ingame")[0]
     assert "aspect-ratio: 1536 / 1024" in css
     assert ".overview-hero--themed.gc-planet-hero .overview-hero-hud" in css
@@ -445,7 +448,8 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert ".overview-hero-activity-panel" in css
     assert 'getElementById("overview-activities")' in src
     assert "overview-hero-title-plate" in overview
-    assert "top: 20%" in css.split(".overview-hero-activity-panel")[1].split(".overview-hero-activity-head")[0]
+    assert "top: var(--hero-activity-top" in css.split(".overview-hero-activity-panel")[1].split(".overview-hero-activity-head")[0]
+    assert "scale(1.05)" in css
     assert "grid-template-columns: 100px" in css
     assert "--hero-activity-glass" in css
     assert ".overview-hero--themed.gc-planet-hero:hover .overview-hero-bg::after" in css
@@ -453,7 +457,8 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "overview-hero-activity-panel .overview-activity-row::after" in css
     assert "opacity: 0" in css.split(".overview-hero-activity-panel{")[1].split(".overview-hero-activity-head")[0]
     assert ".overview-hero--themed.gc-planet-hero:hover .overview-hero-activity-panel" in css
-    assert "--hero-frame-top-name" in css
+    assert "--hero-frame-top-name: color-mix" in css
+    assert "var(--planet-accent-secondary" in css.split("--hero-frame-top-name")[1].split("--hero-frame-top-coords")[0]
 
 
 def test_main_js_gc743_deferred_chat_and_news_boot():
