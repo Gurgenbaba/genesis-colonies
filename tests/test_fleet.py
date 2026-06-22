@@ -1955,6 +1955,257 @@ def test_expedition_return_credit_admin_advance_phases(fleet_db):
     conn.close()
 
 
+# --- GC-620K-B: return-credit contract (fleet tick → live refresh → resources) ---
+
+
+def _planet_stock(conn, planet_id: int) -> dict:
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;",
+        (int(planet_id),),
+    )
+    row = dict(cur.fetchone())
+    return {
+        "metal": int(float(row["metal"])),
+        "crystal": int(float(row["crystal"])),
+        "fuel_cells": int(float(row["fuel_cells"] or 0)),
+    }
+
+
+def _pin_planet_last_update(conn, planet_id: int, ts: float | None = None) -> float:
+    pinned = float(ts if ts is not None else time.time())
+    conn.execute("UPDATE planets SET last_update = ? WHERE id = ?;", (pinned, int(planet_id)))
+    conn.commit()
+    return pinned
+
+
+def _loaded_fleet_credit(resources: dict) -> dict:
+    from game.fleet_calc import calculate_loaded_resources
+
+    return calculate_loaded_resources(resources)
+
+
+def _assert_stock_before_plus_credit(before: dict, after: dict, credit: dict) -> None:
+    for key in ("metal", "crystal", "fuel_cells"):
+        expected = before[key] + int(credit.get(key) or 0)
+        assert after[key] == expected, (
+            f"{key}: expected {expected} (= {before[key]} + {credit.get(key) or 0}), got {after[key]}"
+        )
+
+
+def _complete_return_via_live_refresh(conn, uid: int, *, mode: str) -> None:
+    if mode == "poll":
+        from game.logic import read_player_live_state_for_poll
+
+        read_player_live_state_for_poll(uid, conn=conn)
+    elif mode == "refresh":
+        from game.logic import refresh_player_live_state
+
+        refresh_player_live_state(uid, conn=conn, finish_source="test_gc620k_contract")
+    else:
+        raise ValueError(f"unknown live refresh mode: {mode}")
+    conn.commit()
+
+
+@pytest.mark.parametrize("live_refresh", ("poll", "refresh"))
+def test_gc620k_contract_expedition_return_credit_invariant(fleet_db, live_refresh):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    fleet_id, rewards, _origin_before = _expedition_returning_with_loot(conn, uid, pid)
+    credit = _loaded_fleet_credit(rewards)
+    if credit["metal"] <= 0 and credit["crystal"] <= 0 and credit["fuel_cells"] <= 0:
+        rewards = {"metal": 500, "crystal": 200, "fuel_cells": 0, "expedition_hours": 1}
+        credit = _loaded_fleet_credit(rewards)
+        conn.execute(
+            "UPDATE fleet_movements SET resources_json = ? WHERE id = ?;",
+            (json.dumps(rewards), fleet_id),
+        )
+        conn.commit()
+
+    _pin_planet_last_update(conn, pid)
+    before = _planet_stock(conn, pid)
+    conn.execute(
+        "UPDATE fleet_movements SET return_at = ? WHERE id = ?;",
+        (time.time() - 1, fleet_id),
+    )
+    conn.commit()
+
+    _complete_return_via_live_refresh(conn, uid, mode=live_refresh)
+
+    after = _planet_stock(conn, pid)
+    _assert_stock_before_plus_credit(before, after, credit)
+    conn.close()
+
+
+@pytest.mark.parametrize("live_refresh", ("poll", "refresh"))
+def test_gc620k_contract_collect_return_credit_invariant(fleet_db, live_refresh):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    cur.execute("UPDATE planets SET metal = 8000, crystal = 2000 WHERE id = ?;", (colony2,))
+    _seed_ships(pid, uid, {"mule_courier": 2}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="collect",
+        ships={"mule_courier": 1},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    credit = {"metal": 3000, "crystal": 500, "fuel_cells": 0}
+    now = time.time()
+    cur.execute(
+        """
+        UPDATE fleet_movements
+        SET arrival_at = ?, status = 'returning', return_at = ?, resources_json = ?
+        WHERE id = ?;
+        """,
+        (now - 200, now - 1, json.dumps(credit), fleet_id),
+    )
+    conn.commit()
+
+    _pin_planet_last_update(conn, pid)
+    before = _planet_stock(conn, pid)
+
+    _complete_return_via_live_refresh(conn, uid, mode=live_refresh)
+
+    after = _planet_stock(conn, pid)
+    _assert_stock_before_plus_credit(before, after, credit)
+    row = conn.execute("SELECT status FROM fleet_movements WHERE id = ?;", (fleet_id,)).fetchone()
+    assert row["status"] == "completed"
+    conn.close()
+
+
+@pytest.mark.parametrize("live_refresh", ("poll", "refresh"))
+def test_gc620k_contract_attack_return_credit_invariant(fleet_db, live_refresh):
+    from game.fleet_calc import loaded_resource_total
+    from game.models import add_planet_defense
+
+    foreign_uid, foreign_pid, (g, s, p) = _foreign_planet_standalone()
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _fund_planet(cur, foreign_pid, metal=80_000, crystal=40_000, fuel_cells=20_000)
+    attack_ships = {"ironclad_frigate": 12, "mule_courier": 1}
+    _seed_ships(pid, uid, attack_ships, conn=conn)
+    add_planet_defense(foreign_pid, {"sentinel_turret": 8}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="attack",
+        ships=attack_ships,
+        conn=conn,
+    )
+    assert ok
+    fleet_id = result["fleet"]["id"]
+    cur.execute("UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;", (time.time() - 1, fleet_id))
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    cur.execute("SELECT status, resources_json FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    row = dict(cur.fetchone())
+    assert row["status"] == "returning"
+    credit = _loaded_fleet_credit(json.loads(row["resources_json"] or "{}"))
+    assert loaded_resource_total(credit) > 0
+
+    _pin_planet_last_update(conn, pid)
+    before = _planet_stock(conn, pid)
+    cur.execute("UPDATE fleet_movements SET return_at = ? WHERE id = ?;", (time.time() - 1, fleet_id))
+    conn.commit()
+
+    _complete_return_via_live_refresh(conn, uid, mode=live_refresh)
+
+    after = _planet_stock(conn, pid)
+    _assert_stock_before_plus_credit(before, after, credit)
+    conn.close()
+
+
+def test_gc620k_contract_admin_complete_expedition_credit_invariant(fleet_db):
+    from game.fleet import admin_advance_fleet_movement
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    fleet_id, rewards, _ = _expedition_returning_with_loot(conn, uid, pid)
+    credit = _loaded_fleet_credit(rewards)
+    if credit["metal"] <= 0 and credit["crystal"] <= 0 and credit["fuel_cells"] <= 0:
+        rewards = {"metal": 500, "crystal": 200, "fuel_cells": 0, "expedition_hours": 1}
+        credit = _loaded_fleet_credit(rewards)
+        conn.execute(
+            "UPDATE fleet_movements SET resources_json = ? WHERE id = ?;",
+            (json.dumps(rewards), fleet_id),
+        )
+        conn.commit()
+
+    _pin_planet_last_update(conn, pid)
+    before = _planet_stock(conn, pid)
+
+    result = admin_advance_fleet_movement(fleet_id, conn=conn, complete=True)
+    conn.commit()
+    assert result["ok"] is True
+    assert result["status_after"] == "completed"
+
+    after = _planet_stock(conn, pid)
+    _assert_stock_before_plus_credit(before, after, credit)
+    conn.close()
+
+
+def test_gc620k_live_refresh_never_drops_stock_without_spend(fleet_db):
+    """Repeated poll/refresh after return must not erase fleet credits."""
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    fleet_id, rewards, _ = _expedition_returning_with_loot(conn, uid, pid)
+    credit = _loaded_fleet_credit(rewards)
+    if credit["metal"] <= 0 and credit["crystal"] <= 0 and credit["fuel_cells"] <= 0:
+        rewards = {"metal": 500, "crystal": 200, "fuel_cells": 0, "expedition_hours": 1}
+        credit = _loaded_fleet_credit(rewards)
+        conn.execute(
+            "UPDATE fleet_movements SET resources_json = ? WHERE id = ?;",
+            (json.dumps(rewards), fleet_id),
+        )
+        conn.commit()
+
+    _pin_planet_last_update(conn, pid)
+    before = _planet_stock(conn, pid)
+    conn.execute(
+        "UPDATE fleet_movements SET return_at = ? WHERE id = ?;",
+        (time.time() - 1, fleet_id),
+    )
+    conn.commit()
+
+    _complete_return_via_live_refresh(conn, uid, mode="poll")
+    credited_floor = _planet_stock(conn, pid)
+    _assert_stock_before_plus_credit(before, credited_floor, credit)
+
+    for mode in ("refresh", "poll", "refresh"):
+        _complete_return_via_live_refresh(conn, uid, mode=mode)
+        current = _planet_stock(conn, pid)
+        for key in ("metal", "crystal", "fuel_cells"):
+            assert current[key] >= credited_floor[key]
+
+    conn.close()
+
+
 def test_returning_restores_ships(fleet_db):
     conn = db()
     uid = _player(conn=conn)

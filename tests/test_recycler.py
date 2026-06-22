@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 
@@ -162,6 +163,87 @@ def test_recycle_harvest_return_credits_origin(recycler_db):
     metal = conn.execute("SELECT metal FROM planets WHERE id = ?;", (pid,)).fetchone()["metal"]
     assert float(metal) >= 58000
     assert get_planet_ships(pid, conn=conn).get("harvest_reclaimer", 0) >= 1
+    conn.close()
+
+
+@pytest.mark.parametrize("live_refresh", ("poll", "refresh"))
+def test_gc620k_contract_recycle_return_credit_invariant(recycler_db, live_refresh):
+    from game.fleet_calc import calculate_loaded_resources
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    g, s, p = _coords(pid, conn)
+    add_debris_field(g, s, p, metal=8000, crystal=3000, conn=conn)
+    conn.execute(
+        "UPDATE planets SET metal = 50000, crystal = 50000, fuel_cells = 10000, last_update = ? WHERE id = ?;",
+        (time.time(), pid),
+    )
+    _seed_ships(pid, uid, {"harvest_reclaimer": 1}, conn)
+    conn.commit()
+
+    ok, reason, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="recycle",
+        ships={"harvest_reclaimer": 1},
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert ok, reason
+    movement_id = int(result["fleet"]["id"])
+    conn.execute(
+        "UPDATE fleet_movements SET arrival_at = ? WHERE id = ?;",
+        (time.time() - 1, movement_id),
+    )
+    conn.commit()
+    process_fleet_tick(player_id=uid, now=time.time(), conn=conn)
+    conn.commit()
+
+    row = conn.execute(
+        "SELECT status, resources_json FROM fleet_movements WHERE id = ?;",
+        (movement_id,),
+    ).fetchone()
+    assert row["status"] == "returning"
+    credit = calculate_loaded_resources(json.loads(row["resources_json"] or "{}"))
+    assert credit["metal"] > 0
+
+    before = {
+        "metal": int(float(conn.execute("SELECT metal FROM planets WHERE id = ?;", (pid,)).fetchone()["metal"])),
+        "crystal": int(float(conn.execute("SELECT crystal FROM planets WHERE id = ?;", (pid,)).fetchone()["crystal"])),
+        "fuel_cells": int(float(conn.execute("SELECT fuel_cells FROM planets WHERE id = ?;", (pid,)).fetchone()["fuel_cells"] or 0)),
+    }
+    conn.execute(
+        "UPDATE planets SET last_update = ? WHERE id = ?;",
+        (time.time(), pid),
+    )
+    conn.execute(
+        "UPDATE fleet_movements SET return_at = ? WHERE id = ?;",
+        (time.time() - 1, movement_id),
+    )
+    conn.commit()
+
+    if live_refresh == "poll":
+        from game.logic import read_player_live_state_for_poll
+
+        read_player_live_state_for_poll(uid, conn=conn)
+    else:
+        from game.logic import refresh_player_live_state
+
+        refresh_player_live_state(uid, conn=conn, finish_source="test_gc620k_contract")
+    conn.commit()
+
+    after = {
+        "metal": int(float(conn.execute("SELECT metal FROM planets WHERE id = ?;", (pid,)).fetchone()["metal"])),
+        "crystal": int(float(conn.execute("SELECT crystal FROM planets WHERE id = ?;", (pid,)).fetchone()["crystal"])),
+        "fuel_cells": int(float(conn.execute("SELECT fuel_cells FROM planets WHERE id = ?;", (pid,)).fetchone()["fuel_cells"] or 0)),
+    }
+    for key in ("metal", "crystal", "fuel_cells"):
+        assert after[key] == before[key] + int(credit.get(key) or 0)
     conn.close()
 
 
