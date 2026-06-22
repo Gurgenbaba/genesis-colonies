@@ -5178,13 +5178,14 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   margin-left: auto;
   margin-right: auto;
   aspect-ratio: 1536 / 1024;
+  min-height: 420px;
   height: auto;
   overflow: visible;
   /* frame.png inner opening — HUD/content */
-  --hero-inner-top: 4.59%;
-  --hero-inner-right: 4.75%;
-  --hero-inner-bottom: 4.39%;
-  --hero-inner-left: 8.59%;
+  --hero-inner-top: 6.8%;
+  --hero-inner-right: 6.5%;
+  --hero-inner-bottom: 10.5%;
+  --hero-inner-left: 10.2%;
   /* herocard image — clearly inside frame rails (anti-bleed buffer) */
   --hero-bg-top: 7.1%;
   --hero-bg-right: 7.35%;
@@ -5231,6 +5232,25 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
 .overview-hero--themed.gc-planet-hero .overview-hero-bg::after{
   display: none;
 }
+.overview-hero--themed.gc-planet-hero{
+  --hero-line: color-mix(in srgb, var(--planet-accent, #46e5ff) 22%, rgba(255, 255, 255, 0.08));
+  /* frame.png rails — top fire / bottom ice typography */
+  --hero-frame-top-name: #fff0dc;
+  --hero-frame-top-coords: #ffc988;
+  --hero-frame-top-badge: #ffca80;
+  --hero-frame-bottom-label: #9ecfe0;
+  --hero-frame-bottom-value: #e5f8ff;
+  --hero-frame-bottom-temp: #d8f4ff;
+  --hero-frame-bottom-muted: #a8d8ea;
+  /* center HUD — planet-themed activity typography */
+  --hero-activity-label: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 78%, #fff 22%);
+  --hero-activity-status: #eef6ff;
+  --hero-activity-idle: rgba(210, 228, 246, 0.94);
+  --hero-activity-detail: rgba(175, 200, 222, 0.96);
+  --hero-activity-eta: color-mix(in srgb, var(--planet-accent, #46e5ff) 88%, #fff 12%);
+  --hero-activity-line: color-mix(in srgb, var(--planet-accent, #46e5ff) 32%, rgba(255, 255, 255, 0.1));
+  --hero-activity-head-line: color-mix(in srgb, var(--planet-accent, #46e5ff) 42%, rgba(255, 255, 255, 0.12));
+}
 .overview-hero--themed.gc-planet-hero .overview-hero-hud::before{
   display: none;
 }
@@ -5249,19 +5269,295 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
 }
 .overview-hero--themed.gc-planet-hero .overview-hero-hud{
   position: absolute;
-  top: var(--hero-inner-top, 4.59%);
-  right: var(--hero-inner-right, 4.75%);
-  bottom: var(--hero-inner-bottom, 4.39%);
-  left: var(--hero-inner-left, 8.59%);
+  top: var(--hero-inner-top, 6.8%);
+  right: var(--hero-inner-right, 6.5%);
+  bottom: var(--hero-inner-bottom, 10.5%);
+  left: var(--hero-inner-left, 10.2%);
   z-index: 5;
+  display: block;
+  box-sizing: border-box;
+  padding: 0;
+  min-height: 0;
+  overflow: visible;
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-hud::before{
+  display: none;
+}
+.overview-hero-corner{
+  position: absolute;
+  z-index: 7;
+  max-width: min(44%, 280px);
+  min-width: 0;
+  pointer-events: auto;
+}
+.overview-hero-corner--tl{
+  top: 6px;
+  left: 8px;
+  text-align: left;
+}
+.overview-hero-corner--tr{
+  top: 8px;
+  right: 8px;
+  text-align: right;
+}
+.overview-hero-corner--bl{
+  bottom: 8px;
+  left: 8px;
+  text-align: left;
+}
+.overview-hero-corner--br{
+  bottom: 8px;
+  right: 8px;
+  text-align: right;
+}
+.overview-hero-corner-meta{
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 10px;
-  box-sizing: border-box;
-  padding: 10px 12px 12px;
+  gap: 0;
+}
+.overview-hero-corner-meta .overview-meta-item{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+.overview-hero-corner--br .overview-meta-item--temp dd{
+  align-items: flex-end;
+}
+.overview-hero-corner--bl .overview-meta-item dt,
+.overview-hero-corner--br .overview-meta-item dt{
+  color: var(--hero-frame-bottom-label, #9ecfe0);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: none;
+}
+.overview-hero-corner--bl .overview-meta-item dd,
+.overview-hero-corner--br .overview-meta-item dd,
+.overview-hero-corner--bl .overview-meta-item dd a{
+  color: var(--hero-frame-bottom-value, #e5f8ff);
+  font-weight: 650;
+  text-shadow: none;
+}
+.overview-hero-corner--br .overview-temp-value{
+  color: var(--hero-frame-bottom-temp, #d8f4ff);
+  text-shadow: none;
+}
+.overview-hero-corner--br .overview-climate-hint{
+  color: var(--hero-frame-bottom-muted, #a8d8ea);
+  font-size: 0.72rem;
+  text-shadow: none;
+}
+.overview-hero-title-plate{
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-slot-badge{
+  display: block;
+  max-width: min(100%, 240px);
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  text-align: right;
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-slot-badge::before,
+.overview-hero--themed.gc-planet-hero .overview-hero-slot-badge::after{
+  display: none;
+}
+.overview-hero-title-plate .overview-hero-name,
+.overview-hero-title-plate .overview-hero-coords{
+  text-shadow: none;
+}
+.overview-hero-activity-panel{
+  position: absolute;
+  top: 20%;
+  bottom: 16%;
+  left: 11%;
+  right: 11%;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  width: auto;
+  max-width: none;
   min-height: 0;
+  margin: 0;
+  padding: 0 2px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   overflow: hidden;
+}
+.overview-hero-activity-head{
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 4px;
+  min-width: 0;
+  padding: 0 4px 8px;
+  border-bottom: 1px solid var(--hero-activity-head-line, var(--hero-line));
+}
+.overview-hero-activity-title{
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hero-activity-eta, var(--planet-accent, #46e5ff));
+  text-shadow: none;
+}
+.overview-hero-activity-hint{
+  font-size: 0.66rem;
+  line-height: 1.35;
+  letter-spacing: 0.03em;
+  color: var(--hero-activity-detail, rgba(175, 200, 222, 0.96));
+  text-shadow: none;
+}
+.overview-hero-activity-panel .overview-hero-activities{
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  grid-template-columns: 1fr;
+  gap: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: 2px;
+}
+.overview-hero-activity-panel .overview-activity-row,
+.overview-hero-activity-panel .overview-activity-row:hover,
+.overview-hero-activity-panel .overview-activity-card.overview-activity-active,
+body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-hero .overview-hero-activity-panel .overview-activity-row,
+body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-hero .overview-hero-activity-panel .overview-activity-row:hover,
+body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-hero .overview-hero-activity-panel .overview-activity-card.overview-activity-active{
+  position: relative;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 0;
+}
+.overview-hero-activity-panel .overview-activity-link,
+body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-hero .overview-hero-activity-panel .overview-activity-link,
+.overview-hero-activity-panel .overview-activity-card.overview-activity-idle .overview-activity-link{
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  column-gap: 14px;
+  row-gap: 0;
+  align-items: center;
+  padding: 12px 4px 12px 6px;
+  min-height: 46px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--hero-activity-line, var(--hero-line));
+  background: transparent;
+  box-shadow: none;
+  text-shadow: none;
+  text-decoration: none;
+  transition: border-color 0.15s ease, padding-left 0.15s ease;
+}
+.overview-hero-activity-panel .overview-activity-row:last-child .overview-activity-link{
+  border-bottom: none;
+}
+.overview-hero-activity-panel .overview-activity-row.overview-activity-active .overview-activity-link{
+  padding-left: 8px;
+  border-left: 2px solid var(--hero-activity-eta, var(--planet-accent, #46e5ff));
+}
+.overview-hero-activity-panel .overview-activity-link:hover{
+  border-bottom-color: color-mix(in srgb, var(--planet-accent, #46e5ff) 48%, rgba(255, 255, 255, 0.14));
+}
+.overview-hero-activity-panel .overview-activity-type{
+  grid-column: 1;
+  grid-row: 1;
+  flex-shrink: 0;
+  width: 118px;
+  min-width: 118px;
+  max-width: 118px;
+  font-size: 0.64rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--hero-activity-label);
+  text-shadow: none;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+.overview-hero-activity-panel .overview-activity-body{
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  text-align: left;
+  gap: 2px;
+  min-width: 0;
+  width: 100%;
+}
+.overview-hero-activity-panel .overview-activity-row.overview-activity-active .overview-activity-body{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 1px;
+  align-items: baseline;
+}
+.overview-hero-activity-panel .overview-activity-name{
+  color: var(--hero-activity-status, #eef6ff);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-shadow: none;
+}
+.overview-hero-activity-panel .overview-activity-row.overview-activity-active .overview-activity-name{
+  grid-column: 1;
+  grid-row: 1;
+}
+.overview-hero-activity-panel .overview-activity-detail{
+  color: var(--hero-activity-detail);
+  font-size: 0.74rem;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  text-shadow: none;
+}
+.overview-hero-activity-panel .overview-activity-row.overview-activity-active .overview-activity-detail{
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+.overview-hero-activity-panel .overview-activity-idle{
+  color: var(--hero-activity-idle);
+  font-size: 0.86rem;
+  font-weight: 500;
+  font-style: normal;
+  line-height: 1.35;
+  text-shadow: none;
+  width: 100%;
+}
+.overview-hero-activity-panel .overview-activity-eta{
+  margin-left: 0;
+  color: var(--hero-activity-eta);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: none;
+  white-space: nowrap;
+}
+.overview-hero-activity-panel .overview-activity-row.overview-activity-active .overview-activity-eta{
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+}
+.overview-hero-activity-panel .overview-activity-card.overview-activity-idle .overview-activity-body{
+  min-height: 0;
 }
 .overview-hero-hud::before{
   content: "";
@@ -5337,19 +5633,16 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
 }
 /* Theme frame — PNG only, no extra glow layer */
 .gc-planet-hero.gc-planet-theme-group--hot .overview-hero-slot-badge{
-  background: linear-gradient(145deg, rgba(255, 120, 40, 0.22), rgba(40, 8, 0, 0.55));
-  box-shadow: inset 0 0 0 1px rgba(255, 180, 100, 0.22), 0 0 22px rgba(255, 90, 30, 0.35);
+  background: transparent;
+  box-shadow: none;
 }
 /* Frozen worlds */
 .gc-planet-hero.gc-planet-theme-group--frozen .overview-hero-slot-badge{
-  background: linear-gradient(155deg, rgba(180, 235, 255, 0.22), rgba(20, 50, 80, 0.62));
-  border-color: rgba(140, 220, 255, 0.62);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-    inset 0 -8px 16px rgba(80, 180, 255, 0.08),
-    0 0 24px rgba(80, 200, 255, 0.38);
-  backdrop-filter: blur(8px);
-  text-shadow: 0 0 14px rgba(120, 220, 255, 0.55);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  text-shadow: none;
 }
 .gc-planet-hero.gc-planet-theme-group--frozen .overview-temp-value{
   color: #d4f8ff;
@@ -5358,9 +5651,106 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
     0 0 8px rgba(180, 240, 255, 0.35),
     0 1px 2px rgba(0, 0, 0, 0.9);
 }
-.gc-planet-hero.gc-planet-theme-group--frozen .overview-hero-meta{
-  border-top-color: rgba(120, 210, 255, 0.28);
-  background: linear-gradient(180deg, rgba(0, 12, 26, 0.68), rgba(0, 8, 20, 0.88));
+@media (max-width: 640px){
+  .overview-hero--themed.gc-planet-hero,
+  .overview-hero.gc-planet-hero{
+    min-height: 360px;
+  }
+  .overview-hero-corner{
+    max-width: min(48%, 200px);
+  }
+  .overview-hero-corner--tl,
+  .overview-hero-corner--bl{
+    left: 4px;
+  }
+  .overview-hero-corner--tr,
+  .overview-hero-corner--br{
+    right: 4px;
+  }
+  .overview-hero-corner--tl{ top: 4px; }
+  .overview-hero-corner--tr{ top: 4px; }
+  .overview-hero-corner--bl,
+  .overview-hero-corner--br{
+    bottom: 6px;
+  }
+  .overview-hero-activity-panel{
+    top: 22%;
+    bottom: 18%;
+    left: 8%;
+    right: 8%;
+    padding: 0;
+  }
+  .overview-hero--themed.gc-planet-hero .overview-hero-slot-badge{
+    max-width: 100%;
+    font-size: 0.62rem;
+    line-height: 1.2;
+  }
+  .overview-hero-activity-panel .overview-activity-link{
+    grid-template-columns: minmax(84px, 100px) minmax(0, 1fr);
+    column-gap: 10px;
+    padding: 10px 2px 10px 4px;
+    min-height: 42px;
+  }
+  .overview-hero-activity-panel .overview-activity-type{
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.2;
+    font-size: 0.62rem;
+  }
+  .overview-hero-activity-panel .overview-activity-idle{
+    font-size: 0.82rem;
+  }
+  .overview-hero-activity-panel .overview-activity-row.overview-activity-active .overview-activity-body{
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+  }
+  .overview-hero-activity-panel .overview-activity-row.overview-activity-active .overview-activity-eta{
+    grid-column: 1;
+    grid-row: 2;
+    align-self: start;
+    margin-top: 2px;
+  }
+  .overview-hero-activity-panel .overview-activity-row.overview-activity-active .overview-activity-detail{
+    grid-row: 3;
+  }
+}
+/* Planet hero HUD: flat type directly on herocard — no boxes */
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner-meta,
+.overview-hero--themed.gc-planet-hero .overview-hero-slot-badge,
+.gc-planet-hero.gc-planet-theme-group--hot .overview-hero-slot-badge,
+.gc-planet-hero.gc-planet-theme-group--frozen .overview-hero-slot-badge,
+.gc-planet-hero.gc-planet-theme--absolute-zero .overview-hero-slot-badge{
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name,
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-coords,
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name-btn:hover .overview-hero-name,
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name-btn[aria-expanded="true"] .overview-hero-name,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-temp-value,
+.gc-planet-hero.gc-planet-theme-group--frozen .overview-hero-corner--br .overview-temp-value,
+.overview-hero--themed.gc-planet-hero .overview-hero-activity-panel .overview-activity-type,
+.overview-hero--themed.gc-planet-hero .overview-hero-activity-panel .overview-activity-name,
+.overview-hero--themed.gc-planet-hero .overview-hero-activity-panel .overview-activity-detail,
+.overview-hero--themed.gc-planet-hero .overview-hero-activity-panel .overview-activity-idle,
+.overview-hero--themed.gc-planet-hero .overview-hero-activity-panel .overview-activity-eta,
+.overview-hero--themed.gc-planet-hero .overview-hero-activity-title,
+.overview-hero--themed.gc-planet-hero .overview-hero-activity-hint,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--bl .overview-meta-item dt,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--bl .overview-meta-item dd,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--bl .overview-meta-item dd a,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-meta-item dt,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-meta-item dd,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-meta-item dd a,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-climate-hint,
+.overview-hero--themed.gc-planet-hero .overview-hero-slot-badge{
+  text-shadow: none;
 }
 .gc-planet-hero.gc-planet-theme--absolute-zero .overview-hero-atmo{
   background:
@@ -5369,12 +5759,9 @@ body.gc-body-ingame.gc-has-planet-landscape .overview-hero--themed.gc-planet-her
     linear-gradient(to top, rgba(0, 10, 26, 0.98) 0%, rgba(0, 12, 30, 0.72) 28%, rgba(80, 180, 255, 0.08) 48%, transparent 66%);
 }
 .gc-planet-hero.gc-planet-theme--absolute-zero .overview-hero-slot-badge{
-  background: linear-gradient(160deg, rgba(200, 250, 255, 0.28), rgba(10, 40, 70, 0.72));
-  border-color: rgba(160, 240, 255, 0.75);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
-    inset 0 0 18px rgba(120, 220, 255, 0.12),
-    0 0 28px rgba(80, 220, 255, 0.48);
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 @keyframes heroFrameBreath{
   0%, 100%{ opacity: 0.88; filter: brightness(0.98); }
@@ -5529,9 +5916,52 @@ body.gc-reduced-motion .overview-hero-border::after{
   text-transform: uppercase;
   text-shadow: 0 0 12px color-mix(in srgb, var(--planet-accent, #46e5ff) 35%, transparent);
 }
-.overview-hero--themed .overview-meta-item dd,
-.overview-hero--themed #overview-planet-temp{
-  color: color-mix(in srgb, var(--planet-accent-secondary, #7fffd9) 75%, var(--gc-text) 25%);
+.overview-hero--themed.gc-planet-hero .overview-hero-class,
+.overview-hero--themed.gc-planet-hero .overview-hero-slot-badge{
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  text-align: right;
+  text-shadow: none;
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name,
+.gc-planet-hero.gc-planet-theme-group--frozen .overview-hero-title-plate .overview-hero-name,
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name-btn:hover .overview-hero-name,
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name-btn[aria-expanded="true"] .overview-hero-name{
+  text-shadow: none;
+}
+/* Frame zone colors — top fire rail / bottom ice rail */
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name{
+  color: var(--hero-frame-top-name, #fff0dc);
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name-btn:hover .overview-hero-name,
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-name-btn[aria-expanded="true"] .overview-hero-name{
+  color: #fff8f0;
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-coords,
+.overview-hero--themed.gc-planet-hero .overview-hero-title-plate .overview-hero-coords a{
+  color: var(--hero-frame-top-coords, #ffc988);
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-slot-badge{
+  color: var(--hero-frame-top-badge, #ffca80);
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--bl .overview-meta-item dt,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-meta-item dt{
+  color: var(--hero-frame-bottom-label, #9ecfe0);
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--bl .overview-meta-item dd,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--bl .overview-meta-item dd a,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-meta-item dd,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-meta-item dd a,
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br #overview-planet-temp{
+  color: var(--hero-frame-bottom-value, #e5f8ff);
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-temp-value{
+  color: var(--hero-frame-bottom-temp, #d8f4ff);
+}
+.overview-hero--themed.gc-planet-hero .overview-hero-corner--br .overview-climate-hint{
+  color: var(--hero-frame-bottom-muted, #a8d8ea);
 }
 .overview-hero--themed .overview-res-chip{
   border-color: color-mix(in srgb, var(--planet-accent, #46e5ff) 22%, rgba(70, 229, 255, 0.14));

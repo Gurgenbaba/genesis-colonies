@@ -428,13 +428,31 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "overview-hero-hud-frame" in overview
     assert "overview-hero-frame-glow" not in overview
     assert "width: 100%" in css.split(".overview-hero.gc-planet-hero")[1].split("aspect-ratio")[0]
-    assert "--hero-inner-left: 8.59%" in css
+    assert "--hero-inner-left: 10.2%" in css
     assert "--hero-bg-left: 11.1%" in css
     assert "background: transparent" in css.split(".overview-hero.gc-planet-hero")[1].split("body.gc-body-ingame")[0]
     assert "aspect-ratio: 1536 / 1024" in css
     assert ".overview-hero--themed.gc-planet-hero .overview-hero-hud" in css
     assert "border: none" in css.split(".gc-planet-hero.gc-panel")[1].split("body.gc-body-ingame")[0]
     assert "z-index: 4" in css.split(".overview-hero-hud-frame,")[1].split(".overview-hero-frame-glow")[0]
+    assert "overview-hero-activity-panel" in overview
+    assert 'id="overview-activities"' in overview
+    assert "overview-activities-panel--primary" not in overview
+    assert "overview-hero-corner--tl" in overview
+    assert "overview-hero-corner--br" in overview
+    assert "galactic_directive_banner" not in overview
+    assert ".overview-hero-corner--bl" in css
+    assert ".overview-hero-activity-panel" in css
+    assert 'getElementById("overview-activities")' in src
+    assert "overview-hero-title-plate" in overview
+    assert "top: 20%" in css.split(".overview-hero-activity-panel")[1].split(".overview-hero-activity-head")[0]
+    assert "grid-template-columns: 118px" in css
+    assert "--hero-activity-label" in css
+    assert "--hero-activity-status" in css
+    assert "overview-activity-active .overview-activity-link" in css
+    assert "--hero-frame-bottom-value" in css
+    assert "border-bottom: 1px solid var(--hero-activity-line" in css
+    assert "--hero-frame-top-name" in css
 
 
 def test_main_js_gc743_deferred_chat_and_news_boot():

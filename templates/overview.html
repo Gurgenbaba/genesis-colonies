@@ -60,99 +60,106 @@
     <div class="overview-hero-hud-frame overview-hero-border" data-planet-hero-border aria-hidden="true"></div>
 
     <div class="overview-hero-hud">
-    <div class="overview-hero-top">
-      <div class="overview-hero-identity">
-        <div class="overview-hero-name-wrap">
-          <button type="button"
-                  class="overview-hero-name-btn"
-                  id="overview-planet-menu-trigger"
-                  aria-expanded="false"
-                  aria-controls="gc-planet-manage-root"
-                  aria-haspopup="dialog"
-                  aria-label="{{ T('overview_planet_manage', 'Kolonie verwalten') }}"
-                  title="{{ T('overview_planet_manage', 'Kolonie verwalten') }}"
-                  data-planet-id="{{ planet.planet_id or 0 }}"
-                  data-can-delete="{{ '1' if planet.can_delete else '0' }}">
-            <span class="overview-hero-name" id="overview-planet-name">{{ planet.name or T('overview_label_planet', 'Kolonie') }}</span>
-          </button>
+      <div class="overview-hero-corner overview-hero-corner--tl">
+        <div class="overview-hero-title-plate">
+          <div class="overview-hero-identity">
+            <div class="overview-hero-name-wrap">
+              <button type="button"
+                      class="overview-hero-name-btn"
+                      id="overview-planet-menu-trigger"
+                      aria-expanded="false"
+                      aria-controls="gc-planet-manage-root"
+                      aria-haspopup="dialog"
+                      aria-label="{{ T('overview_planet_manage', 'Kolonie verwalten') }}"
+                      title="{{ T('overview_planet_manage', 'Kolonie verwalten') }}"
+                      data-planet-id="{{ planet.planet_id or 0 }}"
+                      data-can-delete="{{ '1' if planet.can_delete else '0' }}">
+                <span class="overview-hero-name" id="overview-planet-name">{{ planet.name or T('overview_label_planet', 'Kolonie') }}</span>
+              </button>
+            </div>
+            <p class="overview-hero-coords gc-mono" id="overview-planet-coords">{{ galaxy_coord_link(planet.coordinates.display) }}</p>
+          </div>
         </div>
-        <p class="overview-hero-coords gc-mono" id="overview-planet-coords">{{ galaxy_coord_link(planet.coordinates.display) }}</p>
       </div>
-      <span class="overview-hero-class gc-chip-angular overview-hero-slot-badge" id="overview-planet-slot-badge">
-        {{ T(hero_label_key, hero_label_key) }}
-      </span>
-    </div>
 
-    <dl class="overview-meta-grid overview-meta-grid--compact overview-hero-meta">
-      <div class="overview-meta-item">
-        <dt>{{ T("overview_label_commander", "Commander") }}</dt>
-        <dd>
-          {% if cmd_id %}{{ player_name_link(cmd_id, cmd_name) }}{% else %}{{ cmd_name }}{% endif %}
-        </dd>
+      <div class="overview-hero-corner overview-hero-corner--tr">
+        <span class="overview-hero-class gc-chip-angular overview-hero-slot-badge" id="overview-planet-slot-badge">
+          {{ T(hero_label_key, hero_label_key) }}
+        </span>
       </div>
-      <div class="overview-meta-item overview-meta-item--temp">
-        <dt>{{ T("overview_label_temperature", "Temperatur") }}</dt>
-        <dd id="overview-planet-temp">
-          <span class="overview-temp-value">{{ planet.temperature.display if planet.temperature is defined else '–' }}</span>
-          {% set climate = planet.climate if planet.climate is defined else {} %}
-          {% set solar_pct = climate.solar_bonus_pct if climate.solar_bonus_pct is defined else 0 %}
-          {% if solar_pct != 0 %}
-          <span class="overview-climate-hint hint gc-mono" id="overview-planet-climate">
-            {{ T("overview_climate_solar", "Solarenergie") }} {% if solar_pct > 0 %}+{% endif %}{{ solar_pct }}%
-          </span>
-          {% endif %}
-        </dd>
+
+      <div class="overview-hero-activity-panel" aria-label="{{ T('overview_label_activities', 'Aktivitäten') }}">
+        <div class="overview-hero-activity-head">
+          <span class="overview-hero-activity-title">{{ T("overview_label_activities", "Aktivitäten") }}</span>
+          <span class="overview-hero-activity-hint hint">{{ T("overview_panel_activities_hint", "Bau, Forschung, Werft, Verteidigung und Flotte.") }}</span>
+        </div>
+        <ul class="overview-activities overview-activities-grid overview-hero-activities" id="overview-activities">
+          {% for act in activities %}
+          {% set act_type_key = 'fleet' if act.key.startswith('fleet_') else act.key %}
+          <li class="overview-activity-card overview-activity-row overview-activity-{{ act.key }} overview-activity-{{ act.state }}"
+              data-activity-key="{{ act.key }}"
+              {% if act.finish_at %}data-finish-at="{{ act.finish_at|int }}"{% endif %}
+              {% if act.phase %}data-activity-phase="{{ act.phase }}"{% endif %}
+              {% if act.remaining is defined %}data-remaining="{{ act.remaining|int }}"{% endif %}>
+            <a class="overview-activity-link" href="{{ url_for(act.href_key) }}">
+              <span class="overview-activity-type">{{ T('overview_activity_' ~ act_type_key, act_type_key) }}</span>
+              <span class="overview-activity-body">
+                {% if act.state == 'active' %}
+                  <span class="overview-activity-name">{{ T(act.label_key, act.label_key) }}</span>
+                  <span class="overview-activity-detail gc-mono">{% if act.status_label %}{{ T(act.status_label, act.status_label) }} · {% endif %}{{ act.summary }}</span>
+                  <span class="overview-activity-eta gc-mono" data-activity-eta
+                    {% if act.countdown_at or act.finish_at %}
+                    data-timer-target="{{ (act.countdown_at or act.finish_at)|int }}"
+                    data-timer-kind="{{ 'fleet' if act.key.startswith('fleet_') else 'queue' }}"
+                    data-refresh-on-zero="{{ 'fleet' if act.key.startswith('fleet_') else 'game-state' }}"
+                    data-countdown-at="{{ (act.countdown_at or act.finish_at)|int }}"
+                    data-countdown-scope="overview"
+                    data-countdown-format="{{ 'fleet' if act.key.startswith('fleet_') else 'eta' }}"
+                    data-countdown-key="{{ act.movement_id or act.key.replace('fleet_', '') }}:{{ act.phase or act.state }}:{{ (act.countdown_at or act.finish_at)|int }}"
+                    {% if act.key.startswith('fleet_') and act.remaining is defined %}data-server-remaining="{{ act.remaining|int }}"{% endif %}
+                    {% endif %}>{% if act.key.startswith('fleet_') %}–{% else %}{{ act.remaining_display }}{% endif %}</span>
+                {% else %}
+                  <span class="overview-activity-idle">{{ T(act.label_key, 'Bereit') }}</span>
+                {% endif %}
+              </span>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
       </div>
-    </dl>
+
+      <div class="overview-hero-corner overview-hero-corner--bl">
+        <dl class="overview-hero-corner-meta">
+          <div class="overview-meta-item">
+            <dt>{{ T("overview_label_commander", "Commander") }}</dt>
+            <dd>
+              {% if cmd_id %}{{ player_name_link(cmd_id, cmd_name) }}{% else %}{{ cmd_name }}{% endif %}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="overview-hero-corner overview-hero-corner--br">
+        <dl class="overview-hero-corner-meta">
+          <div class="overview-meta-item overview-meta-item--temp">
+            <dt>{{ T("overview_label_temperature", "Temperatur") }}</dt>
+            <dd id="overview-planet-temp">
+              <span class="overview-temp-value">{{ planet.temperature.display if planet.temperature is defined else '–' }}</span>
+              {% set climate = planet.climate if planet.climate is defined else {} %}
+              {% set solar_pct = climate.solar_bonus_pct if climate.solar_bonus_pct is defined else 0 %}
+              {% if solar_pct != 0 %}
+              <span class="overview-climate-hint hint gc-mono" id="overview-planet-climate">
+                {{ T("overview_climate_solar", "Solarenergie") }} {% if solar_pct > 0 %}+{% endif %}{{ solar_pct }}%
+              </span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+      </div>
     </div>
 
   </section>
 
-  <section class="gc-panel overview-activities-panel overview-activities-panel--primary" aria-label="{{ T('overview_label_activities', 'Aktivitäten') }}">
-    <div class="gc-panel-header">
-      <div class="gc-panel-head-left">
-        <span class="gc-panel-title">{{ T("overview_label_activities", "Aktivitäten") }}</span>
-        <span class="gc-panel-subtitle">{{ T("overview_panel_activities_hint", "Bau, Forschung, Werft, Verteidigung und Flotte.") }}</span>
-      </div>
-    </div>
-
-    <ul class="overview-activities overview-activities-grid" id="overview-activities">
-      {% for act in activities %}
-      {% set act_type_key = 'fleet' if act.key.startswith('fleet_') else act.key %}
-      <li class="overview-activity-card overview-activity-row overview-activity-{{ act.key }} overview-activity-{{ act.state }}"
-          data-activity-key="{{ act.key }}"
-          {% if act.finish_at %}data-finish-at="{{ act.finish_at|int }}"{% endif %}
-          {% if act.phase %}data-activity-phase="{{ act.phase }}"{% endif %}
-          {% if act.remaining is defined %}data-remaining="{{ act.remaining|int }}"{% endif %}>
-        <a class="overview-activity-link" href="{{ url_for(act.href_key) }}">
-          <span class="overview-activity-type">{{ T('overview_activity_' ~ act_type_key, act_type_key) }}</span>
-          <span class="overview-activity-body">
-            {% if act.state == 'active' %}
-              <span class="overview-activity-name">{{ T(act.label_key, act.label_key) }}</span>
-              <span class="overview-activity-detail gc-mono">{% if act.status_label %}{{ T(act.status_label, act.status_label) }} · {% endif %}{{ act.summary }}</span>
-              <span class="overview-activity-eta gc-mono" data-activity-eta
-                {% if act.countdown_at or act.finish_at %}
-                data-timer-target="{{ (act.countdown_at or act.finish_at)|int }}"
-                data-timer-kind="{{ 'fleet' if act.key.startswith('fleet_') else 'queue' }}"
-                data-refresh-on-zero="{{ 'fleet' if act.key.startswith('fleet_') else 'game-state' }}"
-                data-countdown-at="{{ (act.countdown_at or act.finish_at)|int }}"
-                data-countdown-scope="overview"
-                data-countdown-format="{{ 'fleet' if act.key.startswith('fleet_') else 'eta' }}"
-                data-countdown-key="{{ act.movement_id or act.key.replace('fleet_', '') }}:{{ act.phase or act.state }}:{{ (act.countdown_at or act.finish_at)|int }}"
-                {% if act.key.startswith('fleet_') and act.remaining is defined %}data-server-remaining="{{ act.remaining|int }}"{% endif %}
-                {% endif %}>{% if act.key.startswith('fleet_') %}–{% else %}{{ act.remaining_display }}{% endif %}</span>
-            {% else %}
-              <span class="overview-activity-idle">{{ T(act.label_key, 'Bereit') }}</span>
-            {% endif %}
-          </span>
-        </a>
-      </li>
-      {% endfor %}
-    </ul>
-  </section>
-
-  {% set galactic_directive_banner = os.galactic_directive_banner if os.galactic_directive_banner is defined else {} %}
-  {% include "partials/galactic_directive_banner.html" %}
   {% set galactic_diplomacy_banner = os.galactic_diplomacy_banner if os.galactic_diplomacy_banner is defined else {} %}
   {% include "partials/galactic_diplomacy_banner.html" %}
 
