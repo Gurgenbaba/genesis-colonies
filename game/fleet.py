@@ -47,6 +47,7 @@ from .fleet_defs import (
     FLEET_MISSION_ORDER,
     FLEET_SPEED_HOLD_MISSIONS,
     FLEET_SPEED_WAR_MISSIONS,
+    MASS_EXPEDITION_STAGGER_SECONDS,
     MISSION_TYPES,
     PRESET_TYPES,
     all_ship_keys,
@@ -2079,6 +2080,7 @@ def send_fleet(
     target_world_x: float | None = None,
     target_world_y: float | None = None,
     expedition_hours: int | None = None,
+    departure_at: int | None = None,
     conn=None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     mission = str(mission_type or "").strip().lower()
@@ -2238,7 +2240,8 @@ def send_fleet(
 
         now = _now()
         flight_seconds = int(preview["flight_seconds"])
-        outbound = build_outbound_timing(departure_at=now, duration_seconds=flight_seconds)
+        dep_ts = int(departure_at if departure_at is not None else now)
+        outbound = build_outbound_timing(departure_at=dep_ts, duration_seconds=flight_seconds)
         arrival_at = outbound["arrival_at"]
 
         cur.execute(
@@ -2259,7 +2262,7 @@ def send_fleet(
                 target[1],
                 target[2],
                 mission,
-                now,
+                outbound["departure_at"],
                 arrival_at,
                 _json_dumps(ships_n),
                 _json_dumps(resources_store),
@@ -4244,6 +4247,7 @@ def mass_expedition(
                 speed_percent=pct,
                 preset_id=int(preset_id),
                 batch_id=batch_id,
+                departure_at=int(now) + len(started) * MASS_EXPEDITION_STAGGER_SECONDS,
                 conn=conn,
             )
             if ok and payload:

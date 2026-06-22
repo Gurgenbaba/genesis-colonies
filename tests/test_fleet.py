@@ -2942,6 +2942,48 @@ def test_mass_expedition_creates_batch(fleet_db):
     conn.close()
 
 
+def test_mass_expedition_staggers_departures_one_second(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, pid, metal=500000, crystal=500000, fuel_cells=500000)
+    _seed_ships(pid, uid, {"solar_skiff": 10}, conn=conn)
+    conn.commit()
+
+    ok, _, preset = create_preset(
+        uid, name="Expo", preset_type="expedition", ships_json={"solar_skiff": 1}
+    )
+    assert ok
+
+    ok2, reason, result = mass_expedition(
+        player_id=uid,
+        origin_planet_id=pid,
+        preset_id=preset["id"],
+        waves=3,
+        conn=conn,
+    )
+    assert ok2, reason
+    assert len(result["started"]) == 3
+
+    batch_id = int(result["batch"]["id"])
+    cur.execute(
+        """
+        SELECT departure_at, arrival_at
+        FROM fleet_movements
+        WHERE parent_batch_id = ?
+        ORDER BY departure_at ASC, id ASC;
+        """,
+        (batch_id,),
+    )
+    rows = [dict(r) for r in cur.fetchall()]
+    assert len(rows) == 3
+    for i in range(1, len(rows)):
+        assert rows[i]["departure_at"] - rows[i - 1]["departure_at"] == 1
+        assert rows[i]["arrival_at"] - rows[i - 1]["arrival_at"] == 1
+    conn.close()
+
+
 def test_mass_expedition_respects_slots(fleet_db):
     conn = db()
     uid = _player(conn=conn)

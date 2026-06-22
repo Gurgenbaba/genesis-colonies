@@ -46,6 +46,9 @@ EXPEDITION_STAY_HOURS_MAX = 4
 EXPEDITION_STAY_HOUR_SECONDS = 3600
 DEFAULT_EXPEDITION_STAY_HOURS = 1
 
+# Mass-expedition waves: 1s between departures so arrival/holding/return ticks do not overlap.
+MASS_EXPEDITION_STAGGER_SECONDS = 1
+
 # Admin game_settings keys per mission category (higher = shorter flight legs).
 FLEET_SPEED_WAR_MISSIONS = frozenset({"attack", "spy"})
 FLEET_SPEED_HOLD_MISSIONS = frozenset({"hold"})
