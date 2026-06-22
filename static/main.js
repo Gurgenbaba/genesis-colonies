@@ -7712,9 +7712,7 @@
   function syncFleetDrawerRowAction(row, mv) {
     if (!row || !mv) return;
     const movementId = fleetDrawerMovementIdFromMv(mv);
-    const canAct = !!movementId && (
-      mv.can_recall === true || mv.can_cancel === true || fleetDrawerRowCanAct(mv)
-    );
+    const canAct = !!movementId && fleetDrawerRowCanAct(mv) && mv.can_recall !== false;
     upsertFleetDrawerActionBtn(
       row.querySelector(".gc-fleet-drawer-row-action-wrap--header"),
       movementId,

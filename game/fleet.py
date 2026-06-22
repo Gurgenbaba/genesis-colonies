@@ -1656,7 +1656,7 @@ def recall_fleet_movement(
             return False, "fleet_unavailable", None
         uid = int(player_id)
         mid = int(movement_id)
-        process_fleet_tick(player_id=uid, conn=conn)
+        now = _now()
         cur = conn.cursor()
         cur.execute(
             "SELECT * FROM fleet_movements WHERE id = ? AND player_id = ? LIMIT 1;",
@@ -1669,7 +1669,24 @@ def recall_fleet_movement(
         status = str(mv.get("status") or "").strip().lower()
         if status not in ("outbound", "holding"):
             return False, "fleet_recall_not_allowed", None
-        now = _now()
+        # Claim return before fleet tick — otherwise overdue arrivals (transport/spy/…)
+        # auto-transition to returning/completed and recall appears to do nothing.
+        if _start_return(mv, conn=conn, now=now):
+            return True, "fleet_recall_ok", {"movement_id": mid, "status": "returning"}
+        process_fleet_tick(player_id=uid, conn=conn)
+        cur.execute(
+            "SELECT * FROM fleet_movements WHERE id = ? AND player_id = ? LIMIT 1;",
+            (mid, uid),
+        )
+        row = cur.fetchone()
+        if not row:
+            return False, "fleet_not_found", None
+        mv = _row_to_movement(row)
+        status = str(mv.get("status") or "").strip().lower()
+        if status == "returning":
+            return True, "fleet_recall_ok", {"movement_id": mid, "status": "returning"}
+        if status not in ("outbound", "holding"):
+            return False, "fleet_recall_not_allowed", None
         if not _start_return(mv, conn=conn, now=now):
             return False, "fleet_recall_failed", None
         return True, "fleet_recall_ok", {"movement_id": mid, "status": "returning"}

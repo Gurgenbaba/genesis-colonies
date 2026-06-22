@@ -4946,6 +4946,55 @@ def test_recall_fleet_movement_outbound(fleet_db):
     conn.close()
 
 
+def test_recall_fleet_movement_before_overdue_arrival_tick(fleet_db):
+    """Cancel must win over a not-yet-ticked overdue arrival (transport/spy/attack)."""
+    from game.fleet import recall_fleet_movement
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    target_id = int(colony2)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000 WHERE id = ?;", (pid,))
+    cur.execute("UPDATE planets SET metal = 1000 WHERE id = ?;", (target_id,))
+    metal_before = int(cur.execute("SELECT metal FROM planets WHERE id = ?;", (target_id,)).fetchone()["metal"])
+    _seed_ships(pid, uid, {"mule_courier": 2}, conn=conn)
+    conn.commit()
+
+    ok, _, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 500, "crystal": 0, "fuel_cells": 0},
+        conn=conn,
+    )
+    assert ok
+    fleet_id = int(result["fleet"]["id"])
+    past = int(time.time()) - 5
+    cur.execute(
+        "UPDATE fleet_movements SET arrival_at = ?, departure_at = ? WHERE id = ?;",
+        (past, past - 120, fleet_id),
+    )
+    conn.commit()
+
+    ok_recall, reason, _payload = recall_fleet_movement(uid, fleet_id, conn=conn)
+    assert ok_recall, reason
+    row = cur.execute(
+        "SELECT status FROM fleet_movements WHERE id = ?;",
+        (fleet_id,),
+    ).fetchone()
+    assert row["status"] == "returning"
+    metal_after = int(cur.execute("SELECT metal FROM planets WHERE id = ?;", (target_id,)).fetchone()["metal"])
+    assert metal_after == metal_before
+    conn.close()
+
+
 def test_api_fleet_recall_returns_state(fleet_db, monkeypatch):
     import importlib
 
