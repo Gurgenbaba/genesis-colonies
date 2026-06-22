@@ -6687,6 +6687,7 @@
     if (fleetExpired) requestMovementCountdownRefresh("fleet");
     if (overviewExpired) requestMovementCountdownRefresh("overview");
     updateFleetDrawerRowTimers(now);
+    _maybeRefreshStaleMovementCountdowns();
   }
 
   function updateMovementCountdowns(serverNow) {
@@ -7826,6 +7827,7 @@
       cdChip.dataset.countdownScope = "fleet";
       cdChip.dataset.countdownKey = countdownKey;
       cdChip.classList.add("fleet-active-countdown");
+      patchFleetHudFlightTrack(row, mv, Number.isFinite(srvRem) && srvRem >= 0 ? srvRem : undefined);
     } else if (Number.isFinite(srvRem) && srvRem >= 0) {
       assignMonotonicServerRemaining(cdChip, Math.ceil(srvRem), countdownAt);
     }
@@ -7884,16 +7886,19 @@
     if (status === "holding") {
       return { status, visual: 1 };
     }
-    const total = Math.max(1, Number(mv?.total_seconds || mv?.duration_seconds || mv?.flight_seconds || 0));
-    let rem = Number(mv?.remaining_seconds);
+    let progressPct = Number(mv?.progress_pct);
     if (Number.isFinite(remainingSeconds)) {
-      rem = Number(remainingSeconds);
+      const total = Math.max(1, Number(mv?.total_seconds || mv?.duration_seconds || mv?.flight_seconds || 0));
+      const rem = Math.max(0, Number(remainingSeconds));
+      progressPct = Math.max(0, Math.min(100, ((total - rem) / total) * 100));
+    } else if (!Number.isFinite(progressPct)) {
+      progressPct = fleetDrawerFlightProgress(mv);
+    } else {
+      progressPct = Math.max(0, Math.min(100, progressPct));
     }
-    rem = Math.max(0, Number.isFinite(rem) ? rem : 0);
-    const pct = Math.max(0, Math.min(100, Math.round(((total - rem) / total) * 100)));
-    let visual = pct / 100;
+    let visual = progressPct / 100;
     if (status === "returning") {
-      visual = (100 - pct) / 100;
+      visual = (100 - progressPct) / 100;
     }
     return { status, visual: Math.max(0, Math.min(1, visual)) };
   }
@@ -7902,9 +7907,14 @@
     const track = row.querySelector("[data-fleet-hud-track]");
     if (!track || !mv) return;
     const { status, visual } = fleetHudFlightVisual(mv, remainingSeconds);
+    const prevStatus = track.dataset.fleetFlightStatus || "";
     track.dataset.fleetFlightStatus = status;
     row.dataset.fleetFlightStatus = status;
     track.style.setProperty("--fleet-progress", String(visual));
+    if (prevStatus && prevStatus !== status) {
+      track.classList.add("is-snap");
+      requestAnimationFrame(() => track.classList.remove("is-snap"));
+    }
   }
 
   function createFleetHudFlightTrack() {
