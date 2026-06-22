@@ -14702,6 +14702,60 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   }
 }
 
+/* ── Expeditions + Records (Chronicles) ───────────────────────────────── */
+
+.gc-chronicles-expo-cat{
+  font-size: 0.82rem;
+  color: rgba(170, 210, 255, 0.88);
+}
+.gc-chronicles-expo-tabs .gc-pvp-tab{ min-width: 0; }
+.gc-chronicles-expo-table .gc-hof-col-name{
+  max-width: 220px;
+}
+.gc-chronicles-records-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.gc-chronicles-record-card{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.16);
+  background: rgba(5, 10, 22, 0.52);
+  min-height: 148px;
+}
+.gc-chronicles-record-card--empty{
+  opacity: 0.72;
+}
+.gc-chronicles-record-title{
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(190, 215, 255, 0.82);
+  text-transform: uppercase;
+}
+.gc-chronicles-record-value{
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: rgba(230, 245, 255, 0.96);
+  line-height: 1.2;
+}
+.gc-chronicles-record-subtitle,
+.gc-chronicles-record-date,
+.gc-chronicles-record-empty{
+  margin: 0;
+  font-size: 0.85rem;
+}
+.gc-chronicles-record-report-btn{
+  margin-top: auto;
+  align-self: flex-start;
+}
+
 /* ── PvP section (Chronicles) ─────────────────────────────────────────── */
 
 .gc-pvp-panel .gc-ranking-panel-head{

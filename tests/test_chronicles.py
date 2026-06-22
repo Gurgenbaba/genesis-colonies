@@ -15,15 +15,23 @@ from game.db import db
 from game.messages import dispatch_combat_reports, normalize_combat_metadata
 from game.models import create_user
 from game.chronicles import (
+    CHRONICLES_SECTION_EXPEDITIONS,
     CHRONICLES_SECTION_PVP,
+    CHRONICLES_SECTION_RECORDS,
+    EXPEDITION_TAB_LOOT,
+    EXPEDITION_TAB_PIRATES,
     PVP_TAB_ATTACKS,
     PVP_TAB_DEFENSES,
     PVP_TAB_LOSSES,
     PVP_TAB_WINS,
     build_chronicles_api_payload,
+    build_expedition_stats,
     build_pvp_stats,
+    list_expedition_events,
     list_pvp_battles,
 )
+from game.expedition_events import EXPEDITION_REPORT_VERSION
+from game.messages import notify_expedition
 
 
 @pytest.fixture()
@@ -84,6 +92,41 @@ def _seed_combat_reports(attacker_id: int, defender_id: int, *, winner: str = "a
     )
     assert sent["attacker"]["ok"]
     assert sent["defender"]["ok"]
+
+
+def _seed_expedition_report(
+    player_id: int,
+    *,
+    event_key: str = "mineral_deposit",
+    rewards: dict | None = None,
+    losses_total: int = 0,
+    salvaged_total: int = 0,
+    story_tier: str = "",
+) -> None:
+    meta = {
+        "report_version": EXPEDITION_REPORT_VERSION,
+        "target_coords": "1:2:16",
+        "event_key": event_key,
+        "event_label_key": f"expedition_event_{event_key}",
+        "event_desc_key": f"expedition_event_{event_key}_desc",
+        "rewards": rewards if rewards is not None else {"metal": 8000, "crystal": 1200},
+        "losses_total": int(losses_total),
+        "salvaged_total": int(salvaged_total),
+        "losses": {},
+        "salvaged_ships": {},
+        "lootboxes": [],
+    }
+    if story_tier:
+        meta["story_tier"] = story_tier
+    if event_key == "pirate_encounter":
+        meta["pirate_combat"] = {"won": salvaged_total > 0, "loss_pct": 12}
+    res = notify_expedition(
+        int(player_id),
+        f"Expedition {event_key}",
+        "Test expedition body",
+        metadata=meta,
+    )
+    assert res["ok"], res
 
 
 def test_chronicles_pvp_stats_and_tabs(temp_db):
@@ -151,3 +194,98 @@ def test_chronicles_page_and_legacy_pvp_redirect(temp_db, monkeypatch):
     assert data["ok"] is True
     assert data["section"] == "pvp"
     assert data["count"] >= 1
+
+
+def test_chronicles_expeditions_stats_and_tabs(temp_db):
+    player_id, _ = _create_player("chron_expo")
+    _seed_expedition_report(player_id, event_key="mineral_deposit")
+    _seed_expedition_report(player_id, event_key="pirate_encounter", losses_total=3)
+    _seed_expedition_report(
+        player_id,
+        event_key="ancient_beacon",
+        rewards={"metal": 500, "crystal": 500},
+        story_tier="legendary",
+    )
+
+    conn = db()
+    try:
+        payload = build_chronicles_api_payload(
+            player_id=player_id,
+            section=CHRONICLES_SECTION_EXPEDITIONS,
+            tab=EXPEDITION_TAB_LOOT,
+            conn=conn,
+        )
+        stats = build_expedition_stats(player_id, conn=conn)
+        loot_events = list_expedition_events(player_id, tab=EXPEDITION_TAB_LOOT, conn=conn)
+        pirate_events = list_expedition_events(player_id, tab=EXPEDITION_TAB_PIRATES, conn=conn)
+    finally:
+        conn.close()
+
+    assert payload["ok"] is True
+    assert payload["section"] == "expeditions"
+    assert payload["section_live"] is True
+    assert stats["total_expeditions"] == 3
+    assert stats["pirate_contacts"] == 1
+    assert stats["legendary_finds"] == 1
+    assert len(loot_events) >= 2
+    assert len(pirate_events) == 1
+
+
+def test_chronicles_records_aggregation(temp_db):
+    attacker_id, _ = _create_player("chron_rec_atk")
+    defender_id, _ = _create_player("chron_rec_def")
+    _seed_combat_reports(attacker_id, defender_id, winner="attacker")
+    _seed_expedition_report(attacker_id, event_key="ancient_stash", rewards={"metal": 12000, "crystal": 4000})
+    _seed_expedition_report(attacker_id, event_key="pirate_encounter", losses_total=4, salvaged_total=1)
+
+    conn = db()
+    try:
+        payload = build_chronicles_api_payload(
+            player_id=attacker_id,
+            section=CHRONICLES_SECTION_RECORDS,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    assert payload["ok"] is True
+    assert payload["section"] == "records"
+    cards = payload["cards"]
+    assert len(cards) == 6
+    keys = {card["key"] for card in cards}
+    assert "biggest_battle" in keys
+    assert "biggest_expo_find" in keys
+    assert cards[0]["has_record"] or any(c["has_record"] for c in cards)
+
+
+def test_chronicles_expeditions_and_records_pages(temp_db, monkeypatch):
+    import app as app_module
+
+    monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
+    importlib.reload(app_module)
+
+    uid, _ = _create_player("chron_sec")
+    _seed_expedition_report(uid, event_key="mineral_deposit")
+    _seed_combat_reports(uid, _create_player("chron_sec_def")[0])
+
+    app_module.app.config["TESTING"] = True
+    app_module.app.config["WTF_CSRF_ENABLED"] = False
+    client = app_module.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    expo = client.get("/chronicles?section=expeditions")
+    assert expo.status_code == 200
+    expo_body = expo.get_data(as_text=True)
+    assert "gc-chronicles-expo-stats" in expo_body
+    assert "data-expedition-report" in expo_body
+
+    records = client.get("/chronicles?section=records")
+    assert records.status_code == 200
+    records_body = records.get_data(as_text=True)
+    assert "gc-chronicles-records-grid" in records_body
+    assert "data-chronicles-report" in records_body
+
+    api_expo = client.get("/api/chronicles?section=expeditions&tab=loot")
+    assert api_expo.status_code == 200
+    assert api_expo.get_json()["section"] == "expeditions"

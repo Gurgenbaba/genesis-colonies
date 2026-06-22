@@ -22127,20 +22127,26 @@
   GC.modules.chronicles = function initChroniclesPage() {
     const root = document.getElementById("chronicles-page");
     if (!root) return;
-    root.querySelectorAll("[data-pvp-report]").forEach((btn) => {
-      if (btn.dataset.pvpBound === "1") return;
-      btn.dataset.pvpBound = "1";
+    const bindReportBtn = (btn, category, attr) => {
+      if (btn.dataset.chroniclesReportBound === "1") return;
+      btn.dataset.chroniclesReportBound = "1";
       btn.addEventListener("click", () => {
         let meta = {};
         try {
-          meta = JSON.parse(btn.getAttribute("data-pvp-report") || "{}");
+          meta = JSON.parse(btn.getAttribute(attr) || "{}");
         } catch (_err) {
           meta = {};
         }
         if (!meta || typeof meta !== "object") return;
         if (typeof GC.openCombatReportModal !== "function") return;
-        GC.openCombatReportModal({ category: "combat", metadata: meta });
+        GC.openCombatReportModal({ category, metadata: meta });
       });
+    };
+    root.querySelectorAll("[data-pvp-report]").forEach((btn) => bindReportBtn(btn, "combat", "data-pvp-report"));
+    root.querySelectorAll("[data-expedition-report]").forEach((btn) => bindReportBtn(btn, "expedition", "data-expedition-report"));
+    root.querySelectorAll("[data-chronicles-report]").forEach((btn) => {
+      const category = String(btn.dataset.chroniclesReportCategory || "combat").trim() || "combat";
+      bindReportBtn(btn, category, "data-chronicles-report");
     });
   };
   GC.modules.records = function initRecordsPage() {

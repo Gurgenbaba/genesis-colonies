@@ -572,6 +572,26 @@ def test_gc700c_chronicles_pvp_overview():
     assert '"pvp_tab_wins"' in de
 
 
+def test_gc700cb_chronicles_expeditions_and_records():
+    """GC-700C-B: Chronicles expeditions tabs, records cards, report hooks."""
+    html = _read("templates/chronicles.html")
+    js = _read("static/main.js")
+    css = _read("static/style.css")
+    de = _read("locales/de.json")
+
+    assert 'section=\'expeditions\'' in html or "section=expeditions" in html
+    assert "gc-chronicles-expo-stats" in html
+    assert "data-expedition-report" in html
+    assert "gc-chronicles-records-grid" in html
+    assert "data-chronicles-report" in html
+    assert "data-expedition-report" in js
+    assert "data-chronicles-report" in js
+    assert ".gc-chronicles-records-grid" in css
+    assert ".gc-chronicles-record-card" in css
+    assert '"chronicles_expo_tab_loot"' in de
+    assert '"chronicles_record_biggest_battle"' in de
+
+
 def test_gc700b_hall_of_fame_v2():
     """GC-700B: HoF ranking layout — tabs, compact hero strip, table rows."""
     html = _read("templates/hall_of_fame.html")
