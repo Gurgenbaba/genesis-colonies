@@ -852,9 +852,13 @@
       const solarPct = Number(climate.solar_bonus_pct || 0);
       if (tempDisplay || solarPct !== 0) {
         tempEl.replaceChildren();
-        if (tempDisplay) tempEl.appendChild(document.createTextNode(tempDisplay));
+        if (tempDisplay) {
+          const valueEl = document.createElement("span");
+          valueEl.className = "overview-temp-value";
+          valueEl.textContent = tempDisplay;
+          tempEl.appendChild(valueEl);
+        }
         if (solarPct !== 0) {
-          if (tempDisplay) tempEl.appendChild(document.createTextNode(" · "));
           const climateEl = document.createElement("span");
           climateEl.id = "overview-planet-climate";
           climateEl.className = "overview-climate-hint hint gc-mono";

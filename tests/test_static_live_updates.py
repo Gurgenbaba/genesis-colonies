@@ -414,14 +414,27 @@ def test_main_js_apply_planet_hero_theme_border_fx():
     assert "gc-planet-theme-group--" in hero_fn
     assert "--planet-glow" in hero_fn
     assert "--planet-landscape" in hero_fn
+    assert "overview-temp-value" in hero_fn
     css = _read("static/style.css")
+    overview = _read("templates/overview.html")
     assert ".overview-hero-border" in css
-    assert "overview-hero-border::after" in css
+    assert "--hero-frame-url" in overview
+    assert "herocardsframe/frame.png" in overview
+    assert ".overview-hero-hud-frame::after" in css
     assert "prefers-reduced-motion" in css
     assert ".gc-planet-theme-group--hot" in css
     assert ".gc-planet-theme-group--frozen" in css
-    overview = _read("templates/overview.html")
     assert "overview-hero-border" in overview
+    assert "overview-hero-hud-frame" in overview
+    assert "overview-hero-frame-glow" not in overview
+    assert "width: 100%" in css.split(".overview-hero.gc-planet-hero")[1].split("aspect-ratio")[0]
+    assert "--hero-inner-left: 8.59%" in css
+    assert "--hero-bg-left: 11.1%" in css
+    assert "background: transparent" in css.split(".overview-hero.gc-planet-hero")[1].split("body.gc-body-ingame")[0]
+    assert "aspect-ratio: 1536 / 1024" in css
+    assert ".overview-hero--themed.gc-planet-hero .overview-hero-hud" in css
+    assert "border: none" in css.split(".gc-planet-hero.gc-panel")[1].split("body.gc-body-ingame")[0]
+    assert "z-index: 4" in css.split(".overview-hero-hud-frame,")[1].split(".overview-hero-frame-glow")[0]
 
 
 def test_main_js_gc743_deferred_chat_and_news_boot():

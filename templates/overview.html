@@ -37,7 +37,7 @@
   <section class="gc-panel overview-hero overview-hero--themed gc-planet-hero gc-planet-theme--{{ hero_theme_key }} gc-planet-theme-group--{{ hero_theme_group }} overview-hero--effect-{{ hero_effect }}"
            id="overview-planet-hero"
            aria-label="{{ T('overview_label_planet', 'Kolonie') }}"
-           style="--planet-accent: {{ hero_accent }}; --planet-secondary: {{ hero_secondary }}; --planet-accent-secondary: {{ hero_secondary }}; --planet-glow: {{ hero_glow }}; --planet-landscape: url('{{ url_for('static', filename=hero_landscape_rel) }}');"
+           style="--planet-accent: {{ hero_accent }}; --planet-secondary: {{ hero_secondary }}; --planet-accent-secondary: {{ hero_secondary }}; --planet-glow: {{ hero_glow }}; --planet-landscape: url('{{ url_for('static', filename=hero_landscape_rel) }}'); --hero-frame-url: url('{{ url_for('static', filename='img/herocardsframe/frame.png') }}');"
            data-planet-effect="{{ hero_effect }}"
            data-planet-theme-key="{{ hero_theme_key }}"
            data-planet-theme-group="{{ hero_theme_group }}"
@@ -55,6 +55,11 @@
              height="933">
       </picture>
     </div>
+    <div class="overview-hero-atmo" aria-hidden="true"></div>
+    <div class="overview-hero-fx" aria-hidden="true"></div>
+    <div class="overview-hero-hud-frame overview-hero-border" data-planet-hero-border aria-hidden="true"></div>
+
+    <div class="overview-hero-hud">
     <div class="overview-hero-top">
       <div class="overview-hero-identity">
         <div class="overview-hero-name-wrap">
@@ -78,31 +83,29 @@
       </span>
     </div>
 
-    <div class="overview-hero-border" data-planet-hero-border aria-hidden="true"></div>
-
-    <dl class="overview-meta-grid overview-meta-grid--compact">
+    <dl class="overview-meta-grid overview-meta-grid--compact overview-hero-meta">
       <div class="overview-meta-item">
         <dt>{{ T("overview_label_commander", "Commander") }}</dt>
         <dd>
           {% if cmd_id %}{{ player_name_link(cmd_id, cmd_name) }}{% else %}{{ cmd_name }}{% endif %}
         </dd>
       </div>
-      <div class="overview-meta-item">
+      <div class="overview-meta-item overview-meta-item--temp">
         <dt>{{ T("overview_label_temperature", "Temperatur") }}</dt>
         <dd id="overview-planet-temp">
-          {{ planet.temperature.display if planet.temperature is defined else '–' }}
+          <span class="overview-temp-value">{{ planet.temperature.display if planet.temperature is defined else '–' }}</span>
           {% set climate = planet.climate if planet.climate is defined else {} %}
           {% set solar_pct = climate.solar_bonus_pct if climate.solar_bonus_pct is defined else 0 %}
           {% if solar_pct != 0 %}
           <span class="overview-climate-hint hint gc-mono" id="overview-planet-climate">
-            · {{ T("overview_climate_solar", "Solarenergie") }} {% if solar_pct > 0 %}+{% endif %}{{ solar_pct }}%
+            {{ T("overview_climate_solar", "Solarenergie") }} {% if solar_pct > 0 %}+{% endif %}{{ solar_pct }}%
           </span>
           {% endif %}
         </dd>
       </div>
     </dl>
+    </div>
 
-    <div class="overview-hero-fx" aria-hidden="true"></div>
   </section>
 
   <section class="gc-panel overview-activities-panel overview-activities-panel--primary" aria-label="{{ T('overview_label_activities', 'Aktivitäten') }}">
