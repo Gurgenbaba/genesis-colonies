@@ -64,6 +64,22 @@ def normalize_loot_entry(raw: Any) -> Optional[LootEntry]:
 
         reward_key = canonical_ship_key(reward_key)
 
+    if reward_type == "resource" and raw.get("stock_fraction") is not None:
+        if reward_key != "fuel_cells":
+            return None
+        try:
+            stock_fraction = float(raw.get("stock_fraction"))
+        except (TypeError, ValueError):
+            return None
+        if stock_fraction <= 0 or stock_fraction > 1.0:
+            return None
+        return {
+            "weight": weight,
+            "reward_type": reward_type,
+            "reward_key": reward_key,
+            "stock_fraction": stock_fraction,
+        }
+
     production_hours: Optional[float] = None
     if reward_type == "resource" and raw.get("production_hours") is not None:
         try:
@@ -77,6 +93,34 @@ def normalize_loot_entry(raw: Any) -> Optional[LootEntry]:
             "reward_type": reward_type,
             "reward_key": reward_key,
             "production_hours": production_hours,
+        }
+
+    if reward_type == "ship" and raw.get("fleet_fraction") is not None:
+        try:
+            fleet_fraction = float(raw.get("fleet_fraction"))
+        except (TypeError, ValueError):
+            return None
+        if fleet_fraction <= 0 or fleet_fraction > 1.0:
+            return None
+        return {
+            "weight": weight,
+            "reward_type": reward_type,
+            "reward_key": reward_key,
+            "fleet_fraction": fleet_fraction,
+        }
+
+    if reward_type == "defense" and raw.get("defense_fraction") is not None:
+        try:
+            defense_fraction = float(raw.get("defense_fraction"))
+        except (TypeError, ValueError):
+            return None
+        if defense_fraction <= 0 or defense_fraction > 1.0:
+            return None
+        return {
+            "weight": weight,
+            "reward_type": reward_type,
+            "reward_key": reward_key,
+            "defense_fraction": defense_fraction,
         }
 
     try:

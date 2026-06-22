@@ -167,10 +167,12 @@ Ressourcen-Drops in Lootboxen sind **nicht mehr fix**, sondern skalieren mit dem
 
 | Regel | Detail |
 |-------|--------|
-| Basis | **50 %** der Stundenproduktion der **höchsten** Mine/Anlage pro Ressourcentyp (über alle Kolonien) |
-| Container-Stufe | Multiplikator pro `container_*`-Key (`CONTAINER_RESOURCE_MULTIPLIER` in `game/inventory_loot.py`) |
-| Keine Minen | Fallback Stufe **1** für die Berechnung |
-| Andere Drops | Schiffe, Verteidigung, Items, Booster — weiterhin feste min/max |
+| Ferronit / Crytite | **50 %** der Stundenproduktion der **höchsten** Mine (× Container-Stufe); Floor **5 000–10 000** |
+| Brennzellen | **10 %** des Bestands (× Stufe); Floor **5 000–10 000** |
+| Schiffe / Verteidigung | Abnehmender %-Anteil (log-Kurve); unter ~100k Bestand: **5 000–10 000** Floor; **max. 100 000** pro Roll |
+| Container-Stufe | Multiplikator pro `container_*`-Key (`CONTAINER_RESOURCE_MULTIPLIER`) |
+| Keine Minen | Fallback Stufe **1** für Ferronit/Crytite |
+| Andere Drops | Items, Booster — feste min/max |
 
 Owner: `game/inventory_loot.py` (Pools + Skalierung), `game/inventory.py` (Roll beim Öffnen).
 

@@ -73,7 +73,7 @@
   "inv_loot_drops_title": "Possible drops",
   "inv_loot_drops_subtitle": "Weighted loot pools per container",
   "inv_loot_drops_intro": "Each open picks one pool entry on the server — chance matches the weight.",
-  "inv_loot_drops_footnote": "Resource amounts scale to your empire's highest mine level (50% of hourly output × container tier). Other drops use fixed ranges.",
+  "inv_loot_drops_footnote": "Resources: scaled + min. 5,000–10,000 × tier. Ships/defense: diminishing % (log curve), min. 5,000–10,000 below ~100k owned, max. 100,000 per roll. Metal/crystal: max-mine production.",
   "inv_loot_drop_weight": "Weight",
   "inv_loot_tagline_basic": "Everyday rewards for every commander.",
   "inv_loot_tagline_rare": "Stronger rewards for growing empires.",

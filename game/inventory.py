@@ -201,8 +201,10 @@ def build_loot_drops_reference(*, conn=None, user_id: Optional[int] = None) -> L
     rows: List[Dict[str, Any]] = []
     effective_pools = inventory_loot.get_loot_pools(conn)
     production_per_hour: Optional[Dict[str, int]] = None
+    roll_ctx: Optional[Dict[str, Any]] = None
     if user_id is not None and conn is not None:
-        production_per_hour = inventory_loot.empire_resource_production_per_hour(int(user_id), conn=conn)
+        roll_ctx = inventory_loot.build_loot_roll_context(int(user_id), "container_basic", conn=conn)
+        production_per_hour = roll_ctx.get("production_per_hour")
     for key in CONTAINER_DISPLAY_ORDER:
         pool = effective_pools.get(key) or []
         if not pool:
@@ -216,22 +218,22 @@ def build_loot_drops_reference(*, conn=None, user_id: Optional[int] = None) -> L
                 continue
             rtype = str(entry.get("reward_type") or "")
             rkey = str(entry.get("reward_key") or "")
-            scaled = inventory_loot.is_scaled_resource_loot(entry)
-            if scaled:
-                if production_per_hour is not None and conn is not None:
-                    amt = inventory_loot.resolve_scaled_resource_amount(
-                        rkey,
-                        entry,
-                        user_id=int(user_id),
-                        container_key=key,
-                        conn=conn,
-                        production_per_hour=production_per_hour,
-                    )
-                    lo = hi = amt
-                    amount_label = _loot_amount_label(lo, hi)
-                else:
-                    lo = hi = 0
-                    amount_label = inventory_loot.scaled_resource_amount_label(entry, container_key=key)
+            scaled = inventory_loot.is_dynamic_loot_entry(entry)
+            if scaled and roll_ctx is not None:
+                preview_rng = random.Random(0)
+                amt = inventory_loot.resolve_loot_entry_amount(
+                    entry,
+                    user_id=int(user_id),
+                    container_key=key,
+                    conn=conn,
+                    rng=preview_rng,
+                    loot_context=roll_ctx,
+                )
+                lo = hi = amt
+                amount_label = _loot_amount_label(lo, hi)
+            elif scaled:
+                lo = hi = 0
+                amount_label = inventory_loot.scaled_loot_amount_label(entry, container_key=key)
             else:
                 lo = int(entry.get("min_amount") or 1)
                 hi = int(entry.get("max_amount") or lo)
@@ -440,15 +442,17 @@ def _roll_single_reward(
         return {"reward_type": "resource", "reward_key": "metal", "amount": 0}
     weights = [int(e["weight"]) for e in entries]
     pick = rng.choices(entries, weights=weights, k=1)[0]
-    if inventory_loot.is_scaled_resource_loot(pick) and loot_context:
-        amount = inventory_loot.resolve_scaled_resource_amount(
-            str(pick["reward_key"]),
+    if loot_context:
+        amount = inventory_loot.resolve_loot_entry_amount(
             pick,
             user_id=int(loot_context["user_id"]),
             container_key=str(loot_context["container_key"]),
             conn=loot_context["conn"],
-            production_per_hour=loot_context.get("production_per_hour"),
+            rng=rng,
+            loot_context=loot_context,
         )
+    elif inventory_loot.is_dynamic_loot_entry(pick):
+        amount = 0
     else:
         lo = int(pick.get("min_amount") or 1)
         hi = int(pick.get("max_amount") or lo)
@@ -531,14 +535,14 @@ def _pool_entry_to_roll_preview(
 ) -> Dict[str, Any]:
     rtype = str(entry.get("reward_type") or "")
     rkey = str(entry.get("reward_key") or "")
-    if inventory_loot.is_scaled_resource_loot(entry) and loot_context:
-        amount = inventory_loot.resolve_scaled_resource_amount(
-            rkey,
+    if loot_context and inventory_loot.is_dynamic_loot_entry(entry):
+        amount = inventory_loot.resolve_loot_entry_amount(
             entry,
             user_id=int(loot_context["user_id"]),
             container_key=str(loot_context["container_key"]),
             conn=loot_context["conn"],
-            production_per_hour=loot_context.get("production_per_hour"),
+            rng=rng,
+            loot_context=loot_context,
         )
     else:
         lo = int(entry.get("min_amount") or 1)
@@ -835,12 +839,7 @@ def open_containers(
         return False, "insufficient_containers", None
 
     roll_rng = rng or random.Random()
-    loot_context = {
-        "user_id": int(user_id),
-        "container_key": key,
-        "conn": conn,
-        "production_per_hour": inventory_loot.empire_resource_production_per_hour(user_id, conn=conn),
-    }
+    loot_context = inventory_loot.build_loot_roll_context(user_id, key, conn=conn)
     rolled: List[Reward] = []
     for _ in range(open_count):
         rolled.append(_roll_single_reward(pool, roll_rng, loot_context=loot_context))
