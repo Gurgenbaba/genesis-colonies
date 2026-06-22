@@ -6,6 +6,7 @@ Run: python -m pytest tests/test_static_live_updates.py -v
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -131,6 +132,28 @@ def test_messages_js_spy_report_and_category_label():
     assert "function keyFallbackLabel(raw)" in src
     assert "expeditionEventVisual" in src
     assert "renderMessageBody(msg)" in src
+
+
+def test_gc620e_expedition_report_delivery_and_effective_cargo():
+    """GC-620E: report UI uses effective cargo cap + delivery notice; no frontend loot math."""
+    src = _read("static/js/messages.js")
+    assert "function expeditionEffectiveCargoCap(meta)" in src
+    assert "function expeditionCargoJackpotMult(meta)" in src
+    assert "function renderExpeditionCargoStatHtml(lootTotal, meta)" in src
+    assert "gc-expedition-report-delivery-notice" in src
+    assert "gc-expedition-cargo-jackpot-badge" in src
+    assert "expedition_report_delivery_notice" in src
+    assert "cargo_jackpot_mult" in src
+    assert "Math.pow" not in src.split("function renderExpeditionReportFull(meta)")[1].split("function renderInboxReportTeaser")[0]
+    de = json.loads(_read("locales/de.json"))
+    en = json.loads(_read("locales/en.json"))
+    for key in (
+        "expedition_report_delivery_notice",
+        "expedition_report_cargo_jackpot_badge",
+        "expedition_report_cargo_base",
+    ):
+        assert key in de, f"missing de locale key {key}"
+        assert key in en, f"missing en locale key {key}"
 
 
 def test_chat_js_poll_updates_last_id_and_resume_bootstrap():

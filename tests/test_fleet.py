@@ -2366,6 +2366,12 @@ def test_expedition_event_engine_report(fleet_db):
     assert meta.get("event_key") in expedition_event_keys()
     assert "rewards" in meta
     assert meta.get("fleet_ships", {}).get("solar_skiff") == 1
+    cur.execute("SELECT resources_json FROM fleet_movements WHERE id = ?;", (fleet_id,))
+    stored = json.loads(cur.fetchone()["resources_json"] or "{}")
+    for key in ("metal", "crystal", "fuel_cells"):
+        assert int(meta["rewards"].get(key) or 0) == int(stored.get(key) or 0)
+    assert int(meta.get("cargo_jackpot_mult") or 1) >= 1
+    assert "cargo_total" in meta
     conn.close()
 
 

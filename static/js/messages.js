@@ -1388,6 +1388,51 @@
     );
   }
 
+  function expeditionCargoJackpotMult(meta) {
+    const mult = Number(meta?.cargo_jackpot_mult ?? 1);
+    return Number.isFinite(mult) && mult > 0 ? Math.floor(mult) : 1;
+  }
+
+  function expeditionEffectiveCargoCap(meta) {
+    const base = Number(meta?.cargo_total ?? 0);
+    if (!Number.isFinite(base) || base <= 0) {
+      return null;
+    }
+    return Math.floor(base * expeditionCargoJackpotMult(meta));
+  }
+
+  function formatExpeditionCargoUsage(lootTotal, meta) {
+    const effective = expeditionEffectiveCargoCap(meta);
+    if (effective == null) {
+      return formatInt(lootTotal);
+    }
+    return `${formatInt(lootTotal)}/${formatInt(effective)}`;
+  }
+
+  function renderExpeditionCargoStatHtml(lootTotal, meta) {
+    const mult = expeditionCargoJackpotMult(meta);
+    const base = Number(meta?.cargo_total ?? 0);
+    const usage = formatExpeditionCargoUsage(lootTotal, meta);
+    if (mult <= 1 || !Number.isFinite(base) || base <= 0) {
+      return `<span class="gc-player-card-stat-value gc-mono">${esc(usage)}</span>`;
+    }
+    const badgeLabel = t("expedition_report_cargo_jackpot_badge", "Jackpot ×%(mult)s").replace(
+      "%(mult)s",
+      formatInt(mult)
+    );
+    const baseHint = t("expedition_report_cargo_base", "Base cargo: %(amount)s").replace(
+      "%(amount)s",
+      formatInt(base)
+    );
+    return (
+      `<span class="gc-expedition-cargo-stat">` +
+        `<span class="gc-player-card-stat-value gc-mono">${esc(usage)}</span>` +
+        `<span class="gc-expedition-cargo-jackpot-badge">${esc(badgeLabel)}</span>` +
+        `<span class="gc-expedition-cargo-base gc-mono">${esc(baseHint)}</span>` +
+      `</span>`
+    );
+  }
+
   function expeditionTargetLabel(meta, { linked = true } = {}) {
     if (meta?.world_name_key) {
       return t(meta.world_name_key, meta.world_name_key);
@@ -1456,6 +1501,7 @@
     const lootboxes = Array.isArray(meta.lootboxes) ? meta.lootboxes : [];
     const lootTotal = expeditionLootTotal(rewards);
     const cargoTotal = Number(meta.cargo_total || 0);
+    const effectiveCargoCap = expeditionEffectiveCargoCap(meta);
     const delayExtra = Number(meta.delay_extra || 0);
     const badge = expeditionEventBadge(eventKey, severity);
     const risk = expeditionRiskLabel(eventKey);
@@ -1504,7 +1550,7 @@
         `</div>` +
         `<div class="gc-player-card-stat">` +
           `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_cargo", "Cargo"))}</span>` +
-          `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(lootTotal))}/${esc(formatInt(cargoTotal))}</span>` +
+          renderExpeditionCargoStatHtml(lootTotal, meta) +
         `</div>` +
         `<div class="gc-player-card-stat">` +
           `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_delay", "Delay"))}</span>` +
@@ -1517,6 +1563,17 @@
       `</div>`
     );
 
+    if (lootTotal > 0) {
+      sections.push(
+        `<p class="gc-expedition-report-delivery-notice" role="note">${esc(
+          t(
+            "expedition_report_delivery_notice",
+            "Reward is credited when the fleet returns to the origin planet."
+          )
+        )}</p>`
+      );
+    }
+
     sections.push(
       renderCombatPanel(
         t("fleet_expedition_report_section_fleet", "Expedition fleet"),
@@ -1525,7 +1582,10 @@
             t("fleet_expedition_report_fleet_summary", "%(ships)s · Cargo %(used)s/%(total)s · Status: %(status)s")
               .replace("%(ships)s", formatInt(fleetTotal))
               .replace("%(used)s", formatInt(lootTotal))
-              .replace("%(total)s", formatInt(cargoTotal))
+              .replace(
+                "%(total)s",
+                effectiveCargoCap != null ? formatInt(effectiveCargoCap) : cargoTotal > 0 ? formatInt(cargoTotal) : "—"
+              )
               .replace("%(status)s", expeditionFleetStatus(delayExtra, lootTotal))
           )}</p>`,
         "gc-combat-report-panel--attacker"
