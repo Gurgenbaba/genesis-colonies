@@ -12,6 +12,7 @@ import pytest
 from game import db as gdb
 from game.auction_house import (
     ACTIVE_AUCTION_TARGET,
+    MAX_BIDS_PER_PLAYER_PER_LISTING,
     ROTATION_INTERVAL_SECONDS,
     UPCOMING_AUCTION_TARGET,
     auction_schema_ready,
@@ -388,4 +389,41 @@ def test_context_planet_resources_used_for_bid(auction_db):
     assert ok, reason
     cur.execute("SELECT metal FROM planets WHERE id = ?;", (pid,))
     assert int(cur.fetchone()["metal"]) == 200_000
+    conn.close()
+
+
+def test_bid_limit_per_listing(auction_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planets = get_planets_by_player(uid, conn=conn)
+    pid = int(planets[0]["id"])
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 500000000 WHERE id = ?;", (pid,))
+    listing_id = _insert_listing(conn, currency="metal", start_price=10_000)
+    conn.commit()
+
+    amount = 10_000
+    for i in range(MAX_BIDS_PER_PLAYER_PER_LISTING):
+        ok, reason, _ = place_bid(
+            player_id=uid,
+            planet_id=pid,
+            listing_id=listing_id,
+            amount=amount,
+            currency="metal",
+            conn=conn,
+        )
+        assert ok, f"bid {i} failed: {reason}"
+        amount = int(amount * 1.06) + 1
+
+    ok, reason, extra = place_bid(
+        player_id=uid,
+        planet_id=pid,
+        listing_id=listing_id,
+        amount=amount,
+        currency="metal",
+        conn=conn,
+    )
+    assert not ok
+    assert reason == "auction_bid_limit_reached"
+    assert extra and int(extra["max_bids"]) == MAX_BIDS_PER_PLAYER_PER_LISTING
     conn.close()

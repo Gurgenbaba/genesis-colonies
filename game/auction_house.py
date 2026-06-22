@@ -25,6 +25,7 @@ MIN_DURATION_SEC = 6 * 3600
 MAX_DURATION_SEC = 12 * 3600
 ROTATION_INTERVAL_SECONDS = 6 * 3600
 MIN_BID_INCREASE_PCT = 0.05
+MAX_BIDS_PER_PLAYER_PER_LISTING = 25
 
 # Ticket box keys → canonical inventory container keys (GC-540).
 BOX_INVENTORY_MAP: Dict[str, str] = {
@@ -678,6 +679,21 @@ def place_bid(
         if same_bidder and prev_amount > 0 and bid_amount <= prev_amount:
             rollback(conn)
             return False, "bid_must_raise", {"min_bid": min_bid, "current_bid": prev_amount}
+
+        cur.execute(
+            """
+            SELECT COUNT(*) AS c FROM auction_house_bids
+            WHERE listing_id = ? AND player_id = ?;
+            """,
+            (int(listing_id), int(player_id)),
+        )
+        bid_count = int(cur.fetchone()["c"] or 0)
+        if bid_count >= MAX_BIDS_PER_PLAYER_PER_LISTING:
+            rollback(conn)
+            return False, "auction_bid_limit_reached", {
+                "max_bids": MAX_BIDS_PER_PLAYER_PER_LISTING,
+            }
+
         charge_amount = bid_amount - prev_amount if same_bidder and prev_amount > 0 else bid_amount
 
         if charge_amount <= 0:

@@ -161,6 +161,21 @@ Recycelt Schiffe vom context planet → Ressourcen-Rückerstattung nach `fleet_d
 
 ---
 
+## Container-Loot (Inventar) — GC-540
+
+Ressourcen-Drops in Lootboxen sind **nicht mehr fix**, sondern skalieren mit dem Imperium:
+
+| Regel | Detail |
+|-------|--------|
+| Basis | **50 %** der Stundenproduktion der **höchsten** Mine/Anlage pro Ressourcentyp (über alle Kolonien) |
+| Container-Stufe | Multiplikator pro `container_*`-Key (`CONTAINER_RESOURCE_MULTIPLIER` in `game/inventory_loot.py`) |
+| Keine Minen | Fallback Stufe **1** für die Berechnung |
+| Andere Drops | Schiffe, Verteidigung, Items, Booster — weiterhin feste min/max |
+
+Owner: `game/inventory_loot.py` (Pools + Skalierung), `game/inventory.py` (Roll beim Öffnen).
+
+---
+
 ## Auktionshaus (`/auction-house`) — GC-550
 
 Meta-System für rotierende Lootbox-Auktionen (Wirtschaft → Auktionshaus, neben Trader Hub).
@@ -176,6 +191,7 @@ Meta-System für rotierende Lootbox-Auktionen (Wirtschaft → Auktionshaus, nebe
 - Bis zu **3** aktive Auktionen; Laufzeit **6–12 h**; nach Ablauf neue Rotation (`generate_auction_rotation`).
 - Gebote in `metal`, `crystal` oder `fuel_cells` — Währung pro Listing fest.
 - Mindest-Erhöhung **5 %**; Abbuchung vom **context planet**; Überbotene erhalten sofort Refund auf ihre Bieter-Kolonie.
+- **Gebotslimit:** max. **25** Gebote pro Commander und Listing (Anti-Spam / Ressourcen-Glitch-Schutz).
 - Gewinner erhält Box in `lootbox_inventory` + `player_inventory_items` (kanonisches Inventar).
 - **Eventboxen ausgeschlossen:** kein `event_container`, kein `event_*`-Prefix, keine Box mit `is_event` / Kategorie `event`.
 

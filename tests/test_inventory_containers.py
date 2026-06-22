@@ -635,7 +635,7 @@ def test_multiple_rewards_keep_primary_winning_reward(inventory_db, monkeypatch)
         ]
     )
 
-    def _fake_roll(pool, rng):
+    def _fake_roll(pool, rng, **kwargs):
         return dict(next(rolls))
 
     monkeypatch.setattr(inventory, "_roll_single_reward", _fake_roll)
@@ -750,3 +750,78 @@ def test_save_idempotent_action_roundtrip(inventory_db):
     save_idempotent_action(uid, rid, payload)
     cached = get_idempotent_action(uid, rid)
     assert cached == payload
+
+
+def test_resource_loot_scales_with_empire_mine_level(inventory_db, monkeypatch):
+    from game import inventory, inventory_loot
+    from game.db import begin_write_transaction, commit
+
+    conn = db()
+    uid = _player(conn=conn)
+    planet = get_context_planet(uid, conn=conn)
+    pid = int(planet["id"])
+
+    cur = conn.cursor()
+    cur.execute("UPDATE planet_buildings SET metal_mine = 20 WHERE planet_id = ?;", (pid,))
+    conn.commit()
+
+    expected_ph = inventory_loot.empire_resource_production_per_hour(uid, conn=conn)["metal"]
+    expected_amt = inventory_loot.resolve_scaled_resource_amount(
+        "metal",
+        {"production_hours": inventory_loot.LOOT_BASE_PRODUCTION_HOURS},
+        user_id=uid,
+        container_key="container_basic",
+        conn=conn,
+    )
+    assert expected_amt == max(1, int(expected_ph * inventory_loot.LOOT_BASE_PRODUCTION_HOURS))
+
+    def _force_metal(pool, rng, *, loot_context=None):
+        assert loot_context is not None
+        return {
+            "reward_type": "resource",
+            "reward_key": "metal",
+            "amount": inventory_loot.resolve_scaled_resource_amount(
+                "metal",
+                {"production_hours": inventory_loot.LOOT_BASE_PRODUCTION_HOURS},
+                user_id=int(loot_context["user_id"]),
+                container_key=str(loot_context["container_key"]),
+                conn=loot_context["conn"],
+                production_per_hour=loot_context.get("production_per_hour"),
+            ),
+        }
+
+    monkeypatch.setattr(inventory, "_roll_single_reward", _force_metal)
+
+    grant_inventory_item(uid, "container_basic", 1, conn=conn)
+    conn.commit()
+
+    begin_write_transaction(conn)
+    ok, reason, result = open_containers(
+        uid,
+        pid,
+        "container_basic",
+        1,
+        conn=conn,
+        rng=random.Random(99),
+    )
+    assert ok, reason
+    commit(conn)
+
+    metal_rewards = [
+        r for r in ((result or {}).get("rewards") or [])
+        if r.get("reward_type") == "resource" and r.get("reward_key") == "metal"
+    ]
+    assert metal_rewards
+    assert int(metal_rewards[0]["amount"]) == expected_amt
+
+    cur.execute("UPDATE planet_buildings SET metal_mine = 40 WHERE planet_id = ?;", (pid,))
+    conn.commit()
+    higher = inventory_loot.resolve_scaled_resource_amount(
+        "metal",
+        {"production_hours": inventory_loot.LOOT_BASE_PRODUCTION_HOURS},
+        user_id=uid,
+        container_key="container_basic",
+        conn=conn,
+    )
+    assert higher > expected_amt
+    conn.close()

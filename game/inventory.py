@@ -196,10 +196,13 @@ def _loot_amount_label(lo: int, hi: int) -> str:
     return f"{fmt_int_compact(lo_i)}–{fmt_int_compact(hi_i)}"
 
 
-def build_loot_drops_reference(*, conn=None) -> List[Dict[str, Any]]:
+def build_loot_drops_reference(*, conn=None, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
     """Public loot-pool reference for inventory UI (server data only)."""
     rows: List[Dict[str, Any]] = []
     effective_pools = inventory_loot.get_loot_pools(conn)
+    production_per_hour: Optional[Dict[str, int]] = None
+    if user_id is not None and conn is not None:
+        production_per_hour = inventory_loot.empire_resource_production_per_hour(int(user_id), conn=conn)
     for key in CONTAINER_DISPLAY_ORDER:
         pool = effective_pools.get(key) or []
         if not pool:
@@ -213,23 +216,42 @@ def build_loot_drops_reference(*, conn=None) -> List[Dict[str, Any]]:
                 continue
             rtype = str(entry.get("reward_type") or "")
             rkey = str(entry.get("reward_key") or "")
-            lo = int(entry.get("min_amount") or 1)
-            hi = int(entry.get("max_amount") or lo)
+            scaled = inventory_loot.is_scaled_resource_loot(entry)
+            if scaled:
+                if production_per_hour is not None and conn is not None:
+                    amt = inventory_loot.resolve_scaled_resource_amount(
+                        rkey,
+                        entry,
+                        user_id=int(user_id),
+                        container_key=key,
+                        conn=conn,
+                        production_per_hour=production_per_hour,
+                    )
+                    lo = hi = amt
+                    amount_label = _loot_amount_label(lo, hi)
+                else:
+                    lo = hi = 0
+                    amount_label = inventory_loot.scaled_resource_amount_label(entry, container_key=key)
+            else:
+                lo = int(entry.get("min_amount") or 1)
+                hi = int(entry.get("max_amount") or lo)
+                amount_label = _loot_amount_label(lo, hi)
             display = _reward_display_meta(rtype, rkey)
-            drops.append(
-                {
-                    "reward_type": rtype,
-                    "reward_key": rkey,
-                    "name_key": display["name_key"],
-                    "icon": display.get("icon") or "📦",
-                    "rarity": display.get("rarity") or "common",
-                    "min_amount": lo,
-                    "max_amount": hi,
-                    "amount_label": _loot_amount_label(lo, hi),
-                    "weight": weight,
-                    "weight_pct": round(100.0 * weight / total_weight, 1) if total_weight else 0.0,
-                }
-            )
+            drop_row: Dict[str, Any] = {
+                "reward_type": rtype,
+                "reward_key": rkey,
+                "name_key": display["name_key"],
+                "icon": display.get("icon") or "📦",
+                "rarity": display.get("rarity") or "common",
+                "min_amount": lo,
+                "max_amount": hi,
+                "amount_label": amount_label,
+                "weight": weight,
+                "weight_pct": round(100.0 * weight / total_weight, 1) if total_weight else 0.0,
+            }
+            if scaled:
+                drop_row["scaled_to_mines"] = True
+            drops.append(drop_row)
         suffix = key.replace("container_", "", 1)
         rows.append(
             {
@@ -267,7 +289,7 @@ def build_inventory_state(user_id: int, *, conn) -> Dict[str, Any]:
         "ready": inventory_schema_ready(conn),
         "containers": containers,
         "other_items": other_items,
-        "loot_drops": build_loot_drops_reference(conn=conn),
+        "loot_drops": build_loot_drops_reference(conn=conn, user_id=int(user_id)),
         "craft_recipes": _craft_recipes_reference(),
         "all": items,
         "planet_name": str(planet.get("name") or ""),
@@ -407,17 +429,32 @@ def _debit_inventory_item(user_id: int, item_key: str, amount: int, *, conn) -> 
     return True
 
 
-def _roll_single_reward(pool: Sequence[LootEntry], rng: random.Random) -> Reward:
+def _roll_single_reward(
+    pool: Sequence[LootEntry],
+    rng: random.Random,
+    *,
+    loot_context: Optional[Dict[str, Any]] = None,
+) -> Reward:
     entries = [e for e in pool if int(e.get("weight") or 0) > 0]
     if not entries:
         return {"reward_type": "resource", "reward_key": "metal", "amount": 0}
     weights = [int(e["weight"]) for e in entries]
     pick = rng.choices(entries, weights=weights, k=1)[0]
-    lo = int(pick.get("min_amount") or 1)
-    hi = int(pick.get("max_amount") or lo)
-    if hi < lo:
-        hi = lo
-    amount = rng.randint(lo, hi)
+    if inventory_loot.is_scaled_resource_loot(pick) and loot_context:
+        amount = inventory_loot.resolve_scaled_resource_amount(
+            str(pick["reward_key"]),
+            pick,
+            user_id=int(loot_context["user_id"]),
+            container_key=str(loot_context["container_key"]),
+            conn=loot_context["conn"],
+            production_per_hour=loot_context.get("production_per_hour"),
+        )
+    else:
+        lo = int(pick.get("min_amount") or 1)
+        hi = int(pick.get("max_amount") or lo)
+        if hi < lo:
+            hi = lo
+        amount = rng.randint(lo, hi)
     return {
         "reward_type": str(pick["reward_type"]),
         "reward_key": str(pick["reward_key"]),
@@ -486,14 +523,29 @@ def _reward_to_roll_preview_entry(reward: Reward) -> Dict[str, Any]:
     }
 
 
-def _pool_entry_to_roll_preview(entry: LootEntry, rng: random.Random) -> Dict[str, Any]:
+def _pool_entry_to_roll_preview(
+    entry: LootEntry,
+    rng: random.Random,
+    *,
+    loot_context: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     rtype = str(entry.get("reward_type") or "")
     rkey = str(entry.get("reward_key") or "")
-    lo = int(entry.get("min_amount") or 1)
-    hi = int(entry.get("max_amount") or lo)
-    if hi < lo:
-        hi = lo
-    amount = rng.randint(lo, hi)
+    if inventory_loot.is_scaled_resource_loot(entry) and loot_context:
+        amount = inventory_loot.resolve_scaled_resource_amount(
+            rkey,
+            entry,
+            user_id=int(loot_context["user_id"]),
+            container_key=str(loot_context["container_key"]),
+            conn=loot_context["conn"],
+            production_per_hour=loot_context.get("production_per_hour"),
+        )
+    else:
+        lo = int(entry.get("min_amount") or 1)
+        hi = int(entry.get("max_amount") or lo)
+        if hi < lo:
+            hi = lo
+        amount = rng.randint(lo, hi)
     meta = _reward_display_meta(rtype, rkey)
     preview_type = rtype
     if rtype == "item":
@@ -551,6 +603,8 @@ def build_roll_preview(
     rewards: List[Reward],
     pool: Sequence[LootEntry],
     rng: random.Random,
+    *,
+    loot_context: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[Dict[str, Any]], int, Dict[str, Any]]:
     """UI-only roller strip; winning tile at winning_index matches the real primary reward."""
     primary = _pick_primary_reward(rewards)
@@ -581,7 +635,7 @@ def build_roll_preview(
     for _ in range(total):
         if pool_entries:
             pick = rng.choices(pool_entries, weights=weights, k=1)[0]
-            preview.append(_pool_entry_to_roll_preview(pick, rng))
+            preview.append(_pool_entry_to_roll_preview(pick, rng, loot_context=loot_context))
         else:
             preview.append(dict(winning_entry))
 
@@ -781,9 +835,15 @@ def open_containers(
         return False, "insufficient_containers", None
 
     roll_rng = rng or random.Random()
+    loot_context = {
+        "user_id": int(user_id),
+        "container_key": key,
+        "conn": conn,
+        "production_per_hour": inventory_loot.empire_resource_production_per_hour(user_id, conn=conn),
+    }
     rolled: List[Reward] = []
     for _ in range(open_count):
-        rolled.append(_roll_single_reward(pool, roll_rng))
+        rolled.append(_roll_single_reward(pool, roll_rng, loot_context=loot_context))
     rewards = _merge_rewards(rolled)
 
     if not free_basic_open and not _debit_inventory_item(user_id, key, open_count, conn=conn):
@@ -794,7 +854,9 @@ def open_containers(
 
     container_meta = item_catalog_entry(key)
     preview_rng = random.Random(roll_rng.randint(0, 2**31 - 1))
-    roll_preview, winning_index, winning_reward = build_roll_preview(rewards, pool, preview_rng)
+    roll_preview, winning_index, winning_reward = build_roll_preview(
+        rewards, pool, preview_rng, loot_context=loot_context
+    )
     return True, "container_open_ok", {
         "opened": open_count,
         "container_key": key,

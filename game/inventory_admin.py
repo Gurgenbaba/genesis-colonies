@@ -47,8 +47,6 @@ def normalize_loot_entry(raw: Any) -> Optional[LootEntry]:
         return None
     try:
         weight = int(raw.get("weight") or 0)
-        min_amount = int(raw.get("min_amount") or 1)
-        max_amount = int(raw.get("max_amount") or min_amount)
     except (TypeError, ValueError):
         return None
     reward_type = str(raw.get("reward_type") or "").strip().lower()
@@ -59,14 +57,35 @@ def normalize_loot_entry(raw: Any) -> Optional[LootEntry]:
         return None
     if weight < 1 or weight > MAX_WEIGHT:
         return None
-    if min_amount < 1 or max_amount < min_amount or max_amount > MAX_AMOUNT:
-        return None
     if not _validate_reward_key(reward_type, reward_key):
         return None
     if reward_type == "ship":
         from .fleet_defs import canonical_ship_key
 
         reward_key = canonical_ship_key(reward_key)
+
+    production_hours: Optional[float] = None
+    if reward_type == "resource" and raw.get("production_hours") is not None:
+        try:
+            production_hours = float(raw.get("production_hours"))
+        except (TypeError, ValueError):
+            return None
+        if production_hours <= 0 or production_hours > 168:
+            return None
+        return {
+            "weight": weight,
+            "reward_type": reward_type,
+            "reward_key": reward_key,
+            "production_hours": production_hours,
+        }
+
+    try:
+        min_amount = int(raw.get("min_amount") or 1)
+        max_amount = int(raw.get("max_amount") or min_amount)
+    except (TypeError, ValueError):
+        return None
+    if min_amount < 1 or max_amount < min_amount or max_amount > MAX_AMOUNT:
+        return None
     return {
         "weight": weight,
         "reward_type": reward_type,
