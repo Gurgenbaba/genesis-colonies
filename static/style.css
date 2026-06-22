@@ -17127,6 +17127,14 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   overscroll-behavior: contain;
 }
 
+.gc-fleet-hud-root.is-show-all .gc-fleet-hud-list,
+.gc-fleet-hud-root.is-show-all .gc-fleet-drawer-list,
+.gc-fleet-hud-list.is-show-all,
+.gc-fleet-drawer-list.is-show-all{
+  max-height: none;
+  overflow-y: visible;
+}
+
 .gc-fleet-hud-row,
 .gc-fleet-drawer-row{
   display: flex;

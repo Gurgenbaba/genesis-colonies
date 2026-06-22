@@ -7946,6 +7946,9 @@
     const moreBtn = root.querySelector("[data-fleet-drawer-more]");
     rememberFleetDrawerMovements(list);
     if (listEl) {
+      const expandedList = showAll && count > visibleLimit;
+      listEl.classList.toggle("is-show-all", expandedList);
+      root.classList.toggle("is-show-all", expandedList);
       const visibleItems = showAll || count <= visibleLimit ? list : list.slice(0, visibleLimit);
       const prevCount = Number(listEl.dataset.fleetDrawerCount || 0);
       if (prevCount !== count) {

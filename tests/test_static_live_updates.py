@@ -1016,6 +1016,7 @@ def test_main_js_gc640_global_fleet_hud():
     assert "FLEET_DRAWER_LS_EXPANDED" not in src
     assert "data-fleet-drawer-empty" in src
     assert "fleetDrawerTotalShips" in src
+    assert "is-show-all" in src
     assert "/api/fleet/recall" in src
     hud = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
     assert "renderGlobalFleetHud(data.active_fleets)" in hud
@@ -1036,6 +1037,7 @@ def test_main_js_gc640_global_fleet_hud():
     assert ".gc-fleet-drawer-root" in css
     assert ".gc-fleet-hud-row" in css
     assert ".gc-fleet-drawer-panel" in css
+    assert ".is-show-all" in css
     assert ".gc-fleet-drawer-row" in css
     assert "data-fleet-drawer-empty" in base
     assert "data-fleet-drawer-toggle" not in base
