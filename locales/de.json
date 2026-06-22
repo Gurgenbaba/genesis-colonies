@@ -1618,6 +1618,7 @@
   "chronicles_records_panel_subtitle": "Deine besten Momente aus Kämpfen und Expeditionen",
   "chronicles_records_empty": "Noch keine Rekorde — spiele Kämpfe und Expeditionen.",
   "chronicles_records_no_entry": "Noch kein Eintrag",
+  "chronicles_records_strip": "%(count)s persönliche Rekorde verzeichnet",
   "chronicles_record_biggest_battle": "Größter Kampf",
   "chronicles_record_biggest_expo": "Größter Expofund",
   "chronicles_record_biggest_debris": "Größtes Trümmerfeld",

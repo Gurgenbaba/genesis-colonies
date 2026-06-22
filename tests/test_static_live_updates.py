@@ -592,6 +592,28 @@ def test_gc700cb_chronicles_expeditions_and_records():
     assert '"chronicles_record_biggest_battle"' in de
 
 
+def test_gc700cd_chronicles_genesis_design():
+    """GC-700C-D: Chronicles Genesis-level visual polish."""
+    html = _read("templates/chronicles.html")
+    css = _read("static/style.css")
+    de = _read("locales/de.json")
+
+    assert "gc-chronicles-page--" in html
+    assert "gc-chronicles-kicker" in html
+    assert "gc-chronicles-section-tabs" in html
+    assert "gc-hof-tab gc-chronicles-section-tab" in html
+    assert "gc-chronicles-stats" in html
+    assert "gc-chronicles-stat--win" in html
+    assert "gc-chronicles-expo-cat--" in html
+    assert "gc-chronicles-record-card--{{ card.key }}" in html
+    assert "gc-chronicles-my-strip" in html
+    assert ".gc-chronicles-kicker" in css
+    assert ".gc-chronicles-stat::before" in css
+    assert ".gc-chronicles-panel::before" in css
+    assert ".gc-chronicles-record-card--biggest_expo_find" in css
+    assert '"chronicles_records_strip"' in de
+
+
 def test_gc700b_hall_of_fame_v2():
     """GC-700B: HoF ranking layout — tabs, compact hero strip, table rows."""
     html = _read("templates/hall_of_fame.html")

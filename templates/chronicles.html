@@ -20,19 +20,30 @@
   {% set stats = {} %}
 {% endif %}
 
-<div class="gc-page gc-chronicles-page gc-hof-page" id="chronicles-page"
+<div class="gc-page gc-chronicles-page gc-hof-page gc-chronicles-page--{{ active_section }}" id="chronicles-page"
      data-chronicles-ready="{{ '1' if chron.ready else '0' }}"
      data-chronicles-section="{{ active_section }}"
      data-chronicles-tab="{{ active_tab }}">
 
   <header class="section-header gc-chronicles-header">
-    <h1 class="section-title">{{ T("chronicles_title", "Chroniken") }}</h1>
+    <div class="section-header-row gc-chronicles-header-row">
+      <h1 class="section-title">{{ T("chronicles_title", "Chroniken") }}</h1>
+      <span class="gc-chronicles-kicker" aria-hidden="true">
+        {% if active_section == 'expeditions' %}
+          {{ T("chronicles_section_expeditions", "Expeditionen") }}
+        {% elif active_section == 'records' %}
+          {{ T("chronicles_section_records", "Rekorde") }}
+        {% else %}
+          {{ T("chronicles_section_pvp", "PvP") }}
+        {% endif %}
+      </span>
+    </div>
     <p class="section-hint hint">{{ T("chronicles_subtitle", "Deine Geschichte im Universum — Kämpfe, Expeditionen und Rekorde") }}</p>
   </header>
 
-  <nav class="gc-chronicles-section-tabs" role="tablist" aria-label="{{ T('chronicles_sections_label', 'Chroniken Bereiche') }}">
+  <nav class="gc-hof-tabs gc-chronicles-section-tabs" role="tablist" aria-label="{{ T('chronicles_sections_label', 'Chroniken Bereiche') }}">
     <a href="{{ url_for('chronicles_view', section='pvp', tab=pvp_tab if active_section == 'pvp' else 'overview') }}"
-       class="tab-btn gc-nav-link gc-chronicles-section-tab{% if active_section == 'pvp' %} active{% endif %}"
+       class="tab-btn gc-nav-link gc-hof-tab gc-chronicles-section-tab{% if active_section == 'pvp' %} active{% endif %}"
        role="tab"
        aria-selected="{{ 'true' if active_section == 'pvp' else 'false' }}"
        {% if active_section == 'pvp' %}aria-current="page"{% endif %}
@@ -40,7 +51,7 @@
       {{ T("chronicles_section_pvp", "PvP") }}
     </a>
     <a href="{{ url_for('chronicles_view', section='expeditions', tab=exp_tab if active_section == 'expeditions' else 'overview') }}"
-       class="tab-btn gc-nav-link gc-chronicles-section-tab{% if active_section == 'expeditions' %} active{% endif %}"
+       class="tab-btn gc-nav-link gc-hof-tab gc-chronicles-section-tab{% if active_section == 'expeditions' %} active{% endif %}"
        role="tab"
        aria-selected="{{ 'true' if active_section == 'expeditions' else 'false' }}"
        {% if active_section == 'expeditions' %}aria-current="page"{% endif %}
@@ -48,7 +59,7 @@
       {{ T("chronicles_section_expeditions", "Expeditionen") }}
     </a>
     <a href="{{ url_for('chronicles_view', section='records') }}"
-       class="tab-btn gc-nav-link gc-chronicles-section-tab{% if active_section == 'records' %} active{% endif %}"
+       class="tab-btn gc-nav-link gc-hof-tab gc-chronicles-section-tab{% if active_section == 'records' %} active{% endif %}"
        role="tab"
        aria-selected="{{ 'true' if active_section == 'records' else 'false' }}"
        {% if active_section == 'records' %}aria-current="page"{% endif %}
@@ -58,7 +69,7 @@
   </nav>
 
   {% if active_section == 'pvp' %}
-  <section class="gc-panel gc-pvp-panel gc-hof-panel ranking-panel-full" aria-labelledby="chronicles-pvp-panel-title">
+  <section class="gc-panel gc-chronicles-panel gc-chronicles-panel--pvp gc-pvp-panel gc-hof-panel ranking-panel-full" aria-labelledby="chronicles-pvp-panel-title">
     <div class="gc-panel-header gc-ranking-panel-head">
       <div class="gc-ranking-panel-head-text">
         <span class="gc-panel-title" id="chronicles-pvp-panel-title">{{ T("pvp_panel_title", "Kampfhistorie") }}</span>
@@ -86,39 +97,39 @@
 
     <div class="gc-ranking-body gc-hof-body-wrap">
       {% if stats %}
-      <div class="gc-pvp-stats" aria-label="{{ T('pvp_stats_label', 'PvP Statistik') }}">
-        <div class="gc-pvp-stat">
-          <span class="gc-pvp-stat-label">{{ T("pvp_stat_battles", "Kämpfe") }}</span>
-          <span class="gc-pvp-stat-value gc-mono">{{ stats.total_battles or 0 }}</span>
+      <div class="gc-chronicles-stats gc-pvp-stats" aria-label="{{ T('pvp_stats_label', 'PvP Statistik') }}">
+        <div class="gc-chronicles-stat gc-pvp-stat">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("pvp_stat_battles", "Kämpfe") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">{{ stats.total_battles or 0 }}</span>
         </div>
-        <div class="gc-pvp-stat gc-pvp-stat--win">
-          <span class="gc-pvp-stat-label">{{ T("pvp_stat_wins", "Siege") }}</span>
-          <span class="gc-pvp-stat-value gc-mono">{{ stats.wins or 0 }}</span>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--win gc-pvp-stat--win">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("pvp_stat_wins", "Siege") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">{{ stats.wins or 0 }}</span>
         </div>
-        <div class="gc-pvp-stat gc-pvp-stat--loss">
-          <span class="gc-pvp-stat-label">{{ T("pvp_stat_losses", "Niederlagen") }}</span>
-          <span class="gc-pvp-stat-value gc-mono">{{ stats.losses or 0 }}</span>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--loss gc-pvp-stat--loss">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("pvp_stat_losses", "Niederlagen") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">{{ stats.losses or 0 }}</span>
         </div>
-        <div class="gc-pvp-stat">
-          <span class="gc-pvp-stat-label">{{ T("pvp_stat_attacks", "Angriffe") }}</span>
-          <span class="gc-pvp-stat-value gc-mono">{{ stats.attacks or 0 }}</span>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--attack">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("pvp_stat_attacks", "Angriffe") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">{{ stats.attacks or 0 }}</span>
         </div>
-        <div class="gc-pvp-stat">
-          <span class="gc-pvp-stat-label">{{ T("pvp_stat_defenses", "Verteidigungen") }}</span>
-          <span class="gc-pvp-stat-value gc-mono">{{ stats.defenses or 0 }}</span>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--defense">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("pvp_stat_defenses", "Verteidigungen") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">{{ stats.defenses or 0 }}</span>
         </div>
-        <div class="gc-pvp-stat">
-          <span class="gc-pvp-stat-label">{{ T("pvp_stat_loot", "Beute") }}</span>
-          <span class="gc-pvp-stat-value gc-mono" title="{{ stats.loot_gained_fmt or '0' }}">{{ stats.loot_gained_compact or '0' }}</span>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--loot">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("pvp_stat_loot", "Beute") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono" title="{{ stats.loot_gained_fmt or '0' }}">{{ stats.loot_gained_compact or '0' }}</span>
         </div>
-        <div class="gc-pvp-stat">
-          <span class="gc-pvp-stat-label">{{ T("pvp_stat_destroyed_dealt", "Zerstört") }}</span>
-          <span class="gc-pvp-stat-value gc-mono" title="{{ stats.destroyed_dealt_fmt or '0' }}">{{ stats.destroyed_dealt_compact or '0' }}</span>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--destroyed">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("pvp_stat_destroyed_dealt", "Zerstört") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono" title="{{ stats.destroyed_dealt_fmt or '0' }}">{{ stats.destroyed_dealt_compact or '0' }}</span>
         </div>
         {% if stats.combat_rank %}
-        <div class="gc-pvp-stat">
-          <span class="gc-pvp-stat-label">{{ T("pvp_stat_combat_rank", "Kampf-Rang") }}</span>
-          <span class="gc-pvp-stat-value gc-mono">#{{ stats.combat_rank }}</span>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--rank">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("pvp_stat_combat_rank", "Kampf-Rang") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">#{{ stats.combat_rank }}</span>
         </div>
         {% endif %}
       </div>
@@ -237,7 +248,7 @@
     </div>
   </section>
   {% elif active_section == 'expeditions' %}
-  <section class="gc-panel gc-pvp-panel gc-hof-panel ranking-panel-full" aria-labelledby="chronicles-expeditions-panel-title">
+  <section class="gc-panel gc-chronicles-panel gc-chronicles-panel--expeditions gc-pvp-panel gc-hof-panel ranking-panel-full" aria-labelledby="chronicles-expeditions-panel-title">
     <div class="gc-panel-header gc-ranking-panel-head">
       <div class="gc-ranking-panel-head-text">
         <span class="gc-panel-title" id="chronicles-expeditions-panel-title">{{ T("chronicles_expo_panel_title", "Expeditionshistorie") }}</span>
@@ -266,30 +277,30 @@
 
     <div class="gc-ranking-body gc-hof-body-wrap">
       {% if stats %}
-      <div class="gc-pvp-stats gc-chronicles-expo-stats" aria-label="{{ T('chronicles_expo_stats_label', 'Expeditionsstatistik') }}">
-        <div class="gc-pvp-stat">
-          <span class="gc-pvp-stat-label">{{ T("chronicles_expo_stat_total", "Expeditionen") }}</span>
-          <span class="gc-pvp-stat-value gc-mono">{{ stats.total_expeditions or 0 }}</span>
+      <div class="gc-chronicles-stats gc-chronicles-expo-stats gc-pvp-stats" aria-label="{{ T('chronicles_expo_stats_label', 'Expeditionsstatistik') }}">
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--total">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_expo_stat_total", "Expeditionen") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">{{ stats.total_expeditions or 0 }}</span>
         </div>
-        <div class="gc-pvp-stat">
-          <span class="gc-pvp-stat-label">{{ T("chronicles_expo_stat_loot", "Loot gesamt") }}</span>
-          <span class="gc-pvp-stat-value gc-mono" title="{{ stats.loot_total_fmt or '0' }}">{{ stats.loot_total_compact or '0' }}</span>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--loot">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_expo_stat_loot", "Loot gesamt") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono" title="{{ stats.loot_total_fmt or '0' }}">{{ stats.loot_total_compact or '0' }}</span>
         </div>
-        <div class="gc-pvp-stat">
-          <span class="gc-pvp-stat-label">{{ T("chronicles_expo_stat_legendary", "Legendary-Funde") }}</span>
-          <span class="gc-pvp-stat-value gc-mono">{{ stats.legendary_finds or 0 }}</span>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--legendary">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_expo_stat_legendary", "Legendary-Funde") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">{{ stats.legendary_finds or 0 }}</span>
         </div>
-        <div class="gc-pvp-stat">
-          <span class="gc-pvp-stat-label">{{ T("chronicles_expo_stat_pirates", "Piratenkontakte") }}</span>
-          <span class="gc-pvp-stat-value gc-mono">{{ stats.pirate_contacts or 0 }}</span>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--pirates">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_expo_stat_pirates", "Piratenkontakte") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono">{{ stats.pirate_contacts or 0 }}</span>
         </div>
-        <div class="gc-pvp-stat gc-pvp-stat--loss">
-          <span class="gc-pvp-stat-label">{{ T("chronicles_expo_stat_losses", "Schiffsverluste") }}</span>
-          <span class="gc-pvp-stat-value gc-mono" title="{{ stats.ship_losses_fmt or '0' }}">{{ stats.ship_losses_compact or '0' }}</span>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--loss gc-pvp-stat--loss">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_expo_stat_losses", "Schiffsverluste") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono" title="{{ stats.ship_losses_fmt or '0' }}">{{ stats.ship_losses_compact or '0' }}</span>
         </div>
-        <div class="gc-pvp-stat">
-          <span class="gc-pvp-stat-label">{{ T("chronicles_expo_stat_biggest", "Größter Fund") }}</span>
-          <span class="gc-pvp-stat-value gc-mono" title="{{ stats.biggest_find_fmt or '0' }}">{{ stats.biggest_find_compact or '0' }}</span>
+        <div class="gc-chronicles-stat gc-pvp-stat gc-chronicles-stat--biggest">
+          <span class="gc-chronicles-stat-label gc-pvp-stat-label">{{ T("chronicles_expo_stat_biggest", "Größter Fund") }}</span>
+          <span class="gc-chronicles-stat-value gc-pvp-stat-value gc-mono" title="{{ stats.biggest_find_fmt or '0' }}">{{ stats.biggest_find_compact or '0' }}</span>
         </div>
       </div>
       {% endif %}
@@ -340,7 +351,7 @@
                   <td class="gc-pvp-col-date gc-mono">{{ event.created_at_short or '—' }}</td>
                   <td class="gc-hof-col-name">{{ T(event.event_label_key, event.event_key) }}</td>
                   <td class="gc-pvp-col-role">
-                    <span class="gc-chronicles-expo-cat">{{ T(event.event_category_label_key, event.event_category) }}</span>
+                    <span class="gc-chronicles-expo-cat gc-chronicles-expo-cat--{{ event.event_category }}">{{ T(event.event_category_label_key, event.event_category) }}</span>
                   </td>
                   <td class="gc-hof-col-num gc-mono" title="{{ event.loot_total_fmt if event.loot_total > 0 else '' }}">
                     {% if event.loot_total > 0 %}{{ event.loot_total_compact }}{% else %}—{% endif %}
@@ -367,7 +378,7 @@
             {% for event in exp_events %}
             <article class="gc-hof-mobile-row gc-pvp-mobile-row gc-chronicles-expo-mobile-row{{ ' is-unread' if not event.is_read else '' }}">
               <div class="gc-pvp-mobile-head">
-                <span class="gc-chronicles-expo-cat">{{ T(event.event_category_label_key, event.event_category) }}</span>
+                <span class="gc-chronicles-expo-cat gc-chronicles-expo-cat--{{ event.event_category }}">{{ T(event.event_category_label_key, event.event_category) }}</span>
                 <span class="gc-mono hint">{{ event.created_at_short or '—' }}</span>
               </div>
               <div class="gc-pvp-mobile-main">
@@ -397,7 +408,7 @@
     </div>
   </section>
   {% elif active_section == 'records' %}
-  <section class="gc-panel gc-chronicles-records-panel gc-hof-panel ranking-panel-full" aria-labelledby="chronicles-records-panel-title">
+  <section class="gc-panel gc-chronicles-panel gc-chronicles-panel--records gc-chronicles-records-panel gc-hof-panel ranking-panel-full" aria-labelledby="chronicles-records-panel-title">
     <div class="gc-panel-header gc-ranking-panel-head">
       <div class="gc-ranking-panel-head-text">
         <span class="gc-panel-title" id="chronicles-records-panel-title">{{ T("chronicles_records_panel_title", "Persönliche Rekorde") }}</span>
@@ -405,6 +416,11 @@
       </div>
     </div>
     <div class="gc-ranking-body gc-hof-body-wrap">
+      {% if rec_data.ready and rec_data.count %}
+      <p class="gc-chronicles-my-strip">
+        {{ T("chronicles_records_strip", "%(count)s persönliche Rekorde verzeichnet", count=rec_data.count) }}
+      </p>
+      {% endif %}
       {% if not rec_data.ready %}
       <p class="gc-hof-empty ranking-empty">{{ T("chronicles_unavailable", "Chroniken sind derzeit nicht verfügbar.") }}</p>
       {% elif not record_cards %}
@@ -412,7 +428,7 @@
       {% else %}
       <div class="gc-chronicles-records-grid">
         {% for card in record_cards %}
-        <article class="gc-chronicles-record-card{% if not card.has_record %} gc-chronicles-record-card--empty{% endif %}">
+        <article class="gc-chronicles-record-card gc-chronicles-record-card--{{ card.key }}{% if not card.has_record %} gc-chronicles-record-card--empty{% endif %}">
           <h3 class="gc-chronicles-record-title">{{ T(card.label_key, card.key) }}</h3>
           {% if card.key == 'rarest_expo_event' and card.has_record %}
           <p class="gc-chronicles-record-value">{{ T(card.detail_label_key, card.value_compact) }}</p>

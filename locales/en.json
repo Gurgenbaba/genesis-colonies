@@ -640,6 +640,7 @@
   "chronicles_records_panel_subtitle": "Your best moments from battles and expeditions",
   "chronicles_records_empty": "No records yet — fight battles and run expeditions.",
   "chronicles_records_no_entry": "No entry yet",
+  "chronicles_records_strip": "%(count)s personal records logged",
   "chronicles_record_biggest_battle": "Biggest battle",
   "chronicles_record_biggest_expo": "Biggest expedition find",
   "chronicles_record_biggest_debris": "Biggest debris field",

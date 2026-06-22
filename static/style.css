@@ -14671,90 +14671,319 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   }
 }
 
-/* ── Chronicles hub (GC-700C-R1) ──────────────────────────────────────── */
+/* ── Chronicles hub (GC-700C-D — Genesis design) ──────────────────────── */
 
 .gc-chronicles-page{
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-.gc-chronicles-section-tabs{
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 16px;
   max-width: 100%;
-}
-.gc-chronicles-section-tab{
-  text-align: center;
   min-width: 0;
 }
+
+.gc-chronicles-page--pvp{ --chronicles-accent: rgba(255, 140, 100, 0.95); }
+.gc-chronicles-page--expeditions{ --chronicles-accent: rgba(70, 229, 255, 0.95); }
+.gc-chronicles-page--records{ --chronicles-accent: rgba(255, 216, 106, 0.95); }
+
+.gc-chronicles-header{
+  margin-bottom: 0;
+}
+
+.gc-chronicles-header-row{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.gc-chronicles-kicker{
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 190, 255, 0.22);
+  background: rgba(5, 10, 22, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  color: var(--chronicles-accent, var(--gc-primary-2));
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.gc-chronicles-section-tabs{
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 6px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.14);
+  background: rgba(3, 8, 18, 0.68);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.gc-chronicles-section-tabs .gc-chronicles-section-tab{
+  min-height: 42px;
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+}
+
+.gc-chronicles-section-tabs .gc-chronicles-section-tab.active{
+  border-color: color-mix(in srgb, var(--chronicles-accent, var(--gc-primary-2)) 55%, rgba(120, 190, 255, 0.25));
+  background: color-mix(in srgb, var(--chronicles-accent, var(--gc-primary-2)) 10%, rgba(5, 10, 22, 0.72));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chronicles-accent, var(--gc-primary-2)) 18%, transparent);
+  color: var(--chronicles-accent, var(--gc-primary-2));
+}
+
+.gc-chronicles-panel{
+  position: relative;
+  overflow: hidden;
+}
+
+.gc-chronicles-panel::before{
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--chronicles-accent, var(--gc-primary-2)),
+    transparent
+  );
+  opacity: 0.88;
+  pointer-events: none;
+}
+
+.gc-chronicles-my-strip{
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid color-mix(in srgb, var(--chronicles-accent, #ffd86a) 28%, transparent);
+  background: color-mix(in srgb, var(--chronicles-accent, #ffd86a) 6%, rgba(5, 10, 22, 0.55));
+  color: var(--gc-text-soft);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.gc-chronicles-stats{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.gc-chronicles-stat{
+  position: relative;
+  min-width: 0;
+  padding: 12px 14px 12px 16px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.16);
+  background: rgba(3, 8, 18, 0.72);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.gc-chronicles-stat::before{
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--stat-accent, var(--gc-primary-2)), transparent);
+  opacity: 0.95;
+}
+
+.gc-chronicles-stat-label{
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+  margin-bottom: 6px;
+  line-height: 1.2;
+}
+
+.gc-chronicles-stat-value{
+  font-size: clamp(0.95rem, 1.4vw, 1.08rem);
+  font-weight: 800;
+  color: var(--gc-text);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.gc-chronicles-stat--win{ --stat-accent: rgba(120, 255, 180, 0.95); }
+.gc-chronicles-stat--win .gc-chronicles-stat-value{ color: rgba(160, 255, 200, 0.96); }
+.gc-chronicles-stat--loss{ --stat-accent: rgba(255, 120, 120, 0.95); }
+.gc-chronicles-stat--loss .gc-chronicles-stat-value{ color: rgba(255, 170, 170, 0.96); }
+.gc-chronicles-stat--attack{ --stat-accent: rgba(255, 170, 110, 0.95); }
+.gc-chronicles-stat--defense{ --stat-accent: rgba(120, 190, 255, 0.95); }
+.gc-chronicles-stat--loot{ --stat-accent: rgba(255, 216, 106, 0.95); }
+.gc-chronicles-stat--destroyed{ --stat-accent: rgba(255, 120, 90, 0.95); }
+.gc-chronicles-stat--rank{ --stat-accent: rgba(180, 140, 255, 0.95); }
+.gc-chronicles-stat--total{ --stat-accent: rgba(70, 229, 255, 0.95); }
+.gc-chronicles-stat--legendary{ --stat-accent: rgba(200, 140, 255, 0.95); }
+.gc-chronicles-stat--pirates{ --stat-accent: rgba(255, 120, 90, 0.95); }
+.gc-chronicles-stat--biggest{ --stat-accent: rgba(127, 255, 217, 0.95); }
+
+.gc-chronicles-expo-tabs{
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.gc-chronicles-expo-cat{
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid rgba(120, 190, 255, 0.18);
+  color: rgba(190, 215, 255, 0.9);
+  background: rgba(5, 10, 22, 0.55);
+  white-space: nowrap;
+}
+
+.gc-chronicles-expo-cat--loot{
+  color: rgba(255, 220, 140, 0.96);
+  border-color: rgba(255, 200, 90, 0.32);
+  background: rgba(40, 28, 0, 0.42);
+}
+.gc-chronicles-expo-cat--combat{
+  color: rgba(255, 170, 130, 0.96);
+  border-color: rgba(255, 110, 70, 0.34);
+  background: rgba(40, 12, 0, 0.42);
+}
+.gc-chronicles-expo-cat--hazard,
+.gc-chronicles-expo-cat--delay{
+  color: rgba(255, 150, 150, 0.96);
+  border-color: rgba(255, 90, 90, 0.32);
+  background: rgba(40, 8, 8, 0.42);
+}
+.gc-chronicles-expo-cat--treasure{
+  color: rgba(180, 255, 210, 0.96);
+  border-color: rgba(80, 220, 140, 0.32);
+  background: rgba(0, 28, 16, 0.42);
+}
+.gc-chronicles-expo-cat--legendary{
+  color: rgba(220, 180, 255, 0.98);
+  border-color: rgba(180, 120, 255, 0.38);
+  background: rgba(24, 8, 40, 0.48);
+}
+.gc-chronicles-expo-cat--neutral{
+  color: rgba(200, 210, 230, 0.88);
+}
+
+.gc-chronicles-expo-table .gc-hof-col-name{
+  max-width: 220px;
+}
+
+.gc-chronicles-records-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+  gap: 12px;
+}
+
+.gc-chronicles-record-card{
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 156px;
+  padding: 16px 16px 14px 18px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.16);
+  background: rgba(3, 8, 18, 0.72);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.gc-chronicles-record-card::before{
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--record-accent, var(--chronicles-accent, var(--gc-primary-2))), transparent);
+  opacity: 0.95;
+}
+
+.gc-chronicles-record-card--biggest_battle{ --record-accent: rgba(255, 120, 90, 0.95); }
+.gc-chronicles-record-card--biggest_expo_find{ --record-accent: rgba(127, 255, 217, 0.95); }
+.gc-chronicles-record-card--biggest_debris{ --record-accent: rgba(170, 190, 220, 0.95); }
+.gc-chronicles-record-card--biggest_loot{ --record-accent: rgba(255, 216, 106, 0.95); }
+.gc-chronicles-record-card--rarest_expo_event{ --record-accent: rgba(200, 140, 255, 0.95); }
+.gc-chronicles-record-card--pirate_losses_salvage{ --record-accent: rgba(255, 150, 110, 0.95); }
+
+.gc-chronicles-record-card--empty{
+  opacity: 0.72;
+  box-shadow: none;
+}
+
+.gc-chronicles-record-title{
+  margin: 0;
+  font-family: Orbitron, Inter, system-ui, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  color: var(--gc-text-dim);
+  text-transform: uppercase;
+}
+
+.gc-chronicles-record-value{
+  margin: 0;
+  font-size: clamp(1.1rem, 2vw, 1.42rem);
+  font-weight: 800;
+  color: var(--gc-text);
+  line-height: 1.15;
+}
+
+.gc-chronicles-record-subtitle,
+.gc-chronicles-record-date,
+.gc-chronicles-record-empty{
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.gc-chronicles-record-report-btn{
+  margin-top: auto;
+  align-self: flex-start;
+}
+
 .gc-chronicles-section-tab--soon{
   opacity: 0.55;
   cursor: not-allowed;
   pointer-events: none;
 }
+
 .gc-chronicles-soon-panel{
   padding: 20px;
 }
+
+@media (max-width: 900px){
+  .gc-chronicles-expo-tabs{
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 520px){
   .gc-chronicles-section-tabs{
     grid-template-columns: 1fr;
   }
+  .gc-chronicles-expo-tabs{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .gc-chronicles-stats{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-/* ── Expeditions + Records (Chronicles) ───────────────────────────────── */
+/* ── Expeditions + Records (Chronicles) — legacy aliases ──────────────── */
 
-.gc-chronicles-expo-cat{
-  font-size: 0.82rem;
-  color: rgba(170, 210, 255, 0.88);
-}
 .gc-chronicles-expo-tabs .gc-pvp-tab{ min-width: 0; }
-.gc-chronicles-expo-table .gc-hof-col-name{
-  max-width: 220px;
-}
-.gc-chronicles-records-grid{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-}
-.gc-chronicles-record-card{
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 14px 16px;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(120, 190, 255, 0.16);
-  background: rgba(5, 10, 22, 0.52);
-  min-height: 148px;
-}
-.gc-chronicles-record-card--empty{
-  opacity: 0.72;
-}
-.gc-chronicles-record-title{
-  margin: 0;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: rgba(190, 215, 255, 0.82);
-  text-transform: uppercase;
-}
-.gc-chronicles-record-value{
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: rgba(230, 245, 255, 0.96);
-  line-height: 1.2;
-}
-.gc-chronicles-record-subtitle,
-.gc-chronicles-record-date,
-.gc-chronicles-record-empty{
-  margin: 0;
-  font-size: 0.85rem;
-}
-.gc-chronicles-record-report-btn{
-  margin-top: auto;
-  align-self: flex-start;
-}
 
 /* ── PvP section (Chronicles) ─────────────────────────────────────────── */
 
@@ -14769,31 +14998,9 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   margin-left: auto;
 }
 .gc-pvp-stats{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
-  gap: 8px;
-  margin-bottom: 14px;
+  /* legacy alias when used without .gc-chronicles-stats */
 }
-.gc-pvp-stat{
-  padding: 10px 12px;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(120, 190, 255, 0.14);
-  background: rgba(5, 10, 22, 0.52);
-  min-width: 0;
-}
-.gc-pvp-stat-label{
-  display: block;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--gc-text-dim);
-  margin-bottom: 4px;
-}
-.gc-pvp-stat-value{
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--gc-primary-2);
-}
+
 .gc-pvp-stat--win .gc-pvp-stat-value{ color: rgba(120, 255, 180, 0.95); }
 .gc-pvp-stat--loss .gc-pvp-stat-value{ color: rgba(255, 140, 140, 0.95); }
 .gc-pvp-tabs .gc-pvp-tab{ min-width: 0; }
