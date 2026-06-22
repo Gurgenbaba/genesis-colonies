@@ -81,6 +81,13 @@ _PIRATE_LOSS_WIN_RANGE = (3, 18)
 _PIRATE_LOSS_CLOSE_RANGE = (8, 28)
 _PIRATE_LOSS_DEFEAT_RANGE = (18, 45)
 
+# Pirate salvage on win — light/mid hulls only; never beats shipyard cadence.
+_PIRATE_SALVAGE_NONE_CHANCE = 0.70
+_PIRATE_SALVAGE_SMALL_CHANCE = 0.25
+_PIRATE_SALVAGE_SCORE_CAP_RATIO = 0.12
+_PIRATE_SALVAGE_SHIP_LIGHT: Sequence[str] = ("spark_drone", "mule_courier", "veil_probe")
+_PIRATE_SALVAGE_SHIP_MID: Sequence[str] = ("mule_courier", "solar_skiff", "falcon_interceptor")
+
 _EXPEDITION_ALLOWED_BOX_KEYS = frozenset(
     {
         "generic_supply_container",
@@ -548,6 +555,70 @@ def apply_expedition_ship_losses(
     return remaining, losses
 
 
+def _merge_ship_counts(
+    base: Mapping[str, int],
+    extra: Mapping[str, int],
+) -> Dict[str, int]:
+    merged = {str(k): int(v) for k, v in (base or {}).items() if int(v or 0) > 0}
+    for key, qty in (extra or {}).items():
+        amount = int(qty or 0)
+        if amount > 0:
+            merged[str(key)] = merged.get(str(key), 0) + amount
+    return merged
+
+
+def roll_pirate_salvage_rewards(
+    rng: random.Random,
+    *,
+    pirate_points: int,
+    fleet_points: int,
+) -> Tuple[Dict[str, int], str]:
+    """Salvage/capture roll on pirate victory — 70% none, 25% small, 5% rare."""
+    roll = rng.random()
+    if roll < _PIRATE_SALVAGE_NONE_CHANCE:
+        return {}, "none"
+    tier = (
+        "small"
+        if roll < (_PIRATE_SALVAGE_NONE_CHANCE + _PIRATE_SALVAGE_SMALL_CHANCE)
+        else "rare"
+    )
+
+    pirate_pts = max(1, int(pirate_points))
+    fleet_pts = max(1, int(fleet_points))
+    score_cap = max(
+        ship_score_value("spark_drone"),
+        int(pirate_pts * _PIRATE_SALVAGE_SCORE_CAP_RATIO),
+    )
+    if tier == "rare":
+        score_cap = min(int(score_cap * 1.8), int(pirate_pts * 0.20))
+
+    pool = list(_PIRATE_SALVAGE_SHIP_LIGHT if tier == "small" else _PIRATE_SALVAGE_SHIP_MID)
+    max_hulls = 2 if tier == "small" else 3
+    if pirate_pts < int(fleet_pts * 0.85):
+        max_hulls = min(max_hulls, 1)
+
+    target_hulls = rng.randint(1, max(1, max_hulls))
+    salvaged: Dict[str, int] = {}
+    total_score = 0
+    for _ in range(target_hulls):
+        affordable = [k for k in pool if total_score + ship_score_value(k) <= score_cap]
+        if not affordable:
+            break
+        weights = [1.0 / max(1.0, float(ship_score_value(k))) for k in affordable]
+        total_w = sum(weights)
+        pick = rng.random() * total_w
+        chosen = affordable[-1]
+        for key, weight in zip(affordable, weights):
+            pick -= weight
+            if pick <= 0:
+                chosen = key
+                break
+        salvaged[chosen] = salvaged.get(chosen, 0) + 1
+        total_score += ship_score_value(chosen)
+
+    return {k: v for k, v in salvaged.items() if v > 0}, tier
+
+
 def resolve_pirate_encounter(
     rng: random.Random,
     ships: Mapping[str, int],
@@ -617,6 +688,21 @@ def resolve_expedition_outcome(
         pirate_combat = resolve_pirate_encounter(pirate_rng, ships, fleet_value)
         remaining_ships = dict(pirate_combat.get("remaining_ships") or {})
         ship_losses = dict(pirate_combat.get("losses") or {})
+        if pirate_combat.get("won"):
+            salvage_rng = random.Random(int(movement_id) * 42424 + 161803)
+            salvaged_ships, salvage_tier = roll_pirate_salvage_rewards(
+                salvage_rng,
+                pirate_points=int(pirate_combat.get("pirate_points") or 0),
+                fleet_points=int(pirate_combat.get("fleet_points") or 0),
+            )
+            if salvaged_ships:
+                remaining_ships = _merge_ship_counts(remaining_ships, salvaged_ships)
+                pirate_combat = dict(pirate_combat)
+                pirate_combat["salvaged_ships"] = salvaged_ships
+                pirate_combat["salvage_tier"] = salvage_tier
+            else:
+                pirate_combat = dict(pirate_combat)
+                pirate_combat["salvage_tier"] = salvage_tier
 
     rewards, loot_debug = _compute_event_loot(
         rng,
@@ -674,6 +760,10 @@ def resolve_expedition_outcome(
     if pirate_combat is not None:
         result["pirate_combat"] = pirate_combat
         result["pirate_won"] = bool(pirate_combat.get("won"))
+        salvaged = dict(pirate_combat.get("salvaged_ships") or {})
+        if salvaged:
+            result["salvaged_ships"] = salvaged
+            result["salvaged_total"] = int(sum(salvaged.values()))
     if remaining_ships is not None:
         result["remaining_ships"] = remaining_ships
     return result
@@ -712,9 +802,11 @@ def build_expedition_report(
     expedition_ships = int(outcome.get("expedition_ship_count") or 0)
     ship_losses = dict(outcome.get("losses") or {})
     losses_total = int(outcome.get("losses_total") or sum(ship_losses.values()))
+    salvaged_ships = dict(outcome.get("salvaged_ships") or {})
+    salvaged_total = int(outcome.get("salvaged_total") or sum(salvaged_ships.values()))
     remaining_ships = dict(outcome.get("remaining_ships") or ships)
     pirate_combat = dict(outcome.get("pirate_combat") or {}) if outcome.get("pirate_combat") else {}
-    report_fleet = remaining_ships if ship_losses else ships
+    report_fleet = remaining_ships if outcome.get("remaining_ships") is not None else ships
     world = dict(world_context or {}) if world_context else {}
     is_salvage = str(world.get("world_type") or "") == "wreckage_field"
 
@@ -864,6 +956,22 @@ def build_expedition_report(
             _t("fleet_world_expedition_report_losses_none", "Losses: none")
         )
 
+    if salvaged_total > 0:
+        body_lines.append(_t("fleet_expedition_report_section_salvaged", "Salvaged ships"))
+        for ship_key, qty in sorted(salvaged_ships.items()):
+            if int(qty or 0) <= 0:
+                continue
+            spec = SHIPS.get(str(ship_key)) or {}
+            ship_name = _t(str(spec.get("name_key") or ship_key), str(ship_key))
+            body_lines.append(
+                _t(
+                    "fleet_expedition_report_salvaged_line",
+                    "+ %(amount)s %(ship)s",
+                    amount=fmt_int(qty),
+                    ship=ship_name,
+                )
+            )
+
     if delay_extra and reward_lines:
         body_lines.append(
             _t(
@@ -894,8 +1002,10 @@ def build_expedition_report(
         "cargo_jackpot_mult": int(outcome.get("cargo_jackpot_mult") or 1),
         "losses": {str(k): int(v) for k, v in ship_losses.items() if int(v or 0) > 0},
         "losses_total": losses_total,
+        "salvaged_ships": {str(k): int(v) for k, v in salvaged_ships.items() if int(v or 0) > 0},
+        "salvaged_total": salvaged_total,
     }
-    if remaining_ships and ship_losses:
+    if remaining_ships and (ship_losses or salvaged_ships):
         metadata["remaining_ships"] = {
             str(k): int(v) for k, v in remaining_ships.items() if int(v or 0) > 0
         }
@@ -907,6 +1017,7 @@ def build_expedition_report(
             "ratio": float(pirate_combat.get("ratio") or 0),
             "win_chance": float(pirate_combat.get("win_chance") or 0),
             "loss_pct": int(pirate_combat.get("loss_pct") or 0),
+            "salvage_tier": str(pirate_combat.get("salvage_tier") or "none"),
         }
         metadata["pirate_won"] = bool(pirate_combat.get("won"))
     if world.get("world_key"):

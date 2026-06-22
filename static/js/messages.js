@@ -1646,6 +1646,18 @@
       );
     }
 
+    const salvaged = meta.salvaged_ships || {};
+    const salvagedTotal = Number(meta.salvaged_total || unitCountTotal(salvaged));
+    if (salvagedTotal > 0) {
+      sections.push(
+        renderCombatPanel(
+          t("fleet_expedition_report_section_salvaged", "Salvaged ships"),
+          renderCombatUnitGrid(salvaged, null),
+          "gc-combat-report-panel--salvaged"
+        )
+      );
+    }
+
     if (lootboxes.length) {
       sections.push(
         renderCombatPanel(

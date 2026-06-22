@@ -1219,6 +1219,8 @@
   "expedition_report_stat_pirate_strength": "Pirate strength",
   "expedition_report_stat_fleet_strength": "Fleet strength",
   "expedition_report_stat_loss_rate": "Loss rate",
+  "fleet_expedition_report_section_salvaged": "Salvaged ships",
+  "fleet_expedition_report_salvaged_line": "+ %(amount)s %(ship)s",
   "overview_label_commander": "Commander",
   "overview_label_planet": "Colony",
   "overview_label_coordinates": "Coordinates",

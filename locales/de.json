@@ -2576,6 +2576,8 @@
   "expedition_report_stat_pirate_strength": "Piratenstärke",
   "expedition_report_stat_fleet_strength": "Flottenstärke",
   "expedition_report_stat_loss_rate": "Verlustrate",
+  "fleet_expedition_report_section_salvaged": "Geborgene Schiffe",
+  "fleet_expedition_report_salvaged_line": "+ %(amount)s %(ship)s",
   "alliance_title": "Allianz",
   "alliance_hint": "Bündnisse, Kommunikation und später Kriegsführung im Cluster.",
   "alliance_status_title": "Allianz-Status",

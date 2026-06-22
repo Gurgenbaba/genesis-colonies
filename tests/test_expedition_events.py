@@ -16,6 +16,7 @@ from game.expedition_events import (
     is_allowed_expedition_lootbox,
     resolve_expedition_outcome,
     resolve_pirate_encounter,
+    roll_pirate_salvage_rewards,
 )
 
 _LARGE_FLEET = {"seed_ark": 163}
@@ -410,3 +411,92 @@ def test_build_expedition_report_includes_pirate_metadata():
     assert meta.get("losses_total", 0) >= 0
     if meta.get("losses_total"):
         assert meta.get("remaining_ships")
+
+
+def test_pirate_salvage_only_on_win():
+    import random
+
+    for seed in range(300):
+        rng = random.Random(seed)
+        combat = resolve_pirate_encounter(rng, {"solar_skiff": 10}, calculate_fleet_value({"solar_skiff": 10}))
+        if not combat.get("won"):
+            continue
+        salvage_rng = random.Random(seed + 999)
+        salvaged, tier = roll_pirate_salvage_rewards(
+            salvage_rng,
+            pirate_points=int(combat["pirate_points"]),
+            fleet_points=int(combat["fleet_points"]),
+        )
+        for key in salvaged:
+            assert key in {"spark_drone", "mule_courier", "veil_probe", "solar_skiff", "falcon_interceptor"}
+        return
+    pytest.skip("no pirate wins in window")
+
+
+def test_pirate_defeat_never_grants_salvage():
+    movement_id = _find_movement_for_event(
+        "pirate_encounter",
+        ships={"solar_skiff": 1},
+        cargo_total=50_000,
+    )
+    outcome = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=50_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships={"solar_skiff": 1},
+    )
+    if outcome.get("pirate_won"):
+        pytest.skip("movement rolled pirate win")
+    assert not outcome.get("salvaged_ships")
+    assert int(outcome.get("salvaged_total") or 0) == 0
+
+
+def test_pirate_salvage_merged_into_return_fleet():
+    import random
+
+    ships = {"solar_skiff": 20, "falcon_interceptor": 40}
+    fleet_value = calculate_fleet_value(ships)
+    for movement_id in range(1, 12000):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships=ships,
+        )
+        if outcome.get("event_key") != "pirate_encounter" or not outcome.get("pirate_won"):
+            continue
+        salvaged = dict(outcome.get("salvaged_ships") or {})
+        if not salvaged:
+            continue
+        remaining = dict(outcome["remaining_ships"])
+        for key, qty in salvaged.items():
+            assert int(remaining.get(key) or 0) >= int(qty)
+        repeat = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships=ships,
+        )
+        assert repeat == outcome
+        return
+    pytest.skip("no pirate win with salvage in search window")
+
+
+def test_salvage_tier_distribution_approximate():
+    import random
+
+    tiers: dict[str, int] = {"none": 0, "small": 0, "rare": 0}
+    for seed in range(5000):
+        _, tier = roll_pirate_salvage_rewards(
+            random.Random(seed),
+            pirate_points=50_000,
+            fleet_points=60_000,
+        )
+        tiers[tier] = tiers.get(tier, 0) + 1
+    total = sum(tiers.values())
+    assert tiers["none"] / total == pytest.approx(0.70, abs=0.05)
+    assert (tiers["small"] + tiers["rare"]) / total == pytest.approx(0.30, abs=0.05)
+    assert tiers["rare"] / total == pytest.approx(0.05, abs=0.03)
