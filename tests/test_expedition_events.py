@@ -15,7 +15,9 @@ from game.expedition_events import (
     grant_expedition_lootboxes,
     is_allowed_expedition_lootbox,
     resolve_expedition_outcome,
+    resolve_minefield_hazard,
     resolve_pirate_encounter,
+    roll_lost_container_lootboxes,
     roll_pirate_salvage_rewards,
 )
 
@@ -500,3 +502,212 @@ def test_salvage_tier_distribution_approximate():
     assert tiers["none"] / total == pytest.approx(0.70, abs=0.05)
     assert (tiers["small"] + tiers["rare"]) / total == pytest.approx(0.30, abs=0.05)
     assert tiers["rare"] / total == pytest.approx(0.05, abs=0.03)
+
+
+def test_ion_storm_delay_within_flight_fraction():
+    movement_id = _find_movement_for_event("ion_storm", ships={"solar_skiff": 2})
+    flight_seconds = 200
+    outcome = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=250_000,
+        expedition_ship_count=2,
+        flight_seconds=flight_seconds,
+        ships={"solar_skiff": 2},
+    )
+    assert outcome["event_key"] == "ion_storm"
+    delay = int(outcome["delay_extra"])
+    assert delay >= int(flight_seconds * 0.20)
+    assert delay <= int(flight_seconds * 0.60) + 1
+    assert int(outcome["reward_total"]) == 0
+    assert not outcome.get("remaining_ships")
+
+
+def test_ion_storm_deterministic():
+    kwargs = dict(
+        cargo_total=250_000,
+        expedition_ship_count=2,
+        flight_seconds=180,
+        ships={"solar_skiff": 2},
+    )
+    movement_id = _find_movement_for_event("ion_storm", ships=kwargs["ships"])
+    assert resolve_expedition_outcome(movement_id, **kwargs) == resolve_expedition_outcome(
+        movement_id, **kwargs
+    )
+
+
+def test_ancient_minefield_never_wipes_fleet():
+    import random
+
+    ships = {"solar_skiff": 8, "falcon_interceptor": 60}
+    for seed in range(200):
+        hazard = resolve_minefield_hazard(random.Random(seed), ships)
+        assert sum(hazard["remaining_ships"].values()) >= 1
+        assert int(hazard["loss_pct"]) >= 2
+        assert int(hazard["loss_pct"]) <= 12
+
+
+def test_ancient_minefield_outcome_no_loot_and_updates_fleet():
+    movement_id = _find_movement_for_event(
+        "ancient_minefield",
+        ships={"solar_skiff": 15, "falcon_interceptor": 80},
+    )
+    ships = {"solar_skiff": 15, "falcon_interceptor": 80}
+    outcome = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=500_000,
+        expedition_ship_count=2,
+        flight_seconds=120,
+        ships=ships,
+    )
+    assert outcome["event_key"] == "ancient_minefield"
+    assert int(outcome["reward_total"]) == 0
+    assert outcome.get("hazard")
+    assert outcome.get("remaining_ships") is not None
+    assert sum(outcome["remaining_ships"].values()) >= 1
+    sent = sum(ships.values())
+    remaining = sum(outcome["remaining_ships"].values())
+    assert remaining <= sent
+    if int(outcome.get("losses_total") or 0) > 0:
+        assert remaining < sent
+
+
+def test_hazard_events_are_rare_in_weight_table():
+    hits = {"ion_storm": 0, "ancient_minefield": 0}
+    for movement_id in range(1, 8000):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 2, "falcon_interceptor": 20},
+        )
+        key = outcome["event_key"]
+        if key in hits:
+            hits[key] += 1
+    total = 7999
+    for key, count in hits.items():
+        rate = count / total
+        assert 0.01 <= rate <= 0.08, f"{key} rate {rate:.3f} out of band"
+
+
+def test_lost_container_grants_lootbox_and_resources():
+    movement_id = _find_movement_for_event("lost_container", ships={"solar_skiff": 2})
+    outcome = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=250_000,
+        expedition_ship_count=2,
+        flight_seconds=120,
+        ships={"solar_skiff": 2},
+        empire_daily_total=500_000,
+    )
+    assert outcome["event_key"] == "lost_container"
+    assert outcome.get("lootboxes")
+    repeat = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=250_000,
+        expedition_ship_count=2,
+        flight_seconds=120,
+        ships={"solar_skiff": 2},
+        empire_daily_total=500_000,
+    )
+    assert outcome == repeat
+
+
+def test_lost_container_lootbox_from_allowed_pool():
+    import random
+
+    for seed in range(100):
+        boxes = roll_lost_container_lootboxes(random.Random(seed))
+        if not boxes:
+            continue
+        assert boxes[0]["key"] in {
+            "generic_supply_container",
+            "resource_cache",
+            "research_capsule",
+            "military_cache",
+            "alien_cache",
+        }
+        return
+    pytest.skip("no lootbox rolled")
+
+
+def test_abandoned_convoy_can_grant_salvage_ships():
+    for movement_id in range(1, 15000):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 10, "falcon_interceptor": 40},
+            empire_daily_total=1_000_000,
+        )
+        if outcome["event_key"] != "abandoned_convoy":
+            continue
+        if outcome.get("salvaged_ships"):
+            assert outcome.get("remaining_ships")
+            sent = 50
+            assert sum(outcome["remaining_ships"].values()) > sent
+            for key in outcome["salvaged_ships"]:
+                assert key in {
+                    "spark_drone",
+                    "mule_courier",
+                    "veil_probe",
+                    "solar_skiff",
+                    "falcon_interceptor",
+                }
+            return
+    pytest.skip("no convoy with ship salvage in search window")
+
+
+def test_ancient_derelict_always_falcon_and_lootbox():
+    movement_id = _find_movement_for_event(
+        "ancient_derelict",
+        ships={"solar_skiff": 5},
+        cargo_total=500_000,
+    )
+    ships = {"solar_skiff": 5}
+    outcome = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=500_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=ships,
+        empire_daily_total=1_000_000,
+    )
+    assert outcome["event_key"] == "ancient_derelict"
+    assert outcome.get("story_tier") == "legendary"
+    assert outcome["salvaged_ships"].get("falcon_interceptor") == 1
+    assert outcome.get("lootboxes")
+    assert int(outcome["remaining_ships"].get("falcon_interceptor") or 0) >= 1
+    assert sum(outcome["remaining_ships"].values()) == 6
+
+
+def test_ancient_derelict_is_very_rare():
+    hits = 0
+    for movement_id in range(1, 12000):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 2},
+        )
+        if outcome["event_key"] == "ancient_derelict":
+            hits += 1
+    rate = hits / 11999
+    assert 0.001 <= rate <= 0.02
+
+
+def test_story_treasure_events_deterministic():
+    for event_key in ("lost_container", "abandoned_convoy", "ancient_derelict"):
+        movement_id = _find_movement_for_event(event_key, ships={"solar_skiff": 5, "falcon_interceptor": 20})
+        kwargs = dict(
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 5, "falcon_interceptor": 20},
+            empire_daily_total=2_000_000,
+        )
+        assert resolve_expedition_outcome(movement_id, **kwargs) == resolve_expedition_outcome(
+            movement_id, **kwargs
+        )

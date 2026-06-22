@@ -57,6 +57,21 @@ _EVENT_LOOT_PROFILES: Dict[str, Dict[str, Any]] = {
         "economy_day_range": (0.0020, 0.0080),
         "split": {"metal": 0.55, "crystal": 0.30, "fuel_cells": 0.15},
     },
+    "lost_container": {
+        "mult_range": (0.35, 0.65),
+        "economy_day_range": (0.0010, 0.0050),
+        "split": {"metal": 0.50, "crystal": 0.35, "fuel_cells": 0.15},
+    },
+    "abandoned_convoy": {
+        "mult_range": (0.55, 0.95),
+        "economy_day_range": (0.0030, 0.0120),
+        "split": {"metal": 0.40, "crystal": 0.45, "fuel_cells": 0.15},
+    },
+    "ancient_derelict": {
+        "mult_range": (0.20, 0.40),
+        "economy_day_range": (0.0020, 0.0080),
+        "split": {"metal": 0.45, "crystal": 0.35, "fuel_cells": 0.20},
+    },
 }
 
 # Rare additive lootbox drops (resources unchanged). Chance = roll < value.
@@ -70,7 +85,16 @@ _EXPEDITION_LOOTBOX_DROPS: Dict[str, Dict[str, Any]] = {
     "sensor_glitch": {"chance": 0.0, "boxes": ()},
     "nav_interference": {"chance": 0.0, "boxes": ()},
     "pirate_encounter": {"chance": 0.0, "boxes": ()},
+    "ion_storm": {"chance": 0.0, "boxes": ()},
+    "ancient_minefield": {"chance": 0.0, "boxes": ()},
+    "lost_container": {"chance": 0.0, "boxes": ()},
+    "abandoned_convoy": {"chance": 0.0, "boxes": ()},
+    "ancient_derelict": {"chance": 0.0, "boxes": ()},
 }
+
+# Hazard events — non-combat risk (GC-620I-A).
+_ION_STORM_DELAY_MULT_RANGE = (0.20, 0.60)
+_MINEFIELD_LOSS_RANGE = (2, 12)
 
 # Pirate encounter — lightweight ratio combat (no combat.py resolver).
 _PIRATE_ENEMY_FACTOR_RANGE = (0.70, 1.25)
@@ -87,6 +111,19 @@ _PIRATE_SALVAGE_SMALL_CHANCE = 0.25
 _PIRATE_SALVAGE_SCORE_CAP_RATIO = 0.12
 _PIRATE_SALVAGE_SHIP_LIGHT: Sequence[str] = ("spark_drone", "mule_courier", "veil_probe")
 _PIRATE_SALVAGE_SHIP_MID: Sequence[str] = ("mule_courier", "solar_skiff", "falcon_interceptor")
+
+# Story / treasure events (GC-620I-B).
+_LOST_CONTAINER_BOX_COMMON: Sequence[str] = (
+    "generic_supply_container",
+    "resource_cache",
+    "research_capsule",
+)
+_LOST_CONTAINER_BOX_RARE: Sequence[str] = ("military_cache", "alien_cache")
+_LOST_CONTAINER_RARE_BOX_CHANCE = 0.15
+_CONVoy_RESOURCES_ONLY_CHANCE = 0.40
+_CONVoy_SHIPS_ONLY_CHANCE = 0.45
+_CONVoy_BOTH_BONUS_BOX_CHANCE = 0.25
+_CONVoy_SALVAGE_SCORE_CAP_RATIO = 0.10
 
 _EXPEDITION_ALLOWED_BOX_KEYS = frozenset(
     {
@@ -180,6 +217,46 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
         "desc_key": "expedition_event_pirate_encounter_desc",
         "severity": "major",
     },
+    {
+        "key": "ion_storm",
+        "weight": 4,
+        "label_key": "expedition_event_ion_storm",
+        "desc_key": "expedition_event_ion_storm_desc",
+        "severity": "minor",
+        "rewards": {},
+        "delay_chance": 1.0,
+        "delay_multiplier_range": _ION_STORM_DELAY_MULT_RANGE,
+    },
+    {
+        "key": "ancient_minefield",
+        "weight": 4,
+        "label_key": "expedition_event_ancient_minefield",
+        "desc_key": "expedition_event_ancient_minefield_desc",
+        "severity": "major",
+        "rewards": {},
+    },
+    {
+        "key": "lost_container",
+        "weight": 4,
+        "label_key": "expedition_event_lost_container",
+        "desc_key": "expedition_event_lost_container_desc",
+        "severity": "normal",
+    },
+    {
+        "key": "abandoned_convoy",
+        "weight": 2,
+        "label_key": "expedition_event_abandoned_convoy",
+        "desc_key": "expedition_event_abandoned_convoy_desc",
+        "severity": "major",
+    },
+    {
+        "key": "ancient_derelict",
+        "weight": 1,
+        "label_key": "expedition_event_ancient_derelict",
+        "desc_key": "expedition_event_ancient_derelict_desc",
+        "severity": "major",
+        "story_tier": "legendary",
+    },
 )
 
 _EVENT_BY_KEY: Dict[str, Dict[str, Any]] = {str(e["key"]): e for e in _EXPEDITION_EVENTS}
@@ -264,7 +341,7 @@ def _pick_event_key(
 ) -> str:
     """Pick event; extra expedition hulls shift weight away from empty outcomes."""
     bonus = min(0.12, max(0, int(expedition_ship_count)) * 0.03) + max(0.0, float(event_bonus))
-    empty_keys = {"void_scan", "sensor_glitch"}
+    empty_keys = {"void_scan", "sensor_glitch", "ion_storm", "ancient_minefield", "nav_interference"}
     adjusted: list[tuple[str, float]] = []
     for event in _EXPEDITION_EVENTS:
         key = str(event["key"])
@@ -619,6 +696,123 @@ def roll_pirate_salvage_rewards(
     return {k: v for k, v in salvaged.items() if v > 0}, tier
 
 
+def roll_lost_container_lootboxes(rng: random.Random) -> list[Dict[str, Any]]:
+    """Drifting supply container — one lootbox, mostly common pool."""
+    if rng.random() < _LOST_CONTAINER_RARE_BOX_CHANCE:
+        pool = [b for b in _LOST_CONTAINER_BOX_RARE if is_allowed_expedition_lootbox(b)]
+    else:
+        pool = [b for b in _LOST_CONTAINER_BOX_COMMON if is_allowed_expedition_lootbox(b)]
+    if not pool:
+        return []
+    return [{"key": pool[rng.randrange(len(pool))], "amount": 1}]
+
+
+def _roll_convoy_ship_salvage(rng: random.Random, fleet_value: int) -> Dict[str, int]:
+    """Convoy wreck salvage — light/mid hulls, capped below pirate salvage."""
+    fleet_pts = max(1, int(fleet_value))
+    score_cap = max(
+        ship_score_value("solar_skiff"),
+        int(fleet_pts * _CONVoy_SALVAGE_SCORE_CAP_RATIO),
+    )
+    pool = list(_PIRATE_SALVAGE_SHIP_LIGHT) + list(_PIRATE_SALVAGE_SHIP_MID)
+    target_hulls = rng.randint(1, 3)
+    salvaged: Dict[str, int] = {}
+    total_score = 0
+    for _ in range(target_hulls):
+        affordable = [k for k in pool if total_score + ship_score_value(k) <= score_cap]
+        if not affordable:
+            break
+        weights = [1.0 / max(1.0, float(ship_score_value(k))) for k in affordable]
+        total_w = sum(weights)
+        pick = rng.random() * total_w
+        chosen = affordable[-1]
+        for key, weight in zip(affordable, weights):
+            pick -= weight
+            if pick <= 0:
+                chosen = key
+                break
+        salvaged[chosen] = salvaged.get(chosen, 0) + 1
+        total_score += ship_score_value(chosen)
+    return {k: v for k, v in salvaged.items() if v > 0}
+
+
+def resolve_abandoned_convoy_treasure(
+    rng: random.Random,
+    *,
+    fleet_value: int,
+) -> Dict[str, Any]:
+    """Abandoned convoy — resources, ships, or both (no combat)."""
+    roll = rng.random()
+    if roll < _CONVoy_RESOURCES_ONLY_CHANCE:
+        mode = "resources"
+    elif roll < (_CONVoy_RESOURCES_ONLY_CHANCE + _CONVoy_SHIPS_ONLY_CHANCE):
+        mode = "ships"
+    else:
+        mode = "both"
+
+    salvaged: Dict[str, int] = {}
+    lootboxes: list[Dict[str, Any]] = []
+    if mode in ("ships", "both"):
+        salvaged = _roll_convoy_ship_salvage(rng, fleet_value)
+    if mode == "both" and rng.random() < _CONVoy_BOTH_BONUS_BOX_CHANCE:
+        box_pool = [b for b in ("resource_cache", "generic_supply_container") if is_allowed_expedition_lootbox(b)]
+        if box_pool:
+            lootboxes.append({"key": box_pool[rng.randrange(len(box_pool))], "amount": 1})
+
+    return {
+        "mode": mode,
+        "salvaged_ships": salvaged,
+        "lootboxes": lootboxes,
+    }
+
+
+def resolve_ancient_derelict_treasure(rng: random.Random) -> Dict[str, Any]:
+    """Ultra-rare derelict — one mid hull plus premium cache lootbox."""
+    box_key = "premium_cache" if rng.random() < 0.35 else "alien_cache"
+    if not is_allowed_expedition_lootbox(box_key):
+        box_key = "alien_cache"
+    return {
+        "salvaged_ships": {"falcon_interceptor": 1},
+        "lootboxes": [{"key": box_key, "amount": 1, "jackpot": True}],
+        "story_tier": "legendary",
+    }
+
+
+def resolve_minefield_hazard(
+    rng: random.Random,
+    ships: Mapping[str, int],
+) -> Dict[str, Any]:
+    """Non-combat minefield — small proportional losses, never total fleet wipe."""
+    loss_pct = rng.randint(int(_MINEFIELD_LOSS_RANGE[0]), int(_MINEFIELD_LOSS_RANGE[1]))
+    remaining, losses = apply_expedition_ship_losses(ships, loss_pct)
+    return {
+        "key": "ancient_minefield",
+        "loss_pct": int(loss_pct),
+        "remaining_ships": remaining,
+        "losses": losses,
+        "losses_total": int(sum(losses.values())),
+    }
+
+
+def _resolve_event_delay_extra(
+    movement_id: int,
+    event: Mapping[str, Any],
+    flight_seconds: int,
+) -> int:
+    delay_chance = float(event.get("delay_chance") or 0.0)
+    if delay_chance <= 0:
+        return 0
+    delay_rng = random.Random(int(movement_id) * 9176)
+    if delay_rng.random() >= delay_chance:
+        return 0
+    base = max(1, int(flight_seconds or 60))
+    mult_range = event.get("delay_multiplier_range")
+    if isinstance(mult_range, (list, tuple)) and len(mult_range) == 2:
+        mult = delay_rng.uniform(float(mult_range[0]), float(mult_range[1]))
+        return max(1, int(base * mult))
+    return base
+
+
 def resolve_pirate_encounter(
     rng: random.Random,
     ships: Mapping[str, int],
@@ -680,8 +874,11 @@ def resolve_expedition_outcome(
     )
     event = _EVENT_BY_KEY[event_key]
     pirate_combat: Dict[str, Any] | None = None
+    hazard: Dict[str, Any] | None = None
     remaining_ships: Dict[str, int] | None = None
     ship_losses: Dict[str, int] = {}
+    story_salvaged: Dict[str, int] = {}
+    story_tier: str | None = None
 
     if event_key == "pirate_encounter" and ships:
         pirate_rng = random.Random(int(movement_id) * 31337 + 271828)
@@ -704,6 +901,12 @@ def resolve_expedition_outcome(
                 pirate_combat = dict(pirate_combat)
                 pirate_combat["salvage_tier"] = salvage_tier
 
+    if event_key == "ancient_minefield" and ships:
+        hazard_rng = random.Random(int(movement_id) * 58258 + 314159)
+        hazard = resolve_minefield_hazard(hazard_rng, ships)
+        remaining_ships = dict(hazard.get("remaining_ships") or {})
+        ship_losses = dict(hazard.get("losses") or {})
+
     rewards, loot_debug = _compute_event_loot(
         rng,
         event_key,
@@ -712,11 +915,36 @@ def resolve_expedition_outcome(
         cargo_total=int(cargo_total),
     )
     lootboxes = _roll_expedition_lootboxes(rng, event_key)
-    if event_key == "pirate_encounter":
+    convoy_mode: str | None = None
+    if event_key == "lost_container":
+        box_rng = random.Random(int(movement_id) * 11113 + 77777)
+        lootboxes = roll_lost_container_lootboxes(box_rng)
+    elif event_key == "abandoned_convoy":
         lootboxes = []
+        convoy_rng = random.Random(int(movement_id) * 22229 + 88888)
+        convoy = resolve_abandoned_convoy_treasure(convoy_rng, fleet_value=fleet_value)
+        convoy_mode = str(convoy.get("mode") or "resources")
+        story_salvaged = dict(convoy.get("salvaged_ships") or {})
+        lootboxes = list(convoy.get("lootboxes") or [])
+    elif event_key == "ancient_derelict":
+        lootboxes = []
+        derelict_rng = random.Random(int(movement_id) * 33347 + 99999)
+        derelict = resolve_ancient_derelict_treasure(derelict_rng)
+        story_salvaged = dict(derelict.get("salvaged_ships") or {})
+        lootboxes = list(derelict.get("lootboxes") or [])
+        story_tier = str(derelict.get("story_tier") or "legendary")
+    elif event_key in ("pirate_encounter", "ancient_minefield", "ion_storm"):
+        lootboxes = []
+    if event_key == "pirate_encounter":
         if not (pirate_combat and pirate_combat.get("won")):
             rewards = _empty_rewards()
             loot_debug = {"economy_base": 0, "raw_loot_total": 0}
+    elif event_key == "abandoned_convoy" and convoy_mode == "ships":
+        rewards = _empty_rewards()
+        loot_debug = {"economy_base": 0, "raw_loot_total": 0}
+    elif event_key in ("ancient_minefield", "ion_storm"):
+        rewards = _empty_rewards()
+        loot_debug = {"economy_base": 0, "raw_loot_total": 0}
     _apply_directive_reward_modifiers(
         rewards,
         loot_mult=loot_mult,
@@ -729,12 +957,7 @@ def resolve_expedition_outcome(
         movement_id=int(movement_id),
     )
 
-    delay_extra = 0
-    delay_chance = float(event.get("delay_chance") or 0.0)
-    if delay_chance > 0:
-        delay_rng = random.Random(int(movement_id) * 9176)
-        if delay_rng.random() < delay_chance:
-            delay_extra = int(flight_seconds or 60)
+    delay_extra = _resolve_event_delay_extra(movement_id, event, int(flight_seconds or 60))
 
     reward_total = sum(int(rewards.get(k) or 0) for k in VALID_RESOURCE_KEYS)
     result: Dict[str, Any] = {
@@ -764,8 +987,20 @@ def resolve_expedition_outcome(
         if salvaged:
             result["salvaged_ships"] = salvaged
             result["salvaged_total"] = int(sum(salvaged.values()))
+    if story_salvaged and ships:
+        base = dict(remaining_ships) if remaining_ships is not None else dict(ships)
+        remaining_ships = _merge_ship_counts(base, story_salvaged)
+        if "salvaged_ships" not in result:
+            result["salvaged_ships"] = story_salvaged
+            result["salvaged_total"] = int(sum(story_salvaged.values()))
+    if convoy_mode:
+        result["convoy_mode"] = convoy_mode
+    if story_tier:
+        result["story_tier"] = story_tier
     if remaining_ships is not None:
         result["remaining_ships"] = remaining_ships
+    if hazard is not None:
+        result["hazard"] = hazard
     return result
 
 
@@ -806,6 +1041,7 @@ def build_expedition_report(
     salvaged_total = int(outcome.get("salvaged_total") or sum(salvaged_ships.values()))
     remaining_ships = dict(outcome.get("remaining_ships") or ships)
     pirate_combat = dict(outcome.get("pirate_combat") or {}) if outcome.get("pirate_combat") else {}
+    hazard = dict(outcome.get("hazard") or {}) if outcome.get("hazard") else {}
     report_fleet = remaining_ships if outcome.get("remaining_ships") is not None else ships
     world = dict(world_context or {}) if world_context else {}
     is_salvage = str(world.get("world_type") or "") == "wreckage_field"
@@ -871,6 +1107,26 @@ def build_expedition_report(
                     pct=fmt_int(int(pirate_combat.get("loss_pct") or 0)),
                 )
             )
+
+    if event_key == "ancient_minefield" and losses_total > 0:
+        loss_pct = int(hazard.get("loss_pct") or 0)
+        if loss_pct > 0:
+            body_lines.append(
+                _t(
+                    "fleet_expedition_report_minefield_loss_rate",
+                    "Minefield damage: %(pct)s%% ship losses",
+                    pct=fmt_int(loss_pct),
+                )
+            )
+
+    if event_key == "ion_storm" and delay_extra > 0:
+        body_lines.append(
+            _t(
+                "fleet_expedition_report_ion_storm_delay",
+                "Return delayed by %(seconds)s s due to ion storm.",
+                seconds=fmt_int(delay_extra),
+            )
+        )
 
     reward_lines: list[str] = []
     if int(rewards.get("metal") or 0):
@@ -951,7 +1207,7 @@ def build_expedition_report(
                     ship=ship_name,
                 )
             )
-    elif not pirate_combat:
+    elif not pirate_combat and not hazard:
         body_lines.append(
             _t("fleet_world_expedition_report_losses_none", "Losses: none")
         )
@@ -1005,6 +1261,10 @@ def build_expedition_report(
         "salvaged_ships": {str(k): int(v) for k, v in salvaged_ships.items() if int(v or 0) > 0},
         "salvaged_total": salvaged_total,
     }
+    if outcome.get("story_tier"):
+        metadata["story_tier"] = str(outcome.get("story_tier"))
+    if outcome.get("convoy_mode"):
+        metadata["convoy_mode"] = str(outcome.get("convoy_mode"))
     if remaining_ships and (ship_losses or salvaged_ships):
         metadata["remaining_ships"] = {
             str(k): int(v) for k, v in remaining_ships.items() if int(v or 0) > 0
@@ -1020,6 +1280,11 @@ def build_expedition_report(
             "salvage_tier": str(pirate_combat.get("salvage_tier") or "none"),
         }
         metadata["pirate_won"] = bool(pirate_combat.get("won"))
+    if hazard:
+        metadata["hazard"] = {
+            "key": str(hazard.get("key") or event_key),
+            "loss_pct": int(hazard.get("loss_pct") or 0),
+        }
     if world.get("world_key"):
         metadata.update(
             {

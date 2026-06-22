@@ -1313,8 +1313,13 @@
       fuel_cache: { theme: "fund", icon: "⚡" },
       debris_salvage: { theme: "fund", icon: "▣" },
       nav_interference: { theme: "disturbance", icon: "⚠" },
+      ion_storm: { theme: "disturbance", icon: "⛈" },
       distress_beacon: { theme: "alert", icon: "✦" },
+      ancient_minefield: { theme: "hazard", icon: "✸" },
       ancient_stash: { theme: "relic", icon: "✧" },
+      lost_container: { theme: "treasure", icon: "▣" },
+      abandoned_convoy: { theme: "fund", icon: "⛭" },
+      ancient_derelict: { theme: "relic", icon: "✦" },
       pirate_encounter: { theme: "combat", icon: "☠" },
     };
     return map[eventKey] || { theme: "anomaly", icon: "◎" };
@@ -1323,10 +1328,15 @@
   function expeditionEventBadge(eventKey, severity) {
     const badges = {
       nav_interference: "fleet_expedition_badge_disturbance",
+      ion_storm: "fleet_expedition_badge_disturbance",
       sensor_glitch: "fleet_expedition_badge_anomaly",
       void_scan: "fleet_expedition_badge_anomaly",
       distress_beacon: "fleet_expedition_badge_alert",
+      ancient_minefield: "fleet_expedition_badge_hazard",
       ancient_stash: "fleet_expedition_badge_relic",
+      lost_container: "fleet_expedition_badge_treasure",
+      abandoned_convoy: "fleet_expedition_badge_treasure",
+      ancient_derelict: "fleet_expedition_badge_legendary",
       pirate_encounter: "fleet_expedition_badge_combat",
     };
     const key = badges[eventKey] || `fleet_expedition_badge_${severity || "normal"}`;
@@ -1334,8 +1344,8 @@
   }
 
   function expeditionRiskLabel(eventKey) {
-    const high = new Set(["distress_beacon", "ancient_stash", "pirate_encounter"]);
-    const medium = new Set(["nav_interference"]);
+    const high = new Set(["distress_beacon", "ancient_stash", "pirate_encounter", "ancient_minefield", "ancient_derelict", "abandoned_convoy"]);
+    const medium = new Set(["nav_interference", "ion_storm", "lost_container"]);
     if (high.has(eventKey)) return t("fleet_expedition_report_risk_high", "elevated");
     if (medium.has(eventKey)) return t("fleet_expedition_report_risk_medium", "moderate");
     return t("fleet_expedition_report_risk_low", "low");
@@ -1347,12 +1357,12 @@
       Number(rewards?.crystal || 0) +
       Number(rewards?.fuel_cells || 0);
     if (total <= 0) {
-      if (eventKey === "nav_interference" || eventKey === "sensor_glitch") {
+      if (eventKey === "nav_interference" || eventKey === "sensor_glitch" || eventKey === "ion_storm" || eventKey === "ancient_minefield") {
         return t("fleet_expedition_report_find_trace", "trace");
       }
       return t("fleet_expedition_report_find_none", "none");
     }
-    if (severity === "major" || eventKey === "ancient_stash") {
+    if (severity === "major" || eventKey === "ancient_stash" || eventKey === "ancient_derelict" || eventKey === "abandoned_convoy") {
       return t("fleet_expedition_report_find_major", "major");
     }
     if (severity === "minor" || total < 800) {
@@ -1452,6 +1462,8 @@
       alert: "defeat",
       relic: "victory",
       combat: "defeat",
+      hazard: "defeat",
+      treasure: "victory",
     };
     return { ...visual, badge: badgeByTheme[visual.theme] || "open" };
   }
@@ -1606,6 +1618,28 @@
               `</div>` +
             `</div>`,
           "gc-combat-report-panel--pirate"
+        )
+      );
+    }
+
+    const hazard = meta.hazard || null;
+    if (hazard && (meta.event_key || "") === "ancient_minefield" && lossesTotal > 0) {
+      sections.push(
+        renderCombatPanel(
+          t("expedition_report_section_minefield", "Ancient minefield"),
+          `<p class="gc-expedition-hazard-summary">${esc(
+            t(
+              "expedition_report_minefield_damage",
+              "The fleet crossed dormant mines — hull damage without hostile contact."
+            )
+          )}</p>` +
+            `<div class="gc-player-card-stats gc-combat-report-stats">` +
+              `<div class="gc-player-card-stat">` +
+                `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_loss_rate", "Loss rate"))}</span>` +
+                `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(hazard.loss_pct || 0))}%</span>` +
+              `</div>` +
+            `</div>`,
+          "gc-combat-report-panel--hazard"
         )
       );
     }
