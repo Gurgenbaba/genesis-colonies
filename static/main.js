@@ -7560,6 +7560,7 @@
       const urgent = remaining > 0 && remaining < 10;
       row.classList.toggle("is-urgent", urgent);
       cdEl.classList.toggle("is-urgent", urgent);
+      if (mv) patchFleetHudFlightTrack(row, mv, remaining);
     });
   }
 
@@ -7747,6 +7748,7 @@
       shipsEl.hidden = totalShips <= 0;
     }
     patchFleetDrawerRowCountdown(row, mv);
+    patchFleetHudFlightTrack(row, mv);
     syncFleetDrawerRowAction(row, mv);
   }
 
@@ -7764,7 +7766,7 @@
       const id = String(mv.movement_id || mv.id || "");
       if (!id) return;
       let row = listEl.querySelector(`[data-fleet-drawer-row][data-movement-id="${id}"]`);
-      if (row && !row.querySelector(".gc-fleet-hud-main")) {
+      if (row && (!row.querySelector(".gc-fleet-hud-main") || !row.querySelector("[data-fleet-hud-track]"))) {
         row.replaceWith(createFleetDrawerRow(mv));
         row = listEl.querySelector(`[data-fleet-drawer-row][data-movement-id="${id}"]`);
       } else if (!row) {
@@ -7877,6 +7879,47 @@
     return flight;
   }
 
+  function fleetHudFlightVisual(mv, remainingSeconds) {
+    const status = String(mv?.status || mv?.phase || mv?.leg_phase || "outbound").toLowerCase();
+    if (status === "holding") {
+      return { status, visual: 1 };
+    }
+    const total = Math.max(1, Number(mv?.total_seconds || mv?.duration_seconds || mv?.flight_seconds || 0));
+    let rem = Number(mv?.remaining_seconds);
+    if (Number.isFinite(remainingSeconds)) {
+      rem = Number(remainingSeconds);
+    }
+    rem = Math.max(0, Number.isFinite(rem) ? rem : 0);
+    const pct = Math.max(0, Math.min(100, Math.round(((total - rem) / total) * 100)));
+    let visual = pct / 100;
+    if (status === "returning") {
+      visual = (100 - pct) / 100;
+    }
+    return { status, visual: Math.max(0, Math.min(1, visual)) };
+  }
+
+  function patchFleetHudFlightTrack(row, mv, remainingSeconds) {
+    const track = row.querySelector("[data-fleet-hud-track]");
+    if (!track || !mv) return;
+    const { status, visual } = fleetHudFlightVisual(mv, remainingSeconds);
+    track.dataset.fleetFlightStatus = status;
+    row.dataset.fleetFlightStatus = status;
+    track.style.setProperty("--fleet-progress", String(visual));
+  }
+
+  function createFleetHudFlightTrack() {
+    const track = document.createElement("span");
+    track.className = "gc-fleet-hud-track";
+    track.dataset.fleetHudTrack = "1";
+    track.setAttribute("aria-hidden", "true");
+    const line = document.createElement("span");
+    line.className = "gc-fleet-hud-track-line";
+    const dot = document.createElement("span");
+    dot.className = "gc-fleet-hud-track-dot";
+    track.append(line, dot);
+    return track;
+  }
+
   function fleetDrawerLegLabel(mv) {
     const status = String(mv?.status || mv?.phase || mv?.leg_phase || "outbound").toLowerCase();
     const legKey = globalFleetLegKey(mv, status);
@@ -7909,9 +7952,7 @@
     routeEl.textContent = formatFleetDrawerRoute(mv);
     main.appendChild(routeEl);
 
-    const leader = document.createElement("span");
-    leader.className = "gc-fleet-hud-leader";
-    leader.setAttribute("aria-hidden", "true");
+    const track = createFleetHudFlightTrack();
 
     const meta = document.createElement("div");
     meta.className = "gc-fleet-hud-meta";
@@ -7940,7 +7981,7 @@
     actionWrap.className = "gc-fleet-hud-action-wrap";
     meta.appendChild(actionWrap);
 
-    row.append(main, leader, meta);
+    row.append(main, track, meta);
 
     patchFleetDrawerRow(row, mv);
     return row;

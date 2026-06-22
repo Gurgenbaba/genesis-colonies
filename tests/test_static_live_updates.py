@@ -1068,7 +1068,11 @@ def test_main_js_gc657_fleet_drawer_timer_selection_separation():
     assert "fleetDrawerCountdown" in row_fn
     assert "gc-fleet-hud-route" in row_fn
     assert "gc-fleet-hud-main" in row_fn
-    assert "gc-fleet-hud-leader" in css
+    assert "createFleetHudFlightTrack()" in row_fn
+    assert "[data-fleet-hud-track]" in src
+    assert "patchFleetHudFlightTrack" in src
+    assert ".gc-fleet-hud-track" in css
+    assert "gc-fleet-hud-track-dot" in css
     assert "gc-fleet-hud-meta" in css
 
 
