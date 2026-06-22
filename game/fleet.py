@@ -3872,15 +3872,27 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
     delay_extra = int(outcome.get("delay_extra") or 0)
     timing = _return_timing_from_now(movement, now=now, delay_seconds=delay_extra)
     return_at = timing["return_at"]
-    claimed = _claim_movement_status(
-        conn,
-        movement_id,
-        ("holding",),
-        "returning",
-        now,
-        extra_sql=", return_at = ?, resources_json = ?",
-        extra_params=(return_at, _json_dumps(rewards)),
-    )
+    remaining_ships = dict(outcome.get("remaining_ships") or {})
+    if remaining_ships:
+        claimed = _claim_movement_status(
+            conn,
+            movement_id,
+            ("holding",),
+            "returning",
+            now,
+            extra_sql=", return_at = ?, ships_json = ?, resources_json = ?",
+            extra_params=(return_at, _json_dumps(remaining_ships), _json_dumps(rewards)),
+        )
+    else:
+        claimed = _claim_movement_status(
+            conn,
+            movement_id,
+            ("holding",),
+            "returning",
+            now,
+            extra_sql=", return_at = ?, resources_json = ?",
+            extra_params=(return_at, _json_dumps(rewards)),
+        )
     if not claimed:
         return False
     if world_key and world_context and is_expedition_world_type(str(world_context.get("world_type") or "")):

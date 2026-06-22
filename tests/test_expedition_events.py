@@ -9,11 +9,13 @@ import pytest
 from game.expedition_events import (
     EXPEDITION_LOOT_FACTOR,
     FLEET_LOOT_EXPONENT,
+    apply_expedition_ship_losses,
     build_expedition_report,
     calculate_fleet_value,
     grant_expedition_lootboxes,
     is_allowed_expedition_lootbox,
     resolve_expedition_outcome,
+    resolve_pirate_encounter,
 )
 
 _LARGE_FLEET = {"seed_ark": 163}
@@ -317,3 +319,94 @@ def test_grant_expedition_lootboxes_persists_inventory(tmp_path, monkeypatch):
     finally:
         conn.close()
         gdb._DB_PATH = None
+
+
+def test_pirate_encounter_event_weight_is_rare():
+    hits = 0
+    for movement_id in range(1, 5000):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 2, "falcon_interceptor": 20},
+        )
+        if outcome["event_key"] == "pirate_encounter":
+            hits += 1
+    rate = hits / 4999
+    assert 0.03 <= rate <= 0.10
+
+
+def test_pirate_encounter_never_wipes_fleet():
+    import random
+
+    ships = {"solar_skiff": 5, "falcon_interceptor": 50}
+    for seed in range(200):
+        rng = random.Random(seed)
+        combat = resolve_pirate_encounter(rng, ships, calculate_fleet_value(ships))
+        remaining = combat["remaining_ships"]
+        assert sum(remaining.values()) >= 1
+
+
+def test_apply_expedition_ship_losses_keeps_minimum_hull():
+    remaining, losses = apply_expedition_ship_losses({"solar_skiff": 1}, 45)
+    assert remaining == {"solar_skiff": 1}
+    assert losses == {}
+
+    remaining, losses = apply_expedition_ship_losses({"solar_skiff": 10, "falcon_interceptor": 100}, 40)
+    assert sum(remaining.values()) >= 1
+    assert sum(losses.values()) > 0
+    assert sum(remaining.values()) + sum(losses.values()) == 110
+
+
+def test_pirate_outcome_deterministic_for_movement():
+    kwargs = dict(
+        cargo_total=250_000,
+        expedition_ship_count=2,
+        flight_seconds=90,
+        ships={"solar_skiff": 3, "falcon_interceptor": 30},
+        empire_daily_total=1_000_000,
+    )
+    movement_id = _find_movement_for_event("pirate_encounter", ships=kwargs["ships"])
+    first = resolve_expedition_outcome(movement_id, **kwargs)
+    second = resolve_expedition_outcome(movement_id, **kwargs)
+    assert first == second
+    assert first["event_key"] == "pirate_encounter"
+    assert first.get("pirate_combat")
+    assert sum(first["remaining_ships"].values()) >= 1
+
+
+def test_pirate_defeat_grants_no_loot():
+    movement_id = _find_movement_for_event(
+        "pirate_encounter",
+        ships={"solar_skiff": 1},
+        cargo_total=50_000,
+    )
+    for _ in range(20):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=50_000,
+            expedition_ship_count=1,
+            flight_seconds=120,
+            ships={"solar_skiff": 1},
+        )
+        if not outcome.get("pirate_won"):
+            assert int(outcome["reward_total"]) == 0
+            assert not outcome.get("lootboxes")
+            return
+    pytest.skip("only pirate wins in retry window")
+
+
+def test_build_expedition_report_includes_pirate_metadata():
+    outcome = resolve_expedition_outcome(
+        _find_movement_for_event("pirate_encounter", ships={"solar_skiff": 5, "falcon_interceptor": 40}),
+        cargo_total=500_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships={"solar_skiff": 5, "falcon_interceptor": 40},
+    )
+    _, meta = build_expedition_report("1:2:16", {"solar_skiff": 5, "falcon_interceptor": 40}, outcome, locale="en")
+    assert meta.get("pirate_combat")
+    assert meta.get("losses_total", 0) >= 0
+    if meta.get("losses_total"):
+        assert meta.get("remaining_ships")

@@ -107,7 +107,7 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 | **GC-402B** | Fleet send preview: mission hints, ok/blocked status, expedition auto-position 16 | `static/main.js`, `templates/fleet.html` |
 | **GC-402C** | Inbox debrief: event card, risk/find meta, loot chips, theme colors per event type | `static/js/messages.js`, `static/style.css` |
 
-Event keys: `void_scan`, `mineral_deposit`, `fuel_cache`, `debris_salvage`, `nav_interference`, `distress_beacon`, `sensor_glitch`, `ancient_stash`. Roll ist deterministisch pro `movement_id`.
+Event keys: `void_scan`, `mineral_deposit`, `fuel_cache`, `debris_salvage`, `nav_interference`, `distress_beacon`, `sensor_glitch`, `ancient_stash`, `pirate_encounter`. Roll ist deterministisch pro `movement_id`.
 
 | **colonize** | `colonize_planet()`; verbraucht `seed_ark` |
 | **recycle** | Trümmer abbauen (`harvest_debris_at_field`); Fracht auf Rückflug; Report bei Ankunft |

@@ -1315,6 +1315,7 @@
       nav_interference: { theme: "disturbance", icon: "⚠" },
       distress_beacon: { theme: "alert", icon: "✦" },
       ancient_stash: { theme: "relic", icon: "✧" },
+      pirate_encounter: { theme: "combat", icon: "☠" },
     };
     return map[eventKey] || { theme: "anomaly", icon: "◎" };
   }
@@ -1326,13 +1327,14 @@
       void_scan: "fleet_expedition_badge_anomaly",
       distress_beacon: "fleet_expedition_badge_alert",
       ancient_stash: "fleet_expedition_badge_relic",
+      pirate_encounter: "fleet_expedition_badge_combat",
     };
     const key = badges[eventKey] || `fleet_expedition_badge_${severity || "normal"}`;
     return t(key, expeditionSeverityLabel(severity));
   }
 
   function expeditionRiskLabel(eventKey) {
-    const high = new Set(["distress_beacon", "ancient_stash"]);
+    const high = new Set(["distress_beacon", "ancient_stash", "pirate_encounter"]);
     const medium = new Set(["nav_interference"]);
     if (high.has(eventKey)) return t("fleet_expedition_report_risk_high", "elevated");
     if (medium.has(eventKey)) return t("fleet_expedition_report_risk_medium", "moderate");
@@ -1449,6 +1451,7 @@
       disturbance: "draw",
       alert: "defeat",
       relic: "victory",
+      combat: "defeat",
     };
     return { ...visual, badge: badgeByTheme[visual.theme] || "open" };
   }
@@ -1509,6 +1512,9 @@
     const returnLabel = expeditionReturnLabel(delayExtra);
     const fleet = meta.fleet_ships || {};
     const fleetTotal = unitCountTotal(fleet);
+    const losses = meta.losses || {};
+    const lossesTotal = Number(meta.losses_total || unitCountTotal(losses));
+    const pirateCombat = meta.pirate_combat || null;
 
     const sections = [];
 
@@ -1574,6 +1580,36 @@
       );
     }
 
+    if (pirateCombat) {
+      const won = Boolean(meta.pirate_won ?? pirateCombat.won);
+      sections.push(
+        renderCombatPanel(
+          t("expedition_report_section_pirate", "Pirate contact"),
+          `<p class="gc-expedition-pirate-summary">${esc(
+            t(
+              won ? "expedition_report_pirate_win" : "expedition_report_pirate_loss",
+              won ? "Your fleet repelled the pirate ambush." : "Your fleet broke contact under heavy fire."
+            )
+          )}</p>` +
+            `<div class="gc-player-card-stats gc-combat-report-stats">` +
+              `<div class="gc-player-card-stat">` +
+                `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_pirate_strength", "Pirate strength"))}</span>` +
+                `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(pirateCombat.pirate_points || 0))}</span>` +
+              `</div>` +
+              `<div class="gc-player-card-stat">` +
+                `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_fleet_strength", "Fleet strength"))}</span>` +
+                `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(pirateCombat.fleet_points || 0))}</span>` +
+              `</div>` +
+              `<div class="gc-player-card-stat">` +
+                `<span class="gc-player-card-stat-label">${esc(t("expedition_report_stat_loss_rate", "Loss rate"))}</span>` +
+                `<span class="gc-player-card-stat-value gc-mono">${esc(formatInt(pirateCombat.loss_pct || 0))}%</span>` +
+              `</div>` +
+            `</div>`,
+          "gc-combat-report-panel--pirate"
+        )
+      );
+    }
+
     sections.push(
       renderCombatPanel(
         t("fleet_expedition_report_section_fleet", "Expedition fleet"),
@@ -1599,6 +1635,16 @@
         `gc-combat-report-panel--loot${lootTotal > 0 ? " gc-combat-report-panel--loot-found" : ""}`
       )
     );
+
+    if (lossesTotal > 0) {
+      sections.push(
+        renderCombatPanel(
+          t("fleet_expedition_report_section_losses", "Ship losses"),
+          renderCombatUnitGrid(losses, null),
+          "gc-combat-report-panel--losses"
+        )
+      );
+    }
 
     if (lootboxes.length) {
       sections.push(
