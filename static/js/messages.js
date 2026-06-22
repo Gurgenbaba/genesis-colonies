@@ -1320,6 +1320,9 @@
       lost_container: { theme: "treasure", icon: "▣" },
       abandoned_convoy: { theme: "fund", icon: "⛭" },
       ancient_derelict: { theme: "relic", icon: "✦" },
+      spatial_rift: { theme: "legendary", icon: "◈" },
+      time_anomaly: { theme: "legendary", icon: "⧖" },
+      ancient_beacon: { theme: "legendary", icon: "✶" },
       pirate_encounter: { theme: "combat", icon: "☠" },
     };
     return map[eventKey] || { theme: "anomaly", icon: "◎" };
@@ -1337,6 +1340,9 @@
       lost_container: "fleet_expedition_badge_treasure",
       abandoned_convoy: "fleet_expedition_badge_treasure",
       ancient_derelict: "fleet_expedition_badge_legendary",
+      spatial_rift: "fleet_expedition_badge_legendary",
+      time_anomaly: "fleet_expedition_badge_legendary",
+      ancient_beacon: "fleet_expedition_badge_legendary",
       pirate_encounter: "fleet_expedition_badge_combat",
     };
     const key = badges[eventKey] || `fleet_expedition_badge_${severity || "normal"}`;
@@ -1344,7 +1350,7 @@
   }
 
   function expeditionRiskLabel(eventKey) {
-    const high = new Set(["distress_beacon", "ancient_stash", "pirate_encounter", "ancient_minefield", "ancient_derelict", "abandoned_convoy"]);
+    const high = new Set(["distress_beacon", "ancient_stash", "pirate_encounter", "ancient_minefield", "ancient_derelict", "abandoned_convoy", "spatial_rift", "time_anomaly", "ancient_beacon"]);
     const medium = new Set(["nav_interference", "ion_storm", "lost_container"]);
     if (high.has(eventKey)) return t("fleet_expedition_report_risk_high", "elevated");
     if (medium.has(eventKey)) return t("fleet_expedition_report_risk_medium", "moderate");
@@ -1362,7 +1368,7 @@
       }
       return t("fleet_expedition_report_find_none", "none");
     }
-    if (severity === "major" || eventKey === "ancient_stash" || eventKey === "ancient_derelict" || eventKey === "abandoned_convoy") {
+    if (severity === "major" || eventKey === "ancient_stash" || eventKey === "ancient_derelict" || eventKey === "abandoned_convoy" || eventKey === "spatial_rift" || eventKey === "ancient_beacon") {
       return t("fleet_expedition_report_find_major", "major");
     }
     if (severity === "minor" || total < 800) {
@@ -1464,6 +1470,7 @@
       combat: "defeat",
       hazard: "defeat",
       treasure: "victory",
+      legendary: "victory",
     };
     return { ...visual, badge: badgeByTheme[visual.theme] || "open" };
   }
@@ -1640,6 +1647,27 @@
               `</div>` +
             `</div>`,
           "gc-combat-report-panel--hazard"
+        )
+      );
+    }
+
+    const legendaryVariant = meta.legendary_variant || "";
+    if (legendaryVariant && ["spatial_rift", "time_anomaly", "ancient_beacon"].includes(eventKey)) {
+      const variantKey = `expedition_report_legendary_${eventKey}_${legendaryVariant}`;
+      const variantDefaults = {
+        spatial_rift_amplified: "Spatial distortion amplified recovered cargo.",
+        spatial_rift_delayed: "The rift collapsed — return delayed.",
+        time_anomaly_dilated: "Time dilation stretched the expedition.",
+        time_anomaly_compressed: "Chrono compression registered — no return gain in this phase.",
+        ancient_beacon_beacon: "The beacon unlocked a sealed cache from a forgotten age.",
+      };
+      const defaultText =
+        variantDefaults[`${eventKey}_${legendaryVariant}`] || "Legendary discovery logged.";
+      sections.push(
+        renderCombatPanel(
+          t("expedition_report_section_legendary", "Legendary discovery"),
+          `<p class="gc-expedition-legendary-summary">${esc(t(variantKey, defaultText))}</p>`,
+          "gc-combat-report-panel--legendary"
         )
       );
     }

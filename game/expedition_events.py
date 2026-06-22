@@ -72,6 +72,21 @@ _EVENT_LOOT_PROFILES: Dict[str, Dict[str, Any]] = {
         "economy_day_range": (0.0020, 0.0080),
         "split": {"metal": 0.45, "crystal": 0.35, "fuel_cells": 0.20},
     },
+    "spatial_rift": {
+        "mult_range": (0.70, 1.00),
+        "economy_day_range": (0.0040, 0.0150),
+        "split": {"metal": 0.50, "crystal": 0.35, "fuel_cells": 0.15},
+    },
+    "time_anomaly": {
+        "mult_range": (0.35, 0.65),
+        "economy_day_range": (0.0010, 0.0050),
+        "split": {"metal": 0.50, "crystal": 0.35, "fuel_cells": 0.15},
+    },
+    "ancient_beacon": {
+        "mult_range": (0.15, 0.30),
+        "economy_day_range": (0.0010, 0.0040),
+        "split": {"metal": 0.45, "crystal": 0.35, "fuel_cells": 0.20},
+    },
 }
 
 # Rare additive lootbox drops (resources unchanged). Chance = roll < value.
@@ -90,6 +105,9 @@ _EXPEDITION_LOOTBOX_DROPS: Dict[str, Dict[str, Any]] = {
     "lost_container": {"chance": 0.0, "boxes": ()},
     "abandoned_convoy": {"chance": 0.0, "boxes": ()},
     "ancient_derelict": {"chance": 0.0, "boxes": ()},
+    "spatial_rift": {"chance": 0.0, "boxes": ()},
+    "time_anomaly": {"chance": 0.0, "boxes": ()},
+    "ancient_beacon": {"chance": 0.0, "boxes": ()},
 }
 
 # Hazard events — non-combat risk (GC-620I-A).
@@ -124,6 +142,17 @@ _CONVoy_RESOURCES_ONLY_CHANCE = 0.40
 _CONVoy_SHIPS_ONLY_CHANCE = 0.45
 _CONVoy_BOTH_BONUS_BOX_CHANCE = 0.25
 _CONVoy_SALVAGE_SCORE_CAP_RATIO = 0.10
+
+# Legendary discoveries (GC-620J-A).
+_LEGENDARY_EVENT_KEYS: frozenset[str] = frozenset(
+    {"spatial_rift", "time_anomaly", "ancient_beacon"}
+)
+_SPATIAL_RIFT_AMPLIFIED_CHANCE = 0.60
+_SPATIAL_RIFT_AMPL_MULT_RANGE = (1.40, 1.80)
+_SPATIAL_RIFT_DELAY_MULT_RANGE = (0.25, 0.55)
+_TIME_ANOMALY_BONUS_CHANCE = 0.30
+_TIME_ANOMALY_DILATED_DELAY_RANGE = (0.20, 0.40)
+_TIME_ANOMALY_BONUS_LOOT_SCALE = 0.50
 
 _EXPEDITION_ALLOWED_BOX_KEYS = frozenset(
     {
@@ -257,6 +286,30 @@ _EXPEDITION_EVENTS: Sequence[Dict[str, Any]] = (
         "severity": "major",
         "story_tier": "legendary",
     },
+    {
+        "key": "spatial_rift",
+        "weight": 1,
+        "label_key": "expedition_event_spatial_rift",
+        "desc_key": "expedition_event_spatial_rift_desc",
+        "severity": "major",
+        "story_tier": "legendary",
+    },
+    {
+        "key": "time_anomaly",
+        "weight": 1,
+        "label_key": "expedition_event_time_anomaly",
+        "desc_key": "expedition_event_time_anomaly_desc",
+        "severity": "major",
+        "story_tier": "legendary",
+    },
+    {
+        "key": "ancient_beacon",
+        "weight": 1,
+        "label_key": "expedition_event_ancient_beacon",
+        "desc_key": "expedition_event_ancient_beacon_desc",
+        "severity": "major",
+        "story_tier": "legendary",
+    },
 )
 
 _EVENT_BY_KEY: Dict[str, Dict[str, Any]] = {str(e["key"]): e for e in _EXPEDITION_EVENTS}
@@ -281,6 +334,9 @@ _EXPEDITION_EVENT_CATEGORIES: Dict[str, str] = {
     "lost_container": "treasure",
     "abandoned_convoy": "treasure",
     "ancient_derelict": "treasure",
+    "spatial_rift": "legendary",
+    "time_anomaly": "legendary",
+    "ancient_beacon": "legendary",
 }
 
 
@@ -576,6 +632,7 @@ def _apply_cargo_cap_with_jackpot(
     cargo_total: int,
     *,
     movement_id: int,
+    allow_jackpot: bool = True,
 ) -> Dict[str, Any]:
     """Cap loot to cargo; 5% jackpot allows 2×/5×/10× cargo when raw loot overshoots."""
     cargo_cap = max(0, int(cargo_total))
@@ -588,17 +645,18 @@ def _apply_cargo_cap_with_jackpot(
     if cargo_cap <= 0 or loaded <= cargo_cap:
         return meta
 
-    jackpot_rng = random.Random(int(movement_id) * 12347 + 99991)
-    if jackpot_rng.random() < _CARGO_JACKPOT_CHANCE:
-        mult = int(_CARGO_JACKPOT_MULTS[jackpot_rng.randrange(len(_CARGO_JACKPOT_MULTS))])
-        jackpot_cap = int(cargo_cap * mult)
-        if loaded > jackpot_cap:
-            scale = jackpot_cap / max(1, loaded)
-            for key in VALID_RESOURCE_KEYS:
-                rewards[key] = int(int(rewards.get(key) or 0) * scale)
-        meta["cargo_jackpot"] = True
-        meta["cargo_jackpot_mult"] = mult
-        return meta
+    if allow_jackpot:
+        jackpot_rng = random.Random(int(movement_id) * 12347 + 99991)
+        if jackpot_rng.random() < _CARGO_JACKPOT_CHANCE:
+            mult = int(_CARGO_JACKPOT_MULTS[jackpot_rng.randrange(len(_CARGO_JACKPOT_MULTS))])
+            jackpot_cap = int(cargo_cap * mult)
+            if loaded > jackpot_cap:
+                scale = jackpot_cap / max(1, loaded)
+                for key in VALID_RESOURCE_KEYS:
+                    rewards[key] = int(int(rewards.get(key) or 0) * scale)
+            meta["cargo_jackpot"] = True
+            meta["cargo_jackpot_mult"] = mult
+            return meta
 
     _scale_rewards_to_cargo(rewards, cargo_cap)
     return meta
@@ -817,6 +875,140 @@ def resolve_ancient_derelict_treasure(rng: random.Random) -> Dict[str, Any]:
     }
 
 
+def _legendary_loot_rng(movement_id: int, salt: int) -> random.Random:
+    return random.Random(int(movement_id) * 7919 + int(salt))
+
+
+def resolve_spatial_rift_legendary(
+    rng: random.Random,
+    *,
+    movement_id: int,
+    fleet_value: int,
+    empire_daily_total: int,
+    cargo_total: int,
+    flight_seconds: int,
+) -> Dict[str, Any]:
+    """Spatial rift — amplified cargo-capped find or return delay."""
+    base_flight = max(1, int(flight_seconds or 60))
+    if rng.random() < _SPATIAL_RIFT_AMPLIFIED_CHANCE:
+        loot_rng = _legendary_loot_rng(movement_id, 133773)
+        rewards, loot_debug = _compute_event_loot(
+            loot_rng,
+            "spatial_rift",
+            fleet_value,
+            empire_daily_total=int(empire_daily_total),
+            cargo_total=int(cargo_total),
+        )
+        ampl = rng.uniform(_SPATIAL_RIFT_AMPL_MULT_RANGE[0], _SPATIAL_RIFT_AMPL_MULT_RANGE[1])
+        for key in VALID_RESOURCE_KEYS:
+            rewards[key] = int(int(rewards.get(key) or 0) * ampl)
+        return {
+            "variant": "amplified",
+            "rewards": rewards,
+            "loot_debug": loot_debug,
+            "delay_extra": 0,
+            "lootboxes": [],
+        }
+    delay_mult = rng.uniform(_SPATIAL_RIFT_DELAY_MULT_RANGE[0], _SPATIAL_RIFT_DELAY_MULT_RANGE[1])
+    return {
+        "variant": "delayed",
+        "rewards": _empty_rewards(),
+        "loot_debug": {"economy_base": 0, "raw_loot_total": 0},
+        "delay_extra": max(1, int(base_flight * delay_mult)),
+        "lootboxes": [],
+    }
+
+
+def resolve_time_anomaly_legendary(
+    rng: random.Random,
+    *,
+    movement_id: int,
+    fleet_value: int,
+    empire_daily_total: int,
+    cargo_total: int,
+    flight_seconds: int,
+) -> Dict[str, Any]:
+    """Time anomaly — dilated delay or compressed flavor with optional mini bonus."""
+    base_flight = max(1, int(flight_seconds or 60))
+    compressed = rng.random() < 0.50
+    rewards = _empty_rewards()
+    loot_debug: Dict[str, Any] = {"economy_base": 0, "raw_loot_total": 0}
+    delay_extra = 0
+    if compressed:
+        variant = "compressed"
+        if rng.random() < _TIME_ANOMALY_BONUS_CHANCE:
+            loot_rng = _legendary_loot_rng(movement_id, 144881)
+            rewards, loot_debug = _compute_event_loot(
+                loot_rng,
+                "time_anomaly",
+                fleet_value,
+                empire_daily_total=int(empire_daily_total),
+                cargo_total=int(cargo_total),
+            )
+            for key in VALID_RESOURCE_KEYS:
+                rewards[key] = int(int(rewards.get(key) or 0) * _TIME_ANOMALY_BONUS_LOOT_SCALE)
+    else:
+        variant = "dilated"
+        delay_mult = rng.uniform(
+            _TIME_ANOMALY_DILATED_DELAY_RANGE[0],
+            _TIME_ANOMALY_DILATED_DELAY_RANGE[1],
+        )
+        delay_extra = max(1, int(base_flight * delay_mult))
+        if rng.random() < _TIME_ANOMALY_BONUS_CHANCE:
+            loot_rng = _legendary_loot_rng(movement_id, 155987)
+            rewards, loot_debug = _compute_event_loot(
+                loot_rng,
+                "time_anomaly",
+                fleet_value,
+                empire_daily_total=int(empire_daily_total),
+                cargo_total=int(cargo_total),
+            )
+            for key in VALID_RESOURCE_KEYS:
+                rewards[key] = int(int(rewards.get(key) or 0) * _TIME_ANOMALY_BONUS_LOOT_SCALE)
+    return {
+        "variant": variant,
+        "rewards": rewards,
+        "loot_debug": loot_debug,
+        "delay_extra": int(delay_extra),
+        "lootboxes": [],
+    }
+
+
+def resolve_ancient_beacon_legendary(
+    rng: random.Random,
+    *,
+    movement_id: int,
+    fleet_value: int,
+    empire_daily_total: int,
+    cargo_total: int,
+) -> Dict[str, Any]:
+    """Ancient beacon — premium cache lootbox plus modest resources."""
+    roll = rng.random()
+    if roll < 0.70:
+        box_key = "alien_cache"
+    elif roll < 0.95:
+        box_key = "premium_cache"
+    else:
+        box_key = "research_capsule"
+    if not is_allowed_expedition_lootbox(box_key):
+        box_key = "alien_cache"
+    loot_rng = _legendary_loot_rng(movement_id, 166699)
+    rewards, loot_debug = _compute_event_loot(
+        loot_rng,
+        "ancient_beacon",
+        fleet_value,
+        empire_daily_total=int(empire_daily_total),
+        cargo_total=int(cargo_total),
+    )
+    return {
+        "variant": "beacon",
+        "rewards": rewards,
+        "loot_debug": loot_debug,
+        "delay_extra": 0,
+        "lootboxes": [{"key": box_key, "amount": 1, "jackpot": True}],
+    }
+
+
 def resolve_minefield_hazard(
     rng: random.Random,
     ships: Mapping[str, int],
@@ -918,6 +1110,8 @@ def resolve_expedition_outcome(
     ship_losses: Dict[str, int] = {}
     story_salvaged: Dict[str, int] = {}
     story_tier: str | None = None
+    legendary_variant: str | None = None
+    delay_extra_preset: int | None = None
 
     if event_key == "pirate_encounter" and ships:
         pirate_rng = random.Random(int(movement_id) * 31337 + 271828)
@@ -946,33 +1140,71 @@ def resolve_expedition_outcome(
         remaining_ships = dict(hazard.get("remaining_ships") or {})
         ship_losses = dict(hazard.get("losses") or {})
 
-    rewards, loot_debug = _compute_event_loot(
-        rng,
-        event_key,
-        fleet_value,
-        empire_daily_total=int(empire_daily_total),
-        cargo_total=int(cargo_total),
-    )
-    lootboxes = _roll_expedition_lootboxes(rng, event_key)
+    legendary_outcome: Dict[str, Any] | None = None
+    if event_key in _LEGENDARY_EVENT_KEYS:
+        leg_rng = random.Random(int(movement_id) * 44453 + 133773)
+        if event_key == "spatial_rift":
+            legendary_outcome = resolve_spatial_rift_legendary(
+                leg_rng,
+                movement_id=movement_id,
+                fleet_value=fleet_value,
+                empire_daily_total=int(empire_daily_total),
+                cargo_total=int(cargo_total),
+                flight_seconds=int(flight_seconds or 60),
+            )
+        elif event_key == "time_anomaly":
+            legendary_outcome = resolve_time_anomaly_legendary(
+                leg_rng,
+                movement_id=movement_id,
+                fleet_value=fleet_value,
+                empire_daily_total=int(empire_daily_total),
+                cargo_total=int(cargo_total),
+                flight_seconds=int(flight_seconds or 60),
+            )
+        elif event_key == "ancient_beacon":
+            legendary_outcome = resolve_ancient_beacon_legendary(
+                leg_rng,
+                movement_id=movement_id,
+                fleet_value=fleet_value,
+                empire_daily_total=int(empire_daily_total),
+                cargo_total=int(cargo_total),
+            )
+        story_tier = "legendary"
+        legendary_variant = str(legendary_outcome.get("variant") or "")
+        delay_extra_preset = int(legendary_outcome.get("delay_extra") or 0)
+
+    if legendary_outcome is not None:
+        rewards = dict(legendary_outcome.get("rewards") or _empty_rewards())
+        loot_debug = dict(legendary_outcome.get("loot_debug") or {})
+        lootboxes = list(legendary_outcome.get("lootboxes") or [])
+    else:
+        rewards, loot_debug = _compute_event_loot(
+            rng,
+            event_key,
+            fleet_value,
+            empire_daily_total=int(empire_daily_total),
+            cargo_total=int(cargo_total),
+        )
+        lootboxes = _roll_expedition_lootboxes(rng, event_key)
     convoy_mode: str | None = None
-    if event_key == "lost_container":
+    if legendary_outcome is None and event_key == "lost_container":
         box_rng = random.Random(int(movement_id) * 11113 + 77777)
         lootboxes = roll_lost_container_lootboxes(box_rng)
-    elif event_key == "abandoned_convoy":
+    elif legendary_outcome is None and event_key == "abandoned_convoy":
         lootboxes = []
         convoy_rng = random.Random(int(movement_id) * 22229 + 88888)
         convoy = resolve_abandoned_convoy_treasure(convoy_rng, fleet_value=fleet_value)
         convoy_mode = str(convoy.get("mode") or "resources")
         story_salvaged = dict(convoy.get("salvaged_ships") or {})
         lootboxes = list(convoy.get("lootboxes") or [])
-    elif event_key == "ancient_derelict":
+    elif legendary_outcome is None and event_key == "ancient_derelict":
         lootboxes = []
         derelict_rng = random.Random(int(movement_id) * 33347 + 99999)
         derelict = resolve_ancient_derelict_treasure(derelict_rng)
         story_salvaged = dict(derelict.get("salvaged_ships") or {})
         lootboxes = list(derelict.get("lootboxes") or [])
         story_tier = str(derelict.get("story_tier") or "legendary")
-    elif event_key in ("pirate_encounter", "ancient_minefield", "ion_storm"):
+    elif legendary_outcome is None and event_key in ("pirate_encounter", "ancient_minefield", "ion_storm"):
         lootboxes = []
     if event_key == "pirate_encounter":
         if not (pirate_combat and pirate_combat.get("won")):
@@ -994,9 +1226,13 @@ def resolve_expedition_outcome(
         rewards,
         int(cargo_total),
         movement_id=int(movement_id),
+        allow_jackpot=event_key not in _LEGENDARY_EVENT_KEYS,
     )
 
-    delay_extra = _resolve_event_delay_extra(movement_id, event, int(flight_seconds or 60))
+    if delay_extra_preset is not None:
+        delay_extra = int(delay_extra_preset)
+    else:
+        delay_extra = _resolve_event_delay_extra(movement_id, event, int(flight_seconds or 60))
 
     reward_total = sum(int(rewards.get(k) or 0) for k in VALID_RESOURCE_KEYS)
     result: Dict[str, Any] = {
@@ -1036,6 +1272,8 @@ def resolve_expedition_outcome(
         result["convoy_mode"] = convoy_mode
     if story_tier:
         result["story_tier"] = story_tier
+    if legendary_variant:
+        result["legendary_variant"] = legendary_variant
     if remaining_ships is not None:
         result["remaining_ships"] = remaining_ships
     if hazard is not None:
@@ -1164,6 +1402,47 @@ def build_expedition_report(
                 "fleet_expedition_report_ion_storm_delay",
                 "Return delayed by %(seconds)s s due to ion storm.",
                 seconds=fmt_int(delay_extra),
+            )
+        )
+
+    legendary_variant = str(outcome.get("legendary_variant") or "")
+    if event_key == "spatial_rift" and legendary_variant:
+        if legendary_variant == "amplified":
+            body_lines.append(
+                _t(
+                    "fleet_expedition_report_spatial_rift_amplified",
+                    "Spatial distortion amplified the recovered cargo beyond normal limits.",
+                )
+            )
+        elif legendary_variant == "delayed":
+            body_lines.append(
+                _t(
+                    "fleet_expedition_report_spatial_rift_delayed",
+                    "The rift collapsed behind the fleet — return delayed by %(seconds)s s.",
+                    seconds=fmt_int(delay_extra),
+                )
+            )
+    elif event_key == "time_anomaly" and legendary_variant:
+        if legendary_variant == "dilated":
+            body_lines.append(
+                _t(
+                    "fleet_expedition_report_time_anomaly_dilated",
+                    "Time dilation stretched the expedition — return delayed by %(seconds)s s.",
+                    seconds=fmt_int(delay_extra),
+                )
+            )
+        elif legendary_variant == "compressed":
+            body_lines.append(
+                _t(
+                    "fleet_expedition_report_time_anomaly_compressed",
+                    "Chrono compression registered on sensors — no measurable return gain in this phase.",
+                )
+            )
+    elif event_key == "ancient_beacon" and legendary_variant:
+        body_lines.append(
+            _t(
+                "fleet_expedition_report_ancient_beacon",
+                "The beacon unlocked a sealed cache from a forgotten age.",
             )
         )
 
@@ -1302,6 +1581,8 @@ def build_expedition_report(
     }
     if outcome.get("story_tier"):
         metadata["story_tier"] = str(outcome.get("story_tier"))
+    if outcome.get("legendary_variant"):
+        metadata["legendary_variant"] = str(outcome.get("legendary_variant"))
     if outcome.get("convoy_mode"):
         metadata["convoy_mode"] = str(outcome.get("convoy_mode"))
     if remaining_ships and (ship_losses or salvaged_ships):

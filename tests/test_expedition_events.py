@@ -576,11 +576,14 @@ def test_expedition_weight_audit_gc620j0():
     audit = expedition_event_weight_audit()
     shares = audit["share_by_category"]
 
-    assert audit["total_weight"] == 121
+    assert audit["total_weight"] == 124
     assert audit["weights_by_key"]["mineral_deposit"] == 29
     assert audit["weight_by_category"]["loot"] == 74
-    assert shares["loot"] == pytest.approx(74 / 121, abs=0.001)
-    assert 0.58 <= shares["loot"] <= 0.64
+    assert audit["weight_by_category"]["legendary"] == 3
+    assert shares["legendary"] == pytest.approx(3 / 124, abs=0.001)
+    assert 0.023 <= shares["legendary"] <= 0.026
+    assert shares["loot"] == pytest.approx(74 / 124, abs=0.001)
+    assert 0.56 <= shares["loot"] <= 0.64
     assert 0.10 <= shares["neutral"] <= 0.16
     assert 0.09 <= shares["delay"] <= 0.14
     assert 0.03 <= shares["combat"] <= 0.07
@@ -605,6 +608,9 @@ def test_expedition_empirical_category_distribution_gc620j0():
         "lost_container": "treasure",
         "abandoned_convoy": "treasure",
         "ancient_derelict": "treasure",
+        "spatial_rift": "legendary",
+        "time_anomaly": "legendary",
+        "ancient_beacon": "legendary",
     }
     rolls = 14999
     for movement_id in range(1, rolls + 1):
@@ -619,12 +625,13 @@ def test_expedition_empirical_category_distribution_gc620j0():
         category_hits[category] = category_hits.get(category, 0) + 1
 
     empirical = {cat: hits / rolls for cat, hits in category_hits.items()}
-    assert 0.54 <= empirical.get("loot", 0) <= 0.68
+    assert 0.52 <= empirical.get("loot", 0) <= 0.68
     assert 0.08 <= empirical.get("neutral", 0) <= 0.18
     assert 0.07 <= empirical.get("delay", 0) <= 0.16
     assert 0.02 <= empirical.get("combat", 0) <= 0.08
     assert 0.01 <= empirical.get("hazard", 0) <= 0.06
     assert 0.03 <= empirical.get("treasure", 0) <= 0.09
+    assert 0.015 <= empirical.get("legendary", 0) <= 0.045
 
 
 def test_hazard_events_are_rare_in_weight_table():
@@ -767,3 +774,117 @@ def test_story_treasure_events_deterministic():
         assert resolve_expedition_outcome(movement_id, **kwargs) == resolve_expedition_outcome(
             movement_id, **kwargs
         )
+
+
+def test_legendary_events_deterministic():
+    for event_key in ("spatial_rift", "time_anomaly", "ancient_beacon"):
+        movement_id = _find_movement_for_event(
+            event_key,
+            ships={"solar_skiff": 5},
+            cargo_total=500_000,
+            empire_daily_total=2_000_000,
+        )
+        kwargs = dict(
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 5},
+            empire_daily_total=2_000_000,
+        )
+        assert resolve_expedition_outcome(movement_id, **kwargs) == resolve_expedition_outcome(
+            movement_id, **kwargs
+        )
+
+
+def test_spatial_rift_variants():
+    amplified = delayed = 0
+    for movement_id in range(1, 12000):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 5},
+            empire_daily_total=2_000_000,
+        )
+        if outcome["event_key"] != "spatial_rift":
+            continue
+        assert outcome.get("story_tier") == "legendary"
+        variant = outcome.get("legendary_variant")
+        assert variant in ("amplified", "delayed")
+        assert not outcome.get("cargo_jackpot")
+        if variant == "amplified":
+            amplified += 1
+            assert int(outcome.get("reward_total") or 0) > 0
+            assert int(outcome.get("delay_extra") or 0) == 0
+        else:
+            delayed += 1
+            assert int(outcome.get("reward_total") or 0) == 0
+            assert int(outcome.get("delay_extra") or 0) >= 30
+    assert amplified >= 1
+    assert delayed >= 1
+
+
+def test_time_anomaly_no_return_shortening():
+    for movement_id in range(1, 15000):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 5},
+            empire_daily_total=2_000_000,
+        )
+        if outcome["event_key"] != "time_anomaly":
+            continue
+        assert outcome.get("legendary_variant") in ("dilated", "compressed")
+        assert int(outcome.get("delay_extra") or 0) >= 0
+        if outcome.get("legendary_variant") == "compressed":
+            assert int(outcome.get("delay_extra") or 0) == 0
+            return
+    pytest.skip("no compressed time anomaly in search window")
+
+
+def test_ancient_beacon_grants_lootbox_and_resources():
+    movement_id = _find_movement_for_event(
+        "ancient_beacon",
+        ships={"solar_skiff": 5},
+        cargo_total=500_000,
+        empire_daily_total=2_000_000,
+    )
+    outcome = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=500_000,
+        expedition_ship_count=2,
+        flight_seconds=120,
+        ships={"solar_skiff": 5},
+        empire_daily_total=2_000_000,
+    )
+    assert outcome["event_key"] == "ancient_beacon"
+    assert outcome.get("story_tier") == "legendary"
+    assert outcome.get("legendary_variant") == "beacon"
+    assert outcome.get("lootboxes")
+    box_key = outcome["lootboxes"][0]["key"]
+    assert box_key in {"alien_cache", "premium_cache", "research_capsule"}
+    assert not outcome.get("cargo_jackpot")
+
+
+def test_legendary_events_are_very_rare():
+    hits = {"spatial_rift": 0, "time_anomaly": 0, "ancient_beacon": 0}
+    rolls = 24999
+    for movement_id in range(1, rolls + 1):
+        outcome = resolve_expedition_outcome(
+            movement_id,
+            cargo_total=500_000,
+            expedition_ship_count=2,
+            flight_seconds=120,
+            ships={"solar_skiff": 2},
+        )
+        key = outcome["event_key"]
+        if key in hits:
+            hits[key] += 1
+    total_legendary = sum(hits.values())
+    rate = total_legendary / rolls
+    assert 0.015 <= rate <= 0.045, f"legendary rate {rate:.3f} out of band"
+    for key, count in hits.items():
+        assert count >= 1, f"never rolled {key}"
