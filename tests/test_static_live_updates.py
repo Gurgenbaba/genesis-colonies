@@ -601,7 +601,9 @@ def test_gc700cd_chronicles_genesis_design():
     assert "gc-chronicles-page--" in html
     assert "gc-chronicles-kicker" in html
     assert "gc-chronicles-section-tabs" in html
-    assert "gc-hof-tab gc-chronicles-section-tab" in html
+    assert "gc-hof-tab gc-chronicles-section-tab" not in html
+    assert "gc-hof-tabs gc-chronicles-section-tabs" in html
+    assert "gc-chronicles-shell" in html
     assert "gc-chronicles-stats" in html
     assert "gc-chronicles-stat--win" in html
     assert "gc-chronicles-expo-cat--" in html

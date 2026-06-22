@@ -41,38 +41,39 @@
     <p class="section-hint hint">{{ T("chronicles_subtitle", "Deine Geschichte im Universum — Kämpfe, Expeditionen und Rekorde") }}</p>
   </header>
 
-  <nav class="gc-hof-tabs gc-chronicles-section-tabs" role="tablist" aria-label="{{ T('chronicles_sections_label', 'Chroniken Bereiche') }}">
-    <a href="{{ url_for('chronicles_view', section='pvp', tab=pvp_tab if active_section == 'pvp' else 'overview') }}"
-       class="tab-btn gc-nav-link gc-hof-tab gc-chronicles-section-tab{% if active_section == 'pvp' %} active{% endif %}"
-       role="tab"
-       aria-selected="{{ 'true' if active_section == 'pvp' else 'false' }}"
-       {% if active_section == 'pvp' %}aria-current="page"{% endif %}
-       data-chronicles-section="pvp">
-      {{ T("chronicles_section_pvp", "PvP") }}
-    </a>
-    <a href="{{ url_for('chronicles_view', section='expeditions', tab=exp_tab if active_section == 'expeditions' else 'overview') }}"
-       class="tab-btn gc-nav-link gc-hof-tab gc-chronicles-section-tab{% if active_section == 'expeditions' %} active{% endif %}"
-       role="tab"
-       aria-selected="{{ 'true' if active_section == 'expeditions' else 'false' }}"
-       {% if active_section == 'expeditions' %}aria-current="page"{% endif %}
-       data-chronicles-section="expeditions">
-      {{ T("chronicles_section_expeditions", "Expeditionen") }}
-    </a>
-    <a href="{{ url_for('chronicles_view', section='records') }}"
-       class="tab-btn gc-nav-link gc-hof-tab gc-chronicles-section-tab{% if active_section == 'records' %} active{% endif %}"
-       role="tab"
-       aria-selected="{{ 'true' if active_section == 'records' else 'false' }}"
-       {% if active_section == 'records' %}aria-current="page"{% endif %}
-       data-chronicles-section="records">
-      {{ T("chronicles_section_records", "Rekorde") }}
-    </a>
-  </nav>
+  <section class="gc-panel gc-chronicles-shell gc-hof-panel ranking-panel-full gc-chronicles-panel gc-chronicles-panel--{{ active_section }}" aria-labelledby="chronicles-panel-title">
+
+    <nav class="gc-hof-tabs gc-chronicles-section-tabs" role="tablist" aria-label="{{ T('chronicles_sections_label', 'Chroniken Bereiche') }}">
+      <a href="{{ url_for('chronicles_view', section='pvp', tab=pvp_tab if active_section == 'pvp' else 'overview') }}"
+         class="tab-btn gc-nav-link gc-hof-tab{% if active_section == 'pvp' %} active{% endif %}"
+         role="tab"
+         aria-selected="{{ 'true' if active_section == 'pvp' else 'false' }}"
+         {% if active_section == 'pvp' %}aria-current="page"{% endif %}
+         data-chronicles-section="pvp">
+        {{ T("chronicles_section_pvp", "PvP") }}
+      </a>
+      <a href="{{ url_for('chronicles_view', section='expeditions', tab=exp_tab if active_section == 'expeditions' else 'overview') }}"
+         class="tab-btn gc-nav-link gc-hof-tab{% if active_section == 'expeditions' %} active{% endif %}"
+         role="tab"
+         aria-selected="{{ 'true' if active_section == 'expeditions' else 'false' }}"
+         {% if active_section == 'expeditions' %}aria-current="page"{% endif %}
+         data-chronicles-section="expeditions">
+        {{ T("chronicles_section_expeditions", "Expeditionen") }}
+      </a>
+      <a href="{{ url_for('chronicles_view', section='records') }}"
+         class="tab-btn gc-nav-link gc-hof-tab{% if active_section == 'records' %} active{% endif %}"
+         role="tab"
+         aria-selected="{{ 'true' if active_section == 'records' else 'false' }}"
+         {% if active_section == 'records' %}aria-current="page"{% endif %}
+         data-chronicles-section="records">
+        {{ T("chronicles_section_records", "Rekorde") }}
+      </a>
+    </nav>
 
   {% if active_section == 'pvp' %}
-  <section class="gc-panel gc-chronicles-panel gc-chronicles-panel--pvp gc-pvp-panel gc-hof-panel ranking-panel-full" aria-labelledby="chronicles-pvp-panel-title">
     <div class="gc-panel-header gc-ranking-panel-head">
       <div class="gc-ranking-panel-head-text">
-        <span class="gc-panel-title" id="chronicles-pvp-panel-title">{{ T("pvp_panel_title", "Kampfhistorie") }}</span>
+        <span class="gc-panel-title" id="chronicles-panel-title">{{ T("pvp_panel_title", "Kampfhistorie") }}</span>
         <span class="gc-panel-subtitle">
           {% if active_tab == 'wins' %}
             {{ T("pvp_panel_subtitle_wins", "Deine Siege") }}
@@ -246,12 +247,10 @@
         {% endif %}
       </div>
     </div>
-  </section>
   {% elif active_section == 'expeditions' %}
-  <section class="gc-panel gc-chronicles-panel gc-chronicles-panel--expeditions gc-pvp-panel gc-hof-panel ranking-panel-full" aria-labelledby="chronicles-expeditions-panel-title">
     <div class="gc-panel-header gc-ranking-panel-head">
       <div class="gc-ranking-panel-head-text">
-        <span class="gc-panel-title" id="chronicles-expeditions-panel-title">{{ T("chronicles_expo_panel_title", "Expeditionshistorie") }}</span>
+        <span class="gc-panel-title" id="chronicles-panel-title">{{ T("chronicles_expo_panel_title", "Expeditionshistorie") }}</span>
         <span class="gc-panel-subtitle">
           {% if exp_tab == 'loot' %}
             {{ T("chronicles_expo_subtitle_loot", "Funde und Ressourcenbeute") }}
@@ -406,12 +405,10 @@
         {% endif %}
       </div>
     </div>
-  </section>
   {% elif active_section == 'records' %}
-  <section class="gc-panel gc-chronicles-panel gc-chronicles-panel--records gc-chronicles-records-panel gc-hof-panel ranking-panel-full" aria-labelledby="chronicles-records-panel-title">
     <div class="gc-panel-header gc-ranking-panel-head">
       <div class="gc-ranking-panel-head-text">
-        <span class="gc-panel-title" id="chronicles-records-panel-title">{{ T("chronicles_records_panel_title", "Persönliche Rekorde") }}</span>
+        <span class="gc-panel-title" id="chronicles-panel-title">{{ T("chronicles_records_panel_title", "Persönliche Rekorde") }}</span>
         <span class="gc-panel-subtitle">{{ T("chronicles_records_panel_subtitle", "Deine besten Momente aus Kämpfen und Expeditionen") }}</span>
       </div>
     </div>
@@ -454,11 +451,11 @@
       </div>
       {% endif %}
     </div>
-  </section>
   {% else %}
-  <section class="gc-panel gc-chronicles-soon-panel">
-    <p class="gc-hof-empty ranking-empty">{{ T("chronicles_section_soon_body", "Dieser Bereich der Chroniken folgt in Kürze.") }}</p>
-  </section>
+    <div class="gc-ranking-body gc-hof-body-wrap">
+      <p class="gc-hof-empty ranking-empty">{{ T("chronicles_section_soon_body", "Dieser Bereich der Chroniken folgt in Kürze.") }}</p>
+    </div>
   {% endif %}
+  </section>
 </div>
 {% endblock %}

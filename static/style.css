@@ -14716,25 +14716,22 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-chronicles-section-tabs{
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  padding: 6px;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(120, 190, 255, 0.14);
-  background: rgba(3, 8, 18, 0.68);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  gap: 6px;
+  padding: 12px 14px 8px;
+  margin: 0;
 }
 
-.gc-chronicles-section-tabs .gc-chronicles-section-tab{
-  min-height: 42px;
-  font-size: 0.74rem;
-  letter-spacing: 0.06em;
+.gc-chronicles-shell > .gc-ranking-panel-head,
+.gc-chronicles-shell > .gc-panel-header{
+  padding-top: 0;
 }
 
-.gc-chronicles-section-tabs .gc-chronicles-section-tab.active{
-  border-color: color-mix(in srgb, var(--chronicles-accent, var(--gc-primary-2)) 55%, rgba(120, 190, 255, 0.25));
-  background: color-mix(in srgb, var(--chronicles-accent, var(--gc-primary-2)) 10%, rgba(5, 10, 22, 0.72));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chronicles-accent, var(--gc-primary-2)) 18%, transparent);
-  color: var(--chronicles-accent, var(--gc-primary-2));
+.gc-pvp-tabs{
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.gc-chronicles-expo-tabs{
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .gc-chronicles-panel{
@@ -14828,10 +14825,6 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .gc-chronicles-stat--legendary{ --stat-accent: rgba(200, 140, 255, 0.95); }
 .gc-chronicles-stat--pirates{ --stat-accent: rgba(255, 120, 90, 0.95); }
 .gc-chronicles-stat--biggest{ --stat-accent: rgba(127, 255, 217, 0.95); }
-
-.gc-chronicles-expo-tabs{
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-}
 
 .gc-chronicles-expo-cat{
   display: inline-flex;
@@ -14967,6 +14960,9 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   .gc-chronicles-expo-tabs{
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+  .gc-pvp-tabs{
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 520px){
@@ -14974,6 +14970,9 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
     grid-template-columns: 1fr;
   }
   .gc-chronicles-expo-tabs{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .gc-pvp-tabs{
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .gc-chronicles-stats{
