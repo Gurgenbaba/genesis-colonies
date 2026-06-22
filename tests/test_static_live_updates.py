@@ -1012,8 +1012,10 @@ def test_main_js_gc640_global_fleet_hud():
     assert "function initGlobalFleetDrawer()" in src
     assert "GC.initGlobalFleetDrawer = initGlobalFleetDrawer" in src
     assert "normalizeActiveFleetsPayload" in src
-    assert "FLEET_DRAWER_LS_EXPANDED" in src
     assert "FLEET_DRAWER_LS_SHOW_ALL" in src
+    assert "FLEET_DRAWER_LS_EXPANDED" not in src
+    assert "data-fleet-drawer-empty" in src
+    assert "fleetDrawerTotalShips" in src
     assert "/api/fleet/recall" in src
     hud = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
     assert "renderGlobalFleetHud(data.active_fleets)" in hud
@@ -1032,9 +1034,11 @@ def test_main_js_gc640_global_fleet_hud():
     assert "/api/fleet/recall" in app_py
     css = _read("static/style.css")
     assert ".gc-fleet-drawer-root" in css
-    assert ".gc-fleet-drawer-toggle" in css
+    assert ".gc-fleet-hud-row" in css
     assert ".gc-fleet-drawer-panel" in css
     assert ".gc-fleet-drawer-row" in css
+    assert "data-fleet-drawer-empty" in base
+    assert "data-fleet-drawer-toggle" not in base
     assert ".gc-fleet-nav-badge" in css
     fleet_py = _read("game/fleet.py")
     assert "build_active_fleets_payload" in fleet_py
@@ -1042,33 +1046,29 @@ def test_main_js_gc640_global_fleet_hud():
 
 
 def test_main_js_gc657_fleet_drawer_timer_selection_separation():
-    """GC-657: one countdown per fleet row; selection toggles detail only."""
+    """GC-657+: compact fleet HUD rows with per-row countdown and hover tooltip."""
     src = _read("static/main.js")
     css = _read("static/style.css")
     assert "fleetDrawerCountdownAt" in src
-    assert "_fleetDrawerSelectedId" in src
+    assert "_fleetDrawerSelectedId" not in src
     assert "updateFleetDrawerRowTimers" in src
-    assert "syncFleetDrawerSummaryCountdown" in src
     assert "formatFleetDrawerArrivalCompact" in src
-    assert "fleet_drawer_arrival_chip" in src
-    assert "syncFleetDrawerRowLayout" in src
-    assert "fleetDrawerArrivalCompact" in src
-    assert "data-fleet-drawer-detail" in src
-    assert "fleet_drawer_remaining" in _read("locales/de.json")
-    assert ".gc-fleet-drawer-row.is-selected" in css
+    assert "fleetDrawerTotalShips" in src
+    assert "toggleFleetDrawerSelection" not in src
+    assert "data-fleet-drawer-detail" not in src
     assert "gc-fleet-drawer-timer-pulse" in css
+    assert ".gc-fleet-hud-row" in css
     countdown = src.split("function patchFleetDrawerRowCountdown(row, mv)")[1].split("function createFleetDrawerFlightRoute")[0]
     assert "fleetDrawerCountdownAt(mv)" in countdown
     assert "prevKey !== countdownKey" in countdown
     assert 'row.querySelector("[data-fleet-drawer-countdown]")' in countdown
-    flight_route = src.split("function createFleetDrawerFlightRoute(mv)")[1].split("function createFleetDrawerRow")[0]
-    assert "gc-fleet-flight-timer" not in flight_route
-    row_fn = src.split("function createFleetDrawerRow(mv)")[1].split("function syncFleetDrawerList")[0]
+    row_fn = src.split("function createFleetDrawerRow(mv)")[1].split("function renderGlobalFleetHud")[0]
     assert "fleetDrawerCountdown" in row_fn
+    assert "gc-fleet-hud-route" in row_fn
 
 
 def test_main_js_gc654b_fleet_drawer_visual_polish():
-    """GC-654B: drawer flight route, mission tooltip, no notch."""
+    """GC-654B: compact fleet HUD, mission tooltip, recall action."""
     src = _read("static/main.js")
     css = _read("static/style.css")
     base = _read("templates/base.html")
@@ -1077,7 +1077,7 @@ def test_main_js_gc654b_fleet_drawer_visual_polish():
     assert "fleetDrawerRowCanAct" in src
     assert "fleetDrawerResolveMovementId" in src
     assert "upsertFleetDrawerActionBtn" in src
-    assert "action-wrap--header" in src
+    assert "gc-fleet-hud-action-wrap" in src
     assert "document.addEventListener(\"click\"" in src.split("function initGlobalFleetDrawer()")[1].split("function patchFleetDrawerRowFlight")[0]
     assert "res.data?.state" in src.split("async function handleFleetDrawerRecall")[1].split("function initGlobalFleetDrawer")[0]
     assert "patchFleetDrawerRowFlight" in src

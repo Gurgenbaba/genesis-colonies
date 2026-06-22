@@ -255,32 +255,27 @@
 
           </div>
           <div id="global-fleet-drawer-root"
-               class="gc-fleet-drawer-root"
+               class="gc-fleet-hud-root gc-fleet-drawer-root"
                data-global-fleet-drawer
                aria-label="{{ T('fleet_drawer_aria', 'Aktive Flotten') }}">
-            <button type="button"
-                    class="gc-fleet-drawer-toggle"
-                    data-fleet-drawer-toggle
-                    aria-expanded="false"
-                    aria-controls="global-fleet-drawer-panel">
-              <span class="gc-fleet-drawer-chevron" data-fleet-drawer-chevron aria-hidden="true">▸</span>
-              <span class="gc-fleet-drawer-toggle-summary" data-fleet-drawer-summary>{{ T('fleet_drawer_empty', 'Keine aktiven Flotten') }}</span>
-            </button>
+            <p class="gc-fleet-hud-empty"
+               data-fleet-drawer-empty
+               role="status">{{ T('fleet_drawer_empty', 'Keine aktiven Flotten') }}</p>
+            <div id="global-fleet-drawer-panel"
+                 class="gc-fleet-hud-panel gc-fleet-drawer-panel"
+                 data-fleet-drawer-panel
+                 hidden>
+              <div class="gc-fleet-hud-list gc-fleet-drawer-list" data-fleet-drawer-list role="list"></div>
+              <button type="button"
+                      class="gc-fleet-hud-more gc-fleet-drawer-more"
+                      data-fleet-drawer-more
+                      hidden></button>
+            </div>
             <div id="gc-fleet-drawer-tooltip"
                  class="gc-fleet-drawer-tooltip"
                  data-fleet-drawer-tooltip
                  hidden
                  role="tooltip"></div>
-            <div id="global-fleet-drawer-panel"
-                 class="gc-fleet-drawer-panel"
-                 data-fleet-drawer-panel
-                 hidden>
-              <div class="gc-fleet-drawer-list" data-fleet-drawer-list role="list"></div>
-              <button type="button"
-                      class="gc-fleet-drawer-more gc-btn gc-btn-ghost gc-btn-xs"
-                      data-fleet-drawer-more
-                      hidden></button>
-            </div>
             <div class="gc-fleet-vacation-notice"
                  data-fleet-vacation-notice
                  role="status"
