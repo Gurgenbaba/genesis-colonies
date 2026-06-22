@@ -478,7 +478,12 @@ def test_gc807b_hud_capacity_polish():
     assert "wrap.hidden = false" in cap_patch
     bars_fn = js.split("function patchHudCapacityBars(")[1].split("function patchHudStorageWarnings")[0]
     assert 'patchHudCapacityBar("energy", energyUsed, energyTotal, opts)' in bars_fn
+    assert "energyUsed != null && energyTotal != null" in bars_fn
     assert "setHudCapacityBarVisible" not in bars_fn
+    live_fn = js.split("function patchShellHudLiveResources(metal, crystal, fuelCells)")[1].split("function syncResourceLiveBaseline(snapshot)")[0]
+    assert "_resourceLive.energyUsed" in live_fn
+    assert "_resourceLive.energyTotal" in live_fn
+    assert "null," not in live_fn.split("patchHudCapacityBars(")[1].split(");")[0]
 
     assert "overview-res-dashboard" not in css
     assert "overview-res-chip" not in css

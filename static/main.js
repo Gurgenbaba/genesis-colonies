@@ -951,6 +951,8 @@
       storageMetal: readVal("#resource-bar .res-cap.metal"),
       storageCrystal: readVal("#resource-bar .res-cap.crystal"),
       storageFuelCells: readVal("#resource-bar .res-cap.fuel_cells"),
+      energyUsed: readVal("#resource-bar .res-value.energy[data-energy-used], #resource-bar [data-energy-used]"),
+      energyTotal: readVal("#resource-bar .res-cap.energy[data-energy-total], #resource-bar [data-energy-total]"),
       prodMetal: 0,
       prodCrystal: 0,
       prodFuelCells: 0,
@@ -2747,7 +2749,9 @@
     patchHudCapacityBar("crystal", crystal, storageCrystal, opts);
     patchHudCapacityBar("fuel_cells", fuelCells, storageFuelCells, opts);
     patchHudFuelStorageState(storageFuelCells);
-    patchHudCapacityBar("energy", energyUsed, energyTotal, opts);
+    if (energyUsed != null && energyTotal != null) {
+      patchHudCapacityBar("energy", energyUsed, energyTotal, opts);
+    }
   }
 
   function patchHudStorageWarnings(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells) {
@@ -7086,6 +7090,8 @@
     capMetal: 0,
     capCrystal: 0,
     capFuelCells: 0,
+    energyUsed: 0,
+    energyTotal: 0,
   };
   let _resourceTickerId = null;
   let _resourceTickerPaused = false;
@@ -7126,10 +7132,11 @@
       _resourceLive.capMetal,
       _resourceLive.capCrystal,
       _resourceLive.capFuelCells,
-      null,
-      null,
+      _resourceLive.energyUsed,
+      _resourceLive.energyTotal,
       { animate: true }
     );
+    patchResourceBarEnergyWarning(_resourceLive.energyUsed, _resourceLive.energyTotal);
   }
 
   function syncResourceLiveBaseline(snapshot) {
@@ -7147,6 +7154,8 @@
     _resourceLive.capMetal = Math.max(0, Math.floor(Number(snapshot.storageMetal) || 0));
     _resourceLive.capCrystal = Math.max(0, Math.floor(Number(snapshot.storageCrystal) || 0));
     _resourceLive.capFuelCells = Math.max(0, Math.floor(Number(snapshot.storageFuelCells) || 0));
+    _resourceLive.energyUsed = Math.max(0, Math.floor(Number(snapshot.energyUsed) || 0));
+    _resourceLive.energyTotal = Math.max(0, Math.floor(Number(snapshot.energyTotal) || 0));
     _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
     startResourceTicker();
   }
@@ -8724,6 +8733,8 @@
       storageMetal: Math.floor(Number(storage.metal || 0)),
       storageCrystal: Math.floor(Number(storage.crystal || 0)),
       storageFuelCells: Math.floor(Number(storage.fuel_cells || 0)),
+      energyUsed: Math.floor(Number(p.energy_used ?? energy.used ?? resources.energy_used ?? 0)),
+      energyTotal: Math.floor(Number(p.energy_total ?? energy.total ?? resources.energy_total ?? 0)),
     });
 
     const anyActive = syncHudQueueLiveStatesFromPoll(data);
@@ -8857,6 +8868,8 @@
         storageMetal,
         storageCrystal,
         storageFuelCells,
+        energyUsed: used,
+        energyTotal: total,
       });
 
       if (skipScopedPanels) {
