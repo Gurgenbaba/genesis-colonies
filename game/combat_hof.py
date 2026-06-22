@@ -15,6 +15,57 @@ COMBAT_HOF_TABLE = "combat_hall_of_fame"
 COMBAT_HOF_DISPLAY_LIMIT = 100
 COMBAT_HOF_RETENTION_LIMIT = 250
 
+HOF_SORT_DESTROYED = "destroyed"
+HOF_SORT_DEBRIS = "debris"
+HOF_SORT_LOOT = "loot"
+HOF_SORT_RECENT = "recent"
+HOF_SORT_KEYS = frozenset({HOF_SORT_DESTROYED, HOF_SORT_DEBRIS, HOF_SORT_LOOT, HOF_SORT_RECENT})
+HOF_SORT_DEFAULT = HOF_SORT_DESTROYED
+
+
+def _normalize_hof_sort(raw: str | None) -> str:
+    key = str(raw or HOF_SORT_DEFAULT).strip().lower()
+    return key if key in HOF_SORT_KEYS else HOF_SORT_DEFAULT
+
+
+def _loot_total(loot: Mapping[str, Any]) -> int:
+    return (
+        max(0, int(loot.get("metal") or 0))
+        + max(0, int(loot.get("crystal") or 0))
+        + max(0, int(loot.get("fuel_cells") or 0))
+    )
+
+
+def _debris_total(debris: Mapping[str, Any]) -> int:
+    return max(0, int(debris.get("metal") or 0)) + max(0, int(debris.get("crystal") or 0))
+
+
+def _sort_order_sql(sort: str) -> str:
+    if sort == HOF_SORT_DEBRIS:
+        return """
+        ORDER BY
+          (
+            COALESCE(json_extract(debris_json, '$.metal'), 0)
+            + COALESCE(json_extract(debris_json, '$.crystal'), 0)
+          ) DESC,
+          created_at DESC,
+          id DESC
+        """
+    if sort == HOF_SORT_LOOT:
+        return """
+        ORDER BY
+          (
+            COALESCE(json_extract(loot_json, '$.metal'), 0)
+            + COALESCE(json_extract(loot_json, '$.crystal'), 0)
+            + COALESCE(json_extract(loot_json, '$.fuel_cells'), 0)
+          ) DESC,
+          created_at DESC,
+          id DESC
+        """
+    if sort == HOF_SORT_RECENT:
+        return "ORDER BY created_at DESC, id DESC"
+    return "ORDER BY total_destroyed_score DESC, created_at DESC, id DESC"
+
 
 def hof_schema_ready(conn) -> bool:
     return table_exists(conn, COMBAT_HOF_TABLE)
@@ -46,6 +97,14 @@ def _format_created_at(ts: int) -> str:
     try:
         dt = datetime.fromtimestamp(int(ts), tz=timezone.utc)
         return dt.strftime("%d.%m.%Y %H:%M UTC")
+    except (TypeError, ValueError, OSError, OverflowError):
+        return "—"
+
+
+def _format_created_at_short(ts: int) -> str:
+    try:
+        dt = datetime.fromtimestamp(int(ts), tz=timezone.utc)
+        return dt.strftime("%d.%m.")
     except (TypeError, ValueError, OSError, OverflowError):
         return "—"
 
@@ -320,6 +379,8 @@ def _row_to_battle(row: Any, *, rank: int) -> Dict[str, Any]:
     debris = _json_loads(row["debris_json"])
     report_metadata = _json_loads(row["report_metadata_json"])
     total_score = int(row["total_destroyed_score"] or 0)
+    loot_total = _loot_total(loot)
+    debris_total = _debris_total(debris)
     created_ts = int(row["created_at"] or 0)
     return {
         "id": int(row["id"]),
@@ -339,26 +400,39 @@ def _row_to_battle(row: Any, *, rank: int) -> Dict[str, Any]:
         "total_destroyed_score": total_score,
         "total_destroyed_score_fmt": fmt_int(total_score),
         "total_destroyed_score_compact": fmt_int_compact(total_score),
+        "loot_total": loot_total,
+        "loot_total_fmt": fmt_int(loot_total),
+        "loot_total_compact": fmt_int_compact(loot_total),
+        "debris_total": debris_total,
+        "debris_total_fmt": fmt_int(debris_total),
+        "debris_total_compact": fmt_int_compact(debris_total),
         "loot": loot,
         "debris": debris,
         "report_metadata": report_metadata,
         "created_at": created_ts,
         "created_at_fmt": _format_created_at(created_ts),
+        "created_at_short": _format_created_at_short(created_ts),
     }
 
 
-def list_top_battles(*, limit: int = COMBAT_HOF_DISPLAY_LIMIT, conn) -> List[Dict[str, Any]]:
-    """Return up to ``limit`` battles sorted by destroyed value (desc), then date (desc)."""
+def list_hof_battles(
+    *,
+    sort: str = HOF_SORT_DEFAULT,
+    limit: int = COMBAT_HOF_DISPLAY_LIMIT,
+    conn,
+) -> List[Dict[str, Any]]:
+    """Return battles for Hall of Fame display (read-only, category sort)."""
     if not hof_schema_ready(conn):
         return []
 
+    sort_key = _normalize_hof_sort(sort)
     lim = max(1, min(int(limit), COMBAT_HOF_DISPLAY_LIMIT))
     cur = conn.cursor()
     cur.execute(
         f"""
         SELECT *
         FROM {COMBAT_HOF_TABLE}
-        ORDER BY total_destroyed_score DESC, created_at DESC, id DESC
+        {_sort_order_sql(sort_key)}
         LIMIT ?;
         """,
         (lim,),
@@ -367,12 +441,83 @@ def list_top_battles(*, limit: int = COMBAT_HOF_DISPLAY_LIMIT, conn) -> List[Dic
     return [_row_to_battle(row, rank=idx + 1) for idx, row in enumerate(rows)]
 
 
-def build_hof_api_payload(*, limit: int = COMBAT_HOF_DISPLAY_LIMIT, conn) -> Dict[str, Any]:
-    battles = list_top_battles(limit=limit, conn=conn)
+def list_top_battles(*, limit: int = COMBAT_HOF_DISPLAY_LIMIT, conn) -> List[Dict[str, Any]]:
+    """Return up to ``limit`` battles sorted by destroyed value (desc), then date (desc)."""
+    return list_hof_battles(sort=HOF_SORT_DESTROYED, limit=limit, conn=conn)
+
+
+def _destroyed_rank_for_battle(row: Any, *, conn) -> int:
+    score = int(row["total_destroyed_score"] or 0)
+    created = int(row["created_at"] or 0)
+    battle_id = int(row["id"])
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS c
+        FROM {COMBAT_HOF_TABLE}
+        WHERE total_destroyed_score > ?
+           OR (total_destroyed_score = ? AND created_at > ?)
+           OR (total_destroyed_score = ? AND created_at = ? AND id > ?);
+        """,
+        (score, score, created, score, created, battle_id),
+    )
+    return int(cur.fetchone()["c"] or 0) + 1
+
+
+def get_player_hof_highlight(*, player_id: int, conn) -> Dict[str, Any] | None:
+    """Best destroyed-value battle for a player and its global rank."""
+    if not hof_schema_ready(conn):
+        return None
+    pid = int(player_id)
+    if pid <= 0:
+        return None
+
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT *
+        FROM {COMBAT_HOF_TABLE}
+        WHERE attacker_player_id = ? OR defender_player_id = ?
+        ORDER BY total_destroyed_score DESC, created_at DESC, id DESC
+        LIMIT 1;
+        """,
+        (pid, pid),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+
+    rank = _destroyed_rank_for_battle(row, conn=conn)
+    battle = _row_to_battle(row, rank=rank)
+    return {
+        "rank": rank,
+        "battle": battle,
+        "total_destroyed_score": battle["total_destroyed_score"],
+        "total_destroyed_score_compact": battle["total_destroyed_score_compact"],
+        "attacker_name": battle["attacker_name"],
+        "defender_name": battle["defender_name"],
+        "target_coords": battle["target_coords"],
+    }
+
+
+def build_hof_api_payload(
+    *,
+    sort: str = HOF_SORT_DEFAULT,
+    player_id: int | None = None,
+    limit: int = COMBAT_HOF_DISPLAY_LIMIT,
+    conn,
+) -> Dict[str, Any]:
+    sort_key = _normalize_hof_sort(sort)
+    battles = list_hof_battles(sort=sort_key, limit=limit, conn=conn)
+    highlight = None
+    if player_id is not None and int(player_id) > 0:
+        highlight = get_player_hof_highlight(player_id=int(player_id), conn=conn)
     return {
         "ok": True,
         "ready": hof_schema_ready(conn),
+        "sort": sort_key,
         "limit": max(1, min(int(limit), COMBAT_HOF_DISPLAY_LIMIT)),
         "battles": battles,
         "count": len(battles),
+        "player_highlight": highlight,
     }

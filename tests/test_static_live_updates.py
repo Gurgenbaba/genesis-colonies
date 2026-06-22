@@ -514,6 +514,49 @@ def test_gc700a_combat_report_v2_presentation():
     assert '"combat_report_side_winner"' in de
 
 
+def test_gc700d_combat_debris_recycler_ux():
+    """GC-700D: debris metadata UX — recycler hint + fleet prefill CTA."""
+    js = _read("static/js/messages.js")
+    css = _read("static/style.css")
+    en = _read("locales/en.json")
+    de = _read("locales/de.json")
+
+    assert "function fleetRecycleHrefFromCoords" in js
+    assert "mission=recycle" in js
+    assert "combat_report_send_recycler" in js
+    assert "recycler_slots_needed" in js
+    assert "renderCombatDebrisPanel(safeMeta)" in js.split("function renderCombatReportFull")[1]
+    assert "gc-combat-debris-footer" in css
+    assert "gc-combat-debris-actions" in css
+    assert '"combat_report_debris_recycler_needed"' in en
+    assert '"combat_report_send_recycler"' in de
+
+
+def test_gc700b_hall_of_fame_v2():
+    """GC-700B: HoF ranking layout — tabs, compact hero strip, table rows."""
+    html = _read("templates/hall_of_fame.html")
+    css = _read("static/style.css")
+    de = _read("locales/de.json")
+
+    assert "building-tabs" not in html.split("gc-hof-tabs")[1].split("</nav>")[0]
+    assert "gc-nav-link" in html
+    assert "gc-hof-tab" in html
+    assert "gc-hof-col-date" not in html
+    assert "hof_col_rounds" not in html.split("gc-hof-table")[1].split("</table>")[0]
+    assert "gc-hof-table" in html
+    assert "gc-hof-my-strip" in html
+    assert "gc-hof-mobile-row" in html
+    assert "gc-hof-tab-icon" not in html
+    assert "gc-hof-card" not in html
+    assert "gc-hof-hero-panel" not in html
+    assert "gc-btn-primary" not in html
+    assert "combat_report_send_recycler" not in html
+    assert "hof_hero_line" in de
+    assert ".gc-hof-table" in css
+    assert ".gc-hof-my-strip" in css
+    assert '"hof_tab_debris"' in de
+
+
 def test_main_js_apply_planet_hero_theme_border_fx():
     src = _read("static/main.js")
     hero_fn = src.split("function applyPlanetHeroThemeFromState(data)")[1].split("function bootstrapPlanetLandscapeFromBoot")[0]

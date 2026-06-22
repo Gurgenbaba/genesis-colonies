@@ -4023,7 +4023,7 @@
       }
 
       const btn = e.target.closest(".building-tabs .tab-btn");
-      if (!btn || btn.closest("#messages-tabs")) return;
+      if (!btn || btn.closest("#messages-tabs") || btn.closest("#hall-of-fame-page")) return;
       if (btn.tagName === "A") e.preventDefault();
       const tabBtn = btn.dataset.tab;
       if (GC.detectPage() === "buildings" && tabBtn) {

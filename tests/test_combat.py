@@ -392,6 +392,71 @@ def test_calculate_debris_from_ship_losses():
     assert c2 == int(1000 * DEBRIS_CRYSTAL_FRACTION) + int(100 * 3 * DEBRIS_CRYSTAL_FRACTION)
 
 
+def test_build_combat_report_includes_debris_metadata():
+    from game.combat import (
+        DEBRIS_FIELD_TTL_SECONDS,
+        build_combat_debris_metadata,
+        build_combat_report,
+        estimate_recycler_slots_needed,
+    )
+    from game.combat_models import CombatResult, CombatRound
+
+    atk_loss = {"falcon_interceptor": 2}
+    def_loss = {"sentinel_turret": 3}
+    debris = build_combat_debris_metadata(atk_loss, def_loss)
+    assert debris is not None
+    assert debris["metal"] > 0
+    assert debris["ttl"] == DEBRIS_FIELD_TTL_SECONDS
+    assert debris["recycler_slots_needed"] == estimate_recycler_slots_needed(
+        debris["metal"], debris["crystal"]
+    )
+
+    combat_result = CombatResult(
+        winner="attacker",
+        rounds=(CombatRound(1, atk_loss, def_loss),),
+        attacker_losses=atk_loss,
+        defender_losses=def_loss,
+    )
+    body, meta = build_combat_report(
+        attacker_id=1,
+        attacker_name="Attacker",
+        defender_id=2,
+        defender_name="Defender",
+        coords="2:3:4",
+        attacking_ships={"falcon_interceptor": 5},
+        defending_ships={},
+        defending_defense={"sentinel_turret": 4},
+        combat_result=combat_result,
+    )
+    assert meta["debris"] == debris
+    assert "Trümmerfeld" in body or "Debris field" in body
+    assert "Recycler benötigt:" in body or "Recyclers needed:" in body
+
+
+def test_build_combat_report_omits_debris_when_none():
+    from game.combat import build_combat_report
+    from game.combat_models import CombatResult
+
+    combat_result = CombatResult(
+        winner="draw",
+        rounds=(),
+        attacker_losses={},
+        defender_losses={},
+    )
+    body, meta = build_combat_report(
+        attacker_id=1,
+        attacker_name="A",
+        defender_id=2,
+        defender_name="D",
+        coords="1:1:1",
+        attacking_ships={},
+        defending_ships={},
+        combat_result=combat_result,
+    )
+    assert "debris" not in meta
+    assert "Trümmerfeld" not in body and "Debris field" not in body
+
+
 def test_both_sides_empty_returns_draw_without_rounds():
     attacker = make_combat_side("attacker", [])
     defender = make_combat_side("defender", [])

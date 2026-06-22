@@ -12,9 +12,15 @@ from game import db as gdb
 from game.db import db
 from game.combat_hof import (
     COMBAT_HOF_RETENTION_LIMIT,
+    HOF_SORT_DEBRIS,
+    HOF_SORT_LOOT,
+    HOF_SORT_RECENT,
     backfill_combat_hof,
+    build_hof_api_payload,
     combat_qualifies_for_hof,
+    get_player_hof_highlight,
     hof_schema_ready,
+    list_hof_battles,
     list_top_battles,
     prune_hof_entries_beyond_top,
     record_hof_battle,
@@ -622,5 +628,118 @@ def test_list_top_battles_respects_limit(hof_db):
         conn.commit()
         battles = list_top_battles(limit=100, conn=conn)
         assert len(battles) == 100
+    finally:
+        conn.close()
+
+
+def test_list_hof_battles_sort_categories(hof_db):
+    conn = db()
+    try:
+        record_hof_battle(
+            fleet_id=11,
+            attacker_player_id=10,
+            defender_player_id=20,
+            attacker_name="LowLoot",
+            defender_name="Def",
+            target_planet_id=1,
+            target_name="P",
+            target_coords="[2:3:4]",
+            winner="attacker",
+            rounds=1,
+            attacker_losses={"ironclad_frigate": 50},
+            defender_losses={},
+            loot={"metal": 1000, "crystal": 0, "fuel_cells": 0},
+            debris={"metal": 5000, "crystal": 1000},
+            report_metadata={},
+            created_at=300,
+            conn=conn,
+        )
+        record_hof_battle(
+            fleet_id=12,
+            attacker_player_id=11,
+            defender_player_id=21,
+            attacker_name="HighLoot",
+            defender_name="Def2",
+            target_planet_id=2,
+            target_name="P2",
+            target_coords="[5:6:7]",
+            winner="attacker",
+            rounds=1,
+            attacker_losses={"ironclad_frigate": 1},
+            defender_losses={},
+            loot={"metal": 900000, "crystal": 100000, "fuel_cells": 0},
+            debris={"metal": 100, "crystal": 100},
+            report_metadata={},
+            created_at=100,
+            conn=conn,
+        )
+        record_hof_battle(
+            fleet_id=13,
+            attacker_player_id=12,
+            defender_player_id=22,
+            attacker_name="Recent",
+            defender_name="Def3",
+            target_planet_id=3,
+            target_name="P3",
+            target_coords="[8:9:10]",
+            winner="draw",
+            rounds=1,
+            attacker_losses={},
+            defender_losses={},
+            loot={},
+            debris={},
+            report_metadata={},
+            created_at=900,
+            conn=conn,
+        )
+        conn.commit()
+
+        debris_top = list_hof_battles(sort=HOF_SORT_DEBRIS, limit=10, conn=conn)
+        assert debris_top[0]["fleet_id"] == 11
+        assert debris_top[0]["debris_total"] > debris_top[1]["debris_total"]
+
+        loot_top = list_hof_battles(sort=HOF_SORT_LOOT, limit=10, conn=conn)
+        assert loot_top[0]["fleet_id"] == 12
+        assert loot_top[0]["loot_total"] > loot_top[1]["loot_total"]
+
+        recent = list_hof_battles(sort=HOF_SORT_RECENT, limit=10, conn=conn)
+        assert recent[0]["fleet_id"] == 13
+    finally:
+        conn.close()
+
+
+def test_get_player_hof_highlight_rank(hof_db):
+    conn = db()
+    try:
+        for idx, score in enumerate((5, 20, 40), start=1):
+            record_hof_battle(
+                fleet_id=100 + idx,
+                attacker_player_id=900 if idx == 2 else idx,
+                defender_player_id=800 + idx,
+                attacker_name=f"Atk{idx}",
+                defender_name=f"Def{idx}",
+                target_planet_id=idx,
+                target_name="P",
+                target_coords=f"[1:1:{idx}]",
+                winner="attacker",
+                rounds=1,
+                attacker_losses={"ironclad_frigate": score},
+                defender_losses={},
+                loot={},
+                debris={},
+                report_metadata={},
+                created_at=idx,
+                conn=conn,
+            )
+        conn.commit()
+
+        highlight = get_player_hof_highlight(player_id=900, conn=conn)
+        assert highlight is not None
+        assert highlight["battle"]["fleet_id"] == 102
+        assert highlight["rank"] == 2
+
+        payload = build_hof_api_payload(sort=HOF_SORT_LOOT, player_id=900, conn=conn)
+        assert payload["sort"] == HOF_SORT_LOOT
+        assert payload["player_highlight"]["rank"] == 2
     finally:
         conn.close()

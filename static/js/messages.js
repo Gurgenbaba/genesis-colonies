@@ -266,6 +266,12 @@
     return `/fleet?mission=attack&target_galaxy=${c.galaxy}&target_system=${c.system}&target_position=${c.position}`;
   }
 
+  function fleetRecycleHrefFromCoords(coords) {
+    const c = parseTargetCoordsForFleet(coords);
+    if (!c) return null;
+    return `/fleet?mission=recycle&target_galaxy=${c.galaxy}&target_system=${c.system}&target_position=${c.position}`;
+  }
+
   function navigateFleetAttack(coords) {
     const href = fleetAttackHrefFromCoords(coords);
     if (!href) return;
@@ -605,7 +611,14 @@
     const metal = Math.max(0, Number(raw.metal) || 0);
     const crystal = Math.max(0, Number(raw.crystal) || 0);
     if (metal <= 0 && crystal <= 0) return null;
-    return { metal, crystal };
+    return {
+      metal,
+      crystal,
+      ttl: Math.max(0, Number(raw.ttl) || 0),
+      recycler_slots_needed: Math.max(0, Number(raw.recycler_slots_needed) || 0),
+      harvested_metal: Math.max(0, Number(raw.harvested_metal ?? raw.harvested?.metal) || 0),
+      harvested_crystal: Math.max(0, Number(raw.harvested_crystal ?? raw.harvested?.crystal) || 0),
+    };
   }
 
   function renderCombatDebrisChips(debris) {
@@ -632,9 +645,52 @@
   function renderCombatDebrisPanel(meta) {
     const debris = combatDebrisPayload(meta);
     if (!debris) return "";
+    const recycleHref = fleetRecycleHrefFromCoords(meta?.target_coords);
+    const footerParts = [];
+    if (debris.recycler_slots_needed > 0) {
+      footerParts.push(
+        `<div class="gc-combat-debris-hint">${esc(
+          t("combat_report_debris_recycler_needed", "Recyclers needed: %(count)s").replace(
+            "%(count)s",
+            formatInt(debris.recycler_slots_needed)
+          )
+        )}</div>`
+      );
+    }
+    const harvestedMetal = debris.harvested_metal;
+    const harvestedCrystal = debris.harvested_crystal;
+    if (harvestedMetal > 0 || harvestedCrystal > 0) {
+      const harvestedBits = [];
+      if (harvestedMetal > 0) {
+        harvestedBits.push(`${esc(t("resource_metal", "Ferronit"))} ${esc(formatInt(harvestedMetal))}`);
+      }
+      if (harvestedCrystal > 0) {
+        harvestedBits.push(`${esc(t("resource_crystal", "Crytite"))} ${esc(formatInt(harvestedCrystal))}`);
+      }
+      footerParts.push(
+        `<div class="gc-combat-debris-harvested">` +
+          `<span class="gc-combat-debris-harvested-label">${esc(
+            t("combat_report_debris_harvested", "Already harvested")
+          )}</span>` +
+          `<span class="gc-combat-debris-harvested-value">${harvestedBits.join(" · ")}</span>` +
+        `</div>`
+      );
+    }
+    if (recycleHref) {
+      footerParts.push(
+        `<div class="gc-combat-debris-actions">` +
+          `<a href="${esc(recycleHref)}" class="gc-btn gc-btn-primary gc-btn-sm">${esc(
+            t("combat_report_send_recycler", "Send recycler")
+          )}</a>` +
+        `</div>`
+      );
+    }
+    const footer = footerParts.length
+      ? `<div class="gc-combat-debris-footer">${footerParts.join("")}</div>`
+      : "";
     return renderCombatPanel(
       t("combat_report_section_debris", "Debris field"),
-      renderCombatDebrisChips(debris),
+      renderCombatDebrisChips(debris) + footer,
       "gc-combat-report-panel--debris"
     );
   }

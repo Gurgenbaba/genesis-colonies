@@ -507,6 +507,27 @@ def normalize_combat_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]
     meta["rounds"] = rounds
     if "rounds_fought" not in meta:
         meta["rounds_fought"] = len(rounds)
+    debris = meta.get("debris")
+    if isinstance(debris, dict):
+        metal = max(0, int(debris.get("metal") or 0))
+        crystal = max(0, int(debris.get("crystal") or 0))
+        if metal > 0 or crystal > 0:
+            meta["debris"] = {
+                "metal": metal,
+                "crystal": crystal,
+                "ttl": max(0, int(debris.get("ttl") or 0)),
+                "recycler_slots_needed": max(0, int(debris.get("recycler_slots_needed") or 0)),
+            }
+            harvested_m = max(0, int(debris.get("harvested_metal") or 0))
+            harvested_c = max(0, int(debris.get("harvested_crystal") or 0))
+            if harvested_m > 0:
+                meta["debris"]["harvested_metal"] = harvested_m
+            if harvested_c > 0:
+                meta["debris"]["harvested_crystal"] = harvested_c
+        else:
+            meta.pop("debris", None)
+    elif "debris" in meta:
+        meta.pop("debris", None)
     return meta
 
 

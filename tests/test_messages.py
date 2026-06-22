@@ -1108,6 +1108,24 @@ def test_fleet_ship_summary_no_raw_ship_keys():
     assert "Custom Hauler" in unknown_txt
 
 
+def test_normalize_combat_metadata_debris_blocks():
+    legacy = normalize_combat_metadata({"result": "attacker", "rounds": []})
+    assert "debris" not in legacy
+
+    with_debris = normalize_combat_metadata(
+        {
+            "debris": {
+                "metal": 12500000,
+                "crystal": 8750000,
+                "ttl": 604800,
+                "recycler_slots_needed": 4,
+            }
+        }
+    )
+    assert with_debris["debris"]["metal"] == 12500000
+    assert with_debris["debris"]["recycler_slots_needed"] == 4
+
+
 def test_dispatch_combat_reports_persists_for_both_players(temp_db):
     from game.combat import COMBAT_REPORT_VERSION, build_combat_report
     from game.combat_models import CombatResult, CombatRound
@@ -1150,6 +1168,9 @@ def test_dispatch_combat_reports_persists_for_both_players(temp_db):
     assert meta["result"] == "attacker"
     assert "attacker_combat_research" in meta
     assert "weapon_tech" in meta["attacker_combat_research"]
+    assert meta["debris"]["metal"] > 0
+    assert meta["debris"]["recycler_slots_needed"] > 0
+    assert meta["debris"]["ttl"] > 0
     assert "═══" in body or "Combat report" in body
 
     sent = dispatch_combat_reports(
@@ -1178,6 +1199,8 @@ def test_dispatch_combat_reports_persists_for_both_players(temp_db):
     assert def_msg["metadata"]["perspective"] == "defender"
     assert atk_msg["metadata"]["rounds_fought"] == 2
     assert atk_msg["metadata"]["defender_losses"]["sentinel_turret"] == 2
+    assert atk_msg["metadata"]["debris"]["metal"] > 0
+    assert atk_msg["metadata"]["debris"]["recycler_slots_needed"] > 0
     assert atk_msg["body"] == body
 
     conn = db()

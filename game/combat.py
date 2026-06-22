@@ -553,6 +553,7 @@ COMBAT_REPORT_VERSION = 2
 COMBAT_PLUNDER_FRACTION = 0.5
 DEBRIS_METAL_FRACTION = 0.3
 DEBRIS_CRYSTAL_FRACTION = 0.3
+DEBRIS_FIELD_TTL_SECONDS = 7 * 24 * 3600
 
 
 def unit_build_cost_for_debris(unit_key: str) -> Tuple[int, int]:
@@ -591,6 +592,33 @@ def calculate_combat_debris(
     m1, c1 = calculate_debris_from_losses(attacker_losses)
     m2, c2 = calculate_debris_from_losses(defender_losses)
     return m1 + m2, c1 + c2
+
+
+def estimate_recycler_slots_needed(metal: int, crystal: int) -> int:
+    """Display hint: harvest_reclaimer ships needed to carry all debris in one trip."""
+    from .fleet_defs import SHIPS
+
+    cargo = max(0, int((SHIPS.get("harvest_reclaimer") or {}).get("cargo") or 0))
+    total = max(0, int(metal)) + max(0, int(crystal))
+    if total <= 0 or cargo <= 0:
+        return 0
+    return (total + cargo - 1) // cargo
+
+
+def build_combat_debris_metadata(
+    attacker_losses: Mapping[str, int],
+    defender_losses: Mapping[str, int],
+) -> Dict[str, int] | None:
+    """Structured debris block for combat report metadata (UX only, no DB)."""
+    metal, crystal = calculate_combat_debris(attacker_losses, defender_losses)
+    if metal <= 0 and crystal <= 0:
+        return None
+    return {
+        "metal": int(metal),
+        "crystal": int(crystal),
+        "ttl": int(DEBRIS_FIELD_TTL_SECONDS),
+        "recycler_slots_needed": estimate_recycler_slots_needed(metal, crystal),
+    }
 
 
 def debris_schema_ready(conn) -> bool:
@@ -1142,6 +1170,32 @@ def build_combat_report(
             )
         )
 
+    debris_meta = build_combat_debris_metadata(atk_loss, def_loss)
+    if debris_meta:
+        debris_lines = _format_stock_lines(
+            {"metal": debris_meta["metal"], "crystal": debris_meta["crystal"]},
+            tr_fn=_t,
+            fmt_int=fmt_int,
+            empty_key="combat_report_debris_empty",
+            empty_default="No debris",
+        )
+        slots_needed = int(debris_meta.get("recycler_slots_needed") or 0)
+        if slots_needed > 0:
+            debris_lines.append(
+                _t(
+                    "combat_report_debris_recycler_needed",
+                    "Recyclers needed: %(count)s",
+                    count=fmt_int(slots_needed),
+                )
+            )
+        body_lines.append("")
+        body_lines.append(
+            _format_kv_section(
+                _t("combat_report_section_debris", "Debris field"),
+                debris_lines,
+            )
+        )
+
     metadata: Dict[str, Any] = {
         "report_version": COMBAT_REPORT_VERSION,
         "target_coords": target_coord_txt if target_coord_txt != "—" else "",
@@ -1166,6 +1220,8 @@ def build_combat_report(
         "attacker_combat_research": atk_research,
         "defender_combat_research": def_research,
     }
+    if debris_meta:
+        metadata["debris"] = dict(debris_meta)
     return "\n".join(line for line in body_lines if line is not None).strip(), metadata
 
 

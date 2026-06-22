@@ -3243,9 +3243,11 @@ def hall_of_fame_view():
 
     from game.combat_hof import build_hof_api_payload
 
+    sort = request.args.get("sort", "destroyed")
+    player_id = _current_player_id()
     conn = db()
     try:
-        hof_payload = build_hof_api_payload(limit=100, conn=conn)
+        hof_payload = build_hof_api_payload(sort=sort, player_id=player_id, limit=100, conn=conn)
     finally:
         conn.close()
 
@@ -3257,6 +3259,7 @@ def hall_of_fame_view():
         energy_used=energy_used,
         storage_caps=storage_caps,
         hof_payload=hof_payload,
+        hof_sort=hof_payload.get("sort") or "destroyed",
     )
 
 
@@ -3268,9 +3271,11 @@ def api_hall_of_fame():
     try:
         from game.combat_hof import build_hof_api_payload
 
+        sort = request.args.get("sort", "destroyed")
+        player_id = _current_player_id()
         conn = db()
         try:
-            payload = build_hof_api_payload(limit=100, conn=conn)
+            payload = build_hof_api_payload(sort=sort, player_id=player_id, limit=100, conn=conn)
         finally:
             conn.close()
         return jsonify(payload)
