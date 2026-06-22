@@ -1056,6 +1056,7 @@
   "fleet_world_target_flight": "Flight time",
   "fleet_expedition_coords_hint_required": "Expeditions require position %(position)s in your current system.",
   "fleet_expedition_hint_events": "Outcomes are rolled on arrival: resources, fuel caches, delays, or empty sectors.",
+  "fleet_expedition_hint_jackpot": "Rare cargo jackpots can temporarily allow more loot than the shown capacity.",
   "fleet_preview_arrival": "Arrival in",
   "fleet_target_own_planet": "Own colony",
   "fleet_target_ally_planet": "Allied colony",

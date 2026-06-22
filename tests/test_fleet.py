@@ -2329,6 +2329,38 @@ def test_expedition_preview_slot_requires_expedition_mission(fleet_db):
     )
     assert allowed["can_send"] is True
     assert allowed["target"]["target_type"] == "expedition_slot"
+    assert int(allowed["cargo_total"]) == calculate_expedition_loot_cap({"solar_skiff": 1})
+    assert int(allowed["cargo_total"]) != calculate_total_cargo({"solar_skiff": 1, "falcon_interceptor": 5})
+    conn.close()
+
+
+def test_expedition_preview_uses_loot_cap_not_transport_cargo(fleet_db):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    g, s, _ = _planet_coords(pid, conn=conn)
+    cur = conn.cursor()
+    _fund_planet(cur, pid)
+    _seed_ships(pid, uid, {"solar_skiff": 1, "falcon_interceptor": 5}, conn=conn)
+    cur.execute("SELECT * FROM planets WHERE id = ?;", (pid,))
+    origin = dict(cur.fetchone())
+    conn.commit()
+
+    ships = {"solar_skiff": 1, "falcon_interceptor": 5}
+    preview = build_fleet_send_preview(
+        player_id=uid,
+        origin_planet=origin,
+        target_galaxy=g,
+        target_system=s,
+        target_position=EXPEDITION_POSITION,
+        mission_type="expedition",
+        ships=ships,
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert int(preview["cargo_total"]) == calculate_expedition_loot_cap(ships)
+    assert int(preview["cargo_total"]) == calculate_expedition_loot_cap({"solar_skiff": 1})
     conn.close()
 
 

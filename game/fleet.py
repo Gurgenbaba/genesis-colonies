@@ -1387,7 +1387,12 @@ def preview_fleet_flight(
             speed_percent,
             fuel_efficiency_factor_override=fuel_eff_factor,
         )
-        cargo_total = calculate_total_cargo(ships)
+        mission = str(mission_type or "").strip().lower()
+        cargo_total = (
+            calculate_expedition_loot_cap(ships)
+            if mission == "expedition"
+            else calculate_total_cargo(ships)
+        )
         fuel_cells_have = float(origin_planet.get("fuel_cells") or 0)
         return build_flight_preview_payload(
             distance=distance,

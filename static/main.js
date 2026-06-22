@@ -12445,6 +12445,7 @@
           });
         }
         hints.push({ tone: "info", text: formatMissionHint("fleet_expedition_hint_events") });
+        hints.push({ tone: "info", text: formatMissionHint("fleet_expedition_hint_jackpot") });
         return hints;
       }
 

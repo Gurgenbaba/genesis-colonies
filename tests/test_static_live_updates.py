@@ -156,6 +156,16 @@ def test_gc620e_expedition_report_delivery_and_effective_cargo():
         assert key in en, f"missing en locale key {key}"
 
 
+def test_gc620f_expedition_preview_jackpot_hint():
+    """GC-620F: fleet preview hints mention rare cargo jackpots; no frontend cap math."""
+    main = _read("static/main.js")
+    assert "fleet_expedition_hint_jackpot" in main
+    de = json.loads(_read("locales/de.json"))
+    en = json.loads(_read("locales/en.json"))
+    assert "fleet_expedition_hint_jackpot" in de
+    assert "fleet_expedition_hint_jackpot" in en
+
+
 def test_chat_js_poll_updates_last_id_and_resume_bootstrap():
     src = _read("static/js/chat.js")
     assert "applyIncomingPollMessages" in src

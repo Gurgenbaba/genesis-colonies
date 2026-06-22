@@ -2437,6 +2437,7 @@
   "fleet_world_target_flight": "Flugzeit",
   "fleet_expedition_coords_hint_required": "Expeditionen erfordern Position %(position)s im aktuellen System.",
   "fleet_expedition_hint_events": "Ergebnisse werden bei Ankunft gewürfelt: Ressourcen, Treibstoff, Verzögerungen oder leere Sektoren.",
+  "fleet_expedition_hint_jackpot": "Seltene Cargo-Jackpots können vorübergehend mehr Beute als die angezeigte Kapazität erlauben.",
   "fleet_preview_arrival": "Ankunft in",
   "fleet_target_own_planet": "Eigene Kolonie",
   "fleet_target_ally_planet": "Verbündete Kolonie",
