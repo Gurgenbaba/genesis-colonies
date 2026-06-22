@@ -217,6 +217,21 @@ def test_player_name_validation(app_client):
         assert res.get_json()["ok"] is False
 
 
+def test_player_name_blocks_moderation_policy(app_client):
+    pid, uname, _ = _create_player()
+    _login(app_client, uname)
+
+    res = app_client.post(
+        "/api/options/player-name",
+        json={"player_name": "ADOLFHIZZLER"},
+        headers={"Accept": "application/json"},
+    )
+    assert res.status_code == 400
+    body = res.get_json()
+    assert body["ok"] is False
+    assert body["error"] == "name_policy_forbidden"
+
+
 def test_player_name_duplicate(app_client):
     pid1, u1, _ = _create_player()
     pid2, u2, _ = _create_player()

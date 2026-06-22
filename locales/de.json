@@ -577,6 +577,7 @@
   "options_save": "Speichern",
   "options_saved": "Gespeichert.",
   "options_error_invalid_name": "Ungültiger Name (2–32 Zeichen, nur Buchstaben, Zahlen, Leerzeichen, - . _).",
+  "name_policy_forbidden": "Dieser Commandername ist nicht erlaubt.",
   "options_error_name_taken": "Dieser Name ist bereits vergeben.",
   "options_error_invalid_email": "Ungültige E-Mail-Adresse.",
   "options_error_email_taken": "Diese E-Mail-Adresse wird bereits verwendet.",

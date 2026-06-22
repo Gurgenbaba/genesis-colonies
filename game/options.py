@@ -126,6 +126,11 @@ def validate_display_name(value: Any) -> Tuple[bool, str, str]:
         return False, "options_error_invalid_name", ""
     if not _NAME_RE.match(s):
         return False, "options_error_invalid_name", ""
+    from .name_policy import validate_player_name
+
+    ok_policy, policy_reason = validate_player_name(s)
+    if not ok_policy:
+        return False, policy_reason or "name_policy_forbidden", ""
     return True, "", s
 
 

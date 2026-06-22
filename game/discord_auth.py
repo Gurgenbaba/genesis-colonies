@@ -378,15 +378,19 @@ def _derive_username(profile: Dict[str, Any]) -> str:
 
 
 def _pick_unique_username(base: str) -> str:
+    from .name_policy import validate_player_name
+
     candidate = _sanitize_username(base)
-    if not get_user_by_username(candidate):
-        return candidate
-    for _ in range(12):
+    for _ in range(20):
+        ok_name, _ = validate_player_name(candidate)
+        if ok_name and len(candidate) >= 3 and not get_user_by_username(candidate):
+            return candidate
         suffix = secrets.randbelow(9000) + 1000
-        alt = _sanitize_username(f"{candidate[:32]}{suffix}")
-        if len(alt) >= 3 and not get_user_by_username(alt):
-            return alt
-    return _sanitize_username(f"{candidate}{secrets.token_hex(3)}")
+        candidate = _sanitize_username(f"{base[:24]}{suffix}")
+    fallback = _sanitize_username(f"Commander{secrets.token_hex(3)}")
+    if get_user_by_username(fallback):
+        fallback = _sanitize_username(f"Commander{secrets.token_hex(4)}")
+    return fallback
 
 
 def _email_taken(email: str, conn) -> bool:

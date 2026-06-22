@@ -598,6 +598,13 @@ def verify_user(username: str, password: str):
 
 
 def create_user(username: str, password: str, is_admin: int = 0, email: str | None = None):
+    from .name_policy import validate_player_name
+
+    uname = str(username or "").strip()
+    ok_name, name_reason = validate_player_name(uname)
+    if not ok_name:
+        return False, name_reason or "name_policy_forbidden", None
+
     conn = db()
     cur = conn.cursor()
 
@@ -612,7 +619,7 @@ def create_user(username: str, password: str, is_admin: int = 0, email: str | No
             VALUES (?, ?, ?, ?, ?);
             """,
             (
-                username,
+                uname,
                 hash_password(password),
                 int(is_admin),
                 normalized_email,
@@ -623,7 +630,7 @@ def create_user(username: str, password: str, is_admin: int = 0, email: str | No
 
         ensure_player_and_homeworld(
             player_id=user_id,
-            player_name=username,
+            player_name=uname,
             is_admin=is_admin,
             conn=conn,
         )
@@ -633,7 +640,7 @@ def create_user(username: str, password: str, is_admin: int = 0, email: str | No
         ensure_player_score_row(int(user_id), conn=conn)
 
         conn.commit()
-        return True, None, {"id": user_id, "username": username, "is_admin": bool(is_admin)}
+        return True, None, {"id": user_id, "username": uname, "is_admin": bool(is_admin)}
 
     except sqlite3.IntegrityError:
         conn.rollback()

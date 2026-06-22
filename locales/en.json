@@ -486,6 +486,7 @@
   "options_save": "Save",
   "options_saved": "Saved.",
   "options_error_invalid_name": "Invalid name (2–32 characters; letters, numbers, spaces, - . _ only).",
+  "name_policy_forbidden": "This commander name is not allowed.",
   "options_error_name_taken": "This name is already taken.",
   "options_error_invalid_email": "Invalid email address.",
   "options_error_email_taken": "This email address is already in use.",
