@@ -1499,6 +1499,7 @@
     if (path.endsWith("/overview") || path === "/") return "overview";
     if (path.endsWith("/ranking")) return "ranking";
     if (path.endsWith("/hall-of-fame")) return "hall_of_fame";
+    if (path.endsWith("/chronicles")) return "chronicles";
     if (path.endsWith("/records")) return "records";
     if (path.endsWith("/messages")) return "messages";
     if (path.endsWith("/options")) return "options";
@@ -4023,7 +4024,7 @@
       }
 
       const btn = e.target.closest(".building-tabs .tab-btn");
-      if (!btn || btn.closest("#messages-tabs") || btn.closest("#hall-of-fame-page")) return;
+      if (!btn || btn.closest("#messages-tabs") || btn.closest("#hall-of-fame-page") || btn.closest("#chronicles-page")) return;
       if (btn.tagName === "A") e.preventDefault();
       const tabBtn = btn.dataset.tab;
       if (GC.detectPage() === "buildings" && tabBtn) {
@@ -16656,6 +16657,7 @@
       path.endsWith("/alliance")
       || path.endsWith("/ranking")
       || path.endsWith("/hall-of-fame")
+      || path.endsWith("/chronicles")
       || path.endsWith("/records")
       || path.endsWith("/referrals")
     ) {
@@ -22113,6 +22115,25 @@
         let meta = {};
         try {
           meta = JSON.parse(btn.getAttribute("data-hof-report") || "{}");
+        } catch (_err) {
+          meta = {};
+        }
+        if (!meta || typeof meta !== "object") return;
+        if (typeof GC.openCombatReportModal !== "function") return;
+        GC.openCombatReportModal({ category: "combat", metadata: meta });
+      });
+    });
+  };
+  GC.modules.chronicles = function initChroniclesPage() {
+    const root = document.getElementById("chronicles-page");
+    if (!root) return;
+    root.querySelectorAll("[data-pvp-report]").forEach((btn) => {
+      if (btn.dataset.pvpBound === "1") return;
+      btn.dataset.pvpBound = "1";
+      btn.addEventListener("click", () => {
+        let meta = {};
+        try {
+          meta = JSON.parse(btn.getAttribute("data-pvp-report") || "{}");
         } catch (_err) {
           meta = {};
         }

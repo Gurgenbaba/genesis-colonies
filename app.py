@@ -3283,6 +3283,101 @@ def api_hall_of_fame():
         return jsonify({"ok": False, "error": "hall_of_fame_unavailable"}), 500
 
 
+@app.route("/chronicles")
+@require_login
+def chronicles_view():
+    player_view, buildings, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
+    if player_view is None:
+        return redirect(url_for("login"))
+
+    from game.chronicles import build_chronicles_api_payload
+
+    section = request.args.get("section", "pvp")
+    tab = request.args.get("tab", "overview")
+    player_id = _current_player_id()
+    conn = db()
+    try:
+        chronicles_payload = build_chronicles_api_payload(
+            player_id=int(player_id),
+            section=section,
+            tab=tab,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    return render_template(
+        "chronicles.html",
+        player=player_view,
+        buildings=buildings,
+        energy_total=energy_total,
+        energy_used=energy_used,
+        storage_caps=storage_caps,
+        chronicles_payload=chronicles_payload,
+        chronicles_section=chronicles_payload.get("section") or "pvp",
+        chronicles_tab=chronicles_payload.get("tab") or "overview",
+    )
+
+
+@app.route("/api/chronicles")
+@require_login
+def api_chronicles():
+    if _current_player_id() is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    try:
+        from game.chronicles import build_chronicles_api_payload
+
+        section = request.args.get("section", "pvp")
+        tab = request.args.get("tab", "overview")
+        player_id = _current_player_id()
+        conn = db()
+        try:
+            payload = build_chronicles_api_payload(
+                player_id=int(player_id),
+                section=section,
+                tab=tab,
+                conn=conn,
+            )
+        finally:
+            conn.close()
+        return jsonify(payload)
+    except Exception:
+        return jsonify({"ok": False, "error": "chronicles_unavailable"}), 500
+
+
+@app.route("/pvp")
+@require_login
+def pvp_view_redirect():
+    tab = request.args.get("tab", "overview")
+    return redirect(url_for("chronicles_view", section="pvp", tab=tab))
+
+
+@app.route("/api/pvp")
+@require_login
+def api_pvp_legacy():
+    """Legacy alias — prefer ``/api/chronicles?section=pvp``."""
+    if _current_player_id() is None:
+        return jsonify({"ok": False, "error": "not_logged_in"}), 401
+    try:
+        from game.chronicles import build_chronicles_api_payload
+
+        tab = request.args.get("tab", "overview")
+        player_id = _current_player_id()
+        conn = db()
+        try:
+            payload = build_chronicles_api_payload(
+                player_id=int(player_id),
+                section="pvp",
+                tab=tab,
+                conn=conn,
+            )
+        finally:
+            conn.close()
+        return jsonify(payload)
+    except Exception:
+        return jsonify({"ok": False, "error": "chronicles_unavailable"}), 500
+
+
 @app.route("/api/admin/combat-hof/backfill", methods=["POST"])
 @require_admin_api
 def api_admin_backfill_combat_hof():

@@ -552,6 +552,26 @@ def test_gc700db_galaxy_debris_ux():
     assert '"galaxy_debris_ttl_remaining"' in de
 
 
+def test_gc700c_chronicles_pvp_overview():
+    """GC-700C: Chronicles hub with PvP section, stats, tabs, combat report modal hook."""
+    html = _read("templates/chronicles.html")
+    js = _read("static/main.js")
+    css = _read("static/style.css")
+    de = _read("locales/de.json")
+
+    assert "chronicles-page" in html
+    assert "gc-chronicles-section-tabs" in html
+    assert "gc-pvp-stats" in html
+    assert "data-pvp-report" in html
+    assert "building-tabs" not in html.split("gc-pvp-tabs")[1].split("</nav>")[0]
+    assert "GC.modules.chronicles" in js or "initChroniclesPage" in js
+    assert "gc-chronicles-section-tab" in css
+    assert "gc-pvp-outcome--victory" in css
+    assert '"chronicles_title"' in de
+    assert '"chronicles_section_pvp"' in de
+    assert '"pvp_tab_wins"' in de
+
+
 def test_gc700b_hall_of_fame_v2():
     """GC-700B: HoF ranking layout — tabs, compact hero strip, table rows."""
     html = _read("templates/hall_of_fame.html")

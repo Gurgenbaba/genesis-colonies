@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set chron = chronicles_payload if chronicles_payload is defined and chronicles_payload else {'ready': false, 'battles': [], 'count': 0, 'stats': {}, 'tab': 'overview', 'section': 'pvp', 'section_live': true} %}
+{% set battles = chron.battles if chron.battles is defined else [] %}
+{% set stats = chron.stats if chron.stats is defined else {} %}
+{% set active_section = chronicles_section if chronicles_section is defined else (chron.section if chron.section is defined else 'pvp') %}
+{% set active_tab = chronicles_tab if chronicles_tab is defined else (chron.tab if chron.tab is defined else 'overview') %}
+
+<div class="gc-page gc-chronicles-page gc-hof-page" id="chronicles-page"
+     data-chronicles-ready="{{ '1' if chron.ready else '0' }}"
+     data-chronicles-section="{{ active_section }}"
+     data-chronicles-tab="{{ active_tab }}">
+
+  <header class="section-header gc-chronicles-header">
+    <h1 class="section-title">{{ T("chronicles_title", "Chroniken") }}</h1>
+    <p class="section-hint hint">{{ T("chronicles_subtitle", "Deine Geschichte im Universum — Kämpfe, Expeditionen und Rekorde") }}</p>
+  </header>
+
+  <nav class="gc-chronicles-section-tabs" role="tablist" aria-label="{{ T('chronicles_sections_label', 'Chroniken Bereiche') }}">
+    <a href="{{ url_for('chronicles_view', section='pvp', tab=active_tab if active_section == 'pvp' else 'overview') }}"
+       class="tab-btn gc-nav-link gc-chronicles-section-tab{% if active_section == 'pvp' %} active{% endif %}"
+       role="tab"
+       aria-selected="{{ 'true' if active_section == 'pvp' else 'false' }}"
+       {% if active_section == 'pvp' %}aria-current="page"{% endif %}
+       data-chronicles-section="pvp">
+      {{ T("chronicles_section_pvp", "PvP") }}
+    </a>
+    <span class="tab-btn gc-nav-link gc-chronicles-section-tab gc-chronicles-section-tab--soon" role="tab" aria-disabled="true" title="{{ T('chronicles_section_soon', 'Demnächst') }}">
+      {{ T("chronicles_section_expeditions", "Expeditionen") }}
+    </span>
+    <span class="tab-btn gc-nav-link gc-chronicles-section-tab gc-chronicles-section-tab--soon" role="tab" aria-disabled="true" title="{{ T('chronicles_section_soon', 'Demnächst') }}">
+      {{ T("chronicles_section_records", "Rekorde") }}
+    </span>
+  </nav>
+
+  {% if active_section == 'pvp' %}
+  <section class="gc-panel gc-pvp-panel gc-hof-panel ranking-panel-full" aria-labelledby="chronicles-pvp-panel-title">
+    <div class="gc-panel-header gc-ranking-panel-head">
+      <div class="gc-ranking-panel-head-text">
+        <span class="gc-panel-title" id="chronicles-pvp-panel-title">{{ T("pvp_panel_title", "Kampfhistorie") }}</span>
+        <span class="gc-panel-subtitle">
+          {% if active_tab == 'wins' %}
+            {{ T("pvp_panel_subtitle_wins", "Deine Siege") }}
+          {% elif active_tab == 'losses' %}
+            {{ T("pvp_panel_subtitle_losses", "Deine Niederlagen") }}
+          {% elif active_tab == 'attacks' %}
+            {{ T("pvp_panel_subtitle_attacks", "Deine Angriffe") }}
+          {% elif active_tab == 'defenses' %}
+            {{ T("pvp_panel_subtitle_defenses", "Deine Verteidigungen") }}
+          {% elif active_tab == 'recent' %}
+            {{ T("pvp_panel_subtitle_recent", "Alle Kämpfe chronologisch") }}
+          {% else %}
+            {{ T("pvp_panel_subtitle_overview", "Zusammenfassung deiner letzten Kämpfe") }}
+          {% endif %}
+        </span>
+      </div>
+      <div class="gc-pvp-panel-links">
+        <a href="{{ url_for('hall_of_fame_view') }}" class="gc-btn gc-btn-ghost gc-btn-sm">{{ T("pvp_link_hof", "Hall of Fame") }}</a>
+        <a href="{{ url_for('messages_view') }}" class="gc-btn gc-btn-ghost gc-btn-sm">{{ T("pvp_link_inbox", "Kampfberichte") }}</a>
+      </div>
+    </div>
+
+    <div class="gc-ranking-body gc-hof-body-wrap">
+      {% if stats %}
+      <div class="gc-pvp-stats" aria-label="{{ T('pvp_stats_label', 'PvP Statistik') }}">
+        <div class="gc-pvp-stat">
+          <span class="gc-pvp-stat-label">{{ T("pvp_stat_battles", "Kämpfe") }}</span>
+          <span class="gc-pvp-stat-value gc-mono">{{ stats.total_battles or 0 }}</span>
+        </div>
+        <div class="gc-pvp-stat gc-pvp-stat--win">
+          <span class="gc-pvp-stat-label">{{ T("pvp_stat_wins", "Siege") }}</span>
+          <span class="gc-pvp-stat-value gc-mono">{{ stats.wins or 0 }}</span>
+        </div>
+        <div class="gc-pvp-stat gc-pvp-stat--loss">
+          <span class="gc-pvp-stat-label">{{ T("pvp_stat_losses", "Niederlagen") }}</span>
+          <span class="gc-pvp-stat-value gc-mono">{{ stats.losses or 0 }}</span>
+        </div>
+        <div class="gc-pvp-stat">
+          <span class="gc-pvp-stat-label">{{ T("pvp_stat_attacks", "Angriffe") }}</span>
+          <span class="gc-pvp-stat-value gc-mono">{{ stats.attacks or 0 }}</span>
+        </div>
+        <div class="gc-pvp-stat">
+          <span class="gc-pvp-stat-label">{{ T("pvp_stat_defenses", "Verteidigungen") }}</span>
+          <span class="gc-pvp-stat-value gc-mono">{{ stats.defenses or 0 }}</span>
+        </div>
+        <div class="gc-pvp-stat">
+          <span class="gc-pvp-stat-label">{{ T("pvp_stat_loot", "Beute") }}</span>
+          <span class="gc-pvp-stat-value gc-mono" title="{{ stats.loot_gained_fmt or '0' }}">{{ stats.loot_gained_compact or '0' }}</span>
+        </div>
+        <div class="gc-pvp-stat">
+          <span class="gc-pvp-stat-label">{{ T("pvp_stat_destroyed_dealt", "Zerstört") }}</span>
+          <span class="gc-pvp-stat-value gc-mono" title="{{ stats.destroyed_dealt_fmt or '0' }}">{{ stats.destroyed_dealt_compact or '0' }}</span>
+        </div>
+        {% if stats.combat_rank %}
+        <div class="gc-pvp-stat">
+          <span class="gc-pvp-stat-label">{{ T("pvp_stat_combat_rank", "Kampf-Rang") }}</span>
+          <span class="gc-pvp-stat-value gc-mono">#{{ stats.combat_rank }}</span>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <nav class="gc-hof-tabs gc-pvp-tabs" role="tablist" aria-label="{{ T('pvp_tabs_label', 'PvP Kategorien') }}">
+        {% for tab in [
+          ('overview', 'pvp_tab_overview', 'Übersicht'),
+          ('recent', 'pvp_tab_recent', 'Alle'),
+          ('wins', 'pvp_tab_wins', 'Siege'),
+          ('losses', 'pvp_tab_losses', 'Niederlagen'),
+          ('attacks', 'pvp_tab_attacks', 'Angriffe'),
+          ('defenses', 'pvp_tab_defenses', 'Verteidigungen')
+        ] %}
+        <a href="{{ url_for('chronicles_view', section='pvp', tab=tab[0]) }}"
+           class="tab-btn gc-nav-link gc-hof-tab gc-pvp-tab{% if active_tab == tab[0] %} active{% endif %}"
+           role="tab"
+           aria-selected="{{ 'true' if active_tab == tab[0] else 'false' }}"
+           {% if active_tab == tab[0] %}aria-current="page"{% endif %}
+           data-pvp-tab="{{ tab[0] }}">
+          {{ T(tab[1], tab[2]) }}
+        </a>
+        {% endfor %}
+      </nav>
+
+      <div class="gc-hof-body gc-pvp-body ranking-table-wrapper">
+        {% if not chron.ready %}
+        <p class="gc-hof-empty ranking-empty">{{ T("chronicles_unavailable", "Chroniken sind derzeit nicht verfügbar.") }}</p>
+        {% elif not battles %}
+        <p class="gc-hof-empty ranking-empty">{{ T("pvp_empty", "Noch keine Kämpfe in deiner Historie. Deine ersten Berichte erscheinen hier.") }}</p>
+        {% else %}
+        <div class="gc-hof-list gc-ranking">
+          <div class="gc-hof-desktop gc-ranking-desktop ranking-table-wrapper">
+            <table class="gc-ranking-table gc-hof-table gc-pvp-table">
+              <thead>
+                <tr>
+                  <th class="gc-pvp-col-date">{{ T("pvp_col_date", "Datum") }}</th>
+                  <th class="gc-pvp-col-outcome">{{ T("pvp_col_outcome", "Ergebnis") }}</th>
+                  <th class="gc-pvp-col-role">{{ T("pvp_col_role", "Rolle") }}</th>
+                  <th class="gc-hof-col-name">{{ T("pvp_col_opponent", "Gegner") }}</th>
+                  <th class="gc-pvp-col-coords">{{ T("pvp_col_coords", "Koordinate") }}</th>
+                  <th class="gc-hof-col-num">{{ T("pvp_col_destroyed", "Zerstört") }}</th>
+                  <th class="gc-hof-col-num">{{ T("hof_stat_loot_short", "Beute") }}</th>
+                  <th class="gc-hof-col-action">{{ T("hof_view_report_short", "Bericht") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for battle in battles %}
+                {% set outcome_cls = 'gc-pvp-outcome--' ~ battle.outcome if battle.outcome else '' %}
+                <tr class="gc-ranking-row gc-hof-row gc-pvp-row{{ ' is-unread' if not battle.is_read else '' }}">
+                  <td class="gc-pvp-col-date gc-mono">{{ battle.created_at_short or '—' }}</td>
+                  <td class="gc-pvp-col-outcome">
+                    <span class="gc-pvp-outcome {{ outcome_cls }}">{{ T(battle.outcome_label_key, battle.outcome) }}</span>
+                  </td>
+                  <td class="gc-pvp-col-role">
+                    {% if battle.perspective_label_key %}
+                    <span class="gc-pvp-role gc-pvp-role--{{ battle.perspective }}">{{ T(battle.perspective_label_key, battle.perspective) }}</span>
+                    {% else %}—{% endif %}
+                  </td>
+                  <td class="gc-hof-col-name">{{ battle.opponent_name or '—' }}</td>
+                  <td class="gc-pvp-col-coords gc-mono">{{ battle.target_coords or '—' }}</td>
+                  <td class="gc-hof-col-num gc-mono" title="{{ battle.destroyed_total }}">{{ battle.destroyed_total_compact or '0' }}</td>
+                  <td class="gc-hof-col-num gc-mono" title="{{ battle.loot_total if battle.loot_total > 0 else '' }}">
+                    {% if battle.loot_total > 0 %}{{ battle.loot_total_compact }}{% else %}—{% endif %}
+                  </td>
+                  <td class="gc-hof-col-action">
+                    {% if battle.report_metadata %}
+                    <button type="button"
+                            class="gc-btn gc-btn-ghost gc-btn-xs gc-pvp-report-btn"
+                            data-pvp-report='{{ battle.report_metadata | tojson }}'>
+                      {{ T("hof_view_report_short", "Bericht") }}
+                    </button>
+                    {% else %}
+                    <span class="gc-hof-action-empty">—</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="gc-hof-mobile gc-pvp-mobile">
+            {% for battle in battles %}
+            <article class="gc-hof-mobile-row gc-pvp-mobile-row{{ ' is-unread' if not battle.is_read else '' }}">
+              <div class="gc-pvp-mobile-head">
+                <span class="gc-pvp-outcome gc-pvp-outcome--{{ battle.outcome }}">{{ T(battle.outcome_label_key, battle.outcome) }}</span>
+                <span class="gc-mono hint">{{ battle.created_at_short or '—' }}</span>
+              </div>
+              <div class="gc-pvp-mobile-main">
+                <strong>{{ battle.opponent_name or '—' }}</strong>
+                <span class="gc-mono hint">{{ battle.target_coords or '—' }}</span>
+              </div>
+              <div class="gc-pvp-mobile-stats">
+                {% if battle.perspective_label_key %}
+                <span>{{ T(battle.perspective_label_key, battle.perspective) }}</span>
+                {% endif %}
+                <span class="gc-mono">{{ T("pvp_col_destroyed", "Zerstört") }} {{ battle.destroyed_total_compact or '0' }}</span>
+                {% if battle.loot_total > 0 %}
+                <span class="gc-mono">{{ T("hof_stat_loot_short", "Beute") }} {{ battle.loot_total_compact }}</span>
+                {% endif %}
+              </div>
+              {% if battle.report_metadata %}
+              <button type="button"
+                      class="gc-btn gc-btn-outline gc-btn-sm gc-pvp-report-btn"
+                      data-pvp-report='{{ battle.report_metadata | tojson }}'>
+                {{ T("hof_view_report_short", "Bericht") }}
+              </button>
+              {% endif %}
+            </article>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+  {% else %}
+  <section class="gc-panel gc-chronicles-soon-panel">
+    <p class="gc-hof-empty ranking-empty">{{ T("chronicles_section_soon_body", "Dieser Bereich der Chroniken folgt in Kürze.") }}</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

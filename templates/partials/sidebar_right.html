@@ -3,7 +3,7 @@
   'trader_hub_view', 'inventory_view', 'auction_house_view', 'empire_view', 'techtree_view'
 ) %}
 {% set _comm_open = request.endpoint in (
-  'alliance_view', 'ranking_view', 'hall_of_fame_view', 'records_view',
+  'alliance_view', 'ranking_view', 'chronicles_view', 'hall_of_fame_view', 'records_view',
   'referrals_view', 'vote_center_view'
 ) %}
 <nav class="gc-sidebar gc-sidebar-desktop gc-sidebar--right gc-sidebar-right{% if _sn.full_nav %} gc-sidebar--full-nav{% else %} gc-sidebar--role-nav{% endif %}"
@@ -88,6 +88,12 @@
          class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'ranking') }} {% if request.endpoint == 'ranking_view' %}active{% endif %}"
          {% if not module_in_section(_sn, 'ranking', 'administration') %}hidden{% endif %}>
         {{ T("nav_ranking", "Ranking") }}
+      </a>
+      <a href="{{ url_for('chronicles_view') }}"
+         data-nav-module="chronicles"
+         class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'chronicles') }} {% if request.endpoint == 'chronicles_view' %}active{% endif %}"
+         {% if not module_in_section(_sn, 'chronicles', 'administration') %}hidden{% endif %}>
+        {{ T("nav_chronicles", "Chroniken") }}
       </a>
       <a href="{{ url_for('hall_of_fame_view') }}"
          data-nav-module="hall_of_fame"

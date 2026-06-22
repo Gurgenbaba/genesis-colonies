@@ -640,6 +640,12 @@
            {% if not mobile_drawer_shows_module(_sn, 'ranking', bottom_modules=_mb) %}hidden{% endif %}>
           {{ T("nav_ranking", "Ranking") }}
         </a>
+        <a href="{{ url_for('chronicles_view') }}"
+           data-nav-module="chronicles"
+           class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'chronicles') }} {% if request.endpoint == 'chronicles_view' %}active{% endif %}"
+           {% if not mobile_drawer_shows_module(_sn, 'chronicles', bottom_modules=_mb) %}hidden{% endif %}>
+          {{ T("nav_chronicles", "Chroniken") }}
+        </a>
         <a href="{{ url_for('hall_of_fame_view') }}"
            data-nav-module="hall_of_fame"
            class="gc-nav-drawer-link gc-nav-module--{{ nav_module_tier(_sn, 'hall_of_fame') }} {% if request.endpoint == 'hall_of_fame_view' %}active{% endif %}"

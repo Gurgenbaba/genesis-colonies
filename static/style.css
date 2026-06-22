@@ -14671,6 +14671,146 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   }
 }
 
+/* ── Chronicles hub (GC-700C-R1) ──────────────────────────────────────── */
+
+.gc-chronicles-page{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gc-chronicles-section-tabs{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 100%;
+}
+.gc-chronicles-section-tab{
+  text-align: center;
+  min-width: 0;
+}
+.gc-chronicles-section-tab--soon{
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.gc-chronicles-soon-panel{
+  padding: 20px;
+}
+@media (max-width: 520px){
+  .gc-chronicles-section-tabs{
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── PvP section (Chronicles) ─────────────────────────────────────────── */
+
+.gc-pvp-panel .gc-ranking-panel-head{
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.gc-pvp-panel-links{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+.gc-pvp-stats{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.gc-pvp-stat{
+  padding: 10px 12px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(120, 190, 255, 0.14);
+  background: rgba(5, 10, 22, 0.52);
+  min-width: 0;
+}
+.gc-pvp-stat-label{
+  display: block;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gc-text-dim);
+  margin-bottom: 4px;
+}
+.gc-pvp-stat-value{
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gc-primary-2);
+}
+.gc-pvp-stat--win .gc-pvp-stat-value{ color: rgba(120, 255, 180, 0.95); }
+.gc-pvp-stat--loss .gc-pvp-stat-value{ color: rgba(255, 140, 140, 0.95); }
+.gc-pvp-tabs .gc-pvp-tab{ min-width: 0; }
+.gc-pvp-outcome{
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid rgba(120, 190, 255, 0.18);
+}
+.gc-pvp-outcome--victory{
+  color: rgba(160, 255, 200, 0.95);
+  border-color: rgba(80, 220, 140, 0.35);
+  background: rgba(0, 28, 16, 0.45);
+}
+.gc-pvp-outcome--defeat{
+  color: rgba(255, 170, 170, 0.95);
+  border-color: rgba(255, 90, 90, 0.35);
+  background: rgba(40, 8, 8, 0.45);
+}
+.gc-pvp-outcome--draw,
+.gc-pvp-outcome--open{
+  color: rgba(200, 210, 230, 0.88);
+}
+.gc-pvp-role{
+  font-size: 0.78rem;
+  color: var(--gc-text-dim);
+}
+.gc-pvp-role--attacker{ color: rgba(255, 190, 120, 0.92); }
+.gc-pvp-role--defender{ color: rgba(120, 190, 255, 0.92); }
+.gc-pvp-row.is-unread td:first-child{
+  box-shadow: inset 3px 0 0 rgba(120, 190, 255, 0.75);
+}
+.gc-pvp-mobile-row.is-unread{
+  border-color: rgba(120, 190, 255, 0.35);
+}
+.gc-pvp-mobile-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.gc-pvp-mobile-main{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.gc-pvp-mobile-stats{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 0.78rem;
+  color: var(--gc-text-dim);
+  margin-bottom: 10px;
+}
+@media (max-width: 820px){
+  .gc-pvp-panel-links{
+    width: 100%;
+    margin-left: 0;
+  }
+  .gc-pvp-stats{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* ── Universe Records (GC-701) ─────────────────────────────────────────── */
 
 .gc-records-page{
