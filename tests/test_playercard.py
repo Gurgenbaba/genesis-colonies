@@ -27,6 +27,7 @@ from game.playercard import (
     avatar_api_path,
     avatar_public_path,
     avatar_storage_path,
+    backfill_legacy_avatar_blobs,
     badge_image_default_path,
     badge_image_static_path,
     build_public_card,
@@ -726,6 +727,41 @@ def test_process_avatar_rejects_invalid_types(temp_db):
     )
     assert ok_svg is False
     assert reason_svg == "playercard_avatar_invalid_type"
+
+
+def test_avatar_upload_accepts_octet_stream_mime(temp_db):
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("avatar_octet")
+    ok, path = process_avatar_upload(pid, _FakeUpload(_png_bytes(), mimetype="application/octet-stream"))
+    assert ok is True, path
+    assert player_avatar_exists(pid)
+
+
+def test_backfill_legacy_avatar_blobs_imports_static_file(temp_db, avatar_storage, monkeypatch):
+    monkeypatch.setattr("game.playercard.SAVE_COOLDOWN_SEC", 0)
+    init_db()
+    _close_db_conn()
+    pid, _ = _create_player("avatar_backfill")
+    ensure_player_card(pid)
+    legacy_path = avatar_storage / f"avatar_{pid}.webp"
+    legacy_path.write_bytes(_png_bytes())
+
+    conn = db()
+    try:
+        conn.execute(
+            "UPDATE player_cards SET avatar_url = ? WHERE player_id = ?;",
+            (avatar_public_path(pid), pid),
+        )
+        commit(conn)
+    finally:
+        conn.close()
+
+    n = backfill_legacy_avatar_blobs()
+    assert n >= 1
+    assert player_avatar_exists(pid)
+    row = get_player_card_row(pid)
+    assert row["avatar_url"] == avatar_api_path(pid)
 
 
 def test_upload_own_avatar_updates_db(temp_db, monkeypatch):

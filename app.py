@@ -3631,7 +3631,11 @@ def api_player_card_avatar_upload():
         return jsonify({"ok": False, "reason": "not_logged_in"}), 401
 
     file_storage = request.files.get("avatar")
-    ok, reason, card = playercard_logic.upload_own_avatar(int(viewer_id), file_storage)
+    try:
+        ok, reason, card = playercard_logic.upload_own_avatar(int(viewer_id), file_storage)
+    except Exception:
+        logger.exception("player-card avatar upload failed viewer_id=%s", viewer_id)
+        return jsonify({"ok": False, "reason": "playercard_avatar_save_failed"}), 500
     if not ok:
         status = 429 if reason == "playercard_rate_limited" else 400
         return jsonify({"ok": False, "reason": reason}), status

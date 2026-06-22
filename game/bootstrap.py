@@ -45,6 +45,15 @@ def bootstrap_application(*, skip_migration_check: bool = False) -> None:
     except Exception as exc:
         print(f"[GC bootstrap] WARNING: planet evolution backfill: {exc}", file=sys.stderr)
 
+    try:
+        from game.playercard import backfill_legacy_avatar_blobs
+
+        n = backfill_legacy_avatar_blobs()
+        if n:
+            print(f"[GC bootstrap] avatar backfill: {n} profile(s) normalized", file=sys.stderr)
+    except Exception as exc:
+        print(f"[GC bootstrap] WARNING: avatar backfill: {exc}", file=sys.stderr)
+
     validate_schema = os.environ.get(
         "GC_VALIDATE_SCHEMA",
         "1" if not is_production() else "0",

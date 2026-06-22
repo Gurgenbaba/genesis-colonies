@@ -7,6 +7,7 @@ Tables: player_cards, player_card_badges, player_card_unlocked_badges
 from __future__ import annotations
 
 import io
+import logging
 import re
 import time
 from html import escape
@@ -23,6 +24,8 @@ from .models import (
 )
 
 from .ranking import get_playercard_ranking_snapshot
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Limits & validation
@@ -547,39 +550,56 @@ def _read_upload_bytes(file_storage: Any) -> Tuple[Optional[bytes], str]:
     return raw, ""
 
 
-def _validate_upload_mime(file_storage: Any) -> Tuple[bool, str]:
+def _validate_upload_image(file_storage: Any, raw: bytes) -> Tuple[bool, str]:
+    """Accept declared MIME or sniff PNG/JPEG/WebP (e.g. application/octet-stream on mobile)."""
     mime = str(getattr(file_storage, "mimetype", "") or "").split(";")[0].strip().lower()
-    if mime not in _ALLOWED_AVATAR_MIME:
+    if mime in _ALLOWED_AVATAR_MIME:
+        return True, mime
+    try:
+        with Image.open(io.BytesIO(raw)) as src:
+            fmt = str(src.format or "").upper()
+    except Exception:
         return False, "playercard_avatar_invalid_type"
-    return True, mime
+    sniffed = {
+        "PNG": "image/png",
+        "JPEG": "image/jpeg",
+        "JPG": "image/jpeg",
+        "WEBP": "image/webp",
+    }.get(fmt)
+    if sniffed:
+        return True, sniffed
+    return False, "playercard_avatar_invalid_type"
 
 
-def process_avatar_upload(player_id: int, file_storage: Any) -> Tuple[bool, str]:
-    """Validate, resize, and persist avatar as WEBP blob. Returns (ok, path_or_reason)."""
-    pid = int(player_id)
+def _avatar_blob_from_upload(file_storage: Any) -> Tuple[Optional[bytes], str]:
     raw, err = _read_upload_bytes(file_storage)
     if raw is None:
-        return False, err
+        return None, err
 
-    ok_mime, mime_err = _validate_upload_mime(file_storage)
+    ok_mime, mime_err = _validate_upload_image(file_storage, raw)
     if not ok_mime:
-        return False, mime_err
+        return None, mime_err
 
     try:
         with Image.open(io.BytesIO(raw)) as src:
             fmt = str(src.format or "").upper()
             if fmt in ("GIF", "SVG", "MPO"):
-                return False, "playercard_avatar_invalid_type"
+                return None, "playercard_avatar_invalid_type"
             im = _process_avatar_image(src)
+        return _avatar_webp_bytes(im), ""
     except UnidentifiedImageError:
-        return False, "playercard_avatar_invalid_type"
+        return None, "playercard_avatar_invalid_type"
     except Exception:
-        return False, "playercard_avatar_invalid_type"
+        logger.exception("avatar image decode failed")
+        return None, "playercard_avatar_invalid_type"
 
-    try:
-        blob = _avatar_webp_bytes(im)
-    except Exception:
-        return False, "playercard_avatar_save_failed"
+
+def process_avatar_upload(player_id: int, file_storage: Any) -> Tuple[bool, str]:
+    """Validate, resize, and persist avatar as WEBP blob. Returns (ok, path_or_reason)."""
+    pid = int(player_id)
+    blob, err = _avatar_blob_from_upload(file_storage)
+    if blob is None:
+        return False, err
 
     public_path = avatar_api_path(pid)
     c = db()
@@ -589,11 +609,81 @@ def process_avatar_upload(player_id: int, file_storage: Any) -> Tuple[bool, str]
         commit(c)
     except Exception:
         rollback(c)
+        logger.exception("avatar blob save failed player_id=%s", pid)
         return False, "playercard_avatar_save_failed"
     finally:
         c.close()
 
     return True, public_path
+
+
+def backfill_legacy_avatar_blobs(conn=None) -> int:
+    """
+    Import legacy static/uploads avatars into player_avatars and normalize URLs.
+    Safe on every boot (Railway: run before ephemeral static files are lost).
+    """
+    own = conn is None
+    c = conn or db()
+    updated = 0
+    try:
+        if not table_exists(c, "player_avatars") or not table_exists(c, "player_cards"):
+            return 0
+
+        if own:
+            begin_write_transaction(c)
+
+        rows = c.execute(
+            "SELECT player_id, avatar_url FROM player_cards WHERE TRIM(avatar_url) != '';"
+        ).fetchall()
+        now = _now_ts()
+        for row in rows:
+            pid = int(row["player_id"])
+            url = str(row["avatar_url"] or "").strip()
+            api_url = avatar_api_path(pid)
+
+            if player_avatar_exists(pid, conn=c):
+                if url != api_url and (
+                    url.startswith("/static/uploads/avatars/")
+                    or url.startswith("/api/player-avatar/")
+                ):
+                    c.execute(
+                        "UPDATE player_cards SET avatar_url = ? WHERE player_id = ?;",
+                        (api_url, pid),
+                    )
+                    updated += 1
+                continue
+
+            path = local_avatar_path_from_url(url)
+            if path is None or not path.is_file():
+                continue
+
+            try:
+                raw = path.read_bytes()
+                if len(raw) < AVATAR_MIN_FILE_BYTES:
+                    continue
+                with Image.open(io.BytesIO(raw)) as src:
+                    im = _process_avatar_image(src)
+                blob = _avatar_webp_bytes(im)
+                save_player_avatar_blob(pid, blob, _AVATAR_BLOB_MIME, conn=c, updated_at=now)
+                c.execute(
+                    "UPDATE player_cards SET avatar_url = ?, updated_at = ? WHERE player_id = ?;",
+                    (api_url, now, pid),
+                )
+                updated += 1
+            except Exception:
+                logger.exception("legacy avatar backfill failed player_id=%s", pid)
+                continue
+
+        if own:
+            commit(c)
+    except Exception:
+        if own:
+            rollback(c)
+        raise
+    finally:
+        if own:
+            c.close()
+    return updated
 
 
 def upload_own_avatar(
@@ -610,14 +700,15 @@ def upload_own_avatar(
     if last_upd and (now - last_upd) < SAVE_COOLDOWN_SEC and last_mem:
         return False, "playercard_rate_limited", None
 
-    ok_proc, result = process_avatar_upload(pid, file_storage)
-    if not ok_proc:
-        return False, result, None
+    blob, err = _avatar_blob_from_upload(file_storage)
+    if blob is None:
+        return False, err, None
 
-    public_path = result
+    public_path = avatar_api_path(pid)
     c = db()
     try:
         begin_write_transaction(c)
+        save_player_avatar_blob(pid, blob, _AVATAR_BLOB_MIME, conn=c, updated_at=now)
         cur = c.cursor()
         cur.execute(
             """
@@ -629,7 +720,8 @@ def upload_own_avatar(
         commit(c)
     except Exception:
         rollback(c)
-        raise
+        logger.exception("avatar upload transaction failed player_id=%s", pid)
+        return False, "playercard_avatar_save_failed", None
     finally:
         c.close()
 
