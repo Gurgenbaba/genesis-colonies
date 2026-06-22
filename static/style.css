@@ -17950,7 +17950,10 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 }
 .gc-header-cmd .hud-res-capacity{
   display: block;
+  flex-shrink: 0;
   min-width: 0;
+  min-height: 9px;
+  visibility: visible;
 }
 .gc-header-cmd .hud-cap-bar{
   display: grid;
@@ -17958,6 +17961,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   gap: 2px;
   width: 100%;
   min-width: 0;
+  flex-shrink: 0;
   height: 7px;
   padding: 1px;
   border: 1px solid rgba(127, 255, 217, 0.32);
@@ -18069,7 +18073,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
     0 0 18px color-mix(in srgb, var(--hud-res-glow) 55%, transparent),
     0 6px 14px rgba(0, 0, 0, 0.22);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .gc-header-cmd .hud-res-metal{
@@ -18236,6 +18240,36 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .gc-header-cmd .hud-res-energy.energy-warning{
   border: 1px solid rgba(255, 120, 120, 0.35) !important;
   box-shadow: 0 0 12px rgba(255, 120, 120, 0.15) !important;
+  animation: gc-hud-energy-panel-flicker 1.15s ease-in-out infinite;
+}
+.gc-header-cmd .hud-res-energy.energy-warning .hud-cap-bar{
+  animation: gc-hud-energy-bar-flicker 1.15s ease-in-out infinite;
+}
+@keyframes gc-hud-energy-panel-flicker{
+  0%, 100%{
+    border-color: rgba(255, 120, 120, 0.32) !important;
+    box-shadow: 0 0 10px rgba(255, 120, 120, 0.12) !important;
+  }
+  50%{
+    border-color: rgba(255, 120, 120, 0.72) !important;
+    box-shadow: 0 0 22px rgba(255, 120, 120, 0.38) !important;
+  }
+}
+@keyframes gc-hud-energy-bar-flicker{
+  0%, 100%{
+    border-color: rgba(255, 120, 120, 0.28);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.22) inset, 0 0 4px rgba(255, 88, 72, 0.18);
+  }
+  50%{
+    border-color: rgba(255, 120, 120, 0.72);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.22) inset, 0 0 14px rgba(255, 88, 72, 0.55);
+  }
+}
+@media (prefers-reduced-motion: reduce){
+  .gc-header-cmd .hud-res-energy.energy-warning,
+  .gc-header-cmd .hud-res-energy.energy-warning .hud-cap-bar{
+    animation: none;
+  }
 }
 
 /* Legacy pill aliases map to panels */

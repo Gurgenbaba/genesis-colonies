@@ -474,7 +474,8 @@ def test_gc807b_hud_capacity_polish():
     assert "function patchHudFuelStorageState" in js
     assert "function setHudCapacityBarVisible" not in js
     cap_patch = js.split("function patchHudCapacityBar(resKey")[1].split("function patchHudFuelStorageState")[0]
-    assert "wrap.hidden" not in cap_patch
+    assert "wrap.hidden = true" not in cap_patch
+    assert "wrap.hidden = false" in cap_patch
     bars_fn = js.split("function patchHudCapacityBars(")[1].split("function patchHudStorageWarnings")[0]
     assert 'patchHudCapacityBar("energy", energyUsed, energyTotal, opts)' in bars_fn
     assert "setHudCapacityBarVisible" not in bars_fn
@@ -483,6 +484,9 @@ def test_gc807b_hud_capacity_polish():
     assert "overview-res-chip" not in css
     assert ".overview-res-card{" in css
     assert "trader-hub-res-bar" in css
+    assert "flex-shrink: 0" in css.split(".gc-header-cmd .hud-res-capacity")[1].split("}")[0]
+    assert "gc-hud-energy-bar-flicker" in css
+    assert ".gc-header-cmd .hud-res-energy.energy-warning .hud-cap-bar" in css
 
 
 def test_gc700a_combat_report_v2_presentation():

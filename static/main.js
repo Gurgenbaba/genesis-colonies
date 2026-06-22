@@ -2703,6 +2703,10 @@
   function patchHudCapacityBar(resKey, current, max, opts) {
     const wrap = document.querySelector(`[data-hud-capacity="${resKey}"]`);
     if (!wrap) return;
+    wrap.hidden = false;
+    wrap.removeAttribute("hidden");
+    wrap.style.removeProperty("display");
+    wrap.style.removeProperty("visibility");
     const { pct, filled, tier } = computeHudCapacityState(current, max);
     const prevPct = wrap.dataset.capPct || "";
     const changed = prevPct !== String(pct);
@@ -2710,6 +2714,8 @@
     wrap.className = `hud-res-capacity hud-cap--${tier}`;
     const bar = wrap.querySelector(".hud-cap-bar");
     if (!bar) return;
+    bar.hidden = false;
+    bar.removeAttribute("hidden");
     if (changed && opts && opts.animate) {
       bar.classList.add("hud-cap-bar--pulse");
       window.setTimeout(() => bar.classList.remove("hud-cap-bar--pulse"), 420);
@@ -2729,6 +2735,10 @@
       line.hidden = !hasCap;
       if (!hasCap) line.setAttribute("aria-hidden", "true");
       else line.removeAttribute("aria-hidden");
+    });
+    fuelPanel.querySelectorAll("[data-hud-capacity]").forEach((wrap) => {
+      wrap.hidden = false;
+      wrap.removeAttribute("hidden");
     });
   }
 
