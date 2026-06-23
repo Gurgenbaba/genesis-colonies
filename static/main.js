@@ -563,7 +563,29 @@
     empire: new Set(["empire"]),
   };
 
-  function shouldPatchGameStateModule(module) {
+  const _PROGRESSION_INIT_PANEL_PAGES = new Set(["buildings", "research", "shipyard", "defense"]);
+
+  function isMutationStatePatchReason(reason) {
+    const r = String(reason || "");
+    if (!r || isHudOnlyGameStateReason(r)) return false;
+    if (r === "poll" || r === "page_hydrate") return false;
+    return (
+      r.endsWith("_success")
+      || r.endsWith("_cancel")
+      || r.endsWith("_finished")
+      || r === "queue_timer_zero"
+      || r === "timer_done"
+      || r === "shipyard_build"
+      || r === "defense_build"
+    );
+  }
+
+  function logActionStatePatch(phase, reason, detail) {
+    console.debug(`[GC] action state ${phase}`, reason, detail || "");
+  }
+
+  function shouldPatchGameStateModule(module, opts) {
+    if (opts && opts.forcePanel) return true;
     const page = GC.currentPage || (typeof GC.detectPage === "function" ? GC.detectPage() : "");
     const allowed = _GAME_STATE_PATCH_PAGES[module];
     if (!allowed) return true;
@@ -932,7 +954,8 @@
   function shouldSkipInitGameStateAfterSsr(page, opts) {
     if (opts && opts.skipGameState) return true;
     if (opts && opts.forceGameState) return false;
-    return pageHasSsrLiveBoot();
+    if (!pageHasSsrLiveBoot()) return false;
+    return _SSR_SKIP_INIT_GAME_STATE_PAGES.has(page);
   }
 
   function bootstrapResourceLiveFromDom() {
@@ -1034,10 +1057,17 @@
   let _lastAppliedServerTime = 0;
   let _fleetRefreshSeq = 0;
 
+  function dismissProgressionTooltipsOnStatePatch() {
+    if (typeof GC.hideCardReqTooltip === "function") GC.hideCardReqTooltip();
+    if (typeof GC.hideMaxQueueTooltip === "function") GC.hideMaxQueueTooltip();
+  }
+
   function applyActionState(json, reason) {
     if (!json) return false;
     const state = json.state || (json.data && json.data.state);
     if (!state) return false;
+
+    dismissProgressionTooltipsOnStatePatch();
 
     const isPlanetSwitch = reason === "planet_switch";
     if (isPlanetSwitch) {
@@ -1065,20 +1095,41 @@
     _lastPeAscensionQueueSignature = "";
     abortInFlightGameStateFetches();
 
+    const reasonStr = String(reason || "");
+    if (reasonStr.endsWith("_cancel_success")) {
+      releaseFinishRefreshLock("buildings");
+      releaseFinishRefreshLock("research");
+      releaseFinishRefreshLock("planet_evolution");
+      _buildZeroHandled = "";
+    }
+
     resetResourceDisplayCache();
     const st = Number(state.server_time || 0);
     if (st) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, st);
 
+    logActionStatePatch("received", reasonStr, {
+      buildings_panel: !!state.buildings_panel,
+      build_queue_owners: Object.keys(resolveCardJobsByOwner(state.build_queue)).length,
+      research_owners: Object.keys(resolveCardJobsByOwner(state.research)).length,
+    });
+    patchQueuePanelsImmediate(state);
+
     const anyActive = applyGameStateData(state, reason, {
       forceResourceBar: true,
+      forcePanel: !isPlanetSwitch,
       hudOnly: isPlanetSwitch,
       planetSwitch: isPlanetSwitch,
       skipScopedPanels: isPlanetSwitch,
     });
 
+    logActionStatePatch("patched", reasonStr, { poll_fallback_only: false });
+
     if (!isPlanetSwitch) {
       GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
       GC.startProgressTicker();
+      if (shouldRefreshTechnicalModalAfterAction(reasonStr)) {
+        refreshOpenTechnicalModalIfNeeded();
+      }
     }
     return anyActive;
   }
@@ -1345,6 +1396,7 @@
     stopResourceTicker();
     _resetQueueLiveStates();
     GC.stopPolling();
+    if (typeof GC.hideCardReqTooltip === "function") GC.hideCardReqTooltip();
     GC.actionLocks.build = false;
     GC.actionLocks.research = false;
     _statusPollErrorLogged = false;
@@ -1384,35 +1436,28 @@
     return id;
   };
 
+  /** GC-835 — mutation fetches must not register with pageLifecycle (survive PJAX cleanup). */
   GC.fetchGameAction = async function fetchGameAction(url, options = {}) {
-    const ctrl = new AbortController();
-    GC.pageLifecycle.abortControllers.push(ctrl);
     const fetchOpts = { ...options };
     delete fetchOpts.signal;
-    try {
-      const res = await fetch(url, {
-        ...fetchOpts,
-        signal: ctrl.signal,
-        credentials: fetchOpts.credentials || "same-origin",
-        redirect: fetchOpts.redirect || "manual",
-      });
-      const ct = (res.headers.get("content-type") || "").toLowerCase();
-      inspectFetchResponseForAuth(res, ct);
-      let data = {};
-      if (ct.includes("application/json")) {
-        try {
-          data = await res.json();
-        } catch (_) {}
-      }
-      if (res.status === 401 || res.status === 403 || data.error === "not_logged_in") {
-        handleAuthFailure(`action-http-${res.status}`);
-        throwAuthError();
-      }
-      return data;
-    } finally {
-      const idx = GC.pageLifecycle.abortControllers.indexOf(ctrl);
-      if (idx >= 0) GC.pageLifecycle.abortControllers.splice(idx, 1);
+    const res = await fetch(url, {
+      ...fetchOpts,
+      credentials: fetchOpts.credentials || "same-origin",
+      redirect: fetchOpts.redirect || "manual",
+    });
+    const ct = (res.headers.get("content-type") || "").toLowerCase();
+    inspectFetchResponseForAuth(res, ct);
+    let data = {};
+    if (ct.includes("application/json")) {
+      try {
+        data = await res.json();
+      } catch (_) {}
     }
+    if (res.status === 401 || res.status === 403 || data.error === "not_logged_in") {
+      handleAuthFailure(`action-http-${res.status}`);
+      throwAuthError();
+    }
+    return data;
   };
 
   function newRequestId() {
@@ -1822,13 +1867,17 @@
       resyncServerTimeFromDom(true);
       const skipInitFetch = shouldSkipInitGameStateAfterSsr(page, opts) || skipGameState;
       if (!skipInitFetch && typeof GC.refreshGameState === "function") {
-        await GC.refreshGameState("page_init");
+        if (_PROGRESSION_INIT_PANEL_PAGES.has(page) && typeof refreshPageAfterQueueEvent === "function") {
+          await refreshPageAfterQueueEvent("page_init");
+        } else {
+          await GC.refreshGameState("page_init");
+        }
       } else {
         if (skipInitFetch) {
           console.debug("[GC] initPage skip game-state (SSR fresh)", page, opts && opts.pjax ? "pjax" : "");
           bootstrapResourceLiveFromDom();
           _bootstrapPageQueueCompactLiveFromDom();
-          if (typeof GC.refreshGameState === "function") {
+          if (_SSR_SKIP_INIT_GAME_STATE_PAGES.has(page) && typeof GC.refreshGameState === "function") {
             void GC.refreshGameState("page_init");
           }
         }
@@ -1954,6 +2003,7 @@
       unknown_tech: t("research_msg_unknown", "Unbekannte Forschung."),
       not_found: t("msg_job_not_found", "Auftrag nicht gefunden."),
       forbidden: t("msg_action_forbidden", "Aktion nicht erlaubt."),
+      max_level_reached: t("msg_build_max_level", "Maximale Stufe erreicht."),
       missing_job_id: t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."),
     };
     return map[reason] || t("msg_generic_error", "Aktion fehlgeschlagen.");
@@ -1984,6 +2034,8 @@
       }
       if (resKey === "build") return t("buildings_effect_build_speed", "Baugeschwindigkeit");
       if (resKey === "storage") return t("buildings_effect_storage_bonus", "Lagerbonus");
+      if (resKey === "metal") return t("research_effect_metal_prod", "Ferronit-Produktion");
+      if (resKey === "crystal") return t("research_effect_crystal_prod", "Crytite-Produktion");
       return t("buildings_effect_bonus", "Bonus");
     }
     if (kind === "reduction_percent") {
@@ -1993,6 +2045,9 @@
       if (resKey === "build") return t("buildings_effect_build_time_reduction", "Bauzeitverkürzung");
       return t("buildings_effect_reduction", "Verkürzung");
     }
+    if (kind === "max_level") return t("buildings_effect_max_mine", "Max. Minenstufe");
+    if (kind === "scan") return t("buildings_effect_scan", "Scan-Reichweite");
+    if (kind === "yard_capacity") return t("buildings_effect_yard_capacity", "Kapazität");
     return t("buildings_effect_level", "Stufe");
   }
 
@@ -2042,7 +2097,7 @@
     if (kind === "energy_use") {
       return t("buildings_prod_delta_cost", "Mehrverbrauch");
     }
-    return t("buildings_prod_delta", "Gewinn");
+    return t("buildings_prod_delta", "Zuwachs");
   }
 
   function renderBuildingEffectDelta(kind, delta, unit) {
@@ -2055,120 +2110,231 @@
     return renderMonoCompact(d, "+", unit || "");
   }
 
-  function renderBuildingEffectStripHtml(effectRow, buildingKey, opts = {}) {
-    const compact = !!opts.compact;
-    const stripClass = opts.stripClass || "";
-    const kind =
-      effectRow.effect_kind ||
-      (effectRow.production_resource || BUILDING_PROD_RESOURCE[buildingKey] ? "production" : "level");
-    const resKey =
-      effectRow.effect_resource ||
-      effectRow.production_resource ||
-      BUILDING_PROD_RESOURCE[buildingKey] ||
-      "";
-    const unit =
-      effectRow.effect_unit ||
-      (kind === "production" ? "/h" : kind === "bonus_percent" || kind === "reduction_percent" ? "%" : "");
-    const cur = Math.floor(
-      Number(effectRow.effect_current ?? effectRow.production_per_hour ?? effectRow.level) || 0
+  function renderCardLrRow(label, valueHtml, rowClass = "gc-card-benefit-row") {
+    return (
+      `<div class="gc-card-lr-row ${rowClass}">` +
+      `<span class="gc-card-lr-label">${escapeHtml(label)}</span>` +
+      `<span class="gc-card-lr-value gc-mono">${valueHtml}</span>` +
+      `</div>`
     );
-    const nxt = Math.floor(
-      Number(effectRow.effect_next ?? effectRow.production_next_per_hour ?? effectRow.target_level) ||
-        0
+  }
+
+  function renderResourceCostChipHtml(resKey, amount, unmet = false) {
+    const mod = resKey === "fuel_cells" ? "gc-res-fuel-cells" : `gc-res-${resKey}`;
+    const unmetCls = unmet ? " is-unmet" : "";
+    return (
+      `<span class="gc-cost-chip gc-cost-${resKey}${unmetCls}">` +
+      `<span class="gc-cost-chip-leading"><span class="gc-res-icon gc-res-icon--sm ${mod}" aria-hidden="true"></span></span>` +
+      `${renderCostVal(amount)}</span>`
     );
-    const delta = Math.floor(Number(effectRow.effect_delta ?? effectRow.production_delta) || 0);
-    const metricLabel = buildingEffectMetricLabel(
+  }
+
+  function renderCompactEffectChipHtml(effectRow, buildingKey = "") {
+    const kind = effectRow.effect_kind || "level";
+    if (kind === "energy_use") return "";
+    const resKey = effectRow.effect_resource || "";
+    const delta = Math.floor(Number(effectRow.effect_delta) || 0);
+    const nxt = Math.floor(Number(effectRow.effect_next) || 0);
+    const metric = buildingEffectMetricLabel(
       kind,
       resKey,
       buildingKey,
       effectRow.effect_metric_key || ""
     );
-    const curLabel = t("buildings_prod_current", "Aktuell");
-    const nextLabel = t("buildings_prod_after", "Nach Upgrade");
-    const deltaLabel = buildingEffectDeltaLabel(kind);
-    const deltaText = renderBuildingEffectDelta(kind, delta, unit);
-    const deltaCostCls = kind === "energy_use" ? " gc-bld-prod-delta-cost" : "";
-    const deltaHtml = deltaText
-      ? `<div class="gc-bld-prod-delta bcell-prod-delta${deltaCostCls}">` +
-        `<span class="gc-bld-prod-delta-label">${deltaLabel}</span>` +
-        `<span class="gc-bld-prod-delta-val">${deltaText}</span></div>`
-      : "";
+    if (kind === "yard_capacity") {
+      if (nxt <= 0 && !(Math.floor(Number(effectRow.build_time_reduction_delta) || 0) > 0)) return "";
+      const redDelta = Math.floor(Number(effectRow.build_time_reduction_delta) || 0);
+      let val = nxt > 0 ? `${fmtIntParts(nxt).display} ${t("compact_yard_units", "Einheiten")}` : "";
+      if (redDelta > 0) val += `${val ? " · " : ""}-${fmtNumber(redDelta)}%`;
+      return renderCardLrRow(metric, val);
+    }
+    if (delta <= 0) return "";
+    if (kind === "production") {
+      return renderCardLrRow(metric, `+${fmtIntParts(delta).display}/h`);
+    }
+    if (kind === "bonus_percent") {
+      return renderCardLrRow(metric, `+${fmtIntParts(delta).display}%`);
+    }
+    if (kind === "reduction_percent") {
+      return renderCardLrRow(metric, `-${fmtIntParts(delta).display}%`);
+    }
+    if (kind === "storage") {
+      return renderCardLrRow(metric, `+${fmtIntParts(delta).display}`);
+    }
+    if (kind === "energy") {
+      return renderCardLrRow(metric, `+${fmtIntParts(delta).display}`);
+    }
+    if (kind === "max_level" || kind === "scan" || kind === "level") {
+      return renderCardLrRow(metric, `+${fmtIntParts(delta).display}`);
+    }
+    return "";
+  }
+
+  function renderBuildingCardFooterHtml(b) {
+    const sec = b?.secondary_effect;
+    if (!sec || sec.effect_kind !== "energy_use") return "";
+    const d = Math.floor(Number(sec.effect_delta) || 0);
+    if (d <= 0) return "";
+    const label = t("buildings_effect_energy_use", "Energieverbrauch");
+    return (
+      `<div class="gc-card-lr-row gc-card-footer-row gc-card-footer-row--energy" data-building-energy-footer>` +
+      `<span class="gc-card-lr-label">${escapeHtml(label)}</span>` +
+      `<span class="gc-card-lr-value gc-mono">` +
+      `${renderBuildingEffectIcon("energy")}` +
+      `<span class="gc-num-compact">-${fmtIntParts(d).display}</span></span></div>`
+    );
+  }
+
+  function serializeReqHoverItems(items) {
+    return JSON.stringify(
+      (items || [])
+        .filter((req) => req && req.met === false)
+        .map((req) => ({
+          kind: req.kind || req.type || "",
+          key: req.key || "",
+          need: Math.floor(Number(req.need ?? req.required) || 0),
+        }))
+    );
+  }
+
+  function buildCardReqTooltipHtml(items) {
+    const unmet = (items || []).filter((req) => req && req.key && req.met !== true);
+    if (!unmet.length) return "";
+    const title = t("msg_build_requirements", "Voraussetzungen");
+    const lines = unmet
+      .map((req) => {
+        const label =
+          req.kind === "building" || req.type === "building"
+            ? t(`building_${req.key}`, req.key)
+            : t(req.key, req.key);
+        const need = Math.floor(Number(req.need ?? req.required) || 0);
+        return `<li class="gc-req-tooltip-item gc-mono">${escapeHtml(label)} ${fmtNumber(need)}</li>`;
+      })
+      .join("");
+    return (
+      `<div class="gc-req-tooltip-title">${escapeHtml(title)}</div>` +
+      `<ul class="gc-req-tooltip-list">${lines}</ul>`
+    );
+  }
+
+  function renderWarnActionButton(extraClass, items) {
+    const lockTitle = t("msg_build_requirements", "Voraussetzungen nicht erfüllt.");
+    const payload = serializeReqHoverItems(items);
+    const reqAttr = payload && payload !== "[]" ? ` data-req-items='${payload.replace(/'/g, "&#39;")}'` : "";
+    return (
+      `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--warn gc-req-hover-trigger ${extraClass}" type="button" disabled` +
+      ` data-action-state="warn"${reqAttr}` +
+      ` aria-label="${escapeHtml(lockTitle)}"><span class="gc-bld-head-action-icon">⚠</span></button>`
+    );
+  }
+
+  function renderBuildingEffectStripHtml(effectRow, buildingKey, opts = {}) {
+    const compact = !!opts.compact;
+    const stripClass = opts.stripClass || "";
+    const kind = effectRow.effect_kind || "level";
+    const delta = Math.floor(Number(effectRow.effect_delta) || 0);
+    const chipHtml = renderCompactEffectChipHtml(effectRow, buildingKey);
+    if (!chipHtml && kind !== "yard_capacity") return "";
     const compactCls = compact ? " gc-bld-effect-compact" : "";
     const extraCls = stripClass ? ` ${stripClass}` : "";
     return (
-      `<div class="gc-bld-prod bcell-prod gc-bld-effect${compactCls}${extraCls}"` +
+      `<div class="gc-compact-benefits bcell-prod gc-bld-effect${compactCls}${extraCls}"` +
       ` data-building-prod="${buildingKey}" data-effect-kind="${kind}">` +
-      `<div class="gc-bld-prod-metric" title="${metricLabel}">${metricLabel}</div>` +
-      `<div class="gc-bld-prod-line">` +
-      `<span class="gc-bld-prod-label">${curLabel}</span>` +
-      `<span class="gc-bld-prod-val gc-bld-prod-cur bcell-prod-current">` +
-      renderBuildingEffectValue(kind, resKey, cur, unit) +
-      `</span></div>` +
-      `<div class="gc-bld-prod-line">` +
-      `<span class="gc-bld-prod-label">${nextLabel}</span>` +
-      `<span class="gc-bld-prod-val gc-bld-prod-next bcell-prod-next">` +
-      renderBuildingEffectValue(kind, resKey, nxt, unit) +
-      `</span></div>` +
-      deltaHtml +
+      chipHtml +
       `</div>`
     );
   }
 
   function renderBuildingEffectBundleHtml(b, opts = {}) {
-    let html = renderBuildingEffectStripHtml(b, b.key, opts);
+    const primaryKind = b.effect_kind || "level";
+    const primaryDelta = Math.floor(Number(b.effect_delta) || 0);
+    const nxt = Math.floor(Number(b.effect_next) || 0);
+    const yardRed = Math.floor(Number(b.build_time_reduction_delta) || 0);
+    const hasPrimary =
+      (primaryKind === "yard_capacity" && (nxt > 0 || yardRed > 0)) ||
+      (primaryKind !== "energy_use" && primaryDelta > 0);
     const sec = b.secondary_effect;
-    if (sec && typeof sec === "object") {
-      html += renderBuildingEffectStripHtml(
-        { ...sec, key: b.key },
-        b.key,
-        { ...opts, stripClass: "gc-bld-effect-secondary" }
-      );
+    const secDelta = sec ? Math.floor(Number(sec.effect_delta) || 0) : 0;
+    if (!hasPrimary && !(sec && sec.effect_kind !== "energy_use" && secDelta > 0)) return "";
+    let rowHtml = "";
+    if (hasPrimary) rowHtml += renderCompactEffectChipHtml(b, b.key);
+    if (sec && sec.effect_kind !== "energy_use" && secDelta > 0) {
+      rowHtml += renderCompactEffectChipHtml(sec, b.key);
     }
-    return html;
+    if (!rowHtml) return "";
+    const prodAttr = b.key ? ` data-building-prod="${escapeHtml(b.key)}"` : "";
+    return (
+      `<div class="gc-bld-effect-bundle bcell-prod"${prodAttr}>` +
+      `<div class="gc-card-benefit-block">${rowHtml}</div></div>`
+    );
   }
 
   function patchBuildingProduction(row, b) {
     if (!row || !b) return;
     const html = renderBuildingEffectBundleHtml(b);
-    const head = row.querySelector(".gc-bld-card-head");
+    const footerHtml = renderBuildingCardFooterHtml(b);
     const meta = row.querySelector(".gc-bld-card-meta");
 
     const bundles = [...row.querySelectorAll(".gc-bld-effect-bundle")];
     let bundle = bundles[0] || null;
     for (let i = 1; i < bundles.length; i += 1) bundles[i].remove();
 
-    if (bundle) {
-      if (bundle.innerHTML.trim() !== html.trim()) bundle.innerHTML = html;
-      row.querySelectorAll(":scope > .gc-bld-prod.bcell-prod").forEach((el) => el.remove());
-      return;
+    if (!html) {
+      bundle?.remove();
+      row.querySelectorAll(":scope > .gc-bld-prod.bcell-prod, :scope > .gc-compact-benefits").forEach((el) => el.remove());
+    } else if (bundle) {
+      if (bundle.outerHTML.trim() !== html.trim()) bundle.outerHTML = html;
+      bundle = row.querySelector(".gc-bld-effect-bundle");
+      row.querySelectorAll(":scope > .gc-bld-prod.bcell-prod, :scope > .gc-compact-benefits").forEach((el) => el.remove());
+    } else {
+      row.querySelectorAll(".bcell-prod, .gc-compact-benefits").forEach((el) => el.remove());
+      const wrap = document.createElement("div");
+      wrap.innerHTML = html;
+      bundle = wrap.firstElementChild;
+      if (bundle) {
+        if (meta) meta.insertAdjacentElement("beforebegin", bundle);
+        else row.appendChild(bundle);
+      }
     }
 
-    row.querySelectorAll(".bcell-prod").forEach((el) => el.remove());
-
-    bundle = document.createElement("div");
-    bundle.className = "gc-bld-effect-bundle";
-    bundle.innerHTML = html;
-
-    if (head && meta) head.insertAdjacentElement("afterend", bundle);
-    else if (head) head.insertAdjacentElement("afterend", bundle);
-    else row.prepend(bundle);
+    let footer = row.querySelector("[data-building-energy-footer]");
+    if (!footerHtml) {
+      footer?.remove();
+      return;
+    }
+    if (footer) {
+      if (footer.outerHTML.trim() !== footerHtml.trim()) footer.outerHTML = footerHtml;
+      return;
+    }
+    const fwrap = document.createElement("div");
+    fwrap.innerHTML = footerHtml;
+    footer = fwrap.firstElementChild;
+    if (!footer) return;
+    if (meta) meta.insertAdjacentElement("afterend", footer);
+    else row.appendChild(footer);
   }
 
-  function renderCompactCosts(metal, crystal, targetLevel, showTarget = true) {
-    const levelLabel = t("buildings_col_level", "Level");
-    const targetNote = showTarget ? `→ L${fmtNumber(targetLevel)}` : "";
-    const targetHtml = showTarget
-      ? `<span class="gc-cost-target" title="${levelLabel} ${fmtNumber(targetLevel)}">${targetNote}</span>`
-      : "";
+  function renderCompactCosts(metal, crystal, targetLevel, showTarget = true, fuelCells = null) {
+    const heading = t("progression_costs_heading", "Kosten");
+    let stack =
+      renderResourceCostChipHtml("metal", metal) + renderResourceCostChipHtml("crystal", crystal);
+    const fuel = Math.floor(Number(fuelCells) || 0);
+    if (fuel > 0) stack += renderResourceCostChipHtml("fuel_cells", fuel);
     return (
-      `<div class="gc-costs-compact">` +
-      `<span class="gc-cost-chip gc-cost-metal"><span class="gc-res-icon gc-res-metal" aria-hidden="true"></span>` +
-      `${renderCostVal(metal)}</span>` +
-      `<span class="gc-cost-chip gc-cost-crystal"><span class="gc-res-icon gc-res-crystal" aria-hidden="true"></span>` +
-      `${renderCostVal(crystal)}</span>` +
-      targetHtml +
-      `</div>`
+      `<div class="gc-card-costs-block bcell-cost">` +
+      `<div class="gc-card-section-label">${escapeHtml(heading)}</div>` +
+      `<div class="gc-cost-stack">${stack}</div></div>`
     );
+  }
+
+  function patchBuildingRequirements(row, b) {
+    if (!row) return;
+    row.querySelector("[data-card-req-block]")?.remove();
+    row.querySelector(".gc-bld-card-req")?.remove();
+    const warnBtn = row.querySelector(".gc-req-hover-trigger");
+    if (!warnBtn || !b || b.requirements_met) return;
+    const payload = serializeReqHoverItems(b.requirements_items);
+    if (payload && payload !== "[]") warnBtn.setAttribute("data-req-items", payload);
   }
 
   function applyBuildingRowState(row, b) {
@@ -2239,36 +2405,116 @@
       .join(" · ");
   }
 
-  function patchBuildingRequirements(row, b) {
-    if (!row || !b) return;
-    const lockTitle = t("msg_build_requirements", "Voraussetzungen nicht erfüllt.");
-    let reqEl = row.querySelector(".gc-bld-card-req");
-    if (b.requirements_met) {
-      if (reqEl) reqEl.remove();
-      return;
-    }
-    const tooltip = formatResearchReqTooltip(b.requirements_items);
-    if (!tooltip) {
-      if (reqEl) reqEl.remove();
-      return;
-    }
-    if (!reqEl) {
-      reqEl = document.createElement("p");
-      reqEl.className = "gc-bld-card-req gc-mono";
-      reqEl.dataset.buildingReq = String(b.key || "");
-      reqEl.title = lockTitle;
-      const actionCell = row.querySelector(".bcell-action");
-      if (actionCell) row.insertBefore(reqEl, actionCell);
-      else row.appendChild(reqEl);
-    }
-    _setIfChanged(reqEl, tooltip);
-  }
-
   function getResearchActionState(tech, queueFull) {
     if (!tech.requirements_met) return "warn";
     if (queueFull) return "locked";
     if (tech.can_afford === false) return "afford";
     return "go";
+  }
+
+  /** GC-835 — missing card_jobs_by_owner clears card queues instead of stale per-row fallback. */
+  function resolveCardJobsByOwner(queueRaw) {
+    const raw = queueRaw?.card_jobs_by_owner;
+    return raw && typeof raw === "object" ? raw : {};
+  }
+
+  function renderMaxQueueButtonLabel(jobs) {
+    const n = Math.max(0, Math.floor(Number(jobs) || 0));
+    if (n < 1) return t("progression_btn_max_queue", "MAX");
+    return t("progression_btn_max_queue_count", "MAX +%(n)s").replace("%(n)s", fmtNumber(n));
+  }
+
+  function serializeMaxQueuePreview(preview) {
+    if (!preview || Math.floor(Number(preview.jobs) || 0) < 1) return "";
+    try {
+      return JSON.stringify(preview);
+    } catch (_err) {
+      return "";
+    }
+  }
+
+  function maxQueuePreviewAttr(preview) {
+    const raw = serializeMaxQueuePreview(preview);
+    if (!raw) return "";
+    return ` data-max-queue-hover="1" data-max-preview='${raw.replace(/'/g, "&#39;")}'`;
+  }
+
+  function buildMaxQueueTooltipHtml(preview, kind) {
+    const jobs = Math.floor(Number(preview?.jobs) || 0);
+    if (jobs < 1) return "";
+    const fromLvl = Math.floor(Number(preview.from_level) || 0);
+    const toLvl = Math.floor(Number(preview.to_level) || 0);
+    const metal = Math.floor(Number(preview.cost_metal) || 0);
+    const crystal = Math.floor(Number(preview.cost_crystal) || 0);
+    const seconds = Math.floor(Number(preview.time_seconds) || 0);
+    const isResearch = String(kind || "").toLowerCase() === "research";
+    const title = t("progression_btn_max_queue", "MAX");
+    const levelLine = isResearch
+      ? t(
+          "progression_max_queue_tooltip_level_research",
+          "Erhöht die Forschung von Stufe %(from)s → %(to)s"
+        )
+          .replace("%(from)s", fmtNumber(fromLvl))
+          .replace("%(to)s", fmtNumber(toLvl))
+      : t(
+          "progression_max_queue_tooltip_level_build",
+          "Erhöht das Gebäude von Stufe %(from)s → %(to)s"
+        )
+          .replace("%(from)s", fmtNumber(fromLvl))
+          .replace("%(to)s", fmtNumber(toLvl));
+    const costsTitle = t("progression_max_queue_tooltip_costs", "Kosten");
+    const metalLabel = t("resource_metal", "Ferronit");
+    const crystalLabel = t("resource_crystal", "Crytite");
+    const timeLabel = isResearch
+      ? t("progression_max_queue_tooltip_time_research", "Forschungszeit")
+      : t("progression_max_queue_tooltip_time_build", "Bauzeit");
+    return (
+      `<div class="gc-max-queue-tooltip-title">${escapeHtml(title)}</div>` +
+      `<div class="gc-max-queue-tooltip-level">${escapeHtml(levelLine)}</div>` +
+      `<div class="gc-max-queue-tooltip-section-title">${escapeHtml(costsTitle)}</div>` +
+      `<div class="gc-max-queue-tooltip-row gc-mono">${escapeHtml(metalLabel)}: ${escapeHtml(fmtNumber(metal))}</div>` +
+      `<div class="gc-max-queue-tooltip-row gc-mono">${escapeHtml(crystalLabel)}: ${escapeHtml(fmtNumber(crystal))}</div>` +
+      `<div class="gc-max-queue-tooltip-section-title">${escapeHtml(timeLabel)}</div>` +
+      `<div class="gc-max-queue-tooltip-row gc-mono">${escapeHtml(formatDuration(seconds))}</div>`
+    );
+  }
+
+  function renderMaxQueueActionBtn(extraClass, attrName, attrValue, preview, kind) {
+    const jobs = Math.max(0, Math.floor(Number(preview?.jobs ?? preview) || 0));
+    const label = renderMaxQueueButtonLabel(jobs);
+    const aria = t("progression_btn_max_queue_aria", "Maximal %(n)s Stufen anreihen").replace(
+      "%(n)s",
+      fmtNumber(jobs)
+    );
+    const disabled = jobs < 1;
+    const previewAttr = maxQueuePreviewAttr(
+      preview && typeof preview === "object" ? preview : { jobs }
+    );
+    return (
+      `<button type="button" class="gc-bld-head-action-btn gc-bld-head-action-btn--queue-max gc-max-queue-hover-trigger ${extraClass}-max"` +
+      ` data-action-state="max-queue" ${attrName}="${escapeHtml(attrValue)}" data-max-queue="${jobs}"` +
+      ` data-max-kind="${escapeHtml(kind || "building")}"${previewAttr}` +
+      (disabled ? " disabled aria-disabled=\"true\"" : "") +
+      ` aria-label="${escapeHtml(aria)}">${escapeHtml(label)}</button>`
+    );
+  }
+
+  function renderPlusOneActionBtn(extraClass, attrName, attrValue, href, actionLabel, idAttr) {
+    const idHtml = idAttr ? ` id="${escapeHtml(idAttr)}"` : "";
+    return (
+      `<a href="${href}"${idHtml} class="gc-bld-head-action-btn gc-bld-head-action-btn--go gc-bld-head-action-btn--plus-one ${extraClass}"` +
+      ` data-action-state="go" ${attrName}="${escapeHtml(attrValue)}"` +
+      ` title="${escapeHtml(actionLabel)}" aria-label="${escapeHtml(actionLabel)}">` +
+      `<span class="gc-bld-head-action-label">${escapeHtml(t("progression_btn_plus_one", "+1"))}</span></a>`
+    );
+  }
+
+  function renderQueueMaxButton(extraClass, attrName, attrValue, maxQueueable, kind, preview) {
+    const p =
+      preview && typeof preview === "object"
+        ? preview
+        : { jobs: Math.max(0, Math.floor(Number(maxQueueable) || 0)) };
+    return renderMaxQueueActionBtn(extraClass, attrName, attrValue, p, kind);
   }
 
   function renderResearchActionCell(tech, summary) {
@@ -2284,13 +2530,7 @@
     const state = getResearchActionState(tech, queueFull);
 
     if (state === "warn") {
-      let lockTitle = t("research_requirements_not_met", "Voraussetzungen nicht erfüllt.");
-      const reqHint = formatResearchReqTooltip(tech.requirements_items);
-      if (reqHint) lockTitle += " · " + reqHint;
-      return (
-        `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-research status-pill-icon-btn" type="button" disabled` +
-        ` data-action-state="warn" title="${lockTitle}" aria-label="${lockTitle}"><span class="gc-bld-head-action-icon">⚠</span></button>`
-      );
+      return renderWarnActionButton("btn-research status-pill-icon-btn", tech.requirements_items);
     }
     if (state === "locked") {
       return (
@@ -2302,13 +2542,15 @@
       const shortMsg = t("research_not_enough_resources", "Nicht genug Ressourcen.");
       return (
         `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-research" type="button" disabled` +
-        ` data-action-state="afford" title="${shortMsg}" aria-label="${shortMsg}"><span class="gc-bld-head-action-icon">+</span></button>`
+        ` data-action-state="afford" title="${shortMsg}" aria-label="${shortMsg}"><span class="gc-bld-head-action-label">${escapeHtml(t("progression_btn_plus_one", "+1"))}</span></button>`
       );
     }
     const href = `/research_start/${encodeURIComponent(key)}`;
     return (
-      `<a href="${href}" class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-research"` +
-      ` data-action-state="go" title="${actionLabel}" aria-label="${actionLabel}"><span class="gc-bld-head-action-icon">+</span></a>`
+      `<div class="gc-bld-card-head-action-group">` +
+      renderPlusOneActionBtn("btn-research", "data-tech-key", key, href, actionLabel) +
+      renderMaxQueueActionBtn("btn-research", "data-tech-key", key, tech.max_queue_preview || { jobs: tech.max_queueable }, "research") +
+      `</div>`
     );
   }
 
@@ -2318,19 +2560,50 @@
     const limit = summary?.limit ?? 3;
     const queueFull = count >= limit;
     const state = getResearchActionState(tech, queueFull);
-    const btn = cell.querySelector(".gc-bld-head-action-btn");
-    const prevState = btn?.dataset?.actionState || "";
+    const goBtn = cell.querySelector("[data-action-state='go']");
+    const stateBtn = goBtn || cell.querySelector(".gc-bld-head-action-btn");
+    const prevState = stateBtn?.dataset?.actionState || "";
     const queueActive = count > 0;
     const actionLabel = queueActive
       ? t("research_btn_queue", "Anreihen")
       : t("research_btn_start", "Forschung starten");
 
-    if (btn && prevState === state) {
+    if (stateBtn && prevState === state) {
       if (state === "go") {
-        btn.title = actionLabel;
-        btn.setAttribute("aria-label", actionLabel);
-        const href = `/research_start/${encodeURIComponent(tech.key)}`;
-        if (btn.getAttribute("href") !== href) btn.setAttribute("href", href);
+        const goLink = cell.querySelector("a.btn-research[data-action-state='go']");
+        if (goLink) {
+          goLink.title = actionLabel;
+          goLink.setAttribute("aria-label", actionLabel);
+          const href = `/research_start/${encodeURIComponent(tech.key)}`;
+          if (goLink.getAttribute("href") !== href) goLink.setAttribute("href", href);
+        }
+        const maxBtn = cell.querySelector(".btn-research-max");
+        if (maxBtn) {
+          const preview = tech.max_queue_preview || { jobs: tech.max_queueable };
+          const n = Math.max(0, Math.floor(Number(preview.jobs ?? tech.max_queueable) || 0));
+          const aria = t("progression_btn_max_queue_aria", "Maximal %(n)s Stufen anreihen").replace(
+            "%(n)s",
+            fmtNumber(n)
+          );
+          maxBtn.dataset.maxQueue = String(n);
+          maxBtn.textContent = renderMaxQueueButtonLabel(n);
+          maxBtn.setAttribute("aria-label", aria);
+          const raw = serializeMaxQueuePreview(preview);
+          if (raw) {
+            maxBtn.setAttribute("data-max-queue-hover", "1");
+            maxBtn.setAttribute("data-max-preview", raw);
+          } else {
+            maxBtn.removeAttribute("data-max-queue-hover");
+            maxBtn.removeAttribute("data-max-preview");
+          }
+          maxBtn.disabled = n < 1;
+          if (n < 1) maxBtn.setAttribute("aria-disabled", "true");
+          else maxBtn.removeAttribute("aria-disabled");
+        }
+      } else if (state === "warn") {
+        const warnBtn = cell.querySelector(".gc-req-hover-trigger");
+        const payload = serializeReqHoverItems(tech.requirements_items);
+        if (warnBtn && payload && payload !== "[]") warnBtn.setAttribute("data-req-items", payload);
       }
       return;
     }
@@ -2365,11 +2638,7 @@
       );
     }
     if (state === "warn") {
-      const lockTitle = t("msg_build_requirements", "Voraussetzungen nicht erfüllt.");
-      return (
-        `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-upgrade status-pill-icon-btn" type="button" disabled` +
-        ` data-action-state="warn" title="${lockTitle}" aria-label="${lockTitle}"><span class="gc-bld-head-action-icon">⚠</span></button>`
-      );
+      return renderWarnActionButton("btn-upgrade status-pill-icon-btn", b.requirements_items);
     }
     if (state === "locked") {
       return (
@@ -2381,35 +2650,67 @@
       const shortMsg = t("msg_build_not_enough_resources", "Nicht genug Ressourcen.");
       return (
         `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-upgrade" type="button" disabled` +
-        ` data-action-state="afford" title="${shortMsg}" aria-label="${shortMsg}"><span class="gc-bld-head-action-icon">+</span></button>`
+        ` data-action-state="afford" title="${shortMsg}" aria-label="${shortMsg}"><span class="gc-bld-head-action-label">${escapeHtml(t("progression_btn_plus_one", "+1"))}</span></button>`
       );
     }
     const tab = b.tab || _getActiveBuildingTab();
     const href = `/upgrade/${encodeURIComponent(key)}?src=buildings&tab=${encodeURIComponent(tab)}`;
     return (
-      `<a id="btn-${key}" data-building="${key}" data-action-state="go" href="${href}"` +
-      ` class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-upgrade"` +
-      ` title="${actionLabel}" aria-label="${actionLabel}"><span class="gc-bld-head-action-icon">+</span></a>`
+      `<div class="gc-bld-card-head-action-group">` +
+      renderPlusOneActionBtn("btn-upgrade", "data-building", key, href, actionLabel, `btn-${key}`) +
+      renderMaxQueueActionBtn("btn-upgrade", "data-building", key, b.max_queue_preview || { jobs: b.max_queueable }, "building") +
+      `</div>`
     );
   }
 
   function syncBuildingHeadAction(cell, b, bqSummary, bqQueueFull) {
     if (!cell || !b) return;
     const state = getBuildingActionState(b, bqQueueFull);
-    const btn = cell.querySelector(".gc-bld-head-action-btn");
-    const prevState = btn?.dataset?.actionState || "";
+    const goBtn = cell.querySelector("[data-action-state='go']");
+    const stateBtn = goBtn || cell.querySelector(".gc-bld-head-action-btn");
+    const prevState = stateBtn?.dataset?.actionState || "";
     const queueActive = (bqSummary?.count || 0) > 0;
     const actionLabel = queueActive
       ? t("research_btn_queue", "Anreihen")
       : t("buildings_btn_upgrade", "Ausbau starten");
 
-    if (btn && prevState === state) {
+    if (stateBtn && prevState === state) {
       if (state === "go") {
-        btn.title = actionLabel;
-        btn.setAttribute("aria-label", actionLabel);
-        const tab = b.tab || _getActiveBuildingTab();
-        const href = `/upgrade/${encodeURIComponent(b.key)}?src=buildings&tab=${encodeURIComponent(tab)}`;
-        if (btn.getAttribute("href") !== href) btn.setAttribute("href", href);
+        const goLink = cell.querySelector("a.btn-upgrade[data-action-state='go'], button.btn-upgrade[data-action-state='go']");
+        if (goLink) {
+          goLink.title = actionLabel;
+          goLink.setAttribute("aria-label", actionLabel);
+          const tab = b.tab || _getActiveBuildingTab();
+          const href = `/upgrade/${encodeURIComponent(b.key)}?src=buildings&tab=${encodeURIComponent(tab)}`;
+          if (goLink.getAttribute("href") !== href) goLink.setAttribute("href", href);
+        }
+        const maxBtn = cell.querySelector(".btn-upgrade-max");
+        if (maxBtn) {
+          const preview = b.max_queue_preview || { jobs: b.max_queueable };
+          const n = Math.max(0, Math.floor(Number(preview.jobs ?? b.max_queueable) || 0));
+          const aria = t("progression_btn_max_queue_aria", "Maximal %(n)s Stufen anreihen").replace(
+            "%(n)s",
+            fmtNumber(n)
+          );
+          maxBtn.dataset.maxQueue = String(n);
+          maxBtn.textContent = renderMaxQueueButtonLabel(n);
+          maxBtn.setAttribute("aria-label", aria);
+          const raw = serializeMaxQueuePreview(preview);
+          if (raw) {
+            maxBtn.setAttribute("data-max-queue-hover", "1");
+            maxBtn.setAttribute("data-max-preview", raw);
+          } else {
+            maxBtn.removeAttribute("data-max-queue-hover");
+            maxBtn.removeAttribute("data-max-preview");
+          }
+          maxBtn.disabled = n < 1;
+          if (n < 1) maxBtn.setAttribute("aria-disabled", "true");
+          else maxBtn.removeAttribute("aria-disabled");
+        }
+      } else if (state === "warn") {
+        const warnBtn = cell.querySelector(".gc-req-hover-trigger");
+        const payload = serializeReqHoverItems(b.requirements_items);
+        if (warnBtn && payload && payload !== "[]") warnBtn.setAttribute("data-req-items", payload);
       }
       return;
     }
@@ -2425,12 +2726,11 @@
     const limit = summary?.limit ?? 3;
     const count = summary?.count ?? 0;
     const bqQueueFull = count >= limit;
-    const byOwner = buildQueueRaw?.card_jobs_by_owner;
-    const useOwnerMap = byOwner && typeof byOwner === "object";
-    if (useOwnerMap) {
+    const syncCardQueuesFromBuildState = buildQueueRaw != null;
+    if (syncCardQueuesFromBuildState) {
       patchCardQueuesFromOwnerMap(
         document,
-        byOwner,
+        resolveCardJobsByOwner(buildQueueRaw),
         (root) => root.querySelectorAll("[data-building-row]"),
         (row) => row.getAttribute("data-building-row") || "",
         (root, key) => root.querySelector(`[data-building-row="${key}"]`)
@@ -2457,7 +2757,7 @@
         }
 
         const durCell = row.querySelector(".bcell-duration");
-        if (durCell) {
+        if (durCell && !row.classList.contains("gc-building-card--in-queue")) {
           setHeroTimeChipIdle(row, b.time_seconds, t("buildings_col_time", "Bauzeit"));
         }
 
@@ -2466,7 +2766,7 @@
           syncBuildingHeadAction(actionCell, b, summary, bqQueueFull);
         }
 
-        if (useOwnerMap) {
+        if (syncCardQueuesFromBuildState) {
           /* queue blocks synced via card_jobs_by_owner */
         } else if (b.queue_job) GC.renderCardQueueBlock(row, b.queue_job);
         else GC.clearCardQueueBlock(row);
@@ -2484,12 +2784,11 @@
     if (!list || !Array.isArray(techs)) return;
 
     const summary = researchRaw?.summary || {};
-    const byOwner = researchRaw?.card_jobs_by_owner;
-    const useOwnerMap = byOwner && typeof byOwner === "object";
-    if (useOwnerMap) {
+    const syncCardQueuesFromResearchState = researchRaw != null;
+    if (syncCardQueuesFromResearchState) {
       patchCardQueuesFromOwnerMap(
         document,
-        byOwner,
+        resolveCardJobsByOwner(researchRaw),
         (root) => root.querySelectorAll("[data-tech-key]"),
         (row) => row.getAttribute("data-tech-key") || "",
         (root, key) => root.querySelector(`[data-tech-key="${key}"]`)
@@ -2502,6 +2801,7 @@
 
       applyResearchRowState(row, tech);
       patchResearchEffects(row, tech);
+      patchBuildingRequirements(row, tech);
 
       const levelEl = row.querySelector(".tech-level-current");
       if (levelEl) {
@@ -2523,7 +2823,7 @@
         syncResearchHeadAction(actionCell, tech, summary);
       }
 
-      if (useOwnerMap) {
+      if (syncCardQueuesFromResearchState) {
         /* queue blocks synced via card_jobs_by_owner */
       } else if (tech.queue_job) GC.renderCardQueueBlock(row, tech.queue_job);
       else GC.clearCardQueueBlock(row);
@@ -2537,10 +2837,64 @@
     updateResearchQueueActions(researchRaw);
   }
 
+  /** GC-838 — patch queue owner maps immediately from action/finish state (no poll wait). */
+  function patchQueuePanelsImmediate(data) {
+    if (!data || data.ok === false) return false;
+    let patched = false;
+    const buildQueueRaw = data.build_queue ?? null;
+    if (buildQueueRaw != null && document.querySelector(".buildings-prog-list")) {
+      patchCardQueuesFromOwnerMap(
+        document,
+        resolveCardJobsByOwner(buildQueueRaw),
+        (root) => root.querySelectorAll("[data-building-row]"),
+        (row) => row.getAttribute("data-building-row") || "",
+        (root, key) => root.querySelector(`[data-building-row="${key}"]`)
+      );
+      renderBuildQueue(buildQueueRaw);
+      patched = true;
+    }
+    const researchRaw = data.research ?? null;
+    if (researchRaw != null && document.querySelector(".research-prog-list")) {
+      patchCardQueuesFromOwnerMap(
+        document,
+        resolveCardJobsByOwner(researchRaw),
+        (root) => root.querySelectorAll("[data-tech-key]"),
+        (row) => row.getAttribute("data-tech-key") || "",
+        (root, key) => root.querySelector(`[data-tech-key="${key}"]`)
+      );
+      renderResearchQueue(researchRaw);
+      patched = true;
+    }
+    const syPage = document.getElementById("shipyard-page");
+    if (syPage?.dataset.ready === "1") {
+      const qd = data.shipyard?.queue || data.shipyard_queue;
+      if (qd) {
+        patchShipyardCardQueues(syPage, qd);
+        patched = true;
+      }
+    }
+    const defPage = document.getElementById("defense-page");
+    if (defPage?.dataset.ready === "1" && data.defense) {
+      const qd = data.defense.queue || data.defense.defense_queue;
+      if (qd) {
+        patchDefenseCardQueues(defPage, qd);
+        patched = true;
+      }
+    }
+    if (patched) {
+      logActionStatePatch("queue owner map patched", "immediate", {
+        build_owners: Object.keys(resolveCardJobsByOwner(buildQueueRaw)).length,
+        research_owners: Object.keys(resolveCardJobsByOwner(researchRaw)).length,
+      });
+    }
+    return patched;
+  }
+
   let _finishRefreshTimer = null;
   const _finishRefreshArmed = { buildings: false, research: false, planet_evolution: false };
   const _finishRefreshLastAt = { buildings: 0, research: 0, planet_evolution: 0 };
-  const FINISH_REFRESH_MIN_MS = 2500;
+  const FINISH_REFRESH_MIN_MS = 450;
+  const FINISH_REFRESH_DEBOUNCE_MS = 80;
 
   function clearFinishRefreshArmed(type, queueList) {
     if (!Array.isArray(queueList) || !queueList.length) {
@@ -2567,9 +2921,10 @@
       return;
     }
     const key = type === "buildings" || type === "research" || type === "planet_evolution" ? type : "buildings";
+    const stale = _hasStaleActiveCardQueue();
     const nowMs = Date.now();
-    if (nowMs - (_finishRefreshLastAt[key] || 0) < FINISH_REFRESH_MIN_MS) return;
-    if (_finishRefreshArmed[key] || _finishRefreshTimer) return;
+    if (!stale && nowMs - (_finishRefreshLastAt[key] || 0) < FINISH_REFRESH_MIN_MS) return;
+    if (!stale && (_finishRefreshArmed[key] || _finishRefreshTimer)) return;
 
     _finishRefreshTimer = GC.setSafeTimeout(() => {
       _finishRefreshTimer = null;
@@ -2577,7 +2932,8 @@
       _lastResearchQueueSignature = "";
 
       const run = () => {
-        const refresh = () => {
+        const reason = `${key}_finished`;
+        const finish = () => {
           if (
             key === "planet_evolution" &&
             document.querySelector(".planet-evolution-page")
@@ -2591,15 +2947,15 @@
               releaseFinishRefreshLock(key);
             });
           }
-          return Promise.resolve(
-            typeof GC.reloadCurrentPage === "function"
-              ? GC.reloadCurrentPage({ force: true, skipGameState: true, skipHydrate: true })
-              : (GC.refreshGameState ? GC.refreshGameState(`${key}_finished`) : null)
-          ).finally(() => {
-            releaseFinishRefreshLock(key);
-          });
+          if (typeof GC.refreshGameState === "function") {
+            return Promise.resolve(GC.refreshGameState(reason)).finally(() => {
+              releaseFinishRefreshLock(key);
+            });
+          }
+          releaseFinishRefreshLock(key);
+          return Promise.resolve(null);
         };
-        refresh();
+        finish();
       };
 
       if (GC.finishLocks[key]) {
@@ -2614,7 +2970,7 @@
         return;
       }
       run();
-    }, 300);
+    }, stale ? 0 : FINISH_REFRESH_DEBOUNCE_MS);
   }
 
   let _overviewWidgetsPlanetId = 0;
@@ -4066,29 +4422,57 @@
     titleEl: null,
     descEl: null,
     tableWrap: null,
-    tbody: null,
+    tableEl: null,
+    theadEl: null,
+    tbodyEl: null,
+    detailEl: null,
     loadingEl: null,
     errorEl: null,
-    colTime: null,
-    colEnergy: null,
     abort: null,
     open: false,
     reqId: 0,
+    activeKey: "",
+    activeKind: "building",
   };
 
   function cacheBuildingTechElements() {
-    if (BUILDING_TECH.root && BUILDING_TECH.tbody) return BUILDING_TECH.root;
+    if (BUILDING_TECH.root && BUILDING_TECH.tbodyEl) return BUILDING_TECH.root;
     BUILDING_TECH.root = document.getElementById("gc-building-tech-root");
     if (!BUILDING_TECH.root) return null;
     BUILDING_TECH.titleEl = document.getElementById("gc-building-tech-title");
     BUILDING_TECH.descEl = BUILDING_TECH.root.querySelector("[data-bt-desc]");
     BUILDING_TECH.tableWrap = BUILDING_TECH.root.querySelector("[data-bt-table-wrap]");
-    BUILDING_TECH.tbody = BUILDING_TECH.root.querySelector("[data-bt-tbody]");
+    BUILDING_TECH.tableEl = BUILDING_TECH.root.querySelector("[data-bt-table]");
+    BUILDING_TECH.theadEl = BUILDING_TECH.root.querySelector("[data-bt-thead]");
+    BUILDING_TECH.tbodyEl = BUILDING_TECH.root.querySelector("[data-bt-tbody]");
+    BUILDING_TECH.detailEl = BUILDING_TECH.root.querySelector("[data-bt-detail]");
     BUILDING_TECH.loadingEl = BUILDING_TECH.root.querySelector("[data-bt-loading]");
     BUILDING_TECH.errorEl = BUILDING_TECH.root.querySelector("[data-bt-error]");
-    BUILDING_TECH.colTime = BUILDING_TECH.root.querySelector("[data-bt-col-time]");
-    BUILDING_TECH.colEnergy = BUILDING_TECH.root.querySelector("[data-bt-col-energy]");
     return BUILDING_TECH.root;
+  }
+
+  function renderPlayerCardStat(label, valueHtml, { highlight = false, sub = "" } = {}) {
+    const subHtml = sub
+      ? `<span class="gc-player-card-stat-sub gc-mono">${sub}</span>`
+      : "";
+    return (
+      `<div class="gc-player-card-stat${highlight ? " gc-player-card-stat--highlight" : ""}">` +
+      `<span class="gc-player-card-stat-label">${escapeHtml(label)}</span>` +
+      `<span class="gc-player-card-stat-value gc-mono">${valueHtml}</span>` +
+      subHtml +
+      `</div>`
+    );
+  }
+
+  function renderTechnicalCostChips(metal, crystal) {
+    return (
+      `<div class="gc-ship-detail-cost gc-mono">` +
+      `<span class="gc-cost-chip gc-cost-metal"><span class="gc-res-icon gc-res-metal" aria-hidden="true"></span>` +
+      `${renderCostVal(metal)}</span>` +
+      `<span class="gc-cost-chip gc-cost-crystal"><span class="gc-res-icon gc-res-crystal" aria-hidden="true"></span>` +
+      `${renderCostVal(crystal)}</span>` +
+      `</div>`
+    );
   }
 
   function formatTechnicalOutputPart(row) {
@@ -4101,7 +4485,13 @@
     const metricPrefix = metricKey ? `${metricKey}: ` : "";
     if (kind === "production") {
       const res = row.effect_resource ? t("resource_" + row.effect_resource, row.effect_resource) : "";
-      return `${metricPrefix}+${fmtNumber(val)}${unit}${res ? " " + res : ""}`;
+      const base = `${fmtNumber(val)}${unit}${res ? " " + res : ""}`;
+      const delta = row.production_delta_per_hour;
+      if (delta != null && Number(delta) > 0) {
+        const d = Math.floor(Number(delta));
+        return `${metricPrefix}${base} (+${formatNumberCompact(d)}${unit})`;
+      }
+      return `${metricPrefix}${base}`;
     }
     if (kind === "energy") {
       return `${metricPrefix}${fmtNumber(val)} ${t("energy", "Energie")}`;
@@ -4114,7 +4504,7 @@
       return `${metricPrefix}${fmtNumber(val)}${res ? " " + res : ""}`;
     }
     if (kind === "bonus_percent") {
-      return `${metricPrefix}+${fmtNumber(val)}${unit || "%"}`;
+      return `${metricPrefix}${fmtNumber(val)}${unit || "%"}`;
     }
     if (kind === "reduction_percent") {
       return `${metricPrefix}-${fmtNumber(val)}${unit || "%"}`;
@@ -4276,17 +4666,85 @@
     return "—";
   }
 
+  const TECHNICAL_I18N_FALLBACKS_DE = {
+    technical_active_bonuses: "Aktive Boni",
+    technical_formula_title: "Berechnung",
+    technical_per_day: "/ Tag",
+    technical_per_hour: "/ h",
+    technical_bonus_slot: "Slotbonus",
+    technical_bonus_temperature: "Temperatur",
+    technical_bonus_mining: "Mining-Forschung",
+    technical_bonus_drone: "Drohnen-Forschung",
+    technical_bonus_energy: "Energie",
+    technical_bonus_empire: "Imperium",
+    technical_bonus_event: "Event",
+    technical_bonus_planet: "Planet",
+    technical_bonus_building: "Gebäude",
+    technical_formula_base: "Basis",
+    technical_formula_slot: "Slotbonus",
+    technical_formula_temperature: "Temperatur",
+    technical_formula_research: "Forschung",
+    technical_formula_energy: "Energie",
+    technical_formula_empire: "Imperium",
+    technical_formula_event: "Event",
+    technical_formula_planet: "Planet",
+    technical_formula_total: "Ergebnis",
+    buildings_technical_col_costs: "Kosten",
+    buildings_technical_section_performance: "Leistung",
+    buildings_technical_col_roi: "Amortisation",
+    buildings_prod_delta: "Zuwachs",
+    buildings_effect_production: "Produktion",
+  };
+
+  const TECHNICAL_I18N_FALLBACKS_EN = {
+    technical_active_bonuses: "Active bonuses",
+    technical_formula_title: "Calculation",
+    technical_per_day: "/ day",
+    technical_per_hour: "/ h",
+    technical_bonus_slot: "Slot bonus",
+    technical_bonus_temperature: "Temperature",
+    technical_bonus_mining: "Mining research",
+    technical_bonus_drone: "Drone research",
+    technical_bonus_energy: "Energy",
+    technical_bonus_empire: "Empire",
+    technical_bonus_event: "Event",
+    technical_bonus_planet: "Planet",
+    technical_bonus_building: "Building",
+    technical_formula_base: "Base",
+    technical_formula_slot: "Slot bonus",
+    technical_formula_temperature: "Temperature",
+    technical_formula_research: "Research",
+    technical_formula_energy: "Energy",
+    technical_formula_empire: "Empire",
+    technical_formula_event: "Event",
+    technical_formula_planet: "Planet",
+    technical_formula_total: "Result",
+    buildings_technical_col_costs: "Costs",
+    buildings_technical_section_performance: "Performance",
+    buildings_technical_col_roi: "Payback",
+    buildings_prod_delta: "Increase",
+    buildings_effect_production: "Production",
+  };
+
+  function technicalFallbackMap() {
+    const lang = String(document.documentElement.lang || "de").toLowerCase();
+    return lang.startsWith("en") ? TECHNICAL_I18N_FALLBACKS_EN : TECHNICAL_I18N_FALLBACKS_DE;
+  }
+
+  function technicalT(key) {
+    const k = String(key || "");
+    const fbMap = technicalFallbackMap();
+    const fb = fbMap[k];
+    let val = t(k, fb != null ? fb : k);
+    if (fb != null && (val === k || String(val).indexOf("technical_") === 0)) {
+      val = fb;
+    }
+    return String(val);
+  }
+
   function setTechnicalModalMode(kind) {
     if (!cacheBuildingTechElements()) return;
     const isResearch = kind === "research";
-    if (BUILDING_TECH.colTime) {
-      BUILDING_TECH.colTime.textContent = isResearch
-        ? t("research_technical_col_time", "Forschungszeit")
-        : t("buildings_technical_col_time", "Bauzeit");
-    }
-    if (BUILDING_TECH.colEnergy) {
-      BUILDING_TECH.colEnergy.hidden = isResearch;
-    }
     BUILDING_TECH.root?.classList.toggle("gc-building-tech-modal--research", isResearch);
   }
 
@@ -4306,43 +4764,610 @@
     }
   }
 
+  function formatTechnicalRoiHours(hours) {
+    const roi = hours ?? null;
+    if (roi == null || roi === "" || !Number.isFinite(Number(roi))) return "—";
+    return formatDuration(Math.ceil(Number(roi) * 3600));
+  }
+
+  function technicalNumericEnergy(row) {
+    if (row?.energy_use != null) return -Math.abs(Number(row.energy_use));
+    if (row?.energy_total != null) return Number(row.energy_total);
+    return null;
+  }
+
+  function technicalRowPrimaryValue(row) {
+    const display = row?.display;
+    if (!display || typeof display !== "object") return null;
+    const layout = String(display.layout || "");
+    if (layout === "production") return Number(display.next_per_hour);
+    if (layout === "energy" || layout === "storage") return Number(display.next);
+    if (layout === "effect_percent") return Number(display.next);
+    return null;
+  }
+
+  function technicalRowStepDelta(row) {
+    const display = row?.display;
+    if (!display) return null;
+    const layout = String(display.layout || "");
+    if (layout === "production") return Number(display.delta_per_hour);
+    if (layout === "energy" || layout === "storage" || layout === "effect_percent") {
+      return Number(display.delta);
+    }
+    return null;
+  }
+
+  function technicalTableLayout(data, levels) {
+    const fromData = String(data?.table_layout || "").trim();
+    if (fromData) return fromData;
+    const hit = (Array.isArray(levels) ? levels : []).find((row) => row?.display?.table_layout || row?.display?.layout);
+    return hit?.display?.table_layout || hit?.display?.layout || "standard";
+  }
+
+  function formatTechnicalStepDelta(val, unit, { signed = true, level = null } = {}) {
+    if (level === 0 || val == null || !Number.isFinite(Number(val))) {
+      return `<span class="gc-tech-val gc-mono">—</span>`;
+    }
+    const v = Math.floor(Number(val));
+    if (v === 0) {
+      return `<span class="gc-tech-val gc-mono gc-tech-val--zero">0${unit || ""}</span>`;
+    }
+    const cls = v > 0 ? "gc-tech-val--pos" : "gc-tech-val--neg";
+    const prefix = signed && v > 0 ? "+" : "";
+    return `<span class="gc-tech-val gc-mono ${cls}">${prefix}${formatNumberCompact(v)}${unit || ""}</span>`;
+  }
+
+  function renderTechnicalLevelCell(row) {
+    const role = String(row.row_role || (row.is_current ? "current" : "preview"));
+    const badges = [];
+    if (role === "current") {
+      badges.push(
+        `<span class="gc-building-tech-current-badge">${escapeHtml(technicalT("buildings_technical_current_level"))}</span>`
+      );
+    } else if (role === "next") {
+      badges.push(
+        `<span class="gc-building-tech-next-badge">${escapeHtml(t("technical_row_next_upgrade", "Nächstes Upgrade"))}</span>`
+      );
+    } else if (role === "milestone") {
+      badges.push(
+        `<span class="gc-building-tech-milestone-badge">${escapeHtml(t("technical_row_milestone", "Meilenstein"))}</span>`
+      );
+    }
+    const badgeHtml = badges.length ? badges.join("") : "";
+    return (
+      `<span class="gc-building-tech-level">` +
+      badgeHtml +
+      `<span class="gc-building-tech-level-num">${fmtNumber(row.level)}</span></span>`
+    );
+  }
+
+  function renderTechnicalMetricsFromDisplay(display, { isResearch = false } = {}) {
+    if (!display || typeof display !== "object") return "";
+    const layout = String(display.layout || "");
+    const perHour = technicalT("technical_per_hour");
+    const lines = [];
+
+    if (layout === "production") {
+      const roiLabel = technicalT("buildings_technical_col_roi");
+      const deltaLabel = technicalT("buildings_prod_delta");
+      lines.push({
+        label: technicalT("buildings_prod_current"),
+        value: `${formatNumberCompact(display.current_per_hour)}${perHour}`,
+      });
+      lines.push({
+        label: technicalT("buildings_prod_after"),
+        value: `${formatNumberCompact(display.next_per_hour)}${perHour}`,
+      });
+      const delta = Number(display.delta_per_hour);
+      if (delta > 0) {
+        lines.push({
+          label: `${deltaLabel}${perHour}`,
+          value: `+${formatNumberCompact(delta)}${perHour}`,
+          highlight: true,
+        });
+      }
+      if (display.upgrade_roi_hours != null && !isResearch) {
+        lines.push({
+          label: roiLabel,
+          value: formatTechnicalRoiHours(display.upgrade_roi_hours),
+          highlight: true,
+        });
+      }
+    } else if (layout === "effect_percent") {
+      const unit = display.unit || "%";
+      const deltaLabel = technicalT("buildings_prod_delta");
+      const isConsumption = display.display_mode === "consumption";
+      const valueLabel = isConsumption
+        ? technicalT("technical_energy_consumption")
+        : technicalT("buildings_prod_current");
+      const afterLabel = technicalT("buildings_prod_after");
+      lines.push({
+        label: valueLabel,
+        value: `${formatNumberCompact(display.current)}${unit}`,
+      });
+      lines.push({
+        label: afterLabel,
+        value: `${formatNumberCompact(display.next)}${unit}`,
+      });
+      const d = Number(display.delta);
+      if (d > 0 || isConsumption) {
+        const step = Number(display.step_delta != null ? display.step_delta : display.delta);
+        const prefix = step > 0 ? "+" : "";
+        lines.push({
+          label: deltaLabel,
+          value: `${prefix}${formatNumberCompact(Math.abs(step))}${unit}`,
+          highlight: true,
+        });
+      }
+    } else if (layout === "storage") {
+      const deltaLabel = technicalT("buildings_prod_delta");
+      lines.push({
+        label: technicalT("buildings_prod_current"),
+        value: formatNumberCompact(display.current),
+      });
+      lines.push({
+        label: technicalT("buildings_prod_after"),
+        value: formatNumberCompact(display.next),
+      });
+      if (display.at_max_level) {
+        lines.push({
+          label: deltaLabel,
+          value: t("technical_max_level_reached", "Maximale Stufe erreicht"),
+          highlight: true,
+        });
+      } else {
+        lines.push({
+          label: deltaLabel,
+          value: `+${formatNumberCompact(display.delta)}`,
+          highlight: true,
+        });
+      }
+    } else if (layout === "yard") {
+      const capLabel = t("buildings_effect_yard_capacity", "Kapazität");
+      const redLabel = t("buildings_technical_build_time_reduction_short", "Bauzeit");
+      const nextCap = display.batch_capacity || display.capacity_at_level;
+      const nextRed = display.build_time_reduction_next != null ? display.build_time_reduction_next : display.reduction_at_level;
+      const currentCap = display.batch_capacity_current;
+      lines.push({
+        label: capLabel,
+        value: `${formatNumberCompact(nextCap)} ${t("technical_ships_per_cycle", "Schiffe/Zyklus")}`,
+        highlight: true,
+      });
+      lines.push({
+        label: redLabel,
+        value: Number(nextRed) > 0 ? `-${formatNumberCompact(nextRed)}%` : t("technical_no_reduction", "0%"),
+        highlight: true,
+      });
+      if (currentCap != null) {
+        lines.push({
+          label: t("technical_yard_active_capacity", "Aktive Werftkapazität"),
+          value: formatNumberCompact(currentCap),
+        });
+      }
+    }
+
+    if (!lines.length) return "";
+    return (
+      `<div class="gc-tech-metrics">${lines
+        .map(
+          (line) =>
+            `<div class="gc-tech-line${line.highlight ? " gc-tech-line--delta" : ""}">` +
+            `<span class="gc-tech-label">${escapeHtml(line.label)}</span>` +
+            `<span class="gc-tech-val gc-mono">${escapeHtml(line.value)}</span>` +
+            `</div>`
+        )
+        .join("")}</div>`
+    );
+  }
+
+  function renderTechnicalMilestonesSection(milestones) {
+    const rows = Array.isArray(milestones) ? milestones : [];
+    if (!rows.length) return "";
+    const title = t("technical_milestones_title", "Nächste Meilensteine");
+    const body = rows
+      .map((m) => {
+        const lvl = fmtNumber(m.level || 0);
+        const labelKey = m.label_key || "";
+        const label = labelKey ? technicalT(labelKey) : "";
+        const gain = String(m.display || "");
+        const text = label && label !== labelKey ? `${label}: ${gain}` : `L${lvl} · ${gain}`;
+        return (
+          `<div class="gc-tech-milestone-line">` +
+          `<span class="gc-tech-milestone-level gc-mono">L${escapeHtml(lvl)}</span>` +
+          `<span class="gc-tech-milestone-gain gc-mono">${escapeHtml(gain)}</span>` +
+          (label && label !== labelKey ? `<span class="gc-tech-milestone-label">${escapeHtml(label)}</span>` : "") +
+          `</div>`
+        );
+      })
+      .join("");
+    return (
+      `<div class="gc-tech-section gc-tech-section--milestones">` +
+      `<div class="gc-tech-section-title">${escapeHtml(title)}</div>` +
+      `<div class="gc-tech-milestones">${body}</div>` +
+      `</div>`
+    );
+  }
+
+  function renderTechnicalSummaryDetail(summary, { isResearch = false, showEnergy = true, milestones = [] } = {}) {
+    if (!summary || typeof summary !== "object") return "";
+    if (summary.at_max_level) {
+      return (
+        `<div class="gc-building-tech-detail-panel">` +
+        `<p class="gc-building-tech-max-hint">${escapeHtml(t("technical_max_level_reached", "Maximale Stufe erreicht"))}</p>` +
+        `</div>`
+      );
+    }
+
+    const display = summary.display || {};
+    const layout = String(display.layout || summary.layout || "");
+    const metricsHtml = renderTechnicalMetricsFromDisplay(display, { isResearch });
+    const roiLabel = isResearch
+      ? t("buildings_technical_col_roi", "Amortisation")
+      : technicalT("buildings_technical_col_roi");
+    let roiHtml = "";
+    if (summary.upgrade_roi_hours != null) {
+      roiHtml =
+        `<div class="gc-tech-line gc-tech-line--delta">` +
+        `<span class="gc-tech-label">${escapeHtml(roiLabel)}</span>` +
+        `<span class="gc-tech-val gc-mono">${escapeHtml(formatTechnicalRoiHours(summary.upgrade_roi_hours))}</span>` +
+        `</div>`;
+    }
+
+    const bonuses = summary.active_bonuses || display.active_bonuses || [];
+    const bonusesHtml =
+      layout === "production" || isResearch || bonuses.length
+        ? renderTechnicalBonusesGcTech(bonuses)
+        : "";
+    const formulaHtml =
+      layout === "production" ? renderTechnicalFormulaGcTech(summary.formula || display.formula) : "";
+
+    const timeLabel = isResearch
+      ? t("research_technical_col_time", "Forschungszeit")
+      : t("buildings_technical_col_time", "Bauzeit");
+    const costsLabel = technicalT("buildings_technical_col_costs");
+    const section1Title = t("technical_section_upgrade", "Nächstes Upgrade");
+    const footerLines = [
+      `<div class="gc-tech-line">` +
+        `<span class="gc-tech-label">${escapeHtml(costsLabel)}</span>` +
+        `<span class="gc-tech-val">${renderTechnicalCostChips(summary.cost_metal || 0, summary.cost_crystal || 0)}</span>` +
+        `</div>`,
+      `<div class="gc-tech-line">` +
+        `<span class="gc-tech-label">${escapeHtml(timeLabel)}</span>` +
+        `<span class="gc-tech-val gc-mono">${escapeHtml(formatDuration(summary.time_seconds || 0))}</span>` +
+        `</div>`,
+    ];
+
+    const section1Body = metricsHtml + roiHtml + footerLines.join("");
+    const milestonesHtml = renderTechnicalMilestonesSection(milestones);
+    const tableTitle =
+      `<div class="gc-tech-section gc-tech-section--table">` +
+      `<div class="gc-tech-section-title">${escapeHtml(t("technical_section_table", "Stufenübersicht"))}</div>` +
+      `</div>`;
+
+    return (
+      `<div class="gc-building-tech-detail-panel">` +
+      (section1Body
+        ? `<div class="gc-tech-section gc-tech-section--summary">` +
+          `<div class="gc-tech-section-title">${escapeHtml(section1Title)}</div>` +
+          `<div class="gc-tech-display">${section1Body}</div>` +
+          `</div>`
+        : "") +
+      bonusesHtml +
+      formulaHtml +
+      milestonesHtml +
+      tableTitle +
+      `</div>`
+    );
+  }
+
+  function renderTechnicalProductionThead() {
+    const cols = [
+      ["buildings_technical_col_level", "Stufe"],
+      ["buildings_technical_col_production_hour", "Produktion/h"],
+      ["technical_col_delta_production", "Δ Produktion"],
+      ["energy", "Energie"],
+      ["technical_col_delta_energy", "Δ Energie"],
+      ["buildings_technical_col_roi", "ROI"],
+    ];
+    const cells = cols
+      .map(([key, fb], idx) => {
+        const energyAttr = idx >= cols.length - 2 ? ' data-bt-col-energy' : "";
+        return `<th scope="col"${energyAttr}>${escapeHtml(t(key, fb))}</th>`;
+      })
+      .join("");
+    return `<tr>${cells}</tr>`;
+  }
+
+  function renderTechnicalEffectPercentThead(display) {
+    const isConsumption = display?.display_mode === "consumption";
+    const valueCol = isConsumption
+      ? ["technical_energy_consumption", "Verbrauch"]
+      : ["buildings_technical_col_effect", "Effekt"];
+    const cols = [
+      ["buildings_technical_col_level", "Stufe"],
+      valueCol,
+      ["technical_col_delta_short", "Δ"],
+    ];
+    const cells = cols
+      .map(([key, fb]) => `<th scope="col">${escapeHtml(t(key, fb))}</th>`)
+      .join("");
+    return `<tr>${cells}</tr>`;
+  }
+
+  function renderTechnicalYardThead() {
+    const cols = [
+      ["buildings_technical_col_level", "Stufe"],
+      ["buildings_technical_yard_capacity", "Kapazität"],
+      ["buildings_technical_build_time_reduction_short", "Bauzeit"],
+      ["buildings_technical_col_roi", "ROI"],
+    ];
+    return `<tr>${cols.map(([k, fb]) => `<th scope="col">${escapeHtml(t(k, fb))}</th>`).join("")}</tr>`;
+  }
+
+  function renderTechnicalStorageThead() {
+    const cols = [
+      ["buildings_technical_col_level", "Stufe"],
+      ["buildings_technical_col_capacity", "Kapazität"],
+      ["technical_col_delta_short", "Δ"],
+    ];
+    return `<tr>${cols.map(([k, fb]) => `<th scope="col">${escapeHtml(t(k, fb))}</th>`).join("")}</tr>`;
+  }
+
+  function renderTechnicalEnergyThead() {
+    const cols = [
+      ["buildings_technical_col_level", "Stufe"],
+      ["buildings_technical_energy_total", "Erzeugung"],
+      ["technical_col_delta_short", "Δ"],
+    ];
+    return `<tr>${cols.map(([k, fb]) => `<th scope="col">${escapeHtml(t(k, fb))}</th>`).join("")}</tr>`;
+  }
+
+  function renderTechnicalProductionRow(row) {
+    const display = row.display || {};
+    const lvl = Number(row.level);
+    const perHour = technicalT("technical_per_hour");
+    const prod = display.value_at_level != null ? Number(display.value_at_level) : null;
+    const stepProd = display.step_delta != null ? Number(display.step_delta) : null;
+    const energy = display.energy_at_level != null ? Number(display.energy_at_level) : technicalNumericEnergy(row);
+    const stepEnergy =
+      display.energy_step_delta != null ? Number(display.energy_step_delta) : null;
+    const prodHtml =
+      prod != null
+        ? `<span class="gc-tech-val gc-mono">${formatNumberCompact(prod)}<span class="gc-tech-unit">${escapeHtml(perHour)}</span></span>`
+        : `<span class="gc-tech-val gc-mono">—</span>`;
+    const energyHtml =
+      energy != null && Number.isFinite(energy)
+        ? formatTechnicalStepDelta(energy, "", { signed: true, level: lvl })
+        : `<span class="gc-tech-val gc-mono">—</span>`;
+    const roiHours = display.upgrade_roi_hours != null ? display.upgrade_roi_hours : row.upgrade_roi_hours;
+    const roiHtml =
+      roiHours != null && lvl > 0
+        ? `<span class="gc-tech-val gc-mono">${escapeHtml(formatTechnicalRoiHours(roiHours))}</span>`
+        : `<span class="gc-tech-val gc-mono">—</span>`;
+
+    return (
+      `<tr class="gc-building-tech-row${row.is_current ? " gc-building-tech-row--current" : ""} gc-building-tech-row--${escapeHtml(row.row_role || "preview")}">` +
+      `<td class="gc-building-tech-col-level gc-mono">${renderTechnicalLevelCell(row)}</td>` +
+      `<td class="gc-mono">${prodHtml}</td>` +
+      `<td class="gc-mono">${formatTechnicalStepDelta(stepProd, ` ${perHour}`, { level: lvl })}</td>` +
+      `<td class="gc-mono" data-bt-col-energy>${energyHtml}</td>` +
+      `<td class="gc-mono" data-bt-col-energy>${formatTechnicalStepDelta(stepEnergy, "", { level: lvl })}</td>` +
+      `<td class="gc-mono">${roiHtml}</td>` +
+      `</tr>`
+    );
+  }
+
+  function renderTechnicalEffectPercentRow(row) {
+    const display = row.display || {};
+    const lvl = Number(row.level);
+    const unit = display.unit || "%";
+    const val = display.value_at_level != null ? Number(display.value_at_level) : Number(display.current);
+    const step = display.step_delta != null ? Number(display.step_delta) : Number(display.delta);
+    return (
+      `<tr class="gc-building-tech-row${row.is_current ? " gc-building-tech-row--current" : ""} gc-building-tech-row--${escapeHtml(row.row_role || "preview")}">` +
+      `<td class="gc-building-tech-col-level gc-mono">${renderTechnicalLevelCell(row)}</td>` +
+      `<td class="gc-mono"><span class="gc-tech-val gc-mono">${formatNumberCompact(val)}${unit}</span></td>` +
+      `<td class="gc-mono">${formatTechnicalStepDelta(step, unit, { level: lvl })}</td>` +
+      `</tr>`
+    );
+  }
+
+  function renderTechnicalYardRow(row) {
+    const display = row.display || {};
+    const lvl = Number(row.level);
+    const cap = display.capacity_at_level != null ? display.capacity_at_level : display.batch_capacity;
+    const red = display.reduction_at_level != null ? display.reduction_at_level : display.build_time_reduction_next;
+    const redDisplay = Number(red) > 0 ? `-${formatNumberCompact(red)}%` : lvl > 0 ? "0%" : "100%";
+    const roiHours = display.upgrade_roi_hours;
+    const roiHtml =
+      roiHours != null && lvl > 0
+        ? `<span class="gc-tech-val gc-mono">${escapeHtml(formatTechnicalRoiHours(roiHours))}</span>`
+        : `<span class="gc-tech-val gc-mono">—</span>`;
+    return (
+      `<tr class="gc-building-tech-row${row.is_current ? " gc-building-tech-row--current" : ""} gc-building-tech-row--${escapeHtml(row.row_role || "preview")}">` +
+      `<td class="gc-building-tech-col-level gc-mono">${renderTechnicalLevelCell(row)}</td>` +
+      `<td class="gc-mono">${formatNumberCompact(cap)}</td>` +
+      `<td class="gc-mono">${redDisplay}</td>` +
+      `<td class="gc-mono">${roiHtml}</td>` +
+      `</tr>`
+    );
+  }
+
+  function renderTechnicalStorageRow(row) {
+    const display = row.display || {};
+    const lvl = Number(row.level);
+    const val = display.value_at_level != null ? Number(display.value_at_level) : Number(display.next);
+    const step = display.step_delta != null ? Number(display.step_delta) : Number(display.delta);
+    const stepHtml = display.at_max_level
+      ? `<span class="gc-tech-val gc-mono gc-tech-val--zero">0</span>`
+      : formatTechnicalStepDelta(step, "", { level: lvl });
+    return (
+      `<tr class="gc-building-tech-row${row.is_current ? " gc-building-tech-row--current" : ""} gc-building-tech-row--${escapeHtml(row.row_role || "preview")}">` +
+      `<td class="gc-building-tech-col-level gc-mono">${renderTechnicalLevelCell(row)}</td>` +
+      `<td class="gc-mono">${formatNumberCompact(val)}</td>` +
+      `<td class="gc-mono">${stepHtml}</td>` +
+      `</tr>`
+    );
+  }
+
+  function renderTechnicalEnergyRow(row) {
+    const display = row.display || {};
+    const lvl = Number(row.level);
+    const val = display.value_at_level != null ? Number(display.value_at_level) : Number(display.next);
+    const step = display.step_delta != null ? Number(display.step_delta) : Number(display.delta);
+    return (
+      `<tr class="gc-building-tech-row${row.is_current ? " gc-building-tech-row--current" : ""} gc-building-tech-row--${escapeHtml(row.row_role || "preview")}">` +
+      `<td class="gc-building-tech-col-level gc-mono">${renderTechnicalLevelCell(row)}</td>` +
+      `<td class="gc-mono">${formatNumberCompact(val)}</td>` +
+      `<td class="gc-mono">${formatTechnicalStepDelta(step, "", { level: lvl })}</td>` +
+      `</tr>`
+    );
+  }
+
+  function formatTechnicalEnergyCell(row) {
+    const n = technicalNumericEnergy(row);
+    if (n == null || !Number.isFinite(n)) return `<span class="gc-tech-val gc-mono">—</span>`;
+    const cls = n < 0 ? "gc-tech-val--neg" : n > 0 ? "gc-tech-val--pos" : "gc-tech-val--zero";
+    const prefix = n > 0 ? "+" : "";
+    return `<span class="gc-tech-val gc-mono ${cls}">${prefix}${formatNumberCompact(n)}</span>`;
+  }
+
+  function renderTechnicalBonusesGcTech(bonuses) {
+    const rows = Array.isArray(bonuses) ? bonuses : [];
+    if (!rows.length) return "";
+    const title = technicalT("technical_active_bonuses");
+    const body = rows
+      .map(
+        (b) =>
+          `<div class="gc-tech-bonus-line">` +
+          `<span class="gc-tech-bonus-label">${escapeHtml(technicalT(b.label_key || ""))}</span>` +
+          `<span class="gc-tech-val gc-mono">${escapeHtml(String(b.display || ""))}</span>` +
+          `</div>`
+      )
+      .join("");
+    return (
+      `<div class="gc-tech-section gc-tech-section--bonuses">` +
+      `<div class="gc-tech-section-title">${escapeHtml(title)}</div>` +
+      `<div class="gc-tech-bonuses">${body}</div>` +
+      `</div>`
+    );
+  }
+
+  function renderTechnicalFormulaGcTech(formula) {
+    const steps = Array.isArray(formula?.steps) ? formula.steps : [];
+    if (!steps.length) return "";
+    const title = technicalT("technical_formula_title");
+    const body = steps
+      .map((step) => {
+        const label = technicalT(step.label_key || "");
+        const isTotal = !!step.is_total;
+        const val = step.value_per_hour != null ? formatNumberCompact(step.value_per_hour) : "";
+        const detail = step.detail ? ` <span class="hint">${escapeHtml(step.detail)}</span>` : "";
+        const factor = step.display ? ` <span class="gc-mono">${escapeHtml(step.display)}</span>` : "";
+        const valSuffix = isTotal ? ` ${technicalT("technical_per_hour")}` : "";
+        const prefix = isTotal ? "= " : "× ";
+        return (
+          `<div class="gc-tech-formula-step${isTotal ? " gc-tech-formula-step--total" : ""}">` +
+          `<span class="gc-tech-formula-mul">${prefix}</span>` +
+          `<span class="gc-tech-formula-label">${escapeHtml(label)}</span>` +
+          detail +
+          factor +
+          (val ? `<span class="gc-mono">${val}${valSuffix}</span>` : "") +
+          `</div>`
+        );
+      })
+      .join("");
+    return (
+      `<details class="gc-tech-formula">` +
+      `<summary class="gc-tech-section-title">${escapeHtml(title)}</summary>` +
+      `<div class="gc-tech-formula-body">${body}</div>` +
+      `</details>`
+    );
+  }
+
+  function renderTechnicalStandardThead({ showEnergy = true, isResearch = false } = {}) {
+    const timeKey = isResearch ? "research_technical_col_time" : "buildings_technical_col_time";
+    const cols = [
+      ["buildings_technical_col_level", "Level"],
+      ["buildings_technical_col_output", "Output"],
+      ["resource_metal", "Ferronit"],
+      ["resource_crystal", "Crytite"],
+      [timeKey, isResearch ? "Forschungszeit" : "Bauzeit"],
+    ];
+    if (showEnergy) cols.push(["energy", "Energie"]);
+    const cells = cols
+      .map(([key, fb], idx) => {
+        let attrs = ' scope="col"';
+        if (idx === 1) attrs += ' data-bt-col-output';
+        if (idx === cols.length - 1 && showEnergy) attrs += ' data-bt-col-energy';
+        if (key === timeKey) attrs += ' data-bt-col-time';
+        return `<th${attrs}">${escapeHtml(t(key, fb))}</th>`;
+      })
+      .join("");
+    return `<tr>${cells}</tr>`;
+  }
+
+  function renderTechnicalStandardRow(row, { showEnergy = true } = {}) {
+    const energyCell = showEnergy
+      ? `<td class="gc-mono" data-bt-col-energy>${formatTechnicalEnergyCell(row)}</td>`
+      : "";
+    return (
+      `<tr class="gc-building-tech-row${row.is_current ? " gc-building-tech-row--current" : ""} gc-building-tech-row--${escapeHtml(row.row_role || "preview")}">` +
+      `<td class="gc-building-tech-col-level gc-mono">${renderTechnicalLevelCell(row)}</td>` +
+      `<td class="gc-mono gc-building-tech-col-output">${escapeHtml(formatTechnicalOutput(row))}</td>` +
+      `<td class="gc-mono">${fmtNumber(row.cost_metal || 0)}</td>` +
+      `<td class="gc-mono">${fmtNumber(row.cost_crystal || 0)}</td>` +
+      `<td class="gc-mono">${escapeHtml(formatDuration(row.time_seconds || 0))}</td>` +
+      energyCell +
+      `</tr>`
+    );
+  }
+
   function renderBuildingTechnicalTable(data) {
-    if (!BUILDING_TECH.tbody || !BUILDING_TECH.tableWrap) return;
+    if (!BUILDING_TECH.tbodyEl || !BUILDING_TECH.tableWrap || !BUILDING_TECH.theadEl) return;
     const kind = data?.kind === "research" ? "research" : "building";
     setTechnicalModalMode(kind);
     setTechnicalModalDescription(data);
     const levels = Array.isArray(data?.levels) ? data.levels : [];
-    const currentLabel = t("buildings_technical_current_level", "Aktuell");
     const showEnergy = kind !== "research";
-    BUILDING_TECH.tbody.innerHTML = levels
-      .map((row) => {
-        const cls = row.is_current ? "gc-building-tech-row gc-building-tech-row--current" : "gc-building-tech-row";
-        const levelNum = fmtNumber(row.level);
-        const levelCell = row.is_current
-          ? `<span class="gc-building-tech-level">` +
-            `<span class="gc-building-tech-current-badge">${currentLabel}</span>` +
-            `<span class="gc-building-tech-level-num">${levelNum}</span></span>`
-          : `<span class="gc-building-tech-level"><span class="gc-building-tech-level-num">${levelNum}</span></span>`;
-        const energyCell = showEnergy
-          ? `<td class="gc-mono">${escapeHtml(formatTechnicalEnergy(row))}</td>`
-          : "";
-        const outputText = formatTechnicalOutput(row);
-        const outputTitle = formatTechnicalOutputTitle(row);
-        const outputCell = outputTitle
-          ? `<td class="gc-mono gc-num-compact gc-building-tech-col-output" title="${escapeHtml(outputTitle)}">${escapeHtml(outputText)}</td>`
-          : `<td class="gc-mono gc-num-compact gc-building-tech-col-output">${escapeHtml(outputText)}</td>`;
-        return (
-          `<tr class="${cls}">` +
-          `<td class="gc-mono gc-building-tech-col-level">${levelCell}</td>` +
-          outputCell +
-          `<td class="gc-mono">${fmtNumber(row.cost_metal || 0)}</td>` +
-          `<td class="gc-mono">${fmtNumber(row.cost_crystal || 0)}</td>` +
-          `<td class="gc-mono">${escapeHtml(formatDuration(row.time_seconds || 0))}</td>` +
-          energyCell +
-          `</tr>`
-        );
-      })
-      .join("");
+    const isResearch = kind === "research";
+    const layout = technicalTableLayout(data, levels);
+    const sampleDisplay = levels[0]?.display || {};
+
+    if (layout === "production") {
+      BUILDING_TECH.theadEl.innerHTML = renderTechnicalProductionThead();
+      BUILDING_TECH.tbodyEl.innerHTML = levels.map((row) => renderTechnicalProductionRow(row)).join("");
+    } else if (layout === "effect_percent") {
+      BUILDING_TECH.theadEl.innerHTML = renderTechnicalEffectPercentThead(sampleDisplay);
+      BUILDING_TECH.tbodyEl.innerHTML = levels.map((row) => renderTechnicalEffectPercentRow(row)).join("");
+    } else if (layout === "yard") {
+      BUILDING_TECH.theadEl.innerHTML = renderTechnicalYardThead();
+      BUILDING_TECH.tbodyEl.innerHTML = levels.map((row) => renderTechnicalYardRow(row)).join("");
+    } else if (layout === "storage") {
+      BUILDING_TECH.theadEl.innerHTML = renderTechnicalStorageThead();
+      BUILDING_TECH.tbodyEl.innerHTML = levels.map((row) => renderTechnicalStorageRow(row)).join("");
+    } else if (layout === "energy") {
+      BUILDING_TECH.theadEl.innerHTML = renderTechnicalEnergyThead();
+      BUILDING_TECH.tbodyEl.innerHTML = levels.map((row) => renderTechnicalEnergyRow(row)).join("");
+    } else {
+      BUILDING_TECH.theadEl.innerHTML = renderTechnicalStandardThead({ showEnergy, isResearch });
+      BUILDING_TECH.tbodyEl.innerHTML = levels
+        .map((row) => renderTechnicalStandardRow(row, { showEnergy }))
+        .join("");
+    }
+
+    if (BUILDING_TECH.detailEl) {
+      const detailHtml = data?.summary
+        ? renderTechnicalSummaryDetail(data.summary, {
+            isResearch,
+            showEnergy,
+            milestones: data.milestones || [],
+          })
+        : "";
+      BUILDING_TECH.detailEl.innerHTML = detailHtml;
+      BUILDING_TECH.detailEl.hidden = !detailHtml;
+    }
+
     BUILDING_TECH.tableWrap.hidden = levels.length === 0;
   }
 
@@ -4385,12 +5410,41 @@
     setBuildingTechLoading(false);
     setBuildingTechError("");
     if (BUILDING_TECH.tableWrap) BUILDING_TECH.tableWrap.hidden = true;
-    if (BUILDING_TECH.tbody) BUILDING_TECH.tbody.innerHTML = "";
+    if (BUILDING_TECH.tbodyEl) BUILDING_TECH.tbodyEl.innerHTML = "";
+    if (BUILDING_TECH.theadEl) BUILDING_TECH.theadEl.innerHTML = "";
+    if (BUILDING_TECH.detailEl) {
+      BUILDING_TECH.detailEl.innerHTML = "";
+      BUILDING_TECH.detailEl.hidden = true;
+    }
     if (BUILDING_TECH.descEl) {
       BUILDING_TECH.descEl.textContent = "";
       BUILDING_TECH.descEl.hidden = true;
     }
     setTechnicalModalMode("building");
+    BUILDING_TECH.activeKey = "";
+    BUILDING_TECH.activeKind = "building";
+  }
+
+  function refreshOpenTechnicalModalIfNeeded() {
+    if (!BUILDING_TECH.open) return;
+    const key = String(BUILDING_TECH.activeKey || "").trim();
+    if (!key) return;
+    if (BUILDING_TECH.activeKind === "research") loadResearchTechnicalData(key);
+    else loadBuildingTechnicalData(key);
+  }
+
+  function shouldRefreshTechnicalModalAfterAction(reason) {
+    const r = String(reason || "");
+    if (r.endsWith("_cancel_success") || r.endsWith("_cancel") || r.endsWith("_error")) return false;
+    return (
+      r === "upgrade_success"
+      || r === "upgrade_max_success"
+      || r === "research_start_success"
+      || r === "research_max_success"
+      || r === "queue_timer_zero"
+      || r === "timer_done"
+      || r.endsWith("_finished")
+    );
   }
 
   async function loadBuildingTechnicalData(buildingType) {
@@ -4401,10 +5455,13 @@
     if (BUILDING_TECH.abort) BUILDING_TECH.abort.abort();
     BUILDING_TECH.abort = new AbortController();
     const reqId = ++BUILDING_TECH.reqId;
+    BUILDING_TECH.activeKey = key;
+    BUILDING_TECH.activeKind = "building";
 
     setBuildingTechError("");
     setBuildingTechLoading(true);
     if (BUILDING_TECH.tableWrap) BUILDING_TECH.tableWrap.hidden = true;
+    if (BUILDING_TECH.detailEl) BUILDING_TECH.detailEl.hidden = true;
     openBuildingTechnicalModal(true);
 
     try {
@@ -4440,10 +5497,13 @@
     if (BUILDING_TECH.abort) BUILDING_TECH.abort.abort();
     BUILDING_TECH.abort = new AbortController();
     const reqId = ++BUILDING_TECH.reqId;
+    BUILDING_TECH.activeKey = key;
+    BUILDING_TECH.activeKind = "research";
 
     setBuildingTechError("");
     setBuildingTechLoading(true);
     if (BUILDING_TECH.tableWrap) BUILDING_TECH.tableWrap.hidden = true;
+    if (BUILDING_TECH.detailEl) BUILDING_TECH.detailEl.hidden = true;
     openBuildingTechnicalModal(true);
 
     try {
@@ -4771,9 +5831,34 @@
   GC.clearCardQueueBlock = function clearCardQueueBlock(cardEl) {
     if (!cardEl) return;
     cardEl.querySelectorAll("[data-gc-card-queue], [data-hero-queue]").forEach((block) => block.remove());
+    stripHeroTimeChipQueueTimer(cardEl);
     resetHeroImageProgress(cardEl);
     _stripCardQueueOwnerClasses(cardEl);
+    delete cardEl.dataset.queueHeadJobId;
+    delete cardEl.dataset.queuePending;
+    delete cardEl.dataset.queueZeroFiredFor;
+    delete cardEl.dataset.queueZeroFiredAt;
   };
+
+  /** GC-833: drop completed timer UI immediately — do not wait for poll/PJAX. */
+  function dismissCompletedCardQueueBlock(block) {
+    if (!block) return;
+    const cardEl = block.closest("[data-building-row], [data-research-card], [data-building-card]");
+    block.remove();
+    if (cardEl && !cardEl.querySelector("[data-gc-card-queue], [data-hero-queue]")) {
+      stripHeroTimeChipQueueTimer(cardEl);
+      resetHeroImageProgress(cardEl);
+      _stripCardQueueOwnerClasses(cardEl);
+      delete cardEl.dataset.queueHeadJobId;
+      delete cardEl.dataset.queuePending;
+    }
+  }
+
+  /** GC-838 — optimistic overlay removal at timer 0 before server confirm. */
+  function optimisticDismissDueCardQueueBlock(block) {
+    if (!block) return;
+    dismissCompletedCardQueueBlock(block);
+  }
 
   function findCardQueueBlockByJobId(cardEl, jobId) {
     if (!cardEl) return null;
@@ -4950,12 +6035,27 @@
     resetHeroSingleImage(stack);
   }
 
+  function stripHeroTimeChipQueueTimer(cardEl) {
+    const chip = cardEl?.querySelector("[data-hero-time-chip]");
+    if (!chip) return;
+    chip.querySelectorAll(".gc-card-queue-timer").forEach((timerEl) => {
+      delete timerEl.dataset.timerTarget;
+      delete timerEl.dataset.countdownAt;
+      delete timerEl.dataset.serverRemaining;
+      delete timerEl.dataset.timerKind;
+      delete timerEl.dataset.refreshOnZero;
+      delete timerEl.dataset.refreshFiredAt;
+      timerEl.remove();
+    });
+  }
+
   function setHeroTimeChipIdle(cardEl, seconds, title) {
     if (!cardEl || cardEl.classList.contains("gc-building-card--in-queue") || cardEl.classList.contains("gc-research-card--in-queue")) {
       return;
     }
+    stripHeroTimeChipQueueTimer(cardEl);
     const chip = cardEl.querySelector("[data-hero-time-chip]");
-    if (!chip || chip.querySelector(".gc-card-queue-timer")) return;
+    if (!chip) return;
     const label = formatDuration(seconds);
     chip.title = title || chip.title || "";
     let textEl = chip.querySelector(".gc-hero-time-text");
@@ -5276,8 +6376,9 @@
 
   /** Sync card queue blocks from owner map — one visible job per card (head only; rest hidden). */
   function patchCardQueuesFromOwnerMap(page, byOwner, listCards, ownerKeyFromCard, findCard) {
-    if (!page || !byOwner || typeof byOwner !== "object") return;
-    const activeKeys = new Set(Object.keys(byOwner));
+    if (!page) return;
+    const ownerMap = byOwner && typeof byOwner === "object" ? byOwner : {};
+    const activeKeys = new Set(Object.keys(ownerMap));
     listCards(page).forEach((card) => {
       const key = ownerKeyFromCard(card);
       if (key && !activeKeys.has(key)) {
@@ -5286,7 +6387,7 @@
         GC.clearCardQueueBlock(card);
       }
     });
-    Object.entries(byOwner).forEach(([ownerKey, jobs]) => {
+    Object.entries(ownerMap).forEach(([ownerKey, jobs]) => {
       const card = findCard(page, ownerKey);
       if (!card) return;
       const list = (Array.isArray(jobs) ? jobs : [])
@@ -6092,11 +7193,9 @@
   function patchPePlanetTechCardQueues(rdx) {
     const page = document.querySelector(".planet-evolution-page");
     if (!page) return;
-    const byOwner = rdx?.card_jobs_by_owner;
-    if (!byOwner || typeof byOwner !== "object") return;
     patchCardQueuesFromOwnerMap(
       page,
-      byOwner,
+      resolveCardJobsByOwner(rdx),
       (root) => root.querySelectorAll("[data-planet-tech-card]"),
       (card) => card.getAttribute("data-tech-key") || "",
       (root, techKey) => root.querySelector(`[data-tech-key="${techKey}"][data-planet-tech-card]`)
@@ -6106,11 +7205,9 @@
   function patchPeAscensionCardQueues(asc) {
     const page = document.querySelector(".planet-evolution-page");
     if (!page) return;
-    const byOwner = asc?.card_jobs_by_owner;
-    if (!byOwner || typeof byOwner !== "object") return;
     patchCardQueuesFromOwnerMap(
       page,
-      byOwner,
+      resolveCardJobsByOwner(asc),
       (root) => root.querySelectorAll("[data-ascension-card]"),
       (card) => card.getAttribute("data-ascension-key") || "",
       (root, ascKey) => root.querySelector(`[data-ascension-key="${ascKey}"][data-ascension-card]`)
@@ -6316,7 +7413,8 @@
   }
 
   // GC-546D — production completion refresh (shipyard/defense): one debounced sync per timer zero.
-  const PRODUCTION_COMPLETION_DEBOUNCE_MS = 1100;
+  const PRODUCTION_COMPLETION_DEBOUNCE_MS = 180;
+  let _queuePanelRefreshInFlight = null;
   let _productionCompletionTimer = null;
   let _productionCompletionPending = { gameState: false, shipyard: false, defense: false };
   let _shipyardApiInFlight = null;
@@ -6342,18 +7440,17 @@
       _productionCompletionTimer = null;
       const pending = { ..._productionCompletionPending };
       _productionCompletionPending = { gameState: false, shipyard: false, defense: false };
-      if (pending.gameState && typeof GC.reloadCurrentPage === "function") {
-        GC.reloadCurrentPage({ force: true, skipGameState: true, skipHydrate: true });
-      } else if (pending.gameState && typeof GC.refreshGameState === "function") {
+      if (pending.gameState && typeof GC.refreshGameState === "function") {
         GC.refreshGameState("timer_done");
-      }
-      if (pending.shipyard) {
-        const syPage = document.getElementById("shipyard-page");
-        if (syPage?.dataset.ready === "1") refreshShipyardStateCoalesced(syPage);
-      }
-      if (pending.defense && !pending.gameState) {
-        const defPage = document.getElementById("defense-page");
-        if (defPage?.dataset.ready === "1") refreshDefenseStateCoalesced(defPage);
+      } else {
+        if (pending.shipyard) {
+          const syPage = document.getElementById("shipyard-page");
+          if (syPage?.dataset.ready === "1") refreshShipyardStateCoalesced(syPage);
+        }
+        if (pending.defense) {
+          const defPage = document.getElementById("defense-page");
+          if (defPage?.dataset.ready === "1") refreshDefenseStateCoalesced(defPage);
+        }
       }
     }, PRODUCTION_COMPLETION_DEBOUNCE_MS);
   }
@@ -6380,37 +7477,11 @@
         keysSnapshot.forEach((k) => _queueTimerZeroRefreshKeys.delete(k));
         return;
       }
-      if (typeof GC.reloadCurrentPage === "function") {
-        Promise.resolve(
-          GC.reloadCurrentPage({ force: true, skipGameState: true, skipHydrate: true })
-        ).finally(() => {
-          if (domains.has("shipyard")) {
-            const syPage = document.getElementById("shipyard-page");
-            if (syPage?.dataset.ready === "1") refreshShipyardStateCoalesced(syPage);
-          }
-          if (domains.has("defense")) {
-            const defPage = document.getElementById("defense-page");
-            if (defPage?.dataset.ready === "1") refreshDefenseStateCoalesced(defPage);
-          }
+      Promise.resolve(GC.refreshGameState("queue_timer_zero")).finally(() => {
           GC.setSafeTimeout(() => {
             keysSnapshot.forEach((k) => _queueTimerZeroRefreshKeys.delete(k));
           }, 1500);
         });
-        return;
-      }
-      Promise.resolve(GC.refreshGameState("queue_timer_zero")).finally(() => {
-        if (domains.has("shipyard")) {
-          const syPage = document.getElementById("shipyard-page");
-          if (syPage?.dataset.ready === "1") refreshShipyardStateCoalesced(syPage);
-        }
-        if (domains.has("defense")) {
-          const defPage = document.getElementById("defense-page");
-          if (defPage?.dataset.ready === "1") refreshDefenseStateCoalesced(defPage);
-        }
-        GC.setSafeTimeout(() => {
-          keysSnapshot.forEach((k) => _queueTimerZeroRefreshKeys.delete(k));
-        }, 1500);
-      });
     }, QUEUE_TIMER_ZERO_DEBOUNCE_MS);
   }
 
@@ -6817,6 +7888,7 @@
       }
       if (isQueueTimerComplete(remaining, finish, serverNowTs)) {
         const jobId = Math.floor(Number(block.dataset.jobId || 0));
+        optimisticDismissDueCardQueueBlock(block);
         if (domain === "research") {
           const zeroKey = `research-card:${finish}:${jobId}`;
           if (_buildZeroHandled !== zeroKey) {
@@ -8770,6 +9842,7 @@
       const skipScopedPanels = Boolean(
         (opts && opts.skipScopedPanels) || (planetSwitch && !planetSwitchReload)
       );
+      const forcePanel = Boolean(opts && opts.forcePanel) || isMutationStatePatchReason(reason);
 
       if (reason === "poll" || reason === "page_hydrate") {
         const st = Number(data.server_time || 0);
@@ -8957,14 +10030,14 @@
 
       renderBuildQueue(buildQueueRaw);
 
-      if (shouldPatchGameStateModule("overview")) {
+      if (shouldPatchGameStateModule("overview", { forcePanel })) {
         patchOverviewScoreFromState(data);
         patchOverviewResearch(research);
         patchOverviewStatus(data.overview, data, buildings, prod);
         if (data.planet_teaser) patchPlanetTeaser(data.planet_teaser);
       }
 
-      if (shouldPatchGameStateModule("buildings")) {
+      if (forcePanel || shouldPatchGameStateModule("buildings")) {
       Object.keys(BUILDINGS).forEach((key) => {
         const cfg = BUILDINGS[key];
         const lvl = buildings[key];
@@ -8981,7 +10054,7 @@
             _setIfChanged(prodCell, `${fmtNumber(fuelCells)} / ${fmtNumber(storageFuelCells)}`);
           } else {
             const val = Math.floor(prod[key] || 0);
-            _setIfChanged(prodCell, val > 0 ? `+${fmtNumber(val)} / h` : "-");
+            _setIfChanged(prodCell, val > 0 ? `${fmtNumber(val)} / h` : "-");
           }
         }
 
@@ -9017,10 +10090,19 @@
 
       if (data.buildings_panel) {
         patchBuildingPanel(data.buildings_panel, buildQueueRaw);
+      } else if (forcePanel && buildQueueRaw != null) {
+        patchCardQueuesFromOwnerMap(
+          document,
+          resolveCardJobsByOwner(buildQueueRaw),
+          (root) => root.querySelectorAll("[data-building-row]"),
+          (row) => row.getAttribute("data-building-row") || "",
+          (root, key) => root.querySelector(`[data-building-row="${key}"]`)
+        );
+        updateBuildQueueActions(buildQueueRaw);
       }
       }
 
-      if (shouldPatchGameStateModule("research")) {
+      if (forcePanel || shouldPatchGameStateModule("research")) {
         patchResearchPanelFromState(data);
         updateResearchQueueActions(research);
 
@@ -9036,19 +10118,27 @@
         }
       }
 
-      if (shouldPatchGameStateModule("trader")) {
+      if (shouldPatchGameStateModule("trader", { forcePanel })) {
         if (data.exchange) patchExchangePanel(data.exchange);
         if (data.scrapyard) patchScrapyardPanel(data.scrapyard);
         if (data.auction_house) patchAuctionHousePanel(data.auction_house);
         patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, fuelCells, storageFuelCells);
       }
 
-      if (shouldPatchGameStateModule("shipyard")) {
+      if (forcePanel || shouldPatchGameStateModule("shipyard")) {
         patchShipyardPanelFromState(data, activePlanetId);
       }
 
-      if (shouldPatchGameStateModule("research") && research.techs) {
+      if ((forcePanel || shouldPatchGameStateModule("research")) && research.techs) {
         patchResearchPanel(research.techs, research);
+      } else if (forcePanel && document.querySelector(".research-prog-list")) {
+        patchCardQueuesFromOwnerMap(
+          document,
+          resolveCardJobsByOwner(research),
+          (root) => root.querySelectorAll("[data-tech-key]"),
+          (row) => row.getAttribute("data-tech-key") || "",
+          (root, key) => root.querySelector(`[data-tech-key="${key}"]`)
+        );
       }
 
       const stApplied = Number(data.server_time || 0);
@@ -9070,14 +10160,25 @@
   }
 
   function refreshPageAfterQueueEvent(reason) {
-    if (typeof GC.reloadCurrentPage === "function") {
-      return GC.reloadCurrentPage({
-        force: true,
-        skipGameState: true,
-        skipHydrate: true,
-      });
-    }
-    return refreshGameState(reason);
+    if (!shouldRunGameLoop() || _authLoopAborted) return Promise.resolve(null);
+    if (_queuePanelRefreshInFlight) return _queuePanelRefreshInFlight;
+    _queuePanelRefreshInFlight = (async () => {
+      try {
+        const data = await GC.fetchJSON("/api/game-state?include_panel=1", { cache: "no-store" });
+        if (!data || data.ok === false) return null;
+        syncServerClockFromState(data);
+        applyGameStateData(data, reason || "queue_finished");
+        return data;
+      } catch (err) {
+        if (err?.name !== "AbortError") {
+          console.error("[GC] queue finish refresh failed", err);
+        }
+        return null;
+      } finally {
+        _queuePanelRefreshInFlight = null;
+      }
+    })();
+    return _queuePanelRefreshInFlight;
   }
 
   /** Lightweight HUD refresh — standalone fetch, no pageLifecycle abort. */
@@ -14393,13 +15494,9 @@
 
   function patchShipyardCardQueues(page, queueData) {
     if (!page) return;
-    const byOwner =
-      queueData?.card_jobs_by_owner && typeof queueData.card_jobs_by_owner === "object"
-        ? queueData.card_jobs_by_owner
-        : {};
     patchCardQueuesFromOwnerMap(
       page,
-      byOwner,
+      resolveCardJobsByOwner(queueData),
       (root) => root.querySelectorAll("[data-ship-card][data-unlocked='1']"),
       (card) => card.getAttribute("data-ship-key") || "",
       (root, shipKey) => root.querySelector(`[data-ship-key="${shipKey}"][data-unlocked="1"]`)
@@ -14416,7 +15513,7 @@
     const compact = document.getElementById("shipyard-queue-compact");
     if (!compact) return;
 
-    const qd = queueData || { queue: [], summary: { count: 0, limit: 3, refund_percent: 60 } };
+    const qd = queueData || { queue: [], summary: { count: 0, limit: 3, refund_percent: 100, refund_percent_active: 50 } };
     const jobs = qd.queue || [];
     const summary = qd.summary || {};
     const first = jobs.length ? jobs[0] : null;
@@ -14516,7 +15613,7 @@
     return map[resKey] || resKey;
   }
 
-  function renderShipyardCostChips(ship, resources, tt) {
+  function renderShipCostStackHtml(ship, resources) {
     const specs = [
       ["metal", "cost_metal"],
       ["crystal", "cost_crystal"],
@@ -14527,15 +15624,21 @@
         const need = Number(ship[costKey]) || 0;
         if (need <= 0) return "";
         const have = Number(resources[resKey]) || 0;
-        const unmet = have < need;
-        return (
-          `<span class="gc-cost-chip gc-cost-${resKey}${unmet ? " is-unmet" : ""}">` +
-          `${shipyardResourceIconHtml(resKey)}` +
-          `<span class="gc-cost-val">${fmtNumber(need)}</span></span>`
-        );
+        return renderResourceCostChipHtml(resKey, need, have < need);
       })
       .filter(Boolean)
       .join("");
+  }
+
+  function renderUnitBuildTimeFooterHtml(sec, tt) {
+    const s = Math.max(0, Math.floor(Number(sec) || 0));
+    if (s <= 0) return "";
+    const label = tt("unit_technical_build_time", "Bauzeit");
+    return (
+      `<div class="gc-card-lr-row gc-card-footer-row gc-card-footer-row--time" data-unit-build-time>` +
+      `<span class="gc-card-lr-label"><span aria-hidden="true">⏱</span> ${escapeHtml(label)}</span>` +
+      `<span class="gc-card-lr-value gc-mono">${escapeHtml(formatDuration(s))}</span></div>`
+    );
   }
 
   function shipyardReqItemVisible(item) {
@@ -14628,30 +15731,51 @@
     return parts.join("");
   }
 
+  function patchCompactUnitStatChips(card, attack, shield, hull, buildSeconds, tt) {
+    const benefit = card?.querySelector("[data-unit-stats]");
+    const mode = benefit?.dataset?.unitMode || "ship";
+    const atk = Math.max(0, Math.floor(Number(attack) || 0));
+    const shd = Math.max(0, Math.floor(Number(shield) || 0));
+    const hul = Math.max(0, Math.floor(Number(hull) || 0));
+    const hp = shd + hul > 0 ? shd + hul : hul;
+    const sec = Math.max(0, Math.floor(Number(buildSeconds) || 0));
+    let benefitHtml = "";
+    if (mode === "defense" && hp > 0) {
+      benefitHtml = renderCardLrRow(
+        `🛡 ${tt("defense_stat_defense", "Verteidigung")}`,
+        `<span class="gc-num-compact">${fmtIntParts(hp).display}</span>`
+      );
+    } else if (mode !== "defense" && atk > 0) {
+      benefitHtml = renderCardLrRow(
+        `⚔ ${tt("ship_stat_attack", "Angriff")}`,
+        `<span class="gc-num-compact">${fmtIntParts(atk).display}</span>`
+      );
+    }
+    if (benefit) {
+      const wrapHtml = benefitHtml ? benefitHtml : "";
+      if (benefit.innerHTML.trim() !== wrapHtml.trim()) benefit.innerHTML = wrapHtml;
+    }
+    let timeRow = card?.querySelector("[data-unit-build-time]");
+    const timeHtml = sec > 0 ? renderUnitBuildTimeFooterHtml(sec, tt) : "";
+    if (!timeHtml) {
+      timeRow?.remove();
+      return;
+    }
+    if (timeRow) {
+      if (timeRow.outerHTML.trim() !== timeHtml.trim()) timeRow.outerHTML = timeHtml;
+      return;
+    }
+    const costs = card?.querySelector(".gc-bld-card-meta");
+    const twrap = document.createElement("div");
+    twrap.innerHTML = timeHtml;
+    timeRow = twrap.firstElementChild;
+    if (!timeRow) return;
+    if (costs) costs.insertAdjacentElement("afterend", timeRow);
+    else card?.appendChild(timeRow);
+  }
+
   function patchProductionStatChips(card, cycleSeconds, batchCapacity, tt) {
-    const grid = card?.querySelector("[data-production-stats]");
-    if (!grid) return;
-    const sec = Math.max(0, Math.round(Number(cycleSeconds) || 0));
-    const cap = Math.max(1, Math.round(Number(batchCapacity) || 1));
-    const cycleEl = grid.querySelector("[data-prod-cycle-seconds]");
-    if (cycleEl) {
-      const cycleText = `${fmtNumber(sec)}s`;
-      if (cycleEl.textContent !== cycleText) cycleEl.textContent = cycleText;
-    }
-    const capEl = grid.querySelector("[data-prod-batch-capacity]");
-    if (capEl) {
-      const capParts = fmtIntParts(cap);
-      if (capEl.textContent !== capParts.display) capEl.textContent = capParts.display;
-      if (capParts.display !== capParts.full) capEl.title = capParts.full;
-      else capEl.removeAttribute("title");
-    }
-    if (tt) {
-      const ariaTpl = tt("prod_stat_aria", "Zyklus %(cycle)s Sekunden, parallel %(capacity)s");
-      const aria = ariaTpl
-        .replace("%(cycle)s", fmtNumber(sec))
-        .replace("%(capacity)s", fmtIntParts(cap).full);
-      if (grid.getAttribute("aria-label") !== aria) grid.setAttribute("aria-label", aria);
-    }
+    patchCompactUnitStatChips(card, 0, 0, 0, cycleSeconds, tt);
   }
 
   function applyShipyardShipCard(card, ship, resources, syLevel, tt) {
@@ -14661,36 +15785,23 @@
     card.classList.toggle("gc-prog-unaffordable", unlocked && !ship.can_build && ship.block_reason !== "queue_full");
     card.classList.toggle("gc-prog-affordable", unlocked && ship.can_build);
 
-    const costEl = card.querySelector("[data-shipyard-cost]");
+    const costEl = card.querySelector("[data-shipyard-cost] .gc-cost-stack");
     if (costEl) {
-      const html = renderShipyardCostChips(ship, resources, tt);
-      if (html && costEl.innerHTML !== html) costEl.innerHTML = html;
+      const html = renderShipCostStackHtml(ship, resources);
+      if (html && costEl.innerHTML.trim() !== html.trim()) costEl.innerHTML = html;
     }
 
-    let blockersEl = card.querySelector("[data-shipyard-blockers]");
-    const blockersHtml = renderShipyardBlockersHtml(ship, resources, syLevel, unlocked, tt);
-    if (blockersHtml) {
-      if (!blockersEl) {
-        blockersEl = document.createElement("div");
-        blockersEl.className = "shipyard-blockers";
-        blockersEl.dataset.shipyardBlockers = "1";
-        blockersEl.setAttribute("aria-live", "polite");
-        card.appendChild(blockersEl);
-      }
-      if (blockersEl.innerHTML !== blockersHtml) blockersEl.innerHTML = blockersHtml;
-      blockersEl.hidden = false;
-    } else if (blockersEl) {
-      blockersEl.replaceChildren();
-      blockersEl.hidden = true;
-    }
+    card.querySelector("[data-shipyard-blockers]")?.remove();
 
     if (ship.build_seconds != null) {
-      const page = card.closest("#shipyard-page");
-      const unitCap =
-        Number(ship.effective_batch_capacity) > 0
-          ? Number(ship.effective_batch_capacity)
-          : Number(page?.dataset.shipyardBatchCapacity || 1) || 1;
-      patchProductionStatChips(card, ship.build_seconds, unitCap, tt);
+      patchCompactUnitStatChips(
+        card,
+        ship.attack,
+        ship.shield,
+        ship.hull,
+        ship.build_seconds,
+        tt
+      );
     }
 
     if (!unlocked) return;
@@ -15046,13 +16157,9 @@
 
   function patchDefenseCardQueues(page, queueData) {
     if (!page) return;
-    const byOwner =
-      queueData?.card_jobs_by_owner && typeof queueData.card_jobs_by_owner === "object"
-        ? queueData.card_jobs_by_owner
-        : {};
     patchCardQueuesFromOwnerMap(
       page,
-      byOwner,
+      resolveCardJobsByOwner(queueData),
       (root) => root.querySelectorAll("[data-defense-card][data-unlocked='1']"),
       (card) => card.getAttribute("data-defense-card") || "",
       (root, defenseKey) => root.querySelector(`[data-defense-card="${defenseKey}"][data-unlocked="1"]`)
@@ -15085,7 +16192,7 @@
     const compact = document.getElementById("defense-queue-compact");
     if (!compact) return;
 
-    const qd = queuePayload || { queue: [], summary: { count: 0, limit: 3, refund_percent: 60 } };
+    const qd = queuePayload || { queue: [], summary: { count: 0, limit: 3, refund_percent: 100, refund_percent_active: 50 } };
     const jobs = qd.queue || [];
     const summary = qd.summary || {};
     const count = summary.count ?? jobs.length;
@@ -15221,18 +16328,19 @@
     card.classList.toggle("gc-prog-unaffordable", !unit.can_build && unit.block_reason !== "queue_full");
     card.classList.toggle("gc-prog-affordable", !!unit.can_build);
 
-    const costEl = card.querySelector("[data-defense-cost]");
+    const costEl = card.querySelector("[data-defense-cost] .gc-cost-stack");
     if (costEl) {
-      const html = renderShipyardCostChips(
+      const html = renderShipCostStackHtml(
         {
           cost_metal: unit.cost_metal,
           cost_crystal: unit.cost_crystal,
         },
-        resources,
-        tt
+        resources
       );
       if (html && costEl.innerHTML.trim() !== html.trim()) costEl.innerHTML = html;
     }
+
+    card.querySelector("[data-defense-blockers]")?.remove();
 
     const maxBtn = card.querySelector(`[data-defense-max="${unit.defense_key}"]`);
     if (maxBtn) maxBtn.dataset.maxQty = String(unit.max_build || 0);
@@ -15258,11 +16366,14 @@
       }
     }
     if (unit.build_seconds != null) {
-      const unitCap =
-        Number(unit.effective_batch_capacity) > 0
-          ? Number(unit.effective_batch_capacity)
-          : Number(page?.dataset.defenseBatchCapacity || 1) || 1;
-      patchProductionStatChips(card, unit.build_seconds, unitCap, tt);
+      patchCompactUnitStatChips(
+        card,
+        unit.attack,
+        unit.shield,
+        unit.hull,
+        unit.build_seconds,
+        tt
+      );
     }
   }
 
@@ -17560,6 +18671,209 @@
     window.addEventListener("scroll", closePopover, true);
 
     normalizePopoverTriggers();
+  }
+
+  function initCardRequirementsHoverOnce() {
+    if (GC._reqHoverBound) return;
+    GC._reqHoverBound = true;
+
+    let activeTrigger = null;
+
+    const hideReqTooltip = () => {
+      const tip = document.getElementById("gc-req-hover-tooltip");
+      if (tip) {
+        tip.hidden = true;
+        tip.style.display = "none";
+        tip.style.visibility = "hidden";
+        tip.innerHTML = "";
+      }
+      if (activeTrigger) {
+        activeTrigger.removeAttribute("aria-describedby");
+        activeTrigger = null;
+      }
+    };
+
+    const ensureReqTooltipEl = () => {
+      let tip = document.getElementById("gc-req-hover-tooltip");
+      if (!tip) {
+        tip = document.createElement("div");
+        tip.id = "gc-req-hover-tooltip";
+        tip.className = "gc-req-hover-tooltip";
+        tip.hidden = true;
+        tip.setAttribute("role", "tooltip");
+        document.body.appendChild(tip);
+      }
+      return tip;
+    };
+
+    const positionReqTooltip = (tip, trigger) => {
+      const rect = trigger.getBoundingClientRect();
+      const margin = 8;
+      tip.style.visibility = "hidden";
+      tip.hidden = false;
+      tip.style.display = "block";
+      const popRect = tip.getBoundingClientRect();
+      let left = rect.left + rect.width / 2 - popRect.width / 2;
+      left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
+      let top = rect.bottom + margin;
+      if (top + popRect.height > window.innerHeight - margin) {
+        top = Math.max(margin, rect.top - popRect.height - margin);
+      }
+      tip.style.left = `${left}px`;
+      tip.style.top = `${top}px`;
+      tip.style.visibility = "visible";
+    };
+
+    const showReqTooltip = (trigger) => {
+      if (!trigger || !trigger.isConnected) return;
+      const raw = trigger.getAttribute("data-req-items");
+      if (!raw) return;
+      let items;
+      try {
+        items = JSON.parse(raw);
+      } catch (_err) {
+        return;
+      }
+      const html = buildCardReqTooltipHtml(items);
+      if (!html) return;
+      if (activeTrigger && activeTrigger !== trigger) {
+        activeTrigger.removeAttribute("aria-describedby");
+      }
+      const tip = ensureReqTooltipEl();
+      tip.innerHTML = html;
+      positionReqTooltip(tip, trigger);
+      activeTrigger = trigger;
+      trigger.setAttribute("aria-describedby", "gc-req-hover-tooltip");
+    };
+
+    const syncReqTooltipHover = (e) => {
+      const trigger = e.target.closest(".gc-req-hover-trigger");
+      if (trigger) {
+        if (trigger !== activeTrigger) showReqTooltip(trigger);
+        return;
+      }
+      if (activeTrigger) hideReqTooltip();
+    };
+
+    document.addEventListener("mouseover", syncReqTooltipHover, true);
+    document.addEventListener("focusin", (e) => {
+      const trigger = e.target.closest(".gc-req-hover-trigger");
+      if (trigger) showReqTooltip(trigger);
+    });
+    document.addEventListener("focusout", (e) => {
+      const trigger = e.target.closest(".gc-req-hover-trigger");
+      if (trigger && !trigger.contains(e.relatedTarget)) hideReqTooltip();
+    });
+    document.addEventListener("pointerdown", hideReqTooltip, true);
+
+    window.addEventListener("resize", hideReqTooltip);
+    window.addEventListener("scroll", hideReqTooltip, true);
+    window.addEventListener("blur", hideReqTooltip);
+
+    GC.hideCardReqTooltip = hideReqTooltip;
+    GC.registerCleanup(hideReqTooltip);
+  }
+
+  function initMaxQueueHoverOnce() {
+    if (GC._maxQueueHoverBound) return;
+    GC._maxQueueHoverBound = true;
+
+    let activeTrigger = null;
+
+    const hideMaxQueueTooltip = () => {
+      const tip = document.getElementById("gc-max-queue-hover-tooltip");
+      if (tip) {
+        tip.hidden = true;
+        tip.style.display = "none";
+        tip.style.visibility = "hidden";
+        tip.innerHTML = "";
+      }
+      if (activeTrigger) {
+        activeTrigger.removeAttribute("aria-describedby");
+        activeTrigger = null;
+      }
+    };
+
+    const ensureMaxQueueTooltipEl = () => {
+      let tip = document.getElementById("gc-max-queue-hover-tooltip");
+      if (!tip) {
+        tip = document.createElement("div");
+        tip.id = "gc-max-queue-hover-tooltip";
+        tip.className = "gc-max-queue-hover-tooltip";
+        tip.hidden = true;
+        tip.setAttribute("role", "tooltip");
+        document.body.appendChild(tip);
+      }
+      return tip;
+    };
+
+    const positionMaxQueueTooltip = (tip, trigger) => {
+      const rect = trigger.getBoundingClientRect();
+      const margin = 8;
+      tip.style.visibility = "hidden";
+      tip.hidden = false;
+      tip.style.display = "block";
+      const popRect = tip.getBoundingClientRect();
+      let left = rect.left + rect.width / 2 - popRect.width / 2;
+      left = Math.max(margin, Math.min(left, window.innerWidth - popRect.width - margin));
+      let top = rect.bottom + margin;
+      if (top + popRect.height > window.innerHeight - margin) {
+        top = Math.max(margin, rect.top - popRect.height - margin);
+      }
+      tip.style.left = `${left}px`;
+      tip.style.top = `${top}px`;
+      tip.style.visibility = "visible";
+    };
+
+    const showMaxQueueTooltip = (trigger) => {
+      if (!trigger || !trigger.isConnected || trigger.disabled) return;
+      const raw = trigger.getAttribute("data-max-preview");
+      if (!raw) return;
+      let preview;
+      try {
+        preview = JSON.parse(raw);
+      } catch (_err) {
+        return;
+      }
+      const kind = trigger.getAttribute("data-max-kind") || "building";
+      const html = buildMaxQueueTooltipHtml(preview, kind);
+      if (!html) return;
+      if (activeTrigger && activeTrigger !== trigger) {
+        activeTrigger.removeAttribute("aria-describedby");
+      }
+      const tip = ensureMaxQueueTooltipEl();
+      tip.innerHTML = html;
+      positionMaxQueueTooltip(tip, trigger);
+      activeTrigger = trigger;
+      trigger.setAttribute("aria-describedby", "gc-max-queue-hover-tooltip");
+    };
+
+    const syncMaxQueueTooltipHover = (e) => {
+      const trigger = e.target.closest(".gc-max-queue-hover-trigger");
+      if (trigger) {
+        if (trigger !== activeTrigger) showMaxQueueTooltip(trigger);
+        return;
+      }
+      if (activeTrigger) hideMaxQueueTooltip();
+    };
+
+    document.addEventListener("mouseover", syncMaxQueueTooltipHover, true);
+    document.addEventListener("focusin", (e) => {
+      const trigger = e.target.closest(".gc-max-queue-hover-trigger");
+      if (trigger) showMaxQueueTooltip(trigger);
+    });
+    document.addEventListener("focusout", (e) => {
+      const trigger = e.target.closest(".gc-max-queue-hover-trigger");
+      if (trigger && !trigger.contains(e.relatedTarget)) hideMaxQueueTooltip();
+    });
+    document.addEventListener("pointerdown", hideMaxQueueTooltip, true);
+
+    window.addEventListener("resize", hideMaxQueueTooltip);
+    window.addEventListener("scroll", hideMaxQueueTooltip, true);
+    window.addEventListener("blur", hideMaxQueueTooltip);
+
+    GC.hideMaxQueueTooltip = hideMaxQueueTooltip;
+    GC.registerCleanup(hideMaxQueueTooltip);
   }
 
   function initPlanetEvolution() {
@@ -22942,6 +24256,78 @@
     GC._gameActionsBound = true;
 
     document.addEventListener("click", async (e) => {
+      const upgradeMaxEl = e.target.closest("button.btn-upgrade-max:not([disabled])");
+      if (upgradeMaxEl) {
+        e.preventDefault();
+        if (upgradeMaxEl.dataset.busy === "1" || GC.actionLocks.build) return;
+        upgradeMaxEl.dataset.busy = "1";
+        GC.actionLocks.build = true;
+        const buildingType = upgradeMaxEl.dataset.building || "";
+        const tab = _getActiveBuildingTab();
+        if (!buildingType) {
+          upgradeMaxEl.dataset.busy = "0";
+          GC.actionLocks.build = false;
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+          return;
+        }
+        try {
+          const json = await GC.fetchGameAction("/api/buildings/upgrade", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              building_type: buildingType,
+              tab,
+              queue_mode: "max",
+              request_id: newRequestId(),
+            }),
+          });
+          applyActionState(json, json.ok ? "upgrade_max_success" : "upgrade_error");
+          if (!json.ok) showNotify(mapActionError(json.reason, json.payload), "error");
+        } catch (err) {
+          console.error("Upgrade MAX AJAX fehlgeschlagen:", err);
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+        } finally {
+          upgradeMaxEl.dataset.busy = "0";
+          GC.actionLocks.build = false;
+        }
+        return;
+      }
+
+      const researchMaxEl = e.target.closest("button.btn-research-max:not([disabled])");
+      if (researchMaxEl) {
+        e.preventDefault();
+        if (researchMaxEl.dataset.busy === "1" || GC.actionLocks.research) return;
+        researchMaxEl.dataset.busy = "1";
+        GC.actionLocks.research = true;
+        const techKey = researchMaxEl.dataset.techKey || "";
+        if (!techKey) {
+          researchMaxEl.dataset.busy = "0";
+          GC.actionLocks.research = false;
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+          return;
+        }
+        try {
+          const json = await GC.fetchGameAction("/api/research/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              tech_key: techKey,
+              queue_mode: "max",
+              request_id: newRequestId(),
+            }),
+          });
+          applyActionState(json, json.ok ? "research_max_success" : "research_start_error");
+          if (!json.ok) showNotify(mapActionError(json.reason, json.payload), "error");
+        } catch (err) {
+          console.error("Research MAX AJAX fehlgeschlagen:", err);
+          showNotify(t("msg_action_failed", "Aktion fehlgeschlagen. Bitte erneut versuchen."), "error");
+        } finally {
+          researchMaxEl.dataset.busy = "0";
+          GC.actionLocks.research = false;
+        }
+        return;
+      }
+
       const upgradeEl = e.target.closest("a.btn-upgrade, button.btn-upgrade:not([disabled])");
       if (upgradeEl && !upgradeEl.hasAttribute("disabled")) {
         if (upgradeEl.tagName === "A") e.preventDefault();
@@ -24895,6 +26281,8 @@
     initLanguageSwitcher();
     initRoleBasedSidebar();
     initGcPopoversOnce();
+    initCardRequirementsHoverOnce();
+    initMaxQueueHoverOnce();
     initVisibilityPolling();
     initMotionPreferenceListener();
     initSimplePageAmbience();

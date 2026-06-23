@@ -362,11 +362,13 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     assert "function shouldSkipInitGameStateAfterSsr(page, opts)" in src
     assert "initPage skip game-state (SSR fresh)" in src
     skip_fn = src.split("function shouldSkipInitGameStateAfterSsr(page, opts)")[1].split("function bootstrapResourceLiveFromDom")[0]
-    assert "opts.forceGameState" in skip_fn
-    assert "return pageHasSsrLiveBoot()" in skip_fn
+    assert "_SSR_SKIP_INIT_GAME_STATE_PAGES.has(page)" in skip_fn
+    assert "pageHasSsrLiveBoot()" in skip_fn
     assert "opts && opts.force) return false" not in skip_fn
     init_body = src.split("const afterInit = async () => {")[1].split("if (page === \"messages\")")[0]
     assert "shouldSkipInitGameStateAfterSsr(page, opts)" in init_body
+    assert "_PROGRESSION_INIT_PANEL_PAGES.has(page)" in init_body
+    assert "refreshPageAfterQueueEvent(\"page_init\")" in init_body
     assert "bootstrapResourceLiveFromDom()" in init_body
     pjax = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
     assert "skipHydrate: opts.skipHydrate !== false" in pjax
@@ -932,8 +934,13 @@ def test_main_js_gc631_formatted_unit_inputs_and_queue_clear():
     assert "parseIntNumber(" in shipyard_bind
     assert "function clearProductionCardQueueState(card)" in src
     patch_sy = src.split("function patchShipyardCardQueues(page, queueData)")[1].split("function shipyardIconUrl")[0]
-    assert "queueData?.card_jobs_by_owner" in patch_sy
-    assert ": {}" in patch_sy
+    assert "resolveCardJobsByOwner(queueData)" in patch_sy
+    assert "function resolveCardJobsByOwner(queueRaw)" in src
+    owner_helper = src.split("function resolveCardJobsByOwner(queueRaw)")[1].split("function renderMaxQueueButtonLabel")[0]
+    assert "return raw && typeof raw === \"object\" ? raw : {}" in owner_helper
+    patch_queues = src.split("function patchCardQueuesFromOwnerMap(page, byOwner, listCards, ownerKeyFromCard, findCard)")[1].split("GC.renderCardQueueBlock = function renderCardQueueBlock")[0]
+    assert "GC.clearCardQueueBlock(card)" in patch_queues
+    assert "activeKeys.has(key)" in patch_queues
     render_sy = src.split("function renderShipyardQueue(page, queueData)")[1].split("function parseShipyardPageData")[0]
     assert "card_jobs_by_owner: {}" in render_sy
     assert "clearProductionCardQueueState(card)" in src.split("function applyShipyardState(page, data)")[1].split("async function refreshShipyardState")[0]
@@ -950,33 +957,29 @@ def test_main_js_gc631_formatted_unit_inputs_and_queue_clear():
 
 
 def test_main_js_gc632_production_stat_chips():
-    """GC-632: compact cycle/parallel stat chips replace long inline production text."""
+    """GC-632 / GC-827: compact unit stat row on ship/defense cards."""
     src = _read("static/main.js")
-    assert "function patchProductionStatChips(card, cycleSeconds, batchCapacity, tt)" in src
-    assert "fmtIntParts(cap)" in src.split("function patchProductionStatChips")[1].split("function applyShipyardShipCard")[0]
-    assert ".shipyard-ship-build-time" not in src.split("function applyShipyardShipCard")[1].split("function applyShipyardState")[0]
-    assert "patchProductionStatChips(card, ship.build_seconds, unitCap, tt)" in src
-    assert "patchProductionStatChips(card, unit.build_seconds, unitCap, tt)" in src
+    assert "function patchCompactUnitStatChips(card, attack, shield, hull, buildSeconds, tt)" in src
+    assert "patchCompactUnitStatChips(" in src
+    assert "ship.attack" in src.split("function applyShipyardShipCard")[1].split("function applyShipyardState")[0]
+    assert "unit.attack" in src.split("function applyDefenseUnitCard")[1].split("async function refreshDefenseState")[0]
     macro = _read("templates/partials/progression_cards.html")
-    assert "render_production_stat_chips" in macro
-    assert "gc-prod-stat-grid" in macro
-    assert "data-prod-cycle-seconds" in macro
-    assert "data-prod-batch-capacity" in macro
+    assert "render_compact_unit_stat_chips" in macro
+    assert "data-unit-stats" in macro
+    assert "gc-compact-stat-row" in macro
     shipyard_tpl = _read("templates/shipyard.html")
-    assert "render_production_stat_chips" in shipyard_tpl
-    assert "shipyard-ship-build-time" not in shipyard_tpl
+    assert "render_compact_unit_stat_chips" in shipyard_tpl
+    assert "data-production-stats" not in shipyard_tpl
     defense_tpl = _read("templates/defense.html")
-    assert "render_production_stat_chips" in defense_tpl
-    assert "shipyard-ship-build-time" not in defense_tpl
+    assert "render_compact_unit_stat_chips" in defense_tpl
     css = _read("static/style.css")
-    assert ".gc-prod-stat-grid" in css
-    assert ".gc-prod-stat-chip" in css
+    assert ".gc-compact-stat-row" in css
+    assert ".gc-compact-chip" in css
     de = _read("locales/de.json")
     en = _read("locales/en.json")
-    assert '"prod_stat_cycle_label"' in de
-    assert '"prod_stat_parallel_label"' in de
-    assert '"prod_stat_cycle_label"' in en
-    assert '"prod_stat_parallel_label"' in en
+    assert '"ship_stat_attack"' in de
+    assert '"ship_stat_hull"' in de
+    assert '"ship_stat_attack"' in en
 
 
 def test_main_js_gc633_weighted_capacity_and_queue_clear():
@@ -1570,7 +1573,10 @@ def test_main_js_gc539_same_type_queue_patch_and_timer_zero():
     assert "function syncCardQueueOwnerClassesFromBlocks(cardEl, fallbackDomain)" in src
     assert "function requestQueueTimerZeroRefresh(meta)" in src
     assert 'GC.refreshGameState("queue_timer_zero")' in src
-    assert "refreshShipyardStateCoalesced(syPage)" in src.split("function requestQueueTimerZeroRefresh(meta)")[1].split("function requestTimerZeroRefresh")[0]
+    timer_zero_fn = src.split("function requestQueueTimerZeroRefresh(meta)")[1].split(
+        "function markCardQueueZeroRefresh"
+    )[0]
+    assert "refreshShipyardStateCoalesced" not in timer_zero_fn
     assert "QUEUE_TIMER_ZERO_DEBOUNCE_MS = 80" in src
     assert "function markCardQueueZeroRefresh(block, jobId, finishAt)" in src
     assert "function isQueueTimerComplete(remaining, finishAt, serverNow)" in src
