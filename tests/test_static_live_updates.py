@@ -1083,9 +1083,9 @@ def test_main_js_gc657_fleet_drawer_timer_selection_separation():
     assert "is-snap" in css
     assert "gc-fleet-hud-meta" in css
     row_css = css.split(".gc-fleet-hud-row,")[1].split(".gc-fleet-hud-main{")[0]
-    assert "grid-template-columns: minmax(0, 1fr) 36px 15.5rem" in row_css
+    assert "grid-template-columns: minmax(0, 38%) minmax(96px, 1fr) 18.5rem" in row_css
     meta_css = css.split(".gc-fleet-hud-meta{")[1].split(".gc-fleet-hud-leg{")[0]
-    assert "grid-template-columns: 3.4rem 3.75rem 2.85rem 5.5rem" in meta_css
+    assert "grid-template-columns: 3.6rem 4.5rem 3.4rem 6rem" in meta_css
 
 
 def test_main_js_gc654b_fleet_drawer_visual_polish():

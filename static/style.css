@@ -17139,23 +17139,23 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .gc-fleet-hud-row,
 .gc-fleet-drawer-row{
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 36px 15.5rem;
-  column-gap: 8px;
+  grid-template-columns: minmax(0, 38%) minmax(96px, 1fr) 18.5rem;
+  column-gap: 10px;
   align-items: center;
-  min-height: 16px;
-  padding: 0;
+  min-height: 17px;
+  padding: 1px 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   border-bottom: 1px solid rgba(120, 190, 255, 0.06);
-  font-size: 0.69rem;
-  line-height: 1.15;
+  font-size: 0.71rem;
+  line-height: 1.2;
 }
 
 .gc-fleet-hud-main{
   display: grid;
-  grid-template-columns: 4.75rem minmax(0, 1fr);
-  column-gap: 6px;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  column-gap: 8px;
   align-items: center;
   min-width: 0;
   overflow: hidden;
@@ -17165,10 +17165,9 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   position: relative;
   display: block;
   align-self: center;
-  width: 36px;
-  min-width: 36px;
-  max-width: 36px;
-  height: 10px;
+  width: 100%;
+  min-width: 96px;
+  height: 12px;
 }
 
 .gc-fleet-hud-track-line{
@@ -17272,13 +17271,13 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 
 .gc-fleet-hud-meta{
   display: grid;
-  grid-template-columns: 3.4rem 3.75rem 2.85rem 5.5rem;
-  column-gap: 4px;
+  grid-template-columns: 3.6rem 4.5rem 3.4rem 6rem;
+  column-gap: 6px;
   align-items: center;
   justify-items: end;
-  width: 15.5rem;
-  max-width: 15.5rem;
-  min-width: 15.5rem;
+  width: 18.5rem;
+  max-width: 18.5rem;
+  min-width: 18.5rem;
   white-space: nowrap;
 }
 
@@ -17287,7 +17286,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 0.56rem;
+  font-size: 0.58rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -17308,17 +17307,17 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.62rem;
+  font-size: 0.64rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  line-height: 1.15;
+  line-height: 1.2;
 }
 
 .gc-fleet-hud-route,
 .gc-fleet-drawer-row-route{
   min-width: 0;
-  font-size: 0.65rem;
+  font-size: 0.67rem;
   color: rgba(190, 220, 245, 0.78);
   line-height: 1.15;
   white-space: nowrap;
@@ -17332,7 +17331,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
-  font-size: 0.62rem;
+  font-size: 0.64rem;
   font-variant-numeric: tabular-nums;
   color: rgba(180, 210, 240, 0.58);
 }
@@ -17353,7 +17352,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   width: 100%;
   min-width: 0;
   text-align: right;
-  font-size: 0.64rem;
+  font-size: 0.66rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: rgba(127, 255, 217, 0.9);
@@ -17384,7 +17383,7 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
 .gc-fleet-hud-action-wrap{
   width: 100%;
   min-width: 0;
-  max-width: 5.5rem;
+  max-width: 6rem;
   overflow: hidden;
   justify-self: end;
 }
@@ -17398,9 +17397,9 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   text-overflow: ellipsis;
   border: 0;
   background: transparent;
-  padding: 0;
+  padding: 0 2px;
   min-height: 0;
-  font-size: 0.62rem;
+  font-size: 0.64rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
