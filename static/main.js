@@ -889,6 +889,9 @@
     const labelKey = String(ap.slot_label_key || theme.label_key || "").trim();
     const herocardUrl = String(ap.herocard_url || "").trim();
     const herocardWebp = String(ap.herocard_webp_url || "").trim();
+    const herocardSrcset = String(ap.herocard_webp_srcset || herocardWebp || "").trim();
+    const herocardSizes = String(ap.herocard_webp_sizes || "").trim();
+    const planetPosition = ap.position != null && ap.position !== "" ? String(ap.position) : "";
     const landscapeUrl = String(ap.landscape_url || "").trim();
 
     if (accent) hero.style.setProperty("--planet-accent", accent);
@@ -929,13 +932,18 @@
       delete hero.dataset.planetThemeGroup;
     }
 
+    if (planetPosition) hero.dataset.planetPosition = planetPosition;
+    else delete hero.dataset.planetPosition;
+
     const bgWrap = hero.querySelector("[data-overview-hero-bg]");
     if (bgWrap && herocardUrl) {
       const picture = bgWrap.querySelector("picture");
       const img = bgWrap.querySelector("img");
       const source = picture?.querySelector("source");
+      const heroPosition = String(hero.dataset.planetPosition || "").trim();
+      const samePlanet = planetPosition && heroPosition === planetPosition;
       const currentSrc = img?.currentSrc || img?.src || "";
-      const sameImage = currentSrc && (currentSrc === herocardUrl || currentSrc.endsWith(herocardUrl));
+      const sameImage = samePlanet && currentSrc && (currentSrc === herocardUrl || currentSrc.endsWith(herocardUrl));
       if (img && !sameImage) {
         img.style.opacity = "0";
         const onLoad = () => {
@@ -943,10 +951,16 @@
           img.removeEventListener("load", onLoad);
         };
         img.addEventListener("load", onLoad);
-        if (source && herocardWebp) source.srcset = herocardWebp;
+        if (source && herocardSrcset) {
+          source.srcset = herocardSrcset;
+          if (herocardSizes) source.sizes = herocardSizes;
+        }
         img.src = herocardUrl;
       } else if (img) {
-        if (source && herocardWebp) source.srcset = herocardWebp;
+        if (source && herocardSrcset) {
+          source.srcset = herocardSrcset;
+          if (herocardSizes) source.sizes = herocardSizes;
+        }
         img.src = herocardUrl;
       }
     }

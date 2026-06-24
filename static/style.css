@@ -10544,6 +10544,10 @@ body.gc-techtree-media-zoom-open{
   pointer-events: none;
   background-color: #020812;
   background-image: url("/static/img/map.png");
+  background-image: image-set(
+    url("/static/img/map.webp") type("image/webp"),
+    url("/static/img/map.png") type("image/png")
+  );
   background-repeat: repeat;
   background-size: 1600px 900px;
   background-position: 0 0;
@@ -10555,6 +10559,10 @@ body.gc-techtree-media-zoom-open{
   inset: 0;
   pointer-events: none;
   background-image: url("/static/img/map.png");
+  background-image: image-set(
+    url("/static/img/map.webp") type("image/webp"),
+    url("/static/img/map.png") type("image/png")
+  );
   background-repeat: repeat;
   background-size: 2300px 1294px;
   background-position: 400px 220px;

@@ -5002,6 +5002,8 @@ def _payload_from_live_context(
             get_landscape_for_position,
             get_planet_identity_for_position,
             herocard_static_relpath,
+            herocard_webp_srcset_for_position,
+            OVERVIEW_HEROCARD_SIZES,
             raster_webp_relpath,
         )
 
@@ -5032,6 +5034,8 @@ def _payload_from_live_context(
             "landscape_webp_url": url_for("static", filename=raster_webp_relpath(landscape_rel)),
             "herocard_url": url_for("static", filename=herocard_rel),
             "herocard_webp_url": url_for("static", filename=raster_webp_relpath(herocard_rel)),
+            "herocard_webp_srcset": herocard_webp_srcset_for_position(position, url_for),
+            "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
             "accent_color": theme["accent_color"],
             "secondary_color": theme["secondary_color"],
             "glow_color": theme["accent_color"],
@@ -5053,6 +5057,8 @@ def _payload_from_live_context(
             DEFAULT_LANDSCAPE,
             climate_economy_display_for_position,
             get_planet_identity_for_position,
+            herocard_webp_srcset_for_position,
+            OVERVIEW_HEROCARD_SIZES,
             raster_webp_relpath,
             temperature_range_for_position,
         )
@@ -5078,6 +5084,8 @@ def _payload_from_live_context(
             "landscape_webp_url": url_for("static", filename=raster_webp_relpath(fallback_rel)),
             "herocard_url": url_for("static", filename=fallback_herocard_rel),
             "herocard_webp_url": url_for("static", filename=raster_webp_relpath(fallback_herocard_rel)),
+            "herocard_webp_srcset": herocard_webp_srcset_for_position(0, url_for),
+            "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
             "accent_color": fallback_theme["accent_color"],
             "secondary_color": fallback_theme["secondary_color"],
             "glow_color": fallback_theme["accent_color"],

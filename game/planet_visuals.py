@@ -328,8 +328,58 @@ def landscape_webp_relpath(position: int) -> str:
 
 
 def herocard_webp_relpath(position: int) -> str:
-    """WebP hero card path for galaxy slot 1–15."""
+    """WebP hero card path for galaxy slot 1–15 (legacy md alias)."""
     return raster_webp_relpath(herocard_static_relpath(position))
+
+
+# GC-860B/C — responsive overview hero variants (widths match compress_p0_assets.py)
+HEROCARD_WEBP_VARIANTS: tuple[str, ...] = ("sm", "md", "lg")
+HEROCARD_WEBP_WIDTHS: dict[str, int] = {"sm": 320, "md": 560, "lg": 840}
+OVERVIEW_HEROCARD_SIZES = "(max-width: 768px) 100vw, (max-width: 1280px) 90vw, 1120px"
+HEROCARD_FALLBACK_WIDTH = 560
+HEROCARD_FALLBACK_HEIGHT = 373
+
+
+def _herocard_stem_from_png_relpath(png_relpath: str) -> str:
+    rel = str(png_relpath or "").strip().lstrip("/")
+    return rel.rsplit(".", 1)[0] if "." in rel else rel
+
+
+def herocard_variant_webp_relpath(position: int, variant: str) -> str:
+    """WebP variant path for overview hero (``sm`` | ``md`` | ``lg``)."""
+    stem = _herocard_stem_from_png_relpath(herocard_static_relpath(position))
+    key = str(variant or "md").strip().lower()
+    if key not in HEROCARD_WEBP_WIDTHS:
+        key = "md"
+    return f"{stem}-{key}.webp"
+
+
+def herocard_webp_srcset_parts_for_position(position: int) -> tuple[tuple[str, int], ...]:
+    """``(relpath, width)`` tuples for overview ``<source srcset>``."""
+    if position and int(position) >= 1:
+        png_rel = herocard_static_relpath(int(position))
+    else:
+        png_rel = f"img/herocards/{DEFAULT_HEROCARD}"
+    stem = _herocard_stem_from_png_relpath(png_rel)
+    return tuple(
+        (f"{stem}-{variant}.webp", HEROCARD_WEBP_WIDTHS[variant])
+        for variant in HEROCARD_WEBP_VARIANTS
+    )
+
+
+def format_static_srcset(
+    parts: tuple[tuple[str, int], ...],
+    static_url,
+) -> str:
+    """Build a ``srcset`` attribute from static relpaths and descriptor widths."""
+    return ", ".join(
+        f"{static_url('static', filename=rel)} {width}w" for rel, width in parts
+    )
+
+
+def herocard_webp_srcset_for_position(position: int, static_url) -> str:
+    """Absolute URL ``srcset`` for overview hero WebP variants."""
+    return format_static_srcset(herocard_webp_srcset_parts_for_position(position), static_url)
 
 
 def landscape_filename_for_planet(planet: dict | None) -> str:
@@ -371,6 +421,10 @@ def planet_theme_for_planet(planet: dict | None) -> Dict[str, Any]:
         "herocard": ident["herocard"],
         "herocard_relpath": herocard_rel,
         "herocard_webp_relpath": raster_webp_relpath(herocard_rel),
+        "herocard_webp_srcset_parts": herocard_webp_srcset_parts_for_position(pos),
+        "herocard_webp_sizes": OVERVIEW_HEROCARD_SIZES,
+        "herocard_fallback_width": HEROCARD_FALLBACK_WIDTH,
+        "herocard_fallback_height": HEROCARD_FALLBACK_HEIGHT,
         "label_key": ident["label_key"],
         "climate": climate_economy_display_for_position(pos),
     }

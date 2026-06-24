@@ -18,7 +18,10 @@
 {% set hero_theme_group = theme.theme_group or 'living' %}
 {% set hero_label_key = theme.label_key or 'planet_slot_08' %}
 {% set herocard_rel = theme.herocard_relpath or 'img/herocards/herocard_08.png' %}
-{% set herocard_webp_rel = theme.herocard_webp_relpath or 'img/herocards/herocard_08.webp' %}
+{% set herocard_srcset_parts = theme.herocard_webp_srcset_parts if theme.herocard_webp_srcset_parts is defined else [] %}
+{% set herocard_sizes = theme.herocard_webp_sizes or '(max-width: 768px) 100vw, (max-width: 1280px) 90vw, 1120px' %}
+{% set herocard_w = theme.herocard_fallback_width|default(560) %}
+{% set herocard_h = theme.herocard_fallback_height|default(373) %}
 {% set hero_landscape_rel = theme.landscape_relpath or 'img/landscapes/normaltempplanet01-h.jpg' %}
 
 <div class="gc-page overview-wrapper overview-command" data-planet-id="{{ planet.planet_id or 0 }}">
@@ -41,18 +44,20 @@
            data-planet-effect="{{ hero_effect }}"
            data-planet-theme-key="{{ hero_theme_key }}"
            data-planet-theme-group="{{ hero_theme_group }}"
-           data-slot-label-key="{{ hero_label_key }}">
+           data-slot-label-key="{{ hero_label_key }}"
+           data-planet-position="{{ planet.coordinates.position if planet.coordinates is defined and planet.coordinates.position is defined else '' }}">
     <div class="overview-hero-bg" data-overview-hero-bg aria-hidden="true">
       <picture>
         <source type="image/webp"
-                srcset="{{ url_for('static', filename=herocard_webp_rel) }}">
+                srcset="{% for rel, w in herocard_srcset_parts %}{{ url_for('static', filename=rel) }} {{ w }}w{% if not loop.last %}, {% endif %}{% endfor %}"
+                sizes="{{ herocard_sizes }}">
         <img src="{{ url_for('static', filename=herocard_rel) }}"
              alt=""
              loading="eager"
              fetchpriority="high"
              decoding="async"
-             width="1400"
-             height="933">
+             width="{{ herocard_w }}"
+             height="{{ herocard_h }}">
       </picture>
     </div>
     <div class="overview-hero-atmo" aria-hidden="true"></div>

@@ -1,6 +1,6 @@
 # GC-860B — P0 Asset Compression
 
-**Status:** DONE (assets + tooling). Template rollout → **GC-860C**.
+**Status:** DONE (assets + tooling). Template rollout → **GC-860C** (DONE).
 
 ## Scope (P0 only)
 
