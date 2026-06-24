@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import dataclass, field
 from typing import Dict, List, Sequence, Tuple, Any, Optional
 
 from .models import (
@@ -24,6 +25,83 @@ from .db import begin_write_transaction, commit, rollback, lock_planet_for_updat
 from .research import RESEARCH_TECHS
 from .effects import EffectResolver, get_effect_resolver
 from .ranking import invalidate_player_score_cache  # ✅ Cache invalidieren nach Finish
+
+# =============================================================================
+#   GC-854 — Shared per-request panel context (SSR / action payloads)
+# =============================================================================
+
+
+@dataclass
+class BuildingsPanelContext:
+    """One EffectResolver + production snapshot per buildings panel build."""
+
+    user_id: int
+    buildings: Dict[str, int]
+    research_levels: Dict[str, int]
+    ratio: float
+    resolver: EffectResolver
+    production_per_hour: Dict[str, int]
+    _bumped_production: Dict[Tuple[str, int], Dict[str, int]] = field(default_factory=dict)
+
+    @classmethod
+    def for_planet(
+        cls,
+        planet: dict,
+        buildings: Dict[str, int],
+        research_levels: Dict[str, int],
+        ratio: float,
+        *,
+        conn=None,
+    ) -> BuildingsPanelContext:
+        user_id = int(planet["player_id"])
+        resolver = get_effect_resolver(
+            user_id,
+            buildings=buildings,
+            research=research_levels,
+            conn=conn,
+            planet=planet,
+        )
+        return cls(
+            user_id=user_id,
+            buildings=dict(buildings),
+            research_levels=dict(research_levels),
+            ratio=float(ratio),
+            resolver=resolver,
+            production_per_hour=resolver.get_building_production_per_hour(float(ratio)),
+        )
+
+    def build_time_seconds(self, building_type: str, target_level: int) -> int:
+        return int(self.resolver.get_build_time_seconds(building_type, int(target_level)))
+
+    def max_level(self, building_type: str) -> int:
+        return int(self.resolver.get_max_building_level(building_type))
+
+    def resolver_at_target(self, building_type: str, target_level: int) -> EffectResolver:
+        bumped = dict(self.buildings)
+        bumped[building_type] = int(target_level)
+        base = self.resolver
+        return EffectResolver(
+            bumped,
+            self.research_levels,
+            settings=base._settings,
+            player_id=base.player_id,
+            planet_id=base.planet_id,
+            planet_position=base.planet_position,
+            galaxy_id=base.galaxy_id,
+            conn=base._conn,
+        )
+
+    def production_per_hour_at_target(self, building_type: str, target_level: int) -> Dict[str, int]:
+        key = (str(building_type), int(target_level))
+        cached = self._bumped_production.get(key)
+        if cached is not None:
+            return cached
+        prod = self.resolver_at_target(building_type, target_level).get_building_production_per_hour(
+            self.ratio
+        )
+        self._bumped_production[key] = prod
+        return prod
+
 
 # =============================================================================
 #   KONFIG: Gebäude-Keys / Reihenfolge / Tabs / Icons
@@ -555,22 +633,36 @@ def _panel_upgrade_effect_fields(
     target_level: int,
     ratio: float,
     research_levels: Dict[str, int],
+    *,
+    panel_ctx: Optional[BuildingsPanelContext] = None,
 ) -> Dict[str, Any]:
     """Authoritative upgrade preview per building (EffectResolver / production helpers)."""
-    from .logic import get_building_production_per_hour
+    if panel_ctx is not None:
+        r_now = panel_ctx.resolver
+        r_next = panel_ctx.resolver_at_target(building_type, target_level)
+    else:
+        from .logic import get_building_production_per_hour
 
-    bumped = dict(buildings)
-    bumped[building_type] = int(target_level)
-    r_now = EffectResolver(buildings, research_levels or {})
-    r_next = EffectResolver(bumped, research_levels or {})
+        r_now = EffectResolver(buildings, research_levels or {})
+        bumped = dict(buildings)
+        bumped[building_type] = int(target_level)
+        r_next = EffectResolver(bumped, research_levels or {})
 
     if building_type in BUILDING_PRODUCTION_RESOURCE:
-        prod_now = get_building_production_per_hour(
-            buildings, ratio, research=research_levels
-        )
-        prod_next = get_building_production_per_hour(
-            bumped, ratio, research=research_levels
-        )
+        if panel_ctx is not None:
+            prod_now = panel_ctx.production_per_hour
+            prod_next = panel_ctx.production_per_hour_at_target(building_type, target_level)
+        else:
+            from .logic import get_building_production_per_hour
+
+            prod_now = get_building_production_per_hour(
+                buildings, ratio, research=research_levels
+            )
+            bumped = dict(buildings)
+            bumped[building_type] = int(target_level)
+            prod_next = get_building_production_per_hour(
+                bumped, ratio, research=research_levels
+            )
         out = _panel_effect_snapshot(
             effect_kind="production",
             effect_current=int(prod_now.get(building_type, 0) or 0),
@@ -1117,6 +1209,8 @@ def _make_panel_row(
     queue_count: int = 0,
     ratio: float = 1.0,
     queue_free_slots: int = 0,
+    *,
+    panel_ctx: Optional[BuildingsPanelContext] = None,
 ) -> Dict[str, Any]:
     from .live_state import current_ssr_perf
 
@@ -1124,20 +1218,32 @@ def _make_panel_row(
     tech_t0 = time.perf_counter() if ssr is not None else 0.0
 
     level = int(buildings.get(building_type, 0) or 0)
-    max_level = get_max_level_for_building(building_type, buildings)
+    if panel_ctx is not None:
+        max_level = panel_ctx.max_level(building_type)
+    else:
+        max_level = get_max_level_for_building(building_type, buildings)
     queued_same = int(queue_count or 0)
     at_queue_max = (level + queued_same) >= max_level
     target_level = min(level + queued_same + 1, max_level)
 
     cost_metal, cost_crystal = get_upgrade_cost(building_type, level + queued_same)
-    time_seconds = get_build_time(building_type, target_level, user_id=planet.get("player_id"))
+    if panel_ctx is not None:
+        time_seconds = panel_ctx.build_time_seconds(building_type, target_level)
+    else:
+        time_seconds = get_build_time(
+            building_type,
+            target_level,
+            user_id=planet.get("player_id"),
+            buildings=buildings,
+            research_levels=research_levels,
+        )
 
     req_met = has_building_requirements(buildings, research_levels, building_type)
     planet_metal = float(planet.get("metal", 0) or 0)
     planet_crystal = float(planet.get("crystal", 0) or 0)
     can_afford = planet_metal >= cost_metal and planet_crystal >= cost_crystal
     max_queue_preview: Dict[str, Any] = {"jobs": 0}
-    if req_met and not at_queue_max:
+    if req_met and not at_queue_max and can_afford and int(queue_free_slots) > 0:
         max_queue_preview = summarize_max_queueable_build_jobs(
             building_type,
             current_level=level,
@@ -1149,6 +1255,7 @@ def _make_panel_row(
             user_id=planet.get("player_id"),
             buildings=buildings,
             research_levels=research_levels,
+            panel_ctx=panel_ctx,
         )
 
     row: Dict[str, Any] = {
@@ -1171,7 +1278,7 @@ def _make_panel_row(
     }
     row.update(
         _panel_upgrade_effect_fields(
-            building_type, buildings, target_level, ratio, research_levels
+            building_type, buildings, target_level, ratio, research_levels, panel_ctx=panel_ctx
         )
     )
     if building_type in ("metal_mine", "crystal_mine", "fuel_cell_plant") and target_level >= 1:
@@ -1203,6 +1310,7 @@ def get_buildings_panel_rows(
 
     research_levels = get_research_levels(user_id=int(user_id))
     ratio = _panel_energy_ratio(buildings, research_levels)
+    panel_ctx = BuildingsPanelContext.for_planet(planet, buildings, research_levels, ratio)
 
     queue_counts: Dict[str, int] = {}
     if build_queue and isinstance(build_queue.get("queue"), list):
@@ -1248,6 +1356,7 @@ def get_buildings_panel_rows(
             queue_count=queue_counts.get(key, 0),
             ratio=ratio,
             queue_free_slots=queue_free_slots,
+            panel_ctx=panel_ctx,
         )
         rows_by_tab.setdefault(row["tab"], []).append(row)
 
@@ -1278,6 +1387,7 @@ def get_buildings_panel_delta(
 
     research_levels = get_research_levels(user_id=int(user_id))
     ratio = _panel_energy_ratio(buildings, research_levels)
+    panel_ctx = BuildingsPanelContext.for_planet(planet, buildings, research_levels, ratio)
 
     queue_counts: Dict[str, int] = {}
     if build_queue and isinstance(build_queue.get("queue"), list):
@@ -1309,6 +1419,7 @@ def get_buildings_panel_delta(
             queue_count=queue_counts.get(key, 0),
             ratio=ratio,
             queue_free_slots=queue_free_slots,
+            panel_ctx=panel_ctx,
         )
         rows_by_tab.setdefault(row["tab"], []).append(row)
 
@@ -1358,6 +1469,7 @@ def get_overview_building_rows(
 
     research_levels = get_research_levels(user_id=int(user_id))
     ratio = _panel_energy_ratio(buildings, research_levels)
+    panel_ctx = BuildingsPanelContext.for_planet(planet, buildings, research_levels, ratio)
 
     queue_counts: Dict[str, int] = {}
     if build_queue and isinstance(build_queue.get("queue"), list):
@@ -1375,6 +1487,7 @@ def get_overview_building_rows(
             key,
             queue_count=queue_counts.get(key, 0),
             ratio=ratio,
+            panel_ctx=panel_ctx,
         )
         rows.append(row)
     return rows
@@ -1426,6 +1539,7 @@ def summarize_max_queueable_build_jobs(
     user_id: Optional[int] = None,
     buildings: Optional[Dict[str, int]] = None,
     research_levels: Optional[Dict[str, int]] = None,
+    panel_ctx: Optional[BuildingsPanelContext] = None,
 ) -> Dict[str, Any]:
     """Preview payload for MAX queue UX: levels, total cost, cumulative build time."""
     jobs = preview_max_queueable_build_jobs(
@@ -1449,15 +1563,18 @@ def summarize_max_queueable_build_jobs(
         total_m += float(cost_m)
         total_c += float(cost_c)
         target = eff + 1
-        total_sec += int(
-            get_build_time(
-                building_type,
-                target,
-                user_id=user_id,
-                buildings=buildings,
-                research_levels=research_levels,
+        if panel_ctx is not None:
+            total_sec += panel_ctx.build_time_seconds(building_type, target)
+        else:
+            total_sec += int(
+                get_build_time(
+                    building_type,
+                    target,
+                    user_id=user_id,
+                    buildings=buildings,
+                    research_levels=research_levels,
+                )
             )
-        )
     return {
         "jobs": int(jobs),
         "from_level": from_level,

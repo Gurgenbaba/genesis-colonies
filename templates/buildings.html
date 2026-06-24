@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_raster_picture, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
+{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
 {% from "partials/building_effect_strip.html" import render_building_effect_bundle, render_building_card_footer with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 {% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
@@ -14,10 +14,32 @@
   <div class="gc-bld-hero-img-stack{% if _active %} gc-bld-hero-img-stack--progress{% endif %}"
        {% if _active %}style="--hero-progress-pct: {{ qj.progress_pct|default(0)|int }}%;"{% endif %}>
     {% if _active %}
-      {{ render_raster_picture(src, '', 'gc-bld-card-hero-img gc-bld-card-hero-img--muted', hero_lazy, hero_lazy, _onerr) }}
-      {{ render_raster_picture(src, '', 'gc-bld-card-hero-img gc-bld-card-hero-img--color', hero_lazy, hero_lazy, _onerr) }}
+      <img src="{{ src }}"
+           alt=""
+           class="gc-bld-card-hero-img gc-bld-card-hero-img--muted"
+           width="320"
+           height="180"
+           loading="lazy"
+           decoding="async"
+           fetchpriority="low"
+           onerror="{{ _onerr }}">
+      <img src="{{ src }}"
+           alt=""
+           class="gc-bld-card-hero-img gc-bld-card-hero-img--color"
+           width="320"
+           height="180"
+           loading="lazy"
+           decoding="async"
+           fetchpriority="low"
+           onerror="{{ _onerr }}">
     {% else %}
-      {{ render_raster_picture(src, '', 'gc-bld-card-hero-img', hero_lazy, hero_lazy, _onerr) }}
+      <img src="{{ src }}"
+           alt=""
+           class="gc-bld-card-hero-img"
+           width="320"
+           height="180"
+           {% if hero_lazy %}loading="lazy" decoding="async" fetchpriority="low"{% else %}loading="eager" decoding="async" fetchpriority="high"{% endif %}
+           onerror="{{ _onerr }}">
     {% endif %}
   </div>
 {% endmacro %}
@@ -147,10 +169,6 @@
       {% for b in rows %}
         {% set building_type = b.key %}
         {% set is_max = (b.level >= b.max_level) or (b.at_queue_max if b.at_queue_max is defined else false) %}
-        {% set desc = T('desc_' ~ building_type) %}
-        {% if desc == 'desc_' ~ building_type %}
-          {% set desc = '' %}
-        {% endif %}
         {% set req_tooltip = render_req_tooltip(b.requirements_items) | trim %}
         {% set row_class = '' %}
         {% if is_max %}
