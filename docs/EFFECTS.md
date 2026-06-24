@@ -8,10 +8,10 @@ Consumers (`resources`, `buildings`, `research`) delegate to these modules; the 
 | Area | Status | Notes |
 |------|--------|--------|
 | Economy (production, energy, storage) | **Fixed** | Applied on every resource tick / derived sync; includes galactic directives + diplomacy (GC-720E, GC-721H) |
-| Time (build, research, lab, academy, nanofactory) | **Fixed** | `get_build_time_seconds`, `get_research_time_seconds` |
+| Time (build, research, lab, academy, nanofactory) | **Fixed** | `get_build_time_seconds`, `get_research_time_seconds` — build uses **legacy exponential** until wired to `power_build_seconds()` |
 | Building caps (core nexus, geothermal) | **Fixed** | Max levels for mines/solar/fuel/storage; terraform = storage bonus only |
 | Combat (`weapon_tech`, `armor_tech`, `shield_tech`) | **Fixed** | Applied in `simulate_battle()` via `EffectResolver.get_combat_modifiers()` — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
-| Fleet (`navigation_tech`, `engine_tech`) | **Prepared only** | Modifiers computed; **no fleet engine** |
+| Fleet (`navigation_tech`, `engine_tech`, `fuel_efficiency`) | **Fixed** | `fleet_speed_multiplier`, `fuel_efficiency_factor` — consumed in `fleet.py` / `fleet_calc.py` |
 | Radar (`radar_array` → `scan_range`) | **Prepared only** | **No scan/galaxy engine** |
 | Multi-universe | **Not supported** | Single SQLite DB; `universe_name` is display config only — **no `universe_id` in schema** |
 
@@ -22,7 +22,11 @@ Prepared modifiers may appear in:
 - Admin debug: `GET /api/admin/player/<id>/effects` (`modifiers_prepared`, `sources_prepared`)
 - Future UI tooltips / tech tree “planned” hints
 
-Combat and fleet modifiers are **active** where documented in [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) and [FLEET_SYSTEM.md](FLEET_SYSTEM.md). Radar (`scan_range`) remains prepared until a scan engine consumes it.
+Combat and fleet modifiers are **active** where documented in [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) and [FLEET_SYSTEM.md](FLEET_SYSTEM.md). Only `scan_range` remains prepared until a scan engine consumes it.
+
+### Build time note (GC-821)
+
+`economy_balance.power_build_seconds()` defines the design curve (`TIME_K × level^exponent`). **Live queue path** still uses legacy `BUILD_TIME_BASE × BUILD_TIME_FACTOR^(level-1)` in `get_build_time_seconds()`. See [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) and [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md).
 
 ### Galactic directives (GC-720E / GC-720E2)
 

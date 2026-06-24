@@ -151,7 +151,9 @@ Owner: `game/queue_refund.py` — **single source** for cancel refund ratios and
 
 Applies to: `build_queue`, `research_queue`, `planet_research_queue`, `shipyard_queue`, `defense_queue`.
 
-Stored-cost queues (shipyard, defense) refund from `cost_metal` / `cost_crystal` / `cost_fuel_cells` on the row. Build/research recompute cost from canonical formulas at cancel time (same level basis as enqueue).
+Stored-cost queues (shipyard, defense) refund from `cost_metal` / `cost_crystal` / `cost_fuel_cells` on the row.
+
+Build/research: refund prefers **stored snapshot** on the row (`cost_metal`/`cost_crystal` from Migration 076 enqueue); falls back to recomputing from canonical formulas at cancel time.
 
 Cancel handlers must call `finish_due_work` first, then refund, then delete job, then reschedule — see [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md).
 

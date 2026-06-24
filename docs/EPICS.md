@@ -2,7 +2,7 @@
 
 Epics sind **Ziele**, keine Implementierungsaufgaben. Jedes Epic wird in Tickets (GC-XXX) zerlegt.
 
-Status: v1.5.3
+Status: v1.5.9.2 (2026-06-24)
 
 | Epic | Titel | Status | Master-Doc |
 |------|-------|--------|------------|

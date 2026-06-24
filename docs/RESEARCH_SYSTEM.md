@@ -1,6 +1,7 @@
 # Research System
 
-Account-weite Technologie-Forschung (v1.5.3).
+Account-weite Technologie-Forschung.  
+**Stand:** v1.5.9.x · Ankerkurven: [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md)
 
 **Abgrenzung:** Planet-spezifische Forschung (Evolution) lebt in `game/planet_evolution/planet_research.py` — nicht dieses Dokument.
 
@@ -24,7 +25,7 @@ Account-weite Technologie-Forschung (v1.5.3).
 | `shield_tech` | shield | 3 (+ armor_tech 1) |
 | `fuel_efficiency` | propulsion | 2 (+ energy_tech 1) |
 
-Jede Tech: `base_cost_m/c`, `base_time`, `cost_factor`, verschachtelte Tech-Requirements.
+Jede Tech: `base_cost_m/c`, `base_time`, `cost_factor` (Tier-Referenz), verschachtelte Tech-Requirements.
 
 ---
 
@@ -48,9 +49,10 @@ Jede Tech: `base_cost_m/c`, `base_time`, `cost_factor`, verschachtelte Tech-Requ
 | Override | `game_settings.research_queue_limit` |
 | Scheduling | Sequenziell; nach Cancel/Enqueue: `recalculate_research_queue_finish_times()` (GC-510) |
 | Finish | `queue_engine.finish_player_research_jobs` |
-| Cancel | Kein Refund; Restqueue wird neu terminiert |
+| Cancel | **GC-831 Refund** (100 % pending / 50 % active); Restqueue neu terminiert |
 
-Migration `008`: `research_queue.start_at` für präzise UI-Fortschritte.
+Migration `008`: `research_queue.start_at` für präzise UI-Fortschritte.  
+Kosten-Snapshot auf Row: Migration `076`.
 
 ---
 
@@ -58,13 +60,13 @@ Migration `008`: `research_queue.start_at` für präzise UI-Fortschritte.
 
 `EffectResolver.get_research_time_seconds()` (GC-825):
 
-- **Basis:** Log-Anker in `economy_balance.research_time_anchor_hours()` (L10 ≈ 1,5 h … L120 ≈ 180 d)
+- **Basis:** Log-Anker in `economy_balance.research_time_anchor_hours()` (L10 = 1,5 h … L120 = 4320 h)
 - **Tech-Tier:** `base_time / 840` (energy_tech = 1,0)
-- ÷ Settings: `build_speed`, `research_speed`
-- ÷ `research_lab_bonus` (+10%/Level über 1)
-- ÷ `research_time_speed` (buildtime_tech, academy)
+- ÷ Settings: `build_speed` (Default **1.1**), `research_speed` (Default **0.85**)
+- ÷ `research_lab_bonus` (+10 %/Level über 1)
+- ÷ `research_time_speed` (buildtime_tech, academy +5 %/Level)
 
-**Kosten:** `economy_balance.research_upgrade_cost()` — Power-Kurve + Tech-Tier aus `base_cost_m/c` (kein `cost_factor^level` mehr).
+**Kosten:** `economy_balance.research_upgrade_cost()` — Power-Kurve + Tech-Tier aus `base_cost_m/c`.
 
 Legacy-Exponential (`base_time × cost_factor^(level-1)`) nur noch als Audit-Helfer in `economy_balance`.
 
@@ -72,22 +74,25 @@ Legacy-Exponential (`base_time × cost_factor^(level-1)`) nur noch als Audit-Hel
 
 ## EffectResolver-Integration
 
-**Aktiv (Economy/Time):**
+**Aktiv (Economy / Time / Combat / Fleet):**
 
 | Tech | Effekt |
 |------|--------|
 | `energy_tech` | `mine_energy_factor` |
 | `mining_tech`, `drone_tech` | Prod-Faktoren |
-| `storage_tech` | `storage_factor` |
+| `storage_tech` | `storage_factor` (+25 %/Lvl) |
 | `buildtime_tech` | Build + research speed |
+| `weapon_tech`, `armor_tech`, `shield_tech` | Combat modifiers → `simulate_battle()` |
+| `navigation_tech`, `engine_tech` | `fleet_speed_multiplier` → `fleet.py` / `fleet_calc.py` |
+| `fuel_efficiency` | `fuel_efficiency_factor` → `fleet_calc.calculate_fuel_cost()` |
 
-**Prepared (noch kein Consumer):**
+**Prepared only:**
 
-`weapon_tech`, `armor_tech`, `shield_tech` → Combat modifiers  
-`navigation_tech`, `engine_tech` → `fleet_speed_multiplier` (prepared in resolver)  
-`fuel_efficiency` → `fuel_efficiency_factor` (active — `fleet_calc.calculate_fuel_cost`)
+| Key | Effekt |
+|-----|--------|
+| `scan_range` (via `radar_array`) | Kein Scan/Galaxy-Engine |
 
-Details: [EFFECTS.md](EFFECTS.md) — prepared modifiers **nicht** als aktiv bewerben.
+Details: [EFFECTS.md](EFFECTS.md), [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md), [FLEET_SYSTEM.md](FLEET_SYSTEM.md).
 
 Research-Effekte skalieren linear pro Level ohne Balancing-Cap. Anzeige-% ist unbegrenzt; Gameplay clampet nur physisch (Verbrauch ≥ 0, Zeiten ≥ 1s).
 
@@ -109,11 +114,10 @@ Tech-Tree Visualisierung: `/techtree` (`game/techtree.py`).
 ## UI
 
 - Template: `templates/research.html`
-- **Queue-UX (GC-536C):** Status in jeder Tech-Card (`queue_job` via `game/queue_card.py` + `_attach_queue_jobs_to_research_techs`)
-- Kompakt-Header: `#research-queue-compact` — nur Zähler (`🔬 N Forschungen aktiv`)
-- Chip: empire lab level
+- **Queue-UX (GC-536C):** Status in jeder Tech-Card (`queue_job` via `game/queue_card.py`)
+- Kompakt-Header: `#research-queue-compact`
 - Poll: `research.techs` + `research.queue` in game-state
-- Card-Queue: `GC.renderCardQueueBlock` (domain `research`) / `.gc-card-queue-block--research`
+- Card-Queue: `GC.renderCardQueueBlock` (domain `research`)
 
 ---
 
@@ -127,5 +131,5 @@ Tech-Tree Visualisierung: `/techtree` (`game/techtree.py`).
 ## Tests
 
 ```bash
-python -m pytest tests/test_research_requirements.py tests/test_effects.py tests/test_game_state_live.py -v
+python -m pytest tests/test_research_requirements.py tests/test_gc825_research_time_rebalance.py tests/test_effects.py tests/test_game_state_live.py tests/test_gc831_queue_refund.py -v
 ```

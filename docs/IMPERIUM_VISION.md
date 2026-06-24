@@ -2,7 +2,9 @@
 
 > **Genesis Colonies soll langfristig kein Spiel über das Verwalten von 18 einzelnen Planeten sein. Genesis Colonies soll ein Spiel über die Entwicklung eines Sternenreiches sein. Planet Evolution ist das zentrale Fortschrittssystem. Die Command Map ist die visuelle Darstellung dieses Fortschritts. Alle neuen Systeme müssen auf den bestehenden Planet-Scope-, Fleet-, Galaxy- und Planet-Evolution-Systemen aufbauen und dürfen keine parallelen Architekturen erzeugen.**
 
-Epic: **EPIC-15 Imperium & Expansion** · Status: 📋 Vision / Backlog · Stand: v1.5.3
+Epic: **EPIC-15 Imperium & Expansion** · **MVP shipped** (Command Map, Colonization, Influence) · Vision-Backlog für GC-598+ · Stand: v1.5.9.2
+
+Live-Status: [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) · Command Map: [GC-570_WORLD_MAP_DIRECTION.md](GC-570_WORLD_MAP_DIRECTION.md)
 
 Referenz-Mockup (Richtung, **keine** 1:1-UI-Vorlage): Command Map / Empire Screen — Regionen, benannte Orte, Einflussgebiete, Handelsrouten, Chokepoints.
 

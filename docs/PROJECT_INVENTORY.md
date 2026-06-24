@@ -1,6 +1,6 @@
 # Genesis Colonies — Project Inventory
 
-**Stand:** GC-601B (2026-06-05) — Doc-Reality-Sync; Logistics GC-900E ✅.
+**Stand:** v1.5.9.2 (2026-06-24) — Doc-Reality-Sync; siehe [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) für Economy-Anker.
 
 Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `static/main.js`, pytest-Dateien, Master-Docs.
 
@@ -16,7 +16,7 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Defense** | `defense.py`, `defense_api.py`, `defense_defs.py` | `/defense` | `/api/defense*`, `{ok,state,queue,defenses}` | `test_defense_phase1`, `test_defense_detail_modal` | ✅ | GC-600 done; Seiten-Poll dokumentiert |
 | **Fleet** | `fleet.py`, `fleet_calc.py`, `fleet_api.py` | `/fleet` | `/api/fleet/*` | `test_fleet.py` (groß) | ✅ | — |
 | **Galaxy** | `galaxy.py` | `/galaxy`, PJAX | `GET /api/galaxy/system` | `test_galaxy.py` | ✅ | — |
-| **Combat** | `combat.py`, `combat_models.py` | Reports in Messages | Kein eigener Spieler-POST; Tick in `fleet.py` | `test_combat.py` (36 Tests) | ✅ | GC-700 = Lücken/Polish, kein Greenfield |
+| **Combat** | `combat.py`, `combat_models.py` | Reports in Messages | Kein eigener Spieler-POST; Tick in `fleet.py` | `test_combat.py` | ✅ | GC-700 = Lücken/Polish, kein Greenfield |
 | **Recycler** | `combat.py` debris + `fleet.py` mission `recycle` | `/fleet` + Galaxy debris actions | `send_fleet` / preview | `test_recycler.py` | ✅ | GC-800C UX optional |
 | **Logistics** | Collect ✅ / Distribute ✅ | `/logistics` (Collect + Distribute) | `…/collect`, `…/distribute` + `state` | `test_fleet_logistics.py` | ✅ | `auto_cargo` optional (Phase 2) |
 | **Messages** | `messages.py` | `/messages`, `messages.js` | `/api/messages/*` | `test_messages.py` | ✅ | ⚠️ `href`-Fallback (GC-512C) |
@@ -27,6 +27,13 @@ Audit-Methode: Module in `game/`, Routen in `app.py`, UI in `templates/` + `stat
 | **Admin** | `admin.py`, `admin_api.py` | `/admin`, `admin.js` | `/api/admin/*` | `test_admin_*` | ✅ | ⚠️ Legacy Forms parallel |
 | **Support** | `support.py` | Options/Support UI | `/api/support/*`, admin support | — | ✅ | Mehr pytest optional |
 | **Options** | `options.py`, `account_email.py` | `/options`, `options.js` | `/api/options/*` | `test_options.py`, `test_account_email` | ✅ | — |
+| **Empire / Command Map** | `planet_evolution/command_map.py`, `world_map.py` | `/empire` | `/api/command-map/*` | `test_command_map*.py`, `test_world_map.py` | ✅ | GC-598 mission actions backlog |
+| **Inventory** | `inventory.py`, `inventory_loot.py` | `/inventory` | `/api/inventory/*` | `test_inventory*.py` | ✅ | — |
+| **Auction House** | `auction_house.py` | `/auction-house` | `/api/auction-house/*` | `test_auction_house.py` | ✅ | — |
+| **Vote Center** | `vote_rewards.py` | `/vote-center` | `/api/vote/*` | `test_vote_rewards.py` | ✅ | — |
+| **Galactic Politics** | `galactic_directives/`, `galactic_diplomacy/` | `/galactic-politics` | `/api/galactic-politics/*` | `test_galactic_*.py` | ✅ | — |
+| **Referrals** | `referrals.py` | `/referrals` | `/api/referrals/*` | `test_referrals.py` | ✅ | — |
+| **Meta content** | news, chronicles, hall-of-fame, records | `/news`, … | read APIs | various | ✅ | — |
 
 ---
 
@@ -45,17 +52,17 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 
 ---
 
-## Doc-Reality Gaps (GC-601)
+## Doc-Reality Gaps (offen)
 
-| Doc | Problem | Korrektur |
-|-----|---------|-----------|
-| `ARCHITECTURE.md` Systemdiagramm | `defense*`, `combat*` nicht in `game/`-Liste | Ergänzt in GC-601 |
-| `ROADMAP.md` Phase 4 | Combat/Defense ✅ — korrekt; GC-700 war als „neu bauen“ missverständlich | GC-700 = Readiness/Polish |
-| `DEFENSE_SYSTEM.md` | Beschreibt teils Combat — korrekt verlinkt | Kein Widerspruch |
-| `COMBAT_SYSTEM.md` | Status ✅ — entspricht `test_combat.py` + `fleet.py` attack path | — |
-| Ticket GC-600 (Defense Phase 1) | Lücke war `applyActionState` + Tests | GC-600 ✅ |
-| ALPHA_TESTPLAN §9 Defense Platzhalter | Veraltet | GC-601B → §9b Live-QA |
-| ROADMAP Tech Debt Recycler fehlt | Veraltet (GC-800 ✅) | GC-601B entfernt / GC-800C optional |
+| Doc | Problem | Status |
+|-----|---------|--------|
+| `BUILDINGS_SYSTEM.md` / `RESEARCH_SYSTEM.md` | Cancel refunds, Kosten/Zeit | ✅ Reality-Sync 2026-06-24 |
+| `ECONOMY_SYSTEM.md` | Storage 150k, fuel_storage, loot floors | ✅ Reality-Sync 2026-06-24 |
+| `EffectResolver` build time | Legacy exponential vs GC-821 design | ⚠️ Code gap — dokumentiert in [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) |
+| Shipyard envelope | `{ok,data}` statt `{ok,state}` | ⚠️ GC-512D backlog |
+| Alliance backend | Minimal | 🔄 MVP backlog |
+
+Historisches GC-601 Audit: [GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md](GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md) (closed).
 
 ---
 

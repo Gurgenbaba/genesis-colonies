@@ -1,6 +1,7 @@
 # Buildings System
 
-Gebäude, Kosten, Requirements und Bau-Queue (v1.5.3).
+Gebäude, Kosten, Requirements und Bau-Queue.  
+**Stand:** v1.5.9.x · Kosten/ROI: [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md)
 
 Kanonischer Gebäude-Key für Werft: **`orbital_shipyard`** (Legacy-Alias `shipyard` wird beim Lesen gemappt).
 
@@ -17,7 +18,7 @@ Kanonischer Gebäude-Key für Werft: **`orbital_shipyard`** (Legacy-Alias `shipy
 | **military** | `orbital_shipyard`, `defense_factory`, `barracks`, `radar_array` |
 | **infrastructure** | `command_center`, `shield_generator`, `terraformer`, `nanofactory`, `geothermal_nexus`, `planet_core_nexus` |
 
-`MAX_BUILDING_LEVEL = 50` (Basis). **L51+** nur über Nexus (GC-821 Endgame-Gate, nicht blind L120):
+`MAX_BUILDING_LEVEL = 50` (Basis). **L51+** nur über Nexus (GC-821 Endgame-Gate):
 
 | Gebäude | Cap-Formel |
 |---------|------------|
@@ -41,11 +42,23 @@ Queue-Cancel-Refunds: [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) (GC-831).
 
 ## Kosten & Zeit
 
-**Kosten:** `BASE_COST[type] × COST_FACTOR^(target_level - 1)` → metal + crystal
+### Upgrade-Kosten (live)
 
-**Zeit:** `BUILD_TIME_BASE × BUILD_TIME_FACTOR^(level-1)` ÷ EffectResolver `get_build_time_seconds()`
+**Kosten:** `economy_balance.power_upgrade_cost()` via `get_upgrade_cost()` — Power-Kurven + Minen-ROI-Anker (GC-821 / GC-821F).
 
-Modifier: `buildtime_tech`, `nanofactory`, `build_speed` (Settings).
+Legacy `BASE_COST × COST_FACTOR^(level-1)` nur noch Audit/Tests — **nicht** der Live-Pfad.
+
+### Build-Zeit (live)
+
+**Zeit:** `EffectResolver.get_build_time_seconds()` — aktuell **Legacy-Exponential**:
+
+```text
+BUILD_TIME_BASE × BUILD_TIME_FACTOR^(target_level - 1) ÷ build_speed ÷ nanofactory ÷ buildtime_tech
+```
+
+**Design-Kurve (GC-821, noch nicht im Resolver):** `economy_balance.power_build_seconds()` — `TIME_K × level^exponent`. Siehe [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) §5–6.
+
+Modifier: `buildtime_tech`, `nanofactory`, `build_speed` (Default **1.1**).
 
 ---
 
@@ -53,10 +66,12 @@ Modifier: `buildtime_tech`, `nanofactory`, `build_speed` (Settings).
 
 | Gebäude | Voraussetzung |
 |---------|---------------|
-| `fuel_cell_plant` | solar_plant ≥1, crystal_mine ≥2 — produziert Brennzellen (reine Produktion) |
-| `fuel_storage` | fuel_cell_plant ≥4 — Brennzellen-Lagerkapazität (wie Metal/Crystal Storage) |
+| `fuel_cell_plant` | solar_plant ≥1, crystal_mine ≥2 |
+| `fuel_storage` | fuel_cell_plant ≥4 |
 | `research_lab` | metal_mine ≥3, crystal_mine ≥2 |
+| `academy` | research_lab ≥2 |
 | `orbital_shipyard` | command_center ≥2 |
+| `defense_factory` | orbital_shipyard ≥2 |
 | `terraformer` | command_center ≥4, storages ≥3, storage_tech ≥1 |
 | `planet_core_nexus` | command_center ≥6, nanofactory ≥2, geothermal_nexus ≥1, storage_tech ≥3, energy_tech ≥4 |
 
@@ -69,11 +84,11 @@ Vollständige Map: `BUILDING_REQUIREMENTS` in `game/buildings.py`.
 | Eigenschaft | Wert |
 |-------------|------|
 | Tabelle | `build_queue` |
-| Limit | `game_settings.queue_limit` (Default **3**, min 1) |
+| Limit | `game_settings.queue_limit` (Default **5**, Code-Fallback **3** wenn Setting fehlt) |
 | Scheduling | Sequenziell; nach Cancel/Enqueue: `recalculate_build_queue_finish_times()` |
-| Zahlung | Sofort metal/crystal via `try_spend_resources_conn` |
+| Zahlung | Sofort metal/crystal via `try_spend_resources_conn`; Kosten-Snapshot auf Row (Migration 076) |
 | Finish | `queue_engine.finish_player_build_jobs` → Level++ |
-| Cancel | Kein Refund; Restqueue wird neu terminiert (GC-510) |
+| Cancel | **GC-831 Refund** (100 % pending / 50 % active); Restqueue neu terminiert |
 
 Due-Finisher läuft vor jeder Mutation und in `refresh_player_live_state()`.
 
@@ -95,8 +110,8 @@ Antwort: `{ ok, reason, job?, state }` — immer frischer game-state.
 ## UI
 
 - Template: `templates/buildings.html` — 4 Tabs
-- **Queue-UX (GC-536B / GC-644C):** Kompakt-Header `#build-queue-compact` (aktiver + optional nächster Job) + Card-Queues pro Gebäude
-- **Kein globaler Queue-HUD** unter der Ressourcenleiste — Bauschleifen nur auf der jeweiligen Seite (wie Research/Werft/Verteidigung)
+- **Queue-UX (GC-536B / GC-644C):** Kompakt-Header `#build-queue-compact` + Card-Queues pro Gebäude
+- **Kein globaler Queue-HUD** unter der Ressourcenleiste
 - Buttons: `.btn-upgrade` → intercepted → POST API
 - Card-Queue: `GC.renderCardQueueBlock` / `.gc-card-queue-block` (Timer + Progress aus Poll)
 
@@ -106,7 +121,7 @@ Panel-Daten: `get_buildings_panel_rows()` für SSR + Poll `buildings_panel` (ink
 
 ## EffectResolver
 
-- Build time: `get_build_time_seconds()`
+- Build time: `get_build_time_seconds()` (Legacy-Pfad, siehe oben)
 - Max level caps für Minen/Solar/Storage
 - Storage capacity für Economy
 
@@ -118,7 +133,7 @@ Siehe [EFFECTS.md](EFFECTS.md).
 
 1. Key in `BUILDING_KEYS` / `BUILDING_ORDER`
 2. Spalte in `planet_buildings` (Baseline + Migration)
-3. `BASE_COST`, `BUILD_TIME_*`, optional `BUILDING_REQUIREMENTS`
+3. `BUILDING_UPGRADE_CURVES` / `BUILD_TIME_CURVES` in `economy_balance.py` (+ Legacy `BASE_COST` für Audit)
 4. Template-Zeile in `buildings.html`
 5. EffectResolver-Hooks falls nötig
 6. pytest: Queue + Persistence
@@ -130,5 +145,5 @@ Siehe [EFFECTS.md](EFFECTS.md).
 ## Tests
 
 ```bash
-python -m pytest tests/test_race_conditions.py tests/test_game_state_live.py tests/test_effects.py -v -k "build"
+python -m pytest tests/test_race_conditions.py tests/test_game_state_live.py tests/test_effects.py tests/test_gc821_economy_rebalance.py tests/test_gc831_queue_refund.py -v -k "build"
 ```

@@ -133,7 +133,7 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-Erwartung: **alle Tests grün** (aktuell 513 Tests).
+Erwartung: **alle Tests grün** (aktuell 2119+ Tests — `python -m pytest --collect-only -q`).
 
 ### Wann welcher Test
 

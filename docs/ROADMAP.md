@@ -1,6 +1,6 @@
 # Genesis Colonies — Roadmap
 
-Geplante Entwicklungsphasen und Meilensteine. Stand: **v1.5.3** (Alpha).
+Geplante Entwicklungsphasen und Meilensteine. Stand: **v1.5.9.2** (Alpha, Reality-Sync 2026-06-24).
 
 Status-Legende:
 
@@ -22,12 +22,12 @@ Status-Legende:
 | Flask + SQLite + Jinja2 | ✅ |
 | Installer (`scripts/install.py`) | ✅ |
 | Environment & Config Guards | ✅ |
-| SQL-Migrationen (`006`–`032`) | ✅ |
+| SQL-Migrationen (`006`–`076`) | ✅ |
 | Health Endpoint (`/health`) | ✅ |
 | Docker + Gunicorn Deployment | ✅ |
 | DB-Abstraction (`game/db.py`) | ✅ |
 | Bootstrap & Migration Guard | ✅ |
-| pytest-Suite (**513 Tests**) | ✅ |
+| pytest-Suite (**2119+** Tests) | ✅ |
 
 ---
 

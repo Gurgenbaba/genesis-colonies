@@ -111,26 +111,26 @@ Galaxy climate still adjusts **solar output** via `EffectResolver` (`solar_outpu
 | `planet_modifier` | Planet classes |
 | `empire_modifier` | Imperium doctrines |
 | `alliance_modifier` | Alliance bonuses |
-| `directive_modifier` | Galactic Directives + Diplomacy overlay |
+| `directive_modifier` | Climate prod overlay + Galactic Directives + Diplomacy |
 | `event_modifier` | Global / expedition events |
 | `season_modifier` | Seasons, anomalies, premium |
 
 ---
 
-## Snapshot values (slot 8, speed 1, no research, full energy)
+## Snapshot values (slot 9, speed 1, no research, full energy)
+
+Pure formula benchmark — **excludes** climate/GD/diplomacy overlay on `directive_modifier`. Live colonies may differ slightly.
 
 | Level | Ferronit/h | Crytite/h | Brennzellen/h |
 |-------|------------|-----------|---------------|
 | 1 | 24 | 16 | 8 |
 | 10 | 852 | 506 | 211 |
-| 30 | 3 968 | 2 629 | 942 |
-| 60 | 11 729 | 7 437 | 2 591 |
-| 90 | 19 236 | 13 670 | 4 434 |
-| 120 | 25 932 | 21 046 | 6 236 |
+| 30 | 3 968 | 2 629 | 942 |
+| 60 | 11 729 | 7 437 | 2 591 |
+| 90 | 19 236 | 13 670 | 4 434 |
+| 120 | 25 932 | 21 046 | 6 236 |
 
-Snapshot uses **galaxy slot 9** (no slot bonus for any resource at reference levels).
-
-With `production_speed = 400` (live tuning), multiply by 400 for admin-boosted benchmarks.
+Vollständige Ankertabellen: [GC_ANCHOR_TABLES_X1.md](GC_ANCHOR_TABLES_X1.md) · Regenerieren: `python scripts/gen_anchor_tables.py docs/GC_ANCHOR_TABLES_X1.md`
 
 ---
 
@@ -142,7 +142,7 @@ With `production_speed = 400` (live tuning), multiply by 400 for admin-boosted b
 | Mid | 30 | Comfortable progression |
 | Strong | 60 | High output |
 | High-end | 90 | Endgame ramp |
-| Cap | 120 | Maximum mine levels |
+| Cap | 120 | Maximum mine levels (requires nexus extensions above L50) |
 
 Target readable ranges: millions → billions → low trillions. Avoid quadrillions in normal play.
 

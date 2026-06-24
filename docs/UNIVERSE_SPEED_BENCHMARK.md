@@ -7,7 +7,7 @@
 | Domäne | Owner | Formel |
 |--------|-------|--------|
 | Forschungszeit | `EffectResolver.get_research_time_seconds` | `anchor_hours × tier ÷ (build_speed × research_speed × lab_bonus × research_time_speed)` |
-| Bauzeit | `EffectResolver.get_build_time_seconds` | `BUILD_TIME_BASE × factor^(L-1) ÷ build_speed_effective` |
+| Bauzeit | `EffectResolver.get_build_time_seconds` | Legacy: `BUILD_TIME_BASE × factor^(L-1) ÷ build_speed_effective` — Design-Kurve `power_build_seconds()` noch nicht wired |
 | Produktion / ROI | `economy_balance.mine_upgrade_roi_hours` | `upgrade_cost ÷ Δprod/h × production_speed` |
 | Flugzeit | `fleet_calc.calculate_flight_seconds` | `(35000/speed) × √(dist/10) ÷ admin_fleet_speed` |
 

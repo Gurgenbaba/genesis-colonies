@@ -13,7 +13,9 @@ Siehe auch: [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md), [AJAX_PJAX_CONTRACT.md
 | `POST /api/buildings/upgrade` | Queue build → `{ ok, reason, state }` |
 | `POST /api/buildings/cancel` | Cancel build job → `{ ok, reason, state }` |
 | `POST /api/research/start` | Queue research → `{ ok, reason, state }` |
-| `POST /api/research/cancel` | Cancel research job → `{ ok, reason, state } |
+| `POST /api/research/cancel` | Cancel research job → `{ ok, reason, state }` |
+
+Weitere `{ ok, state }` Mutationen: defense, exchange, inventory, vote, auction, planet APIs — siehe [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md). **Ausnahme (GC-512D):** Shipyard → `{ ok, data }`.
 
 Actions use `_player_context_for_action()` (read-only DB) then **one** `refresh_player_live_state` inside `_build_game_state_payload` after the mutation.
 
@@ -49,9 +51,9 @@ _load_page_live_context(finish_source=…)
 
 - Poll: `GET /api/game-state` only — **HUD/timer path** (`applyHudOnlyGameState`, no `include_panel`)
 - Page content: SSR on PJAX; mutations via `applyActionState()` full state
-- Queue/timer completion: `reloadCurrentPage({ skipGameState: true })` — fresh SSR, no panel poll
+- Queue/timer completion: `GC.refreshGameState("timer_done"|"queue_timer_zero")` → `GET /api/game-state?include_panel=1` via `refreshPageAfterQueueEvent()` — **no PJAX full reload**
 - `patchShellHudFromState()` is the **only** DOM writer for the shell HUD
-- Planet switch: POST → HUD patch → one PJAX reload → light poll resumes
+- Planet switch: POST → `applyActionState(..., "planet_switch")` (HUD-only) → `reloadCurrentPage({ skipGameState, skipPolling, skipHydrate })` → poll restart
 
 ## Kanonische Queue-Timer (Live-UI)
 

@@ -1,6 +1,6 @@
 # Genesis Colonies — Architecture
 
-Technische Architektur-Dokumentation (Stand: **v1.5.3**). Ergänzt die [README](../README.md) mit Abläufen, Modulgrenzen und Datenflüssen.
+Technische Architektur-Dokumentation (Stand: **v1.5.9.2**, Reality-Sync **2026-06-24**). Ergänzt die [README](../README.md) mit Abläufen, Modulgrenzen und Datenflüssen.
 
 **System-Docs (Single Source of Truth pro Domäne):**
 
@@ -21,10 +21,8 @@ Technische Architektur-Dokumentation (Stand: **v1.5.3**). Ergänzt die [README](
 | [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) | Queue Finish / Cancel / Reschedule |
 | [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) | Planet Defense, Queue, Ranking |
 | [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) | Battle resolver, loot, debris, reports |
-| [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) | Code-Reality-Status aller Module (GC-601) |
-| [GC-600_PROJECT_GAP_ANALYSIS.md](GC-600_PROJECT_GAP_ANALYSIS.md) | Strategisches Gap-Audit |
-| [GC-610_COMPLETE_DEFINITION_AUDIT.md](GC-610_COMPLETE_DEFINITION_AUDIT.md) | Definition of Complete / Reifegrade |
-| [GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md](GC-601B_DOCUMENTATION_CONSISTENCY_SYNC.md) | Doc-Reality-Sync (Defense, Recycler) |
+| [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md) | Code-Reality-Status aller Module |
+| [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) | Economy-Ankerkurven (Code-generiert) |
 
 **Golden Rule:** Genesis Colonies bevorzugt **Konsistenz über Komfort** — keine parallelen Systeme, keine Duplicate-Math, keine Reload-Navigation. Siehe [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) (Regeln 15–17).
 
@@ -82,7 +80,7 @@ Technische Architektur-Dokumentation (Stand: **v1.5.3**). Ergänzt die [README](
                              │
 ┌────────────────────────────▼─────────────────────────────────────┐
 │ SQLite (WAL) — game/game.db                                       │
-│  migration_history + migrations/*.sql (006–032)                   │
+│  migration_history + migrations/*.sql (006–076)                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -136,29 +134,31 @@ Installer (`scripts/install.py`) führt Bootstrap + `migrate.py` in isolierter U
 
 ## Request-Flow: Live State (Polling)
 
+Zwei Pfade — Details: [STATE_AJAX.md](STATE_AJAX.md).
+
+**Diet poll** (`GET /api/game-state`, ohne `include_panel`):
+
 ```
-GET /api/game-state
-  → @require_login
-  → _build_game_state_payload()
-       → refresh_player_live_state()
-            → finish_due_work_once()     # queue_engine
-            → update_planet_resources()  # context planet, skip_queue_finish
-       → get_build_queue_status(skip_finish=True)
-       → get_research_status(skip_finish=True)
-       → exchange, fuel_exchange, scrapyard snapshots
-  → JSON: resources, buildings, queues, active_planet, planets[], ...
+→ read_player_live_state_for_poll()  # leichtgewichtig
+→ finish_source=game_state
+→ HUD-only patch (Ressourcen, Queues-Zähler, keine vollen Panels)
 ```
 
-Details: [STATE_AJAX.md](STATE_AJAX.md), [EFFECTS.md](EFFECTS.md).
+**Full refresh** (Page load, Actions, Timer-Zero, `include_panel=1`):
 
-Client (`static/main.js`): Singleton-Polling, `applyGameStateData()`, rAF-Ticker für Queues.
+```
+→ refresh_player_live_state()
+     → finish_due_work_once()
+     → update_planet_resources(skip_queue_finish=True)
+→ get_build_queue_status(skip_finish=True) / get_research_status(skip_finish=True)
+→ panels: buildings, defense, shipyard, exchange, …
+```
 
-| Zustand | Intervall |
-|---------|-----------|
-| Aktive Queue | ~1000 ms |
-| Idle | ~4000 ms |
-| Tab hidden | ~12000 ms |
-| Fehler | Exponential backoff bis 60 s |
+Orchestrierung: `app.py` (`_build_game_state_payload`, `_load_page_live_context`) + `game/logic.py` + `game/live_state.py`.
+
+Client (`static/main.js`): Singleton-Polling, `applyGameStateData()`, `applyActionState()`, rAF-Ticker für Queues.
+
+**Poll-Intervalle:** siehe [STATE_AJAX.md](STATE_AJAX.md) und `game/config.py` `get_client_runtime_config()` (Production: 8 / 12 / 30 s).
 
 ---
 
@@ -234,29 +234,24 @@ Worker: `scripts/run_queue_tick.py`, Admin: `POST /api/admin/queue-tick`.
 
 ---
 
-## Spielmodule (Status v1.5.3)
+## Spielmodule (Status v1.5.9.2)
+
+Vollständige Tabelle: **[PROJECT_INVENTORY.md](PROJECT_INVENTORY.md)** — hier nur Kernmodule:
 
 | Modul | Route(n) | Backend | Status |
 |-------|----------|---------|--------|
 | Overview | `/overview` | `overview_page.py` | ✅ |
 | Buildings | `/buildings`, `/api/buildings/*` | `buildings.py` | ✅ |
 | Research | `/research`, `/api/research/*` | `research.py` | ✅ |
-| Tech tree | `/techtree` | `techtree.py` | ✅ |
-| Trader Hub | `/trader-hub`, `/api/exchange`, `/api/trader/*` | `exchange.py`, `fuel_exchange.py`, `scrapyard.py` | ✅ |
-| Shipyard | `/shipyard`, `/api/shipyard/*` | `shipyard.py`, `shipyard_queue.py` | ✅ |
-| Galaxy | `/galaxy`, `/api/galaxy/system` | `galaxy.py` | ✅ |
-| Fleet | `/fleet`, `/api/fleet/*` | `fleet.py`, `fleet_calc.py`, `fleet_defs.py` | ✅ |
-| Defense | `/defense`, `/api/defense/*` | `defense.py`, `defense_api.py`, `defense_page.py` | ✅ |
-| Combat | — | `combat.py`, `combat_models.py` | ✅ ([COMBAT_SYSTEM.md](COMBAT_SYSTEM.md)) |
-| Planet Evolution | `/planet-evolution`, `/api/planets/*` | `planet_evolution/` | ✅ |
-| Ranking | `/ranking`, `/api/ranking` | `ranking.py` | ✅ |
-| PlayerCard | `/player/<id>`, `/api/player-card/*` | `playercard.py` | ✅ |
-| Messages | `/messages`, `/api/messages/*` | `messages.py`, `mail.py` | ✅ |
-| Chat | partial in base, `/api/chat/*` | `chat.py` | ✅ |
-| Alliance | `/alliance` | `alliance.py` | 🔄 Backend minimal, UI teils |
-| Support | `/api/support/*` | `support.py` | ✅ |
-| Options | `/options`, `/api/options/*` | `options.py` | ✅ |
-| Admin | `/admin`, `/api/admin/*` | `admin.py`, `admin_api.py` | ✅ |
+| Trader Hub | `/trader-hub`, `/api/exchange`, … | `exchange.py`, `scrapyard.py` | ✅ |
+| Shipyard | `/shipyard`, `/api/shipyard/*` | `shipyard.py` | ✅ ⚠️ GC-512D envelope |
+| Defense | `/defense`, `/api/defense/*` | `defense.py` | ✅ |
+| Fleet / Combat | `/fleet`, `/api/fleet/*` | `fleet.py`, `combat.py` | ✅ |
+| Galaxy | `/galaxy` | `galaxy.py` | ✅ |
+| Empire / Command Map | `/empire`, `/api/command-map/*` | `planet_evolution/command_map.py` | ✅ |
+| Planet Evolution | `/planet-evolution` | `planet_evolution/` | ✅ |
+| Inventory / Auction / Vote | `/inventory`, `/auction-house`, `/vote-center` | respective modules | ✅ |
+| Alliance | `/alliance` | `alliance.py` | 🔄 Backend minimal |
 
 ---
 
@@ -337,7 +332,7 @@ Chat (`static/js/chat.js`) und Messages (`static/js/messages.js`) haben eigenes 
 
 ## Test-Suite
 
-**513 pytest-Tests** (Stand v1.5.3), u. a.:
+**2119+ pytest-Tests** (Stand v1.5.9.2 — `python -m pytest --collect-only -q`), u. a.:
 
 - `test_persistence.py`, `test_race_conditions.py` — DB/Queues
 - `test_game_state_live.py`, `test_effects.py`, `test_queue_engine.py` — Live pipeline

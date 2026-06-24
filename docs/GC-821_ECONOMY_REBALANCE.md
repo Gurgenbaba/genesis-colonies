@@ -36,7 +36,8 @@ Exponents for mines match `LEVEL_GROWTH` in `production_formula.py`.
 **GC-821F** stretches early/mid ROI (L20 ≈ 50 h, L120 ≈ 2000 h) via anchor multipliers — see `docs/GC-821F_MINE_ROI_BULK.md`.
 
 Curves: `BUILDING_UPGRADE_CURVES`, `BUILD_TIME_CURVES` in `economy_balance.py`.  
-Wired via `buildings.get_upgrade_cost()` / `power_build_seconds()`.
+**Costs** wired via `buildings.get_upgrade_cost()` → `power_upgrade_cost()`.  
+**Build times:** `power_build_seconds()` defined but **not yet** used in `EffectResolver.get_build_time_seconds()` (legacy exponential still live).
 
 ---
 
@@ -75,21 +76,22 @@ Expedition `economy_day_range` % bands unchanged (already empire-relative).
 
 ## Balance snapshot (slot 9, `production_speed` 1)
 
-Use `balance_snapshot_table()` in `economy_balance.py` or:
+Use `balance_snapshot_table()` in `economy_balance.py` or regenerate full tables:
 
 ```bash
-python -c "from game.economy_balance import balance_snapshot_table; import pprint; pprint.pp(balance_snapshot_table())"
+python scripts/gen_anchor_tables.py docs/GC_ANCHOR_TABLES_X1.md
 ```
 
-| Level | Ferronit/h | Upgrade Ferronit cost | Metal-hours |
-|-------|------------|----------------------|-------------|
-| 10 | ~852 | ~1 100 | ~4 h |
-| 30 | ~4 675 | ~6 100 | ~4 h |
-| 60 | ~13 688 | ~17 800 | ~4 h |
-| 90 | ~25 662 | ~33 400 | ~4 h |
-| 120 | ~40 081 | ~52 200 | ~4 h |
+**GC-821F ROI anchors (metal mine, payback hours):** L20=50 · L40=100 · L60=200 · L80=500 · L100=1000 · L120=2000.
 
-(Power-law costs yield near-constant afford time vs polynomial production.)
+| Level | Ferronit/h (formula) | Upgrade total F+C (metal_mine) | ROI target |
+|-------|----------------------|--------------------------------|------------|
+| 10 | ~852 | ~8.6k | ~50 h |
+| 30 | ~3.968 | ~23k | ~71 h |
+| 60 | ~11.729 | ~94k | ~200 h |
+| 120 | ~25.932 | ~1.38 Mio | ~2000 h |
+
+Stale GC-821A “~4 h metal-hours” rows superseded by GC-821F. Full tables: [GC_ANCHOR_TABLES_X1.md](GC_ANCHOR_TABLES_X1.md).
 
 ---
 

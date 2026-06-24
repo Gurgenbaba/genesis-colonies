@@ -1,5 +1,7 @@
 # GC-601B — Documentation Consistency Sync
 
+> **CLOSED — historisches Ticket (2026-06-05).** Aktueller Doc-Stand: [PROJECT_INVENTORY.md](PROJECT_INVENTORY.md), [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md), Master-Docs Reality-Sync 2026-06-24.
+
 **Stand:** 2026-06-05 · **Typ:** Doc-only (kein Feature-Code)
 
 Abgrenzung zu **GC-601** ([PROJECT_INVENTORY.md](PROJECT_INVENTORY.md)): GC-601 erfasste Code-Reality pro Modul; GC-601B bringt Master-Docs auf denselben Stand wie Code und [GC-600_PROJECT_GAP_ANALYSIS.md](GC-600_PROJECT_GAP_ANALYSIS.md).

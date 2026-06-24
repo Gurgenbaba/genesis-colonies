@@ -37,6 +37,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [ROADMAP.md](ROADMAP.md) | Status, Phasen, Schulden |
 | [PLANET_SCOPE.md](PLANET_SCOPE.md) | Aktiver Planet, Switch, Scope |
 | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | Ressourcen, Exchange, Fuel |
+| [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) | Ankerkurven, Universe-Defaults (Code-generiert) |
 | [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md) | Kanonische Produktionsformeln (GC-820) |
 | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) | Gebäude, Bau-Queue |
 | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) | Account-Forschung |
@@ -114,7 +115,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (513)
+python -m pytest tests/ -v          # gesamt (2119+)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 

@@ -6,9 +6,9 @@ Browser-basiertes Sci-Fi-Strategiespiel (OGame-inspiriert) — entwickelt als pr
 
 | | |
 |---|---|
-| **Version** | `1.5.3` (siehe [`VERSION`](VERSION)) |
+| **Version** | `1.5.9.2` (siehe [`VERSION`](VERSION)) |
 | **Stack** | Python 3.10+ · Flask 3 · SQLite (WAL) · Vanilla JS |
-| **Status** | Alpha — Multi-Kolonie, Economy, Galaxy, Fleet spielbar; Combat/Defense offen |
+| **Status** | Alpha — Economy, Combat, Defense, Fleet, Imperium-MVP spielbar |
 | **Health** | `GET /health` |
 
 ---
@@ -38,7 +38,7 @@ Genesis Colonies ist ein persistentes Browser-Strategiespiel, in dem Spieler ein
 | Audit Logging | `admin_audit_log` für privilegierte Aktionen |
 | Frontend-Architektur | SPA/PJAX, Singleton-Polling, Lifecycle-Cleanup |
 | Queue-Hardening | Atomare Transaktionen, Idempotenz, Parallel-Tests |
-| Test-Suite | **513** pytest-Tests |
+| Test-Suite | **2119+** pytest-Tests (`python -m pytest --collect-only -q`) |
 
 ### Spielbar (Mechanik)
 
@@ -52,8 +52,13 @@ Genesis Colonies ist ein persistentes Browser-Strategiespiel, in dem Spieler ein
 | Tech-Tree | `/techtree` | ✅ |
 | Trader Hub | `/trader-hub` | ✅ Exchange, Brennzellen, Schrottplatz |
 | Werft | `/shipyard` | ✅ Schiffsbau-Queue |
+| Verteidigung | `/defense` | ✅ Bau-Queue, Ranking |
 | Galaxie | `/galaxy` | ✅ Koordinaten, Slots, Expedition |
-| Flotte | `/fleet` | ✅ Send, Tick, Missionen (Combat stub) |
+| Flotte | `/fleet` | ✅ Send, Tick, Combat, Recycler, Logistics |
+| Imperium / Command Map | `/empire` | ✅ World Map MVP |
+| Inventar | `/inventory` | ✅ Container, Loot |
+| Auktionshaus | `/auction-house` | ✅ |
+| Vote Center | `/vote-center` | ✅ |
 | Planet Evolution | `/planet-evolution` | ✅ DNA, Planet-Tech, Events |
 | Ranking | `/ranking` | ✅ |
 | Messages | `/messages` | ✅ |
@@ -66,10 +71,10 @@ Genesis Colonies ist ein persistentes Browser-Strategiespiel, in dem Spieler ein
 
 | Modul | Route | Status |
 |-------|-------|--------|
-| Verteidigung | `/defense` | 📋 UI only |
 | Allianz | `/alliance` | 🔄 Hub teils, Backend minimal |
-| Fleet Combat | attack mission | 📋 Stub-Bericht |
-| Fleet Logistics | `/api/fleet/logistics/*` | 📋 not implemented |
+| Shipyard API envelope | `/api/shipyard*` | ⚠️ `{ok,data}` statt `{ok,state}` (GC-512D) |
+
+Vollständiger Modul-Status: [docs/PROJECT_INVENTORY.md](docs/PROJECT_INVENTORY.md) · Balance-Anker: [docs/BALANCE_ANCHORS.md](docs/BALANCE_ANCHORS.md)
 
 ---
 

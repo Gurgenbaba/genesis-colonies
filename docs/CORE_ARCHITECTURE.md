@@ -228,11 +228,12 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 |--------|-----------------|-----|
 | Queues (Finish-Pass) | `game/queue_engine.py` | [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) |
 | Queue Card UX (Presentation Adapter) | `game/queue_card.py` | [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) |
-| Live-State / Poll-Payload | `game/live_state.py` | [STATE_AJAX.md](STATE_AJAX.md) |
+| Live-State / Poll-Payload | `app.py` (`_build_game_state_payload`) + `game/logic.py` + `game/live_state.py` | [STATE_AJAX.md](STATE_AJAX.md) |
 | Planet Scope | `game/planet_evolution/repository.py` (`get_context_planet`) | [PLANET_SCOPE.md](PLANET_SCOPE.md) |
 | Ressourcen / Tick | `game/resources.py` | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
 | Produktionsformeln | `game/production_formula.py` | [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md) |
-| Economy-Rebalance (GC-821) | `game/economy_balance.py` | [GC-821_ECONOMY_REBALANCE.md](GC-821_ECONOMY_REBALANCE.md) |
+| Economy-Rebalance (GC-821) | `game/economy_balance.py` | [GC-821_ECONOMY_REBALANCE.md](GC-821_ECONOMY_REBALANCE.md) · [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) |
+| Queue refunds (GC-831) | `game/queue_refund.py` | [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) |
 | Technical data display (GC-823) | `game/technical_data.py` | [GC-823_TECHNICAL_DATA.md](GC-823_TECHNICAL_DATA.md) |
 | Live economy QA (GC-822) | `game/economy_live_audit.py` | [GC-822_LIVE_ECONOMY_QA.md](GC-822_LIVE_ECONOMY_QA.md) |
 | Effekte / Energie / Storage / Zeit | `game/effects/` (`EffectResolver`) | [EFFECTS.md](EFFECTS.md) |

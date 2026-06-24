@@ -1,6 +1,7 @@
 # Economy System
 
-Ressourcen, Produktion, Trader Hub und Unified Resource Trader (v1.5.4).
+Ressourcen, Produktion, Trader Hub und Unified Resource Trader.  
+**Stand:** v1.5.9.x · Ankerkurven: [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md)
 
 Formeln: autoritativ in `game/production_formula.py` — siehe [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).  
 Energie, Storage, Build-Time: `game/effects/effect_resolver.py` — [EFFECTS.md](EFFECTS.md).
@@ -58,10 +59,12 @@ Aufgerufen von:
 
 **Solar:** weiterhin über `climate_economy_modifiers_for_position` → `solar_output_factor` in `EffectResolver`.
 
-**Minen-Produktion:** Slot- und Temperatur-Modifier in `game/production_formula.py` (nicht mehr `metal_prod_factor` / `crystal_prod_factor` / `fuel_prod_factor` aus Klima).
+**Minen-Produktion:** Primär Slot- und Temperatur-Modifier in `game/production_formula.py`.
 
-| Ressource | Slot-Bereich | Max-Bonus |
-|-----------|--------------|-----------|
+**Zusätzlich:** Klima-`metal_prod_factor` / `crystal_prod_factor` / `fuel_prod_factor` aus `planet_visuals.climate_economy_modifiers_for_position` fließen als **`directive_modifier`** in `ProductionContext` (`EffectResolver.prod_overlay_factor()` — Klima + Galactic Directives + Diplomacy).
+
+| Ressource | Slot-Bereich (production_formula) | Max-Bonus |
+|-----------|-----------------------------------|-----------|
 | Ferronit | 4–9 | +20 % |
 | Crytite | 1–3 | +25 % |
 | Brennzellen | 10–15 | +20 % (+ Temperatur 0.75–1.35) |
@@ -84,15 +87,15 @@ Modifier: Slot, Temperatur (nur Brennzellen), `mining_tech` (+3 % Ferronit/Lvl),
 
 Details: [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 
-**Brennzellenwerk:** Kein separates Lagergebäude — integriertes Lager skaliert mit der Werksstufe (~25 h Produktionspuffer × `storage_factor` / Terraformer).
+**Brennzellen-Lager:** Kapazität nur über Gebäude **`fuel_storage`** (`EffectResolver.fuel_cells_storage_capacity()`). Ohne Depot: **Cap 0** — Brennzellen-Produktion wird nicht angesammelt. Voraussetzung: `fuel_cell_plant` ≥ 4.
 
 ---
 
 ## Storage
 
-- Basis 100.000 pro Typ (metal/crystal)
-- Wachstum via Storage-Gebäude + `STORAGE_GROW^1.8`
-- Multiplier: `storage_tech`, `terraformer`, `storage_factor`
+- Basis **150.000** pro Typ (`STORAGE_BASE_CAPACITY` in `economy_balance.py` / `EffectResolver.BASE_STORAGE`)
+- Wachstum: **×1,75** pro Storage-Stufe (`STORAGE_LEVEL_GROWTH`)
+- Multiplier: `storage_tech` (+25 %/Lvl), `terraformer` (+5 % Kapazität/Lvl), `storage_factor`
 - Produktion kann Storage nicht überschreiten; bestehendes Overflow wird nicht getrimmt
 - **Trader Hub + Schrottplatz** dürfen jederzeit über Cap gutschreiben (Overflow bleibt erhalten)
 
@@ -146,7 +149,7 @@ Gleiche Ressource als Input/Output ist verboten.
 | `fuel_exchange_metal_per_unit` | 20 |
 | `fuel_exchange_crystal_per_unit` | 14 |
 | `fuel_exchange_min_units` | 10 |
-| `fuel_production_per_hour` | 2.0 (Stufe 1; Lager skaliert mit) |
+| `fuel_production_per_hour` | **Deprecated** — Anzeige/Legacy-Admin; Produktion via `LEVEL_GROWTH` base 8.0 |
 
 ### Regeln
 
@@ -174,14 +177,31 @@ Ressourcen-Drops in Lootboxen sind **nicht mehr fix**, sondern skalieren mit dem
 
 | Regel | Detail |
 |-------|--------|
-| Ferronit / Crytite | **50 %** der Stundenproduktion der **höchsten** Mine (× Container-Stufe); Floor **5 000–10 000** |
-| Brennzellen | **10 %** des Bestands (× Stufe); Floor **5 000–10 000** |
-| Schiffe / Verteidigung | Abnehmender %-Anteil (log-Kurve); unter ~100k Bestand: **5 000–10 000** Floor; **max. 100 000** pro Roll |
+| Ferronit / Crytite | **50 %** der Stundenproduktion der **höchsten** Mine (× Container-Stufe); Floor **12 000–30 000** |
+| Brennzellen | **10 %** des Bestands (× Stufe); Floor **12 000–30 000** |
+| Schiffe / Verteidigung | Abnehmender %-Anteil (log-Kurve); Floor **12 000–30 000**; **max. 100 000** pro Roll |
 | Container-Stufe | Multiplikator pro `container_*`-Key (`CONTAINER_RESOURCE_MULTIPLIER`) |
 | Keine Minen | Fallback Stufe **1** für Ferronit/Crytite |
 | Andere Drops | Items, Booster — feste min/max |
 
-Owner: `game/inventory_loot.py` (Pools + Skalierung), `game/inventory.py` (Roll beim Öffnen).
+Owner: `game/inventory_loot.py` (Pools + Skalierung), `game/inventory.py` (Roll beim Öffnen).  
+Skalierung: `LOOT_BASE_PRODUCTION_HOURS = 0.5` (50 % der höchsten Mine/h).
+
+---
+
+## Universe-Defaults (`DEFAULT_GAME_SETTINGS`)
+
+| Setting | Default | Hinweis |
+|---------|---------|---------|
+| `production_speed` | 1.0 | Multiplikator Produktion |
+| `build_speed` | 1.1 | Divisor Bauzeiten |
+| `research_speed` | 0.85 | Divisor Forschungszeiten |
+| `queue_limit` | 5 | Bau-Queue (Fallback in Code: 3 wenn Setting fehlt) |
+| `start_metal` | 150.000 | Neukonto Homeworld |
+| `start_crystal` | 100.000 | Neukonto Homeworld |
+| `start_fuel_cells` | 25.000 | Neukonto Homeworld |
+
+Details: [GC-836_ALPHA_STARTER_RESOURCES.md](GC-836_ALPHA_STARTER_RESOURCES.md) · Benchmark ×1: [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md)
 
 ---
 
@@ -266,6 +286,7 @@ Schiffsbau zieht metal, crystal **und fuel_cells** ab (siehe [FLEET_SYSTEM.md](F
 
 | Datei | Rolle |
 |-------|-------|
+| `game/economy_balance.py` | GC-821 Kosten, Storage, Exchange, Loot, Forschungs-Anker |
 | `game/resources.py` | Tick, deltas |
 | `game/production_formula.py` | Produktionsformeln (GC-820) |
 | `game/effects/effect_resolver.py` | Energie, Storage, Zeit, Modifier-Bundle |

@@ -1,5 +1,6 @@
-# GC-836 — Alpha Starter Resources & First-Hour Progression
+# GC-836 — Alpha Starter Resources
 
+> Kanonische Defaults: [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) § Universe-Defaults · `game/models.py` `DEFAULT_GAME_SETTINGS`  
 > Sim-Ergebnisse: `python scripts/fresh_account_progression_sim.py` → [GC-829_FRESH_ACCOUNT_PROGRESSION.md](GC-829_FRESH_ACCOUNT_PROGRESSION.md)
 
 ## Problem

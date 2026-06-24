@@ -1,6 +1,8 @@
 # GC-831 — Queue Cancellation & Refund Consistency
 
-**Priorität:** KRITISCH
+> **Implementiert.** Kanonische Regeln: [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) § Cancel refunds. Dieses Ticket-Doc bleibt als Audit-Referenz.
+
+**Priorität:** KRITISCH (historisch)
 
 ## Problem
 
