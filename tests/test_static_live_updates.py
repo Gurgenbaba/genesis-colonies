@@ -1721,7 +1721,8 @@ def test_main_js_gc553_global_perf_audit():
     progression = _read("templates/partials/progression_cards.html")
     assert 'decoding="async"' in progression
     assert 'fetchpriority="low"' in progression
-    assert "render_raster_picture" in buildings
+    assert "webp_static" in buildings
+    assert 'fetchpriority="high"' in buildings
 
 
 def test_main_js_lootbox_roll_accuracy_and_sound():

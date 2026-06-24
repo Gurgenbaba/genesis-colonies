@@ -8,7 +8,7 @@
    Genesis building cards (Resources / Research / Military / Infrastructure)
    =================================================================== #}
 
-{% macro render_hero_img_stack(src, fallback, qj, hero_lazy=true) %}
+{% macro render_hero_img_stack(src, fallback, qj, hero_load='lazy') %}
   {% set _active = qj is defined and qj and qj.status == 'active' %}
   {% set _onerr = "this.onerror=null;this.src='" ~ fallback ~ "';" %}
   <div class="gc-bld-hero-img-stack{% if _active %} gc-bld-hero-img-stack--progress{% endif %}"
@@ -19,18 +19,14 @@
            class="gc-bld-card-hero-img gc-bld-card-hero-img--muted"
            width="320"
            height="180"
-           loading="lazy"
-           decoding="async"
-           fetchpriority="low"
+           {% if hero_load == 'high' %}loading="eager" decoding="async" fetchpriority="high"{% elif hero_load == 'eager' %}loading="eager" decoding="async"{% else %}loading="lazy" decoding="async" fetchpriority="low"{% endif %}
            onerror="{{ _onerr }}">
       <img src="{{ src }}"
            alt=""
            class="gc-bld-card-hero-img gc-bld-card-hero-img--color"
            width="320"
            height="180"
-           loading="lazy"
-           decoding="async"
-           fetchpriority="low"
+           {% if hero_load == 'high' %}loading="eager" decoding="async" fetchpriority="high"{% elif hero_load == 'eager' %}loading="eager" decoding="async"{% else %}loading="lazy" decoding="async" fetchpriority="low"{% endif %}
            onerror="{{ _onerr }}">
     {% else %}
       <img src="{{ src }}"
@@ -38,7 +34,7 @@
            class="gc-bld-card-hero-img"
            width="320"
            height="180"
-           {% if hero_lazy %}loading="lazy" decoding="async" fetchpriority="low"{% else %}loading="eager" decoding="async" fetchpriority="high"{% endif %}
+           {% if hero_load == 'high' %}loading="eager" decoding="async" fetchpriority="high"{% elif hero_load == 'eager' %}loading="eager" decoding="async"{% else %}loading="lazy" decoding="async" fetchpriority="low"{% endif %}
            onerror="{{ _onerr }}">
     {% endif %}
   </div>
@@ -157,7 +153,6 @@
   {% set rows = rows if rows else [] %}
   {% set _bq_summary = bq_summary if bq_summary is defined and bq_summary else {} %}
   {% set _bq_queue_full = bq_queue_full if bq_queue_full is defined else false %}
-  {% set _bld_img_fallback = url_for('static', filename='img/buildings/default.png') %}
   {% if rows|length == 0 %}
     <div class="gc-empty-state">
       <div class="gc-empty-title">{{ T("msg_generic_error", "Keine Daten") }}</div>
@@ -188,9 +183,16 @@
                  role="listitem">
 
           <div class="gc-bld-card-hero">
-            {% set _bld_icon = url_for('static', filename=b.icon) %}
-            {% set _card_lazy = loop.index0 >= 3 %}
-            {{ render_hero_img_stack(_bld_icon, _bld_img_fallback, b.queue_job if b.queue_job is defined else none, _card_lazy) }}
+            {% set _bld_png = url_for('static', filename=b.icon) %}
+            {% set _bld_webp = _bld_png|webp_static %}
+            {% if loop.index0 == 0 %}
+              {% set _card_load = 'high' %}
+            {% elif loop.index0 < 3 %}
+              {% set _card_load = 'eager' %}
+            {% else %}
+              {% set _card_load = 'lazy' %}
+            {% endif %}
+            {{ render_hero_img_stack(_bld_webp, _bld_png, b.queue_job if b.queue_job is defined else none, _card_load) }}
             {% if b.queue_job is defined and b.queue_job %}
             {{ render_hero_queue(b.queue_job, 'build', 'building') }}
             {% endif %}
