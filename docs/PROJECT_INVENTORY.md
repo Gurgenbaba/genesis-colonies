@@ -58,7 +58,7 @@ Offene **Tech Debt** (kein Blocker): [GC-512_ARCHITECTURE_VALIDATION.md](GC-512_
 |-----|---------|--------|
 | `BUILDINGS_SYSTEM.md` / `RESEARCH_SYSTEM.md` | Cancel refunds, Kosten/Zeit | ✅ Reality-Sync 2026-06-24 |
 | `ECONOMY_SYSTEM.md` | Storage 150k, fuel_storage, loot floors | ✅ Reality-Sync 2026-06-24 |
-| `EffectResolver` build time | Legacy exponential vs GC-821 design | ⚠️ Code gap — dokumentiert in [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) |
+| `EffectResolver` build time | `power_build_seconds` (GC-850A) | ✅ Reality-Sync 2026-06-24 |
 | Shipyard envelope | `{ok,data}` statt `{ok,state}` | ⚠️ GC-512D backlog |
 | Alliance backend | Minimal | 🔄 MVP backlog |
 

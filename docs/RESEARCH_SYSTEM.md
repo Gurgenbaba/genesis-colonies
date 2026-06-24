@@ -86,7 +86,7 @@ Legacy-Exponential (`base_time × cost_factor^(level-1)`) nur noch als Audit-Hel
 | `navigation_tech`, `engine_tech` | `fleet_speed_multiplier` → `fleet.py` / `fleet_calc.py` |
 | `fuel_efficiency` | `fuel_efficiency_factor` → `fleet_calc.calculate_fuel_cost()` |
 
-**Prepared only:**
+**Not wired:**
 
 | Key | Effekt |
 |-----|--------|

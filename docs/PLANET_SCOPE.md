@@ -1,6 +1,6 @@
 # Planet Scope System
 
-Single source of truth für Multi-Kolonie-Kontext in Genesis Colonies (v1.5.3).
+Single source of truth für Multi-Kolonie-Kontext in Genesis Colonies (Stand v1.5.9.2).
 
 ---
 

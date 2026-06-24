@@ -12,7 +12,7 @@ Consumers (`resources`, `buildings`, `research`) delegate to these modules; the 
 | Building caps (core nexus, geothermal) | **Fixed** | Max levels for mines/solar/fuel/storage; terraform = storage bonus only |
 | Combat (`weapon_tech`, `armor_tech`, `shield_tech`) | **Fixed** | Applied in `simulate_battle()` via `EffectResolver.get_combat_modifiers()` — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | Fleet (`navigation_tech`, `engine_tech`, `fuel_efficiency`) | **Fixed** | `fleet_speed_multiplier`, `fuel_efficiency_factor` — consumed in `fleet.py` / `fleet_calc.py` |
-| Radar (`radar_array` → `scan_range`) | **Prepared only** | **No scan/galaxy engine** |
+| Radar (`radar_array` → `scan_range`) | **Not wired** | **No scan/galaxy engine** |
 | Multi-universe | **Not supported** | Single SQLite DB; `universe_name` is display config only — **no `universe_id` in schema** |
 
 ## Developer note — prepared modifiers

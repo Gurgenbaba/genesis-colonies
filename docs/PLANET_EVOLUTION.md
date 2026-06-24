@@ -1,6 +1,6 @@
 # Planet Evolution System
 
-Per-Planet Progression: DNA, Traits, Planet-Forschung, Specialization, Policies, Events (v1.5.3).
+Per-Planet Progression: DNA, Traits, Planet-Forschung, Specialization, Policies, Events (Stand v1.5.9.2).
 
 **Abgrenzung:**
 

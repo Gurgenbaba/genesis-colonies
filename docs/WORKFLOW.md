@@ -39,6 +39,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | Ressourcen, Exchange, Fuel |
 | [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) | Ankerkurven, Universe-Defaults (Code-generiert) |
 | [GC-850_RUNTIME_DOC_AUDIT.md](GC-850_RUNTIME_DOC_AUDIT.md) | Runtime ↔ Doc Audit (GC-850) |
+| GC-851 doc sync guards | `tests/test_gc851_docs_version_sync.py` — VERSION, migrations, pytest count |
 | [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md) | Kanonische Produktionsformeln (GC-820) |
 | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) | Gebäude, Bau-Queue |
 | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) | Account-Forschung |
@@ -116,7 +117,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (2119+)
+python -m pytest tests/ -v          # gesamt (2160 Tests)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 

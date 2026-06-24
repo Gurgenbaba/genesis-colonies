@@ -1,6 +1,6 @@
 # Galaxy System
 
-Koordinaten, Systemansicht und Kolonisierungs-Slots (v1.5.3).
+Koordinaten, Systemansicht und Kolonisierungs-Slots (Stand v1.5.9.2).
 
 Kanonisches Modul: `game/galaxy.py`.
 
