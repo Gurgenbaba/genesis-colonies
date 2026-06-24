@@ -382,7 +382,7 @@ def inject_globals():
         if user_id is not None:
             player_id = int(user_id)  # players.id == users.id
 
-            s = get_player_score_cached(player_id) or {}
+            s = get_player_score_cached(player_id, read_only=True) or {}
             score_total = int(s.get("total", 0) or 0)
             score_buildings = int(s.get("buildings", 0) or 0)
             score_research = int(s.get("research", 0) or 0)

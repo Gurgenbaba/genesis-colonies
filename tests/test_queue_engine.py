@@ -236,7 +236,13 @@ def test_rank_recalculated_once_per_engine_run(temp_db):
     conn.close()
 
     with patch("game.score_events.recalculate_ranks") as mock_ranks:
-        finish_due_work(player_id=pid, planet_id=planet_id, source="test")
+        finish_due_work(
+            player_id=pid,
+            planet_id=planet_id,
+            source="test",
+            update_scores=True,
+            recalc_ranks=True,
+        )
         _close_db()
         assert mock_ranks.call_count == 1
 
@@ -257,7 +263,13 @@ def test_score_updated_after_finish(temp_db):
     conn.commit()
     conn.close()
 
-    result = finish_due_work(player_id=pid, planet_id=planet_id, source="test")
+    result = finish_due_work(
+        player_id=pid,
+        planet_id=planet_id,
+        source="test",
+        update_scores=True,
+        recalc_ranks=True,
+    )
     _close_db()
     assert result["score_updates"] >= 1
 

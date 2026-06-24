@@ -1,5 +1,5 @@
 """
-Batch score updates after queue finishes (ranking integration).
+Batch score updates — ranking worker and admin only (not gameplay hot paths).
 """
 
 from __future__ import annotations

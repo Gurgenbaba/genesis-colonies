@@ -259,6 +259,7 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Galactic Directives | `game/galactic_directives/` | [GALACTIC_DIRECTIVES.md](GALACTIC_DIRECTIVES.md) |
 | Galactic Diplomacy | `game/galactic_diplomacy/` | [GALACTIC_DIPLOMACY.md](GALACTIC_DIPLOMACY.md) |
 | Referrals | `game/referrals.py` | GC-703 |
+| Ranking scores / ranks (batch) | `game/ranking_worker.py` → `game/ranking.py` | `scripts/run_ranking_worker.py` (10 min cron) |
 
 **Ticket-Check:** Domäne identifizieren → nur Owner-Modul (+ Routes/`app.py`) ändern → kein zweites Modul für dieselbe Wahrheit.
 

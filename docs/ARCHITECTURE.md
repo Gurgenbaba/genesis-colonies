@@ -232,6 +232,10 @@ Request-Dedup via Flask `g` + `live_state.coerce_skip_finish()`.
 
 Worker: `scripts/run_queue_tick.py`, Admin: `POST /api/admin/queue-tick`.
 
+**Ranking worker (batch scores, 10 min):** `scripts/run_ranking_worker.py` — recompute all `player_scores` + ranks; gameplay paths do not call `compute_player_scores()`.
+
+**Railway:** separate Cron Service (not the web service). Start command `python scripts/run_ranking_worker.py --source cron`, schedule `*/10 * * * *` (UTC, min. 5 min). Same env/volume/DB as the app; process exits after one run (Railway restarts on schedule). Optional interval guard inside the worker skips duplicate runs if triggered early.
+
 ---
 
 ## Spielmodule (Status v1.5.9.2)

@@ -149,7 +149,7 @@ def read_player_live_state_for_poll(
                         uid,
                         conn,
                         source="game_state",
-                        update_scores=True,
+                        update_scores=False,
                         recalc_ranks=False,
                     )
                     record_poll_queue_finish(uid, conn=conn)

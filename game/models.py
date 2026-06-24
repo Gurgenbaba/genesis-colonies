@@ -1703,7 +1703,7 @@ def finish_due_build_jobs(
     now: float | None = None,
     conn: sqlite3.Connection | None = None,
     *,
-    update_score: bool = True,
+    update_score: bool = False,
 ) -> bool:
     """
     Schließt fällige Build-Jobs für einen Planeten ab.
@@ -1749,7 +1749,7 @@ def finish_due_research_jobs(
     now: float | None = None,
     conn: sqlite3.Connection | None = None,
     *,
-    update_score: bool = True,
+    update_score: bool = False,
 ) -> bool:
     """
     Schließt fällige Research-Jobs ab.

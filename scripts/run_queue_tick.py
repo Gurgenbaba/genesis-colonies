@@ -26,8 +26,8 @@ def main() -> int:
     parser.add_argument("--player-id", type=int, default=None, help="Limit to player id")
     parser.add_argument("--planet-id", type=int, default=None, help="Limit to planet id")
     parser.add_argument("--source", type=str, default="cli", help="Tick source label")
-    parser.add_argument("--no-scores", action="store_true", help="Skip score recompute")
-    parser.add_argument("--no-ranks", action="store_true", help="Skip rank recalc")
+    parser.add_argument("--scores", action="store_true", help="Legacy: recompute ranking scores")
+    parser.add_argument("--ranks", action="store_true", help="Legacy: recalc ranks with --scores")
     args = parser.parse_args()
 
     os.environ.setdefault("GC_SKIP_MIGRATION_CHECK", "1")
@@ -42,15 +42,15 @@ def main() -> int:
             player_id=args.player_id,
             planet_id=args.planet_id,
             source=args.source,
-            update_scores=not args.no_scores,
-            recalc_ranks=not args.no_ranks,
+            update_scores=bool(args.scores),
+            recalc_ranks=bool(args.scores and args.ranks),
         )
     else:
         result = run_tick(
             scope="due",
             source=args.source,
-            update_scores=not args.no_scores,
-            recalc_ranks=not args.no_ranks,
+            update_scores=bool(args.scores),
+            recalc_ranks=bool(args.scores and args.ranks),
         )
 
     print(json.dumps(result, indent=2, ensure_ascii=False))

@@ -416,16 +416,6 @@ def _finish_due_defense_jobs_impl(
         dk = str(head["defense_key"])
         if is_known_defense_key(dk):
             add_planet_defense(int(planet_id), {dk: to_deliver}, conn=conn)
-            try:
-                from .score_events import apply_score_updates_for_players
-
-                apply_score_updates_for_players(
-                    [int(player_id)],
-                    conn=conn,
-                    recalc_ranks=False,
-                )
-            except Exception:
-                pass
 
         remaining = max(0, int(head["amount"] or 0) - to_deliver)
         if remaining <= 0:

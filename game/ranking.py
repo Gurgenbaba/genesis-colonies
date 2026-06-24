@@ -1,6 +1,9 @@
 """
 Galactic ranking service – single source of truth for scores and ranks.
 
+Score persistence is refreshed by ``game/ranking_worker`` (10-minute cron), not during
+queue finishes or polling. Gameplay reads ``player_scores`` snapshots only.
+
 total_score = building + research + fleet + defense + destroyed + evolution
 combat_score = fleet_score + defense_score (active military)
 destroyed_score = weighted cumulative combat destruction (score_destroyed_raw)
@@ -558,10 +561,13 @@ def repair_player_score_totals(player_id: int, conn=None) -> bool:
 
 def on_player_score_changed(player_id: int, conn=None) -> Dict[str, int]:
     """
-    Incremental hook: refresh one player + rebuild rank snapshot.
-    Call after building/research/fleet/defense changes.
+    Legacy gameplay hook — no live score recompute (ranking worker every 10 min).
+
+    Invalidates in-process cache only; returns last persisted snapshot.
+    Admin / worker use ``recompute_and_upsert_score`` or ``recalculate_all_rankings``.
     """
-    return recompute_and_upsert_score(int(player_id), conn=conn)
+    invalidate_player_score_cache(int(player_id))
+    return read_player_scores(int(player_id), conn=conn)
 
 
 def _ensure_score_rows(conn) -> int:
@@ -1013,10 +1019,7 @@ def get_player_score_cached(
 
     row = get_player_score_row(pid, conn=None)
     if not row:
-        if read_only:
-            out = _to_legacy(_zero_scores())
-        else:
-            out = _to_legacy(refresh_player_score(pid))
+        out = _to_legacy(_zero_scores())
     else:
         out = _to_legacy(_normalize_db_row(row))
 

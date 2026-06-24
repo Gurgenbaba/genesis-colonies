@@ -156,8 +156,8 @@ def finish_active_planet_due_work(
     conn: sqlite3.Connection,
     *,
     source: str = "live_state",
-    update_scores: bool = True,
-    recalc_ranks: bool = True,
+    update_scores: bool = False,
+    recalc_ranks: bool = False,
     manage_transaction: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -210,8 +210,8 @@ def finish_player_due_work(
     conn: sqlite3.Connection,
     *,
     source: str = "live_state",
-    update_scores: bool = True,
-    recalc_ranks: bool = True,
+    update_scores: bool = False,
+    recalc_ranks: bool = False,
     manage_transaction: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -265,8 +265,8 @@ def finish_due_work_once(
     source: str = "system",
     conn: Optional[sqlite3.Connection] = None,
     *,
-    update_scores: bool = True,
-    recalc_ranks: bool = True,
+    update_scores: bool = False,
+    recalc_ranks: bool = False,
     dedup: bool = True,
     force: bool = False,
     manage_transaction: bool = True,
@@ -513,8 +513,8 @@ def finish_due_work(
     source: str = "system",
     conn: Optional[sqlite3.Connection] = None,
     *,
-    update_scores: bool = True,
-    recalc_ranks: bool = True,
+    update_scores: bool = False,
+    recalc_ranks: bool = False,
     manage_transaction: bool = True,
 ) -> Dict[str, Any]:
     """

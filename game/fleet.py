@@ -2603,16 +2603,6 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
             except Exception:
                 logger.exception("combat destruction score failed movement_id=%s", movement_id)
 
-        score_players = {int(player_id)}
-        if defender_id > 0:
-            score_players.add(int(defender_id))
-        try:
-            from .score_events import apply_score_updates_for_players
-
-            apply_score_updates_for_players(score_players, conn=conn)
-        except Exception:
-            logger.exception("attack score refresh failed movement_id=%s", movement_id)
-
         resources = dict(movement.get("resources") or {})
         loot_taken: Dict[str, int] = {}
         if target_id and combat_result is not None:
@@ -5007,9 +4997,6 @@ def seed_planet_ships_stack(
             set_planet_ships(int(planet_id), int(player_id), normalized, conn=conn)
         else:
             add_planet_ships(int(planet_id), int(player_id), normalized, conn=conn)
-        from .ranking import on_player_score_changed
-
-        on_player_score_changed(int(player_id), conn=conn)
         if own:
             commit(conn)
         return True, "", get_planet_ships(int(planet_id), conn=conn)

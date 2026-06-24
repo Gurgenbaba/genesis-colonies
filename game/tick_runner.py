@@ -103,8 +103,8 @@ def run_tick(
     scope: str = "due",
     batch_size: int = 100,
     source: str = "cron",
-    update_scores: bool = True,
-    recalc_ranks: bool = True,
+    update_scores: bool = False,
+    recalc_ranks: bool = False,
     persist: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -179,8 +179,8 @@ def run_queue_tick(
     player_id: Optional[int] = None,
     planet_id: Optional[int] = None,
     source: str = "cron",
-    update_scores: bool = True,
-    recalc_ranks: bool = True,
+    update_scores: bool = False,
+    recalc_ranks: bool = False,
     persist: bool = True,
 ) -> Dict[str, Any]:
     """Single-scope tick (one player/planet or global). Back-compat wrapper."""
@@ -224,8 +224,8 @@ def run_global_queue_tick(
     *,
     source: str = "cron",
     batch_size: int = 100,
-    update_scores: bool = True,
-    recalc_ranks: bool = True,
+    update_scores: bool = False,
+    recalc_ranks: bool = False,
     persist: bool = True,
 ) -> Dict[str, Any]:
     """Finish due work for all players (batched). Prefer run_tick()."""
@@ -252,8 +252,8 @@ def _cli_main() -> int:
     parser.add_argument("--player-id", type=int, default=None)
     parser.add_argument("--planet-id", type=int, default=None)
     parser.add_argument("--source", default="cli")
-    parser.add_argument("--no-scores", action="store_true")
-    parser.add_argument("--no-ranks", action="store_true")
+    parser.add_argument("--scores", action="store_true", help="Legacy: recompute ranking scores (prefer run_ranking_worker.py)")
+    parser.add_argument("--ranks", action="store_true", help="Legacy: recalc rank columns with --scores")
     parser.add_argument("--no-persist", action="store_true")
     args = parser.parse_args()
 
@@ -271,8 +271,8 @@ def _cli_main() -> int:
             player_id=args.player_id,
             planet_id=args.planet_id,
             source=args.source,
-            update_scores=not args.no_scores,
-            recalc_ranks=not args.no_ranks,
+            update_scores=bool(args.scores),
+            recalc_ranks=bool(args.scores and args.ranks),
             persist=not args.no_persist,
         )
     else:
@@ -280,8 +280,8 @@ def _cli_main() -> int:
             scope=args.scope,
             batch_size=args.batch_size,
             source=args.source,
-            update_scores=not args.no_scores,
-            recalc_ranks=not args.no_ranks,
+            update_scores=bool(args.scores),
+            recalc_ranks=bool(args.scores and args.ranks),
             persist=not args.no_persist,
         )
 
