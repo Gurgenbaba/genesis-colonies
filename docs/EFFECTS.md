@@ -8,7 +8,7 @@ Consumers (`resources`, `buildings`, `research`) delegate to these modules; the 
 | Area | Status | Notes |
 |------|--------|--------|
 | Economy (production, energy, storage) | **Fixed** | Applied on every resource tick / derived sync; includes galactic directives + diplomacy (GC-720E, GC-721H) |
-| Time (build, research, lab, academy, nanofactory) | **Fixed** | `get_build_time_seconds`, `get_research_time_seconds` — build uses **legacy exponential** until wired to `power_build_seconds()` |
+| Time (build, research, lab, academy, nanofactory) | **Fixed** | `get_build_time_seconds` → `power_build_seconds` (GC-850A); `get_research_time_seconds` |
 | Building caps (core nexus, geothermal) | **Fixed** | Max levels for mines/solar/fuel/storage; terraform = storage bonus only |
 | Combat (`weapon_tech`, `armor_tech`, `shield_tech`) | **Fixed** | Applied in `simulate_battle()` via `EffectResolver.get_combat_modifiers()` — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | Fleet (`navigation_tech`, `engine_tech`, `fuel_efficiency`) | **Fixed** | `fleet_speed_multiplier`, `fuel_efficiency_factor` — consumed in `fleet.py` / `fleet_calc.py` |
@@ -24,9 +24,7 @@ Prepared modifiers may appear in:
 
 Combat and fleet modifiers are **active** where documented in [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) and [FLEET_SYSTEM.md](FLEET_SYSTEM.md). Only `scan_range` remains prepared until a scan engine consumes it.
 
-### Build time note (GC-821)
-
-`economy_balance.power_build_seconds()` defines the design curve (`TIME_K × level^exponent`). **Live queue path** still uses legacy `BUILD_TIME_BASE × BUILD_TIME_FACTOR^(level-1)` in `get_build_time_seconds()`. See [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) and [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md).
+Build time: `get_build_time_seconds()` delegates to `economy_balance.power_build_seconds()` before player/admin speed modifiers (GC-850A).
 
 ### Galactic directives (GC-720E / GC-720E2)
 

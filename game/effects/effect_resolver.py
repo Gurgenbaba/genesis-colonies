@@ -997,12 +997,9 @@ class EffectResolver:
         return int(round(max(0.0, (1.0 - factor) * 100)))
 
     def get_build_time_seconds(self, building_type: str, target_level: int) -> int:
-        from ..buildings import BUILD_TIME_BASE, BUILD_TIME_FACTOR, DEFAULT_BUILD_TIME_LEVEL_1
+        from ..economy_balance import power_build_seconds
 
-        base_time = BUILD_TIME_BASE.get(building_type, DEFAULT_BUILD_TIME_LEVEL_1)
-        factor = BUILD_TIME_FACTOR.get(building_type, 1.5)
-        lvl_factor = factor ** max(int(target_level) - 1, 0)
-        seconds = float(base_time * lvl_factor)
+        seconds = float(power_build_seconds(building_type, int(target_level)))
         seconds /= self.get_build_time_effective_speed(building_type)
         return max(int(seconds), 1)
 

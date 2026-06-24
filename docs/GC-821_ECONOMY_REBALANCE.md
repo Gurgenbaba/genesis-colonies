@@ -37,7 +37,7 @@ Exponents for mines match `LEVEL_GROWTH` in `production_formula.py`.
 
 Curves: `BUILDING_UPGRADE_CURVES`, `BUILD_TIME_CURVES` in `economy_balance.py`.  
 **Costs** wired via `buildings.get_upgrade_cost()` → `power_upgrade_cost()`.  
-**Build times:** `power_build_seconds()` defined but **not yet** used in `EffectResolver.get_build_time_seconds()` (legacy exponential still live).
+**Build times:** wired via `EffectResolver.get_build_time_seconds()` → `power_build_seconds()` (GC-850A).
 
 ---
 
@@ -67,8 +67,7 @@ Expedition `economy_day_range` % bands unchanged (already empire-relative).
 
 ## GC-821D — Shipyard, Defense, Ranking & Admin
 
-- Fleet hull `build_cost` × **1.25** (GC-820 income alignment)
-- Defense `build_cost` × **1.25**
+- Fleet hull `build_cost` × **1.25** — Werte **direkt in** `fleet_defs.py` / `defense_defs.py` eingebacken (kein Runtime-`scaled_military_cost()`)
 - `score_value` unchanged (cost tables drive ranking)
 - `fuel_production_per_hour` admin key **deprecated** — display only; fuel uses `LEVEL_GROWTH` base 8.0
 

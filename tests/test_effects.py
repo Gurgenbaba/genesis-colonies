@@ -624,9 +624,11 @@ class TestResearchEffectRealityAudit:
         assert mods["build_time_multiplier"] == pytest.approx(duration_factor)
         assert mods["build_time_speed"] == pytest.approx(1 / duration_factor)
 
-        base_seconds = 600
+        from game.economy_balance import power_build_seconds
+
+        base_seconds = power_build_seconds("planet_core_nexus", 1)
         actual = er.get_build_time_seconds("planet_core_nexus", 1)
-        expected = int(base_seconds * mods["build_time_multiplier"] / er.build_speed_setting())
+        expected = max(1, int(base_seconds * mods["build_time_multiplier"] / er.build_speed_setting()))
         assert actual == expected
 
     def test_energy_efficiency_matches_display(self):
@@ -728,7 +730,9 @@ class TestResearchEffectRealityAudit:
             _, used = EffectResolver(b, {"energy_tech": lvl}).compute_energy()
             assert used >= 2
 
-        base = 600  # BUILD_TIME_BASE["planet_core_nexus"]
+        from game.economy_balance import power_build_seconds
+
+        base = power_build_seconds("planet_core_nexus", 1)
         for lvl in levels:
             assert "buildtime_tech" in RESEARCH_TECHS
             duration_factor = float(0.97 ** lvl)
@@ -738,7 +742,7 @@ class TestResearchEffectRealityAudit:
             mods = er.get_modifiers()
             assert mods["build_time_multiplier"] == pytest.approx(duration_factor)
             assert er.get_build_time_seconds("planet_core_nexus", 1) >= 1
-            expected_seconds = max(1, int(base * duration_factor))
+            expected_seconds = max(1, int(base * duration_factor / er.build_speed_setting()))
             assert er.get_build_time_seconds("planet_core_nexus", 1) == expected_seconds
 
             preview = get_research_effect_preview("buildtime_tech", lvl, lvl + 1)

@@ -48,17 +48,9 @@ Queue-Cancel-Refunds: [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) (GC-831).
 
 Legacy `BASE_COST × COST_FACTOR^(level-1)` nur noch Audit/Tests — **nicht** der Live-Pfad.
 
-### Build-Zeit (live)
+### Build-Zeit (live, GC-850A)
 
-**Zeit:** `EffectResolver.get_build_time_seconds()` — aktuell **Legacy-Exponential**:
-
-```text
-BUILD_TIME_BASE × BUILD_TIME_FACTOR^(target_level - 1) ÷ build_speed ÷ nanofactory ÷ buildtime_tech
-```
-
-**Design-Kurve (GC-821, noch nicht im Resolver):** `economy_balance.power_build_seconds()` — `TIME_K × level^exponent`. Siehe [BALANCE_ANCHORS.md](BALANCE_ANCHORS.md) §5–6.
-
-Modifier: `buildtime_tech`, `nanofactory`, `build_speed` (Default **1.1**).
+`EffectResolver.get_build_time_seconds()` → `power_build_seconds()` ÷ Speed-Boni (`build_speed`, `buildtime_tech`, `nanofactory`, …).
 
 ---
 
@@ -121,7 +113,7 @@ Panel-Daten: `get_buildings_panel_rows()` für SSR + Poll `buildings_panel` (ink
 
 ## EffectResolver
 
-- Build time: `get_build_time_seconds()` (Legacy-Pfad, siehe oben)
+- Build time: `get_build_time_seconds()` → `power_build_seconds` (GC-821 / GC-850A)
 - Max level caps für Minen/Solar/Storage
 - Storage capacity für Economy
 

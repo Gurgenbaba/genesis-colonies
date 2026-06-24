@@ -39,7 +39,7 @@ Vollständige Tabellen: **[GC_ANCHOR_TABLES_X1.md](GC_ANCHOR_TABLES_X1.md)**
 ## Wichtige Code-Wahrheiten
 
 1. **Upgrade-Kosten (Gebäude):** live via `power_upgrade_cost()` — **nicht** `BASE_COST × COST_FACTOR^level`.
-2. **Build-Zeit:** `power_build_seconds()` existiert in `economy_balance.py`, aber **`EffectResolver.get_build_time_seconds()` nutzt noch Legacy-Exponential** (`BUILD_TIME_BASE × FACTOR^level`). Design- vs. Live-Tabelle in GC_ANCHOR_TABLES_X1 §5–6.
+2. **Build-Zeit:** live via `power_build_seconds()` in `EffectResolver.get_build_time_seconds()` (GC-850A).
 3. **Forschung Kosten/Zeit:** live via `research_upgrade_cost()` / `research_time_anchor_hours()` (GC-825).
 4. **Minen-ROI-Anker:** L20=50h … L120=2000h — Ziel für Ferronit-Mine; Crytite/Brennzellen weichen ab.
 5. **Brennzellen-Lager:** Kapazität nur mit Gebäude **`fuel_storage`** — kein integrierter Werks-Puffer.

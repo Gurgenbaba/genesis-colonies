@@ -52,6 +52,11 @@ class TestGc821ABuildingCosts:
     def test_get_upgrade_cost_delegates_to_economy_balance(self):
         assert get_upgrade_cost("metal_mine", 9) == power_upgrade_cost("metal_mine", 10)
 
+    def test_get_build_time_delegates_to_power_curve(self):
+        er = EffectResolver({}, {}, settings={"build_speed": 1.0})
+        assert get_build_time("metal_mine", 20, user_id=None) == power_build_seconds("metal_mine", 20)
+        assert er.get_build_time_seconds("metal_mine", 20) == power_build_seconds("metal_mine", 20)
+
 
 class TestGc821BStorageAndExchange:
     def test_storage_base_capacity(self):

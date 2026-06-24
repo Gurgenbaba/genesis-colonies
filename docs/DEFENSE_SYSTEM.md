@@ -77,7 +77,7 @@ Gate ohne Migration: `defense_schema_ready()` + `defense_queue_table_ready()` �
 
 - Felder: `player_id`, `planet_id`, `defense_key`, `amount`, `status`, `started_at`, `finish_at`, `queue_position`, `cost_metal`, `cost_crystal`
 - Status: `queued` (aktiv in Queue-Engine), `completed`, `cancelled`
-- Kosten werden beim Einreihen gespeichert (für 60 %-Erstattung bei Cancel)
+- Kosten werden beim Einreihen gespeichert (für GC-831 Refund bei Cancel)
 
 Ranking-Spalte `player_scores.score_defense` existiert seit Migration `014_ranking_hardening.sql`.
 
@@ -122,7 +122,7 @@ Implementierung: `game/defense.py` (Queue-Logik), Auslieferung über [Queue Engi
 | Kosten | Sofort beim Einreihen von Planet-Ressourcen abgebucht |
 | Lieferung | **Progressiv** — Einheiten erscheinen nacheinander im Bestand (`progressive_units_to_deliver`) |
 | Bauzeit | `build_seconds` × Fabrik-Level-Faktor (`BUILD_TIME_LEVEL_FACTOR` 0.90) × globale `shipyard_speed` |
-| Cancel | Nur Jobs mit `status = queued`; **60 %** Rückerstattung (`defense_api.CANCEL_REFUND_RATIO`) |
+| Cancel | Nur Jobs mit `status = queued`; **GC-831 Refund** (100 % pending / 50 % active) via `queue_refund.refund_from_stored_costs` |
 
 Ablauf `build_defense()`:
 
@@ -131,7 +131,7 @@ Ablauf `build_defense()`:
 3. `recalculate_queue_finish_times()`
 4. Nach Lieferung: `add_planet_defense()` + optional `apply_score_updates_for_players()` (Poll-Pfad)
 
-Abbruch: `cancel_defense_job()` in `defense_api.py` — löscht Job, erstattet 60 %, renummeriert Queue.
+Abbruch: `cancel_defense_job()` in `defense_api.py` — löscht Job, GC-831 Refund, renummeriert Queue.
 
 ---
 

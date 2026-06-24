@@ -179,7 +179,7 @@ Ressourcen-Drops in Lootboxen sind **nicht mehr fix**, sondern skalieren mit dem
 |-------|--------|
 | Ferronit / Crytite | **50 %** der Stundenproduktion der **höchsten** Mine (× Container-Stufe); Floor **12 000–30 000** |
 | Brennzellen | **10 %** des Bestands (× Stufe); Floor **12 000–30 000** |
-| Schiffe / Verteidigung | Abnehmender %-Anteil (log-Kurve); Floor **12 000–30 000**; **max. 100 000** pro Roll |
+| Schiffe / Verteidigung | Abnehmender %-Anteil (log-Kurve); Floor **5 000–10 000** (`LOOT_UNIT_FLOOR_*`); **max. 100 000** pro Roll |
 | Container-Stufe | Multiplikator pro `container_*`-Key (`CONTAINER_RESOURCE_MULTIPLIER`) |
 | Keine Minen | Fallback Stufe **1** für Ferronit/Crytite |
 | Andere Drops | Items, Booster — feste min/max |

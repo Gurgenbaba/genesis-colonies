@@ -63,12 +63,6 @@ def prod_ph(res: str, lvl: int) -> float:
     return reference_production_per_hour(res, lvl, slot=SLOT, production_speed=1.0)
 
 
-def live_build_sec(btype: str, target_lvl: int) -> int:
-    bld = {btype: max(0, target_lvl - 1)}
-    er = EffectResolver(bld, {}, settings=SPEED)
-    return er.get_build_time_seconds(btype, target_lvl)
-
-
 def main() -> None:
     lines: list[str] = []
     lines.append("# Genesis Colonies — Ankerkurven (Code-Stand, Universum-Speed ×1)")
@@ -202,9 +196,9 @@ def main() -> None:
     lines.append(f"*Normaler Max-Level: {MAX_BUILDING_LEVEL}*")
     lines.append("")
 
-    lines.append("## 5) Gebäude-Bauzeit — Design-Kurve (GC-821, vor Speed-Boni)")
+    lines.append("## 5) Gebäude-Bauzeit — Live (GC-821 / GC-850A, vor Speed-Boni)")
     lines.append("")
-    lines.append("Formel: `TIME_K × Level^Exponent` · im Spiel ÷ `build_speed`")
+    lines.append("Formel: `power_build_seconds` = `TIME_K × Level^Exponent` · ÷ `build_speed` / Tech-Boni im Resolver")
     lines.append("")
     lines.append("| Stufe | Ferronit | Crytite | Solar | Brennzellen | Labor | Werft | Command |")
     lines.append("|-------|----------|---------|-------|-------------|-------|-------|---------|")
@@ -224,23 +218,7 @@ def main() -> None:
         lines.append(row)
     lines.append("")
 
-    lines.append("## 6) Gebäude-Bauzeit — Live-Queue (Legacy, Speed ×1)")
-    lines.append("")
-    lines.append(
-        "Aktuell serverseitig aktiv: `BUILD_TIME_BASE x Faktor^Stufe / build_speed` — "
-        "weicht Midgame von Design-Kurve ab."
-    )
-    lines.append("")
-    lines.append("| Stufe | Ferronit | Crytite | Solar | Brennzellen | Labor | Werft |")
-    lines.append("|-------|----------|---------|-------|-------------|-------|-------|")
-    for lvl in [10, 20, 30, 40, 50]:
-        row = f"| {lvl} |"
-        for b in pick[:-1]:
-            row += f" {fmt_time_sec(live_build_sec(b, lvl))} |"
-        lines.append(row)
-    lines.append("")
-
-    lines.append("## 7) Speicher & Tausch")
+    lines.append("## 6) Speicher & Tausch")
     lines.append("")
     lines.append(
         f"Speicher Basis L1: **{STORAGE_BASE_CAPACITY:,}** · Wachstum **×{STORAGE_LEVEL_GROWTH}**/Stufe".replace(",", ".")
@@ -258,7 +236,7 @@ def main() -> None:
     )
     lines.append("")
 
-    lines.append("## 8) Code-Anker (Rohwerte)")
+    lines.append("## 7) Code-Anker (Rohwerte)")
     lines.append("")
     lines.append(
         "**Forschung Zeit:** "

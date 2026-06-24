@@ -150,9 +150,9 @@ Amortisation = Payback in **Produktionsstunden** der jeweiligen Ressource (Slot 
 
 *Normaler Max-Level: 50*
 
-## 5) Gebäude-Bauzeit — Design-Kurve (GC-821, vor Speed-Boni)
+## 5) Gebäude-Bauzeit — Live (GC-821 / GC-850A, vor Speed-Boni)
 
-Formel: `TIME_K × Level^Exponent` · im Spiel ÷ `build_speed`
+Formel: `power_build_seconds` = `TIME_K × Level^Exponent` · ÷ `build_speed` / Tech-Boni im Resolver
 
 | Stufe | Ferronit | Crytite | Solar | Brennzellen | Labor | Werft | Command |
 |-------|----------|---------|-------|-------------|-------|-------|---------|
@@ -165,19 +165,7 @@ Formel: `TIME_K × Level^Exponent` · im Spiel ÷ `build_speed`
 | 100 | 15.9 h | 15.9 h | 18.1 h | 21.1 h | 1.2 Tage | 1.9 Tage | 2.0 Tage |
 | 120 | 20.3 h | 20.3 h | 23.1 h | 1.1 Tage | 1.5 Tage | 2.5 Tage | 2.6 Tage |
 
-## 6) Gebäude-Bauzeit — Live-Queue (Legacy, Speed ×1)
-
-Aktuell serverseitig aktiv: `BUILD_TIME_BASE x Faktor^Stufe / build_speed` — weicht Midgame von Design-Kurve ab.
-
-| Stufe | Ferronit | Crytite | Solar | Brennzellen | Labor | Werft |
-|-------|----------|---------|-------|-------------|-------|-------|
-| 10 | 18 Min | 18 Min | 44 Min | 42 Min | 2.3 h | 6.6 h |
-| 20 | 8.5 h | 8.5 h | 1.7 Tage | 1.2 Tage | 1.5 Wochen | 1.8 Monate |
-| 30 | 1.5 Wochen | 1.5 Wochen | 3.4 Monate | 1.7 Monate | 3.2 Jahre | 30.6 Jahre |
-| 40 | 9.8 Monate | 9.8 Monate | 15.9 Jahre | 5.6 Jahre | 347.6 Jahre | 6162.1 Jahre |
-| 50 | 23.4 Jahre | 23.4 Jahre | 916.6 Jahre | 230.4 Jahre | 38216.8 Jahre | 1242283.0 Jahre |
-
-## 7) Speicher & Tausch
+## 6) Speicher & Tausch
 
 Speicher Basis L1: **150.000** · Wachstum **×1.75**/Stufe
 
@@ -193,7 +181,7 @@ Speicher Basis L1: **150.000** · Wachstum **×1.75**/Stufe
 
 Tausch Tageslimit: min. **500.000** oder **80%** Imperiums-Tagesproduktion
 
-## 8) Code-Anker (Rohwerte)
+## 7) Code-Anker (Rohwerte)
 
 **Forschung Zeit:** L10=1.5h, L20=5.0h, L30=24.0h, L40=72.0h, L60=336.0h, L80=1080.0h, L100=2160.0h, L120=4320.0h
 
