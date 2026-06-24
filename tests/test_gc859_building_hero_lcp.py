@@ -81,7 +81,7 @@ def test_gc859_hero_images_have_width_height(buildings_resources_html):
 
 
 def test_gc859_active_queue_branch_respects_load_mode_in_template():
-    src = _read("templates/buildings.html")
+    src = _read("templates/partials/card_hero_img_macros.html")
     assert "render_hero_img_attrs" in src
     assert "'secondary'" in src
 

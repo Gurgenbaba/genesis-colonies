@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_shipyard_resource_blocker, render_raster_picture, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
+{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_shipyard_resource_blocker, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
 {% from "partials/building_effect_strip.html" import render_compact_effect_row with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 {% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
+{% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
 
 {# ===================================================================
    Genesis research cards — mirrors buildings card layout
@@ -90,20 +91,6 @@
     </button>
   </div>
   {% endif %}
-{% endmacro %}
-
-{% macro render_hero_img_stack(src, fallback, qj, hero_lazy=true) %}
-  {% set _active = qj is defined and qj and qj.status == 'active' %}
-  {% set _onerr = "this.onerror=null;this.src='" ~ fallback ~ "';" %}
-  <div class="gc-bld-hero-img-stack{% if _active %} gc-bld-hero-img-stack--progress{% endif %}"
-       {% if _active %}style="--hero-progress-pct: {{ qj.progress_pct|default(0)|int }}%;"{% endif %}>
-    {% if _active %}
-      {{ render_raster_picture(src, '', 'gc-bld-card-hero-img gc-bld-card-hero-img--muted', hero_lazy, hero_lazy, _onerr) }}
-      {{ render_raster_picture(src, '', 'gc-bld-card-hero-img gc-bld-card-hero-img--color', hero_lazy, hero_lazy, _onerr) }}
-    {% else %}
-      {{ render_raster_picture(src, '', 'gc-bld-card-hero-img', hero_lazy, hero_lazy, _onerr) }}
-    {% endif %}
-  </div>
 {% endmacro %}
 
 {% macro render_hero_time_chip(qj, idle_seconds, timer_kind, idle_title) %}
@@ -206,7 +193,7 @@
   </div>
 {% endmacro %}
 
-{% macro render_research_card(tech, rq_summary, queue_full, hero_lazy=true) %}
+{% macro render_research_card(tech, rq_summary, queue_full, hero_load='lazy', lcp_primary=false) %}
   {% set locked = not tech.requirements_met %}
   {% set curr_lvl = (tech.level or 0)|int %}
   {% set target_lvl = (tech.target_level if tech.target_level is defined else (curr_lvl + 1)) %}
@@ -233,7 +220,8 @@
   {% else %}
     {% set row_class = 'gc-prog-affordable' %}
   {% endif %}
-  {% set _research_img = url_for('static', filename='img/research/' ~ tech.icon) if tech.icon else url_for('static', filename='img/research/energieeffizienz.png') %}
+  {% set _research_png = url_for('static', filename='img/research/' ~ tech.icon) if tech.icon else url_for('static', filename='img/research/energieeffizienz.png') %}
+  {% set _research_webp = _research_png|webp_static %}
   {% set _research_img_fallback = url_for('static', filename='img/research/energieeffizienz.png') %}
 
   <article class="gc-building-card gc-research-card gc-prog-card {{ row_class }}{% if locked %} tech-row-locked{% endif %}{% if tech.queue_job is defined and tech.queue_job %} gc-research-card--in-queue{% if tech.queue_job.status == 'active' %} gc-research-card--queue-active{% else %} gc-research-card--queue-pending{% endif %}{% endif %}"
@@ -242,7 +230,7 @@
            role="listitem">
 
     <div class="gc-bld-card-hero">
-      {{ render_hero_img_stack(_research_img, _research_img_fallback, tech.queue_job if tech.queue_job is defined else none, hero_lazy) }}
+      {{ render_hero_img_stack(_research_webp, _research_png, tech.queue_job if tech.queue_job is defined else none, hero_load, lcp_primary) }}
       {% if tech.queue_job is defined and tech.queue_job %}
       {{ render_hero_queue(tech.queue_job, 'research', 'research') }}
       {% endif %}
@@ -290,18 +278,28 @@
   {% else %}
     <div class="gc-building-grid research-prog-list research-tech-grid" role="list">
       {% for tech in rows %}
-        {% set _card_lazy = loop.index0 >= 3 %}
-        {{ render_research_card(tech, rq_summary, queue_full, _card_lazy) }}
+        {% set _card_load = 'high' if loop.index0 == 0 else 'lazy' %}
+        {{ render_research_card(tech, rq_summary, queue_full, _card_load, loop.index0 == 0) }}
       {% endfor %}
     </div>
   {% endif %}
 {% endmacro %}
 
+{% set rs = (research_status if research_status is defined and research_status else {}) %}
+{% set techs = (rs.techs if rs and rs.techs is defined and rs.techs else []) %}
+{% set _lcp_research_png = (url_for('static', filename='img/research/' ~ techs[0].icon) if techs[0].icon else url_for('static', filename='img/research/energieeffizienz.png')) if techs else '' %}
+{% set _lcp_preload_href = (_lcp_research_png|webp_static) if _lcp_research_png else '' %}
+
+{% block extra_head %}
+{{ super() }}
+{% if _lcp_preload_href %}
+<link rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high">
+{% endif %}
+{% endblock %}
+
 {% block content %}
 
-{% set rs = (research_status if research_status is defined and research_status else {}) %}
 {% set rq_summary = (rs.summary if rs and rs.summary is defined and rs.summary else {}) %}
-{% set techs = (rs.techs if rs and rs.techs is defined and rs.techs else []) %}
 {% set lab_level = (rs.lab_level if rs and rs.lab_level is defined else 0) %}
 {% set rq_limit = (rq_summary.limit if rq_summary.limit is defined else 3) %}
 {% set rq_jobs = (rs.queue if rs and rs.queue is defined and rs.queue else []) %}

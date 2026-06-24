@@ -120,6 +120,28 @@ def get_asset_version() -> str:
 
 GC_ASSET_VERSION = get_asset_version()
 
+# GC-861B — moderate cache for unversioned raster static assets (7 days)
+GC_STATIC_IMAGE_CACHE_MAX_AGE = 604800
+GC_STATIC_IMAGE_SUFFIXES = frozenset({".webp", ".png", ".jpg", ".jpeg", ".gif", ".svg"})
+
+
+def _is_static_image_path(path: str) -> bool:
+    if not path.startswith("/static/"):
+        return False
+    lower = path.lower().split("?", 1)[0]
+    return any(lower.endswith(ext) for ext in GC_STATIC_IMAGE_SUFFIXES)
+
+
+def apply_static_image_cache_headers(response: Response) -> Response:
+    """Set Cache-Control on raster files under /static/ (no query-version bust yet)."""
+    if response.status_code not in (200, 304):
+        return response
+    if not _is_static_image_path(request.path or ""):
+        return response
+    response.headers["Cache-Control"] = f"public, max-age={GC_STATIC_IMAGE_CACHE_MAX_AGE}"
+    return response
+
+
 BACKGROUND_CLASSES = ["bg-1", "bg-2", "bg-3", "bg-4"]
 GC_LOCALE = "de"
 
@@ -554,7 +576,8 @@ def _session_cookie_secure() -> bool:
 @app.after_request
 def _gc_security_headers(response):
     secure = _session_cookie_secure() or bool(request.is_secure)
-    return apply_security_headers(response, secure=secure)
+    response = apply_security_headers(response, secure=secure)
+    return apply_static_image_cache_headers(response)
 
 
 def _auth_form_error_key() -> Optional[str]:

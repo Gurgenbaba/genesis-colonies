@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_resource_icon, render_raster_picture, render_compact_unit_stat_chips, render_card_costs_block, render_unit_build_time_footer, render_defense_locked_req_hover_attrs with context %}
+{% from "partials/progression_cards.html" import render_resource_icon, render_compact_unit_stat_chips, render_card_costs_block, render_unit_build_time_footer, render_defense_locked_req_hover_attrs with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 {% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
+{% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
 
 {% macro render_defense_stock_chip(defense_key, owned) %}
   <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero gc-card-level gc-card-stock-badge"
@@ -58,9 +59,20 @@
   {% endif %}
 {% endmacro %}
 
+{% set df = defense if defense is defined and defense else {'ready': false, 'defense_factory_level': 0} %}
+{% set buildable = df.buildable_defense if df.buildable_defense is defined else [] %}
+{% set _lcp_def_png = (buildable[0].icon|default(url_for('static', filename='img/defense/' ~ buildable[0].defense_key ~ '.png'))) if buildable else '' %}
+{% set _lcp_preload_href = (_lcp_def_png|webp_static) if _lcp_def_png else '' %}
+
+{% block extra_head %}
+{{ super() }}
+{% if _lcp_preload_href %}
+<link rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high">
+{% endif %}
+{% endblock %}
+
 {% block content %}
 
-{% set df = defense if defense is defined and defense else {'ready': false, 'defense_factory_level': 0} %}
 {% set player_obj = player if player is defined and player else None %}
 {% set p_metal = (df.resources.metal if df.resources is defined else (player_obj.metal if player_obj else 0)) | int %}
 {% set p_crystal = (df.resources.crystal if df.resources is defined else (player_obj.crystal if player_obj else 0)) | int %}
@@ -148,13 +160,14 @@
       {% set unit_desc = T(unit_desc_key) %}
       {% if unit_desc == unit_desc_key %}{% set unit_desc = '' %}{% endif %}
       {% set owned = (unit.stock if unit.stock is defined else planet_defense.get(unit.defense_key, 0))|int %}
-      {% set _def_img = unit.icon|default('/static/img/defense/' ~ unit.defense_key ~ '.png') %}
+      {% set _def_png = unit.icon|default(url_for('static', filename='img/defense/' ~ unit.defense_key ~ '.png')) %}
+      {% set _def_webp = _def_png|webp_static %}
       {% set _def_img_fallback = url_for('static', filename='img/defense/sentinel_turret.png') %}
-      {% set _card_lazy = loop.index0 >= 3 %}
+      {% set _card_load = 'high' if loop.index0 == 0 else 'lazy' %}
       <article class="gc-ship-card gc-prog-card {{ row_class }}{% if unit.queue_job is defined and unit.queue_job %} gc-ship-card--in-queue{% if unit.queue_job.status == 'active' %} gc-ship-card--queue-active{% else %} gc-ship-card--queue-pending{% endif %}{% endif %}"
                data-defense-card="{{ unit.defense_key }}" data-unlocked="1" role="listitem">
         <div class="gc-bld-card-hero">
-          {{ render_raster_picture(_def_img, '', 'gc-bld-card-hero-img', _card_lazy, _card_lazy, "this.onerror=null;this.src='" ~ _def_img_fallback ~ "';") }}
+          {{ render_hero_img_stack(_def_webp, _def_png, none, _card_load, loop.index0 == 0) }}
           <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
           {{ render_defense_stock_chip(unit.defense_key, owned) }}
           <div class="gc-bld-card-hero-title">
@@ -219,12 +232,12 @@
       {% set unit_desc = T(unit_desc_key) %}
       {% if unit_desc == unit_desc_key %}{% set unit_desc = '' %}{% endif %}
       {% set owned = (unit.stock if unit.stock is defined else planet_defense.get(unit.defense_key, 0))|int %}
-      {% set _def_img = unit.icon|default('/static/img/defense/' ~ unit.defense_key ~ '.png') %}
-      {% set _def_img_fallback = url_for('static', filename='img/defense/sentinel_turret.png') %}
+      {% set _def_png = unit.icon|default(url_for('static', filename='img/defense/' ~ unit.defense_key ~ '.png')) %}
+      {% set _def_webp = _def_png|webp_static %}
       <article class="gc-ship-card gc-prog-card gc-prog-locked is-locked"
                data-defense-card="{{ unit.defense_key }}" data-unlocked="0" role="listitem">
         <div class="gc-bld-card-hero">
-          {{ render_raster_picture(_def_img, '', 'gc-bld-card-hero-img', true, true, "this.onerror=null;this.src='" ~ _def_img_fallback ~ "';") }}
+          {{ render_hero_img_stack(_def_webp, _def_png, none, 'lazy', false) }}
           <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
           {{ render_defense_stock_chip(unit.defense_key, owned) }}
           <div class="gc-bld-card-hero-title">

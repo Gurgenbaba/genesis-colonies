@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_resource_icon, render_raster_picture, render_compact_unit_stat_chips, render_card_costs_block, render_unit_build_time_footer, render_ship_unlock_req_hover_attrs with context %}
+{% from "partials/progression_cards.html" import render_resource_icon, render_compact_unit_stat_chips, render_card_costs_block, render_unit_build_time_footer, render_ship_unlock_req_hover_attrs with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 {% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
+{% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
 
 {% macro render_ship_card_stock(ship_key, owned) %}
   <span class="gc-level-badge gc-bld-card-level gc-bld-card-level--hero gc-card-level gc-card-stock-badge"
@@ -58,8 +59,19 @@
   </div>
 {% endmacro %}
 
-{% block content %}
 {% set sy = shipyard if shipyard is defined and shipyard else {'ready': false, 'orbital_shipyard_level': 0} %}
+{% set buildable_ships = sy.buildable_ships if sy.buildable_ships is defined else [] %}
+{% set _lcp_ship_png = (buildable_ships[0].icon if buildable_ships[0].icon else url_for('static', filename='img/ships/seed_ark.png')) if buildable_ships else '' %}
+{% set _lcp_preload_href = (_lcp_ship_png|webp_static) if _lcp_ship_png else '' %}
+
+{% block extra_head %}
+{{ super() }}
+{% if _lcp_preload_href %}
+<link rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high">
+{% endif %}
+{% endblock %}
+
+{% block content %}
 {% set player_obj = player if player is defined and player else None %}
 {% set p_metal = (sy.resources.metal if sy.resources is defined else (player_obj.metal if player_obj else 0)) | int %}
 {% set p_crystal = (sy.resources.crystal if sy.resources is defined else (player_obj.crystal if player_obj else 0)) | int %}
@@ -152,15 +164,15 @@
       {% set ship_desc = T(ship_desc_key) %}
       {% if ship_desc == ship_desc_key %}{% set ship_desc = '' %}{% endif %}
       {% set owned = (ship.owned_count if ship.owned_count is defined else planet_ships.get(ship.ship_key, 0))|int %}
-      {% set _ship_img = ship.icon if ship.icon else url_for('static', filename='img/ships/seed_ark.png') %}
-      {% set _ship_img_fallback = url_for('static', filename='img/ships/seed_ark.png') %}
-      {% set _card_lazy = loop.index0 >= 3 %}
+      {% set _ship_png = ship.icon if ship.icon else url_for('static', filename='img/ships/seed_ark.png') %}
+      {% set _ship_webp = _ship_png|webp_static %}
+      {% set _card_load = 'high' if loop.index0 == 0 else 'lazy' %}
       <article class="gc-ship-card gc-prog-card {{ row_class }}{% if ship.queue_job is defined and ship.queue_job %} gc-ship-card--in-queue{% if ship.queue_job.status == 'active' %} gc-ship-card--queue-active{% else %} gc-ship-card--queue-pending{% endif %}{% endif %}"
                data-ship-card
                data-ship-key="{{ ship.ship_key }}"
                data-unlocked="1" role="listitem">
         <div class="gc-bld-card-hero">
-          {{ render_raster_picture(_ship_img, '', 'gc-bld-card-hero-img', _card_lazy, _card_lazy, "this.onerror=null;this.src='" ~ _ship_img_fallback ~ "';") }}
+          {{ render_hero_img_stack(_ship_webp, _ship_png, none, _card_load, loop.index0 == 0) }}
           <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
           {{ render_ship_card_stock(ship.ship_key, owned) }}
           <div class="gc-bld-card-hero-title">
@@ -224,14 +236,14 @@
       {% set ship_desc_key = "fleet_ship_" ~ ship.ship_key ~ "_desc" %}
       {% set ship_desc = T(ship_desc_key) %}
       {% if ship_desc == ship_desc_key %}{% set ship_desc = '' %}{% endif %}
-      {% set _ship_img = ship.icon if ship.icon else url_for('static', filename='img/ships/seed_ark.png') %}
-      {% set _ship_img_fallback = url_for('static', filename='img/ships/seed_ark.png') %}
+      {% set _ship_png = ship.icon if ship.icon else url_for('static', filename='img/ships/seed_ark.png') %}
+      {% set _ship_webp = _ship_png|webp_static %}
       <article class="gc-ship-card gc-prog-card gc-prog-locked is-locked"
                data-ship-card
                data-ship-key="{{ ship.ship_key }}"
                data-unlocked="0" role="listitem">
         <div class="gc-bld-card-hero">
-          {{ render_raster_picture(_ship_img, '', 'gc-bld-card-hero-img', true, true, "this.onerror=null;this.src='" ~ _ship_img_fallback ~ "';") }}
+          {{ render_hero_img_stack(_ship_webp, _ship_png, none, 'lazy', false) }}
           <div class="gc-bld-card-hero-overlay" aria-hidden="true"></div>
           {{ render_ship_card_stock(ship.ship_key, owned) }}
           <div class="gc-bld-card-hero-title">

@@ -1,15 +1,9 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip with context %}
 {% from "partials/fleet_slots_badge.html" import render_fleet_slots_badge with context %}
+{% from "partials/card_hero_img_macros.html" import render_hero_img_attrs with context %}
 
-{% block content %}
 {% set fleet_ctx = fleet if fleet is defined and fleet else {'ready': false} %}
-{% set log_ctx = logistics if logistics is defined and logistics else {'ready': false} %}
-{% set player_obj = player if player is defined and player else None %}
-{% set _ship_placeholder = url_for('static', filename='img/ships/seed_ark.png') %}
-{% set fleet_mode_raw = request.args.get('mode', 'send')|lower %}
-{% set fleet_mode = fleet_mode_raw if fleet_mode_raw in ('send', 'collect', 'distribute') else 'send' %}
-{% set fleet_logistics_mode = fleet_mode if fleet_mode in ('collect', 'distribute') else 'collect' %}
 {% set fleet_ship_role_groups = [
   ('cargo', 'scout'),
   ('combat',),
@@ -19,6 +13,35 @@
   ('recycle',),
   ('utility',),
 ] %}
+{% set _lcp_fleet = namespace(key='') %}
+{% if fleet_ctx.ship_defs is defined %}
+  {% for roles in fleet_ship_role_groups %}
+    {% if not _lcp_fleet.key %}
+      {% for ship in fleet_ctx.ship_defs %}
+        {% if not _lcp_fleet.key and ship.role in roles %}
+          {% set _lcp_fleet.key = ship.key %}
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+{% set _lcp_preload_href = url_for('static', filename='img/ships/' ~ _lcp_fleet.key ~ '.webp') if _lcp_fleet.key else '' %}
+
+{% block extra_head %}
+{{ super() }}
+{% if _lcp_preload_href %}
+<link rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high">
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% set log_ctx = logistics if logistics is defined and logistics else {'ready': false} %}
+{% set player_obj = player if player is defined and player else None %}
+{% set _ship_placeholder = url_for('static', filename='img/ships/seed_ark.png') %}
+{% set fleet_mode_raw = request.args.get('mode', 'send')|lower %}
+{% set fleet_mode = fleet_mode_raw if fleet_mode_raw in ('send', 'collect', 'distribute') else 'send' %}
+{% set fleet_logistics_mode = fleet_mode if fleet_mode in ('collect', 'distribute') else 'collect' %}
+{% set _fleet_lcp = namespace(done=false) %}
 
 <div class="gc-page fleet-page" id="fleet-page"
      data-ready="{{ '1' if fleet_ctx.ready else '0' }}"
@@ -204,6 +227,11 @@
               {% for ship in fleet_ctx.ship_defs %}
               {% if ship.role in roles %}
               {% set have = fleet_ctx.ships.get(ship.key, 0) if fleet_ctx.ships else 0 %}
+              {% set _ship_webp = url_for('static', filename='img/ships/' ~ ship.key ~ '.webp') %}
+              {% set _ship_png = url_for('static', filename='img/ships/' ~ ship.key ~ '.png') %}
+              {% set _is_lcp = not _fleet_lcp.done %}
+              {% if _is_lcp %}{% set _fleet_lcp.done = true %}{% endif %}
+              {% set _ship_load = 'high' if _is_lcp else 'lazy' %}
               <article class="fleet-ship-card fleet-ship-card--pick fleet-ship-row{% if have <= 0 %} is-empty{% endif %}"
                        data-ship-key="{{ ship.key }}"
                        data-ship-have="{{ have }}"
@@ -219,15 +247,15 @@
                             data-ship-max-image="{{ ship.key }}"
                             aria-label="{{ T('fleet_ship_image_max', 'Select maximum') }}: {{ T(ship.name_key) }}">
                       <picture>
-                        <source srcset="{{ url_for('static', filename='img/ships/' ~ ship.key ~ '.webp') }}" type="image/webp">
-                        <img src="{{ url_for('static', filename='img/ships/' ~ ship.key ~ '.png') }}"
+                        <source srcset="{{ _ship_webp }}" type="image/webp">
+                        <img src="{{ _ship_png }}"
                              alt=""
-                             loading="lazy"
-                             decoding="async"
+                             {{ render_hero_img_attrs(_ship_load, 'primary') }}
                              class="fleet-ship-card-img fleet-ship-thumb"
                              width="96"
                              height="96"
                              data-ship-img="{{ ship.key }}"
+                             {% if _is_lcp %}data-gc-lcp-hero="1" data-gc-lcp-webp-href="{{ _ship_webp }}"{% endif %}
                              onerror="this.onerror=null;this.src='{{ _ship_placeholder }}';">
                       </picture>
                     </button>

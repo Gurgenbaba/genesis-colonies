@@ -24201,6 +24201,65 @@
     return true;
   }
 
+  // GC-861B — PJAX LCP hero preload (SSR extra_head is not swapped with main-content)
+  const GC_LCP_HERO_PRELOAD_ID = "gc-lcp-hero-preload";
+
+  function resolveLcpHeroImageUrl(root) {
+    if (!root) return "";
+    const img = root.querySelector('[data-gc-lcp-hero="1"]');
+    if (!img) return "";
+    const webpHint = String(img.getAttribute("data-gc-lcp-webp-href") || "").trim();
+    if (webpHint) return webpHint;
+    const picture = img.closest("picture");
+    const source = picture?.querySelector('source[type="image/webp"]');
+    if (source) {
+      const srcset = String(source.getAttribute("srcset") || "").trim();
+      const first = srcset.split(/\s*,\s*/)[0]?.split(/\s+/)[0];
+      if (first) return first;
+    }
+    const raw = String(img.getAttribute("src") || img.src || "").trim();
+    if (/\.(png|jpe?g)(\?|$)/i.test(raw)) {
+      return raw.replace(/\.(png|jpe?g)(\?.*)?$/i, ".webp$2");
+    }
+    return raw;
+  }
+
+  function syncLcpHeroPreload(href) {
+    const url = String(href || "").trim();
+    let link = document.getElementById(GC_LCP_HERO_PRELOAD_ID);
+    if (!url) {
+      if (link) link.remove();
+      document.querySelectorAll("link[data-gc-lcp-preload]").forEach((el) => el.remove());
+      return;
+    }
+    if (!link) {
+      document.querySelectorAll("link[data-gc-lcp-preload]").forEach((el) => el.remove());
+      link = document.createElement("link");
+      link.id = GC_LCP_HERO_PRELOAD_ID;
+      link.rel = "preload";
+      link.as = "image";
+      link.dataset.gcLcpPreload = "1";
+      document.head.appendChild(link);
+    }
+    if (link.getAttribute("href") === url) return;
+    link.setAttribute("href", url);
+    link.setAttribute("fetchpriority", "high");
+    if (/\.webp(\?|$)/i.test(url)) link.type = "image/webp";
+    else link.removeAttribute("type");
+  }
+
+  function syncLcpHeroPreloadFromPjaxDoc(doc) {
+    const newMain = doc?.getElementById?.("main-content");
+    if (!newMain) {
+      syncLcpHeroPreload("");
+      return;
+    }
+    syncLcpHeroPreload(resolveLcpHeroImageUrl(newMain));
+  }
+
+  GC.syncLcpHeroPreload = syncLcpHeroPreload;
+  GC.syncLcpHeroPreloadFromPjaxDoc = syncLcpHeroPreloadFromPjaxDoc;
+
   GC.navigateTo = async function navigateTo(url, opts = {}) {
     const push = opts.push !== false;
     const target = normalizePjaxUrl(url);
@@ -24242,6 +24301,8 @@
         if (!newMain) throw new Error("main-content missing");
 
         GC.cleanupPage();
+
+        syncLcpHeroPreloadFromPjaxDoc(doc);
 
         const main = document.getElementById("main-content");
         main.innerHTML = newMain.innerHTML;

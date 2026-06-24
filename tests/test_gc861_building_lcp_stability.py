@@ -65,11 +65,12 @@ def test_gc861_first_card_marks_lcp_hero(buildings_resources_html):
 
 
 def test_gc861_active_stack_single_high_priority_in_template():
-    src = _read("templates/buildings.html")
+    src = _read("templates/partials/card_hero_img_macros.html")
     assert "render_hero_img_attrs" in src
     assert "role == 'secondary'" in src or "'secondary'" in src
     assert "data-gc-lcp-hero" in src
-    assert "_card_load = 'high' if loop.index0 == 0 else 'lazy'" in src
+    bld = _read("templates/buildings.html")
+    assert "_card_load = 'high' if loop.index0 == 0 else 'lazy'" in bld
 
 
 def test_gc861_second_third_cards_no_longer_eager(buildings_resources_html):

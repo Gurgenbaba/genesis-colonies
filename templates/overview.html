@@ -1,9 +1,22 @@
 {% extends "base.html" %}
 
-{% block content %}
-
 {% set os = (overview_status if overview_status is defined and overview_status else {}) %}
 {% set planet = (os.planet if os.planet is defined else {}) %}
+{% set theme = (planet.theme if planet.theme is defined else {}) %}
+{% set herocard_rel = theme.herocard_relpath or 'img/herocards/herocard_08.png' %}
+{% set herocard_png_url = url_for('static', filename=herocard_rel) %}
+{% set herocard_webp_url = herocard_png_url|webp_static %}
+{% set _lcp_preload_href = herocard_webp_url %}
+
+{% block extra_head %}
+{{ super() }}
+{% if _lcp_preload_href %}
+<link rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high">
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
 {% set commander = (os.commander if os.commander is defined else {}) %}
 {% set activities = (os.activities if os.activities is defined and os.activities else []) %}
 {% set player_obj = (player if player is defined and player else None) %}
@@ -17,7 +30,6 @@
 {% set hero_theme_key = theme.theme_key or 'temperate-highlands' %}
 {% set hero_theme_group = theme.theme_group or 'living' %}
 {% set hero_label_key = theme.label_key or 'planet_slot_08' %}
-{% set herocard_rel = theme.herocard_relpath or 'img/herocards/herocard_08.png' %}
 {% set herocard_srcset_parts = theme.herocard_webp_srcset_parts if theme.herocard_webp_srcset_parts is defined else [] %}
 {% set herocard_sizes = theme.herocard_webp_sizes or '(max-width: 768px) 100vw, (max-width: 1280px) 90vw, 1120px' %}
 {% set herocard_w = theme.herocard_fallback_width|default(560) %}
@@ -51,13 +63,15 @@
         <source type="image/webp"
                 srcset="{% for rel, w in herocard_srcset_parts %}{{ url_for('static', filename=rel) }} {{ w }}w{% if not loop.last %}, {% endif %}{% endfor %}"
                 sizes="{{ herocard_sizes }}">
-        <img src="{{ url_for('static', filename=herocard_rel) }}"
+        <img src="{{ herocard_png_url }}"
              alt=""
              loading="eager"
              fetchpriority="high"
              decoding="async"
              width="{{ herocard_w }}"
-             height="{{ herocard_h }}">
+             height="{{ herocard_h }}"
+             data-gc-lcp-hero="1"
+             data-gc-lcp-webp-href="{{ herocard_webp_url }}">
       </picture>
     </div>
     <div class="overview-hero-atmo" aria-hidden="true"></div>

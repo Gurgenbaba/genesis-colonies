@@ -1,8 +1,20 @@
 {% extends "base.html" %}
+{% from "partials/card_hero_img_macros.html" import render_card_hero_img with context %}
 
-{% block content %}
 {% set inv_data = inventory if inventory is defined and inventory else {'ready': false, 'containers': [], 'other_items': []} %}
 {% set _loot_fallback = url_for('static', filename='img/lootboxes/Generic_Supply_Container.png') %}
+{% set _containers = inv_data.containers if inv_data.containers is defined else [] %}
+{% set _first_container_img = (url_for('static', filename=_containers[0].image) if _containers[0].image is defined else _loot_fallback) if _containers else '' %}
+{% set _lcp_preload_href = (_first_container_img|webp_static) if _first_container_img else '' %}
+
+{% block extra_head %}
+{{ super() }}
+{% if _lcp_preload_href %}
+<link rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high">
+{% endif %}
+{% endblock %}
+
+{% block content %}
 
 <div class="gc-page inventory-page" id="inventory-page"
      data-ready="{{ '1' if inv_data.ready is not defined or inv_data.ready != false else '0' }}">
@@ -55,17 +67,13 @@
       {% set _can_open = (_owned and not _blocked) or _free_ready %}
       {% set _max_open = (c.max_open_amount|int) if c.max_open_amount is defined else 10 %}
       {% set _img = url_for('static', filename=c.image) if c.image is defined else _loot_fallback %}
+      {% set _card_load = 'high' if loop.index0 == 0 else 'lazy' %}
       <article class="inventory-loot-card inventory-container-card {{ 'inventory-loot-card--owned' if _owned else ('inventory-loot-card--free-ready' if _free_ready else 'inventory-loot-card--empty') }}"
                data-inventory-container="{{ c.item_key }}"
                data-rarity="{{ c.rarity }}">
         <div class="inventory-loot-card-hero">
           <div class="inventory-loot-card-glow inventory-loot-card-glow--{{ c.rarity }}" aria-hidden="true"></div>
-          <img class="inventory-loot-card-img"
-               src="{{ _img }}"
-               alt="{{ T(c.name_key, c.item_key) }}"
-               loading="lazy"
-               decoding="async"
-               onerror="this.onerror=null;this.src='{{ _loot_fallback }}';">
+          {{ render_card_hero_img(_img, T(c.name_key, c.item_key), 'inventory-loot-card-img', _card_load, loop.index0 == 0, 320, 180, "this.onerror=null;this.src='" ~ _loot_fallback ~ "';") }}
           <span class="inventory-loot-card-stock gc-mono"
                 data-inventory-amount="{{ c.item_key }}"
                 title="{{ T('inv_amount_label', 'Anzahl') }}">

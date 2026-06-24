@@ -42,6 +42,9 @@ class BuildingsPanelContext:
     resolver: EffectResolver
     production_per_hour: Dict[str, int]
     _bumped_production: Dict[Tuple[str, int], Dict[str, int]] = field(default_factory=dict)
+    _bumped_resolvers: Dict[Tuple[str, int], EffectResolver] = field(default_factory=dict)
+    _build_time_cache: Dict[Tuple[str, int], int] = field(default_factory=dict)
+    _build_time_at_target_cache: Dict[Tuple[str, int], int] = field(default_factory=dict)
 
     @classmethod
     def for_planet(
@@ -70,17 +73,65 @@ class BuildingsPanelContext:
             production_per_hour=resolver.get_building_production_per_hour(float(ratio)),
         )
 
+    @classmethod
+    def for_queue_recalc(
+        cls,
+        user_id: int,
+        buildings: Dict[str, int],
+        research_levels: Dict[str, int],
+        *,
+        conn=None,
+    ) -> BuildingsPanelContext:
+        """GC-862 — one resolver for queue recalc / MAX enqueue loops."""
+        resolver = get_effect_resolver(
+            int(user_id),
+            buildings=buildings,
+            research=research_levels,
+            conn=conn,
+        )
+        return cls(
+            user_id=int(user_id),
+            buildings=dict(buildings),
+            research_levels=dict(research_levels),
+            ratio=1.0,
+            resolver=resolver,
+            production_per_hour={},
+        )
+
     def build_time_seconds(self, building_type: str, target_level: int) -> int:
-        return int(self.resolver.get_build_time_seconds(building_type, int(target_level)))
+        key = (str(building_type), int(target_level))
+        cached = self._build_time_cache.get(key)
+        if cached is not None:
+            return cached
+        val = int(self.resolver.get_build_time_seconds(building_type, int(target_level)))
+        self._build_time_cache[key] = val
+        return val
+
+    def build_time_seconds_at_target(self, building_type: str, target_level: int) -> int:
+        key = (str(building_type), int(target_level))
+        cached = self._build_time_at_target_cache.get(key)
+        if cached is not None:
+            return cached
+        val = int(
+            self.resolver_at_target(building_type, target_level).get_build_time_seconds(
+                building_type, int(target_level)
+            )
+        )
+        self._build_time_at_target_cache[key] = val
+        return val
 
     def max_level(self, building_type: str) -> int:
         return int(self.resolver.get_max_building_level(building_type))
 
     def resolver_at_target(self, building_type: str, target_level: int) -> EffectResolver:
+        key = (str(building_type), int(target_level))
+        cached = self._bumped_resolvers.get(key)
+        if cached is not None:
+            return cached
         bumped = dict(self.buildings)
         bumped[building_type] = int(target_level)
         base = self.resolver
-        return EffectResolver(
+        resolver = EffectResolver(
             bumped,
             self.research_levels,
             settings=base._settings,
@@ -90,6 +141,8 @@ class BuildingsPanelContext:
             galaxy_id=base.galaxy_id,
             conn=base._conn,
         )
+        self._bumped_resolvers[key] = resolver
+        return resolver
 
     def production_per_hour_at_target(self, building_type: str, target_level: int) -> Dict[str, int]:
         key = (str(building_type), int(target_level))
@@ -371,6 +424,7 @@ def recalculate_build_queue_finish_times(
 
     buildings = get_planet_buildings(planet_id, conn=conn)
     research_levels = get_research_levels(user_id=uid, conn=conn)
+    hotpath = BuildingsPanelContext.for_queue_recalc(uid, buildings, research_levels, conn=conn)
     cur = conn.cursor()
     schedule_at = ts
     queued_counts: Dict[str, int] = {}
@@ -380,16 +434,7 @@ def recalculate_build_queue_finish_times(
         current = int(buildings.get(btype, 0) or 0)
         queued_same = int(queued_counts.get(btype, 0))
         target_level = current + queued_same + 1
-        duration = int(
-            get_build_time(
-                btype,
-                target_level,
-                user_id=uid,
-                conn=conn,
-                buildings=buildings,
-                research_levels=research_levels,
-            )
-        )
+        duration = hotpath.build_time_seconds(btype, target_level)
 
         if idx == 0:
             start_existing = float(row["start_time"] or 0)
@@ -860,13 +905,18 @@ def _technical_effects_at_level(
     level: int,
     ratio: float,
     research_levels: Dict[str, int],
+    *,
+    panel_ctx: Optional[BuildingsPanelContext] = None,
 ) -> Dict[str, Any]:
     """Authoritative per-level stats for the technical-data modal."""
-    from .logic import get_building_production_per_hour
-
-    bumped = dict(buildings)
-    bumped[building_type] = int(level)
-    r = EffectResolver(bumped, research_levels or {})
+    if panel_ctx is not None:
+        r = panel_ctx.resolver_at_target(building_type, int(level))
+        bumped = dict(panel_ctx.buildings)
+        bumped[building_type] = int(level)
+    else:
+        bumped = dict(buildings)
+        bumped[building_type] = int(level)
+        r = EffectResolver(bumped, research_levels or {})
 
     out: Dict[str, Any] = {
         "effect_kind": "level",
@@ -885,7 +935,12 @@ def _technical_effects_at_level(
     }
 
     if building_type in BUILDING_PRODUCTION_RESOURCE:
-        prod = get_building_production_per_hour(bumped, ratio, research=research_levels)
+        if panel_ctx is not None:
+            prod = panel_ctx.production_per_hour_at_target(building_type, int(level))
+        else:
+            from .logic import get_building_production_per_hour
+
+            prod = get_building_production_per_hour(bumped, ratio, research=research_levels)
         val = int(prod.get(building_type, 0) or 0)
         res = BUILDING_PRODUCTION_RESOURCE[building_type]
         out["effect_kind"] = "production"
@@ -1069,21 +1124,25 @@ def _technical_level_row(
     conn,
     ratio: float,
     is_current: bool,
+    panel_ctx: Optional[BuildingsPanelContext] = None,
 ) -> Dict[str, Any]:
-    bumped = dict(buildings)
-    bumped[building_type] = int(level)
     upgrade_from = max(int(level) - 1, 0)
     cost_m, cost_c = get_upgrade_cost(building_type, upgrade_from)
-    time_s = int(
-        get_build_time(
-            building_type,
-            int(level),
-            user_id=int(user_id),
-            conn=conn,
-            buildings=bumped,
-            research_levels=research_levels,
+    if panel_ctx is not None:
+        time_s = panel_ctx.build_time_seconds_at_target(building_type, int(level))
+    else:
+        bumped = dict(buildings)
+        bumped[building_type] = int(level)
+        time_s = int(
+            get_build_time(
+                building_type,
+                int(level),
+                user_id=int(user_id),
+                conn=conn,
+                buildings=bumped,
+                research_levels=research_levels,
+            )
         )
-    )
     row: Dict[str, Any] = {
         "level": int(level),
         "is_current": bool(is_current),
@@ -1091,7 +1150,11 @@ def _technical_level_row(
         "cost_crystal": int(cost_c),
         "time_seconds": time_s,
     }
-    row.update(_technical_effects_at_level(building_type, buildings, level, ratio, research_levels))
+    row.update(
+        _technical_effects_at_level(
+            building_type, buildings, level, ratio, research_levels, panel_ctx=panel_ctx
+        )
+    )
     from .technical_data import enrich_building_technical_row
 
     enrich_building_technical_row(row, building_type, buildings, research_levels, ratio, level)
@@ -1117,7 +1180,8 @@ def build_building_technical_data(
     research_levels = get_research_levels(user_id=uid, conn=conn)
     ratio = _panel_energy_ratio(buildings, research_levels)
     current = int(buildings.get(btype, 0) or 0)
-    max_level = get_max_level_for_building(btype, buildings)
+    panel_ctx = BuildingsPanelContext.for_planet(planet, buildings, research_levels, ratio, conn=conn)
+    max_level = panel_ctx.max_level(btype)
     from .technical_data import (
         build_building_technical_summary,
         build_production_milestones,
@@ -1138,6 +1202,7 @@ def build_building_technical_data(
             conn=conn,
             ratio=ratio,
             is_current=(lvl == current),
+            panel_ctx=panel_ctx,
         )
         row["row_role"] = technical_row_role(lvl, current, max_level=max_level)
         levels.append(row)
@@ -1819,38 +1884,39 @@ def queue_build_for_planet(
         last_fail: Dict[str, Any] = {}
         max_attempts = 64 if want_max else 1
 
+        buildings = get_planet_buildings(planet_id, conn=conn)
+        research_levels = get_research_levels(user_id=user_id, conn=conn)
+        hotpath = BuildingsPanelContext.for_queue_recalc(
+            user_id, buildings, research_levels, conn=conn
+        )
+        rows_db: List[Dict[str, Any]] = list(get_build_queue_rows(planet_id, conn=conn))
+
         def _record_mutate_perf() -> None:
             if perf is not None:
                 perf.add_mutate_ms((time.perf_counter() - mutate_t0) * 1000.0)
 
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
+            (planet_id,),
+        )
+        prow = cur.fetchone()
+        if not prow:
+            _record_mutate_perf()
+            rollback(conn)
+            return False, "invalid", {"msg": "Planet not found"}
+        planet_metal = float(prow["metal"] or 0)
+        planet_crystal = float(prow["crystal"] or 0)
+
         for _ in range(max_attempts):
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
-                (planet_id,),
-            )
-            prow = cur.fetchone()
-            if not prow:
-                if jobs_queued > 0:
-                    break
-                rollback(conn)
-                return False, "invalid", {"msg": "Planet not found"}
-
-            planet_metal = float(prow["metal"] or 0)
-            planet_crystal = float(prow["crystal"] or 0)
-
-            buildings = get_planet_buildings(planet_id, conn=conn)
-            research_levels = get_research_levels(user_id=user_id, conn=conn)
-
             current_level = int(buildings.get(building_type, 0) or 0)
-            max_level = get_max_level_for_building(building_type, buildings)
+            max_level = hotpath.max_level(building_type)
 
             if current_level >= max_level:
                 last_reason = "invalid"
                 last_fail = {"msg": "Max level reached", "max_level": max_level}
                 break
 
-            rows_db = get_build_queue_rows(planet_id, conn=conn)
             queued_same = sum(1 for r in rows_db if str(r["building_type"]) == building_type)
             target_level = current_level + queued_same + 1
 
@@ -1892,14 +1958,7 @@ def queue_build_for_planet(
                 last_fail = {"queue_count": len(rows_db), "queue_limit": queue_limit}
                 break
 
-            duration = get_build_time(
-                building_type,
-                target_level,
-                user_id=user_id,
-                conn=conn,
-                buildings=buildings,
-                research_levels=research_levels,
-            )
+            duration = hotpath.build_time_seconds(building_type, target_level)
 
             last_finish_time = max(float(r["finish_time"]) for r in rows_db) if rows_db else now
             start_time = max(now, last_finish_time)
@@ -1936,6 +1995,16 @@ def queue_build_for_planet(
                 "queue_limit": int(queue_limit),
                 "max_level": int(max_level),
             }
+            rows_db.append(
+                {
+                    "id": int(job_id),
+                    "building_type": building_type,
+                    "start_time": float(start_time),
+                    "finish_time": float(finish_time),
+                }
+            )
+            planet_metal -= float(cost_metal)
+            planet_crystal -= float(cost_crystal)
 
             if not want_max:
                 break

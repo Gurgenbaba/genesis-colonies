@@ -3,50 +3,11 @@
 {% from "partials/building_effect_strip.html" import render_building_effect_bundle, render_building_card_footer with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 {% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
+{% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
 
 {# ===================================================================
    Genesis building cards (Resources / Research / Military / Infrastructure)
    =================================================================== #}
-
-{% macro render_hero_img_attrs(hero_load, role) %}
-  {# GC-861 — one high-priority discover per card; stack layers must not compete #}
-  {% if role == 'primary' and hero_load == 'high' %}loading="eager" decoding="async" fetchpriority="high"{% elif role == 'primary' and hero_load == 'eager' %}loading="eager" decoding="async"{% elif role == 'secondary' %}loading="eager" decoding="async" fetchpriority="low"{% else %}loading="lazy" decoding="async" fetchpriority="low"{% endif %}
-{% endmacro %}
-
-{% macro render_hero_img_stack(src, fallback, qj, hero_load='lazy', lcp_primary=false) %}
-  {% set _active = qj is defined and qj and qj.status == 'active' %}
-  {% set _onerr = "this.onerror=null;this.src='" ~ fallback ~ "';" %}
-  {% set _primary_role = 'primary' if hero_load in ('high', 'eager') else 'defer' %}
-  <div class="gc-bld-hero-img-stack{% if _active %} gc-bld-hero-img-stack--progress{% endif %}"
-       {% if _active %}style="--hero-progress-pct: {{ qj.progress_pct|default(0)|int }}%;"{% endif %}>
-    {% if _active %}
-      <img src="{{ src }}"
-           alt=""
-           class="gc-bld-card-hero-img gc-bld-card-hero-img--muted"
-           width="320"
-           height="180"
-           {% if lcp_primary %}data-gc-lcp-hero="1"{% endif %}
-           {{ render_hero_img_attrs(hero_load, _primary_role) }}
-           onerror="{{ _onerr }}">
-      <img src="{{ src }}"
-           alt=""
-           class="gc-bld-card-hero-img gc-bld-card-hero-img--color"
-           width="320"
-           height="180"
-           {{ render_hero_img_attrs(hero_load, 'secondary' if hero_load in ('high', 'eager') else 'defer') }}
-           onerror="{{ _onerr }}">
-    {% else %}
-      <img src="{{ src }}"
-           alt=""
-           class="gc-bld-card-hero-img"
-           width="320"
-           height="180"
-           {% if lcp_primary %}data-gc-lcp-hero="1"{% endif %}
-           {{ render_hero_img_attrs(hero_load, _primary_role) }}
-           onerror="{{ _onerr }}">
-    {% endif %}
-  </div>
-{% endmacro %}
 
 {% macro render_hero_time_chip(qj, idle_seconds, timer_kind, idle_title) %}
   <span class="gc-bld-hero-time-chip gc-card-timer bcell-duration gc-mono" data-hero-time-chip title="{{ idle_title }}">
