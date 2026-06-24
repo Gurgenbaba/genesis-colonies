@@ -67,16 +67,25 @@ def get_building_production_per_hour(
     ratio: float,
     research: Optional[Dict[str, int]] = None,
     mods: Optional[Dict[str, float]] = None,
+    *,
+    user_id: Optional[int] = None,
+    conn=None,
 ) -> Dict[str, int]:
     """
     Liefert eine Übersicht der Produktion pro Stunde je Gebäude.
 
-    Research:
-      - Wenn 'mods' gesetzt ist, werden die zentralen Faktoren aus
-        get_research_modifiers() verwendet.
-      - Andernfalls Fallback auf 'research'-Dict (Formeln identisch).
+    Mit ``user_id``: planet scope + galaxy slot für GC-820 Slot/Temperatur-Modifier.
     """
-    return _resolver(buildings, research, mods).get_building_production_per_hour(ratio)
+    if user_id is not None:
+        resolver = get_effect_resolver(
+            int(user_id),
+            buildings=buildings,
+            research=research,
+            conn=conn,
+        )
+    else:
+        resolver = _resolver(buildings, research, mods)
+    return resolver.get_building_production_per_hour(ratio)
 
 
 # ==========================================================================
@@ -277,15 +286,12 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
         energy_total, energy_used = resolver.compute_energy()
         ratio = EffectResolver.energy_ratio(energy_total, energy_used)
 
-        settings = get_game_settings(conn=conn)
-        prod_speed = float(settings.get("production_speed", 1.0) or 1.0)
-
         if delta > 0:
             m_rate, c_rate = resolver.production_rates_per_sec()
             fc_rate = resolver.fuel_cells_rate_per_sec()
-            delta_metal = int(m_rate * ratio * delta * prod_speed)
-            delta_crystal = int(c_rate * ratio * delta * prod_speed)
-            delta_fuel_cells = int(fc_rate * ratio * delta * prod_speed)
+            delta_metal = int(m_rate * ratio * delta)
+            delta_crystal = int(c_rate * ratio * delta)
+            delta_fuel_cells = int(fc_rate * ratio * delta)
 
             apply_production_delta(
                 planet,

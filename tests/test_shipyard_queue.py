@@ -13,7 +13,6 @@ from game.fleet import get_planet_ships
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, init_db
 from game.shipyard import build_ship, cancel_shipyard_job, move_shipyard_job
 from game.shipyard_queue import (
-    CANCEL_REFUND_RATIO,
     MAX_SHIPYARD_QUEUE,
     finish_due_shipyard_jobs_for_planet,
     queue_count,
@@ -116,7 +115,9 @@ def test_finish_delivers_ships_to_fleet_inventory(sy_queue_db):
     conn.close()
 
 
-def test_cancel_refunds_sixty_percent(sy_queue_db):
+def test_cancel_refunds_by_queue_state(sy_queue_db):
+    from game.queue_refund import REFUND_RATIO_ACTIVE, refund_ratio_for_job
+
     conn = db()
     uid = _player()
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
@@ -129,12 +130,19 @@ def test_cancel_refunds_sixty_percent(sy_queue_db):
     assert ok
     after_build_m = float(cur.execute("SELECT metal FROM planets WHERE id = ?;", (pid,)).fetchone()["metal"])
     spent = before_m - after_build_m
-    job_id = int(result["shipyard_queue"]["queue"][0]["id"])
+    job = result["shipyard_queue"]["queue"][0]
+    job_id = int(job["id"])
+    ratio = refund_ratio_for_job(
+        start_time=float(job.get("start_at") or job.get("started_at") or time.time()),
+        finish_time=float(job.get("finish_at") or time.time()),
+        now=time.time(),
+    )
     ok_c, _, _ = cancel_shipyard_job(player_id=uid, planet_id=pid, job_id=job_id, conn=conn)
     assert ok_c
     after_cancel_m = float(cur.execute("SELECT metal FROM planets WHERE id = ?;", (pid,)).fetchone()["metal"])
     refunded = after_cancel_m - after_build_m
-    assert refunded == pytest.approx(spent * CANCEL_REFUND_RATIO, rel=0.01)
+    assert ratio in (REFUND_RATIO_ACTIVE, 1.0)
+    assert refunded == pytest.approx(spent * ratio, rel=0.01)
     conn.close()
 
 

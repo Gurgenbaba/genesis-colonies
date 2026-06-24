@@ -18,8 +18,14 @@ LootEntry = Dict[str, Any]
 
 LOOT_POOL_SETTINGS_KEY = "inventory_loot_pool_overrides"
 
+from .economy_balance import (
+    LOOT_BASE_PRODUCTION_HOURS as _EB_LOOT_HOURS,
+    LOOT_RESOURCE_FLOOR_MAX as _EB_FLOOR_MAX,
+    LOOT_RESOURCE_FLOOR_MIN as _EB_FLOOR_MIN,
+)
+
 # Discord feedback: reward ≈ 50 % of 1 h production at highest empire mine level.
-LOOT_BASE_PRODUCTION_HOURS = 0.5
+LOOT_BASE_PRODUCTION_HOURS = _EB_LOOT_HOURS
 LOOT_FALLBACK_MINE_LEVEL = 1
 
 LOOT_FLEET_FRACTION = 0.10
@@ -39,8 +45,8 @@ LOOT_UNIT_FRACTION_ANCHORS: Tuple[Tuple[int, Tuple[float, float]], ...] = (
 )
 
 LOOT_FUEL_STOCK_FRACTION = 0.10
-LOOT_RESOURCE_FLOOR_MIN = 5_000
-LOOT_RESOURCE_FLOOR_MAX = 10_000
+LOOT_RESOURCE_FLOOR_MIN = _EB_FLOOR_MIN
+LOOT_RESOURCE_FLOOR_MAX = _EB_FLOOR_MAX
 
 # Backward-compatible aliases for tests
 LOOT_ZERO_FLEET_SHIP_MIN = LOOT_UNIT_FLOOR_MIN

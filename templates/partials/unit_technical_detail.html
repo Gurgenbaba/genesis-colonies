@@ -1,0 +1,72 @@
+{# GC-828 — shared technical sections for ship + defense detail modals #}
+{% macro render_unit_technical_detail(technical) %}
+{% if technical %}
+{% set build = technical.get('build_preview') or {} %}
+{% set combat = technical.get('combat') or {} %}
+{% set bonuses = technical.get('active_bonuses') or [] %}
+
+<div class="gc-unit-technical-detail">
+  {% if build and not build.get('at_max_yard') %}
+  <div class="gc-tech-section gc-tech-section--summary">
+    <div class="gc-tech-section-title">{{ T("technical_section_upgrade", "Nächstes Upgrade") }}</div>
+    <div class="gc-tech-display">
+      <div class="gc-tech-metrics">
+        <div class="gc-tech-line">
+          <span class="gc-tech-label">{{ T("buildings_prod_current", "Aktuell") }}</span>
+          <span class="gc-tech-val gc-mono">{{ build.current_seconds|fmt_int }}s</span>
+        </div>
+        <div class="gc-tech-line">
+          <span class="gc-tech-label">{{ T("buildings_prod_after", "Nach Upgrade") }}</span>
+          <span class="gc-tech-val gc-mono">{{ build.next_seconds|fmt_int }}s</span>
+        </div>
+        {% if build.delta_seconds and build.delta_seconds > 0 %}
+        <div class="gc-tech-line gc-tech-line--delta">
+          <span class="gc-tech-label">{{ T("buildings_prod_delta", "Zuwachs") }}</span>
+          <span class="gc-tech-val gc-mono">-{{ build.delta_seconds|fmt_int }}s</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="gc-tech-section gc-tech-section--combat">
+    <div class="gc-tech-section-title">{{ T("unit_technical_combat_title", "Kampfwerte") }}</div>
+    <div class="gc-tech-display">
+      <div class="gc-tech-metrics">
+        <div class="gc-tech-line">
+          <span class="gc-tech-label">{{ T("ship_detail_stat_attack", "Angriff") }}</span>
+          <span class="gc-tech-val gc-mono">{{ (combat.get('attack') or 0)|fmt_int }}</span>
+        </div>
+        <div class="gc-tech-line">
+          <span class="gc-tech-label">{{ T("ship_detail_stat_shield", "Schild") }}</span>
+          <span class="gc-tech-val gc-mono">{{ (combat.get('shield') or 0)|fmt_int }}</span>
+        </div>
+        <div class="gc-tech-line">
+          <span class="gc-tech-label">{{ T("ship_detail_stat_hull", "Hülle") }}</span>
+          <span class="gc-tech-val gc-mono">{{ (combat.get('hull') or 0)|fmt_int }}</span>
+        </div>
+        <div class="gc-tech-line">
+          <span class="gc-tech-label">{{ T("unit_technical_build_time", "Bauzeit") }}</span>
+          <span class="gc-tech-val gc-mono">{{ (combat.get('build_seconds') or 0)|fmt_int }}s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if bonuses %}
+  <div class="gc-tech-section gc-tech-section--bonuses">
+    <div class="gc-tech-section-title">{{ T("technical_active_bonuses", "Aktive Boni") }}</div>
+    <div class="gc-tech-bonuses">
+      {% for b in bonuses %}
+      <div class="gc-tech-bonus-line">
+        <span class="gc-tech-bonus-label">{{ T(b.label_key, b.label_key) }}</span>
+        <span class="gc-tech-val gc-mono">{{ b.display }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}

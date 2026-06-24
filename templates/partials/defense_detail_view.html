@@ -1,6 +1,6 @@
 {# Defense unit detail partial (AJAX) #}
 {% from "partials/progression_cards.html" import render_resource_cost_chip with context %}
-{% from "partials/unit_production_detail.html" import render_unit_production_detail with context %}
+{% from "partials/unit_technical_detail.html" import render_unit_technical_detail with context %}
 {% set card = card if card is defined and card else {} %}
 
 <div class="gc-player-card-shell gc-ship-detail-shell gc-defense-detail-shell"
@@ -29,22 +29,12 @@
 
   <div class="gc-player-card-stats">
     <div class="gc-player-card-stat">
-      <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_attack") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('attack') or 0)|fmt_int }}</span>
-    </div>
-    <div class="gc-player-card-stat">
-      <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_shield") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('shield') or 0)|fmt_int }}</span>
-    </div>
-    <div class="gc-player-card-stat">
-      <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_hull") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('hull') or 0)|fmt_int }}</span>
-    </div>
-    <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("defense_detail_stat_score") }}</span>
       <span class="gc-player-card-stat-value gc-mono">{{ (card.get('score_value') or 0)|fmt_int }}</span>
     </div>
   </div>
+
+  {{ render_unit_technical_detail(card.get('technical')) }}
 
   <div class="gc-ship-detail-build">
     <span class="gc-player-card-stat-label">{{ T("ship_detail_build_section") }}</span>
@@ -52,7 +42,6 @@
       {{ render_resource_cost_chip('metal', card.get('build_cost_metal') or 0) }}
       {{ render_resource_cost_chip('crystal', card.get('build_cost_crystal') or 0) }}
     </div>
-    {{ render_unit_production_detail(card.get('production'), 'defense_detail_factory_level', card.get('required_defense_factory_level') or 0) }}
   </div>
 
   {% if card.get('requirements_items') %}

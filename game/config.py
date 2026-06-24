@@ -169,6 +169,12 @@ def get_public_base_url() -> str:
     return base.rstrip("/")
 
 
+def is_action_perf_debug_enabled() -> bool:
+    """GC-841: optional action latency profiling (server logs + client console)."""
+    val = os.environ.get("GC_PERF_DEBUG", "0")
+    return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+
 def get_client_runtime_config() -> dict[str, int | bool]:
     """
     Client poll intervals (ms) injected into templates as GC_CLIENT_CONFIG.
@@ -198,6 +204,7 @@ def get_client_runtime_config() -> dict[str, int | bool]:
             "GC_SHIPYARD_POLL_MS", defaults["shipyard_poll_ms"], minimum=3000
         ),
         "command_map_dev_mode": is_command_map_dev_mode(),
+        "action_perf_debug": is_action_perf_debug_enabled(),
     }
 
 

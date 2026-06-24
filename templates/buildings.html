@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_raster_picture with context %}
-{% from "partials/building_effect_strip.html" import render_building_effect_bundle with context %}
+{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_raster_picture, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
+{% from "partials/building_effect_strip.html" import render_building_effect_bundle, render_building_card_footer with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 {% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
 
@@ -84,16 +84,12 @@
             title="{{ T('buildings_btn_max_level') }}"
             aria-label="{{ T('buildings_btn_max_level') }}"><span class="gc-bld-head-action-icon">✓</span></span>
     {% elif not b.requirements_met %}
-      {% set lock_title = T('msg_build_requirements') %}
-      {% if req_tooltip %}
-        {% set lock_title = lock_title ~ " · " ~ req_tooltip %}
-      {% endif %}
       <button type="button"
-              class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-upgrade status-pill-icon-btn"
+              class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-upgrade status-pill-icon-btn gc-req-hover-trigger"
               data-action-state="warn"
               disabled
-              title="{{ lock_title }}"
-              aria-label="{{ lock_title }}"><span class="gc-bld-head-action-icon">⚠</span></button>
+              {{ render_req_hover_attrs(b.requirements_items) }}
+              aria-label="{{ T('msg_build_requirements', 'Voraussetzungen nicht erfüllt') }}"><span class="gc-bld-head-action-icon">⚠</span></button>
     {% elif bq_queue_full %}
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-upgrade"
@@ -108,15 +104,28 @@
               data-action-state="afford"
               disabled
               title="{{ T('msg_build_not_enough_resources') }}"
-              aria-label="{{ T('msg_build_not_enough_resources') }}"><span class="gc-bld-head-action-icon">+</span></button>
+              aria-label="{{ T('msg_build_not_enough_resources') }}"><span class="gc-bld-head-action-label">{{ T('progression_btn_plus_one', '+1') }}</span></button>
     {% else %}
-      <a id="btn-{{ b.key }}"
-         data-building="{{ b.key }}"
-         data-action-state="go"
-         href="{{ url_for('upgrade', building_type=b.key, src='buildings', tab=tab_name) }}"
-         class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-upgrade"
-         title="{{ _action_label }}"
-         aria-label="{{ _action_label }}"><span class="gc-bld-head-action-icon">+</span></a>
+      {% set _preview = b.max_queue_preview if b.max_queue_preview is defined else {'jobs': (b.max_queueable if b.max_queueable is defined else 0)|int} %}
+      {% set _max_q = (_preview.jobs if _preview.jobs is defined else 0)|int %}
+      <div class="gc-bld-card-head-action-group">
+        <a id="btn-{{ b.key }}"
+           data-building="{{ b.key }}"
+           data-action-state="go"
+           href="{{ url_for('upgrade', building_type=b.key, src='buildings', tab=tab_name) }}"
+           class="gc-bld-head-action-btn gc-bld-head-action-btn--go gc-bld-head-action-btn--plus-one btn-upgrade"
+           title="{{ _action_label }}"
+           aria-label="{{ _action_label }}"><span class="gc-bld-head-action-label">{{ T('progression_btn_plus_one', '+1') }}</span></a>
+        <button type="button"
+                class="gc-bld-head-action-btn gc-bld-head-action-btn--queue-max gc-max-queue-hover-trigger btn-upgrade-max"
+                data-action-state="max-queue"
+                data-building="{{ b.key }}"
+                data-max-queue="{{ _max_q }}"
+                data-max-kind="building"
+                {{ render_max_queue_preview_attrs(_preview) }}
+                {% if _max_q < 1 %}disabled aria-disabled="true"{% endif %}
+                aria-label="{{ T('progression_btn_max_queue_aria', 'Maximal %(n)s Stufen anreihen', n=_max_q) }}">{{ T('progression_btn_max_queue_count', 'MAX +%(n)s', n=_max_q) if _max_q > 0 else T('progression_btn_max_queue', 'MAX') }}</button>
+      </div>
     {% endif %}
   </div>
 {% endmacro %}
@@ -192,14 +201,12 @@
           {{ render_building_effect_bundle(b) }}
 
           <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
-            <div class="gc-bld-card-costs bcell-cost">
+            <div class="gc-bld-card-costs">
               {{ render_prog_costs(b.cost_metal, b.cost_crystal, b.target_level, false) }}
             </div>
           </div>
 
-          {% if not b.requirements_met and req_tooltip %}
-            <p class="gc-bld-card-req gc-mono" data-building-req="{{ building_type }}" title="{{ T('msg_build_requirements') }}">{{ req_tooltip }}</p>
-          {% endif %}
+          {{ render_building_card_footer(b) }}
         </article>
       {% endfor %}
     </div>

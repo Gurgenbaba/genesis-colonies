@@ -337,6 +337,9 @@ def _ship_catalog_entry(
     entry: Dict[str, Any] = {
         "ship_key": ship_key,
         "role": spec.get("role"),
+        "attack": int(spec.get("attack", 0) or 0),
+        "shield": int(spec.get("shield", 0) or 0),
+        "hull": int(spec.get("hull", 0) or 0),
         "required_shipyard_level": int(spec.get("required_shipyard_level") or 99),
         "unlocked": unlocked,
         "cost_metal": cost["metal"],

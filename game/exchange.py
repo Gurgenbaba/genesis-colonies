@@ -19,7 +19,7 @@ _EXCHANGE_SETTING_DEFAULTS = {
     "exchange_rate_metal_to_crystal": "0.85",
     "exchange_rate_crystal_to_metal": "0.85",
     "exchange_daily_limit_pct": "80",
-    "exchange_daily_limit_min": "25000000",
+    "exchange_daily_limit_min": "500000",
     "exchange_min_amount": "100",
     "fuel_exchange_enabled": "1",
     "fuel_exchange_metal_per_unit": "20",
@@ -75,8 +75,8 @@ def get_exchange_config(conn=None) -> Dict[str, Any]:
             "daily_limit_pct": _float_setting(settings, "exchange_daily_limit_pct", "80"),
             "daily_limit_min": _int_setting(settings, "exchange_daily_limit_min", "25000000"),
             "min_amount": _int_setting(settings, "exchange_min_amount", "100"),
-            "fuel_metal_per_unit": _float_setting(settings, "fuel_exchange_metal_per_unit", "45"),
-            "fuel_crystal_per_unit": _float_setting(settings, "fuel_exchange_crystal_per_unit", "28"),
+            "fuel_metal_per_unit": _float_setting(settings, "fuel_exchange_metal_per_unit", "20"),
+            "fuel_crystal_per_unit": _float_setting(settings, "fuel_exchange_crystal_per_unit", "14"),
             "fuel_min_units": _int_setting(settings, "fuel_exchange_min_units", "10"),
         }
     finally:

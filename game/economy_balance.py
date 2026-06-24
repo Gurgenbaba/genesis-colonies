@@ -1,0 +1,600 @@
+"""
+GC-821 — Economy rebalance helpers (consumer pass after GC-820).
+
+Aligns building costs/times with power-scaled production from production_formula.
+Does NOT implement production — only upgrade pacing, storage targets, and snapshots.
+
+Authoritative production: game/production_formula.py · docs/PRODUCTION_FORMULA_SYSTEM.md
+"""
+
+from __future__ import annotations
+
+import math
+from typing import Any, Dict, List, Optional, Tuple
+
+from .production_formula import (
+    LEVEL_GROWTH,
+    ProductionContext,
+    calculate_resource_output,
+    normalize_resource_type,
+)
+
+# Benchmark levels for tests and balance docs.
+BENCHMARK_LEVELS: Tuple[int, ...] = (10, 30, 60, 90, 120)
+# GC-821E — ROI snapshot levels (mine payback hours).
+ROI_BENCHMARK_LEVELS: Tuple[int, ...] = (20, 40, 60, 80, 100, 120)
+NEUTRAL_BALANCE_SLOT = 9
+MINE_PACE_REF_LEVEL = 20
+MINE_ENDGAME_PACE_THRESHOLD = 80
+
+# GC-821F — target payback hours (neutral slot, metal mine reference).
+MINE_UPGRADE_ROI_TARGET_HOURS: Dict[int, float] = {
+    20: 50.0,
+    40: 100.0,
+    60: 200.0,
+    80: 500.0,
+    100: 1000.0,
+    120: 2000.0,
+}
+
+# GC-821F — bulk upgrade UX prep (UI follow-up ticket).
+MINE_BULK_UPGRADE_INCREMENTS: Tuple[int, ...] = (1, 5, 10)
+
+MINE_BUILDING_TYPES = frozenset({"metal_mine", "crystal_mine", "fuel_cell_plant"})
+MINE_RESOURCE_BY_BUILDING: Dict[str, str] = {
+    "metal_mine": "metal",
+    "crystal_mine": "crystal",
+    "fuel_cell_plant": "fuel_cells",
+}
+
+# Power-cost: total resource value ≈ K × level^exponent (split per building).
+class _CostCurve:
+    __slots__ = ("k", "exponent", "metal_frac", "crystal_frac", "pace_gamma", "endgame_delta")
+
+    def __init__(
+        self,
+        k: float,
+        exponent: float,
+        metal_frac: float,
+        crystal_frac: float,
+        *,
+        pace_gamma: float = 0.0,
+        endgame_delta: float = 0.0,
+    ) -> None:
+        self.k = k
+        self.exponent = exponent
+        self.metal_frac = metal_frac
+        self.crystal_frac = crystal_frac
+        self.pace_gamma = pace_gamma
+        self.endgame_delta = endgame_delta
+
+
+# GC-821E — mine costs: power exponent + level pacing (L120 ≈ 1–3 months ROI).
+_MINE_COST_EXPONENT = 2.05
+_MINE_PACE_GAMMA = 1.25
+_MINE_ENDGAME_DELTA = 3.40
+
+BUILDING_UPGRADE_CURVES: Dict[str, _CostCurve] = {
+    "metal_mine": _CostCurve(
+        0.82, _MINE_COST_EXPONENT, 0.75, 0.25, pace_gamma=_MINE_PACE_GAMMA, endgame_delta=_MINE_ENDGAME_DELTA
+    ),
+    "crystal_mine": _CostCurve(
+        0.55, _MINE_COST_EXPONENT, 0.59, 0.41, pace_gamma=_MINE_PACE_GAMMA, endgame_delta=_MINE_ENDGAME_DELTA
+    ),
+    "solar_plant": _CostCurve(200.0, 1.45, 0.82, 0.18),
+    "fuel_cell_plant": _CostCurve(
+        0.60, _MINE_COST_EXPONENT, 0.60, 0.40, pace_gamma=_MINE_PACE_GAMMA, endgame_delta=_MINE_ENDGAME_DELTA
+    ),
+    "metal_storage": _CostCurve(420.0, 1.50, 1.0, 0.0),
+    "crystal_storage": _CostCurve(420.0, 1.50, 0.0, 1.0),
+    "fuel_storage": _CostCurve(380.0, 1.48, 0.60, 0.40),
+    "research_lab": _CostCurve(650.0, 1.52, 0.33, 0.67),
+    "academy": _CostCurve(900.0, 1.52, 0.40, 0.60),
+    "command_center": _CostCurve(1200.0, 1.48, 0.71, 0.29),
+    "orbital_shipyard": _CostCurve(1100.0, 1.50, 0.57, 0.43),
+    "defense_factory": _CostCurve(1300.0, 1.50, 0.60, 0.40),
+    "barracks": _CostCurve(700.0, 1.48, 0.60, 0.40),
+    "radar_array": _CostCurve(750.0, 1.48, 0.25, 0.75),
+    "shield_generator": _CostCurve(1800.0, 1.52, 0.56, 0.44),
+    "terraformer": _CostCurve(2400.0, 1.54, 0.50, 0.50),
+    "nanofactory": _CostCurve(3200.0, 1.55, 0.62, 0.38),
+    "geothermal_nexus": _CostCurve(3600.0, 1.55, 0.50, 0.50),
+    "planet_core_nexus": _CostCurve(4800.0, 1.56, 0.40, 0.60),
+}
+
+# Build seconds ≈ TIME_K × level^1.35 (player speed applied separately).
+BUILD_TIME_CURVES: Dict[str, Tuple[float, float]] = {
+    "metal_mine": (114.0, 1.35),
+    "crystal_mine": (114.0, 1.35),
+    "solar_plant": (130.0, 1.35),
+    "fuel_cell_plant": (145.0, 1.36),
+    "metal_storage": (160.0, 1.36),
+    "crystal_storage": (160.0, 1.36),
+    "fuel_storage": (160.0, 1.36),
+    "research_lab": (180.0, 1.38),
+    "academy": (220.0, 1.38),
+    "command_center": (280.0, 1.40),
+    "orbital_shipyard": (260.0, 1.40),
+    "defense_factory": (280.0, 1.40),
+    "barracks": (200.0, 1.38),
+    "radar_array": (200.0, 1.38),
+    "shield_generator": (360.0, 1.42),
+    "terraformer": (320.0, 1.42),
+    "nanofactory": (480.0, 1.44),
+    "geothermal_nexus": (520.0, 1.44),
+    "planet_core_nexus": (580.0, 1.45),
+}
+
+# GC-821B — storage buffer (~18 h Ferronit at matching mine level as orientation).
+STORAGE_BASE_CAPACITY = 150_000
+STORAGE_LEVEL_GROWTH = 1.75
+
+# GC-821B — exchange (scales with empire day production via exchange.py).
+EXCHANGE_DAILY_LIMIT_MIN = 500_000
+EXCHANGE_DAILY_LIMIT_PCT_DEFAULT = 80
+
+# GC-821C — loot / reward floors scale with empire output, not fixed pre-820 absolutes.
+LOOT_RESOURCE_FLOOR_MIN = 12_000
+LOOT_RESOURCE_FLOOR_MAX = 30_000
+LOOT_BASE_PRODUCTION_HOURS = 0.5
+
+# GC-821D — military cost multiplier vs legacy defs (uniform pass).
+MILITARY_COST_MULTIPLIER = 1.25
+MILITARY_SCORE_MULTIPLIER = 1.0
+MILITARY_BUILD_SECONDS_MULTIPLIER = 1.0
+
+# GC-825 — account research upgrade pacing (time + cost anchors).
+RESEARCH_REF_COMBINED_COST = 1500.0  # energy_tech base_m + base_c
+RESEARCH_REF_BASE_TIME = 840.0  # energy_tech base_time seconds
+RESEARCH_BENCHMARK_LEVELS: Tuple[int, ...] = (10, 20, 30, 40, 60, 80, 100, 120)
+
+RESEARCH_TIME_ANCHOR_HOURS: Dict[int, float] = {
+    10: 1.5,  # ~90 min
+    20: 5.0,
+    30: 24.0,
+    40: 72.0,  # 3 days
+    60: 336.0,  # 2 weeks
+    80: 1080.0,  # ~45 days
+    100: 2160.0,  # ~90 days
+    120: 4320.0,  # ~180 days
+}
+
+# Combined metal+crystal value anchors (energy_tech tier = 1.0).
+RESEARCH_COST_ANCHOR_TOTAL: Dict[int, float] = {
+    10: 2500.0,
+    20: 10000.0,
+    30: 22000.0,
+    40: 40000.0,
+    60: 120000.0,
+    80: 400000.0,
+    100: 1200000.0,
+    120: 2400000.0,
+}
+_RESEARCH_L1_COST_TOTAL = 800.0
+_RESEARCH_COST_RAMP_LEVEL = 10
+
+
+def _log_interpolate_anchor_map(level: int, anchors: Dict[int, float]) -> float:
+    """Log-linear interpolation between sorted anchor levels."""
+    sorted_anchors = sorted(anchors.items())
+    lvl = max(1, int(level))
+    if lvl <= sorted_anchors[0][0]:
+        return float(sorted_anchors[0][1])
+    if lvl >= sorted_anchors[-1][0]:
+        return float(sorted_anchors[-1][1])
+    for i in range(len(sorted_anchors) - 1):
+        l0, v0 = sorted_anchors[i]
+        l1, v1 = sorted_anchors[i + 1]
+        if l0 <= lvl <= l1:
+            span = float(l1 - l0)
+            if span <= 0:
+                return float(v1)
+            t = (lvl - l0) / span
+            return math.exp(math.log(float(v0)) * (1.0 - t) + math.log(float(v1)) * t)
+    return float(sorted_anchors[-1][1])
+
+
+def research_time_anchor_hours(level: int) -> float:
+    """GC-825 target research duration before lab/settings modifiers."""
+    return _log_interpolate_anchor_map(level, RESEARCH_TIME_ANCHOR_HOURS)
+
+
+def research_cost_anchor_total(level: int) -> float:
+    """GC-825 combined resource value before tech tier split."""
+    lvl = max(1, int(level))
+    if lvl < _RESEARCH_COST_RAMP_LEVEL:
+        l1 = float(_RESEARCH_L1_COST_TOTAL)
+        l10 = float(RESEARCH_COST_ANCHOR_TOTAL[_RESEARCH_COST_RAMP_LEVEL])
+        t = (lvl - 1) / float(_RESEARCH_COST_RAMP_LEVEL - 1)
+        return l1 * (1.0 - t) + l10 * t
+    return _log_interpolate_anchor_map(lvl, RESEARCH_COST_ANCHOR_TOTAL)
+
+
+def research_time_tier(base_time: float) -> float:
+    """Per-tech multiplier from legacy ``base_time`` (energy_tech = 1.0)."""
+    return max(0.75, float(base_time) / RESEARCH_REF_BASE_TIME)
+
+
+def research_base_time_seconds(target_level: int, *, time_tier: float = 1.0) -> int:
+    """GC-825 base research seconds before EffectResolver speed bonuses."""
+    hours = research_time_anchor_hours(target_level)
+    seconds = hours * 3600.0 * max(0.75, float(time_tier))
+    return max(60, int(seconds))
+
+
+def research_cost_tier(base_cost_m: int, base_cost_c: int) -> float:
+    """Per-tech cost multiplier from legacy base costs (energy_tech = 1.0)."""
+    combined = float(base_cost_m) + float(base_cost_c)
+    if combined <= 0:
+        return 1.0
+    return max(0.75, combined / RESEARCH_REF_COMBINED_COST)
+
+
+def research_upgrade_cost(base_cost_m: int, base_cost_c: int, target_level: int) -> Tuple[int, int]:
+    """GC-825 research upgrade cost (metal, crystal) before payment."""
+    lvl = max(1, int(target_level))
+    tier = research_cost_tier(base_cost_m, base_cost_c)
+    total = max(research_cost_anchor_total(lvl) * tier, 1.0)
+    combined = float(base_cost_m) + float(base_cost_c)
+    if combined <= 0:
+        metal_frac, crystal_frac = 0.67, 0.33
+    else:
+        metal_frac = float(base_cost_m) / combined
+        crystal_frac = float(base_cost_c) / combined
+    metal = max(1, int(math.ceil(total * metal_frac)))
+    crystal = max(0, int(math.ceil(total * crystal_frac)))
+    return metal, crystal
+
+
+def legacy_research_base_time_seconds(
+    base_time: float,
+    cost_factor: float,
+    target_level: int,
+) -> int:
+    """Pre-GC-825 exponential research time (audit only)."""
+    lvl = max(1, int(target_level))
+    factor = float(cost_factor) ** (lvl - 1)
+    return max(1, int(float(base_time) * factor))
+
+
+def legacy_research_upgrade_cost(
+    base_cost_m: int,
+    base_cost_c: int,
+    cost_factor: float,
+    target_level: int,
+) -> Tuple[int, int]:
+    """Pre-GC-825 exponential research cost (audit only)."""
+    lvl = max(1, int(target_level))
+    factor = float(cost_factor) ** (lvl - 1)
+    return max(1, int(base_cost_m * factor)), max(0, int(base_cost_c * factor))
+
+
+def mine_upgrade_pace_factor(level: int, *, pace_gamma: float, endgame_delta: float) -> float:
+    """Level pacing multiplier for mine upgrade costs (GC-821E)."""
+    lvl = max(1, int(level))
+    ref = float(MINE_PACE_REF_LEVEL)
+    factor = (lvl / ref) ** float(pace_gamma)
+    if endgame_delta > 0 and lvl > MINE_ENDGAME_PACE_THRESHOLD:
+        factor *= ((lvl - MINE_ENDGAME_PACE_THRESHOLD) / 40.0 + 1.0) ** float(endgame_delta)
+    return factor
+
+
+def _mine_upgrade_cost_total_raw(building_type: str, target_level: int) -> float:
+    """821E power cost before GC-821F ROI anchor scaling."""
+    btype = str(building_type)
+    lvl = max(1, int(target_level))
+    curve = BUILDING_UPGRADE_CURVES.get(btype)
+    if curve is None or btype not in MINE_BUILDING_TYPES:
+        return 0.0
+    total = curve.k * (float(lvl) ** curve.exponent)
+    if curve.pace_gamma > 0:
+        total *= mine_upgrade_pace_factor(
+            lvl, pace_gamma=curve.pace_gamma, endgame_delta=curve.endgame_delta
+        )
+    return max(total, 1.0)
+
+
+def mine_roi_anchor_hours(level: int) -> float:
+    """Log-interpolated ROI target between GC-821F anchor levels."""
+    return _log_interpolate_anchor_map(level, MINE_UPGRADE_ROI_TARGET_HOURS)
+
+
+def mine_roi_cost_multiplier(target_level: int) -> float:
+    """
+    GC-821F — scale mine upgrade cost so neutral-slot metal-mine ROI follows anchor curve.
+    Applied uniformly to all mine building types.
+    """
+    lvl = max(1, int(target_level))
+    delta = production_delta_per_hour("metal", lvl)
+    if delta <= 0:
+        return 1.0
+    curve = BUILDING_UPGRADE_CURVES["metal_mine"]
+    raw_total = _mine_upgrade_cost_total_raw("metal_mine", lvl)
+    metal_basis = raw_total * curve.metal_frac
+    baseline_roi = metal_basis / delta
+    if baseline_roi <= 0:
+        return 1.0
+    target = mine_roi_anchor_hours(lvl)
+    return max(0.05, target / baseline_roi)
+
+
+def power_upgrade_cost(building_type: str, target_level: int) -> Tuple[int, int]:
+    """GC-821 upgrade cost — mines use 821E pacing × GC-821F ROI anchors."""
+    btype = str(building_type)
+    lvl = max(1, int(target_level))
+    curve = BUILDING_UPGRADE_CURVES.get(btype)
+    if curve is None:
+        mult = 1.5 ** (lvl - 1)
+        return int(100 * mult), int(50 * mult)
+
+    if btype in MINE_BUILDING_TYPES:
+        total = _mine_upgrade_cost_total_raw(btype, lvl)
+        total *= mine_roi_cost_multiplier(lvl)
+    else:
+        total = curve.k * (float(lvl) ** curve.exponent)
+    total = max(total, 1.0)
+    metal = max(1, int(math.ceil(total * curve.metal_frac)))
+    crystal = max(0, int(math.ceil(total * curve.crystal_frac)))
+    return metal, crystal
+
+
+def power_build_seconds(building_type: str, target_level: int) -> int:
+    """GC-821 base build duration before player/admin speed modifiers."""
+    btype = str(building_type)
+    lvl = max(1, int(target_level))
+    k, exp = BUILD_TIME_CURVES.get(btype, (120.0, 1.35))
+    return max(30, int(k * (float(lvl) ** exp)))
+
+
+def reference_production_per_hour(
+    resource_type: str,
+    mine_level: int,
+    *,
+    slot: int = NEUTRAL_BALANCE_SLOT,
+    production_speed: float = 1.0,
+) -> float:
+    """Authoritative production reference for balance tables (delegates to GC-820)."""
+    ctx = ProductionContext(
+        resource_type=normalize_resource_type(resource_type),
+        level=max(0, int(mine_level)),
+        slot=slot,
+        production_speed=production_speed,
+    )
+    return calculate_resource_output(normalize_resource_type(resource_type), ctx)
+
+
+def production_delta_per_hour(
+    resource_type: str,
+    level: int,
+    *,
+    slot: int = NEUTRAL_BALANCE_SLOT,
+    production_speed: float = 1.0,
+) -> float:
+    """Hourly output gain from upgrading to level (vs level - 1)."""
+    lvl = max(0, int(level))
+    if lvl < 1:
+        return 0.0
+    cur = reference_production_per_hour(
+        resource_type, lvl, slot=slot, production_speed=production_speed
+    )
+    prev = (
+        reference_production_per_hour(
+            resource_type, lvl - 1, slot=slot, production_speed=production_speed
+        )
+        if lvl > 1
+        else 0.0
+    )
+    return max(0.0, cur - prev)
+
+
+def mine_upgrade_roi_hours(
+    building_type: str,
+    target_level: int,
+    *,
+    slot: int = NEUTRAL_BALANCE_SLOT,
+    production_speed: float = 1.0,
+) -> float:
+    """Payback hours: upgrade cost basis / hourly production delta (GC-821E)."""
+    btype = str(building_type)
+    if btype not in MINE_BUILDING_TYPES:
+        return float("inf")
+    resource = MINE_RESOURCE_BY_BUILDING[btype]
+    metal_cost, crystal_cost = power_upgrade_cost(btype, target_level)
+    delta = production_delta_per_hour(
+        resource, target_level, slot=slot, production_speed=production_speed
+    )
+    if delta <= 0:
+        return float("inf")
+    if btype == "metal_mine":
+        cost_basis = float(metal_cost)
+    elif btype == "crystal_mine":
+        cost_basis = float(crystal_cost)
+    else:
+        cost_basis = float(metal_cost) + float(crystal_cost)
+    return cost_basis / delta
+
+
+def mine_upgrade_metal_hours(
+    target_level: int,
+    *,
+    slot: int = NEUTRAL_BALANCE_SLOT,
+    production_speed: float = 1.0,
+) -> float:
+    """Ferronit-mine payback hours (alias for mine_upgrade_roi_hours)."""
+    return mine_upgrade_roi_hours(
+        "metal_mine", target_level, slot=slot, production_speed=production_speed
+    )
+
+
+def balance_snapshot_table(
+    *,
+    production_speed: float = 1.0,
+    slot: int = NEUTRAL_BALANCE_SLOT,
+) -> Dict[str, Dict[int, Dict[str, float]]]:
+    """Manual balance table: production + upgrade pacing at benchmark levels."""
+    out: Dict[str, Dict[int, Dict[str, float]]] = {
+        "production_per_hour": {},
+        "production_delta_per_hour": {},
+        "metal_upgrade_hours": {},
+        "metal_upgrade_roi_hours": {},
+        "metal_upgrade_cost": {},
+    }
+    snapshot_levels = tuple(sorted(set(BENCHMARK_LEVELS) | set(ROI_BENCHMARK_LEVELS)))
+    for lvl in snapshot_levels:
+        out["production_per_hour"][lvl] = {
+            "metal": reference_production_per_hour("metal", lvl, slot=slot, production_speed=production_speed),
+            "crystal": reference_production_per_hour("crystal", lvl, slot=slot, production_speed=production_speed),
+            "fuel_cells": reference_production_per_hour(
+                "fuel_cells", lvl, slot=slot, production_speed=production_speed
+            ),
+        }
+        out["production_delta_per_hour"][lvl] = {
+            "metal": production_delta_per_hour("metal", lvl, slot=slot, production_speed=production_speed),
+            "crystal": production_delta_per_hour("crystal", lvl, slot=slot, production_speed=production_speed),
+            "fuel_cells": production_delta_per_hour(
+                "fuel_cells", lvl, slot=slot, production_speed=production_speed
+            ),
+        }
+        mc, _ = power_upgrade_cost("metal_mine", lvl)
+        out["metal_upgrade_cost"][lvl] = float(mc)
+        roi = mine_upgrade_roi_hours("metal_mine", lvl, slot=slot, production_speed=production_speed)
+        out["metal_upgrade_hours"][lvl] = roi
+        out["metal_upgrade_roi_hours"][lvl] = roi
+    return out
+
+
+def scaled_military_cost(raw: int) -> int:
+    return max(1, int(math.ceil(int(raw) * MILITARY_COST_MULTIPLIER)))
+
+
+def scaled_military_score(raw: int) -> int:
+    return max(1, int(math.ceil(int(raw) * MILITARY_SCORE_MULTIPLIER)))
+
+
+def cumulative_upgrade_cost_sum(building_type: str, level: int) -> int:
+    """Sum of metal+crystal spent for levels 1..level (GC-821 power costs)."""
+    lvl = max(0, int(level or 0))
+    if lvl <= 0:
+        return 0
+    total = 0
+    for target in range(1, lvl + 1):
+        metal, crystal = power_upgrade_cost(building_type, target)
+        total += int(metal) + int(crystal)
+    return total
+
+
+def cumulative_upgrade_cost_range(
+    building_type: str,
+    from_level: int,
+    to_level: int,
+) -> Tuple[int, int]:
+    """GC-821F prep — total metal+crystal for upgrades (from_level+1)..to_level inclusive."""
+    start = max(0, int(from_level))
+    end = max(start, int(to_level))
+    metal = 0
+    crystal = 0
+    for target in range(start + 1, end + 1):
+        m, c = power_upgrade_cost(building_type, target)
+        metal += int(m)
+        crystal += int(c)
+    return metal, crystal
+
+
+def max_affordable_mine_upgrade_level(
+    building_type: str,
+    from_level: int,
+    max_level: int,
+    *,
+    metal_available: float,
+    crystal_available: float,
+) -> int:
+    """GC-821F prep — highest target level affordable in one bulk action."""
+    btype = str(building_type)
+    if btype not in MINE_BUILDING_TYPES:
+        return max(0, int(from_level))
+    cur = max(0, int(from_level))
+    cap = max(cur, int(max_level))
+    best = cur
+    metal = float(metal_available or 0)
+    crystal = float(crystal_available or 0)
+    for target in range(cur + 1, cap + 1):
+        m, c = power_upgrade_cost(btype, target)
+        metal -= m
+        crystal -= c
+        if metal < 0 or crystal < 0:
+            break
+        best = target
+    return best
+
+
+def mine_bulk_upgrade_preview(
+    building_type: str,
+    from_level: int,
+    max_level: int,
+    *,
+    metal_available: float,
+    crystal_available: float,
+) -> Dict[str, Any]:
+    """GC-821F prep — metadata for +1/+5/+10/max bulk upgrade UI (no actions yet)."""
+    btype = str(building_type)
+    cur = max(0, int(from_level))
+    cap = max(cur, int(max_level))
+    affordable_max = max_affordable_mine_upgrade_level(
+        btype,
+        cur,
+        cap,
+        metal_available=metal_available,
+        crystal_available=crystal_available,
+    )
+    options: List[Dict[str, Any]] = []
+    for step in MINE_BULK_UPGRADE_INCREMENTS:
+        target = min(cap, cur + int(step))
+        if target <= cur:
+            continue
+        m, c = cumulative_upgrade_cost_range(btype, cur, target)
+        options.append(
+            {
+                "step": int(step),
+                "target_level": int(target),
+                "cost_metal": int(m),
+                "cost_crystal": int(c),
+                "can_afford": metal_available >= m and crystal_available >= c,
+            }
+        )
+    if affordable_max > cur:
+        m, c = cumulative_upgrade_cost_range(btype, cur, affordable_max)
+        options.append(
+            {
+                "step": "max",
+                "target_level": int(affordable_max),
+                "cost_metal": int(m),
+                "cost_crystal": int(c),
+                "can_afford": True,
+            }
+        )
+    return {
+        "increments": list(MINE_BULK_UPGRADE_INCREMENTS),
+        "from_level": cur,
+        "max_level": cap,
+        "affordable_max_level": int(affordable_max),
+        "options": options,
+    }
+
+
+def legacy_exponential_cost_sum(
+    building_type: str,
+    level: int,
+    *,
+    base_m: int,
+    base_c: int,
+    factor: float,
+) -> int:
+    """Pre-GC-821 cumulative cost reference for migration audits only."""
+    lvl = max(0, int(level or 0))
+    if lvl <= 0:
+        return 0
+    total = 0
+    for lv in range(1, lvl + 1):
+        mult = float(factor) ** (lv - 1)
+        total += int(base_m * mult) + int(base_c * mult)
+    return total

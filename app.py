@@ -4781,6 +4781,8 @@ def _payload_from_live_context(
     user_id: int,
     include_panel: bool = True,
     lightweight: bool = False,
+    panel_delta_keys: Optional[List[str]] = None,
+    action_slim: bool = False,
     conn=None,
 ) -> Dict[str, Any]:
     """Build JSON payload from an already-refreshed live context."""
@@ -4992,7 +4994,18 @@ def _payload_from_live_context(
             ),
         }
 
-    if include_panel:
+    if panel_delta_keys:
+        from game.buildings import get_buildings_panel_delta
+
+        payload["buildings_panel_delta"] = get_buildings_panel_delta(
+            planet,
+            buildings,
+            build_queue=build_queue,
+            building_keys=panel_delta_keys,
+        )
+    elif include_panel:
+        from game.buildings import get_buildings_panel_rows
+
         payload["buildings_panel"] = get_buildings_panel_rows(
             planet,
             buildings,
@@ -5209,6 +5222,10 @@ def _payload_from_live_context(
         from game.live_state import apply_lightweight_game_state_diet
 
         payload = apply_lightweight_game_state_diet(payload)
+    elif action_slim:
+        from game.live_state import apply_action_state_diet
+
+        payload = apply_action_state_diet(payload)
 
     from game.logic import attach_canonical_server_time
 
@@ -5220,6 +5237,8 @@ def _build_game_state_payload(
     *,
     finish_source: str = "game_state",
     force_include_panel: bool = False,
+    panel_delta_keys: Optional[List[str]] = None,
+    action_slim: bool = False,
 ) -> Tuple[dict, int]:
     """
     Zentraler Spielzustand für Polling + AJAX-Refresh (kein Page-Reload).
@@ -5236,6 +5255,7 @@ def _build_game_state_payload(
 
     conn = db()
     try:
+        ctx_t0 = time.perf_counter()
         ctx = _load_page_live_context(
             finish_source=str(finish_source or "game_state"),
             include_panel=include_panel,
@@ -5245,16 +5265,24 @@ def _build_game_state_payload(
         if ctx is None:
             return {"ok": False, "error": "not_logged_in"}, 0
 
-        return (
-            _payload_from_live_context(
-                ctx,
-                user_id=user_id,
-                include_panel=include_panel,
-                lightweight=lightweight,
-                conn=conn,
-            ),
-            user_id,
+        payload_t0 = time.perf_counter()
+        payload = _payload_from_live_context(
+            ctx,
+            user_id=user_id,
+            include_panel=include_panel,
+            lightweight=lightweight,
+            panel_delta_keys=panel_delta_keys,
+            action_slim=action_slim,
+            conn=conn,
         )
+        from game.live_state import current_action_perf
+
+        perf = current_action_perf()
+        if perf is not None:
+            perf.add_payload_ms((time.perf_counter() - payload_t0) * 1000.0)
+            # live_state refresh happens inside _load_page_live_context (refresh_player_live_state)
+            _ = ctx_t0  # finish/resource_sync/live_state tracked in refresh_player_live_state
+        return payload, user_id
     finally:
         conn.close()
 
@@ -5280,6 +5308,36 @@ def _extract_request_id(data: Dict[str, Any]) -> str:
     return rid
 
 
+def _queue_mode(data: Dict[str, Any]) -> str:
+    raw = (data.get("queue_mode") or data.get("mode") or "single").strip().lower()
+    return "max" if raw == "max" else "single"
+
+
+def _uses_action_state_diet(finish_source: str) -> bool:
+    return str(finish_source or "") in (
+        "api_buildings_upgrade",
+        "api_buildings_cancel",
+        "game_state_buildings_finish",
+        "api_planets_active",
+    )
+
+
+def _is_buildings_queue_action_source(finish_source: str) -> bool:
+    return str(finish_source or "") in (
+        "api_buildings_upgrade",
+        "api_buildings_cancel",
+        "game_state_buildings_finish",
+    )
+
+
+def _parse_panel_delta_buildings_param() -> Optional[List[str]]:
+    raw = (request.args.get("panel_delta_buildings") or "").strip()
+    if not raw:
+        return None
+    keys = [k.strip() for k in raw.split(",") if k.strip()]
+    return keys or None
+
+
 def _action_json_response(
     ok: bool,
     reason: str,
@@ -5287,9 +5345,20 @@ def _action_json_response(
     job: Any = None,
     *,
     finish_source: str = "action",
+    include_panel: bool = True,
+    panel_delta_keys: Optional[List[str]] = None,
 ) -> Any:
     """Immer frischen Spielzustand liefern – auch bei Fehlern (ein Refresh nach Mutation)."""
-    state, _ = _build_game_state_payload(include_panel=True, finish_source=finish_source)
+    use_panel_delta = bool(panel_delta_keys)
+    use_slim = (not include_panel) and (
+        use_panel_delta or _uses_action_state_diet(finish_source)
+    )
+    state, _ = _build_game_state_payload(
+        include_panel=include_panel and not use_panel_delta,
+        finish_source=finish_source,
+        panel_delta_keys=panel_delta_keys if use_panel_delta else None,
+        action_slim=use_slim,
+    )
     resp: Dict[str, Any] = {
         "ok": bool(ok),
         "reason": reason,
@@ -5299,7 +5368,15 @@ def _action_json_response(
         resp["payload"] = payload
     if ok and job is not None:
         resp["job"] = job
-    return jsonify(resp)
+    from game.live_state import finish_action_perf, is_action_perf_debug_enabled
+
+    out = jsonify(resp)
+    if is_action_perf_debug_enabled():
+        perf_data = finish_action_perf(response_bytes=len(out.get_data() or b""))
+        if perf_data is not None:
+            resp["_action_perf"] = perf_data
+            out = jsonify(resp)
+    return out
 
 
 def _defense_json_response(
@@ -5338,13 +5415,27 @@ def api_status():
 @require_login
 def api_game_state():
     want_panel = request.args.get("include_panel", "").lower() in ("1", "true", "yes")
-    # Panel polls need full live refresh so resources + buildings_panel stay in sync (GC-801).
-    finish_source = "game_state_panel" if want_panel else "game_state"
-    payload, _player_id = _build_game_state_payload(
-        include_panel=True,
-        finish_source=finish_source,
-        force_include_panel=want_panel,
-    )
+    delta_keys = _parse_panel_delta_buildings_param()
+    if delta_keys:
+        payload, _player_id = _build_game_state_payload(
+            include_panel=False,
+            finish_source="game_state_buildings_finish",
+            panel_delta_keys=delta_keys,
+            action_slim=True,
+        )
+    elif want_panel:
+        # Panel polls need full live refresh so resources + buildings_panel stay in sync (GC-801).
+        finish_source = "game_state_panel"
+        payload, _player_id = _build_game_state_payload(
+            include_panel=True,
+            finish_source=finish_source,
+            force_include_panel=True,
+        )
+    else:
+        payload, _player_id = _build_game_state_payload(
+            include_panel=False,
+            finish_source="game_state",
+        )
     if not payload.get("ok"):
         return jsonify({"ok": False, "error": "not_logged_in"}), 401
     return jsonify(payload)
@@ -7024,6 +7115,9 @@ def api_research_technical_data(tech_key: str):
 @app.route("/api/buildings/upgrade", methods=["POST"])
 @require_login
 def api_buildings_upgrade():
+    from game.live_state import start_action_perf
+
+    perf = start_action_perf("/api/buildings/upgrade")
     data = request.get_json(silent=True) or {}
     building_type = (data.get("building_type") or request.form.get("building_type") or "").strip()
     if not building_type:
@@ -7040,15 +7134,29 @@ def api_buildings_upgrade():
     if request_id:
         cached = get_idempotent_action(user_id, request_id)
         if cached is not None:
+            if perf is not None:
+                from game.live_state import finish_action_perf, is_action_perf_debug_enabled
+
+                if is_action_perf_debug_enabled():
+                    import json as _json
+
+                    cached = dict(cached)
+                    perf_data = finish_action_perf(
+                        response_bytes=len(_json.dumps(cached, separators=(",", ":")).encode("utf-8"))
+                    )
+                    if perf_data is not None:
+                        cached["_action_perf"] = {**perf_data, "cached": True}
             return jsonify(cached)
 
-    ok, reason, extra = queue_build(player_view, buildings, building_type)
+    ok, reason, extra = queue_build(player_view, buildings, building_type, queue_mode=_queue_mode(data))
     resp = _action_json_response(
         ok,
         reason,
         payload=extra if not ok else None,
         job=extra if ok else None,
         finish_source="api_buildings_upgrade",
+        include_panel=False,
+        panel_delta_keys=[building_type] if building_type else None,
     )
     response_obj = resp.get_json()
 
@@ -7077,12 +7185,19 @@ def api_buildings_cancel():
     player_view, _buildings = ctx
 
     ok, reason, extra = cancel_build(player_view, job_id)
+    delta_keys: Optional[List[str]] = None
+    if isinstance(extra, dict):
+        bt = str(extra.get("building_type") or "").strip()
+        if bt:
+            delta_keys = [bt]
     return _action_json_response(
         ok,
         reason,
         payload=extra if not ok else None,
         job=extra if ok else None,
         finish_source="api_buildings_cancel",
+        include_panel=False,
+        panel_delta_keys=delta_keys,
     )
 
 
@@ -7107,7 +7222,7 @@ def api_research_start():
         if cached is not None:
             return jsonify(cached)
 
-    ok, reason, extra = queue_research(player_view, tech_key)
+    ok, reason, extra = queue_research(player_view, tech_key, queue_mode=_queue_mode(data))
     resp = _action_json_response(
         ok,
         reason,
@@ -7217,7 +7332,11 @@ def api_planets_set_active():
 
     user_id = int(session["user_id"])
     ok, reason = set_active_planet(user_id, planet_id)
-    state, _ = _build_game_state_payload(include_panel=True, finish_source="api_planets_active")
+    state, _ = _build_game_state_payload(
+        include_panel=False,
+        finish_source="api_planets_active",
+        action_slim=True,
+    )
     planets = None
     if ok:
         from game.planet_evolution.service import list_player_planets_for_switcher

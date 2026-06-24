@@ -199,7 +199,7 @@ def test_api_set_active_updates_state_and_overview(switcher_db, monkeypatch):
     assert gs["active_planet_id"] == hw_id
     assert gs.get("active_planet", {}).get("name")
     assert int(data["state"]["player"]["metal"]) == int(data["state"]["resources"]["metal"])
-    assert "buildings_panel" in data["state"]
+    assert "buildings_panel" not in data["state"]
 
 
 def test_api_planets_active_switch_returns_fresh_colony_resources(monkeypatch):

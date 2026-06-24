@@ -35,12 +35,7 @@ COMMAND_CENTER_NANOFACTORY_DURATION = 0.75  # nanofactory build: × 0.75 ** cc_l
 FUEL_EFFICIENCY_PER_LEVEL = 0.03
 _DIVISION_EPS = 1e-12  # avoid div-by-zero only; not a balance cap
 
-# Production balance (GC-622C / GC-622D — Ferronit:Crytite:Brennzellen ≈ 100:65:35)
-METAL_PROD_BASE = 0.04
-METAL_PROD_EXP = 1.4
-CRYSTAL_PROD_BASE = 0.046  # GC-622D buff (+24% vs 622C, +53% vs original 0.03)
-CRYSTAL_PROD_EXP = 1.39  # was 1.35 — stronger late scaling
-FUEL_CELL_GROWTH = 1.255  # was 1.35 — late-game Brennzellen nerf (GC-622D)
+# Production formulas: game/production_formula.py (GC-820) — do not duplicate here.
 
 # Combat modifiers — consumed by game.combat (GC-504).
 COMBAT_MODIFIER_KEYS = frozenset({
@@ -100,8 +95,8 @@ class EffectResolver:
     Deterministic, server-side effect calculator for one planet + player research.
     """
 
-    BASE_STORAGE = 100_000
-    STORAGE_GROW = 1.8
+    BASE_STORAGE = 150_000  # GC-821B — see economy_balance.STORAGE_BASE_CAPACITY
+    STORAGE_GROW = 1.75
     MAX_BUILDING_LEVEL = 50
 
     # ------------------------------------------------------------------
@@ -169,15 +164,21 @@ class EffectResolver:
 
     @staticmethod
     def metal_prod_bonus_pct(level: int) -> int:
-        return int(round(10.0 * max(0, int(level or 0))))
+        from ..production_formula import MINING_TECH_PER_LEVEL
+
+        return int(round(MINING_TECH_PER_LEVEL * max(0, int(level or 0)) * 100))
 
     @staticmethod
     def crystal_prod_bonus_pct(level: int) -> int:
-        return int(round(4.0 * max(0, int(level or 0))))
+        from ..production_formula import DRONE_TECH_PER_LEVEL
+
+        return int(round(DRONE_TECH_PER_LEVEL * max(0, int(level or 0)) * 100))
 
     @staticmethod
     def drone_prod_bonus_pct(level: int) -> int:
-        return int(round(3.0 * max(0, int(level or 0))))
+        from ..production_formula import DRONE_TECH_PER_LEVEL
+
+        return int(round(DRONE_TECH_PER_LEVEL * max(0, int(level or 0)) * 100))
 
     @staticmethod
     def storage_bonus_pct(level: int) -> int:
@@ -435,7 +436,7 @@ class EffectResolver:
         values: Dict[str, float],
         sources: List[Dict[str, Any]],
     ) -> Dict[str, float]:
-        """Galaxy slot climate — hot slots boost solar/metal, cold slots boost crystal (GC-811C)."""
+        """Galaxy slot climate — solar output only; mine production uses production_formula slot/temp (GC-820)."""
         pos = self.planet_position
         if pos is None:
             return values
@@ -445,12 +446,10 @@ class EffectResolver:
         climate = climate_economy_modifiers_for_position(pos)
         label = f"climate:{climate['label_key']}"
         out = dict(values)
-        for key in ("solar_output_factor", "metal_prod_factor", "crystal_prod_factor", "fuel_prod_factor"):
-            factor = float(climate[key])
-            if abs(factor - 1.0) < 1e-9:
-                continue
-            out[key] = float(out.get(key, 1.0)) * factor
-            sources.append(self._source_entry(key, label, factor, pos))
+        factor = float(climate["solar_output_factor"])
+        if abs(factor - 1.0) >= 1e-9:
+            out["solar_output_factor"] = float(out.get("solar_output_factor", 1.0)) * factor
+            sources.append(self._source_entry("solar_output_factor", label, factor, pos))
         return out
 
     def get_modifiers(self) -> Dict[str, float]:
@@ -487,17 +486,20 @@ class EffectResolver:
             mine_energy_factor = self.mine_energy_factor_for_level(le)
             sources.append(self._source_entry("mine_energy_factor", "energy_tech", mine_energy_factor, le))
 
-        # --- Research: mining_tech (+10% metal, +4% crystal per level) ---
+        # --- Research: mining_tech (+3% Ferronit per level — GC-820) ---
         lm = _lvl(r, "mining_tech")
         if lm > 0:
-            metal_prod_factor *= 1.0 + 0.10 * lm
-            crystal_prod_factor *= 1.0 + 0.04 * lm
+            from ..production_formula import MINING_TECH_PER_LEVEL
+
+            metal_prod_factor *= 1.0 + MINING_TECH_PER_LEVEL * lm
             sources.append(self._source_entry("metal_prod_factor", "mining_tech", metal_prod_factor, lm))
 
-        # --- Research: drone_tech (+3% both per level) ---
+        # --- Research: drone_tech (+2% Ferronit + Crytite per level — GC-820) ---
         ld = _lvl(r, "drone_tech")
         if ld > 0:
-            drone_bonus = 1.0 + 0.03 * ld
+            from ..production_formula import DRONE_TECH_PER_LEVEL
+
+            drone_bonus = 1.0 + DRONE_TECH_PER_LEVEL * ld
             metal_prod_factor *= drone_bonus
             crystal_prod_factor *= drone_bonus
             sources.append(self._source_entry("prod_factor", "drone_tech", drone_bonus, ld))
@@ -744,8 +746,8 @@ class EffectResolver:
             "energy": {"total": energy_total, "used": energy_used, "ratio": ratio},
             "production_per_sec": {"metal": m_rate, "crystal": c_rate},
             "production_per_hour": {
-                "metal": int(m_rate * ratio * 3600 * self.production_speed_setting()),
-                "crystal": int(c_rate * ratio * 3600 * self.production_speed_setting()),
+                "metal": int(m_rate * ratio * 3600),
+                "crystal": int(c_rate * ratio * 3600),
             },
             "storage": caps,
             "build_time_speed": mods.get("build_time_speed", 1.0),
@@ -757,6 +759,7 @@ class EffectResolver:
                     "metal_mine",
                     "crystal_mine",
                     "solar_plant",
+                    "fuel_cell_plant",
                     "metal_storage",
                     "crystal_storage",
                     "fuel_storage",
@@ -831,33 +834,39 @@ class EffectResolver:
             return 1.0
         return max(0.0, float(energy_total) / max(1.0, float(energy_used)))
 
-    def production_rates_per_sec(self) -> Tuple[float, float]:
+    def prod_overlay_factor(self, resource_type: str) -> float:
+        """GD + diplomacy overlay for production (excludes research; slot/temp in production_formula)."""
+        from ..production_formula import normalize_resource_type, research_modifier_for
+
+        key = normalize_resource_type(resource_type)
         mods = self.get_modifiers()
-        b = self.buildings
+        research_part = research_modifier_for(key, self.research)
+        if key == "metal":
+            full = _mod_float(mods, "metal_prod_factor")
+        elif key == "crystal":
+            full = _mod_float(mods, "crystal_prod_factor")
+        else:
+            full = _mod_float(mods, "fuel_prod_factor")
+        return full / max(research_part, 1e-12)
 
-        metal_lvl = _bld(b, "metal_mine")
-        crystal_lvl = _bld(b, "crystal_mine")
+    def production_rates_per_sec(self) -> Tuple[float, float]:
+        from ..production_formula import calculate_resource_output, production_context_from_resolver
 
-        metal_rate = METAL_PROD_BASE * (metal_lvl ** METAL_PROD_EXP) if metal_lvl > 0 else 0.0
-        crystal_rate = CRYSTAL_PROD_BASE * (crystal_lvl ** CRYSTAL_PROD_EXP) if crystal_lvl > 0 else 0.0
-
-        metal_rate *= _mod_float(mods, "metal_prod_factor")
-        crystal_rate *= _mod_float(mods, "crystal_prod_factor")
-
-        return metal_rate, crystal_rate
+        ctx_m = production_context_from_resolver(self, "metal", energy_ratio=1.0)
+        ctx_c = production_context_from_resolver(self, "crystal", energy_ratio=1.0)
+        metal_ph = calculate_resource_output("metal", ctx_m)
+        crystal_ph = calculate_resource_output("crystal", ctx_c)
+        return metal_ph / 3600.0, crystal_ph / 3600.0
 
     def fuel_cells_rate_per_sec(self) -> float:
-        """Brennzellen-Produktion: fuel_production_per_hour * level * FUEL_CELL_GROWTH^(level-1)."""
         per_hour = self.fuel_cells_production_per_hour()
         return per_hour / 3600.0 if per_hour > 0 else 0.0
 
     def fuel_cells_production_per_hour(self) -> float:
-        lvl = _bld(self.buildings, "fuel_cell_plant")
-        if lvl <= 0:
-            return 0.0
-        base_ph = float(self._settings_dict().get("fuel_production_per_hour", 2.0) or 2.0)
-        fuel_factor = _mod_float(self.get_modifiers(), "fuel_prod_factor")
-        return base_ph * lvl * (FUEL_CELL_GROWTH ** max(0, lvl - 1)) * fuel_factor
+        from ..production_formula import calculate_resource_output, production_context_from_resolver
+
+        ctx = production_context_from_resolver(self, "fuel_cells", energy_ratio=1.0)
+        return calculate_resource_output("fuel_cells", ctx)
 
     def fuel_storage_capacity(self) -> int:
         """Planet fuel cell depot capacity (fuel_storage building + tech/terraformer)."""
@@ -899,12 +908,18 @@ class EffectResolver:
         }
 
     def get_building_production_per_hour(self, ratio: float) -> Dict[str, int]:
-        prod_speed = self.production_speed_setting()
-        m_rate, c_rate = self.production_rates_per_sec()
-        fc_rate = self.fuel_cells_rate_per_sec()
-        metal_ph = int(m_rate * float(ratio) * 3600 * prod_speed)
-        crystal_ph = int(c_rate * float(ratio) * 3600 * prod_speed)
-        fuel_cell_ph = int(fc_rate * float(ratio) * 3600 * prod_speed)
+        from ..production_formula import calculate_resource_output, production_context_from_resolver
+
+        ratio_f = max(0.0, float(ratio))
+        metal_ph = int(calculate_resource_output(
+            "metal", production_context_from_resolver(self, "metal", energy_ratio=ratio_f)
+        ))
+        crystal_ph = int(calculate_resource_output(
+            "crystal", production_context_from_resolver(self, "crystal", energy_ratio=ratio_f)
+        ))
+        fuel_cell_ph = int(calculate_resource_output(
+            "fuel_cells", production_context_from_resolver(self, "fuel_cells", energy_ratio=ratio_f)
+        ))
         return {
             "metal_mine": metal_ph,
             "crystal_mine": crystal_ph,
@@ -933,7 +948,12 @@ class EffectResolver:
         core = _bld(b, "planet_core_nexus")
         geo = _bld(b, "geothermal_nexus")
 
-        if building_type in ("metal_mine", "crystal_mine", "solar_plant"):
+        if building_type in (
+            "metal_mine",
+            "crystal_mine",
+            "solar_plant",
+            "fuel_cell_plant",
+        ):
             return base_max + core + geo * 2
         if building_type in ("metal_storage", "crystal_storage", "fuel_storage"):
             return base_max + geo * 2
@@ -994,10 +1014,11 @@ class EffectResolver:
             return 0
 
         base_time = float(cfg.get("base_time", 600))
-        cost_factor = float(cfg.get("cost_factor", 1.6))
         lvl = max(1, int(target_level))
-        factor = cost_factor ** (lvl - 1)
-        raw = float(base_time * factor)
+
+        from ..economy_balance import research_base_time_seconds, research_time_tier
+
+        raw = float(research_base_time_seconds(lvl, time_tier=research_time_tier(base_time)))
 
         mods = self.get_modifiers()
         research_time_speed = _mod_float(mods, "research_time_speed")
@@ -1035,7 +1056,7 @@ def get_effect_resolver(
         planet_position = None
         galaxy_id = None
         planet_row = planet
-        if planet_row is None and conn is not None:
+        if planet_row is None:
             try:
                 planet_row = get_context_planet(player_id=int(player_id), conn=conn)
             except Exception:

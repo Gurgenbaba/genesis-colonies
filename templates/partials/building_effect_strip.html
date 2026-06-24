@@ -1,4 +1,4 @@
-{# Shared upgrade-effect preview (buildings page + overview widgets) #}
+{# GC-827 / GC-827B — compact card benefits (details in Technical Data modal) #}
 {% from "partials/progression_cards.html" import render_resource_icon with context %}
 
 {% macro render_building_effect_icon(res_key) %}
@@ -15,26 +15,11 @@
   {% endif %}
 {% endmacro %}
 
-{% macro render_building_effect_value(kind, res_key, amount, unit) %}
-  {% set val = amount|int %}
-  {% set full_val = val|fmt_int %}
-  {% set compact_val = val|fmt_int_compact %}
-  {% if kind == 'bonus_percent' %}
-    <span class="gc-mono gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>+{{ compact_val }}{{ unit }}</span>
-  {% elif kind == 'reduction_percent' %}
-    <span class="gc-mono gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>-{{ compact_val }}{{ unit }}</span>
-  {% elif kind == 'level' %}
-    <span class="gc-mono gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>{{ compact_val }}</span>
-  {% elif kind == 'max_level' or kind == 'scan' %}
-    <span class="gc-mono gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>{{ compact_val }}{% if unit %}{{ unit }}{% endif %}</span>
-  {% else %}
-    {{ render_building_effect_icon(res_key) }}
-    <span class="gc-mono gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>{{ compact_val }}</span>{% if unit %}<span class="gc-bld-prod-unit">{{ unit }}</span>{% endif %}
-  {% endif %}
-{% endmacro %}
-
-{% macro building_effect_metric_label(kind, res_key, building_key) %}
-  {% if kind == 'production' %}
+{% macro building_effect_metric_label(kind, res_key, building_key, metric_key='') %}
+  {% if metric_key %}
+    {% set _lbl = T(metric_key, '') %}
+    {% if _lbl and _lbl != metric_key %}{{ _lbl }}{% else %}{{ building_effect_metric_label(kind, res_key, building_key) }}{% endif %}
+  {% elif kind == 'production' %}
     {{ T("buildings_effect_production", "Produktion") }}
   {% elif kind == 'energy' %}
     {{ T("buildings_effect_energy", "Energie") }}
@@ -51,6 +36,10 @@
       {{ T("buildings_effect_build_speed", "Baugeschwindigkeit") }}
     {% elif res_key == 'storage' %}
       {{ T("buildings_effect_storage_bonus", "Lagerbonus") }}
+    {% elif res_key == 'metal' %}
+      {{ T("research_effect_metal_prod", "Ferronit-Produktion") }}
+    {% elif res_key == 'crystal' %}
+      {{ T("research_effect_crystal_prod", "Crytite-Produktion") }}
     {% else %}
       {{ T("buildings_effect_bonus", "Bonus") }}
     {% endif %}
@@ -66,77 +55,102 @@
     {{ T("buildings_effect_max_mine", "Max. Minenstufe") }}
   {% elif kind == 'scan' %}
     {{ T("buildings_effect_scan", "Scan-Reichweite") }}
+  {% elif kind == 'yard_capacity' %}
+    {{ T("buildings_effect_yard_capacity", "Kapazität") }}
   {% else %}
     {{ T("buildings_effect_level", "Stufe") }}
   {% endif %}
 {% endmacro %}
 
-{% macro render_building_effect_strip(b, compact=false, strip_class='') %}
-  {% set kind = b.effect_kind if b.effect_kind is defined else 'level' %}
-  {% set res_key = b.effect_resource if b.effect_resource is defined else '' %}
-  {% set unit = b.effect_unit if b.effect_unit is defined else '' %}
-  {% set cur = (b.effect_current if b.effect_current is defined else b.level)|int %}
-  {% set nxt = (b.effect_next if b.effect_next is defined else b.target_level)|int %}
-  {% set delta = (b.effect_delta if b.effect_delta is defined else 0)|int %}
-  {% set building_key = b.key if b.key is defined else '' %}
-  {% set metric_label = building_effect_metric_label(kind, res_key, building_key) %}
-  {% if kind == 'production' %}
-    {% set delta_suffix = "/h" %}
-  {% elif kind == 'bonus_percent' %}
-    {% set delta_suffix = "%" %}
-  {% elif kind == 'reduction_percent' %}
-    {% set delta_suffix = "%" %}
-  {% else %}
-    {% set delta_suffix = "" %}
-  {% endif %}
-  <div class="gc-bld-prod bcell-prod gc-bld-effect{% if compact %} gc-bld-effect-compact{% endif %}{% if strip_class %} {{ strip_class }}{% endif %}"
-       data-building-prod="{{ building_key }}"
-       data-effect-kind="{{ kind }}">
-    <div class="gc-bld-prod-metric" title="{{ metric_label }}">{{ metric_label }}</div>
-    <div class="gc-bld-prod-line">
-      <span class="gc-bld-prod-label">{{ T("buildings_prod_current", "Aktuell") }}</span>
-      <span class="gc-bld-prod-val gc-bld-prod-cur bcell-prod-current" id="prod-cur-{{ building_key }}">
-        {{ render_building_effect_value(kind, res_key, cur, unit) }}
-      </span>
-    </div>
-    <div class="gc-bld-prod-line">
-      <span class="gc-bld-prod-label">{{ T("buildings_prod_after", "Nach Upgrade") }}</span>
-      <span class="gc-bld-prod-val gc-bld-prod-next bcell-prod-next" id="prod-next-{{ building_key }}">
-        {{ render_building_effect_value(kind, res_key, nxt, unit) }}
-      </span>
-    </div>
-    {% if delta > 0 %}
-      {% if kind == 'energy_use' %}
-        {% set delta_label = T("buildings_prod_delta_cost", "Mehrverbrauch") %}
-        {% set delta_class = 'gc-bld-prod-delta-cost' %}
-      {% else %}
-        {% set delta_label = T("buildings_prod_delta", "Gewinn") %}
-        {% set delta_class = '' %}
-      {% endif %}
-      <div class="gc-bld-prod-delta bcell-prod-delta {{ delta_class }}" id="prod-delta-{{ building_key }}-{{ kind }}">
-        <span class="gc-bld-prod-delta-label">{{ delta_label }}</span>
-        <span class="gc-bld-prod-delta-val gc-mono gc-num-compact"{% if (delta|fmt_int_compact) != (delta|fmt_int) %} title="+{{ delta|fmt_int }}{{ delta_suffix }}"{% endif %}>
-          {% if kind == 'bonus_percent' %}+{{ delta|fmt_int_compact }}%{% elif kind == 'reduction_percent' %}-{{ delta|fmt_int_compact }}%{% elif kind == 'level' %}+{{ delta|fmt_int_compact }}{% else %}+{{ delta|fmt_int_compact }}{{ delta_suffix }}{% endif %}
-        </span>
-      </div>
-    {% endif %}
+{% macro render_compact_effect_value_html(kind, res_key, delta, unit='', effect_next=0, extra='') %}
+  {# legacy alias — unused in GC-827B #}
+{% endmacro %}
+
+{% macro render_compact_effect_chip(kind, res_key, delta, unit='', building_key='', effect_next=0, extra='', metric_key='') %}
+  {% set d = (delta or 0)|int %}
+  {% set nxt = (effect_next or 0)|int %}
+  {% set metric = building_effect_metric_label(kind, res_key, building_key, metric_key) %}
+  {% if kind == 'yard_capacity' and (nxt > 0 or extra) %}
+  <div class="gc-card-lr-row gc-card-benefit-row">
+    <span class="gc-card-lr-label">{{ metric }}</span>
+    <span class="gc-card-lr-value gc-mono">{% if nxt > 0 %}{{ nxt|fmt_int_compact }} {{ T("compact_yard_units", "Einheiten") }}{% endif %}{% if extra %} · -{{ extra|fmt_int }}%{% endif %}</span>
   </div>
+  {% elif kind == 'max_level' and (nxt > 0 or d > 0) %}
+  <div class="gc-card-lr-row gc-card-benefit-row">
+    <span class="gc-card-lr-label">{{ metric }}</span>
+    <span class="gc-card-lr-value gc-mono">L{{ (nxt if nxt > 0 else d)|fmt_int_compact }}</span>
+  </div>
+  {% elif kind != 'energy_use' and d > 0 %}
+  <div class="gc-card-lr-row gc-card-benefit-row">
+    <span class="gc-card-lr-label">{{ metric }}</span>
+    <span class="gc-card-lr-value gc-mono">
+      {% if kind == 'production' %}+{{ d|fmt_int_compact }}{{ unit or '/h' }}
+      {% elif kind == 'bonus_percent' %}+{{ d|fmt_int_compact }}%
+      {% elif kind == 'reduction_percent' %}-{{ d|fmt_int_compact }}%
+      {% elif kind == 'storage' %}+{{ d|fmt_int_compact }}
+      {% elif kind == 'energy' %}+{{ d|fmt_int_compact }}
+      {% else %}+{{ d|fmt_int_compact }}{% if unit %}{{ unit }}{% endif %}
+      {% endif %}
+    </span>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_compact_effect_row(effect, building_key='', data_attr='') %}
+  {% set kind = effect.effect_kind if effect.effect_kind is defined else 'level' %}
+  {% set res_key = effect.effect_resource if effect.effect_resource is defined else '' %}
+  {% set unit = effect.effect_unit if effect.effect_unit is defined else '' %}
+  {% set delta = (effect.effect_delta if effect.effect_delta is defined else 0)|int %}
+  {% set nxt = (effect.effect_next if effect.effect_next is defined else 0)|int %}
+  {% set metric_key = effect.effect_metric_key if effect.effect_metric_key is defined else '' %}
+  {% set yard_extra = effect.build_time_reduction_delta if kind == 'yard_capacity' and effect.build_time_reduction_delta is defined and (effect.build_time_reduction_delta|int) > 0 else '' %}
+  {% if kind == 'yard_capacity' or (kind == 'max_level' and (delta > 0 or nxt > 0)) or (kind != 'energy_use' and kind != 'max_level' and delta > 0) %}
+    {{ render_compact_effect_chip(kind, res_key, delta, unit, building_key, nxt, yard_extra, metric_key) }}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_building_card_footer(b) %}
+  {% set sec = b.secondary_effect if b.secondary_effect is defined else none %}
+  {% if sec and sec.effect_kind == 'energy_use' and (sec.effect_delta|default(0)|int) > 0 %}
+  <div class="gc-card-lr-row gc-card-footer-row gc-card-footer-row--energy" data-building-energy-footer>
+    <span class="gc-card-lr-label">{{ T("buildings_effect_energy_use", "Energieverbrauch") }}</span>
+    <span class="gc-card-lr-value gc-mono">
+      {{ render_resource_icon('energy', 'sm') }}
+      <span class="gc-num-compact">-{{ (sec.effect_delta|int)|fmt_int_compact }}</span>
+    </span>
+  </div>
+  {% endif %}
 {% endmacro %}
 
 {% macro render_building_effect_bundle(b, compact=false) %}
-  <div class="gc-bld-effect-bundle">
-    {{ render_building_effect_strip(b, compact=compact) }}
-    {% if b.secondary_effect is defined and b.secondary_effect %}
-      {% set sec = b.secondary_effect %}
-      {{ render_building_effect_strip({
-        'key': b.key,
-        'effect_kind': sec.effect_kind,
-        'effect_resource': sec.effect_resource,
-        'effect_unit': sec.effect_unit,
-        'effect_current': sec.effect_current,
-        'effect_next': sec.effect_next,
-        'effect_delta': sec.effect_delta,
-      }, compact=compact, strip_class='gc-bld-effect-secondary') }}
-    {% endif %}
+  {% set building_key = b.key if b.key is defined else '' %}
+  {% set kind = b.effect_kind if b.effect_kind is defined else 'level' %}
+  {% set delta = (b.effect_delta if b.effect_delta is defined else 0)|int %}
+  {% set nxt = (b.effect_next if b.effect_next is defined else 0)|int %}
+  {% set yard_red = (b.build_time_reduction_delta if b.build_time_reduction_delta is defined else 0)|int %}
+  {% set has_primary = false %}
+  {% if kind == 'yard_capacity' and (nxt > 0 or yard_red > 0) %}
+    {% set has_primary = true %}
+  {% elif kind != 'energy_use' and delta > 0 %}
+    {% set has_primary = true %}
+  {% endif %}
+  {% set sec = b.secondary_effect if b.secondary_effect is defined else none %}
+  {% set sec_delta = (sec.effect_delta if sec and sec.effect_delta is defined else 0)|int %}
+  {% if has_primary or (sec and sec.effect_kind != 'energy_use' and sec_delta > 0) %}
+  <div class="gc-bld-effect-bundle bcell-prod" data-building-prod="{{ building_key }}">
+    <div class="gc-card-benefit-block">
+      {% if has_primary %}
+        {{ render_compact_effect_row(b, building_key) }}
+      {% endif %}
+      {% if sec and sec.effect_kind != 'energy_use' and sec_delta > 0 %}
+        {{ render_compact_effect_row(sec, building_key) }}
+      {% endif %}
+    </div>
   </div>
+  {% endif %}
+{% endmacro %}
+
+{# Legacy aliases #}
+{% macro render_building_effect_strip(b, compact=false, strip_class='') %}
+  {{ render_building_effect_bundle(b, compact) }}
 {% endmacro %}

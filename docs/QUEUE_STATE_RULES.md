@@ -95,11 +95,23 @@ Verboten: UI zeigt nur die Einzel-Einheit-Zeit (z. B. 5 s), während der Auftrag
 
 Referenz: `order_total_seconds` / `order_remaining` in `game/shipyard_queue.py`, `game/defense.py`; Card-Adapter `map_shipyard_queue_to_card_jobs`, `map_defense_queue_to_card_jobs`.
 
-### Live-State / DOM
+### Completion state (GC-833)
 
-- Monotone Timer (`data-server-remaining`) **nur** für denselben aktiven Job (`job_id` + `finish_at` unverändert).
-- Wechsel von `job_id`, Status (queued→active), `finish_at`, `start_at`, Position oder Menge → Block **neu rendern**, keinen alten DOM-State übernehmen.
-- Countdown 0 → zentraler Refresh ([STATE_AJAX.md](STATE_AJAX.md)); leere Queue → Card-Block entfernen.
+| State | Condition | Server | Client |
+|-------|-----------|--------|--------|
+| **Active** | `remaining_seconds > 0` | Job in queue, position 1 active | Show progress + timer |
+| **Completed** | `remaining_seconds <= 0` or `finish_at <= now` | Finish immediately, remove from queue, apply reward, start next | Remove card/HUD queue block immediately; refresh via `/api/game-state` |
+| **Cancelled** | User cancel | Remove job, refund per GC-831, reschedule | Clear queue UI from action `state` |
+
+**Forbidden** (must never appear in API or UI):
+
+- `progress_pct = 100` + `remaining_seconds = 0` + `status = active`
+- Completed job still visible in queue
+- Cancelled job without refund
+
+`coerce_skip_finish()` skips a second finish pass only after `mark_request_live_refreshed()` in the same HTTP request. Before that, queue read paths always run finish so due jobs cannot leak into payloads.
+
+Card adapter: `is_queue_job_client_visible()` in `game/queue_card.py` filters due jobs from `card_jobs` / HUD slices.
 
 ---
 
@@ -124,6 +136,34 @@ Queue-**Logik** bleibt in `game/queue_engine.py` und den Domänen-Ownern. Queue-
 - Kanonisches Card-Job-Format: `game/queue_card.py` (Presentation-Adapter, **keine zweite Queue**)
 - GC-536A: Adapter + Tests + JS-Stub
 - GC-536B–F: Cards produktiv; Kompaktstatus oben, Legacy-Panels entfernt (✅)
+
+---
+
+## Cancel refunds (GC-831)
+
+Owner: `game/queue_refund.py` — **single source** for cancel refund ratios and planet credit.
+
+| Job state | Condition | Refund |
+|-----------|-----------|--------|
+| Pending | `start_time > now` | **100%** |
+| Active | `start_time <= now < finish_time` | **50%** |
+| Completed | `finish_time <= now` | **0%** (not cancellable) |
+
+Applies to: `build_queue`, `research_queue`, `planet_research_queue`, `shipyard_queue`, `defense_queue`.
+
+Stored-cost queues (shipyard, defense) refund from `cost_metal` / `cost_crystal` / `cost_fuel_cells` on the row. Build/research recompute cost from canonical formulas at cancel time (same level basis as enqueue).
+
+Cancel handlers must call `finish_due_work` first, then refund, then delete job, then reschedule — see [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md).
+
+### Cancelled visibility (GC-833B)
+
+**Cancelled** = row deleted from queue table + refund applied + reschedule. Forbidden client state:
+
+- Job still in `build_queue` / `card_jobs_by_owner` after successful cancel API
+- Hero time chip still running `[data-countdown-at]` after cancel (orphan timer)
+- `0s` + queue overlay on the same card
+
+Frontend: `GC.clearCardQueueBlock()` must strip hero overlay **and** hero-chip countdown attrs (`stripHeroTimeChipQueueTimer`). `patchCardQueuesFromOwnerMap` treats missing `card_jobs_by_owner` as empty map (clears stale cards).
 
 ---
 

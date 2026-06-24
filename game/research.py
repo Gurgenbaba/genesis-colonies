@@ -454,14 +454,13 @@ def get_research_cost(tech_key: str, level: int) -> Tuple[int, int]:
     if not cfg:
         return 0, 0
 
-    base_m = float(cfg.get("base_cost_m", 1000))
-    base_c = float(cfg.get("base_cost_c", 500))
-    cost_factor = float(cfg.get("cost_factor", 1.6))
+    from .economy_balance import research_upgrade_cost
 
-    lvl = max(1, int(level))
-    factor = cost_factor ** (lvl - 1)
-
-    return int(base_m * factor), int(base_c * factor)
+    return research_upgrade_cost(
+        int(cfg.get("base_cost_m", 1000)),
+        int(cfg.get("base_cost_c", 500)),
+        max(1, int(level)),
+    )
 
 
 def get_research_time(
@@ -768,7 +767,75 @@ def _resolve_research_queue_limit(
 # QUEUE START
 # ======================================================================
 
-def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
+def preview_max_queueable_research_jobs(
+    tech_key: str,
+    *,
+    current_level: int,
+    queued_same: int,
+    metal: float,
+    crystal: float,
+    queue_free_slots: int,
+) -> int:
+    """How many +1 research jobs can be queued for one tech."""
+    if tech_key not in RESEARCH_TECHS or int(queue_free_slots) <= 0:
+        return 0
+    count = 0
+    m = float(metal or 0)
+    c = float(crystal or 0)
+    while count < int(queue_free_slots):
+        target = int(current_level) + int(queued_same) + count + 1
+        cost_m, cost_c = get_research_cost(tech_key, target)
+        if m < float(cost_m) or c < float(cost_c):
+            break
+        m -= float(cost_m)
+        c -= float(cost_c)
+        count += 1
+    return count
+
+
+def summarize_max_queueable_research_jobs(
+    tech_key: str,
+    *,
+    current_level: int,
+    queued_same: int,
+    metal: float,
+    crystal: float,
+    queue_free_slots: int,
+    user_id: int,
+    buildings: Optional[Dict[str, int]] = None,
+) -> Dict[str, Any]:
+    """Preview payload for MAX research queue UX: levels, total cost, cumulative time."""
+    jobs = preview_max_queueable_research_jobs(
+        tech_key,
+        current_level=current_level,
+        queued_same=queued_same,
+        metal=metal,
+        crystal=crystal,
+        queue_free_slots=queue_free_slots,
+    )
+    if jobs <= 0:
+        return {"jobs": 0}
+    from_level = int(current_level) + int(queued_same)
+    total_m = 0.0
+    total_c = 0.0
+    total_sec = 0
+    for i in range(jobs):
+        target = from_level + i + 1
+        cost_m, cost_c = get_research_cost(tech_key, target)
+        total_m += float(cost_m)
+        total_c += float(cost_c)
+        total_sec += int(get_research_time(tech_key, target, int(user_id), buildings=buildings))
+    return {
+        "jobs": int(jobs),
+        "from_level": from_level,
+        "to_level": from_level + int(jobs),
+        "cost_metal": int(round(total_m)),
+        "cost_crystal": int(round(total_c)),
+        "time_seconds": int(total_sec),
+    }
+
+
+def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None, *, queue_mode: str = "single"):
     if tech_key not in RESEARCH_TECHS:
         return False, "unknown_tech", None
 
@@ -779,6 +846,8 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
         uid = int(pid)
     else:
         uid = int(user_id)
+
+    want_max = str(queue_mode or "single").strip().lower() == "max"
 
     conn = db()
     finished_any = False
@@ -811,105 +880,142 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None):
 
         recalculate_research_queue_finish_times(uid, conn=conn, now=now)
 
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
-            (planet_id,),
-        )
-        prow = cur.fetchone()
-        if not prow:
-            rollback(conn)
-            return False, "no_homeworld", None
-
-        planet_metal = float(prow["metal"] or 0)
-        planet_crystal = float(prow["crystal"] or 0)
-
-        buildings = resolve_buildings_for_research(
-            get_planet_buildings(planet_id, conn=conn),
-            uid,
-            conn=conn,
-        )
-        levels = get_research_levels(uid, conn=conn)
-
-        if int(buildings.get("research_lab", 0) or 0) <= 0:
-            rollback(conn)
-            return False, "no_research_lab", None
-
-        if not has_research_requirements(buildings, levels, tech_key):
-            rollback(conn)
-            return False, "requirements", None
-
-        rows = get_research_queue_rows(uid, conn=conn)
         research_queue_limit = _resolve_research_queue_limit(player_id=uid, conn=conn)
-        if len(rows) >= research_queue_limit:
-            rollback(conn)
-            return False, "research_queue_full", {
-                "queue_count": len(rows),
-                "queue_limit": research_queue_limit,
-            }
+        jobs_queued = 0
+        job_ids: List[int] = []
+        last_payload: Dict[str, Any] = {}
+        last_reason = "unknown"
+        last_fail: Any = None
+        max_attempts = 64 if want_max else 1
 
-        queued_same = sum(1 for r in rows if str(r["tech_key"]) == tech_key)
-        current = int(levels.get(tech_key, 0) or 0)
-        target = current + queued_same + 1
-
-        cost_m, cost_c = get_research_cost(tech_key, target)
-
-        logger.info(
-            "Research Start: player_id=%s planet_id=%s available_feronit=%s available_crytite=%s "
-            "required_feronit=%s required_crytite=%s tech=%s",
-            uid,
-            planet_id,
-            int(planet_metal),
-            int(planet_crystal),
-            int(cost_m),
-            int(cost_c),
-            tech_key,
-        )
-
-        if planet_metal < float(cost_m) or planet_crystal < float(cost_c):
-            rollback(conn)
-            return False, "not_enough_resources", _research_not_enough_payload(
-                planet_metal=planet_metal,
-                planet_crystal=planet_crystal,
-                cost_m=int(cost_m),
-                cost_c=int(cost_c),
-            )
-
-        duration = get_research_time(tech_key, target, user_id=uid, buildings=buildings)
-        last_finish = max(float(r["finish_at"]) for r in rows) if rows else now
-        start_at = max(now, last_finish)
-        finish_at = start_at + float(duration)
-
-        if not try_spend_resources_conn(conn, planet_id, int(cost_m), int(cost_c)):
-            rollback(conn)
+        for _ in range(max_attempts):
+            cur = conn.cursor()
             cur.execute(
                 "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
                 (planet_id,),
             )
-            after = cur.fetchone()
-            avail_m = float(after["metal"] or 0) if after else planet_metal
-            avail_c = float(after["crystal"] or 0) if after else planet_crystal
-            return False, "not_enough_resources", _research_not_enough_payload(
-                planet_metal=avail_m,
-                planet_crystal=avail_c,
-                cost_m=int(cost_m),
-                cost_c=int(cost_c),
-            )
+            prow = cur.fetchone()
+            if not prow:
+                if jobs_queued > 0:
+                    break
+                rollback(conn)
+                return False, "no_homeworld", None
 
-        job_id = add_research_job(uid, tech_key, float(start_at), float(finish_at), conn=conn)
+            planet_metal = float(prow["metal"] or 0)
+            planet_crystal = float(prow["crystal"] or 0)
+
+            buildings = resolve_buildings_for_research(
+                get_planet_buildings(planet_id, conn=conn),
+                uid,
+                conn=conn,
+            )
+            levels = get_research_levels(uid, conn=conn)
+
+            if int(buildings.get("research_lab", 0) or 0) <= 0:
+                last_reason = "no_research_lab"
+                last_fail = None
+                break
+
+            if not has_research_requirements(buildings, levels, tech_key):
+                last_reason = "requirements"
+                last_fail = None
+                break
+
+            rows = get_research_queue_rows(uid, conn=conn)
+            if len(rows) >= research_queue_limit:
+                last_reason = "research_queue_full"
+                last_fail = {
+                    "queue_count": len(rows),
+                    "queue_limit": research_queue_limit,
+                }
+                break
+
+            queued_same = sum(1 for r in rows if str(r["tech_key"]) == tech_key)
+            current = int(levels.get(tech_key, 0) or 0)
+            target = current + queued_same + 1
+
+            cost_m, cost_c = get_research_cost(tech_key, target)
+
+            if planet_metal < float(cost_m) or planet_crystal < float(cost_c):
+                last_reason = "not_enough_resources"
+                last_fail = _research_not_enough_payload(
+                    planet_metal=planet_metal,
+                    planet_crystal=planet_crystal,
+                    cost_m=int(cost_m),
+                    cost_c=int(cost_c),
+                )
+                break
+
+            duration = get_research_time(tech_key, target, user_id=uid, buildings=buildings)
+            last_finish = max(float(r["finish_at"]) for r in rows) if rows else now
+            start_at = max(now, last_finish)
+            finish_at = start_at + float(duration)
+
+            if not try_spend_resources_conn(conn, planet_id, int(cost_m), int(cost_c)):
+                last_reason = "not_enough_resources"
+                cur.execute(
+                    "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
+                    (planet_id,),
+                )
+                after = cur.fetchone()
+                avail_m = float(after["metal"] or 0) if after else planet_metal
+                avail_c = float(after["crystal"] or 0) if after else planet_crystal
+                last_fail = _research_not_enough_payload(
+                    planet_metal=avail_m,
+                    planet_crystal=avail_c,
+                    cost_m=int(cost_m),
+                    cost_c=int(cost_c),
+                )
+                break
+
+            job_id = add_research_job(
+                uid,
+                tech_key,
+                float(start_at),
+                float(finish_at),
+                conn=conn,
+                cost_metal=int(cost_m),
+                cost_crystal=int(cost_c),
+            )
+            jobs_queued += 1
+            job_ids.append(int(job_id))
+            last_payload = {
+                "job_id": int(job_id),
+                "seconds": int(duration),
+                "level": int(target),
+                "target_level": int(target),
+                "queued": len(rows) > 0,
+            }
+
+            if jobs_queued == 1:
+                logger.info(
+                    "Research Start: player_id=%s planet_id=%s available_feronit=%s available_crytite=%s "
+                    "required_feronit=%s required_crytite=%s tech=%s",
+                    uid,
+                    planet_id,
+                    int(planet_metal),
+                    int(planet_crystal),
+                    int(cost_m),
+                    int(cost_c),
+                    tech_key,
+                )
+
+            if not want_max:
+                break
+
+        if jobs_queued <= 0:
+            rollback(conn)
+            return False, last_reason, last_fail
 
         commit(conn)
 
         if finished_any:
             invalidate_player_score_cache(uid)
 
-        return True, "ok", {
-            "job_id": int(job_id),
-            "seconds": int(duration),
-            "level": int(target),
-            "target_level": int(target),
-            "queued": len(rows) > 0,
-        }
+        last_payload["jobs_queued"] = int(jobs_queued)
+        if len(job_ids) > 1:
+            last_payload["job_ids"] = job_ids
+        return True, "ok", last_payload
 
     except Exception:
         rollback(conn)
@@ -948,7 +1054,7 @@ def cancel_research_job(user_id: int, job_id: int):
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, tech_key
+            SELECT id, tech_key, start_at, finish_at, cost_metal, cost_crystal
             FROM research_queue
             WHERE id = ? AND user_id = ?
             LIMIT 1;
@@ -959,6 +1065,21 @@ def cancel_research_job(user_id: int, job_id: int):
         if not row:
             rollback(conn)
             return False, "not_found", {"msg": "Research job not found", "job_id": jid}
+
+        from .queue_refund import refund_research_job
+
+        refund = refund_research_job(
+            conn,
+            int(resource_planet["id"]),
+            uid,
+            job_id=int(row["id"]),
+            tech_key=str(row["tech_key"]),
+            start_time=float(row["start_at"] or row["finish_at"] or now),
+            finish_time=float(row["finish_at"] or now),
+            now=now,
+            cost_metal=int(row["cost_metal"] or 0),
+            cost_crystal=int(row["cost_crystal"] or 0),
+        )
 
         delete_research_job(int(row["id"]), conn=conn)
         recalculate_research_queue_finish_times(uid, conn=conn, now=now)
@@ -971,6 +1092,7 @@ def cancel_research_job(user_id: int, job_id: int):
             "job_id": int(row["id"]),
             "tech_key": str(row["tech_key"]),
             "cancelled": True,
+            **refund,
         }
     except Exception:
         rollback(conn)
@@ -1104,6 +1226,9 @@ def get_research_status(
         k = str(item["tech_key"])
         queue_keys[k] = queue_keys.get(k, 0) + 1
 
+    research_queue_limit = _resolve_research_queue_limit(player_id=uid, conn=conn)
+    queue_free_slots = max(0, research_queue_limit - len(queue_list))
+
     techs: List[Dict[str, Any]] = []
     for tech, cfg in RESEARCH_TECHS.items():
         curr = int(levels.get(tech, 0) or 0)
@@ -1116,6 +1241,18 @@ def get_research_status(
         req = cfg.get("requirements") or {}
         req_met = _check_requirements(req, buildings, levels)
         can_afford = planet_metal >= float(cost_m) and planet_crystal >= float(cost_c)
+        max_queue_preview: Dict[str, Any] = {"jobs": 0}
+        if req_met:
+            max_queue_preview = summarize_max_queueable_research_jobs(
+                tech,
+                current_level=curr,
+                queued_same=q_count,
+                metal=planet_metal,
+                crystal=planet_crystal,
+                queue_free_slots=queue_free_slots,
+                user_id=int(user_id),
+                buildings=buildings,
+            )
 
         is_active = bool(active and str(active.get("tech_key")) == tech)
         in_queue = q_count > 0
@@ -1136,6 +1273,8 @@ def get_research_status(
             "time_seconds": int(t_sec),
             "requirements_met": bool(req_met),
             "can_afford": bool(can_afford),
+            "max_queueable": int(max_queue_preview.get("jobs") or 0),
+            "max_queue_preview": max_queue_preview,
             "requirements_items": get_research_requirements_items(tech, buildings, levels),
             "resource_items": [
                 {
@@ -1160,7 +1299,6 @@ def get_research_status(
             **effect_preview,
         })
 
-    research_queue_limit = _resolve_research_queue_limit(player_id=uid, conn=conn)
     summary = {
         "count": len(queue_list),
         "limit": research_queue_limit,
@@ -1197,7 +1335,10 @@ def _research_technical_level_row(
     cost_level = max(1, lvl) if lvl > 0 else 1
     cost_m, cost_c = get_research_cost(tech_key, cost_level)
     time_s = int(get_research_time(tech_key, cost_level, int(user_id), buildings=buildings))
-    effect = get_research_effect_preview(tech_key, lvl, lvl + 1)
+    if lvl > 0:
+        effect = get_research_effect_preview(tech_key, lvl - 1, lvl)
+    else:
+        effect = get_research_effect_preview(tech_key, 0, 1)
     row: Dict[str, Any] = {
         "level": lvl,
         "is_current": bool(is_current),
@@ -1205,6 +1346,9 @@ def _research_technical_level_row(
         "cost_crystal": int(cost_c),
         "time_seconds": time_s,
         "effect_kind": effect.get("effect_kind") or "level",
+        "effect_current": effect.get("effect_current"),
+        "effect_next": effect.get("effect_next"),
+        "effect_delta": effect.get("effect_delta"),
         "effect_value": effect.get("effect_current"),
         "effect_unit": effect.get("effect_unit") or "",
         "effect_resource": effect.get("effect_resource") or "",
@@ -1214,11 +1358,17 @@ def _research_technical_level_row(
     if isinstance(sec, dict):
         row["secondary_effect"] = {
             "effect_kind": sec.get("effect_kind") or "level",
+            "effect_current": sec.get("effect_current"),
+            "effect_next": sec.get("effect_next"),
+            "effect_delta": sec.get("effect_delta"),
             "effect_value": sec.get("effect_current"),
             "effect_unit": sec.get("effect_unit") or "",
             "effect_resource": sec.get("effect_resource") or "",
             "effect_metric_key": sec.get("effect_metric_key") or "",
         }
+    from .technical_data import enrich_research_technical_row
+
+    enrich_research_technical_row(row, tech_key, lvl)
     return row
 
 
@@ -1241,20 +1391,36 @@ def build_research_technical_data(
     )
     levels = get_research_levels(uid, conn=conn)
     current = int(levels.get(key, 0) or 0)
-    end_level = current + 5
     cfg = RESEARCH_TECHS[key]
+    from .technical_data import (
+        build_research_technical_summary,
+        build_research_effect_milestones,
+        resolve_technical_table_layout,
+        technical_preview_levels,
+        technical_row_role,
+    )
 
+    preview = technical_preview_levels(current)
     level_rows: List[Dict[str, Any]] = []
-    for lvl in range(current, end_level + 1):
-        level_rows.append(
-            _research_technical_level_row(
-                key,
-                lvl,
-                user_id=uid,
-                buildings=buildings,
-                is_current=(lvl == current),
-            )
+    for lvl in preview:
+        row = _research_technical_level_row(
+            key,
+            lvl,
+            user_id=uid,
+            buildings=buildings,
+            is_current=(lvl == current),
         )
+        row["row_role"] = technical_row_role(lvl, current)
+        level_rows.append(row)
+
+    next_row = next((r for r in level_rows if int(r.get("level") or 0) == current + 1), None)
+    summary = build_research_technical_summary(
+        tech_key=key,
+        current=current,
+        next_row=next_row,
+        buildings=buildings,
+        research_levels=levels,
+    )
 
     return {
         "tech_key": key,
@@ -1263,6 +1429,13 @@ def build_research_technical_data(
         "kind": "research",
         "current_level": current,
         "max_level": None,
+        "table_layout": resolve_technical_table_layout(level_rows),
+        "summary": summary,
+        "milestones": build_research_effect_milestones(
+            tech_key=key,
+            current=current,
+            levels=level_rows,
+        ),
         "levels": level_rows,
     }, None
 

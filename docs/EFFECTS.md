@@ -1,7 +1,7 @@
 # Effect System — Genesis Colonies
 
-Authoritative gameplay math lives in `game/effects/effect_resolver.py`.  
-Consumers (`resources`, `buildings`, `research`) delegate to `EffectResolver`; the frontend must not replicate formulas.
+Authoritative gameplay math: production in `game/production_formula.py` ([PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md)); energy, storage, build/research time in `game/effects/effect_resolver.py`.  
+Consumers (`resources`, `buildings`, `research`) delegate to these modules; the frontend must not replicate formulas.
 
 ## Status overview
 
@@ -9,7 +9,7 @@ Consumers (`resources`, `buildings`, `research`) delegate to `EffectResolver`; t
 |------|--------|--------|
 | Economy (production, energy, storage) | **Fixed** | Applied on every resource tick / derived sync; includes galactic directives + diplomacy (GC-720E, GC-721H) |
 | Time (build, research, lab, academy, nanofactory) | **Fixed** | `get_build_time_seconds`, `get_research_time_seconds` |
-| Building caps (core nexus, geothermal, terraform) | **Fixed** | Max levels, storage, solar bonus |
+| Building caps (core nexus, geothermal) | **Fixed** | Max levels for mines/solar/fuel/storage; terraform = storage bonus only |
 | Combat (`weapon_tech`, `armor_tech`, `shield_tech`) | **Fixed** | Applied in `simulate_battle()` via `EffectResolver.get_combat_modifiers()` — [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | Fleet (`navigation_tech`, `engine_tech`) | **Prepared only** | Modifiers computed; **no fleet engine** |
 | Radar (`radar_array` → `scan_range`) | **Prepared only** | **No scan/galaxy engine** |

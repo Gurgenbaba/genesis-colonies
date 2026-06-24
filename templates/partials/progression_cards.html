@@ -75,29 +75,130 @@
   {% set full_val = amount|fmt_int %}
   {% set compact_val = amount|fmt_int_compact %}
   <span class="gc-cost-chip gc-cost-{{ res_key }}{% if unmet %} is-unmet{% endif %}">
-    {{ render_resource_icon(res_key) }}
+    <span class="gc-cost-chip-leading">{{ render_resource_icon(res_key) }}</span>
     <span class="gc-cost-val gc-num-compact"{% if compact_val != full_val %} title="{{ full_val }}"{% endif %}>{{ compact_val }}</span>
   </span>
 {% endmacro %}
 
-{# GC-632 — compact cycle / parallel stat chips (Shipyard + Defense cards) #}
-{% macro render_production_stat_chips(cycle_seconds, batch_capacity) %}
-  {% set _sec = (cycle_seconds|default(1))|int %}
-  {% set _cap = (batch_capacity|default(1))|int %}
-  {% set _cap_full = _cap|fmt_int %}
-  {% set _cap_compact = _cap|fmt_int_compact %}
-  <div class="gc-prod-stat-grid gc-mono" data-production-stats
-       aria-label="{{ T('prod_stat_aria', cycle=_sec, capacity=_cap_full) }}">
-    <div class="gc-prod-stat-chip gc-prod-stat-chip--cycle">
-      <span class="gc-prod-stat-chip-label">{{ T('prod_stat_cycle_label') }}</span>
-      <span class="gc-prod-stat-chip-value" data-prod-cycle-seconds>{{ _sec|fmt_int }}s</span>
-    </div>
-    <div class="gc-prod-stat-chip gc-prod-stat-chip--parallel">
-      <span class="gc-prod-stat-chip-label">{{ T('prod_stat_parallel_label') }}</span>
-      <span class="gc-prod-stat-chip-value" data-prod-batch-capacity
-            {% if _cap_compact != _cap_full %}title="{{ _cap_full }}"{% endif %}>{{ _cap_compact }}</span>
+{% macro render_card_costs_block(metal, crystal, fuel_cells=none, show_heading=true) %}
+  <div class="gc-card-costs-block bcell-cost">
+    {% if show_heading %}
+    <div class="gc-card-section-label">{{ T("progression_costs_heading", "Kosten") }}</div>
+    {% endif %}
+    <div class="gc-cost-stack">
+      {{ render_resource_cost_chip('metal', metal) }}
+      {{ render_resource_cost_chip('crystal', crystal) }}
+      {% if fuel_cells is not none and (fuel_cells|int) > 0 %}
+      {{ render_resource_cost_chip('fuel_cells', fuel_cells) }}
+      {% endif %}
     </div>
   </div>
+{% endmacro %}
+
+{% macro render_card_lr_row(label, value_html, row_class='') %}
+  <div class="gc-card-lr-row{% if row_class %} {{ row_class }}{% endif %}">
+    <span class="gc-card-lr-label">{{ label }}</span>
+    <span class="gc-card-lr-value gc-mono">{{ value_html }}</span>
+  </div>
+{% endmacro %}
+
+{% macro render_req_hover_attrs(items) %}
+  {%- set unmet = items|rejectattr('met')|list if items else [] -%}
+  {%- if unmet %} data-req-hover="1" data-req-items='{{ unmet | tojson }}'{%- endif -%}
+{% endmacro %}
+
+{% macro render_max_queue_preview_attrs(preview) %}
+  {%- if preview and (preview.jobs|default(0))|int > 0 %} data-max-queue-hover="1" data-max-preview='{{ preview | tojson }}'{%- endif -%}
+{% endmacro %}
+
+{% macro render_card_requirements_block(items, met=false) %}
+  {% set unmet = items|rejectattr('met')|list if items else [] %}
+  {% if unmet %}
+  <div class="gc-card-req-block" data-card-req-block>
+    <div class="gc-card-req-head">
+      <span class="gc-card-req-lock" aria-hidden="true">🔒</span>
+      <span class="gc-card-req-title">{{ T("msg_build_requirements", "Voraussetzungen") }}</span>
+    </div>
+    <ul class="gc-card-req-list">
+      {% for req in unmet %}
+      <li class="gc-card-req-item gc-mono">
+        {% if req.kind == 'building' %}
+          {{ T('building_' ~ req.key, req.key) }} {{ (req.need if req.need is defined else req.required)|fmt_int }}
+        {% elif req.type == 'building' %}
+          {{ T('building_' ~ req.key, req.key) }} {{ req.required|fmt_int }}
+        {% else %}
+          {{ T(req.key, req.key) }} {{ (req.need if req.need is defined else req.required)|fmt_int }}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{# GC-632 / GC-827B — compact unit benefit row (Shipyard + Defense cards) #}
+{% macro render_compact_unit_stat_chips(attack, shield, hull, build_seconds=none, mode='ship') %}
+  {% set atk = (attack or 0)|int %}
+  {% set shd = (shield or 0)|int %}
+  {% set hul = (hull or 0)|int %}
+  {% set hp = shd + hul if (shd + hul) > 0 else hul %}
+  <div class="gc-bld-effect-bundle">
+    <div class="gc-card-benefit-block" data-unit-stats data-unit-mode="{{ mode }}"
+         aria-label="{{ T('unit_stat_aria', 'Kampfwerte') }}">
+      {% if mode == 'defense' and hp > 0 %}
+      <div class="gc-card-lr-row gc-card-benefit-row">
+        <span class="gc-card-lr-label"><span aria-hidden="true">🛡</span> {{ T('defense_stat_defense', 'Verteidigung') }}</span>
+        <span class="gc-card-lr-value gc-mono gc-num-compact">{{ hp|fmt_int_compact }}</span>
+      </div>
+      {% elif mode != 'defense' and atk > 0 %}
+      <div class="gc-card-lr-row gc-card-benefit-row">
+        <span class="gc-card-lr-label"><span aria-hidden="true">⚔</span> {{ T('ship_stat_attack', 'Angriff') }}</span>
+        <span class="gc-card-lr-value gc-mono gc-num-compact">{{ atk|fmt_int_compact }}</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro render_unit_build_time_footer(build_seconds) %}
+  {% set _sec = (build_seconds|default(0))|int %}
+  {% if _sec > 0 %}
+  <div class="gc-card-lr-row gc-card-footer-row gc-card-footer-row--time" data-unit-build-time>
+    <span class="gc-card-lr-label"><span aria-hidden="true">⏱</span> {{ T('unit_technical_build_time', 'Bauzeit') }}</span>
+    <span class="gc-card-lr-value gc-mono">{{ render_prog_duration(_sec) }}</span>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_ship_unlock_req_hover_attrs(ship, sy_lvl) %}
+  {% set req_items = ship.requirements.get('items', []) if ship.requirements is defined else [] %}
+  {% set sy_req = (ship.required_shipyard_level or 0)|int %}
+  {% set sy_cur = (sy_lvl or 0)|int %}
+  {% set ns = namespace(hover=[]) %}
+  {% if sy_req > 0 and sy_cur < sy_req %}
+    {% set _ = ns.hover.append({'kind': 'building', 'key': 'orbital_shipyard', 'need': sy_req, 'met': false}) %}
+  {% endif %}
+  {% for item in req_items if not item.met %}
+    {% if not (item.type == 'building' and item.key in ['orbital_shipyard', 'shipyard']) %}
+    {% set _ = ns.hover.append({'kind': item.type, 'key': item.key, 'need': item.required|int, 'met': false}) %}
+    {% endif %}
+  {% endfor %}
+  {% if ns.hover %}{{ render_req_hover_attrs(ns.hover) }}{% endif %}
+{% endmacro %}
+
+{% macro render_defense_locked_req_hover_attrs(unit, factory_level) %}
+  {% set req_lvl = (unit.required_defense_factory_level or 0)|int %}
+  {% set cur_lvl = (factory_level or 0)|int %}
+  {% if cur_lvl < req_lvl %}
+    {% set items = [{'kind': 'building', 'key': 'defense_factory', 'need': req_lvl, 'met': false}] %}
+    {{ render_req_hover_attrs(items) }}
+  {% endif %}
+{% endmacro %}
+
+{# GC-632 — legacy alias; GC-827 uses render_compact_unit_stat_chips + render_unit_build_time_footer #}
+{% macro render_production_stat_chips(cycle_seconds, batch_capacity) %}
+  {{ render_compact_unit_stat_chips(0, 0, 0, none) }}
+  {{ render_unit_build_time_footer(cycle_seconds) }}
 {% endmacro %}
 
 {% macro render_shipyard_req_blocker(item) %}
@@ -107,11 +208,33 @@
     {% set req_label = T(item.key, item.key) %}
   {% endif %}
   <span class="shipyard-blocker shipyard-blocker-req shipyard-blocker-{{ item.type }}{% if item.met %} is-met{% else %} is-unmet{% endif %}"
-        title="{{ req_label }} L{{ item.required|fmt_int }} ({{ item.current|fmt_int }}/{{ item.required|fmt_int }})">
-    <span class="shipyard-blocker-icon" aria-hidden="true">{% if item.met %}✓{% else %}🔒{% endif %}</span>
+        title="{{ req_label }} {{ item.required|fmt_int }} ({{ item.current|fmt_int }}/{{ item.required|fmt_int }})">
     <span class="shipyard-blocker-text">{{ req_label }}</span>
-    <span class="shipyard-blocker-progress gc-mono">L{{ item.current|fmt_int }}/{{ item.required|fmt_int }}</span>
+    <span class="shipyard-blocker-progress gc-mono">{{ item.required|fmt_int }}</span>
   </span>
+{% endmacro %}
+
+{% macro render_shipyard_requirements_block(items) %}
+  {% set unmet = items|rejectattr('met')|list if items else [] %}
+  {% if unmet %}
+  <div class="gc-card-req-block shipyard-req-block" data-card-req-block>
+    <div class="gc-card-req-head">
+      <span class="gc-card-req-lock" aria-hidden="true">🔒</span>
+      <span class="gc-card-req-title">{{ T("msg_build_requirements", "Voraussetzungen") }}</span>
+    </div>
+    <ul class="gc-card-req-list">
+      {% for item in unmet %}
+      <li class="gc-card-req-item gc-mono">
+        {% if item.type == 'building' %}
+          {{ T('building_' ~ item.key, item.key) }} {{ item.required|fmt_int }}
+        {% else %}
+          {{ T(item.key, item.key) }} {{ item.required|fmt_int }}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
 {% endmacro %}
 
 {% macro render_shipyard_level_blocker(required, current) %}
@@ -141,12 +264,32 @@
 
 {% macro render_shipyard_unlock_blockers(ship, sy_lvl) %}
   {% set req_items = ship.requirements.get('items', []) if ship.requirements is defined else [] %}
-  {% if sy_lvl < ship.required_shipyard_level %}
-  {{ render_shipyard_level_blocker(ship.required_shipyard_level, sy_lvl) }}
+  {% set sy_req = (ship.required_shipyard_level or 0)|int %}
+  {% set sy_cur = (sy_lvl or 0)|int %}
+  {% set has_sy = sy_cur >= sy_req %}
+  {% set unmet_reqs = req_items|rejectattr('met')|list if req_items else [] %}
+  {% if (not has_sy and sy_req > 0) or unmet_reqs %}
+  <div class="gc-card-req-block shipyard-req-block" data-card-req-block>
+    <div class="gc-card-req-head">
+      <span class="gc-card-req-lock" aria-hidden="true">🔒</span>
+      <span class="gc-card-req-title">{{ T("msg_build_requirements", "Voraussetzungen") }}</span>
+    </div>
+    <ul class="gc-card-req-list">
+      {% if not has_sy and sy_req > 0 %}
+      <li class="gc-card-req-item gc-mono">{{ T('building_orbital_shipyard', 'Orbitalwerft') }} {{ sy_req|fmt_int }}</li>
+      {% endif %}
+      {% for item in unmet_reqs %}
+      <li class="gc-card-req-item gc-mono">
+        {% if item.type == 'building' %}
+          {{ T('building_' ~ item.key, item.key) }} {{ item.required|fmt_int }}
+        {% else %}
+          {{ T(item.key, item.key) }} {{ item.required|fmt_int }}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
   {% endif %}
-  {% for item in req_items if not item.met %}
-  {{ render_shipyard_req_blocker(item) }}
-  {% endfor %}
 {% endmacro %}
 
 {% macro render_prog_identity(title, icon_src='', fallback='', desc_text='') %}
@@ -177,16 +320,13 @@
   {% endif %}
 {% endmacro %}
 
-{% macro render_prog_costs(metal, crystal, target_level, show_target=true) %}
-  <div class="gc-costs-compact">
-    {{ render_resource_cost_chip('metal', metal) }}
-    {{ render_resource_cost_chip('crystal', crystal) }}
-    {% if show_target %}
-    <span class="gc-cost-target" title="{{ T('buildings_col_level') }} {{ target_level|fmt_int }}">
-      → L{{ target_level|fmt_int }}
-    </span>
-    {% endif %}
-  </div>
+{% macro render_prog_costs(metal, crystal, target_level, show_target=true, fuel_cells=none) %}
+  {{ render_card_costs_block(metal, crystal, fuel_cells, true) }}
+  {% if show_target %}
+  <span class="gc-cost-target" title="{{ T('buildings_col_level') }} {{ target_level|fmt_int }}">
+    → L{{ target_level|fmt_int }}
+  </span>
+  {% endif %}
 {% endmacro %}
 
 {% macro render_req_tooltip(items) -%}

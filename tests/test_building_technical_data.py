@@ -74,14 +74,15 @@ def test_technical_data_metal_mine_levels(tech_db):
     assert data["building_type"] == "metal_mine"
     assert data["current_level"] == 3
     assert len(data["levels"]) == 6
-    assert data["levels"][0]["is_current"] is True
-    assert data["levels"][0]["level"] == 3
-    assert data["levels"][1]["level"] == 4
-    assert data["levels"][0]["production_metal_per_hour"] is not None
-    assert data["levels"][0]["energy_use"] is not None
-    assert data["levels"][0]["cost_metal"] > 0
+    current_row = next(r for r in data["levels"] if r["is_current"])
+    assert current_row["level"] == 3
+    next_row = next(r for r in data["levels"] if r["level"] == 4)
+    assert current_row["production_metal_per_hour"] is not None
+    assert current_row["energy_use"] is not None
+    assert next_row["cost_metal"] > 0
     assert data["description_key"] == "desc_metal_mine"
     assert data["kind"] == "building"
+    assert data["table_layout"] == "production"
 
 
 def test_technical_data_solar_plant_energy(tech_db):
@@ -94,10 +95,10 @@ def test_technical_data_solar_plant_energy(tech_db):
     conn.close()
 
     assert err is None
-    row = data["levels"][0]
-    assert row["effect_kind"] == "energy"
-    assert row["energy_total"] is not None
-    assert row["energy_total"] > 0
+    current_row = next(r for r in data["levels"] if r["is_current"])
+    assert current_row["effect_kind"] == "energy"
+    assert current_row["energy_total"] is not None
+    assert current_row["energy_total"] > 0
 
 
 def test_technical_data_mining_tech_levels(tech_db):
@@ -120,10 +121,12 @@ def test_technical_data_mining_tech_levels(tech_db):
     assert data["tech_key"] == "mining_tech"
     assert data["current_level"] == 2
     assert len(data["levels"]) == 6
-    assert data["levels"][0]["is_current"] is True
-    assert data["levels"][0]["effect_kind"] == "bonus_percent"
+    current_row = next(r for r in data["levels"] if r["is_current"])
+    assert current_row["level"] == 2
+    assert current_row["effect_kind"] == "bonus_percent"
     assert data["description_key"] == "desc_mining_tech"
     assert data["kind"] == "research"
+    assert data["table_layout"] == "effect_percent"
 
 
 def test_technical_data_orbital_shipyard_production(tech_db):
@@ -136,10 +139,12 @@ def test_technical_data_orbital_shipyard_production(tech_db):
     conn.close()
 
     assert err is None
-    row = data["levels"][0]
-    assert row["effect_kind"] == "yard_production"
-    assert row["yard_batch_capacity"] == 9
-    assert row["parallel_light"] >= row["parallel_heavy"] >= 1
+    current_row = next(r for r in data["levels"] if r["is_current"])
+    assert current_row["level"] == 2
+    assert current_row["effect_kind"] == "yard_production"
+    assert current_row["yard_batch_capacity"] == 9
+    assert current_row["parallel_light"] >= current_row["parallel_heavy"] >= 1
+    assert data["table_layout"] == "yard"
 
 
 def test_technical_data_defense_factory_unlock(tech_db):
@@ -155,10 +160,11 @@ def test_technical_data_defense_factory_unlock(tech_db):
     conn.close()
 
     assert err is None
-    row = data["levels"][0]
-    assert row["effect_kind"] == "defense_unlock"
-    assert row["effect_value"] == 2
-    sec = row.get("secondary_effect") or {}
+    current_row = next(r for r in data["levels"] if r["is_current"])
+    assert current_row["level"] == 2
+    assert current_row["effect_kind"] == "defense_unlock"
+    assert current_row["effect_value"] == 2
+    sec = current_row.get("secondary_effect") or {}
     assert sec.get("effect_kind") == "yard_reference"
     assert sec.get("effect_value") == 3
 
@@ -197,12 +203,13 @@ def test_technical_data_nanofactory_flat_per_level_bonus(tech_db):
     conn.close()
 
     assert err is None
-    row = data["levels"][0]
-    assert row["effect_kind"] == "bonus_percent"
-    assert row["effect_value"] == 210
-    assert data["levels"][1]["effect_value"] == 240
-    assert data["levels"][1]["effect_value"] - row["effect_value"] == 30
-    assert row["time_seconds"] == get_build_time("nanofactory", 7, user_id=uid)
+    current_row = next(r for r in data["levels"] if r["is_current"])
+    next_row = next(r for r in data["levels"] if r["level"] == current_row["level"] + 1)
+    assert current_row["effect_kind"] == "bonus_percent"
+    assert current_row["effect_value"] == 210
+    assert next_row["effect_value"] == 240
+    assert next_row["effect_value"] - current_row["effect_value"] == 30
+    assert current_row["time_seconds"] == get_build_time("nanofactory", 7, user_id=uid)
 
 
 def test_technical_data_command_center_flat_per_level_bonus(tech_db):
@@ -215,8 +222,9 @@ def test_technical_data_command_center_flat_per_level_bonus(tech_db):
     conn.close()
 
     assert err is None
-    row = data["levels"][0]
-    assert row["effect_kind"] == "bonus_percent"
-    assert row["effect_value"] == 425
-    assert data["levels"][1]["effect_value"] == 450
-    assert data["levels"][1]["effect_value"] - row["effect_value"] == 25
+    current_row = next(r for r in data["levels"] if r["is_current"])
+    next_row = next(r for r in data["levels"] if r["level"] == current_row["level"] + 1)
+    assert current_row["effect_kind"] == "bonus_percent"
+    assert current_row["effect_value"] == 425
+    assert next_row["effect_value"] == 450
+    assert next_row["effect_value"] - current_row["effect_value"] == 25

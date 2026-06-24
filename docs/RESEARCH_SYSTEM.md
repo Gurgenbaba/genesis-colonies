@@ -56,12 +56,17 @@ Migration `008`: `research_queue.start_at` für präzise UI-Fortschritte.
 
 ## Zeitberechnung
 
-`EffectResolver.get_research_time_seconds()`:
+`EffectResolver.get_research_time_seconds()` (GC-825):
 
-- Basis × `cost_factor^(level-1)`
+- **Basis:** Log-Anker in `economy_balance.research_time_anchor_hours()` (L10 ≈ 1,5 h … L120 ≈ 180 d)
+- **Tech-Tier:** `base_time / 840` (energy_tech = 1,0)
 - ÷ Settings: `build_speed`, `research_speed`
 - ÷ `research_lab_bonus` (+10%/Level über 1)
 - ÷ `research_time_speed` (buildtime_tech, academy)
+
+**Kosten:** `economy_balance.research_upgrade_cost()` — Power-Kurve + Tech-Tier aus `base_cost_m/c` (kein `cost_factor^level` mehr).
+
+Legacy-Exponential (`base_time × cost_factor^(level-1)`) nur noch als Audit-Helfer in `economy_balance`.
 
 ---
 

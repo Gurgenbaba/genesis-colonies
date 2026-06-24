@@ -21,6 +21,35 @@ STATUS_ACTIVE = "active"
 STATUS_QUEUED = "queued"
 
 
+def is_queue_job_client_visible(
+    job: Mapping[str, Any],
+    *,
+    now: Optional[float] = None,
+) -> bool:
+    """
+    GC-833: Forbidden client state — active job at 100 % / 0 s remaining.
+    Due jobs must be finished server-side; never expose them in card/HUD payloads.
+    """
+    ts = float(now if now is not None else time.time())
+    finish = _safe_float(job.get("finish_at"))
+    if finish > 0 and finish <= ts:
+        return False
+    if str(job.get("status") or "") == STATUS_ACTIVE:
+        remaining = _safe_int(job.get("remaining_seconds"), 0)
+        if remaining <= 0:
+            return False
+    return True
+
+
+def filter_client_visible_card_jobs(
+    jobs: Sequence[Mapping[str, Any]],
+    *,
+    now: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    ts = float(now if now is not None else time.time())
+    return [dict(j) for j in jobs if is_queue_job_client_visible(j, now=ts)]
+
+
 def _safe_float(value: Any) -> float:
     try:
         parsed = float(value)
@@ -277,7 +306,7 @@ def reconcile_card_queue_jobs(
         else:
             _apply_queued_wait_remaining(job, finish_at=finish, now=ts)
         out.append(job)
-    return out
+    return filter_client_visible_card_jobs(out, now=ts)
 
 
 def map_research_queue_to_card_jobs(

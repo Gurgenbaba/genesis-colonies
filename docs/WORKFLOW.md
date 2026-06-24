@@ -37,6 +37,7 @@ Vor jeder Änderung die relevanten Docs lesen:
 | [ROADMAP.md](ROADMAP.md) | Status, Phasen, Schulden |
 | [PLANET_SCOPE.md](PLANET_SCOPE.md) | Aktiver Planet, Switch, Scope |
 | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) | Ressourcen, Exchange, Fuel |
+| [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md) | Kanonische Produktionsformeln (GC-820) |
 | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) | Gebäude, Bau-Queue |
 | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) | Account-Forschung |
 | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) | Flotten, Schiffe, Missionen |

@@ -1,4 +1,4 @@
-{# GC-557F — building/research technical data (persists across PJAX) #}
+{# GC-557F / GC-823 — building/research technical data (persists across PJAX) #}
 <div id="gc-building-tech-root"
      class="gc-player-card-modal gc-building-tech-modal"
      hidden
@@ -22,19 +22,11 @@
       <p class="gc-building-tech-desc hint" data-bt-desc hidden></p>
       <div class="gc-building-tech-table-wrap" data-bt-table-wrap hidden>
         <table class="gc-building-tech-table gc-table" data-bt-table>
-          <thead>
-            <tr>
-              <th scope="col">{{ T("buildings_technical_col_level", "Level") }}</th>
-              <th scope="col" data-bt-col-output>{{ T("buildings_technical_col_output", "Output") }}</th>
-              <th scope="col">{{ T("resource_metal", "Ferronit") }}</th>
-              <th scope="col">{{ T("resource_crystal", "Crytite") }}</th>
-              <th scope="col" data-bt-col-time>{{ T("buildings_technical_col_time", "Bauzeit") }}</th>
-              <th scope="col" data-bt-col-energy>{{ T("energy", "Energie") }}</th>
-            </tr>
-          </thead>
+          <thead data-bt-thead></thead>
           <tbody data-bt-tbody></tbody>
         </table>
       </div>
+      <div class="gc-building-tech-detail" data-bt-detail hidden></div>
       <div class="gc-player-card-loading" data-bt-loading hidden aria-hidden="true">
         <span class="gc-player-card-spinner" aria-hidden="true"></span>
         <span class="gc-player-card-loading-text">{{ T("buildings_technical_loading", "Lade Daten…") }}</span>

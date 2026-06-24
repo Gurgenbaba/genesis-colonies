@@ -242,12 +242,20 @@ def refresh_player_live_state(
 
         planet = get_context_planet(uid, conn=conn)
 
+        from .live_state import current_action_perf
+
+        perf = current_action_perf()
+        live_t0 = time.perf_counter()
+        finish_t0 = time.perf_counter()
         finish_player_due_work(
             uid,
             conn,
             source=str(finish_source or "live_state"),
             recalc_ranks=bool(recalc_ranks),
         )
+        if perf is not None:
+            perf.add_finish_ms((time.perf_counter() - finish_t0) * 1000.0)
+
         from .live_state import mark_request_live_refreshed
 
         mark_request_live_refreshed()
@@ -255,6 +263,7 @@ def refresh_player_live_state(
         if not in_transaction(conn):
             begin_write_transaction(conn)
 
+        sync_t0 = time.perf_counter()
         planet, buildings, ratio, energy_total, energy_used = _res.update_planet_resources(
             planet,
             conn=conn,
@@ -268,6 +277,9 @@ def refresh_player_live_state(
         player_view["fuel_cells"] = planet.get("fuel_cells", 0)
         player_view["energy_total"] = int(energy_total)
         player_view["energy_used"] = int(energy_used)
+        if perf is not None:
+            perf.add_resource_sync_ms((time.perf_counter() - sync_t0) * 1000.0)
+            perf.add_live_state_ms((time.perf_counter() - live_t0) * 1000.0)
 
         if own_conn:
             commit(conn)
@@ -345,6 +357,8 @@ def get_building_production_per_hour(
         ratio=ratio,
         research=research,
         mods=mods,
+        user_id=user_id_int,
+        conn=conn,
     )
 
 
@@ -434,6 +448,8 @@ def queue_build(
     player: dict,
     buildings: Dict[str, int],
     building_type: str,
+    *,
+    queue_mode: str = "single",
 ) -> Tuple[bool, str, Any]:
     """
     Komfortfunktion für app.py (Upgrade-Route).
@@ -457,6 +473,7 @@ def queue_build(
         buildings=buildings,
         building_type=building_type,
         user_id=user_id,
+        queue_mode=queue_mode,
     )
 
     if not ok:
@@ -469,6 +486,8 @@ def queue_build(
         if reason == "requirements":
             return False, "requirements", payload
         if reason == "invalid":
+            if isinstance(payload, dict) and payload.get("max_level") is not None:
+                return False, "max_level_reached", payload
             return False, "unknown_building", payload
         return False, reason, payload
 
@@ -493,14 +512,14 @@ def cancel_build(player: dict, job_id: int) -> Tuple[bool, str, Any]:
 # RESEARCH
 # ============================================================================ #
 
-def queue_research(player: dict, tech_key: str):
+def queue_research(player: dict, tech_key: str, *, queue_mode: str = "single"):
     """
     Thin-Wrapper um game.research.queue_research.
 
     Erwartete Signatur in research.py:
         queue_research(player, tech_key, user_id=None)
     """
-    return _queue_research(player, tech_key)
+    return _queue_research(player, tech_key, queue_mode=queue_mode)
 
 
 def cancel_research(player: dict, job_id: int):

@@ -33,7 +33,8 @@ def test_gc838_queue_panel_refresh_coalesced():
     )[0]
     assert "_queuePanelRefreshInFlight" in fn
     assert "if (_queuePanelRefreshInFlight) return _queuePanelRefreshInFlight" in fn
-    assert "include_panel=1" in fn
+    assert 'reasonStr === "page_init"' in fn
+    assert "buildBuildingsFinishDeltaUrl(keys)" in fn
 
 
 def test_gc838_no_double_refresh_on_timer_zero():
@@ -108,11 +109,8 @@ def test_gc838_immediate_action_patch_no_poll_wait():
     skip_fn = src.split("function shouldSkipInitGameStateAfterSsr(page, opts)")[1].split(
         "function bootstrapResourceLiveFromDom"
     )[0]
-    assert "_SSR_SKIP_INIT_GAME_STATE_PAGES.has(page)" in skip_fn
-    ssr_pages = src.split("_SSR_SKIP_INIT_GAME_STATE_PAGES = new Set([")[1].split("]);")[0]
-    assert "buildings" not in ssr_pages
-    assert "research" not in ssr_pages
-    assert "shipyard" not in ssr_pages
+    assert "return pageHasSsrLiveBoot()" in skip_fn
+    assert "_SSR_SKIP_INIT_GAME_STATE_PAGES" not in skip_fn
     apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split(
         "function refreshPageAfterQueueEvent"
     )[0]

@@ -94,7 +94,7 @@ PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
     "exchange_rate_metal_to_crystal": float(DEFAULT_GAME_SETTINGS["exchange_rate_metal_to_crystal"]),
     "exchange_rate_crystal_to_metal": float(DEFAULT_GAME_SETTINGS["exchange_rate_crystal_to_metal"]),
     "exchange_daily_limit_pct": int(float(DEFAULT_GAME_SETTINGS.get("exchange_daily_limit_pct", 80))),
-    "exchange_daily_limit_min": int(DEFAULT_GAME_SETTINGS.get("exchange_daily_limit_min", 0)),
+    "exchange_daily_limit_min": int(DEFAULT_GAME_SETTINGS.get("exchange_daily_limit_min", 500_000)),
     "exchange_min_amount": int(DEFAULT_GAME_SETTINGS["exchange_min_amount"]),
     "fuel_exchange_enabled": True,
     "fuel_exchange_metal_per_unit": float(DEFAULT_GAME_SETTINGS["fuel_exchange_metal_per_unit"]),

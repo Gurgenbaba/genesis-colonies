@@ -184,8 +184,8 @@ def compute_player_scores(
     try:
         exp = _score_exponent(conn)
         w_build, w_research, w_fleet = _score_weights(conn)
-        from .buildings import BASE_COST, BUILDING_ORDER, COST_FACTOR
-        from .research import RESEARCH_TECHS
+        from .buildings import BUILDING_ORDER
+        from .economy_balance import cumulative_upgrade_cost_sum
 
         planets = get_planets_by_player(int(player_id), conn=conn)
         building_sum_costs = 0
@@ -195,11 +195,9 @@ def compute_player_scores(
                 lvl = int(b.get(key, 0) or 0)
                 if lvl <= 0:
                     continue
-                base = BASE_COST.get(key, (0, 0))
-                fac = float(COST_FACTOR.get(key, 1.5))
-                building_sum_costs += _sum_costs_up_to_level(
-                    int(base[0]), int(base[1]), fac, lvl
-                )
+                building_sum_costs += cumulative_upgrade_cost_sum(key, lvl)
+
+        from .research import RESEARCH_TECHS
 
         building_score = _safe_int(
             ((building_sum_costs**exp) * w_build) if building_sum_costs > 0 else 0

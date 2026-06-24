@@ -2,7 +2,8 @@
 
 Ressourcen, Produktion, Trader Hub und Unified Resource Trader (v1.5.4).
 
-Formeln: autoritativ in `game/effects/effect_resolver.py` — siehe [EFFECTS.md](EFFECTS.md).
+Formeln: autoritativ in `game/production_formula.py` — siehe [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).  
+Energie, Storage, Build-Time: `game/effects/effect_resolver.py` — [EFFECTS.md](EFFECTS.md).
 
 ---
 
@@ -53,29 +54,35 @@ Aufgerufen von:
 
 ---
 
-## Klima & Produktion (Galaxie-Slot)
+## Klima & Produktion (Galaxie-Slot) — GC-820
 
-Slot **1** (wärmste Welt) → mehr Solar/Ferronit/Brennzellen; Slot **15** (kälteste) → weniger Solar/Ferronit, mehr Crytite.
+**Solar:** weiterhin über `climate_economy_modifiers_for_position` → `solar_output_factor` in `EffectResolver`.
 
-| Slot | Solar | Ferronit | Crytite | Brennzellen |
-|------|-------|----------|---------|-------------|
-| 1 | +42 % | +14 % | −10 % | +12 % |
-| 8 | ±0 % | ±0 % | ±0 % | ±0 % |
-| 15 | −50 % | −18 % | +20 % | −28 % |
+**Minen-Produktion:** Slot- und Temperatur-Modifier in `game/production_formula.py` (nicht mehr `metal_prod_factor` / `crystal_prod_factor` / `fuel_prod_factor` aus Klima).
 
-Owner: `game/planet_visuals.py` (Tabellen) · angewendet in `EffectResolver.get_modifiers()` vor Galactic Directives.
+| Ressource | Slot-Bereich | Max-Bonus |
+|-----------|--------------|-----------|
+| Ferronit | 4–9 | +20 % |
+| Crytite | 1–3 | +25 % |
+| Brennzellen | 10–15 | +20 % (+ Temperatur 0.75–1.35) |
+
+Details: [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 
 ---
 
-## Produktionsraten (EffectResolver)
+## Produktionsraten (GC-820)
 
-| Ressource | Basis |
-|-----------|-------|
-| Metal | `0.04 × metal_mine^1.4 × metal_prod_factor` |
-| Crystal | `0.046 × crystal_mine^1.39 × crystal_prod_factor` |
-| Fuel cells | `fuel_production_per_hour` × `fuel_cell_plant_level` × `1.255^(level-1)` |
+Kanoniche Formel: `calculate_resource_output()` in `game/production_formula.py`.
 
-Modifier: `mining_tech`, `drone_tech`, `storage_tech`, Settings (`production_speed`, `fuel_production_per_hour`).
+| Ressource | Wachstum (pro Stunde) |
+|-----------|------------------------|
+| Ferronit | `24 × production_speed × level^1.55` × Modifier |
+| Crytite | `16 × production_speed × level^1.50` × Modifier |
+| Brennzellen | `8 × production_speed × level^1.42` × Modifier |
+
+Modifier: Slot, Temperatur (nur Brennzellen), `mining_tech` (+3 % Ferronit/Lvl), `drone_tech` (+2 %/Lvl), Energie-Ratio, Galactic Directives/Diplomacy (`directive_modifier`).
+
+Details: [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 
 **Brennzellenwerk:** Kein separates Lagergebäude — integriertes Lager skaliert mit der Werksstufe (~25 h Produktionspuffer × `storage_factor` / Terraformer).
 
@@ -132,7 +139,7 @@ Gleiche Ressource als Input/Output ist verboten.
 | `exchange_rate_crystal_to_metal` | 0.85 |
 | `exchange_daily_limit` | 50.000.000.000 | Admin-Hardcap (zusätzlich zu computed limit) |
 | `exchange_daily_limit_pct` | 80 | Prozent der Empire-Tagesproduktion (Fe+Cr+BZ/Tag) |
-| `exchange_daily_limit_min` | 25.000.000 | Untergrenze pro Commander |
+| `exchange_daily_limit_min` | 500.000 | Untergrenze pro Commander |
 | `exchange_daily_limit_max` | 50.000.000.000 | Obergrenze pro Commander |
 | `exchange_min_amount` | 100 |
 | `fuel_exchange_enabled` | 1 |
@@ -260,7 +267,8 @@ Schiffsbau zieht metal, crystal **und fuel_cells** ab (siehe [FLEET_SYSTEM.md](F
 | Datei | Rolle |
 |-------|-------|
 | `game/resources.py` | Tick, deltas |
-| `game/effects/effect_resolver.py` | Formeln |
+| `game/production_formula.py` | Produktionsformeln (GC-820) |
+| `game/effects/effect_resolver.py` | Energie, Storage, Zeit, Modifier-Bundle |
 | `game/exchange.py` | Unified Resource Trader |
 | `game/fuel_exchange.py` | Legacy-Wrapper (deprecated) |
 | `game/scrapyard.py` | Recycling |

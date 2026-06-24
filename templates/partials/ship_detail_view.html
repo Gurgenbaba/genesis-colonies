@@ -1,6 +1,6 @@
 {# Ship detail partial (AJAX) #}
 {% from "partials/progression_cards.html" import render_resource_cost_chip with context %}
-{% from "partials/unit_production_detail.html" import render_unit_production_detail with context %}
+{% from "partials/unit_technical_detail.html" import render_unit_technical_detail with context %}
 {% set card = card if card is defined and card else {} %}
 
 <div class="gc-player-card-shell gc-ship-detail-shell"
@@ -40,18 +40,6 @@
       <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_fuel") }}</span>
       <span class="gc-player-card-stat-value gc-mono">{{ (card.get('fuel') or 0)|fmt_int }}</span>
     </div>
-    <div class="gc-player-card-stat">
-      <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_attack") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('attack') or 0)|fmt_int }}</span>
-    </div>
-    <div class="gc-player-card-stat">
-      <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_shield") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('shield') or 0)|fmt_int }}</span>
-    </div>
-    <div class="gc-player-card-stat">
-      <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_hull") }}</span>
-      <span class="gc-player-card-stat-value gc-mono">{{ (card.get('hull') or 0)|fmt_int }}</span>
-    </div>
     {% if card.get('crew') is not none %}
     <div class="gc-player-card-stat">
       <span class="gc-player-card-stat-label">{{ T("ship_detail_stat_crew") }}</span>
@@ -59,6 +47,8 @@
     </div>
     {% endif %}
   </div>
+
+  {{ render_unit_technical_detail(card.get('technical')) }}
 
   <div class="gc-ship-detail-build">
     <span class="gc-player-card-stat-label">{{ T("ship_detail_build_section") }}</span>
@@ -69,7 +59,6 @@
       {{ render_resource_cost_chip('fuel_cells', card.get('build_cost_fuel_cells')) }}
       {% endif %}
     </div>
-    {{ render_unit_production_detail(card.get('production'), 'ship_detail_shipyard_level', card.get('required_shipyard_level') or 0) }}
     {% if card.get('phase2_only') %}
     <p class="gc-ship-detail-phase hint">{{ T("ship_detail_phase2_only") }}</p>
     {% endif %}

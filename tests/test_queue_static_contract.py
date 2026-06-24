@@ -34,6 +34,7 @@ def test_build_queue_reschedule_wired_on_enqueue_and_cancel():
     assert "finish_due_work(" in enqueue_block
     assert "finish_due_work(" in cancel_block
     assert cancel_block.index("finish_due_work") < cancel_block.index("delete_build_job")
+    assert "refund_build_job" in cancel_block or "queue_refund" in cancel_block
     assert cancel_block.index("delete_build_job") < cancel_block.index(
         "recalculate_build_queue_finish_times"
     )
@@ -48,6 +49,7 @@ def test_research_queue_reschedule_wired_on_enqueue_and_cancel():
     assert "recalculate_research_queue_finish_times(" in enqueue_block
     assert "finish_due_work(" in enqueue_block
     assert "finish_due_work(" in cancel_block
+    assert "refund_research_job" in cancel_block or "queue_refund" in cancel_block
 
 
 def test_server_queue_remaining_non_negative():

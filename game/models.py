@@ -45,8 +45,9 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     "research_queue_limit": "2",
     "shipyard_speed": "1.0",
     "shipyard_queue_limit": "3",
-    "start_metal": "3000",
-    "start_crystal": "1500",
+    "start_metal": "150000",
+    "start_crystal": "100000",
+    "start_fuel_cells": "25000",
 
     # Instant resource exchange (Trader Hub) — Speedgame defaults
     "exchange_enabled": "1",
@@ -54,7 +55,7 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     "exchange_rate_crystal_to_metal": "0.85",
     "exchange_daily_limit": "50000000000",
     "exchange_daily_limit_pct": "80",
-    "exchange_daily_limit_min": "25000000",
+    "exchange_daily_limit_min": "500000",
     "exchange_daily_limit_max": "50000000000",
     "exchange_min_amount": "100",
 
@@ -63,7 +64,7 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
     "fuel_exchange_metal_per_unit": "20",
     "fuel_exchange_crystal_per_unit": "14",
     "fuel_exchange_min_units": "10",
-    "fuel_production_per_hour": "2.0",
+    "fuel_production_per_hour": "2.0",  # legacy admin key — GC-820 uses production_formula LEVEL_GROWTH
 
     # historischer Alias (build_speed)
     "speed": "1.1",
@@ -423,6 +424,17 @@ def init_db() -> None:
     except sqlite3.OperationalError:
         pass
 
+    for stmt in (
+        "ALTER TABLE build_queue ADD COLUMN cost_metal INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE build_queue ADD COLUMN cost_crystal INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE research_queue ADD COLUMN cost_metal INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE research_queue ADD COLUMN cost_crystal INTEGER NOT NULL DEFAULT 0",
+    ):
+        try:
+            cur.execute(f"{stmt};")
+        except sqlite3.OperationalError:
+            pass
+
     harden_planets_schema(conn)
 
     from game.admin_audit import ensure_admin_audit_table
@@ -747,10 +759,12 @@ def ensure_player_and_homeworld(
 
             start_metal = float(DEFAULT_GAME_SETTINGS["start_metal"])
             start_crystal = float(DEFAULT_GAME_SETTINGS["start_crystal"])
+            start_fuel_cells = float(DEFAULT_GAME_SETTINGS.get("start_fuel_cells", 500))
             try:
                 settings = get_game_settings()
                 start_metal = float(settings.get("start_metal", start_metal))
                 start_crystal = float(settings.get("start_crystal", start_crystal))
+                start_fuel_cells = float(settings.get("start_fuel_cells", start_fuel_cells))
             except Exception:
                 pass
 
@@ -779,13 +793,14 @@ def ensure_player_and_homeworld(
                         player_id, name, is_homeworld, metal, crystal, fuel_cells, last_update,
                         galaxy, system, position, planet_class, dna_seed
                     )
-                    VALUES (?, ?, 1, ?, ?, 500, ?, ?, ?, ?, ?, ?);
+                    VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     (
                         int(player_id),
                         "Genesis Ark",
                         start_metal,
                         start_crystal,
+                        start_fuel_cells,
                         now,
                         int(galaxy),
                         int(system),
@@ -801,13 +816,14 @@ def ensure_player_and_homeworld(
                         player_id, name, is_homeworld, metal, crystal, fuel_cells, last_update,
                         galaxy, system, position
                     )
-                    VALUES (?, ?, 1, ?, ?, 500, ?, ?, ?, ?);
+                    VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     (
                         int(player_id),
                         "Genesis Ark",
                         start_metal,
                         start_crystal,
+                        start_fuel_cells,
                         now,
                         int(galaxy),
                         int(system),
@@ -1289,6 +1305,9 @@ def add_build_job(
     start: float,
     finish: float,
     conn: sqlite3.Connection | None = None,
+    *,
+    cost_metal: int = 0,
+    cost_crystal: int = 0,
 ) -> int:
     own_conn = False
     if conn is None:
@@ -1302,10 +1321,19 @@ def add_build_job(
 
         cur.execute(
             """
-            INSERT INTO build_queue (planet_id, building_type, start_time, finish_time)
-            VALUES (?, ?, ?, ?);
+            INSERT INTO build_queue (
+                planet_id, building_type, start_time, finish_time, cost_metal, cost_crystal
+            )
+            VALUES (?, ?, ?, ?, ?, ?);
             """,
-            (int(planet_id), str(btype), float(start), float(finish)),
+            (
+                int(planet_id),
+                str(btype),
+                float(start),
+                float(finish),
+                int(cost_metal),
+                int(cost_crystal),
+            ),
         )
         job_id = cur.lastrowid
 
@@ -1526,6 +1554,9 @@ def add_research_job(
     start_at: float,
     finish_at: float,
     conn: sqlite3.Connection | None = None,
+    *,
+    cost_metal: int = 0,
+    cost_crystal: int = 0,
 ) -> int:
     own_conn = False
     if conn is None:
@@ -1539,10 +1570,19 @@ def add_research_job(
 
         cur.execute(
             """
-            INSERT INTO research_queue (user_id, tech_key, start_at, finish_at)
-            VALUES (?, ?, ?, ?);
+            INSERT INTO research_queue (
+                user_id, tech_key, start_at, finish_at, cost_metal, cost_crystal
+            )
+            VALUES (?, ?, ?, ?, ?, ?);
             """,
-            (int(user_id), str(tech_key), float(start_at), float(finish_at)),
+            (
+                int(user_id),
+                str(tech_key),
+                float(start_at),
+                float(finish_at),
+                int(cost_metal),
+                int(cost_crystal),
+            ),
         )
         job_id = int(cur.lastrowid)
 

@@ -4,7 +4,112 @@ Request-scoped guard for the single-pass live refresh pipeline.
 
 from __future__ import annotations
 
+import logging
+import time
+from contextvars import ContextVar
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
+
+_action_perf_trace: ContextVar[Optional["ActionPerfTrace"]] = ContextVar(
+    "gc_action_perf_trace", default=None
+)
+
+
+def is_action_perf_debug_enabled() -> bool:
+    from game.config import is_action_perf_debug_enabled as _enabled
+
+    return _enabled()
+
+
+class ActionPerfTrace:
+    """GC-841: request-scoped timings for mutation action routes."""
+
+    __slots__ = (
+        "route",
+        "started_at",
+        "finish_ms",
+        "mutate_ms",
+        "live_state_ms",
+        "resource_sync_ms",
+        "payload_ms",
+    )
+
+    def __init__(self, route: str) -> None:
+        self.route = str(route or "action")
+        self.started_at = time.perf_counter()
+        self.finish_ms = 0.0
+        self.mutate_ms = 0.0
+        self.live_state_ms = 0.0
+        self.resource_sync_ms = 0.0
+        self.payload_ms = 0.0
+
+    def add_finish_ms(self, ms: float) -> None:
+        self.finish_ms += max(0.0, float(ms))
+
+    def add_mutate_ms(self, ms: float) -> None:
+        self.mutate_ms += max(0.0, float(ms))
+
+    def add_live_state_ms(self, ms: float) -> None:
+        self.live_state_ms += max(0.0, float(ms))
+
+    def add_resource_sync_ms(self, ms: float) -> None:
+        self.resource_sync_ms += max(0.0, float(ms))
+
+    def add_payload_ms(self, ms: float) -> None:
+        self.payload_ms += max(0.0, float(ms))
+
+    @property
+    def total_ms(self) -> float:
+        return (time.perf_counter() - self.started_at) * 1000.0
+
+    def as_dict(self, *, response_bytes: int = 0) -> Dict[str, Any]:
+        return {
+            "route": self.route,
+            "total_ms": round(self.total_ms, 1),
+            "finish_ms": round(self.finish_ms, 1),
+            "mutate_ms": round(self.mutate_ms, 1),
+            "live_state_ms": round(self.live_state_ms, 1),
+            "resource_sync_ms": round(self.resource_sync_ms, 1),
+            "payload_ms": round(self.payload_ms, 1),
+            "bytes": int(response_bytes or 0),
+        }
+
+    def emit_log(self, *, response_bytes: int = 0) -> Dict[str, Any]:
+        data = self.as_dict(response_bytes=response_bytes)
+        logger.info(
+            "[GC ACTION PERF] route=%s total=%sms finish=%sms mutate=%sms "
+            "live_state=%sms resource_sync=%sms payload=%sms bytes=%s",
+            data["route"],
+            data["total_ms"],
+            data["finish_ms"],
+            data["mutate_ms"],
+            data["live_state_ms"],
+            data["resource_sync_ms"],
+            data["payload_ms"],
+            data["bytes"],
+        )
+        return data
+
+
+def start_action_perf(route: str) -> Optional[ActionPerfTrace]:
+    if not is_action_perf_debug_enabled():
+        return None
+    trace = ActionPerfTrace(route)
+    _action_perf_trace.set(trace)
+    return trace
+
+
+def current_action_perf() -> Optional[ActionPerfTrace]:
+    return _action_perf_trace.get()
+
+
+def finish_action_perf(*, response_bytes: int = 0) -> Optional[Dict[str, Any]]:
+    trace = _action_perf_trace.get()
+    if trace is None:
+        return None
+    _action_perf_trace.set(None)
+    return trace.emit_log(response_bytes=response_bytes)
 
 
 def get_request_context_planet(user_id: int, *, conn) -> Dict[str, Any]:
@@ -58,11 +163,13 @@ def request_live_state_already_refreshed() -> bool:
 
 def coerce_skip_finish(skip_finish: bool) -> bool:
     """
-    After refresh_player_live_state in the same request, force skip_finish=True
-    so get_research_status / get_build_queue_status never run a second finish pass.
+    Effective skip_finish for queue read paths (GC-833).
+
+    After refresh_player_live_state / poll finish in the same HTTP request, skip a
+    second finish pass. Before that, never skip — even when callers pass
+    skip_finish=True — so due jobs cannot appear as 100 % / 0 s / active.
     """
-    if skip_finish:
-        return True
+    _ = skip_finish
     return request_live_state_already_refreshed()
 
 
@@ -324,4 +431,31 @@ def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]
         payload.pop(key, None)
     if "research" in payload:
         payload["research"] = research_poll_slice(payload.get("research"))
+    return payload
+
+
+def apply_action_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    GC-840: mutation action state — keep HUD + queue slices, drop page-catalog blocks.
+
+    Full buildings_panel stays on page init / include_panel=1 / timer-finish refresh.
+    """
+    for key in (
+        "player_stats",
+        "planet_teaser",
+        "exchange",
+        "scrapyard",
+        "auction_house",
+        "defense",
+        "shipyard",
+        "shipyard_queue",
+        "global_queue_hud",
+        "building_queue",
+        "research_queue",
+    ):
+        payload.pop(key, None)
+    overview = payload.get("overview")
+    if isinstance(overview, dict):
+        overview.pop("status", None)
+        overview.pop("rows", None)
     return payload

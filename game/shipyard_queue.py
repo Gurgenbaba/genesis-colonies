@@ -1,4 +1,4 @@
-"""Orbital Shipyard build queue — up to 3 jobs per planet, reorder, 60% cancel refund."""
+"""Orbital Shipyard build queue — up to 3 jobs per planet, reorder, cancel refund via queue_refund."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 from .db import begin_write_transaction, commit, db, rollback
 from .fleet_defs import canonical_ship_key, get_ship, is_known_ship_key
 from .models import lock_planet_for_update
+from .queue_refund import refund_from_stored_costs, refund_summary_percents
 
 MAX_SHIPYARD_QUEUE = 3  # fallback default; prefer get_shipyard_queue_limit()
-CANCEL_REFUND_RATIO = 0.6
 QUEUE_STATUS_QUEUED = "queued"
 
 
@@ -389,12 +389,17 @@ def cancel_queue_job(
         return False, "queue_job_not_found"
 
     job = dict(row)
-    refund_m = int(int(job.get("cost_metal") or 0) * CANCEL_REFUND_RATIO)
-    refund_c = int(int(job.get("cost_crystal") or 0) * CANCEL_REFUND_RATIO)
-    refund_f = float(float(job.get("cost_fuel_cells") or 0) * CANCEL_REFUND_RATIO)
+    now = _now()
+    refund = refund_from_stored_costs(
+        conn,
+        int(planet_id),
+        job,
+        start_time=float(job.get("started_at") or job.get("created_at") or now),
+        finish_time=float(job.get("finish_at") or now),
+        now=now,
+    )
 
     cur.execute("DELETE FROM shipyard_queue WHERE id = ?;", (int(job_id),))
-    _refund_resources(conn, planet_id, metal=refund_m, crystal=refund_c, fuel_cells=refund_f)
     _renumber_positions(conn, planet_id)
     recalculate_queue_finish_times(planet_id, shipyard_level, conn=conn)
     return True, ""
@@ -544,12 +549,13 @@ def shipyard_queue_for_client(
         )
 
     first_remaining = jobs[0]["remaining"] if jobs else 0
+    summary = {
+        "count": len(jobs),
+        "limit": get_shipyard_queue_limit(conn=conn),
+        "first_finish_in": first_remaining,
+    }
+    summary.update(refund_summary_percents())
     return {
         "queue": jobs,
-        "summary": {
-            "count": len(jobs),
-            "limit": get_shipyard_queue_limit(conn=conn),
-            "first_finish_in": first_remaining,
-            "refund_percent": int(CANCEL_REFUND_RATIO * 100),
-        },
+        "summary": summary,
     }

@@ -209,7 +209,7 @@ Server und Client dürfen dieselbe Mechanik **nicht** unabhängig berechnen. Typ
 
 | Verboten im Frontend (`static/`) | Autoritative Berechnung (Python) |
 |----------------------------------|----------------------------------|
-| Ressourcen-Produktion / Cap | `game/resources.py`, [EFFECTS.md](EFFECTS.md) (`EffectResolver`) |
+| Ressourcen-Produktion / Cap | `game/production_formula.py`, `game/resources.py` — [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md) |
 | Flugzeit / Fleet-Speed / Fuel | `game/fleet_calc.py`, `game/fleet.py` |
 | Kampf / Loot / Debris | `game/combat.py` |
 | Queue-Finish / Dauer / Kosten | `game/queue_engine.py`, Domänen-Module (`buildings`, `research`, `shipyard_queue`, …) |
@@ -231,7 +231,11 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | Live-State / Poll-Payload | `game/live_state.py` | [STATE_AJAX.md](STATE_AJAX.md) |
 | Planet Scope | `game/planet_evolution/repository.py` (`get_context_planet`) | [PLANET_SCOPE.md](PLANET_SCOPE.md) |
 | Ressourcen / Tick | `game/resources.py` | [ECONOMY_SYSTEM.md](ECONOMY_SYSTEM.md) |
-| Effekte / Formeln | `game/effects/` (`EffectResolver`) | [EFFECTS.md](EFFECTS.md) |
+| Produktionsformeln | `game/production_formula.py` | [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md) |
+| Economy-Rebalance (GC-821) | `game/economy_balance.py` | [GC-821_ECONOMY_REBALANCE.md](GC-821_ECONOMY_REBALANCE.md) |
+| Technical data display (GC-823) | `game/technical_data.py` | [GC-823_TECHNICAL_DATA.md](GC-823_TECHNICAL_DATA.md) |
+| Live economy QA (GC-822) | `game/economy_live_audit.py` | [GC-822_LIVE_ECONOMY_QA.md](GC-822_LIVE_ECONOMY_QA.md) |
+| Effekte / Energie / Storage / Zeit | `game/effects/` (`EffectResolver`) | [EFFECTS.md](EFFECTS.md) |
 | Buildings / Bau-Queue | `game/buildings.py` | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) |
 | Account-Forschung | `game/research.py` | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) |
 | Shipyard-Queue | `game/shipyard_queue.py`, `game/shipyard.py` | [FLEET_SYSTEM.md](FLEET_SYSTEM.md) |

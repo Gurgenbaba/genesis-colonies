@@ -22,6 +22,7 @@ from .models import (
     get_research_levels,
     lock_planet_for_update,
 )
+from .queue_refund import refund_summary_percents
 
 MAX_DEFENSE_QUEUE = 3
 QUEUE_STATUS_QUEUED = "queued"
@@ -742,14 +743,15 @@ def defense_queue_for_client(
         )
 
     first_remaining = jobs[0]["remaining"] if jobs else 0
+    summary = {
+        "count": len(jobs),
+        "limit": get_defense_queue_limit(conn=conn),
+        "first_finish_in": first_remaining,
+    }
+    summary.update(refund_summary_percents())
     return {
         "queue": jobs,
-        "summary": {
-            "count": len(jobs),
-            "limit": get_defense_queue_limit(conn=conn),
-            "first_finish_in": first_remaining,
-            "refund_percent": 60,
-        },
+        "summary": summary,
     }
 
 
@@ -789,12 +791,19 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
                 block_reason = "queue_full"
             elif max_qty <= 0:
                 block_reason = "not_enough_resources"
+            from .combat_models import combat_stats_for_defense
+
+            stats = combat_stats_for_defense(key)
+            spec = get_defense(key) or {}
             buildable.append(
                 {
                     "defense_key": key,
-                    "name_key": str((get_defense(key) or {}).get("name_key") or f"defense_{key}"),
-                    "description_key": str((get_defense(key) or {}).get("description_key") or f"defense_{key}_desc"),
-                    "role": str((get_defense(key) or {}).get("role") or "turret"),
+                    "name_key": str(spec.get("name_key") or f"defense_{key}"),
+                    "description_key": str(spec.get("description_key") or f"defense_{key}_desc"),
+                    "role": str(spec.get("role") or "turret"),
+                    "attack": int(stats.attack if stats else spec.get("attack", 0) or 0),
+                    "shield": int(stats.shield if stats else spec.get("shield", 0) or 0),
+                    "hull": int(stats.hull if stats else spec.get("hull", 0) or 0),
                     "icon": defense_icon_static_path(key),
                     "required_defense_factory_level": int(
                         (get_defense(key) or {}).get("required_defense_factory_level") or 99

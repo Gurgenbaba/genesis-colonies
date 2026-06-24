@@ -162,11 +162,13 @@ def test_fuel_production_respects_storage_cap(exchange_db):
     )
     fuel_cap = int(status["storage"].get("fuel_cells") or 0)
     assert fuel_cap > 0
+    cur.execute(
+        "UPDATE planets SET fuel_cells = ?, last_update = ? WHERE id = ?;",
+        (fuel_cap, time.time() - 3600, pid),
+    )
+    conn.commit()
     cur.execute("SELECT * FROM planets WHERE id = ?;", (pid,))
     planet = dict(cur.fetchone())
-    planet["fuel_cells"] = fuel_cap
-    planet["last_update"] = time.time() - 3600
-    conn.commit()
 
     from game.resources import update_planet_resources
 

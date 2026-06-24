@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_shipyard_resource_blocker, render_raster_picture with context %}
-{% from "partials/building_effect_strip.html" import render_building_effect_value, building_effect_metric_label with context %}
+{% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_shipyard_resource_blocker, render_raster_picture, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
+{% from "partials/building_effect_strip.html" import render_compact_effect_row with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 {% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
 
@@ -8,137 +8,43 @@
    Genesis research cards — mirrors buildings card layout
    =================================================================== #}
 
-{% macro render_research_effect_delta(kind, delta) %}
-  {% set d = (delta or 0)|int %}
-  {% if d > 0 %}
-    {% if kind == 'reduction_percent' %}
-      <span class="gc-mono gc-num-compact">-{{ d|fmt_int_compact }}%</span>
-    {% elif kind == 'bonus_percent' %}
-      <span class="gc-mono gc-num-compact">+{{ d|fmt_int_compact }}%</span>
-    {% else %}
-      <span class="gc-mono gc-num-compact">+{{ d|fmt_int_compact }}</span>
-    {% endif %}
-  {% endif %}
-{% endmacro %}
-
-{% macro render_research_effect_strip(tech) %}
-  {% set kind = tech.effect_kind if tech.effect_kind is defined else 'level' %}
-  {% set res_key = tech.effect_resource if tech.effect_resource is defined else '' %}
-  {% set unit = tech.effect_unit if tech.effect_unit is defined else '' %}
-  {% set cur = (tech.effect_current if tech.effect_current is defined else tech.level)|int %}
-  {% set nxt = (tech.effect_next if tech.effect_next is defined else tech.target_level)|int %}
-  {% set delta = (tech.effect_delta if tech.effect_delta is defined else 0)|int %}
-  {% if tech.effect_metric_key is defined and tech.effect_metric_key %}
-    {% set metric_label = T(tech.effect_metric_key) %}
-    {% if metric_label == tech.effect_metric_key %}
-      {% set metric_label = building_effect_metric_label(kind, res_key, tech.key) %}
-    {% endif %}
-  {% else %}
-    {% set metric_label = building_effect_metric_label(kind, res_key, tech.key) %}
-  {% endif %}
-  <div class="gc-bld-prod bcell-prod gc-bld-effect gc-research-effect"
-       data-tech-effect="{{ tech.key }}"
-       data-effect-kind="{{ kind }}">
-    <div class="gc-bld-prod-metric" title="{{ metric_label }}">{{ metric_label }}</div>
-    <div class="gc-bld-prod-line">
-      <span class="gc-bld-prod-label">{{ T("buildings_prod_current", "Aktuell") }}</span>
-      <span class="gc-bld-prod-val gc-bld-prod-cur bcell-prod-current">
-        {% if kind == 'reduction_percent' %}
-          <span class="gc-mono gc-num-compact">-{{ cur|fmt_int_compact }}%</span>
-        {% else %}
-          {{ render_building_effect_value(kind, res_key, cur, unit) }}
-        {% endif %}
-      </span>
-    </div>
-    <div class="gc-bld-prod-line">
-      <span class="gc-bld-prod-label">{{ T("buildings_prod_after", "Nach Upgrade") }}</span>
-      <span class="gc-bld-prod-val gc-bld-prod-next bcell-prod-next">
-        {% if kind == 'reduction_percent' %}
-          <span class="gc-mono gc-num-compact">-{{ nxt|fmt_int_compact }}%</span>
-        {% else %}
-          {{ render_building_effect_value(kind, res_key, nxt, unit) }}
-        {% endif %}
-      </span>
-    </div>
-    {% if delta > 0 %}
-      <div class="gc-bld-prod-delta bcell-prod-delta">
-        <span class="gc-bld-prod-delta-label">{{ T("buildings_prod_delta", "Gewinn") }}</span>
-        <span class="gc-bld-prod-delta-val">{{ render_research_effect_delta(kind, delta) }}</span>
-      </div>
-    {% endif %}
-  </div>
-{% endmacro %}
-
 {% macro render_research_effect_bundle(tech) %}
-  <div class="gc-bld-effect-bundle">
-    {{ render_research_effect_strip(tech) }}
-    {% if tech.secondary_effect is defined and tech.secondary_effect %}
-      {% set sec = tech.secondary_effect %}
-      <div class="gc-bld-prod bcell-prod gc-bld-effect gc-bld-effect-secondary gc-research-effect"
-           data-tech-effect="{{ tech.key }}-secondary"
-           data-effect-kind="{{ sec.effect_kind }}">
-        {% if sec.effect_metric_key is defined and sec.effect_metric_key %}
-          {% set sec_metric = T(sec.effect_metric_key) %}
-        {% else %}
-          {% set sec_metric = building_effect_metric_label(sec.effect_kind, sec.effect_resource, tech.key) %}
-        {% endif %}
-        <div class="gc-bld-prod-metric" title="{{ sec_metric }}">{{ sec_metric }}</div>
-        <div class="gc-bld-prod-line">
-          <span class="gc-bld-prod-label">{{ T("buildings_prod_current", "Aktuell") }}</span>
-          <span class="gc-bld-prod-val gc-bld-prod-cur bcell-prod-current">
-            {{ render_building_effect_value(sec.effect_kind, sec.effect_resource, sec.effect_current, sec.effect_unit) }}
-          </span>
-        </div>
-        <div class="gc-bld-prod-line">
-          <span class="gc-bld-prod-label">{{ T("buildings_prod_after", "Nach Upgrade") }}</span>
-          <span class="gc-bld-prod-val gc-bld-prod-next bcell-prod-next">
-            {{ render_building_effect_value(sec.effect_kind, sec.effect_resource, sec.effect_next, sec.effect_unit) }}
-          </span>
-        </div>
-        {% if (sec.effect_delta or 0)|int > 0 %}
-          <div class="gc-bld-prod-delta bcell-prod-delta">
-            <span class="gc-bld-prod-delta-label">{{ T("buildings_prod_delta", "Gewinn") }}</span>
-            <span class="gc-bld-prod-delta-val">{{ render_research_effect_delta(sec.effect_kind, sec.effect_delta) }}</span>
-          </div>
-        {% endif %}
-      </div>
-    {% endif %}
+  {% set kind = tech.effect_kind if tech.effect_kind is defined else 'level' %}
+  {% set delta = (tech.effect_delta if tech.effect_delta is defined else 0)|int %}
+  {% set sec = tech.secondary_effect if tech.secondary_effect is defined else none %}
+  {% set sec_delta = (sec.effect_delta if sec and sec.effect_delta is defined else 0)|int %}
+  {% if delta > 0 or (sec and sec_delta > 0) %}
+  <div class="gc-bld-effect-bundle bcell-prod" data-research-effect="{{ tech.key }}">
+    <div class="gc-card-benefit-block">
+      {% if delta > 0 %}
+        {{ render_compact_effect_row(tech, tech.key) }}
+      {% endif %}
+      {% if sec and sec_delta > 0 %}
+        {{ render_compact_effect_row(sec, tech.key) }}
+      {% endif %}
+    </div>
   </div>
+  {% endif %}
 {% endmacro %}
 
-{% macro render_research_req_blocker(item) %}
-  {% if item.kind == 'building' %}
-    {% set req_label = T('building_' ~ item.key, item.key) %}
-    {% set blocker_type = 'building' %}
-  {% else %}
-    {% set req_label = T(item.key, item.key) %}
-    {% set blocker_type = 'research' %}
+{% macro render_research_card_footer(tech) %}
+  {% set time_s = (tech.time_seconds if tech.time_seconds is defined else 0)|int %}
+  {% if time_s > 0 and not (tech.queue_job is defined and tech.queue_job) %}
+  <div class="gc-card-footer-row gc-card-footer-row--time" data-research-time-footer>
+    <span class="gc-card-footer-glyph" aria-hidden="true">⏱</span>
+    <span class="gc-card-footer-val gc-mono">{{ render_prog_duration(time_s) }}</span>
+  </div>
   {% endif %}
-  <span class="shipyard-blocker shipyard-blocker-req shipyard-blocker-{{ blocker_type }}{% if item.met %} is-met{% else %} is-unmet{% endif %}"
-        title="{{ req_label }} L{{ item.need|fmt_int }} ({{ item.have|fmt_int }}/{{ item.need|fmt_int }})">
-    <span class="shipyard-blocker-icon" aria-hidden="true">{% if item.met %}✓{% else %}🔒{% endif %}</span>
-    <span class="shipyard-blocker-text">{{ req_label }}</span>
-    <span class="shipyard-blocker-progress gc-mono">L{{ item.have|fmt_int }}/{{ item.need|fmt_int }}</span>
-  </span>
 {% endmacro %}
 
 {% macro render_research_blockers(tech, queue_full) %}
-  {% set req_items = tech.requirements_items if tech.requirements_items is defined else [] %}
   {% set res_items = tech.resource_items if tech.resource_items is defined else [] %}
   {% set show_resources = tech.requirements_met and not tech.can_afford %}
-  {% set show_reqs = not tech.requirements_met and req_items %}
-  {% if show_reqs or (show_resources and res_items) %}
+  {% if show_resources and res_items %}
     <div class="research-card-blockers shipyard-blockers">
-      {% if show_reqs %}
-        {% for item in req_items %}
-          {{ render_research_req_blocker(item) }}
-        {% endfor %}
-      {% endif %}
-      {% if show_resources %}
-        {% for item in res_items if not item.met %}
-          {{ render_shipyard_resource_blocker(item.key, item.need, item.have) }}
-        {% endfor %}
-      {% endif %}
+      {% for item in res_items if not item.met %}
+        {{ render_shipyard_resource_blocker(item.key, item.need, item.have) }}
+      {% endfor %}
     </div>
   {% endif %}
 {% endmacro %}
@@ -255,25 +161,12 @@
   {% endif %}
   <div class="gc-bld-card-head-action gc-bld-card-action tech-status-cell bcell-action" data-tech-key="{{ tech.key }}">
     {% if locked %}
-      {% set lock_title = T("research_requirements_not_met") %}
-      {% set req_tooltip = namespace(text='') %}
-      {% for req in tech.requirements_items if not req.met %}
-        {% if req.kind == 'building' %}
-          {% set req_label = T('building_' ~ req.key) %}
-        {% else %}
-          {% set req_label = T(req.key) %}
-        {% endif %}
-        {% set req_tooltip.text = req_tooltip.text ~ req_label ~ ' L' ~ (req.need|fmt_int) ~ (' · ' if not loop.last else '') %}
-      {% endfor %}
-      {% if req_tooltip.text %}
-        {% set lock_title = lock_title ~ " · " ~ req_tooltip.text %}
-      {% endif %}
       <button type="button"
-              class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-research status-pill-icon-btn"
+              class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-research status-pill-icon-btn gc-req-hover-trigger"
               data-action-state="warn"
               disabled
-              title="{{ lock_title }}"
-              aria-label="{{ lock_title }}"><span class="gc-bld-head-action-icon">⚠</span></button>
+              {{ render_req_hover_attrs(tech.requirements_items) }}
+              aria-label="{{ T('research_requirements_not_met', 'Voraussetzungen nicht erfüllt') }}"><span class="gc-bld-head-action-icon">⚠</span></button>
     {% elif queue_full %}
       <button type="button"
               class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-research"
@@ -288,13 +181,27 @@
               data-action-state="afford"
               disabled
               title="{{ T('research_not_enough_resources') }}"
-              aria-label="{{ T('research_not_enough_resources') }}"><span class="gc-bld-head-action-icon">+</span></button>
+              aria-label="{{ T('research_not_enough_resources') }}"><span class="gc-bld-head-action-label">{{ T('progression_btn_plus_one', '+1') }}</span></button>
     {% else %}
-      <a href="{{ url_for('research_start', tech_key=tech.key) }}"
-         class="gc-bld-head-action-btn gc-bld-head-action-btn--go btn-research"
-         data-action-state="go"
-         title="{{ _action_label }}"
-         aria-label="{{ _action_label }}"><span class="gc-bld-head-action-icon">+</span></a>
+      {% set _preview = tech.max_queue_preview if tech.max_queue_preview is defined else {'jobs': (tech.max_queueable if tech.max_queueable is defined else 0)|int} %}
+      {% set _max_q = (_preview.jobs if _preview.jobs is defined else 0)|int %}
+      <div class="gc-bld-card-head-action-group">
+        <a href="{{ url_for('research_start', tech_key=tech.key) }}"
+           class="gc-bld-head-action-btn gc-bld-head-action-btn--go gc-bld-head-action-btn--plus-one btn-research"
+           data-action-state="go"
+           data-tech-key="{{ tech.key }}"
+           title="{{ _action_label }}"
+           aria-label="{{ _action_label }}"><span class="gc-bld-head-action-label">{{ T('progression_btn_plus_one', '+1') }}</span></a>
+        <button type="button"
+                class="gc-bld-head-action-btn gc-bld-head-action-btn--queue-max gc-max-queue-hover-trigger btn-research-max"
+                data-action-state="max-queue"
+                data-tech-key="{{ tech.key }}"
+                data-max-queue="{{ _max_q }}"
+                data-max-kind="research"
+                {{ render_max_queue_preview_attrs(_preview) }}
+                {% if _max_q < 1 %}disabled aria-disabled="true"{% endif %}
+                aria-label="{{ T('progression_btn_max_queue_aria', 'Maximal %(n)s Stufen anreihen', n=_max_q) }}">{{ T('progression_btn_max_queue_count', 'MAX +%(n)s', n=_max_q) if _max_q > 0 else T('progression_btn_max_queue', 'MAX') }}</button>
+      </div>
     {% endif %}
   </div>
 {% endmacro %}
@@ -363,10 +270,12 @@
     {{ render_research_effect_bundle(tech) }}
 
     <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
-      <div class="gc-bld-card-costs bcell-cost tech-cost-cell">
+      <div class="gc-bld-card-costs tech-cost-cell">
         {{ render_prog_costs(tech.cost_metal, tech.cost_crystal, target_lvl, false) }}
       </div>
     </div>
+
+    {{ render_research_card_footer(tech) }}
 
     {{ render_research_blockers(tech, queue_full) }}
   </article>

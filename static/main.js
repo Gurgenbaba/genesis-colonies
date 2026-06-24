@@ -11,6 +11,10 @@
 (() => {
   "use strict";
 
+  if (typeof window !== "undefined" && window.GC_CLIENT_CONFIG?.action_perf_debug) {
+    window.GC_PERF_DEBUG = true;
+  }
+
   // =========================
   // i18n helpers
   // =========================
@@ -212,6 +216,16 @@
 
   function readNumberInput(el) {
     return clampToNumberInputCap(el, parseIntNumber(el?.value ?? "0"));
+  }
+
+  /** GC-845/GC-848 — module scope for initFleet (not bindFleetOnce closure). */
+  function syncFleetShipPickQtyMarks(page) {
+    if (!page) return;
+    page.querySelectorAll(".fleet-ship-card--pick").forEach((card) => {
+      const inp = card.querySelector("[data-ship-input]");
+      const qty = inp ? readNumberInput(inp) : 0;
+      card.classList.toggle("has-ship-qty", qty > 0);
+    });
   }
 
   function setNumberInputValue(el, n) {
@@ -584,6 +598,84 @@
     console.debug(`[GC] action state ${phase}`, reason, detail || "");
   }
 
+  let _actionPerfSession = null;
+
+  function isActionPerfDebug() {
+    return window.GC_PERF_DEBUG === true;
+  }
+
+  function beginActionPerfClick(route, meta) {
+    if (!isActionPerfDebug()) return;
+    _actionPerfSession = {
+      route: String(route || ""),
+      meta: meta && typeof meta === "object" ? { ...meta } : {},
+      clickAt: performance.now(),
+      fetchStartAt: 0,
+      fetchEndAt: 0,
+      applyStartAt: 0,
+      applyEndAt: 0,
+      responseBytes: 0,
+      serverPerf: null,
+    };
+  }
+
+  function markActionPerfFetchStart() {
+    if (!_actionPerfSession) return;
+    _actionPerfSession.fetchStartAt = performance.now();
+  }
+
+  function markActionPerfFetchEnd(responseBytes, serverPerf) {
+    if (!_actionPerfSession) return;
+    _actionPerfSession.fetchEndAt = performance.now();
+    if (responseBytes > 0) _actionPerfSession.responseBytes = responseBytes;
+    if (serverPerf && typeof serverPerf === "object") _actionPerfSession.serverPerf = serverPerf;
+  }
+
+  function logActionPerfClient(phase, extra) {
+    if (!isActionPerfDebug()) return;
+    console.debug("[GC ACTION PERF CLIENT]", phase, extra || "");
+  }
+
+  function finishActionPerfAfterApply(reason) {
+    if (!_actionPerfSession) return;
+    const s = _actionPerfSession;
+    s.applyEndAt = performance.now();
+    const clickAt = s.clickAt || s.applyEndAt;
+    const fetchStartAt = s.fetchStartAt || clickAt;
+    const fetchEndAt = s.fetchEndAt || s.applyStartAt || s.applyEndAt;
+    const applyStartAt = s.applyStartAt || fetchEndAt;
+    logActionPerfClient("patch", {
+      reason: String(reason || ""),
+      route: s.route,
+      meta: s.meta,
+      click_to_fetch_ms: Math.round(fetchStartAt - clickAt),
+      fetch_ms: Math.round(fetchEndAt - fetchStartAt),
+      response_to_apply_ms: Math.round(applyStartAt - fetchEndAt),
+      apply_ms: Math.round(s.applyEndAt - applyStartAt),
+      click_to_patch_ms: Math.round(s.applyEndAt - clickAt),
+      response_bytes: s.responseBytes || 0,
+      server: s.serverPerf || null,
+    });
+    const buildingKey = s.meta?.building_type || s.meta?.buildingType || "";
+    const rowSel = buildingKey ? `[data-building-row="${buildingKey}"]` : "[data-building-row]";
+    const defer =
+      typeof requestAnimationFrame === "function"
+        ? (fn) => requestAnimationFrame(() => requestAnimationFrame(fn))
+        : (fn) => setTimeout(fn, 32);
+    defer(() => {
+      const row = document.querySelector(rowSel);
+      logActionPerfClient("visible", {
+        reason: String(reason || ""),
+        route: s.route,
+        building_type: buildingKey || null,
+        click_to_visible_ms: Math.round(performance.now() - clickAt),
+        row_found: !!row,
+        row_in_queue: row?.classList.contains("gc-building-card--in-queue") ?? null,
+      });
+      _actionPerfSession = null;
+    });
+  }
+
   function shouldPatchGameStateModule(module, opts) {
     if (opts && opts.forcePanel) return true;
     const page = GC.currentPage || (typeof GC.detectPage === "function" ? GC.detectPage() : "");
@@ -938,24 +1030,10 @@
     return !!document.querySelector("#resource-bar .res-value.metal");
   }
 
-  const _SSR_SKIP_INIT_GAME_STATE_PAGES = new Set([
-    "overview",
-    "messages",
-    "fleet",
-    "empire",
-    "galaxy",
-    "options",
-    "vote_center",
-    "referrals",
-    "records",
-    "news",
-  ]);
-
   function shouldSkipInitGameStateAfterSsr(page, opts) {
     if (opts && opts.skipGameState) return true;
     if (opts && opts.forceGameState) return false;
-    if (!pageHasSsrLiveBoot()) return false;
-    return _SSR_SKIP_INIT_GAME_STATE_PAGES.has(page);
+    return pageHasSsrLiveBoot();
   }
 
   function bootstrapResourceLiveFromDom() {
@@ -1067,6 +1145,12 @@
     const state = json.state || (json.data && json.data.state);
     if (!state) return false;
 
+    const reasonStr = String(reason || "");
+    if (_actionPerfSession && isMutationStatePatchReason(reasonStr) && !_actionPerfSession.applyStartAt) {
+      _actionPerfSession.applyStartAt = performance.now();
+      if (json._action_perf) markActionPerfFetchEnd(0, json._action_perf);
+    }
+
     dismissProgressionTooltipsOnStatePatch();
 
     const isPlanetSwitch = reason === "planet_switch";
@@ -1095,7 +1179,6 @@
     _lastPeAscensionQueueSignature = "";
     abortInFlightGameStateFetches();
 
-    const reasonStr = String(reason || "");
     if (reasonStr.endsWith("_cancel_success")) {
       releaseFinishRefreshLock("buildings");
       releaseFinishRefreshLock("research");
@@ -1108,11 +1191,21 @@
     if (st) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, st);
 
     logActionStatePatch("received", reasonStr, {
-      buildings_panel: !!state.buildings_panel,
+      buildings_panel: !!(state.buildings_panel || state.buildings_panel_delta),
       build_queue_owners: Object.keys(resolveCardJobsByOwner(state.build_queue)).length,
       research_owners: Object.keys(resolveCardJobsByOwner(state.research)).length,
     });
-    patchQueuePanelsImmediate(state);
+    if (!isPlanetSwitch) {
+      if (state.buildings_panel_delta && document.querySelector(".buildings-prog-list")) {
+        patchBuildingPanel(state.buildings_panel_delta, state.build_queue);
+        if (state.build_queue) {
+          renderBuildQueue(state.build_queue);
+          updateBuildQueueActions(state.build_queue);
+        }
+      } else {
+        patchQueuePanelsImmediate(state);
+      }
+    }
 
     const anyActive = applyGameStateData(state, reason, {
       forceResourceBar: true,
@@ -1123,6 +1216,10 @@
     });
 
     logActionStatePatch("patched", reasonStr, { poll_fallback_only: false });
+
+    if (_actionPerfSession && isMutationStatePatchReason(reasonStr)) {
+      finishActionPerfAfterApply(reasonStr);
+    }
 
     if (!isPlanetSwitch) {
       GC.startPolling(anyActive || lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
@@ -1215,6 +1312,7 @@
   initFormattedNumberInputDelegation();
   GC.t = t;
   GC.tf = tf;
+  GC.syncFleetShipPickQtyMarks = syncFleetShipPickQtyMarks;
 
   function readDomPlayerId() {
     const fromBody = Math.floor(Number(document.body?.dataset?.playerId || 0));
@@ -1440,6 +1538,9 @@
   GC.fetchGameAction = async function fetchGameAction(url, options = {}) {
     const fetchOpts = { ...options };
     delete fetchOpts.signal;
+    const route = String(url || "");
+    const perfActive = isActionPerfDebug() && _actionPerfSession && _actionPerfSession.route === route;
+    if (perfActive) markActionPerfFetchStart();
     const res = await fetch(url, {
       ...fetchOpts,
       credentials: fetchOpts.credentials || "same-origin",
@@ -1448,10 +1549,15 @@
     const ct = (res.headers.get("content-type") || "").toLowerCase();
     inspectFetchResponseForAuth(res, ct);
     let data = {};
+    let rawText = "";
     if (ct.includes("application/json")) {
       try {
-        data = await res.json();
+        rawText = await res.text();
+        data = rawText ? JSON.parse(rawText) : {};
       } catch (_) {}
+    }
+    if (perfActive) {
+      markActionPerfFetchEnd(rawText.length || Number(res.headers.get("content-length") || 0), data._action_perf);
     }
     if (res.status === 401 || res.status === 403 || data.error === "not_logged_in") {
       handleAuthFailure(`action-http-${res.status}`);
@@ -1867,17 +1973,13 @@
       resyncServerTimeFromDom(true);
       const skipInitFetch = shouldSkipInitGameStateAfterSsr(page, opts) || skipGameState;
       if (!skipInitFetch && typeof GC.refreshGameState === "function") {
-        if (_PROGRESSION_INIT_PANEL_PAGES.has(page) && typeof refreshPageAfterQueueEvent === "function") {
-          await refreshPageAfterQueueEvent("page_init");
-        } else {
-          await GC.refreshGameState("page_init");
-        }
+        await GC.refreshGameState("page_init");
       } else {
         if (skipInitFetch) {
           console.debug("[GC] initPage skip game-state (SSR fresh)", page, opts && opts.pjax ? "pjax" : "");
           bootstrapResourceLiveFromDom();
           _bootstrapPageQueueCompactLiveFromDom();
-          if (_SSR_SKIP_INIT_GAME_STATE_PAGES.has(page) && typeof GC.refreshGameState === "function") {
+          if (typeof GC.refreshGameState === "function") {
             void GC.refreshGameState("page_init");
           }
         }
@@ -2895,6 +2997,109 @@
   const _finishRefreshLastAt = { buildings: 0, research: 0, planet_evolution: 0 };
   const FINISH_REFRESH_MIN_MS = 450;
   const FINISH_REFRESH_DEBOUNCE_MS = 80;
+  const _buildingsFinishDeltaKeys = new Set();
+  let _buildingsFinishRefreshTimer = null;
+  const BUILDINGS_FINISH_REFRESH_DEBOUNCE_MS = 40;
+
+  function trackBuildingsFinishDeltaKey(key) {
+    const k = String(key || "").trim();
+    if (k) _buildingsFinishDeltaKeys.add(k);
+  }
+
+  function collectBuildingsFinishDeltaKeys() {
+    const keys = new Set(_buildingsFinishDeltaKeys);
+    if (!keys.size) {
+      document.querySelectorAll("[data-building-row]").forEach((row) => {
+        const k = row.getAttribute("data-building-row") || "";
+        if (k) keys.add(k);
+      });
+    }
+    return Array.from(keys);
+  }
+
+  function buildBuildingsFinishDeltaUrl(keys) {
+    const list = (keys || []).filter(Boolean).join(",");
+    return `/api/game-state?panel_delta_buildings=${encodeURIComponent(list)}`;
+  }
+
+  let _finishPerfSession = null;
+
+  function beginFinishPerf(reason, keys) {
+    if (!isActionPerfDebug()) return;
+    _finishPerfSession = {
+      reason: String(reason || ""),
+      keys: Array.isArray(keys) ? keys.slice() : [],
+      finishAt: performance.now(),
+      responseAt: 0,
+      patchAt: 0,
+    };
+  }
+
+  function finishFinishPerfVisible(buildingKey) {
+    if (!_finishPerfSession) return;
+    const s = _finishPerfSession;
+    const rowSel = buildingKey ? `[data-building-row="${buildingKey}"]` : "[data-building-row]";
+    const row = document.querySelector(rowSel);
+    logActionPerfClient("finish_visible", {
+      reason: s.reason,
+      keys: s.keys,
+      finish_to_response_ms: s.responseAt ? Math.round(s.responseAt - s.finishAt) : null,
+      response_to_patch_ms: s.patchAt && s.responseAt ? Math.round(s.patchAt - s.responseAt) : null,
+      finish_to_visible_ms: Math.round(performance.now() - s.finishAt),
+      row_found: !!row,
+      row_in_queue: row?.classList.contains("gc-building-card--in-queue") ?? null,
+    });
+    _finishPerfSession = null;
+  }
+
+  async function refreshBuildingsFinishState(reason) {
+    if (!shouldRunGameLoop() || _authLoopAborted) return null;
+    const keys = collectBuildingsFinishDeltaKeys();
+    if (!keys.length) return null;
+    if (_queuePanelRefreshInFlight) return _queuePanelRefreshInFlight;
+    beginFinishPerf(reason, keys);
+    _queuePanelRefreshInFlight = (async () => {
+      try {
+        const data = await GC.fetchJSON(buildBuildingsFinishDeltaUrl(keys), { cache: "no-store" });
+        if (_finishPerfSession) _finishPerfSession.responseAt = performance.now();
+        if (!data || data.ok === false) return null;
+        syncServerClockFromState(data);
+        applyGameStateData(data, reason || "buildings_finished", {
+          forcePanel: true,
+          forceResourceBar: true,
+        });
+        if (_finishPerfSession) _finishPerfSession.patchAt = performance.now();
+        const primaryKey = keys[0] || "";
+        const defer =
+          typeof requestAnimationFrame === "function"
+            ? (fn) => requestAnimationFrame(() => requestAnimationFrame(fn))
+            : (fn) => setTimeout(fn, 32);
+        defer(() => finishFinishPerfVisible(primaryKey));
+        return data;
+      } catch (err) {
+        if (err?.name !== "AbortError") {
+          console.error("[GC] buildings finish delta refresh failed", err);
+        }
+        _finishPerfSession = null;
+        return null;
+      } finally {
+        _queuePanelRefreshInFlight = null;
+        _buildingsFinishDeltaKeys.clear();
+      }
+    })();
+    return _queuePanelRefreshInFlight;
+  }
+
+  function requestBuildingsFinishRefresh(meta) {
+    if (!shouldRunGameLoop() || _authLoopAborted) return;
+    const o = meta && typeof meta === "object" ? meta : {};
+    if (o.buildingKey) trackBuildingsFinishDeltaKey(o.buildingKey);
+    if (_buildingsFinishRefreshTimer != null) return;
+    _buildingsFinishRefreshTimer = GC.setSafeTimeout(() => {
+      _buildingsFinishRefreshTimer = null;
+      void refreshBuildingsFinishState("buildings_finished");
+    }, BUILDINGS_FINISH_REFRESH_DEBOUNCE_MS);
+  }
 
   function clearFinishRefreshArmed(type, queueList) {
     if (!Array.isArray(queueList) || !queueList.length) {
@@ -2920,7 +3125,11 @@
       requestProductionCompletionSync({ gameState: true, shipyard: true });
       return;
     }
-    const key = type === "buildings" || type === "research" || type === "planet_evolution" ? type : "buildings";
+    if (type === "buildings") {
+      requestBuildingsFinishRefresh({});
+      return;
+    }
+    const key = type === "research" || type === "planet_evolution" ? type : "buildings";
     const stale = _hasStaleActiveCardQueue();
     const nowMs = Date.now();
     if (!stale && nowMs - (_finishRefreshLastAt[key] || 0) < FINISH_REFRESH_MIN_MS) return;
@@ -7907,9 +8116,12 @@
           }
         } else {
           const zeroKey = `build-card:${finish}:${jobId}`;
+          const cardEl = block.closest("[data-building-row]");
+          const buildingKey = cardEl?.getAttribute("data-building-row") || "";
+          if (buildingKey) trackBuildingsFinishDeltaKey(buildingKey);
           if (_buildZeroHandled !== zeroKey) {
             _buildZeroHandled = zeroKey;
-            requestFinishRefresh("buildings");
+            requestBuildingsFinishRefresh({ buildingKey, jobId, finishAt: finish });
           }
         }
       }
@@ -10088,8 +10300,9 @@
 
       updateBuildQueueActions(buildQueueRaw);
 
-      if (data.buildings_panel) {
-        patchBuildingPanel(data.buildings_panel, buildQueueRaw);
+      const buildingsPanelPatch = data.buildings_panel || data.buildings_panel_delta;
+      if (buildingsPanelPatch) {
+        patchBuildingPanel(buildingsPanelPatch, buildQueueRaw);
       } else if (forcePanel && buildQueueRaw != null) {
         patchCardQueuesFromOwnerMap(
           document,
@@ -10161,13 +10374,41 @@
 
   function refreshPageAfterQueueEvent(reason) {
     if (!shouldRunGameLoop() || _authLoopAborted) return Promise.resolve(null);
+    const reasonStr = String(reason || "");
+    if (reasonStr === "page_init") {
+      if (_queuePanelRefreshInFlight) return _queuePanelRefreshInFlight;
+      _queuePanelRefreshInFlight = (async () => {
+        try {
+          const data = await GC.fetchJSON("/api/game-state?include_panel=1", { cache: "no-store" });
+          if (!data || data.ok === false) return null;
+          syncServerClockFromState(data);
+          applyGameStateData(data, reasonStr);
+          return data;
+        } catch (err) {
+          if (err?.name !== "AbortError") {
+            console.error("[GC] queue finish refresh failed", err);
+          }
+          return null;
+        } finally {
+          _queuePanelRefreshInFlight = null;
+        }
+      })();
+      return _queuePanelRefreshInFlight;
+    }
+    const page = GC.currentPage || (typeof GC.detectPage === "function" ? GC.detectPage() : "");
+    if (page === "buildings" && collectBuildingsFinishDeltaKeys().length) {
+      return refreshBuildingsFinishState(reasonStr);
+    }
+    if (page === "buildings") {
+      return refreshBuildingsFinishState(reasonStr);
+    }
     if (_queuePanelRefreshInFlight) return _queuePanelRefreshInFlight;
     _queuePanelRefreshInFlight = (async () => {
       try {
         const data = await GC.fetchJSON("/api/game-state?include_panel=1", { cache: "no-store" });
         if (!data || data.ok === false) return null;
         syncServerClockFromState(data);
-        applyGameStateData(data, reason || "queue_finished");
+        applyGameStateData(data, reasonStr || "queue_finished");
         return data;
       } catch (err) {
         if (err?.name !== "AbortError") {
@@ -15293,7 +15534,9 @@
     if (typeof GC.refreshFleetState === "function") GC.refreshFleetState(page);
     if (typeof GC.syncFleetMissionLockUi === "function") GC.syncFleetMissionLockUi(page);
     applyFleetPageMode(page);
-    syncFleetShipPickQtyMarks(page);
+    if (typeof GC.syncFleetShipPickQtyMarks === "function") {
+      GC.syncFleetShipPickQtyMarks(page);
+    }
   }
 
   function applyFleetUrlPrefill(page) {
@@ -17569,6 +17812,8 @@
   const NAV_SECTION_STORAGE_KEY_RIGHT = "gc_sidebar_right_state";
   const LEFT_NAV_SECTIONS = new Set(["command", "infrastructure", "military"]);
   const RIGHT_NAV_SECTIONS = new Set(["messages", "economy", "community"]);
+  let _leftmenuRouteCtxCache = null;
+  const INFRA_NAV_SECTION_ANIM_MS = 220;
   const COMMUNITY_ADMIN_MODULES = new Set([
     "ranking", "hall_of_fame", "vote_center", "referrals", "alliance", "records",
   ]);
@@ -17675,7 +17920,11 @@
   }
 
   function resolveLeftmenuRouteContext(url) {
-    const { path, search } = pathFromMenuUrl(url);
+    const targetUrl = String(url || window.location.href);
+    if (_leftmenuRouteCtxCache && _leftmenuRouteCtxCache.url === targetUrl) {
+      return _leftmenuRouteCtxCache.ctx;
+    }
+    const { path, search } = pathFromMenuUrl(targetUrl);
     const sections = new Set();
     const groups = new Set();
     let buildingTab = null;
@@ -17684,7 +17933,9 @@
       sections.add("infrastructure");
       groups.add("buildings");
       buildingTab = search.get("tab") || "resources";
-      return { path, sections, groups, buildingTab };
+      const ctx = { path, sections, groups, buildingTab };
+      _leftmenuRouteCtxCache = { url: targetUrl, ctx };
+      return ctx;
     }
 
     applyLeftmenuPathRouteHints(path, sections, groups);
@@ -17716,7 +17967,13 @@
     });
 
     applyLeftmenuPathRouteHints(path, sections, groups);
-    return { path, sections, groups, buildingTab };
+    const ctx = { path, sections, groups, buildingTab };
+    _leftmenuRouteCtxCache = { url: targetUrl, ctx };
+    return ctx;
+  }
+
+  function invalidateLeftmenuRouteContextCache() {
+    _leftmenuRouteCtxCache = null;
   }
 
   function resolveNavSectionExpanded(section, state, routeCtx) {
@@ -17747,6 +18004,16 @@
     if (!toggle || !body) return;
     const sidebar = section.closest(".gc-sidebar");
     const storageKey = navStorageKeyForSidebar(sidebar);
+    const sectionKey = String(section.dataset.navSection || "");
+    const isInfrastructure = sectionKey === "infrastructure";
+    if (isInfrastructure) {
+      section.classList.add("gc-nav-section--animating");
+      if (section._gcNavAnimTimer) clearTimeout(section._gcNavAnimTimer);
+      section._gcNavAnimTimer = setTimeout(() => {
+        section.classList.remove("gc-nav-section--animating");
+        section._gcNavAnimTimer = null;
+      }, INFRA_NAV_SECTION_ANIM_MS);
+    }
     section.classList.toggle("is-expanded", expanded);
     toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
     if (persist) {
@@ -23992,6 +24259,7 @@
 
         if (typeof GC.syncSidebarSticky === "function") GC.syncSidebarSticky();
         if (push) history.pushState({ gcPjax: true }, "", url);
+        invalidateLeftmenuRouteContextCache();
 
         await GC.initPage({
           force: true,
@@ -24011,7 +24279,7 @@
       } finally {
         GC.pjaxInFlight = null;
         if (GC._pjaxAbort === ctrl) GC._pjaxAbort = null;
-        if (shouldRunGameLoop() && !_authLoopAborted && !GC.polling.running) {
+        if (shouldRunGameLoop() && !_authLoopAborted && !GC.polling.running && !opts.skipPolling) {
           GC.startPolling(lastHadActiveJob || lastHadActiveResearch || lastHadActiveShipyard);
         }
       }
@@ -24271,6 +24539,10 @@
           return;
         }
         try {
+          beginActionPerfClick("/api/buildings/upgrade", {
+            building_type: buildingType,
+            queue_mode: "max",
+          });
           const json = await GC.fetchGameAction("/api/buildings/upgrade", {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -24351,6 +24623,7 @@
         }
 
         try {
+          beginActionPerfClick("/api/buildings/upgrade", { building_type: buildingType });
           const json = await GC.fetchGameAction("/api/buildings/upgrade", {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },

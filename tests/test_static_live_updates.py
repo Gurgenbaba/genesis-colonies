@@ -362,19 +362,19 @@ def test_main_js_gc742_ssr_skip_init_game_state():
     assert "function shouldSkipInitGameStateAfterSsr(page, opts)" in src
     assert "initPage skip game-state (SSR fresh)" in src
     skip_fn = src.split("function shouldSkipInitGameStateAfterSsr(page, opts)")[1].split("function bootstrapResourceLiveFromDom")[0]
-    assert "_SSR_SKIP_INIT_GAME_STATE_PAGES.has(page)" in skip_fn
-    assert "pageHasSsrLiveBoot()" in skip_fn
+    assert "return pageHasSsrLiveBoot()" in skip_fn
+    assert "_SSR_SKIP_INIT_GAME_STATE_PAGES" not in skip_fn
     assert "opts && opts.force) return false" not in skip_fn
     init_body = src.split("const afterInit = async () => {")[1].split("if (page === \"messages\")")[0]
     assert "shouldSkipInitGameStateAfterSsr(page, opts)" in init_body
-    assert "_PROGRESSION_INIT_PANEL_PAGES.has(page)" in init_body
-    assert "refreshPageAfterQueueEvent(\"page_init\")" in init_body
+    assert 'await GC.refreshGameState("page_init")' in init_body
     assert "bootstrapResourceLiveFromDom()" in init_body
     pjax = src.split("GC.navigateTo = async function navigateTo")[1].split("function initPjax")[0]
     assert "skipHydrate: opts.skipHydrate !== false" in pjax
     assert "pjax: true" in pjax
     cleanup = src.split("GC.cleanupPage = function cleanupPage()")[1].split("GC.abortGameLoop")[0]
     assert "abortInFlightGameStateFetches()" in cleanup
+    assert "_preservePollingOnCleanup" not in cleanup
 
 
 def test_app_gc745_pjax_server_fastpath():

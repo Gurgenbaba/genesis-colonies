@@ -162,6 +162,36 @@ def test_api_game_state_overview_production_after_mining_tech(game_client):
     assert int(data["production_per_hour"]["metal_mine"]) == prod_after
 
 
+def test_api_game_state_production_matches_gc820_formula(game_client):
+    """Overview production_per_hour must match EffectResolver / production_formula."""
+    from game.effects import get_effect_resolver
+    from game.models import get_research_levels, save_research_level
+
+    client, pid = game_client
+    _set_buildings(
+        pid,
+        {"metal_mine": 12, "crystal_mine": 10, "fuel_cell_plant": 8, "solar_plant": 15},
+    )
+    save_research_level("mining_tech", 4, pid)
+
+    r = client.get("/api/game-state")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data.get("ok") is True
+
+    planet = get_homeworld(player_id=pid)
+    buildings = get_planet_buildings(int(planet["id"]))
+    research = get_research_levels(pid)
+    er = get_effect_resolver(pid, buildings=buildings, research=research, planet=planet)
+    energy_total, energy_used = er.compute_energy()
+    ratio = er.energy_ratio(energy_total, energy_used)
+    expected = er.get_building_production_per_hour(ratio)
+
+    assert int(data["production_per_hour"]["metal_mine"]) == expected["metal_mine"]
+    assert int(data["production_per_hour"]["crystal_mine"]) == expected["crystal_mine"]
+    assert int(data["production_per_hour"]["fuel_cell_plant"]) == expected["fuel_cell_plant"]
+
+
 def test_api_status_alias_matches_game_state(game_client):
     client, _pid = game_client
     r_state = client.get("/api/game-state")
@@ -375,7 +405,9 @@ def test_api_buildings_upgrade_state_includes_panel_and_resources(game_client):
     body = r.get_json()
     assert "state" in body
     state = body["state"]
-    assert isinstance(state.get("buildings_panel"), dict)
+    assert "buildings_panel" not in state
+    delta = state.get("buildings_panel_delta") or {}
+    assert isinstance(delta, dict) and delta
     metal_after = int((state.get("player") or {}).get("metal") or state.get("resources", {}).get("metal") or 0)
     if body.get("ok"):
         assert metal_after < metal_before

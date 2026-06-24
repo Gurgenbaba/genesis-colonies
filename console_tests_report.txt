@@ -1,0 +1,791 @@
+Genesis Test Report - 2026-06-24 01:23:51.367850
+==================================================
+
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\AJAX_PJAX_CONTRACT.md:128
+Command: python -m pytest tests/test_core_architecture_enforcement.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\ALPHA_TESTPLAN.md:138
+Command: python -m pytest tests/test_defense_detail_modal.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\ALPHA_TESTPLAN.md:175
+Command: python -m pytest tests/test_fleet.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\ALPHA_TESTPLAN.md:315
+Command: python -m pytest tests/test_fleet.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\ARCHITECTURE.md:106
+Command: scripts/install.py`)
+--------------------
+[Queue]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\ARCHITECTURE.md:233
+Command: scripts/run_queue_tick.py`,
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\ARCHITECTURE.md:349
+Command: python -m pytest -q
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\BUILDINGS_SYSTEM.md:133
+Command: python -m pytest tests/test_race_conditions.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\COMBAT_SYSTEM.md:110
+Command: python -m pytest tests/test_combat.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\COMBAT_SYSTEM.md:111
+Command: python -m pytest tests/test_fleet.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\COMBAT_SYSTEM.md:112
+Command: python -m pytest tests/test_ranking.py::test_combat_destruction_increases_ranking_scores
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\CONTRIBUTING.md:13
+Command: pytest |
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\CONTRIBUTING.md:133
+Command: python -m pytest tests/
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\CONTRIBUTING.md:214
+Command: python -m pytest tests/
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\CORE_ARCHITECTURE.md:159
+Command: python -m pytest tests/test_core_architecture_enforcement.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\DEFENSE_SYSTEM.md:309
+Command: python -m pytest tests/test_defense_detail_modal.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\ECONOMY_SYSTEM.md:287
+Command: python -m pytest tests/test_effects.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\EFFECTS.md:95
+Command: python -m pytest tests/test_effects.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\FLEET_SYSTEM.md:266
+Command: python -m pytest tests/test_fleet.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GALAXY_SYSTEM.md:124
+Command: python -m pytest tests/test_galaxy.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-512_ARCHITECTURE_VALIDATION.md:15
+Command: pytest guards
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-512_ARCHITECTURE_VALIDATION.md:17
+Command: pytest |
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-512_ARCHITECTURE_VALIDATION.md:91
+Command: pytest inkl.
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-512_ARCHITECTURE_VALIDATION.md:155
+Command: pytest |
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-512_QUEUE_MANUAL_QA.md:17
+Command: python -m pytest tests/test_queue_static_contract.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-512_QUEUE_MANUAL_QA.md:98
+Command: pytest Guards).
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-533_MANUAL_QA_LOGISTICS.md:13
+Command: pytest ersetzbar.
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-533_MANUAL_QA_LOGISTICS.md:81
+Command: python -m pytest tests/test_fleet.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-533_MANUAL_QA_LOGISTICS.md:87
+Command: python -m pytest tests/test_fleet.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-533_MANUAL_QA_LOGISTICS.md:104
+Command: pytest grün
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-536_QUEUE_CARD_UX.md:134
+Command: pytest tests/test_queue_card_contract.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-536_QUEUE_CARD_UX.md:306
+Command: pytest tests/test_queue_card_global_ux.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-545_LIVE_STATE_BROWSER_AUDIT.md:7
+Command: pytest +
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-545_LIVE_STATE_BROWSER_AUDIT.md:27
+Command: python -m pytest tests/test_static_live_updates.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-545_LIVE_STATE_BROWSER_AUDIT.md:249
+Command: pytest 41
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-546_LIVE_STATE_FIXES.md:20
+Command: pytest (41
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-547B_LANDING_LOGIN_GPU_AUDIT.md:109
+Command: python -m pytest tests/test_static_live_updates.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-547B_LANDING_LOGIN_GPU_AUDIT.md:128
+Command: python scripts/gc547_browser_audit.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-547C_FPS_COMPOSITOR_AUDIT.md:64
+Command: python -m pytest tests/test_static_live_updates.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-547_BROWSER_VALIDATION.md:35
+Command: python -m pytest tests/test_static_live_updates.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-547_BROWSER_VALIDATION.md:36
+Command: python scripts/gc547_browser_audit.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-547_BROWSER_VALIDATION.md:39
+Command: scripts/gc547_browser_audit.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-547_GPU_PERFORMANCE_AUDIT.md:75
+Command: python -m pytest tests/test_static_live_updates.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-548_LANDSCAPE_VISIBILITY.md:40
+Command: pytest tests/test_static_live_updates.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:14
+Command: tools/generate_icons.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:30
+Command: tools/generate_icons.py`).
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:38
+Command: tools/optimize_images.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:48
+Command: scripts/optimize_landscapes.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:58
+Command: tools/generate_icons.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:60
+Command: scripts/optimize_landscapes.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:60
+Command: tools/optimize_images.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:69
+Command: scripts/optimize_landscapes.py`)
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:98
+Command: tools/optimize_images.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:101
+Command: python tools/optimize_images.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:102
+Command: python tools/optimize_images.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:103
+Command: python tools/optimize_images.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:113
+Command: scripts/optimize_landscapes.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:126
+Command: python tools/optimize_images.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:127
+Command: python tools/optimize_images.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:156
+Command: pytest tests/test_static_live_updates.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:157
+Command: pytest tests/test_shipyard_assets.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:181
+Command: tools/optimize_images.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:182
+Command: scripts/optimize_landscapes.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:182
+Command: tools/optimize_images.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:194
+Command: python tools/optimize_images.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:195
+Command: python tools/optimize_images.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:196
+Command: pytest tests/test_static_live_updates.py::test_main_js_gc549_ship_defense_icons_use_png
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:197
+Command: pytest tests/test_static_live_updates.py::test_main_js_gc548_landscape_visible_on_perf_idle_boot
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-549_IMAGE_ASSET_OPTIMIZATION.md:198
+Command: pytest tests/test_defense_detail_modal.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-555_ASSET_AUDIT.md:51
+Command: tools/audit_assets.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-555_ASSET_AUDIT.md:52
+Command: tools/audit_assets_webp.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-555_ASSET_AUDIT.md:53
+Command: tools/convert_webp.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-555_ASSET_AUDIT.md:95
+Command: python tools/audit_assets.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-555_ASSET_AUDIT.md:96
+Command: python tools/convert_webp.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-555_ASSET_AUDIT.md:97
+Command: python tools/audit_assets_webp.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-557_GLOBAL_TIMER_AUDIT.md:54
+Command: python -m pytest tests/test_gc557d_timer_dom_audit.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-557_GLOBAL_TIMER_AUDIT.md:60
+Command: python -m pytest tests/test_gc557_global_timer_audit.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md:264
+Command: pytest tests/test_static_live_updates.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-560_EMPIRE_IDENTITY_LAYER.md:243
+Command: pytest belegt
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-560_EMPIRE_IDENTITY_LAYER.md:247
+Command: pytest tests/test_empire_identity.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-562A_EXPANSION_GATES_POLISH.md:29
+Command: pytest tests/test_expansion_gates.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-562A_EXPANSION_GATES_POLISH.md:49
+Command: pytest tests/test_expansion_gates.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-562_EVOLUTION_UNLOCK_GATES.md:193
+Command: pytest ohne
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-562_EVOLUTION_UNLOCK_GATES.md:196
+Command: pytest tests/test_expansion_gates.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-563B_COMMAND_MAP_VIEWPORT.md:97
+Command: pytest tests/test_command_map_viewport.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-563_COMMAND_MAP_MVP.md:268
+Command: pytest tests/test_command_map.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-564B_SPATIAL_COMMAND_MAP.md:269
+Command: pytest tests/test_imperium_regions.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-564_REGIONS_SECTORS.md:713
+Command: pytest tests/test_imperium_regions.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-565_CHOKEPOINTS.md:209
+Command: pytest tests/test_chokepoints.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-566B_DYNAMIC_INFLUENCE.md:122
+Command: pytest tests/test_dynamic_influence.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-567B_REGION_LANDMARKS.md:129
+Command: pytest tests/test_region_landmarks.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-570_WORLD_MAP_DIRECTION.md:155
+Command: pytest tests/test_location_actions.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-571_SHARED_WORLD_PRESENCE.md:72
+Command: pytest tests/test_world_map.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-590B_FLEET_NAMED_TARGETS.md:30
+Command: python -m pytest tests/test_fleet.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-600_PROJECT_GAP_ANALYSIS.md:36
+Command: pytest |
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-600_PROJECT_GAP_ANALYSIS.md:42
+Command: pytest |
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-600_PROJECT_GAP_ANALYSIS.md:52
+Command: pytest |
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-610_COMPLETE_DEFINITION_AUDIT.md:29
+Command: pytest grün,
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-610_COMPLETE_DEFINITION_AUDIT.md:110
+Command: pytest research
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-610_COMPLETE_DEFINITION_AUDIT.md:247
+Command: pytest GC-512C.
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-610_COMPLETE_DEFINITION_AUDIT.md:259
+Command: pytest |
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620B_LOCALE_REALITY_SYNC.md:30
+Command: python -m pytest tests/test_locale_keys.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620F_TEST_CONTRACT_SYNC.md:106
+Command: python -m pytest tests/
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620F_TEST_CONTRACT_SYNC.md:113
+Command: python -m pytest tests/test_static_live_updates.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620J_LEGENDARY_DISCOVERIES.md:163
+Command: pytest tests/test_expedition_events.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620_FULL_ALPHA_READINESS_AUDIT.md:5
+Command: pytest (kein
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620_FULL_ALPHA_READINESS_AUDIT.md:34
+Command: python -m pytest tests/
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620_FULL_ALPHA_READINESS_AUDIT.md:80
+Command: python -m pytest tests/test_core_architecture_enforcement.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620_FULL_ALPHA_READINESS_AUDIT.md:81
+Command: python -m pytest tests/test_game_state_live.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620_FULL_ALPHA_READINESS_AUDIT.md:82
+Command: python -m pytest tests/test_static_live_updates.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620_FULL_ALPHA_READINESS_AUDIT.md:83
+Command: python -m pytest tests/test_fleet.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620_FULL_ALPHA_READINESS_AUDIT.md:84
+Command: python -m pytest tests/test_ranking.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620_FULL_ALPHA_READINESS_AUDIT.md:85
+Command: python -m pytest tests/test_gc597_world_inspector_modal.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620_FULL_ALPHA_READINESS_AUDIT.md:157
+Command: pytest |
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-620_FULL_ALPHA_READINESS_AUDIT.md:334
+Command: pytest Performance
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-622B_RESOURCE_INTEGER_MIGRATION.md:52
+Command: pytest tests/test_gc622_integer_overflow.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-622_INTEGER_OVERFLOW_AUDIT.md:96
+Command: python -m pytest tests/test_gc622_integer_overflow.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-700A_BATTLE_REPORTS_V2.md:166
+Command: python -m pytest tests/test_combat.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-800_RECYCLER.md:90
+Command: pytest tests/test_recycler.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-821F_MINE_ROI_BULK.md:54
+Command: python -m pytest tests/test_gc821f_mine_roi_bulk.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-821_ECONOMY_REBALANCE.md:107
+Command: python -m pytest tests/test_gc821_economy_rebalance.py
+--------------------
+[Economy]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-822_LIVE_ECONOMY_QA.md:8
+Command: scripts/economy_live_audit.py
+--------------------
+[Economy]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-822_LIVE_ECONOMY_QA.md:38
+Command: python scripts/economy_live_audit.py
+--------------------
+[Economy]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-822_LIVE_ECONOMY_QA.md:41
+Command: python scripts/economy_live_audit.py
+--------------------
+[Economy]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-822_LIVE_ECONOMY_QA.md:44
+Command: python scripts/economy_live_audit.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-822_LIVE_ECONOMY_QA.md:94
+Command: python -m pytest tests/test_gc822_live_economy_audit.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-823_TECHNICAL_DATA.md:68
+Command: python -m pytest tests/test_gc823_technical_data.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-829_FRESH_ACCOUNT_PROGRESSION.md:3
+Command: python scripts/fresh_account_progression_sim.py`.
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-831_QUEUE_REFUND_AUDIT.md:41
+Command: python -m pytest tests/test_gc831_queue_refund.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-836_ALPHA_STARTER_RESOURCES.md:3
+Command: python scripts/fresh_account_progression_sim.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-836_ALPHA_STARTER_RESOURCES.md:61
+Command: python -m pytest tests/test_gc836_starter_resources.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-900_LOGISTICS.md:376
+Command: python -m pytest tests/test_fleet_logistics.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\GC-900_LOGISTICS.md:379
+Command: python -m pytest tests/test_fleet_logistics.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\PLANET_EVOLUTION.md:190
+Command: python -m pytest tests/test_planet_evolution.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\PLANET_SCOPE.md:135
+Command: python -m pytest tests/test_planet_instancing.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\PRODUCTION_FORMULA_SYSTEM.md:191
+Command: python -m pytest tests/test_production_formula.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\PROJECT_INVENTORY.md:28
+Command: pytest optional
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\PROJECT_INVENTORY.md:37
+Command: pytest Allowlist;
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\QUEUE_STATE_RULES.md:173
+Command: python -m pytest tests/test_queue_engine.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\RESEARCH_SYSTEM.md:130
+Command: python -m pytest tests/test_research_requirements.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\ROADMAP.md:23
+Command: scripts/install.py`)
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\STATE_AJAX.md:77
+Command: python -m pytest tests/test_game_state_live.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\TICKET_TEMPLATE.md:36
+Command: pytest tests/test_….py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\UNIVERSE_SPEED_BENCHMARK.md:3
+Command: python scripts/universe_speed_benchmark.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\WORKFLOW.md:117
+Command: python -m pytest tests/
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\docs\WORKFLOW.md:118
+Command: python -m pytest tests/test_fleet.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_account_email.py:4
+Command: python -m pytest tests/test_account_email.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_admin_balance_settings.py:4
+Command: python -m pytest tests/test_admin_balance_settings.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_admin_control_center.py:4
+Command: python -m pytest tests/test_admin_control_center.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_auth.py:4
+Command: python -m pytest tests/test_auth.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_buildings_card_queue.py:4
+Command: python -m pytest tests/test_buildings_card_queue.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_chat.py:4
+Command: python -m pytest tests/test_chat.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_db_read_paths.py:4
+Command: python -m pytest tests/test_db_read_paths.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_defense_card_queue.py:4
+Command: python -m pytest tests/test_defense_card_queue.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_deployment.py:4
+Command: python -m pytest tests/test_deployment.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_effects.py:4
+Command: python -m pytest tests/test_effects.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_empire_page.py:5
+Command: python -m pytest tests/test_empire_page.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_game_state_live.py:4
+Command: python -m pytest tests/test_game_state_live.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_gc804_research_timer.py:4
+Command: python -m pytest tests/test_gc804_research_timer.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_gc821e_production_display_roi.py:4
+Command: python -m pytest tests/test_gc821e_production_display_roi.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_gc821_economy_rebalance.py:4
+Command: python -m pytest tests/test_gc821_economy_rebalance.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_gc822_live_economy_audit.py:4
+Command: python -m pytest tests/test_gc822_live_economy_audit.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_gc827_compact_cards.py:4
+Command: python -m pytest tests/test_gc827_compact_cards.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_gc833b_queue_cancel_state.py:4
+Command: python -m pytest tests/test_gc833b_queue_cancel_state.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_gc833_queue_completion_state.py:4
+Command: python -m pytest tests/test_gc833_queue_completion_state.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_gc835_frontend_state_contract.py:4
+Command: python -m pytest tests/test_gc835_frontend_state_contract.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_gc838_queue_action_latency.py:4
+Command: python -m pytest tests/test_gc838_queue_action_latency.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_gc840_buildings_action_payload.py:4
+Command: python -m pytest tests/test_gc840_buildings_action_payload.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_gc_sec_p0.py:4
+Command: python -m pytest tests/test_gc_sec_p0.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_messages.py:4
+Command: python -m pytest tests/test_messages.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_nexus_building_caps.py:4
+Command: python -m pytest tests/test_nexus_building_caps.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_options.py:4
+Command: python -m pytest tests/test_options.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_persistence.py:4
+Command: python -m pytest tests/test_persistence.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_placeholder_nav.py:4
+Command: python -m pytest tests/test_placeholder_nav.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_planet_evolution_card_queue.py:4
+Command: python -m pytest tests/test_planet_evolution_card_queue.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_planet_instancing.py:4
+Command: python -m pytest tests/test_planet_instancing.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_planet_state_scoping.py:4
+Command: python -m pytest tests/test_planet_state_scoping.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_playercard.py:4
+Command: python -m pytest tests/test_playercard.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_production_formula.py:4
+Command: python -m pytest tests/test_production_formula.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_progression_pages.py:4
+Command: python -m pytest tests/test_progression_pages.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_queue_card_contract.py:4
+Command: python -m pytest tests/test_queue_card_contract.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_queue_card_global_ux.py:4
+Command: python -m pytest tests/test_queue_card_global_ux.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_queue_engine.py:4
+Command: python -m pytest tests/test_queue_engine.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_queue_static_contract.py:4
+Command: python -m pytest tests/test_queue_static_contract.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_race_conditions.py:4
+Command: python -m pytest tests/test_race_conditions.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_race_conditions.py:43
+Command: pytest +
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_ranking.py:4
+Command: python -m pytest tests/test_ranking.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_research_card_queue.py:4
+Command: python -m pytest tests/test_research_card_queue.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_research_requirements.py:4
+Command: python -m pytest tests/test_research_requirements.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_security_tamper.py:4
+Command: python -m pytest tests/test_security_tamper.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_shipyard_card_queue.py:4
+Command: python -m pytest tests/test_shipyard_card_queue.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_static_live_updates.py:4
+Command: python -m pytest tests/test_static_live_updates.py
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_static_live_updates.py:1620
+Command: tools/generate_icons.py")
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_static_live_updates.py:1664
+Command: tools/audit_assets.py")
+--------------------
+[Scripts]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_static_live_updates.py:1665
+Command: tools/convert_webp.py")
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_support.py:4
+Command: python -m pytest tests/test_support.py
+--------------------
+[Pytest]
+Source: C:\Users\gurge\Desktop\RandomStuff\Coding\Genesis Colonies\tests\test_techtree.py:4
+Command: python -m pytest tests/test_techtree.py
+--------------------

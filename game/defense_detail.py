@@ -54,10 +54,21 @@ def build_defense_detail_card(
     )
     if buildings is not None and research is not None:
         from .defense_requirements import requirements_summary_for_client
+        from .technical_data import build_unit_technical_block
 
         req_summary = requirements_summary_for_client(
             key, buildings=buildings, research=research
         )
         card["requirements"] = req_summary
         card["requirements_items"] = list(req_summary.get("items") or [])
+        card["technical"] = build_unit_technical_block(
+            base_attack=int(card["attack"]),
+            base_shield=int(card["shield"]),
+            base_hull=int(card["hull"]),
+            base_build_seconds=int(card["build_seconds"]),
+            production=card["production"],
+            buildings=buildings,
+            research_levels=research,
+            next_yard_unit_seconds=unit_build_seconds(key, sy_level + 1),
+        )
     return card, None

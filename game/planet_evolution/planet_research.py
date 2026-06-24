@@ -255,13 +255,31 @@ def cancel_planet_research_job(
         begin_write_transaction(conn)
         lock_planet_for_update(conn, int(planet_id))
         cur = conn.cursor()
+        now = time.time()
         cur.execute(
-            "SELECT id FROM planet_research_queue WHERE id = ? AND planet_id = ? LIMIT 1;",
+            """
+            SELECT id, tech_key, target_level, start_at, finish_at
+            FROM planet_research_queue
+            WHERE id = ? AND planet_id = ?
+            LIMIT 1;
+            """,
             (int(job_id), int(planet_id)),
         )
-        if not cur.fetchone():
+        row = cur.fetchone()
+        if not row:
             rollback(conn)
             return False, "job_not_found"
+        from ..queue_refund import refund_planet_evolution_research_job
+
+        refund_planet_evolution_research_job(
+            conn,
+            int(planet_id),
+            tech_key=str(row["tech_key"]),
+            target_level=int(row["target_level"] or 0),
+            start_time=float(row["start_at"] or row["finish_at"] or now),
+            finish_time=float(row["finish_at"] or now),
+            now=now,
+        )
         cur.execute("DELETE FROM planet_research_queue WHERE id = ?;", (int(job_id),))
         commit(conn)
         return True, "ok"

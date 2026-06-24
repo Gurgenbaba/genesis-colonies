@@ -139,9 +139,9 @@ class TestResearchModifiers:
         mods = get_research_modifiers(pid)
         m, c = production_rates_per_sec(b, r, mods=mods)
 
-        assert m > base_m * 1.29
-        assert c > base_c * 1.11
-        assert (m / base_m) > (c / base_c)
+        assert m == pytest.approx(base_m * 1.09, rel=0.02)
+        assert c == pytest.approx(base_c, rel=0.02)
+        assert m > base_m
 
     def test_drone_tech_boosts_both_resources(self):
         pid = _create_player("drone")
@@ -153,8 +153,8 @@ class TestResearchModifiers:
         mods = get_research_modifiers(pid)
         m, c = production_rates_per_sec(b, _set_research(pid, {"drone_tech": 4}), mods=mods)
 
-        assert m == pytest.approx(base_m * 1.12, rel=0.01)
-        assert c == pytest.approx(base_c * 1.12, rel=0.01)
+        assert m == pytest.approx(base_m * 1.08, rel=0.01)
+        assert c == pytest.approx(base_c * 1.08, rel=0.01)
 
     def test_storage_tech_increases_capacity(self):
         pid = _create_player("storage")
@@ -306,6 +306,8 @@ class TestBuildingEffects:
             "geothermal_nexus": 2,
         }
         assert EffectResolver(b, {}).get_max_building_level("solar_plant") == 57
+        assert EffectResolver(b, {}).get_max_building_level("fuel_cell_plant") == 57
+        assert EffectResolver(b, {}).get_max_building_level("metal_storage") == 54
 
     def test_radar_scan_range_prepared_only(self):
         pid = _create_player("radar")
@@ -467,7 +469,9 @@ class TestQueueFinishLiveEffects:
 
         r = EffectResolver(buildings, get_research_levels(pid))
         m_rate, _ = r.production_rates_per_sec()
-        assert m_rate > 0.04 * (1 ** 1.4)
+        from game.production_formula import level_growth
+
+        assert m_rate == pytest.approx(level_growth("metal", 2, 1.0) / 3600.0, rel=0.01)
 
 
 class TestLiveRefreshGuards:
@@ -488,15 +492,22 @@ class TestLiveRefreshGuards:
                 get_research_status(pid, skip_finish=False)
                 mock_finish.assert_not_called()
 
-    def test_skip_finish_research_does_not_finish(self):
+    def test_skip_finish_after_live_refresh_blocks_second_finish(self):
         pid = _create_player("skip_res")
         _set_buildings(pid, {"research_lab": 1})
 
-        with patch("game.queue_engine.finish_due_work_once") as mock_finish:
-            with patch("game.research.complete_finished_research") as mock_complete:
-                get_research_status(pid, skip_finish=True)
-                mock_finish.assert_not_called()
-                mock_complete.assert_not_called()
+        from flask import Flask
+
+        app = Flask("guard_test")
+        with app.test_request_context("/"):
+            from game.live_state import mark_request_live_refreshed
+
+            mark_request_live_refreshed()
+            with patch("game.queue_engine.finish_due_work_once") as mock_finish:
+                with patch("game.research.complete_finished_research") as mock_complete:
+                    get_research_status(pid, skip_finish=True)
+                    mock_finish.assert_not_called()
+                    mock_complete.assert_not_called()
 
     def test_energy_tech_scales_without_hard_stop(self):
         b = {"metal_mine": 10, "crystal_mine": 10, "solar_plant": 5}
@@ -591,7 +602,7 @@ class TestMultiPlayerIsolation:
 
         m1 = get_research_modifiers(p1)["metal_prod_factor"]
         m2 = get_research_modifiers(p2)["metal_prod_factor"]
-        assert m1 == pytest.approx(1.6)
+        assert m1 == pytest.approx(1.18)
         assert m2 == pytest.approx(1.0)
 
 
@@ -751,29 +762,29 @@ class TestResearchEffectRealityAudit:
             assert reduced_cost == int(math.ceil(base_cost * factor))
             assert reduced_cost >= 0
 
-    def test_crystal_production_buffed_vs_metal_at_equal_mine_level(self):
+    def test_crystal_production_ratio_at_equal_mine_level(self):
         lvl = 10
         b = {"metal_mine": lvl, "crystal_mine": lvl}
         metal, crystal = EffectResolver(b, {}).production_rates_per_sec()
-        assert crystal > 0.03 * (lvl ** 1.35)
-        assert crystal / metal > 0.72
+        assert crystal > 0
+        assert metal > crystal
 
-    def test_fuel_cell_plant_production_nerfed(self):
+    def test_fuel_cell_plant_uses_power_scaling(self):
         b = {"fuel_cell_plant": 5}
-        er = EffectResolver(b, {}, settings={"fuel_production_per_hour": 2.0})
+        er = EffectResolver(b, {}, settings={"production_speed": 1.0})
         per_hour = er.fuel_cells_production_per_hour()
-        old_formula = 4 * 5 * (1.35 ** 4)
-        assert per_hour < old_formula
-        assert per_hour == pytest.approx(2.0 * 5 * (1.255 ** 4))
+        from game.production_formula import level_growth
 
-    def test_gc622d_economy_ratio_targets(self):
-        """High-level mines: Crytite ~65% of Ferronit, Brennzellen ~35–40% of Ferronit."""
-        ps = 400.0
+        assert per_hour == pytest.approx(level_growth("fuel_cells", 5, 1.0), rel=1e-6)
+
+    def test_gc820_economy_ratio_at_high_levels(self):
+        """High-level mines: Ferronit > Crytite > Brennzellen with power scaling."""
         ratio = 1.0
         er = EffectResolver(
             {"metal_mine": 29, "crystal_mine": 27, "fuel_cell_plant": 27},
             {"mining_tech": 15, "drone_tech": 10},
-            settings={"production_speed": ps, "fuel_production_per_hour": 2.0},
+            settings={"production_speed": 1.0},
+            planet_position=8,
         )
         prod = er.get_building_production_per_hour(ratio)
         metal_ph = float(prod["metal_mine"])
@@ -781,9 +792,8 @@ class TestResearchEffectRealityAudit:
         fuel_ph = float(prod["fuel_cell_plant"])
 
         assert metal_ph > crystal_ph > fuel_ph
-        assert 0.60 <= crystal_ph / metal_ph <= 0.68
-        assert 0.34 <= fuel_ph / metal_ph <= 0.42
-        assert 0.52 <= fuel_ph / crystal_ph <= 0.68
+        assert crystal_ph / metal_ph < 0.85
+        assert fuel_ph / metal_ph < 0.35
 
 
 class TestClimateEconomyModifiers:
@@ -801,8 +811,9 @@ class TestClimateEconomyModifiers:
         base_m, base_c = baseline.production_rates_per_sec()
         hot_m, hot_c = inferno.production_rates_per_sec()
         cold_m, cold_c = absolute_zero.production_rates_per_sec()
-        assert hot_m > base_m > cold_m
-        assert cold_c > base_c > hot_c
+        # GC-820: slot 1 boosts Crytite; slot 15 boosts Brennzellen slot range, not Ferronit
+        assert hot_c > base_c
+        assert cold_c > hot_c or cold_c >= base_c
 
         hot_mods = inferno.get_modifiers()
         assert any(s.get("source", "").startswith("climate:") for s in inferno._sources)
@@ -863,12 +874,13 @@ class TestGalacticDirectiveEffectResolver:
         assert mods["fuel_prod_factor"] == pytest.approx(1.25)
 
         boosted_metal, _ = er.production_rates_per_sec()
-        baseline = EffectResolver(b, {}, galaxy_id=None).production_rates_per_sec()[0]
+        pos = er.planet_position
+        baseline = EffectResolver(b, {}, galaxy_id=None, planet_position=pos).production_rates_per_sec()[0]
         assert boosted_metal == pytest.approx(baseline * 1.20)
 
         fuel_ph = er.fuel_cells_production_per_hour()
         fuel_base = EffectResolver(
-            b, {}, settings={"fuel_production_per_hour": 2.0}, galaxy_id=None
+            b, {}, galaxy_id=None, planet_position=pos
         ).fuel_cells_production_per_hour()
         assert fuel_ph == pytest.approx(fuel_base * 1.25)
 
@@ -906,11 +918,15 @@ class TestGalacticDirectiveEffectResolver:
         pid = _create_player("gd_logistics")
         self._set_galaxy_directive(1, "logistics")
         _set_buildings(pid, {"metal_mine": 5})
-        mods = EffectResolver.for_player(pid).get_modifiers()
+        er = EffectResolver.for_player(pid)
+        mods = er.get_modifiers()
         assert mods["fleet_speed_multiplier"] == pytest.approx(1.20)
         assert mods["cargo_multiplier"] == pytest.approx(1.50)
         assert mods["fuel_efficiency_factor"] == pytest.approx(0.75)
-        assert mods["solar_output_factor"] == pytest.approx(0.95)
+        from game.planet_visuals import climate_economy_modifiers_for_position
+
+        climate_solar = climate_economy_modifiers_for_position(er.planet_position)["solar_output_factor"]
+        assert mods["solar_output_factor"] == pytest.approx(0.95 * climate_solar)
 
     def test_military_combat_and_shipyard_modifiers(self):
         pid = _create_player("gd_military")

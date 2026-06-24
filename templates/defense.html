@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_resource_icon, render_resource_cost_chip, render_shipyard_resource_blocker, render_raster_picture, render_production_stat_chips with context %}
+{% from "partials/progression_cards.html" import render_resource_icon, render_raster_picture, render_compact_unit_stat_chips, render_card_costs_block, render_unit_build_time_footer, render_defense_locked_req_hover_attrs with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 {% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
@@ -168,25 +168,11 @@
             </div>
           </div>
         </div>
-        {{ render_defense_subhead(unit.role|default('turret')) }}
-        <div class="gc-bld-card-meta">
-          <div class="gc-bld-card-costs shipyard-ship-cost gc-mono" data-defense-cost>
-            {{ render_resource_cost_chip('metal', unit.cost_metal, unmet=(p_metal < unit.cost_metal)) }}
-            {{ render_resource_cost_chip('crystal', unit.cost_crystal, unmet=(p_crystal < unit.cost_crystal)) }}
-          </div>
-          {{ render_production_stat_chips(unit.build_seconds, unit.effective_batch_capacity|default(1)) }}
+        {{ render_compact_unit_stat_chips(unit.attack, unit.shield, unit.hull, none, 'defense') }}
+        <div class="gc-bld-card-meta gc-bld-card-meta--costs-only" data-defense-cost>
+          {{ render_card_costs_block(unit.cost_metal, unit.cost_crystal) }}
         </div>
-        {% set unit_res_blocked = (unit.cost_metal and p_metal < unit.cost_metal) or (unit.cost_crystal and p_crystal < unit.cost_crystal) %}
-        {% if unit_res_blocked %}
-        <div class="shipyard-blockers" data-defense-blockers aria-live="polite">
-          {% if unit.cost_metal and p_metal < unit.cost_metal %}
-          {{ render_shipyard_resource_blocker('metal', unit.cost_metal, p_metal) }}
-          {% endif %}
-          {% if unit.cost_crystal and p_crystal < unit.cost_crystal %}
-          {{ render_shipyard_resource_blocker('crystal', unit.cost_crystal, p_crystal) }}
-          {% endif %}
-        </div>
-        {% endif %}
+        {{ render_unit_build_time_footer(unit.build_seconds) }}
         <div class="gc-bld-card-action-wrap">
           <footer class="gc-ship-card-action shipyard-ship-actions">
             <input type="text" inputmode="numeric" value="1" maxlength="20"
@@ -250,24 +236,21 @@
               </h3>
               {{ render_info_popover_trigger(unit_desc) }}
             </div>
+            <div class="gc-bld-card-hero-action-slot">
+              <button type="button"
+                      class="gc-bld-head-action-btn gc-bld-head-action-btn--warn status-pill-icon-btn gc-req-hover-trigger"
+                      data-action-state="warn"
+                      disabled
+                      {{ render_defense_locked_req_hover_attrs(unit, df.defense_factory_level|default(0)) }}
+                      aria-label="{{ T('msg_build_requirements', 'Voraussetzungen nicht erfüllt') }}"><span class="gc-bld-head-action-icon">⚠</span></button>
+            </div>
           </div>
         </div>
-        {{ render_defense_subhead(unit.role|default('turret')) }}
-        <div class="gc-bld-card-meta">
-          <div class="gc-bld-card-costs shipyard-ship-cost gc-mono" data-defense-cost>
-            {{ render_resource_cost_chip('metal', unit.cost_metal) }}
-            {{ render_resource_cost_chip('crystal', unit.cost_crystal) }}
-          </div>
-          <span class="gc-bld-card-time gc-mono gc-ship-card-locked-hint hint"
-                title="{{ T('defense_locked_level', level=unit.required_defense_factory_level) }}">
-            {{ T("defense_locked_level", level=unit.required_defense_factory_level) }}
-          </span>
+        {{ render_compact_unit_stat_chips(unit.attack, unit.shield, unit.hull, none, 'defense') }}
+        <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
+          {{ render_card_costs_block(unit.cost_metal, unit.cost_crystal) }}
         </div>
-        <footer class="gc-ship-card-action shipyard-ship-actions">
-          <button type="button" class="gc-btn gc-btn-danger gc-btn-xs status-pill-icon-btn" disabled
-                  title="{{ T('defense_locked_level', level=unit.required_defense_factory_level) }}"
-                  aria-label="{{ T('defense_locked_level', level=unit.required_defense_factory_level) }}">🔒</button>
-        </footer>
+        {{ render_unit_build_time_footer(unit.build_seconds) }}
       </article>
       {% endfor %}
     </div>

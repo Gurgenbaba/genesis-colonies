@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, Optional, Tuple
 
-CANCEL_REFUND_RATIO = 0.6
+from game.queue_refund import refund_from_stored_costs, refund_summary_percents
 
 
 def defense_ok(
@@ -115,27 +116,6 @@ def fetch_defense_slices(
     )
 
 
-def _refund_planet_resources(
-    conn,
-    planet_id: int,
-    *,
-    metal: int,
-    crystal: int,
-) -> None:
-    if metal <= 0 and crystal <= 0:
-        return
-    cur = conn.cursor()
-    cur.execute(
-        """
-        UPDATE planets
-        SET metal = metal + ?,
-            crystal = crystal + ?
-        WHERE id = ?;
-        """,
-        (int(metal), int(crystal), int(planet_id)),
-    )
-
-
 def _renumber_defense_queue(conn, planet_id: int) -> None:
     from game.defense import list_defense_queue_rows
 
@@ -186,11 +166,17 @@ def cancel_defense_job(
             return False, "queue_job_not_found"
 
         job = dict(row)
-        refund_m = int(int(job.get("cost_metal") or 0) * CANCEL_REFUND_RATIO)
-        refund_c = int(int(job.get("cost_crystal") or 0) * CANCEL_REFUND_RATIO)
+        now = time.time()
+        refund_from_stored_costs(
+            conn,
+            int(planet_id),
+            job,
+            start_time=float(job.get("started_at") or job.get("created_at") or now),
+            finish_time=float(job.get("finish_at") or now),
+            now=now,
+        )
 
         cur.execute("DELETE FROM defense_queue WHERE id = ?;", (int(job_id),))
-        _refund_planet_resources(conn, int(planet_id), metal=refund_m, crystal=refund_c)
         _renumber_defense_queue(conn, int(planet_id))
         factory_level = get_defense_factory_level(int(player_id), int(planet_id), conn=conn)
         recalculate_queue_finish_times(int(planet_id), conn=conn)
