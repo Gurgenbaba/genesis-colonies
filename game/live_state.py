@@ -136,6 +136,8 @@ class SsrPerfTrace:
         "buildings_panel_ms",
         "cards_ms",
         "tech_data_ms",
+        "fleet_panel_ms",
+        "logistics_panel_ms",
         "template_ms",
     )
 
@@ -149,6 +151,8 @@ class SsrPerfTrace:
         self.buildings_panel_ms = 0.0
         self.cards_ms = 0.0
         self.tech_data_ms = 0.0
+        self.fleet_panel_ms = 0.0
+        self.logistics_panel_ms = 0.0
         self.template_ms = 0.0
 
     def add_live_context_ms(self, ms: float) -> None:
@@ -169,6 +173,12 @@ class SsrPerfTrace:
     def add_tech_data_ms(self, ms: float) -> None:
         self.tech_data_ms += max(0.0, float(ms))
 
+    def add_fleet_panel_ms(self, ms: float) -> None:
+        self.fleet_panel_ms += max(0.0, float(ms))
+
+    def add_logistics_panel_ms(self, ms: float) -> None:
+        self.logistics_panel_ms += max(0.0, float(ms))
+
     def add_template_ms(self, ms: float) -> None:
         self.template_ms += max(0.0, float(ms))
 
@@ -187,6 +197,8 @@ class SsrPerfTrace:
             "buildings_panel_ms": round(self.buildings_panel_ms, 1),
             "cards_ms": round(self.cards_ms, 1),
             "tech_data_ms": round(self.tech_data_ms, 1),
+            "fleet_panel_ms": round(self.fleet_panel_ms, 1),
+            "logistics_panel_ms": round(self.logistics_panel_ms, 1),
             "template_ms": round(self.template_ms, 1),
             "bytes": int(response_bytes or 0),
         }
@@ -196,7 +208,7 @@ class SsrPerfTrace:
         logger.info(
             "[GC SSR PERF] route=%s tab=%s total=%sms live_context=%sms finish=%sms "
             "resource_sync=%sms buildings_panel=%sms cards=%sms tech_data=%sms "
-            "template=%sms bytes=%s",
+            "fleet_panel=%sms logistics_panel=%sms template=%sms bytes=%s",
             data["route"],
             data["tab"],
             data["total_ms"],
@@ -206,6 +218,8 @@ class SsrPerfTrace:
             data["buildings_panel_ms"],
             data["cards_ms"],
             data["tech_data_ms"],
+            data["fleet_panel_ms"],
+            data["logistics_panel_ms"],
             data["template_ms"],
             data["bytes"],
         )

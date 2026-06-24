@@ -332,7 +332,7 @@ Chat (`static/js/chat.js`) und Messages (`static/js/messages.js`) haben eigenes 
 
 ## Test-Suite
 
-**2173 pytest-Tests** (Stand v1.5.9.2 — `python -m pytest --collect-only -q`), u. a.:
+**2177 pytest-Tests** (Stand v1.5.9.2 — `python -m pytest --collect-only -q`), u. a.:
 
 - `test_persistence.py`, `test_race_conditions.py` — DB/Queues
 - `test_game_state_live.py`, `test_effects.py`, `test_queue_engine.py` — Live pipeline

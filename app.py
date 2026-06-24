@@ -1718,10 +1718,21 @@ def logistics_view():
 @app.route("/fleet")
 @require_login
 def fleet_view():
+    import time
+
+    from game.live_state import current_ssr_perf, finish_ssr_perf, start_ssr_perf
+
+    start_ssr_perf("/fleet")
+    ssr = current_ssr_perf()
+
     conn = db()
     try:
+        ctx_t0 = time.perf_counter()
         ctx = _load_page_live_context(finish_source="fleet", conn=conn, close_conn=False)
+        if ssr is not None:
+            ssr.add_live_context_ms((time.perf_counter() - ctx_t0) * 1000.0)
         if ctx is None:
+            finish_ssr_perf(response_bytes=0)
             return redirect(url_for("login"))
 
         from game.fleet import build_fleet_page_context, build_logistics_page_context, fleet_schema_ready
@@ -1752,7 +1763,8 @@ def fleet_view():
     finally:
         conn.close()
 
-    return render_template(
+    tpl_t0 = time.perf_counter()
+    resp = render_template(
         "fleet.html",
         player=player_view,
         energy_total=ctx["energy_total"],
@@ -1761,6 +1773,14 @@ def fleet_view():
         fleet=fleet_ctx,
         logistics=logistics_ctx,
     )
+    if ssr is not None:
+        ssr.add_template_ms((time.perf_counter() - tpl_t0) * 1000.0)
+        from flask import make_response
+
+        out = make_response(resp)
+        finish_ssr_perf(response_bytes=len(out.get_data() or b""))
+        return out
+    return resp
 
 
 @app.route("/alliance")

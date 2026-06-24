@@ -16,11 +16,21 @@ pytest_plugins = ["tests.test_game_state_live"]
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _reset_ssr_perf_trace():
+    from game.live_state import finish_ssr_perf
+
+    finish_ssr_perf()
+    yield
+    finish_ssr_perf()
+
+
 def _read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
-def test_gc853_ssr_perf_helpers_gated():
+def test_gc853_ssr_perf_helpers_gated(monkeypatch):
+    monkeypatch.delenv("GC_SSR_PERF_DEBUG", raising=False)
     from game.live_state import SsrPerfTrace, finish_ssr_perf, start_ssr_perf
 
     assert start_ssr_perf("/buildings", tab="resources") is None
@@ -50,6 +60,7 @@ def test_gc853_server_log_format_contract():
     src = _read("game/live_state.py")
     assert "[GC SSR PERF] route=%s tab=%s total=%sms live_context=%sms finish=%sms" in src
     assert "resource_sync=%sms buildings_panel=%sms cards=%sms tech_data=%sms" in src
+    assert "fleet_panel=%sms logistics_panel=%sms" in src
     assert "template=%sms bytes=%s" in src
 
 
@@ -92,6 +103,8 @@ def test_gc853_buildings_with_debug_emits_one_ssr_log(game_client, monkeypatch, 
         "buildings_panel=",
         "cards=",
         "tech_data=",
+        "fleet_panel=",
+        "logistics_panel=",
         "template=",
         "bytes=",
     ):

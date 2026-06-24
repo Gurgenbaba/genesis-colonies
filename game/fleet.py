@@ -4918,6 +4918,11 @@ def build_logistics_page_context(
     conn=None,
 ) -> Dict[str, Any]:
     """Logistics Collect UI (GC-900C) — colonies + cargo hulls; no parallel state."""
+    from .live_state import current_ssr_perf
+
+    ssr = current_ssr_perf()
+    panel_t0 = time.perf_counter() if ssr is not None else 0.0
+
     own = conn is None
     if own:
         conn = db()
@@ -4963,6 +4968,8 @@ def build_logistics_page_context(
             "server_time": time.time(),
         }
     finally:
+        if ssr is not None:
+            ssr.add_logistics_panel_ms((time.perf_counter() - panel_t0) * 1000.0)
         if own and conn is not None:
             conn.close()
 
@@ -5076,6 +5083,11 @@ def build_fleet_page_context(
     conn=None,
     can_seed_test_ships: bool = False,
 ) -> Dict[str, Any]:
+    from .live_state import current_ssr_perf
+
+    ssr = current_ssr_perf()
+    panel_t0 = time.perf_counter() if ssr is not None else 0.0
+
     own = conn is None
     if own:
         conn = db()
@@ -5145,5 +5157,7 @@ def build_fleet_page_context(
             "speed_options": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
         }
     finally:
+        if ssr is not None:
+            ssr.add_fleet_panel_ms((time.perf_counter() - panel_t0) * 1000.0)
         if own and conn is not None:
             conn.close()
