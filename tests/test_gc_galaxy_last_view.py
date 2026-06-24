@@ -1,5 +1,5 @@
 """
-GC-GALAXY-LAST-VIEW — Session last coords + client view tab prefs.
+GC-GALAXY-LAST-VIEW — View tab prefs + active-planet galaxy coords.
 
 Run: python -m pytest tests/test_gc_galaxy_last_view.py -v
 """
@@ -69,19 +69,22 @@ def _page_coords(body: str) -> tuple[int | None, int | None]:
     return None, None
 
 
-def test_galaxy_session_last_coords_without_url_params(galaxy_db, monkeypatch):
+def test_galaxy_without_url_coords_uses_active_planet_not_session(galaxy_db, monkeypatch):
     client = _galaxy_client(monkeypatch)
-    seed = client.get("/galaxy?view=system&galaxy=3&system=42")
-    assert seed.status_code == 200
+    with client.session_transaction() as sess:
+        uid = int(sess["user_id"])
+    from game.galaxy import get_planet_coordinates
+    from game.models import get_homeworld
 
+    active = get_planet_coordinates(get_homeworld(player_id=uid))
+
+    client.get("/galaxy?view=system&galaxy=3&system=42")
     resp = client.get("/galaxy?view=system")
     assert resp.status_code == 200
-    body = resp.get_data(as_text=True)
-    galaxy, system = _page_coords(body)
-    assert galaxy == 3
-    assert system == 42
-    assert 'id="galaxy-jump-system"' in body
-    assert 'value="42"' in body
+    galaxy, system = _page_coords(resp.get_data(as_text=True))
+    assert galaxy == int(active["galaxy"])
+    assert system == int(active["system"])
+    assert system != 42
 
 
 def test_galaxy_first_visit_falls_back_to_active_planet(galaxy_db, monkeypatch):
@@ -102,7 +105,7 @@ def test_galaxy_first_visit_falls_back_to_active_planet(galaxy_db, monkeypatch):
     assert system == int(coords["system"])
 
 
-def test_galaxy_url_coords_override_session(galaxy_db, monkeypatch):
+def test_galaxy_url_coords_override_active_planet(galaxy_db, monkeypatch):
     client = _galaxy_client(monkeypatch)
     client.get("/galaxy?view=system&galaxy=3&system=42")
     resp = client.get("/galaxy?view=system&galaxy=1&system=77")
@@ -112,10 +115,49 @@ def test_galaxy_url_coords_override_session(galaxy_db, monkeypatch):
     assert system == 77
 
 
+def test_galaxy_planet_switch_resets_session_coords(galaxy_db, monkeypatch):
+    client = _galaxy_client(monkeypatch)
+    with client.session_transaction() as sess:
+        uid = int(sess["user_id"])
+
+    from game.db import commit, db
+    from game.galaxy import get_planet_coordinates
+    from game.models import get_homeworld
+    from game.planet_evolution.service import set_active_planet
+
+    hw = get_homeworld(player_id=uid)
+    hw_coords = get_planet_coordinates(hw)
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO planets (
+            player_id, name, is_homeworld, metal, crystal, last_update,
+            galaxy, system, position
+        ) VALUES (?, 'Colony Beta', 0, 1000, 1000, 0, ?, ?, ?);
+        """,
+        (uid, int(hw_coords["galaxy"]), 250, 10),
+    )
+    colony_id = int(cur.lastrowid)
+    commit(conn)
+    conn.close()
+
+    client.get("/galaxy?view=system&galaxy=3&system=42")
+    ok, reason = set_active_planet(uid, colony_id)
+    assert ok, reason
+
+    resp = client.get("/galaxy?view=system")
+    assert resp.status_code == 200
+    galaxy, system = _page_coords(resp.get_data(as_text=True))
+    assert galaxy == int(hw_coords["galaxy"])
+    assert system == 250
+
+
 def test_gc_galaxy_last_view_main_js_contract():
     src = _read("static/main.js")
     assert "gc_galaxy_prefs_v1" in src
     assert "persistGalaxyViewFromPage" in src
     assert "resolveGalaxyNavHref" in src
+    assert "writeGalaxyPrefs({ view })" in src
     assert 'link.dataset.navModule === "galaxy"' in src
-    assert 'root.dataset.galaxyView === "system"' in src
+    assert "prefs.galaxy" not in src.split("resolveGalaxyNavHref")[1].split("function initGalaxyDebrisUx", 1)[0]

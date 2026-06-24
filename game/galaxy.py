@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
 from .db import db, table_exists, column_exists
 
@@ -465,6 +465,13 @@ def build_galaxy_nav(
         "has_next_galaxy": galaxy < gmax,
         "multi_galaxy": gmax > 1,
     }
+
+
+def sync_galaxy_view_session_for_planet(session: Any, planet: Mapping[str, Any]) -> None:
+    """Align Flask session galaxy coords with active/context planet (e.g. after planet switch)."""
+    coords = get_planet_coordinates(planet)
+    session["galaxy_view_galaxy"] = int(coords["galaxy"])
+    session["galaxy_view_system"] = int(coords["system"])
 
 
 def resolve_view_coordinates(

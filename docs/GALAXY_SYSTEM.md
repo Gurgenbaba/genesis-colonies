@@ -43,9 +43,11 @@ Migration `026`: Unique index `idx_planets_galaxy_system_position` (partial, whe
 
 Session-Navigation: `galaxy_view_galaxy`, `galaxy_view_system` in Flask session für SSR.
 
-Default coords wenn URL ohne `galaxy`/`system`/`q`: zuerst **Session-Last-Coords**, Fallback **active/context planet**.
+Default coords wenn URL ohne `galaxy`/`system`/`q`: immer **active/context planet** (auch nach Galaxie-Browsing oder Planetenwechsel).
 
-Client: `localStorage` key `gc_galaxy_prefs_v1` merkt letzten Tab (`command_map` | `system`) + Koordinaten; Sidebar-Galaxie-Link nutzt gespeicherten View (Priorität: URL > localStorage view > Session coords > active planet).
+Client: `localStorage` key `gc_galaxy_prefs_v1` merkt nur den letzten Tab (`command_map` | `system`); Sidebar-Galaxie-Link setzt `view`, Koordinaten kommen vom Server. Bei Planetenwechsel synchronisiert `/api/planets/active` die Session-Coords mit dem neuen Planeten.
+
+Priorität: URL > localStorage view > active planet coords.
 
 ---
 

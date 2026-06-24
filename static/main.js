@@ -22894,13 +22894,7 @@
     const root = document.getElementById("galaxy-page-root");
     if (!root) return;
     const view = root.dataset.galaxyView === "system" ? "system" : "command_map";
-    const galaxy = parseInt(root.dataset.galaxy, 10);
-    const system = parseInt(root.dataset.system, 10);
-    const prefs = readGalaxyPrefs();
-    prefs.view = view;
-    if (Number.isFinite(galaxy) && galaxy > 0) prefs.galaxy = galaxy;
-    if (Number.isFinite(system) && system > 0) prefs.system = system;
-    writeGalaxyPrefs(prefs);
+    writeGalaxyPrefs({ view });
   }
 
   function resolveGalaxyNavHref(rawHref) {
@@ -22924,12 +22918,6 @@
     const prefs = readGalaxyPrefs();
     const view = prefs.view === "system" ? "system" : "command_map";
     url.searchParams.set("view", view);
-    if (view === "system") {
-      const galaxy = parseInt(prefs.galaxy, 10);
-      const system = parseInt(prefs.system, 10);
-      if (Number.isFinite(galaxy) && galaxy > 0) url.searchParams.set("galaxy", String(galaxy));
-      if (Number.isFinite(system) && system > 0) url.searchParams.set("system", String(system));
-    }
     return `${url.pathname}${url.search}`;
   }
 
