@@ -38,7 +38,7 @@ Genesis Colonies ist ein persistentes Browser-Strategiespiel, in dem Spieler ein
 | Audit Logging | `admin_audit_log` für privilegierte Aktionen |
 | Frontend-Architektur | SPA/PJAX, Singleton-Polling, Lifecycle-Cleanup |
 | Queue-Hardening | Atomare Transaktionen, Idempotenz, Parallel-Tests |
-| Test-Suite | **2160** pytest-Tests (`python -m pytest --collect-only -q`) |
+| Test-Suite | **2165** pytest-Tests (`python -m pytest --collect-only -q`) |
 
 ### Spielbar (Mechanik)
 

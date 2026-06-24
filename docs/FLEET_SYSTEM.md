@@ -36,6 +36,51 @@ Definiert in `game/fleet_defs.py`:
 
 Schiffsbau: [Shipyard](BUILDINGS_SYSTEM.md) → `orbital_shipyard` → `shipyard_queue` → Credit auf `planet_ships`.
 
+### Shipyard — Einheiten-Bauzeit (GC-852)
+
+**Owner:** `game/shipyard.py` — **nicht** `EffectResolver` / `power_build_seconds`.
+
+Das **Gebäude-Upgrade** `orbital_shipyard` nutzt die normale Gebäude-Bauzeit ([BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md)).  
+Die **Schiffsbau-Zeit pro Einheit** in der Werft-Queue ist ein separates System.
+
+| Eingabe | Quelle |
+|---------|--------|
+| Basiszeit pro Schiff | `fleet_defs.SHIPS[ship_key].build_seconds` |
+| Werft-Stufe | `max(orbital_shipyard, shipyard)` auf dem Planeten (min. 1 wenn Werft existiert) |
+| Universum-Speed | `game_settings.shipyard_speed` (Default 1.0, clamp 0.1–10) |
+| Direktiven-Bonus | `EffectResolver` / Galactic Directives → `shipyard_time_speed` (pro Planet) |
+
+**Formel (eine Einheit, ein Produktionszyklus):**
+
+```text
+unit_seconds = ceil(
+  build_seconds × 0.9^(yard_level − 1)
+  ÷ shipyard_speed
+  ÷ shipyard_time_speed
+)
+```
+
+Konstante: `BUILD_TIME_LEVEL_FACTOR = 0.90` (−10 % pro Werft-Stufe über 1).  
+Ergebnis: `max(1, …)` Sekunden — Funktionen `unit_build_seconds()` / `_effective_build_seconds()`.
+
+**Progressive Lieferung (Mehrfachauftrag):**
+
+| Konzept | Formel / Owner |
+|---------|----------------|
+| Yard-Kapazität pro Zyklus | `3^yard_level` Einheiten-Slots (`orbital_production_batch_capacity`) |
+| Gewicht pro Schiffstyp | `ceil(build_seconds / 5)` (`unit_production_weight`) |
+| Effektive Batch-Größe | `max(1, yard_capacity // weight)` |
+| Auftragsdauer | `ceil(amount / batch_capacity) × unit_seconds` (`production_job_duration_seconds`) |
+
+Beispiel Speed ×1, Werft L1, `mule_courier` (`build_seconds = 120`):  
+`unit_seconds = 120`, effektive Batch-Größe = 1 (Gewicht `ceil(120/5) = 24` > Yard-Kapazität 3) → Auftrag über 10 Schiffe = `10 × 120 = 1200 s`.
+
+Kosten: `fleet_defs.build_cost` — **kein** Level-Multiplier (metal/crystal/fuel_cells direkt aus Def).
+
+Cancel-Refund: `shipyard_queue` → `queue_refund.refund_from_stored_costs` (GC-831).
+
+Analoges Muster für Verteidigung: [DEFENSE_SYSTEM.md](DEFENSE_SYSTEM.md) (`defense_factory`-Stufe, `defense_time_speed`).
+
 **Queue-UX (GC-536D):** Werftaufträge erscheinen in der jeweiligen Schiff-Card (`queue_job` via `game/queue_card.py` + `_attach_queue_jobs_to_ship_rows` in `game/shipyard.py`). Seitenkopf nur noch Kompaktstatus (`#shipyard-queue-compact`), kein großes Queue-Panel.
 
 ---

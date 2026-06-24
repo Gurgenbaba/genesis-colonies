@@ -52,7 +52,7 @@ Legacy `BASE_COST × COST_FACTOR^(level-1)` nur noch Audit/Tests — **nicht** d
 
 `EffectResolver.get_build_time_seconds()` → `power_build_seconds()` ÷ Speed-Boni (`build_speed`, `buildtime_tech`, `nanofactory`, …).
 
----
+**Abgrenzung Werft:** Das Upgrade des Gebäudes `orbital_shipyard` nutzt diese Kurve. Die **Schiffsbau-Zeit pro Einheit** in der Werft-Queue ist separat dokumentiert in [FLEET_SYSTEM.md](FLEET_SYSTEM.md) (GC-852).
 
 ## Requirements (Auszug)
 

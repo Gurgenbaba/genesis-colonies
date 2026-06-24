@@ -104,6 +104,63 @@ Payload: optional `queue_job` pro Card via `game/queue_card.py` (Presentation on
 
 ---
 
+## Planet-Tech — Kosten & Zeit (GC-852)
+
+**Owner:** `game/planet_evolution/planet_research.py` — **≠** Account-Forschung ([RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) / GC-825 `power_research_seconds`).
+
+Definitionen: `pe_research_definitions` (Seed Migration `017`) → `get_research_def()` in `definitions.py`.
+
+| Feld in Def | Rolle |
+|-------------|-------|
+| `base_cost_m` / `base_cost_c` | Kosten-Basis Stufe 1 |
+| `cost_factor` | Exponential pro Zielstufe (Legacy-Kurve) |
+| `base_time` | Zeit-Basis (Sekunden) |
+| `tier` | Tech-Band (1, 2, …) — beeinflusst **nur** die Zeit, nicht die Kosten |
+| `max_level` | Max. erreichbare Stufe pro Tech |
+
+### Kosten (live)
+
+```text
+metal  = floor(base_cost_m × cost_factor^(target_level − 1))
+crystal = floor(base_cost_c × cost_factor^(target_level − 1))
+```
+
+Funktion: `compute_planet_research_cost(tech_key, target_level)`.
+
+Beispiel `industry_t1_automation` (800 / 400, `cost_factor = 1.5`), Ziel L3:  
+metal = `800 × 1.5² = 1800`, crystal = `400 × 1.5² = 900`.
+
+### Zeit (live)
+
+```text
+duration_seconds = max(1.0, base_time × 1.45^(tier − 1) ÷ planet_research_speed)
+```
+
+Funktion: `compute_planet_research_time(planet_id, tech_key, target_level, conn)`.
+
+**Wichtig:** `target_level` fließt in die **Zeit** nicht ein — nur `tier` aus der Definition und der Speed-Multiplikator.
+
+| Speed-Faktor | Quelle |
+|--------------|--------|
+| `planet_research_speed` | `game_settings` (Default 1.0) |
+| Bonus | Planet-Flag `planet_research_speed_bonus` (additiv: `× (1 + bonus)`) |
+
+Untergrenze: `1.0` s (technischer Safety-Floor, kein 30s-Balance-Cap — GC-622B).
+
+### Queue
+
+| Regel | Wert |
+|-------|------|
+| Limit | `game_settings.planet_research_queue_limit` (Default 2) + Flag `planet_research_queue_bonus` |
+| Scheduling | Sequenziell; `finish_at` = max(now, letzter Job) + `duration` |
+| Zahlung | Sofort metal/crystal beim Enqueue |
+| Cancel | `cancel_planet_research_job` → `refund_planet_evolution_research_job` (GC-831) |
+| Finish | `finish_planet_research_jobs` via `queue_engine` |
+
+**Bewusst Legacy:** Planet-Tech nutzt weiterhin `cost_factor^level` — kein GC-821/GC-825 Power-Curve-Migration. Umbau wäre separates Balancing-Ticket, nicht GC-852.
+
+---
+
 ## Kolonisierung
 
 | Weg | Entry |
