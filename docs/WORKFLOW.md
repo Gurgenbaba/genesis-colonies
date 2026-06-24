@@ -117,7 +117,7 @@ Kurz. Keine Projektzusammenfassung.
 ## Tests
 
 ```bash
-python -m pytest tests/ -v          # gesamt (2208 Tests)
+python -m pytest tests/ -v          # gesamt (2213 Tests)
 python -m pytest tests/test_fleet.py -v   # domänenspezifisch
 ```
 
