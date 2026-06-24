@@ -48,18 +48,20 @@ def test_gc859_first_hero_uses_webp_with_png_fallback(buildings_resources_html):
 
 def test_gc859_first_card_high_priority_eager(buildings_resources_html):
     card = _first_resources_cards(buildings_resources_html, 1)[0]
-    assert 'fetchpriority="high"' in card
-    assert 'loading="eager"' in card
-    assert 'loading="lazy"' not in card.split("gc-bld-card-hero")[1].split("</div>", 1)[0]
+    hero = card.split("gc-bld-card-hero", 1)[1].split("gc-bld-card-meta", 1)[0]
+    assert hero.count('fetchpriority="high"') == 1
+    assert 'loading="eager"' in hero
+    assert 'loading="lazy"' not in hero.split('data-gc-lcp-hero', 1)[0]
 
 
-def test_gc859_second_third_cards_eager_not_lazy(buildings_resources_html):
+def test_gc859_second_third_cards_lazy_low_priority(buildings_resources_html):
     cards = _first_resources_cards(buildings_resources_html, 3)
     assert len(cards) >= 3
     for card in cards[1:3]:
-        hero = card.split("gc-bld-card-hero", 1)[1].split("</div>", 1)[0]
-        assert 'loading="eager"' in hero
-        assert 'fetchpriority="low"' not in hero
+        hero = card.split("gc-bld-card-hero", 1)[1].split("gc-bld-card-meta", 1)[0]
+        assert 'loading="lazy"' in hero
+        assert 'fetchpriority="low"' in hero
+        assert 'fetchpriority="high"' not in hero
 
 
 def test_gc859_fourth_card_lazy_low_priority(buildings_resources_html):
@@ -80,8 +82,8 @@ def test_gc859_hero_images_have_width_height(buildings_resources_html):
 
 def test_gc859_active_queue_branch_respects_load_mode_in_template():
     src = _read("templates/buildings.html")
-    assert "hero_load == 'high'" in src
-    assert 'loading="lazy"\n           decoding="async"\n           fetchpriority="low"' not in src
+    assert "render_hero_img_attrs" in src
+    assert "'secondary'" in src
 
 
 def test_gc859_audit_script_lists_building_assets():

@@ -8,9 +8,15 @@
    Genesis building cards (Resources / Research / Military / Infrastructure)
    =================================================================== #}
 
-{% macro render_hero_img_stack(src, fallback, qj, hero_load='lazy') %}
+{% macro render_hero_img_attrs(hero_load, role) %}
+  {# GC-861 — one high-priority discover per card; stack layers must not compete #}
+  {% if role == 'primary' and hero_load == 'high' %}loading="eager" decoding="async" fetchpriority="high"{% elif role == 'primary' and hero_load == 'eager' %}loading="eager" decoding="async"{% elif role == 'secondary' %}loading="eager" decoding="async" fetchpriority="low"{% else %}loading="lazy" decoding="async" fetchpriority="low"{% endif %}
+{% endmacro %}
+
+{% macro render_hero_img_stack(src, fallback, qj, hero_load='lazy', lcp_primary=false) %}
   {% set _active = qj is defined and qj and qj.status == 'active' %}
   {% set _onerr = "this.onerror=null;this.src='" ~ fallback ~ "';" %}
+  {% set _primary_role = 'primary' if hero_load in ('high', 'eager') else 'defer' %}
   <div class="gc-bld-hero-img-stack{% if _active %} gc-bld-hero-img-stack--progress{% endif %}"
        {% if _active %}style="--hero-progress-pct: {{ qj.progress_pct|default(0)|int }}%;"{% endif %}>
     {% if _active %}
@@ -19,14 +25,15 @@
            class="gc-bld-card-hero-img gc-bld-card-hero-img--muted"
            width="320"
            height="180"
-           {% if hero_load == 'high' %}loading="eager" decoding="async" fetchpriority="high"{% elif hero_load == 'eager' %}loading="eager" decoding="async"{% else %}loading="lazy" decoding="async" fetchpriority="low"{% endif %}
+           {% if lcp_primary %}data-gc-lcp-hero="1"{% endif %}
+           {{ render_hero_img_attrs(hero_load, _primary_role) }}
            onerror="{{ _onerr }}">
       <img src="{{ src }}"
            alt=""
            class="gc-bld-card-hero-img gc-bld-card-hero-img--color"
            width="320"
            height="180"
-           {% if hero_load == 'high' %}loading="eager" decoding="async" fetchpriority="high"{% elif hero_load == 'eager' %}loading="eager" decoding="async"{% else %}loading="lazy" decoding="async" fetchpriority="low"{% endif %}
+           {{ render_hero_img_attrs(hero_load, 'secondary' if hero_load in ('high', 'eager') else 'defer') }}
            onerror="{{ _onerr }}">
     {% else %}
       <img src="{{ src }}"
@@ -34,7 +41,8 @@
            class="gc-bld-card-hero-img"
            width="320"
            height="180"
-           {% if hero_load == 'high' %}loading="eager" decoding="async" fetchpriority="high"{% elif hero_load == 'eager' %}loading="eager" decoding="async"{% else %}loading="lazy" decoding="async" fetchpriority="low"{% endif %}
+           {% if lcp_primary %}data-gc-lcp-hero="1"{% endif %}
+           {{ render_hero_img_attrs(hero_load, _primary_role) }}
            onerror="{{ _onerr }}">
     {% endif %}
   </div>
@@ -185,14 +193,8 @@
           <div class="gc-bld-card-hero">
             {% set _bld_png = url_for('static', filename=b.icon) %}
             {% set _bld_webp = _bld_png|webp_static %}
-            {% if loop.index0 == 0 %}
-              {% set _card_load = 'high' %}
-            {% elif loop.index0 < 3 %}
-              {% set _card_load = 'eager' %}
-            {% else %}
-              {% set _card_load = 'lazy' %}
-            {% endif %}
-            {{ render_hero_img_stack(_bld_webp, _bld_png, b.queue_job if b.queue_job is defined else none, _card_load) }}
+            {% set _card_load = 'high' if loop.index0 == 0 else 'lazy' %}
+            {{ render_hero_img_stack(_bld_webp, _bld_png, b.queue_job if b.queue_job is defined else none, _card_load, loop.index0 == 0) }}
             {% if b.queue_job is defined and b.queue_job %}
             {{ render_hero_queue(b.queue_job, 'build', 'building') }}
             {% endif %}
@@ -234,10 +236,19 @@
 
 {% endmacro %}
 
-{% block content %}
-
 {% set active_tab = (active_tab if active_tab is defined and active_tab else 'resources') %}
 {% set rows_by_tab = (rows_by_tab if rows_by_tab is defined and rows_by_tab else {}) %}
+{% set _lcp_rows = rows_by_tab.get(active_tab, []) if rows_by_tab else [] %}
+{% set _lcp_preload_href = (url_for('static', filename=_lcp_rows[0].icon)|webp_static) if _lcp_rows else '' %}
+
+{% block extra_head %}
+{{ super() }}
+{% if _lcp_preload_href %}
+<link rel="preload" as="image" type="image/webp" href="{{ _lcp_preload_href }}" fetchpriority="high">
+{% endif %}
+{% endblock %}
+
+{% block content %}
 {% set bq = (build_queue if build_queue is defined and build_queue else {}) %}
 {% set bq_summary = (bq.summary if bq and bq.summary is defined and bq.summary else {}) %}
 {% set bq_limit = (bq_summary.limit if bq_summary.limit is defined else 3) %}
