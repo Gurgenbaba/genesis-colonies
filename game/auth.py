@@ -17,11 +17,14 @@ Bann-Logik:
 
 from __future__ import annotations
 
+import logging
 import time
 from functools import wraps
 from typing import Any, Callable, Dict, Optional
 
 from flask import flash, g, jsonify, redirect, request, session, url_for
+
+logger = logging.getLogger(__name__)
 
 from .models import (
     db,
@@ -341,8 +344,8 @@ def require_login(func: ViewFunc) -> ViewFunc:
         # online markieren
         try:
             touch_player_online(int(player["id"]))
-        except Exception as e:
-            print("touch_player_online error:", e)
+        except Exception:
+            logger.warning("touch_player_online failed", exc_info=True)
 
         g.player = player
         return func(*args, **kwargs)
@@ -389,8 +392,8 @@ def require_admin(func: ViewFunc) -> ViewFunc:
                 g.player = player
                 try:
                     touch_player_online(int(player["id"]))
-                except Exception as e:
-                    print("touch_player_online error:", e)
+                except Exception:
+                    logger.warning("touch_player_online failed", exc_info=True)
         except Exception:
             pass
 

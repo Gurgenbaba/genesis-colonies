@@ -1020,10 +1020,19 @@ def landing():
 @app.route("/overview")
 @require_login
 def overview():
+    import time
+
+    from game.live_state import current_ssr_perf, finish_ssr_perf, start_ssr_perf
+
+    start_ssr_perf("/overview")
+    ssr = current_ssr_perf()
+
     conn = db()
     try:
+        ctx_t0 = time.perf_counter()
         ctx = _load_page_live_context(finish_source="overview", conn=conn, close_conn=False)
         if ctx is None:
+            finish_ssr_perf(response_bytes=0)
             return redirect(url_for("login"))
 
         from game.overview_page import build_overview_page_context
@@ -1036,10 +1045,13 @@ def overview():
         overview_status = build_overview_page_context(
             int(session["user_id"]), ctx, planet=planet, conn=conn
         )
+        if ssr is not None:
+            ssr.add_live_context_ms((time.perf_counter() - ctx_t0) * 1000.0)
     finally:
         conn.close()
 
-    return render_template(
+    tpl_t0 = time.perf_counter()
+    resp = render_template(
         "overview.html",
         player=ctx["player_view"],
         ratio=ctx["ratio"],
@@ -1049,6 +1061,14 @@ def overview():
         prod_per_hour=ctx["prod_per_hour"],
         overview_status=overview_status,
     )
+    if ssr is not None:
+        ssr.add_template_ms((time.perf_counter() - tpl_t0) * 1000.0)
+        from flask import make_response
+
+        out = make_response(resp)
+        finish_ssr_perf(response_bytes=len(out.get_data() or b""))
+        return out
+    return resp
 
 
 @app.route("/empire")
@@ -1642,8 +1662,17 @@ def api_worlds_salvage_preview():
 @app.route("/shipyard")
 @require_login
 def shipyard_view():
+    import time
+
+    from game.live_state import current_ssr_perf, finish_ssr_perf, start_ssr_perf
+
+    start_ssr_perf("/shipyard")
+    ssr = current_ssr_perf()
+
+    data_t0 = time.perf_counter()
     player_view, _, planet_row, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
     if player_view is None:
+        finish_ssr_perf(response_bytes=0)
         return redirect(url_for("login"))
 
     from game.fleet import fleet_schema_ready
@@ -1661,7 +1690,11 @@ def shipyard_view():
     finally:
         conn.close()
 
-    return render_template(
+    if ssr is not None:
+        ssr.add_live_context_ms((time.perf_counter() - data_t0) * 1000.0)
+
+    tpl_t0 = time.perf_counter()
+    resp = render_template(
         "shipyard.html",
         player=player_view,
         planet=planet_row,
@@ -1670,13 +1703,30 @@ def shipyard_view():
         energy_used=energy_used,
         storage_caps=storage_caps,
     )
+    if ssr is not None:
+        ssr.add_template_ms((time.perf_counter() - tpl_t0) * 1000.0)
+        from flask import make_response
+
+        out = make_response(resp)
+        finish_ssr_perf(response_bytes=len(out.get_data() or b""))
+        return out
+    return resp
 
 
 @app.route("/defense")
 @require_login
 def defense_view():
+    import time
+
+    from game.live_state import current_ssr_perf, finish_ssr_perf, start_ssr_perf
+
+    start_ssr_perf("/defense")
+    ssr = current_ssr_perf()
+
+    data_t0 = time.perf_counter()
     player_view, _, _, energy_total, energy_used, storage_caps = _load_player_view_with_resources()
     if player_view is None:
+        finish_ssr_perf(response_bytes=0)
         return redirect(url_for("login"))
 
     from game.defense_page import build_defense_page_context
@@ -1693,7 +1743,11 @@ def defense_view():
     finally:
         conn.close()
 
-    return render_template(
+    if ssr is not None:
+        ssr.add_live_context_ms((time.perf_counter() - data_t0) * 1000.0)
+
+    tpl_t0 = time.perf_counter()
+    resp = render_template(
         "defense.html",
         player=player_view,
         defense=defense_ctx,
@@ -1701,6 +1755,14 @@ def defense_view():
         energy_used=energy_used,
         storage_caps=storage_caps,
     )
+    if ssr is not None:
+        ssr.add_template_ms((time.perf_counter() - tpl_t0) * 1000.0)
+        from flask import make_response
+
+        out = make_response(resp)
+        finish_ssr_perf(response_bytes=len(out.get_data() or b""))
+        return out
+    return resp
 
 
 @app.route("/logistics")
@@ -2421,8 +2483,6 @@ def _vote_postback_response(provider_key: str) -> Any:
         "ip": vote_ip,
     }
     logger.info("vote postback received %s", debug_payload)
-    if str(provider_key) == "topg":
-        print("[TopG] postback received", debug_payload, flush=True)
 
     conn = db()
     try:
