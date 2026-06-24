@@ -1118,6 +1118,11 @@ def _make_panel_row(
     ratio: float = 1.0,
     queue_free_slots: int = 0,
 ) -> Dict[str, Any]:
+    from .live_state import current_ssr_perf
+
+    ssr = current_ssr_perf()
+    tech_t0 = time.perf_counter() if ssr is not None else 0.0
+
     level = int(buildings.get(building_type, 0) or 0)
     max_level = get_max_level_for_building(building_type, buildings)
     queued_same = int(queue_count or 0)
@@ -1174,6 +1179,8 @@ def _make_panel_row(
 
         roi = mine_upgrade_roi_hours(building_type, target_level)
         row["upgrade_roi_hours"] = round(roi, 1) if math.isfinite(roi) else None
+    if ssr is not None:
+        ssr.add_tech_data_ms((time.perf_counter() - tech_t0) * 1000.0)
     return row
 
 
@@ -1184,6 +1191,12 @@ def get_buildings_panel_rows(
     *,
     active_tab: Optional[str] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
+    from .live_state import current_ssr_perf
+
+    ssr = current_ssr_perf()
+    panel_t0 = time.perf_counter() if ssr is not None else 0.0
+    cards_t0: float | None = None
+
     user_id = planet.get("player_id")
     if user_id is None:
         raise RuntimeError("get_buildings_panel_rows: planet hat kein 'player_id'-Feld")
@@ -1225,6 +1238,8 @@ def get_buildings_panel_rows(
         building_keys = BUILDING_ORDER
 
     for key in building_keys:
+        if ssr is not None and cards_t0 is None:
+            cards_t0 = time.perf_counter()
         row = _make_panel_row(
             planet,
             buildings,
@@ -1237,6 +1252,11 @@ def get_buildings_panel_rows(
         rows_by_tab.setdefault(row["tab"], []).append(row)
 
     _attach_queue_jobs_to_panel_rows(rows_by_tab, build_queue)
+
+    if ssr is not None:
+        if cards_t0 is not None:
+            ssr.add_cards_ms((time.perf_counter() - cards_t0) * 1000.0)
+        ssr.add_buildings_panel_ms((time.perf_counter() - panel_t0) * 1000.0)
 
     return rows_by_tab
 

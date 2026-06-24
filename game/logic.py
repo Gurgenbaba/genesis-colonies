@@ -242,9 +242,10 @@ def refresh_player_live_state(
 
         planet = get_context_planet(uid, conn=conn)
 
-        from .live_state import current_action_perf
+        from .live_state import current_action_perf, current_ssr_perf
 
         perf = current_action_perf()
+        ssr = current_ssr_perf()
         live_t0 = time.perf_counter()
         finish_t0 = time.perf_counter()
         finish_player_due_work(
@@ -253,8 +254,11 @@ def refresh_player_live_state(
             source=str(finish_source or "live_state"),
             recalc_ranks=bool(recalc_ranks),
         )
+        finish_ms = (time.perf_counter() - finish_t0) * 1000.0
         if perf is not None:
-            perf.add_finish_ms((time.perf_counter() - finish_t0) * 1000.0)
+            perf.add_finish_ms(finish_ms)
+        if ssr is not None:
+            ssr.add_finish_ms(finish_ms)
 
         from .live_state import mark_request_live_refreshed
 
@@ -280,6 +284,8 @@ def refresh_player_live_state(
         if perf is not None:
             perf.add_resource_sync_ms((time.perf_counter() - sync_t0) * 1000.0)
             perf.add_live_state_ms((time.perf_counter() - live_t0) * 1000.0)
+        if ssr is not None:
+            ssr.add_resource_sync_ms((time.perf_counter() - sync_t0) * 1000.0)
 
         if own_conn:
             commit(conn)

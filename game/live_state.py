@@ -112,6 +112,126 @@ def finish_action_perf(*, response_bytes: int = 0) -> Optional[Dict[str, Any]]:
     return trace.emit_log(response_bytes=response_bytes)
 
 
+_ssr_perf_trace: ContextVar[Optional["SsrPerfTrace"]] = ContextVar(
+    "gc_ssr_perf_trace", default=None
+)
+
+
+def is_ssr_perf_debug_enabled() -> bool:
+    from game.config import is_ssr_perf_debug_enabled as _enabled
+
+    return _enabled()
+
+
+class SsrPerfTrace:
+    """GC-853: request-scoped timings for SSR page routes (e.g. /buildings)."""
+
+    __slots__ = (
+        "route",
+        "tab",
+        "started_at",
+        "live_context_ms",
+        "finish_ms",
+        "resource_sync_ms",
+        "buildings_panel_ms",
+        "cards_ms",
+        "tech_data_ms",
+        "template_ms",
+    )
+
+    def __init__(self, route: str, *, tab: str = "") -> None:
+        self.route = str(route or "page")
+        self.tab = str(tab or "")
+        self.started_at = time.perf_counter()
+        self.live_context_ms = 0.0
+        self.finish_ms = 0.0
+        self.resource_sync_ms = 0.0
+        self.buildings_panel_ms = 0.0
+        self.cards_ms = 0.0
+        self.tech_data_ms = 0.0
+        self.template_ms = 0.0
+
+    def add_live_context_ms(self, ms: float) -> None:
+        self.live_context_ms += max(0.0, float(ms))
+
+    def add_finish_ms(self, ms: float) -> None:
+        self.finish_ms += max(0.0, float(ms))
+
+    def add_resource_sync_ms(self, ms: float) -> None:
+        self.resource_sync_ms += max(0.0, float(ms))
+
+    def add_buildings_panel_ms(self, ms: float) -> None:
+        self.buildings_panel_ms += max(0.0, float(ms))
+
+    def add_cards_ms(self, ms: float) -> None:
+        self.cards_ms += max(0.0, float(ms))
+
+    def add_tech_data_ms(self, ms: float) -> None:
+        self.tech_data_ms += max(0.0, float(ms))
+
+    def add_template_ms(self, ms: float) -> None:
+        self.template_ms += max(0.0, float(ms))
+
+    @property
+    def total_ms(self) -> float:
+        return (time.perf_counter() - self.started_at) * 1000.0
+
+    def as_dict(self, *, response_bytes: int = 0) -> Dict[str, Any]:
+        return {
+            "route": self.route,
+            "tab": self.tab,
+            "total_ms": round(self.total_ms, 1),
+            "live_context_ms": round(self.live_context_ms, 1),
+            "finish_ms": round(self.finish_ms, 1),
+            "resource_sync_ms": round(self.resource_sync_ms, 1),
+            "buildings_panel_ms": round(self.buildings_panel_ms, 1),
+            "cards_ms": round(self.cards_ms, 1),
+            "tech_data_ms": round(self.tech_data_ms, 1),
+            "template_ms": round(self.template_ms, 1),
+            "bytes": int(response_bytes or 0),
+        }
+
+    def emit_log(self, *, response_bytes: int = 0) -> Dict[str, Any]:
+        data = self.as_dict(response_bytes=response_bytes)
+        logger.info(
+            "[GC SSR PERF] route=%s tab=%s total=%sms live_context=%sms finish=%sms "
+            "resource_sync=%sms buildings_panel=%sms cards=%sms tech_data=%sms "
+            "template=%sms bytes=%s",
+            data["route"],
+            data["tab"],
+            data["total_ms"],
+            data["live_context_ms"],
+            data["finish_ms"],
+            data["resource_sync_ms"],
+            data["buildings_panel_ms"],
+            data["cards_ms"],
+            data["tech_data_ms"],
+            data["template_ms"],
+            data["bytes"],
+        )
+        return data
+
+
+def start_ssr_perf(route: str, *, tab: str = "") -> Optional[SsrPerfTrace]:
+    if not is_ssr_perf_debug_enabled():
+        return None
+    trace = SsrPerfTrace(route, tab=tab)
+    _ssr_perf_trace.set(trace)
+    return trace
+
+
+def current_ssr_perf() -> Optional[SsrPerfTrace]:
+    return _ssr_perf_trace.get()
+
+
+def finish_ssr_perf(*, response_bytes: int = 0) -> Optional[Dict[str, Any]]:
+    trace = _ssr_perf_trace.get()
+    if trace is None:
+        return None
+    _ssr_perf_trace.set(None)
+    return trace.emit_log(response_bytes=response_bytes)
+
+
 def get_request_context_planet(user_id: int, *, conn) -> Dict[str, Any]:
     """Request-scoped memo for get_context_planet (GC-741)."""
     uid = int(user_id)

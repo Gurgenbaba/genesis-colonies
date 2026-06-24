@@ -1111,14 +1111,25 @@ def trader_hub_view():
 @app.route("/buildings")
 @require_login
 def buildings_view():
+    import time
+
+    from game.live_state import current_ssr_perf, finish_ssr_perf, start_ssr_perf
+
     active_tab = request.args.get("tab") or "resources"
     if active_tab not in ("resources", "research", "military", "infrastructure"):
         active_tab = "resources"
 
+    start_ssr_perf("/buildings", tab=active_tab)
+    ssr = current_ssr_perf()
+
     conn = db()
     try:
+        ctx_t0 = time.perf_counter()
         ctx = _load_page_live_context(finish_source="buildings", conn=conn, close_conn=False)
+        if ssr is not None:
+            ssr.add_live_context_ms((time.perf_counter() - ctx_t0) * 1000.0)
         if ctx is None:
+            finish_ssr_perf(response_bytes=0)
             return redirect(url_for("login"))
 
         planet = ctx.get("planet")
@@ -1135,7 +1146,8 @@ def buildings_view():
     finally:
         conn.close()
 
-    return render_template(
+    tpl_t0 = time.perf_counter()
+    resp = render_template(
         "buildings.html",
         player=ctx["player_view"],
         active_planet_id=int(planet["id"]),
@@ -1150,6 +1162,14 @@ def buildings_view():
         storage_caps=ctx["storage_caps"],
         build_status=ctx["build_queue"],
     )
+    if ssr is not None:
+        ssr.add_template_ms((time.perf_counter() - tpl_t0) * 1000.0)
+        from flask import make_response
+
+        out = make_response(resp)
+        finish_ssr_perf(response_bytes=len(out.get_data() or b""))
+        return out
+    return resp
 
 
 @app.route("/upgrade/<building_type>")
