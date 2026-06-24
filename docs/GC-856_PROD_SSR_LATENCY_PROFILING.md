@@ -2,6 +2,37 @@
 
 Measure-only ticket. **No runtime optimization** in this scope.
 
+## Status
+
+**DONE** — Fleet is not the primary SSR bottleneck locally. Prod/Ferdi measurement optional; see classification below.
+
+## Erkenntnis (lokal)
+
+```text
+fleet_panel / logistics   → 8–60 ms   (not the driver)
+live_context              → 120–390 ms (shared across routes)
+template                  → 30–350 ms (cold spike)
+```
+
+Ferdi's *"mal Fleet, mal Buildings, mal andere Seiten"* → pattern fits **global live_context / Prod host**, not a Fleet-specific bug.
+
+GC-854 already delivered Buildings SSR: ~1613 ms → ~600 ms warm.
+
+**GC-857:** deferred until repeated player reports or Prod logs justify it.
+
+## Classification
+
+| Case | Signal | Next |
+|------|--------|------|
+| A | `live_context` > 1000 ms multi-route | Global live context |
+| B | `fleet_panel` > 1000 ms | Fleet panel |
+| C | `template` > 1000 ms | Template render |
+| D | Prod high, local low | DB/host profiling |
+
+**Parallel track:** GC-859 Building hero image LCP (`img.gc-bld-card-hero-img`) — client-side, not SSR.
+
+---
+
 ## Problem
 
 Ferdi measures ~**2,31 s** browser *Waiting for server response* on `/fleet`. Local dev does not reproduce that magnitude (~400–750 ms cold on Bobby/admin). Ferdi's prod account is the relevant benchmark.

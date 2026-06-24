@@ -26,6 +26,23 @@ Combat and fleet modifiers are **active** where documented in [COMBAT_SYSTEM.md]
 
 Build time: `get_build_time_seconds()` delegates to `economy_balance.power_build_seconds()` before player/admin speed modifiers (GC-850A).
 
+### Build duration (`get_build_time_seconds`)
+
+```text
+seconds = power_build_seconds(building, level) / effective_speed
+return max(int(seconds), 1)   # 1-second floor (GC-858)
+```
+
+**`effective_speed`** stacks multiplicatively:
+
+1. `buildtime_tech` → `build_time_speed × (1 / 0.97^level)`
+2. Galactic directives / diplomacy → `build_time_speed` (whitelist)
+3. `nanofactory` → duration `× 0.70^level` (applied as ÷ in player speed)
+4. `command_center` → duration `× 0.75^level` for **nanofactory upgrades only**
+5. Admin/universe `build_speed` setting
+
+**UI note (GC-858):** Nanofactory card shows flat `level × 30 %` for display; runtime uses `0.70^level`. Production milestones (`+N %`) are **output** previews, not build-speed bonuses. See [GC-858_BUILD_TIME_MODIFIER_AUDIT.md](GC-858_BUILD_TIME_MODIFIER_AUDIT.md).
+
 ### Galactic directives (GC-720E / GC-720E2)
 
 `EffectResolver` loads merged directive mechanics via `get_galaxy_directive_mechanics(planet.galaxy)` — no per-consumer `if directive` branches.

@@ -48,9 +48,13 @@ Queue-Cancel-Refunds: [QUEUE_STATE_RULES.md](QUEUE_STATE_RULES.md) (GC-831).
 
 Legacy `BASE_COST × COST_FACTOR^(level-1)` nur noch Audit/Tests — **nicht** der Live-Pfad.
 
-### Build-Zeit (live, GC-850A)
+### Build-Zeit (live, GC-850A / GC-858)
 
-`EffectResolver.get_build_time_seconds()` → `power_build_seconds()` ÷ Speed-Boni (`build_speed`, `buildtime_tech`, `nanofactory`, …).
+`EffectResolver.get_build_time_seconds()` → `power_build_seconds()` ÷ multiplicative speed stack; **minimum 1 second** (`max(int(seconds), 1)`).
+
+Sources: `build_speed` (universe), `buildtime_tech`, `nanofactory` (`× 0.70^level`), `command_center` (nanofactory upgrades only), galactic directives/diplomacy. Full audit: [GC-858_BUILD_TIME_MODIFIER_AUDIT.md](GC-858_BUILD_TIME_MODIFIER_AUDIT.md).
+
+**UI:** Nanofactory card shows flat `level × 30 %` — **display only**; runtime uses exponential duration. Production milestones (`+N %`) are output previews, not build-speed.
 
 **Abgrenzung Werft:** Das Upgrade des Gebäudes `orbital_shipyard` nutzt diese Kurve. Die **Schiffsbau-Zeit pro Einheit** in der Werft-Queue ist separat dokumentiert in [FLEET_SYSTEM.md](FLEET_SYSTEM.md) (GC-852).
 
