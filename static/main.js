@@ -22873,6 +22873,66 @@
   }
   GC.logCommandMapTelemetry = logCommandMapTelemetry;
 
+  const GALAXY_PREFS_STORAGE_KEY = "gc_galaxy_prefs_v1";
+
+  function readGalaxyPrefs() {
+    try {
+      const raw = localStorage.getItem(GALAXY_PREFS_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function writeGalaxyPrefs(prefs) {
+    try {
+      localStorage.setItem(GALAXY_PREFS_STORAGE_KEY, JSON.stringify(prefs || {}));
+    } catch (_) {}
+  }
+
+  function persistGalaxyViewFromPage() {
+    const root = document.getElementById("galaxy-page-root");
+    if (!root) return;
+    const view = root.dataset.galaxyView === "system" ? "system" : "command_map";
+    const galaxy = parseInt(root.dataset.galaxy, 10);
+    const system = parseInt(root.dataset.system, 10);
+    const prefs = readGalaxyPrefs();
+    prefs.view = view;
+    if (Number.isFinite(galaxy) && galaxy > 0) prefs.galaxy = galaxy;
+    if (Number.isFinite(system) && system > 0) prefs.system = system;
+    writeGalaxyPrefs(prefs);
+  }
+
+  function resolveGalaxyNavHref(rawHref) {
+    if (!rawHref) return rawHref;
+    let url;
+    try {
+      url = new URL(rawHref, window.location.origin);
+    } catch (_) {
+      return rawHref;
+    }
+    if ((url.pathname.replace(/\/$/, "") || "/") !== "/galaxy") return rawHref;
+    if (
+      url.searchParams.has("view")
+      || url.searchParams.has("galaxy")
+      || url.searchParams.has("system")
+      || url.searchParams.has("q")
+      || url.searchParams.has("coord")
+    ) {
+      return rawHref;
+    }
+    const prefs = readGalaxyPrefs();
+    const view = prefs.view === "system" ? "system" : "command_map";
+    url.searchParams.set("view", view);
+    if (view === "system") {
+      const galaxy = parseInt(prefs.galaxy, 10);
+      const system = parseInt(prefs.system, 10);
+      if (Number.isFinite(galaxy) && galaxy > 0) url.searchParams.set("galaxy", String(galaxy));
+      if (Number.isFinite(system) && system > 0) url.searchParams.set("system", String(system));
+    }
+    return `${url.pathname}${url.search}`;
+  }
+
   function initGalaxyDebrisUx() {
     const page = document.querySelector(".galaxy-page");
     if (!page) return;
@@ -22920,6 +22980,7 @@
 
   function initGalaxy() {
     if (!document.querySelector(".galaxy-page")) return;
+    persistGalaxyViewFromPage();
     const galaxyRoot = document.getElementById("galaxy-page-root");
     if (galaxyRoot?.dataset?.galaxyView === "command_map") {
       logCommandMapTelemetry("map_open");
@@ -24134,8 +24195,11 @@
   }
 
   function pjaxNavigateFromLink(link) {
-    const href = link.getAttribute("href");
+    let href = link.getAttribute("href");
     if (!href) return;
+    if (link.dataset.navModule === "galaxy") {
+      href = resolveGalaxyNavHref(href);
+    }
     if (link.dataset.pjaxBusy === "1") return;
     link.dataset.pjaxBusy = "1";
     Promise.resolve(GC.navigateTo(href)).finally(() => {

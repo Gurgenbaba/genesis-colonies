@@ -1392,10 +1392,16 @@ def galaxy_view():
     try:
         active_planet_id = get_active_planet_id(user_id) or None
         if not has_url_view:
-            planet = get_context_planet(user_id)
-            coords = get_planet_coordinates(planet)
-            galaxy = int(coords["galaxy"])
-            system = int(coords["system"])
+            session_galaxy = session.get("galaxy_view_galaxy")
+            session_system = session.get("galaxy_view_system")
+            if session_galaxy is not None and session_system is not None:
+                galaxy = int(session_galaxy)
+                system = int(session_system)
+            else:
+                planet = get_context_planet(user_id)
+                coords = get_planet_coordinates(planet)
+                galaxy = int(coords["galaxy"])
+                system = int(coords["system"])
     except Exception:
         active_planet_id = None
 

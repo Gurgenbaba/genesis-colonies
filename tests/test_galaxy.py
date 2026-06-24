@@ -182,10 +182,11 @@ def test_galaxy_page_url_system_304(galaxy_db, monkeypatch):
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     importlib.reload(app_module)
     uname = f"url_{uuid.uuid4().hex[:8]}"
-    ok, _, user = create_user(uname, "test-pass-123")
-    assert ok
+    ok, err, user = create_user(uname, "test-pass-123")
+    assert ok, err
     client = app_module.app.test_client()
-    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    with client.session_transaction() as sess:
+        sess["user_id"] = int(user["id"])
     resp = client.get("/galaxy?view=system&galaxy=1&system=304")
     assert resp.status_code == 200
     assert "304" in resp.get_data(as_text=True)
@@ -295,11 +296,11 @@ def test_galaxy_page_loads(galaxy_db, monkeypatch):
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     importlib.reload(app_module)
     uname = f"page_{uuid.uuid4().hex[:8]}"
-    ok, _, user = create_user(uname, "test-pass-123")
-    assert ok
+    ok, err, user = create_user(uname, "test-pass-123")
+    assert ok, err
     client = app_module.app.test_client()
-    login = client.post("/login", data={"username": uname, "password": "test-pass-123"})
-    assert login.status_code in (200, 302)
+    with client.session_transaction() as sess:
+        sess["user_id"] = int(user["id"])
     resp = client.get("/galaxy?view=system")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
@@ -339,10 +340,11 @@ def _galaxy_client(monkeypatch):
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     importlib.reload(app_module)
     uname = f"gal_{uuid.uuid4().hex[:8]}"
-    ok, _, user = create_user(uname, "test-pass-123")
+    ok, err, user = create_user(uname, "test-pass-123")
     assert ok, err
     client = app_module.app.test_client()
-    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    with client.session_transaction() as sess:
+        sess["user_id"] = int(user["id"])
     return client, int(user["id"])
 
 
@@ -445,11 +447,20 @@ def test_galaxy_expedition_slot_shortcut(galaxy_db, monkeypatch):
 
 def test_fleet_page_exposes_expedition_position_dataset(galaxy_db, monkeypatch):
     import app as app_module
-    from game.fleet_defs import EXPEDITION_POSITION
+    from game.db import commit, db
+    from game.fleet import EXPEDITION_POSITION, add_planet_ships
+    from game.models import get_homeworld
 
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     importlib.reload(app_module)
-    client, _uid = _galaxy_client(monkeypatch)
+    client, uid = _galaxy_client(monkeypatch)
+    planet = get_homeworld(player_id=uid)
+    conn = db()
+    try:
+        add_planet_ships(int(planet["id"]), uid, {"mule_courier": 1}, conn=conn)
+        commit(conn)
+    finally:
+        conn.close()
     resp = client.get(
         f"/fleet?target_galaxy=1&target_system=42&target_position={EXPEDITION_POSITION}&mission=expedition"
     )
@@ -485,10 +496,11 @@ def test_api_galaxy_system(galaxy_db, monkeypatch):
     monkeypatch.setenv("GC_SKIP_MIGRATION_CHECK", "1")
     importlib.reload(app_module)
     uname = f"api_{uuid.uuid4().hex[:8]}"
-    ok, _, user = create_user(uname, "test-pass-123")
-    assert ok
+    ok, err, user = create_user(uname, "test-pass-123")
+    assert ok, err
     client = app_module.app.test_client()
-    client.post("/login", data={"username": uname, "password": "test-pass-123"})
+    with client.session_transaction() as sess:
+        sess["user_id"] = int(user["id"])
     resp = client.get("/api/galaxy/system?galaxy=1&system=1")
     assert resp.status_code == 200
     payload = resp.get_json()
