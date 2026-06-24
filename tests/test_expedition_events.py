@@ -1,4 +1,4 @@
-"""Expedition loot scaling — fleet value, economy floor, cargo cap, lootboxes."""
+"""Expedition loot scaling — canonical expo formula, cargo cap, lootboxes."""
 
 from __future__ import annotations
 
@@ -7,12 +7,15 @@ import math
 import pytest
 
 from game.expedition_events import (
-    EXPEDITION_LOOT_FACTOR,
-    FLEET_LOOT_EXPONENT,
+    EXPEDITION_LOOT_EXPONENT,
+    EXPEDITION_RANDOM_FACTOR_RANGE,
     apply_expedition_ship_losses,
     build_expedition_report,
+    calculate_base_expedition_loot,
+    calculate_expo_value,
     calculate_fleet_value,
     expedition_event_weight_audit,
+    expedition_ship_fleet_value,
     grant_expedition_lootboxes,
     is_allowed_expedition_lootbox,
     resolve_expedition_outcome,
@@ -22,10 +25,12 @@ from game.expedition_events import (
     roll_pirate_salvage_rewards,
 )
 
-_LARGE_FLEET = {"seed_ark": 163}
-_LARGE_FLEET_VALUE = calculate_fleet_value(_LARGE_FLEET)
-_SMALL_FLEET = {"solar_skiff": 1}
-_ENDGAME_DAILY = 750_000_000_000
+_ODYSSEY_KEY = "solar_skiff"
+_ODYSSEY_FLEET_VALUE = expedition_ship_fleet_value(_ODYSSEY_KEY)
+_SMALL_FLEET = {_ODYSSEY_KEY: 1}
+_MEDIUM_FLEET = {_ODYSSEY_KEY: 100}
+_LARGE_EXPO_FLEET = {_ODYSSEY_KEY: 1000}
+_ESCORT_FLEET = {_ODYSSEY_KEY: 10, "falcon_interceptor": 500, "atlas_hauler": 200}
 
 
 def _find_movement_for_event(
@@ -50,84 +55,56 @@ def _find_movement_for_event(
 
 
 def test_calculate_fleet_value_uses_ship_scores():
-    assert _LARGE_FLEET_VALUE == pytest.approx(13_040_000, rel=0.01)
+    assert calculate_fleet_value(_ESCORT_FLEET) == 10 * 7000 + 500 * 4000 + 200 * 12000
     assert calculate_fleet_value(_SMALL_FLEET) == 7000
 
 
-def test_large_cargo_floor_when_empire_aggregate_is_low():
-    """10B cargo must not return ~5M when empire aggregate under-reports production."""
+def test_expo_value_uses_only_expedition_hulls():
+    assert calculate_expo_value(_SMALL_FLEET) == _ODYSSEY_FLEET_VALUE
+    assert calculate_expo_value(_ESCORT_FLEET) == 10 * _ODYSSEY_FLEET_VALUE
+    assert calculate_expo_value({"falcon_interceptor": 1000, "atlas_hauler": 500}) == 0
+
+
+def test_canonical_base_loot_reference_values():
+    """Community reference table without random/event factors."""
+    assert _ODYSSEY_FLEET_VALUE == 8762
+    assert calculate_base_expedition_loot(100 * _ODYSSEY_FLEET_VALUE) == pytest.approx(18_978, rel=0.01)
+    assert calculate_base_expedition_loot(200 * _ODYSSEY_FLEET_VALUE) == pytest.approx(31_260, rel=0.01)
+    assert calculate_base_expedition_loot(500 * _ODYSSEY_FLEET_VALUE) == pytest.approx(60_465, rel=0.01)
+    assert calculate_base_expedition_loot(1000 * _ODYSSEY_FLEET_VALUE) == pytest.approx(99_597, rel=0.01)
+    assert calculate_base_expedition_loot(10000 * _ODYSSEY_FLEET_VALUE) == pytest.approx(522_692, rel=0.01)
+
+
+def test_sublinear_odyssey_scaling():
+    one = calculate_base_expedition_loot(1 * _ODYSSEY_FLEET_VALUE)
+    ten = calculate_base_expedition_loot(10 * _ODYSSEY_FLEET_VALUE)
+    hundred = calculate_base_expedition_loot(100 * _ODYSSEY_FLEET_VALUE)
+    thousand = calculate_base_expedition_loot(1000 * _ODYSSEY_FLEET_VALUE)
+    assert ten > one
+    assert ten < one * 10
+    assert thousand < hundred * 10
+
+
+def test_combat_and_cargo_ships_do_not_increase_expo_value():
+    base = calculate_expo_value({_ODYSSEY_KEY: 50})
+    with_escorts = calculate_expo_value(
+        {_ODYSSEY_KEY: 50, "falcon_interceptor": 200, "atlas_hauler": 100, "ironclad_frigate": 50}
+    )
+    assert with_escorts == base
+
+
+def test_large_fleet_produces_more_than_small_fleet():
     movement_id = _find_movement_for_event(
         "mineral_deposit",
-        ships=_LARGE_FLEET,
-        cargo_total=10_000_000_000,
-        empire_daily_total=750_000_000,
-    )
-    outcome = resolve_expedition_outcome(
-        movement_id,
-        cargo_total=10_000_000_000,
-        expedition_ship_count=1,
-        flight_seconds=120,
-        ships=_LARGE_FLEET,
-        empire_daily_total=750_000_000,
-    )
-    total = int(outcome["reward_total"])
-    assert total > 5_224_703
-    assert total >= 500_000_000
-    assert int(outcome.get("economy_base") or 0) >= 10_000_000_000
-
-
-def test_endgame_economy_floor_beats_flat_early_game_loot():
-    movement_id = _find_movement_for_event(
-        "mineral_deposit",
-        ships=_LARGE_FLEET,
-        empire_daily_total=_ENDGAME_DAILY,
-    )
-    outcome = resolve_expedition_outcome(
-        movement_id,
-        cargo_total=2_000_000_000_000,
-        expedition_ship_count=1,
-        flight_seconds=120,
-        ships=_LARGE_FLEET,
-        empire_daily_total=_ENDGAME_DAILY,
-    )
-    total = int(outcome["reward_total"])
-    assert total > 200_000
-    assert total >= 5_000_000_000
-
-
-def test_ancient_stash_endgame_can_fill_large_cargo():
-    movement_id = _find_movement_for_event(
-        "ancient_stash",
-        ships=_LARGE_FLEET,
-        empire_daily_total=_ENDGAME_DAILY,
-    )
-    cargo_cap = 1_763_200_000
-    outcome = resolve_expedition_outcome(
-        movement_id,
-        cargo_total=cargo_cap,
-        expedition_ship_count=1,
-        flight_seconds=120,
-        ships=_LARGE_FLEET,
-        empire_daily_total=_ENDGAME_DAILY,
-    )
-    assert int(outcome["reward_total"]) <= cargo_cap * max(1, int(outcome.get("cargo_jackpot_mult") or 1))
-    assert int(outcome["reward_total"]) >= int(cargo_cap * 0.999) or bool(outcome.get("cargo_jackpot"))
-
-
-def test_large_fleet_produces_much_more_than_small_fleet():
-    movement_id = _find_movement_for_event(
-        "mineral_deposit",
-        ships=_LARGE_FLEET,
+        ships=_MEDIUM_FLEET,
         cargo_total=500_000,
-        empire_daily_total=0,
     )
     large = resolve_expedition_outcome(
         movement_id,
         cargo_total=500_000,
-        expedition_ship_count=1,
+        expedition_ship_count=100,
         flight_seconds=120,
-        ships=_LARGE_FLEET,
-        empire_daily_total=0,
+        ships=_MEDIUM_FLEET,
     )
     small = resolve_expedition_outcome(
         movement_id,
@@ -135,13 +112,31 @@ def test_large_fleet_produces_much_more_than_small_fleet():
         expedition_ship_count=1,
         flight_seconds=120,
         ships=_SMALL_FLEET,
-        empire_daily_total=0,
     )
-    assert int(large["reward_total"]) > int(small["reward_total"]) * 5
+    assert int(large["reward_total"]) > int(small["reward_total"])
+
+
+def test_escort_ships_do_not_increase_loot():
+    movement_id = _find_movement_for_event("mineral_deposit", ships=_SMALL_FLEET, cargo_total=500_000)
+    solo = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=500_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=_SMALL_FLEET,
+    )
+    escorted = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=500_000,
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships={_ODYSSEY_KEY: 1, "falcon_interceptor": 500, "atlas_hauler": 200},
+    )
+    assert int(escorted["reward_total"]) == int(solo["reward_total"])
 
 
 def test_small_fleet_still_produces_modest_loot():
-    movement_id = _find_movement_for_event("mineral_deposit", ships=_SMALL_FLEET)
+    movement_id = _find_movement_for_event("mineral_deposit", ships=_SMALL_FLEET, cargo_total=500_000)
     outcome = resolve_expedition_outcome(
         movement_id,
         cargo_total=500_000,
@@ -150,22 +145,21 @@ def test_small_fleet_still_produces_modest_loot():
         ships=_SMALL_FLEET,
     )
     total = int(outcome["reward_total"])
-    assert 1_000 <= total <= 2_000_000
+    assert total > 0
+    assert total <= 500_000
 
 
 def test_loot_capped_by_cargo_capacity():
-    movement_id = _find_movement_for_event("ancient_stash", ships=_LARGE_FLEET, empire_daily_total=_ENDGAME_DAILY)
+    movement_id = _find_movement_for_event("ancient_stash", ships=_LARGE_EXPO_FLEET)
     cargo_cap = 12_345
     outcome = resolve_expedition_outcome(
         movement_id,
         cargo_total=cargo_cap,
-        expedition_ship_count=1,
+        expedition_ship_count=1000,
         flight_seconds=120,
-        ships=_LARGE_FLEET,
-        empire_daily_total=_ENDGAME_DAILY,
+        ships=_LARGE_EXPO_FLEET,
     )
-    mult = int(outcome.get("cargo_jackpot_mult") or 1)
-    assert int(outcome["reward_total"]) <= cargo_cap * mult
+    assert int(outcome["reward_total"]) <= cargo_cap
 
 
 def test_outcome_deterministic_for_same_movement_and_fleet():
@@ -182,31 +176,30 @@ def test_outcome_deterministic_for_same_movement_and_fleet():
 
 
 def test_event_multiplier_changes_loot_magnitude():
-    movement_id = _find_movement_for_event("mineral_deposit", ships=_LARGE_FLEET, empire_daily_total=_ENDGAME_DAILY)
+    movement_id = _find_movement_for_event("mineral_deposit", ships=_MEDIUM_FLEET, cargo_total=500_000)
     mineral = resolve_expedition_outcome(
         movement_id,
-        cargo_total=5_000_000_000_000,
-        expedition_ship_count=1,
+        cargo_total=500_000,
+        expedition_ship_count=100,
         flight_seconds=120,
-        ships=_LARGE_FLEET,
-        empire_daily_total=_ENDGAME_DAILY,
+        ships=_MEDIUM_FLEET,
     )
-    ancient_id = _find_movement_for_event("ancient_stash", ships=_LARGE_FLEET, empire_daily_total=_ENDGAME_DAILY)
+    ancient_id = _find_movement_for_event("ancient_stash", ships=_MEDIUM_FLEET, cargo_total=500_000)
     ancient = resolve_expedition_outcome(
         ancient_id,
-        cargo_total=5_000_000_000_000,
-        expedition_ship_count=1,
+        cargo_total=500_000,
+        expedition_ship_count=100,
         flight_seconds=120,
-        ships=_LARGE_FLEET,
-        empire_daily_total=_ENDGAME_DAILY,
+        ships=_MEDIUM_FLEET,
     )
     assert int(ancient["reward_total"]) > int(mineral["reward_total"])
 
 
 def test_fleet_scaling_formula_reference():
-    fleet_score = math.pow(_LARGE_FLEET_VALUE, FLEET_LOOT_EXPONENT)
-    base_loot = fleet_score * EXPEDITION_LOOT_FACTOR
-    assert base_loot == pytest.approx(1_577_496, rel=0.01)
+    expo_value = 100 * _ODYSSEY_FLEET_VALUE
+    base_loot = math.pow(expo_value, EXPEDITION_LOOT_EXPONENT)
+    assert base_loot == pytest.approx(18_978, rel=0.01)
+    assert EXPEDITION_RANDOM_FACTOR_RANGE == (0.66, 1.5)
 
 
 def test_event_boxes_never_allowed_for_expedition_drops():
@@ -225,7 +218,7 @@ def test_jackpot_lootbox_deterministic_for_movement():
             cargo_total=1_000_000,
             expedition_ship_count=1,
             flight_seconds=120,
-            ships=_LARGE_FLEET,
+            ships=_MEDIUM_FLEET,
         )
         if outcome["event_key"] != "ancient_stash":
             continue
@@ -234,7 +227,7 @@ def test_jackpot_lootbox_deterministic_for_movement():
             cargo_total=1_000_000,
             expedition_ship_count=1,
             flight_seconds=120,
-            ships=_LARGE_FLEET,
+            ships=_MEDIUM_FLEET,
         )
         assert outcome.get("lootboxes") == repeat.get("lootboxes")
         jackpots = [b for b in (outcome.get("lootboxes") or []) if b.get("jackpot")]
@@ -245,20 +238,20 @@ def test_jackpot_lootbox_deterministic_for_movement():
 
 
 def test_lootbox_drop_deterministic_for_movement():
-    movement_id = _find_movement_for_event("ancient_stash", ships=_LARGE_FLEET)
+    movement_id = _find_movement_for_event("ancient_stash", ships=_MEDIUM_FLEET)
     first = resolve_expedition_outcome(
         movement_id,
         cargo_total=1_000_000,
-        expedition_ship_count=1,
+        expedition_ship_count=100,
         flight_seconds=120,
-        ships=_LARGE_FLEET,
+        ships=_MEDIUM_FLEET,
     )
     second = resolve_expedition_outcome(
         movement_id,
         cargo_total=1_000_000,
-        expedition_ship_count=1,
+        expedition_ship_count=100,
         flight_seconds=120,
-        ships=_LARGE_FLEET,
+        ships=_MEDIUM_FLEET,
     )
     assert first.get("lootboxes") == second.get("lootboxes")
 
@@ -812,7 +805,6 @@ def test_spatial_rift_variants():
         assert outcome.get("story_tier") == "legendary"
         variant = outcome.get("legendary_variant")
         assert variant in ("amplified", "delayed")
-        assert not outcome.get("cargo_jackpot")
         if variant == "amplified":
             amplified += 1
             assert int(outcome.get("reward_total") or 0) > 0
@@ -866,7 +858,6 @@ def test_ancient_beacon_grants_lootbox_and_resources():
     assert outcome.get("lootboxes")
     box_key = outcome["lootboxes"][0]["key"]
     assert box_key in {"alien_cache", "premium_cache", "research_capsule"}
-    assert not outcome.get("cargo_jackpot")
 
 
 def test_legendary_events_are_very_rare():

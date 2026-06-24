@@ -2820,8 +2820,8 @@ def test_expedition_event_engine_report(fleet_db):
 
 def test_expedition_loot_cap_uses_expedition_hull_cargo_multiplier():
     cap = calculate_expedition_loot_cap({"solar_skiff": 1, "falcon_interceptor": 5})
-    assert cap == 2000 * 50
-    assert calculate_expedition_loot_cap({"solar_skiff": 2}) == 4000 * 50
+    assert cap == 2000
+    assert calculate_expedition_loot_cap({"solar_skiff": 2}) == 4000
 
 
 def test_expedition_outcome_deterministic_and_cargo_cap():

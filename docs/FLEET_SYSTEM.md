@@ -142,7 +142,7 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 | **spy** | Tiered probe intel (resources → fleet → buildings → activity); structured inbox report; Schiffe return |
 | **attack** | `simulate_battle()` vs hangar + `planet_defense`; losses, debris, loot (winner), combat reports, return flight — see [COMBAT_SYSTEM.md](COMBAT_SYSTEM.md) |
 | **hold** | `holding` für 3600s, dann return (ally only wenn Alliance-Schema) |
-| **expedition** | Event engine (`expedition_events.py`): weighted outcomes, loot cap = expedition-hull cargo × 50, optional delay; inbox event-card report (GC-402C) |
+| **expedition** | Event engine (`expedition_events.py`): weighted outcomes, kanonische Loot-Formel (s. u.), Cargo-Cap = Frachtraum der Expo-Hüllen, optional delay; inbox event-card report (GC-402C) |
 
 ### Expedition (GC-402 / 402B / 402C)
 
@@ -152,7 +152,33 @@ Preview: `POST /api/fleet/preview` → debounced im Client (~300ms).
 | **GC-402B** | Fleet send preview: mission hints, ok/blocked status, expedition auto-position 16 | `static/main.js`, `templates/fleet.html` |
 | **GC-402C** | Inbox debrief: event card, risk/find meta, loot chips, theme colors per event type | `static/js/messages.js`, `static/style.css` |
 
-Event keys: `void_scan`, `mineral_deposit`, `fuel_cache`, `debris_salvage`, `nav_interference`, `distress_beacon`, `sensor_glitch`, `ancient_stash`, `pirate_encounter`, `ion_storm`, `ancient_minefield`, `lost_container`, `abandoned_convoy`, `ancient_derelict`, `spatial_rift`, `time_anomaly`, `ancient_beacon`. Roll ist deterministisch pro `movement_id`. **Weight audit (GC-620J):** 124 Punkte gesamt — Loot ~60 %, Combat ~5 %, Hazard ~3 %, Treasure ~6 %, Legendary ~2,4 % (`spatial_rift`, `time_anomaly`, `ancient_beacon` je weight 1); `expedition_event_weight_audit()` für Regression-Tests. **Legendary (GC-620J-A):** `spatial_rift` — 60 % verstärkter Fund (1,4–1,8×, cargo-capped, kein Jackpot) oder 40 % Rückkehrverzögerung (+25–55 % Flugzeit); `time_anomaly` — 50 % Dilatation (+20–40 % Flugzeit) oder 50 % Kompression (Flavor, kein echter Rückkehrgewinn); optional 30 % Mini-Bonus-Loot; `ancient_beacon` — 1× Premium/Alien/Research-Lootbox + kleine Ressourcen. Piratensieg (GC-620G/H): Verluste + optionale Ressourcenbeute; ~30 % Chance auf kleine Schiffbergung (nur leichte/mittlere Hüllen, Score-Cap). Hazards (GC-620I-A): `ion_storm` verlängert Rückkehr um 20–60 % Flugzeit; `ancient_minefield` verursacht 2–12 % Schiffsverluste ohne Kampf (Hard-Cap ≥1 Schiff). Story/Treasure (GC-620I-B): `lost_container` (~3 %) — Lootbox + kleine Ressourcen; `abandoned_convoy` (~1,6 %) — Ressourcen und/oder Convoy-Salvage; `ancient_derelict` (~0,8 %) — seltenes Mid-Hull + Premium-Cache.
+Event keys: `void_scan`, `mineral_deposit`, `fuel_cache`, `debris_salvage`, `nav_interference`, `distress_beacon`, `sensor_glitch`, `ancient_stash`, `pirate_encounter`, `ion_storm`, `ancient_minefield`, `lost_container`, `abandoned_convoy`, `ancient_derelict`, `spatial_rift`, `time_anomaly`, `ancient_beacon`. Roll ist deterministisch pro `movement_id`. **Weight audit (GC-620J):** 124 Punkte gesamt — Loot ~60 %, Combat ~5 %, Hazard ~3 %, Treasure ~6 %, Legendary ~2,4 % (`spatial_rift`, `time_anomaly`, `ancient_beacon` je weight 1); `expedition_event_weight_audit()` für Regression-Tests.
+
+#### Kanonische Expeditions-Loot-Formel (GC-EXPEDITION-LOOT-FINAL)
+
+**Owner:** `game/expedition_events.py` — keine parallele Loot-Engine, kein Economy-Floor, kein globales Hardcap.
+
+Nur Schiffe mit `role: expedition` zählen (Phase 1: **Odyssey** = `solar_skiff`). Kampf- und Frachter-Eskorten erhöhen weder `expo_value` noch Cargo-Cap.
+
+```text
+per_hull_value = Summe(build_cost)   # metal + crystal + fuel_cells aus fleet_defs
+expo_value     = Σ (expo_hull_count × per_hull_value)
+base_loot      = expo_value ** 0.72
+final_loot     = min(base_loot × random_factor × profile_mult × event_factor, cargo_capacity)
+```
+
+| Faktor | Wert | Quelle |
+|--------|------|--------|
+| `random_factor` | `uniform(0.66, 1.5)` | Server-RNG pro Event-Roll |
+| `profile_mult` | Event-spezifisch (`mult_range` in `_EVENT_LOOT_PROFILES`) | z. B. `ancient_stash` > `mineral_deposit` |
+| `event_factor` | Default `1.0` | Vorbereitet für globale Events (`directive_flags.expedition_event_factor`) |
+| `cargo_capacity` | `calculate_expedition_loot_cap(ships)` | Summe `cargo` aller Expo-Hüllen (ohne ×50-Multiplikator) |
+
+Referenzwerte (Odyssey, ohne Random/Event): 100 ≈ 18 978 · 200 ≈ 31 260 · 500 ≈ 60 465 · 1 000 ≈ 99 597 · 10 000 ≈ 522 692 Loot-Ressourcen gesamt (vor Split auf metal/crystal/fuel_cells).
+
+Weitere Expo-Schiffe (z. B. `eclipse_runner`) werden automatisch über `role: expedition` + `build_cost` in `expo_value` einbezogen.
+
+**Legendary (GC-620J-A):** `spatial_rift` — 60 % verstärkter Fund (1,4–1,8×, cargo-capped) oder 40 % Rückkehrverzögerung (+25–55 % Flugzeit); `time_anomaly` — 50 % Dilatation (+20–40 % Flugzeit) oder 50 % Kompression (Flavor, kein echter Rückkehrgewinn); optional 30 % Mini-Bonus-Loot; `ancient_beacon` — 1× Premium/Alien/Research-Lootbox + kleine Ressourcen. Piratensieg (GC-620G/H): Verluste + optionale Ressourcenbeute; ~30 % Chance auf kleine Schiffbergung (nur leichte/mittlere Hüllen, Score-Cap). Hazards (GC-620I-A): `ion_storm` verlängert Rückkehr um 20–60 % Flugzeit; `ancient_minefield` verursacht 2–12 % Schiffsverluste ohne Kampf (Hard-Cap ≥1 Schiff). Story/Treasure (GC-620I-B): `lost_container` (~3 %) — Lootbox + kleine Ressourcen; `abandoned_convoy` (~1,6 %) — Ressourcen und/oder Convoy-Salvage; `ancient_derelict` (~0,8 %) — seltenes Mid-Hull + Premium-Cache.
 
 | **colonize** | `colonize_planet()`; verbraucht `seed_ark` |
 | **recycle** | Trümmer abbauen (`harvest_debris_at_field`); Fracht auf Rückflug; Report bei Ankunft |

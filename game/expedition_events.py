@@ -10,20 +10,11 @@ from .fleet_defs import SHIPS, VALID_RESOURCE_KEYS, ship_score_value
 
 EXPEDITION_REPORT_VERSION = 2
 
-# Expedition loot uses expedition-hull cargo × multiplier (not transport cargo semantics).
-EXPEDITION_LOOT_CARGO_MULTIPLIER = 50
-
-# fleet_value^exponent × factor — dampened; economy floor scales endgame finds.
-FLEET_LOOT_EXPONENT = 0.72
-EXPEDITION_LOOT_FACTOR = 12
-_LOOT_VARIANCE_RANGE = (0.75, 1.35)
-
-# Cargo sent on expedition implies economic scale — floor when empire aggregate lags display.
-CARGO_ECONOMY_REFERENCE_MULT = 10
-
-# Rare cargo jackpot when raw loot exceeds cap (deterministic per movement_id).
-_CARGO_JACKPOT_CHANCE = 0.05
-_CARGO_JACKPOT_MULTS: Sequence[int] = (2, 5, 10)
+# Canonical expedition loot (GC-EXPEDITION-LOOT-FINAL): expo hull build-cost sum, sublinear exponent.
+EXPEDITION_LOOT_EXPONENT = 0.72
+FLEET_LOOT_EXPONENT = EXPEDITION_LOOT_EXPONENT  # legacy alias for tests/imports
+EXPEDITION_RANDOM_FACTOR_RANGE = (0.66, 1.5)
+DEFAULT_EVENT_FACTOR = 1.0
 
 # Per-event multiplier band, economy-day share, and resource split (shares sum to 1.0).
 _EVENT_LOOT_PROFILES: Dict[str, Dict[str, Any]] = {
@@ -380,6 +371,55 @@ def calculate_fleet_value(ships: Mapping[str, int]) -> int:
     return max(0, total)
 
 
+def expedition_ship_fleet_value(ship_key: str) -> int:
+    """Build-cost sum for one expedition hull — canonical loot scaling input (Odyssey = solar_skiff)."""
+    from .fleet_defs import canonical_ship_key
+
+    spec = SHIPS.get(canonical_ship_key(ship_key)) or {}
+    if spec.get("role") != "expedition":
+        return 0
+    costs = spec.get("build_cost") or {}
+    return sum(int(costs.get(resource) or 0) for resource in VALID_RESOURCE_KEYS)
+
+
+def calculate_expo_value(ships: Mapping[str, int]) -> int:
+    """Expedition-hull count × build-cost value; combat/cargo escorts do not count."""
+    from .fleet_defs import canonical_ship_key
+
+    total = 0
+    for key, qty in ships.items():
+        amount = int(qty or 0)
+        if amount <= 0:
+            continue
+        canon = canonical_ship_key(str(key))
+        per_hull = expedition_ship_fleet_value(canon)
+        if per_hull <= 0:
+            continue
+        total += amount * per_hull
+    return max(0, total)
+
+
+def calculate_base_expedition_loot(expo_value: int) -> float:
+    """Reference base loot before random/event factors: expo_value ** EXPEDITION_LOOT_EXPONENT."""
+    if expo_value <= 0:
+        return 0.0
+    return math.pow(max(0, int(expo_value)), EXPEDITION_LOOT_EXPONENT)
+
+
+def _expo_value_for_outcome(
+    ships: Mapping[str, int] | None,
+    expedition_ship_count: int,
+) -> int:
+    if ships:
+        value = calculate_expo_value(ships)
+        if value > 0:
+            return value
+    hulls = max(0, int(expedition_ship_count))
+    if hulls <= 0:
+        return 0
+    return hulls * expedition_ship_fleet_value("solar_skiff")
+
+
 def _fleet_value_for_outcome(
     ships: Mapping[str, int] | None,
     expedition_ship_count: int,
@@ -407,24 +447,19 @@ def count_expedition_ships(ships: Mapping[str, int]) -> int:
 
 
 def calculate_expedition_loot_cap(ships: Mapping[str, int]) -> int:
-    """Loot cap from expedition hull cargo × multiplier (combat escorts don't inflate loot)."""
+    """Maximum loot = expedition-hull cargo hold (combat escorts don't inflate cap)."""
+    from .fleet_defs import canonical_ship_key
+
     expedition_cargo = 0
     for key, qty in ships.items():
         amount = int(qty or 0)
         if amount <= 0:
             continue
-        spec = SHIPS.get(str(key)) or {}
+        spec = SHIPS.get(canonical_ship_key(str(key))) or {}
         if spec.get("role") != "expedition":
             continue
         expedition_cargo += int(spec.get("cargo") or 0) * amount
-    if expedition_cargo <= 0:
-        for key, qty in ships.items():
-            amount = int(qty or 0)
-            if amount <= 0:
-                continue
-            spec = SHIPS.get(str(key)) or {}
-            expedition_cargo += int(spec.get("cargo") or 0) * amount
-    return max(0, expedition_cargo * EXPEDITION_LOOT_CARGO_MULTIPLIER)
+    return max(0, expedition_cargo)
 
 
 def _pick_event_key(
@@ -484,39 +519,39 @@ def _split_loot_total(total: int, split: Mapping[str, float]) -> Dict[str, int]:
 def _compute_event_loot(
     rng: random.Random,
     event_key: str,
-    fleet_value: int,
+    expo_value: int,
     *,
-    empire_daily_total: int = 0,
     cargo_total: int = 0,
+    event_factor: float = DEFAULT_EVENT_FACTOR,
 ) -> Tuple[Dict[str, int], Dict[str, int]]:
     profile = _EVENT_LOOT_PROFILES.get(str(event_key))
-    if not profile or fleet_value <= 0 and int(empire_daily_total) <= 0 and int(cargo_total) <= 0:
-        return _empty_rewards(), {"economy_base": 0, "raw_loot_total": 0}
+    if not profile or int(expo_value) <= 0:
+        return _empty_rewards(), {"expo_value": 0, "raw_loot_total": 0}
 
     mult_lo, mult_hi = profile["mult_range"]
-    event_mult = rng.uniform(float(mult_lo), float(mult_hi))
-    variance = rng.uniform(_LOOT_VARIANCE_RANGE[0], _LOOT_VARIANCE_RANGE[1])
+    profile_mult = rng.uniform(float(mult_lo), float(mult_hi))
+    random_factor = rng.uniform(
+        float(EXPEDITION_RANDOM_FACTOR_RANGE[0]),
+        float(EXPEDITION_RANDOM_FACTOR_RANGE[1]),
+    )
+    global_event_factor = max(0.0, float(event_factor))
 
-    fleet_loot = 0
-    if fleet_value > 0:
-        fleet_score = math.pow(max(0, int(fleet_value)), FLEET_LOOT_EXPONENT)
-        fleet_loot = max(0, int(fleet_score * EXPEDITION_LOOT_FACTOR * event_mult * variance))
+    base_loot = calculate_base_expedition_loot(int(expo_value))
+    total_loot = max(
+        0,
+        int(base_loot * random_factor * profile_mult * global_event_factor),
+    )
+    cargo_cap = max(0, int(cargo_total))
+    if cargo_cap > 0:
+        total_loot = min(total_loot, cargo_cap)
 
-    economy_loot = 0
-    eco_range = profile.get("economy_day_range")
-    daily_total = max(0, int(empire_daily_total))
-    cargo_reference = max(0, int(cargo_total)) * CARGO_ECONOMY_REFERENCE_MULT
-    economy_base = max(daily_total, cargo_reference)
-    if economy_base > 0 and isinstance(eco_range, (list, tuple)) and len(eco_range) == 2:
-        eco_mult = rng.uniform(float(eco_range[0]), float(eco_range[1]))
-        economy_loot = max(0, int(economy_base * eco_mult * variance))
-
-    total_loot = max(fleet_loot, economy_loot)
     debug = {
-        "economy_base": int(economy_base),
+        "expo_value": int(expo_value),
         "raw_loot_total": int(total_loot),
-        "fleet_loot": int(fleet_loot),
-        "economy_loot": int(economy_loot),
+        "base_loot": int(base_loot),
+        "random_factor": float(random_factor),
+        "profile_mult": float(profile_mult),
+        "event_factor": float(global_event_factor),
     }
     return _split_loot_total(total_loot, profile.get("split") or {}), debug
 
@@ -627,38 +662,17 @@ def _scale_rewards_to_cargo(rewards: MutableMapping[str, int], cargo_total: int)
         rewards[key] = int(int(rewards.get(key) or 0) * scale)
 
 
-def _apply_cargo_cap_with_jackpot(
+def _apply_cargo_cap(
     rewards: MutableMapping[str, int],
     cargo_total: int,
-    *,
-    movement_id: int,
-    allow_jackpot: bool = True,
 ) -> Dict[str, Any]:
-    """Cap loot to cargo; 5% jackpot allows 2×/5×/10× cargo when raw loot overshoots."""
+    """Cap loot to expedition cargo; rewards are scaled proportionally when over cap."""
     cargo_cap = max(0, int(cargo_total))
     loaded = sum(int(rewards.get(k) or 0) for k in VALID_RESOURCE_KEYS)
-    meta: Dict[str, Any] = {
-        "cargo_jackpot": False,
-        "cargo_jackpot_mult": 1,
-        "raw_loot_total": int(loaded),
-    }
-    if cargo_cap <= 0 or loaded <= cargo_cap:
-        return meta
-
-    if allow_jackpot:
-        jackpot_rng = random.Random(int(movement_id) * 12347 + 99991)
-        if jackpot_rng.random() < _CARGO_JACKPOT_CHANCE:
-            mult = int(_CARGO_JACKPOT_MULTS[jackpot_rng.randrange(len(_CARGO_JACKPOT_MULTS))])
-            jackpot_cap = int(cargo_cap * mult)
-            if loaded > jackpot_cap:
-                scale = jackpot_cap / max(1, loaded)
-                for key in VALID_RESOURCE_KEYS:
-                    rewards[key] = int(int(rewards.get(key) or 0) * scale)
-            meta["cargo_jackpot"] = True
-            meta["cargo_jackpot_mult"] = mult
-            return meta
-
-    _scale_rewards_to_cargo(rewards, cargo_cap)
+    meta: Dict[str, Any] = {"raw_loot_total": int(loaded)}
+    if cargo_cap > 0 and loaded > cargo_cap:
+        _scale_rewards_to_cargo(rewards, cargo_cap)
+        meta["raw_loot_total"] = cargo_cap
     return meta
 
 
@@ -883,10 +897,10 @@ def resolve_spatial_rift_legendary(
     rng: random.Random,
     *,
     movement_id: int,
-    fleet_value: int,
-    empire_daily_total: int,
+    expo_value: int,
     cargo_total: int,
     flight_seconds: int,
+    event_factor: float = DEFAULT_EVENT_FACTOR,
 ) -> Dict[str, Any]:
     """Spatial rift — amplified cargo-capped find or return delay."""
     base_flight = max(1, int(flight_seconds or 60))
@@ -895,13 +909,14 @@ def resolve_spatial_rift_legendary(
         rewards, loot_debug = _compute_event_loot(
             loot_rng,
             "spatial_rift",
-            fleet_value,
-            empire_daily_total=int(empire_daily_total),
+            expo_value,
             cargo_total=int(cargo_total),
+            event_factor=event_factor,
         )
         ampl = rng.uniform(_SPATIAL_RIFT_AMPL_MULT_RANGE[0], _SPATIAL_RIFT_AMPL_MULT_RANGE[1])
         for key in VALID_RESOURCE_KEYS:
             rewards[key] = int(int(rewards.get(key) or 0) * ampl)
+        _apply_cargo_cap(rewards, int(cargo_total))
         return {
             "variant": "amplified",
             "rewards": rewards,
@@ -913,7 +928,7 @@ def resolve_spatial_rift_legendary(
     return {
         "variant": "delayed",
         "rewards": _empty_rewards(),
-        "loot_debug": {"economy_base": 0, "raw_loot_total": 0},
+        "loot_debug": {"expo_value": 0, "raw_loot_total": 0},
         "delay_extra": max(1, int(base_flight * delay_mult)),
         "lootboxes": [],
     }
@@ -923,16 +938,16 @@ def resolve_time_anomaly_legendary(
     rng: random.Random,
     *,
     movement_id: int,
-    fleet_value: int,
-    empire_daily_total: int,
+    expo_value: int,
     cargo_total: int,
     flight_seconds: int,
+    event_factor: float = DEFAULT_EVENT_FACTOR,
 ) -> Dict[str, Any]:
     """Time anomaly — dilated delay or compressed flavor with optional mini bonus."""
     base_flight = max(1, int(flight_seconds or 60))
     compressed = rng.random() < 0.50
     rewards = _empty_rewards()
-    loot_debug: Dict[str, Any] = {"economy_base": 0, "raw_loot_total": 0}
+    loot_debug: Dict[str, Any] = {"expo_value": 0, "raw_loot_total": 0}
     delay_extra = 0
     if compressed:
         variant = "compressed"
@@ -941,12 +956,13 @@ def resolve_time_anomaly_legendary(
             rewards, loot_debug = _compute_event_loot(
                 loot_rng,
                 "time_anomaly",
-                fleet_value,
-                empire_daily_total=int(empire_daily_total),
+                expo_value,
                 cargo_total=int(cargo_total),
+                event_factor=event_factor,
             )
             for key in VALID_RESOURCE_KEYS:
                 rewards[key] = int(int(rewards.get(key) or 0) * _TIME_ANOMALY_BONUS_LOOT_SCALE)
+            _apply_cargo_cap(rewards, int(cargo_total))
     else:
         variant = "dilated"
         delay_mult = rng.uniform(
@@ -959,12 +975,13 @@ def resolve_time_anomaly_legendary(
             rewards, loot_debug = _compute_event_loot(
                 loot_rng,
                 "time_anomaly",
-                fleet_value,
-                empire_daily_total=int(empire_daily_total),
+                expo_value,
                 cargo_total=int(cargo_total),
+                event_factor=event_factor,
             )
             for key in VALID_RESOURCE_KEYS:
                 rewards[key] = int(int(rewards.get(key) or 0) * _TIME_ANOMALY_BONUS_LOOT_SCALE)
+            _apply_cargo_cap(rewards, int(cargo_total))
     return {
         "variant": variant,
         "rewards": rewards,
@@ -978,9 +995,9 @@ def resolve_ancient_beacon_legendary(
     rng: random.Random,
     *,
     movement_id: int,
-    fleet_value: int,
-    empire_daily_total: int,
+    expo_value: int,
     cargo_total: int,
+    event_factor: float = DEFAULT_EVENT_FACTOR,
 ) -> Dict[str, Any]:
     """Ancient beacon — premium cache lootbox plus modest resources."""
     roll = rng.random()
@@ -996,9 +1013,9 @@ def resolve_ancient_beacon_legendary(
     rewards, loot_debug = _compute_event_loot(
         loot_rng,
         "ancient_beacon",
-        fleet_value,
-        empire_daily_total=int(empire_daily_total),
+        expo_value,
         cargo_total=int(cargo_total),
+        event_factor=event_factor,
     )
     return {
         "variant": "beacon",
@@ -1094,6 +1111,8 @@ def resolve_expedition_outcome(
     event_bonus = float(flags.get("expedition_event_bonus") or 0.0)
     loot_mult = float(flags.get("expedition_loot_mult") or 1.0)
     wreckage_bonus = float(flags.get("expedition_wreckage_bonus") or 0.0)
+    global_event_factor = float(flags.get("expedition_event_factor") or DEFAULT_EVENT_FACTOR)
+    expo_value = _expo_value_for_outcome(ships, expedition_ship_count)
     fleet_value = _fleet_value_for_outcome(ships, expedition_ship_count)
 
     rng = random.Random(int(movement_id) * 7919 + 104729)
@@ -1147,27 +1166,27 @@ def resolve_expedition_outcome(
             legendary_outcome = resolve_spatial_rift_legendary(
                 leg_rng,
                 movement_id=movement_id,
-                fleet_value=fleet_value,
-                empire_daily_total=int(empire_daily_total),
+                expo_value=expo_value,
                 cargo_total=int(cargo_total),
                 flight_seconds=int(flight_seconds or 60),
+                event_factor=global_event_factor,
             )
         elif event_key == "time_anomaly":
             legendary_outcome = resolve_time_anomaly_legendary(
                 leg_rng,
                 movement_id=movement_id,
-                fleet_value=fleet_value,
-                empire_daily_total=int(empire_daily_total),
+                expo_value=expo_value,
                 cargo_total=int(cargo_total),
                 flight_seconds=int(flight_seconds or 60),
+                event_factor=global_event_factor,
             )
         elif event_key == "ancient_beacon":
             legendary_outcome = resolve_ancient_beacon_legendary(
                 leg_rng,
                 movement_id=movement_id,
-                fleet_value=fleet_value,
-                empire_daily_total=int(empire_daily_total),
+                expo_value=expo_value,
                 cargo_total=int(cargo_total),
+                event_factor=global_event_factor,
             )
         story_tier = "legendary"
         legendary_variant = str(legendary_outcome.get("variant") or "")
@@ -1181,9 +1200,9 @@ def resolve_expedition_outcome(
         rewards, loot_debug = _compute_event_loot(
             rng,
             event_key,
-            fleet_value,
-            empire_daily_total=int(empire_daily_total),
+            expo_value,
             cargo_total=int(cargo_total),
+            event_factor=global_event_factor,
         )
         lootboxes = _roll_expedition_lootboxes(rng, event_key)
     convoy_mode: str | None = None
@@ -1209,25 +1228,20 @@ def resolve_expedition_outcome(
     if event_key == "pirate_encounter":
         if not (pirate_combat and pirate_combat.get("won")):
             rewards = _empty_rewards()
-            loot_debug = {"economy_base": 0, "raw_loot_total": 0}
+            loot_debug = {"expo_value": int(expo_value), "raw_loot_total": 0}
     elif event_key == "abandoned_convoy" and convoy_mode == "ships":
         rewards = _empty_rewards()
-        loot_debug = {"economy_base": 0, "raw_loot_total": 0}
+        loot_debug = {"expo_value": int(expo_value), "raw_loot_total": 0}
     elif event_key in ("ancient_minefield", "ion_storm"):
         rewards = _empty_rewards()
-        loot_debug = {"economy_base": 0, "raw_loot_total": 0}
+        loot_debug = {"expo_value": int(expo_value), "raw_loot_total": 0}
     _apply_directive_reward_modifiers(
         rewards,
         loot_mult=loot_mult,
         wreckage_bonus=wreckage_bonus,
         salvage=salvage,
     )
-    cargo_meta = _apply_cargo_cap_with_jackpot(
-        rewards,
-        int(cargo_total),
-        movement_id=int(movement_id),
-        allow_jackpot=event_key not in _LEGENDARY_EVENT_KEYS,
-    )
+    cargo_meta = _apply_cargo_cap(rewards, int(cargo_total))
 
     if delay_extra_preset is not None:
         delay_extra = int(delay_extra_preset)
@@ -1245,12 +1259,10 @@ def resolve_expedition_outcome(
         "lootboxes": lootboxes,
         "delay_extra": delay_extra,
         "expedition_ship_count": int(expedition_ship_count),
+        "expo_value": int(expo_value),
         "fleet_value": int(fleet_value),
         "empire_daily_total": int(empire_daily_total),
-        "economy_base": int(loot_debug.get("economy_base") or 0),
         "raw_loot_total": int(cargo_meta.get("raw_loot_total") or loot_debug.get("raw_loot_total") or 0),
-        "cargo_jackpot": bool(cargo_meta.get("cargo_jackpot")),
-        "cargo_jackpot_mult": int(cargo_meta.get("cargo_jackpot_mult") or 1),
         "cargo_total": int(cargo_total),
         "losses": ship_losses,
         "losses_total": int(sum(ship_losses.values())),
@@ -1570,10 +1582,8 @@ def build_expedition_report(
         "delay_extra": delay_extra,
         "cargo_total": int(outcome.get("cargo_total") or 0),
         "empire_daily_total": int(outcome.get("empire_daily_total") or 0),
-        "economy_base": int(outcome.get("economy_base") or 0),
+        "expo_value": int(outcome.get("expo_value") or 0),
         "raw_loot_total": int(outcome.get("raw_loot_total") or 0),
-        "cargo_jackpot": bool(outcome.get("cargo_jackpot")),
-        "cargo_jackpot_mult": int(outcome.get("cargo_jackpot_mult") or 1),
         "losses": {str(k): int(v) for k, v in ship_losses.items() if int(v or 0) > 0},
         "losses_total": losses_total,
         "salvaged_ships": {str(k): int(v) for k, v in salvaged_ships.items() if int(v or 0) > 0},
