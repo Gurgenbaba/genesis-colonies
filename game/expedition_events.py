@@ -16,6 +16,10 @@ FLEET_LOOT_EXPONENT = EXPEDITION_LOOT_EXPONENT  # legacy alias for tests/imports
 EXPEDITION_RANDOM_FACTOR_RANGE = (0.66, 1.5)
 DEFAULT_EVENT_FACTOR = 1.0
 
+# Role split (GC-EXPEDITION-LOOT-FINAL): loot / bergung / piratenkampf
+_EXPEDITION_CARGO_ROLES = frozenset({"expedition", "cargo"})
+_EXPEDITION_COMBAT_ROLES = frozenset({"expedition", "combat"})
+
 # Per-event multiplier band, economy-day share, and resource split (shares sum to 1.0).
 _EVENT_LOOT_PROFILES: Dict[str, Dict[str, Any]] = {
     "mineral_deposit": {
@@ -420,12 +424,28 @@ def _expo_value_for_outcome(
     return hulls * expedition_ship_fleet_value("solar_skiff")
 
 
+def calculate_expedition_combat_value(ships: Mapping[str, int]) -> int:
+    """Pirate survival input: expedition hulls + combat escorts (Frachter don't fight)."""
+    from .fleet_defs import canonical_ship_key
+
+    total = 0
+    for key, qty in ships.items():
+        amount = int(qty or 0)
+        if amount <= 0:
+            continue
+        spec = SHIPS.get(canonical_ship_key(str(key))) or {}
+        if spec.get("role") not in _EXPEDITION_COMBAT_ROLES:
+            continue
+        total += amount * ship_score_value(str(key))
+    return max(0, total)
+
+
 def _fleet_value_for_outcome(
     ships: Mapping[str, int] | None,
     expedition_ship_count: int,
 ) -> int:
     if ships:
-        value = calculate_fleet_value(ships)
+        value = calculate_expedition_combat_value(ships)
         if value > 0:
             return value
     hulls = max(0, int(expedition_ship_count))
@@ -447,19 +467,19 @@ def count_expedition_ships(ships: Mapping[str, int]) -> int:
 
 
 def calculate_expedition_loot_cap(ships: Mapping[str, int]) -> int:
-    """Maximum loot = expedition-hull cargo hold (combat escorts don't inflate cap)."""
+    """Bergung cap: cargo holds of expedition hulls + Frachter (combat escorts excluded)."""
     from .fleet_defs import canonical_ship_key
 
-    expedition_cargo = 0
+    cargo_total = 0
     for key, qty in ships.items():
         amount = int(qty or 0)
         if amount <= 0:
             continue
         spec = SHIPS.get(canonical_ship_key(str(key))) or {}
-        if spec.get("role") != "expedition":
+        if spec.get("role") not in _EXPEDITION_CARGO_ROLES:
             continue
-        expedition_cargo += int(spec.get("cargo") or 0) * amount
-    return max(0, expedition_cargo)
+        cargo_total += int(spec.get("cargo") or 0) * amount
+    return max(0, cargo_total)
 
 
 def _pick_event_key(

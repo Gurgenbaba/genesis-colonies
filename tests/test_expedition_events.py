@@ -13,6 +13,8 @@ from game.expedition_events import (
     build_expedition_report,
     calculate_base_expedition_loot,
     calculate_expo_value,
+    calculate_expedition_combat_value,
+    calculate_expedition_loot_cap,
     calculate_fleet_value,
     expedition_event_weight_audit,
     expedition_ship_fleet_value,
@@ -91,6 +93,44 @@ def test_combat_and_cargo_ships_do_not_increase_expo_value():
         {_ODYSSEY_KEY: 50, "falcon_interceptor": 200, "atlas_hauler": 100, "ironclad_frigate": 50}
     )
     assert with_escorts == base
+
+
+def test_cargo_cap_includes_haulers_not_combat_escorts():
+    solo = calculate_expedition_loot_cap({_ODYSSEY_KEY: 1})
+    with_escort = calculate_expedition_loot_cap({_ODYSSEY_KEY: 1, "falcon_interceptor": 10})
+    with_hauler = calculate_expedition_loot_cap({_ODYSSEY_KEY: 1, "atlas_hauler": 2})
+    assert solo == 2000
+    assert with_escort == solo
+    assert with_hauler == 2000 + 2 * 25000
+
+
+def test_combat_value_includes_escorts_not_haulers():
+    solo = calculate_expedition_combat_value({_ODYSSEY_KEY: 1})
+    with_escort = calculate_expedition_combat_value({_ODYSSEY_KEY: 1, "falcon_interceptor": 10})
+    with_hauler = calculate_expedition_combat_value({_ODYSSEY_KEY: 1, "atlas_hauler": 5})
+    assert with_escort > solo
+    assert with_hauler == solo
+
+
+def test_haulers_increase_cargo_cap_not_loot():
+    movement_id = _find_movement_for_event("mineral_deposit", ships=_SMALL_FLEET, cargo_total=500_000)
+    solo = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=calculate_expedition_loot_cap(_SMALL_FLEET),
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=_SMALL_FLEET,
+    )
+    hauler_fleet = {_ODYSSEY_KEY: 1, "atlas_hauler": 3}
+    with_haulers = resolve_expedition_outcome(
+        movement_id,
+        cargo_total=calculate_expedition_loot_cap(hauler_fleet),
+        expedition_ship_count=1,
+        flight_seconds=120,
+        ships=hauler_fleet,
+    )
+    assert int(with_haulers["reward_total"]) == int(solo["reward_total"])
+    assert calculate_expedition_loot_cap(hauler_fleet) > calculate_expedition_loot_cap(_SMALL_FLEET)
 
 
 def test_large_fleet_produces_more_than_small_fleet():

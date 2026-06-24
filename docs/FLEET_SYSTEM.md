@@ -158,7 +158,15 @@ Event keys: `void_scan`, `mineral_deposit`, `fuel_cache`, `debris_salvage`, `nav
 
 **Owner:** `game/expedition_events.py` — keine parallele Loot-Engine, kein Economy-Floor, kein globales Hardcap.
 
-Nur Schiffe mit `role: expedition` zählen (Phase 1: **Odyssey** = `solar_skiff`). Kampf- und Frachter-Eskorten erhöhen weder `expo_value` noch Cargo-Cap.
+Nur Schiffe mit `role: expedition` zählen (Phase 1: **Odyssey** = `solar_skiff`). Kampf-Eskorten erhöhen weder `expo_value` noch Cargo-Cap; Frachter (`role: cargo`) erhöhen nur die Bergungskapazität.
+
+**Drei Säulen:**
+
+| Aspekt | Zählt | Nicht |
+|--------|-------|-------|
+| **Loot** (`expo_value`) | Expo-Schiffe | Eskorten, Frachter |
+| **Bergung** (`cargo_capacity`) | Expo-Frachtraum + Frachter | Kampf-Eskorten |
+| **Piratenkampf** (`fleet_value`) | Expo + Kampf-Eskorten | Frachter |
 
 ```text
 per_hull_value = Summe(build_cost)   # metal + crystal + fuel_cells aus fleet_defs
@@ -172,7 +180,7 @@ final_loot     = min(base_loot × random_factor × profile_mult × event_factor,
 | `random_factor` | `uniform(0.66, 1.5)` | Server-RNG pro Event-Roll |
 | `profile_mult` | Event-spezifisch (`mult_range` in `_EVENT_LOOT_PROFILES`) | z. B. `ancient_stash` > `mineral_deposit` |
 | `event_factor` | Default `1.0` | Vorbereitet für globale Events (`directive_flags.expedition_event_factor`) |
-| `cargo_capacity` | `calculate_expedition_loot_cap(ships)` | Summe `cargo` aller Expo-Hüllen (ohne ×50-Multiplikator) |
+| `cargo_capacity` | `calculate_expedition_loot_cap(ships)` | Summe `cargo` von Expo-Hüllen + Frachtern (`role: cargo`) |
 
 Referenzwerte (Odyssey, ohne Random/Event): 100 ≈ 18 978 · 200 ≈ 31 260 · 500 ≈ 60 465 · 1 000 ≈ 99 597 · 10 000 ≈ 522 692 Loot-Ressourcen gesamt (vor Split auf metal/crystal/fuel_cells).
 
