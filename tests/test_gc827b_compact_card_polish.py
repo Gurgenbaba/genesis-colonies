@@ -41,14 +41,16 @@ def test_unified_requirements_on_warn_hover():
 
 def test_energy_footer_has_consumption_label():
     strip = _read("templates/partials/building_effect_strip.html")
-    assert "buildings_effect_energy_use" in strip
+    assert "gc-cost-chip gc-cost-energy" in strip
+    assert "gc-card-energy-footer" in strip
     footer = strip.split("render_building_card_footer")[1].split("{% endmacro %}")[0]
-    assert "gc-card-lr-label" in footer
+    assert "render_energy_draw_chip" in footer
     assert "effect_current" in footer
 
     js = _read("static/main.js")
     footer_fn = js.split("function renderBuildingCardFooterHtml")[1].split("function serializeReqHoverItems")[0]
-    assert "buildings_effect_energy_use" in footer_fn
+    assert "gc-cost-chip gc-cost-energy" in footer_fn
+    assert "gc-card-energy-footer" in footer_fn
     assert "effect_current" in footer_fn
 
 

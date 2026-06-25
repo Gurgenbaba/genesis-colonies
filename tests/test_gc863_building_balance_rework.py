@@ -151,7 +151,7 @@ class TestGc863OrbitalShipyard:
         new = _shipyard_reduction_pct(18)
         assert old >= 80
         assert new < old
-        assert new <= 55
+        assert new <= 40
 
 
 class TestGc863CommandCenter:
@@ -175,7 +175,7 @@ class TestGc863NanofactoryCosts:
         assert power_upgrade_cost("nanofactory", level) == (metal, crystal)
 
     def test_benchmark_values(self):
-        assert nanofactory_upgrade_cost(1) == (13300, 6650)
-        assert nanofactory_upgrade_cost(10) == (173_188, 86_594)
-        assert nanofactory_upgrade_cost(25) == (12_482_197, 6_241_099)
-        assert nanofactory_upgrade_cost(50) == (15_580_523_595, 7_790_261_798)
+        assert nanofactory_upgrade_cost(1) == (13400, 6700)
+        assert nanofactory_upgrade_cost(10) == (186_659, 93_330)
+        assert nanofactory_upgrade_cost(25) == (15_052_893, 7_526_447)
+        assert nanofactory_upgrade_cost(50) == (22_658_957_156, 11_329_478_578)

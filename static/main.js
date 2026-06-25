@@ -2300,13 +2300,16 @@
     const delta = Math.floor(Number(energySrc.effect_delta) || 0);
     const draw = cur > 0 ? cur : delta;
     if (draw <= 0) return "";
-    const label = t("buildings_effect_energy_use", "Energieverbrauch");
+    const parts = fmtIntParts(draw);
+    const titleAttr =
+      parts.full !== parts.display ? ` title="-${escapeHtml(parts.full)}"` : "";
     return (
-      `<div class="gc-card-lr-row gc-card-footer-row gc-card-footer-row--energy" data-building-energy-footer>` +
-      `<span class="gc-card-lr-label">${escapeHtml(label)}</span>` +
-      `<span class="gc-card-lr-value gc-mono">` +
-      `${renderBuildingEffectIcon("energy")}` +
-      `<span class="gc-num-compact">-${fmtIntParts(draw).display}</span></span></div>`
+      `<div class="gc-card-energy-footer bcell-energy" data-building-energy-footer>` +
+      `<div class="gc-cost-stack">` +
+      `<span class="gc-cost-chip gc-cost-energy">` +
+      `<span class="gc-cost-chip-leading">${renderBuildingEffectIcon("energy")}</span>` +
+      `<span class="gc-cost-val gc-num-compact"${titleAttr}>-${parts.display}</span>` +
+      `</span></div></div>`
     );
   }
 

@@ -7,6 +7,7 @@ import math
 import pytest
 
 from game.economy_balance import (
+    RESEARCH_COST_ANCHOR_TOTAL,
     RESEARCH_TIME_ANCHOR_HOURS,
     legacy_research_base_time_seconds,
     legacy_research_upgrade_cost,
@@ -96,10 +97,11 @@ def test_research_lab_speeds_up_research():
     assert t5 < t1
 
 
-def test_research_cost_l34_sane_vs_legacy():
+def test_research_cost_l34_hardened_vs_legacy():
     m, c = get_research_cost("energy_tech", 34)
     leg_m, leg_c = legacy_research_upgrade_cost(1000, 500, 1.6, 34)
-    assert m + c < 500_000
+    assert m + c >= 750_000
+    assert m + c < leg_m + leg_c
     assert leg_m + leg_c > 10_000_000
 
 
@@ -150,6 +152,7 @@ def test_anchor_map_covers_benchmark_levels():
         assert research_base_time_seconds(lvl) == pytest.approx(
             RESEARCH_TIME_ANCHOR_HOURS[lvl] * 3600, rel=0.001
         )
+    assert 50 in RESEARCH_COST_ANCHOR_TOTAL
 
 
 def test_all_research_techs_have_positive_cost_and_time():

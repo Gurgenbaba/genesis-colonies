@@ -74,6 +74,9 @@ _MINE_COST_EXPONENT = 2.05
 _MINE_PACE_GAMMA = 1.25
 _MINE_ENDGAME_DELTA = 3.40
 
+# GC-863A — percent-power buildings use steeper endgame cost exponent.
+_PERCENT_POWER_COST_EXPONENT = 2.20
+
 BUILDING_UPGRADE_CURVES: Dict[str, _CostCurve] = {
     "metal_mine": _CostCurve(
         0.82, _MINE_COST_EXPONENT, 0.75, 0.25, pace_gamma=_MINE_PACE_GAMMA, endgame_delta=_MINE_ENDGAME_DELTA
@@ -88,10 +91,10 @@ BUILDING_UPGRADE_CURVES: Dict[str, _CostCurve] = {
     "metal_storage": _CostCurve(2100.0, 1.50, 1.0, 0.0),  # GC-863
     "crystal_storage": _CostCurve(2100.0, 1.50, 0.0, 1.0),  # GC-863
     "fuel_storage": _CostCurve(1900.0, 1.48, 0.60, 0.40),  # GC-863
-    "research_lab": _CostCurve(3900.0, 1.52, 0.33, 0.67),  # GC-863
-    "academy": _CostCurve(5400.0, 1.52, 0.40, 0.60),  # GC-863
-    "command_center": _CostCurve(4800.0, 1.48, 0.71, 0.29),  # GC-863
-    "orbital_shipyard": _CostCurve(5500.0, 1.50, 0.57, 0.43),  # GC-863
+    "research_lab": _CostCurve(3298.0, _PERCENT_POWER_COST_EXPONENT, 0.33, 0.67),  # GC-863A
+    "academy": _CostCurve(4580.0, _PERCENT_POWER_COST_EXPONENT, 0.40, 0.60),  # GC-863A
+    "command_center": _CostCurve(3664.0, _PERCENT_POWER_COST_EXPONENT, 0.71, 0.29),  # GC-863A
+    "orbital_shipyard": _CostCurve(3298.0, _PERCENT_POWER_COST_EXPONENT, 0.57, 0.43),  # GC-863A
     "defense_factory": _CostCurve(2600.0, 1.50, 0.60, 0.40),  # GC-863
     "barracks": _CostCurve(1400.0, 1.48, 0.60, 0.40),  # GC-863
     "radar_array": _CostCurve(1500.0, 1.48, 0.25, 0.75),  # GC-863
@@ -128,14 +131,14 @@ BUILD_TIME_CURVES: Dict[str, Tuple[float, float]] = {
 # GC-821B — default depot when no storage building (metal/crystal starter cap).
 STORAGE_BASE_CAPACITY = 150_000
 # GC-863 — capacity anchor: production_per_hour(matching resource, level) × multiplier.
-STORAGE_PRODUCTION_HOUR_MULTIPLIER = 1000
+STORAGE_PRODUCTION_HOUR_MULTIPLIER = 72  # GC-863 — ~3 days buffer at matching mine level (72 h prod)
 # Legacy exponent (pre-GC-863); kept for doc/tests referencing old curve.
 STORAGE_LEVEL_GROWTH = 1.75
 
-# GC-863 — nanofactory upgrade costs (target level X).
+# GC-863 — nanofactory upgrade costs (target level X); GC-863A steeper growth.
 NANOFACTORY_METAL_BASE = 10_000.0
 NANOFACTORY_CRYSTAL_BASE = 5_000.0
-NANOFACTORY_COST_GROWTH = 1.33
+NANOFACTORY_COST_GROWTH = 1.34
 
 # GC-821B — exchange (scales with empire day production via exchange.py).
 EXCHANGE_DAILY_LIMIT_MIN = 500_000
@@ -154,7 +157,7 @@ MILITARY_BUILD_SECONDS_MULTIPLIER = 1.0
 # GC-825 — account research upgrade pacing (time + cost anchors).
 RESEARCH_REF_COMBINED_COST = 1500.0  # energy_tech base_m + base_c
 RESEARCH_REF_BASE_TIME = 840.0  # energy_tech base_time seconds
-RESEARCH_BENCHMARK_LEVELS: Tuple[int, ...] = (10, 20, 30, 40, 60, 80, 100, 120)
+RESEARCH_BENCHMARK_LEVELS: Tuple[int, ...] = (10, 20, 30, 35, 40, 50, 60, 80, 100, 120)
 
 RESEARCH_TIME_ANCHOR_HOURS: Dict[int, float] = {
     10: 1.5,  # ~90 min
@@ -171,12 +174,15 @@ RESEARCH_TIME_ANCHOR_HOURS: Dict[int, float] = {
 RESEARCH_COST_ANCHOR_TOTAL: Dict[int, float] = {
     10: 2500.0,
     20: 10000.0,
-    30: 22000.0,
-    40: 40000.0,
-    60: 120000.0,
-    80: 400000.0,
-    100: 1200000.0,
-    120: 2400000.0,
+    30: 22000.0,  # GC-863A — early curve unchanged
+    35: 2000000.0,  # GC-863A — midgame ramp
+    38: 1500000.0,  # GC-863A
+    40: 4000000.0,  # GC-863A
+    50: 15000000.0,  # GC-863A — achievement tier
+    60: 30000000.0,  # GC-863A
+    80: 100000000.0,  # GC-863A
+    100: 300000000.0,  # GC-863A
+    120: 600000000.0,  # GC-863A
 }
 _RESEARCH_L1_COST_TOTAL = 800.0
 _RESEARCH_COST_RAMP_LEVEL = 10
