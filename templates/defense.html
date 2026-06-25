@@ -108,13 +108,16 @@
 
   {% set df_q = df.defense_queue if df.defense_queue is defined and df.defense_queue else {} %}
   {% set df_q_jobs = df_q.queue if df_q.queue is defined and df_q.queue else [] %}
+  {% set df_q_summary = df_q.summary if df_q.summary is defined and df_q.summary else {} %}
+  {% set df_q_limit = (df_q_summary.limit if df_q_summary.limit is defined else 3)|int %}
   {{ render_page_queue_compact(
     'defense-queue-compact',
     'defense',
     '🛡',
     df_q_jobs,
     T('defense_queue_compact_idle', 'Keine Verteidigungsaufträge'),
-    '',
+    df_q_summary.count if df_q_summary.count is defined else 0,
+    df_q_limit,
     'defense',
     'data-defense-queue-cancel'
   ) }}

@@ -7004,9 +7004,39 @@
     parent.appendChild(timerEl);
   }
 
+  function _pageQueueSlotsLabelKey(domain) {
+    const d = String(domain || "");
+    if (d === "build" || d === "building") return "build_queue_slots";
+    if (d === "research") return "research_queue_slots";
+    if (d === "shipyard") return "shipyard_queue_slots";
+    if (d === "defense") return "defense_queue_slots";
+    return "queue_compact_slots";
+  }
+
+  function _updatePageQueueCompactSlots(compactId, domain, queueRaw) {
+    const summary = queueRaw?.summary || {};
+    const count = Math.floor(Number(summary.count) || 0);
+    const limit = Math.floor(Number(summary.limit) || 0);
+    const slotsEl = document.getElementById(`${compactId}-slots`);
+    if (!slotsEl) return;
+    if (limit <= 0) {
+      slotsEl.hidden = true;
+      return;
+    }
+    slotsEl.hidden = false;
+    const text = `${fmtNumber(count)}/${fmtNumber(limit)}`;
+    _setIfChanged(slotsEl, text);
+    const labelKey = _pageQueueSlotsLabelKey(domain);
+    const aria = tf(labelKey, { count, limit }, `${fmtNumber(count)} / ${fmtNumber(limit)}`);
+    if (slotsEl.getAttribute("title") !== aria) slotsEl.setAttribute("title", aria);
+    if (slotsEl.getAttribute("aria-label") !== aria) slotsEl.setAttribute("aria-label", aria);
+  }
+
   function _updatePageQueueCompact(cfg) {
     const compact = document.getElementById(cfg.compactId);
     if (!compact) return;
+
+    _updatePageQueueCompactSlots(cfg.compactId, cfg.domain, cfg.queueRaw);
 
     const bodyEl = compact.querySelector("[data-page-queue-compact-body]");
     if (!bodyEl) return;
@@ -7015,16 +7045,6 @@
     const sig = jobs.map((j) => cardQueueJobSignature(j)).join("|");
     if (sig === compact.dataset.compactSig) return;
     compact.dataset.compactSig = sig;
-
-    const planetName = String(
-      cfg.queueRaw?.planet_name
-      || GC.lastState?.active_planet_name
-      || ""
-    ).trim();
-    const planetEl = document.getElementById(`${cfg.compactId}-planet`);
-    if (planetEl && planetName) {
-      _setIfChanged(planetEl, `· ${planetName}`);
-    }
 
     let cancelBtn = compact.querySelector("[data-page-queue-compact-cancel]");
     bodyEl.replaceChildren();
@@ -7113,7 +7133,7 @@
         cancelBtn.innerHTML = '<span aria-hidden="true">×</span>';
         cancelBtn.setAttribute("aria-label", t("action_cancel", "Abbrechen"));
         cancelBtn.title = t("action_cancel", "Abbrechen");
-        const anchor = planetEl || null;
+        const anchor = document.getElementById(`${cfg.compactId}-slots`) || null;
         if (anchor) compact.insertBefore(cancelBtn, anchor);
         else compact.appendChild(cancelBtn);
       }

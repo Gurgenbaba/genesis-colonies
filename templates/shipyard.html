@@ -113,13 +113,16 @@
 
   {% set sy_q = sy.shipyard_queue if sy.shipyard_queue is defined and sy.shipyard_queue else {} %}
   {% set sy_q_jobs = sy_q.queue if sy_q.queue is defined and sy_q.queue else [] %}
+  {% set sy_q_summary = sy_q.summary if sy_q.summary is defined and sy_q.summary else {} %}
+  {% set sy_q_limit = (sy_q_summary.limit if sy_q_summary.limit is defined else 3)|int %}
   {{ render_page_queue_compact(
     'shipyard-queue-compact',
     'shipyard',
     '🚀',
     sy_q_jobs,
     T('shipyard_queue_compact_idle', 'Keine Werftaufträge'),
-    '',
+    sy_q_summary.count if sy_q_summary.count is defined else 0,
+    sy_q_limit,
     'shipyard',
     'data-shipyard-queue-cancel'
   ) }}

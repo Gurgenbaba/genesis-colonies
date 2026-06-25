@@ -26,8 +26,10 @@
   {% if amt > 1 %} ×{{ amt|fmt_int }}{% endif %}
 {% endmacro %}
 
-{% macro render_page_queue_compact(compact_id, domain, icon, jobs, idle_text, planet_name, timer_kind, cancel_data_attr) %}
+{% macro render_page_queue_compact(compact_id, domain, icon, jobs, idle_text, queue_count, queue_limit, timer_kind, cancel_data_attr) %}
   {% set job_list = jobs if jobs else [] %}
+  {% set q_count = (queue_count if queue_count is defined else 0)|int %}
+  {% set q_limit = (queue_limit if queue_limit is defined else 0)|int %}
   <div class="gc-queue-compact gc-page-queue-compact {{ domain }}-queue-compact gc-panel-header"
        id="{{ compact_id }}"
        aria-live="polite">
@@ -82,6 +84,14 @@
             {{ cancel_data_attr }}="{{ job_list[0].id|int }}"
             title="{{ T('action_cancel', 'Abbrechen') }}"
             aria-label="{{ T('action_cancel', 'Abbrechen') }}"><span aria-hidden="true">×</span></button>
+    {% endif %}
+    {% if q_limit > 0 %}
+    {% set slots_key = domain ~ '_queue_slots' %}
+    <span class="gc-page-queue-compact-slots gc-page-queue-compact-planet build-queue-planet-chip gc-mono"
+          id="{{ compact_id }}-slots"
+          data-page-queue-compact-slots
+          title="{{ T(slots_key, '%(count)s / %(limit)s Aufträge', count=q_count, limit=q_limit) }}"
+          aria-label="{{ T(slots_key, '%(count)s / %(limit)s Aufträge', count=q_count, limit=q_limit) }}">{{ q_count|fmt_int }}/{{ q_limit|fmt_int }}</span>
     {% endif %}
   </div>
 {% endmacro %}

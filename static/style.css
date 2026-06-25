@@ -8489,13 +8489,15 @@ a.gc-bld-head-action-btn--go:focus-visible{
   display: none !important;
 }
 
+.gc-page-queue-compact-slots,
 .gc-page-queue-compact-planet,
 .build-queue-planet-chip{
   flex: 0 0 auto;
   margin-left: auto;
   font-size: 0.72rem;
+  font-weight: 700;
   letter-spacing: 0.02em;
-  color: rgba(127, 255, 217, 0.48);
+  color: rgba(180, 245, 255, 0.82);
   white-space: nowrap;
 }
 

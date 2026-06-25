@@ -329,7 +329,8 @@
       '🔬',
       rq_jobs,
       T('research_queue_compact_idle', 'Keine Forschungen aktiv'),
-      '',
+      rq_summary.count if rq_summary.count is defined else 0,
+      rq_limit,
       'research',
       'data-research-cancel-id'
     ) }}

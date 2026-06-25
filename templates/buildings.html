@@ -234,7 +234,8 @@
       '🏗',
       bq_jobs,
       T('build_queue_compact_idle', 'Keine Bauaufträge'),
-      '',
+      bq_summary.count if bq_summary.count is defined else 0,
+      bq_limit,
       'build',
       'data-build-cancel-id'
     ) }}
