@@ -903,6 +903,9 @@ def _colonize_fleet_target(
     )
     if not ok_target:
         return False, t_reason, (0, 0, 0), target_info
+    ok_limit, limit_reason = check_colony_limit_available(int(player_id), conn=conn)
+    if not ok_limit:
+        return False, limit_reason, (0, 0, 0), target_info
     return True, "", (int(target_galaxy), int(target_system), int(target_position)), target_info
 
 
@@ -3719,8 +3722,8 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             if world_key:
                 release_world_claim(world_key, conn=conn, player_id=player_id)
             fail_reason = reason
-            if fail_reason == "max_colonies":
-                fail_reason = "colony_limit_reached"
+            if fail_reason in ("max_colonies", "colony_limit_reached"):
+                fail_reason = "max_colonies_reached"
             if world_key:
                 if _notify_world_colonize(success=False, fail_reason=fail_reason):
                     return True

@@ -519,6 +519,19 @@
       </section>
 
       <div class="admin-section-title">
+        <span class="admin-section-title-text">{{ T("admin_balance_section_colonies", "Kolonien") }}</span>
+      </div>
+      <section class="admin-section">
+        <div class="admin-form-grid-2">
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-max-colonies">{{ T("admin_setting_max_colonies_per_player", "Maximale Planeten pro Spieler") }}</label>
+            <input class="admin-input" id="admin-balance-max-colonies" type="number" min="1" max="50" step="1" data-balance-key="max_colonies_per_player">
+            <p class="admin-small-hint">{{ T("admin_setting_max_colonies_help", "Begrenzt, wie viele Planeten ein Spieler insgesamt besitzen darf. Forschung erhöht dieses Limit aktuell nicht.") }}</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="admin-section-title">
         <span class="admin-section-title-text">{{ T("admin_balance_section_shipyard", "Orbitalwerft") }}</span>
       </div>
       <section class="admin-section">

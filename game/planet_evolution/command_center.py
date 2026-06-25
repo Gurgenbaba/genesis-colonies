@@ -1087,7 +1087,7 @@ def _build_strategic_primary_action(
             "label_key": "strategic_world_btn_colonize",
             "world_key": wk,
             "enabled": ok_limit,
-            "blocked_reason_key": str(limit_reason or "fleet_error_colony_limit_reached") if not ok_limit else "",
+            "blocked_reason_key": str(limit_reason or "fleet_error_max_colonies_reached") if not ok_limit else "",
         }
     return none
 
@@ -1105,7 +1105,7 @@ def _build_strategic_hints(
         limit = get_planet_limit_block(int(player_id), conn=conn)
         hints.append({"label_key": "strategic_world_colony_limit", "vars": dict(limit)})
         if int(limit.get("current", 0)) >= int(limit.get("max", 1)):
-            hints.append({"label_key": "fleet_error_colony_limit_reached"})
+            hints.append({"label_key": "fleet_error_max_colonies_reached"})
     if (
         not node.get("is_colonizable")
         and not node.get("is_claimed")

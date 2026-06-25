@@ -1147,7 +1147,43 @@
   let _clientStateGen = 0;
   let _sessionPlayerId = 0;
   let _lastAppliedServerTime = 0;
+  let _lastAppliedStateVersion = 0;
   let _fleetRefreshSeq = 0;
+
+  function extractStateVersion(data) {
+    if (!data || typeof data !== "object") return 0;
+    const sv = Number(data.state_version);
+    if (Number.isFinite(sv) && sv > 0) return sv;
+    const st = Number(data.server_time ?? data.server_now ?? 0);
+    return Number.isFinite(st) && st > 0 ? st : 0;
+  }
+
+  function isAuthoritativeGameStateReason(reason, opts) {
+    const r = String(reason || "");
+    if (opts && (opts.forceApply || opts.allowResourceRegression)) return true;
+    if (opts && (opts.forceResourceBar || opts.planetSwitch)) return true;
+    if (isMutationStatePatchReason(r)) return true;
+    if (r === "planet_switch") return true;
+    return false;
+  }
+
+  function shouldRejectStaleGameState(data, reason, opts) {
+    if (isAuthoritativeGameStateReason(reason, opts)) return false;
+    const incoming = extractStateVersion(data);
+    if (!incoming) return false;
+    const last = Number(_lastAppliedStateVersion || 0);
+    if (!last) return false;
+    return incoming < last - 0.001;
+  }
+
+  function markGameStateVersionApplied(data) {
+    const v = extractStateVersion(data);
+    if (!v) return;
+    _lastAppliedStateVersion = Math.max(_lastAppliedStateVersion, v);
+    GC.lastAppliedStateVersion = _lastAppliedStateVersion;
+    const stInt = Math.floor(v);
+    if (stInt) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stInt);
+  }
 
   function dismissProgressionTooltipsOnStatePatch() {
     if (typeof GC.hideCardReqTooltip === "function") GC.hideCardReqTooltip();
@@ -1223,6 +1259,7 @@
 
     const anyActive = applyGameStateData(state, reason, {
       forceResourceBar: true,
+      allowResourceRegression: true,
       forcePanel: !isPlanetSwitch,
       hudOnly: isPlanetSwitch,
       planetSwitch: isPlanetSwitch,
@@ -1306,6 +1343,7 @@
     },
     shipyardPollMs: 5000,
     modules: {},
+    lastAppliedStateVersion: 0,
   };
 
   window.GC = GC;
@@ -8764,15 +8802,41 @@
     patchResourceBarEnergyWarning(_resourceLive.energyUsed, _resourceLive.energyTotal);
   }
 
-  function syncResourceLiveBaseline(snapshot) {
+  function monotonicResourceBaseline(incoming, current, projected, allowRegression) {
+    const inc = Math.max(0, Math.floor(Number(incoming) || 0));
+    if (allowRegression) return inc;
+    const cur = Math.max(0, Math.floor(Number(current) || 0));
+    const proj = Math.max(0, Math.floor(Number(projected) || 0));
+    return Math.max(inc, cur, proj);
+  }
+
+  function syncResourceLiveBaseline(snapshot, opts) {
     if (!snapshot || !snapshot.planetId) return;
     const planetId = Number(snapshot.planetId);
     if (!Number.isFinite(planetId) || planetId <= 0) return;
+    const allowRegression = Boolean(opts && opts.allowResourceRegression);
+    const samePlanet = planetId === _resourceLive.planetId;
+    const projected = allowRegression ? null : projectLiveResourceAmounts(getApproxServerNow());
     _resourceLive.planetId = planetId;
     _resourceLive.syncedAt = getApproxServerNow();
-    _resourceLive.metal = Math.max(0, Math.floor(Number(snapshot.metal) || 0));
-    _resourceLive.crystal = Math.max(0, Math.floor(Number(snapshot.crystal) || 0));
-    _resourceLive.fuelCells = Math.max(0, Math.floor(Number(snapshot.fuelCells) || 0));
+    _resourceLive.metal = monotonicResourceBaseline(
+      snapshot.metal,
+      samePlanet ? _resourceLive.metal : 0,
+      projected ? projected.metal : 0,
+      allowRegression
+    );
+    _resourceLive.crystal = monotonicResourceBaseline(
+      snapshot.crystal,
+      samePlanet ? _resourceLive.crystal : 0,
+      projected ? projected.crystal : 0,
+      allowRegression
+    );
+    _resourceLive.fuelCells = monotonicResourceBaseline(
+      snapshot.fuelCells,
+      samePlanet ? _resourceLive.fuelCells : 0,
+      projected ? projected.fuelCells : 0,
+      allowRegression
+    );
     _resourceLive.prodMetal = Math.max(0, Math.floor(Number(snapshot.prodMetal) || 0));
     _resourceLive.prodCrystal = Math.max(0, Math.floor(Number(snapshot.prodCrystal) || 0));
     _resourceLive.prodFuelCells = Math.max(0, Math.floor(Number(snapshot.prodFuelCells) || 0));
@@ -9910,6 +9974,7 @@
   function patchShellHudFromState(data, opts) {
     if (!data || data.ok === false) return;
     const forceResourceBar = Boolean(opts && opts.forceResourceBar);
+    const allowResourceRegression = Boolean(opts && opts.allowResourceRegression);
     const resourceOverrides = opts && opts.resourceOverrides;
 
     const p = data.player || {};
@@ -9922,15 +9987,22 @@
     const storageCrystal = Math.floor(Number(storage.crystal || 0));
     const storageFuelCells = Math.floor(Number(storage.fuel_cells || 0));
 
-    const metal = resourceOverrides && resourceOverrides.metal != null
+    let metal = resourceOverrides && resourceOverrides.metal != null
       ? Math.floor(Number(resourceOverrides.metal))
       : Math.floor(Number(p.metal ?? resources.metal ?? 0));
-    const crystal = resourceOverrides && resourceOverrides.crystal != null
+    let crystal = resourceOverrides && resourceOverrides.crystal != null
       ? Math.floor(Number(resourceOverrides.crystal))
       : Math.floor(Number(p.crystal ?? resources.crystal ?? 0));
-    const fuelCells = resourceOverrides && resourceOverrides.fuelCells != null
+    let fuelCells = resourceOverrides && resourceOverrides.fuelCells != null
       ? Math.floor(Number(resourceOverrides.fuelCells))
       : Math.floor(Number(p.fuel_cells ?? resources.fuel_cells ?? 0));
+
+    if (!forceResourceBar && !allowResourceRegression) {
+      const projected = projectLiveResourceAmounts(getApproxServerNow());
+      metal = Math.max(metal, _last.metal ?? 0, projected?.metal ?? 0);
+      crystal = Math.max(crystal, _last.crystal ?? 0, projected?.crystal ?? 0);
+      fuelCells = Math.max(fuelCells, _last.fuelCells ?? 0, projected?.fuelCells ?? 0);
+    }
     const used = Math.floor(Number(p.energy_used ?? energy.used ?? resources.energy_used ?? 0));
     const total = Math.floor(Number(p.energy_total ?? energy.total ?? resources.energy_total ?? 0));
 
@@ -10324,6 +10396,9 @@
   }
 
   function applyHudOnlyGameState(data, reason, opts) {
+    if (shouldRejectStaleGameState(data, reason, opts)) return false;
+    markGameStateVersionApplied(data);
+
     const forceResourceBar = Boolean(opts && (opts.forceResourceBar || opts.planetSwitch));
     const skipMessagesUnread = Boolean(opts && opts.skipMessagesUnread);
     const activePlanetId = Number(data.active_planet_id || data.build_queue?.planet_id || 0);
@@ -10345,6 +10420,7 @@
     patchShellHudFromState(coercePollUnreadForHud(data, reason), {
       forceResourceBar,
       skipMessagesUnread,
+      allowResourceRegression: Boolean(opts && opts.allowResourceRegression),
     });
 
     syncResourceLiveBaseline({
@@ -10360,11 +10436,9 @@
       storageFuelCells: Math.floor(Number(storage.fuel_cells || 0)),
       energyUsed: Math.floor(Number(p.energy_used ?? energy.used ?? resources.energy_used ?? 0)),
       energyTotal: Math.floor(Number(p.energy_total ?? energy.total ?? resources.energy_total ?? 0)),
-    });
+    }, opts);
 
     const anyActive = syncHudQueueLiveStatesFromPoll(data);
-    const stApplied = Number(data.server_time || 0);
-    if (stApplied) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stApplied);
     patchHudLastState(data, reason);
     GC.startProgressTicker();
     syncPerfBodyClasses();
@@ -10397,12 +10471,8 @@
       );
       const forcePanel = Boolean(opts && opts.forcePanel) || isMutationStatePatchReason(reason);
 
-      if (reason === "poll" || reason === "page_hydrate") {
-        const st = Number(data.server_time || 0);
-        if (st && _lastAppliedServerTime && st < _lastAppliedServerTime) {
-          return false;
-        }
-      }
+      if (shouldRejectStaleGameState(data, reason, opts)) return false;
+      markGameStateVersionApplied(data);
 
       syncServerClockFromState(data);
 
@@ -10478,7 +10548,11 @@
       const prodCrystal = Math.floor(Number(prod.crystal_mine ?? prod.crystal ?? 0));
       const prodFuelCells = Math.floor(Number(prod.fuel_cell_plant ?? prod.fuel_cells ?? 0));
 
-      patchShellHudFromState(coercePollUnreadForHud(data, reason), { forceResourceBar, skipMessagesUnread });
+      patchShellHudFromState(coercePollUnreadForHud(data, reason), {
+        forceResourceBar,
+        skipMessagesUnread,
+        allowResourceRegression: Boolean(opts && opts.allowResourceRegression),
+      });
 
       const livePlanetId = activePlanetId > 0
         ? activePlanetId
@@ -10496,11 +10570,9 @@
         storageFuelCells,
         energyUsed: used,
         energyTotal: total,
-      });
+      }, opts);
 
       if (skipScopedPanels) {
-        const stApplied = Number(data.server_time || 0);
-        if (stApplied) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stApplied);
         commitGameStateCache(data, reason, opts);
         return false;
       }
@@ -20608,7 +20680,9 @@
         if (colonizable && !claimed && atLimit) {
           colonizeBlocked.hidden = false;
           colonizeBlocked.textContent =
-            GC.t?.("fleet_error_colony_limit_reached", "Colony limit reached.") || "Colony limit reached.";
+            GC.t?.("fleet_error_max_colonies_reached", "Maximum number of planets reached.")
+              || GC.t?.("fleet_error_colony_limit_reached", "Colony limit reached.")
+              || "Maximum number of planets reached.";
         } else {
           colonizeBlocked.hidden = true;
           colonizeBlocked.textContent = "";

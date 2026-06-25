@@ -743,19 +743,27 @@ def test_main_js_gc801_action_state_and_stale_poll_guards():
     src = _read("static/main.js")
     assert "_clientStateGen" in src
     assert "_lastAppliedServerTime" in src
+    assert "GC.lastAppliedStateVersion" in src
+    assert "shouldRejectStaleGameState" in src
+    assert "extractStateVersion" in src
+    assert "monotonicResourceBaseline" in src
     assert "resetResourceDisplayCache" in src
     action_section = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "forceResourceBar: true" in action_section
+    assert "allowResourceRegression: true" in action_section
     assert "resetResourceDisplayCache()" in action_section
     assert "_clientStateGen += 1" in action_section
     refresh_section = src.split("async function refreshGameState(reason)")[1].split("GC.refreshGameState = refreshGameState")[0]
     assert "stateGenAtStart !== _clientStateGen" in refresh_section
     apply_section = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
-    assert 'reason === "poll"' in apply_section
-    assert 'reason === "page_hydrate"' in apply_section
+    assert "shouldRejectStaleGameState" in apply_section
+    assert "markGameStateVersionApplied" in apply_section
     assert "syncResourceLiveBaseline" in apply_section
     assert "patchBuildingPanel" in apply_section
     assert "location.reload()" not in action_section
+    poll_apply = src.split("function applyHudOnlyGameState", 1)[1].split("function applyGameStateData", 1)[0]
+    assert "shouldRejectStaleGameState" in poll_apply
+    assert "markGameStateVersionApplied" in poll_apply
 
 
 def test_main_js_gc804_research_timer_pjax_safe():

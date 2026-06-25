@@ -220,6 +220,111 @@ def _refresh_planet_resource_balances(planet: dict, *, conn, planet_id: int) -> 
         planet["last_update"] = row["last_update"]
 
 
+def _production_elapsed_seconds(planet: dict, *, now: float | None = None) -> tuple[float, int]:
+    now_ts = float(now if now is not None else time.time())
+    last_raw = planet.get("last_update")
+    last = float(last_raw) if last_raw is not None else now_ts
+    return now_ts, max(0, int(now_ts - last))
+
+
+def _apply_production_tick(
+    planet: dict,
+    buildings: Dict[str, int],
+    *,
+    delta: int,
+    resolver,
+    ratio: float,
+    research: Optional[Dict[str, int]],
+    mods: Optional[Dict[str, float]],
+    monotonic_floor: bool = True,
+) -> None:
+    """Apply in-memory production for elapsed seconds (optional monotonic floor vs DB row)."""
+    if delta <= 0:
+        return
+
+    floor_metal = int(planet.get("metal") or 0)
+    floor_crystal = int(planet.get("crystal") or 0)
+    floor_fuel = int(planet.get("fuel_cells") or 0)
+
+    m_rate, c_rate = resolver.production_rates_per_sec()
+    fc_rate = resolver.fuel_cells_rate_per_sec()
+    delta_metal = int(m_rate * ratio * delta)
+    delta_crystal = int(c_rate * ratio * delta)
+    delta_fuel_cells = int(fc_rate * ratio * delta)
+
+    apply_production_delta(
+        planet,
+        buildings,
+        delta_metal=delta_metal,
+        delta_crystal=delta_crystal,
+        research=research,
+        mods=mods,
+    )
+    apply_fuel_production_delta(
+        planet,
+        buildings,
+        delta_fuel_cells=delta_fuel_cells,
+        research=research,
+        mods=mods,
+    )
+
+    if not monotonic_floor:
+        return
+
+    new_metal = int(planet.get("metal") or 0)
+    new_crystal = int(planet.get("crystal") or 0)
+    new_fuel = int(planet.get("fuel_cells") or 0)
+    if new_metal < floor_metal or new_crystal < floor_crystal or new_fuel < floor_fuel:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "RESOURCE_REGRESSION planet_id=%s old_m=%s new_m=%s old_c=%s new_c=%s "
+            "source=production_tick elapsed=%s",
+            planet.get("id"),
+            floor_metal,
+            new_metal,
+            floor_crystal,
+            new_crystal,
+            delta,
+        )
+    planet["metal"] = max(floor_metal, new_metal)
+    planet["crystal"] = max(floor_crystal, new_crystal)
+    planet["fuel_cells"] = max(floor_fuel, new_fuel)
+
+
+def project_planet_resource_balances(planet: dict, *, conn, now: float | None = None) -> dict:
+    """Read-only production accrual for poll/display paths (no DB persist)."""
+    planet = dict(planet)
+    planet_id = int(planet["id"])
+    player_id = int(planet["player_id"])
+
+    _now, delta = _production_elapsed_seconds(planet, now=now)
+    buildings = get_planet_buildings(planet_id, conn=conn)
+    research = get_research_levels(user_id=player_id, conn=conn)
+    resolver = get_effect_resolver(
+        player_id,
+        buildings=buildings,
+        research=research,
+        conn=conn,
+        force_refresh=True,
+        planet=planet,
+    )
+    mods = resolver.get_modifiers()
+    energy_total, energy_used = resolver.compute_energy()
+    ratio = EffectResolver.energy_ratio(energy_total, energy_used)
+    _apply_production_tick(
+        planet,
+        buildings,
+        delta=delta,
+        resolver=resolver,
+        ratio=ratio,
+        research=research,
+        mods=mods,
+        monotonic_floor=True,
+    )
+    return planet
+
+
 def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool = False):
     """
     Conn-safe Update:
@@ -263,13 +368,9 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
 
             mark_request_live_refreshed()
 
-        if skip_queue_finish:
-            _refresh_planet_resource_balances(planet, conn=conn, planet_id=planet_id)
+        _refresh_planet_resource_balances(planet, conn=conn, planet_id=planet_id)
 
-        now = time.time()
-        last_raw = planet.get("last_update")
-        last = float(last_raw) if last_raw is not None else now
-        delta = max(0, int(now - last))
+        now, delta = _production_elapsed_seconds(planet)
 
         buildings = get_planet_buildings(planet_id, conn=conn)
         research = get_research_levels(user_id=player_id, conn=conn)
@@ -286,28 +387,16 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
         energy_total, energy_used = resolver.compute_energy()
         ratio = EffectResolver.energy_ratio(energy_total, energy_used)
 
-        if delta > 0:
-            m_rate, c_rate = resolver.production_rates_per_sec()
-            fc_rate = resolver.fuel_cells_rate_per_sec()
-            delta_metal = int(m_rate * ratio * delta)
-            delta_crystal = int(c_rate * ratio * delta)
-            delta_fuel_cells = int(fc_rate * ratio * delta)
-
-            apply_production_delta(
-                planet,
-                buildings,
-                delta_metal=delta_metal,
-                delta_crystal=delta_crystal,
-                research=research,
-                mods=mods,
-            )
-            apply_fuel_production_delta(
-                planet,
-                buildings,
-                delta_fuel_cells=delta_fuel_cells,
-                research=research,
-                mods=mods,
-            )
+        _apply_production_tick(
+            planet,
+            buildings,
+            delta=delta,
+            resolver=resolver,
+            ratio=ratio,
+            research=research,
+            mods=mods,
+            monotonic_floor=True,
+        )
 
         planet["last_update"] = now
         planet["energy_total"] = int(energy_total)

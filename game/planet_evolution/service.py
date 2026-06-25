@@ -599,21 +599,14 @@ def colonize_planet(
             return False, "schema_missing", None
 
         begin_write_transaction(conn)
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) AS c FROM planets WHERE player_id = ? AND is_homeworld = 0;",
-            (int(player_id),),
-        )
-        colonies = int(cur.fetchone()["c"])
-        try:
-            settings = get_game_settings(conn=conn)
-            max_col = int(settings.get("max_colonies_per_player", 9))
-        except Exception:
-            max_col = 9
-        if colonies >= max_col:
-            rollback(conn)
-            return False, "max_colonies", None
+        from game.logic import check_planet_cap_available
 
+        ok_cap, cap_reason = check_planet_cap_available(int(player_id), conn=conn)
+        if not ok_cap:
+            rollback(conn)
+            return False, cap_reason, None
+
+        cur = conn.cursor()
         from game.galaxy import (
             assign_free_coordinates,
             assert_coordinate_available,

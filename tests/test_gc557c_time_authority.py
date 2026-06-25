@@ -52,6 +52,8 @@ def gc557c_db(tmp_path, monkeypatch):
 def test_attach_canonical_server_time():
     payload = attach_canonical_server_time({"ok": True})
     assert payload["server_now"] == int(payload["server_time"])
+    assert "state_version" in payload
+    assert float(payload["state_version"]) >= float(payload["server_time"]) - 0.001
     assert abs(payload["server_now"] - live_server_timestamp()) <= 1
 
 

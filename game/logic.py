@@ -69,6 +69,7 @@ def _read_player_live_state_no_writes(
 ) -> Tuple[Any, Dict[str, int], float, int, int, Dict[str, int]]:
     """Pure read path for polling when writes are skipped (e.g. SQLite lock)."""
     planet_id = int(planet["id"])
+    planet_accrued = _res.project_planet_resource_balances(planet, conn=conn)
     buildings = get_planet_buildings(planet_id, conn=conn)
     research = get_research_levels(user_id=uid, conn=conn)
     resolver = get_effect_resolver(
@@ -77,16 +78,16 @@ def _read_player_live_state_no_writes(
         research=research,
         conn=conn,
         force_refresh=True,
-        planet=planet,
+        planet=planet_accrued,
     )
     energy_total, energy_used = resolver.compute_energy()
     ratio = EffectResolver.energy_ratio(energy_total, energy_used)
     storage_caps = get_storage_capacity(buildings, user_id=uid, conn=conn)
 
     player_view = dict(player)
-    player_view["metal"] = planet["metal"]
-    player_view["crystal"] = planet["crystal"]
-    player_view["fuel_cells"] = planet.get("fuel_cells", 0)
+    player_view["metal"] = planet_accrued["metal"]
+    player_view["crystal"] = planet_accrued["crystal"]
+    player_view["fuel_cells"] = planet_accrued.get("fuel_cells", 0)
     player_view["energy_total"] = int(energy_total)
     player_view["energy_used"] = int(energy_used)
     return player_view, buildings, ratio, int(energy_total), int(energy_used), storage_caps
@@ -629,7 +630,43 @@ def get_building_tree_status(
 # PLANET LIMIT (game-state / header HUD)
 # ============================================================================ #
 
+MAX_PLANETS_PER_PLAYER_MIN = 1
+MAX_PLANETS_PER_PLAYER_MAX = 50
 DEFAULT_MAX_COLONIES_PER_PLAYER = 9
+
+
+def get_max_planets_per_player(*, conn=None) -> int:
+    """
+    Hard admin cap for owned planets (homeworld + colonies).
+
+    Deferred: future colony limit increases will come from Planet Evolution /
+    Expansion Gates, not account research.
+    """
+    from .models import get_game_settings
+
+    settings = get_game_settings(conn=conn) if conn is not None else get_game_settings()
+    settings = settings or {}
+    raw_max = settings.get("max_colonies_per_player")
+    try:
+        max_val = int(raw_max) if raw_max is not None else DEFAULT_MAX_COLONIES_PER_PLAYER
+    except (TypeError, ValueError):
+        max_val = DEFAULT_MAX_COLONIES_PER_PLAYER
+    return max(MAX_PLANETS_PER_PLAYER_MIN, min(MAX_PLANETS_PER_PLAYER_MAX, int(max_val)))
+
+
+def check_planet_cap_available(
+    player_id: int,
+    *,
+    conn,
+) -> tuple[bool, str]:
+    """Return whether the player may own another planet."""
+    from .models import get_planets_by_player
+
+    uid = int(player_id)
+    current = len(get_planets_by_player(uid, conn=conn))
+    if current >= get_max_planets_per_player(conn=conn):
+        return False, "max_colonies_reached"
+    return True, ""
 
 
 def get_planet_limit_block(
@@ -640,7 +677,7 @@ def get_planet_limit_block(
     """
     Kolonie-/Planetenlimit für /api/game-state (current = owned planets, max = game_settings).
     """
-    from .models import db as _db, get_game_settings, get_planets_by_player
+    from .models import db as _db, get_planets_by_player
 
     uid = int(player_id)
     own_conn = conn is None
@@ -649,15 +686,7 @@ def get_planet_limit_block(
 
     try:
         current = len(get_planets_by_player(uid, conn=conn))
-        settings = get_game_settings(conn=conn) if conn is not None else get_game_settings()
-        settings = settings or {}
-        raw_max = settings.get("max_colonies_per_player")
-        try:
-            max_val = int(raw_max) if raw_max is not None else DEFAULT_MAX_COLONIES_PER_PLAYER
-        except (TypeError, ValueError):
-            max_val = DEFAULT_MAX_COLONIES_PER_PLAYER
-        if max_val < 1:
-            max_val = DEFAULT_MAX_COLONIES_PER_PLAYER
+        max_val = get_max_planets_per_player(conn=conn)
         return {"current": int(current), "max": int(max_val)}
     finally:
         if own_conn and conn is not None:
@@ -675,10 +704,11 @@ def live_server_timestamp() -> int:
 
 
 def attach_canonical_server_time(payload: dict[str, Any]) -> dict[str, Any]:
-    """Ensure game-state and action payloads expose server_now + server_time."""
-    ts = live_server_timestamp()
-    payload["server_now"] = ts
+    """Ensure game-state and action payloads expose server_now + server_time + state_version."""
+    ts = time.time()
+    payload["server_now"] = int(ts)
     payload["server_time"] = float(ts)
+    payload["state_version"] = float(ts)
     return payload
 
 

@@ -153,22 +153,9 @@ def check_colony_limit_available(
     """Return whether the player may found another colony."""
     if not evolution_schema_ready(conn):
         return False, "schema_missing"
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT COUNT(*) AS c FROM planets WHERE player_id = ? AND is_homeworld = 0;",
-        (int(player_id),),
-    )
-    colonies = int(cur.fetchone()["c"])
-    try:
-        from ..models import get_game_settings
+    from game.logic import check_planet_cap_available
 
-        settings = get_game_settings(conn=conn)
-        max_col = int(settings.get("max_colonies_per_player", 9))
-    except Exception:
-        max_col = 9
-    if colonies >= max_col:
-        return False, "colony_limit_reached"
-    return True, ""
+    return check_planet_cap_available(int(player_id), conn=conn)
 
 
 def evolution_schema_ready(conn: sqlite3.Connection) -> bool:
@@ -250,7 +237,7 @@ def build_world_colonize_preview(
     if not ok_target:
         block_reason = reason or "invalid_world_key"
     elif not ok_limit:
-        block_reason = limit_reason or "colony_limit_reached"
+        block_reason = limit_reason or "max_colonies_reached"
 
     return {
         "world_key": wk,

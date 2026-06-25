@@ -21,6 +21,7 @@ BALANCE_SETTING_KEYS: Tuple[str, ...] = (
     "fleet_speed_peaceful",
     "queue_limit",
     "research_queue_limit",
+    "max_colonies_per_player",
     "shipyard_speed",
     "shipyard_queue_limit",
     "score_weight_buildings",
@@ -52,6 +53,7 @@ _INT_NONNEG = frozenset({
     "exchange_daily_limit_min",
 })
 _INT_POS = frozenset({"queue_limit", "research_queue_limit", "shipyard_queue_limit"})
+_INT_RANGE_1_50 = frozenset({"max_colonies_per_player"})
 _FLOAT_POS = frozenset(
     {
         "production_speed",
@@ -86,6 +88,7 @@ PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
     "research_speed": 0.85,
     "queue_limit": 5,
     "research_queue_limit": 2,
+    "max_colonies_per_player": 9,
     "shipyard_speed": 1.0,
     "shipyard_queue_limit": 3,
     "score_weight_buildings": 1.0,
@@ -146,12 +149,14 @@ def _coerce_setting_value(key: str, raw: Any) -> Tuple[Optional[Any], Optional[s
             return None, f"{key}: invalid boolean"
         return val, None
 
-    if key in _INT_NONNEG | _INT_POS | _INT_PCT:
+    if key in _INT_NONNEG | _INT_POS | _INT_PCT | _INT_RANGE_1_50:
         val = _parse_int(raw)
         if val is None:
             return None, f"{key}: invalid integer"
         if key in _INT_POS and val < 1:
             return None, f"{key}: must be >= 1"
+        if key in _INT_RANGE_1_50 and (val < 1 or val > 50):
+            return None, f"{key}: must be 1–50"
         if key in _INT_PCT and (val < 0 or val > 100):
             return None, f"{key}: must be 0–100"
         if val < 0:
@@ -174,7 +179,7 @@ def _coerce_setting_value(key: str, raw: Any) -> Tuple[Optional[Any], Optional[s
 def _display_value(key: str, raw: Any) -> Any:
     if key in _BOOL_KEYS:
         return str(raw).strip().lower() not in ("0", "false", "no", "off", "")
-    if key in _INT_NONNEG | _INT_POS | _INT_PCT:
+    if key in _INT_NONNEG | _INT_POS | _INT_PCT | _INT_RANGE_1_50:
         try:
             return int(float(raw or 0))
         except (TypeError, ValueError):
