@@ -98,6 +98,11 @@ def get_secret_key() -> str:
     return os.environ.get("SECRET_KEY", "").strip()
 
 
+def get_internal_cron_token() -> str:
+    """Bearer token for POST /api/internal/cron/ranking (Railway HTTP cron)."""
+    return _env_str("GC_INTERNAL_CRON_TOKEN")
+
+
 def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
     raw = os.environ.get(name, "").strip()
     if not raw:
@@ -265,6 +270,11 @@ def validate_config(*, strict: bool | None = None) -> list[str]:
             warnings.append(
                 "DATABASE_URL points to PostgreSQL but is ignored — the app uses SQLite only. "
                 "Unset DATABASE_URL or remove the Postgres service link; set GC_DB_PATH=/data/game.db."
+            )
+        if not get_internal_cron_token():
+            warnings.append(
+                "GC_INTERNAL_CRON_TOKEN is not set — ranking HTTP cron "
+                "(POST /api/internal/cron/ranking) is disabled."
             )
 
     for w in warnings:

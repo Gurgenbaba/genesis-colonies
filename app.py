@@ -607,6 +607,15 @@ def health():
     return jsonify(report), code
 
 
+@app.route("/api/internal/cron/ranking", methods=["POST"])
+def api_internal_cron_ranking():
+    """Token-gated ranking recompute — same DB as web (Railway SQLite cron)."""
+    from game.internal_cron import handle_internal_cron_ranking
+
+    payload, status = handle_internal_cron_ranking(request)
+    return jsonify(payload), status
+
+
 # --------------------------------------------------------------------------
 # HELPER: Spieler-View + Ressourcen laden (conn-safe)
 # --------------------------------------------------------------------------
@@ -3553,7 +3562,17 @@ def api_admin_recalculate_rankings():
     admin = get_current_user()
     admin_id = int(admin["id"]) if admin else 0
     try:
+        from game.db import count_table_rows, db, gather_score_stats
+
         result = recalculate_all_rankings(refresh_scores=True)
+        conn = db()
+        try:
+            result["players_seen"] = count_table_rows(conn, "players")
+            result["scores_updated"] = int(result.get("players_updated") or 0)
+            stats = gather_score_stats(conn)
+            result["top_score"] = stats["top_score"]
+        finally:
+            conn.close()
         if admin_id:
             try:
                 from game.admin_audit import write_admin_audit
@@ -3573,6 +3592,13 @@ def api_admin_recalculate_rankings():
         return jsonify(result), status
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.route("/api/admin/ranking/recompute", methods=["POST"])
+@require_admin_api
+def api_admin_ranking_recompute():
+    """Alias for /api/admin/rankings/recalculate (GC-P0 ranking worker debug)."""
+    return api_admin_recalculate_rankings()
 
 
 @app.route("/api/admin/balance", methods=["GET"])

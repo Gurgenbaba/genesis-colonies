@@ -9,9 +9,18 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 import time
 from typing import Any, Dict, Optional
 
+from .db import (
+    count_table_rows,
+    db,
+    describe_db_connection,
+    gather_score_stats,
+    get_db_identity,
+)
 from .ranking import recalculate_all_rankings
 from .runtime_state import get_runtime_value, set_runtime_value
 
@@ -34,6 +43,12 @@ def _empty_worker_status() -> Dict[str, Any]:
         "skipped_interval": False,
         "next_run_in_sec": None,
     }
+
+
+def _worker_log(msg: str) -> None:
+    line = f"[ranking-worker] {msg}"
+    print(line, flush=True)
+    logger.info("%s", msg)
 
 
 def get_ranking_worker_status(conn=None) -> Dict[str, Any]:
@@ -102,11 +117,19 @@ def record_ranking_worker_result(result: Dict[str, Any], *, source: str, conn=No
     set_runtime_value(RANKING_WORKER_KEY, json.dumps(payload, ensure_ascii=False), conn=conn)
 
 
+def _gather_counts(conn) -> Dict[str, int]:
+    return {
+        "players": count_table_rows(conn, "players"),
+        "planets": count_table_rows(conn, "planets"),
+    }
+
+
 def run_ranking_worker(
     *,
     source: str = "cron",
     force: bool = False,
     persist: bool = True,
+    allow_empty: bool = False,
 ) -> Dict[str, Any]:
     """
     Recompute all player scores and rank columns. Intended for cron every 10 minutes.
@@ -114,74 +137,204 @@ def run_ranking_worker(
     When force=False, skips if the last successful run was within RANKING_WORKER_INTERVAL_SEC.
     """
     started = time.perf_counter()
+    conn = db()
+    try:
+        counts = _gather_counts(conn)
+        before_stats = gather_score_stats(conn)
+        players = int(counts["players"])
+        planets = int(counts["planets"])
 
-    if not force:
-        wait = seconds_until_ranking_worker_allowed()
-        if wait > 0:
-            skipped = {
-                "ok": True,
-                "skipped_interval": True,
+        if players == 0 and planets == 0 and not allow_empty:
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            result = {
+                "ok": False,
+                "skipped_interval": False,
                 "players_updated": 0,
                 "ranks_assigned": 0,
-                "duration_ms": int((time.perf_counter() - started) * 1000),
-                "errors": [],
-                "next_run_in_sec": int(wait),
+                "duration_ms": duration_ms,
+                "errors": ["empty database: players=0 planets=0"],
+                "players_seen": 0,
+                "planets": 0,
+                "scores_before": before_stats["scores_rows"],
+                "scores_after": before_stats["scores_rows"],
+                "scores_updated": 0,
+                "top_score_before": before_stats["top_score"],
+                "top_score_after": before_stats["top_score"],
             }
-            logger.info(
-                "ranking worker skipped (interval) source=%s wait_sec=%.0f",
-                source,
-                wait,
-            )
-            if persist:
-                record_ranking_worker_result(skipped, source=source)
-            return skipped
+            _worker_log("empty database — players=0 planets=0 (use --allow-empty to override)")
+            return result
 
-    logger.info("ranking worker start source=%s force=%s", source, force)
-    result = recalculate_all_rankings(refresh_scores=True)
-    result["skipped_interval"] = False
-    result.setdefault("errors", [])
-    if persist:
-        record_ranking_worker_result(result, source=source)
-    logger.info(
-        "ranking worker done source=%s players=%s ranks=%s duration_ms=%s errors=%s",
-        source,
-        result.get("players_updated"),
-        result.get("ranks_assigned"),
-        result.get("duration_ms"),
-        len(result.get("errors") or []),
-    )
-    return result
+        if not force:
+            wait = seconds_until_ranking_worker_allowed(conn=conn)
+            if wait > 0:
+                duration_ms = int((time.perf_counter() - started) * 1000)
+                skipped = {
+                    "ok": True,
+                    "skipped_interval": True,
+                    "players_updated": 0,
+                    "ranks_assigned": 0,
+                    "duration_ms": duration_ms,
+                    "errors": [],
+                    "next_run_in_sec": int(wait),
+                    "players_seen": players,
+                    "planets": planets,
+                    "scores_before": before_stats["scores_rows"],
+                    "scores_after": before_stats["scores_rows"],
+                    "scores_updated": 0,
+                    "top_score_before": before_stats["top_score"],
+                    "top_score_after": before_stats["top_score"],
+                }
+                _worker_log(f"skipped_interval wait_sec={int(wait)} (use --force to bypass)")
+                return skipped
+
+        _worker_log("recompute_started")
+        result = recalculate_all_rankings(refresh_scores=True, conn=conn)
+        conn.commit()
+        _worker_log("commit_ok")
+
+        after_stats = gather_score_stats(conn)
+        result["skipped_interval"] = False
+        result.setdefault("errors", [])
+        result["players_seen"] = players
+        result["planets"] = planets
+        result["scores_before"] = before_stats["scores_rows"]
+        result["scores_after"] = after_stats["scores_rows"]
+        result["scores_updated"] = int(result.get("players_updated") or 0)
+        result["top_score_before"] = before_stats["top_score"]
+        result["top_score_after"] = after_stats["top_score"]
+
+        if persist and not result.get("skipped_interval"):
+            record_ranking_worker_result(result, source=source, conn=conn)
+            conn.commit()
+
+        return result
+    except Exception as exc:
+        logger.exception("ranking worker failed")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        return {
+            "ok": False,
+            "skipped_interval": False,
+            "players_updated": 0,
+            "ranks_assigned": 0,
+            "duration_ms": duration_ms,
+            "errors": [str(exc)],
+        }
+    finally:
+        conn.close()
+
+
+def worker_exit_code(result: Dict[str, Any], *, allow_empty: bool) -> int:
+    if not result.get("ok"):
+        return 1
+    if result.get("skipped_interval"):
+        return 0
+    players = int(result.get("players_seen") or 0)
+    planets = int(result.get("planets") or 0)
+    if players == 0 and planets == 0 and not allow_empty:
+        return 1
+    if players > 0 and int(result.get("scores_updated") or 0) == 0:
+        return 1
+    return 0
 
 
 def _cli_main() -> int:
     import argparse
     import json
-    import os
-    import sys
     from pathlib import Path
 
     parser = argparse.ArgumentParser(description="Genesis Colonies ranking worker")
     parser.add_argument("--source", default="cli")
     parser.add_argument("--force", action="store_true", help="Ignore 10-minute interval guard")
     parser.add_argument("--no-persist", action="store_true")
+    parser.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help="Allow run when players=0 and planets=0 (default: exit 1)",
+    )
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent.parent
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
-    os.environ.setdefault("GC_SKIP_MIGRATION_CHECK", "1")
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     from game.bootstrap import bootstrap_application
+    from game.config import init_config, is_production
 
-    bootstrap_application(skip_migration_check=True)
+    init_config()
 
-    result = run_ranking_worker(
-        source=args.source,
-        force=bool(args.force),
-        persist=not args.no_persist,
+    if is_production():
+        from game.db import get_db_backend, resolve_db_path
+
+        if get_db_backend() == "sqlite":
+            db_path = resolve_db_path()
+            if not db_path.exists():
+                _worker_log(f"fatal: production db file missing path={db_path}")
+                _worker_log("exit=1")
+                return 1
+
+    skip_mig = os.environ.get("GC_SKIP_MIGRATION_CHECK", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
     )
-    print(json.dumps(result, indent=2, ensure_ascii=False))
-    return 0 if result.get("ok") else 1
+    bootstrap_application(skip_migration_check=skip_mig)
+
+    app_env = os.environ.get("APP_ENV") or os.environ.get("FLASK_ENV") or "development"
+    db_info = describe_db_connection()
+
+    _worker_log(f"start source={args.source}")
+    _worker_log(f"app_env={app_env}")
+    _worker_log(f"db_backend={db_info['db_backend']}")
+    _worker_log(f"database_url_set={'true' if db_info['database_url_set'] else 'false'}")
+    if db_info.get("db_path"):
+        _worker_log(f"db_path={db_info['db_path']}")
+
+    conn = db()
+    try:
+        identity = get_db_identity(conn)
+        counts = _gather_counts(conn)
+        before_stats = gather_score_stats(conn)
+        _worker_log(f"db_identity={identity}")
+        _worker_log(f"players={counts['players']}")
+        _worker_log(f"planets={counts['planets']}")
+        _worker_log(f"scores_before={before_stats['scores_rows']}")
+        _worker_log(f"top_score_before={before_stats['top_score']}")
+    finally:
+        conn.close()
+
+    try:
+        result = run_ranking_worker(
+            source=args.source,
+            force=bool(args.force),
+            persist=not args.no_persist,
+            allow_empty=bool(args.allow_empty),
+        )
+    except Exception as exc:
+        logger.exception("ranking worker failed")
+        _worker_log(f"exit=1 error={exc}")
+        return 1
+
+    if result.get("skipped_interval"):
+        _worker_log(f"skipped_interval next_run_in_sec={result.get('next_run_in_sec')}")
+    else:
+        _worker_log(f"scores_updated={result.get('scores_updated', result.get('players_updated'))}")
+        _worker_log(f"scores_after={result.get('scores_after', '')}")
+        _worker_log(f"top_score_after={result.get('top_score_after', '')}")
+
+    if result.get("errors"):
+        for err in result["errors"]:
+            _worker_log(f"error={err}")
+
+    code = worker_exit_code(result, allow_empty=bool(args.allow_empty))
+    _worker_log(f"exit={code}")
+    print(json.dumps(result, indent=2, ensure_ascii=False), flush=True)
+    return code
 
 
 if __name__ == "__main__":

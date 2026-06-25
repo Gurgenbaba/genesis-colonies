@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-CLI: run Genesis Colonies ranking worker (cron every 10 minutes).
+CLI: run Genesis Colonies ranking worker (local / manual only).
 
-One-shot: computes all scores/ranks, prints JSON, exits 0/1. Safe for Railway Cron
-(separate service — not the web process).
+One-shot: computes all scores/ranks, prints JSON, exits 0/1.
 
-Examples:
+Deprecated for Railway SQLite deployment — volumes are service-bound; a separate
+worker process cannot share /data/game.db with the web service. Use the web
+service HTTP cron instead:
+
+  POST /api/internal/cron/ranking
+  Authorization: Bearer $GC_INTERNAL_CRON_TOKEN
+
+Examples (local dev):
   python scripts/run_ranking_worker.py
-  python scripts/run_ranking_worker.py --source cron
-  python scripts/run_ranking_worker.py --force
-  python -m game.ranking_worker
-
-Railway Cron Service (same repo, env, volume/DB as web):
-  Start:  python scripts/run_ranking_worker.py --source cron
-  Schedule: */10 * * * *   (UTC)
+  python scripts/run_ranking_worker.py --source manual --force
+  python scripts/run_ranking_worker.py --force --allow-empty
 """
 
 from __future__ import annotations

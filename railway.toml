@@ -11,7 +11,8 @@ restartPolicyType = "on_failure"
 # Includes 020_player_messages.sql and all pending *.sql — no manual shell needed.
 # Do NOT use preDeployCommand — that container cannot mount Railway volumes.
 #
-# Optional: Ranking worker as a separate Railway Cron Service (not this web service).
-#   Start: python scripts/run_ranking_worker.py --source cron
-#   Cron:  */10 * * * *  (UTC)
-# Same GC_DB_PATH / volume env as web; one-shot exit per run.
+# Optional: Ranking batch (10 min) — HTTP cron on the web service (same SQLite volume).
+#   POST /api/internal/cron/ranking
+#   Authorization: Bearer $GC_INTERNAL_CRON_TOKEN
+#   Schedule: external HTTP cron every 10 min (e.g. cron-job.org, UptimeRobot).
+# Do NOT run scripts/run_ranking_worker.py as a separate Railway service on SQLite.

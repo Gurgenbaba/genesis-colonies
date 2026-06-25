@@ -440,6 +440,26 @@ def test_admin_recalculate_allowed_for_admin(app_client, temp_db):
     assert resp.status_code == 200
     data = resp.get_json()
     assert data.get("ok") is True
+    assert "players_seen" in data
+    assert "top_score" in data
+
+
+def test_admin_ranking_recompute_alias(app_client, temp_db):
+    _close_db()
+    uid = _create_player("adminrecomp")
+    conn = db()
+    conn.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (uid,))
+    conn.execute("UPDATE players SET is_admin = 1 WHERE id = ?", (uid,))
+    user_row = conn.execute("SELECT username FROM users WHERE id = ?", (uid,)).fetchone()
+    conn.commit()
+    conn.close()
+
+    _login(app_client, user_row["username"])
+    resp = app_client.post("/api/admin/ranking/recompute")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data.get("ok") is True
+    assert "scores_updated" in data
 
 
 def test_ranking_includes_avatar_when_public(temp_db):

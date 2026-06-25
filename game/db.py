@@ -241,3 +241,73 @@ def table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
 
 def column_exists(conn: sqlite3.Connection, table_name: str, column_name: str) -> bool:
     return column_name in table_columns(conn, table_name)
+
+
+def get_connection() -> sqlite3.Connection:
+    """Canonical DB connection helper (alias for db())."""
+    return db()
+
+
+def database_url_is_set() -> bool:
+    return bool(os.environ.get("DATABASE_URL", "").strip())
+
+
+def describe_db_connection() -> dict[str, Any]:
+    """Runtime DB target for workers and health diagnostics."""
+    backend = get_db_backend()
+    info: dict[str, Any] = {
+        "db_backend": backend,
+        "database_url_set": database_url_is_set(),
+    }
+    if backend == "sqlite":
+        info["db_path"] = str(resolve_db_path())
+    return info
+
+
+def count_table_rows(conn: sqlite3.Connection, table_name: str) -> int:
+    if not table_exists(conn, table_name):
+        return 0
+    cur = conn.cursor()
+    cur.execute(f"SELECT COUNT(*) AS cnt FROM {table_name};")
+    row = cur.fetchone()
+    return int(row["cnt"] if row and row["cnt"] is not None else 0)
+
+
+def get_db_identity(conn: Optional[sqlite3.Connection] = None) -> str:
+    """Short fingerprint: backend, path, row counts, top score."""
+    owns = conn is None
+    if owns:
+        conn = db()
+    try:
+        players = count_table_rows(conn, "players")
+        planets = count_table_rows(conn, "planets")
+        scores = count_table_rows(conn, "player_scores")
+        top_score = 0
+        if table_exists(conn, "player_scores"):
+            cur = conn.cursor()
+            cur.execute("SELECT COALESCE(MAX(score_total), 0) AS top FROM player_scores;")
+            row = cur.fetchone()
+            if row:
+                top_score = int(row["top"] or 0)
+        path_part = str(resolve_db_path()) if get_db_backend() == "sqlite" else "postgres"
+        return (
+            f"backend={get_db_backend()} path={path_part} "
+            f"players={players} planets={planets} scores={scores} top={top_score}"
+        )
+    finally:
+        if owns and conn is not None:
+            conn.close()
+
+
+def gather_score_stats(conn: sqlite3.Connection) -> dict[str, int]:
+    """Aggregate player_scores snapshot for worker before/after logs."""
+    if not table_exists(conn, "player_scores"):
+        return {"scores_rows": 0, "scores_positive": 0, "top_score": 0}
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) AS cnt FROM player_scores;")
+    rows = int(cur.fetchone()["cnt"] or 0)
+    cur.execute("SELECT COUNT(*) AS cnt FROM player_scores WHERE COALESCE(score_total, 0) > 0;")
+    positive = int(cur.fetchone()["cnt"] or 0)
+    cur.execute("SELECT COALESCE(MAX(score_total), 0) AS top FROM player_scores;")
+    top = int(cur.fetchone()["top"] or 0)
+    return {"scores_rows": rows, "scores_positive": positive, "top_score": top}
