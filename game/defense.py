@@ -838,14 +838,20 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
             player_id, planet_id, conn=conn
         )
         from .queue_card import (
+            enrich_mini_queue_jobs_batch_size,
             group_card_jobs_by_owner_key,
+            map_card_jobs_to_mini_queue_jobs,
             map_defense_queue_to_card_jobs,
         )
 
         card_jobs = map_defense_queue_to_card_jobs(queue)
         by_owner = group_card_jobs_by_owner_key(card_jobs)
         queue["card_jobs_by_owner"] = by_owner
-        _attach_queue_jobs_to_defense_rows(buildable, by_owner)
+        queue["mini_queue_jobs"] = enrich_mini_queue_jobs_batch_size(
+            map_card_jobs_to_mini_queue_jobs(card_jobs, domain="defense"),
+            domain="defense",
+            shipyard_level=sy_level,
+        )
         from .shipyard import orbital_production_batch_capacity
 
         return {

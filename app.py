@@ -6670,7 +6670,10 @@ def api_shipyard_build():
         conn.close()
 
     if ok:
-        return jsonify(fleet_ok(result, message_key="shipyard_build_ok"))
+        state, _ = _build_game_state_payload(include_panel=True, finish_source="api_shipyard_build")
+        body = fleet_ok(result, message_key="shipyard_build_ok")
+        body["state"] = state
+        return jsonify(body)
     return jsonify(fleet_err(reason)), 400
 
 

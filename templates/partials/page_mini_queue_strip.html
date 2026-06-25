@@ -1,0 +1,81 @@
+{# GC-QUEUE-MINI-CARDS — horizontal mini-queue strip (shipyard / defense) #}
+{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs with context %}
+
+{% macro _mini_queue_job_label(domain, job) %}
+  {% if domain == 'shipyard' %}
+    {{ T(job.label, T('fleet_ship_' ~ job.owner_key, job.owner_key)) }}
+  {% elif domain == 'defense' %}
+    {{ T(job.label, T('defense_' ~ job.owner_key, job.owner_key)) }}
+  {% else %}
+    {{ T(job.label, job.owner_key) }}
+  {% endif %}
+{% endmacro %}
+
+{% macro render_page_mini_queue_strip(host_id, domain, jobs, idle_text, queue_count, queue_limit, cancel_data_attr) %}
+  {% set job_list = jobs if jobs else [] %}
+  {% set q_count = (queue_count if queue_count is defined else 0)|int %}
+  {% set q_limit = (queue_limit if queue_limit is defined else 0)|int %}
+  <div class="gc-mini-queue-host {{ domain }}-mini-queue-host"
+       id="{{ host_id }}"
+       data-mini-queue-host="{{ domain }}"
+       aria-live="polite">
+    <div class="gc-mini-queue-strip" data-mini-queue-strip>
+      {% if job_list|length %}
+        {% for job in job_list %}
+          {% if not loop.first %}
+          <span class="gc-mini-queue-card__connector" aria-hidden="true">&gt;</span>
+          {% endif %}
+          <article class="gc-mini-queue-card{% if job.is_active %} gc-mini-queue-card--active{% else %} gc-mini-queue-card--waiting{% endif %}"
+                   data-mini-queue-card
+                   data-job-id="{{ job.job_id|int }}"
+                   data-queue-active="{{ '1' if job.is_active else '0' }}"
+                   data-timer-domain="{{ domain }}"{{ render_card_queue_data_attrs(job) }}>
+            <span class="gc-mini-queue-card__position gc-mono" aria-label="{{ T('queue_position_label', 'Position %(n)s', n=job.position|int) }}">{{ job.position|int }}</span>
+            <img class="gc-mini-queue-card__image"
+                 src="{{ job.image_url }}"
+                 alt="{{ _mini_queue_job_label(domain, job) }}"
+                 title="{{ _mini_queue_job_label(domain, job) }}"
+                 loading="lazy">
+            <div class="gc-mini-queue-card__body">
+              {% if (job.amount|default(0)|int) > 0 %}
+              <span class="gc-mini-queue-card__amount gc-mono"
+                    title="{{ (job.amount|int)|fmt_int }}">×{{ (job.amount|int)|fmt_int }}</span>
+              {% endif %}
+              <span class="gc-mini-queue-card__timer gc-mono"
+                    data-timer-target="{{ job.finish_at|int }}"
+                    data-timer-kind="{{ domain }}"
+                    data-refresh-on-zero="game-state"
+                    data-countdown-at="{{ job.finish_at|int }}"
+                    data-server-remaining="{{ job.remaining_seconds|default(0)|int }}">{{ job.remaining_seconds|default(0)|int }}s</span>
+            </div>
+            {% if job.cancelable %}
+            <button type="button"
+                    class="gc-mini-queue-card__cancel"
+                    {{ cancel_data_attr }}="{{ job.job_id|int }}"
+                    title="{{ T('queue_cancel_tooltip', 'Auftrag abbrechen') }}"
+                    aria-label="{{ T('queue_cancel_tooltip', 'Auftrag abbrechen') }}"><span aria-hidden="true">×</span></button>
+            {% endif %}
+            {% if job.is_active %}
+            <div class="gc-mini-queue-card__progress" role="progressbar"
+                 aria-valuemin="0" aria-valuemax="100"
+                 aria-valuenow="{{ job.progress_pct|default(0)|int }}">
+              <div class="gc-mini-queue-card__progress-fill gc-progress-smooth"
+                   style="width: {{ job.progress_pct|default(0)|int }}%;"></div>
+            </div>
+            {% endif %}
+          </article>
+        {% endfor %}
+      {% else %}
+        <span class="gc-mini-queue-empty" data-mini-queue-empty aria-hidden="true"></span>
+      {% endif %}
+    </div>
+    {% if q_limit > 0 %}
+    {% set slots_key = domain ~ '_queue_slots' %}
+    <span class="gc-mini-queue-slots gc-mono"
+          id="{{ host_id }}-slots"
+          data-mini-queue-slots
+          title="{{ T(slots_key, '%(count)s / %(limit)s Aufträge', count=q_count, limit=q_limit) }}"
+          aria-label="{{ T(slots_key, '%(count)s / %(limit)s Aufträge', count=q_count, limit=q_limit) }}">{{ q_count|fmt_int }}/{{ q_limit|fmt_int }}</span>
+    {% endif %}
+  </div>
+{% endmacro %}

@@ -569,6 +569,108 @@ def map_ascension_queue_to_card_jobs(
     return reconcile_card_queue_jobs(out, now=ts)
 
 
+def _mini_queue_image_url(domain: str, owner_key: str) -> str:
+    key = str(owner_key or "").strip()
+    if not key:
+        return ""
+    dom = str(domain or "").strip().lower()
+    if dom in (OWNER_SHIPYARD, "shipyard"):
+        from .fleet_defs import ship_icon_static_path
+
+        return ship_icon_static_path(key)
+    if dom in (OWNER_DEFENSE, "defense"):
+        from .defense_defs import defense_icon_static_path
+
+        return defense_icon_static_path(key)
+    return ""
+
+
+def map_card_jobs_to_mini_queue_jobs(
+    card_jobs: Sequence[Mapping[str, Any]],
+    *,
+    domain: str,
+    now: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """
+    GC-QUEUE-MINI-CARDS — horizontal mini-queue strip jobs (shipyard / defense).
+    Built from reconciled card jobs; server remains source of truth for timers.
+    """
+    ts = float(now if now is not None else time.time())
+    visible = filter_client_visible_card_jobs(card_jobs, now=ts)
+    ordered = sorted(
+        visible,
+        key=lambda j: (_safe_int(j.get("queue_position"), 9999), _safe_int(j.get("job_id"), 0)),
+    )
+    dom = str(domain or "").strip().lower()
+    out: List[Dict[str, Any]] = []
+    for idx, raw in enumerate(ordered):
+        job = dict(raw)
+        owner_key = str(job.get("owner_key") or "")
+        if not owner_key:
+            continue
+        status = str(job.get("status") or "")
+        is_active = status == STATUS_ACTIVE
+        position = _safe_int(job.get("queue_position"), idx + 1)
+        amount = _safe_int(job.get("target_amount"), 0)
+        remaining = _safe_int(job.get("remaining_seconds"), 0)
+        finish = _safe_float(job.get("finish_at"))
+        if remaining <= 0 and finish > 0 and finish <= ts:
+            continue
+        label = str(
+            job.get("ship_label_key")
+            or job.get("defense_label_key")
+            or job.get("label_key")
+            or job.get("label")
+            or owner_key
+        )
+        out.append(
+            {
+                "job_id": _safe_int(job.get("job_id"), 0),
+                "domain": dom,
+                "owner_key": owner_key,
+                "label": label,
+                "amount": amount,
+                "position": position,
+                "is_active": is_active,
+                "remaining_seconds": remaining,
+                "start_at": _safe_float(job.get("start_at")),
+                "finish_at": finish if finish > 0 else 0.0,
+                "progress_pct": _safe_int(job.get("progress_pct"), 0),
+                "duration_seconds": max(1, _safe_int(job.get("duration_seconds"), 1)),
+                "image_url": _mini_queue_image_url(dom, owner_key),
+                "cancelable": True,
+            }
+        )
+        if job.get("batch_size") is not None:
+            out[-1]["batch_size"] = max(1, _safe_int(job.get("batch_size"), 1))
+    return out
+
+
+def enrich_mini_queue_jobs_batch_size(
+    jobs: Sequence[Mapping[str, Any]],
+    *,
+    domain: str,
+    shipyard_level: int,
+) -> List[Dict[str, Any]]:
+    """Attach per-job batch_size for shipyard/defense mini-queue display."""
+    dom = str(domain or "").strip().lower()
+    lvl = max(1, int(shipyard_level or 1))
+    out: List[Dict[str, Any]] = []
+    for raw in jobs:
+        job = dict(raw)
+        owner_key = str(job.get("owner_key") or "")
+        if dom in (OWNER_SHIPYARD, "shipyard") and owner_key:
+            from .shipyard import base_unit_seconds_for_ship, unit_batch_capacity
+
+            job["batch_size"] = unit_batch_capacity(lvl, base_unit_seconds_for_ship(owner_key))
+        elif dom in (OWNER_DEFENSE, "defense") and owner_key:
+            from .defense import _batch_capacity_for_defense
+
+            job["batch_size"] = _batch_capacity_for_defense(owner_key, lvl)
+        out.append(job)
+    return out
+
+
 def attach_card_jobs_by_owner(
     payload: MutableMapping[str, Any],
     card_jobs: Sequence[Mapping[str, Any]],

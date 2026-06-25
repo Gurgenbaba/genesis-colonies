@@ -3022,7 +3022,7 @@
     if (syPage?.dataset.ready === "1") {
       const qd = data.shipyard?.queue || data.shipyard_queue;
       if (qd) {
-        patchShipyardCardQueues(syPage, qd);
+        renderShipyardQueue(syPage, qd);
         patched = true;
       }
     }
@@ -3030,7 +3030,7 @@
     if (defPage?.dataset.ready === "1" && data.defense) {
       const qd = data.defense.queue || data.defense.defense_queue;
       if (qd) {
-        patchDefenseCardQueues(defPage, qd);
+        renderDefenseQueue(defPage, qd);
         patched = true;
       }
     }
@@ -4455,6 +4455,18 @@
   GC.renderGlobalQueueHud = renderGlobalQueueHud;
   GC.renderGlobalBuildQueueHud = renderGlobalQueueHud;
 
+  function shipyardActionReasonText(reason) {
+    const key = String(reason || "generic").trim() || "generic";
+    const shipyard = t(`shipyard_error_${key}`, "");
+    if (shipyard && shipyard !== `shipyard_error_${key}`) return shipyard;
+    if (key === "generic" || key === "cancel_failed") {
+      return t("shipyard_error_cancel_failed", "Werftauftrag konnte nicht abgebrochen werden.");
+    }
+    const fleet = t(`fleet_error_${key}`, "");
+    if (fleet && fleet !== `fleet_error_${key}`) return fleet;
+    return t("shipyard_error_cancel_failed", "Werftauftrag konnte nicht abgebrochen werden.");
+  }
+
   async function _handleGlobalQueueHudCancel(btn) {
     if (!btn || btn.dataset.busy === "1") return;
     const planetId = Number(
@@ -4521,14 +4533,18 @@
         });
         if (res?.ok) {
           applyActionState(res, "shipyard_cancel");
+          const syPage = document.getElementById("shipyard-page");
+          if (syPage?.dataset.ready === "1" && res.data) {
+            applyShipyardState(syPage, res.data);
+          }
           if (!res.state && typeof GC.refreshGameState === "function") {
             await GC.refreshGameState("shipyard_cancel");
           }
         } else {
-          showNotify(reasonText(res?.error || apiError(res)), "error");
+          showNotify(shipyardActionReasonText(res?.error || res?.reason || "cancel_failed"), "error");
         }
       } catch (_) {
-        showNotify(reasonText("generic"), "error");
+        showNotify(shipyardActionReasonText("cancel_failed"), "error");
       } finally {
         btn.dataset.busy = "0";
       }
@@ -6952,6 +6968,258 @@
     });
   }
 
+  function miniQueueJobSignature(job) {
+    if (!job || typeof job !== "object") return "";
+    return [
+      job.job_id,
+      job.position || job.queue_position,
+      job.amount || job.target_amount,
+      job.is_active ? 1 : 0,
+      job.finish_at,
+      job.remaining_seconds,
+      job.progress_pct,
+    ].join(":");
+  }
+
+  function _collectMiniQueueJobs(queueRaw, domain) {
+    if (Array.isArray(queueRaw?.mini_queue_jobs)) return queueRaw.mini_queue_jobs;
+    const cardJobs =
+      domain === "defense" ? _collectDefenseQueueCardJobs(queueRaw) : _collectShipyardQueueCardJobs(queueRaw);
+    const iconFn = domain === "defense" ? defenseIconUrl : shipyardIconUrl;
+    return cardJobs.map((job) => ({
+      job_id: Math.floor(Number(job.job_id || 0)),
+      domain,
+      owner_key: String(job.owner_key || ""),
+      label: String(
+        job.ship_label_key || job.defense_label_key || job.label_key || job.label || job.owner_key || ""
+      ),
+      amount: Math.floor(Number(job.target_amount || 0)),
+      position: Math.floor(Number(job.queue_position || 1)),
+      is_active: String(job.status || "") === "active",
+      remaining_seconds: Math.max(0, Math.floor(Number(job.remaining_seconds || 0))),
+      start_at: Math.floor(Number(job.start_at || 0)),
+      finish_at: Math.floor(Number(job.finish_at || 0)),
+      progress_pct: Math.max(0, Math.min(100, Math.floor(Number(job.progress_pct || 0)))),
+      duration_seconds: Math.max(1, Math.floor(Number(job.duration_seconds || 1))),
+      image_url: iconFn(String(job.owner_key || "")),
+      cancelable: true,
+    }));
+  }
+
+  function _updateMiniQueueSlots(hostEl, domain, queueRaw) {
+    if (!hostEl) return;
+    const summary = queueRaw?.summary || {};
+    const count = Math.floor(Number(summary.count) || 0);
+    const limit = Math.floor(Number(summary.limit) || 0);
+    const slotsEl = hostEl.querySelector("[data-mini-queue-slots]");
+    if (!slotsEl) return;
+    if (limit <= 0) {
+      slotsEl.hidden = true;
+      return;
+    }
+    slotsEl.hidden = false;
+    const text = `${fmtNumber(count)}/${fmtNumber(limit)}`;
+    _setIfChanged(slotsEl, text);
+    const labelKey = _pageQueueSlotsLabelKey(domain);
+    const aria = tf(labelKey, { count, limit }, `${fmtNumber(count)} / ${fmtNumber(limit)}`);
+    if (slotsEl.getAttribute("title") !== aria) slotsEl.setAttribute("title", aria);
+    if (slotsEl.getAttribute("aria-label") !== aria) slotsEl.setAttribute("aria-label", aria);
+  }
+
+  function _resolveMiniQueueLabel(job, domain) {
+    const labelKey = String(job.label || "");
+    const ownerKey = String(job.owner_key || "");
+    if (domain === "shipyard") {
+      return t(labelKey || `fleet_ship_${ownerKey}`, ownerKey);
+    }
+    if (domain === "defense") {
+      return t(labelKey || `defense_${ownerKey}`, ownerKey);
+    }
+    return t(labelKey, ownerKey);
+  }
+
+  GC.renderMiniQueueStrip = function renderMiniQueueStrip(rootEl, jobs, options) {
+    if (!rootEl) return;
+    const opts = options && typeof options === "object" ? options : {};
+    const domain = String(opts.domain || rootEl.dataset.miniQueueHost || "shipyard");
+    const cancelDataset =
+      domain === "defense" ? "defenseQueueCancel" : domain === "shipyard" ? "shipyardQueueCancel" : "";
+    const strip = rootEl.querySelector("[data-mini-queue-strip]") || rootEl;
+    const now = getTimerServerNow();
+    const visibleJobs = (Array.isArray(jobs) ? jobs : [])
+      .filter((job) => {
+        if (!job || typeof job !== "object") return false;
+        const rem = Math.max(0, Math.floor(Number(job.remaining_seconds || 0)));
+        const finish = Math.floor(Number(job.finish_at || 0));
+        if (rem <= 0 && finish > 0 && finish <= now) return false;
+        return Math.floor(Number(job.job_id || 0)) > 0;
+      })
+      .slice()
+      .sort(
+        (a, b) =>
+          Math.floor(Number(a.position || a.queue_position || 0)) -
+          Math.floor(Number(b.position || b.queue_position || 0))
+      );
+
+    const sig = visibleJobs.map((j) => miniQueueJobSignature(j)).join("|");
+    if (sig === strip.dataset.miniQueueSig) {
+      visibleJobs.forEach((job) => {
+        const card = strip.querySelector(`[data-mini-queue-card][data-job-id="${Math.floor(Number(job.job_id))}"]`);
+        if (!card) return;
+        const isActive = Boolean(job.is_active);
+        const timerEl = card.querySelector(".gc-mini-queue-card__timer");
+        const finishAt = Math.floor(Number(job.finish_at || 0));
+        if (timerEl && finishAt > 0) {
+          const displayRemaining = queueJobRemainingSeconds(
+            finishAt,
+            now,
+            Math.max(0, Math.floor(Number(job.remaining_seconds || 0)))
+          );
+          applyQueueJobTimerAttrs(timerEl, finishAt, domain, "game-state", displayRemaining);
+          timerEl.textContent = formatEta(queueTimerDisplaySeconds(displayRemaining));
+        }
+        if (isActive) {
+          const bar = card.querySelector(".gc-mini-queue-card__progress");
+          const fill = card.querySelector(".gc-mini-queue-card__progress-fill");
+          const pct = Math.max(0, Math.min(100, Math.floor(Number(job.progress_pct || 0))));
+          if (bar) bar.setAttribute("aria-valuenow", String(pct));
+          if (fill) fill.style.width = `${pct}%`;
+        }
+      });
+      return;
+    }
+    strip.dataset.miniQueueSig = sig;
+    strip.replaceChildren();
+
+    if (!visibleJobs.length) {
+      const emptyEl = document.createElement("span");
+      emptyEl.className = "gc-mini-queue-empty";
+      emptyEl.dataset.miniQueueEmpty = "1";
+      emptyEl.setAttribute("aria-hidden", "true");
+      strip.appendChild(emptyEl);
+      return;
+    }
+
+    visibleJobs.forEach((job, idx) => {
+      if (idx > 0) {
+        const conn = document.createElement("span");
+        conn.className = "gc-mini-queue-card__connector";
+        conn.setAttribute("aria-hidden", "true");
+        conn.textContent = ">";
+        strip.appendChild(conn);
+      }
+
+      const jobId = Math.floor(Number(job.job_id || 0));
+      const isActive = Boolean(job.is_active);
+      const position = Math.max(1, Math.floor(Number(job.position || job.queue_position || idx + 1)));
+      const amount = Math.floor(Number(job.amount || job.target_amount || 0));
+      const ownerKey = String(job.owner_key || "");
+      const finishAt = Math.floor(Number(job.finish_at || 0));
+      const startAt = Math.floor(Number(job.start_at || 0));
+      const duration = Math.max(1, Math.floor(Number(job.duration_seconds || 1)));
+      const progressPct = Math.max(0, Math.min(100, Math.floor(Number(job.progress_pct || 0))));
+      const imageUrl =
+        String(job.image_url || "") ||
+        (domain === "defense" ? defenseIconUrl(ownerKey) : shipyardIconUrl(ownerKey));
+      const label = _resolveMiniQueueLabel(job, domain);
+
+      const card = document.createElement("article");
+      card.className = `gc-mini-queue-card${isActive ? " gc-mini-queue-card--active" : " gc-mini-queue-card--waiting"}`;
+      card.dataset.miniQueueCard = "1";
+      card.dataset.jobId = String(jobId);
+      card.dataset.queueActive = isActive ? "1" : "0";
+      card.dataset.timerDomain = domain;
+      card.title = amount > 0 ? `${label} ×${fmtNumber(amount)}` : label;
+      if (startAt > 0) card.dataset.startAt = String(startAt);
+      if (finishAt > 0) card.dataset.finishAt = String(finishAt);
+      card.dataset.totalSeconds = String(duration);
+
+      const posEl = document.createElement("span");
+      posEl.className = "gc-mini-queue-card__position gc-mono";
+      posEl.textContent = String(position);
+      posEl.setAttribute("aria-label", tf("queue_position_label", { n: position }, `Position ${position}`));
+      card.appendChild(posEl);
+
+      const img = document.createElement("img");
+      img.className = "gc-mini-queue-card__image";
+      img.src = imageUrl;
+      img.alt = label;
+      img.title = label;
+      img.loading = "lazy";
+      card.appendChild(img);
+
+      const body = document.createElement("div");
+      body.className = "gc-mini-queue-card__body";
+
+      if (amount > 0) {
+        const amtEl = document.createElement("span");
+        amtEl.className = "gc-mini-queue-card__amount gc-mono";
+        const amtText = `×${fmtNumber(amount)}`;
+        amtEl.textContent = amtText;
+        amtEl.title = fmtNumber(amount);
+        body.appendChild(amtEl);
+      }
+
+      const timerEl = document.createElement("span");
+      timerEl.className = "gc-mini-queue-card__timer gc-mono";
+      if (finishAt > 0) {
+        const displayRemaining = queueJobRemainingSeconds(
+          finishAt,
+          now,
+          Math.max(0, Math.floor(Number(job.remaining_seconds || 0)))
+        );
+        applyQueueJobTimerAttrs(timerEl, finishAt, domain, "game-state", displayRemaining);
+        timerEl.textContent = formatEta(queueTimerDisplaySeconds(displayRemaining));
+      } else {
+        timerEl.textContent = formatEta(Math.max(0, Math.floor(Number(job.remaining_seconds || 0))));
+      }
+      body.appendChild(timerEl);
+      card.appendChild(body);
+
+      if (job.cancelable !== false && jobId > 0 && cancelDataset) {
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "gc-mini-queue-card__cancel";
+        cancelBtn.dataset[cancelDataset] = String(jobId);
+        cancelBtn.title = t("queue_cancel_tooltip", "Auftrag abbrechen");
+        cancelBtn.setAttribute("aria-label", t("queue_cancel_tooltip", "Auftrag abbrechen"));
+        cancelBtn.innerHTML = '<span aria-hidden="true">×</span>';
+        card.appendChild(cancelBtn);
+      }
+
+      if (isActive) {
+        const bar = document.createElement("div");
+        bar.className = "gc-mini-queue-card__progress";
+        bar.setAttribute("role", "progressbar");
+        bar.setAttribute("aria-valuemin", "0");
+        bar.setAttribute("aria-valuemax", "100");
+        bar.setAttribute("aria-valuenow", String(progressPct));
+        const fill = document.createElement("div");
+        fill.className = "gc-mini-queue-card__progress-fill gc-progress-smooth";
+        fill.style.width = `${progressPct}%`;
+        bar.appendChild(fill);
+        card.appendChild(bar);
+      }
+
+      strip.appendChild(card);
+    });
+  };
+
+  function _renderProductionMiniQueue(hostId, queueRaw, options) {
+    const host = document.getElementById(hostId);
+    if (!host) return;
+    const opts = options && typeof options === "object" ? options : {};
+    const domain = String(opts.domain || host.dataset.miniQueueHost || "shipyard");
+    const jobs = _collectMiniQueueJobs(queueRaw, domain);
+    GC.renderMiniQueueStrip(host, jobs, {
+      domain,
+      idleText: opts.idleText,
+      planetId: opts.planetId,
+      limit: Math.floor(Number(queueRaw?.summary?.limit || opts.limit || 0)),
+    });
+    _updateMiniQueueSlots(host, domain, queueRaw);
+  }
+
   function _resolveQueueJobDisplayName(job, domain) {
     const ownerKey = String(
       job?.owner_key || job?.tech_key || job?.key || job?.building_type
@@ -7198,13 +7466,15 @@
     const updaters = [
       ["build-queue-compact", () => _updateBuildQueueCompact(state.build_queue)],
       ["research-queue-compact", () => _updateResearchQueueCompact(state.research)],
-      ["shipyard-queue-compact", () => {
+      ["shipyard-mini-queue", () => {
         const sy = state.shipyard?.queue || state.shipyard_queue;
-        if (sy) _updateShipyardQueueCompact(sy);
+        const page = document.getElementById("shipyard-page");
+        if (sy && page) renderShipyardQueue(page, sy);
       }],
-      ["defense-queue-compact", () => {
+      ["defense-mini-queue", () => {
         const df = state.defense?.defense_queue || state.defense?.queue || state.defense_queue;
-        if (df) _updateDefenseQueueCompact(df);
+        const page = document.getElementById("defense-page");
+        if (df && page) renderDefenseQueue(page, df);
       }],
     ];
     updaters.forEach(([id, fn]) => {
@@ -15824,8 +16094,8 @@
   GC.shipyardIconUrl = shipyardIconUrl;
 
   function renderShipyardQueue(page, queueData) {
-    const compact = document.getElementById("shipyard-queue-compact");
-    if (!compact) return;
+    const host = document.getElementById("shipyard-mini-queue");
+    if (!host) return;
 
     const qd = queueData || { queue: [], summary: { count: 0, limit: 3, refund_percent: 100, refund_percent_active: 50 } };
     const jobs = qd.queue || [];
@@ -15843,9 +16113,8 @@
       _shipyardUnitFinishKey = "";
       SHIPYARDQ.active.finishTime = 0;
       SHIPYARDQ.active.totalSeconds = 0;
-      _updateShipyardQueueCompact(qd);
+      _renderProductionMiniQueue("shipyard-mini-queue", qd, { domain: "shipyard" });
       clearAllProductionCardQueues(page);
-      patchShipyardCardQueues(page, { queue: [], summary: { count: 0 }, card_jobs_by_owner: {} });
       GC.startProgressTicker();
       return;
     }
@@ -15860,8 +16129,7 @@
         (finishTime > 0 && finishTime <= now) ||
         (nextUnitFinish > 0 && nextUnitFinish <= now);
       if (!overdue) {
-        _updateShipyardQueueCompact(qd);
-        patchShipyardCardQueues(page, qd);
+        _renderProductionMiniQueue("shipyard-mini-queue", qd, { domain: "shipyard" });
         GC.startProgressTicker();
         return;
       }
@@ -15869,12 +16137,11 @@
     _lastShipyardQueueSignature = sig;
     _productionZeroHandled.shipyard = "";
 
-    _updateShipyardQueueCompact(qd);
+    _renderProductionMiniQueue("shipyard-mini-queue", qd, { domain: "shipyard" });
     if (!jobs.length) _finishRefreshArmed.shipyard = false;
     else clearFinishRefreshArmed("shipyard", jobs);
 
-    patchShipyardCardQueues(page, qd);
-
+    clearAllProductionCardQueues(page);
     GC.startProgressTicker();
   }
 
@@ -16158,8 +16425,19 @@
       return;
     }
     const tt = (key, fb) => t(key, fb);
+    const resources = data.resources || {};
 
     if (data.planet_id) page.dataset.planetId = String(data.planet_id);
+
+    if (data.resources && typeof GC.mergeLastState === "function") {
+      GC.mergeLastState({ resources: { ...resources } }, "shipyard_state");
+      if (typeof GC.patchShellHudFromState === "function") {
+        GC.patchShellHudFromState(
+          { ...GC.lastState, resources: { ...resources } },
+          { forceResourceBar: true, reason: "shipyard_state" }
+        );
+      }
+    }
 
     if (data.orbital_shipyard_level != null) {
       page.dataset.shipyardLevel = String(data.orbital_shipyard_level);
@@ -16188,13 +16466,11 @@
     (data.buildable_ships || []).forEach((ship) => {
       const card = page.querySelector(`[data-ship-key="${ship.ship_key}"][data-unlocked="1"]`);
       applyShipyardShipCard(card, ship, resources, syLevel, tt);
-      if (card && !ship.queue_job) clearProductionCardQueueState(card);
     });
 
     (data.locked_ships || []).forEach((ship) => {
       const card = page.querySelector(`[data-ship-key="${ship.ship_key}"][data-unlocked="0"]`);
       applyShipyardShipCard(card, ship, resources, syLevel, tt);
-      if (card && !ship.queue_job) clearProductionCardQueueState(card);
     });
   }
 
@@ -16228,8 +16504,8 @@
     if (_shipyardBound) return;
     _shipyardBound = true;
     const tt = (key, fallback) => t(key, fallback);
-    const apiError = (res) => (res && (res.error || res.reason)) || "generic";
-    const reasonText = (reason) => tt(`shipyard_error_${reason}`, tt(`fleet_error_${reason}`, reason || "Error"));
+    const apiError = (res) => (res && (res.error || res.reason)) || "cancel_failed";
+    const reasonText = shipyardActionReasonText;
 
     document.addEventListener("click", async (e) => {
       const page = document.getElementById("shipyard-page");
@@ -16253,9 +16529,11 @@
       const cancelBtn = e.target.closest("[data-shipyard-queue-cancel]");
       if (cancelBtn && page.contains(cancelBtn)) {
         e.preventDefault();
+        e.stopPropagation();
         const jobId = parseInt(cancelBtn.getAttribute("data-shipyard-queue-cancel") || "0", 10);
         const planetId = parseInt(page.dataset.planetId || "0", 10);
-        if (!jobId) return;
+        if (!jobId || cancelBtn.dataset.busy === "1") return;
+        cancelBtn.dataset.busy = "1";
         cancelBtn.disabled = true;
         try {
           const res = await GC.fetchGameAction("/api/shipyard/queue/cancel", {
@@ -16267,9 +16545,10 @@
             _lastShipyardQueueSignature = "";
             if (res.state) {
               applyActionState(res, "shipyard_cancel");
-            } else if (res.data) {
+            }
+            if (res.data) {
               applyShipyardState(page, res.data);
-            } else {
+            } else if (!res.state) {
               await refreshShipyardState(page);
             }
             if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_cancel");
@@ -16277,8 +16556,9 @@
             showNotify(reasonText(res?.error || apiError(res)), "error");
           }
         } catch (_) {
-          showNotify(reasonText("generic"), "error");
+          showNotify(reasonText("cancel_failed"), "error");
         } finally {
+          delete cancelBtn.dataset.busy;
           cancelBtn.disabled = false;
         }
         return;
@@ -16341,9 +16621,16 @@
         });
         if (res?.ok) {
           _lastShipyardQueueSignature = "";
-          if (res.data) applyShipyardState(page, res.data);
-          else await refreshShipyardState(page);
-          if (typeof GC.refreshGameState === "function") await GC.refreshGameState("shipyard_build");
+          if (res.state) {
+            applyActionState(res, "shipyard_build");
+          }
+          if (res.data) {
+            applyShipyardState(page, res.data);
+          } else if (!res.state) {
+            await refreshShipyardState(page);
+          } else if (typeof GC.refreshGameState === "function") {
+            await GC.refreshGameState("shipyard_build");
+          }
         } else {
           const errKey = res?.error || apiError(res);
           showNotify(reasonText(errKey), "error");
@@ -16473,13 +16760,12 @@
   }
 
   function renderDefenseQueue(page, queuePayload) {
-    const compact = document.getElementById("defense-queue-compact");
-    if (!compact) return;
+    const host = document.getElementById("defense-mini-queue");
+    if (!host) return;
 
     const qd = queuePayload || { queue: [], summary: { count: 0, limit: 3, refund_percent: 100, refund_percent_active: 50 } };
     const jobs = qd.queue || [];
     const summary = qd.summary || {};
-    const count = summary.count ?? jobs.length;
     const first = jobs.length ? jobs[0] : null;
 
     _syncDefenseQueueLiveState(jobs);
@@ -16493,9 +16779,8 @@
       _defenseUnitFinishKey = "";
       DEFENSEQ.active.finishTime = 0;
       DEFENSEQ.active.totalSeconds = 0;
-      _updateDefenseQueueCompact(qd);
+      _renderProductionMiniQueue("defense-mini-queue", qd, { domain: "defense" });
       clearAllProductionCardQueues(page);
-      patchDefenseCardQueues(page, { queue: [], summary: { count: 0 }, card_jobs_by_owner: {} });
       GC.startProgressTicker();
       return;
     }
@@ -16510,8 +16795,7 @@
         (finishTime > 0 && finishTime <= now) ||
         (nextUnitFinish > 0 && nextUnitFinish <= now);
       if (!overdue) {
-        _updateDefenseQueueCompact(qd);
-        patchDefenseCardQueues(page, qd);
+        _renderProductionMiniQueue("defense-mini-queue", qd, { domain: "defense" });
         GC.startProgressTicker();
         return;
       }
@@ -16519,11 +16803,11 @@
     _lastDefenseQueueSignature = sig;
     _productionZeroHandled.defense = "";
 
-    _updateDefenseQueueCompact(qd);
+    _renderProductionMiniQueue("defense-mini-queue", qd, { domain: "defense" });
     if (!jobs.length) _finishRefreshArmed.defense = false;
     else clearFinishRefreshArmed("defense", jobs);
 
-    patchDefenseCardQueues(page, qd);
+    clearAllProductionCardQueues(page);
     GC.startProgressTicker();
   }
 
@@ -16554,14 +16838,10 @@
     if (data.current_defense) updateDefenseStockBadges(page, data.current_defense);
     if (data.defense_queue) renderDefenseQueue(page, data.defense_queue);
     (data.buildable_defense || []).forEach((unit) => {
-      const card = page.querySelector(`[data-defense-card="${unit.defense_key}"]`);
       applyDefenseUnitCard(page, unit, data.resources || {}, tt);
-      if (card && !unit.queue_job) clearProductionCardQueueState(card);
     });
     (data.locked_defense || []).forEach((unit) => {
-      const card = page.querySelector(`[data-defense-card="${unit.defense_key}"]`);
       applyDefenseUnitCard(page, unit, data.resources || {}, tt, { locked: true });
-      if (card && !unit.queue_job) clearProductionCardQueueState(card);
     });
   }
 

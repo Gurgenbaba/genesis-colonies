@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_compact_unit_stat_chips, render_card_costs_block, render_unit_build_time_footer, render_defense_locked_req_hover_attrs with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
-{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
-{% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
+{% from "partials/page_mini_queue_strip.html" import render_page_mini_queue_strip with context %}
 {% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
 
 {% macro render_defense_stock_chip(defense_key, owned) %}
@@ -10,47 +9,6 @@
         title="{{ T('shipyard_stock_label', 'Am Planeten') }}"
         aria-label="{{ T('shipyard_stock_label', 'Am Planeten') }}: {{ owned|fmt_int }}"
         data-defense-stock="{{ defense_key }}">{{ owned|fmt_int }}</span>
-{% endmacro %}
-
-{% macro render_defense_card_queue(qj) %}
-  {% if qj is defined and qj %}
-  <div class="gc-card-queue-block gc-card-queue-block--defense gc-card-queue-block--{{ qj.status }}"
-       data-gc-card-queue="1"
-       data-queue-active="{{ '1' if qj.status == 'active' else '0' }}"
-       data-timer-domain="defense"
-       data-job-id="{{ qj.job_id|int }}"{{ render_card_queue_data_attrs(qj) }}>
-    <div class="gc-card-queue-head">
-      <span class="gc-card-queue-glyph gc-card-queue-glyph--defense" aria-hidden="true"></span>
-      <span class="gc-card-queue-status">
-        {% if qj.status == 'active' %}
-          {{ T('queue_card_status_active', 'AKTIV') }}
-        {% else %}
-          {{ T('queue_card_status_queued', 'QUEUE #%(n)s', n=qj.queue_position|int) }}
-        {% endif %}
-      </span>
-    </div>
-    {% if qj.target_amount is defined and qj.owner_key is defined and (qj.target_amount|int) > 1 %}
-    <div class="gc-card-queue-quantity gc-mono">
-      {{ qj.target_amount|int }}× {{ T('defense_' ~ qj.owner_key) }}
-    </div>
-    {% endif %}
-    {{ render_card_queue_timer(qj, 'defense', 'defense') }}
-    {% if qj.status == 'active' %}
-    <div class="gc-card-queue-bar" role="progressbar"
-         aria-valuemin="0" aria-valuemax="100"
-         aria-valuenow="{{ qj.progress_pct|default(0)|int }}">
-      <div class="gc-card-queue-bar-fill gc-progress-smooth"
-           style="width: {{ qj.progress_pct|default(0)|int }}%;"></div>
-      <div class="gc-card-queue-scanline gc-card-queue-scanline--defense" aria-hidden="true"></div>
-    </div>
-    {% endif %}
-    <button type="button"
-            class="gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel"
-            data-defense-queue-cancel="{{ qj.job_id|int }}">
-      {{ T('shipyard_queue_cancel_btn', 'Abbrechen') }}
-    </button>
-  </div>
-  {% endif %}
 {% endmacro %}
 
 {% set df = defense if defense is defined and defense else {'ready': false, 'defense_factory_level': 0} %}
@@ -107,18 +65,16 @@
   </section>
 
   {% set df_q = df.defense_queue if df.defense_queue is defined and df.defense_queue else {} %}
-  {% set df_q_jobs = df_q.queue if df_q.queue is defined and df_q.queue else [] %}
   {% set df_q_summary = df_q.summary if df_q.summary is defined and df_q.summary else {} %}
   {% set df_q_limit = (df_q_summary.limit if df_q_summary.limit is defined else 3)|int %}
-  {{ render_page_queue_compact(
-    'defense-queue-compact',
+  {% set df_mini = df_q.mini_queue_jobs if df_q.mini_queue_jobs is defined else [] %}
+  {{ render_page_mini_queue_strip(
+    'defense-mini-queue',
     'defense',
-    '🛡',
-    df_q_jobs,
-    T('defense_queue_compact_idle', 'Keine Verteidigungsaufträge'),
+    df_mini,
+    T('defense_queue_compact_idle', 'Keine Verteidigungsaufträge aktiv'),
     df_q_summary.count if df_q_summary.count is defined else 0,
     df_q_limit,
-    'defense',
     'data-defense-queue-cancel'
   ) }}
 
@@ -141,7 +97,7 @@
       {% set _def_webp = _def_png|webp_static %}
       {% set _def_img_fallback = url_for('static', filename='img/defense/sentinel_turret.png') %}
       {% set _card_load = 'high' if loop.index0 == 0 else 'lazy' %}
-      <article class="gc-ship-card gc-prog-card {{ row_class }}{% if unit.queue_job is defined and unit.queue_job %} gc-ship-card--in-queue{% if unit.queue_job.status == 'active' %} gc-ship-card--queue-active{% else %} gc-ship-card--queue-pending{% endif %}{% endif %}"
+      <article class="gc-ship-card gc-prog-card {{ row_class }}"
                data-defense-card="{{ unit.defense_key }}" data-unlocked="1" role="listitem">
         <div class="gc-bld-card-hero">
           {{ render_hero_img_stack(_def_webp, _def_png, none, _card_load, loop.index0 == 0) }}
@@ -163,36 +119,29 @@
           {{ render_card_costs_block(unit.cost_metal, unit.cost_crystal, unit.cost_fuel_cells if unit.cost_fuel_cells else none) }}
         </div>
         {{ render_unit_build_time_footer(unit.build_seconds) }}
-        <div class="gc-bld-card-action-wrap">
-          <footer class="gc-ship-card-action shipyard-ship-actions">
-            <input type="text" inputmode="numeric" value="1" maxlength="20"
-                   class="gc-input shipyard-qty-input gc-num-input" data-defense-qty="{{ unit.defense_key }}"
-                   {% if unit.max_build %}data-input-max="{{ unit.max_build }}"{% endif %}
-                   aria-label="{{ T('defense_amount_label') }}">
-            <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs"
-                    data-defense-max="{{ unit.defense_key }}"
-                    data-max-qty="{{ unit.max_build|default(0) }}">
-              {{ T("shipyard_btn_max") }}
-            </button>
-            <button type="button" class="gc-btn gc-btn-primary gc-btn-xs"
-                    data-defense-build="{{ unit.defense_key }}"
-                    data-can-build="{{ '1' if unit.can_build else '0' }}"
-                    {% if not unit.can_build %}disabled aria-disabled="true"{% endif %}
-                    {% if unit.block_reason == 'queue_full' %}title="{{ T('defense_btn_queue_full', 'Warteschlange voll') }}"{% endif %}>
-              {% if unit.block_reason == 'queue_full' %}
-                {{ T("defense_btn_queue_full", "Warteschlange voll") }}
-              {% else %}
-                {{ T("defense_build_btn") }}
-              {% endif %}
-            </button>
-          </footer>
-          <div class="gc-bld-card-queue-slot" data-defense-queue-slot>
-            {{ render_defense_card_queue(unit.queue_job if unit.queue_job is defined else none) }}
-          </div>
-        </div>
+        <footer class="gc-ship-card-action shipyard-ship-actions">
+          <input type="text" inputmode="numeric" value="1" maxlength="20"
+                 class="gc-input shipyard-qty-input gc-num-input" data-defense-qty="{{ unit.defense_key }}"
+                 {% if unit.max_build %}data-input-max="{{ unit.max_build }}"{% endif %}
+                 aria-label="{{ T('defense_amount_label') }}">
+          <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs"
+                  data-defense-max="{{ unit.defense_key }}"
+                  data-max-qty="{{ unit.max_build|default(0) }}">
+            {{ T("shipyard_btn_max") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-xs"
+                  data-defense-build="{{ unit.defense_key }}"
+                  data-can-build="{{ '1' if unit.can_build else '0' }}"
+                  {% if not unit.can_build %}disabled aria-disabled="true"{% endif %}
+                  {% if unit.block_reason == 'queue_full' %}title="{{ T('defense_btn_queue_full', 'Warteschlange voll') }}"{% endif %}>
+            {% if unit.block_reason == 'queue_full' %}
+              {{ T("defense_btn_queue_full", "Warteschlange voll") }}
+            {% else %}
+              {{ T("defense_build_btn") }}
+            {% endif %}
+          </button>
+        </footer>
       </article>
-      {% else %}
-      <p class="shipyard-empty">{{ T("defense_no_buildable") }}</p>
       {% endfor %}
     </div>
   </section>

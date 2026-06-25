@@ -92,10 +92,13 @@ def test_queue_engine_unchanged_static():
     assert "queue_card" not in text
 
 
-def test_shipyard_template_card_queue_markers():
+def test_shipyard_template_mini_queue_markers():
     html = (ROOT / "templates/shipyard.html").read_text(encoding="utf-8")
+    partial = (ROOT / "templates/partials/page_mini_queue_strip.html").read_text(encoding="utf-8")
     assert "data-ship-card" in html
     assert "data-ship-key" in html
-    assert "shipyard-queue-compact" in html
-    assert "gc-card-queue-block" in html
+    assert "shipyard-mini-queue" in html
+    assert "render_page_mini_queue_strip" in html
+    assert "gc-mini-queue-strip" in partial
+    assert "gc-card-queue-block" not in html
     assert "data-shipyard-queue-list" not in html

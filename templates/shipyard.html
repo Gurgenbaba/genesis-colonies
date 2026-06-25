@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_compact_unit_stat_chips, render_card_costs_block, render_unit_build_time_footer, render_ship_unlock_req_hover_attrs with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
-{% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
-{% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
+{% from "partials/page_mini_queue_strip.html" import render_page_mini_queue_strip with context %}
 {% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
 
 {% macro render_ship_card_stock(ship_key, owned) %}
@@ -10,47 +9,6 @@
         title="{{ T('shipyard_stock_label', 'Am Planeten') }}"
         aria-label="{{ T('shipyard_stock_label', 'Am Planeten') }}: {{ owned|fmt_int }}"
         data-shipyard-stock="{{ ship_key }}">{{ owned|fmt_int }}</span>
-{% endmacro %}
-
-{% macro render_ship_card_queue(qj) %}
-  {% if qj is defined and qj %}
-  <div class="gc-card-queue-block gc-card-queue-block--shipyard gc-card-queue-block--{{ qj.status }}"
-       data-gc-card-queue="1"
-       data-queue-active="{{ '1' if qj.status == 'active' else '0' }}"
-       data-timer-domain="shipyard"
-       data-job-id="{{ qj.job_id|int }}"{{ render_card_queue_data_attrs(qj) }}>
-    <div class="gc-card-queue-head">
-      <span class="gc-card-queue-glyph gc-card-queue-glyph--shipyard" aria-hidden="true"></span>
-      <span class="gc-card-queue-status">
-        {% if qj.status == 'active' %}
-          {{ T('queue_card_status_active', 'AKTIV') }}
-        {% else %}
-          {{ T('queue_card_status_queued', 'QUEUE #%(n)s', n=qj.queue_position|int) }}
-        {% endif %}
-      </span>
-    </div>
-    {% if qj.target_amount is defined and qj.owner_key is defined and (qj.target_amount|int) > 1 %}
-    <div class="gc-card-queue-quantity gc-mono">
-      {{ qj.target_amount|int }}× {{ T('fleet_ship_' ~ qj.owner_key) }}
-    </div>
-    {% endif %}
-    {{ render_card_queue_timer(qj, 'shipyard', 'shipyard') }}
-    {% if qj.status == 'active' %}
-    <div class="gc-card-queue-bar" role="progressbar"
-         aria-valuemin="0" aria-valuemax="100"
-         aria-valuenow="{{ qj.progress_pct|default(0)|int }}">
-      <div class="gc-card-queue-bar-fill gc-progress-smooth"
-           style="width: {{ qj.progress_pct|default(0)|int }}%;"></div>
-      <div class="gc-card-queue-scanline gc-card-queue-scanline--shipyard" aria-hidden="true"></div>
-    </div>
-    {% endif %}
-    <button type="button"
-            class="gc-btn gc-btn-ghost gc-btn-xs gc-card-queue-cancel"
-            data-shipyard-queue-cancel="{{ qj.job_id|int }}">
-      {{ T('shipyard_queue_cancel_btn', 'Abbrechen') }}
-    </button>
-  </div>
-  {% endif %}
 {% endmacro %}
 
 {% macro render_ship_card_subhead(role) %}
@@ -112,18 +70,16 @@
   </section>
 
   {% set sy_q = sy.shipyard_queue if sy.shipyard_queue is defined and sy.shipyard_queue else {} %}
-  {% set sy_q_jobs = sy_q.queue if sy_q.queue is defined and sy_q.queue else [] %}
   {% set sy_q_summary = sy_q.summary if sy_q.summary is defined and sy_q.summary else {} %}
   {% set sy_q_limit = (sy_q_summary.limit if sy_q_summary.limit is defined else 3)|int %}
-  {{ render_page_queue_compact(
-    'shipyard-queue-compact',
+  {% set sy_mini = sy_q.mini_queue_jobs if sy_q.mini_queue_jobs is defined else [] %}
+  {{ render_page_mini_queue_strip(
+    'shipyard-mini-queue',
     'shipyard',
-    '🚀',
-    sy_q_jobs,
-    T('shipyard_queue_compact_idle', 'Keine Werftaufträge'),
+    sy_mini,
+    T('shipyard_queue_compact_idle', 'Keine Werftaufträge aktiv'),
     sy_q_summary.count if sy_q_summary.count is defined else 0,
     sy_q_limit,
-    'shipyard',
     'data-shipyard-queue-cancel'
   ) }}
 
@@ -145,7 +101,7 @@
       {% set _ship_png = ship.icon if ship.icon else url_for('static', filename='img/ships/seed_ark.png') %}
       {% set _ship_webp = _ship_png|webp_static %}
       {% set _card_load = 'high' if loop.index0 == 0 else 'lazy' %}
-      <article class="gc-ship-card gc-prog-card {{ row_class }}{% if ship.queue_job is defined and ship.queue_job %} gc-ship-card--in-queue{% if ship.queue_job.status == 'active' %} gc-ship-card--queue-active{% else %} gc-ship-card--queue-pending{% endif %}{% endif %}"
+      <article class="gc-ship-card gc-prog-card {{ row_class }}"
                data-ship-card
                data-ship-key="{{ ship.ship_key }}"
                data-unlocked="1" role="listitem">
@@ -169,35 +125,28 @@
           {{ render_card_costs_block(ship.cost_metal, ship.cost_crystal, ship.cost_fuel_cells if ship.cost_fuel_cells else none) }}
         </div>
         {{ render_unit_build_time_footer(ship.build_seconds) }}
-        <div class="gc-bld-card-action-wrap">
-          <footer class="gc-ship-card-action shipyard-ship-actions">
-            <input type="text" inputmode="numeric" value="1" maxlength="20"
-                   class="gc-input shipyard-qty-input gc-num-input" data-shipyard-qty="{{ ship.ship_key }}"
-                   {% if ship.max_build is defined and ship.max_build %}data-input-max="{{ ship.max_build }}"{% endif %}
-                   aria-label="{{ T('shipyard_amount_label') }}">
-            <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shipyard-max="{{ ship.ship_key }}"
-                    data-max-qty="{{ ship.max_build|default(0) }}">
-              {{ T("shipyard_btn_max") }}
-            </button>
-            <button type="button" class="gc-btn gc-btn-primary gc-btn-xs"
-                    data-shipyard-build="{{ ship.ship_key }}"
-                    data-can-build="{{ '1' if ship.can_build else '0' }}"
-                    {% if not ship.can_build %}disabled aria-disabled="true"{% endif %}
-                    {% if ship.block_reason == 'queue_full' %}title="{{ T('shipyard_btn_queue_full', 'Werftwarteschlange voll') }}"{% endif %}>
-              {% if ship.block_reason == 'queue_full' %}
-                {{ T("shipyard_btn_queue_full", "Werftwarteschlange voll") }}
-              {% else %}
-                {{ T("shipyard_build_btn") }}
-              {% endif %}
-            </button>
-          </footer>
-          <div class="gc-bld-card-queue-slot" data-shipyard-queue-slot>
-            {{ render_ship_card_queue(ship.queue_job if ship.queue_job is defined else none) }}
-          </div>
-        </div>
+        <footer class="gc-ship-card-action shipyard-ship-actions">
+          <input type="text" inputmode="numeric" value="1" maxlength="20"
+                 class="gc-input shipyard-qty-input gc-num-input" data-shipyard-qty="{{ ship.ship_key }}"
+                 {% if ship.max_build is defined and ship.max_build %}data-input-max="{{ ship.max_build }}"{% endif %}
+                 aria-label="{{ T('shipyard_amount_label') }}">
+          <button type="button" class="gc-btn gc-btn-ghost gc-btn-xs" data-shipyard-max="{{ ship.ship_key }}"
+                  data-max-qty="{{ ship.max_build|default(0) }}">
+            {{ T("shipyard_btn_max") }}
+          </button>
+          <button type="button" class="gc-btn gc-btn-primary gc-btn-xs"
+                  data-shipyard-build="{{ ship.ship_key }}"
+                  data-can-build="{{ '1' if ship.can_build else '0' }}"
+                  {% if not ship.can_build %}disabled aria-disabled="true"{% endif %}
+                  {% if ship.block_reason == 'queue_full' %}title="{{ T('shipyard_btn_queue_full', 'Werftwarteschlange voll') }}"{% endif %}>
+            {% if ship.block_reason == 'queue_full' %}
+              {{ T("shipyard_btn_queue_full", "Werftwarteschlange voll") }}
+            {% else %}
+              {{ T("shipyard_build_btn") }}
+            {% endif %}
+          </button>
+        </footer>
       </article>
-      {% else %}
-      <p class="shipyard-empty">{{ T("shipyard_no_buildable") }}</p>
       {% endfor %}
     </div>
   </section>

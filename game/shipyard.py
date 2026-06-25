@@ -881,8 +881,9 @@ def build_shipyard_api_payload(player_id: int, planet_id: int, *, conn=None) -> 
             player_id, planet_id, sy_level, conn=conn
         )
         from .queue_card import (
-            card_queue_job_for_item,
+            enrich_mini_queue_jobs_batch_size,
             group_card_jobs_by_owner_key,
+            map_card_jobs_to_mini_queue_jobs,
             map_shipyard_queue_to_card_jobs,
         )
 
@@ -890,9 +891,11 @@ def build_shipyard_api_payload(player_id: int, planet_id: int, *, conn=None) -> 
         by_owner = group_card_jobs_by_owner_key(card_jobs)
         queue_payload = dict(queue)
         queue_payload["card_jobs_by_owner"] = by_owner
-
-        _attach_queue_jobs_to_ship_rows(buildable, by_owner)
-        _attach_queue_jobs_to_ship_rows(locked, by_owner)
+        queue_payload["mini_queue_jobs"] = enrich_mini_queue_jobs_batch_size(
+            map_card_jobs_to_mini_queue_jobs(card_jobs, domain="shipyard"),
+            domain="shipyard",
+            shipyard_level=sy_level,
+        )
 
         from .shipyard import orbital_production_batch_capacity
 

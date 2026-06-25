@@ -877,6 +877,7 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     assert "function patchResearchPanelFromState(data)" in src
     assert "function patchShipyardPanelFromState(data, activePlanetId)" in src
     assert "function patchShipyardCardQueues(page, queueData)" in src
+    assert "GC.renderMiniQueueStrip = function renderMiniQueueStrip" in src
     parse_section = src.split("function parseTimerTarget(raw)")[1].split("function resolveQueueJobFinishTime")[0]
     assert r"/^\d+(\.\d+)?$/" in parse_section
     research_partial = _read("templates/partials/research_queue.html")
@@ -889,10 +890,10 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     assert 'data-timer-kind="shipyard"' in shipyard_partial
     render_card_queue = src.split("GC.renderCardQueueBlock = function renderCardQueueBlock")[1].split("GC.clearBuildingCardQueue")[0]
     assert "applyQueueJobTimerAttrs" in render_card_queue
-    assert "data-countdown-at" in _read("templates/shipyard.html") or "countdown-at" in render_card_queue
+    assert "data-countdown-at" in _read("templates/partials/page_mini_queue_strip.html") or "countdown-at" in render_card_queue
     render_shipyard = src.split("function renderShipyardQueue(page, queueData)")[1].split("function parseShipyardPageData")[0]
-    assert "patchShipyardCardQueues" in render_shipyard
-    assert "_updateShipyardQueueCompact" in render_shipyard
+    assert "_renderProductionMiniQueue" in render_shipyard
+    assert "_updateShipyardQueueCompact" not in render_shipyard
     apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent")[0]
     assert "patchResearchPanelFromState(data)" in apply
     assert "patchShipyardPanelFromState(data, activePlanetId)" in apply
@@ -916,7 +917,7 @@ def test_main_js_gc542_research_shipyard_queue_timer_parity():
     assert "cardQueueTimerTarget(queueJob, isActive)" in render_card
     render_sy = src.split("function renderShipyardQueue(page, queueData)")[1].split("function parseShipyardPageData")[0]
     assert "if (!jobs.length)" in render_sy
-    assert "patchShipyardCardQueues(page, qd)" in render_sy.split("if (!overdue)")[0] or "patchShipyardCardQueues(page, qd)" in render_sy
+    assert "_renderProductionMiniQueue" in render_sy
     action = src.split("function applyActionState(json, reason)")[1].split("function logStatusPollErrorOnce")[0]
     assert "_lastDefenseQueueSignature = \"\"" in action
     assert "_lastPePlanetTechQueueSignature = \"\"" in action
@@ -942,8 +943,7 @@ def test_main_js_gc631_formatted_unit_inputs_and_queue_clear():
     assert "GC.clearCardQueueBlock(card)" in patch_queues
     assert "activeKeys.has(key)" in patch_queues
     render_sy = src.split("function renderShipyardQueue(page, queueData)")[1].split("function parseShipyardPageData")[0]
-    assert "card_jobs_by_owner: {}" in render_sy
-    assert "clearProductionCardQueueState(card)" in src.split("function applyShipyardState(page, data)")[1].split("async function refreshShipyardState")[0]
+    assert "clearAllProductionCardQueues(page)" in render_sy
     shipyard_tpl = _read("templates/shipyard.html")
     assert 'data-shipyard-qty' in shipyard_tpl
     assert 'type="text"' in shipyard_tpl

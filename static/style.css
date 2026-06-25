@@ -8494,6 +8494,195 @@ a.gc-bld-head-action-btn--go:focus-visible{
   white-space: nowrap;
 }
 
+/* GC-QUEUE-MINI-CARDS — shipyard / defense horizontal mini-queue strip */
+.gc-mini-queue-host{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 6px;
+  min-width: 0;
+  max-width: 100%;
+  border-bottom: 1px solid rgba(70, 229, 255, 0.06);
+}
+
+.gc-mini-queue-strip{
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 44px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(70, 229, 255, 0.28) transparent;
+  padding-bottom: 1px;
+}
+
+.gc-mini-queue-strip::-webkit-scrollbar{
+  height: 3px;
+}
+
+.gc-mini-queue-strip::-webkit-scrollbar-thumb{
+  background: rgba(70, 229, 255, 0.24);
+  border-radius: 2px;
+}
+
+.gc-mini-queue-empty{
+  display: block;
+  min-height: 0;
+  padding: 0;
+}
+
+.gc-mini-queue-slots{
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: rgba(180, 245, 255, 0.78);
+  white-space: nowrap;
+}
+
+.gc-mini-queue-card--active{
+  border-color: rgba(127, 255, 217, 0.36);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.2) inset,
+    0 0 10px rgba(70, 229, 255, 0.1);
+}
+
+.gc-mini-queue-card--waiting{
+  opacity: 0.8;
+}
+
+.gc-mini-queue-card__position{
+  grid-column: 1;
+  grid-row: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 3px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: rgba(180, 245, 255, 0.88);
+  background: rgba(70, 229, 255, 0.08);
+  border: 1px solid rgba(70, 229, 255, 0.16);
+}
+
+.gc-mini-queue-card{
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 28px minmax(0, auto) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 2px 6px;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: min(148px, 56vw);
+  padding: 5px 7px 7px;
+  border: 1px solid rgba(70, 229, 255, 0.18);
+  border-radius: 2px;
+  background: linear-gradient(135deg, rgba(8, 16, 36, 0.92), rgba(6, 12, 28, 0.88));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+}
+
+.gc-mini-queue-card__image{
+  grid-column: 2;
+  grid-row: 1;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.gc-mini-queue-card__body{
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gc-mini-queue-card__title{
+  display: none;
+}
+
+.gc-mini-queue-card__amount{
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--gc-text);
+  white-space: nowrap;
+}
+
+.gc-mini-queue-card__timer{
+  font-size: 0.68rem;
+  color: var(--gc-primary-2);
+  white-space: nowrap;
+}
+
+.gc-mini-queue-card__cancel{
+  grid-column: 4;
+  grid-row: 1;
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  padding: 0;
+  margin: 0;
+  border: 1px solid rgba(70, 229, 255, 0.22);
+  border-radius: 2px;
+  background: rgba(8, 20, 36, 0.55);
+  color: rgba(180, 245, 255, 0.82);
+  font-size: 0.78rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gc-mini-queue-card__cancel:hover,
+.gc-mini-queue-card__cancel:focus-visible{
+  color: #ffd0d0;
+  border-color: rgba(255, 120, 120, 0.5);
+  background: rgba(255, 70, 70, 0.16);
+}
+
+.gc-mini-queue-card__cancel:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.gc-mini-queue-card__connector{
+  flex: 0 0 auto;
+  color: rgba(127, 255, 217, 0.22);
+  font-size: 0.68rem;
+  user-select: none;
+}
+
+.gc-mini-queue-card__progress{
+  grid-column: 1 / -1;
+  grid-row: 2;
+  height: 2px;
+  margin-top: 2px;
+  background: rgba(70, 229, 255, 0.08);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.gc-mini-queue-card__progress-fill{
+  height: 100%;
+  background: linear-gradient(90deg, rgba(70, 229, 255, 0.5), rgba(127, 255, 217, 0.8));
+}
+
+.gc-mini-queue-card--waiting .gc-mini-queue-card__progress{
+  display: none;
+}
+
 .buildings-divider.gc-prog-divider,
 .research-divider.gc-prog-divider,
 .shipyard-divider.gc-prog-divider,

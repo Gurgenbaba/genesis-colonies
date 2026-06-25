@@ -221,14 +221,20 @@ def test_cancel_first_job_reschedules_follower(defense_db):
 
 
 def test_api_defense_build_returns_state(defense_db, monkeypatch):
-    client, uid, _app = _login_client(defense_db, monkeypatch)
+    import app as app_mod
+
     conn = db()
+    uid = _player(conn=conn)
     pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
     cur = conn.cursor()
     _fund_planet(cur, pid)
     _grant_defense_prereqs(cur, pid, uid)
     conn.commit()
     conn.close()
+
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
 
     res = client.post(
         "/api/defense/build",
