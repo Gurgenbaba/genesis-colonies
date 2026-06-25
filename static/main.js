@@ -2288,9 +2288,16 @@
 
   function renderBuildingCardFooterHtml(b) {
     const sec = b?.secondary_effect;
-    if (!sec || sec.effect_kind !== "energy_use") return "";
-    const cur = Math.floor(Number(sec.effect_current) || 0);
-    const delta = Math.floor(Number(sec.effect_delta) || 0);
+    const primary = b?.effect_kind === "energy_use" ? b : null;
+    const energySrc =
+      sec?.effect_kind === "energy_use"
+        ? sec
+        : primary?.effect_kind === "energy_use"
+          ? primary
+          : null;
+    if (!energySrc) return "";
+    const cur = Math.floor(Number(energySrc.effect_current) || 0);
+    const delta = Math.floor(Number(energySrc.effect_delta) || 0);
     const draw = cur > 0 ? cur : delta;
     if (draw <= 0) return "";
     const label = t("buildings_effect_energy_use", "Energieverbrauch");
@@ -2418,10 +2425,17 @@
     let footer = row.querySelector("[data-building-energy-footer]");
     if (!footerHtml) {
       const sec = b?.secondary_effect;
-      const hasEnergy =
+      const primary = b?.effect_kind === "energy_use" ? b : null;
+      const energySrc =
         sec?.effect_kind === "energy_use"
-        && (Math.floor(Number(sec.effect_current) || 0) > 0
-          || Math.floor(Number(sec.effect_delta) || 0) > 0);
+          ? sec
+          : primary?.effect_kind === "energy_use"
+            ? primary
+            : null;
+      const hasEnergy =
+        energySrc
+        && (Math.floor(Number(energySrc.effect_current) || 0) > 0
+          || Math.floor(Number(energySrc.effect_delta) || 0) > 0);
       if (!hasEnergy) footer?.remove();
       return;
     }
@@ -16130,36 +16144,6 @@
       }
     }
 
-    if (data.planet_name) {
-      const scopeEl = page.querySelector("[data-shipyard-planet-scope]");
-      if (scopeEl) {
-        const label = tt("shipyard_planet_scope", "Active planet: %(name)s").replace(
-          "%(name)s",
-          String(data.planet_name)
-        );
-        scopeEl.textContent = label;
-        let coordsEl = scopeEl.querySelector("[data-shipyard-planet-coords]");
-        if (data.planet_coords) {
-          if (!coordsEl) {
-            coordsEl = document.createElement("span");
-            coordsEl.className = "shipyard-planet-coords";
-            coordsEl.dataset.shipyardPlanetCoords = "1";
-            scopeEl.appendChild(document.createTextNode(" "));
-            scopeEl.appendChild(coordsEl);
-          }
-          coordsEl.innerHTML = `(${GC.coordLinkHtml(data.planet_coords, { label: data.planet_coords })})`;
-        } else if (coordsEl) {
-          coordsEl.remove();
-        }
-      }
-    }
-
-    const resources = data.resources || {};
-    page.querySelectorAll("[data-sy-res]").forEach((node) => {
-      const key = node.getAttribute("data-sy-res");
-      if (key && resources[key] != null) node.textContent = fmtNumber(Number(resources[key]) || 0);
-    });
-
     if (data.current_ships) updateShipyardStockBadges(page, data.current_ships);
     if (data.shipyard_queue) renderShipyardQueue(page, data.shipyard_queue);
 
@@ -16530,35 +16514,6 @@
           "Production via orbital shipyard capacity: %(capacity)s per cycle"
         ).replace("%(capacity)s", fmtNumber(data.production_batch_capacity));
       }
-    }
-    if (data.planet_name) {
-      const scopeEl = page.querySelector("[data-defense-planet-scope]");
-      if (scopeEl) {
-        const label = tt("defense_planet_scope", "Active planet: %(name)s").replace(
-          "%(name)s",
-          String(data.planet_name)
-        );
-        scopeEl.textContent = label;
-        let coordsEl = scopeEl.querySelector("[data-defense-planet-coords]");
-        if (data.planet_coords) {
-          if (!coordsEl) {
-            coordsEl = document.createElement("span");
-            coordsEl.className = "defense-planet-coords";
-            coordsEl.dataset.defensePlanetCoords = "1";
-            scopeEl.appendChild(document.createTextNode(" "));
-            scopeEl.appendChild(coordsEl);
-          }
-          coordsEl.innerHTML = `(${GC.coordLinkHtml(data.planet_coords, { label: data.planet_coords })})`;
-        } else if (coordsEl) {
-          coordsEl.remove();
-        }
-      }
-    }
-    if (data.resources) {
-      Object.entries(data.resources).forEach(([key, val]) => {
-        const el = page.querySelector(`[data-df-res="${key}"]`);
-        if (el) el.textContent = fmtNumber(val);
-      });
     }
     if (data.current_defense) updateDefenseStockBadges(page, data.current_defense);
     if (data.defense_queue) renderDefenseQueue(page, data.defense_queue);

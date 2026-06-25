@@ -111,9 +111,10 @@
 
 {% macro render_building_card_footer(b) %}
   {% set sec = b.secondary_effect if b.secondary_effect is defined else none %}
-  {% if sec and sec.effect_kind == 'energy_use' %}
-  {% set cur = (sec.effect_current|default(0)|int) %}
-  {% set delta = (sec.effect_delta|default(0)|int) %}
+  {% set energy_src = sec if sec and sec.effect_kind == 'energy_use' else (b if b.effect_kind is defined and b.effect_kind == 'energy_use' else none) %}
+  {% if energy_src %}
+  {% set cur = (energy_src.effect_current|default(0)|int) %}
+  {% set delta = (energy_src.effect_delta|default(0)|int) %}
   {% set draw = cur if cur > 0 else delta %}
   {% if draw > 0 %}
   <div class="gc-card-lr-row gc-card-footer-row gc-card-footer-row--energy" data-building-energy-footer>

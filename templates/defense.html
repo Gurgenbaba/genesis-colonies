@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_resource_icon, render_compact_unit_stat_chips, render_card_costs_block, render_unit_build_time_footer, render_defense_locked_req_hover_attrs with context %}
+{% from "partials/progression_cards.html" import render_compact_unit_stat_chips, render_card_costs_block, render_unit_build_time_footer, render_defense_locked_req_hover_attrs with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 {% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
@@ -10,12 +10,6 @@
         title="{{ T('shipyard_stock_label', 'Am Planeten') }}"
         aria-label="{{ T('shipyard_stock_label', 'Am Planeten') }}: {{ owned|fmt_int }}"
         data-defense-stock="{{ defense_key }}">{{ owned|fmt_int }}</span>
-{% endmacro %}
-
-{% macro render_defense_subhead(role) %}
-  <div class="gc-ship-card-subhead">
-    <span class="gc-ship-role-badge gc-defense-role-badge">{{ T("defense_role_" ~ role) }}</span>
-  </div>
 {% endmacro %}
 
 {% macro render_defense_card_queue(qj) %}
@@ -89,14 +83,6 @@
   <header class="defense-headline section-header">
     <h2 class="section-title">{{ T("defense_title") }}</h2>
     <p class="section-hint hint">{{ T("defense_hint") }}</p>
-    {% if df.planet_name is defined and df.planet_name %}
-    <p class="defense-planet-scope gc-mono" data-defense-planet-scope>
-      {{ T("defense_planet_scope", name=df.planet_name) }}
-      {% if df.planet_coords is defined and df.planet_coords %}
-      <span class="defense-planet-coords" data-defense-planet-coords>({{ galaxy_coord_link(df.planet_coords) }})</span>
-      {% endif %}
-    </p>
-    {% endif %}
   </header>
 
   {% if df.ready is defined and df.ready == false %}
@@ -118,18 +104,6 @@
         {{ T("defense_production_capacity", capacity=(df.production_batch_capacity|default(3))) }}
       </span>
     </div>
-    <div class="shipyard-resource-summary gc-mono" aria-live="polite">
-      <span class="gc-resource-summary-item">
-        {{ render_resource_icon('metal') }}
-        <span>{{ T("resource_metal") }}:</span>
-        <strong data-df-res="metal">{{ p_metal|fmt_int }}</strong>
-      </span>
-      <span class="gc-resource-summary-item">
-        {{ render_resource_icon('crystal') }}
-        <span>{{ T("resource_crystal") }}:</span>
-        <strong data-df-res="crystal">{{ p_crystal|fmt_int }}</strong>
-      </span>
-    </div>
   </section>
 
   {% set df_q = df.defense_queue if df.defense_queue is defined and df.defense_queue else {} %}
@@ -140,7 +114,7 @@
     '🛡',
     df_q_jobs,
     T('defense_queue_compact_idle', 'Keine Verteidigungsaufträge'),
-    df.planet_name if df.planet_name is defined else '',
+    '',
     'defense',
     'data-defense-queue-cancel'
   ) }}

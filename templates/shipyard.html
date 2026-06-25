@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_resource_icon, render_compact_unit_stat_chips, render_card_costs_block, render_unit_build_time_footer, render_ship_unlock_req_hover_attrs with context %}
+{% from "partials/progression_cards.html" import render_compact_unit_stat_chips, render_card_costs_block, render_unit_build_time_footer, render_ship_unlock_req_hover_attrs with context %}
 {% from "partials/info_popover.html" import render_info_popover_trigger with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 {% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
@@ -90,14 +90,6 @@
   <header class="shipyard-headline section-header">
     <h2 class="section-title">{{ T("shipyard_title") }}</h2>
     <p class="section-hint hint">{{ T("shipyard_hint") }}</p>
-    {% if sy.planet_name is defined and sy.planet_name %}
-    <p class="shipyard-planet-scope gc-mono" data-shipyard-planet-scope>
-      {{ T("shipyard_planet_scope", name=sy.planet_name) }}
-      {% if sy.planet_coords is defined and sy.planet_coords %}
-      <span class="shipyard-planet-coords" data-shipyard-planet-coords>({{ galaxy_coord_link(sy.planet_coords) }})</span>
-      {% endif %}
-    </p>
-    {% endif %}
   </header>
 
   {% if sy.ready is defined and sy.ready == false %}
@@ -117,23 +109,6 @@
         {{ T("shipyard_parallel_capacity", capacity=(sy.production_batch_capacity|default(3))) }}
       </span>
     </div>
-    <div class="shipyard-resource-summary gc-mono" aria-live="polite">
-      <span class="gc-resource-summary-item">
-        {{ render_resource_icon('metal') }}
-        <span>{{ T("resource_metal") }}:</span>
-        <strong data-sy-res="metal">{{ p_metal|fmt_int }}</strong>
-      </span>
-      <span class="gc-resource-summary-item">
-        {{ render_resource_icon('crystal') }}
-        <span>{{ T("resource_crystal") }}:</span>
-        <strong data-sy-res="crystal">{{ p_crystal|fmt_int }}</strong>
-      </span>
-      <span class="gc-resource-summary-item">
-        {{ render_resource_icon('fuel_cells') }}
-        <span>{{ T("resource_fuel_cells") }}:</span>
-        <strong data-sy-res="fuel_cells">{{ p_fuel|fmt_int }}</strong>
-      </span>
-    </div>
   </section>
 
   {% set sy_q = sy.shipyard_queue if sy.shipyard_queue is defined and sy.shipyard_queue else {} %}
@@ -144,7 +119,7 @@
     '🚀',
     sy_q_jobs,
     T('shipyard_queue_compact_idle', 'Keine Werftaufträge'),
-    sy.planet_name if sy.planet_name is defined else '',
+    '',
     'shipyard',
     'data-shipyard-queue-cancel'
   ) }}

@@ -83,8 +83,5 @@
             title="{{ T('action_cancel', 'Abbrechen') }}"
             aria-label="{{ T('action_cancel', 'Abbrechen') }}"><span aria-hidden="true">×</span></button>
     {% endif %}
-    {% if planet_name %}
-    <span class="build-queue-planet-chip gc-page-queue-compact-planet" id="{{ compact_id }}-planet" title="{{ T('pe_planet_switcher', 'Kolonie wählen') }}">· {{ planet_name }}</span>
-    {% endif %}
   </div>
 {% endmacro %}
