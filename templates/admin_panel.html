@@ -797,37 +797,19 @@
       </section>
 
       <div class="admin-section-title">
-        <span class="admin-section-title-text">{{ T("admin_section_wipe", "Universum zurücksetzen (Wipe)") }}</span>
+        <span class="admin-section-title-text">{{ T("admin_section_universe_reset", "Universum resetten") }}</span>
       </div>
       <section class="admin-section admin-section-danger">
-        <p class="admin-small-hint">{{ T("admin_wipe_hint", "Setzt Planeten, Gebäude, Queues und Flotten zurück. Accounts bleiben.") }}</p>
+        <p class="admin-small-hint">{{ T("admin_universe_reset_hint", "Setzt das Universum auf Season-Start zurück. Accounts und Inventar bleiben erhalten. Alles andere wird gelöscht.") }}</p>
         <div class="admin-row-full">
-          <label class="admin-checkbox-row" for="wipe_research">
-            <input type="checkbox" id="wipe_research" checked>
-            <span>{{ T("admin_wipe_research", "Forschungsstände zurücksetzen") }}</span>
-          </label>
-        </div>
-        <div class="admin-row-full">
-          <label class="admin-checkbox-row" for="wipe_resources">
-            <input type="checkbox" id="wipe_resources" checked>
-            <span>{{ T("admin_wipe_resources", "Ressourcen auf Startwerte setzen") }}</span>
-          </label>
-        </div>
-        <div class="admin-row-full">
-          <label class="admin-checkbox-row" for="wipe_messages">
-            <input type="checkbox" id="wipe_messages" checked>
-            <span>{{ T("admin_wipe_messages", "Nachrichten/Logs leeren") }}</span>
-          </label>
-        </div>
-        <div class="admin-row-full">
-          <label class="admin-checkbox-row" for="wipe_confirm">
-            <input type="checkbox" id="wipe_confirm">
-            <span>{{ T("admin_wipe_confirm", "Ich verstehe: Dieser Wipe ist endgültig.") }}</span>
-          </label>
+          <label class="admin-label" for="universe_reset_confirm_text">{{ T("admin_universe_reset_confirm_label", "Bestätigungsphrase") }}</label>
+          <input type="text" class="admin-input admin-input-full" id="universe_reset_confirm_text"
+                 autocomplete="off" spellcheck="false"
+                 placeholder="RESET UNIVERSE KEEP INVENTORY">
         </div>
         <div class="admin-btn-row">
-          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="server-wipe">
-            {{ T("admin_wipe_execute", "Wipe ausführen") }}
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="server-universe-reset">
+            {{ T("admin_universe_reset_execute", "Universum resetten") }}
           </button>
         </div>
       </section>

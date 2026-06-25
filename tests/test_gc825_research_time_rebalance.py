@@ -100,8 +100,10 @@ def test_research_lab_speeds_up_research():
 def test_research_cost_l34_hardened_vs_legacy():
     m, c = get_research_cost("energy_tech", 34)
     leg_m, leg_c = legacy_research_upgrade_cost(1000, 500, 1.6, 34)
-    assert m + c >= 750_000
-    assert m + c < leg_m + leg_c
+    total = m + c
+    # GC-863B: L34 between 50k@30 and 250k@35 — still far below legacy exponential curve.
+    assert total >= 100_000
+    assert total < leg_m + leg_c
     assert leg_m + leg_c > 10_000_000
 
 

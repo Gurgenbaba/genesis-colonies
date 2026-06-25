@@ -171,20 +171,21 @@ RESEARCH_TIME_ANCHOR_HOURS: Dict[int, float] = {
 }
 
 # Combined metal+crystal value anchors (energy_tech tier = 1.0).
+# GC-863B — round-number research cost curve; early/mid/end raised vs GC-863A.
 RESEARCH_COST_ANCHOR_TOTAL: Dict[int, float] = {
-    10: 2500.0,
-    20: 10000.0,
-    30: 22000.0,  # GC-863A — early curve unchanged
-    35: 2000000.0,  # GC-863A — midgame ramp
-    38: 1500000.0,  # GC-863A
-    40: 4000000.0,  # GC-863A
-    50: 15000000.0,  # GC-863A — achievement tier
-    60: 30000000.0,  # GC-863A
-    80: 100000000.0,  # GC-863A
-    100: 300000000.0,  # GC-863A
-    120: 600000000.0,  # GC-863A
+    10: 3_000.0,
+    20: 12_500.0,
+    30: 50_000.0,
+    35: 250_000.0,
+    38: 500_000.0,
+    40: 2_000_000.0,
+    50: 25_000_000.0,
+    60: 50_000_000.0,
+    80: 150_000_000.0,
+    100: 500_000_000.0,
+    120: 1_000_000_000.0,
 }
-_RESEARCH_L1_COST_TOTAL = 800.0
+_RESEARCH_L1_COST_TOTAL = 1_000.0
 _RESEARCH_COST_RAMP_LEVEL = 10
 
 
@@ -244,20 +245,61 @@ def research_cost_tier(base_cost_m: int, base_cost_c: int) -> float:
     return max(0.75, combined / RESEARCH_REF_COMBINED_COST)
 
 
+def _research_cost_round_total(total: float) -> int:
+    """GC-863B — snap combined research cost to Genesis round numbers."""
+    t = max(1.0, float(total))
+    if t < 1_000:
+        step = 50
+    elif t < 5_000:
+        step = 250
+    elif t < 25_000:
+        step = 500
+    elif t < 100_000:
+        step = 2_500
+    elif t < 500_000:
+        step = 10_000
+    elif t < 5_000_000:
+        step = 50_000
+    elif t < 50_000_000:
+        step = 250_000
+    elif t < 500_000_000:
+        step = 1_000_000
+    else:
+        step = 5_000_000
+    return max(step, int(round(t / step) * step))
+
+
+def _split_research_cost_round(total: int, base_cost_m: int, base_cost_c: int) -> Tuple[int, int]:
+    """Split a round total into round metal/crystal using tech base ratio."""
+    total = int(total)
+    bm, bc = int(base_cost_m), int(base_cost_c)
+    combined = bm + bc
+    if combined <= 0 or total <= 0:
+        return max(1, total), 0
+    if total >= 100_000_000:
+        comp_step = 1_000_000
+    elif total >= 10_000_000:
+        comp_step = 250_000
+    elif total >= 1_000_000:
+        comp_step = 50_000
+    else:
+        comp_step = 250 if total < 5_000 else (500 if total < 25_000 else 2_500)
+    metal = max(
+        comp_step,
+        int(round((total * bm / combined) / comp_step) * comp_step),
+    )
+    metal = min(metal, total - comp_step) if total > comp_step else total
+    crystal = total - metal
+    return max(1, metal), max(0, crystal)
+
+
 def research_upgrade_cost(base_cost_m: int, base_cost_c: int, target_level: int) -> Tuple[int, int]:
     """GC-825 research upgrade cost (metal, crystal) before payment."""
     lvl = max(1, int(target_level))
     tier = research_cost_tier(base_cost_m, base_cost_c)
-    total = max(research_cost_anchor_total(lvl) * tier, 1.0)
-    combined = float(base_cost_m) + float(base_cost_c)
-    if combined <= 0:
-        metal_frac, crystal_frac = 0.67, 0.33
-    else:
-        metal_frac = float(base_cost_m) / combined
-        crystal_frac = float(base_cost_c) / combined
-    metal = max(1, int(math.ceil(total * metal_frac)))
-    crystal = max(0, int(math.ceil(total * crystal_frac)))
-    return metal, crystal
+    raw_total = max(research_cost_anchor_total(lvl) * tier, 1.0)
+    total = _research_cost_round_total(raw_total)
+    return _split_research_cost_round(total, int(base_cost_m), int(base_cost_c))
 
 
 def legacy_research_base_time_seconds(

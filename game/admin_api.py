@@ -47,6 +47,7 @@ CONFIRM_PHRASES: Dict[str, str] = {
     "delete_player": "DELETE PLAYER",
     "run_migrations": "RUN MIGRATIONS",
     "broadcast_messages": "SEND SYSTEM BROADCAST",
+    "universe_reset_keep_inventory": "RESET UNIVERSE KEEP INVENTORY",
 }
 
 
@@ -1617,15 +1618,48 @@ def api_broadcast_system_messages(admin_id: int, body: Dict[str, Any]) -> Dict[s
 
 
 def api_wipe_universe(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    """Deprecated legacy wipe — dev-only. Use api_universe_reset_keep_inventory in production."""
     from game.admin import wipe_universe
 
+    if is_production():
+        return _err(
+            "deprecated",
+            "Legacy wipe is disabled in production. Use POST /api/admin/universe-reset instead.",
+        )
     if not isinstance(body, dict):
         return _err("invalid_payload", "Expected JSON object")
     if body.get("wipe_confirm") not in (True, 1, "1", "true", "on"):
         return _err("confirm_required", "wipe_confirm required")
     wipe_universe(body)
-    audit(int(admin_id), "universe_wipe", target_type="system", payload={"keys": sorted(body.keys())})
-    return _ok(wiped=True)
+    audit(
+        int(admin_id),
+        "universe_wipe",
+        target_type="system",
+        payload={"keys": sorted(body.keys()), "deprecated": True},
+    )
+    return _ok(wiped=True, deprecated=True)
+
+
+def api_universe_reset_keep_inventory(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.admin_universe_reset import execute_universe_reset_keep_inventory
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+    if not validate_confirm("universe_reset_keep_inventory", body.get("confirm_text")):
+        return _err("confirm_required", "Type RESET UNIVERSE KEEP INVENTORY to confirm.")
+
+    try:
+        result = execute_universe_reset_keep_inventory()
+    except Exception as exc:
+        return _err("reset_failed", str(exc))
+
+    audit(
+        int(admin_id),
+        "universe_reset_keep_inventory",
+        target_type="system",
+        payload=result,
+    )
+    return _ok(**result)
 
 
 def api_get_bans() -> Dict[str, Any]:

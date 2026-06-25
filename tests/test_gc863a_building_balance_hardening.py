@@ -110,14 +110,14 @@ class TestGc863aNanofactory:
 
 
 class TestGc863aResearchCosts:
-    def test_early_anchors_unchanged(self) -> None:
-        assert research_cost_anchor_total(10) == pytest.approx(2500.0)
-        assert research_cost_anchor_total(20) == pytest.approx(10000.0)
-        assert research_cost_anchor_total(30) == pytest.approx(22000.0)
+    def test_early_anchors_gc863b(self) -> None:
+        assert research_cost_anchor_total(10) == pytest.approx(3_000.0)
+        assert research_cost_anchor_total(20) == pytest.approx(12_500.0)
+        assert research_cost_anchor_total(30) == pytest.approx(50_000.0)
 
     def test_level_50_anchor_explicit(self) -> None:
-        assert RESEARCH_COST_ANCHOR_TOTAL[50] == 15_000_000.0
-        assert research_cost_anchor_total(50) == pytest.approx(15_000_000.0)
+        assert RESEARCH_COST_ANCHOR_TOTAL[50] == 25_000_000.0
+        assert research_cost_anchor_total(50) == pytest.approx(25_000_000.0)
 
     @pytest.mark.parametrize("level", (40, 50, 60, 80, 100, 120))
     def test_mid_late_anchors_raised(self, level: int) -> None:

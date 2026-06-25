@@ -1034,25 +1034,29 @@
     return res;
   }
 
-  async function wipeAdminUniverse() {
-    if (!qs("#wipe_confirm")?.checked) {
-      showAlert(t("admin_wipe_confirm_required", "Wipe-Bestätigung erforderlich."), "error");
+  async function resetAdminUniverseKeepInventory() {
+    const phrase = String(qs("#universe_reset_confirm_text")?.value || "").trim();
+    if (phrase !== "RESET UNIVERSE KEEP INVENTORY") {
+      showAlert(
+        t("admin_universe_reset_confirm_required", "Tippe exakt: RESET UNIVERSE KEEP INVENTORY"),
+        "error",
+      );
       return null;
     }
-    const c = prompt(t("admin_wipe_type_confirm", "Tippe WIPE UNIVERSE"));
-    if (c !== "WIPE UNIVERSE") return null;
-    const payload = {
-      wipe_confirm: 1,
-      wipe_reset_research: qs("#wipe_research")?.checked ? 1 : 0,
-      wipe_reset_resources: qs("#wipe_resources")?.checked ? 1 : 0,
-      wipe_delete_messages: qs("#wipe_messages")?.checked ? 1 : 0,
-    };
-    const res = await adminPost("/api/admin/wipe", payload);
+    const res = await adminPost("/api/admin/universe-reset", { confirm_text: phrase });
     if (res.ok) {
-      notify(t("msg_admin_wipe", "Universum wurde zurückgesetzt."), "success");
-      setServerStatus(t("msg_admin_wipe", "Universum wurde zurückgesetzt."));
-      if (qs("#wipe_confirm")) qs("#wipe_confirm").checked = false;
-      await syncAfterAdminChange("admin_universe_wipe", { reloadTab: true });
+      const n = res.players_reinitialized ?? 0;
+      const backup = res.backup_path ? ` Backup: ${res.backup_path}` : "";
+      const msg = t(
+        "msg_admin_universe_reset",
+        "Season-Reset abgeschlossen. %(count)s Spieler neu initialisiert.%(backup)s",
+      )
+        .replace("%(count)s", String(n))
+        .replace("%(backup)s", backup);
+      notify(msg, "success");
+      setServerStatus(msg);
+      if (qs("#universe_reset_confirm_text")) qs("#universe_reset_confirm_text").value = "";
+      await syncAfterAdminChange("admin_universe_reset", { reloadTab: true });
     } else {
       showAlert(res.message || res.error, "error");
     }
@@ -2438,7 +2442,7 @@
     if (act === "diplomacy-clear-resolution") return applyAdminDiplomacyLayer("resolution", true);
     if (act === "diplomacy-set-emergency") return applyAdminDiplomacyLayer("emergency", false);
     if (act === "diplomacy-clear-emergency") return applyAdminDiplomacyLayer("emergency", true);
-    if (act === "server-wipe") return wipeAdminUniverse();
+    if (act === "server-universe-reset") return resetAdminUniverseKeepInventory();
     if (act === "run-queue-tick") return runQueueTick(btn);
     if (act === "queue-cancel") return cancelQueueJob(btn.dataset.queueType, btn.dataset.jobId);
     if (act === "fleet-advance") {

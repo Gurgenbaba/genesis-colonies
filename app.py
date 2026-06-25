@@ -3698,6 +3698,14 @@ def api_admin_wipe():
     return _admin_json(admin_api_logic.api_wipe_universe(_admin_actor_id(), _admin_body()))
 
 
+@app.route("/api/admin/universe-reset", methods=["POST"])
+@require_admin_api
+def api_admin_universe_reset():
+    return _admin_json(
+        admin_api_logic.api_universe_reset_keep_inventory(_admin_actor_id(), _admin_body())
+    )
+
+
 @app.route("/api/admin/bans", methods=["GET"])
 @require_admin_api
 def api_admin_bans_list():
@@ -7701,6 +7709,13 @@ def admin_resources():
 @require_login
 @require_admin
 def admin_wipe_universe():
+    if is_production():
+        flash(
+            T("admin_wipe_deprecated")
+            or "Legacy-Wipe ist in Production deaktiviert. Nutze „Universum resetten“ im Admin Panel.",
+            "error",
+        )
+        return redirect(url_for("admin_panel"))
     admin_logic.wipe_universe(request.form)
     flash(T("msg_admin_wipe") or "Universum wurde zurückgesetzt.", "success")
 
