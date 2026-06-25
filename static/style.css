@@ -7762,8 +7762,6 @@ a.gc-bld-head-action-btn--go:focus-visible{
 .gc-building-card .gc-bld-card-meta,
 .gc-building-card .gc-bld-card-req,
 .gc-building-card .gc-bld-card-queue-zone,
-.gc-building-card .gc-card-energy-footer,
-.gc-building-card [data-building-energy-footer],
 .gc-research-card .gc-bld-prod,
 .gc-research-card .gc-bld-effect-bundle,
 .gc-research-card .gc-bld-card-meta,
@@ -7945,25 +7943,6 @@ a.gc-bld-head-action-btn--go:focus-visible{
 
 .gc-card-footer-row--energy .gc-card-footer-val{
   color: rgba(251, 191, 36, 0.9);
-}
-
-/* GC-827B — energy draw footer matches cost-chip row (icon left, value right) */
-.gc-card-energy-footer{
-  width: 100%;
-  min-width: 0;
-  margin-top: 2px;
-}
-
-.gc-card-energy-footer .gc-cost-val{
-  max-width: 5.5rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: rgba(251, 191, 36, 0.95);
-}
-
-.gc-cost-energy .gc-cost-val{
-  color: rgba(251, 191, 36, 0.95);
 }
 
 .gc-card-footer-row--time .gc-card-footer-val{
@@ -9359,6 +9338,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
 .gc-cost-metal .gc-cost-val{ color: rgba(127,255,217,0.95); }
 .gc-cost-crystal .gc-cost-val{ color: rgba(70,229,255,0.95); }
 .gc-cost-fuel_cells .gc-cost-val{ color: rgba(251,191,36,0.95); }
+.gc-cost-energy .gc-cost-val{ color: rgba(251, 191, 36, 0.95); }
 
 .gc-cost-target{
   flex: 1 1 100%;

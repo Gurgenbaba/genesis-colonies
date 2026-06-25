@@ -1,5 +1,5 @@
 {# GC-827 / GC-827B — compact card benefits (details in Technical Data modal) #}
-{% from "partials/progression_cards.html" import render_resource_icon with context %}
+{% from "partials/progression_cards.html" import render_resource_icon, render_card_costs_block with context %}
 
 {% macro render_building_effect_icon(res_key) %}
   {% if res_key == 'energy' %}
@@ -109,29 +109,21 @@
   {% endif %}
 {% endmacro %}
 
-{% macro render_energy_draw_chip(draw) %}
-  {% set full_val = draw|fmt_int %}
-  {% set compact_val = draw|fmt_int_compact %}
-  <div class="gc-card-energy-footer bcell-energy" data-building-energy-footer>
-    <div class="gc-cost-stack">
-      <span class="gc-cost-chip gc-cost-energy">
-        <span class="gc-cost-chip-leading">{{ render_resource_icon('energy', 'sm') }}</span>
-        <span class="gc-cost-val gc-num-compact"{% if compact_val != full_val %} title="-{{ full_val }}"{% endif %}>-{{ compact_val }}</span>
-      </span>
-    </div>
-  </div>
-{% endmacro %}
-
-{% macro render_building_card_footer(b) %}
+{% macro render_building_prog_costs(b, metal, crystal, target_level, show_target=false, fuel_cells=none) %}
+  {% set ns = namespace(energy_draw=none) %}
   {% set sec = b.secondary_effect if b.secondary_effect is defined else none %}
   {% set energy_src = sec if sec and sec.effect_kind == 'energy_use' else (b if b.effect_kind is defined and b.effect_kind == 'energy_use' else none) %}
   {% if energy_src %}
-  {% set cur = (energy_src.effect_current|default(0)|int) %}
-  {% set delta = (energy_src.effect_delta|default(0)|int) %}
-  {% set draw = cur if cur > 0 else delta %}
-  {% if draw > 0 %}
-  {{ render_energy_draw_chip(draw) }}
+    {% set cur = (energy_src.effect_current|default(0)|int) %}
+    {% set delta = (energy_src.effect_delta|default(0)|int) %}
+    {% set draw = cur if cur > 0 else delta %}
+    {% if draw > 0 %}{% set ns.energy_draw = draw %}{% endif %}
   {% endif %}
+  {{ render_card_costs_block(metal, crystal, fuel_cells, true, ns.energy_draw) }}
+  {% if show_target %}
+  <span class="gc-cost-target" title="{{ T('buildings_col_level') }} {{ target_level|fmt_int }}">
+    → L{{ target_level|fmt_int }}
+  </span>
   {% endif %}
 {% endmacro %}
 

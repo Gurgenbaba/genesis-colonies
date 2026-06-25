@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
-{% from "partials/building_effect_strip.html" import render_building_effect_bundle, render_building_card_footer with context %}
+{% from "partials/building_effect_strip.html" import render_building_effect_bundle, render_building_prog_costs with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
 {% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
 {% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
@@ -185,11 +185,9 @@
 
           <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
             <div class="gc-bld-card-costs">
-              {{ render_prog_costs(b.cost_metal, b.cost_crystal, b.target_level, false) }}
+              {{ render_building_prog_costs(b, b.cost_metal, b.cost_crystal, b.target_level, false) }}
             </div>
           </div>
-
-          {{ render_building_card_footer(b) }}
         </article>
       {% endfor %}
     </div>

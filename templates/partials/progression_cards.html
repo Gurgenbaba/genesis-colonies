@@ -80,7 +80,16 @@
   </span>
 {% endmacro %}
 
-{% macro render_card_costs_block(metal, crystal, fuel_cells=none, show_heading=true) %}
+{% macro render_energy_draw_cost_chip(draw) %}
+  {% set full_val = draw|fmt_int %}
+  {% set compact_val = draw|fmt_int_compact %}
+  <span class="gc-cost-chip gc-cost-energy" data-building-energy-draw>
+    <span class="gc-cost-chip-leading">{{ render_resource_icon('energy', 'sm') }}</span>
+    <span class="gc-cost-val gc-num-compact"{% if compact_val != full_val %} title="-{{ full_val }}"{% endif %}>-{{ compact_val }}</span>
+  </span>
+{% endmacro %}
+
+{% macro render_card_costs_block(metal, crystal, fuel_cells=none, show_heading=true, energy_draw=none) %}
   <div class="gc-card-costs-block bcell-cost">
     {% if show_heading %}
     <div class="gc-card-section-label">{{ T("progression_costs_heading", "Kosten") }}</div>
@@ -90,6 +99,9 @@
       {{ render_resource_cost_chip('crystal', crystal) }}
       {% if fuel_cells is not none and (fuel_cells|int) > 0 %}
       {{ render_resource_cost_chip('fuel_cells', fuel_cells) }}
+      {% endif %}
+      {% if energy_draw is not none and (energy_draw|int) > 0 %}
+      {{ render_energy_draw_cost_chip(energy_draw) }}
       {% endif %}
     </div>
   </div>
@@ -320,8 +332,8 @@
   {% endif %}
 {% endmacro %}
 
-{% macro render_prog_costs(metal, crystal, target_level, show_target=true, fuel_cells=none) %}
-  {{ render_card_costs_block(metal, crystal, fuel_cells, true) }}
+{% macro render_prog_costs(metal, crystal, target_level, show_target=true, fuel_cells=none, energy_draw=none) %}
+  {{ render_card_costs_block(metal, crystal, fuel_cells, true, energy_draw) }}
   {% if show_target %}
   <span class="gc-cost-target" title="{{ T('buildings_col_level') }} {{ target_level|fmt_int }}">
     → L{{ target_level|fmt_int }}

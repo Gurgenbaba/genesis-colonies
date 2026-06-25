@@ -2286,31 +2286,53 @@
     return "";
   }
 
-  function renderBuildingCardFooterHtml(b) {
+  function resolveBuildingEnergySource(b) {
     const sec = b?.secondary_effect;
     const primary = b?.effect_kind === "energy_use" ? b : null;
-    const energySrc =
-      sec?.effect_kind === "energy_use"
-        ? sec
-        : primary?.effect_kind === "energy_use"
-          ? primary
-          : null;
-    if (!energySrc) return "";
+    return sec?.effect_kind === "energy_use"
+      ? sec
+      : primary?.effect_kind === "energy_use"
+        ? primary
+        : null;
+  }
+
+  function resolveBuildingEnergyDraw(energySrc) {
+    if (!energySrc) return 0;
     const cur = Math.floor(Number(energySrc.effect_current) || 0);
     const delta = Math.floor(Number(energySrc.effect_delta) || 0);
-    const draw = cur > 0 ? cur : delta;
-    if (draw <= 0) return "";
-    const parts = fmtIntParts(draw);
+    return cur > 0 ? cur : delta;
+  }
+
+  function hasAuthoritativeEnergyDraw(b, energySrc) {
+    if (!energySrc) return false;
+    const cur = Math.floor(Number(energySrc.effect_current) || 0);
+    if (cur > 0) return true;
+    const level = Math.floor(Number(b?.level) || 0);
+    if (level <= 0) return Math.floor(Number(energySrc.effect_delta) || 0) > 0;
+    return false;
+  }
+
+  function renderEnergyDrawCostChipHtml(draw) {
+    const d = Math.floor(Number(draw) || 0);
+    if (d <= 0) return "";
+    const parts = fmtIntParts(d);
     const titleAttr =
       parts.full !== parts.display ? ` title="-${escapeHtml(parts.full)}"` : "";
     return (
-      `<div class="gc-card-energy-footer bcell-energy" data-building-energy-footer>` +
-      `<div class="gc-cost-stack">` +
-      `<span class="gc-cost-chip gc-cost-energy">` +
-      `<span class="gc-cost-chip-leading">${renderBuildingEffectIcon("energy")}</span>` +
-      `<span class="gc-cost-val gc-num-compact"${titleAttr}>-${parts.display}</span>` +
-      `</span></div></div>`
+      `<span class="gc-cost-chip gc-cost-energy" data-building-energy-draw>` +
+      `<span class="gc-cost-chip-leading"><span class="gc-res-icon gc-res-icon--sm gc-res-energy" aria-hidden="true"></span></span>` +
+      `<span class="gc-cost-val gc-num-compact"${titleAttr}>-${parts.display}</span></span>`
     );
+  }
+
+  function resolveEnergyDrawForBuildingRow(b, row) {
+    const energySrc = resolveBuildingEnergySource(b);
+    if (hasAuthoritativeEnergyDraw(b, energySrc)) {
+      const draw = resolveBuildingEnergyDraw(energySrc);
+      return draw > 0 ? draw : null;
+    }
+    if (row?.querySelector("[data-building-energy-draw]")) return "preserve";
+    return null;
   }
 
   function serializeReqHoverItems(items) {
@@ -2400,8 +2422,8 @@
   function patchBuildingProduction(row, b) {
     if (!row || !b) return;
     const html = renderBuildingEffectBundleHtml(b);
-    const footerHtml = renderBuildingCardFooterHtml(b);
     const meta = row.querySelector(".gc-bld-card-meta");
+    row.querySelector("[data-building-energy-footer]")?.remove();
 
     const bundles = [...row.querySelectorAll(".gc-bld-effect-bundle")];
     let bundle = bundles[0] || null;
@@ -2424,47 +2446,43 @@
         else row.appendChild(bundle);
       }
     }
-
-    let footer = row.querySelector("[data-building-energy-footer]");
-    if (!footerHtml) {
-      const sec = b?.secondary_effect;
-      const primary = b?.effect_kind === "energy_use" ? b : null;
-      const energySrc =
-        sec?.effect_kind === "energy_use"
-          ? sec
-          : primary?.effect_kind === "energy_use"
-            ? primary
-            : null;
-      const hasEnergy =
-        energySrc
-        && (Math.floor(Number(energySrc.effect_current) || 0) > 0
-          || Math.floor(Number(energySrc.effect_delta) || 0) > 0);
-      if (!hasEnergy) footer?.remove();
-      return;
-    }
-    if (footer) {
-      if (footer.outerHTML.trim() !== footerHtml.trim()) footer.outerHTML = footerHtml;
-      return;
-    }
-    const fwrap = document.createElement("div");
-    fwrap.innerHTML = footerHtml;
-    footer = fwrap.firstElementChild;
-    if (!footer) return;
-    if (meta) meta.insertAdjacentElement("afterend", footer);
-    else row.appendChild(footer);
   }
 
-  function renderCompactCosts(metal, crystal, targetLevel, showTarget = true, fuelCells = null) {
+  function renderCompactCosts(metal, crystal, targetLevel, showTarget = true, fuelCells = null, energyDraw = null) {
     const heading = t("progression_costs_heading", "Kosten");
     let stack =
       renderResourceCostChipHtml("metal", metal) + renderResourceCostChipHtml("crystal", crystal);
     const fuel = Math.floor(Number(fuelCells) || 0);
     if (fuel > 0) stack += renderResourceCostChipHtml("fuel_cells", fuel);
+    const energy = Math.floor(Number(energyDraw) || 0);
+    if (energy > 0) stack += renderEnergyDrawCostChipHtml(energy);
     return (
       `<div class="gc-card-costs-block bcell-cost">` +
       `<div class="gc-card-section-label">${escapeHtml(heading)}</div>` +
       `<div class="gc-cost-stack">${stack}</div></div>`
     );
+  }
+
+  function patchBuildingCosts(row, b) {
+    const costCell = row.querySelector(".bcell-cost");
+    if (!costCell) return;
+    const energyMode = resolveEnergyDrawForBuildingRow(b, row);
+    const preservedChip =
+      energyMode === "preserve"
+        ? row.querySelector("[data-building-energy-draw]")?.outerHTML || ""
+        : "";
+    let html = renderCompactCosts(
+      b.cost_metal,
+      b.cost_crystal,
+      b.target_level,
+      false,
+      null,
+      typeof energyMode === "number" ? energyMode : null
+    );
+    if (preservedChip) {
+      html = html.replace("</div></div>", `${preservedChip}</div></div>`);
+    }
+    if (costCell.outerHTML.trim() !== html.trim()) costCell.outerHTML = html;
   }
 
   function patchBuildingRequirements(row, b) {
@@ -2889,12 +2907,7 @@
         applyBuildingRowState(row, b);
         patchBuildingRequirements(row, b);
         patchBuildingProduction(row, b);
-
-        const costCell = row.querySelector(".bcell-cost");
-        if (costCell) {
-          const html = renderCompactCosts(b.cost_metal, b.cost_crystal, b.target_level, false);
-          if (costCell.innerHTML.trim() !== html.trim()) costCell.innerHTML = html;
-        }
+        patchBuildingCosts(row, b);
 
         const durCell = row.querySelector(".bcell-duration");
         if (durCell && !row.classList.contains("gc-building-card--in-queue")) {

@@ -15,6 +15,7 @@ import game.models as models
 from game.buildings import (
     BUILDING_ENERGY_CONSUMERS,
     _make_panel_row,
+    get_buildings_panel_delta,
     get_overview_building_rows,
 )
 from game.effects import EffectResolver
@@ -79,6 +80,22 @@ class TestUpgradeEffectPreview:
         assert sec["effect_kind"] == "energy_use"
         assert sec["effect_next"] > sec["effect_current"]
         assert sec["effect_delta"] > 0
+        assert sec["effect_current"] > sec["effect_delta"]
+
+    def test_metal_mine_delta_payload_keeps_energy_current(self, preview_db):
+        planet = get_homeworld(player_id=preview_db)
+        buildings = {"metal_mine": 47, "crystal_mine": 43, "solar_plant": 34, "fuel_cell_plant": 39}
+        save_planet_buildings(int(planet["id"]), buildings)
+        b = get_planet_buildings(int(planet["id"]))
+        research = get_research_levels(user_id=preview_db)
+        planet = dict(planet)
+        planet["player_id"] = preview_db
+        delta = get_buildings_panel_delta(planet, b, building_keys=["metal_mine"])
+        row = delta["resources"][0]
+        sec = row["secondary_effect"]
+        assert sec["effect_kind"] == "energy_use"
+        assert sec["effect_current"] > 100
+        assert sec["effect_current"] > sec["effect_delta"]
 
     def test_solar_plant_energy_output_no_secondary(self, preview_db):
         row = _panel_row(preview_db, "solar_plant", {"solar_plant": 3})

@@ -39,19 +39,29 @@ def test_unified_requirements_on_warn_hover():
     assert "render_card_requirements_block" not in research
 
 
-def test_energy_footer_has_consumption_label():
+def test_energy_draw_in_cost_stack():
+    prog = _read("templates/partials/progression_cards.html")
+    assert "render_energy_draw_cost_chip" in prog
+    assert "data-building-energy-draw" in prog
+    costs_macro = prog.split("render_card_costs_block")[1].split("{% endmacro %}")[0]
+    assert "energy_draw" in costs_macro
+
     strip = _read("templates/partials/building_effect_strip.html")
-    assert "gc-cost-chip gc-cost-energy" in strip
-    assert "gc-card-energy-footer" in strip
-    footer = strip.split("render_building_card_footer")[1].split("{% endmacro %}")[0]
-    assert "render_energy_draw_chip" in footer
-    assert "effect_current" in footer
+    assert "render_building_prog_costs" in strip
+    assert "effect_current" in strip.split("render_building_prog_costs")[1].split("{% endmacro %}")[0]
+
+    bld = _read("templates/buildings.html")
+    assert "render_building_prog_costs" in bld
+    assert "render_building_card_footer" not in bld
 
     js = _read("static/main.js")
-    footer_fn = js.split("function renderBuildingCardFooterHtml")[1].split("function serializeReqHoverItems")[0]
-    assert "gc-cost-chip gc-cost-energy" in footer_fn
-    assert "gc-card-energy-footer" in footer_fn
-    assert "effect_current" in footer_fn
+    energy_helpers = js.split("function resolveBuildingEnergySource")[1].split("function serializeReqHoverItems")[0]
+    assert "effect_current" in energy_helpers
+    assert "renderEnergyDrawCostChipHtml" in js
+    assert "data-building-energy-draw" in js
+    assert "patchBuildingCosts" in js
+    costs_fn = js.split("function renderCompactCosts")[1].split("function patchBuildingRequirements")[0]
+    assert "renderEnergyDrawCostChipHtml" in costs_fn
 
 
 def test_ship_cards_attack_only_speed_in_footer():
