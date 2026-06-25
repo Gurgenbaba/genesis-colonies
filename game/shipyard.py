@@ -17,7 +17,7 @@ from .fleet_defs import (
 )
 from .models import db, get_planet_buildings, lock_planet_for_update
 
-BUILD_TIME_LEVEL_FACTOR = 0.90  # −10% ship build time per shipyard level above 1
+BUILD_TIME_LEVEL_FACTOR = 0.96  # GC-863 — −4% ship build time per shipyard level above 1
 
 
 def _shipyard_speed_multiplier(*, conn=None) -> float:

@@ -86,6 +86,14 @@ def _job_scheduled_duration_seconds(row: Mapping[str, Any]) -> int:
     return max(1, int(finish - started))
 
 
+def _planet_id_from_row(row: Mapping[str, Any]) -> int | None:
+    try:
+        pid = int(row.get("planet_id") or 0)
+    except (TypeError, ValueError):
+        return None
+    return pid if pid > 0 else None
+
+
 def _job_total_units(
     row: Mapping[str, Any], shipyard_level: int, *, conn
 ) -> int:
@@ -94,7 +102,9 @@ def _job_total_units(
 
     sk = canonical_ship_key(str(row["ship_key"]))
     remaining = max(0, int(row.get("amount") or 0))
-    unit_sec = _unit_build_seconds(sk, shipyard_level, conn=conn)
+    unit_sec = _unit_build_seconds(
+        sk, shipyard_level, conn=conn, planet_id=_planet_id_from_row(row)
+    )
     cap = _batch_capacity_for_ship(sk, shipyard_level)
     return production_infer_total_units(
         remaining=remaining,
@@ -120,7 +130,9 @@ def progressive_units_to_deliver(
         return 0
 
     sk = canonical_ship_key(str(row["ship_key"]))
-    unit_sec = _unit_build_seconds(sk, shipyard_level, conn=conn)
+    unit_sec = _unit_build_seconds(
+        sk, shipyard_level, conn=conn, planet_id=_planet_id_from_row(row)
+    )
     cap = _batch_capacity_for_ship(sk, shipyard_level)
     total = _job_total_units(row, shipyard_level, conn=conn)
     return production_progressive_units_to_deliver(
@@ -143,7 +155,9 @@ def _next_unit_finish_at(
 
     sk = canonical_ship_key(str(row["ship_key"]))
     started = float(row.get("started_at") or 0)
-    unit_sec = _unit_build_seconds(sk, shipyard_level, conn=conn)
+    unit_sec = _unit_build_seconds(
+        sk, shipyard_level, conn=conn, planet_id=_planet_id_from_row(row)
+    )
     cap = _batch_capacity_for_ship(sk, shipyard_level)
     total = _job_total_units(row, shipyard_level, conn=conn)
     remaining = max(0, int(row.get("amount") or 0))
@@ -170,7 +184,9 @@ def _job_row_for_client(
     amount_remaining = max(0, int(row.get("amount") or 0))
     total_units = _job_total_units(row, shipyard_level, conn=conn)
     units_delivered = max(0, total_units - amount_remaining)
-    unit_sec = _unit_build_seconds(sk, shipyard_level, conn=conn)
+    unit_sec = _unit_build_seconds(
+        sk, shipyard_level, conn=conn, planet_id=_planet_id_from_row(row)
+    )
     started_at = float(row.get("started_at") or 0)
     finish_at = float(row.get("finish_at") or 0)
     order_total_seconds = _job_scheduled_duration_seconds(row)

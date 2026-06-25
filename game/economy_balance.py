@@ -81,25 +81,25 @@ BUILDING_UPGRADE_CURVES: Dict[str, _CostCurve] = {
     "crystal_mine": _CostCurve(
         0.55, _MINE_COST_EXPONENT, 0.59, 0.41, pace_gamma=_MINE_PACE_GAMMA, endgame_delta=_MINE_ENDGAME_DELTA
     ),
-    "solar_plant": _CostCurve(200.0, 1.45, 0.82, 0.18),
+    "solar_plant": _CostCurve(1200.0, 1.45, 0.82, 0.18),  # GC-863
     "fuel_cell_plant": _CostCurve(
         0.60, _MINE_COST_EXPONENT, 0.60, 0.40, pace_gamma=_MINE_PACE_GAMMA, endgame_delta=_MINE_ENDGAME_DELTA
     ),
-    "metal_storage": _CostCurve(420.0, 1.50, 1.0, 0.0),
-    "crystal_storage": _CostCurve(420.0, 1.50, 0.0, 1.0),
-    "fuel_storage": _CostCurve(380.0, 1.48, 0.60, 0.40),
-    "research_lab": _CostCurve(650.0, 1.52, 0.33, 0.67),
-    "academy": _CostCurve(900.0, 1.52, 0.40, 0.60),
-    "command_center": _CostCurve(1200.0, 1.48, 0.71, 0.29),
-    "orbital_shipyard": _CostCurve(1100.0, 1.50, 0.57, 0.43),
-    "defense_factory": _CostCurve(1300.0, 1.50, 0.60, 0.40),
-    "barracks": _CostCurve(700.0, 1.48, 0.60, 0.40),
-    "radar_array": _CostCurve(750.0, 1.48, 0.25, 0.75),
-    "shield_generator": _CostCurve(1800.0, 1.52, 0.56, 0.44),
-    "terraformer": _CostCurve(2400.0, 1.54, 0.50, 0.50),
-    "nanofactory": _CostCurve(3200.0, 1.55, 0.62, 0.38),
-    "geothermal_nexus": _CostCurve(3600.0, 1.55, 0.50, 0.50),
-    "planet_core_nexus": _CostCurve(4800.0, 1.56, 0.40, 0.60),
+    "metal_storage": _CostCurve(2100.0, 1.50, 1.0, 0.0),  # GC-863
+    "crystal_storage": _CostCurve(2100.0, 1.50, 0.0, 1.0),  # GC-863
+    "fuel_storage": _CostCurve(1900.0, 1.48, 0.60, 0.40),  # GC-863
+    "research_lab": _CostCurve(3900.0, 1.52, 0.33, 0.67),  # GC-863
+    "academy": _CostCurve(5400.0, 1.52, 0.40, 0.60),  # GC-863
+    "command_center": _CostCurve(4800.0, 1.48, 0.71, 0.29),  # GC-863
+    "orbital_shipyard": _CostCurve(5500.0, 1.50, 0.57, 0.43),  # GC-863
+    "defense_factory": _CostCurve(2600.0, 1.50, 0.60, 0.40),  # GC-863
+    "barracks": _CostCurve(1400.0, 1.48, 0.60, 0.40),  # GC-863
+    "radar_array": _CostCurve(1500.0, 1.48, 0.25, 0.75),  # GC-863
+    "shield_generator": _CostCurve(3240.0, 1.52, 0.56, 0.44),  # GC-863
+    "terraformer": _CostCurve(4320.0, 1.54, 0.50, 0.50),  # GC-863
+    "nanofactory": _CostCurve(3200.0, 1.55, 0.62, 0.38),  # overridden in power_upgrade_cost (GC-863)
+    "geothermal_nexus": _CostCurve(6480.0, 1.55, 0.50, 0.50),  # GC-863
+    "planet_core_nexus": _CostCurve(8640.0, 1.56, 0.40, 0.60),  # GC-863
 }
 
 # Build seconds ≈ TIME_K × level^1.35 (player speed applied separately).
@@ -125,9 +125,17 @@ BUILD_TIME_CURVES: Dict[str, Tuple[float, float]] = {
     "planet_core_nexus": (580.0, 1.45),
 }
 
-# GC-821B — storage buffer (~18 h Ferronit at matching mine level as orientation).
+# GC-821B — default depot when no storage building (metal/crystal starter cap).
 STORAGE_BASE_CAPACITY = 150_000
+# GC-863 — capacity anchor: production_per_hour(matching resource, level) × multiplier.
+STORAGE_PRODUCTION_HOUR_MULTIPLIER = 1000
+# Legacy exponent (pre-GC-863); kept for doc/tests referencing old curve.
 STORAGE_LEVEL_GROWTH = 1.75
+
+# GC-863 — nanofactory upgrade costs (target level X).
+NANOFACTORY_METAL_BASE = 10_000.0
+NANOFACTORY_CRYSTAL_BASE = 5_000.0
+NANOFACTORY_COST_GROWTH = 1.33
 
 # GC-821B — exchange (scales with empire day production via exchange.py).
 EXCHANGE_DAILY_LIMIT_MIN = 500_000
@@ -318,10 +326,37 @@ def mine_roi_cost_multiplier(target_level: int) -> float:
     return max(0.05, target / baseline_roi)
 
 
+def storage_capacity_anchor(
+    resource_type: str,
+    storage_level: int,
+    *,
+    slot: int = NEUTRAL_BALANCE_SLOT,
+    production_speed: float = 1.0,
+) -> int:
+    """GC-863 — depot size from matching mine production at the same level."""
+    lvl = max(0, int(storage_level))
+    if lvl <= 0:
+        return 0
+    prod = reference_production_per_hour(
+        resource_type, lvl, slot=slot, production_speed=production_speed
+    )
+    return max(1, int(prod * STORAGE_PRODUCTION_HOUR_MULTIPLIER))
+
+
+def nanofactory_upgrade_cost(target_level: int) -> Tuple[int, int]:
+    """GC-863 — Ferronit/Crytite = base × 1.33^target_level."""
+    lvl = max(1, int(target_level))
+    metal = max(1, int(math.ceil(NANOFACTORY_METAL_BASE * (NANOFACTORY_COST_GROWTH ** lvl))))
+    crystal = max(0, int(math.ceil(NANOFACTORY_CRYSTAL_BASE * (NANOFACTORY_COST_GROWTH ** lvl))))
+    return metal, crystal
+
+
 def power_upgrade_cost(building_type: str, target_level: int) -> Tuple[int, int]:
     """GC-821 upgrade cost — mines use 821E pacing × GC-821F ROI anchors."""
     btype = str(building_type)
     lvl = max(1, int(target_level))
+    if btype == "nanofactory":
+        return nanofactory_upgrade_cost(lvl)
     curve = BUILDING_UPGRADE_CURVES.get(btype)
     if curve is None:
         mult = 1.5 ** (lvl - 1)

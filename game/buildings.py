@@ -549,7 +549,7 @@ def _panel_energy_ratio(buildings: Dict[str, int], research_levels: Dict[str, in
 
 
 # Flat UI modifiers for build-time buildings (cards/technical data). Gameplay uses EffectResolver.
-COMMAND_CENTER_NANOFACTORY_BUILD_BONUS_PER_LEVEL = 25
+COMMAND_CENTER_NANOFACTORY_BUILD_BONUS_PER_LEVEL = 15  # GC-863 — UI display only
 NANOFACTORY_BUILD_BONUS_PER_LEVEL = 30
 
 

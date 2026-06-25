@@ -787,6 +787,19 @@ class EffectResolver:
         lab = _bld(self.buildings, "research_lab")
         return 1.0 + max(0, lab - 1) * 0.10
 
+    @staticmethod
+    def solar_energy_base_at_level(level: int) -> int:
+        """GC-863 — solar output matches combined mine draw at the same level + 1."""
+        lvl = max(0, int(level or 0))
+        if lvl <= 0:
+            return 0
+        draw = (
+            int(10 * (lvl ** 1.25))
+            + int(6 * (lvl ** 1.25))
+            + int(8 * (lvl ** 1.25))
+        )
+        return draw + 1
+
     def compute_energy(self) -> Tuple[int, int]:
         mods = self.get_modifiers()
         b = self.buildings
@@ -796,7 +809,9 @@ class EffectResolver:
         crystal_lvl = _bld(b, "crystal_mine")
 
         solar_factor = _mod_float(mods, "solar_output_factor")
-        energy_total = int(20 * (solar_lvl ** 1.4) * solar_factor) if solar_lvl > 0 else 0
+        energy_total = (
+            int(self.solar_energy_base_at_level(solar_lvl) * solar_factor) if solar_lvl > 0 else 0
+        )
 
         energy_metal = int(10 * (metal_lvl ** 1.25)) if metal_lvl > 0 else 0
         energy_crystal = int(6 * (crystal_lvl ** 1.25)) if crystal_lvl > 0 else 0
@@ -870,6 +885,8 @@ class EffectResolver:
 
     def fuel_storage_capacity(self) -> int:
         """Planet fuel cell depot capacity (fuel_storage building + tech/terraformer)."""
+        from ..economy_balance import storage_capacity_anchor
+
         mods = self.get_modifiers()
         b = self.buildings
 
@@ -880,7 +897,7 @@ class EffectResolver:
         f_lvl = _bld(b, "fuel_storage")
         if f_lvl <= 0:
             return 0
-        f_cap = self.BASE_STORAGE * (self.STORAGE_GROW ** max(0, f_lvl - 1))
+        f_cap = storage_capacity_anchor("fuel_cells", f_lvl)
         return int(f_cap * storage_factor)
 
     def fuel_cells_storage_capacity(self) -> int:
@@ -888,6 +905,8 @@ class EffectResolver:
         return self.fuel_storage_capacity()
 
     def get_storage_capacity(self) -> Dict[str, int]:
+        from ..economy_balance import storage_capacity_anchor
+
         mods = self.get_modifiers()
         b = self.buildings
 
@@ -898,8 +917,8 @@ class EffectResolver:
         m_lvl = _bld(b, "metal_storage")
         c_lvl = _bld(b, "crystal_storage")
 
-        m_cap = self.BASE_STORAGE * (self.STORAGE_GROW ** max(0, m_lvl - 1)) if m_lvl > 0 else self.BASE_STORAGE
-        c_cap = self.BASE_STORAGE * (self.STORAGE_GROW ** max(0, c_lvl - 1)) if c_lvl > 0 else self.BASE_STORAGE
+        m_cap = storage_capacity_anchor("metal", m_lvl) if m_lvl > 0 else self.BASE_STORAGE
+        c_cap = storage_capacity_anchor("crystal", c_lvl) if c_lvl > 0 else self.BASE_STORAGE
 
         return {
             "metal": int(m_cap * storage_factor),

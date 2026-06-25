@@ -465,7 +465,7 @@ def test_progressive_shipyard_delivery(shipyard_db):
     job = cur.fetchone()
     started = float(job["started_at"])
     finish = float(job["finish_at"])
-    unit = unit_build_seconds("mule_courier", 1, conn=conn)
+    unit = unit_build_seconds("mule_courier", 1, conn=conn, planet_id=pid)
     cap = unit_batch_capacity(1, base_unit_seconds_for_ship("mule_courier"))
     batches = (qty + cap - 1) // cap
     assert int(job["amount"]) == qty
@@ -521,7 +521,7 @@ def test_progressive_ships_available_for_fleet_preview(shipyard_db, monkeypatch)
     assert ok, reason
     cur.execute("SELECT started_at FROM shipyard_queue WHERE planet_id = ?;", (pid,))
     started = float(cur.fetchone()["started_at"])
-    unit = unit_build_seconds("mule_courier", 1, conn=conn)
+    unit = unit_build_seconds("mule_courier", 1, conn=conn, planet_id=pid)
     conn.close()
 
     client = app_mod.app.test_client()
@@ -535,7 +535,7 @@ def test_progressive_ships_available_for_fleet_preview(shipyard_db, monkeypatch)
     assert rv.status_code == 200
     data = rv.get_json()
     assert data["ok"] is True
-    assert data["data"]["ships"].get("mule_courier", 0) == 3
+    assert data["data"]["ships"].get("mule_courier", 0) == 1
     assert data["data"]["has_ships"] is True
 
 
