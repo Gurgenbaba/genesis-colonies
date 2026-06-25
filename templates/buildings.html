@@ -2,7 +2,7 @@
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_req_tooltip, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
 {% from "partials/building_effect_strip.html" import render_building_effect_bundle, render_building_prog_costs with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
-{% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
+{% from "partials/page_mini_queue_strip.html" import render_page_mini_queue_strip with context %}
 {% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
 
 {# ===================================================================
@@ -226,16 +226,15 @@
   <div class="buildings-shell gc-panel">
 
     {% set bq_jobs = (bq.queue if bq and bq.queue is defined and bq.queue else []) %}
-    {{ render_page_queue_compact(
-      'build-queue-compact',
-      'build',
-      '🏗',
-      bq_jobs,
+    {{ render_page_mini_queue_strip(
+      'build-mini-queue',
+      'building',
+      [],
       T('build_queue_compact_idle', 'Keine Bauaufträge'),
       bq_summary.count if bq_summary.count is defined else 0,
       bq_limit,
-      'build',
-      'data-build-cancel-id'
+      'data-build-cancel-id',
+      fallback_queue=bq_jobs
     ) }}
 
     <hr class="buildings-divider gc-prog-divider">

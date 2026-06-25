@@ -201,13 +201,13 @@ def test_queue_engine_unchanged_static():
 
 def test_buildings_template_card_queue_markers():
     html = (ROOT / "templates/buildings.html").read_text(encoding="utf-8")
-    macro = (ROOT / "templates/partials/page_queue_compact.html").read_text(encoding="utf-8")
+    macro = (ROOT / "templates/partials/page_mini_queue_strip.html").read_text(encoding="utf-8")
     assert "data-building-card" in html
     assert "data-building-type" in html
-    assert "render_page_queue_compact" in html
-    assert "build-queue-compact" in html
-    assert "data-page-queue-compact-body" in macro
-    assert "gc-page-queue-compact-active" in macro
+    assert "render_page_mini_queue_strip" in html
+    assert "build-mini-queue" in html
+    assert "gc-mini-queue-strip" in macro
+    assert "gc-mini-queue-card" in macro
     assert "gc-card-queue-block" in html
     assert "build-queue-root" not in html
     assert "gc-page-queue-panel" not in html
@@ -215,12 +215,10 @@ def test_buildings_template_card_queue_markers():
 
 def test_main_js_updates_page_queue_compact():
     js = (ROOT / "static/main.js").read_text(encoding="utf-8")
-    assert "_updatePageQueueCompact" in js
-    assert "_updateBuildQueueCompact" in js
-    assert "_updateResearchQueueCompact" in js
-    assert "_updateShipyardQueueCompact" in js
-    assert "_updateDefenseQueueCompact" in js
-    assert "data-page-queue-compact-body" in js
+    assert "_renderProductionMiniQueue" in js
+    assert "build-mini-queue" in js
+    assert "research-mini-queue" in js
+    assert "GC.renderMiniQueueStrip" in js
 
 
 def test_main_js_excludes_building_queue_from_global_hud():

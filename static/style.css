@@ -8612,6 +8612,36 @@ a.gc-bld-head-action-btn--go:focus-visible{
   display: none;
 }
 
+.gc-mini-queue-card--level-queue .gc-mini-queue-card__body{
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.gc-mini-queue-card--level-queue .gc-mini-queue-card__title{
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--gc-text);
+  line-height: 1.15;
+}
+
+.gc-mini-queue-card--level-queue .gc-mini-queue-card__level{
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: rgba(180, 245, 255, 0.82);
+  white-space: nowrap;
+  line-height: 1.1;
+}
+
+.gc-mini-queue-card--level-queue{
+  max-width: min(156px, 58vw);
+}
+
 .gc-mini-queue-card__amount{
   font-size: 0.72rem;
   font-weight: 600;

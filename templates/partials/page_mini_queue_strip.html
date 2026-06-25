@@ -1,4 +1,4 @@
-{# GC-QUEUE-MINI-CARDS — horizontal mini-queue strip (shipyard / defense) #}
+{# GC-QUEUE-MINI-CARDS — horizontal mini-queue strip (buildings / research / shipyard / defense) #}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs with context %}
 
 {% macro _mini_queue_job_label(domain, job) %}
@@ -6,12 +6,82 @@
     {{ T(job.label, T('fleet_ship_' ~ job.owner_key, job.owner_key)) }}
   {% elif domain == 'defense' %}
     {{ T(job.label, T('defense_' ~ job.owner_key, job.owner_key)) }}
+  {% elif domain in ('building', 'build') %}
+    {{ T(job.label, T('building_' ~ job.owner_key, job.owner_key)) }}
+  {% elif domain == 'research' %}
+    {{ T(job.label, T(job.owner_key, job.owner_key)) }}
   {% else %}
     {{ T(job.label, job.owner_key) }}
   {% endif %}
 {% endmacro %}
 
-{% macro render_page_mini_queue_strip(host_id, domain, jobs, idle_text, queue_count, queue_limit, cancel_data_attr) %}
+{% macro _mini_queue_building_icon(building_type) %}
+  {% set file = building_type %}
+  {% if building_type == 'orbital_shipyard' %}{% set file = 'shipyard' %}{% endif %}
+  {% if building_type == 'fuel_storage' %}{% set file = 'fuel_cell_storage' %}{% endif %}
+  {{ url_for('static', filename='img/buildings/' ~ file ~ '.png') }}
+{% endmacro %}
+
+{% macro _mini_queue_research_icon(raw) %}
+  {% if raw.icon %}
+    {{ url_for('static', filename='img/research/' ~ raw.icon) }}
+  {% else %}
+    {{ url_for('static', filename='img/research/' ~ raw.tech_key ~ '.png') }}
+  {% endif %}
+{% endmacro %}
+
+{% macro _mini_queue_card(job, domain, cancel_data_attr, is_first) %}
+  {% set is_level_queue = domain in ('building', 'build', 'research') %}
+  {% if not is_first %}
+  <span class="gc-mini-queue-card__connector" aria-hidden="true">&gt;</span>
+  {% endif %}
+  <article class="gc-mini-queue-card{% if job.is_active %} gc-mini-queue-card--active{% else %} gc-mini-queue-card--waiting{% endif %}{% if is_level_queue %} gc-mini-queue-card--level-queue{% endif %}"
+           data-mini-queue-card
+           data-job-id="{{ job.job_id|int }}"
+           data-queue-active="{{ '1' if job.is_active else '0' }}"
+           data-timer-domain="{{ domain }}"{{ render_card_queue_data_attrs(job) }}>
+    <span class="gc-mini-queue-card__position gc-mono" aria-label="{{ T('queue_position_label', 'Position %(n)s', n=job.position|int) }}">{{ job.position|int }}</span>
+    <img class="gc-mini-queue-card__image"
+         src="{{ job.image_url }}"
+         alt="{{ _mini_queue_job_label(domain, job) }}"
+         title="{{ _mini_queue_job_label(domain, job) }}"
+         loading="lazy">
+    <div class="gc-mini-queue-card__body">
+      {% if is_level_queue %}
+      <span class="gc-mini-queue-card__title">{{ _mini_queue_job_label(domain, job) }}</span>
+      {% if job.target_level is defined and job.target_level %}
+      <span class="gc-mini-queue-card__level gc-mono">{{ T('build_queue_compact_level', 'Lv.%(level)s', level=job.target_level|int) }}</span>
+      {% endif %}
+      {% elif (job.amount|default(0)|int) > 0 %}
+      <span class="gc-mini-queue-card__amount gc-mono"
+            title="{{ (job.amount|int)|fmt_int }}">×{{ (job.amount|int)|fmt_int }}</span>
+      {% endif %}
+      <span class="gc-mini-queue-card__timer gc-mono"
+            data-timer-target="{{ job.finish_at|int }}"
+            data-timer-kind="{{ domain }}"
+            data-refresh-on-zero="game-state"
+            data-countdown-at="{{ job.finish_at|int }}"
+            data-server-remaining="{{ job.remaining_seconds|default(0)|int }}">{{ job.remaining_seconds|default(0)|int }}s</span>
+    </div>
+    {% if job.cancelable %}
+    <button type="button"
+            class="gc-mini-queue-card__cancel"
+            {{ cancel_data_attr }}="{{ job.job_id|int }}"
+            title="{{ T('queue_cancel_tooltip', 'Auftrag abbrechen') }}"
+            aria-label="{{ T('queue_cancel_tooltip', 'Auftrag abbrechen') }}"><span aria-hidden="true">×</span></button>
+    {% endif %}
+    {% if job.is_active %}
+    <div class="gc-mini-queue-card__progress" role="progressbar"
+         aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="{{ job.progress_pct|default(0)|int }}">
+      <div class="gc-mini-queue-card__progress-fill gc-progress-smooth"
+           style="width: {{ job.progress_pct|default(0)|int }}%;"></div>
+    </div>
+    {% endif %}
+  </article>
+{% endmacro %}
+
+{% macro render_page_mini_queue_strip(host_id, domain, jobs, idle_text, queue_count, queue_limit, cancel_data_attr, fallback_queue=none) %}
   {% set job_list = jobs if jobs else [] %}
   {% set q_count = (queue_count if queue_count is defined else 0)|int %}
   {% set q_limit = (queue_limit if queue_limit is defined else 0)|int %}
@@ -22,48 +92,58 @@
     <div class="gc-mini-queue-strip" data-mini-queue-strip>
       {% if job_list|length %}
         {% for job in job_list %}
-          {% if not loop.first %}
-          <span class="gc-mini-queue-card__connector" aria-hidden="true">&gt;</span>
+          {{ _mini_queue_card(job, domain, cancel_data_attr, loop.first) }}
+        {% endfor %}
+      {% elif fallback_queue and fallback_queue|length %}
+        {% for raw in fallback_queue %}
+          {% if domain in ('building', 'build') %}
+            {% set _owner = raw.building_type %}
+            {% set _finish = (raw.finish_time or raw.finish_at)|default(0) %}
+            {% set _total = (raw.total or raw.total_seconds or 1)|int %}
+            {% set _remain = (raw.remaining_seconds or raw.remaining or 0)|int %}
+            {% set _elapsed = _total - _remain if loop.first else 0 %}
+            {% set _pct = ((_elapsed * 100) // _total) if loop.first and _total > 0 else 0 %}
+            {% set job = {
+              'job_id': raw.id|int,
+              'owner_key': _owner,
+              'label': raw.label_key|default('building_' ~ _owner),
+              'target_level': raw.target_level|int,
+              'position': loop.index,
+              'is_active': loop.first,
+              'finish_at': _finish|int,
+              'remaining_seconds': _remain,
+              'progress_pct': _pct,
+              'duration_seconds': _total,
+              'start_at': (_finish|float - _total|float)|int,
+              'image_url': _mini_queue_building_icon(_owner),
+              'cancelable': true
+            } %}
+          {% elif domain == 'research' %}
+            {% set _owner = raw.tech_key or raw.key %}
+            {% set _finish = (raw.finish_at or raw.finish_time)|default(0) %}
+            {% set _total = (raw.total_seconds or raw.total or 1)|int %}
+            {% set _remain = (raw.remaining_seconds or raw.remaining or 0)|int %}
+            {% set _elapsed = _total - _remain if loop.first else 0 %}
+            {% set _pct = ((_elapsed * 100) // _total) if loop.first and _total > 0 else 0 %}
+            {% set job = {
+              'job_id': raw.id|int,
+              'owner_key': _owner,
+              'label': raw.label_key|default(raw.label|default(_owner)),
+              'target_level': raw.target_level|int,
+              'position': loop.index,
+              'is_active': loop.first,
+              'finish_at': _finish|int,
+              'remaining_seconds': _remain,
+              'progress_pct': _pct,
+              'duration_seconds': _total,
+              'start_at': raw.start_at|default(0)|int,
+              'image_url': _mini_queue_research_icon(raw),
+              'cancelable': true
+            } %}
+          {% else %}
+            {% set job = raw %}
           {% endif %}
-          <article class="gc-mini-queue-card{% if job.is_active %} gc-mini-queue-card--active{% else %} gc-mini-queue-card--waiting{% endif %}"
-                   data-mini-queue-card
-                   data-job-id="{{ job.job_id|int }}"
-                   data-queue-active="{{ '1' if job.is_active else '0' }}"
-                   data-timer-domain="{{ domain }}"{{ render_card_queue_data_attrs(job) }}>
-            <span class="gc-mini-queue-card__position gc-mono" aria-label="{{ T('queue_position_label', 'Position %(n)s', n=job.position|int) }}">{{ job.position|int }}</span>
-            <img class="gc-mini-queue-card__image"
-                 src="{{ job.image_url }}"
-                 alt="{{ _mini_queue_job_label(domain, job) }}"
-                 title="{{ _mini_queue_job_label(domain, job) }}"
-                 loading="lazy">
-            <div class="gc-mini-queue-card__body">
-              {% if (job.amount|default(0)|int) > 0 %}
-              <span class="gc-mini-queue-card__amount gc-mono"
-                    title="{{ (job.amount|int)|fmt_int }}">×{{ (job.amount|int)|fmt_int }}</span>
-              {% endif %}
-              <span class="gc-mini-queue-card__timer gc-mono"
-                    data-timer-target="{{ job.finish_at|int }}"
-                    data-timer-kind="{{ domain }}"
-                    data-refresh-on-zero="game-state"
-                    data-countdown-at="{{ job.finish_at|int }}"
-                    data-server-remaining="{{ job.remaining_seconds|default(0)|int }}">{{ job.remaining_seconds|default(0)|int }}s</span>
-            </div>
-            {% if job.cancelable %}
-            <button type="button"
-                    class="gc-mini-queue-card__cancel"
-                    {{ cancel_data_attr }}="{{ job.job_id|int }}"
-                    title="{{ T('queue_cancel_tooltip', 'Auftrag abbrechen') }}"
-                    aria-label="{{ T('queue_cancel_tooltip', 'Auftrag abbrechen') }}"><span aria-hidden="true">×</span></button>
-            {% endif %}
-            {% if job.is_active %}
-            <div class="gc-mini-queue-card__progress" role="progressbar"
-                 aria-valuemin="0" aria-valuemax="100"
-                 aria-valuenow="{{ job.progress_pct|default(0)|int }}">
-              <div class="gc-mini-queue-card__progress-fill gc-progress-smooth"
-                   style="width: {{ job.progress_pct|default(0)|int }}%;"></div>
-            </div>
-            {% endif %}
-          </article>
+          {{ _mini_queue_card(job, domain, cancel_data_attr, loop.first) }}
         {% endfor %}
       {% else %}
         <span class="gc-mini-queue-empty" data-mini-queue-empty aria-hidden="true"></span>

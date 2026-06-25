@@ -15,6 +15,7 @@ from game.economy_balance import (
     NANOFACTORY_COST_GROWTH,
     NANOFACTORY_CRYSTAL_BASE,
     NANOFACTORY_METAL_BASE,
+    STORAGE_BASE_CAPACITY,
     STORAGE_PRODUCTION_HOUR_MULTIPLIER,
     nanofactory_upgrade_cost,
     power_upgrade_cost,
@@ -96,7 +97,21 @@ class TestGc863StorageCapacity:
         er = EffectResolver({building: level}, {})
         caps = er.get_storage_capacity()
         key = "fuel_cells" if resource == "fuel_cells" else resource
-        assert caps[key] == anchor
+        if resource == "fuel_cells":
+            assert caps[key] == anchor
+        else:
+            assert caps[key] == STORAGE_BASE_CAPACITY + anchor
+
+    def test_metal_crystal_storage_increases_on_first_depot_level(self):
+        for resource, building in (("metal", "metal_storage"), ("crystal", "crystal_storage")):
+            er0 = EffectResolver({}, {})
+            er1 = EffectResolver({building: 1}, {})
+            key = resource
+            cap0 = er0.get_storage_capacity()[key]
+            cap1 = er1.get_storage_capacity()[key]
+            assert cap1 > cap0
+            assert cap0 == STORAGE_BASE_CAPACITY
+            assert cap1 == STORAGE_BASE_CAPACITY + storage_capacity_anchor(resource, 1)
 
 
 class TestGc863SolarCalibration:

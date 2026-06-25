@@ -67,12 +67,12 @@ class TestGc821BStorageAndExchange:
         assert caps["metal"] == STORAGE_BASE_CAPACITY
         assert caps["crystal"] == STORAGE_BASE_CAPACITY
 
-    def test_storage_level_one_uses_production_anchor(self):
+    def test_storage_level_one_adds_production_anchor_to_base(self):
         from game.economy_balance import storage_capacity_anchor
 
         er = EffectResolver({"metal_storage": 1}, {})
         caps = er.get_storage_capacity()
-        assert caps["metal"] == storage_capacity_anchor("metal", 1)
+        assert caps["metal"] == STORAGE_BASE_CAPACITY + storage_capacity_anchor("metal", 1)
 
     def test_exchange_daily_limit_min_default(self):
         assert int(_EXCHANGE_SETTING_DEFAULTS["exchange_daily_limit_min"]) == EXCHANGE_DAILY_LIMIT_MIN

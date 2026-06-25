@@ -904,9 +904,16 @@ class EffectResolver:
         """Authoritative fuel_cells cap — depot only (plant no longer stores)."""
         return self.fuel_storage_capacity()
 
-    def get_storage_capacity(self) -> Dict[str, int]:
+    def _metal_crystal_storage_base_cap(self, resource: str, storage_level: int) -> int:
+        """Planet base cap plus depot bonus from GC-863 production anchor (level 0 = base only)."""
         from ..economy_balance import storage_capacity_anchor
 
+        lvl = max(0, int(storage_level))
+        if lvl <= 0:
+            return self.BASE_STORAGE
+        return self.BASE_STORAGE + storage_capacity_anchor(resource, lvl)
+
+    def get_storage_capacity(self) -> Dict[str, int]:
         mods = self.get_modifiers()
         b = self.buildings
 
@@ -917,8 +924,8 @@ class EffectResolver:
         m_lvl = _bld(b, "metal_storage")
         c_lvl = _bld(b, "crystal_storage")
 
-        m_cap = storage_capacity_anchor("metal", m_lvl) if m_lvl > 0 else self.BASE_STORAGE
-        c_cap = storage_capacity_anchor("crystal", c_lvl) if c_lvl > 0 else self.BASE_STORAGE
+        m_cap = self._metal_crystal_storage_base_cap("metal", m_lvl)
+        c_cap = self._metal_crystal_storage_base_cap("crystal", c_lvl)
 
         return {
             "metal": int(m_cap * storage_factor),

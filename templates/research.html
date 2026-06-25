@@ -2,7 +2,7 @@
 {% from "partials/progression_cards.html" import render_prog_duration, render_prog_costs, render_shipyard_resource_blocker, render_req_hover_attrs, render_max_queue_preview_attrs with context %}
 {% from "partials/building_effect_strip.html" import render_compact_effect_row with context %}
 {% from "partials/card_queue_macros.html" import render_card_queue_data_attrs, render_card_queue_timer with context %}
-{% from "partials/page_queue_compact.html" import render_page_queue_compact with context %}
+{% from "partials/page_mini_queue_strip.html" import render_page_mini_queue_strip with context %}
 {% from "partials/card_hero_img_macros.html" import render_hero_img_stack with context %}
 
 {# ===================================================================
@@ -323,16 +323,15 @@
 
   <section class="gc-panel research-shell">
 
-    {{ render_page_queue_compact(
-      'research-queue-compact',
+    {{ render_page_mini_queue_strip(
+      'research-mini-queue',
       'research',
-      '🔬',
-      rq_jobs,
+      [],
       T('research_queue_compact_idle', 'Keine Forschungen aktiv'),
       rq_summary.count if rq_summary.count is defined else 0,
       rq_limit,
-      'research',
-      'data-research-cancel-id'
+      'data-research-cancel-id',
+      fallback_queue=rq_jobs
     ) }}
 
     <hr class="research-divider gc-prog-divider">

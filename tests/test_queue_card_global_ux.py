@@ -13,17 +13,19 @@ ROOT = Path(__file__).resolve().parents[1]
 QUEUE_PAGES = {
     "buildings": {
         "template": "templates/buildings.html",
-        "skip_compact": True,
-        "compact_id": "build-queue-compact",
+        "compact_id": "build-mini-queue",
+        "compact_label": "build-mini-queue",
         "card_attr": "data-building-card",
         "card_queue": "render_hero_queue",
+        "mini_queue": True,
     },
     "research": {
         "template": "templates/research.html",
-        "compact_id": "research-queue-compact",
-        "compact_label": "research-queue-compact-label",
+        "compact_id": "research-mini-queue",
+        "compact_label": "research-mini-queue",
         "card_attr": "data-research-card",
         "card_queue": "render_research_card_queue",
+        "mini_queue": True,
     },
     "shipyard": {
         "template": "templates/shipyard.html",
@@ -104,7 +106,8 @@ def test_all_queue_pages_have_compact_status():
 
 def test_buildings_uses_page_compact_header_only():
     html = _read("templates/buildings.html")
-    assert "build-queue-compact" in html
+    assert "build-mini-queue" in html
+    assert "render_page_mini_queue_strip" in html
     assert "build-queue-root" not in html
     assert "gc-page-queue-panel" not in html
     base = _read("templates/base.html")
@@ -114,10 +117,9 @@ def test_buildings_uses_page_compact_header_only():
 
 
 def test_compact_headers_have_no_timers():
-    # GC-644C: page compact headers show live timers for active jobs.
-    skip_timer_compact = {"buildings", "research", "shipyard", "defense"}
+    # Mini-queue headers intentionally show live timers for active jobs.
     for page, cfg in QUEUE_PAGES.items():
-        if cfg.get("skip_compact") or page in skip_timer_compact:
+        if cfg.get("skip_compact") or cfg.get("mini_queue"):
             continue
         html = _read(cfg["template"])
         compact_ids = cfg.get("compact_ids") or [cfg["compact_id"]]

@@ -582,6 +582,25 @@ def _mini_queue_image_url(domain: str, owner_key: str) -> str:
         from .defense_defs import defense_icon_static_path
 
         return defense_icon_static_path(key)
+    if dom in (OWNER_BUILDING, "building", "build"):
+        from .buildings import BUILDING_ICON
+
+        path = str(BUILDING_ICON.get(key) or f"img/buildings/{key}.png")
+        if path.startswith("/static/"):
+            return path
+        if path.startswith("img/"):
+            return f"/static/{path}"
+        return f"/static/img/buildings/{path}"
+    if dom in (OWNER_RESEARCH, "research"):
+        from .research import RESEARCH_TECHS
+
+        cfg = RESEARCH_TECHS.get(key) or {}
+        icon = str(cfg.get("icon") or f"{key}.png")
+        if icon.startswith("/static/"):
+            return icon
+        if icon.startswith("img/"):
+            return f"/static/{icon}"
+        return f"/static/img/research/{icon}"
     return ""
 
 
@@ -612,6 +631,9 @@ def map_card_jobs_to_mini_queue_jobs(
         is_active = status == STATUS_ACTIVE
         position = _safe_int(job.get("queue_position"), idx + 1)
         amount = _safe_int(job.get("target_amount"), 0)
+        target_level = _safe_int(job.get("target_level"), 0)
+        if dom in (OWNER_BUILDING, "building", "build", OWNER_RESEARCH, "research"):
+            amount = 0
         remaining = _safe_int(job.get("remaining_seconds"), 0)
         finish = _safe_float(job.get("finish_at"))
         if remaining <= 0 and finish > 0 and finish <= ts:
@@ -630,6 +652,7 @@ def map_card_jobs_to_mini_queue_jobs(
                 "owner_key": owner_key,
                 "label": label,
                 "amount": amount,
+                "target_level": int(target_level) if target_level > 0 else None,
                 "position": position,
                 "is_active": is_active,
                 "remaining_seconds": remaining,

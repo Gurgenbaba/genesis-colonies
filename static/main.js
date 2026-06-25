@@ -1018,7 +1018,8 @@
       document.querySelector(".buildings-wrapper[data-planet-id]"),
       document.querySelector(".research-page[data-planet-id]"),
       document.getElementById("global-queue-hud"),
-      document.getElementById("research-queue-compact"),
+      document.getElementById("build-mini-queue"),
+      document.getElementById("research-mini-queue"),
       document.getElementById("shipyard-page"),
       document.getElementById("defense-page"),
       document.getElementById("fleet-page"),
@@ -1097,7 +1098,8 @@
       "defense-page",
       "trader-hub-page",
       "global-queue-hud",
-      "research-queue-compact",
+      "build-mini-queue",
+      "research-mini-queue",
     ].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.dataset.planetId = String(pid);
@@ -7019,19 +7021,47 @@
     ].join(":");
   }
 
+  function researchIconUrl(techKey, iconFile) {
+    const key = String(techKey || "").trim();
+    let file = String(iconFile || "").trim();
+    if (!file && key) file = `${key}.png`;
+    if (!file) return "/static/img/research/energieeffizienz.png";
+    if (file.startsWith("/static/")) return file;
+    if (file.startsWith("img/")) return `/static/${file}`;
+    return `/static/img/research/${file}`;
+  }
+
+  function _miniQueueIconUrl(job, domain) {
+    const dom = String(domain || "").toLowerCase();
+    const ownerKey = String(job.owner_key || "");
+    const preset = String(job.image_url || "");
+    if (preset) return preset;
+    if (dom === "defense") return defenseIconUrl(ownerKey);
+    if (dom === "shipyard") return shipyardIconUrl(ownerKey);
+    if (dom === "building" || dom === "build") return buildingIconUrl(ownerKey);
+    if (dom === "research") return researchIconUrl(ownerKey, job.icon);
+    return "";
+  }
+
   function _collectMiniQueueJobs(queueRaw, domain) {
     if (Array.isArray(queueRaw?.mini_queue_jobs)) return queueRaw.mini_queue_jobs;
-    const cardJobs =
-      domain === "defense" ? _collectDefenseQueueCardJobs(queueRaw) : _collectShipyardQueueCardJobs(queueRaw);
-    const iconFn = domain === "defense" ? defenseIconUrl : shipyardIconUrl;
+    const dom = String(domain || "").toLowerCase();
+    let cardJobs;
+    if (dom === "defense") cardJobs = _collectDefenseQueueCardJobs(queueRaw);
+    else if (dom === "shipyard") cardJobs = _collectShipyardQueueCardJobs(queueRaw);
+    else if (dom === "building" || dom === "build") cardJobs = _collectBuildQueueCardJobs(queueRaw);
+    else if (dom === "research") cardJobs = _collectResearchQueueCardJobs(queueRaw);
+    else cardJobs = _collectShipyardQueueCardJobs(queueRaw);
+    const isLevelQueue = dom === "building" || dom === "build" || dom === "research";
     return cardJobs.map((job) => ({
       job_id: Math.floor(Number(job.job_id || 0)),
-      domain,
+      domain: dom,
       owner_key: String(job.owner_key || ""),
       label: String(
         job.ship_label_key || job.defense_label_key || job.label_key || job.label || job.owner_key || ""
       ),
-      amount: Math.floor(Number(job.target_amount || 0)),
+      amount: isLevelQueue ? 0 : Math.floor(Number(job.target_amount || 0)),
+      target_level: Math.floor(Number(job.target_level || 0)) || null,
       position: Math.floor(Number(job.queue_position || 1)),
       is_active: String(job.status || "") === "active",
       remaining_seconds: Math.max(0, Math.floor(Number(job.remaining_seconds || 0))),
@@ -7039,7 +7069,8 @@
       finish_at: Math.floor(Number(job.finish_at || 0)),
       progress_pct: Math.max(0, Math.min(100, Math.floor(Number(job.progress_pct || 0)))),
       duration_seconds: Math.max(1, Math.floor(Number(job.duration_seconds || 1))),
-      image_url: iconFn(String(job.owner_key || "")),
+      image_url: _miniQueueIconUrl(job, dom),
+      icon: job.icon,
       cancelable: true,
     }));
   }
@@ -7073,6 +7104,12 @@
     if (domain === "defense") {
       return t(labelKey || `defense_${ownerKey}`, ownerKey);
     }
+    if (domain === "building" || domain === "build") {
+      return t(labelKey || `building_${ownerKey}`, ownerKey);
+    }
+    if (domain === "research") {
+      return t(labelKey || ownerKey, ownerKey);
+    }
     return t(labelKey, ownerKey);
   }
 
@@ -7081,7 +7118,16 @@
     const opts = options && typeof options === "object" ? options : {};
     const domain = String(opts.domain || rootEl.dataset.miniQueueHost || "shipyard");
     const cancelDataset =
-      domain === "defense" ? "defenseQueueCancel" : domain === "shipyard" ? "shipyardQueueCancel" : "";
+      domain === "defense"
+        ? "defenseQueueCancel"
+        : domain === "shipyard"
+          ? "shipyardQueueCancel"
+          : domain === "research"
+            ? "researchCancelId"
+            : domain === "building" || domain === "build"
+              ? "buildCancelId"
+              : "";
+    const isLevelQueue = domain === "building" || domain === "build" || domain === "research";
     const strip = rootEl.querySelector("[data-mini-queue-strip]") || rootEl;
     const now = getTimerServerNow();
     const visibleJobs = (Array.isArray(jobs) ? jobs : [])
@@ -7156,13 +7202,11 @@
       const startAt = Math.floor(Number(job.start_at || 0));
       const duration = Math.max(1, Math.floor(Number(job.duration_seconds || 1)));
       const progressPct = Math.max(0, Math.min(100, Math.floor(Number(job.progress_pct || 0))));
-      const imageUrl =
-        String(job.image_url || "") ||
-        (domain === "defense" ? defenseIconUrl(ownerKey) : shipyardIconUrl(ownerKey));
+      const imageUrl = _miniQueueIconUrl(job, domain);
       const label = _resolveMiniQueueLabel(job, domain);
 
       const card = document.createElement("article");
-      card.className = `gc-mini-queue-card${isActive ? " gc-mini-queue-card--active" : " gc-mini-queue-card--waiting"}`;
+      card.className = `gc-mini-queue-card${isActive ? " gc-mini-queue-card--active" : " gc-mini-queue-card--waiting"}${isLevelQueue ? " gc-mini-queue-card--level-queue" : ""}`;
       card.dataset.miniQueueCard = "1";
       card.dataset.jobId = String(jobId);
       card.dataset.queueActive = isActive ? "1" : "0";
@@ -7189,7 +7233,19 @@
       const body = document.createElement("div");
       body.className = "gc-mini-queue-card__body";
 
-      if (amount > 0) {
+      if (isLevelQueue) {
+        const titleEl = document.createElement("span");
+        titleEl.className = "gc-mini-queue-card__title";
+        titleEl.textContent = label;
+        body.appendChild(titleEl);
+        const targetLevel = Math.floor(Number(job.target_level || 0));
+        if (targetLevel > 0) {
+          const lvlEl = document.createElement("span");
+          lvlEl.className = "gc-mini-queue-card__level gc-mono";
+          lvlEl.textContent = tf("build_queue_compact_level", { level: targetLevel }, `Lv.${targetLevel}`);
+          body.appendChild(lvlEl);
+        }
+      } else if (amount > 0) {
         const amtEl = document.createElement("span");
         amtEl.className = "gc-mini-queue-card__amount gc-mono";
         const amtText = `×${fmtNumber(amount)}`;
@@ -7472,18 +7528,22 @@
 
   function _bootstrapPageQueueCompactLiveFromDom() {
     const boots = [
-      { compactId: "build-queue-compact", live: BUILDQ },
-      { compactId: "research-queue-compact", live: RESEARCHQ },
-      { compactId: "shipyard-queue-compact", live: SHIPYARDQ },
-      { compactId: "defense-queue-compact", live: DEFENSEQ },
+      { compactId: "build-mini-queue", live: BUILDQ, mini: true },
+      { compactId: "research-mini-queue", live: RESEARCHQ, mini: true },
+      { compactId: "shipyard-mini-queue", live: SHIPYARDQ, mini: true },
+      { compactId: "defense-mini-queue", live: DEFENSEQ, mini: true },
     ];
     const now = getTimerServerNow();
-    boots.forEach(({ compactId, live }) => {
+    boots.forEach(({ compactId, live, mini }) => {
       const root = document.getElementById(compactId);
       if (!root) return;
-      const timerEl = root.querySelector(
-        ".gc-page-queue-compact-timer[data-countdown-at], .gc-page-queue-compact-active [data-countdown-at]"
-      );
+      const timerEl = mini
+        ? root.querySelector(
+          ".gc-mini-queue-card--active .gc-mini-queue-card__timer[data-countdown-at], .gc-mini-queue-card__timer[data-countdown-at]"
+        )
+        : root.querySelector(
+          ".gc-page-queue-compact-timer[data-countdown-at], .gc-page-queue-compact-active [data-countdown-at]"
+        );
       if (!timerEl) return;
       syncTimerElement(timerEl);
       const finish = parseTimerTarget(timerEl.dataset.timerTarget || timerEl.dataset.countdownAt || 0);
@@ -7502,8 +7562,8 @@
       return;
     }
     const updaters = [
-      ["build-queue-compact", () => _updateBuildQueueCompact(state.build_queue)],
-      ["research-queue-compact", () => _updateResearchQueueCompact(state.research)],
+      ["build-mini-queue", () => _renderProductionMiniQueue("build-mini-queue", state.build_queue, { domain: "building" })],
+      ["research-mini-queue", () => _renderProductionMiniQueue("research-mini-queue", state.research, { domain: "research" })],
       ["shipyard-mini-queue", () => {
         const sy = state.shipyard?.queue || state.shipyard_queue;
         const page = document.getElementById("shipyard-page");
@@ -7610,7 +7670,7 @@
         resolveQueueJobFinishTime(first) <= getTimerServerNow();
       if (!overdue) {
         _syncBuildQueueLiveState(queueList);
-        _updateBuildQueueCompact(buildQueueRaw);
+        _renderProductionMiniQueue("build-mini-queue", buildQueueRaw, { domain: "building" });
         GC.startProgressTicker();
         return;
       }
@@ -7622,7 +7682,7 @@
     else clearFinishRefreshArmed("buildings", queueList);
 
     _syncBuildQueueLiveState(queueList);
-    _updateBuildQueueCompact(buildQueueRaw);
+    _renderProductionMiniQueue("build-mini-queue", buildQueueRaw, { domain: "building" });
 
     GC.startProgressTicker();
   }
@@ -7666,8 +7726,8 @@
   }
 
   function renderResearchQueue(researchRaw) {
-    const compact = document.getElementById("research-queue-compact");
-    if (!compact) return;
+    const host = document.getElementById("research-mini-queue");
+    if (!host) return;
 
     let queueList = [];
     let summary = null;
@@ -7692,14 +7752,14 @@
       const finishTime = first ? resolveQueueJobFinishTime(first) : 0;
       const overdue = finishTime > 0 && finishTime <= getTimerServerNow();
       if (!overdue) {
-        _updateResearchQueueCompact(researchRaw);
+        _renderProductionMiniQueue("research-mini-queue", researchRaw, { domain: "research" });
         GC.startProgressTicker();
         return;
       }
     }
     _lastResearchQueueSignature = sig;
 
-    _updateResearchQueueCompact(researchRaw);
+    _renderProductionMiniQueue("research-mini-queue", researchRaw, { domain: "research" });
     if (!queueList.length) _finishRefreshArmed.research = false;
     else clearFinishRefreshArmed("research", queueList);
 

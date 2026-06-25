@@ -122,7 +122,10 @@ def test_queue_engine_unchanged_static():
 
 def test_research_template_card_queue_markers():
     html = (ROOT / "templates/research.html").read_text(encoding="utf-8")
+    macro = (ROOT / "templates/partials/page_mini_queue_strip.html").read_text(encoding="utf-8")
     assert "data-research-card" in html
-    assert "research-queue-compact" in html
+    assert "research-mini-queue" in html
+    assert "render_page_mini_queue_strip" in html
+    assert "gc-mini-queue-strip" in macro
     assert "gc-card-queue-block" in html
     assert "research-queue-root" not in html

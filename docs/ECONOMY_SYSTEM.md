@@ -93,8 +93,8 @@ Details: [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 
 ## Storage
 
-- Basis **150.000** pro Typ (`STORAGE_BASE_CAPACITY` in `economy_balance.py` / `EffectResolver.BASE_STORAGE`)
-- Wachstum: **×1,75** pro Storage-Stufe (`STORAGE_LEVEL_GROWTH`)
+- Basis **150.000** Ferronit/Crytite ohne Depot (`STORAGE_BASE_CAPACITY` / `EffectResolver.BASE_STORAGE`)
+- Mit `metal_storage` / `crystal_storage` ≥ 1: **Basis + GC-863-Produktionsanker** (`BASE + storage_capacity_anchor`); Brennzellen nur über `fuel_storage` (Anker, ohne Basis)
 - Multiplier: `storage_tech` (+25 %/Lvl), `terraformer` (+5 % Kapazität/Lvl), `storage_factor`
 - Produktion kann Storage nicht überschreiten; bestehendes Overflow wird nicht getrimmt
 - **Trader Hub + Schrottplatz** dürfen jederzeit über Cap gutschreiben (Overflow bleibt erhalten)
