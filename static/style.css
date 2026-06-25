@@ -7762,6 +7762,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
 .gc-building-card .gc-bld-card-meta,
 .gc-building-card .gc-bld-card-req,
 .gc-building-card .gc-bld-card-queue-zone,
+.gc-building-card [data-building-energy-footer],
 .gc-research-card .gc-bld-prod,
 .gc-research-card .gc-bld-effect-bundle,
 .gc-research-card .gc-bld-card-meta,

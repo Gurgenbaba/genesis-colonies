@@ -2289,15 +2289,17 @@
   function renderBuildingCardFooterHtml(b) {
     const sec = b?.secondary_effect;
     if (!sec || sec.effect_kind !== "energy_use") return "";
-    const d = Math.floor(Number(sec.effect_delta) || 0);
-    if (d <= 0) return "";
+    const cur = Math.floor(Number(sec.effect_current) || 0);
+    const delta = Math.floor(Number(sec.effect_delta) || 0);
+    const draw = cur > 0 ? cur : delta;
+    if (draw <= 0) return "";
     const label = t("buildings_effect_energy_use", "Energieverbrauch");
     return (
       `<div class="gc-card-lr-row gc-card-footer-row gc-card-footer-row--energy" data-building-energy-footer>` +
       `<span class="gc-card-lr-label">${escapeHtml(label)}</span>` +
       `<span class="gc-card-lr-value gc-mono">` +
       `${renderBuildingEffectIcon("energy")}` +
-      `<span class="gc-num-compact">-${fmtIntParts(d).display}</span></span></div>`
+      `<span class="gc-num-compact">-${fmtIntParts(draw).display}</span></span></div>`
     );
   }
 
@@ -2415,7 +2417,12 @@
 
     let footer = row.querySelector("[data-building-energy-footer]");
     if (!footerHtml) {
-      footer?.remove();
+      const sec = b?.secondary_effect;
+      const hasEnergy =
+        sec?.effect_kind === "energy_use"
+        && (Math.floor(Number(sec.effect_current) || 0) > 0
+          || Math.floor(Number(sec.effect_delta) || 0) > 0);
+      if (!hasEnergy) footer?.remove();
       return;
     }
     if (footer) {
