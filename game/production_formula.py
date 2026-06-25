@@ -1,5 +1,5 @@
 """
-Unified production formula — single source of truth for resource output (GC-820).
+Unified production formula — single source of truth for resource output (GC-820 / GC-860).
 
 All production values must flow through ``calculate_resource_output``.
 EffectResolver and resources.py delegate here; no duplicate formulas elsewhere.
@@ -16,15 +16,18 @@ if TYPE_CHECKING:
     from .effects.effect_resolver import EffectResolver
 
 # ---------------------------------------------------------------------------
-# Resource growth (power scaling — no stacked exponentials)
+# Ferdi base curve (GC-860) — single exponential tier + flat offset
 # ---------------------------------------------------------------------------
 
 RESOURCE_KEYS = frozenset({"metal", "crystal", "fuel_cells"})
 
+FERDI_GROWTH_RATE = 1.075
+FERDI_BASE_FLAT = 365.0
+
 LEVEL_GROWTH: Dict[str, Dict[str, float]] = {
-    "metal": {"base": 24.0, "exponent": 1.55, "building": "metal_mine"},
-    "crystal": {"base": 16.0, "exponent": 1.50, "building": "crystal_mine"},
-    "fuel_cells": {"base": 8.0, "exponent": 1.42, "building": "fuel_cell_plant"},
+    "metal": {"multiplier": 100.0, "building": "metal_mine"},
+    "crystal": {"multiplier": 66.0, "building": "crystal_mine"},
+    "fuel_cells": {"multiplier": 33.0, "building": "fuel_cell_plant"},
 }
 
 MINING_TECH_PER_LEVEL = 0.03
@@ -75,15 +78,23 @@ def normalize_resource_type(resource_type: str) -> str:
     return _normalize_resource_type(resource_type)
 
 
-def level_growth(resource_type: str, level: int, production_speed: float = 1.0) -> float:
-    """Base × speed × level^exponent (per hour, before modifiers)."""
+def ferdi_base_output(resource_type: str, level: int) -> float:
+    """Ferdi base curve per hour (before production_speed and gameplay modifiers)."""
     key = _normalize_resource_type(resource_type)
     lvl = max(0, int(level or 0))
     if lvl <= 0:
         return 0.0
-    cfg = LEVEL_GROWTH[key]
+    multiplier = float(LEVEL_GROWTH[key]["multiplier"])
+    return multiplier * lvl * (FERDI_GROWTH_RATE ** lvl) + FERDI_BASE_FLAT
+
+
+def level_growth(resource_type: str, level: int, production_speed: float = 1.0) -> float:
+    """Ferdi base × production_speed (per hour, before slot/research/energy modifiers)."""
+    base = ferdi_base_output(resource_type, level)
+    if base <= 0:
+        return 0.0
     speed = max(0.0, float(production_speed or 1.0))
-    return float(cfg["base"]) * speed * float(lvl ** cfg["exponent"])
+    return base * speed
 
 
 def _slot_linear_bonus(
@@ -251,8 +262,8 @@ def calculate_resource_output(resource_type: str, context: ProductionContext) ->
     """
     Canonical production output per hour.
 
-    Output = LevelGrowth × Slot × Temperature × Research × Energy × Building
-             × Planet × Empire × Alliance × Directive × Event × Season
+    Output = FerdiBase × production_speed × Slot × Temperature × Research × Energy
+             × Building × Planet × Empire × Alliance × Directive × Event × Season
     """
     key = _normalize_resource_type(resource_type)
     lvl = max(0, int(context.level or 0))

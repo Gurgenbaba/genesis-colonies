@@ -24,6 +24,7 @@ from game.production_formula import (
     ProductionContext,
     ProductionModifiers,
     calculate_resource_output,
+    ferdi_base_output,
     level_growth,
     research_modifier_for,
     slot_modifier_for,
@@ -87,6 +88,12 @@ def _ctx(resource: str, level: int, **kwargs) -> ProductionContext:
 
 
 class TestLevelGrowth:
+    def test_ferdi_base_output_level_one(self):
+        assert ferdi_base_output("metal", 1) == pytest.approx(472.5)
+        assert ferdi_base_output("crystal", 1) == pytest.approx(435.95)
+        assert ferdi_base_output("fuel_cells", 1) == pytest.approx(400.475)
+        assert ferdi_base_output("metal", 0) == 0.0
+
     def test_benchmark_levels_match_snapshot(self):
         snap = snapshot_outputs(production_speed=1.0, slot=NEUTRAL_SNAPSHOT_SLOT)
         for res in ("metal", "crystal", "fuel_cells"):

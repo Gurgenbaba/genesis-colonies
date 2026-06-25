@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .economy_balance import power_upgrade_cost
 from .production_formula import (
+    FERDI_BASE_FLAT,
+    FERDI_GROWTH_RATE,
     LEVEL_GROWTH,
     ProductionContext,
     ProductionModifiers,
@@ -230,7 +232,9 @@ def _formula_steps(resource_type: str, context: ProductionContext) -> List[Dict[
     steps: List[Dict[str, Any]] = [
         {
             "label_key": "technical_formula_base",
-            "detail": f"{cfg['base']} × level^{cfg['exponent']}",
+            "detail": (
+                f"{cfg['multiplier']} × level × {FERDI_GROWTH_RATE}^level + {FERDI_BASE_FLAT:g}"
+            ),
             "value_per_hour": int(base),
         }
     ]

@@ -2,43 +2,44 @@
 
 **Referenz:** Galaxieslot 9 · Energie 100% · Forschung 0 · `production_speed=1` · `build_speed=1` · `research_speed=1`
 
-## 1) Produktionsformel (GC-820)
+## 1) Produktionsformel (GC-820 / GC-860 Ferdi)
 
 ```
-Produktion/h = Basis × production_speed × Level^Exponent × Slot × Temperatur × Forschung × Energie × …
+Produktion/h = Multiplikator × Level × 1.075^Level + 365
+             × production_speed × Slot × Temperatur × Forschung × Energie × …
 ```
 
-| Ressource | Basis | Exponent | Gebäude |
-|-----------|-------|----------|---------|
-| Ferronit | 24.0 | 1.55 | metal_mine |
-| Crytite | 16.0 | 1.5 | crystal_mine |
-| Brennzellen | 8.0 | 1.42 | fuel_cell_plant |
+| Ressource | Multiplikator | Gebäude |
+|-----------|---------------|---------|
+| Ferronit | 100.0 | metal_mine |
+| Crytite | 66.0 | crystal_mine |
+| Brennzellen | 33.0 | fuel_cell_plant |
 
 ### Produktion/h (Slot 9, Speed ×1)
 
 | Mine-Stufe | Ferronit/h | Crytite/h | Brennzellen/h |
 |------------|------------|-----------|---------------|
-| 10 | 852 | 506 | 242 |
-| 20 | 2.5k | 1.4k | 647 |
-| 30 | 4.7k | 2.6k | 1.2k |
-| 40 | 7.3k | 4.0k | 1.7k |
-| 60 | 14k | 7.4k | 3.1k |
-| 80 | 21k | 11k | 4.6k |
-| 100 | 30k | 16k | 6.4k |
-| 120 | 40k | 21k | 8.2k |
+| 10 | 2.4k | 1.7k | 1.2k |
+| 20 | 8.9k | 6.0k | 3.6k |
+| 30 | 27k | 18k | 10k |
+| 40 | 73k | 48k | 28k |
+| 60 | 460k | 304k | 175k |
+| 80 | 2.61 Mio | 1.72 Mio | 989k |
+| 100 | 13.83 Mio | 9.13 Mio | 5.25 Mio |
+| 120 | 70.50 Mio | 46.53 Mio | 26.75 Mio |
 
 ### Produktionsgewinn pro Upgrade (+1 Stufe, Delta/h)
 
 | Ziel-Stufe | Ferronit +/h | Crytite +/h | Brennzellen +/h |
 |------------|--------------|-------------|-----------------|
-| 10 | 128 | 74 | 34 |
-| 20 | 191 | 106 | 45 |
-| 30 | 239 | 130 | 54 |
-| 40 | 281 | 151 | 61 |
-| 60 | 352 | 185 | 73 |
-| 80 | 413 | 214 | 82 |
-| 100 | 467 | 239 | 90 |
-| 120 | 517 | 262 | 97 |
+| 10 | 336 | 221 | 127 |
+| 20 | 988 | 652 | 375 |
+| 30 | 2.6k | 1.7k | 1.0k |
+| 40 | 6.7k | 4.4k | 2.5k |
+| 60 | 39k | 26k | 15k |
+| 80 | 212k | 140k | 80k |
+| 100 | 1.09 Mio | 722k | 415k |
+| 120 | 5.47 Mio | 3.61 Mio | 2.07 Mio |
 
 ## 2) Forschung — Ankerkurven (GC-825, vor Speed-Boni)
 
@@ -92,40 +93,40 @@ Amortisation = Payback in **Produktionsstunden** der jeweiligen Ressource (Slot 
 
 | Ziel-Stufe | Ferronit | Crytite | Gesamt | Amortisation |
 |------------|----------|---------|--------|--------------|
-| 10 | 6.4k | 2.1k | 8.6k | 50 h |
-| 20 | 9.5k | 3.2k | 13k | 50 h |
-| 30 | 17k | 5.6k | 23k | 71 h |
-| 40 | 28k | 9.4k | 37k | 100 h |
-| 60 | 70k | 23k | 94k | 200 h |
-| 80 | 206k | 69k | 275k | 500 h |
-| 100 | 467k | 156k | 623k | 1000 h |
-| 120 | 1.03 Mio | 344k | 1.38 Mio | 2000 h |
+| 10 | 17k | 5.6k | 22k | 50 h |
+| 20 | 49k | 16k | 66k | 50 h |
+| 30 | 187k | 62k | 250k | 71 h |
+| 40 | 671k | 224k | 895k | 100 h |
+| 60 | 7.84 Mio | 2.61 Mio | 10.46 Mio | 200 h |
+| 80 | 106.01 Mio | 35.34 Mio | 141.34 Mio | 500 h |
+| 100 | 1093.60 Mio | 364.53 Mio | 1458.13 Mio | 1000 h |
+| 120 | 10930.43 Mio | 3643.48 Mio | 14573.91 Mio | 2000 h |
 
 ### Crytite-Mine
 
 | Ziel-Stufe | Ferronit | Crytite | Gesamt | Amortisation |
 |------------|----------|---------|--------|--------------|
-| 10 | 3.4k | 2.4k | 5.7k | 32 h |
-| 20 | 5.0k | 3.5k | 8.5k | 33 h |
-| 30 | 8.9k | 6.2k | 15k | 48 h |
-| 40 | 15k | 10k | 25k | 68 h |
-| 60 | 37k | 26k | 63k | 139 h |
-| 80 | 109k | 76k | 185k | 354 h |
-| 100 | 246k | 171k | 418k | 715 h |
-| 120 | 545k | 379k | 924k | 1444 h |
+| 10 | 8.9k | 6.2k | 15k | 28 h |
+| 20 | 26k | 18k | 44k | 28 h |
+| 30 | 99k | 69k | 167k | 39 h |
+| 40 | 354k | 246k | 600k | 56 h |
+| 60 | 4.14 Mio | 2.88 Mio | 7.01 Mio | 111 h |
+| 80 | 55.93 Mio | 38.87 Mio | 94.80 Mio | 278 h |
+| 100 | 577.03 Mio | 400.99 Mio | 978.01 Mio | 556 h |
+| 120 | 5767.36 Mio | 4007.82 Mio | 9775.18 Mio | 1111 h |
 
 ### Brennzellen-Anlage
 
 | Ziel-Stufe | Ferronit | Crytite | Gesamt | Amortisation |
 |------------|----------|---------|--------|--------------|
-| 10 | 3.8k | 2.5k | 6.3k | 186 h |
-| 20 | 5.6k | 3.7k | 9.3k | 204 h |
-| 30 | 9.9k | 6.6k | 17k | 305 h |
-| 40 | 16k | 11k | 27k | 448 h |
-| 60 | 41k | 27k | 69k | 945 h |
-| 80 | 121k | 81k | 201k | 2454 h |
-| 100 | 273k | 182k | 456k | 5053 h |
-| 120 | 605k | 403k | 1.01 Mio | 10350 h |
+| 10 | 9.8k | 6.5k | 16k | 129 h |
+| 20 | 29k | 19k | 48k | 129 h |
+| 30 | 110k | 73k | 183k | 182 h |
+| 40 | 393k | 262k | 655k | 257 h |
+| 60 | 4.59 Mio | 3.06 Mio | 7.65 Mio | 514 h |
+| 80 | 62.05 Mio | 41.37 Mio | 103.42 Mio | 1286 h |
+| 100 | 640.15 Mio | 426.77 Mio | 1066.92 Mio | 2571 h |
+| 120 | 6398.30 Mio | 4265.53 Mio | 10663.83 Mio | 5143 h |
 
 ### Minen ROI-Anker (explizite Zielwerte GC-821F)
 
@@ -142,11 +143,11 @@ Amortisation = Payback in **Produktionsstunden** der jeweiligen Ressource (Slot 
 
 | Stufe | metal_mine | crystal_mine | solar_plant | fuel_cell_plant | metal_storage | crystal_storage | fuel_storage | research_lab | academy | command_center | orbital_shipyard | defense_factory | barracks | radar_array | shield_generator | terraformer | nanofactory | geothermal_nexus | planet_core_nexus |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 10 | 8.6k | 5.7k | 5.6k | 6.3k | 13k | 13k | 11k | 22k | 30k | 36k | 35k | 41k | 21k | 23k | 60k | 83k | 114k | 128k | 174k |
-| 20 | 13k | 8.5k | 15k | 9.3k | 38k | 38k | 32k | 62k | 85k | 101k | 98k | 116k | 59k | 63k | 171k | 242k | 332k | 374k | 514k |
-| 30 | 23k | 15k | 28k | 17k | 69k | 69k | 58k | 114k | 158k | 184k | 181k | 214k | 107k | 115k | 317k | 452k | 623k | 701k | 967k |
-| 40 | 37k | 25k | 42k | 27k | 106k | 106k | 89k | 177k | 245k | 282k | 278k | 329k | 164k | 176k | 490k | 704k | 974k | 1.10 Mio | 1.52 Mio |
-| 50 | 60k | 40k | 58k | 44k | 148k | 148k | 124k | 249k | 344k | 392k | 389k | 460k | 229k | 245k | 688k | 992k | 1.38 Mio | 1.55 Mio | 2.15 Mio |
+| 10 | 22k | 15k | 5.6k | 16k | 13k | 13k | 11k | 22k | 30k | 36k | 35k | 41k | 21k | 23k | 60k | 83k | 114k | 128k | 174k |
+| 20 | 66k | 44k | 15k | 48k | 38k | 38k | 32k | 62k | 85k | 101k | 98k | 116k | 59k | 63k | 171k | 242k | 332k | 374k | 514k |
+| 30 | 250k | 167k | 28k | 183k | 69k | 69k | 58k | 114k | 158k | 184k | 181k | 214k | 107k | 115k | 317k | 452k | 623k | 701k | 967k |
+| 40 | 895k | 600k | 42k | 655k | 106k | 106k | 89k | 177k | 245k | 282k | 278k | 329k | 164k | 176k | 490k | 704k | 974k | 1.10 Mio | 1.52 Mio |
+| 50 | 3.10 Mio | 2.08 Mio | 58k | 2.27 Mio | 148k | 148k | 124k | 249k | 344k | 392k | 389k | 460k | 229k | 245k | 688k | 992k | 1.38 Mio | 1.55 Mio | 2.15 Mio |
 
 *Normaler Max-Level: 50*
 

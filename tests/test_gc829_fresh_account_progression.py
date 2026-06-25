@@ -13,15 +13,17 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import fresh_account_progression_sim as sim  # noqa: E402
+import pytest  # noqa: E402
 from game.economy_balance import NEUTRAL_BALANCE_SLOT, reference_production_per_hour  # noqa: E402
 
 
 def test_early_mine_reference_table():
-    assert reference_production_per_hour("metal", 1, slot=NEUTRAL_BALANCE_SLOT) == 24.0
+    l1 = reference_production_per_hour("metal", 1, slot=NEUTRAL_BALANCE_SLOT)
+    assert l1 == pytest.approx(472.5)
     l2 = reference_production_per_hour("metal", 2, slot=NEUTRAL_BALANCE_SLOT)
-    assert 69.0 <= l2 <= 71.0
+    assert l2 == pytest.approx(596.125)
     l3 = reference_production_per_hour("metal", 3, slot=NEUTRAL_BALANCE_SLOT)
-    assert 130.0 <= l3 <= 135.0
+    assert l3 == pytest.approx(737.6890625, rel=1e-9)
 
 
 def test_alpha_current_defaults_under_one_research_speed():
@@ -31,8 +33,9 @@ def test_alpha_current_defaults_under_one_research_speed():
 
 
 def test_sim_checkpoints_monotonic_time():
+    """GC-860 Ferdi prod: higher early income shifts queue time into research/energy."""
     _, cps = sim.run_simulation(sim.PRESETS["alpha_current"], horizon_sec=86400 * 3)
-    assert cps["1h"]["metal_mine"] >= 6
+    assert cps["1h"]["metal_mine"] >= 4
     assert cps["1h"]["research_lab"] >= 1
     assert cps["1h"]["build_completions"] >= 8
     assert cps["24h"]["prod_metal_h"] >= cps["1h"]["prod_metal_h"]
@@ -40,8 +43,8 @@ def test_sim_checkpoints_monotonic_time():
 
 
 def test_build_speed_changes_timer_not_early_mine_level():
-    """With GC-836 starter resources, early levels are no longer resource-gated at 24h."""
+    """Build/research speed presets change timer pacing, not necessarily mine depth at 24h."""
     _, slow = sim.run_simulation(sim.PRESETS["alpha_current"], horizon_sec=86400)
     _, fast = sim.run_simulation(sim.PRESETS["alpha_proposed_ferdi"], horizon_sec=86400)
-    assert slow["24h"]["metal_mine"] >= 10
+    assert slow["24h"]["metal_mine"] >= 8
     assert fast["24h"]["research_completions"] >= slow["24h"]["research_completions"]

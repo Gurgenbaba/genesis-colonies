@@ -1,4 +1,4 @@
-# Production Formula System (GC-820)
+# Production Formula System (GC-820 / GC-860)
 
 **Single source of truth** for all resource production in Genesis Colonies.
 
@@ -22,9 +22,9 @@ calculate_resource_output(resource_type, context)  →  output / hour
 EffectResolver.production_rates_per_sec()  →  ÷ 3600 for tick
 ```
 
-New gameplay systems **register modifiers** on `ProductionContext` or extend `ProductionModifiers`. The base formula never changes.
+New gameplay systems **register modifiers** on `ProductionContext` or extend `ProductionModifiers`. Modifier hooks stay stable; only the base level curve changed in GC-860.
 
-Forbidden: second production engines, frontend production math, hidden level softcaps, stacked exponentials (`level × 1.1^level`, bonus tiers at L50/L120).
+Forbidden: second production engines, frontend production math, hidden level softcaps, stacked exponential tiers beyond the canonical Ferdi base.
 
 ---
 
@@ -35,7 +35,8 @@ All resources:
 ```text
 Output/h
 
-  = Base × speed × level^exp
+  = (multiplier × level × 1.075^level + 365)
+  × production_speed
   × SlotModifier
   × TemperatureModifier
   × ResearchModifier
@@ -49,15 +50,19 @@ Output/h
   × SeasonModifier
 ```
 
-### Level growth (power scaling)
+### Level growth (Ferdi base — GC-860)
 
-| Resource | Key | Base | Exponent |
-|----------|-----|------|----------|
-| Ferronit | `metal` | 24 | 1.55 |
-| Crytite | `crystal` | 16 | 1.50 |
-| Brennzellen | `fuel_cells` | 8 | 1.42 |
+| Resource | Key | Multiplier |
+|----------|-----|------------|
+| Ferronit | `metal` | 100 |
+| Crytite | `crystal` | 66 |
+| Brennzellen | `fuel_cells` | 33 |
 
-`speed` = admin `production_speed` setting (default 1.0).
+Shared constants: growth rate **1.075**, flat offset **+365** per hour.
+
+Central helper: `ferdi_base_output(resource_type, level)` in `game/production_formula.py`.
+
+`production_speed` = admin `production_speed` setting (default 1.0).
 
 ### Modifier order
 
@@ -119,16 +124,16 @@ Galaxy climate still adjusts **solar output** via `EffectResolver` (`solar_outpu
 
 ## Snapshot values (slot 9, speed 1, no research, full energy)
 
-Pure formula benchmark — **excludes** climate/GD/diplomacy overlay on `directive_modifier`. Live colonies may differ slightly.
+Pure formula benchmark — **excludes** climate/GD/diplomacy overlay on `directive_modifier`. Brennzellen include slot-9 temperature modifier. Live colonies may differ slightly.
 
 | Level | Ferronit/h | Crytite/h | Brennzellen/h |
 |-------|------------|-----------|---------------|
-| 1 | 24 | 16 | 8 |
-| 10 | 852 | 506 | 211 |
-| 30 | 3 968 | 2 629 | 942 |
-| 60 | 11 729 | 7 437 | 2 591 |
-| 90 | 19 236 | 13 670 | 4 434 |
-| 120 | 25 932 | 21 046 | 6 236 |
+| 1 | 473 | 436 | 460 |
+| 10 | 2 426 | 1 725 | 1 202 |
+| 30 | 26 630 | 17 700 | 10 384 |
+| 60 | 460 260 | 303 896 | 174 903 |
+| 90 | 6 039 911 | 3 986 465 | 2 291 807 |
+| 120 | 70 501 638 | 46 531 205 | 26 748 410 |
 
 Vollständige Ankertabellen: [GC_ANCHOR_TABLES_X1.md](GC_ANCHOR_TABLES_X1.md) · Regenerieren: `python scripts/gen_anchor_tables.py docs/GC_ANCHOR_TABLES_X1.md`
 
@@ -153,13 +158,13 @@ Target readable ranges: millions → billions → low trillions. Avoid quadrilli
 **Level 30 Ferronit, slot 5 (+16 % slot), mining L10 (+30 %), energy 80 %:**
 
 ```text
-3 968 × 1.16 × 1.30 × 0.80 ≈ 4 790 / h
+26 630 × 1.16 × 1.30 × 0.80 ≈ 32 100 / h
 ```
 
 **Level 60 Brennzellen, slot 15 (+20 % slot, +35 % temp cap), drone L5 (+10 %):**
 
 ```text
-2 591 × 1.20 × 1.35 × 1.10 ≈ 4 612 / h
+174 903 × 1.20 × 1.35 × 1.10 ≈ 311 500 / h
 ```
 
 ---
@@ -178,7 +183,7 @@ Target readable ranges: millions → billions → low trillions. Avoid quadrilli
 ## Forbidden patterns
 
 - Duplicate formulas in `buildings.py`, `static/`, or feature modules
-- `level × 1.1^level` or multiple exponential tiers
+- Legacy `base × level^exponent` power scaling (replaced GC-860)
 - Level-based softcaps (L50 bonus, L120 cap) in production
 - Frontend `production_per_hour` calculation as truth
 - Parallel `production_engine` modules

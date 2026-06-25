@@ -1,7 +1,7 @@
 """Generate community anchor tables from live game code (speed x1)."""
 from __future__ import annotations
 
-from game.production_formula import LEVEL_GROWTH
+from game.production_formula import FERDI_BASE_FLAT, FERDI_GROWTH_RATE, LEVEL_GROWTH
 from game.economy_balance import (
     BUILDING_UPGRADE_CURVES,
     power_upgrade_cost,
@@ -73,19 +73,22 @@ def main() -> None:
     )
     lines.append("")
 
-    lines.append("## 1) Produktionsformel (GC-820)")
+    lines.append("## 1) Produktionsformel (GC-820 / GC-860 Ferdi)")
     lines.append("")
     lines.append("```")
     lines.append(
-        "Produktion/h = Basis × production_speed × Level^Exponent × Slot × Temperatur × Forschung × Energie × …"
+        f"Produktion/h = Multiplikator × Level × {FERDI_GROWTH_RATE}^Level + {FERDI_BASE_FLAT:g}"
+    )
+    lines.append(
+        "             × production_speed × Slot × Temperatur × Forschung × Energie × …"
     )
     lines.append("```")
     lines.append("")
-    lines.append("| Ressource | Basis | Exponent | Gebäude |")
-    lines.append("|-----------|-------|----------|---------|")
+    lines.append("| Ressource | Multiplikator | Gebäude |")
+    lines.append("|-----------|---------------|---------|")
     labels = {"metal": "Ferronit", "crystal": "Crytite", "fuel_cells": "Brennzellen"}
     for res, cfg in LEVEL_GROWTH.items():
-        lines.append(f"| {labels.get(res, res)} | {cfg['base']} | {cfg['exponent']} | {cfg['building']} |")
+        lines.append(f"| {labels.get(res, res)} | {cfg['multiplier']} | {cfg['building']} |")
     lines.append("")
 
     lines.append("### Produktion/h (Slot 9, Speed ×1)")
