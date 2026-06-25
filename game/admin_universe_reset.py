@@ -148,6 +148,17 @@ RESET_DOMAIN_ORDER: tuple[str, ...] = (
     "runtime",
 )
 
+# Domains that change persisted scores — trigger full recompute + rank refresh after reset.
+RANKING_REFRESH_DOMAINS: frozenset[str] = frozenset(
+    {
+        "colonies",
+        "rankings",
+        "fleets",
+        "combat",
+        "account_research",
+    }
+)
+
 RESET_DOMAIN_LABEL_KEYS: Dict[str, str] = {
     "colonies": "admin_reset_domain_colonies",
     "queues": "admin_reset_domain_queues",
@@ -391,7 +402,7 @@ def _reset_player_progress_columns(conn: sqlite3.Connection) -> None:
 
 
 def _rebuild_homeworlds(conn: sqlite3.Connection) -> List[int]:
-    from game.models import ensure_player_and_homeworld, recompute_and_upsert_score
+    from game.models import ensure_player_and_homeworld
     from game.planet_evolution.repository import set_active_planet_id
 
     cur = conn.cursor()
@@ -418,10 +429,24 @@ def _rebuild_homeworlds(conn: sqlite3.Connection) -> List[int]:
             raise RuntimeError(f"homeworld_missing_after_reset player_id={pid}")
         hw_id = int(hw["id"])
         set_active_planet_id(pid, hw_id, conn)
-        recompute_and_upsert_score(pid, conn=conn)
         player_ids.append(pid)
 
     return player_ids
+
+
+def ranking_refresh_needed(options: Dict[str, bool]) -> bool:
+    return any(options.get(domain) for domain in RANKING_REFRESH_DOMAINS)
+
+
+def _refresh_rankings_after_universe_reset(
+    conn: sqlite3.Connection,
+    options: Dict[str, bool],
+) -> Optional[Dict[str, Any]]:
+    if not ranking_refresh_needed(options):
+        return None
+    from game.ranking import recalculate_all_rankings
+
+    return recalculate_all_rankings(refresh_scores=True, conn=conn)
 
 
 def execute_universe_reset_keep_inventory(
@@ -451,6 +476,7 @@ def execute_universe_reset_keep_inventory(
     inventory_tables = sorted(discover_inventory_tables(conn))
     preserved = set(PRESERVED_TABLES) | set(inventory_tables)
     player_ids: List[int] = []
+    ranking_refresh: Optional[Dict[str, Any]] = None
 
     try:
         begin_write_transaction(conn)
@@ -467,13 +493,13 @@ def execute_universe_reset_keep_inventory(
             _reset_player_progress_columns(conn)
             player_ids = _rebuild_homeworlds(conn)
 
-        if options.get("rankings") or options.get("colonies"):
-            try:
-                from game.ranking import recalculate_ranks
-
-                recalculate_ranks(conn=conn)
-            except Exception:
-                pass
+        ranking_refresh = _refresh_rankings_after_universe_reset(conn, options)
+        if ranking_refresh and not ranking_refresh.get("ok", True):
+            errors = ranking_refresh.get("errors") or []
+            raise RuntimeError(
+                "ranking refresh failed after universe reset"
+                + (f": {errors[0]}" if errors else "")
+            )
 
         commit(conn)
     except Exception:
@@ -490,5 +516,6 @@ def execute_universe_reset_keep_inventory(
         "reset_domains_applied": [k for k in RESET_DOMAIN_ORDER if options.get(k)],
         "players_reinitialized": len(player_ids),
         "inventory_tables_preserved": inventory_tables,
+        "ranking_refresh": ranking_refresh,
         "timestamp": int(time.time()),
     }

@@ -343,3 +343,67 @@ def test_universe_reset_selective_messages_only(mock_backup, app_client, tmp_pat
     assert _count_table("research_levels") == before_research
     assert _count_table("player_messages") == 0
     assert _count_table("build_queue") > 0
+
+
+@patch("game.admin_universe_reset.create_pre_reset_backup")
+def test_universe_reset_recalculates_rankings(mock_backup, app_client, tmp_path):
+    """After season reset, scores must be recomputed from live state — not stale ranks."""
+    mock_backup.return_value = tmp_path / "pre_universe_reset_test.db"
+
+    client, admin_id, user_id = app_client
+    _login(client, "admin_reset", "adminpass123")
+
+    from game.models import db
+
+    conn = db()
+    try:
+        conn.execute(
+            """
+            UPDATE player_scores
+            SET score_research = 50000, score_total = 50000, rank_total = 1
+            WHERE player_id = ?;
+            """,
+            (user_id,),
+        )
+        conn.commit()
+        before = conn.execute(
+            """
+            SELECT score_total, score_research, rank_total
+            FROM player_scores WHERE player_id = ?;
+            """,
+            (user_id,),
+        ).fetchone()
+        assert before is not None
+        assert int(before["score_research"] or 0) == 50000
+    finally:
+        conn.close()
+
+    r = client.post(
+        "/api/admin/universe-reset",
+        json={"confirm": True},
+    )
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    ranking = data.get("ranking_refresh") or {}
+    assert ranking.get("ok") is True
+    assert ranking.get("players_updated", 0) >= 2
+    assert ranking.get("ranks_assigned", 0) >= 2
+
+    conn = db()
+    try:
+        rows = conn.execute(
+            """
+            SELECT player_id, score_total, score_research, rank_total
+            FROM player_scores
+            ORDER BY player_id ASC;
+            """
+        ).fetchall()
+        assert len(rows) >= 2
+        for row in rows:
+            assert int(row["score_research"] or 0) == 0
+            assert int(row["rank_total"] or 0) >= 1
+        rank_totals = sorted(int(r["rank_total"]) for r in rows)
+        assert rank_totals == list(range(1, len(rows) + 1))
+    finally:
+        conn.close()
