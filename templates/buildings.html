@@ -226,10 +226,11 @@
   <div class="buildings-shell gc-panel">
 
     {% set bq_jobs = (bq.queue if bq and bq.queue is defined and bq.queue else []) %}
+    {% set bq_mini = (bq.mini_queue_jobs if bq and bq.mini_queue_jobs is defined else []) %}
     {{ render_page_mini_queue_strip(
       'build-mini-queue',
       'building',
-      [],
+      bq_mini,
       T('build_queue_compact_idle', 'Keine Bauaufträge'),
       bq_summary.count if bq_summary.count is defined else 0,
       bq_limit,

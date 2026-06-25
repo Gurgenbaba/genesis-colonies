@@ -18,8 +18,10 @@ from game.defense_api import cancel_defense_job
 from game.models import create_user, ensure_player_and_homeworld, get_planets_by_player, init_db
 from game.queue_card import (
     STATUS_ACTIVE,
+    map_build_queue_to_card_jobs,
     map_card_jobs_to_mini_queue_jobs,
     map_defense_queue_to_card_jobs,
+    map_research_queue_to_card_jobs,
     map_shipyard_queue_to_card_jobs,
 )
 from game.shipyard import build_ship, build_shipyard_api_payload, cancel_shipyard_job
@@ -190,6 +192,50 @@ def test_defense_mini_queue_payload_fields():
     assert job["is_active"] is True
     assert job["remaining_seconds"] == 180
     assert "/static/img/defense/laser_turret.png" in job["image_url"]
+
+
+def test_research_mini_queue_resolves_storage_tech_icon():
+    research = {
+        "queue": [
+            {
+                "id": 7,
+                "tech_key": "storage_tech",
+                "key": "storage_tech",
+                "label": "Lagertechnik",
+                "target_level": 2,
+                "remaining": 120,
+                "total_seconds": 770,
+                "finish_at": _NOW + 120,
+                "start_at": _NOW,
+                "position": 1,
+            }
+        ]
+    }
+    card_jobs = map_research_queue_to_card_jobs(research, now=_NOW)
+    mini = map_card_jobs_to_mini_queue_jobs(card_jobs, domain="research", now=_NOW)
+    assert len(mini) == 1
+    assert mini[0]["owner_key"] == "storage_tech"
+    assert mini[0]["image_url"] == "/static/img/research/lagertechnik.png"
+
+
+def test_building_mini_queue_resolves_icon_alias():
+    build_queue = {
+        "queue": [
+            {
+                "id": 3,
+                "building_type": "orbital_shipyard",
+                "target_level": 2,
+                "remaining": 90,
+                "total": 300,
+                "finish_time": _NOW + 90,
+            }
+        ]
+    }
+    card_jobs = map_build_queue_to_card_jobs(build_queue, now=_NOW)
+    mini = map_card_jobs_to_mini_queue_jobs(card_jobs, domain="building", now=_NOW)
+    assert len(mini) == 1
+    assert mini[0]["owner_key"] == "orbital_shipyard"
+    assert mini[0]["image_url"] == "/static/img/buildings/shipyard.png"
 
 
 def test_waiting_job_remaining_is_finish_minus_now_not_start():

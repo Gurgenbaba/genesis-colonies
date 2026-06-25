@@ -4244,12 +4244,37 @@
     };
   }
 
+  function _researchQueueIconByKey(researchRaw) {
+    const iconByKey = new Map();
+    const queueList = Array.isArray(researchRaw?.queue) ? researchRaw.queue : [];
+    queueList.forEach((raw) => {
+      const k = String(raw?.tech_key || raw?.key || "").trim();
+      const icon = String(raw?.icon || "").trim();
+      if (k && icon) iconByKey.set(k, icon);
+    });
+    const techs = Array.isArray(researchRaw?.techs) ? researchRaw.techs : [];
+    techs.forEach((row) => {
+      const k = String(row?.key || row?.tech_key || "").trim();
+      const icon = String(row?.icon || "").trim();
+      if (k && icon && !iconByKey.has(k)) iconByKey.set(k, icon);
+    });
+    return iconByKey;
+  }
+
   function _collectResearchQueueCardJobs(researchRaw) {
+    const iconByKey = _researchQueueIconByKey(researchRaw);
+    const attachIcon = (job) => {
+      if (!job || typeof job !== "object") return job;
+      if (job.icon) return job;
+      const k = String(job.owner_key || "");
+      const icon = iconByKey.get(k);
+      return icon ? { ...job, icon } : job;
+    };
     const byOwner = researchRaw?.card_jobs_by_owner;
     if (byOwner && typeof byOwner === "object") {
       const jobs = [];
       Object.values(byOwner).forEach((rows) => {
-        if (Array.isArray(rows)) rows.forEach((j) => jobs.push(j));
+        if (Array.isArray(rows)) rows.forEach((j) => jobs.push(attachIcon(j)));
       });
       jobs.sort((a, b) => (Number(a.queue_position) || 0) - (Number(b.queue_position) || 0));
       return jobs;
@@ -4265,6 +4290,7 @@
       remaining_seconds: resolveQueueJobRemaining(raw),
       target_level: raw.target_level,
       label_key: raw.label_key || raw.label || raw.tech_key || raw.key,
+      icon: raw.icon || iconByKey.get(String(raw.tech_key || raw.key || "")),
     }));
   }
 
@@ -7012,6 +7038,8 @@
     if (!job || typeof job !== "object") return "";
     return [
       job.job_id,
+      job.owner_key,
+      job.image_url,
       job.position || job.queue_position,
       job.amount || job.target_amount,
       job.is_active ? 1 : 0,
@@ -7024,6 +7052,18 @@
   function researchIconUrl(techKey, iconFile) {
     const key = String(techKey || "").trim();
     let file = String(iconFile || "").trim();
+    if (!file && key) {
+      const techs = GC.lastState?.research?.techs;
+      if (Array.isArray(techs)) {
+        const row = techs.find((t) => String(t.key || t.tech_key || "") === key);
+        if (row?.icon) file = String(row.icon).trim();
+      }
+      const queue = GC.lastState?.research?.queue;
+      if (!file && Array.isArray(queue)) {
+        const row = queue.find((t) => String(t.tech_key || t.key || "") === key);
+        if (row?.icon) file = String(row.icon).trim();
+      }
+    }
     if (!file && key) file = `${key}.png`;
     if (!file) return "/static/img/research/energieeffizienz.png";
     if (file.startsWith("/static/")) return file;
@@ -7075,24 +7115,8 @@
     }));
   }
 
-  function _updateMiniQueueSlots(hostEl, domain, queueRaw) {
-    if (!hostEl) return;
-    const summary = queueRaw?.summary || {};
-    const count = Math.floor(Number(summary.count) || 0);
-    const limit = Math.floor(Number(summary.limit) || 0);
-    const slotsEl = hostEl.querySelector("[data-mini-queue-slots]");
-    if (!slotsEl) return;
-    if (limit <= 0) {
-      slotsEl.hidden = true;
-      return;
-    }
-    slotsEl.hidden = false;
-    const text = `${fmtNumber(count)}/${fmtNumber(limit)}`;
-    _setIfChanged(slotsEl, text);
-    const labelKey = _pageQueueSlotsLabelKey(domain);
-    const aria = tf(labelKey, { count, limit }, `${fmtNumber(count)} / ${fmtNumber(limit)}`);
-    if (slotsEl.getAttribute("title") !== aria) slotsEl.setAttribute("title", aria);
-    if (slotsEl.getAttribute("aria-label") !== aria) slotsEl.setAttribute("aria-label", aria);
+  function _updateMiniQueueSlots() {
+    /* queue slot badge removed from mini strips */
   }
 
   function _resolveMiniQueueLabel(job, domain) {
@@ -7151,6 +7175,11 @@
         const card = strip.querySelector(`[data-mini-queue-card][data-job-id="${Math.floor(Number(job.job_id))}"]`);
         if (!card) return;
         const isActive = Boolean(job.is_active);
+        const imageUrl = _miniQueueIconUrl(job, domain);
+        const imgEl = card.querySelector(".gc-mini-queue-card__image");
+        if (imgEl && imageUrl && imgEl.getAttribute("src") !== imageUrl) {
+          imgEl.setAttribute("src", imageUrl);
+        }
         const timerEl = card.querySelector(".gc-mini-queue-card__timer");
         const finishAt = Math.floor(Number(job.finish_at || 0));
         if (timerEl && finishAt > 0) {
@@ -7185,14 +7214,6 @@
     }
 
     visibleJobs.forEach((job, idx) => {
-      if (idx > 0) {
-        const conn = document.createElement("span");
-        conn.className = "gc-mini-queue-card__connector";
-        conn.setAttribute("aria-hidden", "true");
-        conn.textContent = ">";
-        strip.appendChild(conn);
-      }
-
       const jobId = Math.floor(Number(job.job_id || 0));
       const isActive = Boolean(job.is_active);
       const position = Math.max(1, Math.floor(Number(job.position || job.queue_position || idx + 1)));
@@ -7206,7 +7227,7 @@
       const label = _resolveMiniQueueLabel(job, domain);
 
       const card = document.createElement("article");
-      card.className = `gc-mini-queue-card${isActive ? " gc-mini-queue-card--active" : " gc-mini-queue-card--waiting"}${isLevelQueue ? " gc-mini-queue-card--level-queue" : ""}`;
+      card.className = `gc-mini-queue-card${isActive ? " gc-mini-queue-card--active" : " gc-mini-queue-card--waiting"}${isLevelQueue ? " gc-mini-queue-card--level-queue" : " gc-mini-queue-card--production"}`;
       card.dataset.miniQueueCard = "1";
       card.dataset.jobId = String(jobId);
       card.dataset.queueActive = isActive ? "1" : "0";
@@ -7215,12 +7236,8 @@
       if (startAt > 0) card.dataset.startAt = String(startAt);
       if (finishAt > 0) card.dataset.finishAt = String(finishAt);
       card.dataset.totalSeconds = String(duration);
-
-      const posEl = document.createElement("span");
-      posEl.className = "gc-mini-queue-card__position gc-mono";
-      posEl.textContent = String(position);
-      posEl.setAttribute("aria-label", tf("queue_position_label", { n: position }, `Position ${position}`));
-      card.appendChild(posEl);
+      const posLabel = tf("queue_position_label", { n: position }, `Position ${position}`);
+      card.setAttribute("aria-label", amount > 0 ? `${posLabel} · ${label} ×${fmtNumber(amount)}` : `${posLabel} · ${label}`);
 
       const img = document.createElement("img");
       img.className = "gc-mini-queue-card__image";
@@ -7233,11 +7250,12 @@
       const body = document.createElement("div");
       body.className = "gc-mini-queue-card__body";
 
+      const titleEl = document.createElement("span");
+      titleEl.className = "gc-mini-queue-card__title";
+      titleEl.textContent = label;
+      body.appendChild(titleEl);
+
       if (isLevelQueue) {
-        const titleEl = document.createElement("span");
-        titleEl.className = "gc-mini-queue-card__title";
-        titleEl.textContent = label;
-        body.appendChild(titleEl);
         const targetLevel = Math.floor(Number(job.target_level || 0));
         if (targetLevel > 0) {
           const lvlEl = document.createElement("span");

@@ -1761,7 +1761,11 @@ def get_build_queue_status_for_planet(
         else:
             summary["first_finish_in"] = 0
 
-        from .queue_card import group_card_jobs_by_owner_key, map_build_queue_to_card_jobs
+        from .queue_card import (
+            group_card_jobs_by_owner_key,
+            map_build_queue_to_card_jobs,
+            map_card_jobs_to_mini_queue_jobs,
+        )
 
         payload = {
             "planet_id": int(planet_id),
@@ -1770,6 +1774,9 @@ def get_build_queue_status_for_planet(
         }
         card_jobs = map_build_queue_to_card_jobs(payload, now=now)
         payload["card_jobs_by_owner"] = group_card_jobs_by_owner_key(card_jobs)
+        payload["mini_queue_jobs"] = map_card_jobs_to_mini_queue_jobs(
+            card_jobs, domain="building", now=now
+        )
         return payload
 
     finally:

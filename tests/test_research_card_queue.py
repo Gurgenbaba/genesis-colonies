@@ -125,6 +125,7 @@ def test_research_template_card_queue_markers():
     macro = (ROOT / "templates/partials/page_mini_queue_strip.html").read_text(encoding="utf-8")
     assert "data-research-card" in html
     assert "research-mini-queue" in html
+    assert "rq_mini" in html
     assert "render_page_mini_queue_strip" in html
     assert "gc-mini-queue-strip" in macro
     assert "gc-card-queue-block" in html

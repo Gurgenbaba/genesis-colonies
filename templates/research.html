@@ -303,6 +303,7 @@
 {% set lab_level = (rs.lab_level if rs and rs.lab_level is defined else 0) %}
 {% set rq_limit = (rq_summary.limit if rq_summary.limit is defined else 3) %}
 {% set rq_jobs = (rs.queue if rs and rs.queue is defined and rs.queue else []) %}
+{% set rq_mini = (rs.mini_queue_jobs if rs and rs.mini_queue_jobs is defined else []) %}
 {% set queue_full = (rq_summary.count or 0)|int >= rq_limit|int %}
 
 <div class="gc-page research-page" data-planet-id="{{ (active_planet_id if active_planet_id is defined else (HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else 0))|int }}">
@@ -326,7 +327,7 @@
     {{ render_page_mini_queue_strip(
       'research-mini-queue',
       'research',
-      [],
+      rq_mini,
       T('research_queue_compact_idle', 'Keine Forschungen aktiv'),
       rq_summary.count if rq_summary.count is defined else 0,
       rq_limit,

@@ -8494,38 +8494,26 @@ a.gc-bld-head-action-btn--go:focus-visible{
   white-space: nowrap;
 }
 
-/* GC-QUEUE-MINI-CARDS — shipyard / defense horizontal mini-queue strip */
+/* GC-QUEUE-MINI-CARDS — one row, up to 5 jobs, readable cards, no horizontal scroll */
 .gc-mini-queue-host{
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: block;
   padding: 4px 10px 6px;
   min-width: 0;
   max-width: 100%;
+  overflow-x: clip;
   border-bottom: 1px solid rgba(70, 229, 255, 0.06);
 }
 
 .gc-mini-queue-strip{
   display: flex;
-  flex: 1 1 auto;
-  align-items: center;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
   gap: 6px;
+  width: 100%;
   min-width: 0;
   min-height: 44px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(70, 229, 255, 0.28) transparent;
-  padding-bottom: 1px;
-}
-
-.gc-mini-queue-strip::-webkit-scrollbar{
-  height: 3px;
-}
-
-.gc-mini-queue-strip::-webkit-scrollbar-thumb{
-  background: rgba(70, 229, 255, 0.24);
-  border-radius: 2px;
+  overflow-x: clip;
 }
 
 .gc-mini-queue-empty{
@@ -8535,11 +8523,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-mini-queue-slots{
-  flex: 0 0 auto;
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: rgba(180, 245, 255, 0.78);
-  white-space: nowrap;
+  display: none !important;
 }
 
 .gc-mini-queue-card--active{
@@ -8550,37 +8534,21 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-mini-queue-card--waiting{
-  opacity: 0.8;
-}
-
-.gc-mini-queue-card__position{
-  grid-column: 1;
-  grid-row: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1rem;
-  height: 1rem;
-  padding: 0 3px;
-  border-radius: 999px;
-  font-size: 0.62rem;
-  font-weight: 700;
-  color: rgba(180, 245, 255, 0.88);
-  background: rgba(70, 229, 255, 0.08);
-  border: 1px solid rgba(70, 229, 255, 0.16);
+  opacity: 0.82;
 }
 
 .gc-mini-queue-card{
   position: relative;
   display: grid;
-  grid-template-columns: auto 28px minmax(0, auto) auto;
+  grid-template-columns: clamp(30px, 7vw, 40px) minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
   align-items: center;
-  gap: 2px 6px;
-  flex: 0 0 auto;
+  gap: 3px 8px;
+  flex: 1 1 0%;
+  width: 0;
   min-width: 0;
-  max-width: min(148px, 56vw);
-  padding: 5px 7px 7px;
+  max-width: none;
+  padding: 5px 6px;
   border: 1px solid rgba(70, 229, 255, 0.18);
   border-radius: 2px;
   background: linear-gradient(135deg, rgba(8, 16, 36, 0.92), rgba(6, 12, 28, 0.88));
@@ -8588,75 +8556,124 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-mini-queue-card__image{
-  grid-column: 2;
+  grid-column: 1;
   grid-row: 1;
-  width: 28px;
-  height: 28px;
+  align-self: center;
+  width: clamp(30px, 7vw, 40px);
+  height: clamp(30px, 7vw, 40px);
   object-fit: contain;
-  border-radius: 2px;
-  background: rgba(0, 0, 0, 0.22);
+  object-position: center;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(70, 229, 255, 0.1);
+  padding: 2px;
+  box-sizing: border-box;
 }
 
 .gc-mini-queue-card__body{
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 1;
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .gc-mini-queue-card__title{
-  display: none;
-}
-
-.gc-mini-queue-card--level-queue .gc-mini-queue-card__body{
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-}
-
-.gc-mini-queue-card--level-queue .gc-mini-queue-card__title{
   display: block;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.66rem;
+  font-size: clamp(0.58rem, 1.55vw, 0.68rem);
   font-weight: 600;
   color: var(--gc-text);
   line-height: 1.15;
 }
 
+.gc-mini-queue-card--level-queue .gc-mini-queue-card__body{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 1px 6px;
+  align-items: baseline;
+}
+
+.gc-mini-queue-card--level-queue .gc-mini-queue-card__title{
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
 .gc-mini-queue-card--level-queue .gc-mini-queue-card__level{
-  font-size: 0.64rem;
+  grid-column: 1;
+  grid-row: 2;
+  font-size: clamp(0.56rem, 1.45vw, 0.64rem);
   font-weight: 600;
   color: rgba(180, 245, 255, 0.82);
   white-space: nowrap;
   line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gc-mini-queue-card--level-queue .gc-mini-queue-card__timer{
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
+}
+
+.gc-mini-queue-card--production .gc-mini-queue-card__body{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 1px 6px;
+  align-items: baseline;
+}
+
+.gc-mini-queue-card--production .gc-mini-queue-card__title{
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.gc-mini-queue-card--production .gc-mini-queue-card__amount{
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.gc-mini-queue-card--production .gc-mini-queue-card__timer{
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
+}
+
+.gc-mini-queue-card--production .gc-mini-queue-card__body:not(:has(.gc-mini-queue-card__amount)) .gc-mini-queue-card__timer{
+  grid-column: 1 / -1;
 }
 
 .gc-mini-queue-card--level-queue{
-  max-width: min(156px, 58vw);
+  max-width: none;
 }
 
 .gc-mini-queue-card__amount{
-  font-size: 0.72rem;
+  font-size: clamp(0.56rem, 1.45vw, 0.64rem);
   font-weight: 600;
   color: var(--gc-text);
   white-space: nowrap;
+  line-height: 1.1;
 }
 
 .gc-mini-queue-card__timer{
-  font-size: 0.68rem;
+  font-size: clamp(0.56rem, 1.45vw, 0.64rem);
   color: var(--gc-primary-2);
   white-space: nowrap;
+  line-height: 1.1;
 }
 
 .gc-mini-queue-card__cancel{
-  grid-column: 4;
+  grid-column: 3;
   grid-row: 1;
   align-self: start;
   display: inline-flex;
@@ -8673,6 +8690,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
   font-size: 0.78rem;
   line-height: 1;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .gc-mini-queue-card__cancel:hover,
@@ -8688,10 +8706,7 @@ a.gc-bld-head-action-btn--go:focus-visible{
 }
 
 .gc-mini-queue-card__connector{
-  flex: 0 0 auto;
-  color: rgba(127, 255, 217, 0.22);
-  font-size: 0.68rem;
-  user-select: none;
+  display: none;
 }
 
 .gc-mini-queue-card__progress{

@@ -26,29 +26,27 @@
   {% if raw.icon %}
     {{ url_for('static', filename='img/research/' ~ raw.icon) }}
   {% else %}
-    {{ url_for('static', filename='img/research/' ~ raw.tech_key ~ '.png') }}
+    {# tech_key.png is wrong for many techs (e.g. storage_tech → lagertechnik.png); queue rows always carry icon #}
+    {{ url_for('static', filename='img/research/' ~ (raw.tech_key or raw.key) ~ '.png') }}
   {% endif %}
 {% endmacro %}
 
 {% macro _mini_queue_card(job, domain, cancel_data_attr, is_first) %}
   {% set is_level_queue = domain in ('building', 'build', 'research') %}
-  {% if not is_first %}
-  <span class="gc-mini-queue-card__connector" aria-hidden="true">&gt;</span>
-  {% endif %}
-  <article class="gc-mini-queue-card{% if job.is_active %} gc-mini-queue-card--active{% else %} gc-mini-queue-card--waiting{% endif %}{% if is_level_queue %} gc-mini-queue-card--level-queue{% endif %}"
+  <article class="gc-mini-queue-card{% if job.is_active %} gc-mini-queue-card--active{% else %} gc-mini-queue-card--waiting{% endif %}{% if is_level_queue %} gc-mini-queue-card--level-queue{% else %} gc-mini-queue-card--production{% endif %}"
            data-mini-queue-card
            data-job-id="{{ job.job_id|int }}"
            data-queue-active="{{ '1' if job.is_active else '0' }}"
-           data-timer-domain="{{ domain }}"{{ render_card_queue_data_attrs(job) }}>
-    <span class="gc-mini-queue-card__position gc-mono" aria-label="{{ T('queue_position_label', 'Position %(n)s', n=job.position|int) }}">{{ job.position|int }}</span>
+           data-timer-domain="{{ domain }}"
+           aria-label="{{ T('queue_position_label', 'Position %(n)s', n=job.position|int) }} · {{ _mini_queue_job_label(domain, job) }}"{{ render_card_queue_data_attrs(job) }}>
     <img class="gc-mini-queue-card__image"
          src="{{ job.image_url }}"
          alt="{{ _mini_queue_job_label(domain, job) }}"
          title="{{ _mini_queue_job_label(domain, job) }}"
          loading="lazy">
     <div class="gc-mini-queue-card__body">
-      {% if is_level_queue %}
       <span class="gc-mini-queue-card__title">{{ _mini_queue_job_label(domain, job) }}</span>
+      {% if is_level_queue %}
       {% if job.target_level is defined and job.target_level %}
       <span class="gc-mini-queue-card__level gc-mono">{{ T('build_queue_compact_level', 'Lv.%(level)s', level=job.target_level|int) }}</span>
       {% endif %}
@@ -149,13 +147,5 @@
         <span class="gc-mini-queue-empty" data-mini-queue-empty aria-hidden="true"></span>
       {% endif %}
     </div>
-    {% if q_limit > 0 %}
-    {% set slots_key = domain ~ '_queue_slots' %}
-    <span class="gc-mini-queue-slots gc-mono"
-          id="{{ host_id }}-slots"
-          data-mini-queue-slots
-          title="{{ T(slots_key, '%(count)s / %(limit)s Aufträge', count=q_count, limit=q_limit) }}"
-          aria-label="{{ T(slots_key, '%(count)s / %(limit)s Aufträge', count=q_count, limit=q_limit) }}">{{ q_count|fmt_int }}/{{ q_limit|fmt_int }}</span>
-    {% endif %}
   </div>
 {% endmacro %}
