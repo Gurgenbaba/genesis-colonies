@@ -143,15 +143,15 @@ def test_container_debited_and_loot_credited(inventory_db):
     assert result and result["rewards"]
     assert any(int(r.get("amount") or 0) > 0 for r in result["rewards"])
     metal_after, crystal_after, fuel_after = _planet_resources(conn, pid)
-    ships_changed = any(r.get("reward_type") == "ship" for r in result["rewards"])
-    defense_changed = any(r.get("reward_type") == "defense" for r in result["rewards"])
     items_changed = any(r.get("reward_type") in ("item", "booster") for r in result["rewards"])
-    resources_changed = (
-        metal_after > metal_before
-        or crystal_after > crystal_before
-        or fuel_after > fuel_before
+    resources_unchanged = (
+        metal_after == metal_before
+        and crystal_after == crystal_before
+        and fuel_after == fuel_before
     )
-    assert resources_changed or ships_changed or defense_changed or items_changed
+    assert items_changed
+    assert resources_unchanged
+    assert not any(r.get("reward_type") in ("resource", "ship", "defense") for r in result["rewards"])
 
     log_count = conn.execute(
         "SELECT COUNT(*) AS c FROM container_open_log WHERE user_id = ?;",
@@ -161,7 +161,7 @@ def test_container_debited_and_loot_credited(inventory_db):
     conn.close()
 
 
-def test_resources_land_on_context_planet(inventory_db):
+def test_meta_rewards_land_in_inventory(inventory_db):
     conn = db()
     uid = _player(conn=conn)
     planet = get_context_planet(uid, conn=conn)
@@ -181,11 +181,13 @@ def test_resources_land_on_context_planet(inventory_db):
     commit(conn)
 
     rewards = (result or {}).get("rewards") or []
-    resource_total = sum(int(r.get("amount") or 0) for r in rewards if r.get("reward_type") == "resource")
-    assert resource_total > 0
-
-    row = conn.execute("SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;", (pid,)).fetchone()
-    assert float(row["metal"]) + float(row["crystal"]) + float(row["fuel_cells"] or 0) >= resource_total
+    assert rewards
+    assert all(r.get("reward_type") in ("item", "booster") for r in rewards)
+    inv_total = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM player_inventory_items WHERE user_id = ?;",
+        (uid,),
+    ).fetchone()["total"]
+    assert int(inv_total) > 0
     conn.close()
 
 
@@ -452,8 +454,9 @@ def test_basic_container_rejects_multi_open(inventory_db):
     conn.close()
 
 
-def test_open_grants_ships_to_context_planet(inventory_db, monkeypatch):
+def test_open_ignores_ship_pool_entries(inventory_db, monkeypatch):
     from game import inventory_loot
+    from game.fleet import get_planet_ships
 
     monkeypatch.setitem(
         inventory_loot.LOOT_POOLS,
@@ -463,11 +466,10 @@ def test_open_grants_ships_to_context_planet(inventory_db, monkeypatch):
                 "weight": 100,
                 "reward_type": "ship",
                 "reward_key": "spark_drone",
-                "fleet_fraction": inventory_loot.LOOT_FLEET_FRACTION,
+                "fleet_fraction": 0.1,
             }
         ],
     )
-    from game.fleet import get_planet_ships
 
     conn = db()
     uid = _player(conn=conn)
@@ -475,17 +477,17 @@ def test_open_grants_ships_to_context_planet(inventory_db, monkeypatch):
     pid = int(planet["id"])
     grant_inventory_item(uid, "container_basic", 1, conn=conn)
     begin_write_transaction(conn)
-    ok, reason, _ = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(1))
-    assert ok, reason
-    commit(conn)
+    ok, reason, result = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(1))
+    assert not ok
+    assert reason == "invalid_container"
     ships = get_planet_ships(pid, conn=conn)
-    amt = int(ships.get("spark_drone") or 0)
-    assert inventory_loot.LOOT_UNIT_FLOOR_MIN <= amt <= inventory_loot.LOOT_UNIT_FLOOR_MAX
+    assert int(ships.get("spark_drone") or 0) == 0
     conn.close()
 
 
-def test_open_grants_defense_to_context_planet(inventory_db, monkeypatch):
+def test_open_ignores_defense_pool_entries(inventory_db, monkeypatch):
     from game import inventory_loot
+    from game.models import get_planet_defense
 
     monkeypatch.setitem(
         inventory_loot.LOOT_POOLS,
@@ -495,11 +497,10 @@ def test_open_grants_defense_to_context_planet(inventory_db, monkeypatch):
                 "weight": 100,
                 "reward_type": "defense",
                 "reward_key": "sentinel_turret",
-                "defense_fraction": inventory_loot.LOOT_DEFENSE_FRACTION,
+                "defense_fraction": 0.1,
             }
         ],
     )
-    from game.models import get_planet_defense
 
     conn = db()
     uid = _player(conn=conn)
@@ -507,12 +508,11 @@ def test_open_grants_defense_to_context_planet(inventory_db, monkeypatch):
     pid = int(planet["id"])
     grant_inventory_item(uid, "container_basic", 1, conn=conn)
     begin_write_transaction(conn)
-    ok, reason, _ = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(2))
-    assert ok, reason
-    commit(conn)
+    ok, reason, result = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(2))
+    assert not ok
+    assert reason == "invalid_container"
     defense = get_planet_defense(pid, conn=conn)
-    amt = int(defense.get("sentinel_turret") or 0)
-    assert inventory_loot.LOOT_UNIT_FLOOR_MIN <= amt <= inventory_loot.LOOT_UNIT_FLOOR_MAX
+    assert int(defense.get("sentinel_turret") or 0) == 0
     conn.close()
 
 
@@ -630,8 +630,8 @@ def test_multiple_rewards_keep_primary_winning_reward(inventory_db, monkeypatch)
 
     rolls = iter(
         [
-            {"reward_type": "resource", "reward_key": "metal", "amount": 5000},
-            {"reward_type": "item", "reward_key": "booster_build_15m", "amount": 1},
+            {"reward_type": "item", "reward_key": "fragment_dna_rare", "amount": 2},
+            {"reward_type": "booster", "reward_key": "booster_build_15m", "amount": 1},
         ]
     )
 
@@ -750,190 +750,3 @@ def test_save_idempotent_action_roundtrip(inventory_db):
     save_idempotent_action(uid, rid, payload)
     cached = get_idempotent_action(uid, rid)
     assert cached == payload
-
-
-def test_resource_loot_scales_with_empire_mine_level(inventory_db, monkeypatch):
-    from game import inventory, inventory_loot
-    from game.db import begin_write_transaction, commit
-
-    conn = db()
-    uid = _player(conn=conn)
-    planet = get_context_planet(uid, conn=conn)
-    pid = int(planet["id"])
-
-    cur = conn.cursor()
-    cur.execute("UPDATE planet_buildings SET metal_mine = 20 WHERE planet_id = ?;", (pid,))
-    conn.commit()
-
-    roll_rng = random.Random(99)
-
-    def _force_metal(pool, rng, *, loot_context=None):
-        assert loot_context is not None
-        return {
-            "reward_type": "resource",
-            "reward_key": "metal",
-            "amount": inventory_loot.resolve_loot_entry_amount(
-                {"reward_type": "resource", "reward_key": "metal", "production_hours": inventory_loot.LOOT_BASE_PRODUCTION_HOURS},
-                user_id=int(loot_context["user_id"]),
-                container_key=str(loot_context["container_key"]),
-                conn=loot_context["conn"],
-                rng=rng,
-                loot_context=loot_context,
-            ),
-        }
-
-    monkeypatch.setattr(inventory, "_roll_single_reward", _force_metal)
-
-    grant_inventory_item(uid, "container_basic", 1, conn=conn)
-    conn.commit()
-
-    begin_write_transaction(conn)
-    ok, reason, result = open_containers(
-        uid,
-        pid,
-        "container_basic",
-        1,
-        conn=conn,
-        rng=roll_rng,
-    )
-    assert ok, reason
-    commit(conn)
-
-    metal_rewards = [
-        r for r in ((result or {}).get("rewards") or [])
-        if r.get("reward_type") == "resource" and r.get("reward_key") == "metal"
-    ]
-    assert metal_rewards
-    amt = int(metal_rewards[0]["amount"])
-    assert inventory_loot.LOOT_RESOURCE_FLOOR_MIN <= amt <= inventory_loot.LOOT_RESOURCE_FLOOR_MAX
-
-    cur.execute("UPDATE planet_buildings SET metal_mine = 40 WHERE planet_id = ?;", (pid,))
-    conn.commit()
-    higher_ctx = inventory_loot.build_loot_roll_context(uid, "container_basic", conn=conn)
-    higher = inventory_loot.resolve_loot_entry_amount(
-        {"reward_type": "resource", "reward_key": "metal", "production_hours": inventory_loot.LOOT_BASE_PRODUCTION_HOURS},
-        user_id=uid,
-        container_key="container_basic",
-        conn=conn,
-        rng=random.Random(1),
-        loot_context=higher_ctx,
-    )
-    scaled_only = inventory_loot.resolve_scaled_resource_amount(
-        "metal",
-        {"production_hours": inventory_loot.LOOT_BASE_PRODUCTION_HOURS},
-        user_id=uid,
-        container_key="container_basic",
-        conn=conn,
-        production_per_hour=higher_ctx.get("production_per_hour"),
-    )
-    if scaled_only >= inventory_loot.LOOT_RESOURCE_FLOOR_MIN:
-        assert higher >= scaled_only
-    else:
-        assert higher >= inventory_loot.LOOT_RESOURCE_FLOOR_MIN
-    conn.close()
-
-
-def test_diminishing_unit_loot_curve():
-    from game import inventory_loot as il
-
-    small = il.resolve_diminishing_unit_amount(1, rng=random.Random(1), tier_mult=1.0)
-    assert il.LOOT_UNIT_FLOOR_MIN <= small <= il.LOOT_UNIT_FLOOR_MAX
-
-    at_100k = il.resolve_diminishing_unit_amount(100_000, rng=random.Random(2), tier_mult=1.0)
-    assert il.LOOT_UNIT_FLOOR_MIN <= at_100k <= il.LOOT_UNIT_FLOOR_MAX
-
-    at_1m = il.resolve_diminishing_unit_amount(1_000_000, rng=random.Random(3), tier_mult=1.0)
-    assert 20_000 <= at_1m <= 60_000
-    assert at_1m <= il.LOOT_UNIT_AMOUNT_CAP
-
-    at_1b = il.resolve_diminishing_unit_amount(1_000_000_000, rng=random.Random(4), tier_mult=1.0)
-    assert 40_000 <= at_1b <= il.LOOT_UNIT_AMOUNT_CAP
-
-
-def test_ship_loot_scales_with_fleet(inventory_db, monkeypatch):
-    from game import inventory, inventory_loot
-    from game.fleet import add_planet_ships
-
-    conn = db()
-    uid = _player(conn=conn)
-    planet = get_context_planet(uid, conn=conn)
-    pid = int(planet["id"])
-
-    cur = conn.cursor()
-    cur.execute("DELETE FROM planet_ships WHERE planet_id = ?;", (pid,))
-    add_planet_ships(pid, uid, {"spark_drone": 100_000}, conn=conn)
-    conn.commit()
-
-    roll_rng = random.Random(2)
-    ctx = inventory_loot.build_loot_roll_context(uid, "container_basic", conn=conn)
-
-    def _force_ship(pool, rng, *, loot_context=None):
-        assert loot_context is not None
-        return {
-            "reward_type": "ship",
-            "reward_key": "spark_drone",
-            "amount": inventory_loot.resolve_loot_entry_amount(
-                {"reward_type": "ship", "reward_key": "spark_drone", "fleet_fraction": inventory_loot.LOOT_FLEET_FRACTION},
-                user_id=int(loot_context["user_id"]),
-                container_key=str(loot_context["container_key"]),
-                conn=loot_context["conn"],
-                rng=rng,
-                loot_context=loot_context,
-            ),
-        }
-
-    monkeypatch.setattr(inventory, "_roll_single_reward", _force_ship)
-    grant_inventory_item(uid, "container_basic", 1, conn=conn)
-    conn.commit()
-    begin_write_transaction(conn)
-    ok, reason, result = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=roll_rng)
-    assert ok, reason
-    commit(conn)
-    ship_rewards = [r for r in ((result or {}).get("rewards") or []) if r.get("reward_type") == "ship"]
-    assert ship_rewards
-    amt = int(ship_rewards[0]["amount"])
-    assert inventory_loot.LOOT_UNIT_FLOOR_MIN <= amt <= inventory_loot.LOOT_UNIT_FLOOR_MAX
-
-    huge = inventory_loot.resolve_diminishing_unit_amount(50_000_000, rng=random.Random(9), tier_mult=1.0)
-    assert huge == inventory_loot.LOOT_UNIT_AMOUNT_CAP
-    conn.close()
-
-
-def test_fuel_loot_for_new_player_without_fleet(inventory_db, monkeypatch):
-    from game import inventory, inventory_loot
-
-    conn = db()
-    uid = _player(conn=conn)
-    planet = get_context_planet(uid, conn=conn)
-    pid = int(planet["id"])
-
-    def _force_fuel(pool, rng, *, loot_context=None):
-        assert loot_context is not None
-        return {
-            "reward_type": "resource",
-            "reward_key": "fuel_cells",
-            "amount": inventory_loot.resolve_loot_entry_amount(
-                {"reward_type": "resource", "reward_key": "fuel_cells", "stock_fraction": inventory_loot.LOOT_FUEL_STOCK_FRACTION},
-                user_id=int(loot_context["user_id"]),
-                container_key=str(loot_context["container_key"]),
-                conn=loot_context["conn"],
-                rng=rng,
-                loot_context=loot_context,
-            ),
-        }
-
-    monkeypatch.setattr(inventory, "_roll_single_reward", _force_fuel)
-    grant_inventory_item(uid, "container_basic", 1, conn=conn)
-    conn.commit()
-    begin_write_transaction(conn)
-    ok, reason, result = open_containers(uid, pid, "container_basic", 1, conn=conn, rng=random.Random(42))
-    assert ok, reason
-    commit(conn)
-    fuel_rewards = [
-        r for r in ((result or {}).get("rewards") or [])
-        if r.get("reward_type") == "resource" and r.get("reward_key") == "fuel_cells"
-    ]
-    assert fuel_rewards
-    amt = int(fuel_rewards[0]["amount"])
-    assert inventory_loot.LOOT_RESOURCE_FLOOR_MIN <= amt <= inventory_loot.LOOT_RESOURCE_FLOOR_MAX
-    conn.close()

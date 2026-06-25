@@ -12,6 +12,7 @@ from .models import DEFAULT_GAME_SETTINGS, get_game_settings, save_game_settings
 BALANCE_SETTING_KEYS: Tuple[str, ...] = (
     "start_metal",
     "start_crystal",
+    "start_fuel_cells",
     "production_speed",
     "build_speed",
     "research_speed",
@@ -43,6 +44,7 @@ BALANCE_SETTING_KEYS: Tuple[str, ...] = (
 _INT_NONNEG = frozenset({
     "start_metal",
     "start_crystal",
+    "start_fuel_cells",
     "exchange_min_amount",
     "fuel_exchange_min_units",
     "fuel_production_per_hour",
@@ -78,6 +80,7 @@ _BOOL_KEYS = frozenset({"exchange_enabled", "fuel_exchange_enabled"})
 PRESET_B_BALANCE: Dict[str, Union[int, float, bool]] = {
     "start_metal": 3000,
     "start_crystal": 1500,
+    "start_fuel_cells": 500,
     "production_speed": 1.0,
     "build_speed": 1.1,
     "research_speed": 0.85,
@@ -316,6 +319,7 @@ def save_balance_settings(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, A
         apply_start_resources_to_homeworlds(
             int(cleaned.get("start_metal", settings_now.get("start_metal", 0)) or 0),
             int(cleaned.get("start_crystal", settings_now.get("start_crystal", 0)) or 0),
+            int(cleaned.get("start_fuel_cells", settings_now.get("start_fuel_cells", 0)) or 0),
         )
 
     try:

@@ -603,6 +603,21 @@
   accent-color: var(--admin-accent);
 }
 
+.admin-shell .admin-reset-domain-grid,
+.admin-reset-domain-grid {
+  display: grid;
+  gap: 6px 10px;
+  margin-top: 6px;
+}
+
+.admin-shell .admin-reset-domain-all,
+.admin-reset-domain-all {
+  grid-column: 1 / -1;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 2px;
+}
+
 .admin-shell .admin-btn-row {
   display: flex;
   justify-content: flex-end;
@@ -743,6 +758,63 @@
 
 .admin-shell .admin-messages-collapse-body[hidden] {
   display: none !important;
+}
+
+.admin-shell .admin-motd-collapse {
+  margin-top: 10px;
+  border: 1px solid rgba(120, 190, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(8, 16, 28, 0.35);
+}
+
+.admin-shell .admin-motd-collapse-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  list-style: none;
+}
+
+.admin-shell .admin-motd-collapse-summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-shell .admin-motd-collapse-summary::before {
+  content: "▸";
+  margin-right: 8px;
+  color: rgba(160, 210, 255, 0.75);
+  transition: transform 0.15s ease;
+}
+
+.admin-shell .admin-motd-collapse[open] > .admin-motd-collapse-summary::before {
+  transform: rotate(90deg);
+}
+
+.admin-shell .admin-motd-collapse-count {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: rgba(160, 200, 240, 0.75);
+}
+
+.admin-shell .admin-motd-collapse .admin-news-manage {
+  padding: 0 12px 12px;
+  border-top: 1px solid rgba(120, 190, 255, 0.12);
+}
+
+.admin-shell .admin-motd-collapse .admin-btn-row {
+  margin-top: 10px;
+}
+
+.admin-shell .admin-motd-collapse .admin-news-list {
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  margin-top: 10px;
+  padding-right: 4px;
 }
 
 .admin-shell .admin-support-detail,

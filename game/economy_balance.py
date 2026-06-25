@@ -681,3 +681,156 @@ def legacy_exponential_cost_sum(
         mult = float(factor) ** (lv - 1)
         total += int(base_m * mult) + int(base_c * mult)
     return total
+
+
+# ---------------------------------------------------------------------------
+# GC-864 — loot meta pool helpers (no economy rewards in containers)
+# ---------------------------------------------------------------------------
+
+LOOT_JACKPOT_MAX_WEIGHT_PCT = 2.0
+
+
+def loot_pool_total_weight(pool: List[Dict[str, Any]]) -> int:
+    return sum(max(0, int(e.get("weight") or 0)) for e in pool)
+
+
+def loot_jackpot_entries(
+    pool: List[Dict[str, Any]],
+    *,
+    max_weight_pct: float = LOOT_JACKPOT_MAX_WEIGHT_PCT,
+) -> List[Dict[str, Any]]:
+    """Entries at or below jackpot weight threshold (container upgrades, mythics)."""
+    total_w = loot_pool_total_weight(pool)
+    if total_w <= 0:
+        return []
+    out: List[Dict[str, Any]] = []
+    threshold = float(max_weight_pct)
+    for entry in pool:
+        w = int(entry.get("weight") or 0)
+        if w <= 0:
+            continue
+        pct = 100.0 * float(w) / float(total_w)
+        rtype = str(entry.get("reward_type") or "")
+        rkey = str(entry.get("reward_key") or "")
+        is_upgrade = rtype == "item" and rkey.startswith("container_")
+        is_mythic = "mythic" in rkey or rkey in {
+            "research_instant_level",
+            "artifact_core_fragment",
+            "mythic_genesis_core",
+            "mythic_ancient_nexus",
+        }
+        if pct <= threshold and (is_upgrade or is_mythic):
+            out.append({**entry, "weight_pct": round(pct, 2)})
+    return out
+
+
+def loot_duplicate_reward_audit(
+    pools: Dict[str, List[Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    """reward_key → containers; flags keys appearing in 3+ pools."""
+    index: Dict[str, List[str]] = {}
+    for container_key, pool in pools.items():
+        seen_in_pool: set[str] = set()
+        for entry in pool:
+            rtype = str(entry.get("reward_type") or "")
+            rkey = str(entry.get("reward_key") or "")
+            token = f"{rtype}:{rkey}"
+            if token in seen_in_pool:
+                continue
+            seen_in_pool.add(token)
+            index.setdefault(token, []).append(str(container_key))
+    rows: List[Dict[str, Any]] = []
+    for token, containers in sorted(index.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+        if len(containers) < 3:
+            continue
+        rtype, rkey = token.split(":", 1)
+        rows.append(
+            {
+                "reward_type": rtype,
+                "reward_key": rkey,
+                "pool_count": len(containers),
+                "containers": containers,
+            }
+        )
+    return rows
+
+
+def generate_loot_balance_table_markdown() -> str:
+    """GC-864 — markdown meta-loot table from live LOOT_POOLS."""
+    from .inventory_catalog import CONTAINER_DISPLAY_ORDER, ITEM_CATALOG
+
+    il = _loot_import_inventory_loot()
+    pools = il.LOOT_POOLS
+    lines: List[str] = [
+        "# GC-864 — Loot Balance Table",
+        "",
+        "> Auto-generated from `game/inventory_loot.py`.",
+        "> **Meta-only:** boosters, fragments, items, containers — no resources/ships/defense.",
+        "",
+        "## Container overview",
+        "",
+        "| Container | Entries | Total weight | Jackpots ≤2% | Economy drops |",
+        "|-----------|---------|--------------|--------------|---------------|",
+    ]
+    for key in CONTAINER_DISPLAY_ORDER:
+        if key not in pools:
+            continue
+        pool = pools[key]
+        total_w = loot_pool_total_weight(pool)
+        jackpots = loot_jackpot_entries(pool)
+        jp_note = f"{len(jackpots)} ok" if jackpots else "—"
+        economy = "yes" if il.pool_has_forbidden_rewards(pool) else "no"
+        lines.append(f"| `{key}` | {len(pool)} | {total_w} | {jp_note} | {economy} |")
+
+    lines.extend(["", "## Duplicate reward audit (3+ pools)", ""])
+    dupes = loot_duplicate_reward_audit(pools)
+    if not dupes:
+        lines.append("_No cross-pool duplicates at 3+ threshold._")
+    else:
+        lines.append("| Reward | Pools | Containers |")
+        lines.append("|--------|-------|------------|")
+        for row in dupes:
+            lines.append(
+                f"| `{row['reward_key']}` ({row['reward_type']}) | {row['pool_count']} | {', '.join(f'`{c}`' for c in row['containers'])} |"
+            )
+
+    lines.extend(["", "## Drops by rarity (ITEM_CATALOG)", ""])
+    for key in CONTAINER_DISPLAY_ORDER:
+        if key not in pools:
+            continue
+        pool = pools[key]
+        total_w = loot_pool_total_weight(pool)
+        by_rarity: Dict[str, List[str]] = {}
+        for entry in pool:
+            w = int(entry.get("weight") or 0)
+            if w <= 0 or total_w <= 0:
+                continue
+            rtype = str(entry.get("reward_type") or "")
+            rkey = str(entry.get("reward_key") or "")
+            if rtype in ("item", "booster"):
+                rarity = str((ITEM_CATALOG.get(rkey) or {}).get("rarity") or "common")
+            else:
+                rarity = "forbidden"
+            pct = 100.0 * w / total_w
+            lo = int(entry.get("min_amount") or 1)
+            hi = int(entry.get("max_amount") or lo)
+            amt = str(lo) if lo == hi else f"{lo}–{hi}"
+            label = f"{rtype}:{rkey} ×{amt} ({pct:.1f}%)"
+            by_rarity.setdefault(rarity, []).append(label)
+        lines.append(f"### `{key}`")
+        lines.append("")
+        for rarity in ("common", "uncommon", "rare", "epic", "legendary", "mythic", "forbidden"):
+            items = by_rarity.get(rarity)
+            if not items:
+                continue
+            lines.append(f"- **{rarity}**: " + "; ".join(items))
+        lines.append("")
+
+    lines.append("---\n\n_Regenerate: `python scripts/gen_loot_balance_table.py`_")
+    return "\n".join(lines)
+
+
+def _loot_import_inventory_loot():
+    from . import inventory_loot
+
+    return inventory_loot

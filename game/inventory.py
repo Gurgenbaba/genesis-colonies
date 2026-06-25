@@ -437,9 +437,9 @@ def _roll_single_reward(
     *,
     loot_context: Optional[Dict[str, Any]] = None,
 ) -> Reward:
-    entries = [e for e in pool if int(e.get("weight") or 0) > 0]
+    entries = inventory_loot.sanitize_loot_pool([e for e in pool if int(e.get("weight") or 0) > 0])
     if not entries:
-        return {"reward_type": "resource", "reward_key": "metal", "amount": 0}
+        return {"reward_type": "item", "reward_key": "fragment_dna_common", "amount": 0}
     weights = [int(e["weight"]) for e in entries]
     pick = rng.choices(entries, weights=weights, k=1)[0]
     if loot_context:
@@ -451,8 +451,6 @@ def _roll_single_reward(
             rng=rng,
             loot_context=loot_context,
         )
-    elif inventory_loot.is_dynamic_loot_entry(pick):
-        amount = 0
     else:
         lo = int(pick.get("min_amount") or 1)
         hi = int(pick.get("max_amount") or lo)
@@ -580,7 +578,7 @@ def _pick_primary_reward(rewards: List[Reward]) -> Reward:
     """Primary tile for the roller — highest rarity, then highest amount."""
     positive = [r for r in rewards if int(r.get("amount") or 0) > 0]
     if not positive:
-        return rewards[0] if rewards else {"reward_type": "resource", "reward_key": "metal", "amount": 0}
+        return rewards[0] if rewards else {"reward_type": "item", "reward_key": "fragment_dna_common", "amount": 0}
 
     def _score(r: Reward) -> Tuple[int, int]:
         rarity = str(r.get("rarity") or "common")
@@ -719,49 +717,18 @@ def _apply_rewards(
     *,
     conn,
 ) -> None:
-    from .fleet import add_planet_ships
-    from .fleet_defs import canonical_ship_key, is_known_ship_key
-    from .models import add_planet_defense
-    from .defense_defs import is_known_defense_key
-
-    metal = crystal = fuel_cells = 0
-    ships: Dict[str, int] = {}
-    defense: Dict[str, int] = {}
-
+    _ = planet_id
     for r in rewards:
         rtype = str(r["reward_type"])
         rkey = str(r["reward_key"])
         amt = int(r.get("amount") or 0)
         if amt <= 0:
             continue
-        if rtype == "resource":
-            if rkey == "metal":
-                metal += amt
-            elif rkey == "crystal":
-                crystal += amt
-            elif rkey == "fuel_cells":
-                fuel_cells += amt
-        elif rtype == "ship":
-            sk = canonical_ship_key(rkey)
-            if is_known_ship_key(sk):
-                ships[sk] = ships.get(sk, 0) + amt
-        elif rtype == "defense":
-            if is_known_defense_key(rkey):
-                defense[rkey] = defense.get(rkey, 0) + amt
-        elif rtype in ("item", "booster") and is_known_item_key(rkey):
+        # GC-864 — containers credit inventory meta rewards only.
+        if rtype not in ("item", "booster"):
+            continue
+        if is_known_item_key(rkey):
             grant_inventory_item(user_id, rkey, amt, conn=conn)
-
-    _credit_planet_resources(
-        planet_id,
-        metal=metal,
-        crystal=crystal,
-        fuel_cells=fuel_cells,
-        conn=conn,
-    )
-    if ships:
-        add_planet_ships(int(planet_id), int(user_id), ships, conn=conn)
-    if defense:
-        add_planet_defense(int(planet_id), defense, conn=conn)
 
 
 def _log_container_open(

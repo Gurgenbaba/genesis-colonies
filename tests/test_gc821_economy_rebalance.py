@@ -23,7 +23,9 @@ from game.economy_balance import (
 from game.effects import EffectResolver
 from game.exchange import _EXCHANGE_SETTING_DEFAULTS
 from game.fleet_defs import SHIPS
-from game.inventory_loot import LOOT_RESOURCE_FLOOR_MIN as LOOT_MIN
+class TestGc821CLootFloors:
+    def test_loot_floors_raised(self):
+        assert LOOT_RESOURCE_FLOOR_MIN >= 12_000
 from game.production_formula import calculate_resource_output, ProductionContext
 
 
@@ -83,8 +85,7 @@ class TestGc821BStorageAndExchange:
 
 class TestGc821CLootFloors:
     def test_loot_floors_raised(self):
-        assert LOOT_MIN >= LOOT_RESOURCE_FLOOR_MIN
-        assert LOOT_MIN >= 12_000
+        assert LOOT_RESOURCE_FLOOR_MIN >= 12_000
 
 
 class TestGc821DMilitaryCosts:

@@ -136,7 +136,7 @@ def test_universe_reset_wrong_confirm_no_db_change(app_client):
     before_planets = _count_table("planets")
     before_messages = _count_table("player_messages")
 
-    r = client.post("/api/admin/universe-reset", json={"confirm_text": "WRONG PHRASE"})
+    r = client.post("/api/admin/universe-reset", json={})
     assert r.status_code == 400
     data = r.get_json()
     assert data["ok"] is False
@@ -277,3 +277,69 @@ def test_universe_reset_writes_audit_log(mock_backup, app_client, tmp_path):
     assert payload.get("action") == "universe_reset_keep_inventory"
     assert payload.get("backup_path")
     assert "deleted_tables" in payload
+
+
+def test_reset_domain_coverage_complete():
+    from game.admin_universe_reset import CLEAR_TABLES_ORDER, RESET_DOMAINS
+
+    mapped = set()
+    for tables in RESET_DOMAINS.values():
+        mapped.update(tables)
+    assert mapped == set(CLEAR_TABLES_ORDER)
+
+
+def _only_messages_reset_options() -> dict:
+    from game.admin_universe_reset import RESET_DOMAIN_ORDER, default_reset_options
+
+    opts = default_reset_options()
+    for key in RESET_DOMAIN_ORDER:
+        opts[key] = key == "messages"
+    return opts
+
+
+def test_universe_reset_empty_domains_rejected(app_client):
+    client, _, _ = app_client
+    _login(client, "admin_reset", "adminpass123")
+    opts = _only_messages_reset_options()
+    for key in opts:
+        opts[key] = False
+    r = client.post(
+        "/api/admin/universe-reset",
+        json={"confirm_text": "RESET UNIVERSE KEEP INVENTORY", "reset_options": opts},
+    )
+    assert r.status_code == 400
+    data = r.get_json()
+    assert data["ok"] is False
+    assert data["error"] == "reset_options_empty"
+
+
+@patch("game.admin_universe_reset.create_pre_reset_backup")
+def test_universe_reset_selective_messages_only(mock_backup, app_client, tmp_path):
+    mock_backup.return_value = tmp_path / "pre_universe_reset_test.db"
+
+    client, _, user_id = app_client
+    _login(client, "admin_reset", "adminpass123")
+
+    before_planets = _count_table("planets")
+    before_research = _count_table("research_levels")
+    assert before_planets > 0
+    assert before_research > 0
+    assert _count_table("player_messages") > 0
+
+    r = client.post(
+        "/api/admin/universe-reset",
+        json={
+            "confirm_text": "RESET UNIVERSE KEEP INVENTORY",
+            "reset_options": _only_messages_reset_options(),
+        },
+    )
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    assert data["players_reinitialized"] == 0
+    assert data["reset_domains_applied"] == ["messages"]
+
+    assert _count_table("planets") == before_planets
+    assert _count_table("research_levels") == before_research
+    assert _count_table("player_messages") == 0
+    assert _count_table("build_queue") > 0

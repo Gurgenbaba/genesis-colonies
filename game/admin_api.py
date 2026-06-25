@@ -84,6 +84,17 @@ def validate_confirm(action_key: str, confirm_text: Any) -> bool:
     return str(confirm_text or "").strip() == expected
 
 
+def admin_action_confirmed(body: Any, action_key: str) -> bool:
+    """Admin session is authoritative; UI may send confirm=true after a dialog."""
+    if not isinstance(body, dict):
+        return False
+    if body.get("confirm") in (True, 1, "1", "true", "on", "yes"):
+        return True
+    if validate_confirm(action_key, body.get("confirm_text")):
+        return True
+    return validate_confirm(action_key, body.get("confirm"))
+
+
 def _request_meta() -> Tuple[Optional[str], Optional[str]]:
     from flask import request
 
@@ -178,7 +189,7 @@ def api_runtime() -> Dict[str, Any]:
 def api_run_migrations(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
     if is_production():
         return _err("forbidden", "Migrations cannot be run from UI in production.")
-    if not validate_confirm("run_migrations", body.get("confirm_text")):
+    if not admin_action_confirmed(body, "run_migrations"):
         return _err("confirm_required", "Type RUN MIGRATIONS to confirm.")
     try:
         import migrate
@@ -319,7 +330,7 @@ def get_player_effects_debug(player_id: int) -> Dict[str, Any]:
 
 def set_player_admin(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
     is_admin = 1 if body.get("is_admin") in (True, 1, "1", "true") else 0
-    if is_admin == 0 and not validate_confirm("remove_admin", body.get("confirm_text")):
+    if is_admin == 0 and not admin_action_confirmed(body, "remove_admin"):
         return _err("confirm_required", "Type REMOVE ADMIN to revoke admin rights.")
 
     conn = db()
@@ -348,7 +359,7 @@ def set_player_admin(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dic
 
 
 def ban_player_api(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
-    if not validate_confirm("ban_player", body.get("confirm_text")):
+    if not admin_action_confirmed(body, "ban_player"):
         return _err("confirm_required", "Type BAN PLAYER to confirm ban.")
 
     reason = str(body.get("reason") or "").strip()[:500]
@@ -413,7 +424,7 @@ def unban_player_api(admin_id: int, player_id: int) -> Dict[str, Any]:
 
 
 def delete_player_api(admin_id: int, player_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
-    if not validate_confirm("delete_player", body.get("confirm_text")):
+    if not admin_action_confirmed(body, "delete_player"):
         return _err("confirm_required", "Type DELETE PLAYER to confirm permanent account deletion.")
 
     pid = int(player_id)
@@ -895,7 +906,7 @@ def reset_lootbox_pool(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def reset_planet(admin_id: int, planet_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
-    if not validate_confirm("planet_reset", body.get("confirm_text")):
+    if not admin_action_confirmed(body, "planet_reset"):
         return _err("confirm_required", "Type RESET PLANET to confirm.")
 
     settings = get_game_settings() or {}
@@ -1277,7 +1288,7 @@ def finish_due_queues(admin_id: int) -> Dict[str, Any]:
 
 
 def clear_queues(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
-    if not validate_confirm("queue_clear", body.get("confirm_text")):
+    if not admin_action_confirmed(body, "queue_clear"):
         return _err("confirm_required", "Type CLEAR QUEUE to confirm.")
 
     scope = str(body.get("scope") or "planet").lower()
@@ -1594,8 +1605,7 @@ def api_broadcast_system_messages(admin_id: int, body: Dict[str, Any]) -> Dict[s
 
     if not isinstance(body, dict):
         return _err("invalid_payload", "Expected JSON object")
-    confirm = body.get("confirm") or body.get("confirm_text")
-    if not validate_confirm("broadcast_messages", confirm):
+    if not admin_action_confirmed(body, "broadcast_messages"):
         return _err("confirm_required", "Type SEND SYSTEM BROADCAST to confirm.")
     result = admin_broadcast_system_message(
         str(body.get("subject") or ""),
@@ -1641,15 +1651,21 @@ def api_wipe_universe(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def api_universe_reset_keep_inventory(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
-    from game.admin_universe_reset import execute_universe_reset_keep_inventory
+    from game.admin_universe_reset import execute_universe_reset_keep_inventory, normalize_reset_options
 
     if not isinstance(body, dict):
         return _err("invalid_payload", "Expected JSON object")
-    if not validate_confirm("universe_reset_keep_inventory", body.get("confirm_text")):
+    if not admin_action_confirmed(body, "universe_reset_keep_inventory"):
         return _err("confirm_required", "Type RESET UNIVERSE KEEP INVENTORY to confirm.")
 
+    reset_options = normalize_reset_options(body.get("reset_options"))
+    if not any(reset_options.values()):
+        return _err("reset_options_empty", "Select at least one reset category.")
+
     try:
-        result = execute_universe_reset_keep_inventory()
+        result = execute_universe_reset_keep_inventory(reset_options=reset_options)
+    except ValueError as exc:
+        return _err("reset_options_invalid", str(exc))
     except Exception as exc:
         return _err("reset_failed", str(exc))
 

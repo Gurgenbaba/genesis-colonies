@@ -52,6 +52,10 @@
       .replace(/"/g, "&quot;");
   }
 
+  function adminDestructiveConfirmed(messageKey, fallbackMessage) {
+    return window.confirm(t(messageKey, fallbackMessage));
+  }
+
   const ADMIN_SELECT_ATTRS = 'class="admin-input admin-select" data-gc-hud-select';
 
   function syncAdminHudSelects(root) {
@@ -598,8 +602,14 @@
 
   function renderAdminNewsList(entries) {
     const host = qs("#admin-news-list");
-    if (!host) return;
+    const countEl = qs("#admin-news-list-count");
     const rows = Array.isArray(entries) ? entries : [];
+    if (countEl) {
+      countEl.textContent = rows.length
+        ? `(${rows.length})`
+        : "";
+    }
+    if (!host) return;
     if (!rows.length) {
       host.innerHTML = `<p class="admin-small-hint">${esc(t("admin_news_empty", "Noch keine News-Einträge."))}</p>`;
       return;
@@ -1034,16 +1044,62 @@
     return res;
   }
 
+  function collectUniverseResetOptions() {
+    const opts = {};
+    document.querySelectorAll("[data-universe-reset-domain]").forEach((el) => {
+      const key = el.getAttribute("data-universe-reset-domain");
+      if (key) opts[key] = !!el.checked;
+    });
+    return opts;
+  }
+
+  function syncUniverseResetSelectAll() {
+    const master = qs("#universe_reset_select_all");
+    const boxes = [...document.querySelectorAll("[data-universe-reset-domain]")];
+    if (!master || !boxes.length) return;
+    const allOn = boxes.every((el) => el.checked);
+    const anyOn = boxes.some((el) => el.checked);
+    master.checked = allOn;
+    master.indeterminate = !allOn && anyOn;
+  }
+
+  function initUniverseResetDomainCheckboxes() {
+    const master = qs("#universe_reset_select_all");
+    const boxes = [...document.querySelectorAll("[data-universe-reset-domain]")];
+    if (!boxes.length) return;
+    boxes.forEach((el) => {
+      el.addEventListener("change", syncUniverseResetSelectAll);
+    });
+    if (master) {
+      master.addEventListener("change", () => {
+        const on = !!master.checked;
+        boxes.forEach((el) => {
+          el.checked = on;
+        });
+        master.indeterminate = false;
+      });
+    }
+    syncUniverseResetSelectAll();
+  }
+
   async function resetAdminUniverseKeepInventory() {
-    const phrase = String(qs("#universe_reset_confirm_text")?.value || "").trim();
-    if (phrase !== "RESET UNIVERSE KEEP INVENTORY") {
+    const reset_options = collectUniverseResetOptions();
+    if (!Object.values(reset_options).some(Boolean)) {
       showAlert(
-        t("admin_universe_reset_confirm_required", "Tippe exakt: RESET UNIVERSE KEEP INVENTORY"),
+        t("admin_universe_reset_domains_required", "Wähle mindestens einen Bereich zum Zurücksetzen."),
         "error",
       );
       return null;
     }
-    const res = await adminPost("/api/admin/universe-reset", { confirm_text: phrase });
+    if (
+      !adminDestructiveConfirmed(
+        "admin_universe_reset_confirm_dialog",
+        "Universum wirklich zurücksetzen? Inventar bleibt erhalten. Diese Aktion kann nicht rückgängig gemacht werden.",
+      )
+    ) {
+      return null;
+    }
+    const res = await adminPost("/api/admin/universe-reset", { confirm: true, reset_options });
     if (res.ok) {
       const n = res.players_reinitialized ?? 0;
       const backup = res.backup_path ? ` Backup: ${res.backup_path}` : "";
@@ -1055,7 +1111,6 @@
         .replace("%(backup)s", backup);
       notify(msg, "success");
       setServerStatus(msg);
-      if (qs("#universe_reset_confirm_text")) qs("#universe_reset_confirm_text").value = "";
       await syncAfterAdminChange("admin_universe_reset", { reloadTab: true });
     } else {
       showAlert(res.message || res.error, "error");
@@ -1208,10 +1263,15 @@
   }
 
   async function runAdminMigrations() {
-    const confirmEl = qs("#admin-migrations-confirm");
-    const data = await adminPost("/api/admin/migrations/run", {
-      confirm_text: confirmEl ? confirmEl.value : "",
-    });
+    if (
+      !adminDestructiveConfirmed(
+        "admin_migrations_confirm_dialog",
+        "Ausstehende Migrationen jetzt ausführen? Datenbank wird geändert.",
+      )
+    ) {
+      return { ok: false, error: "cancelled" };
+    }
+    const data = await adminPost("/api/admin/migrations/run", { confirm: true });
     if (data.ok) notify(t("admin_action_success", "Erfolgreich"), "success");
     else showAlert(data.message || t("admin_confirm_required", "Bestätigung erforderlich"), "error");
     await loadAdminMigrations();
@@ -1290,11 +1350,8 @@
 
   function lootPoolRewardTypeOptions(selected) {
     const types = (_lootboxAdminState && _lootboxAdminState.reward_types) || [
-      "resource",
       "item",
       "booster",
-      "ship",
-      "defense",
     ];
     return types
       .map(
@@ -1502,8 +1559,7 @@
         <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="player-unban" data-player-id="${p.id}">${t("admin_btn_unban", "Entbannen")}</button>
       </div>
       <div class="admin-danger-zone">
-        <p class="admin-small-hint">${t("admin_player_delete_hint", "Account unwiderruflich löschen. Tippe DELETE PLAYER und den exakten Spielernamen.")}</p>
-        <input type="text" class="admin-input admin-input-sm" id="admin-player-delete-confirm" placeholder="DELETE PLAYER" autocomplete="off">
+        <p class="admin-small-hint">${t("admin_player_delete_hint", "Account unwiderruflich löschen. Spielernamen zur Bestätigung eingeben.")}</p>
         <input type="text" class="admin-input admin-input-sm" id="admin-player-delete-username" placeholder="${t("admin_player_delete_username", "Spielername")}" autocomplete="off">
         <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="player-delete" data-player-id="${p.id}" data-player-name="${esc(p.username || "")}">${t("admin_btn_delete_player", "Account löschen")}</button>
       </div>
@@ -1584,8 +1640,7 @@
       </div>
       
       <div class="admin-danger-zone">
-        <p class="admin-small-hint">${t("admin_planet_reset_hint", "Tippe RESET PLANET zur Bestätigung")}</p>
-        <input type="text" class="admin-input" id="admin-planet-reset-confirm" placeholder="RESET PLANET" autocomplete="off">
+        <p class="admin-small-hint">${t("admin_planet_reset_hint", "Planet auf Ausgangszustand zurücksetzen.")}</p>
         <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="planet-reset" data-planet-id="${pl.id}">${t("admin_btn_reset_planet", "Planet reset")}</button>
       </div>`;
     syncAdminHudSelects(el);
@@ -1748,8 +1803,7 @@
           )}
         </div>
         <div class="admin-danger-zone">
-          <p class="admin-small-hint">${t("admin_queue_clear_hint", "Tippe CLEAR QUEUE")}</p>
-          <input type="text" class="admin-input" id="admin-queue-clear-confirm" placeholder="CLEAR QUEUE" autocomplete="off">
+          <p class="admin-small-hint">${t("admin_queue_clear_hint", "Alle Warteschlangen-Einträge im gewählten Bereich löschen.")}</p>
           <select ${ADMIN_SELECT_ATTRS} id="admin-queue-clear-scope">
             <option value="planet">${t("admin_filter_planet_id", "Planet")}</option>
             <option value="player">${t("admin_filter_player_id", "Player")}</option>
@@ -1832,9 +1886,16 @@
   }
 
   async function clearQueues() {
-    const confirmText = qs("#admin-queue-clear-confirm")?.value || "";
+    if (
+      !adminDestructiveConfirmed(
+        "admin_queue_clear_confirm_dialog",
+        "Warteschlangen wirklich leeren?",
+      )
+    ) {
+      return { ok: false, error: "cancelled" };
+    }
     const scope = qs("#admin-queue-clear-scope")?.value || "planet";
-    const body = { confirm_text: confirmText, scope, queue_type: "both" };
+    const body = { confirm: true, scope, queue_type: "both" };
     if (scope === "planet") body.planet_id = qs("#admin-queue-planet-id")?.value;
     else body.player_id = qs("#admin-queue-player-id")?.value;
     const data = await adminPost("/api/admin/queues/clear", body);
@@ -2200,7 +2261,7 @@
     const res = await adminPost("/api/admin/messages/broadcast", {
       subject,
       body,
-      confirm: "SEND SYSTEM BROADCAST",
+      confirm: true,
     });
     if (res.ok) {
       const count = res.delivered_count ?? res.data?.delivered_count ?? "?";
@@ -2455,9 +2516,15 @@
     if (act === "player-set-admin") {
       const body = { is_admin: btn.dataset.isAdmin === "1" ? 1 : 0 };
       if (body.is_admin === 0) {
-        const c = prompt(t("admin_confirm_remove_admin", "Tippe REMOVE ADMIN"));
-        if (c !== "REMOVE ADMIN") return null;
-        body.confirm_text = c;
+        if (
+          !adminDestructiveConfirmed(
+            "admin_confirm_remove_admin_dialog",
+            "Admin-Rechte wirklich entziehen?",
+          )
+        ) {
+          return null;
+        }
+        body.confirm = true;
       }
       const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/set-admin`, body);
       if (res.ok) {
@@ -2468,10 +2535,16 @@
       return res;
     }
     if (act === "player-ban") {
-      const c = prompt(t("admin_confirm_ban", "Tippe BAN PLAYER"));
-      if (c !== "BAN PLAYER") return null;
+      if (
+        !adminDestructiveConfirmed(
+          "admin_confirm_ban_dialog",
+          "Spieler wirklich bannen?",
+        )
+      ) {
+        return null;
+      }
       const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/ban`, {
-        confirm_text: c,
+        confirm: true,
         reason: "admin panel",
         hours: 24,
       });
@@ -2488,12 +2561,18 @@
         showAlert(t("admin_ban_invalid_id", "Ungültige Spieler-ID."), "error");
         return null;
       }
-      const c = prompt(t("admin_confirm_ban", "Tippe BAN PLAYER"));
-      if (c !== "BAN PLAYER") return null;
+      if (
+        !adminDestructiveConfirmed(
+          "admin_confirm_ban_dialog",
+          "Spieler wirklich bannen?",
+        )
+      ) {
+        return null;
+      }
       const hoursRaw = qs("#admin-ban-hours")?.value;
       const hours = hoursRaw === "" || hoursRaw == null ? 24 : parseInt(hoursRaw, 10);
       const res = await adminPost(`/api/admin/player/${playerId}/ban`, {
-        confirm_text: c,
+        confirm: true,
         reason: (qs("#admin-ban-reason")?.value || "").trim(),
         hours: Number.isFinite(hours) ? hours : 24,
       });
@@ -2515,12 +2594,7 @@
       return res;
     }
     if (act === "player-delete") {
-      const confirmText = (qs("#admin-player-delete-confirm")?.value || "").trim();
       const expectedUsername = (qs("#admin-player-delete-username")?.value || "").trim();
-      if (confirmText !== "DELETE PLAYER") {
-        showAlert(t("admin_confirm_delete_player", "Tippe DELETE PLAYER zur Bestätigung."), "error");
-        return null;
-      }
       if (!expectedUsername) {
         showAlert(t("admin_player_delete_username_required", "Spielername zur Bestätigung eingeben."), "error");
         return null;
@@ -2536,7 +2610,7 @@
         return null;
       }
       const res = await adminPost(`/api/admin/player/${btn.dataset.playerId}/delete`, {
-        confirm_text: confirmText,
+        confirm: true,
         expected_username: expectedUsername,
       });
       if (res.ok) {
@@ -2774,8 +2848,16 @@
       return res;
     }
     if (act === "planet-reset") {
+      if (
+        !adminDestructiveConfirmed(
+          "admin_planet_reset_confirm_dialog",
+          "Planet wirklich zurücksetzen?",
+        )
+      ) {
+        return null;
+      }
       const res = await adminPost(`/api/admin/planet/${btn.dataset.planetId}/reset`, {
-        confirm_text: qs("#admin-planet-reset-confirm")?.value || "",
+        confirm: true,
       });
       if (res.ok) {
         notify(t("admin_action_success", "OK"), "success");
@@ -2886,6 +2968,7 @@
     if (!root) return;
 
     bindAdminPanelOnce();
+    initUniverseResetDomainCheckboxes();
 
     if (!_adminPanelBootstrapped) {
       _adminPanelBootstrapped = true;

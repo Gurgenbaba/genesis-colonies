@@ -53,6 +53,7 @@ def _ensure_admin_defaults(settings: Dict[str, Any]) -> Dict[str, Any]:
 
         "start_metal": 0,
         "start_crystal": 0,
+        "start_fuel_cells": 0,
 
         "motd_text": "",
         "motd_enabled": 0,
@@ -132,11 +133,16 @@ def get_admin_settings() -> Dict[str, Any]:
     return s
 
 
-def apply_start_resources_to_homeworlds(start_metal: int, start_crystal: int) -> None:
-    """Set homeworld metal/crystal to at least start values (minimum bump)."""
+def apply_start_resources_to_homeworlds(
+    start_metal: int,
+    start_crystal: int,
+    start_fuel_cells: int = 0,
+) -> None:
+    """Set homeworld resources to at least configured start values (minimum bump)."""
     sm = max(0, int(start_metal or 0))
     sc = max(0, int(start_crystal or 0))
-    if sm <= 0 and sc <= 0:
+    sf = max(0, int(start_fuel_cells or 0))
+    if sm <= 0 and sc <= 0 and sf <= 0:
         return
 
     conn = db()
@@ -159,6 +165,15 @@ def apply_start_resources_to_homeworlds(start_metal: int, start_crystal: int) ->
                  WHERE is_homeworld = 1;
                 """,
                 (sc, sc),
+            )
+        if sf > 0:
+            cur.execute(
+                """
+                UPDATE planets
+                   SET fuel_cells = CASE WHEN fuel_cells < ? THEN ? ELSE fuel_cells END
+                 WHERE is_homeworld = 1;
+                """,
+                (sf, sf),
             )
         conn.commit()
     finally:

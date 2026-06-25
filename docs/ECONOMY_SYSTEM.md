@@ -171,21 +171,21 @@ Recycelt Schiffe vom context planet → Ressourcen-Rückerstattung nach `fleet_d
 
 ---
 
-## Container-Loot (Inventar) — GC-540
+## Container-Loot (Inventar) — GC-540 / GC-864
 
-Ressourcen-Drops in Lootboxen sind **nicht mehr fix**, sondern skalieren mit dem Imperium:
+**Meta-only:** Lootboxen geben **keine** Ressourcen, Schiffe oder Verteidigung.
 
-| Regel | Detail |
-|-------|--------|
-| Ferronit / Crytite | **50 %** der Stundenproduktion der **höchsten** Mine (× Container-Stufe); Floor **12 000–30 000** |
-| Brennzellen | **10 %** des Bestands (× Stufe); Floor **12 000–30 000** |
-| Schiffe / Verteidigung | Abnehmender %-Anteil (log-Kurve); Floor **5 000–10 000** (`LOOT_UNIT_FLOOR_*`); **max. 100 000** pro Roll |
-| Container-Stufe | Multiplikator pro `container_*`-Key (`CONTAINER_RESOURCE_MULTIPLIER`) |
-| Keine Minen | Fallback Stufe **1** für Ferronit/Crytite |
-| Andere Drops | Items, Booster — feste min/max |
+| Erlaubt | Verboten |
+|---------|----------|
+| Booster | Ferronit, Crytite, Brennzellen |
+| Fragmente, Forschungs-Items | Schiffe |
+| Container / Keys | Verteidigungseinheiten |
+| seltene Utility-Items | |
 
-Owner: `game/inventory_loot.py` (Pools + Skalierung), `game/inventory.py` (Roll beim Öffnen).  
-Skalierung: `LOOT_BASE_PRODUCTION_HOURS = 0.5` (50 % der höchsten Mine/h).
+Owner: `game/inventory_loot.py` (`LOOT_POOLS`, `sanitize_loot_pool`), `game/inventory.py` (Roll + Inventar-Gutschrift).  
+Admin-Overrides: nur `item` / `booster` — siehe [GC-864_LOOT_BALANCE_TABLE.md](GC-864_LOOT_BALANCE_TABLE.md).
+
+Ressourcen kommen aus Produktion, Handel, Expedition und Kampf. Schiffe aus der Werft. Defense aus der Fabrik.
 
 ---
 

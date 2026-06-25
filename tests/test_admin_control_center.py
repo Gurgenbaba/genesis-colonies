@@ -411,8 +411,33 @@ def test_admin_lootboxes_state(app_client):
     assert "container_basic" in data["pools"]
     assert data["pools"]["container_basic"]["entries"]
     assert "reward_keys_by_type" in data
-    assert "metal" in {e["key"] for e in data["reward_keys_by_type"]["resource"]}
-    assert len(data["reward_keys_by_type"]["ship"]) >= 1
+    assert "booster" in data["reward_keys_by_type"]
+    assert "item" in data["reward_keys_by_type"]
+    assert "resource" not in data["reward_keys_by_type"]
+
+
+def test_admin_lootbox_pool_save_rejects_economy_rewards(app_client):
+    client, _, _ = app_client
+    _login(client, "admin_cc", "adminpass123")
+
+    save = client.post(
+        "/api/admin/lootboxes/pools/save",
+        json={
+            "container_key": "container_rare",
+            "entries": [
+                {
+                    "weight": 100,
+                    "reward_type": "resource",
+                    "reward_key": "metal",
+                    "min_amount": 42,
+                    "max_amount": 42,
+                }
+            ],
+        },
+    )
+    assert save.status_code == 400
+    data = save.get_json()
+    assert data["ok"] is False
 
 
 def test_admin_lootbox_pool_save_and_open(app_client):
@@ -422,10 +447,10 @@ def test_admin_lootbox_pool_save_and_open(app_client):
     custom_pool = [
         {
             "weight": 100,
-            "reward_type": "resource",
-            "reward_key": "metal",
-            "min_amount": 42,
-            "max_amount": 42,
+            "reward_type": "booster",
+            "reward_key": "booster_build_15m",
+            "min_amount": 2,
+            "max_amount": 2,
         }
     ]
     save = client.post(
@@ -440,7 +465,7 @@ def test_admin_lootbox_pool_save_and_open(app_client):
     from game import inventory_loot
 
     effective = inventory_loot.get_loot_pools()
-    assert effective["container_rare"][0]["reward_key"] == "metal"
+    assert effective["container_rare"][0]["reward_key"] == "booster_build_15m"
 
     from game.db import db, begin_write_transaction, commit
     from game.inventory import grant_inventory_item, open_containers
@@ -451,9 +476,10 @@ def test_admin_lootbox_pool_save_and_open(app_client):
     try:
         planet = get_context_planet(user_id, conn=conn)
         pid = int(planet["id"])
+        metal_before = float(planet["metal"])
         grant_inventory_item(user_id, "container_rare", 1, conn=conn)
         begin_write_transaction(conn)
-        ok, reason, _ = open_containers(
+        ok, reason, result = open_containers(
             user_id, pid, "container_rare", 1, conn=conn, rng=random.Random(99)
         )
         assert ok, reason
@@ -461,7 +487,12 @@ def test_admin_lootbox_pool_save_and_open(app_client):
         cur = conn.cursor()
         cur.execute("SELECT metal FROM planets WHERE id = ?;", (pid,))
         row = cur.fetchone()
-        assert int(row["metal"]) >= 42
+        assert float(row["metal"]) == metal_before
+        inv = cur.execute(
+            "SELECT amount FROM player_inventory_items WHERE user_id = ? AND item_key = ?;",
+            (user_id, "booster_build_15m"),
+        ).fetchone()
+        assert inv and int(inv["amount"]) >= 2
     finally:
         conn.close()
 
@@ -700,7 +731,7 @@ def test_delete_player_requires_username_match(app_client):
     _login(client, "admin_cc", "adminpass123")
     r = client.post(
         f"/api/admin/player/{user_id}/delete",
-        json={"confirm_text": "DELETE PLAYER", "expected_username": "wrong_name"},
+        json={"confirm": True, "expected_username": "wrong_name"},
     )
     assert r.status_code == 400
     assert r.get_json()["error"] == "username_mismatch"
@@ -711,7 +742,7 @@ def test_delete_player_cannot_delete_self(app_client):
     _login(client, "admin_cc", "adminpass123")
     r = client.post(
         f"/api/admin/player/{admin_id}/delete",
-        json={"confirm_text": "DELETE PLAYER", "expected_username": "admin_cc"},
+        json={"confirm": True, "expected_username": "admin_cc"},
     )
     assert r.status_code == 400
     assert r.get_json()["error"] == "cannot_delete_self"
@@ -735,7 +766,7 @@ def test_delete_player_removes_user_and_planets(app_client):
 
     r = client.post(
         f"/api/admin/player/{user_id}/delete",
-        json={"confirm_text": "DELETE PLAYER", "expected_username": username},
+        json={"confirm": True, "expected_username": username},
     )
     assert r.status_code == 200
     data = r.get_json()

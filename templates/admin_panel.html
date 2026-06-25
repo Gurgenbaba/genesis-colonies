@@ -134,7 +134,6 @@
       
       <div class="admin-danger-zone" id="admin-migrations-run-zone" hidden>
         <p class="admin-small-hint">{{ T("admin_migrations_run_hint") }}</p>
-        <input type="text" class="admin-input" id="admin-migrations-confirm" placeholder="RUN MIGRATIONS" autocomplete="off">
         <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="run-migrations">{{ T("admin_btn_run_migrations") }}</button>
       </div>
     </section>
@@ -440,7 +439,7 @@
         <span class="admin-section-title-text">{{ T("admin_balance_section_start", "Startressourcen") }}</span>
       </div>
       <section class="admin-section">
-        <div class="admin-form-grid-2">
+        <div class="admin-form-grid-3">
           <div class="admin-field">
             <label class="admin-label" for="admin-balance-start-metal">{{ T("admin_label_start_metal", "Start-Ferronit") }}</label>
             <input class="admin-input" id="admin-balance-start-metal" type="number" min="0" step="1" data-balance-key="start_metal">
@@ -448,6 +447,10 @@
           <div class="admin-field">
             <label class="admin-label" for="admin-balance-start-crystal">{{ T("admin_label_start_crystal", "Start-Crytite") }}</label>
             <input class="admin-input" id="admin-balance-start-crystal" type="number" min="0" step="1" data-balance-key="start_crystal">
+          </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-balance-start-fuel">{{ T("admin_label_start_fuel_cells", "Start-Brennzellen") }}</label>
+            <input class="admin-input" id="admin-balance-start-fuel" type="number" min="0" step="1" data-balance-key="start_fuel_cells">
           </div>
         </div>
         <div class="admin-row-full">
@@ -665,25 +668,30 @@
         </div>
         <p class="admin-small-hint">{{ T("admin_news_hint", "News-Einträge bleiben im Archiv sichtbar. Nur ein Eintrag ist gleichzeitig Live-Banner.") }}</p>
 
-        <div class="admin-news-manage">
-          <h3 class="admin-subsection-title">{{ T("admin_news_published_heading", "Veröffentlichte Einträge") }}</h3>
-          <div class="admin-btn-row">
-            <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-changelog">
-              {{ T("admin_news_import_changelog", "CHANGELOG.md importieren") }}
-            </button>
-            <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-git">
-              {{ T("admin_news_import_git", "Git-Historie importieren") }}
-            </button>
-            <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-full">
-              {{ T("admin_news_import_full", "Vollständiger Import") }}
-            </button>
-            <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-reclassify">
-              {{ T("admin_news_reclassify", "Patchnotes bereinigen") }}
-            </button>
+        <details class="admin-motd-collapse" id="admin-motd-published-collapse">
+          <summary class="admin-motd-collapse-summary">
+            <span>{{ T("admin_news_published_heading", "Veröffentlichte Einträge") }}</span>
+            <span class="admin-motd-collapse-count" id="admin-news-list-count" aria-live="polite"></span>
+          </summary>
+          <div class="admin-news-manage">
+            <div class="admin-btn-row">
+              <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-changelog">
+                {{ T("admin_news_import_changelog", "CHANGELOG.md importieren") }}
+              </button>
+              <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-git">
+                {{ T("admin_news_import_git", "Git-Historie importieren") }}
+              </button>
+              <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-import-full">
+                {{ T("admin_news_import_full", "Vollständiger Import") }}
+              </button>
+              <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="news-reclassify">
+                {{ T("admin_news_reclassify", "Patchnotes bereinigen") }}
+              </button>
+            </div>
+            <div id="admin-news-repo-audit" class="admin-news-repo-audit admin-small-hint" aria-live="polite"></div>
+            <div id="admin-news-list" class="admin-news-list" aria-live="polite"></div>
           </div>
-          <div id="admin-news-repo-audit" class="admin-news-repo-audit admin-small-hint" aria-live="polite"></div>
-          <div id="admin-news-list" class="admin-news-list" aria-live="polite"></div>
-        </div>
+        </details>
 
         <div class="admin-news-compose" id="admin-news-compose">
           <h3 class="admin-subsection-title" id="admin-news-form-title">{{ T("admin_news_compose_heading", "Neue Meldung veröffentlichen") }}</h3>
@@ -800,12 +808,63 @@
         <span class="admin-section-title-text">{{ T("admin_section_universe_reset", "Universum resetten") }}</span>
       </div>
       <section class="admin-section admin-section-danger">
-        <p class="admin-small-hint">{{ T("admin_universe_reset_hint", "Setzt das Universum auf Season-Start zurück. Accounts und Inventar bleiben erhalten. Alles andere wird gelöscht.") }}</p>
+        <p class="admin-small-hint">{{ T("admin_universe_reset_hint", "Setzt ausgewählte Spielbereiche zurück. Accounts und Inventar bleiben immer erhalten.") }}</p>
         <div class="admin-row-full">
-          <label class="admin-label" for="universe_reset_confirm_text">{{ T("admin_universe_reset_confirm_label", "Bestätigungsphrase") }}</label>
-          <input type="text" class="admin-input admin-input-full" id="universe_reset_confirm_text"
-                 autocomplete="off" spellcheck="false"
-                 placeholder="RESET UNIVERSE KEEP INVENTORY">
+          <span class="admin-label">{{ T("admin_universe_reset_domains_label", "Bereiche zum Zurücksetzen") }}</span>
+          <div class="admin-reset-domain-grid" id="universe_reset_domains">
+            <label class="admin-checkbox-row admin-reset-domain-all">
+              <input type="checkbox" id="universe_reset_select_all" checked>
+              <span>{{ T("admin_universe_reset_select_all", "Alles auswählen") }}</span>
+            </label>
+            <label class="admin-checkbox-row" for="universe_reset_domain_colonies">
+              <input type="checkbox" id="universe_reset_domain_colonies" data-universe-reset-domain="colonies" checked>
+              <span>{{ T("admin_reset_domain_colonies", "Planeten & Kolonien (Gebäude, Schiffe, Verteidigung)") }}</span>
+            </label>
+            <label class="admin-checkbox-row" for="universe_reset_domain_queues">
+              <input type="checkbox" id="universe_reset_domain_queues" data-universe-reset-domain="queues" checked>
+              <span>{{ T("admin_reset_domain_queues", "Warteschlangen (Bau, Forschung, Werft, Verteidigung)") }}</span>
+            </label>
+            <label class="admin-checkbox-row" for="universe_reset_domain_fleets">
+              <input type="checkbox" id="universe_reset_domain_fleets" data-universe-reset-domain="fleets" checked>
+              <span>{{ T("admin_reset_domain_fleets", "Flotten & Flotten-Presets") }}</span>
+            </label>
+            <label class="admin-checkbox-row" for="universe_reset_domain_account_research">
+              <input type="checkbox" id="universe_reset_domain_account_research" data-universe-reset-domain="account_research" checked>
+              <span>{{ T("admin_reset_domain_account_research", "Account-Forschung") }}</span>
+            </label>
+            <label class="admin-checkbox-row" for="universe_reset_domain_messages">
+              <input type="checkbox" id="universe_reset_domain_messages" data-universe-reset-domain="messages" checked>
+              <span>{{ T("admin_reset_domain_messages", "Nachrichten & Chat") }}</span>
+            </label>
+            <label class="admin-checkbox-row" for="universe_reset_domain_alliances">
+              <input type="checkbox" id="universe_reset_domain_alliances" data-universe-reset-domain="alliances" checked>
+              <span>{{ T("admin_reset_domain_alliances", "Allianzen") }}</span>
+            </label>
+            <label class="admin-checkbox-row" for="universe_reset_domain_economy">
+              <input type="checkbox" id="universe_reset_domain_economy" data-universe-reset-domain="economy" checked>
+              <span>{{ T("admin_reset_domain_economy", "Handel, Auktion & Tausch-Logs") }}</span>
+            </label>
+            <label class="admin-checkbox-row" for="universe_reset_domain_combat">
+              <input type="checkbox" id="universe_reset_domain_combat" data-universe-reset-domain="combat" checked>
+              <span>{{ T("admin_reset_domain_combat", "Kampfberichte & Hall of Fame") }}</span>
+            </label>
+            <label class="admin-checkbox-row" for="universe_reset_domain_rankings">
+              <input type="checkbox" id="universe_reset_domain_rankings" data-universe-reset-domain="rankings" checked>
+              <span>{{ T("admin_reset_domain_rankings", "Ranglisten") }}</span>
+            </label>
+            <label class="admin-checkbox-row" for="universe_reset_domain_diplomacy">
+              <input type="checkbox" id="universe_reset_domain_diplomacy" data-universe-reset-domain="diplomacy" checked>
+              <span>{{ T("admin_reset_domain_diplomacy", "Galaktische Diplomatie & Welt-Fortschritt") }}</span>
+            </label>
+            <label class="admin-checkbox-row" for="universe_reset_domain_referrals">
+              <input type="checkbox" id="universe_reset_domain_referrals" data-universe-reset-domain="referrals" checked>
+              <span>{{ T("admin_reset_domain_referrals", "Referrals & Vote-Rewards") }}</span>
+            </label>
+            <label class="admin-checkbox-row" for="universe_reset_domain_runtime">
+              <input type="checkbox" id="universe_reset_domain_runtime" data-universe-reset-domain="runtime" checked>
+              <span>{{ T("admin_reset_domain_runtime", "Runtime-Cache & System-Logs") }}</span>
+            </label>
+          </div>
         </div>
         <div class="admin-btn-row">
           <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="server-universe-reset">

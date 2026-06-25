@@ -74,6 +74,7 @@ def test_balance_get_ok_for_admin(app_client):
     assert data["ok"] is True
     settings = data["settings"]
     assert "start_metal" in settings
+    assert "start_fuel_cells" in settings
     assert "score_weight_research" in settings
     assert "exchange_enabled" in settings
 

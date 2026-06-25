@@ -1,5 +1,6 @@
 """
 Admin loot pool configuration — validated overrides for container loot tables.
+GC-864: meta rewards only (item / booster).
 """
 
 from __future__ import annotations
@@ -18,26 +19,14 @@ from . import inventory_loot
 
 LootEntry = Dict[str, Any]
 
-VALID_REWARD_TYPES = frozenset({"resource", "item", "booster", "ship", "defense"})
-VALID_RESOURCES = frozenset({"metal", "crystal", "fuel_cells"})
+VALID_REWARD_TYPES = frozenset({"item", "booster"})
 MAX_POOL_ENTRIES = 40
 MAX_WEIGHT = 100_000
 MAX_AMOUNT = 1_000_000_000
 
 
 def _validate_reward_key(reward_type: str, reward_key: str) -> bool:
-    if reward_type == "resource":
-        return reward_key in VALID_RESOURCES
-    if reward_type == "ship":
-        from .fleet_defs import canonical_ship_key, get_ship
-
-        sk = canonical_ship_key(reward_key)
-        return bool(get_ship(sk))
-    if reward_type == "defense":
-        from .defense_defs import DEFENSES
-
-        return reward_key in DEFENSES
-    if reward_type in ("item", "booster"):
+    if reward_type in VALID_REWARD_TYPES:
         return is_known_item_key(reward_key)
     return False
 
@@ -59,69 +48,6 @@ def normalize_loot_entry(raw: Any) -> Optional[LootEntry]:
         return None
     if not _validate_reward_key(reward_type, reward_key):
         return None
-    if reward_type == "ship":
-        from .fleet_defs import canonical_ship_key
-
-        reward_key = canonical_ship_key(reward_key)
-
-    if reward_type == "resource" and raw.get("stock_fraction") is not None:
-        if reward_key != "fuel_cells":
-            return None
-        try:
-            stock_fraction = float(raw.get("stock_fraction"))
-        except (TypeError, ValueError):
-            return None
-        if stock_fraction <= 0 or stock_fraction > 1.0:
-            return None
-        return {
-            "weight": weight,
-            "reward_type": reward_type,
-            "reward_key": reward_key,
-            "stock_fraction": stock_fraction,
-        }
-
-    production_hours: Optional[float] = None
-    if reward_type == "resource" and raw.get("production_hours") is not None:
-        try:
-            production_hours = float(raw.get("production_hours"))
-        except (TypeError, ValueError):
-            return None
-        if production_hours <= 0 or production_hours > 168:
-            return None
-        return {
-            "weight": weight,
-            "reward_type": reward_type,
-            "reward_key": reward_key,
-            "production_hours": production_hours,
-        }
-
-    if reward_type == "ship" and raw.get("fleet_fraction") is not None:
-        try:
-            fleet_fraction = float(raw.get("fleet_fraction"))
-        except (TypeError, ValueError):
-            return None
-        if fleet_fraction <= 0 or fleet_fraction > 1.0:
-            return None
-        return {
-            "weight": weight,
-            "reward_type": reward_type,
-            "reward_key": reward_key,
-            "fleet_fraction": fleet_fraction,
-        }
-
-    if reward_type == "defense" and raw.get("defense_fraction") is not None:
-        try:
-            defense_fraction = float(raw.get("defense_fraction"))
-        except (TypeError, ValueError):
-            return None
-        if defense_fraction <= 0 or defense_fraction > 1.0:
-            return None
-        return {
-            "weight": weight,
-            "reward_type": reward_type,
-            "reward_key": reward_key,
-            "defense_fraction": defense_fraction,
-        }
 
     try:
         min_amount = int(raw.get("min_amount") or 1)
@@ -152,40 +78,18 @@ def validate_loot_pool(entries: Any) -> Tuple[bool, str, List[LootEntry]]:
         entry = normalize_loot_entry(raw)
         if not entry:
             return False, "invalid_entry", []
+        if inventory_loot.is_forbidden_loot_reward_type(str(entry.get("reward_type") or "")):
+            return False, "forbidden_reward_type", []
         total_weight += int(entry["weight"])
         normalized.append(entry)
     if total_weight <= 0:
         return False, "zero_weight", []
+    if not inventory_loot.sanitize_loot_pool(normalized):
+        return False, "empty_pool", []
     return True, "", normalized
 
 
-_RESOURCE_NAME_KEYS = {
-    "metal": "resource_metal",
-    "crystal": "resource_crystal",
-    "fuel_cells": "resource_fuel_cells",
-}
-
-
 def build_reward_key_options() -> Dict[str, List[Dict[str, str]]]:
-    resources = [
-        {"key": key, "name_key": _RESOURCE_NAME_KEYS.get(key, key)}
-        for key in sorted(VALID_RESOURCES)
-    ]
-
-    from .fleet_defs import SHIPS
-
-    ships = [
-        {"key": key, "name_key": str(spec.get("name_key") or f"fleet_ship_{key}")}
-        for key, spec in sorted(SHIPS.items())
-    ]
-
-    from .defense_defs import DEFENSES
-
-    defenses = [
-        {"key": key, "name_key": str(spec.get("name_key") or f"defense_{key}")}
-        for key, spec in sorted(DEFENSES.items())
-    ]
-
     items: List[Dict[str, str]] = []
     boosters: List[Dict[str, str]] = []
     for key, meta in sorted(ITEM_CATALOG.items()):
@@ -196,9 +100,6 @@ def build_reward_key_options() -> Dict[str, List[Dict[str, str]]]:
             items.append(entry)
 
     return {
-        "resource": resources,
-        "ship": ships,
-        "defense": defenses,
         "item": items,
         "booster": boosters,
     }
@@ -221,6 +122,5 @@ def build_admin_loot_state() -> Dict[str, Any]:
         "containers": admin_grant_catalog(),
         "pools": pools,
         "reward_types": sorted(VALID_REWARD_TYPES),
-        "resource_keys": sorted(VALID_RESOURCES),
         "reward_keys_by_type": build_reward_key_options(),
     }

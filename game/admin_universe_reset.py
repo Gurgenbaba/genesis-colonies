@@ -132,6 +132,193 @@ CLEAR_TABLES_ORDER: tuple[str, ...] = (
     "battle_logs",
 )
 
+# Selectable reset domains (admin checkboxes). Every CLEAR_TABLES_ORDER table maps to one domain.
+RESET_DOMAIN_ORDER: tuple[str, ...] = (
+    "colonies",
+    "queues",
+    "fleets",
+    "account_research",
+    "messages",
+    "alliances",
+    "economy",
+    "combat",
+    "rankings",
+    "diplomacy",
+    "referrals",
+    "runtime",
+)
+
+RESET_DOMAIN_LABEL_KEYS: Dict[str, str] = {
+    "colonies": "admin_reset_domain_colonies",
+    "queues": "admin_reset_domain_queues",
+    "fleets": "admin_reset_domain_fleets",
+    "account_research": "admin_reset_domain_account_research",
+    "messages": "admin_reset_domain_messages",
+    "alliances": "admin_reset_domain_alliances",
+    "economy": "admin_reset_domain_economy",
+    "combat": "admin_reset_domain_combat",
+    "rankings": "admin_reset_domain_rankings",
+    "diplomacy": "admin_reset_domain_diplomacy",
+    "referrals": "admin_reset_domain_referrals",
+    "runtime": "admin_reset_domain_runtime",
+}
+
+RESET_DOMAIN_DEFAULT_LABELS: Dict[str, str] = {
+    "colonies": "Planeten & Kolonien (Gebäude, Schiffe, Verteidigung)",
+    "queues": "Warteschlangen (Bau, Forschung, Werft, Verteidigung)",
+    "fleets": "Flotten & Flotten-Presets",
+    "account_research": "Account-Forschung",
+    "messages": "Nachrichten & Chat",
+    "alliances": "Allianzen",
+    "economy": "Handel, Auktion & Tausch-Logs",
+    "combat": "Kampfberichte & Hall of Fame",
+    "rankings": "Ranglisten",
+    "diplomacy": "Galaktische Diplomatie & Welt-Fortschritt",
+    "referrals": "Referrals & Vote-Rewards",
+    "runtime": "Runtime-Cache & System-Logs",
+}
+
+RESET_DOMAINS: Dict[str, tuple[str, ...]] = {
+    "queues": (
+        "shipyard_queue",
+        "defense_queue",
+        "build_queue",
+        "research_queue",
+        "planet_evolution_queue",
+        "planet_conversion_queue",
+        "planet_ascension_queue",
+        "planet_research_queue",
+    ),
+    "fleets": (
+        "fleet_movements",
+        "fleet_batches",
+        "fleet_presets",
+    ),
+    "colonies": (
+        "planet_ships",
+        "planet_defense",
+        "planet_events",
+        "planet_discoveries",
+        "planet_failure_states",
+        "planet_history",
+        "planet_legacy_tags",
+        "planet_special_resources",
+        "planet_production_chains",
+        "planet_locked_choices",
+        "planet_policies",
+        "planet_culture",
+        "planet_research_levels",
+        "planet_mechanics",
+        "planet_dna",
+        "debris_fields",
+        "planet_buildings",
+        "planets",
+    ),
+    "economy": (
+        "auction_house_bids",
+        "auction_house_listings",
+        "planet_trade_routes",
+        "planet_import_demands",
+        "exchange_log",
+    ),
+    "messages": (
+        "player_messages",
+        "chat_messages",
+        "chat_whisper_state",
+        "chat_user_state",
+        "chat_mutes",
+        "chat_bans",
+        "chat_room_members",
+        "chat_rooms",
+        "messages",
+    ),
+    "alliances": (
+        "alliance_members",
+        "alliances",
+    ),
+    "combat": (
+        "combat_hall_of_fame",
+        "combat_reports",
+        "battle_logs",
+    ),
+    "diplomacy": (
+        "gd_votes",
+        "gd_cycles",
+        "gd_resolution_state",
+        "gd_emergency_state",
+        "gd_galaxy_personality_state",
+        "gd_galaxy_state",
+        "gd_alliance_blocs",
+        "world_claims",
+        "world_progress",
+    ),
+    "referrals": (
+        "vote_rewards",
+        "referral_reward_claims",
+        "player_referrals",
+    ),
+    "account_research": ("research_levels",),
+    "rankings": ("player_scores",),
+    "runtime": (
+        "action_idempotency",
+        "runtime_state",
+        "container_open_log",
+        "logs",
+    ),
+}
+
+
+def _assert_reset_domain_coverage() -> None:
+    mapped: Dict[str, str] = {}
+    for domain, tables in RESET_DOMAINS.items():
+        for table in tables:
+            if table in mapped:
+                raise RuntimeError(f"reset table {table!r} mapped to both {mapped[table]!r} and {domain!r}")
+            mapped[table] = domain
+    missing = [t for t in CLEAR_TABLES_ORDER if t not in mapped]
+    if missing:
+        raise RuntimeError(f"reset domains missing tables: {missing}")
+    extra = sorted(set(mapped) - set(CLEAR_TABLES_ORDER))
+    if extra:
+        raise RuntimeError(f"reset domains reference unknown tables: {extra}")
+
+
+_assert_reset_domain_coverage()
+
+
+def default_reset_options() -> Dict[str, bool]:
+    return {key: True for key in RESET_DOMAIN_ORDER}
+
+
+def normalize_reset_options(raw: Optional[Dict[str, Any]]) -> Dict[str, bool]:
+    if not isinstance(raw, dict) or not raw:
+        return default_reset_options()
+    out = default_reset_options()
+    for key in RESET_DOMAIN_ORDER:
+        if key in raw:
+            out[key] = bool(raw[key])
+    return out
+
+
+def tables_for_reset_options(options: Dict[str, bool]) -> Set[str]:
+    tables: Set[str] = set()
+    for domain in RESET_DOMAIN_ORDER:
+        if not options.get(domain):
+            continue
+        tables.update(RESET_DOMAINS.get(domain, ()))
+    return tables
+
+
+def reset_domain_catalog() -> List[Dict[str, str]]:
+    return [
+        {
+            "key": key,
+            "label_key": RESET_DOMAIN_LABEL_KEYS[key],
+            "default_label": RESET_DOMAIN_DEFAULT_LABELS[key],
+        }
+        for key in RESET_DOMAIN_ORDER
+    ]
+
 
 def discover_inventory_tables(conn: sqlite3.Connection) -> Set[str]:
     """Return existing tables that store player item ownership (must be preserved)."""
@@ -241,12 +428,19 @@ def execute_universe_reset_keep_inventory(
     *,
     skip_backup: bool = False,
     backup_dir: Optional[Path] = None,
+    reset_options: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Season reset: wipe gameplay state, preserve accounts + inventory, rebuild homeworlds.
+    Season reset: wipe selected gameplay domains, preserve accounts + inventory.
 
-    Returns summary dict for API response and audit payload.
+    When ``colonies`` is enabled, homeworlds are rebuilt. Returns summary for API/audit.
     """
+    options = normalize_reset_options(reset_options)
+    if not any(options.values()):
+        raise ValueError("at least one reset domain must be selected")
+
+    tables_to_clear = tables_for_reset_options(options)
+
     backup_path: Optional[str] = None
     if not skip_backup:
         backup_file = create_pre_reset_backup(backups_dir=backup_dir)
@@ -256,25 +450,30 @@ def execute_universe_reset_keep_inventory(
     deleted_counts: Dict[str, int] = {}
     inventory_tables = sorted(discover_inventory_tables(conn))
     preserved = set(PRESERVED_TABLES) | set(inventory_tables)
+    player_ids: List[int] = []
 
     try:
         begin_write_transaction(conn)
         cur = conn.cursor()
 
         for table in CLEAR_TABLES_ORDER:
+            if table not in tables_to_clear:
+                continue
             if table in preserved:
                 continue
             deleted_counts[table] = _clear_table(cur, conn, table)
 
-        _reset_player_progress_columns(conn)
-        player_ids = _rebuild_homeworlds(conn)
+        if options.get("colonies"):
+            _reset_player_progress_columns(conn)
+            player_ids = _rebuild_homeworlds(conn)
 
-        try:
-            from game.ranking import recalculate_ranks
+        if options.get("rankings") or options.get("colonies"):
+            try:
+                from game.ranking import recalculate_ranks
 
-            recalculate_ranks(conn=conn)
-        except Exception:
-            pass
+                recalculate_ranks(conn=conn)
+            except Exception:
+                pass
 
         commit(conn)
     except Exception:
@@ -287,6 +486,8 @@ def execute_universe_reset_keep_inventory(
         "action": "universe_reset_keep_inventory",
         "backup_path": backup_path,
         "deleted_tables": deleted_counts,
+        "reset_options": options,
+        "reset_domains_applied": [k for k in RESET_DOMAIN_ORDER if options.get(k)],
         "players_reinitialized": len(player_ids),
         "inventory_tables_preserved": inventory_tables,
         "timestamp": int(time.time()),

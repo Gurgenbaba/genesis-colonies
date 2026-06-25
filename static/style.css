@@ -3115,6 +3115,19 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   accent-color: var(--gc-primary);
 }
 
+.admin-page:not(.admin-shell) .admin-reset-domain-grid{
+  display: grid;
+  gap: 6px 10px;
+  margin-top: 6px;
+}
+
+.admin-page:not(.admin-shell) .admin-reset-domain-all{
+  grid-column: 1 / -1;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 2px;
+}
+
 .admin-page:not(.admin-shell) .admin-btn-row{ display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
 .admin-page:not(.admin-shell) .admin-section-footer{ padding-top: 8px; }
 
