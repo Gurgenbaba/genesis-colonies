@@ -41,6 +41,9 @@
     <div class="gc-ship-detail-cost gc-mono">
       {{ render_resource_cost_chip('metal', card.get('build_cost_metal') or 0) }}
       {{ render_resource_cost_chip('crystal', card.get('build_cost_crystal') or 0) }}
+      {% if card.get('build_cost_fuel_cells') %}
+      {{ render_resource_cost_chip('fuel_cells', card.get('build_cost_fuel_cells')) }}
+      {% endif %}
     </div>
   </div>
 

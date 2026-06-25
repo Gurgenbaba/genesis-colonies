@@ -523,6 +523,7 @@ def _build_defense_items(
                 "build_cost": {
                     "metal": int(cost.get("metal") or 0),
                     "crystal": int(cost.get("crystal") or 0),
+                    "fuel_cells": int(cost.get("fuel_cells") or 0),
                 },
             }
         )

@@ -341,8 +341,8 @@ def enqueue_defense_build(
         INSERT INTO defense_queue (
             player_id, planet_id, defense_key, amount, status,
             started_at, finish_at, created_at,
-            queue_position, cost_metal, cost_crystal
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            queue_position, cost_metal, cost_crystal, cost_fuel_cells
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         (
             int(player_id),
@@ -356,6 +356,7 @@ def enqueue_defense_build(
             next_pos,
             int(cost.get("metal") or 0),
             int(cost.get("crystal") or 0),
+            float(cost.get("fuel_cells") or 0),
         ),
     )
     job_id = int(cur.lastrowid)
@@ -437,16 +438,20 @@ def _finish_due_defense_jobs_impl(
     return completed_jobs
 
 
-def _planet_resources(planet_id: int, *, conn) -> Tuple[float, float]:
+def _planet_resources(planet_id: int, *, conn) -> Tuple[float, float, float]:
     cur = conn.cursor()
     cur.execute(
-        "SELECT metal, crystal FROM planets WHERE id = ? LIMIT 1;",
+        "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ? LIMIT 1;",
         (int(planet_id),),
     )
     row = cur.fetchone()
     if not row:
-        return 0.0, 0.0
-    return float(row["metal"] or 0), float(row["crystal"] or 0)
+        return 0.0, 0.0, 0.0
+    return (
+        float(row["metal"] or 0),
+        float(row["crystal"] or 0),
+        float(row["fuel_cells"] or 0),
+    )
 
 
 def _try_spend_build_resources(
@@ -455,22 +460,33 @@ def _try_spend_build_resources(
     *,
     metal: int,
     crystal: int,
+    fuel_cells: int = 0,
 ) -> bool:
-    if metal < 0 or crystal < 0:
+    if metal < 0 or crystal < 0 or fuel_cells < 0:
         raise ValueError("Costs must be >= 0")
-    if metal == 0 and crystal == 0:
+    if metal == 0 and crystal == 0 and fuel_cells == 0:
         return True
     cur = conn.cursor()
     cur.execute(
         """
         UPDATE planets
         SET metal = metal - ?,
-            crystal = crystal - ?
+            crystal = crystal - ?,
+            fuel_cells = fuel_cells - ?
         WHERE id = ?
           AND metal >= ?
-          AND crystal >= ?;
+          AND crystal >= ?
+          AND fuel_cells >= ?;
         """,
-        (int(metal), int(crystal), int(planet_id), int(metal), int(crystal)),
+        (
+            int(metal),
+            int(crystal),
+            float(fuel_cells),
+            int(planet_id),
+            int(metal),
+            int(crystal),
+            float(fuel_cells),
+        ),
     )
     return cur.rowcount == 1
 
@@ -478,6 +494,7 @@ def _try_spend_build_resources(
 def max_build_amount_for_planet(
     metal_have: float,
     crystal_have: float,
+    fuel_have: float,
     defense_key: str,
     factory_level: int,
     *,
@@ -491,13 +508,15 @@ def max_build_amount_for_planet(
     ):
         return 0
     cost = unit_build_cost(dk)
-    if cost["metal"] <= 0 and cost["crystal"] <= 0:
+    if cost["metal"] <= 0 and cost["crystal"] <= 0 and cost["fuel_cells"] <= 0:
         return 0
     limits: List[int] = []
     if cost["metal"] > 0:
         limits.append(int(metal_have) // cost["metal"])
     if cost["crystal"] > 0:
         limits.append(int(crystal_have) // cost["crystal"])
+    if cost["fuel_cells"] > 0:
+        limits.append(int(fuel_have) // cost["fuel_cells"])
     if not limits:
         return 0
     return max(0, min(limits))
@@ -548,10 +567,11 @@ def can_build_defense(
         ):
             return False, "queue_full"
 
-        metal, crystal = _planet_resources(planet_id, conn=conn)
+        metal, crystal, fuel = _planet_resources(planet_id, conn=conn)
         max_qty = max_build_amount_for_planet(
             metal,
             crystal,
+            fuel,
             dk,
             factory_level,
             player_id=player_id,
@@ -587,6 +607,7 @@ def build_defense(
     unit = unit_build_cost(dk)
     total_m = unit["metal"] * qty
     total_c = unit["crystal"] * qty
+    total_f = unit["fuel_cells"] * qty
 
     own = conn is None
     if own:
@@ -598,7 +619,9 @@ def build_defense(
             began_tx = True
         lock_planet_for_update(conn, int(planet_id))
 
-        if not _try_spend_build_resources(conn, int(planet_id), metal=total_m, crystal=total_c):
+        if not _try_spend_build_resources(
+            conn, int(planet_id), metal=total_m, crystal=total_c, fuel_cells=total_f
+        ):
             if own or began_tx:
                 rollback(conn)
             return False, "not_enough_resources", None
@@ -614,7 +637,7 @@ def build_defense(
             planet_id=int(planet_id),
             defense_key=dk,
             amount=qty,
-            cost={"metal": total_m, "crystal": total_c},
+            cost={"metal": total_m, "crystal": total_c, "fuel_cells": total_f},
             conn=conn,
         )
         if not ok_q:
@@ -629,7 +652,7 @@ def build_defense(
         payload["defense_key"] = dk
         payload["amount"] = qty
         payload["job_id"] = job_id
-        payload["cost"] = {"metal": total_m, "crystal": total_c}
+        payload["cost"] = {"metal": total_m, "crystal": total_c, "fuel_cells": total_f}
         return True, "", payload
     except Exception:
         if own or began_tx:
@@ -704,6 +727,7 @@ def _defense_job_row_for_client(
         "is_active": is_active,
         "cost_metal": int(row.get("cost_metal") or 0),
         "cost_crystal": int(row.get("cost_crystal") or 0),
+        "cost_fuel_cells": int(float(row.get("cost_fuel_cells") or 0)),
     }
 
 
@@ -752,7 +776,7 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
     try:
         factory_level = get_defense_factory_level(player_id, planet_id, conn=conn)
         sy_level = _production_shipyard_level(planet_id, conn=conn)
-        metal, crystal = _planet_resources(planet_id, conn=conn)
+        metal, crystal, fuel = _planet_resources(planet_id, conn=conn)
         stock = get_planet_defense(int(planet_id), conn=conn)
         buildable: List[Dict[str, Any]] = []
         queue_full = False
@@ -769,6 +793,7 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
             max_qty = max_build_amount_for_planet(
                 metal,
                 crystal,
+                fuel,
                 key,
                 factory_level,
                 player_id=player_id,
@@ -800,6 +825,7 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
                     ),
                     "cost_metal": cost["metal"],
                     "cost_crystal": cost["crystal"],
+                    "cost_fuel_cells": cost["fuel_cells"],
                     "build_seconds": unit_build_seconds(key, sy_level, conn=conn),
                     "effective_batch_capacity": _batch_capacity_for_defense(key, sy_level),
                     "max_build": max_qty,
@@ -829,7 +855,11 @@ def build_defense_api_payload(player_id: int, planet_id: int, *, conn=None) -> D
             "buildable_defense": buildable,
             "current_defense": get_planet_defense(planet_id, conn=conn),
             "defense_queue": queue,
-            "resources": {"metal": int(metal), "crystal": int(crystal)},
+            "resources": {
+                "metal": int(metal),
+                "crystal": int(crystal),
+                "fuel_cells": int(fuel),
+            },
         }
     finally:
         if own and conn is not None:

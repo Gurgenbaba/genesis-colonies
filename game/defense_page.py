@@ -58,6 +58,7 @@ def _locked_defense_catalog(
                 "required_defense_factory_level": int(spec.get("required_defense_factory_level") or 99),
                 "cost_metal": int(cost.get("metal") or 0),
                 "cost_crystal": int(cost.get("crystal") or 0),
+                "cost_fuel_cells": int(cost.get("fuel_cells") or 0),
                 "build_seconds": 0,
                 "stock": int(stock.get(key, 0) or 0),
                 "unlocked": False,

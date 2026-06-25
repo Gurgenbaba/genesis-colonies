@@ -197,6 +197,6 @@ def empty_defense_slices(*, ready: bool = False) -> Tuple[Dict[str, Any], Dict[s
         "defense_factory_level": 0,
         "buildable_defense": [],
         "current_defense": {},
-        "resources": {"metal": 0, "crystal": 0},
+        "resources": {"metal": 0, "crystal": 0, "fuel_cells": 0},
     }
     return queue, defenses

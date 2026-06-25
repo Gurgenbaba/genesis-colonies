@@ -69,7 +69,7 @@ def test_expo_value_uses_only_expedition_hulls():
 
 def test_canonical_base_loot_reference_values():
     """Community reference table without random/event factors."""
-    assert _ODYSSEY_FLEET_VALUE == 8762
+    assert _ODYSSEY_FLEET_VALUE == 8750
     assert calculate_base_expedition_loot(100 * _ODYSSEY_FLEET_VALUE) == pytest.approx(18_978, rel=0.01)
     assert calculate_base_expedition_loot(200 * _ODYSSEY_FLEET_VALUE) == pytest.approx(31_260, rel=0.01)
     assert calculate_base_expedition_loot(500 * _ODYSSEY_FLEET_VALUE) == pytest.approx(60_465, rel=0.01)

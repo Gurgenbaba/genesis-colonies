@@ -160,7 +160,7 @@
         </div>
         {{ render_compact_unit_stat_chips(unit.attack, unit.shield, unit.hull, none, 'defense') }}
         <div class="gc-bld-card-meta gc-bld-card-meta--costs-only" data-defense-cost>
-          {{ render_card_costs_block(unit.cost_metal, unit.cost_crystal) }}
+          {{ render_card_costs_block(unit.cost_metal, unit.cost_crystal, unit.cost_fuel_cells if unit.cost_fuel_cells else none) }}
         </div>
         {{ render_unit_build_time_footer(unit.build_seconds) }}
         <div class="gc-bld-card-action-wrap">
@@ -238,7 +238,7 @@
         </div>
         {{ render_compact_unit_stat_chips(unit.attack, unit.shield, unit.hull, none, 'defense') }}
         <div class="gc-bld-card-meta gc-bld-card-meta--costs-only">
-          {{ render_card_costs_block(unit.cost_metal, unit.cost_crystal) }}
+          {{ render_card_costs_block(unit.cost_metal, unit.cost_crystal, unit.cost_fuel_cells if unit.cost_fuel_cells else none) }}
         </div>
         {{ render_unit_build_time_footer(unit.build_seconds) }}
       </article>

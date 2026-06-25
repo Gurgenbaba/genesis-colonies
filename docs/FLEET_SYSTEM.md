@@ -30,7 +30,7 @@ Gate: `fleet_schema_ready()` — Features degradieren gracefully ohne Migration.
 Definiert in `game/fleet_defs.py`:
 
 - `ACTIVE_SHIP_KEYS` — im Fleet-UI sichtbar
-- `build_cost`: metal, crystal, fuel_cells
+- `build_cost`: metal, crystal, fuel_cells (fuel_cells auf Mid/High-Tier; Odyssey unverändert)
 - Legacy-Key-Aliases für alte Saves
 - `eclipse_runner`: `phase2_only` — aus UI ausgeschlossen
 

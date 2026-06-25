@@ -41,6 +41,7 @@ def build_defense_detail_card(
         "icon": defense_icon_static_path(key),
         "build_cost_metal": int(build_cost.get("metal", 0) or 0),
         "build_cost_crystal": int(build_cost.get("crystal", 0) or 0),
+        "build_cost_fuel_cells": int(build_cost.get("fuel_cells", 0) or 0),
         "build_seconds": int(spec.get("build_seconds", 0) or 0),
         "required_defense_factory_level": int(
             spec.get("required_defense_factory_level", 0) or 0

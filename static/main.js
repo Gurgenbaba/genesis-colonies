@@ -16573,6 +16573,7 @@
         {
           cost_metal: unit.cost_metal,
           cost_crystal: unit.cost_crystal,
+          cost_fuel_cells: unit.cost_fuel_cells,
         },
         resources
       );

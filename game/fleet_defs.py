@@ -98,6 +98,7 @@ ACTIVE_SHIP_KEYS: FrozenSet[str] = frozenset(
     }
 )
 
+# build_cost: metal, crystal, fuel_cells — static defs; fuel_cells nur Mid/High-Tier (GC-860).
 SHIPS: Dict[str, Dict[str, Any]] = {
     "spark_drone": {
         "name_key": "fleet_ship_spark_drone",
@@ -165,7 +166,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
             "buildings": {"orbital_shipyard": 2},
             "research": {"engine_tech": 3, "navigation_tech": 3},
         },
-        "build_cost": {"metal": 5000, "crystal": 3750, "fuel_cells": 12},
+        "build_cost": {"metal": 5000, "crystal": 3750, "fuel_cells": 0},
         "build_seconds": 300,
         "score_value": 7000,
         "speed": 8000,
@@ -207,7 +208,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
             "buildings": {"orbital_shipyard": 4, "barracks": 2},
             "research": {"weapon_tech": 7, "armor_tech": 4},
         },
-        "build_cost": {"metal": 18750, "crystal": 8750, "fuel_cells": 0},
+        "build_cost": {"metal": 18750, "crystal": 8750, "fuel_cells": 12500},
         "build_seconds": 600,
         "score_value": 22000,
         "speed": 10000,
@@ -228,7 +229,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
             "buildings": {"orbital_shipyard": 4},
             "research": {"storage_tech": 5, "mining_tech": 4},
         },
-        "build_cost": {"metal": 7500, "crystal": 7500, "fuel_cells": 0},
+        "build_cost": {"metal": 7500, "crystal": 7500, "fuel_cells": 750},
         "build_seconds": 480,
         "score_value": 12000,
         "speed": 7500,
@@ -249,7 +250,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
             "buildings": {"orbital_shipyard": 5},
             "research": {"drone_tech": 5, "fuel_efficiency": 4},
         },
-        "build_cost": {"metal": 12500, "crystal": 7500, "fuel_cells": 25},
+        "build_cost": {"metal": 12500, "crystal": 7500, "fuel_cells": 7500},
         "build_seconds": 540,
         "score_value": 16000,
         "speed": 2000,
@@ -270,7 +271,7 @@ SHIPS: Dict[str, Dict[str, Any]] = {
             "buildings": {"orbital_shipyard": 6, "command_center": 3},
             "research": {"navigation_tech": 6, "storage_tech": 5},
         },
-        "build_cost": {"metal": 62500, "crystal": 37500, "fuel_cells": 125},
+        "build_cost": {"metal": 62500, "crystal": 37500, "fuel_cells": 60000},
         "build_seconds": 3600,
         "score_value": 80000,
         "speed": 1500,

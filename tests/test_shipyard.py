@@ -47,7 +47,7 @@ def _player(conn=None):
     return uid
 
 
-def _fund_planet(cur, planet_id: int, *, metal: int, crystal: int, fuel_cells: float = 500):
+def _fund_planet(cur, planet_id: int, *, metal: int, crystal: int, fuel_cells: float = 500_000):
     cur.execute(
         "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
         (metal, crystal, fuel_cells, planet_id),
@@ -620,17 +620,15 @@ def test_shipyard_job_force_completes_at_finish_at(shipyard_db):
 
 
 def test_max_build_ignores_zero_cost_resources(shipyard_db):
-    """Zero fuel cost must not cap max build at the 999999 placeholder."""
-    from game.shipyard import max_build_amount_for_planet
+    """Non-zero fuel cost must participate in max-build without a 999999 placeholder cap."""
+    from game.shipyard import max_build_amount_for_planet, _unit_build_cost
 
-    # mule_courier: metal 2000, crystal 2000, fuel_cells 0
+    cost = _unit_build_cost("mule_courier")
     target = 1_110_929
-    metal_have = 2000 * target
-    crystal_have = 2000 * target
     max_qty = max_build_amount_for_planet(
-        metal_have,
-        crystal_have,
-        0,
+        cost["metal"] * target,
+        cost["crystal"] * target,
+        cost["fuel_cells"] * target,
         "mule_courier",
         1,
     )
@@ -638,8 +636,8 @@ def test_max_build_ignores_zero_cost_resources(shipyard_db):
     assert max_qty > 999_999
 
     broken_cap = min(
-        metal_have // 2000,
-        crystal_have // 2000,
+        (cost["metal"] * target) // cost["metal"],
+        (cost["crystal"] * target) // cost["crystal"],
         999_999,
     )
     assert max_qty > broken_cap
