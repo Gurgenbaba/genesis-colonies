@@ -1051,6 +1051,21 @@ def validate_fleet_send(
         if target_pid and vacation_blocks_incoming_attack(int(target_pid), conn=conn):
             return False, "vacation_target_protected", {"target": target_info}
 
+    attack_limit_info: Optional[Dict[str, Any]] = None
+    if mission == "attack" and target_info:
+        target_planet_id = target_info.get("target_planet_id")
+        if target_planet_id:
+            ok_limit, attack_limit_info = check_attack_limit(
+                int(player_id),
+                int(target_planet_id),
+                conn=conn,
+            )
+            if not ok_limit:
+                return False, "attack_limit_reached", {
+                    "target": target_info,
+                    "attack_limit": attack_limit_info,
+                }
+
     if mission == "expedition":
         target = (int(target_galaxy), int(target_system), EXPEDITION_POSITION)
 
@@ -1093,12 +1108,15 @@ def validate_fleet_send(
     if mission == "colonize" and int(ships_n.get("seed_ark") or 0) < 1:
         return False, "colonize_requires_ark", {"target": target_info, "preview": preview}
 
-    return True, "", {
+    out: Dict[str, Any] = {
         "target": target_info,
         "preview": preview,
         "origin_planet": origin_planet,
         "resolved_target": target,
     }
+    if attack_limit_info is not None:
+        out["attack_limit"] = attack_limit_info
+    return True, "", out
 
 
 def build_fleet_send_preview(
@@ -1227,6 +1245,7 @@ def build_fleet_send_preview(
         can_send = False
         block_reason = mission_reason if not mission_ok else ""
         mission_lock_payload = mission_lock_info if mission_locked else None
+        attack_limit_payload: Optional[Dict[str, Any]] = None
         if mission_locked:
             block_reason = "mission_locked"
         elif ships_n and mission_ok:
@@ -1247,6 +1266,15 @@ def build_fleet_send_preview(
             block_reason = reason or ""
             if (_extra or {}).get("mission_lock"):
                 mission_lock_payload = _extra["mission_lock"]
+            if (_extra or {}).get("attack_limit"):
+                attack_limit_payload = _extra["attack_limit"]
+        elif mission == "attack" and mission_ok and target_info and target_info.get("target_planet_id"):
+            attack_limit_payload = get_attack_limit_status(
+                int(player_id),
+                int(target_info["target_planet_id"]),
+                conn=conn,
+                now=now,
+            )
 
         if target_info:
             attach_world_target(
@@ -1278,6 +1306,8 @@ def build_fleet_send_preview(
         }
         if mission_lock_payload:
             payload["mission_lock"] = mission_lock_payload
+        if attack_limit_payload:
+            payload["attack_limit"] = attack_limit_payload
         return payload
     finally:
         if own and conn is not None:
@@ -1819,6 +1849,141 @@ def build_active_fleets_payload(
     }
 
 
+ATTACK_LIMIT_MAX_PER_TARGET = 5
+ATTACK_LIMIT_WINDOW_SEC = 24 * 60 * 60
+ATTACK_LIMIT_COUNT_STATUSES = ("outbound", "returning", "completed", "holding")
+
+
+def get_attack_limit_status(
+    attacker_player_id: int,
+    target_planet_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Rolling 24h attack count per attacker account + target planet (GC-FLEET-ATTACK-LIMIT).
+
+    Counts by ``player_id`` + ``target_planet_id`` only — ``origin_planet_id`` is ignored
+    so colony hopping cannot bypass the limit.
+    """
+    max_attacks = ATTACK_LIMIT_MAX_PER_TARGET
+    pid = int(attacker_player_id)
+    tid = int(target_planet_id)
+    empty = {
+        "max": max_attacks,
+        "used": 0,
+        "remaining": max_attacks,
+        "resets_at": None,
+    }
+    if pid <= 0 or tid <= 0 or not fleet_schema_ready(conn):
+        return dict(empty)
+
+    ts = float(now if now is not None else _now())
+    window_start = ts - float(ATTACK_LIMIT_WINDOW_SEC)
+    placeholders = ",".join("?" for _ in ATTACK_LIMIT_COUNT_STATUSES)
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS used, MIN(created_at) AS oldest_created
+        FROM fleet_movements
+        WHERE player_id = ?
+          AND target_planet_id = ?
+          AND mission_type = 'attack'
+          AND created_at >= ?
+          AND status IN ({placeholders});
+        """,
+        (pid, tid, window_start, *ATTACK_LIMIT_COUNT_STATUSES),
+    )
+    row = cur.fetchone()
+    used = int(row["used"] or 0) if row else 0
+    remaining = max(0, max_attacks - used)
+    resets_at: Optional[int] = None
+    if used >= max_attacks and row and row["oldest_created"] is not None:
+        try:
+            resets_at = int(float(row["oldest_created"]) + ATTACK_LIMIT_WINDOW_SEC)
+        except (TypeError, ValueError):
+            resets_at = None
+    return {
+        "max": max_attacks,
+        "used": used,
+        "remaining": remaining,
+        "resets_at": resets_at,
+    }
+
+
+def check_attack_limit(
+    attacker_player_id: int,
+    target_planet_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Tuple[bool, Dict[str, Any]]:
+    info = get_attack_limit_status(
+        int(attacker_player_id),
+        int(target_planet_id),
+        conn=conn,
+        now=now,
+    )
+    return info["remaining"] > 0, info
+
+
+def build_fleet_incoming_attack_alerts(
+    player_id: int,
+    *,
+    conn,
+    now: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Inbound enemy attack slice for /api/game-state fleet_alerts (GC-FLEET-ALERT)."""
+    empty: Dict[str, Any] = {
+        "incoming_attack_count": 0,
+        "next_attack_arrival": None,
+        "has_incoming_attack": False,
+    }
+    if not fleet_schema_ready(conn):
+        return dict(empty)
+
+    pid = int(player_id)
+    if pid <= 0:
+        return dict(empty)
+
+    ts = float(now if now is not None else _now())
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT COUNT(*) AS attack_count, MIN(fm.arrival_at) AS next_arrival
+        FROM fleet_movements fm
+        INNER JOIN planets tp ON tp.id = fm.target_planet_id
+        WHERE tp.player_id = ?
+          AND fm.player_id != ?
+          AND fm.mission_type = 'attack'
+          AND fm.status = 'outbound'
+          AND fm.arrival_at > ?;
+        """,
+        (pid, pid, ts),
+    )
+    row = cur.fetchone()
+    if not row:
+        return dict(empty)
+
+    count = int(row["attack_count"] or 0)
+    if count <= 0:
+        return dict(empty)
+
+    next_arrival = row["next_arrival"]
+    next_attack_arrival: Optional[int] = None
+    if next_arrival is not None:
+        try:
+            next_attack_arrival = int(float(next_arrival))
+        except (TypeError, ValueError):
+            next_attack_arrival = None
+
+    return {
+        "incoming_attack_count": count,
+        "next_attack_arrival": next_attack_arrival,
+        "has_incoming_attack": True,
+    }
+
+
 def recall_fleet_movement(
     player_id: int,
     movement_id: int,
@@ -1847,9 +2012,10 @@ def recall_fleet_movement(
         status = str(mv.get("status") or "").strip().lower()
         if status not in ("outbound", "holding"):
             return False, "fleet_recall_not_allowed", None
+        outbound_recall = status == "outbound"
         # Claim return before fleet tick — otherwise overdue arrivals (transport/spy/…)
         # auto-transition to returning/completed and recall appears to do nothing.
-        if _start_return(mv, conn=conn, now=now):
+        if _start_return(mv, conn=conn, now=now, outbound_recall=outbound_recall):
             return True, "fleet_recall_ok", {"movement_id": mid, "status": "returning"}
         process_fleet_tick(player_id=uid, conn=conn)
         cur.execute(
@@ -1865,7 +2031,8 @@ def recall_fleet_movement(
             return True, "fleet_recall_ok", {"movement_id": mid, "status": "returning"}
         if status not in ("outbound", "holding"):
             return False, "fleet_recall_not_allowed", None
-        if not _start_return(mv, conn=conn, now=now):
+        outbound_recall = status == "outbound"
+        if not _start_return(mv, conn=conn, now=now, outbound_recall=outbound_recall):
             return False, "fleet_recall_failed", None
         return True, "fleet_recall_ok", {"movement_id": mid, "status": "returning"}
     finally:
@@ -2219,7 +2386,8 @@ def send_fleet(
         if not ok_send:
             if own:
                 rollback(conn)
-            return False, send_reason, None
+            extra = send_ctx if isinstance(send_ctx, dict) else None
+            return False, send_reason, extra
 
         origin_planet = send_ctx["origin_planet"]
         preview = send_ctx["preview"]
@@ -2387,14 +2555,27 @@ def _return_leg_seconds(movement: Mapping[str, Any]) -> int:
     return max(1, int(movement.get("flight_seconds") or movement.get("duration_seconds") or 0))
 
 
+def _outbound_elapsed_recall_seconds(movement: Mapping[str, Any], *, now: float) -> int:
+    """Return leg duration after player recall from outbound = time already flown."""
+    full = _return_leg_seconds(movement)
+    try:
+        dep = float(movement.get("departure_at") or now)
+    except (TypeError, ValueError):
+        dep = float(now)
+    elapsed = max(0, int(now) - int(dep))
+    return max(1, min(elapsed, full))
+
+
 def _return_timing_from_now(
     movement: Mapping[str, Any],
     *,
     now: float,
     delay_seconds: int = 0,
+    duration_seconds: int | None = None,
 ) -> Dict[str, int]:
     started = int(now) + max(0, int(delay_seconds))
-    return build_return_timing(return_started_at=started, duration_seconds=_return_leg_seconds(movement))
+    duration = max(1, int(duration_seconds if duration_seconds is not None else _return_leg_seconds(movement)))
+    return build_return_timing(return_started_at=started, duration_seconds=duration)
 
 
 def _bounce_inbound_vacation_protected(
@@ -2463,9 +2644,20 @@ def _start_return(
     now: float,
     remaining_resources: Mapping[str, Any] | None = None,
     delay_seconds: int = 0,
+    outbound_recall: bool = False,
 ) -> bool:
     resources = remaining_resources if remaining_resources is not None else movement.get("resources") or {}
-    timing = _return_timing_from_now(movement, now=now, delay_seconds=delay_seconds)
+    duration = (
+        _outbound_elapsed_recall_seconds(movement, now=now)
+        if outbound_recall
+        else _return_leg_seconds(movement)
+    )
+    timing = _return_timing_from_now(
+        movement,
+        now=now,
+        delay_seconds=delay_seconds,
+        duration_seconds=duration,
+    )
     return_at = timing["return_at"]
     return _claim_movement_status(
         conn,

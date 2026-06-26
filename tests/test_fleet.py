@@ -13,7 +13,10 @@ from game.db import db
 from game.fleet import (
     add_planet_ships,
     build_distribute_route,
+    build_fleet_incoming_attack_alerts,
     build_fleet_send_preview,
+    check_attack_limit,
+    get_attack_limit_status,
     collect_resources,
     count_active_fleet_slots,
     create_preset,
@@ -5551,6 +5554,196 @@ def test_recall_fleet_movement_before_overdue_arrival_tick(fleet_db):
     conn.close()
 
 
+def _send_transport_fleet(conn, uid: int) -> tuple[int, int, int]:
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000, fuel_cells = 50000 WHERE id = ?;", (pid,))
+    _seed_ships(pid, uid, {"mule_courier": 2}, conn=conn)
+    conn.commit()
+    ok, reason, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 500, "crystal": 0, "fuel_cells": 0},
+        conn=conn,
+    )
+    assert ok, reason
+    return uid, pid, int(result["fleet"]["id"])
+
+
+def test_recall_return_uses_elapsed_outbound_not_full_flight(fleet_db):
+    from game.fleet import recall_fleet_movement
+
+    conn = db()
+    uid = _player(conn=conn)
+    uid, _pid, fleet_id = _send_transport_fleet(conn, uid)
+    now = time.time()
+    elapsed = 120
+    total = 600
+    dep = now - elapsed
+    conn.execute(
+        "UPDATE fleet_movements SET departure_at = ?, arrival_at = ?, flight_seconds = ? WHERE id = ?;",
+        (dep, dep + total, total, fleet_id),
+    )
+    conn.commit()
+
+    ok_recall, reason, _ = recall_fleet_movement(uid, fleet_id, conn=conn)
+    assert ok_recall, reason
+    row = conn.execute(
+        "SELECT status, return_at, departure_at FROM fleet_movements WHERE id = ?;",
+        (fleet_id,),
+    ).fetchone()
+    assert row["status"] == "returning"
+    return_at = int(row["return_at"])
+    assert abs(return_at - (int(now) + elapsed)) <= 2
+    assert return_at < int(now) + total
+    conn.close()
+
+
+def test_recall_return_minimum_one_second(fleet_db):
+    from game.fleet import recall_fleet_movement
+
+    conn = db()
+    uid = _player(conn=conn)
+    uid, _pid, fleet_id = _send_transport_fleet(conn, uid)
+    now = time.time()
+    dep = now - 0.5
+    conn.execute(
+        "UPDATE fleet_movements SET departure_at = ?, arrival_at = ?, flight_seconds = 600 WHERE id = ?;",
+        (dep, dep + 600, fleet_id),
+    )
+    conn.commit()
+
+    ok_recall, reason, _ = recall_fleet_movement(uid, fleet_id, conn=conn)
+    assert ok_recall, reason
+    return_at = int(
+        conn.execute("SELECT return_at FROM fleet_movements WHERE id = ?;", (fleet_id,)).fetchone()["return_at"]
+    )
+    assert return_at >= int(now) + 1
+    assert return_at <= int(now) + 3
+    conn.close()
+
+
+def test_recall_return_near_arrival_uses_elapsed_not_remaining(fleet_db):
+    from game.fleet import recall_fleet_movement
+
+    conn = db()
+    uid = _player(conn=conn)
+    uid, _pid, fleet_id = _send_transport_fleet(conn, uid)
+    now = time.time()
+    total = 600
+    elapsed = 590
+    dep = now - elapsed
+    conn.execute(
+        "UPDATE fleet_movements SET departure_at = ?, arrival_at = ?, flight_seconds = ? WHERE id = ?;",
+        (dep, dep + total, total, fleet_id),
+    )
+    conn.commit()
+
+    ok_recall, reason, _ = recall_fleet_movement(uid, fleet_id, conn=conn)
+    assert ok_recall, reason
+    return_at = int(
+        conn.execute("SELECT return_at FROM fleet_movements WHERE id = ?;", (fleet_id,)).fetchone()["return_at"]
+    )
+    assert abs(return_at - (int(now) + elapsed)) <= 2
+    assert return_at > int(now) + 60
+    conn.close()
+
+
+def test_recall_returning_fleet_cannot_recall_again(fleet_db):
+    from game.fleet import recall_fleet_movement
+
+    conn = db()
+    uid = _player(conn=conn)
+    uid, _pid, fleet_id = _send_transport_fleet(conn, uid)
+    ok1, reason1, _ = recall_fleet_movement(uid, fleet_id, conn=conn)
+    assert ok1, reason1
+    ok2, reason2, _ = recall_fleet_movement(uid, fleet_id, conn=conn)
+    assert not ok2
+    assert reason2 == "fleet_recall_not_allowed"
+    conn.close()
+
+
+def test_recall_foreign_fleet_denied(fleet_db):
+    from game.fleet import recall_fleet_movement
+
+    uid = _player()
+    other_uid = _player()
+    conn = db()
+    _, _pid, fleet_id = _send_transport_fleet(conn, uid)
+    ok, reason, _ = recall_fleet_movement(other_uid, fleet_id, conn=conn)
+    assert not ok
+    assert reason == "fleet_not_found"
+    conn.close()
+
+
+def test_recall_completes_with_ships_and_cargo_on_origin_without_mission(fleet_db):
+    from game.fleet import process_fleet_tick, recall_fleet_movement
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    colony2 = _second_colony(uid, conn=conn)
+    g, s, p = _planet_coords(colony2, conn=conn)
+    target_id = int(colony2)
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 50000, crystal = 5000, fuel_cells = 50000 WHERE id = ?;", (pid,))
+    cur.execute("UPDATE planets SET metal = 1000 WHERE id = ?;", (target_id,))
+    _seed_ships(pid, uid, {"mule_courier": 2}, conn=conn)
+    ships_before = int(get_planet_ships(pid, conn=conn).get("mule_courier") or 0)
+    metal_origin_before = int(cur.execute("SELECT metal FROM planets WHERE id = ?;", (pid,)).fetchone()["metal"])
+    metal_target_before = int(cur.execute("SELECT metal FROM planets WHERE id = ?;", (target_id,)).fetchone()["metal"])
+    conn.commit()
+
+    ok, reason, result = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=g,
+        target_system=s,
+        target_position=p,
+        mission_type="transport",
+        ships={"mule_courier": 1},
+        resources={"metal": 500, "crystal": 0, "fuel_cells": 0},
+        conn=conn,
+    )
+    assert ok, reason
+    fleet_id = int(result["fleet"]["id"])
+    ships_after_send = int(get_planet_ships(pid, conn=conn).get("mule_courier") or 0)
+    metal_after_send = int(cur.execute("SELECT metal FROM planets WHERE id = ?;", (pid,)).fetchone()["metal"])
+    assert ships_after_send == ships_before - 1
+
+    now = time.time()
+    conn.execute(
+        "UPDATE fleet_movements SET departure_at = ?, arrival_at = ?, flight_seconds = 600 WHERE id = ?;",
+        (now - 120, now + 480, fleet_id),
+    )
+    conn.commit()
+    ok_recall, recall_reason, _ = recall_fleet_movement(uid, fleet_id, conn=conn)
+    assert ok_recall, recall_reason
+
+    conn.execute("UPDATE fleet_movements SET return_at = ? WHERE id = ?;", (time.time() - 1, fleet_id))
+    conn.commit()
+    process_fleet_tick(player_id=uid, conn=conn)
+    conn.commit()
+
+    status = conn.execute("SELECT status FROM fleet_movements WHERE id = ?;", (fleet_id,)).fetchone()["status"]
+    assert status == "completed"
+    ships_final = int(get_planet_ships(pid, conn=conn).get("mule_courier") or 0)
+    assert ships_final == ships_before
+    metal_origin_after = int(conn.execute("SELECT metal FROM planets WHERE id = ?;", (pid,)).fetchone()["metal"])
+    metal_target_after = int(conn.execute("SELECT metal FROM planets WHERE id = ?;", (target_id,)).fetchone()["metal"])
+    assert metal_target_after == metal_target_before
+    assert metal_origin_after >= metal_after_send
+    assert metal_origin_after <= metal_origin_before
+    conn.close()
+
+
 def test_api_fleet_recall_returns_state(fleet_db, monkeypatch):
     import importlib
 
@@ -5578,6 +5771,11 @@ def test_api_fleet_recall_returns_state(fleet_db, monkeypatch):
     )
     assert ok
     fleet_id = int(result["fleet"]["id"])
+    now = time.time()
+    cur.execute(
+        "UPDATE fleet_movements SET departure_at = ?, arrival_at = ?, flight_seconds = 600 WHERE id = ?;",
+        (now - 120, now + 480, fleet_id),
+    )
     conn.commit()
     conn.close()
 
@@ -5670,4 +5868,341 @@ def test_vacation_mode_blocks_attack_send_and_arrival(fleet_db):
     assert cur.fetchone()["status"] == "returning"
     cur.execute("SELECT metal FROM planets WHERE id = ?;", (def_pid,))
     assert int(cur.fetchone()["metal"]) == metal_before
+    conn.close()
+
+
+def _insert_inbound_movement(
+    conn,
+    *,
+    attacker_id: int,
+    target_planet_id: int,
+    origin_planet_id: int | None = None,
+    mission_type: str = "attack",
+    status: str = "outbound",
+    arrival_at: float | None = None,
+    created_at: float | None = None,
+) -> int:
+    now = time.time()
+    created = float(created_at if created_at is not None else now)
+    arrival = float(arrival_at if arrival_at is not None else created + 3600)
+    origin_id = int(
+        origin_planet_id
+        if origin_planet_id is not None
+        else get_planets_by_player(attacker_id, conn=conn)[0]["id"]
+    )
+    g, s, p = _planet_coords(int(target_planet_id), conn=conn)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO fleet_movements (
+            player_id, origin_planet_id, target_planet_id,
+            target_galaxy, target_system, target_position,
+            mission_type, status, departure_at, arrival_at, return_at, holding_until,
+            ships_json, resources_json, fuel_cost, speed_percent, distance, flight_seconds,
+            preset_id, parent_batch_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, '{}', '{}', 0, 100, 1, 60, NULL, NULL, ?, ?);
+        """,
+        (
+            int(attacker_id),
+            origin_id,
+            int(target_planet_id),
+            g,
+            s,
+            p,
+            mission_type,
+            status,
+            now - 60,
+            arrival,
+            created,
+            created,
+        ),
+    )
+    return int(cur.lastrowid)
+
+
+def test_incoming_attack_alert_counts_enemy_attack(fleet_db):
+    attacker_id = _player()
+    defender_id, def_pid, _coords = _foreign_planet_standalone()
+    conn = db()
+    _insert_inbound_movement(conn, attacker_id=attacker_id, target_planet_id=def_pid)
+    alerts = build_fleet_incoming_attack_alerts(defender_id, conn=conn)
+    assert alerts["has_incoming_attack"] is True
+    assert alerts["incoming_attack_count"] == 1
+    assert int(alerts["next_attack_arrival"]) > int(time.time())
+    conn.close()
+
+
+def test_incoming_attack_alert_attacker_no_alarm(fleet_db):
+    attacker_id = _player()
+    defender_id, def_pid, _coords = _foreign_planet_standalone()
+    conn = db()
+    _insert_inbound_movement(conn, attacker_id=attacker_id, target_planet_id=def_pid)
+    alerts = build_fleet_incoming_attack_alerts(attacker_id, conn=conn)
+    assert alerts["has_incoming_attack"] is False
+    assert alerts["incoming_attack_count"] == 0
+    conn.close()
+
+
+def test_incoming_attack_alert_spy_no_alarm(fleet_db):
+    attacker_id = _player()
+    defender_id, def_pid, _coords = _foreign_planet_standalone()
+    conn = db()
+    _insert_inbound_movement(
+        conn,
+        attacker_id=attacker_id,
+        target_planet_id=def_pid,
+        mission_type="spy",
+    )
+    alerts = build_fleet_incoming_attack_alerts(defender_id, conn=conn)
+    assert alerts["has_incoming_attack"] is False
+    conn.close()
+
+
+def test_incoming_attack_alert_returning_no_alarm(fleet_db):
+    attacker_id = _player()
+    defender_id, def_pid, _coords = _foreign_planet_standalone()
+    conn = db()
+    _insert_inbound_movement(
+        conn,
+        attacker_id=attacker_id,
+        target_planet_id=def_pid,
+        status="returning",
+    )
+    alerts = build_fleet_incoming_attack_alerts(defender_id, conn=conn)
+    assert alerts["has_incoming_attack"] is False
+    conn.close()
+
+
+def test_incoming_attack_alert_multiple_and_earliest_arrival(fleet_db):
+    attacker_id = _player()
+    defender_id, def_pid, _coords = _foreign_planet_standalone()
+    now = time.time()
+    conn = db()
+    _insert_inbound_movement(
+        conn,
+        attacker_id=attacker_id,
+        target_planet_id=def_pid,
+        arrival_at=now + 7200,
+    )
+    _insert_inbound_movement(
+        conn,
+        attacker_id=attacker_id,
+        target_planet_id=def_pid,
+        arrival_at=now + 1800,
+    )
+    alerts = build_fleet_incoming_attack_alerts(defender_id, conn=conn, now=now)
+    assert alerts["incoming_attack_count"] == 2
+    assert int(alerts["next_attack_arrival"]) == int(now + 1800)
+    conn.close()
+
+
+def test_attack_limit_allows_five_attacks_on_same_target(fleet_db):
+    attacker_id = _player()
+    _defender_id, def_pid, _coords = _foreign_planet_standalone()
+    conn = db()
+    for i in range(4):
+        _insert_inbound_movement(conn, attacker_id=attacker_id, target_planet_id=def_pid, created_at=time.time() - i)
+    ok, info = check_attack_limit(attacker_id, def_pid, conn=conn)
+    assert ok is True
+    assert info["used"] == 4
+    assert info["remaining"] == 1
+    conn.close()
+
+
+def test_attack_limit_blocks_sixth_attack(fleet_db):
+    attacker_id = _player()
+    _defender_id, def_pid, _coords = _foreign_planet_standalone()
+    conn = db()
+    for _ in range(5):
+        _insert_inbound_movement(conn, attacker_id=attacker_id, target_planet_id=def_pid)
+    ok, info = check_attack_limit(attacker_id, def_pid, conn=conn)
+    assert ok is False
+    assert info["used"] == 5
+    conn.close()
+
+
+def test_attack_limit_other_target_planet_has_separate_budget(fleet_db):
+    attacker_id = _player()
+    defender_id, def_pid, _coords = _foreign_planet_standalone()
+    conn = db()
+    colony2 = _second_colony(defender_id, conn=conn)
+    for _ in range(5):
+        _insert_inbound_movement(conn, attacker_id=attacker_id, target_planet_id=def_pid)
+    ok_planet_a, info_a = check_attack_limit(attacker_id, def_pid, conn=conn)
+    ok_planet_b, info_b = check_attack_limit(attacker_id, colony2, conn=conn)
+    assert ok_planet_a is False
+    assert info_a["used"] == 5
+    assert ok_planet_b is True
+    assert info_b["used"] == 0
+    conn.close()
+
+
+def test_attack_limit_two_targets_allow_ten_attacks_total(fleet_db):
+    attacker_id = _player()
+    defender_id, def_pid, _coords = _foreign_planet_standalone()
+    conn = db()
+    colony2 = _second_colony(defender_id, conn=conn)
+    for _ in range(5):
+        _insert_inbound_movement(conn, attacker_id=attacker_id, target_planet_id=def_pid)
+        _insert_inbound_movement(conn, attacker_id=attacker_id, target_planet_id=colony2)
+    ok_a, info_a = check_attack_limit(attacker_id, def_pid, conn=conn)
+    ok_b, info_b = check_attack_limit(attacker_id, colony2, conn=conn)
+    assert ok_a is False and info_a["used"] == 5
+    assert ok_b is False and info_b["used"] == 5
+    conn.close()
+
+
+def test_attack_limit_account_wide_blocks_colony_bypass(fleet_db):
+    attacker_id = _player()
+    conn = db()
+    colony1 = int(get_planets_by_player(attacker_id, conn=conn)[0]["id"])
+    colony2 = _second_colony(attacker_id, conn=conn)
+    _defender_id, def_pid, (dg, ds, dp) = _foreign_planet_standalone()
+    for _ in range(3):
+        _insert_inbound_movement(
+            conn,
+            attacker_id=attacker_id,
+            target_planet_id=def_pid,
+            origin_planet_id=colony1,
+        )
+    for _ in range(2):
+        _insert_inbound_movement(
+            conn,
+            attacker_id=attacker_id,
+            target_planet_id=def_pid,
+            origin_planet_id=colony2,
+        )
+    ok, info = check_attack_limit(attacker_id, def_pid, conn=conn)
+    assert ok is False
+    assert info["used"] == 5
+    assert info["remaining"] == 0
+
+    cur = conn.cursor()
+    _fund_planet(cur, colony2)
+    _seed_ships(colony2, attacker_id, {"falcon_interceptor": 5}, conn=conn)
+    conn.commit()
+    ok, reason, extra = send_fleet(
+        player_id=attacker_id,
+        origin_planet_id=colony2,
+        target_galaxy=dg,
+        target_system=ds,
+        target_position=dp,
+        mission_type="attack",
+        ships={"falcon_interceptor": 1},
+        conn=conn,
+    )
+    assert ok is False
+    assert reason == "attack_limit_reached"
+    assert extra and extra.get("attack_limit", {}).get("used") == 5
+    conn.close()
+
+
+def test_attack_limit_other_attacker_has_own_budget(fleet_db):
+    attacker_a = _player()
+    attacker_b = _player()
+    _defender_id, def_pid, _coords = _foreign_planet_standalone()
+    conn = db()
+    for _ in range(5):
+        _insert_inbound_movement(conn, attacker_id=attacker_a, target_planet_id=def_pid)
+    ok_a, _ = check_attack_limit(attacker_a, def_pid, conn=conn)
+    ok_b, info_b = check_attack_limit(attacker_b, def_pid, conn=conn)
+    assert ok_a is False
+    assert ok_b is True
+    assert info_b["used"] == 0
+    conn.close()
+
+
+def test_attack_limit_spy_does_not_count(fleet_db):
+    attacker_id = _player()
+    _defender_id, def_pid, _coords = _foreign_planet_standalone()
+    conn = db()
+    for _ in range(5):
+        _insert_inbound_movement(
+            conn,
+            attacker_id=attacker_id,
+            target_planet_id=def_pid,
+            mission_type="spy",
+        )
+    ok, info = check_attack_limit(attacker_id, def_pid, conn=conn)
+    assert ok is True
+    assert info["used"] == 0
+    conn.close()
+
+
+def test_attack_limit_ignores_attacks_outside_window(fleet_db):
+    attacker_id = _player()
+    _defender_id, def_pid, _coords = _foreign_planet_standalone()
+    conn = db()
+    now = time.time()
+    for _ in range(5):
+        _insert_inbound_movement(
+            conn,
+            attacker_id=attacker_id,
+            target_planet_id=def_pid,
+            created_at=now - (25 * 3600),
+        )
+    ok, info = check_attack_limit(attacker_id, def_pid, conn=conn, now=now)
+    assert ok is True
+    assert info["used"] == 0
+    conn.close()
+
+
+def test_attack_limit_preview_blocks_at_limit(fleet_db):
+    attacker_id = _player()
+    _defender_id, def_pid, (dg, ds, dp) = _foreign_planet_standalone()
+    conn = db()
+    att_pid = int(get_planets_by_player(attacker_id, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, att_pid)
+    _seed_ships(att_pid, attacker_id, {"falcon_interceptor": 5}, conn=conn)
+    for _ in range(5):
+        _insert_inbound_movement(conn, attacker_id=attacker_id, target_planet_id=def_pid)
+    origin = dict(conn.execute("SELECT * FROM planets WHERE id = ?;", (att_pid,)).fetchone())
+    preview = build_fleet_send_preview(
+        player_id=attacker_id,
+        origin_planet=origin,
+        target_galaxy=dg,
+        target_system=ds,
+        target_position=dp,
+        mission_type="attack",
+        ships={"falcon_interceptor": 1},
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+    assert preview["can_send"] is False
+    assert preview["block_reason"] == "attack_limit_reached"
+    assert preview["attack_limit"]["used"] == 5
+    assert preview["attack_limit"]["remaining"] == 0
+    conn.close()
+
+
+def test_attack_limit_send_blocks_without_ship_deduction(fleet_db):
+    attacker_id = _player()
+    _defender_id, def_pid, (dg, ds, dp) = _foreign_planet_standalone()
+    conn = db()
+    att_pid = int(get_planets_by_player(attacker_id, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    _fund_planet(cur, att_pid)
+    _seed_ships(att_pid, attacker_id, {"falcon_interceptor": 10}, conn=conn)
+    for _ in range(5):
+        _insert_inbound_movement(conn, attacker_id=attacker_id, target_planet_id=def_pid)
+    before = int(get_planet_ships(att_pid, conn=conn).get("falcon_interceptor") or 0)
+    conn.commit()
+
+    ok, reason, extra = send_fleet(
+        player_id=attacker_id,
+        origin_planet_id=att_pid,
+        target_galaxy=dg,
+        target_system=ds,
+        target_position=dp,
+        mission_type="attack",
+        ships={"falcon_interceptor": 5},
+        conn=conn,
+    )
+    assert ok is False
+    assert reason == "attack_limit_reached"
+    assert extra and extra.get("attack_limit", {}).get("used") == 5
+    after = int(get_planet_ships(att_pid, conn=conn).get("falcon_interceptor") or 0)
+    assert after == before
     conn.close()

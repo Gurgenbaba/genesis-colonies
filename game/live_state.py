@@ -382,6 +382,7 @@ def fleet_hud_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
     """Player-wide active fleet slice for /api/game-state (GC-640A)."""
     from game.fleet import (
         build_active_fleets_payload,
+        build_fleet_incoming_attack_alerts,
         fleet_schema_ready,
         get_fleet_slot_status,
         process_fleet_tick,
@@ -398,6 +399,7 @@ def fleet_hud_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:
     return {
         "active_fleets": build_active_fleets_payload(uid, conn=conn),
         "fleet_slots": get_fleet_slot_status(uid, conn=conn),
+        "fleet_alerts": build_fleet_incoming_attack_alerts(uid, conn=conn),
     }
 
 
@@ -559,7 +561,7 @@ def apply_lightweight_game_state_diet(payload: Dict[str, Any]) -> Dict[str, Any]
     GC-747 / GC-802: normal poll diet — keep shell HUD slices, drop page-catalog blocks.
 
     Keeps: planet_limit, planets (switcher), active_planet (+ sidebar_nav for role nav),
-    active_fleets, fleet_slots, account_safety (vacation HUD).
+    active_fleets, fleet_slots, fleet_alerts, account_safety (vacation HUD).
     Drops: player_stats, building_queue, research_queue, planet_teaser, research.techs.
     """
     for key in (

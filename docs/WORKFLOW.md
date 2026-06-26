@@ -150,6 +150,16 @@ Vor jedem Ticket: [CORE_ARCHITECTURE.md](CORE_ARCHITECTURE.md) (Golden Rule + **
 
 ---
 
+## i18n / Locales
+
+Neue Übersetzungs-Keys immer in **allen** Dateien unter `locales/` nachziehen:
+
+`de`, `en`, `es`, `fr`, `pl`, `pt`, `ru`, `tr`
+
+Nicht nur `de.json` / `en.json` — fehlende Keys fallen auf Englisch zurück und wirken im UI inkonsistent.
+
+---
+
 ## Verwandte Docs
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Code-Stil, Migrationen, PR

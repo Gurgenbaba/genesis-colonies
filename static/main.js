@@ -4135,6 +4135,7 @@
       shipyardFinish ||
       defenseFinish ||
       activeFleetCount > 0 ||
+      (GC.lastState?.fleet_alerts?.has_incoming_attack === true) ||
       _hasSafetyCountdownTimers() ||
       !!document.querySelector(".build-job.build-job-active") ||
       !!document.querySelector(".research-job.research-job-active") ||
@@ -9386,6 +9387,7 @@
 
   function updateFleetDrawerRowTimers(serverNow) {
     const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
+    updateFleetAttackAlertCountdown(now);
     document.querySelectorAll("[data-fleet-drawer-row]").forEach((row) => {
       const movementId = Number(row.dataset.movementId || 0);
       const mv = movementId ? _fleetDrawerMovementById.get(movementId) : null;
@@ -9858,6 +9860,85 @@
     return row;
   }
 
+  function _fleetAttackAlertLabel(alerts) {
+    const count = Math.max(0, Math.floor(Number(alerts?.incoming_attack_count) || 0));
+    if (count <= 0) return "";
+    if (count === 1) {
+      return t("fleet_alert_incoming_attack", "Angriff im Anflug");
+    }
+    return tf("fleet_alert_incoming_attacks", { count }, `${count} Angriffe im Anflug`);
+  }
+
+  function updateFleetAttackAlertCountdown(serverNow) {
+    const alertEl = document.querySelector("[data-fleet-alert]");
+    if (!alertEl || alertEl.hidden) return;
+    const arrivalAt = Math.floor(Number(alertEl.dataset.arrivalAt || 0));
+    if (!arrivalAt) return;
+    const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
+    const remaining = Math.max(0, Math.floor(arrivalAt - now));
+    const base = alertEl.dataset.alertBase || alertEl.textContent || "";
+    const arrivalText = remaining > 0
+      ? tf("fleet_alert_arrival_in", { time: formatCountdownRemain(remaining) }, `Ankunft in ${formatCountdownRemain(remaining)}`)
+      : t("fleet_arrival_at", "Ankunft");
+    const next = remaining > 0 ? `${base} · ${arrivalText}` : base;
+    _setIfChanged(alertEl, next);
+  }
+
+  function syncFleetAttackAlert(alerts) {
+    const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
+    if (!root) return;
+
+    const data = alerts && typeof alerts === "object" ? alerts : {};
+    const active = data.has_incoming_attack === true && Math.floor(Number(data.incoming_attack_count) || 0) > 0;
+    let alertEl = root.querySelector("[data-fleet-alert]");
+
+    if (!active) {
+      if (alertEl) {
+        alertEl.hidden = true;
+        alertEl.removeAttribute("data-arrival-at");
+        alertEl.dataset.alertBase = "";
+        alertEl.textContent = "";
+      }
+      return;
+    }
+
+    if (!alertEl) {
+      alertEl = document.createElement("button");
+      alertEl.type = "button";
+      alertEl.className = "gc-fleet-alert gc-fleet-alert--danger";
+      alertEl.setAttribute("data-fleet-alert", "");
+      alertEl.setAttribute("role", "alert");
+      alertEl.setAttribute("aria-live", "polite");
+      alertEl.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (typeof GC.navigateTo === "function") {
+          GC.navigateTo("/fleet");
+        } else {
+          window.location.href = "/fleet";
+        }
+      });
+      const emptyEl = root.querySelector("[data-fleet-drawer-empty]");
+      if (emptyEl) {
+        root.insertBefore(alertEl, emptyEl);
+      } else {
+        root.prepend(alertEl);
+      }
+    }
+
+    const arrivalAt = Math.floor(Number(data.next_attack_arrival) || 0);
+    const base = _fleetAttackAlertLabel(data);
+    alertEl.hidden = false;
+    alertEl.dataset.alertBase = base;
+    if (arrivalAt > 0) {
+      alertEl.dataset.arrivalAt = String(arrivalAt);
+    } else {
+      alertEl.removeAttribute("data-arrival-at");
+    }
+    updateFleetAttackAlertCountdown(getTimerServerNow());
+    GC.startProgressTicker();
+  }
+  GC.syncFleetAttackAlert = syncFleetAttackAlert;
+
   function renderGlobalFleetHud(fleetsRaw) {
     const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
     const payload = normalizeActiveFleetsPayload(fleetsRaw);
@@ -10311,6 +10392,10 @@
 
     if (data.active_fleets !== undefined) {
       renderGlobalFleetHud(data.active_fleets);
+    }
+
+    if (data.fleet_alerts !== undefined) {
+      syncFleetAttackAlert(data.fleet_alerts);
     }
 
     if (data.account_safety !== undefined) {
@@ -13550,6 +13635,12 @@
           return tpl.replace("{datetime}", when);
         }
         return tt("fleet_mission_locked", "This mission is currently locked.");
+      }
+      if (reason === "attack_limit_reached") {
+        return tt(
+          "fleet_attack_limit_reached",
+          "Attack limit reached: you can only attack the same planet 5 times within 24 hours."
+        );
       }
       return tt(`fleet_error_${reason}`, tt("fleet_error_generic", "Fleet action failed."));
     };

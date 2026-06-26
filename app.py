@@ -5221,6 +5221,11 @@ def _payload_from_live_context(
                 "items": [],
             }
             payload["fleet_slots"] = fleet_hud.get("fleet_slots") or {}
+            payload["fleet_alerts"] = fleet_hud.get("fleet_alerts") or {
+                "incoming_attack_count": 0,
+                "next_attack_arrival": None,
+                "has_incoming_attack": False,
+            }
         else:
             payload["active_fleets"] = {
                 "count": 0,
@@ -5229,6 +5234,11 @@ def _payload_from_live_context(
                 "items": [],
             }
             payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
+            payload["fleet_alerts"] = {
+                "incoming_attack_count": 0,
+                "next_attack_arrival": None,
+                "has_incoming_attack": False,
+            }
     except Exception:
         payload["active_fleets"] = {
             "count": 0,
@@ -5237,6 +5247,11 @@ def _payload_from_live_context(
             "items": [],
         }
         payload["fleet_slots"] = {"active": 0, "max": 0, "free": 0}
+        payload["fleet_alerts"] = {
+            "incoming_attack_count": 0,
+            "next_attack_arrival": None,
+            "has_incoming_attack": False,
+        }
 
     try:
         from game.live_state import account_safety_hud_for_game_state
@@ -6050,7 +6065,10 @@ def api_fleet_send():
         return jsonify(body)
 
     state, _ = _build_game_state_payload(include_panel=True, finish_source="api_fleet_send")
-    return jsonify(fleet_err(reason or "generic", data={"state": state})), 400
+    err_data: Dict[str, Any] = {"state": state}
+    if isinstance(result, dict) and result.get("attack_limit"):
+        err_data["attack_limit"] = result["attack_limit"]
+    return jsonify(fleet_err(reason or "generic", data=err_data)), 400
 
 
 @app.route("/api/fleet/recall", methods=["POST"])

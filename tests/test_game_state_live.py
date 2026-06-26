@@ -317,6 +317,9 @@ def test_api_game_state_poll_is_lightweight(game_client):
     assert "rows" not in body.get("overview", {})
     assert "active_fleets" in body
     assert "fleet_slots" in body
+    assert "fleet_alerts" in body
+    assert isinstance(body["fleet_alerts"], dict)
+    assert body["fleet_alerts"]["has_incoming_attack"] is False
     assert isinstance(body["active_fleets"], dict)
     assert "items" in body["active_fleets"]
     assert "global_queue_hud" not in body
@@ -376,6 +379,7 @@ def test_api_game_state_include_panel_has_heavy_hud_slices(game_client):
     assert isinstance(body["active_fleets"], dict)
     assert "items" in body["active_fleets"]
     assert "fleet_slots" in body
+    assert "fleet_alerts" in body
     assert "global_queue_hud" in body
     assert isinstance(body["global_queue_hud"], dict)
 
