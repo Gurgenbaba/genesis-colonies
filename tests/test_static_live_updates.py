@@ -1091,6 +1091,24 @@ def test_main_js_gc_fleet_incoming_attack_alert_row():
     assert "_incomingAttackNotifyPrimed" in src
 
 
+def test_notify_sound_assets_and_main_js_wiring():
+    """Attack + mailbox notify sounds are tracked assets with poll-safe playback hooks."""
+    src = _read("static/main.js")
+    assert (ROOT / "static/sounds/notify/notify.mp3").is_file()
+    assert (ROOT / "static/sounds/notify/message.mp3").is_file()
+    assert "function playIncomingAttackNotifySound()" in src
+    assert "/static/sounds/notify/notify.mp3" in src
+    assert "function playNewMessageNotifySound()" in src
+    assert "/static/sounds/notify/message.mp3" in src
+    assert "GC?.settings?.sound === false" in src.split("function playIncomingAttackNotifySound()")[1].split("function playNewMessageNotifySound()")[0]
+    assert "GC?.settings?.sound === false" in src.split("function playNewMessageNotifySound()")[1].split("function lootTileAmountLabel")[0]
+    unread_section = src.split("if (typeof data.unread_messages_count === \"number\")")[1].split("// --- Overview-Ressourcen")[0]
+    assert "playNewMessageNotifySound();" in unread_section
+    alert_fn = src.split("function syncFleetAttackAlert(alerts)")[1].split("GC.syncFleetAttackAlert = syncFleetAttackAlert")[0]
+    assert "_maybePlayIncomingAttackNotify" in alert_fn
+    assert "_incomingAttackNotifyPrimed" in src
+
+
 def test_main_js_gc657_fleet_drawer_timer_selection_separation():
     """GC-657+: compact fleet HUD rows with per-row countdown and hover tooltip."""
     src = _read("static/main.js")

@@ -639,6 +639,34 @@ def ranking_inactive_from_last_seen(last_seen: int, *, now: Optional[int] = None
     return (now_i - seen) >= RANKING_INACTIVE_AFTER_SEC
 
 
+def is_player_inactive(
+    player_row: Any,
+    *,
+    now: Optional[int] = None,
+) -> bool:
+    """True when player row has no recent activity (ranking/galaxy inactive threshold)."""
+    if player_row is None:
+        return True
+    if isinstance(player_row, (int, float)):
+        last_seen = int(player_row)
+    elif isinstance(player_row, dict):
+        last_seen = int(player_row.get("last_seen") or 0)
+    else:
+        last_seen = int(getattr(player_row, "last_seen", 0) or 0)
+    return ranking_inactive_from_last_seen(last_seen, now=now)
+
+
+def is_player_id_inactive(player_id: int, *, conn, now: Optional[int] = None) -> bool:
+    """Server-side inactive check for a player id (uses ``players.last_seen``)."""
+    row = conn.execute(
+        "SELECT last_seen FROM players WHERE id = ? LIMIT 1;",
+        (int(player_id),),
+    ).fetchone()
+    if not row:
+        return True
+    return is_player_inactive(dict(row), now=now)
+
+
 def _combat_ranking_select(conn) -> str:
     if column_exists(conn, "player_scores", "score_combat"):
         return (
