@@ -101,7 +101,7 @@ def mine_output(resource_type: str, level: int) -> float:
     if lvl <= 0:
         return 0.0
     base = float(LEVEL_GROWTH[key]["multiplier"])
-    return base * (LEVEL_GROWTH_RATE ** lvl)
+    return base * lvl * (LEVEL_GROWTH_RATE ** lvl)
 
 
 def ferdi_base_output(resource_type: str, level: int) -> float:

@@ -20,12 +20,16 @@ from game.economy_balance import NEUTRAL_BALANCE_SLOT, reference_production_per_
 def test_early_mine_reference_table():
     l0 = reference_production_per_hour("metal", 0, slot=NEUTRAL_BALANCE_SLOT)
     l1 = reference_production_per_hour("metal", 1, slot=NEUTRAL_BALANCE_SLOT)
-    l2 = reference_production_per_hour("metal", 2, slot=NEUTRAL_BALANCE_SLOT)
-    l3 = reference_production_per_hour("metal", 3, slot=NEUTRAL_BALANCE_SLOT)
+    l5 = reference_production_per_hour("metal", 5, slot=NEUTRAL_BALANCE_SLOT)
+    l10 = reference_production_per_hour("metal", 10, slot=NEUTRAL_BALANCE_SLOT)
+    l20 = reference_production_per_hour("metal", 20, slot=NEUTRAL_BALANCE_SLOT)
     assert l0 == pytest.approx(15000.0)
-    assert l1 == pytest.approx(15000.0 + 150 * 1.075)
-    assert l2 - l1 == pytest.approx(l1 - l0, rel=1e-6)
-    assert l3 > l2
+    assert l1 == pytest.approx(15000.0 + 150 * 1 * 1.075)
+    assert l5 == pytest.approx(15000.0 + 150 * 5 * (1.075**5))
+    assert l10 == pytest.approx(15000.0 + 150 * 10 * (1.075**10), rel=1e-6)
+    assert l20 == pytest.approx(15000.0 + 150 * 20 * (1.075**20), rel=1e-6)
+    assert l5 > l1
+    assert l10 > l5
 
 
 def test_alpha_current_defaults_under_one_research_speed():

@@ -36,7 +36,7 @@ All resources:
 Output/h
 
   = StandardBase × production_speed × modifiers (excl. energy)
-  + MineBase × 1.075^level × production_speed × modifiers (incl. energy on mine part)
+  + MineBase × level × 1.075^level × production_speed × modifiers (incl. energy on mine part)
 ```
 
 ### Standard production (every planet)
@@ -55,9 +55,9 @@ Constants: `STANDARD_PRODUCTION_PER_HOUR` in `game/production_formula.py`.
 
 | Resource | Key | Mine base | Formula |
 |----------|-----|-----------|---------|
-| Ferronit | `metal` | 150 | `150 × 1.075^level` |
-| Crytite | `crystal` | 100 | `100 × 1.075^level` |
-| Brennzellen | `fuel_cells` | 50 | `50 × 1.075^level` |
+| Ferronit | `metal` | 150 | `150 × level × 1.075^level` |
+| Crytite | `crystal` | 100 | `100 × level × 1.075^level` |
+| Brennzellen | `fuel_cells` | 50 | `50 × level × 1.075^level` |
 
 Level 0 mine → no mine output (standard still applies).
 
@@ -156,7 +156,7 @@ Vollständige Ankertabellen: [GC_ANCHOR_TABLES_X1.md](GC_ANCHOR_TABLES_X1.md)
 **Level 10 Ferronit mine, slot 5 (+16 % slot), mining L10 (+30 %), energy 80 %:**
 
 ```text
-15 000 × 1.16 × 1.30 + (150 × 1.075^10) × 1.16 × 1.30 × 0.80
+15 000 × 1.16 × 1.30 + (150 × 10 × 1.075^10) × 1.16 × 1.30 × 0.80
 ```
 
 ---

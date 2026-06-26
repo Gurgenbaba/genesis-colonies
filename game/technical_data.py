@@ -247,7 +247,7 @@ def _formula_steps(resource_type: str, context: ProductionContext) -> List[Dict[
         steps.append(
             {
                 "label_key": "technical_formula_base",
-                "detail": f"{cfg['multiplier']:g} × {LEVEL_GROWTH_RATE}^{lvl}",
+                "detail": f"{cfg['multiplier']:g} × level × {LEVEL_GROWTH_RATE}^level",
                 "value_per_hour": int(mine_output(key, lvl) * speed),
             }
         )

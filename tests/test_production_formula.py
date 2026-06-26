@@ -92,11 +92,20 @@ def _ctx(resource: str, level: int, **kwargs) -> ProductionContext:
 
 class TestLevelGrowth:
     def test_mine_output_level_one(self):
-        assert mine_output("metal", 1) == pytest.approx(150 * 1.075)
-        assert mine_output("crystal", 1) == pytest.approx(100 * 1.075)
-        assert mine_output("fuel_cells", 1) == pytest.approx(50 * 1.075)
+        assert mine_output("metal", 1) == pytest.approx(150 * 1 * 1.075)
+        assert mine_output("crystal", 1) == pytest.approx(100 * 1 * 1.075)
+        assert mine_output("fuel_cells", 1) == pytest.approx(50 * 1 * 1.075)
         assert mine_output("metal", 0) == 0.0
         assert ferdi_base_output("metal", 1) == pytest.approx(mine_output("metal", 1))
+
+    def test_mine_output_benchmark_levels(self):
+        assert mine_output("metal", 5) == pytest.approx(150 * 5 * (1.075**5))
+        assert mine_output("metal", 10) == pytest.approx(150 * 10 * (1.075**10))
+        assert mine_output("metal", 20) == pytest.approx(150 * 20 * (1.075**20), rel=1e-6)
+        assert mine_output("metal", 40) == pytest.approx(150 * 40 * (1.075**40), rel=1e-6)
+        assert mine_output("metal", 60) == pytest.approx(150 * 60 * (1.075**60), rel=1e-5)
+        total_l10 = calculate_resource_output("metal", _ctx("metal", 10))
+        assert total_l10 == pytest.approx(15000 + mine_output("metal", 10))
 
     def test_standard_output_without_mine(self):
         assert standard_output("metal") == STANDARD_PRODUCTION_PER_HOUR["metal"]

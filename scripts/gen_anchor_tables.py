@@ -81,7 +81,7 @@ def main() -> None:
     lines.append("## 1) Produktionsformel (GC-820 / Ferdi-Rebase)")
     lines.append("")
     lines.append("```")
-    lines.append("Produktion/h = Standardbasis + (Mine-Basis × 1.075^Level)")
+    lines.append("Produktion/h = Standardbasis + (Mine-Basis × Level × 1.075^Level)")
     lines.append("             × production_speed × Slot × Temperatur × Forschung × …")
     lines.append("Energie-Drossel gilt nur für den Minen-Anteil (Standardproduktion läuft immer).")
     lines.append("```")
