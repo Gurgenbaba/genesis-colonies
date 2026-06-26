@@ -1,8 +1,8 @@
 """
 Background ranking worker — batch score + rank refresh (cron / CLI).
 
-Gameplay paths must not call compute_player_scores(); only this worker (or admin
-force-recalc) updates player_scores on a schedule.
+Gameplay paths must not call compute_player_scores() directly; use score_events or admin
+force-recalc. The worker batch-refreshes all players on a schedule as a safety net.
 """
 
 from __future__ import annotations

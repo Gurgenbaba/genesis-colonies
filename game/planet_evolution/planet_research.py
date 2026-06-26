@@ -158,7 +158,7 @@ def queue_planet_research(
 
         from ..queue_engine import finish_due_work
 
-        finish_due_work(planet_id=int(planet_id), conn=conn, source="planet_research", update_scores=False)
+        finish_due_work(planet_id=int(planet_id), conn=conn, source="planet_research")
 
         planet = get_planet_row(planet_id, conn=conn)
         if not planet:

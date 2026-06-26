@@ -150,7 +150,7 @@ def read_player_live_state_for_poll(
                         uid,
                         conn,
                         source="game_state",
-                        update_scores=False,
+                        update_scores=True,
                         recalc_ranks=False,
                     )
                     record_poll_queue_finish(uid, conn=conn)
@@ -253,6 +253,7 @@ def refresh_player_live_state(
             uid,
             conn,
             source=str(finish_source or "live_state"),
+            update_scores=True,
             recalc_ranks=bool(recalc_ranks),
         )
         finish_ms = (time.perf_counter() - finish_t0) * 1000.0

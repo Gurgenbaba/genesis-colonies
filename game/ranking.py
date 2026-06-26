@@ -1,8 +1,8 @@
 """
 Galactic ranking service – single source of truth for scores and ranks.
 
-Score persistence is refreshed by ``game/ranking_worker`` (10-minute cron), not during
-queue finishes or polling. Gameplay reads ``player_scores`` snapshots only.
+Score persistence is refreshed live after gameplay mutations (``score_events``) and
+periodically by ``ranking_worker`` (10-minute safety net). Gameplay reads ``player_scores`` snapshots only.
 
 total_score = building + research + fleet + defense + destroyed + evolution
 combat_score = fleet_score + defense_score (active military)

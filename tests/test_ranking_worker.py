@@ -72,12 +72,12 @@ def _create_player(username: str) -> int:
     return int(user["id"])
 
 
-def test_finish_due_work_skips_live_score_by_default(temp_db):
+def test_finish_due_work_updates_scores_by_default(temp_db):
     _run_migrate(temp_db)
     init_db()
     _close_db()
 
-    pid = _create_player("worker_skip")
+    pid = _create_player("worker_live")
     hw = get_homeworld(pid)
     planet_id = int(hw["id"])
     now = time.time()
@@ -87,15 +87,42 @@ def test_finish_due_work_skips_live_score_by_default(temp_db):
     conn.commit()
     conn.close()
 
-    with patch("game.score_events.apply_score_updates_for_players") as mock_scores:
-        result = finish_due_work(player_id=pid, planet_id=planet_id, source="test")
-        _close_db()
-        assert result["finished"]["buildings"] >= 1
-        mock_scores.assert_not_called()
-        assert result["score_updates"] == 0
+    result = finish_due_work(player_id=pid, planet_id=planet_id, source="test")
+    _close_db()
+    assert result["finished"]["buildings"] >= 1
+    assert result["score_updates"] >= 1
 
     row = get_player_score_row(pid)
-    assert row is None or int(row.get("score_buildings") or 0) == 0
+    assert row is not None
+    assert int(row.get("score_buildings") or 0) > 0
+
+
+def test_apply_score_updates_throttles_rank_recalc(temp_db):
+    from game.score_events import apply_score_updates_for_players
+
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    p1 = _create_player("throttle_a")
+    p2 = _create_player("throttle_b")
+    conn = db()
+
+    with patch("game.score_events.recalculate_ranks") as mock_ranks:
+        apply_score_updates_for_players([p1], conn=conn, reason="test_a")
+        apply_score_updates_for_players([p2], conn=conn, reason="test_b")
+        assert mock_ranks.call_count == 1
+
+        apply_score_updates_for_players(
+            [p2],
+            conn=conn,
+            reason="test_force",
+            force_rank_recalc=True,
+        )
+        assert mock_ranks.call_count == 2
+
+    conn.close()
+    _close_db()
 
 
 def test_ranking_worker_recomputes_after_queue_finish(temp_db):
@@ -116,9 +143,14 @@ def test_ranking_worker_recomputes_after_queue_finish(temp_db):
     finish_result = finish_due_work(player_id=pid, planet_id=planet_id, source="test")
     _close_db()
     assert finish_result["finished"]["buildings"] >= 1
+    assert finish_result["score_updates"] >= 1
 
     buildings = get_planet_buildings(planet_id)
     assert int(buildings.get("metal_mine") or 0) >= 1
+
+    row_before_worker = get_player_score_row(pid)
+    assert row_before_worker is not None
+    assert int(row_before_worker["score_buildings"]) > 0
 
     result = run_ranking_worker(source="test", force=True, persist=False)
     _close_db()
