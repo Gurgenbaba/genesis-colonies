@@ -94,13 +94,13 @@ def test_main_js_messages_inbox_reload_only_on_unread_increase():
     assert after_init.index("bootMessagesInbox") > after_init.index("refreshGameState")
     assert "function recoverStuckInbox" in _read("static/js/messages.js")
     assert "function ensureInboxFetching" in _read("static/js/messages.js")
-    unread_section = src.split("if (typeof data.unread_messages_count === \"number\")")[1].split("// --- Overview-Ressourcen")[0]
+    unread_section = src.split("function _processUnreadMessagesPoll(data, reason, opts)")[1].split("function updateNavBadges")[0]
     assert "emptyInboxNeedsFill" not in unread_section
     assert "unreadSyncedFromApi" not in unread_section
     assert "GC.messagesPageState.listLoaded" in unread_section
-    assert "unreadIncreased &&" in unread_section
+    assert "unreadIncreased" in unread_section
     assert "function playNewMessageNotifySound()" in src
-    assert "/static/sounds/notify/message.mp3" in src
+    assert "playNotificationSound(\"message\")" in src
     assert "playNewMessageNotifySound();" in unread_section
     tabs_section = src.split("function bindBuildingTabsOnce")[1].split("function initBuildings")[0]
     assert '#messages-tabs' in tabs_section
@@ -1086,27 +1086,44 @@ def test_main_js_gc_fleet_incoming_attack_alert_row():
     assert 'document.createElement("button")' not in src.split("function syncFleetAttackAlert")[1].split("GC.syncFleetAttackAlert")[0]
     alert_fn = src.split("function syncFleetAttackAlert(alerts)")[1].split("GC.syncFleetAttackAlert = syncFleetAttackAlert")[0]
     assert "function playIncomingAttackNotifySound()" in src
-    assert "/static/sounds/notify/notify.mp3" in src
-    assert "_maybePlayIncomingAttackNotify" in alert_fn
+    assert "playNotificationSound(\"attack\")" in src
+    assert "GC_NOTIFY_SOUNDS" in src
+    assert "_maybePlayIncomingAttackNotify" not in alert_fn
+    patch_shell = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
+    assert "_maybePlayIncomingAttackNotify(data.fleet_alerts)" in patch_shell
     assert "_incomingAttackNotifyPrimed" in src
 
 
 def test_notify_sound_assets_and_main_js_wiring():
-    """Attack + mailbox notify sounds are tracked assets with poll-safe playback hooks."""
+    """Attack + mailbox notify sounds use primed audio + real game-state fields."""
     src = _read("static/main.js")
+    fleet_py = _read("game/fleet.py")
     assert (ROOT / "static/sounds/notify/notify.mp3").is_file()
     assert (ROOT / "static/sounds/notify/message.mp3").is_file()
-    assert "function playIncomingAttackNotifySound()" in src
-    assert "/static/sounds/notify/notify.mp3" in src
-    assert "function playNewMessageNotifySound()" in src
-    assert "/static/sounds/notify/message.mp3" in src
-    assert "GC?.settings?.sound === false" in src.split("function playIncomingAttackNotifySound()")[1].split("function playNewMessageNotifySound()")[0]
-    assert "GC?.settings?.sound === false" in src.split("function playNewMessageNotifySound()")[1].split("function lootTileAmountLabel")[0]
-    unread_section = src.split("if (typeof data.unread_messages_count === \"number\")")[1].split("// --- Overview-Ressourcen")[0]
-    assert "playNewMessageNotifySound();" in unread_section
-    alert_fn = src.split("function syncFleetAttackAlert(alerts)")[1].split("GC.syncFleetAttackAlert = syncFleetAttackAlert")[0]
-    assert "_maybePlayIncomingAttackNotify" in alert_fn
-    assert "_incomingAttackNotifyPrimed" in src
+    assert "function initNotificationSounds()" in src
+    assert "GC.initNotificationSounds = initNotificationSounds" in src
+    assert "function playNotificationSound(kind)" in src
+    assert 'attack: "/static/sounds/notify/notify.mp3"' in src
+    assert 'message: "/static/sounds/notify/message.mp3"' in src
+    assert "initNotificationSounds();" in src.split("function initShellOnce()")[1].split("document.addEventListener(\"click\"")[0]
+    assert "playNotificationSound(\"attack\")" in src.split("function playIncomingAttackNotifySound()")[1].split("function playNewMessageNotifySound()")[0]
+    assert "playNotificationSound(\"message\")" in src.split("function playNewMessageNotifySound()")[1].split("function lootTileAmountLabel")[0]
+    assert "window.GC?.settings?.sound === false" in src.split("function playNotificationSound(kind)")[1].split("GC.playNotificationSound = playNotificationSound")[0]
+    assert "incoming_attack_count" in fleet_py
+    assert "has_incoming_attack" in fleet_py
+    assert "next_attack_arrival" in fleet_py
+    unread_fn = src.split("function _processUnreadMessagesPoll(data, reason, opts)")[1].split("function updateNavBadges")[0]
+    assert "data.unread_messages_count" in unread_fn
+    assert "coercePollUnreadForHud" in unread_fn
+    assert "playNewMessageNotifySound();" in unread_fn
+    assert "_processUnreadMessagesPoll(data, reason" in src
+    attack_fn = src.split("function _maybePlayIncomingAttackNotify(alerts)")[1].split("function syncFleetAttackAlert(alerts)")[0]
+    assert "incoming_attack_count" in attack_fn
+    assert "has_incoming_attack" in attack_fn
+    assert "playIncomingAttackNotifySound();" in attack_fn
+    patch_shell = src.split("function patchShellHudFromState(data, opts)")[1].split("GC.patchShellHudFromState = patchShellHudFromState")[0]
+    assert "_maybePlayIncomingAttackNotify(data.fleet_alerts)" in patch_shell
+    assert '[GC] notify check' in src
 
 
 def test_main_js_gc657_fleet_drawer_timer_selection_separation():

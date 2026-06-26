@@ -1397,6 +1397,7 @@
       }
       _incomingAttackNotifyKey = null;
       _incomingAttackNotifyPrimed = false;
+      _lastMessagesUnreadPoll = null;
       console.debug("[GC] client state reset (account switch)", _sessionPlayerId, "->", pid, reason || "");
     }
     if (pid > 0) _sessionPlayerId = pid;
@@ -9196,6 +9197,55 @@
     _lastMessagesUnreadPoll = Math.max(0, Number(count) || 0);
   };
 
+  function _processUnreadMessagesPoll(data, reason, opts) {
+    if (!data || typeof data.unread_messages_count !== "number") return;
+    if (opts && opts.skipMessagesUnread) return;
+
+    const onMessagesPage = GC.detectPage() === "messages";
+    const hudUnread = coercePollUnreadForHud(data, reason).unread_messages_count;
+    const prevUnread = _lastMessagesUnreadPoll;
+    const unreadIncreased = prevUnread !== null && hudUnread > prevUnread;
+
+    console.debug("[GC] notify check", {
+      kind: "message",
+      unreadCount: hudUnread,
+      previousUnread: prevUnread,
+      unreadIncreased,
+      soundEnabled: window.GC?.settings?.sound !== false,
+      audioUnlocked: _notifyAudioUnlocked,
+    });
+
+    _lastMessagesUnreadPoll = hudUnread;
+
+    if (unreadIncreased) {
+      playNewMessageNotifySound();
+    }
+
+    if (
+      unreadIncreased
+      && !onMessagesPage
+      && typeof GC.showNotify === "function"
+    ) {
+      let notifyLabel = "Neue Nachricht.";
+      try {
+        const dict = window.GC_LOCALE || {};
+        if (dict.messages_notify_new) notifyLabel = String(dict.messages_notify_new);
+      } catch (_) {}
+      GC.showNotify(notifyLabel, "info");
+    }
+
+    if (
+      unreadIncreased &&
+      onMessagesPage &&
+      GC.messagesPageState &&
+      GC.messagesPageState.listLoaded &&
+      !GC.messagesPageState.loading &&
+      typeof GC.messagesPageState.loadList === "function"
+    ) {
+      GC.messagesPageState.loadList();
+    }
+  }
+
   function updateNavBadges(navBadges) {
     const badges = navBadges && typeof navBadges === "object" ? navBadges : {};
     document.querySelectorAll("[data-nav-badge]").forEach((el) => {
@@ -9848,7 +9898,9 @@
 
   function _fleetIncomingAttackActive(alerts) {
     const data = alerts && typeof alerts === "object" ? alerts : (GC.lastState?.fleet_alerts || {});
-    return data.has_incoming_attack === true && Math.floor(Number(data.incoming_attack_count) || 0) > 0;
+    const count = Math.max(0, Math.floor(Number(data.incoming_attack_count) || 0));
+    const attacks = Array.isArray(data.incoming_attacks) ? data.incoming_attacks : [];
+    return data.has_incoming_attack === true || count > 0 || attacks.length > 0;
   }
 
   function _syncFleetHudShellVisibility(root, fleetCount, alerts) {
@@ -9950,7 +10002,23 @@
 
   function _maybePlayIncomingAttackNotify(alerts) {
     const data = alerts && typeof alerts === "object" ? alerts : {};
-    if (!_fleetIncomingAttackActive(data)) {
+    const attackCount = Math.max(0, Math.floor(Number(data.incoming_attack_count) || 0));
+    const active = _fleetIncomingAttackActive(data);
+
+    console.debug("[GC] notify check", {
+      kind: "attack",
+      attackCount,
+      hasIncomingAttack: data.has_incoming_attack === true,
+      nextAttackArrival: data.next_attack_arrival,
+      active,
+      signature: _incomingAttackNotifySignature(data),
+      previousSignature: _incomingAttackNotifyKey,
+      primed: _incomingAttackNotifyPrimed,
+      soundEnabled: window.GC?.settings?.sound !== false,
+      audioUnlocked: _notifyAudioUnlocked,
+    });
+
+    if (!active) {
       _incomingAttackNotifyKey = null;
       _incomingAttackNotifyPrimed = false;
       return;
@@ -9969,10 +10037,9 @@
 
   function syncFleetAttackAlert(alerts) {
     const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
-    if (!root) return;
-
     const data = alerts && typeof alerts === "object" ? alerts : {};
     const active = _fleetIncomingAttackActive(data);
+    if (!root) return;
     const listEl = root.querySelector("[data-fleet-drawer-list]");
     let alertRow = root.querySelector("[data-fleet-alert].gc-fleet-drawer-row");
 
@@ -9982,7 +10049,6 @@
       }
       const fleetCount = normalizeActiveFleetsPayload(GC.lastState?.active_fleets).count;
       _syncFleetHudShellVisibility(root, fleetCount, data);
-      _maybePlayIncomingAttackNotify(data);
       return;
     }
 
@@ -10024,7 +10090,6 @@
     const fleetCount = normalizeActiveFleetsPayload(GC.lastState?.active_fleets).count;
     _syncFleetHudShellVisibility(root, fleetCount, data);
     updateFleetAttackAlertCountdown(getTimerServerNow());
-    _maybePlayIncomingAttackNotify(data);
     GC.startProgressTicker();
   }
   GC.syncFleetAttackAlert = syncFleetAttackAlert;
@@ -10482,6 +10547,7 @@
     }
 
     if (data.fleet_alerts !== undefined) {
+      _maybePlayIncomingAttackNotify(data.fleet_alerts);
       syncFleetAttackAlert(data.fleet_alerts);
     }
 
@@ -10759,6 +10825,7 @@
       skipMessagesUnread,
       allowResourceRegression: Boolean(opts && opts.allowResourceRegression),
     });
+    _processUnreadMessagesPoll(data, reason, opts);
 
     syncResourceLiveBaseline({
       planetId: activePlanetId,
@@ -10890,6 +10957,7 @@
         skipMessagesUnread,
         allowResourceRegression: Boolean(opts && opts.allowResourceRegression),
       });
+      _processUnreadMessagesPoll(data, reason, { skipMessagesUnread });
 
       const livePlanetId = activePlanetId > 0
         ? activePlanetId
@@ -10912,47 +10980,6 @@
       if (skipScopedPanels) {
         commitGameStateCache(data, reason, opts);
         return false;
-      }
-
-      if (typeof data.unread_messages_count === "number") {
-        const onMessagesPage = GC.detectPage() === "messages";
-        const hudUnread = coercePollUnreadForHud(data, reason).unread_messages_count;
-        const prevUnread = _lastMessagesUnreadPoll;
-        const unreadIncreased =
-          prevUnread !== null && hudUnread > prevUnread;
-        if (!skipMessagesUnread) {
-          _lastMessagesUnreadPoll = hudUnread;
-
-          if (unreadIncreased) {
-            playNewMessageNotifySound();
-          }
-
-          if (
-            unreadIncreased
-            && !onMessagesPage
-            && typeof GC.showNotify === "function"
-          ) {
-            let notifyLabel = "Neue Nachricht.";
-            try {
-              const dict = window.GC_LOCALE || {};
-              if (dict.messages_notify_new) notifyLabel = String(dict.messages_notify_new);
-            } catch (_) {}
-            GC.showNotify(notifyLabel, "info");
-          }
-
-          // Inbox list load is owned by messages.js (init/tab). Only refresh when unread
-          // count rises after the inbox has already loaded — never on empty filtered tabs.
-          if (
-            unreadIncreased &&
-            onMessagesPage &&
-            GC.messagesPageState &&
-            GC.messagesPageState.listLoaded &&
-            !GC.messagesPageState.loading &&
-            typeof GC.messagesPageState.loadList === "function"
-          ) {
-            GC.messagesPageState.loadList();
-          }
-        }
       }
 
       // --- Queue tracking (always — ticker intervals / polling cadence) ---
@@ -11869,6 +11896,85 @@
 
   let _lootModalState = null;
 
+  const GC_NOTIFY_SOUNDS = {
+    attack: "/static/sounds/notify/notify.mp3",
+    message: "/static/sounds/notify/message.mp3",
+  };
+
+  let _notifyAudioUnlocked = false;
+  let _notifyAudio = {};
+  let _notifySoundInitDone = false;
+
+  function initNotificationSounds() {
+    if (_notifySoundInitDone) return;
+    _notifySoundInitDone = true;
+
+    Object.entries(GC_NOTIFY_SOUNDS).forEach(([key, src]) => {
+      const audio = new Audio(src);
+      audio.preload = "auto";
+      audio.volume = 0.65;
+      _notifyAudio[key] = audio;
+    });
+
+    const unlock = () => {
+      if (_notifyAudioUnlocked) return;
+      _notifyAudioUnlocked = true;
+
+      Object.values(_notifyAudio).forEach((audio) => {
+        try {
+          audio.muted = true;
+          const promise = audio.play();
+          if (promise && typeof promise.then === "function") {
+            promise
+              .then(() => {
+                audio.pause();
+                audio.currentTime = 0;
+                audio.muted = false;
+              })
+              .catch(() => {
+                audio.muted = false;
+              });
+          } else {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.muted = false;
+          }
+        } catch (_) {
+          audio.muted = false;
+        }
+      });
+    };
+
+    ["click", "keydown", "touchstart", "pointerdown"].forEach((eventName) => {
+      document.addEventListener(eventName, unlock, { once: true, passive: true });
+    });
+  }
+  GC.initNotificationSounds = initNotificationSounds;
+
+  function playNotificationSound(kind) {
+    if (window.GC?.settings?.sound === false) return;
+    initNotificationSounds();
+
+    const audio = _notifyAudio[kind];
+    if (!audio) return;
+
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.muted = false;
+
+      const promise = audio.play();
+      if (promise && typeof promise.catch === "function") {
+        promise.catch((err) => {
+          console.debug("[GC] notification sound blocked", kind, err);
+        });
+      }
+    } catch (err) {
+      console.debug("[GC] notification sound failed", kind, err);
+    }
+  }
+  GC.playNotificationSound = playNotificationSound;
+
   function playLootboxOpenSound() {
     if (window.GC?.settings?.sound === false) return;
     try {
@@ -11879,23 +11985,11 @@
   }
 
   function playIncomingAttackNotifySound() {
-    if (window.GC?.settings?.sound === false) return;
-    try {
-      const audio = new Audio("/static/sounds/notify/notify.mp3");
-      audio.volume = 0.65;
-      const p = audio.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
-    } catch (_) {}
+    playNotificationSound("attack");
   }
 
   function playNewMessageNotifySound() {
-    if (window.GC?.settings?.sound === false) return;
-    try {
-      const audio = new Audio("/static/sounds/notify/message.mp3");
-      audio.volume = 0.65;
-      const p = audio.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
-    } catch (_) {}
+    playNotificationSound("message");
   }
 
   function lootTileAmountLabel(tile) {
@@ -27541,6 +27635,7 @@
     initCardRequirementsHoverOnce();
     initMaxQueueHoverOnce();
     initVisibilityPolling();
+    initNotificationSounds();
     initMotionPreferenceListener();
     initSimplePageAmbience();
     bootstrapPlanetLandscapeFromBoot();
