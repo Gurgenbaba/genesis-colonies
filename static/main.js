@@ -10923,6 +10923,10 @@
         if (!skipMessagesUnread) {
           _lastMessagesUnreadPoll = hudUnread;
 
+          if (unreadIncreased) {
+            playNewMessageNotifySound();
+          }
+
           if (
             unreadIncreased
             && !onMessagesPage
@@ -11878,6 +11882,16 @@
     if (window.GC?.settings?.sound === false) return;
     try {
       const audio = new Audio("/static/sounds/notify/notify.mp3");
+      audio.volume = 0.65;
+      const p = audio.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    } catch (_) {}
+  }
+
+  function playNewMessageNotifySound() {
+    if (window.GC?.settings?.sound === false) return;
+    try {
+      const audio = new Audio("/static/sounds/notify/message.mp3");
       audio.volume = 0.65;
       const p = audio.play();
       if (p && typeof p.catch === "function") p.catch(() => {});

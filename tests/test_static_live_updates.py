@@ -99,6 +99,9 @@ def test_main_js_messages_inbox_reload_only_on_unread_increase():
     assert "unreadSyncedFromApi" not in unread_section
     assert "GC.messagesPageState.listLoaded" in unread_section
     assert "unreadIncreased &&" in unread_section
+    assert "function playNewMessageNotifySound()" in src
+    assert "/static/sounds/notify/message.mp3" in src
+    assert "playNewMessageNotifySound();" in unread_section
     tabs_section = src.split("function bindBuildingTabsOnce")[1].split("function initBuildings")[0]
     assert '#messages-tabs' in tabs_section
 
