@@ -1081,6 +1081,11 @@ def test_main_js_gc_fleet_incoming_attack_alert_row():
     assert "gc-fleet-alert--danger" not in css
     assert "gcFleetAttackPulse" not in css
     assert 'document.createElement("button")' not in src.split("function syncFleetAttackAlert")[1].split("GC.syncFleetAttackAlert")[0]
+    alert_fn = src.split("function syncFleetAttackAlert(alerts)")[1].split("GC.syncFleetAttackAlert = syncFleetAttackAlert")[0]
+    assert "function playIncomingAttackNotifySound()" in src
+    assert "/static/sounds/notify/notify.mp3" in src
+    assert "_maybePlayIncomingAttackNotify" in alert_fn
+    assert "_incomingAttackNotifyPrimed" in src
 
 
 def test_main_js_gc657_fleet_drawer_timer_selection_separation():

@@ -1395,6 +1395,8 @@
       if (typeof syncHeaderVacationBanner === "function") {
         syncHeaderVacationBanner({});
       }
+      _incomingAttackNotifyKey = null;
+      _incomingAttackNotifyPrimed = false;
       console.debug("[GC] client state reset (account switch)", _sessionPlayerId, "->", pid, reason || "");
     }
     if (pid > 0) _sessionPlayerId = pid;
@@ -9937,6 +9939,34 @@
     }
   }
 
+  let _incomingAttackNotifyKey = null;
+  let _incomingAttackNotifyPrimed = false;
+
+  function _incomingAttackNotifySignature(alerts) {
+    const count = Math.max(0, Math.floor(Number(alerts?.incoming_attack_count) || 0));
+    const arrival = Math.floor(Number(alerts?.next_attack_arrival) || 0);
+    return `${count}:${arrival}`;
+  }
+
+  function _maybePlayIncomingAttackNotify(alerts) {
+    const data = alerts && typeof alerts === "object" ? alerts : {};
+    if (!_fleetIncomingAttackActive(data)) {
+      _incomingAttackNotifyKey = null;
+      _incomingAttackNotifyPrimed = false;
+      return;
+    }
+    const signature = _incomingAttackNotifySignature(data);
+    if (!_incomingAttackNotifyPrimed) {
+      _incomingAttackNotifyPrimed = true;
+      _incomingAttackNotifyKey = signature;
+      return;
+    }
+    if (signature !== _incomingAttackNotifyKey) {
+      _incomingAttackNotifyKey = signature;
+      playIncomingAttackNotifySound();
+    }
+  }
+
   function syncFleetAttackAlert(alerts) {
     const root = document.getElementById("global-fleet-drawer-root") || document.querySelector("[data-global-fleet-drawer]");
     if (!root) return;
@@ -9952,6 +9982,7 @@
       }
       const fleetCount = normalizeActiveFleetsPayload(GC.lastState?.active_fleets).count;
       _syncFleetHudShellVisibility(root, fleetCount, data);
+      _maybePlayIncomingAttackNotify(data);
       return;
     }
 
@@ -9993,6 +10024,7 @@
     const fleetCount = normalizeActiveFleetsPayload(GC.lastState?.active_fleets).count;
     _syncFleetHudShellVisibility(root, fleetCount, data);
     updateFleetAttackAlertCountdown(getTimerServerNow());
+    _maybePlayIncomingAttackNotify(data);
     GC.startProgressTicker();
   }
   GC.syncFleetAttackAlert = syncFleetAttackAlert;
@@ -11839,6 +11871,16 @@
       const audio = new Audio("/static/sounds/lootboxes/lootbox_sound.mp3");
       audio.volume = 0.2;
       audio.play().catch(() => {});
+    } catch (_) {}
+  }
+
+  function playIncomingAttackNotifySound() {
+    if (window.GC?.settings?.sound === false) return;
+    try {
+      const audio = new Audio("/static/sounds/notify/notify.mp3");
+      audio.volume = 0.65;
+      const p = audio.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
     } catch (_) {}
   }
 
