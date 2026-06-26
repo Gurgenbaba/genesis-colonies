@@ -97,6 +97,7 @@ CLEAR_TABLES_ORDER: tuple[str, ...] = (
     "debris_fields",
     "exchange_log",
     "player_messages",
+    "chronicle_entries",
     "chat_messages",
     "chat_whisper_state",
     "chat_user_state",
@@ -249,6 +250,7 @@ RESET_DOMAINS: Dict[str, tuple[str, ...]] = {
     ),
     "combat": (
         "combat_hall_of_fame",
+        "chronicle_entries",
         "combat_reports",
         "battle_logs",
     ),

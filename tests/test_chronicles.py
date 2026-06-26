@@ -12,7 +12,7 @@ import game.models as models
 from game.combat import build_combat_report
 from game.combat_models import CombatResult, CombatRound
 from game.db import db
-from game.messages import dispatch_combat_reports, normalize_combat_metadata
+from game.messages import dispatch_combat_reports, normalize_combat_metadata, delete_message, list_messages
 from game.models import create_user
 from game.chronicles import (
     CHRONICLES_SECTION_EXPEDITIONS,
@@ -289,3 +289,147 @@ def test_chronicles_expeditions_and_records_pages(temp_db, monkeypatch):
     api_expo = client.get("/api/chronicles?section=expeditions&tab=loot")
     assert api_expo.status_code == 200
     assert api_expo.get_json()["section"] == "expeditions"
+
+
+def _count_chronicle_entries(player_id: int, entry_type: str) -> int:
+    conn = db()
+    try:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM chronicle_entries
+            WHERE player_id = ? AND entry_type = ?;
+            """,
+            (int(player_id), str(entry_type)),
+        ).fetchone()
+        return int(row["c"] or 0)
+    finally:
+        conn.close()
+
+
+def test_combat_report_creates_chronicle_entry(temp_db):
+    attacker_id, _ = _create_player("chron_persist_atk")
+    defender_id, _ = _create_player("chron_persist_def")
+    _seed_combat_reports(attacker_id, defender_id)
+
+    assert _count_chronicle_entries(attacker_id, "combat") == 1
+    assert _count_chronicle_entries(defender_id, "combat") == 1
+
+
+def test_delete_message_keeps_chronicle_entry(temp_db):
+    attacker_id, _ = _create_player("chron_del_atk")
+    defender_id, _ = _create_player("chron_del_def")
+    _seed_combat_reports(attacker_id, defender_id)
+
+    inbox = list_messages(attacker_id, category="combat")
+    message_id = inbox["data"]["messages"][0]["id"]
+    assert delete_message(attacker_id, message_id)["ok"]
+
+    conn = db()
+    try:
+        remaining_inbox = conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM player_messages
+            WHERE recipient_player_id = ? AND category = 'combat'
+              AND (deleted_at IS NULL OR deleted_at = 0);
+            """,
+            (attacker_id,),
+        ).fetchone()
+        assert int(remaining_inbox["c"] or 0) == 0
+
+        payload = build_chronicles_api_payload(
+            player_id=attacker_id,
+            section=CHRONICLES_SECTION_PVP,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    assert _count_chronicle_entries(attacker_id, "combat") == 1
+    assert payload["count"] == 1
+    assert payload["battles"][0]["report_metadata"]["perspective"] == "attacker"
+
+
+def test_chronicles_survive_message_cleanup(temp_db):
+    attacker_id, _ = _create_player("chron_clean_atk")
+    defender_id, _ = _create_player("chron_clean_def")
+    _seed_combat_reports(attacker_id, defender_id)
+
+    conn = db()
+    try:
+        now = int(__import__("time").time())
+        conn.execute(
+            "UPDATE player_messages SET deleted_at = ? WHERE recipient_player_id = ?;",
+            (now, attacker_id),
+        )
+        conn.commit()
+
+        payload = build_chronicles_api_payload(
+            player_id=attacker_id,
+            section=CHRONICLES_SECTION_PVP,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    assert _count_chronicle_entries(attacker_id, "combat") == 1
+    assert payload["count"] == 1
+
+
+def test_chronicle_entry_has_snapshot_without_message(temp_db):
+    attacker_id, _ = _create_player("chron_snap_atk")
+    defender_id, _ = _create_player("chron_snap_def")
+    _seed_combat_reports(attacker_id, defender_id)
+
+    conn = db()
+    try:
+        conn.execute("DELETE FROM player_messages;")
+        conn.commit()
+
+        row = conn.execute(
+            """
+            SELECT body_json FROM chronicle_entries
+            WHERE player_id = ? AND entry_type = 'combat'
+            LIMIT 1;
+            """,
+            (attacker_id,),
+        ).fetchone()
+        payload = build_chronicles_api_payload(
+            player_id=attacker_id,
+            section=CHRONICLES_SECTION_PVP,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    assert row is not None
+    assert payload["count"] == 1
+    battle = payload["battles"][0]
+    assert battle["report_metadata"]["attacker_name"] == "Attacker"
+    assert battle["report_metadata"]["defender_losses"]["sentinel_turret"] == 2
+
+
+def test_expedition_report_creates_chronicle_entry(temp_db):
+    player_id, _ = _create_player("chron_expo_persist")
+    _seed_expedition_report(player_id, event_key="mineral_deposit")
+
+    assert _count_chronicle_entries(player_id, "expedition") == 1
+
+    conn = db()
+    try:
+        payload = build_chronicles_api_payload(
+            player_id=player_id,
+            section=CHRONICLES_SECTION_EXPEDITIONS,
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    assert payload["count"] >= 1
+    assert payload["events"][0]["event_key"] == "mineral_deposit"
+
+
+def test_universe_reset_combat_domain_clears_chronicles_not_message_cleanup(temp_db):
+    from game.admin_universe_reset import RESET_DOMAINS
+
+    assert "chronicle_entries" in RESET_DOMAINS["combat"]
+    assert "chronicle_entries" not in RESET_DOMAINS["messages"]

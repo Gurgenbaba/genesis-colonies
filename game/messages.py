@@ -323,6 +323,26 @@ def create_message(
             ),
         )
         message_id = int(cur.lastrowid)
+        if cat in ("combat", "expedition"):
+            try:
+                from .chronicle_entries import record_chronicle_for_fleet_report
+
+                record_chronicle_for_fleet_report(
+                    player_id=int(recipient_player_id),
+                    entry_type=cat,
+                    subject=subject_n,
+                    metadata=metadata,
+                    source_message_id=message_id,
+                    occurred_at=now,
+                    conn=conn,
+                )
+            except Exception:
+                logger.exception(
+                    "chronicle entry persist failed player_id=%s category=%s message_id=%s",
+                    int(recipient_player_id),
+                    cat,
+                    message_id,
+                )
         if own_conn:
             commit(conn)
     except Exception:
@@ -393,7 +413,7 @@ def _notify_player_idempotent_fleet(
             report_phase=str(report_phase) if report_phase else None,
         ):
             return _ok({"message_id": None, "deduplicated": True})
-    return create_message(
+    result = create_message(
         pid,
         subject,
         body,
@@ -403,6 +423,7 @@ def _notify_player_idempotent_fleet(
         metadata=meta or None,
         conn=conn,
     )
+    return result
 
 
 def _valid_player_id(player_id: int, *, conn=None) -> int | None:

@@ -3751,7 +3751,7 @@
   "pe_policy_cooldown": "Slot on cooldown — switch available again soon.",
   "pe_policy_none_eligible": "No politics fits the current culture in this slot.",
   "pe_policy_locked_level": "At level 5 the first politics slot is unlocked.",
-  "pe_policy_wrong_archetype": "Passt nicht zur Kultur dieses Planeten.",
+  "pe_policy_wrong_archetype": "Does not match this planet's culture.",
   "pe_archetype_unknown": "Still unformed",
   "pe_archetype_frontier_settlers": "Grenzland-Siedler",
   "pe_archetype_militarized_society": "Militarized society",

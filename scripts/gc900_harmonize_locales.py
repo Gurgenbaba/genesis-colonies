@@ -181,6 +181,7 @@ EN_OVERRIDES: dict[str, str] = {
     "pe_spec_tagline_industrial_megacity": "Industrial megacity — conversion and mass output.",
     "pe_unlock_auto_conversion": "Automatic resource conversion",
     "overview_label_colony": "Colony",
+    "pe_policy_wrong_archetype": "Does not match this planet's culture.",
     "fleet_mission_hint_recycle_ready": "Debris field: %(metal)s Ferronite, %(crystal)s Crytite — %(ships)s reclaimer(s) assigned.",
     "fleet_preview_debris_amounts": "Ferronite %(metal)s · Crytite %(crystal)s",
     "trader_hub_footer_note": "All transactions are final. Ferronite and Crytite output is limited by storage capacity on the active colony.",

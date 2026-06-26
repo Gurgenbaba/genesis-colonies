@@ -10,7 +10,12 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional
 
-from .db import table_exists
+from .chronicle_entries import (
+    CHRONICLE_ENTRIES_TABLE,
+    chronicle_row_metadata,
+    chronicle_row_subject,
+    chronicle_schema_ready,
+)
 from .expedition_events import expedition_event_weight_audit
 from .messages import normalize_combat_metadata
 from .number_format import fmt_int, fmt_int_compact
@@ -122,7 +127,7 @@ def _normalize_section_tab(section: str, raw: str | None) -> str:
 
 
 def chronicles_schema_ready(conn) -> bool:
-    return table_exists(conn, "player_messages")
+    return chronicle_schema_ready(conn)
 
 
 def _format_created_at(ts: int) -> str:
@@ -228,7 +233,7 @@ def _opponent_name(meta: Mapping[str, Any], perspective: str) -> str:
 
 
 def _battle_from_row(row: Any, *, player_id: int) -> Dict[str, Any]:
-    meta = normalize_combat_metadata(_parse_metadata(row["metadata_json"]))
+    meta = normalize_combat_metadata(chronicle_row_metadata(row["body_json"]))
     perspective = _resolve_perspective(meta, player_id)
     outcome = _viewer_outcome(meta, player_id)
     loot = dict(meta.get("loot") or {})
@@ -237,10 +242,12 @@ def _battle_from_row(row: Any, *, player_id: int) -> Dict[str, Any]:
     debris_total = _debris_total(debris)
     destroyed_dealt = _destroyed_dealt(meta, perspective)
     destroyed_lost = _destroyed_lost(meta, perspective)
-    created_ts = int(row["created_at"] or 0)
+    created_ts = int(row["occurred_at"] or 0)
+    source_message_id = row["source_message_id"]
     return {
-        "message_id": int(row["id"]),
-        "subject": str(row["subject"] or ""),
+        "message_id": int(source_message_id) if source_message_id else int(row["id"]),
+        "chronicle_id": int(row["id"]),
+        "subject": chronicle_row_subject(row["body_json"]),
         "created_at": created_ts,
         "created_at_fmt": _format_created_at(created_ts),
         "created_at_short": _format_created_at_short(created_ts),
@@ -265,7 +272,7 @@ def _battle_from_row(row: Any, *, player_id: int) -> Dict[str, Any]:
         "loot_total_compact": fmt_int_compact(loot_total),
         "debris_total": debris_total,
         "debris_total_compact": fmt_int_compact(debris_total),
-        "is_read": bool(int(row["is_read"] or 0)),
+        "is_read": True,
         "report_metadata": meta,
     }
 
@@ -288,14 +295,12 @@ def _matches_pvp_tab(battle: Mapping[str, Any], tab: str) -> bool:
 def _fetch_combat_rows(player_id: int, *, limit: int, conn: sqlite3.Connection) -> List[Any]:
     cur = conn.cursor()
     cur.execute(
-        """
-        SELECT id, subject, metadata_json, created_at, is_read
-        FROM player_messages
-        WHERE recipient_player_id = ?
-          AND (deleted_at IS NULL OR deleted_at = 0)
-          AND COALESCE(is_archived, 0) = 0
-          AND category = 'combat'
-        ORDER BY created_at DESC, id DESC
+        f"""
+        SELECT id, source_message_id, body_json, occurred_at
+        FROM {CHRONICLE_ENTRIES_TABLE}
+        WHERE player_id = ?
+          AND entry_type = 'combat'
+        ORDER BY occurred_at DESC, id DESC
         LIMIT ?;
         """,
         (int(player_id), max(1, int(limit))),
@@ -350,6 +355,8 @@ def _build_pvp_stats(battles: List[Mapping[str, Any]]) -> Dict[str, Any]:
 
 
 def _combat_rank(player_id: int, *, conn: sqlite3.Connection) -> Optional[int]:
+    from .db import table_exists
+
     if not table_exists(conn, "player_scores"):
         return None
     cur = conn.cursor()
@@ -453,22 +460,24 @@ def _format_losses_salvage(losses_total: int, salvaged_total: int) -> str:
 
 
 def _expedition_from_row(row: Any) -> Dict[str, Any]:
-    meta = _parse_metadata(row["metadata_json"])
+    meta = chronicle_row_metadata(row["body_json"])
     event_key = str(meta.get("event_key") or "")
     rewards = dict(meta.get("rewards") or {})
     loot_total = _expedition_rewards_total(rewards)
     losses_total = max(0, int(meta.get("losses_total") or 0))
     salvaged_total = max(0, int(meta.get("salvaged_total") or 0))
-    created_ts = int(row["created_at"] or 0)
+    created_ts = int(row["occurred_at"] or 0)
     story_tier = str(meta.get("story_tier") or "")
     is_legendary = (
         event_key in _EXPO_LEGENDARY_EVENT_KEYS
         or story_tier == "legendary"
         or _expedition_event_category(event_key) == "legendary"
     )
+    source_message_id = row["source_message_id"]
     return {
-        "message_id": int(row["id"]),
-        "subject": str(row["subject"] or ""),
+        "message_id": int(source_message_id) if source_message_id else int(row["id"]),
+        "chronicle_id": int(row["id"]),
+        "subject": chronicle_row_subject(row["body_json"]),
         "created_at": created_ts,
         "created_at_fmt": _format_created_at(created_ts),
         "created_at_short": _format_created_at_short(created_ts),
@@ -484,7 +493,7 @@ def _expedition_from_row(row: Any) -> Dict[str, Any]:
         "salvaged_total": salvaged_total,
         "losses_salvage_compact": _format_losses_salvage(losses_total, salvaged_total),
         "is_legendary": is_legendary,
-        "is_read": bool(int(row["is_read"] or 0)),
+        "is_read": True,
         "report_metadata": meta,
     }
 
@@ -511,14 +520,12 @@ def _matches_expedition_tab(event: Mapping[str, Any], tab: str) -> bool:
 def _fetch_expedition_rows(player_id: int, *, limit: int, conn: sqlite3.Connection) -> List[Any]:
     cur = conn.cursor()
     cur.execute(
-        """
-        SELECT id, subject, metadata_json, created_at, is_read
-        FROM player_messages
-        WHERE recipient_player_id = ?
-          AND (deleted_at IS NULL OR deleted_at = 0)
-          AND COALESCE(is_archived, 0) = 0
-          AND category = 'expedition'
-        ORDER BY created_at DESC, id DESC
+        f"""
+        SELECT id, source_message_id, body_json, occurred_at
+        FROM {CHRONICLE_ENTRIES_TABLE}
+        WHERE player_id = ?
+          AND entry_type = 'expedition'
+        ORDER BY occurred_at DESC, id DESC
         LIMIT ?;
         """,
         (int(player_id), max(1, int(limit))),

@@ -165,10 +165,14 @@ def test_gc900c_tr_works_for_each_supported_language():
 
 
 def test_gc900c_non_de_fallback_chain_uses_en():
-    fr = get_locale_dict("fr")
-    en = get_locale_dict("en")
-    assert fr["buildings_title"] == en["buildings_title"]
+    from game.i18n import _load_locale
+
+    fr_raw = _load_locale("fr")
+    en_raw = _load_locale("en")
+    merged = get_locale_dict("fr")
     assert FALLBACK_LOCALE == "en"
+    assert len(merged) >= len(en_raw)
+    assert merged["buildings_title"] == fr_raw["buildings_title"]
 
 
 def test_gc900c_api_accepts_french_guest(app_client):
