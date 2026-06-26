@@ -72,20 +72,12 @@ def test_tr_brace_count_placeholder():
     assert "2" in text
 
 
-def test_en_locale_falls_back_to_de_for_missing_keys():
-    import json
-    from pathlib import Path
-
+def test_en_locale_falls_back_to_en_for_new_languages():
     from game.i18n import get_locale_dict
 
-    root = Path(__file__).resolve().parent.parent
-    de_raw = json.loads((root / "locales" / "de.json").read_text(encoding="utf-8"))
-    en_raw = json.loads((root / "locales" / "en.json").read_text(encoding="utf-8"))
-    sample_key = "build_queue_title"
-    assert sample_key in de_raw
-    assert sample_key not in en_raw
-    merged = get_locale_dict("en")
-    assert merged[sample_key] == de_raw[sample_key]
+    fr = get_locale_dict("fr")
+    en = get_locale_dict("en")
+    assert fr.get("buildings_title") == en.get("buildings_title")
 
 
 def test_T_interpolates_brace_placeholders():

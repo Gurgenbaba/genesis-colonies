@@ -1,0 +1,318 @@
+{
+  "account_email_verify_sent": {
+    "en": "Verifizierungs-Mail gesendet.",
+    "de": "Verifizierungs-Mail gesendet."
+  },
+  "admin_ban_hint": {
+    "en": "Schnelles Bann-Handling. Detailliertes Player-Management folgt separat.",
+    "de": "Schnelles Bann-Handling. Detailliertes Player-Management folgt separat."
+  },
+  "admin_ban_permanent": {
+    "en": "permanent",
+    "de": "permanent"
+  },
+  "admin_btn_ban_player": {
+    "en": "Spieler bannen",
+    "de": "Spieler bannen"
+  },
+  "admin_btn_save_settings": {
+    "en": "Einstellungen speichern",
+    "de": "Einstellungen speichern"
+  },
+  "admin_btn_unban_player": {
+    "en": "Bann aufheben",
+    "de": "Bann aufheben"
+  },
+  "admin_chat_moderation_hint": {
+    "en": "Mute (temporary) and chat ban (permanent) are separate measures.",
+    "de": "Stummschaltung (temporär) und Chat-Bann (dauerhaft) sind getrennte Maßnahmen."
+  },
+  "admin_label_ban_player_id": {
+    "en": "Spieler-ID",
+    "de": "Spieler-ID"
+  },
+  "admin_label_resource_player_id": {
+    "en": "Spieler-ID (optional)",
+    "de": "Spieler-ID (optional)"
+  },
+  "admin_label_unban_player_id": {
+    "en": "Spieler-ID (Bann aufheben)",
+    "de": "Spieler-ID (Bann aufheben)"
+  },
+  "admin_metric_speed_hint": {
+    "en": "Produktion / Bau / Forschung",
+    "de": "Produktion / Bau / Forschung"
+  },
+  "admin_no_bans": {
+    "en": "Aktuell sind keine Spieler gebannt.",
+    "de": "Aktuell sind keine Spieler gebannt."
+  },
+  "admin_wipe_confirm": {
+    "en": "I understand: this wipe is permanent.",
+    "de": "Ich verstehe: Dieser Wipe ist endgültig."
+  },
+  "alliance_title": {
+    "en": "Allianz",
+    "de": "Allianz"
+  },
+  "defense_panel_planetary_title": {
+    "en": "Planetare Verteidigung",
+    "de": "Planetare Verteidigung"
+  },
+  "desc_pe_ancient_t1": {
+    "en": "Produktionskette: Ancient Alloy.",
+    "de": "Produktionskette: Ancient Alloy."
+  },
+  "desc_pe_ecology_t1": {
+    "en": "Produktionskette: Living Crystal.",
+    "de": "Produktionskette: Living Crystal."
+  },
+  "desc_pe_energy_t2": {
+    "en": "Produktionskette: Dark Plasma.",
+    "de": "Produktionskette: Dark Plasma."
+  },
+  "desc_pe_experimental_t1": {
+    "en": "Experimentelle Forschung (riskant).",
+    "de": "Experimentelle Forschung (riskant)."
+  },
+  "desc_pe_industry_t2_mining_path": {
+    "en": "Orbital extraction or deep core — permanent choice.",
+    "de": "Orbitale Extraktion oder Tiefkern — permanente Entscheidung."
+  },
+  "desc_pe_military_t2": {
+    "en": "Produktionskette: Phase Crystal.",
+    "de": "Produktionskette: Phase Crystal."
+  },
+  "desc_pe_science_t1": {
+    "en": "Planetare Forschung beschleunigt.",
+    "de": "Planetare Forschung beschleunigt."
+  },
+  "desc_pe_science_t5": {
+    "en": "Experimentelle Forschung aktivieren.",
+    "de": "Experimentelle Forschung aktivieren."
+  },
+  "galaxy_legend_enemy_planned": {
+    "en": "● Feindliche Kolonie (in Planung)",
+    "de": "● Feindliche Kolonie (in Planung)"
+  },
+  "landing_badge_live": {
+    "en": "🛰 Live-Produktion & Forschung",
+    "de": "🛰 Live-Produktion & Forschung"
+  },
+  "landing_roadmap_defense": {
+    "en": "Verteidigung",
+    "de": "Verteidigung"
+  },
+  "landing_scanner_title": {
+    "en": "Kolonie-Scanner",
+    "de": "Kolonie-Scanner"
+  },
+  "landing_section_start_subtitle": {
+    "en": "Drei Schritte bis zur laufenden Kolonie",
+    "de": "Drei Schritte bis zur laufenden Kolonie"
+  },
+  "landing_step_2": {
+    "en": "Starte Forschung (Bauoptimierung / Scanner)",
+    "de": "Starte Forschung (Bauoptimierung / Scanner)"
+  },
+  "login_btn_submit": {
+    "en": "🚀 Einloggen &amp; Kolonie betreten",
+    "de": "🚀 Einloggen &amp; Kolonie betreten"
+  },
+  "overview_label_colony": {
+    "en": "Kolonie",
+    "de": "Kolonie"
+  },
+  "pe_action_spec_body": {
+    "en": "From level 8 you can pick a permanent specialization. Your DNA shows which path fits best.",
+    "de": "Ab Stufe 8 kannst du eine permanente Spezialisierung wählen. Deine DNA zeigt, welche Richtung am besten passt."
+  },
+  "pe_action_spec_soon_body": {
+    "en": "At level 8 you can set your planet's permanent specialization.",
+    "de": "Ab Stufe 8 kannst du die permanente Spezialisierung festlegen."
+  },
+  "pe_active_research": {
+    "en": "Aktive Forschung",
+    "de": "Aktive Forschung"
+  },
+  "pe_colonize_prompt": {
+    "en": "Name der neuen Kolonie:",
+    "de": "Name der neuen Kolonie:"
+  },
+  "pe_confirm_choice": {
+    "en": "This choice is permanent and cannot be undone.",
+    "de": "Diese Wahl ist permanent und kann nicht rückgängig gemacht werden."
+  },
+  "pe_confirm_spec": {
+    "en": "Die Spezialisierung ist permanent.",
+    "de": "Die Spezialisierung ist permanent."
+  },
+  "pe_dev_path_hint": {
+    "en": "Permanent decisions and specializations",
+    "de": "Permanente Entscheidungen und Spezialisierungen"
+  },
+  "pe_economy_empty": {
+    "en": "Baue Forschung und Infrastruktur aus, um Produktion zu starten.",
+    "de": "Baue Forschung und Infrastruktur aus, um Produktion zu starten."
+  },
+  "pe_identity_teaser_active_body": {
+    "en": "This permanent path shapes production, events, and policies.",
+    "de": "Diese permanente Richtung prägt Produktion, Events und Politik."
+  },
+  "pe_identity_teaser_countdown_body": {
+    "en": "From level 3 you see DNA traits. At level 8 you choose your planet's permanent identity.",
+    "de": "Ab Stufe 3 siehst du DNA-Eigenschaften. Ab Stufe 8 wählst du die permanente Planet-Identität."
+  },
+  "pe_identity_teaser_ready_hint": {
+    "en": "Scroll down and pick a permanent specialization.",
+    "de": "Scrolle nach unten und wähle eine permanente Spezialisierung."
+  },
+  "pe_intro_identity": {
+    "en": "At level 8 you choose a permanent planet identity — one of your most important decisions.",
+    "de": "Ab Stufe 8 wählst du die permanente Planet-Identität — eine der wichtigsten Entscheidungen."
+  },
+  "pe_no_chains": {
+    "en": "Noch keine Ketten aktiv — Forschung schaltet Ketten frei.",
+    "de": "Noch keine Ketten aktiv — Forschung schaltet Ketten frei."
+  },
+  "pe_no_spec_yet": {
+    "en": "Noch keine Spezialisierung",
+    "de": "Noch keine Spezialisierung"
+  },
+  "pe_pick_spec": {
+    "en": "Choose specialization (permanent)",
+    "de": "Spezialisierung wählen (permanent)"
+  },
+  "pe_reason_already_specialized": {
+    "en": "Spezialisierung ist bereits festgelegt.",
+    "de": "Spezialisierung ist bereits festgelegt."
+  },
+  "pe_reason_missing_name": {
+    "en": "Kolonie braucht einen Namen.",
+    "de": "Kolonie braucht einen Namen."
+  },
+  "pe_reason_not_eligible": {
+    "en": "Diese Spezialisierung passt nicht zu deinem Planeten.",
+    "de": "Diese Spezialisierung passt nicht zu deinem Planeten."
+  },
+  "pe_req_locked_choice": {
+    "en": "Requires a previous permanent decision",
+    "de": "Benötigt vorherige permanente Entscheidung"
+  },
+  "pe_req_spec_tier": {
+    "en": "Spezialisierung Stufe %(need)s erforderlich",
+    "de": "Spezialisierung Stufe %(need)s erforderlich"
+  },
+  "pe_research_choice_hint": {
+    "en": "Choose a permanent path:",
+    "de": "Permanente Richtung wählen:"
+  },
+  "pe_spec_active_desc": {
+    "en": "This permanent direction shapes production, events, and policy on this planet.",
+    "de": "Diese permanente Richtung prägt Produktion, Events und Politik auf diesem Planeten."
+  },
+  "pe_spec_empty": {
+    "en": "Choose a permanent specialization to shape the planet.",
+    "de": "Wähle eine permanente Spezialisierung, um den Planeten zu formen."
+  },
+  "pe_spec_identity_fortress_planet": {
+    "en": "Dieser Planet wird zur Bastion — Verteidigung und Crytite-Produktion stehen im Mittelpunkt.",
+    "de": "Dieser Planet wird zur Bastion — Verteidigung und Crytite-Produktion stehen im Mittelpunkt."
+  },
+  "pe_spec_lock_incompatible": {
+    "en": "Mit aktueller Spezialisierung unvereinbar",
+    "de": "Mit aktueller Spezialisierung unvereinbar"
+  },
+  "pe_spec_none_eligible": {
+    "en": "Keine Spezialisierung passt zur aktuellen DNA. Entwickle den Planeten weiter oder kolonisiere eine passende Welt.",
+    "de": "Keine Spezialisierung passt zur aktuellen DNA. Entwickle den Planeten weiter oder kolonisiere eine passende Welt."
+  },
+  "pe_spec_pick_btn": {
+    "en": "Spezialisierung festlegen",
+    "de": "Spezialisierung festlegen"
+  },
+  "pe_spec_pick_intro": {
+    "en": "Choose your planet's permanent future. This decision cannot be undone.",
+    "de": "Wähle die permanente Zukunft deines Planeten. Diese Entscheidung kann nicht rückgängig gemacht werden."
+  },
+  "pe_spec_t2_fortress_planet": {
+    "en": "Crytite-Produktionskette — Festungswirtschaft.",
+    "de": "Crytite-Produktionskette — Festungswirtschaft."
+  },
+  "pe_spec_tagline_deep_mining_colony": {
+    "en": "Tiefbau-Kolonie — Rohstoffe aus dem Planetenkern.",
+    "de": "Tiefbau-Kolonie — Rohstoffe aus dem Planetenkern."
+  },
+  "pe_spec_tagline_smuggler_colony": {
+    "en": "Schmuggler-Kolonie — Schattenwirtschaft und Risiko.",
+    "de": "Schmuggler-Kolonie — Schattenwirtschaft und Risiko."
+  },
+  "pe_spec_tier": {
+    "en": "Spezialisierung Stufe",
+    "de": "Spezialisierung Stufe"
+  },
+  "pe_spec_tier_up_2": {
+    "en": "Spezialisierung auf Stufe 2 ausgebaut",
+    "de": "Spezialisierung auf Stufe 2 ausgebaut"
+  },
+  "pe_spec_tier_up_3": {
+    "en": "Spezialisierung auf Meisterstufe erreicht",
+    "de": "Spezialisierung auf Meisterstufe erreicht"
+  },
+  "pe_spec_upgrade_btn": {
+    "en": "Spezialisierung auf Stufe %s ausbauen",
+    "de": "Spezialisierung auf Stufe %s ausbauen"
+  },
+  "pe_stat_research": {
+    "en": "Forschung",
+    "de": "Forschung"
+  },
+  "pe_tab_research": {
+    "en": "Forschung",
+    "de": "Forschung"
+  },
+  "pe_unlock_chain_contraband": {
+    "en": "Produktionskette: Schmuggelware",
+    "de": "Produktionskette: Schmuggelware"
+  },
+  "pe_unlock_chain_mantle_alloy": {
+    "en": "Produktionskette: Mantle Alloy",
+    "de": "Produktionskette: Mantle Alloy"
+  },
+  "pe_unlock_chain_phase_crystal": {
+    "en": "Produktionskette: Phase Crystal",
+    "de": "Produktionskette: Phase Crystal"
+  },
+  "pe_unlock_chain_raw_ferronit_bulk": {
+    "en": "Produktionskette: Raw Ferronite",
+    "de": "Produktionskette: Roh-Ferronit"
+  },
+  "pe_unlock_enable_experimental": {
+    "en": "Experimentelle Forschung freigeschaltet",
+    "de": "Experimentelle Forschung freigeschaltet"
+  },
+  "pe_unlock_event_pool_smuggler": {
+    "en": "Schmuggler-Events",
+    "de": "Schmuggler-Events"
+  },
+  "pe_unlock_experimental": {
+    "en": "Experimentelle Forschung",
+    "de": "Experimentelle Forschung"
+  },
+  "register_btn_submit": {
+    "en": "Account erstellen & Kolonie starten",
+    "de": "Account erstellen & Kolonie starten"
+  },
+  "register_feature_2": {
+    "en": "Optimiere Produktion & Forschung",
+    "de": "Optimiere Produktion & Forschung"
+  },
+  "spec_deep_mining_colony": {
+    "en": "Tiefbau-Kolonie",
+    "de": "Tiefbau-Kolonie"
+  },
+  "spec_smuggler_colony": {
+    "en": "Schmuggler-Kolonie",
+    "de": "Schmuggler-Kolonie"
+  }
+}

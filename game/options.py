@@ -19,7 +19,7 @@ from .models import (
 )
 from .planet_evolution.repository import get_context_planet
 from .playercard import _strip_control, sanitize_text_field
-from .i18n import get_player_locale, normalize_locale, set_player_locale, ensure_locale_schema
+from .i18n import SUPPORTED_LOCALES, get_player_locale, normalize_locale, set_player_locale, ensure_locale_schema
 
 NAME_MIN = 2
 NAME_MAX = 40
@@ -1053,7 +1053,7 @@ def update_locale(
     conn=None,
 ) -> Tuple[bool, str, Dict[str, Any]]:
     raw = str(locale or "").strip().lower()
-    if raw not in {"de", "en"}:
+    if raw not in SUPPORTED_LOCALES:
         return False, "options_error_invalid_locale", {}
     loc = normalize_locale(raw)
     own = conn is None

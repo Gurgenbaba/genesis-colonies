@@ -718,6 +718,36 @@ def test_admin_panel_includes_diplomacy_tab(app_client):
     assert "admin-diplomacy-output" in html
 
 
+def test_admin_panel_includes_ranking_recompute_button(app_client):
+    client, admin_id, user_id = app_client
+    _as_admin(client, admin_id)
+    r = client.get("/admin")
+    assert r.status_code == 200
+    html = r.get_data(as_text=True)
+    assert 'data-admin-action="ranking-recompute"' in html
+    assert "admin-btn-ranking-recompute" in html
+    assert "admin_ranking_recompute_button" in html or "Ranking jetzt neu berechnen" in html
+
+
+def test_admin_ranking_recompute_forbidden_for_user(app_client):
+    client, admin_id, user_id = app_client
+    _as_user(client, user_id)
+    r = client.post("/api/admin/ranking/recompute", json={})
+    assert r.status_code == 403
+
+
+def test_admin_ranking_recompute_ok_for_admin(app_client):
+    client, admin_id, user_id = app_client
+    _login(client, "admin_cc", "adminpass123")
+    r = client.post("/api/admin/ranking/recompute", json={})
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data.get("ok") is True
+    assert "players_updated" in data
+    assert "ranks_assigned" in data
+    assert "duration_ms" in data
+
+
 def test_delete_player_requires_confirm(app_client):
     client, admin_id, user_id = app_client
     _login(client, "admin_cc", "adminpass123")

@@ -419,6 +419,18 @@
         </div>
       </div>
       <div id="admin-queue-tick-result" class="admin-small-hint" aria-live="polite"></div>
+
+      <section class="admin-section admin-card">
+        <h3 class="admin-section-title-text">{{ T("admin_ranking_recompute_title", "Ranking aktualisieren") }}</h3>
+        <p class="admin-small-hint">{{ T("admin_ranking_recompute_desc", "Berechnet alle Spielerpunkte und Ränge sofort neu.") }}</p>
+        <div class="admin-toolbar admin-action-row-wrap">
+          <button type="button" id="admin-btn-ranking-recompute" class="gc-btn gc-btn-primary gc-btn-sm" data-admin-action="ranking-recompute">
+            {{ T("admin_ranking_recompute_button", "Ranking jetzt neu berechnen") }}
+          </button>
+        </div>
+        <div id="admin-ranking-recompute-result" class="admin-small-hint" aria-live="polite"></div>
+      </section>
+
       <div id="admin-runtime-output" class="admin-panel-body"></div>
     </section>
 
@@ -604,12 +616,13 @@
             <p class="admin-hint">{{ T("admin_balance_exchange_daily_min_hint", "Untergrenze für neue/kleine Imperien (Early Game).") }}</p>
           </div>
           <div class="admin-field">
-            <label class="admin-label" for="admin-balance-rate-m2c">{{ T("exchange_rate_metal_to_crystal", "Ferronit → Crytite") }}</label>
+            <label class="admin-label" for="admin-balance-rate-m2c">{{ T("admin_exchange_crytite_buy_cost_label", "Ferronit-Kosten pro 1 Crytite (Kauf)") }}</label>
             <input class="admin-input" id="admin-balance-rate-m2c" type="number" min="0.01" step="0.01" data-balance-key="exchange_rate_metal_to_crystal">
           </div>
           <div class="admin-field">
-            <label class="admin-label" for="admin-balance-rate-c2m">{{ T("exchange_rate_crystal_to_metal", "Crytite → Ferronit") }}</label>
+            <label class="admin-label" for="admin-balance-rate-c2m">{{ T("admin_exchange_crytite_sell_return_label", "Ferronit-Ertrag pro 1 Crytite (Verkauf)") }}</label>
             <input class="admin-input" id="admin-balance-rate-c2m" type="number" min="0.01" step="0.01" data-balance-key="exchange_rate_crystal_to_metal">
+            <p class="admin-hint">{{ T("admin_exchange_arbitrage_help", "Der Kaufpreis muss höher sein als der Verkaufsertrag, sonst entsteht ein Arbitrage-Exploit.") }}</p>
           </div>
           <div class="admin-field">
             <label class="admin-label" for="admin-balance-fuel-enabled">{{ T("admin_balance_fuel_exchange_enabled", "Brennzellen-Tausch") }}</label>

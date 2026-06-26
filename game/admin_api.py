@@ -1376,6 +1376,8 @@ def api_save_balance_settings(admin_id: int, body: Dict[str, Any]) -> Dict[str, 
 
     settings, err = save_balance_settings(body)
     if err:
+        if err in ("exchange_arbitrage_risk", "exchange_invalid_rate"):
+            return _err(err, err)
         return _err("invalid_settings", err)
 
     audit(

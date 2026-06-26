@@ -441,7 +441,10 @@ def test_admin_recalculate_allowed_for_admin(app_client, temp_db):
     data = resp.get_json()
     assert data.get("ok") is True
     assert "players_seen" in data
-    assert "top_score" in data
+    assert "players_updated" in data
+    assert "ranks_assigned" in data
+    assert "duration_ms" in data
+    assert data.get("skipped_interval") is False
 
 
 def test_admin_ranking_recompute_alias(app_client, temp_db):
@@ -459,7 +462,15 @@ def test_admin_ranking_recompute_alias(app_client, temp_db):
     assert resp.status_code == 200
     data = resp.get_json()
     assert data.get("ok") is True
+    assert "players_seen" in data
     assert "scores_updated" in data
+    assert "ranks_assigned" in data
+    assert "duration_ms" in data
+
+    audit = app_client.get("/api/admin/audit-log?action=admin_ranking_recompute")
+    assert audit.status_code == 200
+    entries = audit.get_json()["entries"]
+    assert any(row.get("action") == "admin_ranking_recompute" for row in entries)
 
 
 def test_ranking_includes_avatar_when_public(temp_db):

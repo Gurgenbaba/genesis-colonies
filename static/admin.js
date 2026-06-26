@@ -434,7 +434,14 @@
       setBalanceStatus(t("admin_balance_saved", "Balance-Einstellungen gespeichert."));
       await afterBalanceMutation(res.settings, "admin_balance_save", { hud: res.hud });
     } else {
-      showAlert(res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen"), "error");
+      const errMsg =
+        res.error === "exchange_arbitrage_risk"
+          ? t(
+              "error_exchange_arbitrage_risk",
+              "Invalid exchange rates: the Crytite buy price must be higher than the Crytite sell return."
+            )
+          : res.message || res.error || t("admin_action_failed", "Aktion fehlgeschlagen");
+      showAlert(errMsg, "error");
       setBalanceStatus("");
     }
     return res;
@@ -454,17 +461,38 @@
   }
 
   async function recalculateAdminRankings() {
-    const res = await adminPost("/api/admin/rankings/recalculate", {});
-    if (res.ok) {
-      const n = res.players_updated ?? 0;
-      notify(t("admin_balance_recalc_ok", "Ranking neu berechnet.") + ` (${n})`, "success");
-      setBalanceStatus(
-        `${t("admin_balance_recalc_ok", "Ranking neu berechnet.")} — ${n} ${t("admin_balance_players", "Spieler")}`
-      );
-    } else {
-      showAlert(res.message || res.error, "error");
+    return runAdminRankingRecompute(qs('[data-admin-action="balance-recalculate"]'));
+  }
+
+  async function runAdminRankingRecompute(triggerBtn) {
+    const btn = triggerBtn || qs("#admin-btn-ranking-recompute");
+    const resultEl = qs("#admin-ranking-recompute-result");
+    if (resultEl) resultEl.textContent = t("admin_ranking_recompute_running", "Ranking wird neu berechnet …");
+    setBusy(btn, true);
+    try {
+      const res = await adminPost("/api/admin/ranking/recompute", {});
+      if (res.ok) {
+        const players = res.players_updated ?? res.players_seen ?? 0;
+        const ranks = res.ranks_assigned ?? 0;
+        const msg = t("admin_ranking_recompute_success", "Ranking aktualisiert: {players} Spieler, {ranks} Ränge.")
+          .replace("{players}", String(players))
+          .replace("{ranks}", String(ranks));
+        notify(msg, "success");
+        if (resultEl) resultEl.textContent = msg;
+      } else {
+        const errMsg = res.message || res.error || t("admin_ranking_recompute_error", "Ranking konnte nicht aktualisiert werden.");
+        showAlert(errMsg, "error");
+        if (resultEl) resultEl.textContent = errMsg;
+      }
+      return res;
+    } catch (err) {
+      const errMsg = err && err.message ? err.message : t("admin_ranking_recompute_error", "Ranking konnte nicht aktualisiert werden.");
+      showAlert(errMsg, "error");
+      if (resultEl) resultEl.textContent = errMsg;
+      return { ok: false, error: errMsg };
+    } finally {
+      setBusy(btn, false);
     }
-    return res;
   }
 
   async function backfillCombatHof() {
@@ -2482,6 +2510,7 @@
     if (act === "balance-save") return saveAdminBalance();
     if (act === "balance-preset-b") return applyBalancePresetB();
     if (act === "balance-recalculate") return recalculateAdminRankings();
+    if (act === "ranking-recompute") return runAdminRankingRecompute(btn);
     if (act === "combat-hof-backfill") return backfillCombatHof();
     if (act === "server-save") return saveAdminServer();
     if (act === "news-publish") return publishAdminNews(true);

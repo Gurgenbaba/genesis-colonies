@@ -51,8 +51,8 @@ DEFAULT_GAME_SETTINGS: Dict[str, str] = {
 
     # Instant resource exchange (Trader Hub) — Speedgame defaults
     "exchange_enabled": "1",
-    "exchange_rate_metal_to_crystal": "0.85",
-    "exchange_rate_crystal_to_metal": "0.85",
+    "exchange_rate_metal_to_crystal": "2",
+    "exchange_rate_crystal_to_metal": "1",
     "exchange_daily_limit": "50000000000",
     "exchange_daily_limit_pct": "80",
     "exchange_daily_limit_min": "500000",

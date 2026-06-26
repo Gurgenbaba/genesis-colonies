@@ -4173,6 +4173,71 @@ def test_colonize_fleet_send_preview_classic_empty_slot(fleet_db):
     conn.close()
 
 
+def _colonize_preview_to_empty_slot(uid: int, pid: int, origin, conn):
+    return build_fleet_send_preview(
+        player_id=uid,
+        origin_planet=dict(origin),
+        target_galaxy=1,
+        target_system=499,
+        target_position=12,
+        mission_type="colonize",
+        ships={"seed_ark": 1},
+        resources={},
+        speed_percent=100,
+        conn=conn,
+    )
+
+
+def test_colonize_fleet_preview_respects_colony_cap(fleet_db):
+    from game.admin_balance import save_balance_settings
+
+    uid = _player()
+    settings, err = save_balance_settings({"max_colonies_per_player": 2})
+    assert err is None, err
+    assert settings["max_colonies_per_player"] == 2
+
+    conn = db()
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    _seed_ships(pid, uid, {"seed_ark": 1}, conn=conn)
+    origin = conn.cursor().execute("SELECT * FROM planets WHERE id = ?;", (pid,)).fetchone()
+    conn.commit()
+
+    preview_below = _colonize_preview_to_empty_slot(uid, pid, origin, conn)
+    assert preview_below["mission_allowed"] is True
+    assert preview_below["can_send"] is True
+
+    ok, reason, _ = colonize_planet(
+        uid,
+        name="Colony Two",
+        galaxy=1,
+        system=498,
+        position=11,
+        conn=conn,
+    )
+    assert ok, reason
+    conn.commit()
+
+    preview_at_cap = _colonize_preview_to_empty_slot(uid, pid, origin, conn)
+    assert preview_at_cap["mission_allowed"] is False
+    assert preview_at_cap["block_reason"] == "max_colonies_reached"
+    assert preview_at_cap["can_send"] is False
+
+    ok_send, reason_send, _ = send_fleet(
+        player_id=uid,
+        origin_planet_id=pid,
+        target_galaxy=1,
+        target_system=499,
+        target_position=13,
+        mission_type="colonize",
+        ships={"seed_ark": 1},
+        resources={"colony_name": "Blocked Colony"},
+        conn=conn,
+    )
+    assert not ok_send
+    assert reason_send == "max_colonies_reached"
+    conn.close()
+
+
 def test_colonize_fleet_send_to_empty_slot(fleet_db):
     conn = db()
     uid = _player(conn=conn)

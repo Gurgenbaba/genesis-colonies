@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import time
 from typing import Any, Dict, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from .db import begin_write_transaction, commit, db, lock_planet_for_update, lock_player_for_update, rollback
 from .models import column_exists, get_game_settings, get_planet_buildings, get_research_levels, table_exists
@@ -14,10 +17,15 @@ DAY_SECONDS = 86400
 
 EXCHANGE_RESOURCES = ("metal", "crystal", "fuel_cells")
 
+_SAFE_FERRONITE_COST_PER_CRYTITE_BUY = 2.0
+_SAFE_FERRONITE_RETURN_PER_CRYTITE_SELL = 1.0
+
 _EXCHANGE_SETTING_DEFAULTS = {
     "exchange_enabled": "1",
-    "exchange_rate_metal_to_crystal": "0.85",
-    "exchange_rate_crystal_to_metal": "0.85",
+    # Ferronite cost per 1 Crytite (buy) — divide input by this rate.
+    "exchange_rate_metal_to_crystal": "2",
+    # Ferronite return per 1 Crytite (sell) — multiply input by this rate.
+    "exchange_rate_crystal_to_metal": "1",
     "exchange_daily_limit_pct": "80",
     "exchange_daily_limit_min": "500000",
     "exchange_min_amount": "100",
@@ -59,6 +67,46 @@ def _int_setting(settings: Dict[str, Any], key: str, default: str) -> int:
     return max(0, int(_float_setting(settings, key, default)))
 
 
+def validate_exchange_rates(buy_cost: float, sell_return: float) -> Tuple[bool, Optional[str]]:
+    """Ensure Crytite buy cost exceeds sell return (no roundtrip profit)."""
+    try:
+        buy = float(buy_cost)
+        sell = float(sell_return)
+    except (TypeError, ValueError):
+        return False, "exchange_invalid_rate"
+    if buy <= 0 or sell <= 0:
+        return False, "exchange_invalid_rate"
+    if buy <= sell:
+        return False, "exchange_arbitrage_risk"
+    return True, None
+
+
+def would_roundtrip_profit(amount: int, buy_cost: float, sell_return: float) -> bool:
+    """Return True when Ferronite → Crytite → Ferronite yields more Ferronite."""
+    start = max(0, int(amount))
+    if start <= 0:
+        return False
+    buy = max(0.001, float(buy_cost))
+    sell = max(0.0, float(sell_return))
+    crytite = int(math.floor(start / buy))
+    ferronite_back = int(math.floor(crytite * sell))
+    return ferronite_back > start
+
+
+def _sanitize_metal_crystal_rates(buy_cost: float, sell_return: float) -> Tuple[float, float, bool]:
+    ok, _ = validate_exchange_rates(buy_cost, sell_return)
+    if ok:
+        return float(buy_cost), float(sell_return), False
+    logger.warning(
+        "[exchange] corrected unsafe exchange rates buy_cost=%s sell_return=%s -> buy_cost=%s sell_return=%s",
+        buy_cost,
+        sell_return,
+        _SAFE_FERRONITE_COST_PER_CRYTITE_BUY,
+        _SAFE_FERRONITE_RETURN_PER_CRYTITE_SELL,
+    )
+    return _SAFE_FERRONITE_COST_PER_CRYTITE_BUY, _SAFE_FERRONITE_RETURN_PER_CRYTITE_SELL, True
+
+
 def get_exchange_config(conn=None) -> Dict[str, Any]:
     own = conn is None
     if own:
@@ -67,11 +115,20 @@ def get_exchange_config(conn=None) -> Dict[str, Any]:
         settings = get_game_settings(conn=conn)
         enabled = str(settings.get("exchange_enabled", "1")).strip() not in ("0", "false", "False")
         fuel_enabled = str(settings.get("fuel_exchange_enabled", "1")).strip() not in ("0", "false", "False")
+        raw_buy = _float_setting(settings, "exchange_rate_metal_to_crystal", "2")
+        raw_sell = _float_setting(settings, "exchange_rate_crystal_to_metal", "1")
+        buy_cost, sell_return, corrected = _sanitize_metal_crystal_rates(raw_buy, raw_sell)
+        rates_ok, rates_reason = validate_exchange_rates(buy_cost, sell_return)
         return {
             "enabled": enabled,
             "fuel_enabled": fuel_enabled,
-            "rate_metal_to_crystal": _float_setting(settings, "exchange_rate_metal_to_crystal", "0.85"),
-            "rate_crystal_to_metal": _float_setting(settings, "exchange_rate_crystal_to_metal", "0.85"),
+            "rate_metal_to_crystal": buy_cost,
+            "rate_crystal_to_metal": sell_return,
+            "ferronite_cost_per_crytite_buy": buy_cost,
+            "ferronite_return_per_crytite_sell": sell_return,
+            "rates_valid": rates_ok,
+            "rates_block_reason": rates_reason or "",
+            "rates_corrected": corrected,
             "daily_limit_pct": _float_setting(settings, "exchange_daily_limit_pct", "80"),
             "daily_limit_min": _int_setting(settings, "exchange_daily_limit_min", "25000000"),
             "min_amount": _int_setting(settings, "exchange_min_amount", "100"),
@@ -106,9 +163,11 @@ def _preview_receive(from_resource: str, to_resource: str, amount: int, cfg: Dic
     if give_amount <= 0:
         return 0
     if from_resource == "metal" and to_resource == "crystal":
-        return max(0, int(math.floor(give_amount * float(cfg["rate_metal_to_crystal"]))))
+        buy_cost = max(0.001, float(cfg["rate_metal_to_crystal"]))
+        return max(0, int(math.floor(give_amount / buy_cost)))
     if from_resource == "crystal" and to_resource == "metal":
-        return max(0, int(math.floor(give_amount * float(cfg["rate_crystal_to_metal"]))))
+        sell_return = max(0.0, float(cfg["rate_crystal_to_metal"]))
+        return max(0, int(math.floor(give_amount * sell_return)))
     if from_resource == "metal" and to_resource == "fuel_cells":
         per = _fuel_unit_cost(cfg, "metal")
         return max(0, int(math.floor(give_amount / per)))
@@ -124,9 +183,9 @@ def _preview_receive(from_resource: str, to_resource: str, amount: int, cfg: Dic
 
 def _route_rate(from_resource: str, to_resource: str, cfg: Dict[str, Any]) -> float:
     if from_resource == "metal" and to_resource == "crystal":
-        return float(cfg["rate_metal_to_crystal"])
+        return max(0.001, float(cfg["rate_metal_to_crystal"]))
     if from_resource == "crystal" and to_resource == "metal":
-        return float(cfg["rate_crystal_to_metal"])
+        return max(0.0, float(cfg["rate_crystal_to_metal"]))
     if from_resource == "metal" and to_resource == "fuel_cells":
         return 1.0 / _fuel_unit_cost(cfg, "metal")
     if from_resource == "crystal" and to_resource == "fuel_cells":
@@ -337,6 +396,27 @@ def execute_exchange(
         daily_limit = int(limit_block["daily_limit"])
         if not _route_enabled(give_resource, receive_resource, cfg):
             return False, "exchange_disabled", None
+
+        if {give_resource, receive_resource} == {"metal", "crystal"}:
+            buy_cost = float(cfg["rate_metal_to_crystal"])
+            sell_return = float(cfg["rate_crystal_to_metal"])
+            ok_rates, rate_reason = validate_exchange_rates(buy_cost, sell_return)
+            if not ok_rates:
+                logger.warning(
+                    "[exchange] blocked trade: invalid metal/crystal rates buy=%s sell=%s reason=%s",
+                    buy_cost,
+                    sell_return,
+                    rate_reason,
+                )
+                return False, "exchange_arbitrage_disabled", None
+            if would_roundtrip_profit(give_amount, buy_cost, sell_return):
+                logger.warning(
+                    "[exchange] blocked trade: roundtrip profit possible buy=%s sell=%s amount=%s",
+                    buy_cost,
+                    sell_return,
+                    give_amount,
+                )
+                return False, "exchange_arbitrage_disabled", None
 
         min_give = _min_give_amount(give_resource, receive_resource, cfg)
         if give_amount < min_give:

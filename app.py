@@ -147,6 +147,7 @@ GC_LOCALE = "de"
 
 from game.i18n import (
     DEFAULT_LOCALE,
+    SUPPORTED_LANGUAGES,
     current_locale,
     format_i18n,
     get_locale_dict,
@@ -495,6 +496,7 @@ def inject_globals():
         T=T,
         T_DATA=get_locale_dict(active_locale),
         GC_LOCALE=active_locale,
+        SUPPORTED_LANGUAGES=SUPPORTED_LANGUAGES,
         GC_ASSET_VERSION=GC_ASSET_VERSION,
         GC_CLIENT_CONFIG=get_client_runtime_config(),
         player_name_link=player_name_link,
@@ -3559,46 +3561,41 @@ def api_admin_backfill_combat_hof():
 @app.route("/api/admin/rankings/recalculate", methods=["POST"])
 @require_admin_api
 def api_admin_recalculate_rankings():
-    admin = get_current_user()
-    admin_id = int(admin["id"]) if admin else 0
-    try:
-        from game.db import count_table_rows, db, gather_score_stats
-
-        result = recalculate_all_rankings(refresh_scores=True)
-        conn = db()
-        try:
-            result["players_seen"] = count_table_rows(conn, "players")
-            result["scores_updated"] = int(result.get("players_updated") or 0)
-            stats = gather_score_stats(conn)
-            result["top_score"] = stats["top_score"]
-        finally:
-            conn.close()
-        if admin_id:
-            try:
-                from game.admin_audit import write_admin_audit
-
-                write_admin_audit(
-                    admin_id,
-                    "recalculate_rankings",
-                    target_type="system",
-                    payload={
-                        "players_updated": result.get("players_updated"),
-                        "duration_ms": result.get("duration_ms"),
-                    },
-                )
-            except Exception:
-                pass
-        status = 200 if result.get("ok") else 500
-        return jsonify(result), status
-    except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
+    """Legacy alias — prefer POST /api/admin/ranking/recompute."""
+    return api_admin_ranking_recompute()
 
 
 @app.route("/api/admin/ranking/recompute", methods=["POST"])
 @require_admin_api
 def api_admin_ranking_recompute():
-    """Alias for /api/admin/rankings/recalculate (GC-P0 ranking worker debug)."""
-    return api_admin_recalculate_rankings()
+    """Admin manual ranking batch (same job as HTTP cron, force=1, session auth)."""
+    from game.internal_cron import handle_admin_ranking_recompute
+
+    admin = get_current_user()
+    admin_id = int(admin["id"]) if admin else 0
+    try:
+        payload, status = handle_admin_ranking_recompute()
+        if admin_id and payload.get("ok"):
+            try:
+                from game.admin_audit import write_admin_audit
+
+                write_admin_audit(
+                    admin_id,
+                    "admin_ranking_recompute",
+                    target_type="system",
+                    payload={
+                        "players_seen": payload.get("players_seen"),
+                        "players_updated": payload.get("players_updated"),
+                        "ranks_assigned": payload.get("ranks_assigned"),
+                        "duration_ms": payload.get("duration_ms"),
+                    },
+                )
+            except Exception:
+                logger.exception("admin ranking recompute audit failed")
+        return jsonify(payload), status
+    except Exception as exc:
+        logger.exception("api_admin_ranking_recompute failed")
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @app.route("/api/admin/balance", methods=["GET"])
@@ -4486,7 +4483,7 @@ def api_locale():
     """Guest / pre-login locale — persists display language in gc_locale cookie only."""
     payload = request.get_json(silent=True) or {}
     raw = str(payload.get("locale") or "").strip().lower()
-    if raw not in {"de", "en"}:
+    if raw not in SUPPORTED_LANGUAGES:
         return _options_api_response(False, "options_error_invalid_locale", None, 400)
     loc = normalize_locale(raw)
     from flask import make_response

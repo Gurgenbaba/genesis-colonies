@@ -303,6 +303,18 @@ def validate_balance_payload(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
     if errors:
         return None, "; ".join(errors)
 
+    buy_key = "exchange_rate_metal_to_crystal"
+    sell_key = "exchange_rate_crystal_to_metal"
+    if buy_key in cleaned or sell_key in cleaned:
+        from .exchange import validate_exchange_rates
+
+        current = get_game_settings() or {}
+        buy_cost = float(cleaned.get(buy_key, current.get(buy_key, DEFAULT_GAME_SETTINGS[buy_key])))
+        sell_return = float(cleaned.get(sell_key, current.get(sell_key, DEFAULT_GAME_SETTINGS[sell_key])))
+        ok_rates, rate_err = validate_exchange_rates(buy_cost, sell_return)
+        if not ok_rates:
+            return None, rate_err or "exchange_arbitrage_risk"
+
     return cleaned, None
 
 

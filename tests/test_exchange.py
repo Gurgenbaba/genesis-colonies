@@ -11,6 +11,9 @@ from game.exchange import (
     get_exchange_config,
     get_exchange_status,
     resolve_exchange_daily_limit,
+    validate_exchange_rates,
+    would_roundtrip_profit,
+    _preview_receive,
 )
 from game.models import get_homeworld
 
@@ -53,13 +56,45 @@ def test_exchange_schema_ready(exchange_db):
 def test_exchange_config_defaults(exchange_db):
     cfg = get_exchange_config()
     assert cfg["enabled"] is True
-    assert cfg["rate_metal_to_crystal"] == 0.85
-    assert cfg["rate_crystal_to_metal"] == 0.85
+    assert cfg["rate_metal_to_crystal"] == 2.0
+    assert cfg["rate_crystal_to_metal"] == 1.0
+    assert cfg["rates_valid"] is True
     assert cfg["daily_limit_pct"] == 80.0
     assert cfg["daily_limit_min"] == 25000000
     assert cfg["min_amount"] == 100
     assert cfg["fuel_metal_per_unit"] == 20
     assert cfg["fuel_crystal_per_unit"] == 14
+
+
+def test_validate_exchange_rates_blocks_arbitrage():
+    assert validate_exchange_rates(2, 1) == (True, None)
+    assert validate_exchange_rates(1, 2)[0] is False
+    assert validate_exchange_rates(1, 1)[0] is False
+    assert validate_exchange_rates(0, 1)[0] is False
+
+
+def test_would_roundtrip_profit_safe_rates():
+    for amount in (1, 10, 100, 1000, 1_000_000):
+        assert would_roundtrip_profit(amount, 2, 1) is False
+
+
+def test_would_roundtrip_profit_detects_exploit():
+    assert would_roundtrip_profit(100, 1, 2) is True
+
+
+def test_exchange_metal_to_crystal_uses_buy_cost_division(exchange_db):
+    cfg = get_exchange_config()
+    assert _preview_receive("metal", "crystal", 100, cfg) == 50
+    assert _preview_receive("metal", "crystal", 1000, cfg) == 500
+
+
+def test_exchange_roundtrip_loses_value(exchange_db):
+    cfg = get_exchange_config()
+    start = 1000
+    crytite = _preview_receive("metal", "crystal", start, cfg)
+    ferronite_back = _preview_receive("crystal", "metal", crytite, cfg)
+    assert ferronite_back <= start
+    assert ferronite_back == 500
 
 
 def test_exchange_metal_to_crystal(exchange_db):
@@ -79,13 +114,13 @@ def test_exchange_metal_to_crystal(exchange_db):
         conn=conn,
     )
     assert ok, reason
-    assert result["receive_amount"] == 850
+    assert result["receive_amount"] == 500
     assert result["receive_resource"] == "crystal"
 
     cur.execute("SELECT metal, crystal FROM planets WHERE id = ?;", (pid,))
     row = cur.fetchone()
     assert int(row["metal"]) == 9000
-    assert int(row["crystal"]) == 850
+    assert int(row["crystal"]) == 500
 
     cur.execute("SELECT COUNT(*) AS c FROM exchange_log WHERE player_id = ?;", (uid,))
     assert int(cur.fetchone()["c"]) == 1
@@ -260,11 +295,11 @@ def test_exchange_allows_storage_overflow(exchange_db):
         conn=conn,
     )
     assert ok, reason
-    assert result["receive_amount"] == 850
+    assert result["receive_amount"] == 1000
 
     cur.execute("SELECT metal FROM planets WHERE id = ?;", (pid,))
     metal_after = int(cur.fetchone()["metal"])
-    assert metal_after == metal_cap + 850
+    assert metal_after == metal_cap + 1000
     assert metal_after > metal_cap
     conn.close()
 
@@ -380,7 +415,7 @@ def test_exchange_api_route(exchange_db, tmp_path, monkeypatch):
     assert res.status_code == 200
     data = res.get_json()
     assert data["ok"] is True
-    assert data["job"]["receive_amount"] == 425
+    assert data["job"]["receive_amount"] == 250
 
 
 def test_trader_hub_page_includes_exchange_panel(exchange_db, tmp_path, monkeypatch):
@@ -622,3 +657,62 @@ def test_trader_hub_shows_limit_breakdown(exchange_db, tmp_path, monkeypatch):
     assert "data-exchange-daily-used" in html
     assert "data-exchange-empire-day" in html
     assert "trader_hub_daily_formula" in html or "Empire-Produktion" in html or "empire production" in html.lower()
+
+
+def test_exchange_config_sanitizes_unsafe_db_rates(exchange_db):
+    conn = db()
+    conn.execute(
+        "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('exchange_rate_metal_to_crystal', '1');"
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO game_settings (key, value) VALUES ('exchange_rate_crystal_to_metal', '2');"
+    )
+    conn.commit()
+    cfg = get_exchange_config(conn=conn)
+    conn.close()
+    assert cfg["rate_metal_to_crystal"] == 2.0
+    assert cfg["rate_crystal_to_metal"] == 1.0
+    assert cfg["rates_corrected"] is True
+
+
+def test_exchange_execute_rejects_unsafe_rates_when_not_sanitized(exchange_db, monkeypatch):
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_planets_by_player(uid, conn=conn)[0]["id"])
+    cur = conn.cursor()
+    cur.execute("UPDATE planets SET metal = 10000, crystal = 0 WHERE id = ?;", (pid,))
+    conn.commit()
+
+    def _unsafe_cfg(*, conn=None):
+        base = get_exchange_config(conn=conn)
+        base["rate_metal_to_crystal"] = 1.0
+        base["rate_crystal_to_metal"] = 2.0
+        base["rates_valid"] = False
+        return base
+
+    monkeypatch.setattr("game.exchange.get_exchange_config", _unsafe_cfg)
+
+    ok, reason, _ = execute_exchange(
+        player_id=uid,
+        planet_id=pid,
+        from_resource="metal",
+        to_resource="crystal",
+        amount=1000,
+        conn=conn,
+    )
+    assert not ok
+    assert reason == "exchange_arbitrage_disabled"
+    conn.close()
+
+
+def test_admin_save_rejects_arbitrage_exchange_rates(exchange_db):
+    from game.admin_balance import save_balance_settings
+
+    settings, err = save_balance_settings(
+        {
+            "exchange_rate_metal_to_crystal": 1,
+            "exchange_rate_crystal_to_metal": 2,
+        }
+    )
+    assert settings is None
+    assert err == "exchange_arbitrage_risk"

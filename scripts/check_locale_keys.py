@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GC-537: Audit locale keys used in Python, Jinja templates, and JS."""
+"""GC-537 / GC-900C: Audit locale keys used in Python, Jinja templates, and JS."""
 
 from __future__ import annotations
 
@@ -10,6 +10,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LOCALES_DIR = ROOT / "locales"
+
+sys.path.insert(0, str(ROOT))
+from game.i18n import SUPPORTED_LOCALES  # noqa: E402
 
 # Static locale key (exclude trailing '_' — those are dynamic prefix fragments)
 _RE_TR = re.compile(r"""(?<![A-Za-z0-9_])tr\(\s*['"]([a-zA-Z0-9][a-zA-Z0-9_]*)['"]""")
@@ -179,37 +182,49 @@ def collect_used_keys() -> set[str]:
 
 
 def find_missing(locale: str, used: set[str]) -> list[str]:
-    data = _load_json(LOCALES_DIR / f"{locale}.json")
+    path = LOCALES_DIR / f"{locale}.json"
+    if not path.exists():
+        return sorted(used)
+    data = _load_json(path)
     return sorted(k for k in used if k not in data)
 
 
 def main() -> int:
     used = collect_used_keys()
-    de_missing = find_missing("de", used)
-    en_path = LOCALES_DIR / "en.json"
-    en_missing = find_missing("en", used) if en_path.exists() else []
+    de_keys = _load_json(LOCALES_DIR / "de.json")
+    failed = False
 
     print(f"Used keys (static + expanded dynamic): {len(used)}")
-    print(f"Missing in de.json: {len(de_missing)}")
-    if en_path.exists():
-        print(f"Missing in en.json: {len(en_missing)}")
+    print(f"de.json entries: {len(de_keys)}")
 
-    if de_missing:
-        print("\n--- Missing in de.json ---")
-        for key in de_missing:
-            print(key)
+    for locale in sorted(SUPPORTED_LOCALES):
+        path = LOCALES_DIR / f"{locale}.json"
+        if not path.exists():
+            print(f"Missing locale file: {path.name}")
+            failed = True
+            continue
+        data = _load_json(path)
+        used_missing = find_missing(locale, used)
+        canon_missing = sorted(set(de_keys) - set(data))
+        print(f"{locale}.json entries: {len(data)} | missing used: {len(used_missing)} | missing vs de: {len(canon_missing)}")
+        if used_missing:
+            print(f"\n--- Missing in {locale}.json (used in code) ---")
+            for key in used_missing:
+                print(key)
+            failed = True
+        if canon_missing:
+            print(f"\n--- Missing in {locale}.json (vs de.json) ---")
+            for key in canon_missing[:20]:
+                print(key)
+            if len(canon_missing) > 20:
+                print(f"... and {len(canon_missing) - 20} more")
+            failed = True
 
-    if en_missing:
-        print("\n--- Missing in en.json ---")
-        for key in en_missing:
-            print(key)
-
-    if de_missing or en_missing:
+    if failed:
         return 1
-    print("OK — all used locale keys are present.")
+    print("OK — all used locale keys are present in every supported language.")
     return 0
 
 
 if __name__ == "__main__":
-    sys.path.insert(0, str(ROOT))
     raise SystemExit(main())

@@ -876,12 +876,11 @@ def _colonize_fleet_target(
     conn,
 ) -> Tuple[bool, str, Tuple[int, int, int], Dict[str, Any]]:
     """Resolve colonize target for classic empty slot or strategic world."""
+    from .planet_evolution.world_colonization import check_colony_limit_available
+
     wk = str(world_key or "").strip() or None
     if wk:
-        from .planet_evolution.world_colonization import (
-            check_colony_limit_available,
-            validate_world_colonize_target,
-        )
+        from .planet_evolution.world_colonization import validate_world_colonize_target
         from .galaxy import assign_free_coordinates
 
         ok_w, w_reason, target_info = validate_world_colonize_target(wk, conn=conn)

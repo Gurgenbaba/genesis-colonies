@@ -16,14 +16,27 @@ from .db import column_exists, db
 
 _LOCALES_DIR = Path(__file__).resolve().parent.parent / "locales"
 DEFAULT_LOCALE = "de"
-SUPPORTED_LOCALES = frozenset({"de", "en"})
+FALLBACK_LOCALE = "en"
+
+SUPPORTED_LANGUAGES: dict[str, dict[str, str]] = {
+    "de": {"label": "Deutsch", "flag": "🇩🇪"},
+    "en": {"label": "English", "flag": "🇬🇧"},
+    "fr": {"label": "Français", "flag": "🇫🇷"},
+    "es": {"label": "Español", "flag": "🇪🇸"},
+    "pl": {"label": "Polski", "flag": "🇵🇱"},
+    "tr": {"label": "Türkçe", "flag": "🇹🇷"},
+    "ru": {"label": "Русский", "flag": "🇷🇺"},
+    "pt": {"label": "Português", "flag": "🇵🇹"},
+}
+
+SUPPORTED_LOCALES = frozenset(SUPPORTED_LANGUAGES)
 
 _current_locale: contextvars.ContextVar[str] = contextvars.ContextVar(
     "locale", default=DEFAULT_LOCALE
 )
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=len(SUPPORTED_LOCALES) + 2)
 def _load_locale(locale: str) -> dict[str, str]:
     path = _LOCALES_DIR / f"{locale}.json"
     try:
@@ -42,9 +55,9 @@ def normalize_locale(locale: str | None) -> str:
 def get_locale_dict(locale: str | None = None) -> dict[str, str]:
     loc = normalize_locale(locale)
     primary = _load_locale(loc)
-    if loc == DEFAULT_LOCALE:
+    if loc in (DEFAULT_LOCALE, FALLBACK_LOCALE):
         return primary
-    fallback = _load_locale(DEFAULT_LOCALE)
+    fallback = _load_locale(FALLBACK_LOCALE)
     merged = dict(fallback)
     merged.update(primary)
     return merged

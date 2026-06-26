@@ -432,7 +432,7 @@ def test_api_locale_cookie_guest(app_client):
 def test_api_locale_invalid(app_client):
     res = app_client.post(
         "/api/locale",
-        json={"locale": "fr"},
+        json={"locale": "xx"},
         headers={"Accept": "application/json"},
     )
     assert res.status_code == 400

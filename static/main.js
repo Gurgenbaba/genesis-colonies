@@ -17344,8 +17344,10 @@
       const { from, to } = routeParts(dir);
       const raw = parseInt(String(amount || "0"), 10);
       if (!raw || raw <= 0) return 0;
-      if (from === "metal" && to === "crystal") return Math.floor(raw * cfg.m2c);
-      if (from === "crystal" && to === "metal") return Math.floor(raw * cfg.c2m);
+      if (from === "metal" && to === "crystal") {
+        return Math.floor(raw / Math.max(0.001, cfg.m2c));
+      }
+      if (from === "crystal" && to === "metal") return Math.floor(raw * Math.max(0, cfg.c2m));
       if (from === "metal" && to === "fuel_cells") return Math.floor(raw / Math.max(0.001, cfg.fuelMetalPer));
       if (from === "crystal" && to === "fuel_cells") return Math.floor(raw / Math.max(0.001, cfg.fuelCrystalPer));
       if (from === "fuel_cells" && to === "metal") return Math.floor(raw * Math.max(0.001, cfg.fuelMetalPer));
@@ -17356,13 +17358,25 @@
     const displayRate = (dir) => {
       const cfg = readRates();
       const { from, to } = routeParts(dir);
-      if (from === "metal" && to === "crystal") return cfg.m2c;
-      if (from === "crystal" && to === "metal") return cfg.c2m;
-      if (from === "metal" && to === "fuel_cells") return 1 / Math.max(0.001, cfg.fuelMetalPer);
-      if (from === "crystal" && to === "fuel_cells") return 1 / Math.max(0.001, cfg.fuelCrystalPer);
-      if (from === "fuel_cells" && to === "metal") return cfg.fuelMetalPer;
-      if (from === "fuel_cells" && to === "crystal") return cfg.fuelCrystalPer;
-      return 0;
+      if (from === "metal" && to === "crystal") {
+        return tf(
+          "exchange_rate_ferronite_per_crytite",
+          { rate: formatRate(Math.max(0.001, cfg.m2c)) },
+          `${formatRate(Math.max(0.001, cfg.m2c))} Ferronite per 1 Crytite`
+        );
+      }
+      if (from === "crystal" && to === "metal") {
+        return tf(
+          "exchange_rate_ferronite_per_crytite",
+          { rate: formatRate(Math.max(0, cfg.c2m)) },
+          `${formatRate(Math.max(0, cfg.c2m))} Ferronite per 1 Crytite`
+        );
+      }
+      if (from === "metal" && to === "fuel_cells") return formatRate(1 / Math.max(0.001, cfg.fuelMetalPer));
+      if (from === "crystal" && to === "fuel_cells") return formatRate(1 / Math.max(0.001, cfg.fuelCrystalPer));
+      if (from === "fuel_cells" && to === "metal") return formatRate(cfg.fuelMetalPer);
+      if (from === "fuel_cells" && to === "crystal") return formatRate(cfg.fuelCrystalPer);
+      return "0";
     };
 
     const formatRate = (rate) => (rate >= 1 ? String(Math.round(rate)) : rate.toFixed(3).replace(/\.?0+$/, ""));
@@ -17373,7 +17387,7 @@
       if (routeSelect && routeSelect.value !== next) routeSelect.value = next;
       const { from, to } = routeParts(next);
       updateTileStates(from, to);
-      if (rateDisplayEl) rateDisplayEl.textContent = formatRate(displayRate(next));
+      if (rateDisplayEl) rateDisplayEl.textContent = displayRate(next);
       const minNow = minForRoute(next);
       panel.dataset.routeMin = String(minNow);
       amountInput.min = String(minNow);
@@ -18886,25 +18900,57 @@
     });
   };
 
+  function rebuildLanguageSelectMenu(select) {
+    if (!select || !select._gcHudSelect) return;
+    const { menu } = select._gcHudSelect;
+    if (!menu) return;
+    menu.innerHTML = "";
+    Array.from(select.options).forEach((opt) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "gc-hud-select-item gc-lang-select-item";
+      btn.dataset.value = opt.value;
+      btn.setAttribute("role", "option");
+      const label = opt.dataset.langLabel || opt.textContent.trim();
+      const flag = opt.dataset.langFlag || opt.textContent.trim();
+      btn.setAttribute("aria-label", label);
+      btn.title = label;
+      btn.textContent = flag;
+      if (opt.disabled) btn.disabled = true;
+      menu.appendChild(btn);
+    });
+    syncHudSelect(select);
+  }
+
   function initLanguageSwitcher() {
     const root = document.getElementById("gc-language-switcher");
-    if (!root || root.dataset.gcBound === "1") return;
+    const select = document.getElementById("gc-language-select");
+    if (!root || !select || root.dataset.gcBound === "1") return;
     root.dataset.gcBound = "1";
+
+    if (select.dataset.gcHudSelectEnhanced !== "1") {
+      enhanceHudSelect(select);
+    }
+    rebuildLanguageSelectMenu(select);
 
     const apiUrl = root.dataset.api || "/api/locale";
     let busy = false;
 
-    root.addEventListener("click", async (e) => {
-      const btn = e.target.closest("[data-locale]");
-      if (!btn || busy) return;
-      const loc = String(btn.dataset.locale || "").trim().toLowerCase();
-      if (!loc || loc === root.dataset.locale) return;
+    select.addEventListener("change", async () => {
+      const prev = String(root.dataset.locale || "de").trim().toLowerCase();
+      const loc = String(select.value || "").trim().toLowerCase();
+      if (!loc || loc === prev || busy) {
+        select.value = prev;
+        syncHudSelect(select);
+        return;
+      }
 
       busy = true;
       root.classList.add("is-busy");
-      root.querySelectorAll(".gc-lang-btn").forEach((b) => {
-        b.disabled = true;
-      });
+      select.disabled = true;
+      const trigger = select._gcHudSelect && select._gcHudSelect.trigger;
+      const wrap = select._gcHudSelect && select._gcHudSelect.wrap;
+      if (trigger) trigger.disabled = true;
       try {
         const res = await fetch(apiUrl, {
           method: "POST",
@@ -18915,9 +18961,10 @@
         const data = await res.json().catch(() => null);
         if (!res.ok || !data || data.ok !== true) {
           console.warn("[GC] locale switch rejected", data && data.error);
+          select.value = prev;
+          syncHudSelect(select);
           return;
         }
-        // Locale affects header, sidebar, nav and GC_LOCALE — PJAX main-content swap is not enough.
         if (typeof GC.reloadCurrentPage === "function") {
           await GC.reloadCurrentPage({ force: true, fullDocument: true });
         } else {
@@ -18926,12 +18973,14 @@
         return;
       } catch (err) {
         console.error("[GC] locale switch failed", err);
+        select.value = prev;
+        syncHudSelect(select);
       } finally {
         busy = false;
         root.classList.remove("is-busy");
-        root.querySelectorAll(".gc-lang-btn").forEach((b) => {
-          b.disabled = false;
-        });
+        select.disabled = false;
+        if (trigger) trigger.disabled = false;
+        if (wrap) closeHudSelectWrap(wrap);
       }
     });
   }
