@@ -22,10 +22,10 @@ from game.vote_rewards import (
     GAMETOOR_PROVIDER,
     GTOP100_COOLDOWN_SEC,
     GTOP100_PROVIDER,
+    STANDARD_VOTE_REWARD_PAYLOAD,
     TOPG_COOLDOWN_SEC,
     TOPG_PROVIDER,
     VOTE_PROVIDERS,
-    VOTE_REWARD_POOL,
     claim_all_vote_rewards,
     claim_vote_reward,
     get_provider_cooldown_status,
@@ -54,12 +54,8 @@ GAMETOOR_IVN_TEST_KEY = "test-gametoor-ivn-key"
 GAMETOOR_URL = "http://gametoor.com/in/3277/{user_id}"
 TWELVE_H_COOLDOWN_SEC = 12 * 60 * 60
 
-LOOTBOX_PAYLOAD = {
-    "reward_type": "lootbox",
-    "reward_key": "vote_supply_container",
-    "box_key": "generic_supply_container",
-    "amount": 1,
-}
+STANDARD_BOX_PAYLOAD = dict(STANDARD_VOTE_REWARD_PAYLOAD)
+LOOTBOX_PAYLOAD = STANDARD_BOX_PAYLOAD
 RESOURCE_PAYLOAD = {
     "reward_type": "resources",
     "reward_key": "vote_resource_pack_small",
@@ -525,8 +521,10 @@ def test_valid_topg_callback_creates_pending_reward(vote_db):
     assert row["status"] == "pending"
     assert row["provider"] == TOPG_PROVIDER
     payload = json.loads(row["reward_payload_json"])
-    assert payload["reward_type"] == "lootbox"
+    assert payload["reward_type"] == "standard_box"
+    assert payload["reward_key"] == "standard_box"
     assert payload["box_key"] == DEFAULT_VOTE_BOX_KEY
+    assert payload["amount"] == 1
     conn.close()
 
 
@@ -663,13 +661,14 @@ def test_vote_visit_api_endpoint(vote_db, monkeypatch):
     conn.close()
 
 
-def test_roll_vote_reward_single_entry(vote_db):
-    rng = __import__("random").Random(7)
-    reward = roll_vote_reward(rng=rng)
-    assert reward["reward_type"] in {"lootbox", "resources", "ships", "defense"}
-    assert reward["reward_key"]
-    if reward["reward_type"] == "lootbox":
-        assert is_allowed_vote_reward_box(reward.get("box_key", ""))
+def test_roll_vote_reward_always_standard_box(vote_db):
+    reward = roll_vote_reward()
+    assert reward == STANDARD_BOX_PAYLOAD
+    assert reward["reward_type"] == "standard_box"
+    assert reward["reward_key"] == "standard_box"
+    assert reward["box_key"] == DEFAULT_VOTE_BOX_KEY
+    assert reward["amount"] == 1
+    assert is_allowed_vote_reward_box(reward["box_key"]) is True
 
 
 def test_vote_provider_card_images_mapped(vote_db):
@@ -680,33 +679,22 @@ def test_vote_provider_card_images_mapped(vote_db):
 
 
 def test_reward_summary_display_items_use_canonical_labels(vote_db):
-    loot = _reward_summary(LOOTBOX_PAYLOAD)
-    assert loot["display_items"][0]["name_key"] == "inv_container_basic"
-    assert loot["display_items"][0]["image"].endswith("Basic_Container.png")
+    summary = _reward_summary(STANDARD_BOX_PAYLOAD)
+    assert summary["reward_type"] == "standard_box"
+    assert summary["amount"] == 1
+    assert summary["display_items"][0]["name_key"] == "inv_container_basic"
+    assert summary["display_items"][0]["image"].endswith("Basic_Container.png")
 
-    resources = _reward_summary(RESOURCE_PAYLOAD)
-    assert [item["name_key"] for item in resources["display_items"]] == [
-        "resource_metal",
-        "resource_crystal",
-        "resource_fuel_cells",
-    ]
-
-    ships = _reward_summary(SHIP_PAYLOAD)
-    assert ships["display_items"][0]["name_key"] == "fleet_ship_spark_drone"
-    assert ships["display_items"][0]["image"].endswith("spark_drone.png")
-
-    defense = _reward_summary(DEFENSE_PAYLOAD)
-    assert defense["display_items"][0]["name_key"] == "defense_sentinel_turret"
-    assert defense["display_items"][0]["image"].endswith("sentinel_turret.png")
+    legacy_resources = _reward_summary(RESOURCE_PAYLOAD)
+    assert legacy_resources["reward_type"] == "standard_box"
+    assert legacy_resources["amount"] == 1
+    assert len(legacy_resources["display_items"]) == 1
+    assert legacy_resources["display_items"][0]["kind"] == "lootbox"
 
 
-def test_pool_never_contains_event_box(vote_db):
-    for entry in VOTE_REWARD_POOL:
-        payload = entry.get("payload") or {}
-        box_key = payload.get("box_key")
-        if box_key:
-            assert is_event_box(box_key) is False
-            assert is_allowed_vote_reward_box(box_key) is True
+def test_standard_vote_reward_never_uses_event_box(vote_db):
+    assert is_event_box(STANDARD_BOX_PAYLOAD["box_key"]) is False
+    assert is_allowed_vote_reward_box(STANDARD_BOX_PAYLOAD["box_key"]) is True
 
 
 def test_invalid_user_id_ignored(vote_db):
@@ -760,10 +748,24 @@ def test_topg_reward_after_cooldown_expires(vote_db):
     conn.close()
 
 
-def test_claim_lootbox_reward(vote_db):
+def test_record_provider_vote_stores_standard_box_payload(vote_db):
     uid = _player()
     conn = db()
-    record_topg_vote(uid, "1.2.3.4", conn=conn, reward_payload=LOOTBOX_PAYLOAD)
+    record_topg_vote(uid, "1.2.3.4", conn=conn, reward_payload=RESOURCE_PAYLOAD)
+    row = conn.execute(
+        "SELECT reward_key, reward_payload_json FROM vote_rewards WHERE user_id = ? LIMIT 1;",
+        (uid,),
+    ).fetchone()
+    assert row["reward_key"] == "standard_box"
+    payload = json.loads(row["reward_payload_json"])
+    assert payload == STANDARD_BOX_PAYLOAD
+    conn.close()
+
+
+def test_claim_standard_box_reward(vote_db):
+    uid = _player()
+    conn = db()
+    record_topg_vote(uid, "1.2.3.4", conn=conn, reward_payload=STANDARD_BOX_PAYLOAD)
     cur = conn.cursor()
     cur.execute("SELECT id FROM vote_rewards WHERE user_id = ? LIMIT 1;", (uid,))
     reward_id = int(cur.fetchone()["id"])
@@ -771,12 +773,13 @@ def test_claim_lootbox_reward(vote_db):
     ok, reason, result = claim_vote_reward(uid, reward_id, conn=conn, planet_id=pid)
     assert ok is True
     assert reason == "vote_reward_claimed"
-    assert result["reward_type"] == "lootbox"
+    assert result["reward_type"] == "standard_box"
+    assert result["amount"] == 1
     assert _inventory_amount(uid, "container_basic", conn=conn) == 1
     conn.close()
 
 
-def test_claim_resources_reward(vote_db):
+def test_claim_legacy_resource_payload_grants_standard_box_not_resources(vote_db):
     uid = _player()
     conn = db()
     record_topg_vote(uid, "1.2.3.4", conn=conn, reward_payload=RESOURCE_PAYLOAD)
@@ -784,18 +787,21 @@ def test_claim_resources_reward(vote_db):
     cur.execute("SELECT id FROM vote_rewards WHERE user_id = ? LIMIT 1;", (uid,))
     reward_id = int(cur.fetchone()["id"])
     pid = _context_planet_id(uid, conn=conn)
-    conn.execute("UPDATE planets SET metal = 0, crystal = 0, fuel_cells = 0 WHERE id = ?;", (pid,))
+    conn.execute("UPDATE planets SET metal = 100, crystal = 50, fuel_cells = 10 WHERE id = ?;", (pid,))
     ok, reason, result = claim_vote_reward(uid, reward_id, conn=conn, planet_id=pid)
     assert ok is True
-    assert result["reward_type"] == "resources"
+    assert reason == "vote_reward_claimed"
+    assert result["reward_type"] == "standard_box"
+    assert result["amount"] == 1
     row = conn.execute("SELECT metal, crystal, fuel_cells FROM planets WHERE id = ?;", (pid,)).fetchone()
-    assert float(row["metal"]) == 2_500_000
-    assert float(row["crystal"]) == 1_000_000
-    assert float(row["fuel_cells"]) == 50_000
+    assert float(row["metal"]) == 100
+    assert float(row["crystal"]) == 50
+    assert float(row["fuel_cells"]) == 10
+    assert _inventory_amount(uid, "container_basic", conn=conn) == 1
     conn.close()
 
 
-def test_claim_ships_reward(vote_db):
+def test_claim_legacy_ship_payload_grants_standard_box_not_ships(vote_db):
     uid = _player()
     conn = db()
     record_topg_vote(uid, "1.2.3.4", conn=conn, reward_payload=SHIP_PAYLOAD)
@@ -805,17 +811,17 @@ def test_claim_ships_reward(vote_db):
     pid = _context_planet_id(uid, conn=conn)
     ok, reason, result = claim_vote_reward(uid, reward_id, conn=conn, planet_id=pid)
     assert ok is True
-    assert result["reward_type"] == "ships"
+    assert result["reward_type"] == "standard_box"
     row = conn.execute(
         "SELECT amount FROM planet_ships WHERE planet_id = ? AND ship_key = ?;",
         (pid, "spark_drone"),
     ).fetchone()
-    assert row is not None
-    assert int(row["amount"]) == 5
+    assert row is None
+    assert _inventory_amount(uid, "container_basic", conn=conn) == 1
     conn.close()
 
 
-def test_claim_defense_reward(vote_db):
+def test_claim_legacy_defense_payload_grants_standard_box_not_defense(vote_db):
     uid = _player()
     conn = db()
     record_topg_vote(uid, "1.2.3.4", conn=conn, reward_payload=DEFENSE_PAYLOAD)
@@ -825,13 +831,13 @@ def test_claim_defense_reward(vote_db):
     pid = _context_planet_id(uid, conn=conn)
     ok, reason, result = claim_vote_reward(uid, reward_id, conn=conn, planet_id=pid)
     assert ok is True
-    assert result["reward_type"] == "defense"
+    assert result["reward_type"] == "standard_box"
     row = conn.execute(
         "SELECT amount FROM planet_defense WHERE planet_id = ? AND defense_key = ?;",
         (pid, "sentinel_turret"),
     ).fetchone()
-    assert row is not None
-    assert int(row["amount"]) == 5
+    assert row is None
+    assert _inventory_amount(uid, "container_basic", conn=conn) == 1
     conn.close()
 
 

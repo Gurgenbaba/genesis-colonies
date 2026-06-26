@@ -8028,6 +8028,28 @@ def api_admin_fleet_advance(movement_id: int):
     )
 
 
+@app.route("/api/admin/fleet-mission-locks", methods=["GET"])
+@require_admin_api
+def api_admin_fleet_mission_locks_get():
+    return _admin_json(admin_api_logic.get_fleet_mission_locks_admin())
+
+
+@app.route("/api/admin/fleet-mission-locks", methods=["POST"])
+@require_admin_api
+def api_admin_fleet_mission_locks_set():
+    return _admin_json(
+        admin_api_logic.set_fleet_mission_lock_admin(_admin_actor_id(), _admin_body())
+    )
+
+
+@app.route("/api/admin/fleet-mission-locks/reset-attack-protection", methods=["POST"])
+@require_admin_api
+def api_admin_fleet_mission_locks_reset_attack():
+    return _admin_json(
+        admin_api_logic.reset_fleet_attack_protection_admin(_admin_actor_id(), _admin_body())
+    )
+
+
 @app.route("/api/admin/galactic-diplomacy/<int:galaxy>", methods=["GET"])
 @require_admin_api
 def api_admin_galactic_diplomacy_get(galaxy: int):

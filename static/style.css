@@ -14664,6 +14664,42 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   background: rgba(95, 211, 141, 0.08);
   color: var(--gc-text);
 }
+.fleet-mission-locks-banner{
+  margin: 0 0 var(--gc-space-md, 12px);
+  border: 1px solid color-mix(in srgb, var(--gc-danger, #ff6b6b) 45%, transparent);
+  border-radius: var(--gc-radius-md, 8px);
+  background: color-mix(in srgb, var(--gc-danger, #ff6b6b) 12%, var(--gc-panel-bg, #12141c));
+}
+.fleet-mission-locks-banner-inner{
+  padding: 10px 14px;
+}
+.fleet-mission-locks-banner-title{
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gc-danger, #ff6b6b);
+}
+.fleet-mission-locks-banner-list{
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.fleet-mission-locks-banner-item{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--gc-text-muted, #a8b0c0);
+}
+.fleet-mission-locks-banner-item strong{
+  color: var(--gc-text, #e8ecf4);
+  font-weight: 600;
+}
+.fleet-mission-select option:disabled{
+  color: var(--gc-text-muted, #888);
+}
 .fleet-mission-feedback.is-warn{
   border-color: rgba(255, 196, 86, 0.28);
   background: rgba(255, 196, 86, 0.08);

@@ -16,9 +16,7 @@ import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .auction_house import is_event_box, resolve_inventory_key
-from .db import db, lock_planet_for_update, table_exists
-from .defense_defs import defense_icon_static_path, get_defense, is_known_defense_key
-from .fleet_defs import canonical_ship_key, get_ship, is_known_ship_key, ship_icon_static_path
+from .db import db, table_exists
 from .inventory import grant_inventory_item, inventory_schema_ready
 from .inventory_catalog import container_image_path, item_catalog_entry
 
@@ -78,7 +76,15 @@ VOTE_PROVIDERS: Dict[str, Dict[str, Any]] = {
 TOPG_COOLDOWN_SEC = int(VOTE_PROVIDERS["topg"]["cooldown_seconds"])
 VOTE_COOLDOWN_SEC = TOPG_COOLDOWN_SEC
 DEFAULT_VOTE_BOX_KEY = "generic_supply_container"
-DEFAULT_REWARD_KEY = "vote_container"
+DEFAULT_REWARD_KEY = "standard_box"
+STANDARD_VOTE_REWARD_TYPE = "standard_box"
+
+STANDARD_VOTE_REWARD_PAYLOAD: Dict[str, Any] = {
+    "reward_type": STANDARD_VOTE_REWARD_TYPE,
+    "reward_key": DEFAULT_REWARD_KEY,
+    "box_key": DEFAULT_VOTE_BOX_KEY,
+    "amount": 1,
+}
 VOTE_SKIP_IP_CHECK_ENV = "GC_VOTE_SKIP_IP_CHECK"
 TOPG_STRICT_IP_CHECK_ENV = "TOPG_STRICT_IP_CHECK"
 
@@ -97,66 +103,12 @@ TOPG_REWARD_KEY = DEFAULT_REWARD_KEY
 TOPG_DEFAULT_BOX_KEY = DEFAULT_VOTE_BOX_KEY
 TOPG_REMOTE_HOST = "monitor.topg.org"
 
-ALLOWED_VOTE_BOX_KEYS = frozenset(
-    {
-        "generic_supply_container",
-        "resource_cache",
-        "research_capsule",
-        "military_cache",
-    }
-)
-
-VOTE_REWARD_POOL: List[Dict[str, Any]] = [
-    {
-        "key": "vote_supply_container",
-        "type": "lootbox",
-        "weight": 45,
-        "payload": {"box_key": "generic_supply_container", "amount": 1},
-    },
-    {
-        "key": "vote_resource_pack_small",
-        "type": "resources",
-        "weight": 25,
-        "payload": {"metal": 2_500_000, "crystal": 1_000_000, "fuel_cells": 50_000},
-    },
-    {
-        "key": "vote_resource_pack_large",
-        "type": "resources",
-        "weight": 10,
-        "payload": {"metal": 10_000_000, "crystal": 4_000_000, "fuel_cells": 150_000},
-    },
-    {
-        "key": "vote_ship_pack_scout",
-        "type": "ships",
-        "weight": 10,
-        "payload": {"ships": {"spark_drone": 5}},
-    },
-    {
-        "key": "vote_ship_pack_cargo",
-        "type": "ships",
-        "weight": 5,
-        "payload": {"ships": {"mule_courier": 2}},
-    },
-    {
-        "key": "vote_defense_pack_basic",
-        "type": "defense",
-        "weight": 5,
-        "payload": {"defense": {"sentinel_turret": 5}},
-    },
-]
+ALLOWED_VOTE_BOX_KEYS = frozenset({DEFAULT_VOTE_BOX_KEY})
 
 REWARD_TYPE_LABEL_KEYS: Dict[str, str] = {
-    "lootbox": "vote_reward_type_lootbox",
-    "resources": "vote_reward_type_resources",
-    "ships": "vote_reward_type_ships",
-    "defense": "vote_reward_type_defense",
+    "standard_box": "vote_reward_type_standard_box",
+    "lootbox": "vote_reward_type_standard_box",
 }
-
-_VOTE_RESOURCE_DISPLAY: Tuple[Tuple[str, str, str], ...] = (
-    ("metal", "resource_metal", "/static/img/res/Ferronit.webp"),
-    ("crystal", "resource_crystal", "/static/img/res/Crytite.webp"),
-    ("fuel_cells", "resource_fuel_cells", "/static/img/res/Brennzellen.webp"),
-)
 
 
 def vote_rewards_schema_ready(conn) -> bool:
@@ -255,60 +207,28 @@ def topg_provider_ref(user_id: int, now: int) -> str:
     return provider_ref(TOPG_PROVIDER, user_id, now, VOTE_COOLDOWN_SEC)
 
 
+def _normalize_vote_reward_payload(
+    payload: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Votes always grant exactly one standard supply container."""
+    return dict(STANDARD_VOTE_REWARD_PAYLOAD)
+
+
 def roll_vote_reward(*, rng: Optional[random.Random] = None) -> Dict[str, Any]:
-    """Pick exactly one weighted vote reward."""
-    pool = [e for e in VOTE_REWARD_POOL if int(e.get("weight") or 0) > 0]
-    total = sum(int(e["weight"]) for e in pool)
-    if total <= 0:
-        entry = VOTE_REWARD_POOL[0]
-    else:
-        r = rng or random.Random()
-        roll = r.randint(1, total)
-        acc = 0
-        entry = pool[-1]
-        for candidate in pool:
-            acc += int(candidate["weight"])
-            if roll <= acc:
-                entry = candidate
-                break
-    payload = dict(entry.get("payload") or {})
-    return {
-        "reward_type": str(entry["type"]),
-        "reward_key": str(entry["key"]),
-        **payload,
-    }
+    """Every vote grants exactly one standard supply container."""
+    return _normalize_vote_reward_payload()
 
 
 def _parse_reward_payload(raw: str) -> Dict[str, Any]:
     if not raw:
-        return roll_vote_reward()
+        return _normalize_vote_reward_payload()
     try:
         data = json.loads(raw)
-        if isinstance(data, dict) and data.get("reward_type"):
-            return data
+        if isinstance(data, dict):
+            return _normalize_vote_reward_payload(data)
     except (TypeError, ValueError, json.JSONDecodeError):
         pass
-    legacy = _parse_legacy_reward_payload(raw)
-    if legacy:
-        return legacy
-    return roll_vote_reward()
-
-
-def _parse_legacy_reward_payload(raw: str) -> Optional[Dict[str, Any]]:
-    try:
-        data = json.loads(raw)
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    if data.get("box_key"):
-        return {
-            "reward_type": "lootbox",
-            "reward_key": DEFAULT_REWARD_KEY,
-            "box_key": str(data["box_key"]),
-            "amount": int(data.get("amount") or 1),
-        }
-    return None
+    return _normalize_vote_reward_payload()
 
 
 def is_allowed_vote_reward_box(box_key: str) -> bool:
@@ -433,100 +353,36 @@ def _static_image_url(rel_path: str) -> str:
 
 
 def _reward_display_items(payload: Mapping[str, Any]) -> List[Dict[str, Any]]:
-    rtype = str(payload.get("reward_type") or "lootbox")
-    items: List[Dict[str, Any]] = []
-    if rtype == "lootbox":
-        box_key = str(payload.get("box_key") or DEFAULT_VOTE_BOX_KEY)
-        inv_key = resolve_inventory_key(box_key) or box_key
-        meta = item_catalog_entry(inv_key)
-        items.append(
-            {
-                "kind": "lootbox",
-                "name_key": str(meta.get("name_key") or f"inv_{inv_key}"),
-                "name_fallback": inv_key,
-                "image": _static_image_url(container_image_path(inv_key)),
-                "amount": int(payload.get("amount") or 1),
-                "rarity": str(meta.get("rarity") or "common"),
-            }
-        )
-    elif rtype == "resources":
-        for res_key, name_key, image in _VOTE_RESOURCE_DISPLAY:
-            amount = int(payload.get(res_key) or 0)
-            if amount > 0:
-                items.append(
-                    {
-                        "kind": "resource",
-                        "resource_key": res_key,
-                        "name_key": name_key,
-                        "name_fallback": res_key,
-                        "image": image,
-                        "amount": amount,
-                    }
-                )
-    elif rtype == "ships":
-        ships = payload.get("ships") if isinstance(payload.get("ships"), dict) else {}
-        for ship_key, amount in ships.items():
-            amount_i = int(amount or 0)
-            if amount_i <= 0:
-                continue
-            canon = canonical_ship_key(str(ship_key))
-            ship = get_ship(canon) or {}
-            items.append(
-                {
-                    "kind": "ship",
-                    "item_key": canon,
-                    "name_key": str(ship.get("name_key") or f"fleet_ship_{canon}"),
-                    "name_fallback": canon,
-                    "image": ship_icon_static_path(canon),
-                    "amount": amount_i,
-                }
-            )
-    elif rtype == "defense":
-        defense = payload.get("defense") if isinstance(payload.get("defense"), dict) else {}
-        for defense_key, amount in defense.items():
-            amount_i = int(amount or 0)
-            if amount_i <= 0:
-                continue
-            key = str(defense_key)
-            spec = get_defense(key) or {}
-            items.append(
-                {
-                    "kind": "defense",
-                    "item_key": key,
-                    "name_key": str(spec.get("name_key") or f"defense_{key}"),
-                    "name_fallback": key,
-                    "image": defense_icon_static_path(key),
-                    "amount": amount_i,
-                }
-            )
-    return items
+    normalized = _normalize_vote_reward_payload(payload)
+    box_key = str(normalized.get("box_key") or DEFAULT_VOTE_BOX_KEY)
+    inv_key = resolve_inventory_key(box_key) or box_key
+    meta = item_catalog_entry(inv_key)
+    return [
+        {
+            "kind": "lootbox",
+            "name_key": str(meta.get("name_key") or f"inv_{inv_key}"),
+            "name_fallback": inv_key,
+            "image": _static_image_url(container_image_path(inv_key)),
+            "amount": int(normalized.get("amount") or 1),
+            "rarity": str(meta.get("rarity") or "common"),
+        }
+    ]
 
 
 def _reward_summary(payload: Mapping[str, Any]) -> Dict[str, Any]:
-    rtype = str(payload.get("reward_type") or "lootbox")
-    rkey = str(payload.get("reward_key") or DEFAULT_REWARD_KEY)
-    label_key = REWARD_TYPE_LABEL_KEYS.get(rtype, "vote_reward_type_lootbox")
-    out: Dict[str, Any] = {
+    normalized = _normalize_vote_reward_payload(payload)
+    rtype = str(normalized["reward_type"])
+    rkey = str(normalized["reward_key"])
+    label_key = REWARD_TYPE_LABEL_KEYS.get(rtype, "vote_reward_type_standard_box")
+    return {
         "reward_type": rtype,
         "reward_key": rkey,
         "reward_type_label_key": label_key,
         "title_key": "vote_reward_title",
+        "box_key": str(normalized["box_key"]),
+        "amount": int(normalized["amount"]),
+        "display_items": _reward_display_items(normalized),
     }
-    if rtype == "lootbox":
-        out["box_key"] = str(payload.get("box_key") or DEFAULT_VOTE_BOX_KEY)
-        out["amount"] = int(payload.get("amount") or 1)
-    elif rtype == "resources":
-        out["metal"] = int(payload.get("metal") or 0)
-        out["crystal"] = int(payload.get("crystal") or 0)
-        out["fuel_cells"] = int(payload.get("fuel_cells") or 0)
-    elif rtype == "ships":
-        ships = payload.get("ships") if isinstance(payload.get("ships"), dict) else {}
-        out["ships"] = {str(k): int(v) for k, v in ships.items() if int(v or 0) > 0}
-    elif rtype == "defense":
-        defense = payload.get("defense") if isinstance(payload.get("defense"), dict) else {}
-        out["defense"] = {str(k): int(v) for k, v in defense.items() if int(v or 0) > 0}
-    out["display_items"] = _reward_display_items(payload)
-    return out
 
 
 def _serialize_pending_reward(row: Any, *, conn, provider_names: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
@@ -1002,8 +858,8 @@ def record_provider_vote(
     pref = str(provider_ref_override or "").strip() or provider_ref(
         str(provider_key), uid, ts, int(provider["cooldown_sec"])
     )
-    rolled = dict(reward_payload) if reward_payload else roll_vote_reward()
-    reward_key = str(rolled.get("reward_key") or provider["reward_key"])
+    rolled = _normalize_vote_reward_payload(reward_payload)
+    reward_key = str(rolled["reward_key"])
     payload_json = json.dumps(rolled)
     ip_val = str(vote_ip).strip()[:64] if vote_ip else None
 
@@ -1223,36 +1079,6 @@ def handle_vote_visit(
     return True, False, "cooldown_active", int(cd["cooldown_remaining_sec"])
 
 
-def _credit_planet_resources(
-    planet_id: int,
-    *,
-    metal: int = 0,
-    crystal: int = 0,
-    fuel_cells: int = 0,
-    conn,
-) -> None:
-    if metal <= 0 and crystal <= 0 and fuel_cells <= 0:
-        return
-    lock_planet_for_update(conn, int(planet_id))
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT metal, crystal, fuel_cells FROM planets WHERE id = ? LIMIT 1;",
-        (int(planet_id),),
-    )
-    row = cur.fetchone()
-    if not row:
-        return
-    cur.execute(
-        "UPDATE planets SET metal = ?, crystal = ?, fuel_cells = ? WHERE id = ?;",
-        (
-            float(row["metal"]) + float(metal),
-            float(row["crystal"]) + float(crystal),
-            float(row["fuel_cells"] or 0) + float(fuel_cells),
-            int(planet_id),
-        ),
-    )
-
-
 def _grant_vote_payload(
     user_id: int,
     planet_id: int,
@@ -1261,90 +1087,40 @@ def _grant_vote_payload(
     conn,
     now: float,
 ) -> Tuple[bool, str, Dict[str, Any]]:
-    rtype = str(payload.get("reward_type") or "lootbox")
+    normalized = _normalize_vote_reward_payload(payload)
+    rtype = str(normalized["reward_type"])
     result: Dict[str, Any] = {
         "reward_type": rtype,
-        "reward_key": str(payload.get("reward_key") or ""),
+        "reward_key": str(normalized["reward_key"]),
     }
 
-    if rtype == "lootbox":
-        box_key = str(payload.get("box_key") or DEFAULT_VOTE_BOX_KEY)
-        amount = int(payload.get("amount") or 1)
-        if not is_allowed_vote_reward_box(box_key):
-            return False, "reward_not_allowed", result
-        if not inventory_schema_ready(conn):
-            return False, "inventory_unavailable", result
-        inv_key = resolve_inventory_key(box_key) or box_key
-        if not grant_inventory_item(
-            int(user_id),
-            inv_key,
-            amount,
-            conn=conn,
-            metadata={"source": "vote_reward", "box_key": box_key},
-        ):
-            return False, "grant_failed", result
-        if table_exists(conn, "lootbox_inventory"):
-            cur = conn.cursor()
-            for _ in range(amount):
-                cur.execute(
-                    """
-                    INSERT INTO lootbox_inventory (player_id, box_key, source, created_at)
-                    VALUES (?, ?, 'vote_reward', ?);
-                    """,
-                    (int(user_id), str(box_key), int(now)),
-                )
-        result.update({"box_key": box_key, "amount": amount, "inventory_key": inv_key})
-        return True, "ok", result
-
-    if rtype == "resources":
-        metal = int(payload.get("metal") or 0)
-        crystal = int(payload.get("crystal") or 0)
-        fuel_cells = int(payload.get("fuel_cells") or 0)
-        if metal <= 0 and crystal <= 0 and fuel_cells <= 0:
-            return False, "grant_failed", result
-        _credit_planet_resources(
-            int(planet_id),
-            metal=metal,
-            crystal=crystal,
-            fuel_cells=fuel_cells,
-            conn=conn,
-        )
-        result.update({"metal": metal, "crystal": crystal, "fuel_cells": fuel_cells, "planet_id": int(planet_id)})
-        return True, "ok", result
-
-    if rtype == "ships":
-        from .fleet import add_planet_ships
-
-        ships_in = payload.get("ships") if isinstance(payload.get("ships"), dict) else {}
-        ships: Dict[str, int] = {}
-        for key, amt in ships_in.items():
-            sk = canonical_ship_key(str(key))
-            n = int(amt or 0)
-            if n > 0 and is_known_ship_key(sk):
-                ships[sk] = ships.get(sk, 0) + n
-        if not ships:
-            return False, "grant_failed", result
-        add_planet_ships(int(planet_id), int(user_id), ships, conn=conn)
-        result.update({"ships": ships, "planet_id": int(planet_id)})
-        return True, "ok", result
-
-    if rtype == "defense":
-        from .models import add_planet_defense
-
-        defense_in = payload.get("defense") if isinstance(payload.get("defense"), dict) else {}
-        defense: Dict[str, int] = {}
-        for key, amt in defense_in.items():
-            dk = str(key).strip()
-            n = int(amt or 0)
-            if n > 0 and is_known_defense_key(dk):
-                defense[dk] = defense.get(dk, 0) + n
-        if not defense:
-            return False, "grant_failed", result
-        add_planet_defense(int(planet_id), defense, conn=conn)
-        result.update({"defense": defense, "planet_id": int(planet_id)})
-        return True, "ok", result
-
-    return False, "reward_not_allowed", result
+    box_key = str(normalized["box_key"])
+    amount = int(normalized["amount"])
+    if not is_allowed_vote_reward_box(box_key):
+        return False, "reward_not_allowed", result
+    if not inventory_schema_ready(conn):
+        return False, "inventory_unavailable", result
+    inv_key = resolve_inventory_key(box_key) or box_key
+    if not grant_inventory_item(
+        int(user_id),
+        inv_key,
+        amount,
+        conn=conn,
+        metadata={"source": "vote_reward", "box_key": box_key},
+    ):
+        return False, "grant_failed", result
+    if table_exists(conn, "lootbox_inventory"):
+        cur = conn.cursor()
+        for _ in range(amount):
+            cur.execute(
+                """
+                INSERT INTO lootbox_inventory (player_id, box_key, source, created_at)
+                VALUES (?, ?, 'vote_reward', ?);
+                """,
+                (int(user_id), str(box_key), int(now)),
+            )
+    result.update({"box_key": box_key, "amount": amount, "inventory_key": inv_key})
+    return True, "ok", result
 
 
 def claim_vote_reward(

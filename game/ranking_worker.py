@@ -17,9 +17,8 @@ from typing import Any, Dict, Optional
 from .db import (
     count_table_rows,
     db,
-    describe_db_connection,
+    gather_db_startup_diagnostics,
     gather_score_stats,
-    get_db_identity,
 )
 from .ranking import recalculate_all_rankings
 from .runtime_state import get_runtime_value, set_runtime_value
@@ -49,6 +48,44 @@ def _worker_log(msg: str) -> None:
     line = f"[ranking-worker] {msg}"
     print(line, flush=True)
     logger.info("%s", msg)
+
+
+def _log_worker_event(event: str, **fields: Any) -> None:
+    parts = [f"ranking_worker_{event}"] + [f"{key}={value}" for key, value in fields.items()]
+    msg = " ".join(parts)
+    print(msg, flush=True)
+    logger.info("%s", msg)
+
+
+def _load_last_run_record(conn=None) -> Optional[Dict[str, Any]]:
+    raw = get_runtime_value(RANKING_WORKER_KEY, conn=conn)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _log_startup_diagnostics(source: str, conn) -> None:
+    diag = gather_db_startup_diagnostics(conn=conn)
+    fields: Dict[str, Any] = {
+        "source": source,
+        "db_backend": diag.get("db_backend"),
+    }
+    if diag.get("db_path"):
+        fields["db"] = diag["db_path"]
+        fields["db_exists"] = str(bool(diag.get("db_exists"))).lower()
+        fields["db_size_bytes"] = int(diag.get("db_size_bytes") or 0)
+    fields["players"] = int(diag.get("players") or 0)
+    fields["planets"] = int(diag.get("planets") or 0)
+    if diag.get("migrations_readable"):
+        fields["migrations"] = f"{diag.get('migrations_applied', 0)}/{diag.get('migrations_total', 0)}"
+        fields["migrations_current"] = str(bool(diag.get("migrations_current"))).lower()
+    elif diag.get("migrations_error"):
+        fields["migrations_error"] = diag["migrations_error"]
+    _log_worker_event("start", **fields)
 
 
 def get_ranking_worker_status(conn=None) -> Dict[str, Any]:
@@ -88,13 +125,14 @@ def seconds_until_ranking_worker_allowed(
     conn=None,
 ) -> float:
     """Seconds until the next scheduled worker run is allowed (0 = ready)."""
-    raw = get_runtime_value(RANKING_WORKER_KEY, conn=conn)
-    if not raw:
+    data = _load_last_run_record(conn=conn)
+    if not data:
+        return 0.0
+    if not data.get("ok"):
         return 0.0
     try:
-        data = json.loads(raw)
         last_at = float(data.get("at") or 0)
-    except (json.JSONDecodeError, TypeError, ValueError):
+    except (TypeError, ValueError):
         return 0.0
     if last_at <= 0:
         return 0.0
@@ -139,6 +177,7 @@ def run_ranking_worker(
     started = time.perf_counter()
     conn = db()
     try:
+        _log_startup_diagnostics(source, conn)
         counts = _gather_counts(conn)
         before_stats = gather_score_stats(conn)
         players = int(counts["players"])
@@ -161,12 +200,19 @@ def run_ranking_worker(
                 "top_score_before": before_stats["top_score"],
                 "top_score_after": before_stats["top_score"],
             }
-            _worker_log("empty database — players=0 planets=0 (use --allow-empty to override)")
+            _log_worker_event(
+                "error",
+                reason="empty_database",
+                players=0,
+                planets=0,
+                duration_ms=duration_ms,
+            )
             return result
 
         if not force:
             wait = seconds_until_ranking_worker_allowed(conn=conn)
             if wait > 0:
+                last_run = _load_last_run_record(conn=conn) or {}
                 duration_ms = int((time.perf_counter() - started) * 1000)
                 skipped = {
                     "ok": True,
@@ -184,13 +230,18 @@ def run_ranking_worker(
                     "top_score_before": before_stats["top_score"],
                     "top_score_after": before_stats["top_score"],
                 }
-                _worker_log(f"skipped_interval wait_sec={int(wait)} (use --force to bypass)")
+                _log_worker_event(
+                    "skip",
+                    reason="guard_recent",
+                    last_run=int(last_run.get("at") or 0),
+                    last_source=last_run.get("source") or "unknown",
+                    wait_sec=int(wait),
+                    duration_ms=duration_ms,
+                )
                 return skipped
 
-        _worker_log("recompute_started")
         result = recalculate_all_rankings(refresh_scores=True, conn=conn)
         conn.commit()
-        _worker_log("commit_ok")
 
         after_stats = gather_score_stats(conn)
         result["skipped_interval"] = False
@@ -203,7 +254,22 @@ def run_ranking_worker(
         result["top_score_before"] = before_stats["top_score"]
         result["top_score_after"] = after_stats["top_score"]
 
-        if persist and not result.get("skipped_interval"):
+        if result.get("ok"):
+            _log_worker_event(
+                "success",
+                updated_players=int(result.get("players_updated") or 0),
+                ranks_assigned=int(result.get("ranks_assigned") or 0),
+                duration_ms=int(result.get("duration_ms") or 0),
+            )
+        else:
+            _log_worker_event(
+                "error",
+                updated_players=int(result.get("players_updated") or 0),
+                duration_ms=int(result.get("duration_ms") or 0),
+                errors=";".join(result.get("errors") or []),
+            )
+
+        if persist and result.get("ok") and not result.get("skipped_interval"):
             record_ranking_worker_result(result, source=source, conn=conn)
             conn.commit()
 
@@ -215,6 +281,7 @@ def run_ranking_worker(
         except Exception:
             pass
         duration_ms = int((time.perf_counter() - started) * 1000)
+        _log_worker_event("error", message=str(exc), duration_ms=duration_ms)
         return {
             "ok": False,
             "skipped_interval": False,
@@ -285,28 +352,7 @@ def _cli_main() -> int:
     )
     bootstrap_application(skip_migration_check=skip_mig)
 
-    app_env = os.environ.get("APP_ENV") or os.environ.get("FLASK_ENV") or "development"
-    db_info = describe_db_connection()
-
-    _worker_log(f"start source={args.source}")
-    _worker_log(f"app_env={app_env}")
-    _worker_log(f"db_backend={db_info['db_backend']}")
-    _worker_log(f"database_url_set={'true' if db_info['database_url_set'] else 'false'}")
-    if db_info.get("db_path"):
-        _worker_log(f"db_path={db_info['db_path']}")
-
-    conn = db()
-    try:
-        identity = get_db_identity(conn)
-        counts = _gather_counts(conn)
-        before_stats = gather_score_stats(conn)
-        _worker_log(f"db_identity={identity}")
-        _worker_log(f"players={counts['players']}")
-        _worker_log(f"planets={counts['planets']}")
-        _worker_log(f"scores_before={before_stats['scores_rows']}")
-        _worker_log(f"top_score_before={before_stats['top_score']}")
-    finally:
-        conn.close()
+    _worker_log(f"cli_env app_env={os.environ.get('APP_ENV') or os.environ.get('FLASK_ENV') or 'development'}")
 
     try:
         result = run_ranking_worker(
@@ -322,10 +368,12 @@ def _cli_main() -> int:
 
     if result.get("skipped_interval"):
         _worker_log(f"skipped_interval next_run_in_sec={result.get('next_run_in_sec')}")
-    else:
-        _worker_log(f"scores_updated={result.get('scores_updated', result.get('players_updated'))}")
-        _worker_log(f"scores_after={result.get('scores_after', '')}")
-        _worker_log(f"top_score_after={result.get('top_score_after', '')}")
+    elif result.get("ok"):
+        _worker_log(
+            f"scores_updated={result.get('scores_updated', result.get('players_updated'))} "
+            f"scores_after={result.get('scores_after', '')} "
+            f"top_score_after={result.get('top_score_after', '')}"
+        )
 
     if result.get("errors"):
         for err in result["errors"]:

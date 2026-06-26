@@ -247,6 +247,17 @@
         </div>
       </div>
       <p class="admin-tab-hint admin-small-hint">{{ T("admin_fleets_hint", "Aktive Flottenbewegungen — eine Phase vorrücken oder Mission abschließen (Dev/QA).") }}</p>
+
+      <section class="admin-section admin-card" id="admin-fleet-mission-locks-section">
+        <h3 class="admin-section-title-text">{{ T("admin_fleet_mission_locks", "Flottenmissionen") }}</h3>
+        <p class="admin-small-hint">{{ T("admin_fleet_mission_locks_hint", "Universumsweite Sperre für neue Flottenstarts. Aktive Bewegungen laufen weiter.") }}</p>
+        <div class="admin-toolbar admin-action-row-wrap admin-mb-sm">
+          <button type="button" class="gc-btn gc-btn-outline gc-btn-sm" data-admin-action="fleet-locks-refresh">{{ T("admin_btn_refresh", "Aktualisieren") }}</button>
+          <button type="button" class="gc-btn gc-btn-danger gc-btn-sm" data-admin-action="fleet-attack-protection-72h">{{ T("admin_attack_protection_72h", "3 Tage Angriffssperre setzen") }}</button>
+        </div>
+        <div id="admin-fleet-mission-locks" class="admin-panel-body" aria-live="polite"></div>
+      </section>
+
       <div id="admin-fleets-output" class="admin-panel-body"></div>
     </section>
 

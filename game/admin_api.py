@@ -1110,6 +1110,79 @@ def get_admin_fleets(filters: Dict[str, Any]) -> Dict[str, Any]:
         conn.close()
 
 
+def get_fleet_mission_locks_admin() -> Dict[str, Any]:
+    from game.fleet_mission_locks import get_fleet_mission_locks
+
+    return _ok(locks=get_fleet_mission_locks())
+
+
+def set_fleet_mission_lock_admin(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.fleet_mission_locks import set_fleet_mission_lock
+
+    if not isinstance(body, dict):
+        return _err("invalid_payload", "Expected JSON object")
+    mission = str(body.get("mission") or "").strip().lower()
+    if not mission:
+        return _err("mission_required", "mission is required")
+    locked = bool(body.get("locked"))
+    locked_until = body.get("locked_until")
+    if locked_until in ("", None) and body.get("locked_until") is not None:
+        locked_until = None
+    reason = body.get("reason")
+    try:
+        result = set_fleet_mission_lock(
+            mission,
+            locked,
+            locked_until=int(locked_until) if locked_until not in (None, "") else None,
+            reason=str(reason).strip() if reason else None,
+            admin_id=int(admin_id),
+        )
+    except ValueError as exc:
+        return _err("invalid_mission", str(exc))
+
+    audit(
+        int(admin_id),
+        "fleet_mission_lock_set",
+        target_type="fleet_mission",
+        target_id=mission,
+        payload={
+            "mission": mission,
+            "locked": locked,
+            "locked_until": result.get("locked_until"),
+            "reason": result.get("reason"),
+        },
+    )
+    return _ok(lock=result, locks={mission: result})
+
+
+def reset_fleet_attack_protection_admin(admin_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    from game.fleet_mission_locks import apply_reset_attack_protection
+
+    body = body if isinstance(body, dict) else {}
+    try:
+        hours = float(body.get("duration_hours") or 72)
+    except (TypeError, ValueError):
+        hours = 72.0
+    duration_seconds = int(max(1.0, hours) * 3600)
+    result = apply_reset_attack_protection(
+        duration_seconds=duration_seconds,
+        admin_id=int(admin_id),
+    )
+    audit(
+        int(admin_id),
+        "fleet_attack_protection_set",
+        target_type="fleet_mission",
+        target_id="attack",
+        payload={
+            "duration_hours": hours,
+            "duration_seconds": duration_seconds,
+            "locked_until": result.get("locked_until"),
+            "reason": result.get("reason"),
+        },
+    )
+    return _ok(lock=result, attack_protection=result)
+
+
 def advance_admin_fleet(admin_id: int, movement_id: int, body: Dict[str, Any]) -> Dict[str, Any]:
     from game.fleet import admin_advance_fleet_movement, fleet_schema_ready
 

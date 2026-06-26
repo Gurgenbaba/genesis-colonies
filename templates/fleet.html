@@ -78,6 +78,8 @@
        aria-selected="{{ 'true' if fleet_mode == 'distribute' else 'false' }}">{{ T("fleet_logistics_distribute") }}</a>
   </nav>
 
+  <div class="fleet-mission-locks-banner" data-fleet-mission-locks-banner hidden aria-live="polite"></div>
+
   <div class="fleet-ogame-stack">
 
     <div class="fleet-ogame-send" data-fleet-mode-panel="send"{% if fleet_mode != 'send' %} hidden{% endif %}>

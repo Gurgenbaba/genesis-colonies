@@ -12810,12 +12810,13 @@
     const key = String(r?.reward_type_label_key || "");
     if (key) return t(key, String(r?.reward_type || "lootbox"));
     const map = {
-      lootbox: t("vote_reward_type_lootbox", "Lootbox"),
-      resources: t("vote_reward_type_resources", "Ressourcen"),
-      ships: t("vote_reward_type_ships", "Schiffe"),
-      defense: t("vote_reward_type_defense", "Verteidigung"),
+      standard_box: t("vote_reward_type_standard_box", "Standard-Box"),
+      lootbox: t("vote_reward_type_standard_box", "Standard-Box"),
+      resources: t("vote_reward_type_standard_box", "Standard-Box"),
+      ships: t("vote_reward_type_standard_box", "Standard-Box"),
+      defense: t("vote_reward_type_standard_box", "Standard-Box"),
     };
-    return map[String(r?.reward_type || "lootbox")] || map.lootbox;
+    return map[String(r?.reward_type || "standard_box")] || map.standard_box;
   }
 
   const VOTE_REWARD_IMG_FALLBACK = "/static/img/lootboxes/Generic_Supply_Container.png";
@@ -13539,7 +13540,19 @@
     const tt = (key, fallback) => t(key, fallback);
     const fleetPayload = (res) => ((res && res.data && typeof res.data === "object") ? res.data : res) || {};
     const apiError = (res) => (res && (res.error || res.reason)) || "generic";
-    const reasonText = (reason) => tt(`fleet_error_${reason}`, tt("fleet_error_generic", "Fleet action failed."));
+    const reasonText = (reason, preview) => {
+      if (reason === "mission_locked") {
+        const lock = preview?.mission_lock || {};
+        const until = Number(lock.locked_until || lock.until || 0);
+        if (until > 0) {
+          const when = new Date(until * 1000).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+          const tpl = tt("fleet_mission_locked_until", "This mission is locked until {datetime}.");
+          return tpl.replace("{datetime}", when);
+        }
+        return tt("fleet_mission_locked", "This mission is currently locked.");
+      }
+      return tt(`fleet_error_${reason}`, tt("fleet_error_generic", "Fleet action failed."));
+    };
 
     const getPage = () => {
       const page = document.getElementById("fleet-page");
@@ -13717,11 +13730,84 @@
       const form = getForm(page);
       const ms = form?.querySelector("[data-fleet-mission]");
       const row = page?.querySelector(".fleet-mission-speed-row");
+      const formatLockUntil = (ts) => {
+        const n = Number(ts);
+        if (!Number.isFinite(n) || n <= 0) return "";
+        try {
+          return new Date(n * 1000).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+        } catch (_) {
+          return "";
+        }
+      };
+      const getOpsMissionLocks = () => getFleetRuntime(page).data?.mission_locks || {};
+      const missionLockStatusText = (lock) => {
+        if (!lock?.locked) return "";
+        const until = formatLockUntil(lock.locked_until);
+        if (until) {
+          return tt("fleet_mission_locked_until", "This mission is locked until {datetime}.").replace("{datetime}", until);
+        }
+        return tt("fleet_mission_locked", "This mission is currently locked.");
+      };
+      const renderFleetMissionLocksBanner = () => {
+        const banner = page.querySelector("[data-fleet-mission-locks-banner]");
+        if (!banner) return;
+        const active = Object.entries(getOpsMissionLocks()).filter(([, lock]) => lock && lock.locked);
+        if (!active.length) {
+          banner.hidden = true;
+          banner.innerHTML = "";
+          return;
+        }
+        const items = active.map(([mission, lock]) => {
+          const name = tt(`fleet_mission_${mission}`, mission);
+          const status = missionLockStatusText(lock);
+          return `<li class="fleet-mission-locks-banner-item"><strong>${_fleetEsc(name)}</strong><span>${_fleetEsc(status)}</span></li>`;
+        }).join("");
+        banner.innerHTML =
+          `<div class="fleet-mission-locks-banner-inner">` +
+          `<p class="fleet-mission-locks-banner-title">${_fleetEsc(tt("fleet_mission_locks_notice_title", "Locked missions"))}</p>` +
+          `<ul class="fleet-mission-locks-banner-list">${items}</ul>` +
+          `</div>`;
+        banner.hidden = false;
+      };
+      const applyOpsMissionLocksToSelect = () => {
+        if (!ms) return;
+        const rt = getFleetRuntime(page);
+        const locks = getOpsMissionLocks();
+        const urlPrefillLocked = isFleetUrlPrefillLocked(page);
+        if (!rt.missionOptionLabels) {
+          rt.missionOptionLabels = {};
+          Array.from(ms.options).forEach((opt) => {
+            rt.missionOptionLabels[opt.value] = opt.textContent.trim();
+          });
+        }
+        Array.from(ms.options).forEach((opt) => {
+          const lock = locks[opt.value];
+          const opsLocked = !!(lock && lock.locked);
+          opt.disabled = opsLocked;
+          const baseLabel = rt.missionOptionLabels[opt.value] || tt(`fleet_mission_${opt.value}`, opt.value);
+          opt.textContent = opsLocked
+            ? `${baseLabel} — ${tt("fleet_mission_locked_short", "locked")}`
+            : baseLabel;
+        });
+        if (!urlPrefillLocked) {
+          const currentLock = locks[ms.value];
+          if (currentLock && currentLock.locked) {
+            const firstOpen = Array.from(ms.options).find((opt) => !opt.disabled);
+            if (firstOpen) {
+              ms.value = firstOpen.value;
+              if (typeof GC.updateFleetFormMode === "function") GC.updateFleetFormMode(page);
+            }
+          }
+        }
+        if (typeof GC.rebuildHudSelect === "function") GC.rebuildHudSelect(ms);
+        else if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
+      };
+      renderFleetMissionLocksBanner();
       if (!ms || !row) return;
-      const locked = isFleetUrlPrefillLocked(page);
-      ms.disabled = locked;
-      row.classList.toggle("is-mission-locked", locked);
-      if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(ms);
+      const urlPrefillLocked = isFleetUrlPrefillLocked(page);
+      applyOpsMissionLocksToSelect();
+      ms.disabled = urlPrefillLocked;
+      row.classList.toggle("is-mission-locked", urlPrefillLocked);
     };
 
     const resolveFleetWorldTargetPresentation = (target) => {
@@ -14131,6 +14217,7 @@
       }
       if (typeof GC.rebuildHudSelect === "function") GC.rebuildHudSelect(sel);
       else if (typeof GC.syncHudSelect === "function") GC.syncHudSelect(sel);
+      if (typeof GC.syncFleetMissionLockUi === "function") GC.syncFleetMissionLockUi(page);
       if (locked) {
         enforceFleetUrlMissionLock(page);
         return;
@@ -14592,6 +14679,10 @@
           GC.renderGlobalFleetHud(state.active_fleets);
         }
       }
+      if (state.mission_locks) {
+        rt.data.mission_locks = state.mission_locks;
+        if (typeof GC.syncFleetMissionLockUi === "function") GC.syncFleetMissionLockUi(page);
+      }
       if (state.presets) {
         rt.data.presets = state.presets;
         renderPresetList(page, state.presets);
@@ -14747,7 +14838,7 @@
               previewMissionStatus.classList.add("is-ok");
             } else {
               const reason = p.block_reason || p.mission_block_reason || "generic";
-              previewMissionStatus.textContent = reasonText(reason);
+              previewMissionStatus.textContent = reasonText(reason, p);
               previewMissionStatus.classList.add("is-blocked");
             }
           }
@@ -15288,7 +15379,7 @@
         }
         if (!rt.lastPreview?.can_send) {
           if (errorEl) {
-            errorEl.textContent = reasonText(rt.lastPreview?.block_reason || "generic");
+            errorEl.textContent = reasonText(rt.lastPreview?.block_reason || "generic", rt.lastPreview);
             errorEl.hidden = false;
           }
           rt.sending = false;

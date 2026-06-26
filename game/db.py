@@ -311,3 +311,40 @@ def gather_score_stats(conn: sqlite3.Connection) -> dict[str, int]:
     cur.execute("SELECT COALESCE(MAX(score_total), 0) AS top FROM player_scores;")
     top = int(cur.fetchone()["top"] or 0)
     return {"scores_rows": rows, "scores_positive": positive, "top_score": top}
+
+
+def gather_db_startup_diagnostics(conn: Optional[sqlite3.Connection] = None) -> dict[str, Any]:
+    """DB target fingerprint for ranking worker / cron startup logs."""
+    owns = conn is None
+    if owns:
+        conn = db()
+    try:
+        backend = get_db_backend()
+        info: dict[str, Any] = {
+            "db_backend": backend,
+            "database_url_set": database_url_is_set(),
+            "players": count_table_rows(conn, "players"),
+            "planets": count_table_rows(conn, "planets"),
+        }
+        if backend == "sqlite":
+            path = resolve_db_path()
+            info["db_path"] = str(path)
+            info["db_exists"] = path.exists()
+            info["db_size_bytes"] = int(path.stat().st_size) if path.exists() else 0
+        try:
+            from game.migrations_util import get_applied_migration_names, list_migration_files
+
+            applied = get_applied_migration_names(conn)
+            total = len(list_migration_files())
+            info["migrations_applied"] = len(applied)
+            info["migrations_total"] = total
+            info["migrations_current"] = len(applied) >= total and total > 0
+        except Exception as exc:
+            info["migrations_readable"] = False
+            info["migrations_error"] = str(exc)
+        else:
+            info["migrations_readable"] = True
+        return info
+    finally:
+        if owns and conn is not None:
+            conn.close()

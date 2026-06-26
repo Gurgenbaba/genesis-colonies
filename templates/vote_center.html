@@ -175,8 +175,8 @@
           <div class="vote-center-reward-info">
             <span class="vote-center-reward-title">{{ T("vote_reward_title", "Vote Belohnung") }}</span>
             <span class="vote-center-reward-provider">{{ r.provider_name if r.provider_name is defined else r.provider }}</span>
-            <span class="vote-center-reward-type" data-vote-reward-type="{{ r.reward_type if r.reward_type is defined else 'lootbox' }}">
-              {{ T(r.reward_type_label_key if r.reward_type_label_key is defined else "vote_reward_type_lootbox", "Lootbox") }}
+            <span class="vote-center-reward-type" data-vote-reward-type="{{ r.reward_type if r.reward_type is defined else 'standard_box' }}">
+              {{ T(r.reward_type_label_key if r.reward_type_label_key is defined else "vote_reward_type_standard_box", "Standard-Box") }}
             </span>
           </div>
           <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm vote-center-claim-btn" data-vote-claim="{{ r.id }}">

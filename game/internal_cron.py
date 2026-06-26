@@ -139,7 +139,7 @@ def handle_internal_cron_ranking(request: Request) -> Tuple[Dict[str, Any], int]
         return {"ok": False, "error": auth_err or "unauthorized"}, 401
 
     force = parse_force_flag(request)
-    _recompute_log("ranking-http-cron", f"start source=http force={str(force).lower()}")
+    _recompute_log("ranking-http-cron", f"request_received force={str(force).lower()}")
     try:
         payload = execute_ranking_recompute(force=force, source="http_cron")
     except Exception as exc:

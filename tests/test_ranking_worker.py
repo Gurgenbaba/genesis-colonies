@@ -365,3 +365,71 @@ def test_ranking_worker_force_bypasses_interval(temp_db):
         run_ranking_worker(source="test", force=True, persist=False)
         _close_db()
         mock_full.assert_called_once()
+
+
+def test_ranking_worker_failed_run_does_not_block_guard(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("worker_fail_guard")
+    upsert_player_scores(pid, {"total_score": 10, "building_score": 10, "research_score": 0})
+    _close_db()
+
+    failed = {
+        "at": int(time.time()),
+        "source": "test",
+        "ok": False,
+        "players_updated": 0,
+        "ranks_assigned": 0,
+        "duration_ms": 5,
+        "errors": ["boom"],
+    }
+    set_runtime_value(RANKING_WORKER_KEY, json.dumps(failed))
+    _close_db()
+
+    wait = seconds_until_ranking_worker_allowed()
+    assert wait == 0.0
+
+    with patch(
+        "game.ranking_worker.recalculate_all_rankings",
+        return_value={
+            "ok": True,
+            "players_updated": 1,
+            "ranks_assigned": 1,
+            "duration_ms": 1,
+            "errors": [],
+        },
+    ) as mock_full:
+        result = run_ranking_worker(source="test", force=False, persist=False)
+        _close_db()
+        mock_full.assert_called_once()
+        assert result.get("skipped_interval") is not True
+
+
+def test_ranking_worker_failed_run_not_persisted_as_guard_marker(temp_db):
+    _run_migrate(temp_db)
+    init_db()
+    _close_db()
+
+    pid = _create_player("worker_fail_persist")
+    upsert_player_scores(pid, {"total_score": 10, "building_score": 10, "research_score": 0})
+    _close_db()
+
+    with patch(
+        "game.ranking_worker.recalculate_all_rankings",
+        return_value={
+            "ok": False,
+            "players_updated": 0,
+            "ranks_assigned": 0,
+            "duration_ms": 1,
+            "errors": ["partial failure"],
+        },
+    ):
+        result = run_ranking_worker(source="test", force=True, persist=True)
+    _close_db()
+    assert result.get("ok") is False
+
+    from game.runtime_state import get_runtime_value
+
+    assert get_runtime_value(RANKING_WORKER_KEY) is None

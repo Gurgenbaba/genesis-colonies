@@ -390,6 +390,11 @@ def test_universe_reset_recalculates_rankings(mock_backup, app_client, tmp_path)
     assert ranking.get("players_updated", 0) >= 2
     assert ranking.get("ranks_assigned", 0) >= 2
 
+    attack_protection = data.get("attack_protection") or {}
+    assert attack_protection.get("locked") is True
+    assert attack_protection.get("reason") == "reset_protection"
+    assert int(attack_protection.get("locked_until") or 0) > int(time.time())
+
     conn = db()
     try:
         rows = conn.execute(

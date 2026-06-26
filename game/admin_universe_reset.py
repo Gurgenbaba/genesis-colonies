@@ -479,6 +479,7 @@ def execute_universe_reset_keep_inventory(
     preserved = set(PRESERVED_TABLES) | set(inventory_tables)
     player_ids: List[int] = []
     ranking_refresh: Optional[Dict[str, Any]] = None
+    attack_protection: Optional[Dict[str, Any]] = None
 
     try:
         begin_write_transaction(conn)
@@ -503,6 +504,10 @@ def execute_universe_reset_keep_inventory(
                 + (f": {errors[0]}" if errors else "")
             )
 
+        from game.fleet_mission_locks import apply_reset_attack_protection
+
+        attack_protection = apply_reset_attack_protection(conn=conn)
+
         commit(conn)
     except Exception:
         rollback(conn)
@@ -519,5 +524,6 @@ def execute_universe_reset_keep_inventory(
         "players_reinitialized": len(player_ids),
         "inventory_tables_preserved": inventory_tables,
         "ranking_refresh": ranking_refresh,
+        "attack_protection": attack_protection,
         "timestamp": int(time.time()),
     }

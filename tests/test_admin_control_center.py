@@ -718,6 +718,16 @@ def test_admin_panel_includes_diplomacy_tab(app_client):
     assert "admin-diplomacy-output" in html
 
 
+def test_admin_panel_includes_fleet_mission_locks(app_client):
+    client, admin_id, user_id = app_client
+    _as_admin(client, admin_id)
+    r = client.get("/admin")
+    assert r.status_code == 200
+    html = r.get_data(as_text=True)
+    assert 'data-admin-action="fleet-attack-protection-72h"' in html
+    assert "admin-fleet-mission-locks" in html
+
+
 def test_admin_panel_includes_ranking_recompute_button(app_client):
     client, admin_id, user_id = app_client
     _as_admin(client, admin_id)

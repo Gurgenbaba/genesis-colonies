@@ -202,6 +202,12 @@ def _now() -> float:
     return time.time()
 
 
+def _fleet_mission_locks_for_client(conn) -> Dict[str, Dict[str, Any]]:
+    from .fleet_mission_locks import get_active_fleet_mission_locks_for_client
+
+    return get_active_fleet_mission_locks_for_client(conn=conn)
+
+
 def fleet_schema_ready(conn) -> bool:
     return (
         table_exists(conn, "planet_ships")
@@ -970,6 +976,12 @@ def validate_fleet_send(
 
     if mission not in MISSION_TYPES:
         return False, "invalid_mission", None
+
+    from .fleet_mission_locks import is_fleet_mission_locked
+
+    locked, lock_info = is_fleet_mission_locked(mission, conn=conn)
+    if locked:
+        return False, "mission_locked", {"mission_lock": lock_info}
     if not ships_n:
         return False, "no_ships", None
     if pct < 10 or pct > 100:
@@ -1114,10 +1126,12 @@ def build_fleet_send_preview(
         conn = db()
     try:
         from .fleet_target import attach_world_target, normalize_fleet_target_request
+        from .fleet_mission_locks import is_fleet_mission_locked
 
         mission = str(mission_type or "").strip().lower()
         ships_n = normalize_ships(ships)
         resources_n = calculate_loaded_resources(resources)
+        mission_locked, mission_lock_info = is_fleet_mission_locked(mission, conn=conn)
         try:
             norm = normalize_fleet_target_request(
                 int(player_id),
@@ -1187,6 +1201,9 @@ def build_fleet_send_preview(
                 tp,
                 conn=conn,
             )
+        if mission_locked:
+            mission_ok = False
+            mission_reason = "mission_locked"
         flight_tp = EXPEDITION_POSITION if mission == "expedition" else tp
         flight = preview_fleet_flight(
             origin_planet=origin_planet,
@@ -1209,7 +1226,10 @@ def build_fleet_send_preview(
 
         can_send = False
         block_reason = mission_reason if not mission_ok else ""
-        if ships_n and mission_ok:
+        mission_lock_payload = mission_lock_info if mission_locked else None
+        if mission_locked:
+            block_reason = "mission_locked"
+        elif ships_n and mission_ok:
             ok, reason, _extra = validate_fleet_send(
                 player_id=player_id,
                 origin_planet_id=int(origin_planet["id"]),
@@ -1225,6 +1245,8 @@ def build_fleet_send_preview(
             )
             can_send = ok
             block_reason = reason or ""
+            if (_extra or {}).get("mission_lock"):
+                mission_lock_payload = _extra["mission_lock"]
 
         if target_info:
             attach_world_target(
@@ -1236,7 +1258,7 @@ def build_fleet_send_preview(
             )
             merge_world_native_allowed_missions(target_info)
 
-        return {
+        payload = {
             **flight,
             "target": target_info,
             "mission_type": mission,
@@ -1254,6 +1276,9 @@ def build_fleet_send_preview(
                 (flight_seconds * 2) + expo_stay_seconds if mission == "expedition" and ships_n else None
             ),
         }
+        if mission_lock_payload:
+            payload["mission_lock"] = mission_lock_payload
+        return payload
     finally:
         if own and conn is not None:
             conn.close()
@@ -2088,6 +2113,13 @@ def send_fleet(
     mission = str(mission_type or "").strip().lower()
     if mission not in MISSION_TYPES:
         return False, "invalid_mission", None
+
+    from .fleet_mission_locks import is_fleet_mission_locked
+
+    locked, lock_info = is_fleet_mission_locked(mission, conn=conn)
+    if locked:
+        return False, "mission_locked", None
+
     for key in ships:
         if not is_known_ship_key(str(key)):
             return False, "unknown_ship", None
@@ -4958,6 +4990,7 @@ def build_logistics_page_context(
             "ships": get_planet_ships(planet_id, conn=conn),
             "fleet_slots": get_fleet_slot_status(player_id, conn=conn),
             "server_time": time.time(),
+            "mission_locks": _fleet_mission_locks_for_client(conn=conn),
         }
     finally:
         if ssr is not None:
@@ -5058,6 +5091,7 @@ def get_fleet_live_state(
             "active_fleets": build_active_fleets_payload(player_id, conn=conn),
             "presets": list_presets(player_id, conn=conn),
             "fuel_resource": FLEET_FUEL_RESOURCE,
+            "mission_locks": _fleet_mission_locks_for_client(conn=conn),
         }
     finally:
         if own and conn is not None:
@@ -5144,6 +5178,7 @@ def build_fleet_page_context(
             "buildable_ships": buildable,
             "shipyard_url": "/shipyard",
             "speed_options": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+            "mission_locks": _fleet_mission_locks_for_client(conn=conn),
         }
     finally:
         if ssr is not None:

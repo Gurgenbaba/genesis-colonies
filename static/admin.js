@@ -1693,7 +1693,122 @@
     return `${m}m ${s % 60}s`;
   }
 
+  function formatLockUntil(ts) {
+    const n = parseInt(ts, 10);
+    if (!Number.isFinite(n) || n <= 0) return "—";
+    try {
+      return new Date(n * 1000).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+    } catch (_) {
+      return String(n);
+    }
+  }
+
+  function datetimeLocalToUnix(value) {
+    if (!value) return null;
+    const ms = Date.parse(value);
+    if (!Number.isFinite(ms)) return null;
+    return Math.floor(ms / 1000);
+  }
+
+  function unixToDatetimeLocal(ts) {
+    const n = parseInt(ts, 10);
+    if (!Number.isFinite(n) || n <= 0) return "";
+    const d = new Date(n * 1000);
+    const pad = (x) => String(x).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  const FLEET_MISSION_ORDER = [
+    "transport", "collect", "recycle", "deploy", "spy", "attack", "colonize", "hold", "expedition",
+  ];
+
+  function renderFleetMissionLocksTable(locks) {
+    const reasonOptions = [
+      ["reset_protection", t("admin_fleet_lock_reason_reset", "Reset-Schutz")],
+      ["maintenance", t("admin_fleet_lock_reason_maintenance", "Wartung")],
+      ["exploit_fix", t("admin_fleet_lock_reason_exploit", "Exploit-Fix")],
+      ["event", t("admin_fleet_lock_reason_event", "Event")],
+      ["manual", t("admin_fleet_lock_reason_manual", "Manuell")],
+    ];
+    const rows = FLEET_MISSION_ORDER.map((mission) => {
+      const lock = (locks && locks[mission]) || {};
+      const active = !!lock.locked;
+      const until = lock.locked_until;
+      const status = active
+        ? (until
+          ? t("admin_fleet_lock_status_until", "Gesperrt bis %(until)s").replace("%(until)s", formatLockUntil(until))
+          : t("admin_fleet_lock_status_locked", "Gesperrt"))
+        : t("admin_fleet_lock_status_active", "Aktiv");
+      const reasonSel = reasonOptions.map(([val, label]) =>
+        `<option value="${esc(val)}"${lock.reason === val ? " selected" : ""}>${esc(label)}</option>`
+      ).join("");
+      const missionLabel = t(`fleet_mission_${mission}`, mission);
+      return `<tr data-fleet-lock-row="${esc(mission)}">` +
+        `<td>${esc(missionLabel)} <span class="admin-small-hint gc-mono">(${esc(mission)})</span></td>` +
+        `<td class="admin-fleet-lock-status">${esc(status)}</td>` +
+        `<td><input type="datetime-local" class="admin-input admin-input-sm" data-fleet-lock-until value="${esc(unixToDatetimeLocal(until))}"></td>` +
+        `<td><select class="admin-input admin-select admin-input-sm" data-gc-hud-select data-fleet-lock-reason>${reasonSel}</select></td>` +
+        `<td class="admin-table-actions">` +
+        `<button type="button" class="gc-btn gc-btn-${active ? "outline" : "danger"} gc-btn-xs" data-admin-action="fleet-mission-lock-toggle" data-mission="${esc(mission)}" data-locked="${active ? "0" : "1"}">${esc(active ? t("admin_fleet_lock_unlock", "Entsperren") : t("admin_fleet_lock_lock", "Sperren"))}</button>` +
+        `</td></tr>`;
+    });
+    return renderTable(
+      [
+        t("admin_col_mission", "Mission"),
+        t("admin_col_status", "Status"),
+        t("admin_fleet_lock_until_col", "Sperren bis"),
+        t("admin_fleet_lock_reason_col", "Grund"),
+        "",
+      ],
+      rows
+    );
+  }
+
+  async function loadFleetMissionLocks() {
+    const out = qs("#admin-fleet-mission-locks");
+    if (out) out.innerHTML = loadingHtml();
+    const data = await adminGet("/api/admin/fleet-mission-locks");
+    if (!data.ok) {
+      if (out) out.innerHTML = errorCard(data);
+      return data;
+    }
+    if (out) {
+      out.innerHTML = `<div class="admin-card">${renderFleetMissionLocksTable(data.locks || {})}</div>`;
+      if (typeof GC.initHudSelects === "function") GC.initHudSelects(out);
+    }
+    return data;
+  }
+
+  async function setFleetMissionLockFromRow(mission, locked) {
+    const row = qs(`[data-fleet-lock-row="${mission}"]`);
+    const untilRaw = row?.querySelector("[data-fleet-lock-until]")?.value || "";
+    const reason = row?.querySelector("[data-fleet-lock-reason]")?.value || "manual";
+    const lockedUntil = datetimeLocalToUnix(untilRaw);
+    const payload = { mission, locked: !!locked, reason };
+    if (locked && lockedUntil) payload.locked_until = lockedUntil;
+    const data = await adminPost("/api/admin/fleet-mission-locks", payload);
+    if (data.ok) {
+      notify(t("admin_fleet_lock_saved", "Missionssperre gespeichert."), "success");
+      await loadFleetMissionLocks();
+    } else {
+      showAlert(data.message || t("admin_fleet_lock_error", "Sperre konnte nicht gespeichert werden."), "error");
+    }
+    return data;
+  }
+
+  async function resetFleetAttackProtection72h() {
+    const data = await adminPost("/api/admin/fleet-mission-locks/reset-attack-protection", { duration_hours: 72 });
+    if (data.ok) {
+      notify(t("admin_attack_protection_72h_ok", "Angriffssperre für 72 Stunden gesetzt."), "success");
+      await loadFleetMissionLocks();
+    } else {
+      showAlert(data.message || t("admin_fleet_lock_error", "Sperre konnte nicht gespeichert werden."), "error");
+    }
+    return data;
+  }
+
   async function loadAdminFleets() {
+    await loadFleetMissionLocks();
     const out = qs("#admin-fleets-output");
     const pid = qs("#admin-fleet-player-id")?.value;
     const status = qs("#admin-fleet-status")?.value || "all";
@@ -2411,6 +2526,14 @@
     if (act === "search-planets") return searchAdminPlanets();
     if (act === "load-queues") return loadAdminQueues();
     if (act === "load-fleets") return loadAdminFleets();
+    if (act === "fleet-locks-refresh") return loadFleetMissionLocks();
+    if (act === "fleet-attack-protection-72h") return resetFleetAttackProtection72h();
+    if (act === "fleet-mission-lock-toggle") {
+      const mission = btn.dataset.mission;
+      const locked = btn.dataset.locked === "1";
+      if (!mission) return null;
+      return setFleetMissionLockFromRow(mission, locked);
+    }
     if (act === "finish-due") return finishDueQueues();
     if (act === "load-audit") return loadAuditLog();
     if (act === "chat-search") return searchAdminChatMessages();
