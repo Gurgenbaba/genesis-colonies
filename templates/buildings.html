@@ -61,7 +61,7 @@
   {% elif bq_queue_full %}
     {% set _action_state = 'locked' %}
   {% elif not b.can_afford %}
-    {% set _action_state = 'afford' %}
+    {% set _action_state = 'warn' %}
   {% else %}
     {% set _action_state = 'go' %}
   {% endif %}
@@ -87,11 +87,11 @@
               aria-label="{{ T('buildings_btn_queue_full', 'Warteschlange voll') }}"><span class="gc-bld-head-action-icon">🔒</span></button>
     {% elif not b.can_afford %}
       <button type="button"
-              class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-upgrade"
-              data-action-state="afford"
+              class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-upgrade status-pill-icon-btn gc-req-hover-trigger"
+              data-action-state="warn"
               disabled
-              title="{{ T('msg_build_not_enough_resources') }}"
-              aria-label="{{ T('msg_build_not_enough_resources') }}"><span class="gc-bld-head-action-label">{{ T('progression_btn_plus_one', '+1') }}</span></button>
+              {{ render_req_hover_attrs(b.resource_items) }}
+              aria-label="{{ T('msg_build_not_enough_resources') }}"><span class="gc-bld-head-action-icon">⚠</span></button>
     {% else %}
       {% set _preview = b.max_queue_preview if b.max_queue_preview is defined else {'jobs': (b.max_queueable if b.max_queueable is defined else 0)|int} %}
       {% set _max_q = (_preview.jobs if _preview.jobs is defined else 0)|int %}

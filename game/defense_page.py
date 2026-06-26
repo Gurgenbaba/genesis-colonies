@@ -39,15 +39,32 @@ def _locked_defense_catalog(
     *,
     conn,
 ) -> list[Dict[str, Any]]:
-    from .models import get_planet_defense
+    from .defense_requirements import requirements_summary_for_client
+    from .models import get_planet_buildings, get_planet_defense
+    from .research import get_research_levels
 
     stock = get_planet_defense(int(planet_id), conn=conn)
+    buildings = get_planet_buildings(int(planet_id), conn=conn)
+    research = get_research_levels(user_id=int(player_id), conn=conn)
     out: list[Dict[str, Any]] = []
     for key in sorted(ACTIVE_DEFENSE_KEYS):
         if defense_unlocked(key, factory_level, player_id=player_id, planet_id=planet_id, conn=conn):
             continue
         spec = DEFENSES.get(key) or {}
         cost = spec.get("build_cost") or {}
+        req_summary = requirements_summary_for_client(
+            key, buildings=buildings, research=research
+        )
+        req_items = [
+            {
+                "kind": str(it.get("type") or ""),
+                "key": str(it.get("key") or ""),
+                "need": int(it.get("required") or 0),
+                "have": int(it.get("current") or 0),
+                "met": bool(it.get("met")),
+            }
+            for it in (req_summary.get("items") or [])
+        ]
         out.append(
             {
                 "defense_key": key,
@@ -62,6 +79,7 @@ def _locked_defense_catalog(
                 "build_seconds": 0,
                 "stock": int(stock.get(key, 0) or 0),
                 "unlocked": False,
+                "requirements_items": req_items,
             }
         )
     return out

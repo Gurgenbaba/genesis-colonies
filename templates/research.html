@@ -142,7 +142,7 @@
   {% elif queue_full %}
     {% set _action_state = 'locked' %}
   {% elif not can_afford %}
-    {% set _action_state = 'afford' %}
+    {% set _action_state = 'warn' %}
   {% else %}
     {% set _action_state = 'go' %}
   {% endif %}
@@ -164,11 +164,11 @@
               aria-label="{{ T('research_btn_queue_full', 'Forschungsliste voll') }}"><span class="gc-bld-head-action-icon">🔒</span></button>
     {% elif not can_afford %}
       <button type="button"
-              class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-research"
-              data-action-state="afford"
+              class="gc-bld-head-action-btn gc-bld-head-action-btn--warn btn-research status-pill-icon-btn gc-req-hover-trigger"
+              data-action-state="warn"
               disabled
-              title="{{ T('research_not_enough_resources') }}"
-              aria-label="{{ T('research_not_enough_resources') }}"><span class="gc-bld-head-action-label">{{ T('progression_btn_plus_one', '+1') }}</span></button>
+              {{ render_req_hover_attrs(tech.resource_items) }}
+              aria-label="{{ T('research_not_enough_resources') }}"><span class="gc-bld-head-action-icon">⚠</span></button>
     {% else %}
       {% set _preview = tech.max_queue_preview if tech.max_queue_preview is defined else {'jobs': (tech.max_queueable if tech.max_queueable is defined else 0)|int} %}
       {% set _max_q = (_preview.jobs if _preview.jobs is defined else 0)|int %}

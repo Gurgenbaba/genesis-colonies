@@ -145,3 +145,20 @@ def test_trader_hub_uses_genesis_window_layout(trader_hub_db, monkeypatch):
     assert "gc-scrapyard-panel" in html
     assert "trader-hub-layout" not in html
     assert "trader-hub-resources" not in html
+    assert "gc-trader-panel" in html
+
+
+def test_trader_hub_contrast_css_contract():
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[1] / "static" / "style.css").read_text(encoding="utf-8")
+    assert "GC-TRADER-HUB-CONTRAST" in css
+    assert ".trader-hub-shell.gc-panel::before" in css
+    chunk = css.split("GC-TRADER-HUB-CONTRAST")[1].split(".trader-hub-shell .trader-hub-status-panel")[0]
+    assert "opacity: 1" in chunk
+    assert "filter: none" in chunk
+    tiles = css.split(".trader-hub-page .gc-trader-resource-tile.is-disabled")[1].split("}")[0]
+    assert "opacity: 0.45" in tiles
+    assert "pointer-events: none" in tiles
+    active = css.split(".trader-hub-page .gc-trader-resource-tile.is-active")[1].split("}")[0]
+    assert "box-shadow" in active

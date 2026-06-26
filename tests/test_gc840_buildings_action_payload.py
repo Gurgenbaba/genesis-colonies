@@ -110,6 +110,34 @@ def test_get_buildings_panel_delta_only_requested_keys():
     assert row["key"] == "metal_mine"
     assert "requirements_items" in row
     assert "can_afford" in row
+    assert "resource_items" in row
+    assert any(item.get("kind") == "resource" for item in row["resource_items"])
+
+
+def test_buildings_unaffordable_action_uses_warn_resource_hover():
+    tpl = _read("templates/buildings.html")
+    chunks = tpl.split("{% elif not b.can_afford %}")
+    chunk = chunks[2].split("{% else %}")[0]
+    assert "gc-bld-head-action-btn--warn" in chunk
+    assert "render_req_hover_attrs(b.resource_items)" in chunk
+    assert "gc-bld-head-action-btn--afford" not in chunk
+
+
+def test_research_unaffordable_action_uses_warn_resource_hover():
+    tpl = _read("templates/research.html")
+    chunks = tpl.split("{% elif not can_afford %}")
+    chunk = chunks[2].split("{% else %}")[0]
+    assert "gc-bld-head-action-btn--warn" in chunk
+    assert "render_req_hover_attrs(tech.resource_items)" in chunk
+    assert "gc-bld-head-action-btn--afford" not in chunk
+
+
+def test_main_js_unaffordable_buildings_use_warn_hover():
+    src = _read("static/main.js")
+    assert "function unmetBuildingHoverItems" in src
+    assert "function unmetResearchHoverItems" in src
+    assert 'if (!b.can_afford) return "warn"' in src
+    assert 'if (tech.can_afford === false) return "warn"' in src
 
 
 def test_gc840_cancel_action_uses_delta(game_client):

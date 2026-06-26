@@ -261,3 +261,27 @@ def test_main_js_defense_uses_apply_action_state_and_cleanup():
     assert 'applyActionState(res, "defense_build")' in src
     assert 'applyActionState(res, "defense_cancel")' in src
     assert "GC.modules.defense = initDefense" in src
+
+
+def test_locked_defense_catalog_exposes_requirements_items(defense_db):
+    from game.defense_page import _locked_defense_catalog
+    from game.models import get_homeworld
+
+    conn = db()
+    uid = _player(conn=conn)
+    pid = int(get_homeworld(uid, conn=conn)["id"])
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE planet_buildings SET defense_factory = 1 WHERE planet_id = ?;",
+        (pid,),
+    )
+    cur.execute("DELETE FROM research_levels WHERE user_id = ?;", (uid,))
+    conn.commit()
+
+    locked = _locked_defense_catalog(uid, pid, 1, conn=conn)
+    sentinel = next((row for row in locked if row["defense_key"] == "sentinel_turret"), None)
+    assert sentinel is not None
+    items = sentinel.get("requirements_items") or []
+    assert any(item.get("key") == "weapon_tech" and not item.get("met") for item in items)
+
+    conn.close()

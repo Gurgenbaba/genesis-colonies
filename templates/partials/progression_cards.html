@@ -199,11 +199,15 @@
 {% endmacro %}
 
 {% macro render_defense_locked_req_hover_attrs(unit, factory_level) %}
-  {% set req_lvl = (unit.required_defense_factory_level or 0)|int %}
-  {% set cur_lvl = (factory_level or 0)|int %}
-  {% if cur_lvl < req_lvl %}
-    {% set items = [{'kind': 'building', 'key': 'defense_factory', 'need': req_lvl, 'met': false}] %}
-    {{ render_req_hover_attrs(items) }}
+  {% if unit.requirements_items is defined and unit.requirements_items %}
+    {{ render_req_hover_attrs(unit.requirements_items) }}
+  {% else %}
+    {% set req_lvl = (unit.required_defense_factory_level or 0)|int %}
+    {% set cur_lvl = (factory_level or 0)|int %}
+    {% if cur_lvl < req_lvl %}
+      {% set items = [{'kind': 'building', 'key': 'defense_factory', 'need': req_lvl, 'met': false}] %}
+      {{ render_req_hover_attrs(items) }}
+    {% endif %}
   {% endif %}
 {% endmacro %}
 

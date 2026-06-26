@@ -41,6 +41,9 @@ def auction_db(tmp_path, monkeypatch):
     import migrate
 
     migrate.main()
+    from game.bootstrap import bootstrap_application
+
+    bootstrap_application(skip_migration_check=True)
     yield
     gdb._DB_PATH = None
 
@@ -312,6 +315,8 @@ def test_idempotent_bid_api(auction_db, monkeypatch):
     import app as app_module
 
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
+    app_module.app.config["WTF_CSRF_ENABLED"] = False
 
     conn = db()
     uid = _player(conn=conn)
@@ -350,6 +355,8 @@ def test_auction_house_page_reachable(auction_db, monkeypatch):
     import app as app_module
 
     importlib.reload(app_module)
+    app_module.app.config["TESTING"] = True
+    app_module.app.config["WTF_CSRF_ENABLED"] = False
 
     conn = db()
     uid = _player(conn=conn)
@@ -362,6 +369,7 @@ def test_auction_house_page_reachable(auction_db, monkeypatch):
     assert res.status_code == 200
     body = res.get_data(as_text=True)
     assert "auction-house-page" in body
+    assert "auction-house-shell" in body
     assert "auction-house-card" in body or "auction-house-table" in body or "auction-house-empty" in body
     assert "auction-upcoming-panel" in body or "auction-house-upcoming" in body or "auction-house-empty" in body
     assert "auction-stats-bar" in body or "auction-house-empty" in body

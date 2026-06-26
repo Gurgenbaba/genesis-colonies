@@ -527,6 +527,30 @@ def get_building_requirements_items(
     return items
 
 
+def get_building_resource_items(
+    cost_metal: int,
+    cost_crystal: int,
+    planet_metal: float,
+    planet_crystal: float,
+) -> List[Dict[str, Any]]:
+    return [
+        {
+            "kind": "resource",
+            "key": "metal",
+            "need": int(cost_metal),
+            "have": int(planet_metal),
+            "met": planet_metal >= float(cost_metal),
+        },
+        {
+            "kind": "resource",
+            "key": "crystal",
+            "need": int(cost_crystal),
+            "have": int(planet_crystal),
+            "met": planet_crystal >= float(cost_crystal),
+        },
+    ]
+
+
 # =============================================================================
 # Panel Rows
 # =============================================================================
@@ -1337,6 +1361,9 @@ def _make_panel_row(
         "time_seconds": int(time_seconds),
         "requirements_met": bool(req_met),
         "requirements_items": get_building_requirements_items(building_type, buildings, research_levels),
+        "resource_items": get_building_resource_items(
+            cost_metal, cost_crystal, planet_metal, planet_crystal
+        ),
         "can_afford": bool(can_afford),
         "max_queueable": int(max_queue_preview.get("jobs") or 0),
         "max_queue_preview": max_queue_preview,

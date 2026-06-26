@@ -2383,8 +2383,39 @@
           kind: req.kind || req.type || "",
           key: req.key || "",
           need: Math.floor(Number(req.need ?? req.required) || 0),
+          have:
+            req.have != null
+              ? Math.floor(Number(req.have ?? req.current) || 0)
+              : req.current != null
+                ? Math.floor(Number(req.current) || 0)
+                : undefined,
         }))
+        .map((req) => {
+          if (req.have == null) delete req.have;
+          return req;
+        })
     );
+  }
+
+  function resolveReqHoverLabel(req) {
+    const kind = req.kind || req.type || "";
+    if (kind === "resource") return t(`resource_${req.key}`, t(req.key, req.key));
+    if (kind === "building") return t(`building_${req.key}`, req.key);
+    return t(req.key, req.key);
+  }
+
+  function unmetBuildingHoverItems(b) {
+    if (!b) return [];
+    if (!b.requirements_met) return b.requirements_items || [];
+    if (!b.can_afford) return (b.resource_items || []).filter((req) => req && req.met === false);
+    return [];
+  }
+
+  function unmetResearchHoverItems(tech) {
+    if (!tech) return [];
+    if (!tech.requirements_met) return tech.requirements_items || [];
+    if (tech.can_afford === false) return (tech.resource_items || []).filter((req) => req && req.met === false);
+    return [];
   }
 
   function buildCardReqTooltipHtml(items) {
@@ -2393,12 +2424,15 @@
     const title = t("msg_build_requirements", "Voraussetzungen");
     const lines = unmet
       .map((req) => {
-        const label =
-          req.kind === "building" || req.type === "building"
-            ? t(`building_${req.key}`, req.key)
-            : t(req.key, req.key);
+        const label = resolveReqHoverLabel(req);
         const need = Math.floor(Number(req.need ?? req.required) || 0);
-        return `<li class="gc-req-tooltip-item gc-mono">${escapeHtml(label)} ${fmtNumber(need)}</li>`;
+        const haveRaw = req.have ?? req.current;
+        const kind = req.kind || req.type || "";
+        const value =
+          kind === "resource" && haveRaw != null
+            ? `${fmtNumber(Math.floor(Number(haveRaw) || 0))} / ${fmtNumber(need)}`
+            : fmtNumber(need);
+        return `<li class="gc-req-tooltip-item gc-mono">${escapeHtml(label)} ${value}</li>`;
       })
       .join("");
     return (
@@ -2530,8 +2564,10 @@
     row.querySelector("[data-card-req-block]")?.remove();
     row.querySelector(".gc-bld-card-req")?.remove();
     const warnBtn = row.querySelector(".gc-req-hover-trigger");
-    if (!warnBtn || !b || b.requirements_met) return;
-    const payload = serializeReqHoverItems(b.requirements_items);
+    if (!warnBtn || !b) return;
+    const items = unmetBuildingHoverItems(b);
+    if (!items.length) return;
+    const payload = serializeReqHoverItems(items);
     if (payload && payload !== "[]") warnBtn.setAttribute("data-req-items", payload);
   }
 
@@ -2606,7 +2642,7 @@
   function getResearchActionState(tech, queueFull) {
     if (!tech.requirements_met) return "warn";
     if (queueFull) return "locked";
-    if (tech.can_afford === false) return "afford";
+    if (tech.can_afford === false) return "warn";
     return "go";
   }
 
@@ -2728,19 +2764,12 @@
     const state = getResearchActionState(tech, queueFull);
 
     if (state === "warn") {
-      return renderWarnActionButton("btn-research status-pill-icon-btn", tech.requirements_items);
+      return renderWarnActionButton("btn-research status-pill-icon-btn", unmetResearchHoverItems(tech));
     }
     if (state === "locked") {
       return (
         `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-research" type="button" disabled` +
         ` data-action-state="locked" aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span class="gc-bld-head-action-icon">🔒</span></button>`
-      );
-    }
-    if (state === "afford") {
-      const shortMsg = t("research_not_enough_resources", "Nicht genug Ressourcen.");
-      return (
-        `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-research" type="button" disabled` +
-        ` data-action-state="afford" title="${shortMsg}" aria-label="${shortMsg}"><span class="gc-bld-head-action-label">${escapeHtml(t("progression_btn_plus_one", "+1"))}</span></button>`
       );
     }
     const href = `/research_start/${encodeURIComponent(key)}`;
@@ -2800,7 +2829,7 @@
         }
       } else if (state === "warn") {
         const warnBtn = cell.querySelector(".gc-req-hover-trigger");
-        const payload = serializeReqHoverItems(tech.requirements_items);
+        const payload = serializeReqHoverItems(unmetResearchHoverItems(tech));
         if (warnBtn && payload && payload !== "[]") warnBtn.setAttribute("data-req-items", payload);
       }
       return;
@@ -2815,7 +2844,7 @@
     if (isMax) return "max";
     if (!b.requirements_met) return "warn";
     if (bqQueueFull) return "locked";
-    if (!b.can_afford) return "afford";
+    if (!b.can_afford) return "warn";
     return "go";
   }
 
@@ -2836,19 +2865,12 @@
       );
     }
     if (state === "warn") {
-      return renderWarnActionButton("btn-upgrade status-pill-icon-btn", b.requirements_items);
+      return renderWarnActionButton("btn-upgrade status-pill-icon-btn", unmetBuildingHoverItems(b));
     }
     if (state === "locked") {
       return (
         `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--locked btn-upgrade" type="button" disabled` +
         ` data-action-state="locked" aria-disabled="true" title="${fullLabel}" aria-label="${fullLabel}"><span class="gc-bld-head-action-icon">🔒</span></button>`
-      );
-    }
-    if (state === "afford") {
-      const shortMsg = t("msg_build_not_enough_resources", "Nicht genug Ressourcen.");
-      return (
-        `<button class="gc-bld-head-action-btn gc-bld-head-action-btn--afford btn-upgrade" type="button" disabled` +
-        ` data-action-state="afford" title="${shortMsg}" aria-label="${shortMsg}"><span class="gc-bld-head-action-label">${escapeHtml(t("progression_btn_plus_one", "+1"))}</span></button>`
       );
     }
     const tab = b.tab || _getActiveBuildingTab();
@@ -2907,7 +2929,7 @@
         }
       } else if (state === "warn") {
         const warnBtn = cell.querySelector(".gc-req-hover-trigger");
-        const payload = serializeReqHoverItems(b.requirements_items);
+        const payload = serializeReqHoverItems(unmetBuildingHoverItems(b));
         if (warnBtn && payload && payload !== "[]") warnBtn.setAttribute("data-req-items", payload);
       }
       return;

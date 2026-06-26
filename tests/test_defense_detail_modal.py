@@ -35,3 +35,13 @@ def test_build_defense_detail_card_unknown():
     card, err = build_defense_detail_card("unknown_turret_xyz")
     assert card is None
     assert err == "defense_detail_not_found"
+
+
+def test_defense_locked_template_uses_requirements_items_hover():
+    from pathlib import Path
+
+    tpl = (Path(__file__).resolve().parents[1] / "templates/partials/progression_cards.html").read_text(
+        encoding="utf-8"
+    )
+    chunk = tpl.split("macro render_defense_locked_req_hover_attrs")[1].split("endmacro")[0]
+    assert "unit.requirements_items" in chunk
