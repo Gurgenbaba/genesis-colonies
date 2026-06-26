@@ -59,32 +59,34 @@ Energie-Drossel gilt nur für den Minen-Anteil (Standardproduktion läuft immer)
 
 ### Basis-Kosten (Energieeffizienz-Tier = 1,0)
 
+Formel: `research_cost_anchor_total(level)` = Referenzproduktion (Fe+Cr, Slot 9) × `research_cost_afford_hours(level)`
+
 | Forschungsstufe | Gesamt (Anker) | Ferronit | Crytite |
 |-----------------|----------------|----------|---------|
-| 10 | 3.0k | 2.0k | 1.0k |
-| 20 | 12k | 8.5k | 4.0k |
-| 30 | 50k | 32k | 18k |
-| 40 | 2.00 Mio | 1.35 Mio | 650k |
-| 60 | 50.00 Mio | 33.25 Mio | 16.75 Mio |
-| 80 | 150.00 Mio | 100.00 Mio | 50.00 Mio |
-| 100 | 500.00 Mio | 333.00 Mio | 167.00 Mio |
-| 120 | 1000.00 Mio | 667.00 Mio | 333.00 Mio |
+| 10 | 241k | 160k | 80k |
+| 20 | 1.11 Mio | 750k | 350k |
+| 30 | 8.70 Mio | 5.85 Mio | 2.90 Mio |
+| 40 | 69.03 Mio | 46.00 Mio | 23.00 Mio |
+| 60 | 1268.72 Mio | 847.00 Mio | 423.00 Mio |
+| 80 | 14119.68 Mio | 9413.00 Mio | 4707.00 Mio |
+| 100 | 149480.34 Mio | 99653.00 Mio | 49827.00 Mio |
+| 120 | 1523043.49 Mio | 1015363.00 Mio | 507682.00 Mio |
 
 ### Alle Technologien — Stufe 30 (Speed ×1, Labor L1, ohne Tech-Boni auf Zeit)
 
 | Technologie | Ferronit | Crytite | Dauer | Tier Zeit | Tier Kosten |
 |-------------|----------|---------|-------|-----------|-------------|
-| armor_tech | 42k | 25k | 1.4 Tage | 1.42 | 1.33 |
-| buildtime_tech | 42k | 25k | 11.6 h | 1.17 | 1.33 |
-| drone_tech | 50k | 32k | 1.2 Tage | 1.25 | 1.67 |
-| energy_tech | 32k | 18k | 1.0 Tage | 1.00 | 1.00 |
-| engine_tech | 50k | 32k | 1.6 Tage | 1.58 | 1.67 |
-| fuel_efficiency | 50k | 18k | 1.7 Tage | 1.67 | 1.33 |
-| mining_tech | 32k | 18k | 1.1 Tage | 1.08 | 1.00 |
-| navigation_tech | 42k | 25k | 1.5 Tage | 1.50 | 1.33 |
-| shield_tech | 42k | 25k | 1.6 Tage | 1.58 | 1.33 |
-| storage_tech | 20k | 18k | 22.0 h | 0.92 | 0.67 |
-| weapon_tech | 32k | 18k | 1.3 Tage | 1.33 | 1.00 |
+| armor_tech | 7.25 Mio | 4.25 Mio | 1.4 Tage | 1.42 | 1.33 |
+| buildtime_tech | 7.25 Mio | 4.25 Mio | 11.6 h | 1.17 | 1.33 |
+| drone_tech | 8.75 Mio | 5.75 Mio | 1.2 Tage | 1.25 | 1.67 |
+| energy_tech | 5.85 Mio | 2.90 Mio | 1.0 Tage | 1.00 | 1.00 |
+| engine_tech | 8.75 Mio | 5.75 Mio | 1.6 Tage | 1.58 | 1.67 |
+| fuel_efficiency | 8.50 Mio | 3.00 Mio | 1.7 Tage | 1.67 | 1.33 |
+| mining_tech | 5.85 Mio | 2.90 Mio | 1.1 Tage | 1.08 | 1.00 |
+| navigation_tech | 7.25 Mio | 4.25 Mio | 1.5 Tage | 1.50 | 1.33 |
+| shield_tech | 7.25 Mio | 4.25 Mio | 1.6 Tage | 1.58 | 1.33 |
+| storage_tech | 3.25 Mio | 3.25 Mio | 22.0 h | 0.92 | 0.67 |
+| weapon_tech | 5.85 Mio | 2.90 Mio | 1.3 Tage | 1.33 | 1.00 |
 
 ## 3) Minen-Upgrades — Kosten & Ziel-Amortisation (live)
 
@@ -187,6 +189,8 @@ Tausch Tageslimit: min. **500.000** oder **80%** Imperiums-Tagesproduktion
 
 **Forschung Zeit:** L10=1.5h, L20=5.0h, L30=24.0h, L40=72.0h, L60=336.0h, L80=1080.0h, L100=2160.0h, L120=4320.0h
 
-**Forschung Kosten:** L10=3.0k, L20=12k, L30=50k, L35=250k, L38=500k, L40=2.00 Mio, L50=25.00 Mio, L60=50.00 Mio, L80=150.00 Mio, L100=500.00 Mio, L120=1000.00 Mio
+**Forschung Kosten (Afford-h @ Tier 1.0):** L10=241k, L20=1.11 Mio, L30=8.70 Mio, L35=22.68 Mio, L38=43.68 Mio, L40=69.03 Mio, L50=352.71 Mio, L60=1268.72 Mio, L80=14119.68 Mio, L100=149480.34 Mio, L120=1523043.49 Mio
+
+**Forschung Afford-Anker (h):** L10=8h, L20=24h, L30=96h, L35=168h, L38=252h, L40=336h, L50=720h, L60=1080h, L80=2160h, L100=4320h, L120=8640h
 
 **Minen ROI:** L20=50.0h, L40=100.0h, L60=200.0h, L80=500.0h, L100=1000.0h, L120=2000.0h

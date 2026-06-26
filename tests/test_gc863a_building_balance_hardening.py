@@ -14,11 +14,12 @@ from game.economy_balance import (
     NANOFACTORY_COST_GROWTH,
     NANOFACTORY_CRYSTAL_BASE,
     NANOFACTORY_METAL_BASE,
-    RESEARCH_COST_ANCHOR_TOTAL,
+    RESEARCH_COST_AFFORD_HOURS,
     nanofactory_upgrade_cost,
     power_upgrade_cost,
     reference_production_per_hour,
     research_cost_anchor_total,
+    research_cost_afford_hours,
     research_upgrade_cost,
 )
 from game.shipyard import BUILD_TIME_LEVEL_FACTOR
@@ -110,25 +111,29 @@ class TestGc863aNanofactory:
 
 
 class TestGc863aResearchCosts:
-    def test_early_anchors_gc863b(self) -> None:
-        assert research_cost_anchor_total(10) == pytest.approx(3_000.0)
-        assert research_cost_anchor_total(20) == pytest.approx(12_500.0)
-        assert research_cost_anchor_total(30) == pytest.approx(50_000.0)
+    def test_cost_anchor_tracks_production_times_afford_hours(self) -> None:
+        for level in (10, 20, 30):
+            income = reference_production_per_hour("metal", level) + reference_production_per_hour(
+                "crystal", level
+            )
+            assert research_cost_anchor_total(level) == pytest.approx(
+                income * research_cost_afford_hours(level), rel=1e-9
+            )
 
-    def test_level_50_anchor_explicit(self) -> None:
-        assert RESEARCH_COST_ANCHOR_TOTAL[50] == 25_000_000.0
-        assert research_cost_anchor_total(50) == pytest.approx(25_000_000.0)
+    def test_level_50_anchor_in_hundreds_of_millions(self) -> None:
+        assert RESEARCH_COST_AFFORD_HOURS[50] == 720.0
+        assert research_cost_anchor_total(50) >= 200_000_000.0
 
     @pytest.mark.parametrize("level", (40, 50, 60, 80, 100, 120))
     def test_mid_late_anchors_raised(self, level: int) -> None:
-        assert research_cost_anchor_total(level) >= 499_999.0
+        assert research_cost_anchor_total(level) >= 10_000_000.0
 
     def test_energy_tech_l50_not_trivial_vs_l54_mine(self) -> None:
         metal, crystal = research_upgrade_cost(1000, 500, 50)
         total = metal + crystal
         metal_ph = reference_production_per_hour("metal", 54)
         assert total >= metal_ph * 24
-        assert total >= 10_000_000
+        assert total >= 200_000_000
 
     @pytest.mark.parametrize("level", _RESEARCH_LEVELS)
     def test_anchor_table_monotone(self, level: int) -> None:

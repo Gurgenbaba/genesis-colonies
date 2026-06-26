@@ -154,7 +154,7 @@ MILITARY_COST_MULTIPLIER = 1.25
 MILITARY_SCORE_MULTIPLIER = 1.0
 MILITARY_BUILD_SECONDS_MULTIPLIER = 1.0
 
-# GC-825 — account research upgrade pacing (time + cost anchors).
+# GC-825 — account research upgrade pacing (time anchors unchanged).
 RESEARCH_REF_COMBINED_COST = 1500.0  # energy_tech base_m + base_c
 RESEARCH_REF_BASE_TIME = 840.0  # energy_tech base_time seconds
 RESEARCH_BENCHMARK_LEVELS: Tuple[int, ...] = (10, 20, 30, 35, 40, 50, 60, 80, 100, 120)
@@ -170,22 +170,22 @@ RESEARCH_TIME_ANCHOR_HOURS: Dict[int, float] = {
     120: 4320.0,  # ~180 days
 }
 
-# Combined metal+crystal value anchors (energy_tech tier = 1.0).
-# GC-863B — round-number research cost curve; early/mid/end raised vs GC-863A.
-RESEARCH_COST_ANCHOR_TOTAL: Dict[int, float] = {
-    10: 3_000.0,
-    20: 12_500.0,
-    30: 50_000.0,
-    35: 250_000.0,
-    38: 500_000.0,
-    40: 2_000_000.0,
-    50: 25_000_000.0,
-    60: 50_000_000.0,
-    80: 150_000_000.0,
-    100: 500_000_000.0,
-    120: 1_000_000_000.0,
+# GC-RESEARCH-COST-REBALANCE — target afford hours × reference empire income (metal+crystal @ level).
+# energy_tech tier 1.0; other techs scale via research_cost_tier(base_cost_m/c).
+RESEARCH_COST_AFFORD_HOURS: Dict[int, float] = {
+    10: 8.0,
+    20: 24.0,
+    30: 96.0,  # ~4 days production
+    35: 168.0,  # ~1 week
+    38: 252.0,  # ~10 days
+    40: 336.0,  # ~2 weeks
+    50: 720.0,  # ~30 days
+    60: 1080.0,  # ~45 days
+    80: 2160.0,  # ~90 days
+    100: 4320.0,  # ~180 days
+    120: 8640.0,  # ~360 days
 }
-_RESEARCH_L1_COST_TOTAL = 1_000.0
+_RESEARCH_L1_AFFORD_HOURS = 3.0
 _RESEARCH_COST_RAMP_LEVEL = 10
 
 
@@ -214,15 +214,29 @@ def research_time_anchor_hours(level: int) -> float:
     return _log_interpolate_anchor_map(level, RESEARCH_TIME_ANCHOR_HOURS)
 
 
-def research_cost_anchor_total(level: int) -> float:
-    """GC-825 combined resource value before tech tier split."""
+def _research_income_reference(level: int) -> float:
+    """Neutral-slot metal+crystal production/h at mine level (cost calibration reference)."""
+    lvl = max(1, int(level))
+    return reference_production_per_hour("metal", lvl) + reference_production_per_hour(
+        "crystal", lvl
+    )
+
+
+def research_cost_afford_hours(level: int) -> float:
+    """Target hours of reference income to afford one research upgrade (energy_tech tier)."""
     lvl = max(1, int(level))
     if lvl < _RESEARCH_COST_RAMP_LEVEL:
-        l1 = float(_RESEARCH_L1_COST_TOTAL)
-        l10 = float(RESEARCH_COST_ANCHOR_TOTAL[_RESEARCH_COST_RAMP_LEVEL])
+        h1 = float(_RESEARCH_L1_AFFORD_HOURS)
+        h10 = float(RESEARCH_COST_AFFORD_HOURS[_RESEARCH_COST_RAMP_LEVEL])
         t = (lvl - 1) / float(_RESEARCH_COST_RAMP_LEVEL - 1)
-        return l1 * (1.0 - t) + l10 * t
-    return _log_interpolate_anchor_map(lvl, RESEARCH_COST_ANCHOR_TOTAL)
+        return h1 * (1.0 - t) + h10 * t
+    return _log_interpolate_anchor_map(lvl, RESEARCH_COST_AFFORD_HOURS)
+
+
+def research_cost_anchor_total(level: int) -> float:
+    """GC-825 combined resource value (energy_tech tier) before tech tier split."""
+    lvl = max(1, int(level))
+    return max(1.0, _research_income_reference(lvl) * research_cost_afford_hours(lvl))
 
 
 def research_time_tier(base_time: float) -> float:

@@ -7,7 +7,7 @@ import math
 import pytest
 
 from game.economy_balance import (
-    RESEARCH_COST_ANCHOR_TOTAL,
+    RESEARCH_COST_AFFORD_HOURS,
     RESEARCH_TIME_ANCHOR_HOURS,
     legacy_research_base_time_seconds,
     legacy_research_upgrade_cost,
@@ -101,7 +101,7 @@ def test_research_cost_l34_hardened_vs_legacy():
     m, c = get_research_cost("energy_tech", 34)
     leg_m, leg_c = legacy_research_upgrade_cost(1000, 500, 1.6, 34)
     total = m + c
-    # GC-863B: L34 between 50k@30 and 250k@35 — still far below legacy exponential curve.
+    # GC-863B: L34 between L30 and L35 anchors — still far below legacy exponential curve.
     assert total >= 100_000
     assert total < leg_m + leg_c
     assert leg_m + leg_c > 10_000_000
@@ -154,7 +154,7 @@ def test_anchor_map_covers_benchmark_levels():
         assert research_base_time_seconds(lvl) == pytest.approx(
             RESEARCH_TIME_ANCHOR_HOURS[lvl] * 3600, rel=0.001
         )
-    assert 50 in RESEARCH_COST_ANCHOR_TOTAL
+    assert 50 in RESEARCH_COST_AFFORD_HOURS
 
 
 def test_all_research_techs_have_positive_cost_and_time():

@@ -14,6 +14,7 @@ from game.economy_balance import (
     mine_upgrade_roi_hours,
     research_time_anchor_hours,
     research_cost_anchor_total,
+    research_cost_afford_hours,
     research_upgrade_cost,
     research_base_time_seconds,
     reference_production_per_hour,
@@ -23,7 +24,7 @@ from game.economy_balance import (
     EXCHANGE_DAILY_LIMIT_PCT_DEFAULT,
     MINE_UPGRADE_ROI_TARGET_HOURS,
     RESEARCH_TIME_ANCHOR_HOURS,
-    RESEARCH_COST_ANCHOR_TOTAL,
+    RESEARCH_COST_AFFORD_HOURS,
     NEUTRAL_BALANCE_SLOT,
 )
 from game.research import RESEARCH_TECHS
@@ -131,6 +132,11 @@ def main() -> None:
     lines.append("")
 
     lines.append("### Basis-Kosten (Energieeffizienz-Tier = 1,0)")
+    lines.append("")
+    lines.append(
+        "Formel: `research_cost_anchor_total(level)` = Referenzproduktion (Fe+Cr, Slot 9) "
+        "× `research_cost_afford_hours(level)`"
+    )
     lines.append("")
     lines.append("| Forschungsstufe | Gesamt (Anker) | Ferronit | Crytite |")
     lines.append("|-----------------|----------------|----------|---------|")
@@ -252,8 +258,16 @@ def main() -> None:
     )
     lines.append("")
     lines.append(
-        "**Forschung Kosten:** "
-        + ", ".join(f"L{k}={fmt_num(v)}" for k, v in RESEARCH_COST_ANCHOR_TOTAL.items())
+        "**Forschung Kosten (Afford-h @ Tier 1.0):** "
+        + ", ".join(
+            f"L{k}={fmt_num(research_cost_anchor_total(k))}"
+            for k in sorted(RESEARCH_COST_AFFORD_HOURS)
+        )
+    )
+    lines.append("")
+    lines.append(
+        "**Forschung Afford-Anker (h):** "
+        + ", ".join(f"L{k}={v:g}h" for k, v in RESEARCH_COST_AFFORD_HOURS.items())
     )
     lines.append("")
     lines.append(

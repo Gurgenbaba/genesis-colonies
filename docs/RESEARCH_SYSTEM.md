@@ -66,7 +66,23 @@ Kosten-Snapshot auf Row: Migration `076`.
 - ÷ `research_lab_bonus` (+10 %/Level über 1)
 - ÷ `research_time_speed` (buildtime_tech, academy +5 %/Level)
 
-**Kosten:** `economy_balance.research_upgrade_cost()` — Power-Kurve + Tech-Tier aus `base_cost_m/c`.
+**Kosten:** `economy_balance.research_upgrade_cost()` — `reference_production(metal+crystal @ level) × research_cost_afford_hours(level)` (GC-RESEARCH-COST-REBALANCE) × Tech-Tier aus `base_cost_m/c`.
+
+Afford-Anker (`RESEARCH_COST_AFFORD_HOURS`, energy_tech Tier 1.0):
+
+| Level | Ziel-Afford (h Produktion) |
+|-------|----------------------------|
+| 1→10 | 3 h → 8 h (linear) |
+| 20 | 24 h |
+| 30 | 96 h (~4 Tage) |
+| 40 | 336 h (~2 Wochen) |
+| 50 | 720 h (~30 Tage) |
+| 60 | 1080 h |
+| 80 | 2160 h |
+| 100 | 4320 h |
+| 120 | 8640 h |
+
+Beispiel energy_tech L19: ~940k Gesamt · storage_tech L19 (Tier 0,67): ~625k Gesamt.
 
 Legacy-Exponential (`base_time × cost_factor^(level-1)`) nur noch als Audit-Helfer in `economy_balance`.
 
