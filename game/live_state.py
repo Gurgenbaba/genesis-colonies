@@ -538,6 +538,12 @@ def research_poll_slice(research: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     card_jobs = research.get("card_jobs")
     if card_jobs is not None:
         out["card_jobs"] = card_jobs
+    card_jobs_by_owner = research.get("card_jobs_by_owner")
+    if card_jobs_by_owner is not None:
+        out["card_jobs_by_owner"] = card_jobs_by_owner
+    mini_queue_jobs = research.get("mini_queue_jobs")
+    if mini_queue_jobs is not None:
+        out["mini_queue_jobs"] = mini_queue_jobs
     return out
 
 

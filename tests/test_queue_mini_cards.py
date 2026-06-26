@@ -215,6 +215,7 @@ def test_research_mini_queue_resolves_storage_tech_icon():
     mini = map_card_jobs_to_mini_queue_jobs(card_jobs, domain="research", now=_NOW)
     assert len(mini) == 1
     assert mini[0]["owner_key"] == "storage_tech"
+    assert mini[0]["label"] == "storage_tech"
     assert mini[0]["image_url"] == "/static/img/research/lagertechnik.png"
 
 

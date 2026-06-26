@@ -329,7 +329,7 @@ def map_research_queue_to_card_jobs(
         owner_key = str(raw.get("tech_key") or raw.get("key") or "")
         if not owner_key:
             continue
-        label = str(raw.get("label") or raw.get("label_key") or owner_key)
+        label_key = str(raw.get("label_key") or owner_key)
         position = _safe_int(raw.get("position"), idx + 1)
         start = _safe_float(raw.get("start_at"))
         job = normalize_card_queue_job(
@@ -340,7 +340,7 @@ def map_research_queue_to_card_jobs(
                 start_at=start,
                 finish_at=raw.get("finish_at") or raw.get("finish_time"),
                 now=ts,
-                label=label,
+                label=label_key,
                 target_level=_safe_int(raw.get("target_level"), 0) or None,
                 remaining_seconds=_safe_int(raw.get("remaining") or raw.get("remaining_seconds")),
                 duration_seconds=_safe_int(raw.get("total_seconds") or raw.get("total"), 0) or None,

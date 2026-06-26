@@ -425,6 +425,7 @@ def test_gc803_simple_hud_poll_contract():
     live = _read("game/live_state.py")
     assert "def apply_lightweight_game_state_diet(payload" in live
     assert "def research_poll_slice(research" in live
+    assert "mini_queue_jobs" in live.split("def research_poll_slice(research")[1].split("def account_safety_hud_for_game_state")[0]
 
 
 def test_gc744_resource_icons_use_webp():
@@ -1815,3 +1816,30 @@ def test_gc804_leftmenu_ui_state_independent_from_game_state_poll():
     buildings_tabs = src.split("function bindBuildingTabsOnce", 1)[1].split("function initBuildings", 1)[0]
     assert 'GC.navigateTo(`/buildings?tab=${encodeURIComponent(tab)}`)' in buildings_tabs
     assert 'data-building-tab="military"' in _read("templates/partials/sidebar.html")
+
+
+def test_main_js_mini_queue_research_label_resolution():
+    """Research mini-queue titles resolve i18n keys, not raw tech_key."""
+    src = _read("static/main.js")
+    assert "function _resolveQueueJobDisplayName(job, domain)" in src
+    mini = src.split("function _resolveMiniQueueLabel(job, domain)")[1].split("GC.renderMiniQueueStrip = function")[0]
+    assert "_resolveQueueJobDisplayName(job, domain)" in mini
+    collect = src.split("function _collectResearchQueueCardJobs(researchRaw)")[1].split("function _globalQueueHudDomainTitle")[0]
+    assert "label_key: raw.label_key || ownerKey" in collect
+
+
+def test_main_js_trader_hub_exchange_live_preview():
+    """Trader Hub: preview runs after formatted number input; locale parsing covers grouped ints."""
+    src = _read("static/main.js")
+    parse_fn = src.split("function parseIntNumber(n)")[1].split("function formatNumber")[0]
+    assert r"^-?\d{1,3}(,\d{3})+$" in parse_fn
+    assert "digitsOnly" in parse_fn
+    exchange = src.split("function initExchangePanel()")[1].split("function renderScrapyardRows")[0]
+    assert "scheduleUpdatePreview" in exchange
+    assert "requestAnimationFrame" in exchange
+    assert 'amountInput.addEventListener("input", scheduleUpdatePreview)' in exchange
+    assert 'amountInput.addEventListener("change", scheduleUpdatePreview)' in exchange
+    assert 'amountInput.addEventListener("paste"' in exchange
+    assert "readNumberInput(amountInput)" in exchange
+    assert "parseIntNumber(amount)" in exchange
+    assert "setNumberInputValue(amountInput, minNow)" in exchange

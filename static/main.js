@@ -86,6 +86,15 @@
     if (/^-?\d{1,3}(\.\d{3})+$/.test(cleaned)) {
       return parseInt(cleaned.replace(/\./g, ""), 10);
     }
+    // en-US grouped integers: 1,000,000
+    if (/^-?\d{1,3}(,\d{3})+$/.test(cleaned)) {
+      return parseInt(cleaned.replace(/,/g, ""), 10);
+    }
+    // In-progress grouped typing (e.g. 1.0000 before formatter settles): digits only
+    if (/[.,\s]/.test(raw)) {
+      const digitsOnly = cleaned.replace(/[^\d-]/g, "");
+      if (/^-?\d+$/.test(digitsOnly)) return parseInt(digitsOnly, 10);
+    }
     if (cleaned.includes(",") && cleaned.includes(".")) {
       cleaned = cleaned.replace(/\./g, "").replace(",", ".");
     } else if ((cleaned.match(/\./g) || []).length > 1) {
@@ -3727,7 +3736,14 @@
 
     const nameEl = document.getElementById("overview-research-active-name");
     if (nameEl) {
-      const label = active.label || active.tech_key || active.key || "Forschung";
+      const label = _resolveQueueJobDisplayName(
+        {
+          owner_key: active.tech_key || active.key,
+          label_key: active.label_key,
+          label: active.label,
+        },
+        "research"
+      ) || t("nav_research", "Forschung");
       const cur = active.current_level ?? active.level ?? 0;
       const targ = active.target_level ?? (cur + 1);
       nameEl.textContent = `${label} (L${cur} → L${targ})`;
@@ -4317,18 +4333,22 @@
       return jobs;
     }
     const queueList = Array.isArray(researchRaw?.queue) ? researchRaw.queue : [];
-    return queueList.map((raw, idx) => ({
-      owner_type: "research",
-      owner_key: raw.tech_key || raw.key,
-      job_id: raw.id,
-      status: idx === 0 ? "active" : "queued",
-      queue_position: idx + 1,
-      finish_at: resolveQueueJobFinishTime(raw),
-      remaining_seconds: resolveQueueJobRemaining(raw),
-      target_level: raw.target_level,
-      label_key: raw.label_key || raw.label || raw.tech_key || raw.key,
-      icon: raw.icon || iconByKey.get(String(raw.tech_key || raw.key || "")),
-    }));
+    return queueList.map((raw, idx) => {
+      const ownerKey = String(raw.tech_key || raw.key || "");
+      return {
+        owner_type: "research",
+        owner_key: ownerKey,
+        job_id: raw.id,
+        status: idx === 0 ? "active" : "queued",
+        queue_position: idx + 1,
+        finish_at: resolveQueueJobFinishTime(raw),
+        remaining_seconds: resolveQueueJobRemaining(raw),
+        target_level: raw.target_level,
+        label_key: raw.label_key || ownerKey,
+        label: raw.label,
+        icon: raw.icon || iconByKey.get(ownerKey),
+      };
+    });
   }
 
   function _globalQueueHudDomainTitle(job) {
@@ -7157,21 +7177,7 @@
   }
 
   function _resolveMiniQueueLabel(job, domain) {
-    const labelKey = String(job.label || "");
-    const ownerKey = String(job.owner_key || "");
-    if (domain === "shipyard") {
-      return t(labelKey || `fleet_ship_${ownerKey}`, ownerKey);
-    }
-    if (domain === "defense") {
-      return t(labelKey || `defense_${ownerKey}`, ownerKey);
-    }
-    if (domain === "building" || domain === "build") {
-      return t(labelKey || `building_${ownerKey}`, ownerKey);
-    }
-    if (domain === "research") {
-      return t(labelKey || ownerKey, ownerKey);
-    }
-    return t(labelKey, ownerKey);
+    return _resolveQueueJobDisplayName(job, domain);
   }
 
   GC.renderMiniQueueStrip = function renderMiniQueueStrip(rootEl, jobs, options) {
@@ -7219,6 +7225,12 @@
         }
         const timerEl = card.querySelector(".gc-mini-queue-card__timer");
         const finishAt = Math.floor(Number(job.finish_at || 0));
+        const titleEl = card.querySelector(".gc-mini-queue-card__title");
+        if (titleEl) {
+          const label = _resolveMiniQueueLabel(job, domain);
+          if (titleEl.textContent !== label) titleEl.textContent = label;
+          if (card.title !== label) card.title = label;
+        }
         if (timerEl && finishAt > 0) {
           const displayRemaining = queueJobRemainingSeconds(
             finishAt,
@@ -17416,7 +17428,7 @@
     const computeReceive = (dir, amount) => {
       const cfg = readRates();
       const { from, to } = routeParts(dir);
-      const raw = parseInt(String(amount || "0"), 10);
+      const raw = parseIntNumber(amount);
       if (!raw || raw <= 0) return 0;
       if (from === "metal" && to === "crystal") {
         return Math.floor(raw / Math.max(0.001, cfg.m2c));
@@ -17486,12 +17498,15 @@
       setDirection(dir);
     };
 
+    let previewRaf = 0;
     const updatePreview = () => {
       const raw = readNumberInput(amountInput);
       const minNow = parseInt(panel.dataset.routeMin || String(minForRoute(selectedDirection())), 10);
       const dir = selectedDirection();
       const { to } = routeParts(dir);
-      if (!raw || raw < minNow) {
+      const valid = raw >= minNow;
+      if (submitBtn) submitBtn.disabled = !valid;
+      if (!valid) {
         previewEl.textContent = "–";
         if (receiveSummaryEl) receiveSummaryEl.textContent = "–";
         return;
@@ -17502,6 +17517,14 @@
       if (receiveSummaryEl) {
         receiveSummaryEl.textContent = `${formatNumber(receive)} ${receiveLabel}`;
       }
+    };
+
+    const scheduleUpdatePreview = () => {
+      if (previewRaf) cancelAnimationFrame(previewRaf);
+      previewRaf = requestAnimationFrame(() => {
+        previewRaf = 0;
+        updatePreview();
+      });
     };
 
     const patchExchangeFromState = (exchange) => {
@@ -17570,7 +17593,12 @@
           setDirection(routeSelect.value || "metal_to_crystal");
         });
       }
-      amountInput.addEventListener("input", updatePreview);
+      amountInput.addEventListener("input", scheduleUpdatePreview);
+      amountInput.addEventListener("change", scheduleUpdatePreview);
+      amountInput.addEventListener("keyup", scheduleUpdatePreview);
+      amountInput.addEventListener("paste", () => {
+        scheduleUpdatePreview();
+      });
 
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -17611,8 +17639,8 @@
             body: JSON.stringify({ direction: dir, from, to, amount }),
           });
           if (res?.ok) {
-            amountInput.value = String(minNow);
-            updatePreview();
+            setNumberInputValue(amountInput, minNow);
+            scheduleUpdatePreview();
             applyActionState(res, "exchange_success");
             showNotify(tt("exchange_success", "Exchange completed."), "success");
           } else {
@@ -17628,7 +17656,7 @@
             errorEl.hidden = false;
           }
         } finally {
-          if (submitBtn) submitBtn.disabled = false;
+          updatePreview();
         }
       });
     }
