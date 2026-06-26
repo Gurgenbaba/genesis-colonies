@@ -45,6 +45,30 @@ def _player(conn=None):
     return uid
 
 
+def test_game_state_includes_fuel_storage_cap(fuel_db, monkeypatch):
+    import importlib
+    import app as app_mod
+
+    importlib.reload(app_mod)
+    uid = _player()
+    from game.models import get_homeworld, save_planet_buildings
+
+    planet = get_homeworld(player_id=uid)
+    save_planet_buildings(int(planet["id"]), {"fuel_storage": 1, "fuel_cell_plant": 2, "solar_plant": 3})
+
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = uid
+
+    r = client.get("/api/game-state")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["ok"] is True
+    fuel_cap = int(data["storage"].get("fuel_cells") or 0)
+    assert fuel_cap > 0
+    assert fuel_cap == int(data["resources"]["storage"]["fuel_cells"])
+
+
 def test_game_state_includes_fuel_cells(fuel_db, monkeypatch):
     import importlib
     import app as app_mod
@@ -74,9 +98,15 @@ def test_base_template_shows_fuel_cells_panel():
     assert "res-cap fuel_cells" in html
     assert "render_hud_capacity_bar('fuel_cells'" in html
     assert 'data-hud-capacity="{{ res_key }}"' in (root / "templates" / "partials" / "progression_cards.html").read_text(encoding="utf-8")
-    assert "hud-res-no-storage" in html
-    assert "fc_cap <= 0" in html
+    assert "hud-res-no-storage" not in html
+    assert "fc_cap <= 0" not in html
     assert "repeat(4, minmax(0, 1fr))" in css
+    # Same cap-line structure as Ferronit / Crytite
+    metal_block = html.split("hud-res-metal")[1].split("hud-res-crystal")[0]
+    fuel_block = html.split("hud-res-fuel-cells")[1].split("hud-res-energy")[0]
+    assert "hud-res-cap-line" in metal_block
+    assert "hud-res-cap-line" in fuel_block
+    assert "{% if fc_cap" not in fuel_block
 
 
 def test_main_js_patches_fuel_cells():
@@ -87,7 +117,6 @@ def test_main_js_patches_fuel_cells():
     assert 'bar.querySelectorAll(".res-value.fuel_cells")' in js
     assert 'bar.querySelectorAll(".res-cap.fuel_cells")' in js
     assert "function patchHudCapacityBars" in js
-    assert "function patchHudFuelStorageState" in js
     assert "patchHudCapacityBar(\"metal\"" in js
     assert "prodFuelCells" in js
     assert "buildingIconUrl" in js

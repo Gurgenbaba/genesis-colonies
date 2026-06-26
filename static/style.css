@@ -20080,10 +20080,6 @@ body.gc-combat-report-open { overflow: hidden; }
   font-size: 0.85rem;
   color: var(--gc-text-muted, rgba(180, 200, 230, 0.75));
 }
-.hud-res-fuel-cells.hud-res-no-storage .res-block-fuel-cells {
-  gap: 0.35rem;
-}
-
 /* --- Modal shell --- */
 .gc-player-card-modal {
   position: fixed;

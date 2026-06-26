@@ -451,7 +451,7 @@ def test_gc744_resource_icons_use_webp():
 
 
 def test_gc807b_hud_capacity_polish():
-    """GC-807B-R1: compact HUD bars, energy always visible, fuel no-storage, WebP energy icon."""
+    """GC-807B-R1: compact HUD bars, energy always visible, fuel storage same pipeline as metal/crystal."""
     macro = _read("templates/partials/progression_cards.html")
     base = _read("templates/base.html")
     js = _read("static/main.js")
@@ -466,22 +466,23 @@ def test_gc807b_hud_capacity_polish():
     assert "render_hud_capacity_bar('energy', eu, et)" in base
     assert "{% if et > 0 %}{{ render_hud_capacity_bar('energy'" not in base
     assert "data-energy-total>{% if et > 0 %}" in base
-    assert "hud-res-no-storage" in base
-    assert "fc_cap <= 0" in base
+    assert "hud-res-no-storage" not in base
+    assert "fc_cap <= 0" not in base
+    assert "render_hud_capacity_bar('fuel_cells'" in base
     assert "icons/energy.png" not in base
     assert "img/res/Energie.webp" in base
 
     bld_icon = js.split("function renderBuildingEffectIcon(resKey)")[1].split("function renderBuildingEffectValue")[0]
     assert "img/res/Energie.webp" in bld_icon
     assert "/static/icons/energy.png" not in js
-    assert "function patchHudFuelStorageState" in js
+    assert "function patchHudFuelStorageState" not in js
     assert "function setHudCapacityBarVisible" not in js
-    cap_patch = js.split("function patchHudCapacityBar(resKey")[1].split("function patchHudFuelStorageState")[0]
+    cap_patch = js.split("function patchHudCapacityBar(resKey")[1].split("function patchHudCapacityBars")[0]
     assert "wrap.hidden = true" not in cap_patch
     assert "wrap.hidden = false" in cap_patch
     assert "wrap.className =" not in cap_patch
-    assert "_hudFuelStorageHasCap" in js.split("function patchHudFuelStorageState")[1].split("function patchHudCapacityBars")[0]
     bars_fn = js.split("function patchHudCapacityBars(")[1].split("function patchHudStorageWarnings")[0]
+    assert 'patchHudCapacityBar("fuel_cells", fuelCells, storageFuelCells, opts)' in bars_fn
     assert 'patchHudCapacityBar("energy", energyUsed, energyTotal, opts)' in bars_fn
     assert "energyUsed != null && energyTotal != null" in bars_fn
     assert "setHudCapacityBarVisible" not in bars_fn
@@ -490,6 +491,9 @@ def test_gc807b_hud_capacity_polish():
     assert "_resourceLive.energyTotal" in live_fn
     assert "null," not in live_fn.split("patchHudCapacityBars(")[1].split(");")[0]
     assert "{ animate: false }" in live_fn
+    hud_patch = js.split("function patchShellHudFromState(data, opts)")[1].split("function patchHeaderPlanetLimitFromState")[0]
+    assert 'storage.fuel_cells || 0' in hud_patch
+    assert "storageFuelCells > 0 ? fmtNumber" not in hud_patch
 
     assert "overview-res-dashboard" not in css
     assert "overview-res-chip" not in css

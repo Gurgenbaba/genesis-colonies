@@ -3429,27 +3429,10 @@
     });
   }
 
-  let _hudFuelStorageHasCap = null;
-
-  function patchHudFuelStorageState(storageFuelCells) {
-    const fuelPanel = document.querySelector(".hud-res-fuel-cells");
-    if (!fuelPanel) return;
-    const hasCap = Math.floor(Number(storageFuelCells) || 0) > 0;
-    if (_hudFuelStorageHasCap === hasCap) return;
-    _hudFuelStorageHasCap = hasCap;
-    fuelPanel.classList.toggle("hud-res-no-storage", !hasCap);
-    fuelPanel.querySelectorAll(".hud-res-cap-line").forEach((line) => {
-      line.hidden = !hasCap;
-      if (!hasCap) line.setAttribute("aria-hidden", "true");
-      else line.removeAttribute("aria-hidden");
-    });
-  }
-
   function patchHudCapacityBars(metal, crystal, fuelCells, storageMetal, storageCrystal, storageFuelCells, energyUsed, energyTotal, opts) {
     patchHudCapacityBar("metal", metal, storageMetal, opts);
     patchHudCapacityBar("crystal", crystal, storageCrystal, opts);
     patchHudCapacityBar("fuel_cells", fuelCells, storageFuelCells, opts);
-    patchHudFuelStorageState(storageFuelCells);
     if (energyUsed != null && energyTotal != null) {
       patchHudCapacityBar("energy", energyUsed, energyTotal, opts);
     }
@@ -9008,7 +8991,6 @@
     _resourceLive.capFuelCells = Math.max(0, Math.floor(Number(snapshot.storageFuelCells) || 0));
     _resourceLive.energyUsed = Math.max(0, Math.floor(Number(snapshot.energyUsed) || 0));
     _resourceLive.energyTotal = Math.max(0, Math.floor(Number(snapshot.energyTotal) || 0));
-    if (!samePlanet) _hudFuelStorageHasCap = null;
     _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
     startResourceTicker();
   }
@@ -10352,9 +10334,9 @@
         _last.fuelCells = fuelCells;
         _resourceDisplay.fuelCells = fuelCells;
       }
-      if (forceResourceBar || _last.storageFuelCells !== storageFuelCells) {
+      if (forceResourceBar || (_last.storageFuelCells !== storageFuelCells && storageFuelCells > 0)) {
         bar.querySelectorAll(".res-cap.fuel_cells").forEach((el) => {
-          _setIfChanged(el, storageFuelCells > 0 ? fmtNumber(storageFuelCells) : "");
+          _setIfChanged(el, fmtNumber(storageFuelCells));
         });
         _last.storageFuelCells = storageFuelCells;
       }

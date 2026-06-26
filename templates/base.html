@@ -209,20 +209,18 @@
             </div>
 
             {% set fc_have = (player.fuel_cells if player is defined and player.fuel_cells is defined else 0) | int %}
-            {% set fc_cap = (storage_caps.fuel_cells if storage_caps is defined and storage_caps.fuel_cells is defined else 0) | int %}
-            <div class="hud-res-panel hud-res-fuel-cells{% if fc_cap <= 0 %} hud-res-no-storage{% endif %}" data-hud-res="fuel_cells" title="{{ T('resource_fuel_cells') }}" aria-label="{{ T('resource_fuel_cells') }}">
+            {% set fc_cap_val = (storage_caps.fuel_cells if storage_caps is defined else 0)|int %}
+            <div class="hud-res-panel hud-res-fuel-cells" data-hud-res="fuel_cells" title="{{ T('resource_fuel_cells') }}" aria-label="{{ T('resource_fuel_cells') }}">
               <div class="hud-res-body res-block res-block-fuel-cells">
                 <span class="hud-res-badge" aria-hidden="true">{{ T('resource_fuel_cells_short', 'BZ') }}</span>
                 {{ render_resource_icon('fuel_cells', hud=true, lazy=false, priority='high', alt=T('resource_fuel_cells')) }}
                 <span class="hud-res-amount">
                   <span class="res-value fuel_cells">{{ fc_have|fmt_int }}</span>
-                  {{ render_hud_capacity_bar('fuel_cells', fc_have, fc_cap) }}
-                  {% if fc_cap > 0 %}
+                  {{ render_hud_capacity_bar('fuel_cells', fc_have, fc_cap_val) }}
                   <span class="hud-res-cap-line">
                     <span class="res-sep" aria-hidden="true">/</span>
-                    <span class="res-cap fuel_cells">{{ fc_cap|fmt_int }}</span>
+                    <span class="res-cap fuel_cells">{{ fc_cap_val|fmt_int }}</span>
                   </span>
-                  {% endif %}
                 </span>
               </div>
               <span class="hud-res-warn" data-hud-res-warn="fuel_cells" hidden aria-live="polite"></span>
