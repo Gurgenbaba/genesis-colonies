@@ -1,43 +1,43 @@
 {% extends "base.html" %}
-{% from "partials/progression_cards.html" import render_resource_icon with context %}
 
 {% block content %}
-{% set player_obj = (player if player is defined and player else None) %}
-{% set caps = (storage_caps if storage_caps is defined and storage_caps else {'metal': 0, 'crystal': 0}) %}
 {% set ex = exchange if exchange is defined and exchange else {} %}
-{% set p_metal = (player_obj.metal if player_obj and player_obj.metal is defined else 0) | int %}
-{% set p_crystal = (player_obj.crystal if player_obj and player_obj.crystal is defined else 0) | int %}
-{% set p_fuel = (player_obj.fuel_cells if player_obj and player_obj.fuel_cells is defined else 0) | int %}
-{% set cap_metal = (caps.metal if caps and caps.metal is defined else (caps.get('metal', 0) if caps is mapping else 0)) | int %}
-{% set cap_crystal = (caps.crystal if caps and caps.crystal is defined else (caps.get('crystal', 0) if caps is mapping else 0)) | int %}
-{% set cap_fuel = (caps.fuel_cells if caps and caps.fuel_cells is defined else (caps.get('fuel_cells', 0) if caps is mapping else 0)) | int %}
-{% set pct_metal = (p_metal * 100 // cap_metal) if cap_metal > 0 else 0 %}
-{% set pct_crystal = (p_crystal * 100 // cap_crystal) if cap_crystal > 0 else 0 %}
-{% set pct_fuel = (p_fuel * 100 // cap_fuel) if cap_fuel > 0 and cap_fuel < 1000000000 else 0 %}
+{% set active_planet = HEADER_ACTIVE_PLANET if HEADER_ACTIVE_PLANET is defined else none %}
 
 <div class="gc-page trader-hub-page" id="trader-hub-page"
-     data-planet-id="{{ HEADER_ACTIVE_PLANET.planet_id if HEADER_ACTIVE_PLANET else '' }}">
+     data-planet-id="{{ active_planet.planet_id if active_planet else '' }}">
 
-  <header class="section-header trader-hub-header">
-    <div class="fleet-headline-row">
-      <div>
-        <h1 class="section-title">{{ T("trader_hub_title", "Trader Hub") }}</h1>
-        <p class="section-hint hint">{{ T("trader_hub_hint") }}</p>
-      </div>
-      <div class="trader-hub-daily-panel" aria-label="{{ T('trader_hub_daily_limit', 'Daily limit (per commander)') }}">
-        <div class="trader-hub-daily-row">
-          <span class="fleet-slots-label">{{ T('trader_hub_daily_used', 'Heute genutzt') }}</span>
-          <span class="fleet-slots-value gc-mono">
-            <strong data-exchange-daily-used>{{ ex.daily_used|fmt_int if ex.daily_used is defined else '0' }}</strong>
-            <span class="trader-hub-daily-sep">/</span>
-            <span data-exchange-daily-limit>{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}</span>
+  <div class="trader-hub-shell gc-panel">
+
+    <section class="trader-hub-status-panel" aria-label="{{ T('trader_hub_title', 'Trader Hub') }}">
+      <div class="gc-panel-header trader-hub-window-header">
+        <div class="gc-panel-head-left">
+          <span class="gc-panel-title" id="trader-hub-window-title">{{ T("trader_hub_title", "Trader Hub") }}</span>
+          <span class="gc-panel-subtitle hint">{{ T("trader_hub_subtitle", "Ressourcen tauschen · Schiffe recyceln") }}</span>
+        </div>
+        <div class="gc-panel-head-right trader-hub-status-chips">
+          {% if active_planet and active_planet.name %}
+          <span class="gc-panel-tag trader-hub-status-chip" title="{{ T('header_planet_label', 'Planet') }}">
+            {{ active_planet.name }}
+          </span>
+          {% endif %}
+          <span class="gc-panel-tag trader-hub-status-chip" title="{{ T('trader_hub_daily_limit_label', 'Daily limit') }}">
+            {{ T('trader_hub_daily_limit_label', 'Tageslimit') }}:
+            <span class="gc-mono" data-exchange-daily-limit-display>{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}</span>
+          </span>
+          <span class="gc-panel-tag trader-hub-status-chip trader-hub-status-chip--accent" title="{{ T('trader_hub_daily_used', 'Used today') }}">
+            {{ T('trader_hub_daily_used', 'Heute genutzt') }}:
+            <span class="gc-mono">
+              <strong data-exchange-daily-used>{{ ex.daily_used|fmt_int if ex.daily_used is defined else '0' }}</strong>
+              <span class="trader-hub-daily-sep">/</span>
+              <span data-exchange-daily-limit>{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}</span>
+            </span>
           </span>
         </div>
+      </div>
+
+      <div class="trader-hub-daily-panel" aria-label="{{ T('trader_hub_daily_limit', 'Daily limit (per commander)') }}">
         <div class="trader-hub-daily-breakdown hint">
-          <div class="trader-hub-daily-row trader-hub-daily-row--compact">
-            <span>{{ T('trader_hub_daily_limit_label', 'Tageslimit') }}</span>
-            <span class="gc-mono" data-exchange-daily-limit-display>{{ ex.daily_limit|fmt_int if ex.daily_limit is defined else '–' }}</span>
-          </div>
           <p class="trader-hub-daily-formula">
             {{ T('trader_hub_daily_formula', 'Berechnung: Empire-Produktion × %(pct)s %%', pct=(ex.daily_limit_pct|default(15)|int)) }}
           </p>
@@ -46,58 +46,14 @@
           </p>
         </div>
       </div>
+    </section>
+
+    <hr class="trader-hub-divider gc-prog-divider">
+
+    <div class="trader-hub-content-grid">
+      {% include "partials/exchange_panel.html" %}
+      {% include "partials/scrapyard_panel.html" %}
     </div>
-  </header>
-
-  <div class="overview-resources trader-hub-resources" aria-label="{{ T('trader_hub_balance', 'Colony balance') }}">
-    <article class="overview-res-card" aria-label="{{ T('resource_metal') }}">
-      {{ render_resource_icon('metal', 'lg') }}
-      <div class="overview-res-meta">
-        <span class="overview-res-label">{{ T("resource_metal") }}</span>
-        <span class="overview-res-main">
-          <span class="gc-val" data-res="metal">{{ p_metal|fmt_int }}</span>
-          <span class="gc-cap" data-cap="metal">/ {{ cap_metal|fmt_int }}</span>
-        </span>
-        <div class="trader-hub-res-bar" aria-hidden="true">
-          <span class="trader-hub-res-bar-fill" data-res-bar="metal" style="width: {{ [pct_metal, 100]|min }}%;"></span>
-        </div>
-      </div>
-    </article>
-    <article class="overview-res-card" aria-label="{{ T('resource_crystal') }}">
-      {{ render_resource_icon('crystal', 'lg') }}
-      <div class="overview-res-meta">
-        <span class="overview-res-label">{{ T("resource_crystal") }}</span>
-        <span class="overview-res-main">
-          <span class="gc-val" data-res="crystal">{{ p_crystal|fmt_int }}</span>
-          <span class="gc-cap" data-cap="crystal">/ {{ cap_crystal|fmt_int }}</span>
-        </span>
-        <div class="trader-hub-res-bar" aria-hidden="true">
-          <span class="trader-hub-res-bar-fill" data-res-bar="crystal" style="width: {{ [pct_crystal, 100]|min }}%;"></span>
-        </div>
-      </div>
-    </article>
-    <article class="overview-res-card" aria-label="{{ T('resource_fuel_cells') }}">
-      {{ render_resource_icon('fuel_cells', 'lg') }}
-      <div class="overview-res-meta">
-        <span class="overview-res-label">{{ T("resource_fuel_cells") }}</span>
-        <span class="overview-res-main">
-          <span class="gc-val" data-res="fuel_cells">{{ p_fuel|fmt_int }}</span>
-          {% if cap_fuel > 0 and cap_fuel < 1000000000 %}
-          <span class="gc-cap" data-cap="fuel_cells">/ {{ cap_fuel|fmt_int }}</span>
-          {% endif %}
-        </span>
-        {% if cap_fuel > 0 and cap_fuel < 1000000000 %}
-        <div class="trader-hub-res-bar" aria-hidden="true">
-          <span class="trader-hub-res-bar-fill" data-res-bar="fuel_cells" style="width: {{ [pct_fuel, 100]|min }}%;"></span>
-        </div>
-        {% endif %}
-      </div>
-    </article>
-  </div>
-
-  <div class="fleet-layout trader-hub-layout">
-    {% include "partials/exchange_panel.html" %}
-    {% include "partials/scrapyard_panel.html" %}
   </div>
 </div>
 {% endblock %}

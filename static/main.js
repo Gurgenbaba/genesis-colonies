@@ -3358,6 +3358,14 @@
     return { pct, filled, tier };
   }
 
+  const HUD_CAPACITY_TIERS = [
+    "tier-green",
+    "tier-yellow-green",
+    "tier-yellow",
+    "tier-orange",
+    "tier-red",
+  ];
+
   function patchHudCapacityBar(resKey, current, max, opts) {
     const wrap = document.querySelector(`[data-hud-capacity="${resKey}"]`);
     if (!wrap) return;
@@ -3367,9 +3375,15 @@
     wrap.style.removeProperty("visibility");
     const { pct, filled, tier } = computeHudCapacityState(current, max);
     const prevPct = wrap.dataset.capPct || "";
+    const prevTier = wrap.dataset.capTier || "";
     const changed = prevPct !== String(pct);
     wrap.dataset.capPct = String(pct);
-    wrap.className = `hud-res-capacity hud-cap--${tier}`;
+    if (prevTier !== tier) {
+      HUD_CAPACITY_TIERS.forEach((t) => wrap.classList.remove(`hud-cap--${t}`));
+      wrap.classList.add(`hud-cap--${tier}`);
+      wrap.dataset.capTier = tier;
+    }
+    if (!wrap.classList.contains("hud-res-capacity")) wrap.classList.add("hud-res-capacity");
     const bar = wrap.querySelector(".hud-cap-bar");
     if (!bar) return;
     bar.hidden = false;
@@ -3384,19 +3398,19 @@
     });
   }
 
+  let _hudFuelStorageHasCap = null;
+
   function patchHudFuelStorageState(storageFuelCells) {
     const fuelPanel = document.querySelector(".hud-res-fuel-cells");
     if (!fuelPanel) return;
     const hasCap = Math.floor(Number(storageFuelCells) || 0) > 0;
+    if (_hudFuelStorageHasCap === hasCap) return;
+    _hudFuelStorageHasCap = hasCap;
     fuelPanel.classList.toggle("hud-res-no-storage", !hasCap);
     fuelPanel.querySelectorAll(".hud-res-cap-line").forEach((line) => {
       line.hidden = !hasCap;
       if (!hasCap) line.setAttribute("aria-hidden", "true");
       else line.removeAttribute("aria-hidden");
-    });
-    fuelPanel.querySelectorAll("[data-hud-capacity]").forEach((wrap) => {
-      wrap.hidden = false;
-      wrap.removeAttribute("hidden");
     });
   }
 
@@ -4090,6 +4104,7 @@
       !!document.querySelector("[data-fleet-drawer-row]") ||
       _hasVisibleOverviewResearchTimer() ||
       !!document.querySelector(".planet-evolution-page .gc-card-queue-block[data-gc-card-queue='1']") ||
+      !!document.querySelector(".gc-mini-queue-card--active[data-finish-at]") ||
       _hasLiveCountdownAt() ||
       _hasStaleActiveCardQueue()
     );
@@ -7044,8 +7059,8 @@
       job.amount || job.target_amount,
       job.is_active ? 1 : 0,
       job.finish_at,
-      job.remaining_seconds,
-      job.progress_pct,
+      job.start_at,
+      job.duration_seconds,
     ].join(":");
   }
 
@@ -7192,11 +7207,19 @@
           timerEl.textContent = formatEta(queueTimerDisplaySeconds(displayRemaining));
         }
         if (isActive) {
+          const total = Math.max(1, Math.floor(Number(job.duration_seconds || card.dataset.totalSeconds || 1)));
+          const displayRemaining = finishAt > 0
+            ? queueJobRemainingSeconds(
+              finishAt,
+              now,
+              Math.max(0, Math.floor(Number(job.remaining_seconds || 0)))
+            )
+            : Math.max(0, Math.floor(Number(job.remaining_seconds || 0)));
+          const pct = Math.max(0, Math.min(100, Math.round(100 * (1 - displayRemaining / total))));
           const bar = card.querySelector(".gc-mini-queue-card__progress");
           const fill = card.querySelector(".gc-mini-queue-card__progress-fill");
-          const pct = Math.max(0, Math.min(100, Math.floor(Number(job.progress_pct || 0))));
           if (bar) bar.setAttribute("aria-valuenow", String(pct));
-          if (fill) fill.style.width = `${pct}%`;
+          _applyProgressFill(fill, pct);
         }
       });
       return;
@@ -8799,7 +8822,34 @@
       });
     }
 
+    updateMiniQueueProgressBars(serverNowTs);
     updateSafetyCountdownTimers();
+  }
+
+  function updateMiniQueueProgressBars(serverNowTs) {
+    document.querySelectorAll(".gc-mini-queue-card--active[data-finish-at]").forEach((card) => {
+      const finish = parseTimerTarget(card.dataset.finishAt || 0);
+      if (!finish) return;
+      const total = Math.max(1, Number(card.dataset.totalSeconds || 1));
+      const domain = String(card.dataset.timerDomain || "building");
+      const srvRemRaw = card.dataset.serverRemaining;
+      const remaining = queueJobRemainingSeconds(
+        finish,
+        serverNowTs,
+        srvRemRaw === undefined || srvRemRaw === "" ? NaN : Number(srvRemRaw)
+      );
+      assignMonotonicServerRemaining(card, remaining, finish);
+      const timerEl = card.querySelector(".gc-mini-queue-card__timer");
+      if (timerEl) {
+        applyQueueJobTimerAttrs(timerEl, finish, domain, "game-state", remaining);
+        _setIfChanged(timerEl, formatEta(queueTimerDisplaySeconds(remaining)));
+      }
+      const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / total)));
+      const bar = card.querySelector(".gc-mini-queue-card__progress");
+      const fill = card.querySelector(".gc-mini-queue-card__progress-fill");
+      if (bar) bar.setAttribute("aria-valuenow", String(Math.round(pct)));
+      _applyProgressFill(fill, pct);
+    });
   }
 
   function updateBuildQueueLive() {
@@ -8875,7 +8925,7 @@
       _resourceLive.capFuelCells,
       _resourceLive.energyUsed,
       _resourceLive.energyTotal,
-      { animate: true }
+      { animate: false }
     );
     patchResourceBarEnergyWarning(_resourceLive.energyUsed, _resourceLive.energyTotal);
   }
@@ -8923,6 +8973,7 @@
     _resourceLive.capFuelCells = Math.max(0, Math.floor(Number(snapshot.storageFuelCells) || 0));
     _resourceLive.energyUsed = Math.max(0, Math.floor(Number(snapshot.energyUsed) || 0));
     _resourceLive.energyTotal = Math.max(0, Math.floor(Number(snapshot.energyTotal) || 0));
+    if (!samePlanet) _hudFuelStorageHasCap = null;
     _resourceDisplay = { metal: null, crystal: null, fuelCells: null };
     startResourceTicker();
   }
@@ -10113,8 +10164,10 @@
         _last.fuelCells = fuelCells;
         _resourceDisplay.fuelCells = fuelCells;
       }
-      if (forceResourceBar || (_last.storageFuelCells !== storageFuelCells && storageFuelCells > 0)) {
-        bar.querySelectorAll(".res-cap.fuel_cells").forEach((el) => { _setIfChanged(el, fmtNumber(storageFuelCells)); });
+      if (forceResourceBar || _last.storageFuelCells !== storageFuelCells) {
+        bar.querySelectorAll(".res-cap.fuel_cells").forEach((el) => {
+          _setIfChanged(el, storageFuelCells > 0 ? fmtNumber(storageFuelCells) : "");
+        });
         _last.storageFuelCells = storageFuelCells;
       }
 
@@ -10826,7 +10879,6 @@
         if (data.exchange) patchExchangePanel(data.exchange);
         if (data.scrapyard) patchScrapyardPanel(data.scrapyard);
         if (data.auction_house) patchAuctionHousePanel(data.auction_house);
-        patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, fuelCells, storageFuelCells);
       }
 
       if (forcePanel || shouldPatchGameStateModule("shipyard")) {
@@ -17567,7 +17619,10 @@
   function renderScrapyardRows(ships) {
     const tt = (key, fallback, vars) => t(key, fallback, vars);
     if (!Array.isArray(ships) || ships.length === 0) {
-      return `<p class="hint" data-scrapyard-empty>${tt("scrapyard_empty", "No ships to recycle.")}</p>`;
+      return `<div class="trader-hub-scrap-empty" data-scrapyard-empty>
+        <span class="trader-hub-scrap-empty-icon" aria-hidden="true">♻</span>
+        <p class="trader-hub-scrap-empty-text hint">${tt("scrapyard_empty", "Keine recyclebaren Schiffe auf dieser Kolonie.")}</p>
+      </div>`;
     }
     return ships.map((row) => {
       const key = String(row.ship_key || "");
@@ -17676,38 +17731,6 @@
     if (!list || !Array.isArray(scrapyard.ships)) return;
     list.innerHTML = renderScrapyardRows(scrapyard.ships);
     bindFormattedNumberInputs(list);
-  }
-
-  function patchTraderHubBalance(metal, crystal, storageMetal, storageCrystal, fuelCells, storageFuelCells) {
-    const page = document.getElementById("trader-hub-page");
-    if (!page) return;
-    const metalVal = page.querySelector('[data-res="metal"]');
-    const crystalVal = page.querySelector('[data-res="crystal"]');
-    const fuelVal = page.querySelector('[data-res="fuel_cells"]');
-    const metalCap = page.querySelector('[data-cap="metal"]');
-    const crystalCap = page.querySelector('[data-cap="crystal"]');
-    const fuelCap = page.querySelector('[data-cap="fuel_cells"]');
-    const metalBar = page.querySelector('[data-res-bar="metal"]');
-    const crystalBar = page.querySelector('[data-res-bar="crystal"]');
-    const fuelBar = page.querySelector('[data-res-bar="fuel_cells"]');
-    if (metalVal) _setIfChanged(metalVal, fmtNumber(metal));
-    if (crystalVal) _setIfChanged(crystalVal, fmtNumber(crystal));
-    if (fuelVal && typeof fuelCells === "number") _setIfChanged(fuelVal, fmtNumber(fuelCells));
-    if (metalCap && storageMetal > 0) _setIfChanged(metalCap, `/ ${fmtNumber(storageMetal)}`);
-    if (crystalCap && storageCrystal > 0) _setIfChanged(crystalCap, `/ ${fmtNumber(storageCrystal)}`);
-    if (fuelCap && storageFuelCells > 0) _setIfChanged(fuelCap, `/ ${fmtNumber(storageFuelCells)}`);
-    if (metalBar && storageMetal > 0) {
-      const pct = Math.min(100, Math.floor((Number(metal) / storageMetal) * 100));
-      metalBar.style.width = `${pct}%`;
-    }
-    if (crystalBar && storageCrystal > 0) {
-      const pct = Math.min(100, Math.floor((Number(crystal) / storageCrystal) * 100));
-      crystalBar.style.width = `${pct}%`;
-    }
-    if (fuelBar && storageFuelCells > 0) {
-      const pct = Math.min(100, Math.floor((Number(fuelCells) / storageFuelCells) * 100));
-      fuelBar.style.width = `${pct}%`;
-    }
   }
 
   function initResearch() {

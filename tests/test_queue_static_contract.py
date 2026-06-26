@@ -93,6 +93,10 @@ def test_main_js_clamps_queue_progress_display():
     assert "Math.max(0, Math.min(100" in text
     assert "function assignMonotonicServerRemaining" in text
     assert "el.dataset.serverRemaining = String(next)" in text
+    sig_fn = text.split("function miniQueueJobSignature(job)")[1].split("function _miniQueueIconUrl")[0]
+    assert "job.remaining_seconds" not in sig_fn
+    assert "job.progress_pct" not in sig_fn
+    assert "function updateMiniQueueProgressBars" in text
 
 
 def test_build_research_cancel_api_routes_return_action_state():

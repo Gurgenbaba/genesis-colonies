@@ -113,18 +113,35 @@ def test_game_state_exchange_limit_scales_without_hardcap(trader_hub_db, monkeyp
     assert "daily_limit_max" not in data["exchange"]
 
 
-def test_trader_hub_uses_active_planet_resources(trader_hub_db, monkeypatch):
+def test_trader_hub_uses_active_planet_scope(trader_hub_db, monkeypatch):
+    """Trader Hub shows no duplicate resource strip; planet scope via data-planet-id."""
     client, uid = _login_client(trader_hub_db, monkeypatch)
     conn = db()
     planets = get_planets_by_player(uid, conn=conn)
     assert len(planets) >= 1
     pid = int(planets[0]["id"])
-    conn.execute("UPDATE planets SET metal = 4242, crystal = 5353 WHERE id = ?;", (pid,))
-    conn.commit()
     conn.close()
 
     res = client.get("/trader-hub")
     assert res.status_code == 200
     html = res.get_data(as_text=True)
-    assert "4.242" in html or "4242" in html
-    assert "5.353" in html or "5353" in html
+    assert f'data-planet-id="{pid}"' in html
+    assert "trader-hub-resources" not in html
+    assert "data-res-bar=" not in html
+    assert 'data-res="metal"' not in html
+
+
+def test_trader_hub_uses_genesis_window_layout(trader_hub_db, monkeypatch):
+    client, _uid = _login_client(trader_hub_db, monkeypatch)
+    res = client.get("/trader-hub")
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+    assert "trader-hub-shell" in html
+    assert "trader-hub-content-grid" in html
+    assert "trader-hub-subpanel" in html
+    assert "trader-hub-daily-panel" in html
+    assert "data-exchange-daily-used" in html
+    assert "gc-exchange-panel" in html
+    assert "gc-scrapyard-panel" in html
+    assert "trader-hub-layout" not in html
+    assert "trader-hub-resources" not in html

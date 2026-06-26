@@ -2,7 +2,7 @@
 {% from "partials/progression_cards.html" import render_resource_icon with context %}
 {% set ex = exchange if exchange is defined and exchange else {} %}
 {% set default_dir = 'metal_to_crystal' %}
-<section class="gc-exchange-panel gc-panel trader-hub-panel" id="gc-exchange-panel"
+<section class="gc-exchange-panel trader-hub-subpanel" id="gc-exchange-panel"
          {% if not ex.enabled %}data-disabled="1"{% endif %}
          data-rate-m2c="{{ ex.rate_metal_to_crystal or 2 }}"
          data-rate-c2m="{{ ex.rate_crystal_to_metal or 1 }}"

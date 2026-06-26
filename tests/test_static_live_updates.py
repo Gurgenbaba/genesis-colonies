@@ -478,6 +478,8 @@ def test_gc807b_hud_capacity_polish():
     cap_patch = js.split("function patchHudCapacityBar(resKey")[1].split("function patchHudFuelStorageState")[0]
     assert "wrap.hidden = true" not in cap_patch
     assert "wrap.hidden = false" in cap_patch
+    assert "wrap.className =" not in cap_patch
+    assert "_hudFuelStorageHasCap" in js.split("function patchHudFuelStorageState")[1].split("function patchHudCapacityBars")[0]
     bars_fn = js.split("function patchHudCapacityBars(")[1].split("function patchHudStorageWarnings")[0]
     assert 'patchHudCapacityBar("energy", energyUsed, energyTotal, opts)' in bars_fn
     assert "energyUsed != null && energyTotal != null" in bars_fn
@@ -486,11 +488,13 @@ def test_gc807b_hud_capacity_polish():
     assert "_resourceLive.energyUsed" in live_fn
     assert "_resourceLive.energyTotal" in live_fn
     assert "null," not in live_fn.split("patchHudCapacityBars(")[1].split(");")[0]
+    assert "{ animate: false }" in live_fn
 
     assert "overview-res-dashboard" not in css
     assert "overview-res-chip" not in css
     assert ".overview-res-card{" in css
-    assert "trader-hub-res-bar" in css
+    assert "function updateMiniQueueProgressBars" in js
+    assert "job.progress_pct" not in js.split("function miniQueueJobSignature")[1].split("function _miniQueueIconUrl")[0]
     assert "flex-shrink: 0" in css.split(".gc-header-cmd .hud-res-capacity")[1].split("}")[0]
     assert "gc-hud-energy-bar-flicker" in css
     assert ".gc-header-cmd .hud-res-energy.energy-warning .hud-cap-bar" in css

@@ -1,6 +1,6 @@
 {# Scrapyard — recycle ships on active planet #}
 {% set sy = scrapyard if scrapyard is defined and scrapyard else {} %}
-<section class="gc-scrapyard-panel gc-panel trader-hub-panel" id="gc-scrapyard-panel"
+<section class="gc-scrapyard-panel trader-hub-subpanel" id="gc-scrapyard-panel"
          {% if not sy.ready %}data-disabled="1"{% endif %}
          aria-label="{{ T('scrapyard_title') }}">
   <div class="gc-panel-header">
@@ -43,7 +43,10 @@
       </article>
       {% endfor %}
     {% else %}
-      <p class="hint" data-scrapyard-empty>{{ T('scrapyard_empty') }}</p>
+      <div class="trader-hub-scrap-empty" data-scrapyard-empty>
+        <span class="trader-hub-scrap-empty-icon" aria-hidden="true">♻</span>
+        <p class="trader-hub-scrap-empty-text hint">{{ T('scrapyard_empty', 'Keine recyclebaren Schiffe auf dieser Kolonie.') }}</p>
+      </div>
     {% endif %}
   </div>
   <p class="gc-scrapyard-error gc-trader-error hint" data-scrapyard-error hidden></p>

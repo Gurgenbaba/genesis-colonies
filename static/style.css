@@ -1716,8 +1716,7 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 }
 
 .gc-page > header.section-header:is(
-  :has(.research-lab-chip),
-  :has(.trader-hub-daily-panel)
+  :has(.research-lab-chip)
 ) {
   display: flex;
   align-items: flex-start;
@@ -1736,8 +1735,7 @@ body.gc-body-ingame.gc-has-planet-landscape button.gc-nav-link.gc-nav-submenu-to
 }
 
 .gc-page > header.section-header:has(.research-lab-chip) .section-title,
-.gc-page > header.section-header:has(.research-lab-chip) .section-hint,
-.gc-page > header.section-header:has(.trader-hub-daily-panel) .fleet-headline-row > div:first-child {
+.gc-page > header.section-header:has(.research-lab-chip) .section-hint {
   display: none;
 }
 
@@ -4599,22 +4597,80 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 .overview-res-main .gc-cap{ font-family: var(--gc-mono); font-size: 0.86rem; color: var(--gc-text-dim); }
 .overview-res-cap{ color: var(--gc-text-soft); font-size: 0.84rem; }
 
-.trader-hub-page .trader-hub-resources .gc-res-icon--lg{
-  width: 34px;
-  height: 34px;
+.trader-hub-page{
+  min-width: 0;
+  overflow-x: clip;
 }
-.trader-hub-page .overview-res-card{
-  background: rgba(10, 16, 32, 0.96);
+.trader-hub-shell.gc-panel{
+  padding: 10px;
 }
-.trader-hub-page .trader-hub-resources{
+.trader-hub-shell .trader-hub-status-panel{
+  margin: -10px -10px 0;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(127, 255, 217, 0.08);
+}
+.trader-hub-shell .trader-hub-window-header{
+  margin-bottom: 8px;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.trader-hub-status-chips{
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: min(100%, 520px);
+}
+.trader-hub-status-chip strong{
+  color: rgba(127, 255, 217, 0.96);
+}
+.trader-hub-status-chip--accent{
+  border-color: rgba(70, 229, 255, 0.35);
+  color: var(--gc-text);
+}
+.trader-hub-divider{
+  margin: 10px 0;
+}
+.trader-hub-content-grid{
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--gc-card-gap);
-  margin-bottom: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
 }
-.trader-hub-page .trader-hub-layout{
-  margin-bottom: 12px;
+.trader-hub-subpanel{
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(70, 229, 255, 0.14);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(6, 12, 28, 0.55);
 }
+.trader-hub-subpanel .gc-panel-header{
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+}
+.trader-hub-scrap-empty{
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 18px 12px;
+  border: 1px dashed rgba(70, 229, 255, 0.18);
+  border-radius: var(--gc-radius-sm);
+  background: rgba(3, 8, 18, 0.45);
+  text-align: center;
+}
+.trader-hub-scrap-empty-icon{
+  font-size: 1.45rem;
+  line-height: 1;
+  opacity: 0.72;
+  filter: grayscale(0.2);
+}
+.trader-hub-scrap-empty-text{
+  margin: 0;
+  max-width: 22rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
 .trader-hub-daily-sep{
   opacity: 0.45;
   padding: 0 0.15rem;
@@ -4622,31 +4678,17 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
 
 .trader-hub-daily-panel{
   display: grid;
-  gap: 8px;
-  min-width: min(100%, 320px);
-  padding: 10px 12px;
-  border-radius: var(--gc-radius-md);
-  border: 1px solid rgba(70, 229, 255, 0.18);
-  background: rgba(6, 12, 28, 0.72);
-}
-
-.trader-hub-daily-row{
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.trader-hub-daily-row--compact{
-  font-size: 0.72rem;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: var(--gc-radius-sm);
+  border: 1px solid rgba(70, 229, 255, 0.12);
+  background: rgba(3, 8, 18, 0.42);
 }
 
 .trader-hub-daily-breakdown{
   display: grid;
   gap: 4px;
   margin: 0;
-  padding-top: 6px;
-  border-top: 1px solid rgba(70, 229, 255, 0.1);
   font-size: 0.68rem;
   line-height: 1.35;
 }
@@ -4660,22 +4702,16 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   color: rgba(127, 255, 217, 0.96);
 }
 
-.trader-hub-res-bar{
-  height: 4px;
-  margin-top: 0.2rem;
-  border: 1px solid var(--gc-border);
-  border-radius: var(--gc-radius-sm);
-  background: rgba(0, 0, 0, 0.28);
-  overflow: hidden;
-}
-.trader-hub-res-bar-fill{
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, rgba(70, 229, 255, 0.55), rgba(127, 255, 217, 0.85));
-}
 .trader-hub-page .gc-exchange-panel,
 .trader-hub-page .gc-scrapyard-panel{
   max-width: none;
+  margin-bottom: 0;
+}
+.trader-hub-page .gc-exchange-panel{
+  padding: 0;
+}
+.trader-hub-page .gc-scrapyard-panel{
+  padding: 0;
 }
 .gc-fuel-exchange-panel,
 .gc-scrapyard-panel{
@@ -5147,9 +5183,20 @@ hr{ border: none; border-top: 1px solid rgba(120, 190, 255, 0.14); }
   font-weight: 700;
   letter-spacing: 0.05em;
 }
-@media (max-width: 820px){
-  .trader-hub-page .trader-hub-resources{
+@media (max-width: 1100px){
+  .trader-hub-content-grid{
     grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 820px){
+  .trader-hub-status-chips{
+    justify-content: flex-start;
+    max-width: none;
+  }
+  .trader-hub-shell .trader-hub-window-header{
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
   }
   .trader-hub-page .gc-trader-exchange-pick,
   .trader-hub-page .gc-trader-amount-row,
