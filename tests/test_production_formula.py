@@ -23,12 +23,15 @@ from game.production_formula import (
     FUEL_TEMP_MODIFIER_MIN,
     ProductionContext,
     ProductionModifiers,
+    STANDARD_PRODUCTION_PER_HOUR,
     calculate_resource_output,
     ferdi_base_output,
     level_growth,
+    mine_output,
     research_modifier_for,
     slot_modifier_for,
     snapshot_outputs,
+    standard_output,
     temperature_mid_c_for_slot,
     temperature_modifier_for,
 )
@@ -88,21 +91,24 @@ def _ctx(resource: str, level: int, **kwargs) -> ProductionContext:
 
 
 class TestLevelGrowth:
-    def test_ferdi_base_output_level_one(self):
-        assert ferdi_base_output("metal", 1) == pytest.approx(472.5)
-        assert ferdi_base_output("crystal", 1) == pytest.approx(435.95)
-        assert ferdi_base_output("fuel_cells", 1) == pytest.approx(400.475)
-        assert ferdi_base_output("metal", 0) == 0.0
+    def test_mine_output_level_one(self):
+        assert mine_output("metal", 1) == pytest.approx(150 * 1.075)
+        assert mine_output("crystal", 1) == pytest.approx(100 * 1.075)
+        assert mine_output("fuel_cells", 1) == pytest.approx(50 * 1.075)
+        assert mine_output("metal", 0) == 0.0
+        assert ferdi_base_output("metal", 1) == pytest.approx(mine_output("metal", 1))
+
+    def test_standard_output_without_mine(self):
+        assert standard_output("metal") == STANDARD_PRODUCTION_PER_HOUR["metal"]
+        assert calculate_resource_output("metal", _ctx("metal", 0)) == pytest.approx(15000.0)
+        assert calculate_resource_output("crystal", _ctx("crystal", 0)) == pytest.approx(10000.0)
+        assert calculate_resource_output("fuel_cells", _ctx("fuel_cells", 0)) == pytest.approx(5000.0)
 
     def test_benchmark_levels_match_snapshot(self):
         snap = snapshot_outputs(production_speed=1.0, slot=NEUTRAL_SNAPSHOT_SLOT)
         for res in ("metal", "crystal", "fuel_cells"):
-            for lvl in BENCHMARK_LEVELS:
-                expected = level_growth(res, lvl, 1.0)
-                expected *= slot_modifier_for(res, NEUTRAL_SNAPSHOT_SLOT)
-                if res == "fuel_cells":
-                    temp = temperature_mid_c_for_slot(NEUTRAL_SNAPSHOT_SLOT)
-                    expected *= temperature_modifier_for("fuel_cells", temp)
+            for lvl in (1, 10, 30, 60, 90, 120):
+                expected = calculate_resource_output(res, _ctx(res, lvl, slot=NEUTRAL_SNAPSHOT_SLOT))
                 assert snap[res][lvl] == pytest.approx(expected, rel=1e-9)
 
     def test_monotonic_growth_all_resources(self):
@@ -122,8 +128,8 @@ class TestLevelGrowth:
                 assert val > prev
                 prev = val
 
-    def test_level_zero_is_zero(self):
-        assert calculate_resource_output("metal", _ctx("metal", 0)) == 0.0
+    def test_level_zero_is_standard_only(self):
+        assert calculate_resource_output("metal", _ctx("metal", 0)) == pytest.approx(standard_output("metal"))
 
 
 class TestSlotModifiers:
@@ -176,10 +182,14 @@ class TestResearchAndEnergy:
         assert research_modifier_for("metal", {"drone_tech": 5}) == pytest.approx(1.10)
         assert research_modifier_for("crystal", {"drone_tech": 5}) == pytest.approx(1.10)
 
-    def test_energy_under_supply(self):
+    def test_energy_under_supply_throttles_mine_only(self):
+        std = calculate_resource_output("metal", _ctx("metal", 0, slot=8, energy_ratio=1.0))
         full = calculate_resource_output("metal", _ctx("metal", 20, slot=8, energy_ratio=1.0))
         half = calculate_resource_output("metal", _ctx("metal", 20, slot=8, energy_ratio=0.5))
-        assert half == pytest.approx(full * 0.5)
+        no_mine_half = calculate_resource_output("metal", _ctx("metal", 0, slot=8, energy_ratio=0.5))
+        no_mine_zero_energy = calculate_resource_output("metal", _ctx("metal", 0, slot=8, energy_ratio=0.0))
+        assert no_mine_half == no_mine_zero_energy == pytest.approx(std)
+        assert half == pytest.approx(std + (full - std) * 0.5)
 
     def test_energy_over_supply_not_boosted(self):
         base = calculate_resource_output("metal", _ctx("metal", 20, slot=8, energy_ratio=1.0))
@@ -199,11 +209,9 @@ class TestCombinedModifiers:
         )
         mods = ProductionModifiers(ctx)
         expected = (
-            level_growth("metal", 30, 1.0)
-            * mods.slot_modifier()
-            * mods.research_modifier()
-            * mods.energy_modifier()
-            * mods.directive_modifier()
+            standard_output("metal") * ctx.production_speed * mods.combined_without_energy()
+            + level_growth("metal", 30, 1.0)
+            * mods.combined()
         )
         assert calculate_resource_output("metal", ctx) == pytest.approx(expected)
 

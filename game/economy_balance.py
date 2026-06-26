@@ -460,12 +460,8 @@ def production_delta_per_hour(
     cur = reference_production_per_hour(
         resource_type, lvl, slot=slot, production_speed=production_speed
     )
-    prev = (
-        reference_production_per_hour(
-            resource_type, lvl - 1, slot=slot, production_speed=production_speed
-        )
-        if lvl > 1
-        else 0.0
+    prev = reference_production_per_hour(
+        resource_type, lvl - 1, slot=slot, production_speed=production_speed
     )
     return max(0.0, cur - prev)
 

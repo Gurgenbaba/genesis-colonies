@@ -16,18 +16,28 @@ if TYPE_CHECKING:
     from .effects.effect_resolver import EffectResolver
 
 # ---------------------------------------------------------------------------
-# Ferdi base curve (GC-860) — single exponential tier + flat offset
+# Ferdi rebase (GC-PRODUCTION-FERDI-REBASE) — standard income + mine exponential
 # ---------------------------------------------------------------------------
 
 RESOURCE_KEYS = frozenset({"metal", "crystal", "fuel_cells"})
 
-FERDI_GROWTH_RATE = 1.075
-FERDI_BASE_FLAT = 365.0
+LEVEL_GROWTH_RATE = 1.075
+FERDI_GROWTH_RATE = LEVEL_GROWTH_RATE  # legacy alias
+
+FERRONIT_MINE_BASE = 150.0
+CRYTITE_MINE_BASE = 100.0
+FUEL_CELLS_MINE_BASE = 50.0
+
+STANDARD_PRODUCTION_PER_HOUR: Dict[str, float] = {
+    "metal": 15000.0,
+    "crystal": 10000.0,
+    "fuel_cells": 5000.0,
+}
 
 LEVEL_GROWTH: Dict[str, Dict[str, float]] = {
-    "metal": {"multiplier": 100.0, "building": "metal_mine"},
-    "crystal": {"multiplier": 66.0, "building": "crystal_mine"},
-    "fuel_cells": {"multiplier": 33.0, "building": "fuel_cell_plant"},
+    "metal": {"multiplier": FERRONIT_MINE_BASE, "building": "metal_mine"},
+    "crystal": {"multiplier": CRYTITE_MINE_BASE, "building": "crystal_mine"},
+    "fuel_cells": {"multiplier": FUEL_CELLS_MINE_BASE, "building": "fuel_cell_plant"},
 }
 
 MINING_TECH_PER_LEVEL = 0.03
@@ -78,19 +88,30 @@ def normalize_resource_type(resource_type: str) -> str:
     return _normalize_resource_type(resource_type)
 
 
-def ferdi_base_output(resource_type: str, level: int) -> float:
-    """Ferdi base curve per hour (before production_speed and gameplay modifiers)."""
+def standard_output(resource_type: str) -> float:
+    """Planet baseline income per hour (no mine required)."""
+    key = _normalize_resource_type(resource_type)
+    return float(STANDARD_PRODUCTION_PER_HOUR[key])
+
+
+def mine_output(resource_type: str, level: int) -> float:
+    """Mine-only base curve per hour (before production_speed and gameplay modifiers)."""
     key = _normalize_resource_type(resource_type)
     lvl = max(0, int(level or 0))
     if lvl <= 0:
         return 0.0
-    multiplier = float(LEVEL_GROWTH[key]["multiplier"])
-    return multiplier * lvl * (FERDI_GROWTH_RATE ** lvl) + FERDI_BASE_FLAT
+    base = float(LEVEL_GROWTH[key]["multiplier"])
+    return base * (LEVEL_GROWTH_RATE ** lvl)
+
+
+def ferdi_base_output(resource_type: str, level: int) -> float:
+    """Alias for mine-only output (legacy name)."""
+    return mine_output(resource_type, level)
 
 
 def level_growth(resource_type: str, level: int, production_speed: float = 1.0) -> float:
-    """Ferdi base × production_speed (per hour, before slot/research/energy modifiers)."""
-    base = ferdi_base_output(resource_type, level)
+    """Mine output × production_speed (per hour, before slot/research/energy modifiers)."""
+    base = mine_output(resource_type, level)
     if base <= 0:
         return 0.0
     speed = max(0.0, float(production_speed or 1.0))
@@ -242,12 +263,12 @@ class ProductionModifiers:
     def seasonal_modifier(self) -> float:
         return max(0.0, float(self.context.season_modifier or 1.0))
 
-    def combined(self) -> float:
+    def combined_without_energy(self) -> float:
+        """Gameplay modifiers shared by standard and mine production."""
         return (
             self.slot_modifier()
             * self.temperature_modifier()
             * self.research_modifier()
-            * self.energy_modifier()
             * self.building_modifier()
             * self.planet_modifier()
             * self.empire_modifier()
@@ -257,25 +278,28 @@ class ProductionModifiers:
             * self.seasonal_modifier()
         )
 
+    def combined(self) -> float:
+        return self.combined_without_energy() * self.energy_modifier()
+
 
 def calculate_resource_output(resource_type: str, context: ProductionContext) -> float:
     """
     Canonical production output per hour.
 
-    Output = FerdiBase × production_speed × Slot × Temperature × Research × Energy
-             × Building × Planet × Empire × Alliance × Directive × Event × Season
+    Output = StandardBase × speed × modifiers (excl. energy)
+           + MineBase(level) × speed × modifiers (incl. energy on mine part only)
     """
     key = _normalize_resource_type(resource_type)
     lvl = max(0, int(context.level or 0))
-    if lvl <= 0:
-        return 0.0
-
-    base = level_growth(key, lvl, context.production_speed)
-    if base <= 0:
-        return 0.0
-
+    speed = max(0.0, float(context.production_speed or 1.0))
     mods = ProductionModifiers(context)
-    return max(0.0, base * mods.combined())
+    mod_shared = mods.combined_without_energy()
+
+    standard_part = standard_output(key) * speed * mod_shared
+    mine_base = mine_output(key, lvl) * speed
+    mine_part = mine_base * mods.combined() if mine_base > 0 else 0.0
+
+    return max(0.0, standard_part + mine_part)
 
 
 def production_context_from_resolver(
@@ -319,7 +343,7 @@ def snapshot_outputs(
     slot: Optional[int] = 9,
 ) -> Dict[str, Dict[int, float]]:
     """Reference table for docs/tests — per-hour output at benchmark levels."""
-    levels = (1, 10, 30, 60, 90, 120)
+    levels = (0, 1, 10, 30, 60, 90, 120)
     out: Dict[str, Dict[int, float]] = {k: {} for k in RESOURCE_KEYS}
     for res in RESOURCE_KEYS:
         for lvl in levels:

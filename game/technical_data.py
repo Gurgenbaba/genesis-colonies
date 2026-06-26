@@ -12,16 +12,19 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .economy_balance import power_upgrade_cost
 from .production_formula import (
-    FERDI_BASE_FLAT,
     FERDI_GROWTH_RATE,
     LEVEL_GROWTH,
+    LEVEL_GROWTH_RATE,
+    STANDARD_PRODUCTION_PER_HOUR,
     ProductionContext,
     ProductionModifiers,
     calculate_resource_output,
     level_growth,
+    mine_output,
     normalize_resource_type,
     production_context_from_resolver,
     research_modifier_for,
+    standard_output,
     _lvl,
 )
 
@@ -223,46 +226,39 @@ def _active_production_bonuses(
 def _formula_steps(resource_type: str, context: ProductionContext) -> List[Dict[str, Any]]:
     key = normalize_resource_type(resource_type)
     lvl = max(0, int(context.level or 0))
-    if lvl <= 0:
-        return []
-
-    cfg = LEVEL_GROWTH[key]
-    base = level_growth(key, lvl, context.production_speed)
     mods = ProductionModifiers(context)
+    speed = max(0.0, float(context.production_speed or 1.0))
+    mod_shared = mods.combined_without_energy()
+    cfg = LEVEL_GROWTH[key]
+
+    standard_part = int(standard_output(key) * speed * mod_shared)
+    mine_part = 0
+    if lvl > 0:
+        mine_part = int(mine_output(key, lvl) * speed * mods.combined())
+
     steps: List[Dict[str, Any]] = [
         {
-            "label_key": "technical_formula_base",
-            "detail": (
-                f"{cfg['multiplier']} × level × {FERDI_GROWTH_RATE}^level + {FERDI_BASE_FLAT:g}"
-            ),
-            "value_per_hour": int(base),
+            "label_key": "technical_formula_standard",
+            "detail": f"{STANDARD_PRODUCTION_PER_HOUR[key]:g} /h × modifiers (excl. energy)",
+            "value_per_hour": standard_part,
         }
     ]
-
-    chain = [
-        ("technical_formula_slot", mods.slot_modifier()),
-        ("technical_formula_temperature", mods.temperature_modifier()),
-        ("technical_formula_research", mods.research_modifier()),
-        ("technical_formula_energy", mods.energy_modifier()),
-        ("technical_formula_empire", float(context.directive_modifier or 1.0)),
-        ("technical_formula_event", mods.event_modifier()),
-        ("technical_formula_planet", mods.planet_modifier()),
-    ]
-    running = float(base)
-    for label_key, factor in chain:
-        if key != "fuel_cells" and label_key == "technical_formula_temperature":
-            continue
-        if abs(factor - 1.0) <= 0.0005 and label_key != "technical_formula_energy":
-            continue
-        running *= float(factor)
+    if lvl > 0:
         steps.append(
             {
-                "label_key": label_key,
-                "factor": round(float(factor), 4),
-                "display": _pct_display(factor) if label_key != "technical_formula_energy" else _energy_display(factor),
-                "value_per_hour": int(running),
+                "label_key": "technical_formula_base",
+                "detail": f"{cfg['multiplier']:g} × {LEVEL_GROWTH_RATE}^{lvl}",
+                "value_per_hour": int(mine_output(key, lvl) * speed),
             }
         )
+        if abs(mods.energy_modifier() - 1.0) > 0.0005 or abs(mod_shared - 1.0) > 0.0005:
+            steps.append(
+                {
+                    "label_key": "technical_formula_mine_after_mods",
+                    "detail": "mine × modifiers (incl. energy)",
+                    "value_per_hour": mine_part,
+                }
+            )
 
     total = int(calculate_resource_output(key, context))
     steps.append({"label_key": "technical_formula_total", "value_per_hour": total, "is_total": True})

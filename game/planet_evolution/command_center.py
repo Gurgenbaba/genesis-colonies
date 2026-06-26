@@ -118,19 +118,19 @@ def _build_resources_block(
             "key": "metal",
             "short": "Fe",
             "amount": fmt_int_compact(planet.get("metal", 0)),
-            "rate": _format_rate(_rate_per_hour(m_rate, ratio, prod_speed)),
+            "rate": _format_rate(_rate_per_hour(m_rate, 1.0, prod_speed)),
         },
         {
             "key": "crystal",
             "short": "Cr",
             "amount": fmt_int_compact(planet.get("crystal", 0)),
-            "rate": _format_rate(_rate_per_hour(c_rate, ratio, prod_speed)),
+            "rate": _format_rate(_rate_per_hour(c_rate, 1.0, prod_speed)),
         },
         {
             "key": "fuel_cells",
             "short": "Fuel",
             "amount": fmt_int_compact(planet.get("fuel_cells", 0)),
-            "rate": _format_rate(_rate_per_hour(fc_rate, ratio, prod_speed)),
+            "rate": _format_rate(_rate_per_hour(fc_rate, 1.0, prod_speed)),
         },
     ]
 
@@ -931,8 +931,8 @@ def build_colony_command_center(
         conn=conn,
         force_refresh=False,
     )
-    m_rate, c_rate = resolver.production_rates_per_sec()
-    fc_rate = resolver.fuel_cells_rate_per_sec()
+    m_rate, c_rate = resolver.production_rates_per_sec(ratio)
+    fc_rate = resolver.fuel_cells_rate_per_sec(ratio)
 
     movements = fleet_movements if fleet_movements is not None else list_active_movements(uid, conn=conn)
     now = time.time()

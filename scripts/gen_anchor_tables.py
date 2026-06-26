@@ -1,7 +1,12 @@
 """Generate community anchor tables from live game code (speed x1)."""
 from __future__ import annotations
 
-from game.production_formula import FERDI_BASE_FLAT, FERDI_GROWTH_RATE, LEVEL_GROWTH
+from game.production_formula import (
+    FERDI_GROWTH_RATE,
+    LEVEL_GROWTH,
+    LEVEL_GROWTH_RATE,
+    STANDARD_PRODUCTION_PER_HOUR,
+)
 from game.economy_balance import (
     BUILDING_UPGRADE_CURVES,
     power_upgrade_cost,
@@ -73,22 +78,22 @@ def main() -> None:
     )
     lines.append("")
 
-    lines.append("## 1) Produktionsformel (GC-820 / GC-860 Ferdi)")
+    lines.append("## 1) Produktionsformel (GC-820 / Ferdi-Rebase)")
     lines.append("")
     lines.append("```")
-    lines.append(
-        f"Produktion/h = Multiplikator × Level × {FERDI_GROWTH_RATE}^Level + {FERDI_BASE_FLAT:g}"
-    )
-    lines.append(
-        "             × production_speed × Slot × Temperatur × Forschung × Energie × …"
-    )
+    lines.append("Produktion/h = Standardbasis + (Mine-Basis × 1.075^Level)")
+    lines.append("             × production_speed × Slot × Temperatur × Forschung × …")
+    lines.append("Energie-Drossel gilt nur für den Minen-Anteil (Standardproduktion läuft immer).")
     lines.append("```")
     lines.append("")
-    lines.append("| Ressource | Multiplikator | Gebäude |")
-    lines.append("|-----------|---------------|---------|")
+    lines.append("| Ressource | Standard/h | Mine-Basis | Gebäude |")
+    lines.append("|-----------|------------|------------|---------|")
     labels = {"metal": "Ferronit", "crystal": "Crytite", "fuel_cells": "Brennzellen"}
     for res, cfg in LEVEL_GROWTH.items():
-        lines.append(f"| {labels.get(res, res)} | {cfg['multiplier']} | {cfg['building']} |")
+        std = int(STANDARD_PRODUCTION_PER_HOUR[res])
+        lines.append(
+            f"| {labels.get(res, res)} | {fmt_num(std)} | {cfg['multiplier']:g} | {cfg['building']} |"
+        )
     lines.append("")
 
     lines.append("### Produktion/h (Slot 9, Speed ×1)")
@@ -107,9 +112,9 @@ def main() -> None:
     lines.append("| Ziel-Stufe | Ferronit +/h | Crytite +/h | Brennzellen +/h |")
     lines.append("|------------|--------------|-------------|-----------------|")
     for lvl in ANCHORS:
-        dm = prod_ph("metal", lvl) - (prod_ph("metal", lvl - 1) if lvl > 1 else 0)
-        dc = prod_ph("crystal", lvl) - (prod_ph("crystal", lvl - 1) if lvl > 1 else 0)
-        df = prod_ph("fuel_cells", lvl) - (prod_ph("fuel_cells", lvl - 1) if lvl > 1 else 0)
+        dm = prod_ph("metal", lvl) - prod_ph("metal", lvl - 1)
+        dc = prod_ph("crystal", lvl) - prod_ph("crystal", lvl - 1)
+        df = prod_ph("fuel_cells", lvl) - prod_ph("fuel_cells", lvl - 1)
         lines.append(f"| {lvl} | {fmt_num(dm)} | {fmt_num(dc)} | {fmt_num(df)} |")
     lines.append("")
 

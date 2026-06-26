@@ -727,9 +727,9 @@ class EffectResolver:
     def debug_snapshot(self) -> Dict[str, Any]:
         mods = self.get_modifiers()
         energy_total, energy_used = self.compute_energy()
-        m_rate, c_rate = self.production_rates_per_sec()
-        caps = self.get_storage_capacity()
         ratio = self.energy_ratio(energy_total, energy_used)
+        m_rate, c_rate = self.production_rates_per_sec(ratio)
+        caps = self.get_storage_capacity()
         active_sources = [s for s in self._sources if s.get("status") == "active"]
         prepared_sources = [s for s in self._sources if s.get("status") == "prepared"]
         return {
@@ -746,8 +746,8 @@ class EffectResolver:
             "energy": {"total": energy_total, "used": energy_used, "ratio": ratio},
             "production_per_sec": {"metal": m_rate, "crystal": c_rate},
             "production_per_hour": {
-                "metal": int(m_rate * ratio * 3600),
-                "crystal": int(c_rate * ratio * 3600),
+                "metal": int(m_rate * 3600),
+                "crystal": int(c_rate * 3600),
             },
             "storage": caps,
             "build_time_speed": mods.get("build_time_speed", 1.0),
@@ -864,23 +864,25 @@ class EffectResolver:
             full = _mod_float(mods, "fuel_prod_factor")
         return full / max(research_part, 1e-12)
 
-    def production_rates_per_sec(self) -> Tuple[float, float]:
+    def production_rates_per_sec(self, energy_ratio: float = 1.0) -> Tuple[float, float]:
         from ..production_formula import calculate_resource_output, production_context_from_resolver
 
-        ctx_m = production_context_from_resolver(self, "metal", energy_ratio=1.0)
-        ctx_c = production_context_from_resolver(self, "crystal", energy_ratio=1.0)
+        ratio_f = max(0.0, float(energy_ratio))
+        ctx_m = production_context_from_resolver(self, "metal", energy_ratio=ratio_f)
+        ctx_c = production_context_from_resolver(self, "crystal", energy_ratio=ratio_f)
         metal_ph = calculate_resource_output("metal", ctx_m)
         crystal_ph = calculate_resource_output("crystal", ctx_c)
         return metal_ph / 3600.0, crystal_ph / 3600.0
 
-    def fuel_cells_rate_per_sec(self) -> float:
-        per_hour = self.fuel_cells_production_per_hour()
+    def fuel_cells_rate_per_sec(self, energy_ratio: float = 1.0) -> float:
+        per_hour = self.fuel_cells_production_per_hour(energy_ratio)
         return per_hour / 3600.0 if per_hour > 0 else 0.0
 
-    def fuel_cells_production_per_hour(self) -> float:
+    def fuel_cells_production_per_hour(self, energy_ratio: float = 1.0) -> float:
         from ..production_formula import calculate_resource_output, production_context_from_resolver
 
-        ctx = production_context_from_resolver(self, "fuel_cells", energy_ratio=1.0)
+        ratio_f = max(0.0, float(energy_ratio))
+        ctx = production_context_from_resolver(self, "fuel_cells", energy_ratio=ratio_f)
         return calculate_resource_output("fuel_cells", ctx)
 
     def fuel_storage_capacity(self) -> int:

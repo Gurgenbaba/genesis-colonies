@@ -1,4 +1,4 @@
-# Production Formula System (GC-820 / GC-860)
+# Production Formula System (GC-820 / Ferdi-Rebase)
 
 **Single source of truth** for all resource production in Genesis Colonies.
 
@@ -6,7 +6,7 @@
 |------|--------|
 | Implementation | `game/production_formula.py` |
 | Integration / tick | `game/effects/effect_resolver.py` → `game/resources.py` |
-| Energy (supply/demand) | `EffectResolver.compute_energy()` — not part of level growth |
+| Energy (supply/demand) | `EffectResolver.compute_energy()` — throttles **mine output only** |
 
 ---
 
@@ -19,12 +19,12 @@ ProductionModifiers (per-factor multipliers)
         ↓
 calculate_resource_output(resource_type, context)  →  output / hour
         ↓
-EffectResolver.production_rates_per_sec()  →  ÷ 3600 for tick
+EffectResolver.production_rates_per_sec(energy_ratio)  →  ÷ 3600 for tick
 ```
 
-New gameplay systems **register modifiers** on `ProductionContext` or extend `ProductionModifiers`. Modifier hooks stay stable; only the base level curve changed in GC-860.
+New gameplay systems **register modifiers** on `ProductionContext` or extend `ProductionModifiers`. Modifier hooks stay stable; base curve = standard income + mine exponential (Ferdi-Rebase).
 
-Forbidden: second production engines, frontend production math, hidden level softcaps, stacked exponential tiers beyond the canonical Ferdi base.
+Forbidden: second production engines, frontend production math, hidden level softcaps, stacked exponential tiers beyond the canonical base.
 
 ---
 
@@ -35,43 +35,44 @@ All resources:
 ```text
 Output/h
 
-  = (multiplier × level × 1.075^level + 365)
-  × production_speed
-  × SlotModifier
-  × TemperatureModifier
-  × ResearchModifier
-  × EnergyModifier
-  × BuildingModifier
-  × PlanetModifier
-  × EmpireModifier
-  × AllianceModifier
-  × DirectiveModifier
-  × EventModifier
-  × SeasonModifier
+  = StandardBase × production_speed × modifiers (excl. energy)
+  + MineBase × 1.075^level × production_speed × modifiers (incl. energy on mine part)
 ```
 
-### Level growth (Ferdi base — GC-860)
+### Standard production (every planet)
 
-| Resource | Key | Multiplier |
-|----------|-----|------------|
-| Ferronit | `metal` | 100 |
-| Crytite | `crystal` | 66 |
-| Brennzellen | `fuel_cells` | 33 |
+| Resource | Key | Standard / h |
+|----------|-----|--------------|
+| Ferronit | `metal` | 15 000 |
+| Crytite | `crystal` | 10 000 |
+| Brennzellen | `fuel_cells` | 5 000 |
 
-Shared constants: growth rate **1.075**, flat offset **+365** per hour.
+Runs without mines. **Not** reduced by energy shortage (baseline supply).
 
-Central helper: `ferdi_base_output(resource_type, level)` in `game/production_formula.py`.
+Constants: `STANDARD_PRODUCTION_PER_HOUR` in `game/production_formula.py`.
+
+### Mine growth (Ferdi-Rebase)
+
+| Resource | Key | Mine base | Formula |
+|----------|-----|-----------|---------|
+| Ferronit | `metal` | 150 | `150 × 1.075^level` |
+| Crytite | `crystal` | 100 | `100 × 1.075^level` |
+| Brennzellen | `fuel_cells` | 50 | `50 × 1.075^level` |
+
+Level 0 mine → no mine output (standard still applies).
+
+Central helpers: `standard_output()`, `mine_output()` / `ferdi_base_output()` in `game/production_formula.py`.
 
 `production_speed` = admin `production_speed` setting (default 1.0).
 
 ### Modifier order
 
-Applied as a single product (order commutative). Convention in code:
+Applied as a single product per part (order commutative). Convention in code:
 
 1. Slot (galaxy position)
 2. Temperature (fuel only)
 3. Research
-4. Energy
+4. Energy (**mine part only**)
 5. Building / Planet / Empire / Alliance / Directive / Event / Season
 
 ### Slot bonuses
@@ -104,7 +105,7 @@ Outside range: factor `1.0`. Linear interpolation within range.
 energy_ratio = min(1, energy_available / energy_required)
 ```
 
-Under-supply reduces production; over-supply does **not** boost above 100 %.
+Under-supply reduces **mine** production only; standard production stays at full modifier stack (excl. energy).
 
 Galaxy climate still adjusts **solar output** via `EffectResolver` (`solar_output_factor`); mine output uses slot/temperature modifiers above.
 
@@ -126,16 +127,13 @@ Galaxy climate still adjusts **solar output** via `EffectResolver` (`solar_outpu
 
 Pure formula benchmark — **excludes** climate/GD/diplomacy overlay on `directive_modifier`. Brennzellen include slot-9 temperature modifier. Live colonies may differ slightly.
 
-| Level | Ferronit/h | Crytite/h | Brennzellen/h |
-|-------|------------|-----------|---------------|
-| 1 | 473 | 436 | 460 |
-| 10 | 2 426 | 1 725 | 1 202 |
-| 30 | 26 630 | 17 700 | 10 384 |
-| 60 | 460 260 | 303 896 | 174 903 |
-| 90 | 6 039 911 | 3 986 465 | 2 291 807 |
-| 120 | 70 501 638 | 46 531 205 | 26 748 410 |
+Regenerate from code:
 
-Vollständige Ankertabellen: [GC_ANCHOR_TABLES_X1.md](GC_ANCHOR_TABLES_X1.md) · Regenerieren: `python scripts/gen_anchor_tables.py docs/GC_ANCHOR_TABLES_X1.md`
+```bash
+python scripts/gen_anchor_tables.py docs/GC_ANCHOR_TABLES_X1.md
+```
+
+Vollständige Ankertabellen: [GC_ANCHOR_TABLES_X1.md](GC_ANCHOR_TABLES_X1.md)
 
 ---
 
@@ -143,28 +141,22 @@ Vollständige Ankertabellen: [GC_ANCHOR_TABLES_X1.md](GC_ANCHOR_TABLES_X1.md) ·
 
 | Stage | Level | Intent |
 |-------|-------|--------|
-| Early | 10 | Noticeable growth |
+| Early | 10 | Fast baseline via standard income; mines add on top |
 | Mid | 30 | Comfortable progression |
 | Strong | 60 | High output |
-| High-end | 90 | Endgame ramp |
+| High-end | 90 | Endgame ramp (not inflated by flat +365 offset) |
 | Cap | 120 | Maximum mine levels (requires nexus extensions above L50) |
-
-Target readable ranges: millions → billions → low trillions. Avoid quadrillions in normal play.
 
 ---
 
 ## Examples
 
-**Level 30 Ferronit, slot 5 (+16 % slot), mining L10 (+30 %), energy 80 %:**
+**No mine (L0), slot 9:** Ferronit **15 000 / h**, Crytite **10 000 / h**, Brennzellen **5 000 / h**.
+
+**Level 10 Ferronit mine, slot 5 (+16 % slot), mining L10 (+30 %), energy 80 %:**
 
 ```text
-26 630 × 1.16 × 1.30 × 0.80 ≈ 32 100 / h
-```
-
-**Level 60 Brennzellen, slot 15 (+20 % slot, +35 % temp cap), drone L5 (+10 %):**
-
-```text
-174 903 × 1.20 × 1.35 × 1.10 ≈ 311 500 / h
+15 000 × 1.16 × 1.30 + (150 × 1.075^10) × 1.16 × 1.30 × 0.80
 ```
 
 ---
@@ -175,7 +167,7 @@ Target readable ranges: millions → billions → low trillions. Avoid quadrilli
 |----------|--------|
 | `EffectResolver.production_rates_per_sec` | Resource tick |
 | `EffectResolver.get_building_production_per_hour` | Overview, buildings, `/api/game-state` |
-| `game/resources.update_planet_resources` | Applies `energy_ratio` at tick |
+| `game/resources.update_planet_resources` | Applies `energy_ratio` at tick (mine-only throttle) |
 | `game/inventory_loot.py` | Scaled rewards from production |
 
 ---
@@ -183,7 +175,7 @@ Target readable ranges: millions → billions → low trillions. Avoid quadrilli
 ## Forbidden patterns
 
 - Duplicate formulas in `buildings.py`, `static/`, or feature modules
-- Legacy `base × level^exponent` power scaling (replaced GC-860)
+- Legacy `base × level^exponent + 365` additive offset
 - Level-based softcaps (L50 bonus, L120 cap) in production
 - Frontend `production_per_hour` calculation as truth
 - Parallel `production_engine` modules

@@ -246,11 +246,11 @@ def _apply_production_tick(
     floor_crystal = int(planet.get("crystal") or 0)
     floor_fuel = int(planet.get("fuel_cells") or 0)
 
-    m_rate, c_rate = resolver.production_rates_per_sec()
-    fc_rate = resolver.fuel_cells_rate_per_sec()
-    delta_metal = int(m_rate * ratio * delta)
-    delta_crystal = int(c_rate * ratio * delta)
-    delta_fuel_cells = int(fc_rate * ratio * delta)
+    m_rate, c_rate = resolver.production_rates_per_sec(ratio)
+    fc_rate = resolver.fuel_cells_rate_per_sec(ratio)
+    delta_metal = int(m_rate * delta)
+    delta_crystal = int(c_rate * delta)
+    delta_fuel_cells = int(fc_rate * delta)
 
     apply_production_delta(
         planet,

@@ -44,7 +44,7 @@ Vollständige Tabellen: **[GC_ANCHOR_TABLES_X1.md](GC_ANCHOR_TABLES_X1.md)**
 4. **Minen-ROI-Anker:** L20=50h … L120=2000h — Ziel für Ferronit-Mine; Crytite/Brennzellen weichen ab.
 5. **Brennzellen-Lager:** Kapazität nur mit Gebäude **`fuel_storage`** — kein integrierter Werks-Puffer.
 6. **Klima-Prod-Faktoren:** zusätzlich zu Slot/Temperatur in `production_formula.py` via `directive_modifier` (Klima + Galactic Directives + Diplomacy).
-7. **Produktions-Basis (GC-860):** `multiplier × level × 1.075^level + 365` — siehe [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
+7. **Produktions-Basis (Ferdi-Rebase):** `Standard + MineBasis × 1.075^level` — Standard 15k/10k/5k; Energie nur auf Minen-Anteil — siehe [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 
 ---
 

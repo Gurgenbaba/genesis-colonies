@@ -468,10 +468,11 @@ class TestQueueFinishLiveEffects:
         assert int(buildings.get("metal_mine", 0)) == 2
 
         r = EffectResolver(buildings, get_research_levels(pid))
-        m_rate, _ = r.production_rates_per_sec()
-        from game.production_formula import level_growth
+        m_rate, _ = r.production_rates_per_sec(1.0)
+        from game.production_formula import calculate_resource_output, production_context_from_resolver
 
-        assert m_rate == pytest.approx(level_growth("metal", 2, 1.0) / 3600.0, rel=0.01)
+        ctx = production_context_from_resolver(r, "metal", energy_ratio=1.0)
+        assert m_rate == pytest.approx(calculate_resource_output("metal", ctx) / 3600.0, rel=0.01)
 
 
 class TestLiveRefreshGuards:
@@ -777,9 +778,10 @@ class TestResearchEffectRealityAudit:
         b = {"fuel_cell_plant": 5}
         er = EffectResolver(b, {}, settings={"production_speed": 1.0})
         per_hour = er.fuel_cells_production_per_hour()
-        from game.production_formula import level_growth
+        from game.production_formula import calculate_resource_output, production_context_from_resolver
 
-        assert per_hour == pytest.approx(level_growth("fuel_cells", 5, 1.0), rel=1e-6)
+        ctx = production_context_from_resolver(er, "fuel_cells", energy_ratio=1.0)
+        assert per_hour == pytest.approx(calculate_resource_output("fuel_cells", ctx), rel=1e-6)
 
     def test_gc820_economy_ratio_at_high_levels(self):
         """High-level mines: Ferronit > Crytite > Brennzellen with power scaling."""
