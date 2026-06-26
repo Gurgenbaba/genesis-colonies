@@ -2404,6 +2404,7 @@
   "fleet_arrival_at": "Arrival",
   "fleet_return_at": "Return",
   "fleet_leg_outbound": "Outbound",
+  "fleet_leg_inbound": "Inbound",
   "fleet_leg_returning": "Return flight",
   "fleet_leg_holding": "Holding",
   "fleet_route_tooltip_mission": "Mission",

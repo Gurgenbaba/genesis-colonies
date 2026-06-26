@@ -2404,6 +2404,7 @@
   "fleet_arrival_at": "Ankunft",
   "fleet_return_at": "Rückkehr",
   "fleet_leg_outbound": "Hinflug",
+  "fleet_leg_inbound": "Eingehend",
   "fleet_leg_returning": "Rückflug",
   "fleet_leg_holding": "Haltend",
   "fleet_route_tooltip_mission": "Mission",

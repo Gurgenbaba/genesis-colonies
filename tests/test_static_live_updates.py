@@ -1068,6 +1068,17 @@ def test_main_js_gc640_global_fleet_hud():
     assert "recall_fleet_movement" in fleet_py
 
 
+def test_main_js_gc_fleet_incoming_attack_alert_row():
+    """GC-FLEET-ALERT UX: incoming attack uses fleet HUD row, not separate button."""
+    src = _read("static/main.js")
+    css = _read("static/style.css")
+    assert "function createFleetAttackAlertRow()" in src
+    assert "gc-fleet-hud-row--incoming-alert" in src
+    assert "gc-fleet-alert--danger" not in css
+    assert "gcFleetAttackPulse" not in css
+    assert 'document.createElement("button")' not in src.split("function syncFleetAttackAlert")[1].split("GC.syncFleetAttackAlert")[0]
+
+
 def test_main_js_gc657_fleet_drawer_timer_selection_separation():
     """GC-657+: compact fleet HUD rows with per-row countdown and hover tooltip."""
     src = _read("static/main.js")

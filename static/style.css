@@ -18739,48 +18739,35 @@ body.gc-body-ingame .logistics-page input[type="number"]::-webkit-inner-spin-but
   }
 }
 
-.gc-fleet-drawer-root .gc-fleet-alert{
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  margin: 0 0 6px;
-  padding: 6px 10px;
-  border-radius: var(--gc-radius-sm);
-  border: 1px solid rgba(120, 190, 255, 0.16);
-  background: linear-gradient(180deg, rgba(8, 14, 28, 0.92), rgba(6, 10, 22, 0.78));
-  font-size: 0.76rem;
-  font-weight: 600;
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: pointer;
+.gc-fleet-hud-row--incoming-alert{
+  cursor: default;
 }
 
-.gc-fleet-alert--danger{
-  color: #ffd6d6;
-  border-color: rgba(255, 60, 60, 0.75);
-  background: rgba(120, 0, 0, 0.35);
-  box-shadow: 0 0 14px rgba(255, 40, 40, 0.45);
-  animation: gcFleetAttackPulse 1.1s ease-in-out infinite;
+.gc-fleet-hud-row--incoming-alert .gc-fleet-hud-route{
+  color: #fca5a5;
 }
 
-.gc-fleet-alert[hidden]{
-  display: none !important;
+.gc-fleet-hud-row--incoming-alert .gc-fleet-hud-time{
+  color: #fca5a5;
+  text-shadow: 0 0 8px rgba(255, 80, 80, 0.28);
 }
 
-@keyframes gcFleetAttackPulse{
-  0%, 100%{
-    opacity: 0.72;
-    box-shadow: 0 0 8px rgba(255, 40, 40, 0.35);
-  }
-  50%{
-    opacity: 1;
-    box-shadow: 0 0 18px rgba(255, 40, 40, 0.8);
-  }
+.gc-fleet-hud-row--incoming-alert .gc-fleet-hud-ships{
+  color: #fca5a5;
+}
+
+.gc-fleet-hud-row--incoming-alert .gc-fleet-hud-track-line{
+  background: linear-gradient(
+    90deg,
+    rgba(255, 80, 80, 0.08) 0%,
+    rgba(255, 100, 100, 0.42) 50%,
+    rgba(255, 80, 80, 0.08) 100%
+  );
+  box-shadow: 0 0 6px rgba(255, 80, 80, 0.16);
+}
+
+.gc-fleet-hud-row--incoming-alert.is-urgent .gc-fleet-hud-time{
+  animation: gc-fleet-drawer-timer-pulse 1s ease-in-out infinite;
 }
 
 /* GC-640A — legacy fleet HUD chip styles (fleet page / badges) */

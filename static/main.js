@@ -9389,6 +9389,7 @@
     const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
     updateFleetAttackAlertCountdown(now);
     document.querySelectorAll("[data-fleet-drawer-row]").forEach((row) => {
+      if (row.hasAttribute("data-fleet-alert")) return;
       const movementId = Number(row.dataset.movementId || 0);
       const mv = movementId ? _fleetDrawerMovementById.get(movementId) : null;
       const cdEl = row.querySelector("[data-fleet-drawer-countdown]");
@@ -9622,6 +9623,7 @@
     const wantedIds = new Set(items.map((mv) => String(mv.movement_id || mv.id || "")).filter(Boolean));
 
     listEl.querySelectorAll("[data-fleet-drawer-row]").forEach((row) => {
+      if (row.hasAttribute("data-fleet-alert")) return;
       const id = String(row.dataset.movementId || "");
       if (id && !wantedIds.has(id)) row.remove();
     });
@@ -9860,6 +9862,70 @@
     return row;
   }
 
+  function _fleetIncomingAttackActive(alerts) {
+    const data = alerts && typeof alerts === "object" ? alerts : (GC.lastState?.fleet_alerts || {});
+    return data.has_incoming_attack === true && Math.floor(Number(data.incoming_attack_count) || 0) > 0;
+  }
+
+  function _syncFleetHudShellVisibility(root, fleetCount, alerts) {
+    if (!root) return;
+    const hasAlert = _fleetIncomingAttackActive(alerts);
+    const showHud = fleetCount > 0 || hasAlert;
+    const emptyEl = root.querySelector("[data-fleet-drawer-empty]");
+    const panel = root.querySelector("[data-fleet-drawer-panel]");
+    if (emptyEl) emptyEl.hidden = showHud;
+    if (panel) panel.hidden = !showHud;
+    root.classList.toggle("is-empty", !showHud);
+  }
+
+  function createFleetAttackAlertRow() {
+    const row = document.createElement("article");
+    row.className = "gc-fleet-hud-row gc-fleet-drawer-row gc-fleet-hud-row--attack gc-fleet-hud-row--incoming-alert";
+    row.setAttribute("data-fleet-alert", "");
+    row.setAttribute("role", "status");
+    row.setAttribute("aria-live", "polite");
+
+    const main = document.createElement("div");
+    main.className = "gc-fleet-hud-main";
+
+    const missionEl = document.createElement("span");
+    missionEl.className = "gc-fleet-hud-mission gc-fleet-hud-mission--attack";
+    missionEl.textContent = t("fleet_mission_attack", "Angriff");
+
+    const routeEl = document.createElement("span");
+    routeEl.className = "gc-fleet-hud-route gc-fleet-drawer-row-route";
+    routeEl.dataset.fleetAlertSummary = "1";
+
+    main.append(missionEl, routeEl);
+
+    const track = createFleetHudFlightTrack();
+    track.dataset.fleetFlightStatus = "inbound";
+
+    const meta = document.createElement("div");
+    meta.className = "gc-fleet-hud-meta";
+
+    const legEl = document.createElement("span");
+    legEl.className = "gc-fleet-hud-leg";
+    legEl.textContent = t("fleet_leg_inbound", "Eingehend");
+
+    const shipsEl = document.createElement("span");
+    shipsEl.className = "gc-fleet-hud-ships gc-mono";
+    shipsEl.dataset.fleetAlertCount = "1";
+    shipsEl.hidden = true;
+
+    const timeEl = document.createElement("span");
+    timeEl.className = "gc-fleet-hud-time gc-mono";
+    timeEl.dataset.fleetDrawerCountdown = "1";
+
+    const actionWrap = document.createElement("span");
+    actionWrap.className = "gc-fleet-hud-action-wrap";
+    actionWrap.hidden = true;
+
+    meta.append(legEl, shipsEl, timeEl, actionWrap);
+    row.append(main, track, meta);
+    return row;
+  }
+
   function _fleetAttackAlertLabel(alerts) {
     const count = Math.max(0, Math.floor(Number(alerts?.incoming_attack_count) || 0));
     if (count <= 0) return "";
@@ -9870,18 +9936,23 @@
   }
 
   function updateFleetAttackAlertCountdown(serverNow) {
-    const alertEl = document.querySelector("[data-fleet-alert]");
-    if (!alertEl || alertEl.hidden) return;
-    const arrivalAt = Math.floor(Number(alertEl.dataset.arrivalAt || 0));
-    if (!arrivalAt) return;
+    const row = document.querySelector("[data-fleet-alert].gc-fleet-drawer-row");
+    if (!row || row.hidden) return;
+    const summaryEl = row.querySelector("[data-fleet-alert-summary]");
+    const cdEl = row.querySelector("[data-fleet-drawer-countdown]");
+    if (!summaryEl || !cdEl) return;
+    const arrivalAt = Math.floor(Number(row.dataset.arrivalAt || 0));
     const now = Number.isFinite(serverNow) ? serverNow : getTimerServerNow();
-    const remaining = Math.max(0, Math.floor(arrivalAt - now));
-    const base = alertEl.dataset.alertBase || alertEl.textContent || "";
-    const arrivalText = remaining > 0
-      ? tf("fleet_alert_arrival_in", { time: formatCountdownRemain(remaining) }, `Ankunft in ${formatCountdownRemain(remaining)}`)
-      : t("fleet_arrival_at", "Ankunft");
-    const next = remaining > 0 ? `${base} · ${arrivalText}` : base;
-    _setIfChanged(alertEl, next);
+    const remaining = arrivalAt > 0 ? Math.max(0, Math.floor(arrivalAt - now)) : 0;
+    if (remaining > 0) {
+      _setIfChanged(cdEl, formatCountdownRemain(remaining));
+      row.classList.toggle("is-urgent", remaining < 10);
+      cdEl.classList.toggle("is-urgent", remaining < 10);
+    } else if (arrivalAt > 0) {
+      _setIfChanged(cdEl, t("fleet_arrival_at", "Ankunft"));
+      row.classList.remove("is-urgent");
+      cdEl.classList.remove("is-urgent");
+    }
   }
 
   function syncFleetAttackAlert(alerts) {
@@ -9889,51 +9960,56 @@
     if (!root) return;
 
     const data = alerts && typeof alerts === "object" ? alerts : {};
-    const active = data.has_incoming_attack === true && Math.floor(Number(data.incoming_attack_count) || 0) > 0;
-    let alertEl = root.querySelector("[data-fleet-alert]");
+    const active = _fleetIncomingAttackActive(data);
+    const listEl = root.querySelector("[data-fleet-drawer-list]");
+    let alertRow = root.querySelector("[data-fleet-alert].gc-fleet-drawer-row");
 
     if (!active) {
-      if (alertEl) {
-        alertEl.hidden = true;
-        alertEl.removeAttribute("data-arrival-at");
-        alertEl.dataset.alertBase = "";
-        alertEl.textContent = "";
+      if (alertRow) {
+        alertRow.remove();
       }
+      const fleetCount = normalizeActiveFleetsPayload(GC.lastState?.active_fleets).count;
+      _syncFleetHudShellVisibility(root, fleetCount, data);
       return;
     }
 
-    if (!alertEl) {
-      alertEl = document.createElement("button");
-      alertEl.type = "button";
-      alertEl.className = "gc-fleet-alert gc-fleet-alert--danger";
-      alertEl.setAttribute("data-fleet-alert", "");
-      alertEl.setAttribute("role", "alert");
-      alertEl.setAttribute("aria-live", "polite");
-      alertEl.addEventListener("click", (e) => {
-        e.preventDefault();
-        if (typeof GC.navigateTo === "function") {
-          GC.navigateTo("/fleet");
-        } else {
-          window.location.href = "/fleet";
-        }
-      });
-      const emptyEl = root.querySelector("[data-fleet-drawer-empty]");
-      if (emptyEl) {
-        root.insertBefore(alertEl, emptyEl);
-      } else {
-        root.prepend(alertEl);
-      }
+    if (!alertRow) {
+      alertRow = createFleetAttackAlertRow();
+    }
+
+    const count = Math.max(0, Math.floor(Number(data.incoming_attack_count) || 0));
+    const summaryEl = alertRow.querySelector("[data-fleet-alert-summary]");
+    const shipsEl = alertRow.querySelector("[data-fleet-alert-count]");
+    if (summaryEl) {
+      _setIfChanged(summaryEl, _fleetAttackAlertLabel(data));
+    }
+    if (shipsEl) {
+      shipsEl.textContent = count > 1 ? fmtNumber(count) : "";
+      shipsEl.hidden = count <= 1;
     }
 
     const arrivalAt = Math.floor(Number(data.next_attack_arrival) || 0);
-    const base = _fleetAttackAlertLabel(data);
-    alertEl.hidden = false;
-    alertEl.dataset.alertBase = base;
     if (arrivalAt > 0) {
-      alertEl.dataset.arrivalAt = String(arrivalAt);
+      alertRow.dataset.arrivalAt = String(arrivalAt);
+      const cdEl = alertRow.querySelector("[data-fleet-drawer-countdown]");
+      if (cdEl) cdEl.dataset.timerTarget = String(arrivalAt);
     } else {
-      alertEl.removeAttribute("data-arrival-at");
+      alertRow.removeAttribute("data-arrival-at");
+      const cdEl = alertRow.querySelector("[data-fleet-drawer-countdown]");
+      if (cdEl) {
+        cdEl.removeAttribute("data-timer-target");
+        cdEl.textContent = "";
+      }
     }
+
+    if (listEl) {
+      listEl.prepend(alertRow);
+    } else {
+      root.prepend(alertRow);
+    }
+
+    const fleetCount = normalizeActiveFleetsPayload(GC.lastState?.active_fleets).count;
+    _syncFleetHudShellVisibility(root, fleetCount, data);
     updateFleetAttackAlertCountdown(getTimerServerNow());
     GC.startProgressTicker();
   }
@@ -9953,15 +10029,12 @@
     }
 
     root.hidden = false;
-    root.classList.toggle("is-empty", count === 0);
 
     const showAll = isFleetDrawerShowAll();
     const visibleLimit = Math.max(1, Number(payload.visible_limit) || 5);
 
-    const emptyEl = root.querySelector("[data-fleet-drawer-empty]");
-    const panel = root.querySelector("[data-fleet-drawer-panel]");
-    if (emptyEl) emptyEl.hidden = count > 0;
-    if (panel) panel.hidden = count === 0;
+    const hasIncomingAttack = _fleetIncomingAttackActive(GC.lastState?.fleet_alerts);
+    _syncFleetHudShellVisibility(root, count, GC.lastState?.fleet_alerts);
     if (count > 0) notifyFleetDrawerLayoutChange();
 
     const listEl = root.querySelector("[data-fleet-drawer-list]");

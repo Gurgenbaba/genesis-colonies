@@ -2401,6 +2401,7 @@
   "fleet_arrival_at": "Chegada",
   "fleet_return_at": "Retornar",
   "fleet_leg_outbound": "Saída",
+  "fleet_leg_inbound": "A caminho",
   "fleet_leg_returning": "Voo de volta",
   "fleet_leg_holding": "Contenção",
   "fleet_route_tooltip_mission": "Missão",
