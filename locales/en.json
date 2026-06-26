@@ -4220,6 +4220,7 @@
   "language_name_pt": "Portuguese",
   "language_name_ru": "Russian",
   "language_name_tr": "Turkish",
+  "trader_hub_subtitle": "Exchange resources · Recycle ships",
   "academy": "Genesis Academy",
   "barracks": "Orbital Barracks",
   "command_center": "Command Center",
@@ -4239,6 +4240,5 @@
   "register_hint": "Launch a new colony in the Genesis Cluster.",
   "shield_generator": "Aegis Shield Projector",
   "solar_plant": "Solar Collector Field",
-  "terraformer": "Terraformer",
-  "trader_hub_subtitle": "Exchange resources · Recycle ships"
+  "terraformer": "Terraformer"
 }
