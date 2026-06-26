@@ -2577,6 +2577,8 @@
   "fleet_error_attack_limit_reached": "Limite d'attaques atteinte : vous ne pouvez attaquer la même planète que 5 fois en 24 heures.",
   "fleet_attack_limit_reached": "Limite d'attaques atteinte : vous ne pouvez attaquer la même planète que 5 fois en 24 heures.",
   "fleet_attack_limit_remaining": "Attaques sur cette cible : {used}/{max} · Réinitialisation : {time}",
+  "fleet_error_noob_protection_blocked": "Attaque bloquée : les scores doivent rester dans un facteur de {factor} (vous : {attacker_score}, cible : {defender_score}).",
+  "fleet_noob_protection_blocked": "Attaque bloquée : les scores doivent rester dans un facteur de {factor} (vous : {attacker_score}, cible : {defender_score}).",
   "fleet_error_not_logged_in": "Non connecté.",
   "fleet_error_fleet_unavailable": "Système de flotte indisponible.",
   "fleet_error_no_ships": "Sélectionnez au moins un navire.",

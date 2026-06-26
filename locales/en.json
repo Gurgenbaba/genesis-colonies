@@ -2577,6 +2577,8 @@
   "fleet_error_attack_limit_reached": "Attack limit reached: you can only attack the same planet 5 times within 24 hours.",
   "fleet_attack_limit_reached": "Attack limit reached: you can only attack the same planet 5 times within 24 hours.",
   "fleet_attack_limit_remaining": "Attacks on this target: {used}/{max} · Reset: {time}",
+  "fleet_error_noob_protection_blocked": "Attack blocked: player scores must be within {factor}× of each other (you: {attacker_score}, target: {defender_score}).",
+  "fleet_noob_protection_blocked": "Attack blocked: player scores must be within {factor}× of each other (you: {attacker_score}, target: {defender_score}).",
   "fleet_error_not_logged_in": "Not logged in.",
   "fleet_error_fleet_unavailable": "Fleet system unavailable.",
   "fleet_error_no_ships": "Select at least one ship.",

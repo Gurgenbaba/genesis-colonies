@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import random
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, TypedDict
@@ -1052,8 +1053,21 @@ def validate_fleet_send(
             return False, "vacation_target_protected", {"target": target_info}
 
     attack_limit_info: Optional[Dict[str, Any]] = None
+    noob_protection_info: Optional[Dict[str, Any]] = None
     if mission == "attack" and target_info:
         target_planet_id = target_info.get("target_planet_id")
+        target_player_id = target_info.get("target_player_id")
+        if target_player_id:
+            ok_np, noob_protection_info = check_noob_protection(
+                int(player_id),
+                int(target_player_id),
+                conn=conn,
+            )
+            if not ok_np:
+                return False, "noob_protection_blocked", {
+                    "target": target_info,
+                    "noob_protection": noob_protection_info,
+                }
         if target_planet_id:
             ok_limit, attack_limit_info = check_attack_limit(
                 int(player_id),
@@ -1116,6 +1130,8 @@ def validate_fleet_send(
     }
     if attack_limit_info is not None:
         out["attack_limit"] = attack_limit_info
+    if noob_protection_info is not None:
+        out["noob_protection"] = noob_protection_info
     return True, "", out
 
 
@@ -1246,6 +1262,7 @@ def build_fleet_send_preview(
         block_reason = mission_reason if not mission_ok else ""
         mission_lock_payload = mission_lock_info if mission_locked else None
         attack_limit_payload: Optional[Dict[str, Any]] = None
+        noob_protection_payload: Optional[Dict[str, Any]] = None
         if mission_locked:
             block_reason = "mission_locked"
         elif ships_n and mission_ok:
@@ -1268,13 +1285,22 @@ def build_fleet_send_preview(
                 mission_lock_payload = _extra["mission_lock"]
             if (_extra or {}).get("attack_limit"):
                 attack_limit_payload = _extra["attack_limit"]
-        elif mission == "attack" and mission_ok and target_info and target_info.get("target_planet_id"):
-            attack_limit_payload = get_attack_limit_status(
-                int(player_id),
-                int(target_info["target_planet_id"]),
-                conn=conn,
-                now=now,
-            )
+            if (_extra or {}).get("noob_protection"):
+                noob_protection_payload = _extra["noob_protection"]
+        elif mission == "attack" and mission_ok and target_info:
+            if target_info.get("target_planet_id"):
+                attack_limit_payload = get_attack_limit_status(
+                    int(player_id),
+                    int(target_info["target_planet_id"]),
+                    conn=conn,
+                    now=now,
+                )
+            if target_info.get("target_player_id"):
+                _, noob_protection_payload = check_noob_protection(
+                    int(player_id),
+                    int(target_info["target_player_id"]),
+                    conn=conn,
+                )
 
         if target_info:
             attach_world_target(
@@ -1308,6 +1334,8 @@ def build_fleet_send_preview(
             payload["mission_lock"] = mission_lock_payload
         if attack_limit_payload:
             payload["attack_limit"] = attack_limit_payload
+        if noob_protection_payload:
+            payload["noob_protection"] = noob_protection_payload
         return payload
     finally:
         if own and conn is not None:
@@ -1852,6 +1880,69 @@ def build_active_fleets_payload(
 ATTACK_LIMIT_MAX_PER_TARGET = 5
 ATTACK_LIMIT_WINDOW_SEC = 24 * 60 * 60
 ATTACK_LIMIT_COUNT_STATUSES = ("outbound", "returning", "completed", "holding")
+
+# Fair-attack / noob protection — attacks only when both scores within this factor (GC-XXX).
+NOOB_PROTECTION_FACTOR = 5
+
+
+def _player_score_total(player_id: int, *, conn) -> int:
+    from .ranking import get_player_score_row
+
+    row = get_player_score_row(int(player_id), conn=conn)
+    if not row:
+        return 0
+    return max(0, int(row.get("score_total") or 0))
+
+
+def get_noob_protection_status(
+    attacker_player_id: int,
+    defender_player_id: int,
+    *,
+    conn,
+    factor: int | None = None,
+) -> Dict[str, Any]:
+    """Score-gap gate for attack missions — symmetric factor on ``score_total``."""
+    fac = max(1, int(factor if factor is not None else NOOB_PROTECTION_FACTOR))
+    atk_id = int(attacker_player_id)
+    def_id = int(defender_player_id)
+    empty = {
+        "factor": fac,
+        "attacker_score": 0,
+        "defender_score": 0,
+        "min_defender_score": 0,
+        "max_defender_score": 0,
+        "allowed": True,
+    }
+    if atk_id <= 0 or def_id <= 0 or atk_id == def_id:
+        return dict(empty)
+
+    atk_score = _player_score_total(atk_id, conn=conn)
+    def_score = _player_score_total(def_id, conn=conn)
+    min_def = int(math.ceil(atk_score / fac)) if atk_score > 0 else 0
+    max_def = int(atk_score * fac)
+    allowed = min_def <= def_score <= max_def
+    return {
+        "factor": fac,
+        "attacker_score": atk_score,
+        "defender_score": def_score,
+        "min_defender_score": min_def,
+        "max_defender_score": max_def,
+        "allowed": allowed,
+    }
+
+
+def check_noob_protection(
+    attacker_player_id: int,
+    defender_player_id: int,
+    *,
+    conn,
+) -> Tuple[bool, Dict[str, Any]]:
+    info = get_noob_protection_status(
+        int(attacker_player_id),
+        int(defender_player_id),
+        conn=conn,
+    )
+    return bool(info.get("allowed")), info
 
 
 def get_attack_limit_status(

@@ -13697,6 +13697,17 @@
           "Attack limit reached: you can only attack the same planet 5 times within 24 hours."
         );
       }
+      if (reason === "noob_protection_blocked") {
+        const np = preview?.noob_protection || {};
+        const tpl = tt(
+          "fleet_noob_protection_blocked",
+          "Attack blocked: player scores must be within {factor}× of each other (you: {attacker_score}, target: {defender_score})."
+        );
+        return tpl
+          .replace("{factor}", String(np.factor || 5))
+          .replace("{attacker_score}", fmtNumber(np.attacker_score || 0))
+          .replace("{defender_score}", fmtNumber(np.defender_score || 0));
+      }
       return tt(`fleet_error_${reason}`, tt("fleet_error_generic", "Fleet action failed."));
     };
 

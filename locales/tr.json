@@ -2577,6 +2577,8 @@
   "fleet_error_attack_limit_reached": "Saldırı limiti doldu: aynı gezegene 24 saat içinde yalnızca 5 kez saldırabilirsiniz.",
   "fleet_attack_limit_reached": "Saldırı limiti doldu: aynı gezegene 24 saat içinde yalnızca 5 kez saldırabilirsiniz.",
   "fleet_attack_limit_remaining": "Bu hedefe saldırılar: {used}/{max} · Sıfırlama: {time}",
+  "fleet_error_noob_protection_blocked": "Saldırı engellendi: oyuncu puanları {factor}× aralığında olmalı (sen: {attacker_score}, hedef: {defender_score}).",
+  "fleet_noob_protection_blocked": "Saldırı engellendi: oyuncu puanları {factor}× aralığında olmalı (sen: {attacker_score}, hedef: {defender_score}).",
   "fleet_error_not_logged_in": "Giriş yapılmadı.",
   "fleet_error_fleet_unavailable": "Filo sistemi mevcut değil.",
   "fleet_error_no_ships": "En az bir gemi seçin.",

@@ -2577,6 +2577,8 @@
   "fleet_error_attack_limit_reached": "Osiągnięto limit ataków: możesz atakować ten sam planetę tylko 5 razy w ciągu 24 godzin.",
   "fleet_attack_limit_reached": "Osiągnięto limit ataków: możesz atakować ten sam planetę tylko 5 razy w ciągu 24 godzin.",
   "fleet_attack_limit_remaining": "Ataki na ten cel: {used}/{max} · Reset: {time}",
+  "fleet_error_noob_protection_blocked": "Atak zablokowany: punkty graczy muszą mieścić się w {factor}-krotnym zakresie (ty: {attacker_score}, cel: {defender_score}).",
+  "fleet_noob_protection_blocked": "Atak zablokowany: punkty graczy muszą mieścić się w {factor}-krotnym zakresie (ty: {attacker_score}, cel: {defender_score}).",
   "fleet_error_not_logged_in": "Nie zalogowany.",
   "fleet_error_fleet_unavailable": "System flotowy niedostępny.",
   "fleet_error_no_ships": "Wybierz co najmniej jeden statek.",
