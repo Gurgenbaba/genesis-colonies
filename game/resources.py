@@ -387,6 +387,17 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
         energy_total, energy_used = resolver.compute_energy()
         ratio = EffectResolver.energy_ratio(energy_total, energy_used)
 
+        tick_start = float(planet.get("last_update") or now)
+        prod_delta_metal = 0
+        prod_delta_crystal = 0
+        prod_delta_fuel = 0
+        if delta > 0:
+            m_rate, c_rate = resolver.production_rates_per_sec(ratio)
+            fc_rate = resolver.fuel_cells_rate_per_sec(ratio)
+            prod_delta_metal = int(m_rate * delta)
+            prod_delta_crystal = int(c_rate * delta)
+            prod_delta_fuel = int(fc_rate * delta)
+
         _apply_production_tick(
             planet,
             buildings,
@@ -397,6 +408,29 @@ def update_planet_resources(planet: dict, conn=None, *, skip_queue_finish: bool 
             mods=mods,
             monotonic_floor=True,
         )
+
+        if delta > 0 and (prod_delta_metal or prod_delta_crystal or prod_delta_fuel):
+            try:
+                from .directives.progress import emit_resource_produced_events
+
+                emit_resource_produced_events(
+                    player_id,
+                    planet_id=planet_id,
+                    tick_start=tick_start,
+                    delta_metal=prod_delta_metal,
+                    delta_crystal=prod_delta_crystal,
+                    delta_fuel_cells=prod_delta_fuel,
+                    conn=conn,
+                    now=now,
+                )
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).exception(
+                    "imperial_directives production progress failed player=%s planet=%s",
+                    player_id,
+                    planet_id,
+                )
 
         planet["last_update"] = now
         planet["energy_total"] = int(energy_total)

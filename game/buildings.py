@@ -1913,6 +1913,7 @@ def queue_build_for_planet(
 
         jobs_queued = 0
         job_ids: List[int] = []
+        queued_spends: List[tuple[int, int, int]] = []
         last_payload: Dict[str, Any] = {}
         last_reason = "invalid"
         last_fail: Dict[str, Any] = {}
@@ -2020,6 +2021,7 @@ def queue_build_for_planet(
             )
             jobs_queued += 1
             job_ids.append(int(job_id))
+            queued_spends.append((int(job_id), int(cost_metal), int(cost_crystal)))
             last_payload = {
                 "job_id": int(job_id),
                 "building_type": building_type,
@@ -2049,6 +2051,27 @@ def queue_build_for_planet(
             return False, last_reason, last_fail
 
         commit(conn)
+
+        if queued_spends:
+            try:
+                from .directives.progress import emit_resource_spent_event
+
+                for job_id, spend_m, spend_c in queued_spends:
+                    emit_resource_spent_event(
+                        user_id,
+                        metal=spend_m,
+                        crystal=spend_c,
+                        source_event_id=f"build_spend:{job_id}",
+                        context="build",
+                        conn=conn,
+                        now=now,
+                    )
+                conn.commit()
+            except Exception:
+                logger.exception(
+                    "imperial_directives build spend progress failed player=%s",
+                    user_id,
+                )
 
         if finished_any:
             invalidate_player_score_cache(user_id)

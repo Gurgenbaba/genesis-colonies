@@ -21,6 +21,7 @@ Status: v1.5.9.2 (2026-06-24)
 | EPIC-13 | Queue Card UX | ✅ | [GC-536_QUEUE_CARD_UX.md](GC-536_QUEUE_CARD_UX.md) |
 | EPIC-14 | Megabunker UX Feedback Polish | 📋 | [GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md](GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md) |
 | EPIC-15 | Imperium & Expansion (Genesis 2.0) | 📋 | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) |
+| EPIC-17 | Imperial Directives (High Command) | 📋 | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
 
 ---
 
@@ -81,3 +82,18 @@ Details: [GC-557_MEGABUNKER_UX_FEEDBACK_POLISH.md](GC-557_MEGABUNKER_UX_FEEDBACK
 | GC-568 | Territorial Warfare |
 
 Details: [IMPERIUM_VISION.md](IMPERIUM_VISION.md) · [ROADMAP.md](ROADMAP.md) Phase 9
+
+**EPIC-17 Imperial Directives** → nicht als Ganzes implementieren:
+
+| Ticket | Fokus |
+|--------|-------|
+| GC-910 | Master-Doc + Architektur ([IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md)) |
+| GC-911A | Schema + definitions + generator + scaling |
+| GC-911B | service + lazy generation + Tests |
+| GC-912A | progress + Hooks Economy/Science |
+| GC-912B | Hooks Fleet/Military/Exploration |
+| GC-913 | rewards + claim API |
+| GC-914A | live-state + nav badges |
+| GC-914B | Page UI + i18n (8 Locales) |
+
+Details: [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md)

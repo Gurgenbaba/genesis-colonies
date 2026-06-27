@@ -346,6 +346,7 @@ def finish_planet_build_jobs(
     cur = conn.cursor()
     due_cutoff = float(now) + _due_epsilon()
     completed = 0
+    build_completions: list[dict] = []
 
     while True:
         rows = get_build_queue_rows(int(planet_id), conn=conn)
@@ -357,9 +358,10 @@ def finish_planet_build_jobs(
 
         buildings = get_planet_buildings(int(planet_id), conn=conn)
         btype = str(head["building_type"])
+        job_id = int(head["id"])
         if btype in buildings:
             buildings[btype] = int(buildings.get(btype, 0)) + 1
-        delete_build_job(int(head["id"]), conn=conn)
+        delete_build_job(job_id, conn=conn)
 
         cur.execute(
             f"""
@@ -370,6 +372,29 @@ def finish_planet_build_jobs(
             [int(buildings.get(k, 0)) for k in _BUILDING_KEYS] + [int(planet_id)],
         )
         completed += 1
+        build_completions.append(
+            {
+                "building_type": btype,
+                "source_event_id": f"build_finish:{job_id}",
+            }
+        )
+
+    if build_completions:
+        try:
+            from .directives.progress import emit_build_complete_events
+
+            emit_build_complete_events(
+                int(player_id),
+                build_completions,
+                conn=conn,
+                now=float(now),
+            )
+        except Exception:
+            logger.exception(
+                "imperial_directives build progress failed player=%s planet=%s",
+                player_id,
+                planet_id,
+            )
 
     return completed
 
@@ -420,6 +445,7 @@ def finish_player_research_jobs(
     cur = conn.cursor()
     due_cutoff = float(now) + _due_epsilon()
     completed = 0
+    research_completions: list[dict] = []
 
     while True:
         cur.execute(
@@ -435,8 +461,9 @@ def finish_player_research_jobs(
 
         levels = get_research_levels(int(user_id), conn=conn)
         tech_key = str(head["tech_key"])
+        job_id = int(head["id"])
         levels[tech_key] = int(levels.get(tech_key, 0)) + 1
-        cur.execute("DELETE FROM research_queue WHERE id = ?;", (int(head["id"]),))
+        cur.execute("DELETE FROM research_queue WHERE id = ?;", (job_id,))
 
         for tkey, lvl in levels.items():
             cur.execute(
@@ -448,6 +475,28 @@ def finish_player_research_jobs(
                 (int(user_id), str(tkey), int(lvl)),
             )
         completed += 1
+        research_completions.append(
+            {
+                "tech_key": tech_key,
+                "source_event_id": f"research_finish:{job_id}",
+            }
+        )
+
+    if research_completions:
+        try:
+            from .directives.progress import emit_research_complete_events
+
+            emit_research_complete_events(
+                int(user_id),
+                research_completions,
+                conn=conn,
+                now=float(now),
+            )
+        except Exception:
+            logger.exception(
+                "imperial_directives research progress failed player=%s",
+                user_id,
+            )
 
     return completed
 

@@ -28355,6 +28355,363 @@ body.gc-reduced-motion .gc-loot-tile.is-winning {
   border-radius: 0;
 }
 
+.id-directives-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.id-directives-eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gc-accent-cyan, #46e5ff);
+  opacity: 0.9;
+}
+
+.id-directives-header .section-title {
+  letter-spacing: 0.03em;
+}
+
+/* Command strip — meta + claim-all */
+.id-directives-command-strip {
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(70, 229, 255, 0.2);
+  background:
+    linear-gradient(135deg, rgba(10, 20, 36, 0.98) 0%, rgba(4, 8, 16, 0.99) 100%);
+  box-shadow:
+    0 0 0 1px rgba(70, 229, 255, 0.05),
+    0 8px 28px rgba(0, 0, 0, 0.35);
+  clip-path: polygon(
+    0 8px, 8px 0, calc(100% - 8px) 0, 100% 8px,
+    100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px)
+  );
+}
+
+.id-directives-command-strip__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  padding: 14px 18px;
+}
+
+.id-directives-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem 2rem;
+}
+
+.id-directives-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.id-directives-stat__label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(200, 232, 244, 0.55);
+}
+
+.id-directives-stat__value {
+  font-size: 0.88rem;
+  color: var(--gc-neon-cyan, #46e5ff);
+  letter-spacing: 0.04em;
+}
+
+.id-directives-claim-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-left: auto;
+}
+
+.id-directives-claimable-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.id-directives-pending-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 4px 10px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #e8f4ff;
+  background: rgba(8, 16, 28, 0.92);
+  border: 1px solid rgba(70, 229, 255, 0.35);
+  box-shadow: 0 0 12px rgba(70, 229, 255, 0.15);
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+}
+
+.id-directives-pending-badge:not(:empty):not([data-id-claimable-count="0"]) {
+  color: #b8f5c8;
+  border-color: rgba(110, 207, 143, 0.45);
+  box-shadow: 0 0 14px rgba(110, 207, 143, 0.2);
+}
+
+.id-directives-claimable-label {
+  font-size: 0.78rem;
+  color: var(--gc-text-dim);
+  letter-spacing: 0.02em;
+}
+
+.id-directives-claim-all-btn:disabled {
+  opacity: 0.45;
+}
+
+.id-directive-grid {
+  margin-top: 4px;
+}
+
+.id-directive-grid--weekly {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+/* Directive cards — inventory loot card DNA */
+.id-directives-page .id-directive-card.inventory-loot-card {
+  gap: 0;
+  min-height: 100%;
+}
+
+.id-directive-card__tag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 0;
+}
+
+.id-directive-card__category-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(200, 232, 244, 0.5);
+}
+
+.id-directive-card__cadence-tag {
+  margin-left: auto;
+  padding: 2px 8px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gc-neon-cyan, #46e5ff);
+  border: 1px solid rgba(70, 229, 255, 0.28);
+  background: rgba(70, 229, 255, 0.06);
+  clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 4px 100%, 0 calc(100% - 4px));
+}
+
+.id-directive-card__hero {
+  aspect-ratio: 16 / 11;
+  padding: 12px 14px 8px;
+}
+
+.id-directive-card__hero .inventory-loot-card-img {
+  width: min(100%, 140px);
+  max-height: 120px;
+}
+
+.id-directive-card__pct {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 2;
+  padding: 3px 9px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #e8f4ff;
+  background: rgba(8, 16, 28, 0.88);
+  border: 1px solid rgba(70, 229, 255, 0.3);
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 5px 100%, 0 calc(100% - 5px));
+}
+
+.id-directive-card__body {
+  flex: 1 1 auto;
+  gap: 8px;
+}
+
+.id-directive-card__title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.id-directive-card__desc {
+  line-height: 1.4;
+  min-height: 2.5em;
+}
+
+.id-directive-card__progress {
+  position: relative;
+  height: 6px;
+  margin-top: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(70, 229, 255, 0.12);
+  overflow: hidden;
+  clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 4px 100%, 0 calc(100% - 4px));
+}
+
+.id-directive-card__progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(70, 229, 255, 0.45) 0%, rgba(110, 207, 143, 0.85) 100%);
+  box-shadow: 0 0 10px rgba(70, 229, 255, 0.35);
+  transition: width 0.35s ease;
+}
+
+.id-directive-card__progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.id-directive-card__progress-label {
+  font-size: 0.74rem;
+  color: rgba(200, 232, 244, 0.75);
+}
+
+.id-directive-card__expires {
+  font-size: 0.72rem;
+  color: var(--gc-accent-warm, #ffb84d);
+  letter-spacing: 0.02em;
+}
+
+.id-directive-card__loot-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.id-directive-loot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid rgba(70, 229, 255, 0.2);
+  background: rgba(8, 16, 28, 0.65);
+  clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 4px 100%, 0 calc(100% - 4px));
+}
+
+.id-directive-loot-chip__img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+}
+
+.id-directive-loot-chip__amt {
+  font-size: 0.72rem;
+  color: var(--gc-neon-cyan, #46e5ff);
+}
+
+.id-directive-card__actions {
+  border-top: 1px solid rgba(70, 229, 255, 0.08);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.id-directive-card__claim-btn {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.id-directive-card__claimed-badge {
+  flex: 1 1 100%;
+  text-align: center;
+  padding: 8px 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6ecf8f;
+}
+
+.id-directive-card__active-hint {
+  flex: 1 1 100%;
+  text-align: center;
+  padding: 6px 0;
+  font-size: 0.72rem;
+  color: var(--gc-text-dim);
+  letter-spacing: 0.02em;
+}
+
+/* State + rarity accents (match inventory owned glow) */
+.id-directive-card--claimed {
+  opacity: 0.78;
+}
+
+.id-directive-card--claimed .inventory-loot-card-img {
+  filter: grayscale(0.7) brightness(0.75) saturate(0.5);
+}
+
+.id-directive-card--completed {
+  border-color: rgba(110, 207, 143, 0.42);
+  box-shadow:
+    0 0 0 1px rgba(110, 207, 143, 0.12),
+    0 0 28px rgba(110, 207, 143, 0.14),
+    0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.id-directive-card--completed .id-directive-card__pct {
+  color: #b8f5c8;
+  border-color: rgba(110, 207, 143, 0.45);
+}
+
+.id-directive-card--completed .id-directive-card__claim-btn {
+  box-shadow: 0 0 16px rgba(110, 207, 143, 0.25);
+}
+
+.id-directive-card[data-rarity="legendary"]:not(.id-directive-card--claimed) {
+  border-color: rgba(255, 184, 77, 0.42);
+  box-shadow: 0 0 24px rgba(255, 184, 77, 0.1), 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.id-directive-card[data-rarity="epic"]:not(.id-directive-card--claimed) {
+  border-color: rgba(199, 125, 255, 0.38);
+}
+
+.id-directive-card[data-rarity="rare"]:not(.id-directive-card--claimed) {
+  border-color: rgba(94, 176, 255, 0.32);
+}
+
+.id-directives-empty {
+  margin: 0;
+  color: var(--gc-text-dim);
+}
+
+.id-directives-page .gc-panel,
+.id-directives-page .gc-btn {
+  border-radius: 0;
+}
+
+@media (max-width: 640px) {
+  .id-directives-command-strip__inner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .id-directives-claim-strip {
+    margin-left: 0;
+    justify-content: space-between;
+  }
+
+  .id-directive-grid--weekly {
+    grid-template-columns: 1fr;
+  }
+}
+
 .galactic-politics-page {
   display: flex;
   flex-direction: column;

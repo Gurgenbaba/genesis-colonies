@@ -883,6 +883,7 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None, *
         research_queue_limit = _resolve_research_queue_limit(player_id=uid, conn=conn)
         jobs_queued = 0
         job_ids: List[int] = []
+        queued_research: List[tuple[int, str, int, int]] = []
         last_payload: Dict[str, Any] = {}
         last_reason = "unknown"
         last_fail: Any = None
@@ -979,6 +980,7 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None, *
             )
             jobs_queued += 1
             job_ids.append(int(job_id))
+            queued_research.append((int(job_id), tech_key, int(cost_m), int(cost_c)))
             last_payload = {
                 "job_id": int(job_id),
                 "seconds": int(duration),
@@ -1008,6 +1010,27 @@ def queue_research(player: dict, tech_key: str, user_id: Optional[int] = None, *
             return False, last_reason, last_fail
 
         commit(conn)
+
+        if queued_research:
+            try:
+                from .directives.progress import emit_research_started_event
+
+                for job_id, queued_tech, spend_m, spend_c in queued_research:
+                    emit_research_started_event(
+                        uid,
+                        tech_key=queued_tech,
+                        metal=spend_m,
+                        crystal=spend_c,
+                        job_id=job_id,
+                        conn=conn,
+                        now=now,
+                    )
+                conn.commit()
+            except Exception:
+                logger.exception(
+                    "imperial_directives research start progress failed player=%s",
+                    uid,
+                )
 
         if finished_any:
             invalidate_player_score_cache(uid)

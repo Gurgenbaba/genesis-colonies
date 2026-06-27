@@ -2578,6 +2578,25 @@ def send_fleet(
         if own:
             commit(conn)
 
+        try:
+            from .directives.progress import emit_fleet_mission_sent
+
+            emit_fleet_mission_sent(
+                int(player_id),
+                mission=mission,
+                fleet_id=fleet_id,
+                conn=conn,
+                now=now,
+            )
+            if own:
+                conn.commit()
+        except Exception:
+            logger.exception(
+                "imperial_directives fleet send progress failed player=%s fleet=%s",
+                player_id,
+                fleet_id,
+            )
+
         result = {
             "fleet": enrich_movement_timing(
                 _row_to_movement(
@@ -2996,6 +3015,23 @@ def _handle_attack_arrival(movement: Dict[str, Any], *, conn, now: float) -> boo
             defender_locale=defender_locale,
         )
         if combat_result is not None:
+            try:
+                from .directives.progress import emit_combat_directive_events
+
+                emit_combat_directive_events(
+                    int(player_id),
+                    movement_id=movement_id,
+                    winner=str(combat_result.winner or ""),
+                    defender_losses=combat_result.defender_losses,
+                    conn=conn,
+                    now=float(now),
+                )
+            except Exception:
+                logger.exception(
+                    "imperial_directives combat progress failed movement_id=%s",
+                    movement_id,
+                )
+
             try:
                 from .combat import calculate_combat_debris
                 from .combat_hof import record_hof_battle
@@ -3544,6 +3580,20 @@ def _handle_arrival(movement: Dict[str, Any], *, conn, now: float) -> bool:
             locale=sender_locale,
             conn=conn,
         )
+        try:
+            from .directives.progress import emit_recycle_complete_event
+
+            emit_recycle_complete_event(
+                int(player_id),
+                movement_id=movement_id,
+                conn=conn,
+                now=float(now),
+            )
+        except Exception:
+            logger.exception(
+                "imperial_directives recycle progress failed movement_id=%s",
+                movement_id,
+            )
         return True
 
     if mission == "transport":
@@ -4266,6 +4316,21 @@ def _handle_expedition_holding_end(movement: Dict[str, Any], *, conn, now: float
             metadata=meta,
             locale=sender_locale,
             conn=conn,
+        )
+    try:
+        from .directives.progress import emit_expedition_complete_event
+
+        emit_expedition_complete_event(
+            int(player_id),
+            movement_id=movement_id,
+            outcome=outcome,
+            conn=conn,
+            now=float(now),
+        )
+    except Exception:
+        logger.exception(
+            "imperial_directives expedition progress failed movement_id=%s",
+            movement_id,
         )
     return True
 

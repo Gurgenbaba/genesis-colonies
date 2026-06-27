@@ -1901,3 +1901,49 @@ def test_main_js_trader_hub_exchange_live_preview():
     assert "readNumberInput(amountInput)" in exchange
     assert "parseIntNumber(amount)" in exchange
     assert "setNumberInputValue(amountInput, minNow)" in exchange
+
+
+def test_main_js_imperial_directives_full_state_endpoint():
+    """Cards must load from /api/imperial-directives/state, not game-state summary."""
+    src = _read("static/main.js")
+    assert '"/api/imperial-directives/state"' in src
+    assert "function refreshImperialDirectivesFullState" in src
+    assert "function _patchImperialDirectivesFromGameStateSummary" in src
+    assert "patchImperialDirectivesDom(data.imperial_directives)" not in src
+    apply = src.split("function applyGameStateData(data, _reason, opts)")[1].split("function refreshPageAfterQueueEvent", 1)[0]
+    assert '_patchImperialDirectivesFromGameStateSummary(data.imperial_directives, reason)' in apply
+    assert 'reason !== "page_hydrate"' in apply
+    summary_fn = src.split("function _patchImperialDirectivesFromGameStateSummary(summary, reason)")[1].split("async function refreshImperialDirectivesFullState", 1)[0]
+    assert "Array.isArray(summary.directives)" in summary_fn
+    assert "return;" in summary_fn
+    assert "dailyList.innerHTML" not in summary_fn
+    patch_fn = src.split("function patchImperialDirectivesDom(state, opts)")[1].split("let _imperialDirectivesBound", 1)[0]
+    assert "_imperialDirectivesStateUsable(state)" in patch_fn
+    assert "_imperialDirectivesHasSsrCards(page)" in patch_fn
+    assert "if (dailyList && daily.length)" in patch_fn
+    card_html = src.split("function _idDirectiveCardHtml(d)")[1].split("let _idCountdownTimer", 1)[0]
+    assert "inventory-loot-card-name" in card_html
+    assert "data-directive-progress-fill" in card_html
+    assert "data-directive-claim" in card_html
+    init = src.split("function initImperialDirectives()")[1].split("function parseGalacticPoliticsPageState", 1)[0]
+    assert "_imperialDirectivesHasSsrCards(page)" in init
+    assert "refreshImperialDirectivesFullState" in init
+    assert "if (!hasSsrCards)" in init
+    assert "_logImperialDirectivesRender" in src
+
+
+def test_main_js_imperial_directive_expire_timer_targets_label_only():
+    """Expire countdown must not set textContent on the card root."""
+    src = _read("static/main.js")
+    sync_fn = src.split("function _syncImperialDirectiveCountdowns(page)")[1].split("function patchImperialDirectivesDom", 1)[0]
+    assert "[data-directive-expires-label]" in sync_fn
+    assert "label.textContent" in sync_fn
+    assert 'querySelectorAll("[data-directive-expires]")' not in sync_fn
+    card_html = src.split("function _idDirectiveCardHtml(d)")[1].split("let _idCountdownTimer", 1)[0]
+    assert "data-directive-expires-at" in card_html
+    assert "data-directive-expires-label" in card_html
+    assert 'data-directive-expires="' not in card_html
+    tpl = _read("templates/imperial_directives.html")
+    assert "data-directive-expires-at" in tpl
+    assert "data-directive-expires-label" in tpl
+    assert 'data-directive-expires="{{' not in tpl

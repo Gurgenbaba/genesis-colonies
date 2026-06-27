@@ -359,6 +359,9 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
     vote_count = count_voteable_providers(uid, conn=conn)
     gov_count = count_pending_government_votes(uid, conn=conn)
     referral_count = count_claimable_referral_rewards(uid, conn=conn, read_only=True)
+    from game.directives.service import count_claimable_directives
+
+    directive_count = count_claimable_directives(uid, conn=conn)
     return {
         "vote_center": _nav_badge_entry(
             active=vote_count > 0,
@@ -375,7 +378,19 @@ def nav_badges_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
             count=referral_count,
             label="!" if referral_count > 0 else "",
         ),
+        "imperial_directives": _nav_badge_entry(
+            active=directive_count > 0,
+            count=directive_count,
+            label=str(directive_count) if directive_count > 0 else "",
+        ),
     }
+
+
+def imperial_directives_for_game_state(user_id: int, *, conn) -> Dict[str, Any]:
+    """Compact Imperial Directives summary for /api/game-state (GC-914A)."""
+    from game.directives.service import get_imperial_directives_summary
+
+    return get_imperial_directives_summary(int(user_id), conn=conn)
 
 
 def fleet_hud_for_game_state(user_id: int, *, conn) -> Optional[Dict[str, Any]]:

@@ -18,8 +18,9 @@ Epics beschreiben nur das Ziel. **Niemals direkt implementieren.**
 | EPIC-06 | Buildings | [BUILDINGS_SYSTEM.md](BUILDINGS_SYSTEM.md) |
 | EPIC-07 | Research (Account-Tech) | [RESEARCH_SYSTEM.md](RESEARCH_SYSTEM.md) |
 | EPIC-15 | Imperium & Expansion (Genesis 2.0) | [IMPERIUM_VISION.md](IMPERIUM_VISION.md) |
+| EPIC-17 | Imperial Directives (High Command) | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
 
-Epic → in **3–5 Tickets** zerlegen. Siehe [EPICS.md](EPICS.md).
+Epic → in **3–5 Tickets** zerlegen (große Epics: Phasen in Master-Doc). Siehe [EPICS.md](EPICS.md).
 
 ---
 

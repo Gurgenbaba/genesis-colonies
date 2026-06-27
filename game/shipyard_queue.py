@@ -515,6 +515,26 @@ def _finish_due_shipyard_jobs_impl(
         sk = canonical_ship_key(str(head["ship_key"]))
         if is_known_ship_key(sk):
             add_planet_ships(int(planet_id), int(player_id), {sk: to_deliver}, conn=conn)
+            try:
+                from .directives.progress import emit_ship_built_events
+
+                delivered_before = remaining_amt
+                emit_ship_built_events(
+                    int(player_id),
+                    ship_key=sk,
+                    amount=to_deliver,
+                    job_id=int(head["id"]),
+                    delivered_before=delivered_before,
+                    conn=conn,
+                    now=ts,
+                )
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).exception(
+                    "imperial_directives shipyard progress failed player=%s",
+                    player_id,
+                )
 
         remaining = max(0, int(head["amount"] or 0) - to_deliver)
         if remaining <= 0:

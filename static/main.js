@@ -1708,6 +1708,7 @@
     if (path.endsWith("/auction-house")) return "auction_house";
     if (path.endsWith("/vote-center")) return "vote_center";
     if (path.endsWith("/referrals")) return "referrals";
+    if (path.endsWith("/imperial-directives")) return "imperial_directives";
     if (path.endsWith("/galactic-politics")) return "galactic_politics";
     if (path.endsWith("/skilltree")) return "skilltree";
     if (path.endsWith("/premium")) return "premium";
@@ -9274,7 +9275,9 @@
           ? "nav_badge_government_aria"
           : key === "referrals"
             ? "nav_badge_referrals_aria"
-            : key === "community"
+            : key === "imperial_directives"
+              ? "nav_badge_imperial_directives_aria"
+              : key === "community"
               ? "nav_badge_community_aria"
               : "";
       if (ariaKey) {
@@ -9284,7 +9287,9 @@
             ? "Vote verfügbar"
             : key === "referrals"
               ? "Referral-Belohnung verfügbar"
-              : "Abstimmung offen")
+              : key === "imperial_directives"
+                ? "Imperial Directive abholbereit"
+                : "Abstimmung offen")
         );
       }
     });
@@ -11136,6 +11141,14 @@
 
       const stApplied = Number(data.server_time || 0);
       if (stApplied) _lastAppliedServerTime = Math.max(_lastAppliedServerTime, stApplied);
+
+      if (
+        data.imperial_directives
+        && document.getElementById("imperial-directives-page")
+        && reason !== "page_hydrate"
+      ) {
+        _patchImperialDirectivesFromGameStateSummary(data.imperial_directives, reason);
+      }
 
       commitGameStateCache(data, reason, opts);
       GC.startProgressTicker();
@@ -13607,6 +13620,390 @@
     if (!page || page.dataset.ready !== "1") return;
     const state = parseReferralsPageState();
     if (state) patchReferralsDom(state);
+  }
+
+  function debugDirectiveDomMutation(label) {
+    if (!_imperialDirectivesDebugEnabled()) return;
+    const page = document.getElementById("imperial-directives-page");
+    if (!page) return;
+    const cards = page.querySelectorAll("[data-directive-card]");
+    console.debug("[GC] directive DOM", label, {
+      cards: cards.length,
+      titledCards: page.querySelectorAll("[data-directive-card] .inventory-loot-card-name").length,
+      htmlLength: page.innerHTML.length,
+      text: page.innerText.slice(0, 500),
+    });
+  }
+
+  function watchImperialDirectiveMutations() {
+    if (!_imperialDirectivesDebugEnabled()) return;
+    const page = document.getElementById("imperial-directives-page");
+    if (!page || page.__directiveMutationWatch) return;
+    page.__directiveMutationWatch = true;
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type === "childList" && (m.removedNodes.length || m.addedNodes.length)) {
+          console.warn("[GC] directive DOM mutated", {
+            target: m.target,
+            added: m.addedNodes.length,
+            removed: m.removedNodes.length,
+          });
+          console.trace("[GC] directive mutation trace");
+        }
+      }
+    });
+    observer.observe(page, { childList: true, subtree: true });
+    GC.registerCleanup(() => observer.disconnect());
+  }
+
+  function _imperialDirectivesDebugEnabled() {
+    return Boolean(window.GC_PERF_DEBUG || window.GC_CLIENT_CONFIG?.directive_debug);
+  }
+
+  function _logImperialDirectivesRender(source, payload, opts) {
+    if (!_imperialDirectivesDebugEnabled()) return;
+    console.log("[GC] imperial directives render", source, {
+      reason: opts && opts.reason,
+      force: Boolean(opts && opts.force),
+      ready: payload && payload.ready,
+      directiveCount: Array.isArray(payload?.directives) ? payload.directives.length : null,
+      hasSummaryOnly: Boolean(payload && !Array.isArray(payload.directives)),
+      payload,
+    });
+    console.trace("[GC] imperial directives render stack");
+  }
+
+  function _imperialDirectiveCardReady(d) {
+    if (!d || typeof d !== "object") return false;
+    const labelKey = String(d.title_key || d.description_key || d.definition_key || "").trim();
+    if (!labelKey) return false;
+    if (!Number.isFinite(Number(d.target)) || Number(d.target) < 1) return false;
+    if (!Array.isArray(d.rewards_preview) || !d.rewards_preview.length) return false;
+    return true;
+  }
+
+  function _imperialDirectivesStateUsable(state) {
+    if (!state || state.ready === false) return false;
+    const directives = Array.isArray(state.directives) ? state.directives : [];
+    if (!directives.length) return false;
+    const daily = directives.filter((d) => String(d.cadence) === "daily");
+    const weekly = directives.filter((d) => String(d.cadence) === "weekly");
+    if (!daily.length && !weekly.length) return false;
+    return directives.every(_imperialDirectiveCardReady);
+  }
+
+  function _imperialDirectivesHasSsrCards(page) {
+    if (!page) return false;
+    return page.querySelectorAll("[data-directive-card] .inventory-loot-card-name").length > 0;
+  }
+
+  function _patchImperialDirectivesFromGameStateSummary(summary, reason) {
+    void reason;
+    const page = document.getElementById("imperial-directives-page");
+    if (!page || !summary || summary.ready === false) return;
+    _logImperialDirectivesRender("game-state-summary", summary, { reason });
+    if (Array.isArray(summary.directives)) {
+      return;
+    }
+    _patchImperialDirectivesMeta(page, summary);
+    _syncImperialDirectiveCountdowns(page);
+  }
+
+  async function refreshImperialDirectivesFullState(reason) {
+    const page = document.getElementById("imperial-directives-page");
+    if (!page || page.dataset.ready !== "1") return null;
+    try {
+      const data = await GC.fetchJSON("/api/imperial-directives/state", { cache: "no-store" });
+      if (!data?.ok || !data.imperial_directives) return null;
+      _logImperialDirectivesRender("full-state-endpoint", data.imperial_directives, { reason, force: true });
+      if (_imperialDirectivesStateUsable(data.imperial_directives)) {
+        patchImperialDirectivesDom(data.imperial_directives, { force: true, reason: "full_state_fetch" });
+      }
+      return data.imperial_directives;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function _patchImperialDirectivesMeta(page, state) {
+    if (!page || !state) return;
+    const claimable = Math.max(0, Number(state.claimable_count) || 0);
+    const claimableEl = page.querySelector("[data-id-claimable-count]");
+    if (claimableEl) claimableEl.textContent = String(claimable);
+    const claimAllBtn = page.querySelector("[data-directive-claim-all]");
+    if (claimAllBtn) claimAllBtn.disabled = claimable <= 0;
+
+    const dailyReset = page.querySelector("[data-id-daily-reset]");
+    if (dailyReset && state.daily_reset_at) {
+      dailyReset.dataset.ts = String(state.daily_reset_at);
+    }
+    const weeklyReset = page.querySelector("[data-id-weekly-reset]");
+    if (weeklyReset && state.weekly_reset_at) {
+      weeklyReset.dataset.ts = String(state.weekly_reset_at);
+    }
+  }
+
+  function parseImperialDirectivesPageState() {
+    const el = document.getElementById("imperial-directives-page-state");
+    if (el && el.textContent) {
+      try { return JSON.parse(el.textContent); } catch (_) {}
+    }
+    return null;
+  }
+
+  function _idCategoryLabel(category) {
+    const key = `imperial_directives_category_${String(category || "")}`;
+    return t(key, String(category || "").replace(/_/g, " "));
+  }
+
+  function _idRarityLabel(rarity) {
+    const r = String(rarity || "common");
+    return t(`inv_rarity_${r}`, t(`imperial_directives_rarity_${r}`, r.charAt(0).toUpperCase() + r.slice(1)));
+  }
+
+  function _idPrimaryReward(rewards) {
+    const list = Array.isArray(rewards) ? rewards : [];
+    return list.find((r) => String(r.item_type || "") === "container") || list[0] || null;
+  }
+
+  function _idBoosterRewards(rewards) {
+    const list = Array.isArray(rewards) ? rewards : [];
+    const primary = _idPrimaryReward(list);
+    if (!primary) return list.slice(1);
+    return list.filter((r) => r !== primary);
+  }
+
+  function _idDirectiveCardHtml(d) {
+    const id = Number(d.id || 0);
+    const status = String(d.status || "active");
+    const rarity = String(d.rarity || "common");
+    const cadence = String(d.cadence || "daily");
+    const progress = Math.max(0, Number(d.progress) || 0);
+    const target = Math.max(1, Number(d.target) || 1);
+    const pct = Math.min(100, Math.round((progress / target) * 100));
+    const cardState = d.claimable || status === "completed" ? "completed" : status;
+    const title = escapeHtml(t(d.title_key, d.definition_key || ""));
+    const desc = escapeHtml(tf(d.description_key, { target: fmtNumber(target) }, d.definition_key || ""));
+    const fallback = "/static/img/lootboxes/Generic_Supply_Container.png";
+    const hero = _idPrimaryReward(d.rewards_preview);
+    const heroImg = hero?.image ? `/static/${String(hero.image).replace(/^\/+/, "")}` : fallback;
+    const heroAlt = escapeHtml(t(hero?.name_key, hero?.item_key || ""));
+    const boosters = _idBoosterRewards(d.rewards_preview);
+    const boosterHtml = boosters.map((reward) => {
+      const img = reward.image ? `/static/${String(reward.image).replace(/^\/+/, "")}` : fallback;
+      const name = t(reward.name_key, reward.item_key || "");
+      return `<div class="id-directive-loot-chip" title="${escapeHtml(name)}">
+        <img class="id-directive-loot-chip__img" src="${escapeHtml(img)}" alt="" width="32" height="32" loading="lazy">
+        <span class="id-directive-loot-chip__amt gc-mono">×${escapeHtml(fmtNumber(reward.amount || 1))}</span>
+      </div>`;
+    }).join("");
+    const weeklyTag = cadence === "weekly"
+      ? `<span class="id-directive-card__cadence-tag">${escapeHtml(t("imperial_directives_weekly_badge", "Weekly"))}</span>`
+      : "";
+    let actionHtml = "";
+    if (d.claimable || status === "completed") {
+      actionHtml = `<button type="button" class="gc-btn gc-btn-primary gc-btn-sm id-directive-card__claim-btn" data-directive-claim="${id}">${escapeHtml(t("imperial_directives_claim_btn", "Claim reward"))}</button>`;
+    } else if (status === "claimed") {
+      actionHtml = `<span class="id-directive-card__claimed-badge">${escapeHtml(t("imperial_directives_claimed_badge", "Claimed"))}</span>`;
+    } else {
+      actionHtml = `<span class="id-directive-card__active-hint">${escapeHtml(t("imperial_directives_active_hint", "Progress through normal gameplay"))}</span>`;
+    }
+    const expires = Number(d.expires_at || 0);
+    return `<article class="id-directive-card inventory-loot-card id-directive-card--${escapeHtml(cardState)}"
+         data-directive-card
+         data-directive-id="${id}"
+         data-directive-status="${escapeHtml(status)}"
+         data-directive-expires-at="${expires}"
+         data-rarity="${escapeHtml(rarity)}">
+      <div class="id-directive-card__tag-row">
+        <span class="id-directive-card__category-tag">${escapeHtml(_idCategoryLabel(d.category))}</span>
+        ${weeklyTag}
+      </div>
+      <div class="inventory-loot-card-hero id-directive-card__hero">
+        <div class="inventory-loot-card-glow inventory-loot-card-glow--${escapeHtml(rarity)}" aria-hidden="true"></div>
+        <img src="${escapeHtml(heroImg)}" alt="${heroAlt}" class="inventory-loot-card-img" width="168" height="168" loading="lazy" onerror="this.onerror=null;this.src='${fallback}';">
+        <span class="id-directive-card__pct gc-mono" data-directive-pct>${pct}%</span>
+      </div>
+      <div class="inventory-loot-card-body id-directive-card__body">
+        <div class="inventory-loot-card-head">
+          <h3 class="inventory-loot-card-name id-directive-card__title">${title}</h3>
+          <span class="inventory-rarity-badge inventory-rarity-badge--${escapeHtml(rarity)}">${escapeHtml(_idRarityLabel(rarity))}</span>
+        </div>
+        <p class="inventory-loot-card-hint id-directive-card__desc">${desc}</p>
+        <div class="id-directive-card__progress" role="progressbar" aria-valuemin="0" aria-valuemax="${target}" aria-valuenow="${progress}">
+          <div class="id-directive-card__progress-fill gc-progress-smooth" data-directive-progress-fill style="width:${pct}%;"></div>
+        </div>
+        <div class="id-directive-card__progress-meta">
+          <span class="id-directive-card__progress-label gc-mono" data-directive-progress-label>${escapeHtml(fmtNumber(progress))} / ${escapeHtml(fmtNumber(target))}</span>
+          <span class="id-directive-card__expires gc-mono" data-directive-expires-label>${expires > 0 ? `${escapeHtml(t("imperial_directives_expires_in", "Expires in"))} …` : ""}</span>
+        </div>
+        ${boosterHtml ? `<div class="id-directive-card__loot-row">${boosterHtml}</div>` : ""}
+      </div>
+      <div class="inventory-loot-card-actions id-directive-card__actions">
+        ${actionHtml}
+      </div>
+    </article>`;
+  }
+
+  let _idCountdownTimer = null;
+
+  function _syncImperialDirectiveCountdowns(page) {
+    if (!page) return;
+    debugDirectiveDomMutation("countdown:before");
+    const now = getTimerServerNow();
+    page.querySelectorAll("[data-directive-expires-label]").forEach((label) => {
+      const card = label.closest("[data-directive-card]");
+      const expires = Number(card?.getAttribute("data-directive-expires-at") || 0);
+      if (!expires) {
+        return;
+      }
+      if (expires <= now) {
+        label.textContent = t("imperial_directives_reset_now", "Soon");
+        return;
+      }
+      const rem = Math.max(0, Math.ceil(expires - now));
+      label.textContent = `${t("imperial_directives_expires_in", "Expires in")} ${formatCountdownRemain(rem)}`;
+    });
+    page.querySelectorAll("[data-id-daily-reset]").forEach((el) => {
+      const ts = Number(el.dataset.ts || el.getAttribute("data-ts") || 0);
+      if (ts > now) el.textContent = formatCountdownRemain(Math.ceil(ts - now));
+      else if (ts > 0) el.textContent = t("imperial_directives_reset_now", "Soon");
+    });
+    page.querySelectorAll("[data-id-weekly-reset]").forEach((el) => {
+      const ts = Number(el.dataset.ts || el.getAttribute("data-ts") || 0);
+      if (ts > now) el.textContent = formatCountdownRemain(Math.ceil(ts - now));
+      else if (ts > 0) el.textContent = t("imperial_directives_reset_now", "Soon");
+    });
+    debugDirectiveDomMutation("countdown:after");
+  }
+
+  function patchImperialDirectivesDom(state, opts) {
+    const page = document.getElementById("imperial-directives-page");
+    if (!page || !state || state.ready === false) return;
+
+    debugDirectiveDomMutation("patch-dom:before");
+    const reason = opts && opts.reason ? String(opts.reason) : "unknown";
+    const force = Boolean(opts && opts.force);
+    _logImperialDirectivesRender("patch-dom", state, { reason, force });
+
+    if (!_imperialDirectivesStateUsable(state)) {
+      _patchImperialDirectivesMeta(page, state);
+      _syncImperialDirectiveCountdowns(page);
+      return;
+    }
+
+    const dailyList = page.querySelector('[data-id-directive-list="daily"]');
+    const weeklyList = page.querySelector('[data-id-directive-list="weekly"]');
+    const directives = Array.isArray(state.directives) ? state.directives : [];
+    const daily = directives.filter((d) => String(d.cadence) === "daily");
+    const weekly = directives.filter((d) => String(d.cadence) === "weekly");
+
+    if (!daily.length && !weekly.length) {
+      _patchImperialDirectivesMeta(page, state);
+      _syncImperialDirectiveCountdowns(page);
+      return;
+    }
+
+    if (!force && _imperialDirectivesHasSsrCards(page)) {
+      _patchImperialDirectivesMeta(page, state);
+      _syncImperialDirectiveCountdowns(page);
+      const scriptEl = document.getElementById("imperial-directives-page-state");
+      if (scriptEl) scriptEl.textContent = JSON.stringify(state);
+      return;
+    }
+
+    if (dailyList && daily.length) dailyList.innerHTML = daily.map(_idDirectiveCardHtml).join("");
+    if (weeklyList && weekly.length) weeklyList.innerHTML = weekly.map(_idDirectiveCardHtml).join("");
+
+    _patchImperialDirectivesMeta(page, state);
+
+    const scriptEl = document.getElementById("imperial-directives-page-state");
+    if (scriptEl) scriptEl.textContent = JSON.stringify(state);
+    _syncImperialDirectiveCountdowns(page);
+    debugDirectiveDomMutation("patch-dom:after");
+  }
+
+  let _imperialDirectivesBound = false;
+
+  function bindImperialDirectivesOnce() {
+    if (_imperialDirectivesBound) return;
+    _imperialDirectivesBound = true;
+
+    document.addEventListener("click", async (ev) => {
+      const claimBtn = ev.target.closest("[data-directive-claim]");
+      if (claimBtn) {
+        const directiveId = Number(claimBtn.getAttribute("data-directive-claim") || 0);
+        if (!directiveId) return;
+        const res = await GC.fetchGameAction("/api/imperial-directives/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ directive_id: directiveId, request_id: newRequestId() }),
+        });
+        if (res?.state) applyActionState(res, "imperial_directive_claim");
+        if (res?.imperial_directives) {
+          patchImperialDirectivesDom(res.imperial_directives, { force: true, reason: "claim" });
+        }
+        if (res?.ok) {
+          showNotify(t("imperial_directives_claim_ok", "Reward added to inventory."), "success");
+        } else {
+          showNotify(t("imperial_directives_claim_fail", "Could not claim reward."), "error");
+        }
+        return;
+      }
+
+      const claimAllBtn = ev.target.closest("[data-directive-claim-all]");
+      if (claimAllBtn) {
+        const res = await GC.fetchGameAction("/api/imperial-directives/claim-all", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ request_id: newRequestId() }),
+        });
+        if (res?.state) applyActionState(res, "imperial_directive_claim_all");
+        if (res?.imperial_directives) {
+          patchImperialDirectivesDom(res.imperial_directives, { force: true, reason: "claim" });
+        }
+        if (res?.ok) {
+          const count = Number(res?.claim?.count || 0);
+          showNotify(
+            count > 0
+              ? tf("imperial_directives_claim_all_ok", { count: fmtNumber(count) }, "Rewards claimed.")
+              : t("imperial_directives_claim_all_ok", "Rewards claimed."),
+            "success",
+          );
+        } else {
+          showNotify(t("imperial_directives_claim_all_fail", "Could not claim rewards."), "error");
+        }
+      }
+    });
+  }
+
+  function initImperialDirectives() {
+    bindImperialDirectivesOnce();
+    debugDirectiveDomMutation("init:start");
+    watchImperialDirectiveMutations();
+    const page = document.getElementById("imperial-directives-page");
+    if (!page || page.dataset.ready !== "1") return;
+    resyncServerTimeFromDom(true);
+    const state = parseImperialDirectivesPageState();
+    debugDirectiveDomMutation("init:after-ssr-state-parse");
+    const hasSsrCards = _imperialDirectivesHasSsrCards(page);
+    if (state) _patchImperialDirectivesMeta(page, state);
+    _syncImperialDirectiveCountdowns(page);
+    if (!hasSsrCards) {
+      void refreshImperialDirectivesFullState("page_init");
+    }
+    debugDirectiveDomMutation("init:done");
+    if (_idCountdownTimer) clearInterval(_idCountdownTimer);
+    _idCountdownTimer = setInterval(() => {
+      const live = document.getElementById("imperial-directives-page");
+      if (live) _syncImperialDirectiveCountdowns(live);
+    }, 1000);
+    GC.registerCleanup(() => {
+      if (_idCountdownTimer) {
+        clearInterval(_idCountdownTimer);
+        _idCountdownTimer = null;
+      }
+    });
   }
 
   function parseGalacticPoliticsPageState() {
@@ -18842,6 +19239,7 @@
       || path.endsWith("/chronicles")
       || path.endsWith("/records")
       || path.endsWith("/referrals")
+      || path.endsWith("/imperial-directives")
     ) {
       sections.add("community");
     }
@@ -24584,6 +24982,7 @@
   GC.modules.auction_house = initAuctionHouse;
   GC.modules.vote_center = initVoteCenter;
   GC.modules.referrals = initReferrals;
+  GC.modules.imperial_directives = initImperialDirectives;
   GC.modules.galactic_politics = initGalacticPolitics;
   GC.modules.trader_hub = initTraderHub;
   GC.modules.fleet = initFleet;

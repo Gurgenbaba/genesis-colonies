@@ -417,6 +417,25 @@ def _finish_due_defense_jobs_impl(
         dk = str(head["defense_key"])
         if is_known_defense_key(dk):
             add_planet_defense(int(planet_id), {dk: to_deliver}, conn=conn)
+            try:
+                from .directives.progress import emit_defense_built_events
+
+                emit_defense_built_events(
+                    int(player_id),
+                    defense_key=dk,
+                    amount=to_deliver,
+                    job_id=int(head["id"]),
+                    delivered_before=max(0, int(head.get("amount") or 0)),
+                    conn=conn,
+                    now=ts,
+                )
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).exception(
+                    "imperial_directives defense progress failed player=%s",
+                    player_id,
+                )
 
         remaining = max(0, int(head["amount"] or 0) - to_deliver)
         if remaining <= 0:

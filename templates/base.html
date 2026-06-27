@@ -587,6 +587,12 @@
              class="gc-nav-drawer-link gc-nav-drawer-sublink {% if request.endpoint == 'inventory_view' %}active{% endif %}">
             {{ T("nav_inventory", "Inventar") }}
           </a>
+          <a href="{{ url_for('imperial_directives_view') }}"
+             class="gc-nav-drawer-link gc-nav-drawer-sublink {% if request.endpoint == 'imperial_directives_view' %}active{% endif %}"
+             data-nav-key="imperial_directives">
+            <span>{{ T("nav_imperial_directives", "Imperial Directives") }}</span>
+            <span class="gc-nav-badge hidden" data-nav-badge="imperial_directives" hidden aria-hidden="true"></span>
+          </a>
           <a href="{{ url_for('vote_center_view') }}"
              class="gc-nav-drawer-link gc-nav-drawer-sublink {% if request.endpoint == 'vote_center_view' %}active{% endif %}"
              data-nav-key="vote_center">

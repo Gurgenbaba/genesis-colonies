@@ -4,7 +4,7 @@
 ) %}
 {% set _comm_open = request.endpoint in (
   'alliance_view', 'ranking_view', 'chronicles_view', 'hall_of_fame_view', 'records_view',
-  'referrals_view', 'vote_center_view'
+  'referrals_view', 'vote_center_view', 'imperial_directives_view'
 ) %}
 <nav class="gc-sidebar gc-sidebar-desktop gc-sidebar--right gc-sidebar-right{% if _sn.full_nav %} gc-sidebar--full-nav{% else %} gc-sidebar--role-nav{% endif %}"
      id="gc-sidebar-nav-right"
@@ -100,6 +100,13 @@
          class="gc-nav-sub-link gc-nav-module--{{ nav_module_tier(_sn, 'hall_of_fame') }} {% if request.endpoint == 'hall_of_fame_view' %}active{% endif %}"
          {% if not module_in_section(_sn, 'hall_of_fame', 'administration') %}hidden{% endif %}>
         {{ T("nav_hall_of_fame", "Hall of Fame") }}
+      </a>
+      <a href="{{ url_for('imperial_directives_view') }}"
+         data-nav-module="imperial_directives"
+         data-nav-key="imperial_directives"
+         class="gc-nav-sub-link gc-nav-module--secondary {% if request.endpoint == 'imperial_directives_view' %}active{% endif %}">
+        <span class="gc-nav-link-label">{{ T("nav_imperial_directives", "Imperial Directives") }}</span>
+        <span class="gc-nav-badge hidden" data-nav-badge="imperial_directives" hidden aria-hidden="true"></span>
       </a>
       <a href="{{ url_for('vote_center_view') }}"
          data-nav-module="vote_center"

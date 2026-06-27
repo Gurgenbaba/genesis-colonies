@@ -3230,6 +3230,188 @@ def api_referrals_claim():
     return jsonify(resp)
 
 
+@app.route("/api/imperial-directives/claim", methods=["POST"])
+@require_login
+def api_imperial_directives_claim():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    try:
+        directive_id = int(data.get("directive_id") or 0)
+    except (TypeError, ValueError):
+        directive_id = 0
+
+    from game.directives.rewards import claim_directive_reward
+    from game.directives.service import get_imperial_directives_state
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, claim_result = claim_directive_reward(
+            user_id,
+            directive_id,
+            conn=conn,
+        )
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception(
+            "imperial directive claim failed user_id=%s directive_id=%s",
+            user_id,
+            directive_id,
+        )
+        state, _ = _build_game_state_payload(
+            include_panel=True,
+            finish_source="api_imperial_directives_claim",
+        )
+        return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True,
+        finish_source="api_imperial_directives_claim",
+    )
+    imperial_directives: Dict[str, Any] = {}
+    conn2 = db()
+    try:
+        imperial_directives = get_imperial_directives_state(user_id, conn=conn2)
+    finally:
+        conn2.close()
+
+    resp: Dict[str, Any] = {
+        "ok": bool(ok),
+        "reason": reason,
+        "state": state,
+        "imperial_directives": imperial_directives,
+    }
+    if ok and claim_result:
+        resp["claim"] = claim_result
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
+@app.route("/api/imperial-directives/claim-all", methods=["POST"])
+@require_login
+def api_imperial_directives_claim_all():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    data = request.get_json(silent=True) or {}
+    request_id = _extract_request_id(data)
+    if request_id:
+        cached = get_idempotent_action(user_id, request_id)
+        if cached is not None:
+            return jsonify(cached)
+
+    from game.directives.rewards import claim_all_directive_rewards
+    from game.directives.service import get_imperial_directives_state
+
+    conn = db()
+    try:
+        begin_write_transaction(conn)
+        ok, reason, claim_result = claim_all_directive_rewards(user_id, conn=conn)
+        if ok:
+            commit(conn)
+        else:
+            rollback(conn)
+    except Exception:
+        rollback(conn)
+        logger.exception("imperial directive claim-all failed user_id=%s", user_id)
+        state, _ = _build_game_state_payload(
+            include_panel=True,
+            finish_source="api_imperial_directives_claim_all",
+        )
+        return jsonify({"ok": False, "reason": "claim_failed", "state": state}), 500
+    finally:
+        conn.close()
+
+    state, _ = _build_game_state_payload(
+        include_panel=True,
+        finish_source="api_imperial_directives_claim_all",
+    )
+    imperial_directives: Dict[str, Any] = {}
+    conn2 = db()
+    try:
+        imperial_directives = get_imperial_directives_state(user_id, conn=conn2)
+    finally:
+        conn2.close()
+
+    resp: Dict[str, Any] = {
+        "ok": bool(ok),
+        "reason": reason,
+        "state": state,
+        "imperial_directives": imperial_directives,
+    }
+    if claim_result:
+        resp["claim"] = claim_result
+    if request_id and ok:
+        save_idempotent_action(user_id, request_id, resp)
+    return jsonify(resp)
+
+
+# --------------------------------------------------------------------------
+# IMPERIAL DIRECTIVES (GC-914B)
+# --------------------------------------------------------------------------
+
+@app.route("/api/imperial-directives/state")
+@require_login
+def api_imperial_directives_state():
+    user_id = int(session.get("user_id") or 0)
+    if not user_id:
+        return jsonify({"ok": False, "reason": "not_logged_in"}), 401
+
+    from game.directives.service import get_imperial_directives_state
+
+    conn = db()
+    try:
+        imperial_directives = get_imperial_directives_state(user_id, conn=conn)
+    finally:
+        conn.close()
+
+    return jsonify({"ok": True, "imperial_directives": imperial_directives})
+
+
+@app.route("/imperial-directives")
+@require_login
+def imperial_directives_view():
+    ctx = _load_page_live_context(finish_source="imperial_directives")
+    if ctx is None:
+        return redirect(url_for("login"))
+
+    from game.directives.service import get_imperial_directives_state
+
+    imperial_directives = {"ready": False, "directives": []}
+    conn = db()
+    try:
+        imperial_directives = get_imperial_directives_state(
+            int(session["user_id"]),
+            conn=conn,
+        )
+    finally:
+        conn.close()
+
+    return render_template(
+        "imperial_directives.html",
+        player=ctx["player_view"],
+        storage_caps=ctx["storage_caps"],
+        imperial_directives=imperial_directives,
+    )
+
+
 # RANKING PAGE
 # --------------------------------------------------------------------------
 
@@ -5207,6 +5389,23 @@ def _payload_from_live_context(
             "vote_center": {"active": False, "count": 0, "label": ""},
             "government": {"active": False, "count": 0, "label": ""},
             "referrals": {"active": False, "count": 0, "label": ""},
+            "imperial_directives": {"active": False, "count": 0, "label": ""},
+        }
+
+    try:
+        from game.live_state import imperial_directives_for_game_state
+
+        payload["imperial_directives"] = imperial_directives_for_game_state(user_id, conn=conn)
+    except Exception:
+        payload["imperial_directives"] = {
+            "ready": False,
+            "daily_completed": 0,
+            "daily_total": 0,
+            "weekly_completed": 0,
+            "weekly_total": 0,
+            "claimable_count": 0,
+            "daily_reset_at": 0,
+            "weekly_reset_at": 0,
         }
 
     try:
