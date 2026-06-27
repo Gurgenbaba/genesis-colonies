@@ -14,7 +14,7 @@ Energie, Storage, Build-Time: `game/effects/effect_resolver.py` — [EFFECTS.md]
 |-----|---------|-------------|-------|
 | `metal` | Ferronit | Ja (`metal_storage` + Tech) | Planet |
 | `crystal` | Crytite | Ja (`crystal_storage` + Tech) | Planet |
-| `fuel_cells` | Brennzellen | Ja (`fuel_storage` + Tech) | Planet |
+| `fuel_cells` | Brennzellen | Ja (Basis-Cap wie Ferronit/Crytite; `fuel_storage` erweitert) | Planet |
 | `energy_total` / `energy_used` | Energie | Derived, persisted | Planet |
 
 **Kein Deuterium** — Fuel für Schiffe = `fuel_cells`.
@@ -87,14 +87,14 @@ Modifier: Slot, Temperatur (nur Brennzellen), `mining_tech` (+3 % Ferronit/Lvl),
 
 Details: [PRODUCTION_FORMULA_SYSTEM.md](PRODUCTION_FORMULA_SYSTEM.md).
 
-**Brennzellen-Lager:** Kapazität nur über Gebäude **`fuel_storage`** (`EffectResolver.fuel_cells_storage_capacity()`). Ohne Depot: **Cap 0** — Brennzellen-Produktion wird nicht angesammelt. Voraussetzung: `fuel_cell_plant` ≥ 4.
+**Brennzellen-Lager:** Gleiche **Basis-Cap** wie Ferronit/Crytite (`STORAGE_BASE_CAPACITY` / `EffectResolver.BASE_STORAGE` = 150.000) — auch **ohne** `fuel_storage`. Mit Depot: **Basis + GC-863-Produktionsanker** (`BASE + storage_capacity_anchor`). Gebäude-Voraussetzung zum Bau: `fuel_cell_plant` ≥ 4.
 
 ---
 
 ## Storage
 
-- Basis **150.000** Ferronit/Crytite ohne Depot (`STORAGE_BASE_CAPACITY` / `EffectResolver.BASE_STORAGE`)
-- Mit `metal_storage` / `crystal_storage` ≥ 1: **Basis + GC-863-Produktionsanker** (`BASE + storage_capacity_anchor`); Brennzellen nur über `fuel_storage` (Anker, ohne Basis)
+- Basis **150.000** Ferronit/Crytite/Brennzellen ohne Depot (`STORAGE_BASE_CAPACITY` / `EffectResolver.BASE_STORAGE`)
+- Mit `metal_storage` / `crystal_storage` / `fuel_storage` ≥ 1: **Basis + GC-863-Produktionsanker** (`BASE + storage_capacity_anchor`)
 - Multiplier: `storage_tech` (+25 %/Lvl), `terraformer` (+5 % Kapazität/Lvl), `storage_factor`
 - Produktion kann Storage nicht überschreiten; bestehendes Overflow wird nicht getrimmt
 - **Trader Hub + Schrottplatz** dürfen jederzeit über Cap gutschreiben (Overflow bleibt erhalten)
@@ -352,7 +352,7 @@ Ressourcen sind der Druck im Alltag — aber in Genesis Colonies nicht das allei
 - **Ferronit / Crytite:** Minen auf der aktiven Welt; Galaxie-Slot und Klima modifizieren Produktion.
 - **Brennzellen:** Brennzellen-Produktion; Lager nur mit **Brennzellen-Depot** (nach entsprechender Infrastruktur).
 - **Energie:** Solarkraftwerk liefert; Minen verbrauchen — bei Mangel drosselt `energy_ratio` alle Produktion.
-- **Storage:** Basis-Cap ohne Depot; `metal_storage`, `crystal_storage`, `fuel_storage` erhöhen Limits; `storage_tech` und Terraformer multiplizieren.
+- **Storage:** Basis-Cap ohne Depot für Ferronit/Crytite/Brennzellen; `metal_storage`, `crystal_storage`, `fuel_storage` erhöhen Limits; `storage_tech` und Terraformer multiplizieren.
 - Trader Hub und Schrottplatz können **über Cap** gutschreiben — Overflow bleibt erhalten.
 - Zahlen und ROI: **Technische Daten** bei Gebäuden — nicht hier.
 

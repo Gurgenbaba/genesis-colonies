@@ -66,6 +66,7 @@ class TestGc821BStorageAndExchange:
         caps = er.get_storage_capacity()
         assert caps["metal"] == STORAGE_BASE_CAPACITY
         assert caps["crystal"] == STORAGE_BASE_CAPACITY
+        assert caps["fuel_cells"] == STORAGE_BASE_CAPACITY
 
     def test_storage_level_one_adds_production_anchor_to_base(self):
         from game.economy_balance import storage_capacity_anchor

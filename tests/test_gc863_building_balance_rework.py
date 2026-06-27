@@ -97,10 +97,11 @@ class TestGc863StorageCapacity:
         er = EffectResolver({building: level}, {})
         caps = er.get_storage_capacity()
         key = "fuel_cells" if resource == "fuel_cells" else resource
-        if resource == "fuel_cells":
-            assert caps[key] == anchor
-        else:
-            assert caps[key] == STORAGE_BASE_CAPACITY + anchor
+        assert caps[key] == STORAGE_BASE_CAPACITY + anchor
+
+    def test_fuel_cells_base_capacity_without_depot(self):
+        er = EffectResolver({"fuel_cell_plant": 5}, {})
+        assert er.get_storage_capacity()["fuel_cells"] == STORAGE_BASE_CAPACITY
 
     def test_metal_crystal_storage_increases_on_first_depot_level(self):
         for resource, building in (("metal", "metal_storage"), ("crystal", "crystal_storage")):

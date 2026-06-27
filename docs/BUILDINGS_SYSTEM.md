@@ -119,7 +119,7 @@ Panel-Daten: `get_buildings_panel_rows()` für SSR + Poll `buildings_panel` (ink
 
 - Build time: `get_build_time_seconds()` → `power_build_seconds` (GC-821 / GC-850A)
 - Max level caps für Minen/Solar/Storage
-- Storage capacity für Economy
+- Storage capacity für Economy — Ferronit/Crytite/Brennzellen teilen `STORAGE_BASE_CAPACITY` ohne Depot; `fuel_storage` addiert wie `metal_storage` den GC-863-Anker
 
 Siehe [EFFECTS.md](EFFECTS.md).
 

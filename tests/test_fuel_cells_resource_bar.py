@@ -11,6 +11,9 @@ from game.fleet_defs import FLEET_FUEL_RESOURCE
 from game.models import create_user, ensure_player_and_homeworld, get_homeworld, get_planets_by_player, init_db
 from game.planet_evolution.service import colonize_planet
 from game.shipyard import build_ship
+from game.effects import EffectResolver
+from game.economy_balance import STORAGE_BASE_CAPACITY
+from game.resources import get_storage_capacity, update_planet_resources
 
 @pytest.fixture
 def fuel_db(tmp_path, monkeypatch):
@@ -72,6 +75,57 @@ def test_game_state_includes_fuel_cells(fuel_db, monkeypatch):
     assert 'fuel_cells' in data['resources']
     assert float(data['player']['fuel_cells']) >= 0
     assert 'fuel_cell_plant' in data.get('production_per_hour', {})
+
+def test_fuel_cells_base_capacity_without_fuel_storage(fuel_db):
+    uid = _player()
+    planet = get_homeworld(player_id=uid)
+    from game.models import save_planet_buildings
+    save_planet_buildings(int(planet['id']), {'fuel_cell_plant': 3, 'solar_plant': 5})
+    buildings = {'fuel_cell_plant': 3, 'solar_plant': 5}
+    caps = get_storage_capacity(buildings)
+    assert caps['fuel_cells'] == STORAGE_BASE_CAPACITY
+    er = EffectResolver(buildings, {})
+    assert er.get_storage_capacity()['fuel_cells'] == STORAGE_BASE_CAPACITY
+
+def test_fuel_production_accumulates_to_base_cap_without_fuel_storage(fuel_db):
+    conn = db()
+    uid = _player(conn=conn)
+    planet = dict(get_homeworld(player_id=uid, conn=conn))
+    pid = int(planet['id'])
+    cur = conn.cursor()
+    cur.execute(
+        'UPDATE planet_buildings SET fuel_cell_plant = 3, solar_plant = 5, fuel_storage = 0 WHERE planet_id = ?;',
+        (pid,),
+    )
+    cur.execute('UPDATE planets SET fuel_cells = 0, last_update = ? WHERE id = ?;', (time.time() - 3600, pid))
+    conn.commit()
+    cur.execute('SELECT * FROM planets WHERE id = ?;', (pid,))
+    planet = dict(cur.fetchone())
+    update_planet_resources(planet, conn=conn, skip_queue_finish=True)
+    conn.commit()
+    after = int(cur.execute('SELECT fuel_cells FROM planets WHERE id = ?;', (pid,)).fetchone()['fuel_cells'])
+    conn.close()
+    assert after > 0
+    assert after <= STORAGE_BASE_CAPACITY
+
+def test_game_state_includes_base_fuel_cap_without_fuel_storage(fuel_db, monkeypatch):
+    import importlib
+    import app as app_mod
+    importlib.reload(app_mod)
+    uid = _player()
+    from game.models import save_planet_buildings
+    planet = get_homeworld(player_id=uid)
+    save_planet_buildings(int(planet['id']), {'fuel_cell_plant': 2, 'solar_plant': 3})
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = uid
+    r = client.get('/api/game-state')
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data['ok'] is True
+    fuel_cap = int(data['storage'].get('fuel_cells') or 0)
+    assert fuel_cap == STORAGE_BASE_CAPACITY
+    assert fuel_cap == int(data['resources']['storage']['fuel_cells'])
 
 def test_base_template_shows_fuel_cells_panel():
     root = Path(__file__).resolve().parent.parent

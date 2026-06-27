@@ -54,7 +54,7 @@ def fuel_storage_db(tmp_path, monkeypatch):
     return int(user["id"])
 
 
-def test_fuel_storage_capacity_requires_building(fuel_storage_db):
+def test_fuel_storage_base_capacity_without_building(fuel_storage_db):
     planet = get_homeworld(player_id=fuel_storage_db)
     save_planet_buildings(
         int(planet["id"]),
@@ -62,20 +62,23 @@ def test_fuel_storage_capacity_requires_building(fuel_storage_db):
     )
     b = get_planet_buildings(int(planet["id"]))
     r = EffectResolver(b, get_research_levels(user_id=fuel_storage_db))
-    assert r.fuel_storage_capacity() == 0
-    assert r.get_storage_capacity()["fuel_cells"] == 0
+    assert r.fuel_storage_capacity() == EffectResolver.BASE_STORAGE
+    assert r.get_storage_capacity()["fuel_cells"] == EffectResolver.BASE_STORAGE
 
 
 def test_fuel_storage_capacity_scales_like_metal_storage(fuel_storage_db):
+    from game.economy_balance import storage_capacity_anchor
+
     planet = get_homeworld(player_id=fuel_storage_db)
     save_planet_buildings(int(planet["id"]), {"fuel_storage": 2})
     b = get_planet_buildings(int(planet["id"]))
     r = EffectResolver(b, get_research_levels(user_id=fuel_storage_db))
     cap = r.fuel_storage_capacity()
-    assert cap == int(EffectResolver.BASE_STORAGE * (EffectResolver.STORAGE_GROW ** 1))
+    expected = EffectResolver.BASE_STORAGE + storage_capacity_anchor("fuel_cells", 2)
+    assert cap == expected
 
 
-def test_fuel_cell_plant_does_not_add_storage(fuel_storage_db):
+def test_fuel_cell_plant_does_not_add_depot_bonus(fuel_storage_db):
     planet = get_homeworld(player_id=fuel_storage_db)
     save_planet_buildings(
         int(planet["id"]),
@@ -83,7 +86,7 @@ def test_fuel_cell_plant_does_not_add_storage(fuel_storage_db):
     )
     b = get_planet_buildings(int(planet["id"]))
     r = EffectResolver(b, get_research_levels(user_id=fuel_storage_db))
-    assert r.fuel_cells_storage_capacity() == 0
+    assert r.fuel_cells_storage_capacity() == EffectResolver.BASE_STORAGE
 
 
 def test_production_respects_fuel_storage_cap(fuel_storage_db):

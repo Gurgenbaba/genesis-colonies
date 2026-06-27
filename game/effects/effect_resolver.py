@@ -886,9 +886,7 @@ class EffectResolver:
         return calculate_resource_output("fuel_cells", ctx)
 
     def fuel_storage_capacity(self) -> int:
-        """Planet fuel cell depot capacity (fuel_storage building + tech/terraformer)."""
-        from ..economy_balance import storage_capacity_anchor
-
+        """Planet fuel cell depot capacity (base cap + fuel_storage building + tech/terraformer)."""
         mods = self.get_modifiers()
         b = self.buildings
 
@@ -897,16 +895,14 @@ class EffectResolver:
         storage_factor = _mod_float(mods, "storage_factor") * terra_factor
 
         f_lvl = _bld(b, "fuel_storage")
-        if f_lvl <= 0:
-            return 0
-        f_cap = storage_capacity_anchor("fuel_cells", f_lvl)
+        f_cap = self._storage_base_cap("fuel_cells", f_lvl)
         return int(f_cap * storage_factor)
 
     def fuel_cells_storage_capacity(self) -> int:
-        """Authoritative fuel_cells cap — depot only (plant no longer stores)."""
+        """Authoritative fuel_cells cap — same base storage as metal/crystal without depot."""
         return self.fuel_storage_capacity()
 
-    def _metal_crystal_storage_base_cap(self, resource: str, storage_level: int) -> int:
+    def _storage_base_cap(self, resource: str, storage_level: int) -> int:
         """Planet base cap plus depot bonus from GC-863 production anchor (level 0 = base only)."""
         from ..economy_balance import storage_capacity_anchor
 
@@ -914,6 +910,10 @@ class EffectResolver:
         if lvl <= 0:
             return self.BASE_STORAGE
         return self.BASE_STORAGE + storage_capacity_anchor(resource, lvl)
+
+    def _metal_crystal_storage_base_cap(self, resource: str, storage_level: int) -> int:
+        """Backward-compatible alias — use _storage_base_cap."""
+        return self._storage_base_cap(resource, storage_level)
 
     def get_storage_capacity(self) -> Dict[str, int]:
         mods = self.get_modifiers()
