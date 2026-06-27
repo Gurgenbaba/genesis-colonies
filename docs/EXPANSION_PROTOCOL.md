@@ -73,7 +73,34 @@ Expansion Site → Claimed Site → Seed Ark en route → Frontier Outpost → C
 2. Eine Welt ist erst ab Phase **`colony`** eine Kolonie im Spielersinn.
 3. **`frontier_outpost`** ist spielbar (primitive Mine, Lager, Solar), aber **keine** Kolonie.
 4. **`strategic_world`** ist Endzustand der **Welt-Entwicklung**, nicht Ersatz für die Genesis Ark.
-5. Kein paralleles Planet-System (GC-000 Regel 15) — ein Enum auf `planets` + `world_claims` + Fleet-State.
+5. Kein paralleles Planet-System (GC-000 Regel 15) — Phasen aus bestehenden Quellen ableiten (siehe unten).
+
+### `expansion_phase` ist abgeleitet — kein isolierter DB-Status (GC-920)
+
+**`expansion_phase` wird nicht blind als Enum-Spalte gepflegt**, die leicht „hängen bleibt". Er ist ein **abgeleiteter Zustand** aus kanonischen Quellen:
+
+| Phase | Ableitung (Single Resolver) |
+|-------|----------------------------|
+| `expansion_site` | Site in `expansion_gates.py`; kein `world_claim`, kein aktiver Fleet-Target |
+| `claimed_site` | `world_claims` vorhanden (`reserved` / `claimed`); noch kein Outpost-Planet |
+| `seed_ark_en_route` | Aktive Fleet-Mission `colonize` auf diese `world_key` |
+| `frontier_outpost` | `planets`-Row existiert; **nicht alle** Etablierungs-Meilensteine erfüllt |
+| `colony` | Alle vier Etablierungs-Meilensteine erfüllt; Spezialisierung noch nicht abgeschlossen |
+| `strategic_world` | Spezialisierung gewählt; Planet Evolution für diese Welt freigeschaltet |
+
+**Owner (GC-920):** ein Resolver in `game/planet_evolution/` (z. B. `expansion_phase.py`) — liest `world_claims`, Fleet, `planets`, Establishment-Flags, Spec-Status; **schreibt** nur persistierte Meilensteine, **nicht** die Phase als parallel gepflegte Wahrheit.
+
+Persistiert werden nur Fakten, die Queries brauchen (Claim, Planet-Row, Meilenstein-Flags). Die Phase ist **berechnet**.
+
+```text
+Fleet          → transportiert Seed Ark
+Planet Evolution → entwickelt die Welt
+Command Map    → visualisiert Fortschritt
+Queue Engine   → verarbeitet Etablierungs-Meilensteine (Bau/Finish)
+Buildings      → bauen Infrastruktur für Meilensteine
+```
+
+→ GC-000 Regel 18
 
 ---
 
@@ -403,7 +430,7 @@ So bleibt jede Implementierung an der Design-Charta ausgerichtet; kein Ticket da
 
 | Ticket | Fokus | Charta-Abschnitt |
 |--------|-------|------------------|
-| **GC-920** | `expansion_phase` enum + Migration + Outpost-Mechanics | [Was ist eine Kolonie?](#was-ist-überhaupt-eine-kolonie) · Offizieller Lifecycle |
+| **GC-920** | `expansion_phase` Resolver (abgeleitet) + Meilenstein-Persistenz + Outpost-Mechanics | [Was ist eine Kolonie?](#was-ist-überhaupt-eine-kolonie) · `expansion_phase` abgeleitet |
 | **GC-921** | Interstellar Expansion Tech (Reichweite) | [Zwei Enabler](#zwei-enabler--keine-dritte-ressource) · Gate-Matrix |
 | **GC-922** | Dual-Gate; ersetzt `max_colonies` | [Zwei Enabler](#zwei-enabler--keine-dritte-ressource) · [Keine Kolonie-Anzahl](#keine-kolonie-anzahl--nur-regionen-und-sites) |
 | **GC-923** | Etablierungs-Meilensteine (nicht Timer-only) | [Wann ist eine Kolonie „fertig"?](#wann-ist-eine-kolonie-fertig--meilensteine-nicht-timer) |

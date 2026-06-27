@@ -173,8 +173,30 @@ Eine Lösung ist **falsch**, wenn sie:
 - Parallele States, Queues oder Domänen-Systeme einführt (Regel 15)
 - Planet Scope umgeht
 - Keinen klaren System-Owner hat (Regel 17)
+- Kolonien/Welten außerhalb des Expansion-Protocols erzeugt (Regel 18)
 
 → Überarbeiten, nicht mergen.
+
+---
+
+## 18. Expansion Creates Worlds Through Protocol Only
+
+> **Neue Systeme dürfen keine Kolonien erzeugen. Sie dürfen nur den Fortschritt einer Welt verändern.**
+
+Design-Charta: [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) (EPIC-15).
+
+| Owner | Darf |
+|-------|------|
+| **Fleet** | Seed Ark transportieren |
+| **World colonization** (`world_colonization.py`) | Claim anlegen; Outpost-Planet-Row im Protocol-Flow |
+| **Establishment / Queue Engine** | Etablierungs-Meilensteine abschließen |
+| **Buildings** | Infrastruktur für Meilensteine bauen |
+| **Planet Evolution** | Welt entwickeln (DNA, Spec, Events) |
+| **Command Map** | Fortschritt visualisieren; kein eigener Colonize-Pfad |
+
+**Verboten:** Beliebiges Modul ruft `colonize_planet()` oder legt `planets`-Rows an, ohne den Expansion-Protocol-Flow (Claim → Fleet → Outpost → Meilensteine → Kolonie). Kein paralleler „+1 Planet"-Pfad (Astrophysik-Slots, `max_colonies` als Gameplay-Gate).
+
+`expansion_phase` ist **abgeleitet** (Resolver), nicht als isolierter Status, der out-of-sync hängen bleibt.
 
 ---
 
@@ -255,6 +277,8 @@ Für jede Domäne gibt es **genau eine** Antwort auf „Wo gehört das hin?“. 
 | World colonization from map | `game/planet_evolution/world_colonization.py` | [GC-582_DYNAMIC_COLONIZATION.md](GC-582_DYNAMIC_COLONIZATION.md) — GC-582A claims |
 | Location role actions (Map → Routes) | `game/planet_evolution/location_actions.py` | [GC-570_WORLD_MAP_DIRECTION.md](GC-570_WORLD_MAP_DIRECTION.md) |
 | Command Center panel (own colony snapshot) | `game/planet_evolution/command_center.py` | [GC-592_COMMAND_CENTER_PANEL.md](GC-592_COMMAND_CENTER_PANEL.md) |
+| `expansion_phase` / Establishment | `game/planet_evolution/` (Resolver + Meilensteine; ab GC-920) | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
+| Expansion Sites / Gates | `game/planet_evolution/expansion_gates.py` | [EXPANSION_PROTOCOL.md](EXPANSION_PROTOCOL.md) |
 | Planet Evolution | `game/planet_evolution/` | [PLANET_EVOLUTION.md](PLANET_EVOLUTION.md) |
 | Galactic Directives | `game/galactic_directives/` | [GALACTIC_DIRECTIVES.md](GALACTIC_DIRECTIVES.md) |
 | Imperial Directives (player High Command) | `game/directives/` | [IMPERIAL_DIRECTIVES.md](IMPERIAL_DIRECTIVES.md) |
